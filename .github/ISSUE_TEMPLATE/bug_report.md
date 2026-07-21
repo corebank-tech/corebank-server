@@ -1,5 +1,5 @@
 ---
-name: 버그 리포트 템플릿
+name: bug_report
 about: 프로젝트 버그에서 발생하는 버그에 대해 명세
 title: "[BUG]"
 labels: ''

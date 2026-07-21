@@ -1,5 +1,5 @@
 ---
-name: 성능/장애 템플릿
+name: performance
 about: 병목, 장애, 성능 저하가 발생했을 때
 title: "[PREF]"
 labels: ''

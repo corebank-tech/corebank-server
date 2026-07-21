@@ -1,5 +1,5 @@
 ---
-name: 기능/작업 이슈 템플릿
+name: feature_task
 about: 새로운 기능이나 작업을 등록
 title: "[FEAT]"
 labels: ''
