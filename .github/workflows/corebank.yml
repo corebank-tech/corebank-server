@@ -97,6 +97,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # 0) repo 디버깅 스텝
+      - name: Debug OIDC subject
+        run: |
+          echo "expected sub = repo:${{ github.repository }}:ref:${{ github.ref }}"
+
       # 1) AWS OIDC 자격 증명 획득
       - name: Configure AWS Credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
