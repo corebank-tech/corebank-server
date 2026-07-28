@@ -128,7 +128,11 @@ jobs:
                 - "80:SERVER_PORT_PLACEHOLDER"
               environment:
                 - SPRING_PROFILES_ACTIVE=prod
-                - TZ=Asia/Seoul
+                - DB_HOST=DB_HOST_PLACEHOLDER
+                - DB_USER=DB_USER_PLACEHOLDER
+                - DB_PASSWORD=DB_PASSWORD_PLACEHOLDER
+                - FLYWAY_USER=FLYWAY_USER_PLACEHOLDER
+                - FLYWAY_PASSWORD=FLYWAY_PASSWORD_PLACEHOLDER
               networks:
                 - corebank-net
 
@@ -143,6 +147,11 @@ jobs:
           sed -i "s|TAG_PLACEHOLDER|${{ github.sha }}|g" docker-compose.yml
           sed -i "s|CONTAINER_NAME_PLACEHOLDER|${{ env.CONTAINER_NAME }}|g" docker-compose.yml
           sed -i "s|SERVER_PORT_PLACEHOLDER|${{ env.SERVER_PORT }}|g" docker-compose.yml
+          sed -i "s|DB_HOST_PLACEHOLDER|${{ secrets.DB_HOST }}|g" docker-compose.yml
+          sed -i "s|DB_USER_PLACEHOLDER|${{ secrets.DB_USER }}|g" docker-compose.yml
+          sed -i "s|DB_PASSWORD_PLACEHOLDER|${{ secrets.DB_PASSWORD }}|g" docker-compose.yml
+          sed -i "s|FLYWAY_USER_PLACEHOLDER|${{ secrets.FLYWAY_USER }}|g" docker-compose.yml
+          sed -i "s|FLYWAY_PASSWORD_PLACEHOLDER|${{ secrets.FLYWAY_PASSWORD }}|g" docker-compose.yml
           
           # Docker Compose를 이용한 최신 이미지 풀 및 무중단/선언적 배포
           docker compose pull
