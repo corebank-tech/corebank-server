@@ -2,7 +2,7 @@
 
 > **대상**: Corebank 프로젝트 개발 팀원 전체  
 > **목적**: 신규 팀원 로컬 DB 셋업, Flyway 마이그레이션 DDL 작성 규칙, 통합 테스트 작성법 및 트러블슈팅 안내  
-> **아키텍처 및 공통 클래스 안내**: [team_db_architecture_guide.md](file:///Users/kun/shinhan/projects/corebank/articles/team_db_architecture_guide.md) 참조
+> **아키텍처 및 공통 클래스 안내**: [team_db_architecture_guide.md](team_db_architecture_guide.md) 참조
 
 ---
 
