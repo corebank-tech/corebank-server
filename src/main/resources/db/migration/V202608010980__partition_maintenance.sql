@@ -4,8 +4,6 @@
 -- 파티션 프루닝 효과가 사라진다. 매월 1회 호출해 실 파티션을 만든다.
 -- ====================================================================
 
-DELIMITER $$
-
 CREATE PROCEDURE add_ledger_partition(IN target_month DATE)
 BEGIN
     DECLARE pname   VARCHAR(16);
@@ -30,6 +28,4 @@ BEGIN
         EXECUTE st;
         DEALLOCATE PREPARE st;
     END IF;
-END$$
-
-DELIMITER ;
+END;
