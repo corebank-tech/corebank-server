@@ -74,7 +74,24 @@ ON DUPLICATE KEY UPDATE name = VALUES(name), updated_at = VALUES(updated_at);
 
 ---
 
-## 3. 🧪 통합 테스트는 어떻게 작성하나요?
+## 3. 🚫 DB 초기화 (`flyway clean`) 정책 및 가이드
+
+`flyway clean`은 Flyway가 관리하는 스키마의 모든 객체(테이블, 데이터, View, Function 등)를 삭제하는 명령어입니다.
+우리 팀은 **데이터 유실 사고를 원천 차단하기 위해 모든 환경에서 `clean`을 비활성화**하는 것을 원칙으로 합니다.
+
+- **운영 환경(`prod`)**: 절대 사용 금지 (`spring.flyway.clean-disabled: true` 적용됨)
+- **로컬 환경(`local`)**: 실수로 공용 개발 DB에 연결된 상태에서 `clean`을 실행하는 것을 막기 위해 로컬에서도 기본적으로 비활성화합니다.
+
+> 💡 **로컬에서 DB 초기화가 필요할 때는?**
+> `flyway clean`을 사용하지 말고, 아래와 같이 로컬 DB 도커 컨테이너 자체를 재생성(볼륨 삭제 포함)하는 방식을 권장합니다.
+> ```bash
+> docker compose down -v
+> docker compose up -d minicore-mysql
+> ```
+
+---
+
+## 4. 🧪 통합 테스트는 어떻게 작성하나요?
 
 새로운 Service나 Repository의 DB 연동 테스트 코드를 작성할 때, 기본 `@SpringBootTest`를 만들면 DB 연결 에러가 발생합니다.
 반드시 우리가 만들어 둔 **`IntegrationTestSupport`를 상속**받아 작성해주세요!
@@ -99,7 +116,7 @@ class AccountServiceTest extends IntegrationTestSupport {
 
 ---
 
-## 4. 🚨 트러블슈팅 & FAQ
+## 5. 🚨 트러블슈팅 & FAQ
 
 **Q1. 마이그레이션 SQL 파일을 작성해서 기동했는데, 오타가 있어서 이미 실행된 SQL 파일 내용을 수정했더니 에러(`Validate failed: migration checksum mismatch`)가 납니다!**  
 - **원인**: Flyway는 한 번 실행된 `V...` 파일의 체크섬을 `flyway_schema_history` 테이블에 기록해두고, 파일 내용이 변조되면 보안상 기동을 차단합니다.
