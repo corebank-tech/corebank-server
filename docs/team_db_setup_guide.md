@@ -34,13 +34,13 @@ docker compose up -d minicore-mysql
 엔티티(`@Entity`) 클래스만 수정해서는 DB 테이블이 변하지 않습니다. 반드시 `src/main/resources/db/migration/` 디렉토리에 SQL 파일을 추가해야 합니다.
 
 ### ① 파일명 작성 규칙 (절대 순번 V1, V2 사용 금지 ❌)
-6인 협업 충돌을 막기 위해 반드시 `V<yyyyMMdd>_<HHmm>__<snake_case_설명>.sql` 형식을 지켜주세요. (언더바 개수에 주의!)
-- ⭕ 올바른 예시: `V20260728_1430__create_account_table.sql`
-- ❌ 잘못된 예시: `V1__create_account.sql`, `v20260728_1430_create_account.sql`
+6인 협업 충돌을 막기 위해 반드시 `V<yyyyMMddHHmm>__<snake_case_설명>.sql` 형식을 지켜주세요. (언더바 개수에 주의!)
+- ⭕ 올바른 예시: `V202607281430__create_account_table.sql`
+- ❌ 잘못된 예시: `V1__create_account.sql`, `V20260728_1430__create_account.sql` (날짜·시간 사이 언더바 금지)
 
 ### ② DDL 작성 규칙 (★ 핵심 금지 규칙 준수 ★)
 ```sql
--- V20260728_1430__create_account_table.sql 예시
+-- V202607281430__create_account_table.sql 예시
 CREATE TABLE IF NOT EXISTS account (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     account_number VARCHAR(20) NOT NULL,
