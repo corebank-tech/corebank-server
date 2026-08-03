@@ -279,29 +279,29 @@
 
 계좌별명·표시순서(구 `account_preference`)와 출금계좌 등록(구 `withdrawal_account`)을 흡수했다. `balance`는 조회용 캐시이며 진실의 원천은 `ledger_entry`다.
 
-| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
-| --- | --- | --- | --- | --- | --- |
-| `account_id` | `BIGINT` | **PK** | X |  | 계좌 내부 식별자. 본인 계좌에만 사용한다 (타 고객 계좌는 번호로 지칭) |
-| `account_number` | `CHAR(12)` | **UK** | X |  | 하이픈 없는 숫자 12자리 |
-| `customer_id` | `BIGINT` | **FK** | X |  | 예금주 → `customer.customer_id` |
-| `product_id` | `BIGINT` | **FK** | O |  | 입출금계좌는 NULL → `product.product_id` |
-| `account_type` | `VARCHAR(24)` |  | X |  | 계좌 종류. `DEMAND_DEPOSIT`(입출금) / `TIME_DEPOSIT`(정기예금) / `INSTALLMENT_SAVINGS`(정기적금) |
-| `balance` | `BIGINT` |  | X | `0` | 현재 잔액. **조회 성능용 캐시**이며 진실의 원천은 `ledger_entry` 합계다. 배치로 대사한다 |
-| `status` | `VARCHAR(12)` |  | X |  | 계좌 상태. `ACTIVE`(정상) / `SUSPENDED`(거래정지) / `CLOSED`(해지) |
-| `password_hash` | `CHAR(60)` |  | X |  | 계좌비밀번호 4자리의 BCrypt 해시 |
-| `password_failure_count` | `TINYINT` |  | X | `0` | 계좌비밀번호 연속 오류 횟수. 검증 실패 응답의 `errorCount` |
-| `password_locked` | `BOOLEAN` |  | X | `FALSE` | 계좌비밀번호 잠금 여부. 5회 오류 시 TRUE가 되어 거래가 정지된다 (APW0101) |
-| `alias` | `VARCHAR(24)` |  | O |  | 고객이 붙인 계좌별명. 계좌명 표시 시 상품명보다 우선한다 |
-| `display_order` | `INT` |  | O |  | 고객이 지정한 계좌 목록 표시 순서 |
-| `withdrawal_registered` | `BOOLEAN` |  | X | `FALSE` | 출금계좌로 등록됐는지. 이체·상품가입의 출금 원천이 될 수 있는지를 가른다 |
-| `withdrawal_registered_at` | `DATETIME(6)` |  | O |  | 출금계좌 등록 시각. 미등록이면 NULL |
-| `opened_date` | `DATE` |  | X |  | 계좌 개설일 |
-| `maturity_date` | `DATE` |  | O |  | 만기일. 예·적금 계좌만 값이 있다 |
-| `closed_date` | `DATE` |  | O |  | 해지일. `status = CLOSED` 전환 시각 |
-| `last_transaction_at` | `DATETIME(6)` |  | O |  | 최근 거래 일시. 전체 계좌 조회의 `lastTransactionAt` |
-| `version` | `BIGINT` |  | X | `0` | 낙관적 락 버전. 배치·조회 경로의 갱신 충돌을 잡는다 (이체 실행 경로는 비관적 락) |
-| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 생성 일시 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 최종 수정 일시 |
+| 컬럼                         | 타입            | 키      | Null | 기본값      | 담기는 정보                                                                            |
+|----------------------------|---------------|--------|------|----------|-----------------------------------------------------------------------------------|
+| `account_id`               | `BIGINT`      | **PK** | X    |          | 계좌 내부 식별자. 본인 계좌에만 사용한다 (타 고객 계좌는 번호로 지칭)                                         |
+| `account_number`           | `CHAR(12)`    | **UK** | X    |          | 하이픈 없는 숫자 12자리                                                                    |
+| `customer_id`              | `BIGINT`      | **FK** | X    |          | 예금주 → `customer.customer_id`                                                      |
+| `product_id`               | `BIGINT`      | **FK** | O    |          | 입출금계좌는 NULL → `product.product_id`                                                |
+| `account_type`             | `VARCHAR(24)` |        | X    |          | 계좌 종류. `DEMAND_DEPOSIT`(입출금) / `TIME_DEPOSIT`(정기예금) / `INSTALLMENT_SAVINGS`(정기적금) |
+| `balance`                  | `BIGINT`      |        | X    | `0`      | 현재 잔액. **조회 성능용 캐시**이며 진실의 원천은 `ledger_entry` 합계다. 배치로 대사한다                       |
+| `status`                   | `VARCHAR(12)` |        | X    | `ACTIVE` | 계좌 상태. `ACTIVE`(정상) / `SUSPENDED`(거래정지) / `CLOSED`(해지)                            |
+| `password_hash`            | `CHAR(60)`    |        | X    |          | 계좌비밀번호 4자리의 BCrypt 해시                                                             |
+| `password_failure_count`   | `TINYINT`     |        | X    | `0`      | 계좌비밀번호 연속 오류 횟수. 검증 실패 응답의 `errorCount`                                           |
+| `password_locked`          | `BOOLEAN`     |        | X    | `FALSE`  | 계좌비밀번호 잠금 여부. 5회 오류 시 TRUE가 되어 거래가 정지된다 (APW0101)                                 |
+| `alias`                    | `VARCHAR(24)` |        | O    |          | 고객이 붙인 계좌별명. 계좌명 표시 시 상품명보다 우선한다                                                  |
+| `display_order`            | `INT`         |        | O    |          | 고객이 지정한 계좌 목록 표시 순서                                                               |
+| `withdrawal_registered`    | `BOOLEAN`     |        | X    | `FALSE`  | 출금계좌로 등록됐는지. 이체·상품가입의 출금 원천이 될 수 있는지를 가른다                                         |
+| `withdrawal_registered_at` | `DATETIME(6)` |        | O    |          | 출금계좌 등록 시각. 미등록이면 NULL                                                            |
+| `opened_date`              | `DATE`        |        | X    |          | 계좌 개설일                                                                            |
+| `maturity_date`            | `DATE`        |        | O    |          | 만기일. 예·적금 계좌만 값이 있다                                                               |
+| `closed_date`              | `DATE`        |        | O    |          | 해지일. `status = CLOSED` 전환 시각                                                      |
+| `last_transaction_at`      | `DATETIME(6)` |        | O    |          | 최근 거래 일시. 전체 계좌 조회의 `lastTransactionAt`                                           |
+| `version`                  | `BIGINT`      |        | X    | `0`      | 낙관적 락 버전. 배치·조회 경로의 갱신 충돌을 잡는다 (이체 실행 경로는 비관적 락)                                  |
+| `created_at`               | `DATETIME(6)` |        | X    |          | 행 생성 일시. JPA Auditing이 UTC 기준으로 자동 설정                                             |
+| `updated_at`               | `DATETIME(6)` |        | X    |          | 행 최종 수정 일시. JPA Auditing이 UTC 기준으로 자동 설정                                          |
 
 **인덱스**
 
