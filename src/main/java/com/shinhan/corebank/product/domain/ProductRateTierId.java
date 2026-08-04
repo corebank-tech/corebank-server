@@ -1,4 +1,4 @@
-package com.shinhan.corebank.product;
+package com.shinhan.corebank.product.domain;
 
 import jakarta.persistence.Embeddable;
 import lombok.AllArgsConstructor;

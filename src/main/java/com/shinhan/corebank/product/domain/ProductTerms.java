@@ -1,4 +1,4 @@
-package com.shinhan.corebank.product;
+package com.shinhan.corebank.product.domain;
 
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;

@@ -1,15 +1,13 @@
-package com.shinhan.corebank.product;
+package com.shinhan.corebank.product.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.EmbeddedId;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 
 @Entity
+@Table(name = "product_preferential_rate")
 @Getter
 @NoArgsConstructor
 public class ProductPreferentialRate {

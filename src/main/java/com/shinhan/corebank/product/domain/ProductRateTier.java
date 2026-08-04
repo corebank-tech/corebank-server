@@ -1,9 +1,8 @@
-package com.shinhan.corebank.product;
+package com.shinhan.corebank.product.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.io.Serializable;
 import java.math.BigDecimal;
 
 @Entity

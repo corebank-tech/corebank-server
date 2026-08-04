@@ -1,4 +1,4 @@
-package com.shinhan.corebank.product;
+package com.shinhan.corebank.product.domain;
 
 import com.shinhan.corebank.common.entity.BaseEntity;
 import jakarta.persistence.*;
