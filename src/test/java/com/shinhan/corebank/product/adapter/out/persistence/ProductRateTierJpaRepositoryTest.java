@@ -52,7 +52,7 @@ class ProductRateTierJpaRepositoryTest extends IntegrationTestSupport {
                 .productCode("SVN-001")
                 .productName("정기예금")
                 .productGroup(ProductGroup.DEPOSIT)
-                .depositType(DepositType.거치식)
+                .depositType(DepositType.LUMP_SUM)
                 .baseRate(new BigDecimal("2.50"))
                 .maxRate(new BigDecimal("3.00"))
                 .minAmount(100_000L)

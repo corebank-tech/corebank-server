@@ -18,5 +18,5 @@ public class ProductPreferentialRateId implements Serializable {
     private long productId;
 
     @Column(length = 30)
-    private String condition_code;
+    private String conditionCode;
 }

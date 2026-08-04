@@ -15,5 +15,5 @@ import java.io.Serializable;
 @AllArgsConstructor
 public class ProductRateTierId implements Serializable {
     private long productId;
-    private short term_months;
+    private short termMonths;
 }

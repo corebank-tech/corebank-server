@@ -26,7 +26,7 @@ class ProductJpaRepositoryTest extends IntegrationTestSupport {
                 .productCode("SVN-001")
                 .productName("정기예금")
                 .productGroup(ProductGroup.DEPOSIT)
-                .depositType(DepositType.거치식)
+                .depositType(DepositType.LUMP_SUM)
                 .baseRate(new BigDecimal("2.50"))
                 .maxRate(new BigDecimal("3.00"))
                 .minAmount(100_000L)
@@ -45,7 +45,7 @@ class ProductJpaRepositoryTest extends IntegrationTestSupport {
         Product found = repository.findById(saved.getProductId()).orElseThrow();
         assertThat(found.getProductCode()).isEqualTo("SVN-001");
         assertThat(found.getProductGroup()).isEqualTo(ProductGroup.DEPOSIT);
-        assertThat(found.getDepositType()).isEqualTo(DepositType.거치식);
+        assertThat(found.getDepositType()).isEqualTo(DepositType.LUMP_SUM);
         assertThat(found.getCreatedAt()).isNotNull();
         assertThat(found.getUpdatedAt()).isNotNull();
     }
