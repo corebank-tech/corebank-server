@@ -6,16 +6,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-// 모든 REST 컨트롤러의 예외를 가로채 {code, message, data} 로 변환. 각 파트는 수정할 필요 없음
-@RestControllerAdvice(annotations = RestController.class)
+// 모든 예외를 가로채 {code, message, data} 로 변환. 각 파트는 수정할 필요 없음
+// annotations = RestController.class 로 스코프를 제한하지 않는다: 404/405 처럼 핸들러 매칭 자체가
+// 실패한 예외는 handlerType 을 알 수 없어 스코프가 걸린 advice 후보에서 아예 제외되기 때문
+@RestControllerAdvice
 public class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
@@ -60,6 +64,20 @@ public class ApiExceptionHandler {
         String message = "필수 헤더 '%s' 가 누락되었습니다.".formatted(e.getHeaderName());
         log.warn("[{}] {}", CommonErrorCode.REQUIRED_FIELD_MISSING.getCode(), message);
         return ErrorResponse.toResponseEntity(CommonErrorCode.REQUIRED_FIELD_MISSING, message);
+    }
+
+    // 존재하지 않는 경로 호출 -> CMN0201 (404)
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<ErrorResponse> handleNotFound(Exception e) {
+        log.warn("[{}] {}", CommonErrorCode.INVALID_ENDPOINT.getCode(), e.getMessage());
+        return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_ENDPOINT);
+    }
+
+    // 경로는 존재하나 지원하지 않는 HTTP 메서드로 호출 -> CMN0201 (404). 405 대신 404 로 통일
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        log.warn("[{}] {}", CommonErrorCode.INVALID_ENDPOINT.getCode(), e.getMessage());
+        return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_ENDPOINT);
     }
 
     // 그 외 모든 예외 (NPE, DB 오류 등) -> CMN9999. 스택트레이스는 로그에만 남김

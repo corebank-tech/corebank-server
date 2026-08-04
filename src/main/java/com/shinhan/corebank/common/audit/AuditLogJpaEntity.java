@@ -51,6 +51,16 @@ public class AuditLogJpaEntity {
     public static AuditLogJpaEntity of(Long customerId, String transactionNumber,
                                        AuditEventType eventType, String requestIp,
                                        boolean success, String detail, LocalDateTime now) {
+        boolean hasTransactionNumber = transactionNumber != null && !transactionNumber.isBlank();
+        if (eventType.isLedgerChanging() && !hasTransactionNumber) {
+            throw new IllegalArgumentException(
+                    "원장 변경 이벤트(%s)는 transactionNumber 가 반드시 있어야 합니다.".formatted(eventType));
+        }
+        if (!eventType.isLedgerChanging() && hasTransactionNumber) {
+            throw new IllegalArgumentException(
+                    "원장 비변경 이벤트(%s)는 transactionNumber 가 없어야 합니다.".formatted(eventType));
+        }
+
         AuditLogJpaEntity e = new AuditLogJpaEntity();
         e.customerId = customerId;
         e.transactionNumber = transactionNumber;

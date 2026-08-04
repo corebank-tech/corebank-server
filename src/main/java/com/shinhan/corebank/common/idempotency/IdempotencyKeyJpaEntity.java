@@ -65,12 +65,16 @@ public class IdempotencyKeyJpaEntity {
     }
 
     public void complete(short httpStatus, String responseSnapshot) {
+        if (this.state != IdempotencyState.PROCESSING) {
+            throw new IllegalStateException("Idempotency key is already completed: " + this.idempotencyKey);
+        }
         this.state = IdempotencyState.COMPLETED;
         this.httpStatus = httpStatus;
         this.responseSnapshot = responseSnapshot;
     }
 
-    public boolean matches(String requestHash) {
-        return this.requestHash.equals(requestHash);   // 불일치 → CMN0302
+    public boolean matches(String endpoint, String requestHash) {
+        return this.endpoint.equals(endpoint) && this.requestHash.equals(requestHash);   // 불일치 → CMN0302
     }
 }
+

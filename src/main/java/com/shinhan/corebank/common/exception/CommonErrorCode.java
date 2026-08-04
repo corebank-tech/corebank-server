@@ -11,6 +11,8 @@ public enum CommonErrorCode implements ErrorCode {
     UNAUTHORIZED("CMN0101", 401, "인증정보가 없거나 세션이 만료되었습니다."),
     FORBIDDEN("CMN0102", 403, "해당 자원에 접근할 권한이 없습니다."),
 
+    INVALID_ENDPOINT("CMN0201", 404, "잘못된 요청 주소입니다."),
+
     DUPLICATE_REQUEST_IN_PROGRESS("CMN0301", 409, "동일 요청이 처리 중입니다."),
     IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST("CMN0302", 409, "동일한 멱등키가 다른 요청에 사용되었습니다."),
 

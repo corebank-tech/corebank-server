@@ -78,6 +78,22 @@ class ApiExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("존재하지 않는 경로 -> CMN0201, 404")
+    void notFound() throws Exception {
+        mockMvc.perform(get("/test/errors/does-not-exist"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("CMN0201"));
+    }
+
+    @Test
+    @DisplayName("존재하는 경로에 지원하지 않는 메서드 -> CMN0201, 404 (405 대신 404 로 통일)")
+    void methodNotSupported() throws Exception {
+        mockMvc.perform(post("/test/errors/business"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("CMN0201"));
+    }
+
+    @Test
     @DisplayName("정상 처리 -> ApiExceptionHandler 를 거치지 않고 ApiResponse 그대로 응답")
     void success() throws Exception {
         mockMvc.perform(get("/test/errors/ok"))
