@@ -41,6 +41,15 @@ CREATE TABLE `account_number_sequence` (
     UNIQUE KEY `uk_account_number_sequence_prefix`
         (`bank_code`, `product_prefix`),
 
+    UNIQUE KEY `uk_account_number_sequence_product`
+        (`bank_code`, `product_id`),
+
+    KEY `ix_account_number_sequence_lookup`
+        (`bank_code`, `account_type`, `product_id`),
+
+    KEY `ix_account_number_sequence_product`
+        (`product_id`),
+
     CONSTRAINT `fk_account_number_sequence_product`
         FOREIGN KEY (`product_id`)
         REFERENCES `product` (`product_id`),
