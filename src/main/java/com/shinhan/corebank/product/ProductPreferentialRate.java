@@ -17,7 +17,7 @@ public class ProductPreferentialRate {
     private ProductPreferentialRateId productPreferentialRateId;
 
     @Column(length = 100, nullable = false)
-    private String condition_name;
+    private String conditionName;
 
     @Column(precision = 5, scale = 2, nullable = false)
     private BigDecimal rate;

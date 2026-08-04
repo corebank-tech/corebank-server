@@ -54,17 +54,17 @@ public class Product extends BaseEntity {
     private Long amountUnit;
 
     @Column(nullable = false)
-    private Short min_term_months;
+    private Short minTermMonths;
 
     @Column(nullable = false)
-    private Short max_term_months;
+    private Short maxTermMonths;
 
     @Column(length = 20, nullable = false)
-    private String interest_pay_type;
+    private String interestPayType;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 12, nullable = false)
-    private SaleStatus sale_status;
+    private SaleStatus saleStatus;
 
     private LocalDate saleStartDate;
     private LocalDate saleEndDate;
@@ -73,5 +73,5 @@ public class Product extends BaseEntity {
     private Boolean newFlag;
 
     @Column(nullable = false)
-    private Boolean single_account_limit;
+    private Boolean singleAccountLimit;
 }
