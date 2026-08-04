@@ -115,15 +115,20 @@ CSV 다운로드 API의 응답 규칙은 다음과 같습니다.
 ### 구현 형태
 
 ```java
+// 성공 응답 전용 봉투. 실패 응답은 ErrorResponse(ApiExceptionHandler)가 전담한다
 public record ApiResponse<T>(String code, String message, T data) {
-    public static <T> ApiResponse<T> ok(T data) {
-        return new ApiResponse<>("0000", "정상 처리되었습니다.", data);
+
+    private static final String SUCCESS_CODE = "0000";
+    private static final String SUCCESS_MESSAGE = "정상 처리되었습니다.";
+
+    public static <T> ApiResponse<T> success(T data) {
+        return new ApiResponse<>(SUCCESS_CODE, SUCCESS_MESSAGE, data);
     }
-    public static ApiResponse<Void> ok() {
-        return new ApiResponse<>("0000", "정상 처리되었습니다.", null); // 직렬화 시 {} 로 변환
+    public static <T> ApiResponse<T> success(T data, String message) {
+        return new ApiResponse<>(SUCCESS_CODE, message, data);
     }
-    public static ApiResponse<Void> error(ErrorCode ec) {
-        return new ApiResponse<>(ec.getCode(), ec.getMessage(), null);
+    public static ApiResponse<Void> success() {
+        return new ApiResponse<>(SUCCESS_CODE, SUCCESS_MESSAGE, null); // 직렬화 시 {} 로 변환
     }
 }
 ```

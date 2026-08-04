@@ -148,18 +148,11 @@ public enum CommonErrorCode implements ErrorCode {
 package com.example.adapter.in.web.exception;
 
 import com.example.common.exception.ErrorCode;
-import lombok.Builder;
-import lombok.Getter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
-@Getter
-@Builder
-public class ErrorResponse {
-
-    private final String code;
-    private final String message;
-    private final Object data;
+// 실패 응답 전용 봉투. 성공 응답은 ApiResponse 가 전담한다
+public record ErrorResponse(String code, String message, Object data) {
 
     public static ResponseEntity<ErrorResponse> toResponseEntity(ErrorCode errorCode) {
         return toResponseEntity(errorCode, errorCode.getMessage());
@@ -168,11 +161,7 @@ public class ErrorResponse {
     public static ResponseEntity<ErrorResponse> toResponseEntity(ErrorCode errorCode, String message) {
         return ResponseEntity
                 .status(HttpStatus.valueOf(errorCode.getStatus()))
-                .body(ErrorResponse.builder()
-                        .code(errorCode.getCode())
-                        .message(message)
-                        .data(null)
-                        .build());
+                .body(new ErrorResponse(errorCode.getCode(), message, null));
     }
 }
 ```

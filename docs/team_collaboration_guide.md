@@ -95,6 +95,7 @@ DB·API 관련 기술 문서는 `docs/team_db_setup_guide.md`, `docs/api_convent
 - `dev`: 다음 출시 버전을 대비하여 개발하는 통합 브랜치
 - `feat` (기능 개발): `feat/(도메인명)-(기능명)` — 예: `feat/account-create`
 - `fix` (버그 수정): `fix/(도메인명)-(기능명)` — 예: `fix/transfer-ui`
+- 모든 PR은 `main`이 아니라 **`dev`를 base로** 연다. `main`은 배포 시점에 `dev`를 병합해서만 갱신한다.
 
 ### 6-2. PR 및 Issue 제목 규칙
 

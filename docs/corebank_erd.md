@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 23 테이블 / 금액 BIGINT · 시각 DATETIME(6) UTC
+> **DBMS**: MySQL 8.4 / 24 테이블 / 금액 BIGINT · 시각 DATETIME(6) UTC
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -9,7 +9,7 @@
 erDiagram
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 23 테이블 / 금액 BIGINT · 시각 DATETIME(6) UTC
+    %% MySQL 8.4 / 24 테이블 / 금액 BIGINT · 시각 DATETIME(6) UTC
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -294,6 +294,16 @@ erDiagram
         varchar result "SUCCESS / FAILURE"
         json detail "민감정보 마스킹 후 저장"
         datetime requested_at "DATETIME(6)"
+    }
+    common_code {
+        varchar code_group PK "예: ACCOUNT_STATUS"
+        varchar code PK "서버 Enum 값과 일치. 예: ACTIVE"
+        varchar code_name "화면 표시 한글명"
+        int sort_order
+        char use_yn "Y / N"
+        varchar description "VARCHAR(200)"
+        datetime created_at "DATETIME(6)"
+        datetime updated_at "DATETIME(6)"
     }
 
     %% ---------- 관계 ----------

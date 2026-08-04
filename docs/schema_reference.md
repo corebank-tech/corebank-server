@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 23개 테이블 · 241개 컬럼
+**대상**: 24개 테이블 · 249개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -47,6 +47,7 @@
 | 21 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8 |
 | 22 | `idempotency_key` | 멱등키 | P5 | 9 |
 | 23 | `audit_log` | 감사 로그 | P5 | 8 |
+| 24 | `common_code` | 공통코드 | P5 | 8 |
 
 ---
 
@@ -707,5 +708,30 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | --- | --- | --- |
 | INDEX | `ix_audit_customer` | `customer_id, requested_at DESC` |
 | INDEX | `ix_audit_txno` | `transaction_number` |
+
+---
+
+## `common_code`
+
+> 공통코드 (REQ-CMN-023). 코드값 → 화면 표시명 매핑
+
+`code` 값은 서버 Enum 값과 문자열이 정확히 일치해야 한다. Enum에는 있는데 이 테이블에 행이 없으면 프론트가 표시명 매핑에 실패한다. P5 테이블 중 유일하게 `created_at`/`updated_at`을 모두 가져 `BaseEntity`를 상속한다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `code_group` | `VARCHAR(50)` | **PK** | X |  | 코드 그룹명. 예: `ACCOUNT_STATUS` |
+| `code` | `VARCHAR(50)` | **PK** | X |  | 코드값. 서버 Enum 값과 일치. 예: `ACTIVE` |
+| `code_name` | `VARCHAR(100)` |  | X |  | 화면 표시 한글명. 예: `정상` |
+| `sort_order` | `INT` |  | X |  | 드롭다운 표시 순서 |
+| `use_yn` | `CHAR(1)` |  | X | `Y` | 사용 여부. `Y`/`N`. 물리 삭제 대신 사용 |
+| `description` | `VARCHAR(200)` |  | O |  | 관리자용 설명 |
+| `created_at` | `DATETIME(6)` |  | X |  | JPA Auditing |
+| `updated_at` | `DATETIME(6)` |  | X |  | JPA Auditing |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| INDEX | `ix_common_code_group` | `code_group, use_yn, sort_order` |
 
 ---
