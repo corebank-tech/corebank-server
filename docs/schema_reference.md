@@ -373,6 +373,7 @@
 | `ck_account_number_sequence_type` | `account_type IN ('DEMAND_DEPOSIT', 'TIME_DEPOSIT', 'INSTALLMENT_SAVINGS')` (CHECK) | 허용된 계좌 유형 중 하나인지 검증 |
 | `ck_account_number_sequence_product` | `DEMAND_DEPOSIT이면 product_id IS NULL, 예·적금이면 product_id IS NOT NULL` (CHECK) | 입출금은 상품 없음, 예·적금은 상품 필수 (정합성 보장) |
 | `ck_account_number_sequence_value` | `last_sequence BETWEEN 0 AND 9999999` (CHECK) | 일련번호가 7자리 범위(0 ~ 9,999,999)를 초과하지 않도록 제한 |
+
 ---
 
 # 4. 이체 · 원장 — P4
