@@ -76,8 +76,8 @@
 | `previous_login_at` | `DATETIME(6)` |  | O |  | 직전 로그인 시각. 대시보드의 `previousLoginAt`. 부정 접속을 고객이 알아채는 단서 |
 | `password_changed_at` | `DATETIME(6)` |  | O |  | 로그인 비밀번호 최종 변경 일시. 직전 비밀번호 재사용 제한(ATH0003) 판정 보조 |
 | `joined_at` | `DATETIME(6)` |  | X |  | 회원가입 완료 일시. 고객정보 조회의 `joinedAt` |
-| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 생성 일시 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 최종 수정 일시 |
+| `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시 |
 
 **인덱스**
 
@@ -102,8 +102,8 @@
 | `content` | `TEXT` |  | X |  | 약관 전문. 약관 본문 조회 응답의 `content` |
 | `is_required` | `BOOLEAN` |  | X | `FALSE` | 필수 동의 여부. FALSE면 선택 약관이라 미동의해도 가입이 진행된다 |
 | `view_required` | `BOOLEAN` |  | X | `FALSE` | 전문 열람 강제 여부. TRUE면 동의 전에 본문을 열어야 하며 이력이 없으면 PRD0005 |
-| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 생성 일시 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 최종 수정 일시 |
+| `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시 |
 
 **인덱스**
 
@@ -152,7 +152,7 @@
 | `used` | `BOOLEAN` |  | X | `FALSE` | 사용 완료 여부. 검증 성공 시 TRUE로 바꿔 재사용을 막는다 |
 | `verified_at` | `DATETIME(6)` |  | O |  | 검증 성공 시각. 미검증이면 NULL |
 | `expires_at` | `DATETIME(6)` |  | X |  | 유효시간 만료 시각. 발급 시각 + 180초 |
-| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 발급 요청 시각 |
+| `created_at` | `DATETIME(6)` |  | X |  | 발급 요청 시각 |
 
 **인덱스**
 
@@ -215,8 +215,8 @@
 | `sale_end_date` | `DATE` |  | O |  | 판매 종료일 |
 | `new_flag` | `BOOLEAN` |  | X | `FALSE` | 신상품 뱃지 표시 여부 |
 | `single_account_limit` | `BOOLEAN` |  | X | `FALSE` | 1인 1계좌 제한 상품인지. TRUE인 상품만 중복 가입 시 PRD0301을 던진다 |
-| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 생성 일시 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 최종 수정 일시 |
+| `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시 |
 
 **인덱스**
 
@@ -343,7 +343,7 @@
 | `seq_date` | `DATE` | **PK** | X |  | 채번 기준 영업일. KST 기준이며 거래번호 앞 8자리와 같다 |
 | `channel` | `CHAR(2)` | **PK** | X |  | 채널 코드. `WB`(인터넷뱅킹) / `BT`(배치·예약이체). 거래번호 9~10번째 자리 |
 | `last_seq` | `BIGINT` |  | X | `0` | 해당 일자·채널에서 마지막으로 나간 일련번호. 다음 거래는 이 값 + 1을 받는다 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 마지막 채번 시각 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 마지막 채번 시각 |
 
 **CHECK 제약**
 
@@ -380,7 +380,7 @@
 | `error_code` | `VARCHAR(10)` |  | O |  | 실패 시 오류코드 |
 | `error_message` | `VARCHAR(200)` |  | O |  | 실패 시 사유 문구 |
 | `transferred_at` | `DATETIME(6)` |  | X |  | 이체 처리 일시 |
-| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 생성 일시 |
+| `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
 
 **인덱스**
 
@@ -473,7 +473,7 @@
 | `one_time_limit` | `BIGINT` |  | X |  | 1회 이체한도. 초과하면 LMT0002 |
 | `daily_limit` | `BIGINT` |  | X |  | 1일 이체한도. 초과하면 LMT0003 |
 | `version` | `BIGINT` |  | X | `0` | 낙관적 락 버전 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 최종 수정 일시 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시 |
 
 **CHECK 제약**
 
@@ -495,7 +495,7 @@
 | `customer_id` | `BIGINT` | **PK** **FK** | X |  | 대상 고객 → `customer.customer_id` |
 | `usage_date` | `DATE` | **PK** | X |  | 사용액 집계 기준일. KST 영업일이며 매일 새 행이 생긴다 |
 | `used_amount` | `BIGINT` |  | X | `0` | 해당 일자에 `SUCCESS`로 확정된 이체금액 누계. 오류·취소·미실행 예약은 빠진다 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 마지막 사용액 갱신 시각 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 마지막 사용액 갱신 시각 |
 
 **CHECK 제약**
 
@@ -622,7 +622,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | `status` | `VARCHAR(12)` |  | X |  | **등록 건** 생명주기 상태. `NORMAL`(운용 중) / `EXPIRED`(기간 만료로 시스템 자동 종료) / `TERMINATED`(고객 직접 해지). 회차 실행결과와는 전혀 다른 개념이다 |
 | `registered_at` | `DATETIME(6)` |  | X |  | 등록 일시 |
 | `terminated_at` | `DATETIME(6)` |  | O |  | 해지·만료 전환 시각 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 최종 수정 일시 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시 |
 | `active_dup_key` | `VARCHAR(64)` *GEN* | **UK** | O |  | **생성 컬럼.** `NORMAL`일 때만 값이 생겨 중복 등록을 막는다 (AUT0301) |
 
 **인덱스**
@@ -683,7 +683,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | `state` | `VARCHAR(12)` |  | X |  | 처리 상태. `PROCESSING`(처리 중) / `COMPLETED`(완료). 재요청 시 CMN0301과 200 반환을 가르는 기준 |
 | `http_status` | `SMALLINT` |  | O |  | 저장된 응답의 HTTP 상태코드 |
 | `response_snapshot` | `JSON` |  | O |  | 저장된 응답 본문. 재요청 시 그대로 되돌려준다 |
-| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 최초 요청 수신 시각 |
+| `created_at` | `DATETIME(6)` |  | X |  | 최초 요청 수신 시각 |
 | `expires_at` | `DATETIME(6)` |  | X |  | 만료 시각. 24시간 경과 건은 배치가 지운다 |
 
 **인덱스**
