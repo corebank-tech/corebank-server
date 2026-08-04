@@ -33,15 +33,18 @@ ALTER TABLE `account`
             )
         ),
 
-    ADD CONSTRAINT `ck_account_password_failure_count`
-        CHECK (
-            `password_failure_count` BETWEEN 0 AND 5
-        ),
-
-    ADD CONSTRAINT `ck_account_password_locked`
-        CHECK (
-            `password_locked` IN (FALSE, TRUE)
-        ),
+ADD CONSTRAINT `ck_account_password_lock_state`
+    CHECK (
+        (
+            `password_failure_count` BETWEEN 0 AND 4
+            AND `password_locked` = FALSE
+        )
+        OR
+        (
+            `password_failure_count` = 5
+            AND `password_locked` = TRUE
+        )
+    ),
 
     ADD CONSTRAINT `ck_account_withdrawal_registered`
         CHECK (
