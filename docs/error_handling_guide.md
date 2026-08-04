@@ -119,6 +119,8 @@ public enum CommonErrorCode implements ErrorCode {
     UNAUTHORIZED("CMN0101", 401, "인증정보가 없거나 세션이 만료되었습니다."),
     FORBIDDEN("CMN0102", 403, "해당 자원에 접근할 권한이 없습니다."),
 
+    INVALID_ENDPOINT("CMN0201", 404, "잘못된 요청 주소입니다."),
+
     DUPLICATE_REQUEST_IN_PROGRESS("CMN0301", 409, "동일 요청이 처리 중입니다."),
     IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST("CMN0302", 409, "동일한 멱등키가 다른 요청에 사용되었습니다."),
 
@@ -186,16 +188,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-// 모든 REST 컨트롤러의 예외를 가로채 {code, message, data} 로 변환. 각 파트는 수정할 필요 없음
-@RestControllerAdvice(annotations = RestController.class)
+// 모든 예외를 가로채 {code, message, data} 로 변환. 각 파트는 수정할 필요 없음
+// annotations = RestController.class 로 스코프를 제한하지 않는다: 404/405 처럼 핸들러 매칭 자체가
+// 실패한 예외는 handlerType 을 알 수 없어 스코프가 걸린 advice 후보에서 아예 제외되기 때문
+@RestControllerAdvice
 public class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
@@ -242,6 +248,20 @@ public class ApiExceptionHandler {
         return ErrorResponse.toResponseEntity(CommonErrorCode.REQUIRED_FIELD_MISSING, message);
     }
 
+    // 존재하지 않는 경로 호출 -> CMN0201 (404)
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<ErrorResponse> handleNotFound(Exception e) {
+        log.warn("[{}] {}", CommonErrorCode.INVALID_ENDPOINT.getCode(), e.getMessage());
+        return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_ENDPOINT);
+    }
+
+    // 경로는 존재하나 지원하지 않는 HTTP 메서드로 호출 -> CMN0201 (404). 405 대신 404 로 통일
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        log.warn("[{}] {}", CommonErrorCode.INVALID_ENDPOINT.getCode(), e.getMessage());
+        return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_ENDPOINT);
+    }
+
     // 그 외 모든 예외 (NPE, DB 오류 등) -> CMN9999. 스택트레이스는 로그에만 남김
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception e) {
@@ -251,7 +271,7 @@ public class ApiExceptionHandler {
 }
 ```
 
-핸들러 6개가 처리하는 상황:
+핸들러 8개가 처리하는 상황:
 
 | 핸들러 | 처리 상황 | 반환 코드 |
 | --- | --- | --- |
@@ -260,6 +280,8 @@ public class ApiExceptionHandler {
 | `MethodArgumentTypeMismatchException` | 타입 불일치. Enum에 없는 값 전달 | `CMN0001` |
 | `MissingServletRequestParameterException` | 필수 쿼리 파라미터 누락 | `CMN0002` |
 | `MissingRequestHeaderException` | 필수 헤더 누락 (`Idempotency-Key` 등) | `CMN0002` |
+| `NoResourceFoundException` / `NoHandlerFoundException` | 존재하지 않는 엔드포인트 (404) | `CMN0201` |
+| `HttpRequestMethodNotSupportedException` | 지원하지 않는 HTTP 메서드 (405 → 404로 통일) | `CMN0201` |
 | `Exception` | 그 외 모든 예외 | `CMN9999` |
 
 ---
@@ -312,6 +334,7 @@ public enum ProductErrorCode implements ErrorCode {
 | 지원하지 않는 페이지 크기 | `INVALID_PAGE_SIZE` |
 | 세션 없음·만료 (401) | `UNAUTHORIZED` |
 | 타 고객 자원 접근 (403) | `FORBIDDEN` |
+| 존재하지 않는 엔드포인트·지원하지 않는 메서드 (404) | 던지지 않아도 자동으로 `INVALID_ENDPOINT` |
 | 멱등키 중복 처리중 (409) | `DUPLICATE_REQUEST_IN_PROGRESS` |
 | 멱등키 재사용+요청 내용 다름 (409) | `IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST` |
 | 예상 못 한 서버 오류 (500) | 던지지 않아도 자동으로 `INTERNAL_ERROR` |
