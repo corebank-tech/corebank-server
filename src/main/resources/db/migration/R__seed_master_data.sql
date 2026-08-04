@@ -27,9 +27,12 @@ INSERT INTO product
    2.80, 3.30, 100000, 100000000, 100000, 6, 36, '단리', 'ON_SALE', FALSE, FALSE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000')
 ON DUPLICATE KEY UPDATE
   product_name = VALUES(product_name), product_group = VALUES(product_group),
+  deposit_type = VALUES(deposit_type), summary = VALUES(summary),
   base_rate = VALUES(base_rate), max_rate = VALUES(max_rate),
   min_amount = VALUES(min_amount), max_amount = VALUES(max_amount),
-  amount_unit = VALUES(amount_unit), sale_status = VALUES(sale_status),
+  amount_unit = VALUES(amount_unit), min_term_months = VALUES(min_term_months),
+  max_term_months = VALUES(max_term_months), interest_pay_type = VALUES(interest_pay_type),
+  sale_status = VALUES(sale_status), new_flag = VALUES(new_flag),
   single_account_limit = VALUES(single_account_limit), updated_at = VALUES(updated_at);
 
 -- 상품 기간별 금리 (product_id + term_months 가 PK)
