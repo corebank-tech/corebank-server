@@ -42,9 +42,9 @@ JOIN (SELECT 6 AS term_months, 3.00 AS rate
 WHERE p.product_code = 'PRD_YOUTH_SAVE'
 ON DUPLICATE KEY UPDATE rate = VALUES(rate);
 
--- 상품-약관 연결 (product_id + terms_id 가 PK)
-INSERT INTO product_terms (product_id, terms_id, required)
-SELECT p.product_id, tm.terms_id, TRUE
+-- 상품-약관 연결 (product_id + terms_id 가 PK). 필수 동의 여부는 terms.is_required 기준.
+INSERT INTO product_terms (product_id, terms_id)
+SELECT p.product_id, tm.terms_id
 FROM product p
 JOIN terms tm ON tm.terms_code IN ('TERMS_DEPOSIT', 'TERMS_SAVINGS') AND tm.version = 'v1.0'
-ON DUPLICATE KEY UPDATE required = VALUES(required);
+ON DUPLICATE KEY UPDATE terms_id = VALUES(terms_id);

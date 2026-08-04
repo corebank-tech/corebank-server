@@ -196,7 +196,6 @@ erDiagram
     product_terms {
         bigint product_id PK
         bigint terms_id PK
-        boolean required
     }
     product_subscription {
         bigint subscription_id PK

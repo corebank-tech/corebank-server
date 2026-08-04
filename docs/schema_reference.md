@@ -32,7 +32,7 @@
 | 6 | `product` | 상품 | P3 | 22 |
 | 7 | `product_rate_tier` | 상품 기간별 금리 | P3 | 3 |
 | 8 | `product_preferential_rate` | 상품 우대금리 | P3 | 4 |
-| 9 | `product_terms` | 상품-약관 연결 | P3 | 3 |
+| 9 | `product_terms` | 상품-약관 연결 | P3 | 2 |
 | 10 | `account` | 계좌 | P2 | 21 |
 | 11 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4 |
 | 12 | `transfer` | 이체 거래 | P4 | 20 |
@@ -268,7 +268,8 @@
 | --- | --- | --- | --- | --- | --- |
 | `product_id` | `BIGINT` | **PK** **FK** | X |  | 대상 상품 → `product.product_id` |
 | `terms_id` | `BIGINT` | **PK** **FK** | X |  | 연결된 약관 (버전 포함) → `terms.terms_id` |
-| `required` | `BOOLEAN` |  | X | `FALSE` | **이 상품에서** 필수 동의인지. `terms.is_required`와 별개로 상품마다 다를 수 있다 |
+
+필수 동의 여부는 상품별 오버라이드 없이 `terms.is_required` 단일 기준으로 판단한다.
 
 ---
 
