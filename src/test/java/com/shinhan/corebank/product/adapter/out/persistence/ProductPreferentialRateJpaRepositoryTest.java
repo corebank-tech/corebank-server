@@ -10,6 +10,7 @@ import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.ProductPreferentialRate;
 import com.shinhan.corebank.product.domain.ProductPreferentialRateId;
 import com.shinhan.corebank.product.domain.SaleStatus;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -25,6 +26,9 @@ class ProductPreferentialRateJpaRepositoryTest extends IntegrationTestSupport {
 
     @Autowired
     ProductPreferentialRateJpaRepository repository;
+
+    @Autowired
+    EntityManager entityManager;
 
     Long productId;
 
@@ -44,6 +48,8 @@ class ProductPreferentialRateJpaRepositoryTest extends IntegrationTestSupport {
                 .build();
 
         repository.save(preferentialRate);
+        entityManager.flush();
+        entityManager.clear();
 
         ProductPreferentialRate found = repository.findById(id).orElseThrow();
         assertThat(found.getConditionName()).isEqualTo("장기거래 우대");

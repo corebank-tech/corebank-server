@@ -10,6 +10,7 @@ import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.ProductRateTier;
 import com.shinhan.corebank.product.domain.ProductRateTierId;
 import com.shinhan.corebank.product.domain.SaleStatus;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -25,6 +26,9 @@ class ProductRateTierJpaRepositoryTest extends IntegrationTestSupport {
 
     @Autowired
     ProductRateTierJpaRepository repository;
+
+    @Autowired
+    EntityManager entityManager;
 
     Long productId;
 
@@ -43,6 +47,8 @@ class ProductRateTierJpaRepositoryTest extends IntegrationTestSupport {
                 .build();
 
         repository.save(tier);
+        entityManager.flush();
+        entityManager.clear();
 
         ProductRateTier found = repository.findById(id).orElseThrow();
         assertThat(found.getRate()).isEqualByComparingTo("2.80");

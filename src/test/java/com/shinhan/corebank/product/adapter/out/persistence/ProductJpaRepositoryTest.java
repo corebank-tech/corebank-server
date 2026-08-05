@@ -8,6 +8,7 @@ import com.shinhan.corebank.product.domain.InterestPayType;
 import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.SaleStatus;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,9 @@ class ProductJpaRepositoryTest extends IntegrationTestSupport {
 
     @Autowired
     ProductJpaRepository repository;
+
+    @Autowired
+    EntityManager entityManager;
 
     @Test
     @DisplayName("Product를 저장하면 감사 컬럼이 채워지고 findById로 조회된다")
@@ -42,6 +46,8 @@ class ProductJpaRepositoryTest extends IntegrationTestSupport {
                 .build();
 
         Product saved = repository.save(product);
+        entityManager.flush();
+        entityManager.clear();
 
         Product found = repository.findById(saved.getProductId()).orElseThrow();
         assertThat(found.getProductCode()).isEqualTo("SVN-001");

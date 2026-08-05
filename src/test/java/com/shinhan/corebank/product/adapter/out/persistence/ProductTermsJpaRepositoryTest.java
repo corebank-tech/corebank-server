@@ -10,6 +10,7 @@ import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.ProductTerms;
 import com.shinhan.corebank.product.domain.ProductTermsId;
 import com.shinhan.corebank.product.domain.SaleStatus;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,9 @@ class ProductTermsJpaRepositoryTest extends IntegrationTestSupport {
     @Autowired
     JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    EntityManager entityManager;
+
     @Test
     @DisplayName("ProductTerms를 저장하면 복합키로 조회된다")
     void saveAndFindById() {
@@ -42,6 +46,8 @@ class ProductTermsJpaRepositoryTest extends IntegrationTestSupport {
                 .build();
 
         repository.save(productTerms);
+        entityManager.flush();
+        entityManager.clear();
 
         assertThat(repository.findById(id)).isPresent();
     }
