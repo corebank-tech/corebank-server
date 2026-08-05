@@ -21,10 +21,10 @@ INSERT INTO product
   (product_code, product_name, product_group, deposit_type, summary, base_rate, max_rate,
    min_amount, max_amount, amount_unit, min_term_months, max_term_months,
    interest_pay_type, sale_status, new_flag, single_account_limit, created_at, updated_at) VALUES
-  ('PRD_YOUTH_SAVE', '청년 희망 적금', 'SAVINGS', '적립식', '청년 대상 우대 적금',
-   3.20, 4.50,  10000, 1000000,  10000, 6, 36, '단리', 'ON_SALE', TRUE,  TRUE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000'),
-  ('PRD_BASIC_DEP',  '기본 정기예금',  'DEPOSIT', '거치식', '기본형 정기예금',
-   2.80, 3.30, 100000, 100000000, 100000, 6, 36, '단리', 'ON_SALE', FALSE, FALSE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000')
+  ('PRD_YOUTH_SAVE', '청년 희망 적금', 'SAVINGS', 'INSTALLMENT', '청년 대상 우대 적금',
+   3.20, 4.50,  10000, 1000000,  10000, 6, 36, 'SIMPLE', 'ON_SALE', TRUE,  TRUE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000'),
+  ('PRD_BASIC_DEP',  '기본 정기예금',  'DEPOSIT', 'LUMP_SUM', '기본형 정기예금',
+   2.80, 3.30, 100000, 100000000, 100000, 6, 36, 'SIMPLE', 'ON_SALE', FALSE, FALSE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000')
 ON DUPLICATE KEY UPDATE
   product_name = VALUES(product_name), product_group = VALUES(product_group),
   deposit_type = VALUES(deposit_type), summary = VALUES(summary),
@@ -46,9 +46,15 @@ JOIN (SELECT 6 AS term_months, 3.00 AS rate
 WHERE p.product_code = 'PRD_YOUTH_SAVE'
 ON DUPLICATE KEY UPDATE rate = VALUES(rate);
 
--- 상품-약관 연결 (product_id + terms_id 가 PK)
-INSERT INTO product_terms (product_id, terms_id, required)
-SELECT p.product_id, tm.terms_id, TRUE
+-- 상품-약관 연결 (product_id + terms_id 가 PK). 필수 동의 여부는 terms.is_required 기준.
+-- 상품군별로 대응하는 약관만 연결한다 (적금 → TERMS_SAVINGS, 예금 → TERMS_DEPOSIT).
+INSERT INTO product_terms (product_id, terms_id)
+SELECT p.product_id, tm.terms_id
 FROM product p
-JOIN terms tm ON tm.terms_code IN ('TERMS_DEPOSIT', 'TERMS_SAVINGS') AND tm.version = 'v1.0'
-ON DUPLICATE KEY UPDATE required = VALUES(required);
+JOIN (
+  SELECT 'PRD_YOUTH_SAVE' AS product_code, 'TERMS_SAVINGS' AS terms_code
+  UNION ALL
+  SELECT 'PRD_BASIC_DEP', 'TERMS_DEPOSIT'
+) mapping ON mapping.product_code = p.product_code
+JOIN terms tm ON tm.terms_code = mapping.terms_code AND tm.version = 'v1.0'
+ON DUPLICATE KEY UPDATE terms_id = VALUES(terms_id);

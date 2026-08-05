@@ -32,7 +32,7 @@
 | 6 | `product` | 상품 | P3 | 22 |
 | 7 | `product_rate_tier` | 상품 기간별 금리 | P3 | 3 |
 | 8 | `product_preferential_rate` | 상품 우대금리 | P3 | 4 |
-| 9 | `product_terms` | 상품-약관 연결 | P3 | 3 |
+| 9 | `product_terms` | 상품-약관 연결 | P3 | 2 |
 | 10 | `account` | 계좌 | P2 | 21 |
 | 11 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4 |
 | 12 | `transfer` | 이체 거래 | P4 | 20 |
@@ -199,7 +199,7 @@
 | `product_code` | `VARCHAR(20)` | **UK** | X |  | 상품 업무 코드. 화면·시드 데이터가 상품을 지칭하는 안정적 키 |
 | `product_name` | `VARCHAR(100)` |  | X |  | 화면에 노출하는 상품명 |
 | `product_group` | `VARCHAR(12)` |  | X |  | SAVINGS(정기적금) / DEPOSIT(정기예금) |
-| `deposit_type` | `VARCHAR(20)` |  | X |  | 납입 방식. `거치식`(한 번에 예치) / `적립식`(매월 납입) |
+| `deposit_type` | `VARCHAR(20)` |  | X |  | 납입 방식. `LUMP_SUM`(한 번에 예치) / `INSTALLMENT`(매월 납입) |
 | `summary` | `VARCHAR(200)` |  | O |  | 상품 한 줄 요약. 목록 화면용 |
 | `description` | `TEXT` |  | O |  | 상품 상세 설명. 상세 화면용 |
 | `base_rate` | `DECIMAL(5,2)` |  | X |  | 기본금리(연 %). 우대금리를 제외한 기준값 |
@@ -209,7 +209,7 @@
 | `amount_unit` | `BIGINT` |  | X |  | 가입금액 입력 단위. 이 값의 배수가 아니면 PRD0004 |
 | `min_term_months` | `SMALLINT` |  | X |  | 최소 가입기간(개월). 미만이면 PRD0002 |
 | `max_term_months` | `SMALLINT` |  | X |  | 최대 가입기간(개월). 초과하면 PRD0002 |
-| `interest_pay_type` | `VARCHAR(20)` |  | X |  | 이자 계산 방식. `단리` / `복리` |
+| `interest_pay_type` | `VARCHAR(20)` |  | X |  | 이자 계산 방식. `SIMPLE`(단리) / `COMPOUND`(복리) |
 | `sale_status` | `VARCHAR(12)` |  | X |  | 판매 상태. `ON_SALE`(판매중) / `SUSPENDED`(판매중지). 판매중지 상품은 목록에서 빠지고 상세 조회는 PRD0201 |
 | `sale_start_date` | `DATE` |  | O |  | 판매 시작일 |
 | `sale_end_date` | `DATE` |  | O |  | 판매 종료일 |
@@ -268,7 +268,8 @@
 | --- | --- | --- | --- | --- | --- |
 | `product_id` | `BIGINT` | **PK** **FK** | X |  | 대상 상품 → `product.product_id` |
 | `terms_id` | `BIGINT` | **PK** **FK** | X |  | 연결된 약관 (버전 포함) → `terms.terms_id` |
-| `required` | `BOOLEAN` |  | X | `FALSE` | **이 상품에서** 필수 동의인지. `terms.is_required`와 별개로 상품마다 다를 수 있다 |
+
+필수 동의 여부는 상품별 오버라이드 없이 `terms.is_required` 단일 기준으로 판단한다.
 
 ---
 
@@ -327,6 +328,52 @@
 | `ck_account_withdrawal_type`          | `withdrawal_registered = FALSE OR account_type = 'DEMAND_DEPOSIT'`                                                                                   | 출금계좌 등록은 입출금계좌에만 허용한다.                             |
 | `ck_account_withdrawal_registered_at` | 미등록이면 `withdrawal_registered_at IS NULL`<br>등록이면 `withdrawal_registered_at IS NOT NULL`                                                              | 출금계좌 등록 여부와 등록 일시의 존재 여부가 일치해야 한다.                 |
 | `ck_account_closed_date`              | `CLOSED`이면 `closed_date IS NOT NULL AND closed_date >= opened_date`<br>`CLOSED`가 아니면 `closed_date IS NULL`                                           | 해지 계좌에는 개설일 이후의 해지일이 있어야 하며, 미해지 계좌에는 해지일이 없어야 한다. |
+
+---
+
+## `account_number_sequence`
+
+> 은행·상품별 계좌번호 채번
+
+은행·계좌 유형·상품별 계좌번호 발급 규칙과 마지막 발급 일련번호를 관리한다.
+
+### 계좌번호 구성
+```text
+은행코드 3자리 + 상품 Prefix 2자리 + 일련번호 7자리
+```
+
+| 컬럼명              | 데이터 타입      | NULL 허용 |      기본값       | 키  | 설명                                                              |
+|:-----------------|:------------|:-------:|:--------------:|:--:|:----------------------------------------------------------------|
+| `sequence_id`    | BIGINT      |    X    | AUTO_INCREMENT | PK | 계좌번호 채번 규칙 식별자                                                  |
+| `bank_code`      | CHAR(3)     |    X    |       없음       |    | 계좌번호 앞 3자리에 포함되는 은행코드                                           |
+| `account_type`   | VARCHAR(24) |    X    |       없음       |    | 계좌 유형 (`DEMAND_DEPOSIT`, `TIME_DEPOSIT`, `INSTALLMENT_SAVINGS`) |
+| `product_id`     | BIGINT      |    O    |      NULL      | FK | 연결 상품 식별자. 입출금계좌는 `NULL`                                        |
+| `product_prefix` | CHAR(2)     |    X    |       없음       |    | 계좌번호에 포함되는 상품별 Prefix                                           |
+| `last_sequence`  | BIGINT      |    X    |      `0`       |    | 마지막으로 발급한 7자리 일련번호                                              |
+| `created_at`     | DATETIME(6) |    X    |       없음       |    | 채번 규칙 생성 일시                                                     |
+| `updated_at`     | DATETIME(6) |    X    |       없음       |    | 채번 규칙 최종 수정 일시                                                  |
+
+**인덱스**
+
+| 종류 | 이름                                   | 컬럼                                        | 용도                               |
+| :--- |:-------------------------------------|:------------------------------------------|:---------------------------------|
+| PRIMARY | `PRIMARY`                            | `sequence_id`                             | 채번 규칙 식별 및 PK 조회                 |
+| UNIQUE | `uk_account_number_sequence_prefix`  | `bank_code`, `product_prefix`             | 같은 은행 내 Prefix 중복 방지             |
+| UNIQUE | `uk_account_number_sequence_product` | `bank_code`, `product_id`                 | 같은 예·적금 상품의 채번 규칙 중복 방지          |
+| INDEX | `ix_account_number_sequence_lookup`  | `bank_code`, `account_type`, `product_id` | 계좌번호 발급 시 채번 행 조회 및 비관적 락 범위 최소화 |
+| INDEX | `ix_account_number_sequence_product` | `product_id`                              | 상품 FK 검사 및 상품 기준 조회 지원           |
+
+**CHECK 제약**
+
+| 이름 | 조건 | 설명 |
+| :--- | :--- | :--- |
+| `PRIMARY` | `sequence_id` (PK) | 행별 고유값 (채번 규칙 행 식별) |
+| `fk_account_number_sequence_product` | `product_id` (FK -> `product.product_id`) | 존재하는 상품만 채번 규칙 연결 가능 |
+| `ck_account_number_sequence_bank_code` | `bank_code REGEXP '^[0-9]{3}$'` (CHECK) | 은행코드 형식 검증 (숫자 3자리) |
+| `ck_account_number_sequence_prefix` | `product_prefix REGEXP '^[0-9]{2}$'` (CHECK) | 상품 Prefix 형식 검증 (숫자 2자리) |
+| `ck_account_number_sequence_type` | `account_type IN ('DEMAND_DEPOSIT', 'TIME_DEPOSIT', 'INSTALLMENT_SAVINGS')` (CHECK) | 허용된 계좌 유형 중 하나인지 검증 |
+| `ck_account_number_sequence_product` | `DEMAND_DEPOSIT이면 product_id IS NULL, 예·적금이면 product_id IS NOT NULL` (CHECK) | 입출금은 상품 없음, 예·적금은 상품 필수 (정합성 보장) |
+| `ck_account_number_sequence_value` | `last_sequence BETWEEN 0 AND 9999999` (CHECK) | 일련번호가 7자리 범위(0 ~ 9,999,999)를 초과하지 않도록 제한 |
 
 ---
 
