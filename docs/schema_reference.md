@@ -264,10 +264,11 @@
 
 > 상품-약관 연결
 
-| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
-| --- | --- | --- | --- | --- | --- |
-| `product_id` | `BIGINT` | **PK** **FK** | X |  | 대상 상품 → `product.product_id` |
-| `terms_id` | `BIGINT` | **PK** **FK** | X |  | 연결된 약관 (버전 포함) → `terms.terms_id` |
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보                                             |
+| --- | --- | --- | --- | --- |----------------------------------------------------|
+| `product_id` | `BIGINT` | **PK** **FK** | X |  | 대상 상품 → `product.product_id`                       |
+| `terms_id` | `BIGINT` | **PK** **FK** | X |  | 연결된 약관 (버전 포함) → `terms.terms_id`                  |
+| `display_order` | `SMALLINT` |  | X |  | 상품 상세조회에서 이 약관을 보여줄 순서(오름차순). — `terms` 자체의 속성이 아님 |
 
 필수 동의 여부는 상품별 오버라이드 없이 `terms.is_required` 단일 기준으로 판단한다.
 
