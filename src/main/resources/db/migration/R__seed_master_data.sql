@@ -43,8 +43,14 @@ WHERE p.product_code = 'PRD_YOUTH_SAVE'
 ON DUPLICATE KEY UPDATE rate = VALUES(rate);
 
 -- 상품-약관 연결 (product_id + terms_id 가 PK). 필수 동의 여부는 terms.is_required 기준.
+-- 상품군별로 대응하는 약관만 연결한다 (적금 → TERMS_SAVINGS, 예금 → TERMS_DEPOSIT).
 INSERT INTO product_terms (product_id, terms_id)
 SELECT p.product_id, tm.terms_id
 FROM product p
-JOIN terms tm ON tm.terms_code IN ('TERMS_DEPOSIT', 'TERMS_SAVINGS') AND tm.version = 'v1.0'
+JOIN (
+  SELECT 'PRD_YOUTH_SAVE' AS product_code, 'TERMS_SAVINGS' AS terms_code
+  UNION ALL
+  SELECT 'PRD_BASIC_DEP', 'TERMS_DEPOSIT'
+) mapping ON mapping.product_code = p.product_code
+JOIN terms tm ON tm.terms_code = mapping.terms_code AND tm.version = 'v1.0'
 ON DUPLICATE KEY UPDATE terms_id = VALUES(terms_id);
