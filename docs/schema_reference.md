@@ -199,7 +199,7 @@
 | `product_code` | `VARCHAR(20)` | **UK** | X |  | 상품 업무 코드. 화면·시드 데이터가 상품을 지칭하는 안정적 키 |
 | `product_name` | `VARCHAR(100)` |  | X |  | 화면에 노출하는 상품명 |
 | `product_group` | `VARCHAR(12)` |  | X |  | SAVINGS(정기적금) / DEPOSIT(정기예금) |
-| `deposit_type` | `VARCHAR(20)` |  | X |  | 납입 방식. `거치식`(한 번에 예치) / `적립식`(매월 납입) |
+| `deposit_type` | `VARCHAR(20)` |  | X |  | 납입 방식. `LUMP_SUM`(한 번에 예치) / `INSTALLMENT`(매월 납입) |
 | `summary` | `VARCHAR(200)` |  | O |  | 상품 한 줄 요약. 목록 화면용 |
 | `description` | `TEXT` |  | O |  | 상품 상세 설명. 상세 화면용 |
 | `base_rate` | `DECIMAL(5,2)` |  | X |  | 기본금리(연 %). 우대금리를 제외한 기준값 |
@@ -209,7 +209,7 @@
 | `amount_unit` | `BIGINT` |  | X |  | 가입금액 입력 단위. 이 값의 배수가 아니면 PRD0004 |
 | `min_term_months` | `SMALLINT` |  | X |  | 최소 가입기간(개월). 미만이면 PRD0002 |
 | `max_term_months` | `SMALLINT` |  | X |  | 최대 가입기간(개월). 초과하면 PRD0002 |
-| `interest_pay_type` | `VARCHAR(20)` |  | X |  | 이자 계산 방식. `단리` / `복리` |
+| `interest_pay_type` | `VARCHAR(20)` |  | X |  | 이자 계산 방식. `SIMPLE`(단리) / `COMPOUND`(복리) |
 | `sale_status` | `VARCHAR(12)` |  | X |  | 판매 상태. `ON_SALE`(판매중) / `SUSPENDED`(판매중지). 판매중지 상품은 목록에서 빠지고 상세 조회는 PRD0201 |
 | `sale_start_date` | `DATE` |  | O |  | 판매 시작일 |
 | `sale_end_date` | `DATE` |  | O |  | 판매 종료일 |
