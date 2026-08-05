@@ -56,8 +56,7 @@ public class AutoTransfer {
             throw new BusinessException(AutoTransferErrorCode.INVALID_TRANSFER_PERIOD, "이체 종료일은 시작일로부터 60개월 이내여야 합니다.");
         }
 
-        // 최초 실행 예정일은 항상 startDate 이후 첫 transferDay(월말 보정)로 서버가 직접 계산한다.
-        // 호출부가 넘긴 값을 신뢰하면 startDate보다 이르거나 transferDay와 안 맞는 날짜가 들어올 수 있다.
+        // 최초 실행 예정일은 항상 startDate 이후 첫 transferDay(월말 보정)로 서버가 직접 계산
         LocalDate nextExecutionDate = firstExecutionDate(startDate, transferDay);
         if (nextExecutionDate.isAfter(endDate)) {
             throw new BusinessException(AutoTransferErrorCode.NO_EXECUTION_WITHIN_PERIOD);
@@ -139,17 +138,20 @@ public class AutoTransfer {
             throw new BusinessException(AutoTransferErrorCode.INVALID_TRANSFER_PERIOD, "이체 종료일은 시작일로부터 60개월 이내여야 합니다.");
         }
 
+        LocalDate newNextExecutionDate = this.nextExecutionDate;
         if (!cycleMonths.equals(this.cycleMonths)) {
             // 직전 실행 예정일 기준 재산출: 현재 nextExecutionDate를 옛 주기만큼 되돌린 지점(앵커)에 새 주기 더하는 방식
             YearMonth anchor = YearMonth.from(this.nextExecutionDate).minusMonths(this.cycleMonths);
             YearMonth targetMonth = anchor.plusMonths(cycleMonths);
-            this.nextExecutionDate = clampToTransferDay(targetMonth, this.transferDay);
-            this.cycleMonths = cycleMonths;
+            newNextExecutionDate = clampToTransferDay(targetMonth, this.transferDay);
         }
-        if (this.nextExecutionDate.isAfter(endDate)) {
+        if (newNextExecutionDate.isAfter(endDate)) {
             throw new BusinessException(AutoTransferErrorCode.NO_EXECUTION_WITHIN_PERIOD);
         }
 
+        // 모든 검증을 통과한 뒤에만 필드에 반영한다 — 검증 도중 실패하면 엔티티는 변경 전 상태를 유지해야 한다
+        this.cycleMonths = cycleMonths;
+        this.nextExecutionDate = newNextExecutionDate;
         this.amount = amount;
         this.endDate = endDate;
         this.myPassbookMemo = myPassbookMemo;
