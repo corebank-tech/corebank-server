@@ -37,6 +37,7 @@ class ProductTermsJpaRepositoryTest extends IntegrationTestSupport {
         ProductTermsId id = new ProductTermsId(productId, termsId);
         ProductTerms productTerms = ProductTerms.builder()
                 .id(id)
+                .displayOrder((short) 1)
                 .build();
 
         repository.save(productTerms);
