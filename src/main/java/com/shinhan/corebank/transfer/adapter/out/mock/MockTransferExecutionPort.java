@@ -13,7 +13,7 @@ import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCas
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 
 @Component
-@Profile({"local", "test", "scratch", "default"})
+@Profile({"local", "test", "scratch"})
 public class MockTransferExecutionPort implements TransferExecutionUseCase{
 
     // 임시 일련번호 생성을 위한 시퀀스 (동시성 보장)
