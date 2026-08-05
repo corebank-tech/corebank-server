@@ -14,7 +14,12 @@ final class ProductTestFixtures {
     }
 
     static ProductJpaEntity defaultProduct() {
+        return defaultProduct(null);
+    }
+
+    static ProductJpaEntity defaultProduct(Long productId) {
         return ProductJpaEntity.builder()
+                .productId(productId)
                 .productCode("SVN-001")
                 .productName("정기예금")
                 .productGroup(ProductGroup.DEPOSIT)
@@ -39,6 +44,7 @@ final class ProductTestFixtures {
 
     static Product defaultProductDomain() {
         return Product.builder()
+                .productId(1L)
                 .productCode("SVN-001")
                 .productName("정기예금")
                 .productGroup(ProductGroup.DEPOSIT)

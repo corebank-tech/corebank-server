@@ -3,15 +3,19 @@ package com.shinhan.corebank.product.adapter.out.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.product.domain.Product;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class ProductMapperTest {
 
     @Test
     @DisplayName("JPA 엔티티를 도메인 객체로 변환하면 모든 필드가 보존된다")
     void toDomain_preservesAllFields() {
-        ProductJpaEntity entity = ProductTestFixtures.defaultProduct();
+        ProductJpaEntity entity = ProductTestFixtures.defaultProduct(1L);
+        ReflectionTestUtils.setField(entity, "createdAt", LocalDateTime.of(2026, 1, 1, 0, 0));
+        ReflectionTestUtils.setField(entity, "updatedAt", LocalDateTime.of(2026, 1, 2, 0, 0));
 
         Product domain = ProductMapper.toDomain(entity);
 
@@ -40,8 +44,10 @@ class ProductMapperTest {
     }
 
     @Test
-    @DisplayName("도메인 객체를 JPA 엔티티로 변환하면 모든 필드가 보존된다")
-    void toEntity_preservesAllFields() {
+    @DisplayName("도메인 객체를 JPA 엔티티로 변환하면 감사 필드를 제외한 모든 필드가 보존된다")
+    void toEntity_preservesAllFieldsExceptAuditTimestamps() {
+        // createdAt/updatedAt은 BaseEntity에서 JPA Auditing(@CreatedDate/@LastModifiedDate)이
+        // 전담하므로 toEntity에서 의도적으로 다루지 않는다.
         Product domain = ProductTestFixtures.defaultProductDomain();
 
         ProductJpaEntity entity = ProductMapper.toEntity(domain);
