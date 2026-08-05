@@ -337,5 +337,24 @@ class AutoTransferTest {
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(AutoTransferErrorCode.NO_EXECUTION_WITHIN_PERIOD));
         }
+
+        @Test
+        @DisplayName("주기 변경으로 인해 AUT0004가 나면 cycleMonths·nextExecutionDate를 포함해 기존 필드가 그대로 유지된다")
+        void failureLeavesEntityUnchanged() {
+            AutoTransfer e = register(); // cycle=1, nextExecutionDate=2025-06-15, amount=10000, endDate=END
+
+            // cycle 1 -> 3 이면 newNextExecutionDate = 2025-08-15 인데, endDate를 그보다 이르게 줘서 AUT0004를 유발한다
+            assertThatThrownBy(() -> e.change(99999L, 3, LocalDate.of(2025, 7, 1), "새내메모", "새받는메모"))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(AutoTransferErrorCode.NO_EXECUTION_WITHIN_PERIOD));
+
+            assertThat(e.getCycleMonths()).isEqualTo(1);
+            assertThat(e.getNextExecutionDate()).isEqualTo(NEXT_EXECUTION);
+            assertThat(e.getAmount()).isEqualTo(10000L);
+            assertThat(e.getEndDate()).isEqualTo(END);
+            assertThat(e.getMyPassbookMemo()).isEqualTo("내메모");
+            assertThat(e.getRecipientPassbookMemo()).isEqualTo("받는메모");
+        }
     }
 }
