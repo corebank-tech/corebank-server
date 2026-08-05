@@ -88,9 +88,52 @@ ON DUPLICATE KEY UPDATE
   joined_at = VALUES(joined_at),
   updated_at = VALUES(updated_at);
 
--- INSERT INTO transaction_type (code, name, sign, created_at, updated_at) VALUES
---   ('TRANSFER', '이체', -1, '2026-07-28 00:00:00.000000', '2026-07-28 00:00:00.000000')
--- ON DUPLICATE KEY UPDATE
---   name = VALUES(name),
---   sign = VALUES(sign),
---   updated_at = VALUES(updated_at);
+-- ====================================================================
+-- P4 이체·원장 기능 테스트용 계좌 데이터
+--
+-- 모든 계좌 테스트 비밀번호: 1234
+-- 계좌번호 규칙:
+--   은행코드 3자리 + 상품 Prefix 2자리 + 일련번호 7자리
+--
+-- Prefix:
+--   10: 입출금계좌
+--   20: 정기예금
+--   30: 정기적금
+--
+-- 주의:
+--   account.balance는 조회용 캐시이며,
+--   P4의 초기 ledger_entry 합계와 반드시 일치해야 한다.
+-- ====================================================================
+
+SET @account_password_hash =
+    '$2y$10$1NOtaTsHuD0rdffA3ReFKO5S0J4bHlVES6okQMYubUd0OuVFfMZXa';
+
+SET @hong_customer_id = (
+    SELECT customer_id
+    FROM customer
+    WHERE user_id = 'honggildong'
+);
+
+SET @kim_customer_id = (
+    SELECT customer_id
+    FROM customer
+    WHERE user_id = 'kimminji'
+);
+
+SET @lee_customer_id = (
+    SELECT customer_id
+    FROM customer
+    WHERE user_id = 'leeseojun'
+);
+
+SET @youth_savings_product_id = (
+    SELECT product_id
+    FROM product
+    WHERE product_code = 'PRD_YOUTH_SAVE'
+);
+
+SET @basic_deposit_product_id = (
+    SELECT product_id
+    FROM product
+    WHERE product_code = 'PRD_BASIC_DEP'
+);
