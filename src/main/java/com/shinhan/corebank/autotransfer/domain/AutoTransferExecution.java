@@ -1,11 +1,12 @@
 package com.shinhan.corebank.autotransfer.domain;
 
-import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferJpaEntity;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import lombok.Getter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+@Getter
 public class AutoTransferExecution {
     private Long executionId;
     private LocalDate executionDate;
@@ -14,5 +15,31 @@ public class AutoTransferExecution {
     private String transactionNumber;   // 성공 시에만. 실패는 null
     private String failureReason;   // 실패 시에만. 성공은 null
     private LocalDateTime executedAt;   // 실제 실행 시각, 예정일과 다를 수 있음
+
+    // 성공
+    public static AutoTransferExecution success(
+            LocalDate executionDate, Long amount, String transactionNumber, LocalDateTime executedAt) {
+
+        AutoTransferExecution e = new AutoTransferExecution();
+        e.executionDate = executionDate;
+        e.amount = amount;
+        e.status = ProcessResultStatus.SUCCESS;
+        e.transactionNumber = transactionNumber;
+        e.executedAt = executedAt;
+        return e;
+    }
+
+    // 에러
+    public static AutoTransferExecution error(
+            LocalDate executionDate, Long amount, String failureReason, LocalDateTime executedAt) {
+
+        AutoTransferExecution e = new AutoTransferExecution();
+        e.executionDate = executionDate;
+        e.amount = amount;
+        e.status = ProcessResultStatus.ERROR;
+        e.failureReason = failureReason;
+        e.executedAt = executedAt;
+        return e;
+    }
 
 }

@@ -44,35 +44,4 @@ public class AutoTransferExecutionJpaEntity {
     @Column(name = "executed_at", nullable = false)
     private LocalDateTime executedAt;   // 실제 실행 시각, 예정일과 다를 수 있음
 
-    // 성공
-    public static AutoTransferExecutionJpaEntity success(
-            LocalDate executionDate, Long amount, String transactionNumber, LocalDateTime executedAt) {
-
-        AutoTransferExecutionJpaEntity e = new AutoTransferExecutionJpaEntity();
-        e.executionDate = executionDate;
-        e.amount = amount;
-        e.status = ProcessResultStatus.SUCCESS;
-        e.transactionNumber = transactionNumber;
-        e.executedAt = executedAt;
-        return e;
-    }
-
-    // 에러
-    public static AutoTransferExecutionJpaEntity error(
-            LocalDate executionDate, Long amount, String failureReason, LocalDateTime executedAt) {
-
-        AutoTransferExecutionJpaEntity e = new AutoTransferExecutionJpaEntity();
-        e.executionDate = executionDate;
-        e.amount = amount;
-        e.status = ProcessResultStatus.ERROR;
-        e.failureReason = failureReason;
-        e.executedAt = executedAt;
-        return e;
-    }
-
-
-    /** 부모가 addExecution 할 때 호출한다 */
-    void assignTo(AutoTransferJpaEntity parent) {
-        this.autoTransfer = parent;
-    }
 }
