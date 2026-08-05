@@ -330,6 +330,52 @@
 
 ---
 
+## `account_number_sequence`
+
+> 은행·상품별 계좌번호 채번
+
+은행·계좌 유형·상품별 계좌번호 발급 규칙과 마지막 발급 일련번호를 관리한다.
+
+### 계좌번호 구성
+```text
+은행코드 3자리 + 상품 Prefix 2자리 + 일련번호 7자리
+```
+
+| 컬럼명              | 데이터 타입      | NULL 허용 |      기본값       | 키  | 설명                                                              |
+|:-----------------|:------------|:-------:|:--------------:|:--:|:----------------------------------------------------------------|
+| `sequence_id`    | BIGINT      |    X    | AUTO_INCREMENT | PK | 계좌번호 채번 규칙 식별자                                                  |
+| `bank_code`      | CHAR(3)     |    X    |       없음       |    | 계좌번호 앞 3자리에 포함되는 은행코드                                           |
+| `account_type`   | VARCHAR(24) |    X    |       없음       |    | 계좌 유형 (`DEMAND_DEPOSIT`, `TIME_DEPOSIT`, `INSTALLMENT_SAVINGS`) |
+| `product_id`     | BIGINT      |    O    |      NULL      | FK | 연결 상품 식별자. 입출금계좌는 `NULL`                                        |
+| `product_prefix` | CHAR(2)     |    X    |       없음       |    | 계좌번호에 포함되는 상품별 Prefix                                           |
+| `last_sequence`  | BIGINT      |    X    |      `0`       |    | 마지막으로 발급한 7자리 일련번호                                              |
+| `created_at`     | DATETIME(6) |    X    |       없음       |    | 채번 규칙 생성 일시                                                     |
+| `updated_at`     | DATETIME(6) |    X    |       없음       |    | 채번 규칙 최종 수정 일시                                                  |
+
+**인덱스**
+
+| 종류 | 이름                                   | 컬럼                                        | 용도                               |
+| :--- |:-------------------------------------|:------------------------------------------|:---------------------------------|
+| PRIMARY | `PRIMARY`                            | `sequence_id`                             | 채번 규칙 식별 및 PK 조회                 |
+| UNIQUE | `uk_account_number_sequence_prefix`  | `bank_code`, `product_prefix`             | 같은 은행 내 Prefix 중복 방지             |
+| UNIQUE | `uk_account_number_sequence_product` | `bank_code`, `product_id`                 | 같은 예·적금 상품의 채번 규칙 중복 방지          |
+| INDEX | `ix_account_number_sequence_lookup`  | `bank_code`, `account_type`, `product_id` | 계좌번호 발급 시 채번 행 조회 및 비관적 락 범위 최소화 |
+| INDEX | `ix_account_number_sequence_product` | `product_id`                              | 상품 FK 검사 및 상품 기준 조회 지원           |
+
+**CHECK 제약**
+
+| 이름 | 조건 | 설명 |
+| :--- | :--- | :--- |
+| `PRIMARY` | `sequence_id` (PK) | 행별 고유값 (채번 규칙 행 식별) |
+| `fk_account_number_sequence_product` | `product_id` (FK -> `product.product_id`) | 존재하는 상품만 채번 규칙 연결 가능 |
+| `ck_account_number_sequence_bank_code` | `bank_code REGEXP '^[0-9]{3}$'` (CHECK) | 은행코드 형식 검증 (숫자 3자리) |
+| `ck_account_number_sequence_prefix` | `product_prefix REGEXP '^[0-9]{2}$'` (CHECK) | 상품 Prefix 형식 검증 (숫자 2자리) |
+| `ck_account_number_sequence_type` | `account_type IN ('DEMAND_DEPOSIT', 'TIME_DEPOSIT', 'INSTALLMENT_SAVINGS')` (CHECK) | 허용된 계좌 유형 중 하나인지 검증 |
+| `ck_account_number_sequence_product` | `DEMAND_DEPOSIT이면 product_id IS NULL, 예·적금이면 product_id IS NOT NULL` (CHECK) | 입출금은 상품 없음, 예·적금은 상품 필수 (정합성 보장) |
+| `ck_account_number_sequence_value` | `last_sequence BETWEEN 0 AND 9999999` (CHECK) | 일련번호가 7자리 범위(0 ~ 9,999,999)를 초과하지 않도록 제한 |
+
+---
+
 # 4. 이체 · 원장 — P4
 
 ## `transaction_sequence`
