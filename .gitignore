@@ -42,3 +42,6 @@ out/
 /docs/requirements_overview.md
 /docs/api_endpoint_reference.md
 /docs/api_spec_conflict_report.md
+
+### CODEX ###
+/AGENTS.md
