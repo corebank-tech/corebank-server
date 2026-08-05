@@ -3,13 +3,8 @@ package com.shinhan.corebank.product.adapter.out.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
-import com.shinhan.corebank.product.domain.DepositType;
-import com.shinhan.corebank.product.domain.InterestPayType;
-import com.shinhan.corebank.product.domain.Product;
-import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.ProductRateTier;
 import com.shinhan.corebank.product.domain.ProductRateTierId;
-import com.shinhan.corebank.product.domain.SaleStatus;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,7 +29,7 @@ class ProductRateTierJpaRepositoryTest extends IntegrationTestSupport {
 
     @BeforeEach
     void setUp() {
-        productId = productRepository.save(defaultProduct()).getProductId();
+        productId = productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
     }
 
     @Test
@@ -52,25 +47,5 @@ class ProductRateTierJpaRepositoryTest extends IntegrationTestSupport {
 
         ProductRateTier found = repository.findById(id).orElseThrow();
         assertThat(found.getRate()).isEqualByComparingTo("2.80");
-    }
-
-    private Product defaultProduct() {
-        return Product.builder()
-                .productCode("SVN-001")
-                .productName("정기예금")
-                .productGroup(ProductGroup.DEPOSIT)
-                .depositType(DepositType.LUMP_SUM)
-                .baseRate(new BigDecimal("2.50"))
-                .maxRate(new BigDecimal("3.00"))
-                .minAmount(100_000L)
-                .maxAmount(100_000_000L)
-                .amountUnit(10_000L)
-                .minTermMonths((short) 6)
-                .maxTermMonths((short) 36)
-                .interestPayType(InterestPayType.SIMPLE)
-                .saleStatus(SaleStatus.ON_SALE)
-                .newFlag(false)
-                .singleAccountLimit(false)
-                .build();
     }
 }
