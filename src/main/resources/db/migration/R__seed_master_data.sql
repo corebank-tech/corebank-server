@@ -5,31 +5,35 @@
 -- ====================================================================
 
 -- 약관 (terms_code + version 이 UK)
-INSERT INTO terms (terms_code, version, terms_type, title, content, is_required, view_required) VALUES
-  ('TERMS_SERVICE',  'v1.0', 'SIGNUP',  '서비스 이용약관',        '(내용)', TRUE,  FALSE),
-  ('TERMS_PRIVACY',  'v1.0', 'SIGNUP',  '개인정보 수집·이용 동의', '(내용)', TRUE,  FALSE),
-  ('TERMS_MARKETING','v1.0', 'SIGNUP',  '마케팅 정보 수신 동의',   '(내용)', FALSE, FALSE),
-  ('TERMS_DEPOSIT',  'v1.0', 'PRODUCT', '예금거래 기본약관',       '(내용)', TRUE,  TRUE),
-  ('TERMS_SAVINGS',  'v1.0', 'PRODUCT', '적립식예금 약관',         '(내용)', TRUE,  TRUE)
+INSERT INTO terms (terms_code, version, terms_type, title, content, is_required, view_required, created_at, updated_at) VALUES
+  ('TERMS_SERVICE',  'v1.0', 'SIGNUP',  '서비스 이용약관',        '(내용)', TRUE,  FALSE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000'),
+  ('TERMS_PRIVACY',  'v1.0', 'SIGNUP',  '개인정보 수집·이용 동의', '(내용)', TRUE,  FALSE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000'),
+  ('TERMS_MARKETING','v1.0', 'SIGNUP',  '마케팅 정보 수신 동의',   '(내용)', FALSE, FALSE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000'),
+  ('TERMS_DEPOSIT',  'v1.0', 'PRODUCT', '예금거래 기본약관',       '(내용)', TRUE,  TRUE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000'),
+  ('TERMS_SAVINGS',  'v1.0', 'PRODUCT', '적립식예금 약관',         '(내용)', TRUE,  TRUE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000')
 ON DUPLICATE KEY UPDATE
   terms_type = VALUES(terms_type), title = VALUES(title), content = VALUES(content),
-  is_required = VALUES(is_required), view_required = VALUES(view_required);
+  is_required = VALUES(is_required), view_required = VALUES(view_required),
+  updated_at = VALUES(updated_at);
 
 -- 상품 (product_code 가 UK)
 INSERT INTO product
   (product_code, product_name, product_group, deposit_type, summary, base_rate, max_rate,
    min_amount, max_amount, amount_unit, min_term_months, max_term_months,
-   interest_pay_type, sale_status, new_flag, single_account_limit) VALUES
+   interest_pay_type, sale_status, new_flag, single_account_limit, created_at, updated_at) VALUES
   ('PRD_YOUTH_SAVE', '청년 희망 적금', 'SAVINGS', 'INSTALLMENT', '청년 대상 우대 적금',
-   3.20, 4.50,  10000, 1000000,  10000, 6, 36, 'SIMPLE', 'ON_SALE', TRUE,  TRUE),
+   3.20, 4.50,  10000, 1000000,  10000, 6, 36, 'SIMPLE', 'ON_SALE', TRUE,  TRUE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000'),
   ('PRD_BASIC_DEP',  '기본 정기예금',  'DEPOSIT', 'LUMP_SUM', '기본형 정기예금',
-   2.80, 3.30, 100000, 100000000, 100000, 6, 36, 'SIMPLE', 'ON_SALE', FALSE, FALSE)
+   2.80, 3.30, 100000, 100000000, 100000, 6, 36, 'SIMPLE', 'ON_SALE', FALSE, FALSE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000')
 ON DUPLICATE KEY UPDATE
   product_name = VALUES(product_name), product_group = VALUES(product_group),
+  deposit_type = VALUES(deposit_type), summary = VALUES(summary),
   base_rate = VALUES(base_rate), max_rate = VALUES(max_rate),
   min_amount = VALUES(min_amount), max_amount = VALUES(max_amount),
-  amount_unit = VALUES(amount_unit), sale_status = VALUES(sale_status),
-  single_account_limit = VALUES(single_account_limit);
+  amount_unit = VALUES(amount_unit), min_term_months = VALUES(min_term_months),
+  max_term_months = VALUES(max_term_months), interest_pay_type = VALUES(interest_pay_type),
+  sale_status = VALUES(sale_status), new_flag = VALUES(new_flag),
+  single_account_limit = VALUES(single_account_limit), updated_at = VALUES(updated_at);
 
 -- 상품 기간별 금리 (product_id + term_months 가 PK)
 INSERT INTO product_rate_tier (product_id, term_months, rate)

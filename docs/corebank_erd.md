@@ -88,9 +88,9 @@ erDiagram
         int display_order "사용자 지정 표시순서"
         boolean withdrawal_registered "응답 withdrawalAccountRegistered"
         datetime withdrawal_registered_at "DATETIME(6)"
-        date opened_date
+        datetime opened_date
         date maturity_date
-        date closed_date
+        datetime closed_date
         datetime last_transaction_at "DATETIME(6)"
         bigint version "낙관적 락"
     }
