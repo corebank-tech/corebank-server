@@ -137,3 +137,52 @@ SET @basic_deposit_product_id = (
     FROM product
     WHERE product_code = 'PRD_BASIC_DEP'
 );
+
+-- ====================================================================
+-- 계좌번호 채번 기준 데이터
+--
+-- 이미 더 큰 번호까지 발급된 경우 last_sequence를 낮추지 않는다.
+-- ====================================================================
+
+INSERT INTO account_number_sequence (
+    bank_code,
+    account_type,
+    product_id,
+    product_prefix,
+    last_sequence,
+    created_at,
+    updated_at
+) VALUES
+    (
+        '088',
+        'DEMAND_DEPOSIT',
+        NULL,
+        '10',
+        9,
+        '2026-08-01 00:00:00.000000',
+        '2026-08-05 00:00:00.000000'
+    ),
+    (
+        '088',
+        'TIME_DEPOSIT',
+        @basic_deposit_product_id,
+        '20',
+        1,
+        '2026-08-01 00:00:00.000000',
+        '2026-08-05 00:00:00.000000'
+    ),
+    (
+        '088',
+        'INSTALLMENT_SAVINGS',
+        @youth_savings_product_id,
+        '30',
+        1,
+        '2026-08-01 00:00:00.000000',
+        '2026-08-05 00:00:00.000000'
+    )
+ON DUPLICATE KEY UPDATE
+    last_sequence = GREATEST(
+        last_sequence,
+        VALUES(last_sequence)
+    ),
+    updated_at = VALUES(updated_at);
