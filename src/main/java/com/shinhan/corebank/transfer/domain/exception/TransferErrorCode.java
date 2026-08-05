@@ -20,6 +20,4 @@ public enum TransferErrorCode implements ErrorCode {
     private final String code;
     private final int status;
     private final String message;
-
-
 }
