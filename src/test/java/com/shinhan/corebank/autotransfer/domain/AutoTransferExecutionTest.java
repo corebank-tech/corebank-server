@@ -62,6 +62,32 @@ class AutoTransferExecutionTest {
             assertThatThrownBy(() -> e.markSuccess("TXN0000000000000002"))
                     .isInstanceOf(IllegalStateException.class);
         }
+
+        @Test
+        @DisplayName("거래번호가 null이면 거부되고 PROCESSING 상태가 유지된다")
+        void rejectsNullTransactionNumber() {
+            AutoTransferExecution e = processing();
+
+            assertThatThrownBy(() -> e.markSuccess(null))
+                    .isInstanceOf(IllegalArgumentException.class);
+
+            assertThat(e.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
+            assertThat(e.getTransactionNumber()).isNull();
+        }
+
+        @Test
+        @DisplayName("거래번호가 빈 문자열이나 공백뿐이면 거부되고 PROCESSING 상태가 유지된다")
+        void rejectsBlankTransactionNumber() {
+            AutoTransferExecution e = processing();
+
+            assertThatThrownBy(() -> e.markSuccess(""))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> e.markSuccess("   "))
+                    .isInstanceOf(IllegalArgumentException.class);
+
+            assertThat(e.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
+            assertThat(e.getTransactionNumber()).isNull();
+        }
     }
 
     @Nested
@@ -88,6 +114,32 @@ class AutoTransferExecutionTest {
 
             assertThatThrownBy(() -> e.markError("잔액 부족"))
                     .isInstanceOf(IllegalStateException.class);
+        }
+
+        @Test
+        @DisplayName("실패 사유가 null이면 거부되고 PROCESSING 상태가 유지된다")
+        void rejectsNullFailureReason() {
+            AutoTransferExecution e = processing();
+
+            assertThatThrownBy(() -> e.markError(null))
+                    .isInstanceOf(IllegalArgumentException.class);
+
+            assertThat(e.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
+            assertThat(e.getFailureReason()).isNull();
+        }
+
+        @Test
+        @DisplayName("실패 사유가 빈 문자열이나 공백뿐이면 거부되고 PROCESSING 상태가 유지된다")
+        void rejectsBlankFailureReason() {
+            AutoTransferExecution e = processing();
+
+            assertThatThrownBy(() -> e.markError(""))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> e.markError("   "))
+                    .isInstanceOf(IllegalArgumentException.class);
+
+            assertThat(e.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
+            assertThat(e.getFailureReason()).isNull();
         }
     }
 }

@@ -27,19 +27,25 @@ public class AutoTransferExecution {
         return e;
     }
 
-    // PROCESSING -> SUCCESS
+    // PROCESSING -> SUCCESS. 거래번호 없이는 성공으로 확정할 수 없다 — 상태를 바꾸기 전에 검증한다.
     public void markSuccess(String transactionNumber) {
         if (this.status != ProcessResultStatus.PROCESSING) {
             throw new IllegalStateException("처리중 상태에서만 성공으로 전환할 수 있습니다.");
+        }
+        if (transactionNumber == null || transactionNumber.isBlank()) {
+            throw new IllegalArgumentException("거래번호가 없으면 성공으로 확정할 수 없습니다.");
         }
         this.status = ProcessResultStatus.SUCCESS;
         this.transactionNumber = transactionNumber;
     }
 
-    // PROCESSING -> ERROR
+    // PROCESSING -> ERROR. 실패 사유 없이는 실패로 확정할 수 없다 — 상태를 바꾸기 전에 검증한다.
     public void markError(String failureReason) {
         if (this.status != ProcessResultStatus.PROCESSING) {
             throw new IllegalStateException("처리중 상태에서만 실패로 전환할 수 있습니다.");
+        }
+        if (failureReason == null || failureReason.isBlank()) {
+            throw new IllegalArgumentException("실패 사유가 없으면 실패로 확정할 수 없습니다.");
         }
         this.status = ProcessResultStatus.ERROR;
         this.failureReason = failureReason;
