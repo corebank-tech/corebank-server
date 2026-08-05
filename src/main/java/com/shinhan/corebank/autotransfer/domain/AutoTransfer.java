@@ -34,7 +34,7 @@ public class AutoTransfer {
     public static AutoTransfer register(
             Long customerId, Long withdrawalAccountId, String depositAccountNumber, String payeeName,
             Long amount, Integer cycleMonths, Integer transferDay,
-            LocalDate startDate, LocalDate endDate, LocalDate nextExecutionDate,
+            LocalDate startDate, LocalDate endDate,
             String myPassbookMemo, String recipientPassbookMemo, LocalDateTime now) {
 
         TransferCycle.fromMonths(cycleMonths);
@@ -55,6 +55,10 @@ public class AutoTransfer {
         if (endDate.isAfter(startDate.plusMonths(60))) {
             throw new BusinessException(AutoTransferErrorCode.INVALID_TRANSFER_PERIOD, "이체 종료일은 시작일로부터 60개월 이내여야 합니다.");
         }
+
+        // 최초 실행 예정일은 항상 startDate 이후 첫 transferDay(월말 보정)로 서버가 직접 계산한다.
+        // 호출부가 넘긴 값을 신뢰하면 startDate보다 이르거나 transferDay와 안 맞는 날짜가 들어올 수 있다.
+        LocalDate nextExecutionDate = firstExecutionDate(startDate, transferDay);
         if (nextExecutionDate.isAfter(endDate)) {
             throw new BusinessException(AutoTransferErrorCode.NO_EXECUTION_WITHIN_PERIOD);
         }
@@ -75,6 +79,21 @@ public class AutoTransfer {
         e.status = AutoTransferStatus.NORMAL;
         e.registeredAt = now;
         return e;
+    }
+
+    // startDate 이후 첫 transferDay(월말 보정) 날짜
+    private static LocalDate firstExecutionDate(LocalDate startDate, int transferDay) {
+        LocalDate candidate = clampToTransferDay(YearMonth.from(startDate), transferDay);
+        if (candidate.isBefore(startDate)) {
+            candidate = clampToTransferDay(YearMonth.from(startDate).plusMonths(1), transferDay);
+        }
+        return candidate;
+    }
+
+    // 해당 월에 transferDay가 없으면(29~31일) 말일로 보정
+    private static LocalDate clampToTransferDay(YearMonth yearMonth, int transferDay) {
+        int day = Math.min(transferDay, yearMonth.lengthOfMonth());
+        return yearMonth.atDay(day);
     }
 
     // 해지
@@ -98,8 +117,7 @@ public class AutoTransfer {
     // 다음 실행 예정일. transferDay 기준으로 계산해 월말 보정이 누적 X
     public void advanceNextExecutionDate() {
         YearMonth targetMonth = YearMonth.from(this.nextExecutionDate).plusMonths(this.cycleMonths);
-        int day = Math.min(this.transferDay, targetMonth.lengthOfMonth());
-        this.nextExecutionDate = targetMonth.atDay(day);
+        this.nextExecutionDate = clampToTransferDay(targetMonth, this.transferDay);
     }
 
     // 회차 리스트에 새 회차를 추가
@@ -125,8 +143,7 @@ public class AutoTransfer {
             // 직전 실행 예정일 기준 재산출: 현재 nextExecutionDate를 옛 주기만큼 되돌린 지점(앵커)에 새 주기 더하는 방식
             YearMonth anchor = YearMonth.from(this.nextExecutionDate).minusMonths(this.cycleMonths);
             YearMonth targetMonth = anchor.plusMonths(cycleMonths);
-            int day = Math.min(this.transferDay, targetMonth.lengthOfMonth());
-            this.nextExecutionDate = targetMonth.atDay(day);
+            this.nextExecutionDate = clampToTransferDay(targetMonth, this.transferDay);
             this.cycleMonths = cycleMonths;
         }
         if (this.nextExecutionDate.isAfter(endDate)) {
