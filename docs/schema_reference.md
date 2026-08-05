@@ -359,7 +359,7 @@
 | :--- |:-------------------------------------|:------------------------------------------|:---------------------------------|
 | PRIMARY | `PRIMARY`                            | `sequence_id`                             | 채번 규칙 식별 및 PK 조회                 |
 | UNIQUE | `uk_account_number_sequence_prefix`  | `bank_code`, `product_prefix`             | 같은 은행 내 Prefix 중복 방지             |
-| UNIQUE | `uk_account_number_sequence_product` | `bank_code`, `product_id`                 | 같은 예·적금 상품의 채번 규칙 중복 방지          |
+| UNIQUE | `uk_account_number_sequence_rule` | `bank_code`, `COALESCE(product_id, 0)`                 | 같은 입출금, 예·적금 상품의 채번 규칙 중복 방지     |
 | INDEX | `ix_account_number_sequence_lookup`  | `bank_code`, `account_type`, `product_id` | 계좌번호 발급 시 채번 행 조회 및 비관적 락 범위 최소화 |
 | INDEX | `ix_account_number_sequence_product` | `product_id`                              | 상품 FK 검사 및 상품 기준 조회 지원           |
 
