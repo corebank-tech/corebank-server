@@ -3,8 +3,6 @@ package com.shinhan.corebank.product.adapter.out.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
-import com.shinhan.corebank.product.domain.ProductPreferentialRate;
-import com.shinhan.corebank.product.domain.ProductPreferentialRateId;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,8 +33,8 @@ class ProductPreferentialRateJpaRepositoryTest extends IntegrationTestSupport {
     @Test
     @DisplayName("ProductPreferentialRate를 저장하면 복합키로 조회된다")
     void saveAndFindById() {
-        ProductPreferentialRateId id = new ProductPreferentialRateId(productId, "LONG_TERM");
-        ProductPreferentialRate preferentialRate = ProductPreferentialRate.builder()
+        ProductPreferentialRateJpaEntityId id = new ProductPreferentialRateJpaEntityId(productId, "LONG_TERM");
+        ProductPreferentialRateJpaEntity preferentialRate = ProductPreferentialRateJpaEntity.builder()
                 .productPreferentialRateId(id)
                 .conditionName("장기거래 우대")
                 .rate(new BigDecimal("0.30"))
@@ -46,7 +44,7 @@ class ProductPreferentialRateJpaRepositoryTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        ProductPreferentialRate found = repository.findById(id).orElseThrow();
+        ProductPreferentialRateJpaEntity found = repository.findById(id).orElseThrow();
         assertThat(found.getConditionName()).isEqualTo("장기거래 우대");
         assertThat(found.getRate()).isEqualByComparingTo("0.30");
     }
