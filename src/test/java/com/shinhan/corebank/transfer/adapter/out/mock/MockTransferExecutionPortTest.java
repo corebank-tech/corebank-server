@@ -31,10 +31,9 @@ class MockTransferExecutionPortTest {
         assertThat(result.errorCode()).isNull();
         assertThat(result.errorMessage()).isNull();
         
-        // 거래번호 검증 (YYYYMMDD + WB + 0000000001 = 20자리)
+        // 거래번호 검증 (YYYYMMDD(8) + WB(2) + 일련번호(10) = 20자리)
         assertThat(result.transactionNumber()).isNotNull();
-        assertThat(result.transactionNumber()).hasSize(20);
-        assertThat(result.transactionNumber()).contains("WB");
+        assertThat(result.transactionNumber()).matches("\\d{8}WB\\d{10}");
     }
 
     @Test
@@ -43,6 +42,7 @@ class MockTransferExecutionPortTest {
         // given
         TransferCommand command = TransferCommand.builder()
                 .channel(TransferChannel.BT)
+                .amount(10000L)
                 .build();
 
         // when
