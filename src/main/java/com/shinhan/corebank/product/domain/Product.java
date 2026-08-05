@@ -63,8 +63,9 @@ public class Product extends BaseEntity {
     @Column(nullable = false)
     private Short maxTermMonths;
 
+    @Enumerated(EnumType.STRING)
     @Column(length = 20, nullable = false)
-    private String interestPayType;
+    private InterestPayType interestPayType;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 12, nullable = false)

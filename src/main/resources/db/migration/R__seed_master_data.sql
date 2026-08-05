@@ -21,9 +21,9 @@ INSERT INTO product
    min_amount, max_amount, amount_unit, min_term_months, max_term_months,
    interest_pay_type, sale_status, new_flag, single_account_limit) VALUES
   ('PRD_YOUTH_SAVE', '청년 희망 적금', 'SAVINGS', '적립식', '청년 대상 우대 적금',
-   3.20, 4.50,  10000, 1000000,  10000, 6, 36, '단리', 'ON_SALE', TRUE,  TRUE),
+   3.20, 4.50,  10000, 1000000,  10000, 6, 36, 'SIMPLE', 'ON_SALE', TRUE,  TRUE),
   ('PRD_BASIC_DEP',  '기본 정기예금',  'DEPOSIT', '거치식', '기본형 정기예금',
-   2.80, 3.30, 100000, 100000000, 100000, 6, 36, '단리', 'ON_SALE', FALSE, FALSE)
+   2.80, 3.30, 100000, 100000000, 100000, 6, 36, 'SIMPLE', 'ON_SALE', FALSE, FALSE)
 ON DUPLICATE KEY UPDATE
   product_name = VALUES(product_name), product_group = VALUES(product_group),
   base_rate = VALUES(base_rate), max_rate = VALUES(max_rate),

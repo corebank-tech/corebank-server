@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.product.domain.DepositType;
+import com.shinhan.corebank.product.domain.InterestPayType;
 import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.ProductTerms;
@@ -58,7 +59,7 @@ class ProductTermsJpaRepositoryTest extends IntegrationTestSupport {
                 .amountUnit(10_000L)
                 .minTermMonths((short) 6)
                 .maxTermMonths((short) 36)
-                .interestPayType("MATURITY")
+                .interestPayType(InterestPayType.SIMPLE)
                 .saleStatus(SaleStatus.ON_SALE)
                 .newFlag(false)
                 .singleAccountLimit(false)
