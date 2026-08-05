@@ -1,12 +1,14 @@
 package com.shinhan.corebank.autotransfer.domain;
 
 import com.shinhan.corebank.common.exception.BusinessException;
+import lombok.AccessLevel;
 import lombok.Getter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @Getter
@@ -28,7 +30,9 @@ public class AutoTransfer {
     private LocalDateTime registeredAt;
     private LocalDateTime terminatedAt;
     private LocalDateTime updatedAt;
-    private List<AutoTransferExecution> executions = new ArrayList<>();
+    // 실행 이력은 추가만 허용한다. 외부에서 remove()/clear()로 지울 수 없도록 불변 뷰로만 노출한다.
+    @Getter(AccessLevel.NONE)
+    private final List<AutoTransferExecution> executions = new ArrayList<>();
 
     // 등록
     public static AutoTransfer register(
@@ -119,9 +123,13 @@ public class AutoTransfer {
         this.nextExecutionDate = clampToTransferDay(targetMonth, this.transferDay);
     }
 
-    // 회차 리스트에 새 회차를 추가
+    // 회차 리스트에 새 회차를 추가. 외부에는 불변 뷰로만 노출한다.
     public void addExecution(AutoTransferExecution execution) {
         this.executions.add(execution);
+    }
+
+    public List<AutoTransferExecution> getExecutions() {
+        return Collections.unmodifiableList(executions);
     }
 
     // 금액, 주기, 종료일, 통장 표시 내용 변경

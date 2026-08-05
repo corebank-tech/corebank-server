@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @Entity
@@ -80,7 +81,14 @@ public class AutoTransferJpaEntity {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    @OneToMany(mappedBy = "autoTransfer", cascade = CascadeType.ALL, orphanRemoval = true)
+    // 실행결과는 이력성 데이터라 추가만 허용한다. orphanRemoval·REMOVE cascade를 두면
+    // 컬렉션에서 빼거나 부모를 지울 때 이미 저장된 회차가 DB에서 같이 삭제될 수 있다.
+    @Getter(AccessLevel.NONE)
+    @OneToMany(mappedBy = "autoTransfer", cascade = CascadeType.PERSIST)
     private final List<AutoTransferExecutionJpaEntity> executions = new ArrayList<>();
+
+    public List<AutoTransferExecutionJpaEntity> getExecutions() {
+        return Collections.unmodifiableList(executions);
+    }
 
 }

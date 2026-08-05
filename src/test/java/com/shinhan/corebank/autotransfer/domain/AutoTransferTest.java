@@ -357,4 +357,33 @@ class AutoTransferTest {
             assertThat(e.getRecipientPassbookMemo()).isEqualTo("받는메모");
         }
     }
+
+    @Nested
+    @DisplayName("getExecutions()")
+    class Executions {
+
+        @Test
+        @DisplayName("addExecution()으로 추가한 회차가 조회된다")
+        void addedExecutionIsVisible() {
+            AutoTransfer e = register();
+            AutoTransferExecution execution = AutoTransferExecution.success(
+                    NEXT_EXECUTION, 10000L, "TXN0000000000000001", NEXT_EXECUTION.atStartOfDay());
+
+            e.addExecution(execution);
+
+            assertThat(e.getExecutions()).containsExactly(execution);
+        }
+
+        @Test
+        @DisplayName("불변 뷰라 외부에서 remove()/clear()로 지울 수 없다")
+        void executionsViewIsUnmodifiable() {
+            AutoTransfer e = register();
+            e.addExecution(AutoTransferExecution.success(
+                    NEXT_EXECUTION, 10000L, "TXN0000000000000001", NEXT_EXECUTION.atStartOfDay()));
+
+            assertThatThrownBy(() -> e.getExecutions().clear())
+                    .isInstanceOf(UnsupportedOperationException.class);
+            assertThat(e.getExecutions()).hasSize(1);
+        }
+    }
 }
