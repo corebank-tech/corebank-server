@@ -81,8 +81,7 @@ public class AutoTransferJpaEntity {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    // 실행결과는 이력성 데이터라 추가만 허용한다. orphanRemoval·REMOVE cascade를 두면
-    // 컬렉션에서 빼거나 부모를 지울 때 이미 저장된 회차가 DB에서 같이 삭제될 수 있다.
+    // 기존 : excutions 클래스 레벨 @Getter로 노출 및 orphanRemoval=true+cascade=ALL -> 부모를 지우면 이미 저장된 회차 DB 삭제될 수 있음
     @Getter(AccessLevel.NONE)
     @OneToMany(mappedBy = "autoTransfer", cascade = CascadeType.PERSIST)
     private final List<AutoTransferExecutionJpaEntity> executions = new ArrayList<>();

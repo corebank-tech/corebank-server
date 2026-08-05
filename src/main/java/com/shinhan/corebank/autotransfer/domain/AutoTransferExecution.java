@@ -16,9 +16,8 @@ public class AutoTransferExecution {
     private String failureReason;   // 실패 시에만. 그 외는 null
     private LocalDateTime executedAt;   // 실제 실행 시각, 예정일과 다를 수 있음
 
-    // 외부 이체 호출 전에 먼저 저장한다. (auto_transfer_id, execution_date) 유니크 제약이
-    // 이 저장 시점의 멱등성 체크포인트 역할을 한다 — 배치가 재실행돼도 이미 PROCESSING 행이
-    // 있으면 중복 INSERT가 막혀 동일 이체가 다시 실행되지 않는다.
+    // 기본 success(), error() -> processing() 이유 : 재실행될 때 이체가 중복 실행될 위험이 있어
+    // processing행을 먼저 저장하면 멱등성 체크포인트 역할을 하게됨
     public static AutoTransferExecution processing(LocalDate executionDate, Long amount, LocalDateTime executedAt) {
         AutoTransferExecution e = new AutoTransferExecution();
         e.executionDate = executionDate;
