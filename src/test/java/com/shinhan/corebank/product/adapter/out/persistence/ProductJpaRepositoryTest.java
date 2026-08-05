@@ -10,6 +10,7 @@ import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.SaleStatus;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,5 +56,21 @@ class ProductJpaRepositoryTest extends IntegrationTestSupport {
         assertThat(found.getDepositType()).isEqualTo(DepositType.LUMP_SUM);
         assertThat(found.getCreatedAt()).isNotNull();
         assertThat(found.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("R__seed_master_data.sql로 채워진 상품이 enum 필드와 정확히 매핑된다")
+    void seedProductsMapToValidEnums() {
+        entityManager.clear();
+
+        List<Product> seeded = repository.findAll();
+
+        assertThat(seeded).isNotEmpty();
+        assertThat(seeded).allSatisfy(p -> {
+            assertThat(p.getDepositType()).isNotNull();
+            assertThat(p.getInterestPayType()).isNotNull();
+            assertThat(p.getProductGroup()).isNotNull();
+            assertThat(p.getSaleStatus()).isNotNull();
+        });
     }
 }
