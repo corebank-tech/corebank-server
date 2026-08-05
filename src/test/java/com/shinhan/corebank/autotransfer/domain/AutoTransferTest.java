@@ -366,8 +366,8 @@ class AutoTransferTest {
         @DisplayName("addExecution()으로 추가한 회차가 조회된다")
         void addedExecutionIsVisible() {
             AutoTransfer e = register();
-            AutoTransferExecution execution = AutoTransferExecution.success(
-                    NEXT_EXECUTION, 10000L, "TXN0000000000000001", NEXT_EXECUTION.atStartOfDay());
+            AutoTransferExecution execution = AutoTransferExecution.processing(
+                    NEXT_EXECUTION, 10000L, NEXT_EXECUTION.atStartOfDay());
 
             e.addExecution(execution);
 
@@ -378,8 +378,8 @@ class AutoTransferTest {
         @DisplayName("불변 뷰라 외부에서 remove()/clear()로 지울 수 없다")
         void executionsViewIsUnmodifiable() {
             AutoTransfer e = register();
-            e.addExecution(AutoTransferExecution.success(
-                    NEXT_EXECUTION, 10000L, "TXN0000000000000001", NEXT_EXECUTION.atStartOfDay()));
+            e.addExecution(AutoTransferExecution.processing(
+                    NEXT_EXECUTION, 10000L, NEXT_EXECUTION.atStartOfDay()));
 
             assertThatThrownBy(() -> e.getExecutions().clear())
                     .isInstanceOf(UnsupportedOperationException.class);
