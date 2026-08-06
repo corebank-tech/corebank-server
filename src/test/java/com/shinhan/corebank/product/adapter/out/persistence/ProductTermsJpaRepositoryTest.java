@@ -3,8 +3,6 @@ package com.shinhan.corebank.product.adapter.out.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
-import com.shinhan.corebank.product.domain.ProductTerms;
-import com.shinhan.corebank.product.domain.ProductTermsId;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,8 +32,8 @@ class ProductTermsJpaRepositoryTest extends IntegrationTestSupport {
         Long termsId = jdbcTemplate.queryForObject(
                 "SELECT terms_id FROM terms WHERE terms_code = ?", Long.class, "TERMS_SERVICE");
 
-        ProductTermsId id = new ProductTermsId(productId, termsId);
-        ProductTerms productTerms = ProductTerms.builder()
+        ProductTermsJpaEntityId id = new ProductTermsJpaEntityId(productId, termsId);
+        ProductTermsJpaEntity productTerms = ProductTermsJpaEntity.builder()
                 .id(id)
                 .build();
 
