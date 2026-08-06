@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.product.domain.DepositType;
-import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import jakarta.persistence.EntityManager;
 import java.util.List;
@@ -25,11 +24,11 @@ class ProductJpaRepositoryTest extends IntegrationTestSupport {
     @Test
     @DisplayName("Product를 저장하면 감사 컬럼이 채워지고 findById로 조회된다")
     void saveAndFindById() {
-        Product saved = repository.save(ProductTestFixtures.defaultProduct());
+        ProductJpaEntity saved = repository.save(ProductTestFixtures.defaultProduct());
         entityManager.flush();
         entityManager.clear();
 
-        Product found = repository.findById(saved.getProductId()).orElseThrow();
+        ProductJpaEntity found = repository.findById(saved.getProductId()).orElseThrow();
         assertThat(found.getProductCode()).isEqualTo("SVN-001");
         assertThat(found.getProductGroup()).isEqualTo(ProductGroup.DEPOSIT);
         assertThat(found.getDepositType()).isEqualTo(DepositType.LUMP_SUM);
@@ -42,7 +41,7 @@ class ProductJpaRepositoryTest extends IntegrationTestSupport {
     void seedProductsMapToValidEnums() {
         entityManager.clear();
 
-        List<Product> seeded = repository.findAll();
+        List<ProductJpaEntity> seeded = repository.findAll();
 
         assertThat(seeded).isNotEmpty();
         assertThat(seeded).allSatisfy(p -> {

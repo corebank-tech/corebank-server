@@ -1,19 +1,13 @@
 package com.shinhan.corebank.product.domain;
 
-import jakarta.persistence.Embeddable;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
-import java.io.Serializable;
-
-@Embeddable
 @Getter
 @EqualsAndHashCode
-@NoArgsConstructor
 @AllArgsConstructor
-public class ProductRateTierId implements Serializable {
+public class ProductRateTierId {
     private long productId;
     private short termMonths;
 }
