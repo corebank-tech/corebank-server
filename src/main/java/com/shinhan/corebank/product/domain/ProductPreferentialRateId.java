@@ -1,22 +1,13 @@
 package com.shinhan.corebank.product.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Embeddable;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
-import java.io.Serializable;
-
-@Embeddable
 @Getter
-@EqualsAndHashCode(callSuper = false)
-@NoArgsConstructor
+@EqualsAndHashCode
 @AllArgsConstructor
-public class ProductPreferentialRateId implements Serializable {
+public class ProductPreferentialRateId {
     private long productId;
-
-    @Column(length = 30)
     private String conditionCode;
 }

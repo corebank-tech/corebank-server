@@ -1,6 +1,7 @@
 package com.shinhan.corebank.product.adapter.in.web;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaEntity;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
 import com.shinhan.corebank.product.domain.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +30,7 @@ class ProductControllerTest extends IntegrationTestSupport {
 
     @BeforeEach
     void seedProduct() {
-        productJpaRepository.save(Product.builder()
+        productJpaRepository.save(ProductJpaEntity.builder()
                 .productCode("CTL-101")
                 .productName("정기예금 컨트롤러 테스트")
                 .productGroup(ProductGroup.DEPOSIT)

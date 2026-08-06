@@ -78,8 +78,8 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
                 .toList();
     }
 
-    private Product product(String code, String name, ProductGroup group, BigDecimal maxRate, SaleStatus status) {
-        return Product.builder()
+    private ProductJpaEntity product(String code, String name, ProductGroup group, BigDecimal maxRate, SaleStatus status) {
+        return ProductJpaEntity.builder()
                 .productCode(code)
                 .productName(name)
                 .productGroup(group)

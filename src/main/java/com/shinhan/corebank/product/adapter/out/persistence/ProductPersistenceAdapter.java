@@ -17,7 +17,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
-import static com.shinhan.corebank.product.domain.QProduct.product;
+import static com.shinhan.corebank.product.adapter.out.persistence.QProductJpaEntity.productJpaEntity;
 
 @Repository
 @RequiredArgsConstructor
@@ -29,45 +29,45 @@ public class ProductPersistenceAdapter implements ProductQueryPort {
     public Page<Product> search(ProductGroup productGroup, String keyword, ProductSortType sort, Pageable pageable) {
         Predicate[] conditions = conditions(productGroup, keyword);
 
-        List<Product> content = queryFactory
-                .selectFrom(product)
+        List<ProductJpaEntity> content = queryFactory
+                .selectFrom(productJpaEntity)
                 .where(conditions)
                 .orderBy(orderSpecifier(sort))
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
                 .fetch();
 
-
         Long total = queryFactory
-                .select(product.count())
-                .from(product)
+                .select(productJpaEntity.count())
+                .from(productJpaEntity)
                 .where(conditions)
                 .fetchOne();
 
-        return new PageImpl<>(content, pageable, total == null ? 0 : total);
+        List<Product> domainContent = content.stream().map(ProductMapper::toDomain).toList();
+        return new PageImpl<>(domainContent, pageable, total == null ? 0 : total);
     }
 
     private Predicate[] conditions(ProductGroup productGroup, String keyword) {
         return new Predicate[] {
-                product.saleStatus.eq(SaleStatus.ON_SALE),
+                productJpaEntity.saleStatus.eq(SaleStatus.ON_SALE),
                 productGroupEq(productGroup),
                 keywordContains(keyword)
         };
     }
 
     private BooleanExpression productGroupEq(ProductGroup productGroup) {
-        return productGroup != null ? product.productGroup.eq(productGroup) : null;
+        return productGroup != null ? productJpaEntity.productGroup.eq(productGroup) : null;
     }
 
     private BooleanExpression keywordContains(String keyword) {
-        return (keyword != null && !keyword.isBlank()) ? product.productName.contains(keyword) : null;
+        return (keyword != null && !keyword.isBlank()) ? productJpaEntity.productName.contains(keyword) : null;
     }
 
     private OrderSpecifier<?> orderSpecifier(ProductSortType sort) {
         return switch (sort) {
-            case NEW -> product.saleStartDate.desc();
-            case NAME -> product.productName.asc();
-            case RATE -> product.maxRate.desc();
+            case NEW -> productJpaEntity.saleStartDate.desc();
+            case NAME -> productJpaEntity.productName.asc();
+            case RATE -> productJpaEntity.maxRate.desc();
         };
     }
 }

@@ -5,8 +5,6 @@ server:
 spring:
   application:
     name: corebank
-  profiles:
-    default: local
   jpa:
     open-in-view: false
     properties:
