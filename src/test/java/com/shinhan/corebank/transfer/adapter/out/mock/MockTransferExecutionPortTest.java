@@ -34,6 +34,9 @@ class MockTransferExecutionPortTest {
         // 거래번호 검증 (YYYYMMDD(8) + WB(2) + 일련번호(10) = 20자리)
         assertThat(result.transactionNumber()).isNotNull();
         assertThat(result.transactionNumber()).matches("\\d{8}WB\\d{10}");
+        
+        // 잔액 반환 검증
+        assertThat(result.withdrawalBalanceAfter()).isEqualTo(10000L);
     }
 
     @Test

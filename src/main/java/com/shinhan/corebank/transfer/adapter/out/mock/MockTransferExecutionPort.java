@@ -35,6 +35,7 @@ public class MockTransferExecutionPort implements TransferExecutionUseCase{
                 .status(ProcessResultStatus.SUCCESS)
                 .transactionNumber(transactionNumber)
                 .transferredAt(now)
+                .withdrawalBalanceAfter(10000L)
                 .build();
     }
 }

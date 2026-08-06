@@ -11,6 +11,7 @@ public record TransferResult(
     String transactionNumber,
     LocalDateTime transferredAt,
     String errorCode,
-    String errorMessage
+    String errorMessage,
+    Long withdrawalBalanceAfter
 ) {
 }
