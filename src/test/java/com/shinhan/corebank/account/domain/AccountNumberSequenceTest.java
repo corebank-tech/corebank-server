@@ -1,14 +1,18 @@
 package com.shinhan.corebank.account.domain;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@DisplayName("계좌번호 채번 도메인 테스트")
 class AccountNumberSequenceTest {
 
     @Test
-    void 첫_입출금계좌번호를_발급한다() {
+    @DisplayName("첫 번째 입출금계좌 번호를 발급한다")
+    void issuesFirstDemandDepositAccountNumber() {
+        // given
         AccountNumberSequence sequence =
                 AccountNumberSequence.reconstitute(
                         1L,
@@ -19,8 +23,10 @@ class AccountNumberSequenceTest {
                         0L
                 );
 
+        // when
         String accountNumber = sequence.issueNext();
 
+        // then
         assertThat(accountNumber)
                 .isEqualTo("088100000001");
 
@@ -29,7 +35,9 @@ class AccountNumberSequenceTest {
     }
 
     @Test
-    void 다음_일련번호를_7자리로_채운다() {
+    @DisplayName("다음 일련번호를 7자리로 채워 계좌번호를 발급한다")
+    void issuesNextAccountNumberWithSevenDigitSequence() {
+        // given
         AccountNumberSequence sequence =
                 AccountNumberSequence.reconstitute(
                         1L,
@@ -40,14 +48,21 @@ class AccountNumberSequenceTest {
                         9L
                 );
 
+        // when
         String accountNumber = sequence.issueNext();
 
+        // then
         assertThat(accountNumber)
                 .isEqualTo("088100000010");
+
+        assertThat(sequence.getLastSequence())
+                .isEqualTo(10L);
     }
 
     @Test
-    void 마지막_계좌번호를_발급한다() {
+    @DisplayName("발급 가능한 마지막 계좌번호를 발급한다")
+    void issuesLastAvailableAccountNumber() {
+        // given
         AccountNumberSequence sequence =
                 AccountNumberSequence.reconstitute(
                         1L,
@@ -58,8 +73,10 @@ class AccountNumberSequenceTest {
                         9_999_998L
                 );
 
+        // when
         String accountNumber = sequence.issueNext();
 
+        // then
         assertThat(accountNumber)
                 .isEqualTo("088109999999");
 
@@ -68,7 +85,9 @@ class AccountNumberSequenceTest {
     }
 
     @Test
-    void 일련번호가_소진되면_발급할_수_없다() {
+    @DisplayName("일련번호가 모두 사용되면 계좌번호를 발급할 수 없다")
+    void throwsExceptionWhenSequenceIsExhausted() {
+        // given
         AccountNumberSequence sequence =
                 AccountNumberSequence.reconstitute(
                         1L,
@@ -79,12 +98,19 @@ class AccountNumberSequenceTest {
                         9_999_999L
                 );
 
+        // when & then
         assertThatThrownBy(sequence::issueNext)
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("계좌번호 일련번호가 소진되었습니다.");
+
+        assertThat(sequence.getLastSequence())
+                .isEqualTo(9_999_999L);
     }
 
     @Test
-    void 입출금계좌에_productId가_있으면_복원할_수_없다() {
+    @DisplayName("입출금계좌에 상품 ID가 있으면 채번 객체를 복원할 수 없다")
+    void throwsExceptionWhenDemandDepositHasProductId() {
+        // when & then
         assertThatThrownBy(() ->
                 AccountNumberSequence.reconstitute(
                         1L,
@@ -94,11 +120,15 @@ class AccountNumberSequenceTest {
                         "10",
                         0L
                 )
-        ).isInstanceOf(IllegalStateException.class);
+        )
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("계좌 유형과 상품 ID 조합이 올바르지 않습니다.");
     }
 
     @Test
-    void 예적금계좌에_productId가_없으면_복원할_수_없다() {
+    @DisplayName("예금계좌에 상품 ID가 없으면 채번 객체를 복원할 수 없다")
+    void throwsExceptionWhenTimeDepositHasNoProductId() {
+        // when & then
         assertThatThrownBy(() ->
                 AccountNumberSequence.reconstitute(
                         1L,
@@ -108,6 +138,26 @@ class AccountNumberSequenceTest {
                         "20",
                         0L
                 )
-        ).isInstanceOf(IllegalStateException.class);
+        )
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("계좌 유형과 상품 ID 조합이 올바르지 않습니다.");
+    }
+
+    @Test
+    @DisplayName("적금계좌에 상품 ID가 없으면 채번 객체를 복원할 수 없다")
+    void throwsExceptionWhenInstallmentSavingsHasNoProductId() {
+        // when & then
+        assertThatThrownBy(() ->
+                AccountNumberSequence.reconstitute(
+                        1L,
+                        "088",
+                        AccountType.INSTALLMENT_SAVINGS,
+                        null,
+                        "30",
+                        0L
+                )
+        )
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("계좌 유형과 상품 ID 조합이 올바르지 않습니다.");
     }
 }
