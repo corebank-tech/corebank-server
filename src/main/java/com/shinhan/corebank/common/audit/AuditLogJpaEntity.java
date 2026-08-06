@@ -8,6 +8,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * 감사 로그 (REQ-NFR-010).
@@ -43,14 +44,14 @@ public class AuditLogJpaEntity {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "detail")
-    private String detail;                          // 마스킹 후 저장
+    private Map<String, Object> detail;                          // 마스킹 후 저장
 
     @Column(name = "requested_at", nullable = false)
     private LocalDateTime requestedAt;
 
     public static AuditLogJpaEntity of(Long customerId, String transactionNumber,
                                        AuditEventType eventType, String requestIp,
-                                       boolean success, String detail, LocalDateTime now) {
+                                       boolean success, Map<String, Object> detail, LocalDateTime now) {
         boolean hasTransactionNumber = transactionNumber != null && !transactionNumber.isBlank();
         if (eventType.isLedgerChanging() && !hasTransactionNumber) {
             throw new IllegalArgumentException(
