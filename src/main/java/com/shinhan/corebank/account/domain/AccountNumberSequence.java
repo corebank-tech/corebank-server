@@ -97,23 +97,23 @@ public class AccountNumberSequence {
         }
         if (bankCode == null || !bankCode.matches("^[0-9]{3}$")) {
             throw new IllegalStateException(
-                    "저장된 은행코드가 숫자 3자리가 아닙니다."
+                    "사전 정의된 은행코드가 숫자 3자리가 아닙니다."
             );
         }
         if (accountType == null) {
             throw new IllegalStateException(
-                    "저장된 계좌 유형이 없습니다."
+                    "사전 정의된 계좌 유형이 없습니다."
             );
         }
         if (productPrefix == null || !productPrefix.matches("^[0-9]{2}$")) {
             throw new IllegalStateException(
-                    "저장된 상품 prefix가 숫자 2자리가 아닙니다."
+                    "사전 정의된 상품 prefix가 숫자 2자리가 아닙니다."
             );
         }
         if (lastSequence < 0
                 || lastSequence > AccountNumberPolicy.MAX_SEQUENCE) {
             throw new IllegalStateException(
-                    "저장된 계좌번호 일련번호가 올바르지 않습니다."
+                    "사전 정의된 계좌번호 일련번호가 올바르지 않습니다."
             );
         }
         boolean demandDeposit =
@@ -122,7 +122,7 @@ public class AccountNumberSequence {
                 (demandDeposit && productId != null) || (!demandDeposit && productId == null);
         if(invalidProductCombination){
             throw new IllegalStateException(
-                    "저장된 계좌 유형과 상품 ID 조합이 올바르지 않습니다."
+                    "사전 정의된 계좌 유형과 상품 ID 조합이 올바르지 않습니다."
             );
         }
     }
