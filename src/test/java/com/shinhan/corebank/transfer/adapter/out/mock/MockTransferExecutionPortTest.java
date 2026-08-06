@@ -9,6 +9,7 @@ import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
+import com.shinhan.corebank.transfer.domain.TransferType;
 
 class MockTransferExecutionPortTest {
 
@@ -19,6 +20,9 @@ class MockTransferExecutionPortTest {
     void execute_ShouldReturnSuccessWith20CharTransactionNumber() {
         // given
         TransferCommand command = TransferCommand.builder()
+                .withdrawalAccountId(1L)
+                .depositAccountNumber("123456789012")
+                .transferType(TransferType.IMMEDIATE)
                 .channel(TransferChannel.WB)
                 .amount(10000L)
                 .build();
@@ -44,6 +48,9 @@ class MockTransferExecutionPortTest {
     void execute_ShouldIncrementSequence() {
         // given
         TransferCommand command = TransferCommand.builder()
+                .withdrawalAccountId(1L)
+                .depositAccountNumber("123456789012")
+                .transferType(TransferType.IMMEDIATE)
                 .channel(TransferChannel.BT)
                 .amount(10000L)
                 .build();

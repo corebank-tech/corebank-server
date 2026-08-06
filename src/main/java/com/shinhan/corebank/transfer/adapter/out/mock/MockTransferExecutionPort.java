@@ -25,7 +25,7 @@ public class MockTransferExecutionPort implements TransferExecutionUseCase{
         LocalDateTime now = LocalDateTime.now();
 
         String dateStr = now.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String channel = command.channel() != null ? command.channel().name() : "WB";
+        String channel = command.channel().name();
         String seqStr = String.format("%010d",sequence.getAndIncrement());
 
         // 거래번호 규칙: YYYYMMDD + 채널(2) + 일련(10) = 20자리
