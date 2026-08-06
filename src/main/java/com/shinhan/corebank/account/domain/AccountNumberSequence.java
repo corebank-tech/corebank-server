@@ -113,7 +113,7 @@ public class AccountNumberSequence {
         if (lastSequence < 0
                 || lastSequence > AccountNumberPolicy.MAX_SEQUENCE) {
             throw new IllegalStateException(
-                    "사전 정의된 계좌번호 일련번호가 올바르지 않습니다."
+                    "계좌번호 일련번호가 올바르지 않습니다."
             );
         }
         boolean demandDeposit =
@@ -122,7 +122,7 @@ public class AccountNumberSequence {
                 (demandDeposit && productId != null) || (!demandDeposit && productId == null);
         if(invalidProductCombination){
             throw new IllegalStateException(
-                    "사전 정의된 계좌 유형과 상품 ID 조합이 올바르지 않습니다."
+                    "계좌 유형과 상품 ID 조합이 올바르지 않습니다."
             );
         }
     }
