@@ -10,6 +10,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -81,14 +82,32 @@ public class AuditLogJpaEntity {
     }
     private static Map<String, Object> sanitizeDetail(Map<String, Object> detail) {
         if(detail == null) {return null;}
-        for(String key : detail.keySet()) {
+        Map<String, Object> sanitized = new HashMap<>();
+        for(Map.Entry<String, Object> entry : detail.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+
             if(FORBIDDEN_DETAIL_KEY.contains(key)) {
                 throw new IllegalArgumentException("detail에 금지된 키가 포함되어 있습니다: " + key);
             }
+            if(ACCOUNT_NUMBER_KEY.equals(key)) {
+                sanitized.put(key, MaskingUtil.maskAccountNumber((String)value));
+            } else {
+                sanitized.put(key, sanitizeValue(value));
+            }
         }
-        if(!detail.containsKey(ACCOUNT_NUMBER_KEY)) {return new HashMap<>(detail);}
-        Map<String, Object> masked = new HashMap<>(detail);
-        masked.put(ACCOUNT_NUMBER_KEY, MaskingUtil.maskAccountNumber((String)detail.get(ACCOUNT_NUMBER_KEY)));
-        return masked;
+        return sanitized;
+    }
+
+    // 재귀
+    @SuppressWarnings("unchecked")
+    private static Object sanitizeValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return sanitizeDetail((Map<String, Object>) map);
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(AuditLogJpaEntity::sanitizeValue).toList();
+        }
+        return value;
     }
 }

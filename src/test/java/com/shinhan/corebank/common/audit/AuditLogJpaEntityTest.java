@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -99,6 +100,42 @@ class AuditLogJpaEntityTest {
     @DisplayName("detail에 금지 키(password) 포함 -> IllegalArgumentException")
     void detailWithForbiddenKey_password_throws() {
         Map<String, Object> detail = Map.of("password", "1234");
+
+        assertThatIllegalArgumentException().isThrownBy(() ->
+                AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, NOW));
+    }
+
+    @Test
+    @DisplayName("중첩된 Map 안의 계좌번호도 마스킹된다")
+    void nestedMapAccountNumber_masked() {
+        Map<String, Object> detail = Map.of(
+                "transfer", Map.of("accountNumber", "110123456789"));
+
+        AuditLogJpaEntity e = AuditLogJpaEntity.of(
+                1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, NOW);
+
+        Map<?, ?> transfer = (Map<?, ?>) e.getDetail().get("transfer");
+        assertThat(transfer.get("accountNumber")).isEqualTo("110******789");
+    }
+
+    @Test
+    @DisplayName("List 안의 Map에 있는 계좌번호도 마스킹된다")
+    void listOfMapsAccountNumber_masked() {
+        Map<String, Object> detail = Map.of(
+                "accounts", List.of(Map.of("accountNumber", "110123456789")));
+
+        AuditLogJpaEntity e = AuditLogJpaEntity.of(
+                1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, NOW);
+
+        List<?> accounts = (List<?>) e.getDetail().get("accounts");
+        Map<?, ?> first = (Map<?, ?>) accounts.get(0);
+        assertThat(first.get("accountNumber")).isEqualTo("110******789");
+    }
+
+    @Test
+    @DisplayName("중첩 Map 안의 금지 키(otp)도 차단된다")
+    void nestedForbiddenKey_throws() {
+        Map<String, Object> detail = Map.of("auth", Map.of("otp", "123456"));
 
         assertThatIllegalArgumentException().isThrownBy(() ->
                 AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, NOW));
