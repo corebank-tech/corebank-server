@@ -1,21 +1,15 @@
 package com.shinhan.corebank.product.domain;
 
-import jakarta.persistence.*;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
 
 import java.math.BigDecimal;
 
-@Entity
-@Table(name = "product_rate_tier")
 @Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@AllArgsConstructor
 @Builder
 public class ProductRateTier {
-    @EmbeddedId
     private ProductRateTierId id;
-
-    @Column(precision = 5, scale = 2, nullable = false)
     private BigDecimal rate;
-
 }

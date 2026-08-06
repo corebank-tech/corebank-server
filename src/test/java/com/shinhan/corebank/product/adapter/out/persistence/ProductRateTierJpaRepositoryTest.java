@@ -3,8 +3,6 @@ package com.shinhan.corebank.product.adapter.out.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
-import com.shinhan.corebank.product.domain.ProductRateTier;
-import com.shinhan.corebank.product.domain.ProductRateTierId;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,8 +33,8 @@ class ProductRateTierJpaRepositoryTest extends IntegrationTestSupport {
     @Test
     @DisplayName("ProductRateTier를 저장하면 복합키로 조회된다")
     void saveAndFindById() {
-        ProductRateTierId id = new ProductRateTierId(productId, (short) 12);
-        ProductRateTier tier = ProductRateTier.builder()
+        ProductRateTierJpaEntityId id = new ProductRateTierJpaEntityId(productId, (short) 12);
+        ProductRateTierJpaEntity tier = ProductRateTierJpaEntity.builder()
                 .id(id)
                 .rate(new BigDecimal("2.80"))
                 .build();
@@ -45,7 +43,7 @@ class ProductRateTierJpaRepositoryTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        ProductRateTier found = repository.findById(id).orElseThrow();
+        ProductRateTierJpaEntity found = repository.findById(id).orElseThrow();
         assertThat(found.getRate()).isEqualByComparingTo("2.80");
     }
 }

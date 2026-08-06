@@ -1,12 +1,10 @@
 package com.shinhan.corebank.product.adapter.out.persistence;
 
-import static com.shinhan.corebank.product.domain.QProduct.product;
+import static com.shinhan.corebank.product.adapter.out.persistence.QProductJpaEntity.productJpaEntity;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.querydsl.core.BooleanBuilder;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.shinhan.corebank.IntegrationTestSupport;
-import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.SaleStatus;
 import jakarta.persistence.EntityManager;
@@ -30,23 +28,22 @@ class QuerydslSmokeTest extends IntegrationTestSupport {
     EntityManager entityManager;
 
     @Test
-    @DisplayName("Q타입으로 조립한 동적 조건(BooleanBuilder)이 실제 쿼리로 실행된다")
+    @DisplayName("Q타입으로 조립한 동적 조건이 실제 쿼리로 실행된다")
     void dynamicPredicateQueryWorks() {
-        Product saved = repository.save(ProductTestFixtures.defaultProduct());
+        ProductJpaEntity saved = repository.save(ProductTestFixtures.defaultProduct());
         entityManager.flush();
         entityManager.clear();
 
-        BooleanBuilder condition = new BooleanBuilder();
-        condition.and(product.productGroup.eq(ProductGroup.DEPOSIT));
-        condition.and(product.saleStatus.eq(SaleStatus.ON_SALE));
-
-        List<Product> result = queryFactory
-                .selectFrom(product)
-                .where(condition)
+        List<ProductJpaEntity> result = queryFactory
+                .selectFrom(productJpaEntity)
+                .where(
+                        productJpaEntity.productGroup.eq(ProductGroup.DEPOSIT),
+                        productJpaEntity.saleStatus.eq(SaleStatus.ON_SALE)
+                )
                 .fetch();
 
         assertThat(result)
-                .extracting(Product::getProductId)
+                .extracting(ProductJpaEntity::getProductId)
                 .contains(saved.getProductId());
     }
 }
