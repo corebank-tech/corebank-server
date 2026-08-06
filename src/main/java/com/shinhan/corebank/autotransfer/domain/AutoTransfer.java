@@ -148,9 +148,9 @@ public class AutoTransfer {
 
         LocalDate newNextExecutionDate = this.nextExecutionDate;
         if (!cycleMonths.equals(this.cycleMonths)) {
-            // 직전 실행 예정일 기준 재산출: 현재 nextExecutionDate를 옛 주기만큼 되돌린 지점(앵커)에 새 주기 더하는 방식
-            YearMonth anchor = YearMonth.from(this.nextExecutionDate).minusMonths(this.cycleMonths);
-            YearMonth targetMonth = anchor.plusMonths(cycleMonths);
+            // 직전 실행 예정일 기준 재산출: 현재 nextExecutionDate를 옛 주기만큼 되돌린 지점에 새 주기 더하는 방식
+            YearMonth cycleBaseMonth = YearMonth.from(this.nextExecutionDate).minusMonths(this.cycleMonths);
+            YearMonth targetMonth = cycleBaseMonth.plusMonths(cycleMonths);
             newNextExecutionDate = clampToTransferDay(targetMonth, this.transferDay);
         }
         if (newNextExecutionDate.isAfter(endDate)) {
