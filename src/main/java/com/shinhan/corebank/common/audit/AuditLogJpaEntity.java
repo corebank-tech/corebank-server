@@ -55,7 +55,7 @@ public class AuditLogJpaEntity {
 
     public static final Set<String> FORBIDDEN_DETAIL_KEY = Set.of("birthDate", "otp", "password");
 
-    public static final String ACCOUNT_NUMBER_KEY = "accountNumber";
+    public static final String ACCOUNT_NUMBER_KEY_SUFFIX = "AccountNumber";
 
     public static AuditLogJpaEntity of(Long customerId, String transactionNumber,
                                        AuditEventType eventType, String requestIp,
@@ -90,7 +90,7 @@ public class AuditLogJpaEntity {
             if(FORBIDDEN_DETAIL_KEY.contains(key)) {
                 throw new IllegalArgumentException("detail에 금지된 키가 포함되어 있습니다: " + key);
             }
-            if(ACCOUNT_NUMBER_KEY.equals(key)) {
+            if(key.toLowerCase().endsWith(ACCOUNT_NUMBER_KEY_SUFFIX.toLowerCase())) {
                 sanitized.put(key, MaskingUtil.maskAccountNumber((String)value));
             } else {
                 sanitized.put(key, sanitizeValue(value));

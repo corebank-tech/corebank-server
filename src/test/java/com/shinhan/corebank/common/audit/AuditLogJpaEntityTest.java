@@ -68,6 +68,17 @@ class AuditLogJpaEntityTest {
     }
 
     @Test
+    @DisplayName("depositAccountNumber처럼 접두사가 붙은 key도 마스킹된다")
+    void detailWithPrefixedAccountNumberKey_masked() {
+        Map<String, Object> detail = Map.of("depositAccountNumber", "110123456789");
+
+        AuditLogJpaEntity e = AuditLogJpaEntity.of(
+                1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, NOW);
+
+        assertThat(e.getDetail().get("depositAccountNumber")).isEqualTo("110******789");
+    }
+
+    @Test
     @DisplayName("detail에 계좌번호·금지 키 없음 -> 원본 그대로 저장됨")
     void detailWithoutSensitiveKeys_keptAsIs() {
         Map<String, Object> detail = Map.of("eventNote", "정상 로그인");
