@@ -3,7 +3,8 @@
 -- 약관 초기 데이터 시딩 (이력 보존을 위해 R 스크립트가 아닌 V 스크립트로 관리)
 -- ====================================================================
 
-INSERT INTO terms (terms_code, version, terms_type, title, content, is_required, view_required, created_at, updated_at) VALUES
+-- 기존 운영(prod)환경에는 R 스크립트로 terms 데이터가 이미 채워져 있으므로 이를 블로킹
+INSERT IGNORE INTO terms (terms_code, version, terms_type, title, content, is_required, view_required, created_at, updated_at) VALUES
   ('TERMS_SERVICE',  'v1.0', 'SIGNUP',  '서비스 이용약관',        '(내용)', TRUE,  FALSE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000'),
   ('TERMS_PRIVACY',  'v1.0', 'SIGNUP',  '개인정보 수집·이용 동의', '(내용)', TRUE,  FALSE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000'),
   ('TERMS_MARKETING','v1.0', 'SIGNUP',  '마케팅 정보 수신 동의',   '(내용)', FALSE, FALSE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000'),
