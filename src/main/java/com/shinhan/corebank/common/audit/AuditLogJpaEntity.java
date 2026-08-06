@@ -1,5 +1,6 @@
 package com.shinhan.corebank.common.audit;
 
+import com.shinhan.corebank.common.util.MaskingUtil;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -8,7 +9,9 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 감사 로그 (REQ-NFR-010).
@@ -49,6 +52,10 @@ public class AuditLogJpaEntity {
     @Column(name = "requested_at", nullable = false)
     private LocalDateTime requestedAt;
 
+    public static final Set<String> FORBIDDEN_DETAIL_KEY = Set.of("birthDate", "otp", "password");
+
+    public static final String ACCOUNT_NUMBER_KEY = "accountNumber";
+
     public static AuditLogJpaEntity of(Long customerId, String transactionNumber,
                                        AuditEventType eventType, String requestIp,
                                        boolean success, Map<String, Object> detail, LocalDateTime now) {
@@ -68,8 +75,20 @@ public class AuditLogJpaEntity {
         e.eventType = eventType.name();
         e.requestIp = requestIp;
         e.result = success ? "SUCCESS" : "FAILURE";
-        e.detail = detail;
+        e.detail = sanitizeDetail(detail);
         e.requestedAt = now;
         return e;
+    }
+    private static Map<String, Object> sanitizeDetail(Map<String, Object> detail) {
+        if(detail == null) {return null;}
+        for(String key : detail.keySet()) {
+            if(FORBIDDEN_DETAIL_KEY.contains(key)) {
+                throw new IllegalArgumentException("detail에 금지된 키가 포함되어 있습니다: " + key);
+            }
+        }
+        if(!detail.containsKey(ACCOUNT_NUMBER_KEY)) {return new HashMap<>(detail);}
+        Map<String, Object> masked = new HashMap<>(detail);
+        masked.put(ACCOUNT_NUMBER_KEY, MaskingUtil.maskAccountNumber((String)detail.get(ACCOUNT_NUMBER_KEY)));
+        return masked;
     }
 }
