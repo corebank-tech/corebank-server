@@ -2,6 +2,8 @@ package com.shinhan.corebank.account.application.service;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,6 +20,7 @@ class AccountNumberIssuanceRollbackTest
     extends IntegrationTestSupport {
 
     private static final long INITIAL_SEQUENCE = 100L;
+    private AccountNumberSequenceTestFixture fixture;
 
     @Autowired
     private AccountNumberIssuanceService service;
@@ -30,8 +33,19 @@ class AccountNumberIssuanceRollbackTest
 
     @BeforeEach
     void setUp() {
-        deleteDemandDepositSequence();
-        insertDemandDepositSequence(INITIAL_SEQUENCE);
+        fixture =
+                new AccountNumberSequenceTestFixture(
+                        jdbcTemplate
+                );
+
+        fixture.resetDemandDepositSequence(
+                INITIAL_SEQUENCE
+        );
+    }
+
+    @AfterEach
+    void tearDown() {
+        fixture.deleteDemandDepositSequence();
     }
 
     @Test
@@ -57,56 +71,9 @@ class AccountNumberIssuanceRollbackTest
         ).isInstanceOf(ForcedRollbackException.class);
 
         // 트랜잭션 종료 후 DB를 새로 조회한다.
-        assertThat(findLastSequence())
-            .isEqualTo(INITIAL_SEQUENCE);
-    }
-
-    private void insertDemandDepositSequence(
-        long lastSequence
-    ) {
-        jdbcTemplate.update("""
-            INSERT INTO account_number_sequence (
-                bank_code,
-                account_type,
-                product_id,
-                product_prefix,
-                last_sequence,
-                created_at,
-                updated_at
-            )
-            VALUES (
-                '088',
-                'DEMAND_DEPOSIT',
-                NULL,
-                '10',
-                ?,
-                CURRENT_TIMESTAMP(6),
-                CURRENT_TIMESTAMP(6)
-            )
-            """,
-            lastSequence
-        );
-    }
-
-    private void deleteDemandDepositSequence() {
-        jdbcTemplate.update("""
-            DELETE FROM account_number_sequence
-             WHERE bank_code = '088'
-               AND account_type = 'DEMAND_DEPOSIT'
-               AND product_id IS NULL
-            """);
-    }
-
-    private Long findLastSequence() {
-        return jdbcTemplate.queryForObject("""
-            SELECT last_sequence
-              FROM account_number_sequence
-             WHERE bank_code = '088'
-               AND account_type = 'DEMAND_DEPOSIT'
-               AND product_id IS NULL
-            """,
-            Long.class
-        );
+        assertThat(
+                fixture.findDemandDepositLastSequence()
+        ).isEqualTo(INITIAL_SEQUENCE);
     }
 
     private static class ForcedRollbackException
