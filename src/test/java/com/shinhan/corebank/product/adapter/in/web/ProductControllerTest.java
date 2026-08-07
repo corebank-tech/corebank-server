@@ -3,13 +3,29 @@ package com.shinhan.corebank.product.adapter.in.web;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaEntity;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductPreferentialRateJpaEntity;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductPreferentialRateJpaEntityId;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductPreferentialRateJpaRepository;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductRateTierJpaEntity;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductRateTierJpaEntityId;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductRateTierJpaRepository;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductTermsJpaEntity;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductTermsJpaEntityId;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductTermsJpaRepository;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductTestFixtures;
+import com.shinhan.corebank.product.domain.DepositType;
+import com.shinhan.corebank.product.domain.InterestPayType;
+import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.SaleStatus;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +42,18 @@ class ProductControllerTest extends IntegrationTestSupport {
 
     @Autowired
     ProductJpaRepository productJpaRepository;
+
+    @Autowired
+    ProductRateTierJpaRepository rateTierRepository;
+
+    @Autowired
+    ProductPreferentialRateJpaRepository preferentialRateRepository;
+
+    @Autowired
+    ProductTermsJpaRepository termsRepository;
+
+    @Autowired
+    JdbcTemplate jdbcTemplate;
 
     @BeforeEach
     void seedProduct() {
@@ -80,24 +108,103 @@ class ProductControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("상품 상세를 200 + ApiResponse 봉투로 반환한다")
+    @DisplayName("상품 상세 응답이 docs/api_endpoint_reference.md 스펙 필드를 전부 채워서 반환한다")
     void getProductDetail() throws Exception {
-        ProductJpaEntity saved = productJpaRepository.save(ProductTestFixtures.productWithCode("DTL-101"));
+        ProductJpaEntity saved = productJpaRepository.save(ProductJpaEntity.builder()
+                .productCode("DTL-101")
+                .productName("청년 희망 적금")
+                .productGroup(ProductGroup.SAVINGS)
+                .depositType(DepositType.INSTALLMENT)
+                .description("만 19~34세 대상 정액적립식 적금")
+                .eligibility("만 19~34세 개인")
+                .subscriptionRestrictions(List.of("1인 1계좌"))
+                .notices(List.of("중도해지 시 약정금리가 적용되지 않습니다."))
+                .baseRate(new BigDecimal("3.20"))
+                .maxRate(new BigDecimal("4.50"))
+                .minAmount(10_000L)
+                .maxAmount(10_000_000L)
+                .amountUnit(10_000L)
+                .minTermMonths((short) 6)
+                .maxTermMonths((short) 36)
+                .interestPayType(InterestPayType.SIMPLE)
+                .saleStatus(SaleStatus.ON_SALE)
+                .saleEndDate(LocalDate.of(2026, 12, 31))
+                .newFlag(false)
+                .singleAccountLimit(false)
+                .build());
+        Long productId = saved.getProductId();
+        Long termsId = jdbcTemplate.queryForObject(
+                "SELECT terms_id FROM terms WHERE terms_code = ?", Long.class, "TERMS_SAVINGS");
 
-        mockMvc.perform(get("/products/{productId}", saved.getProductId()))
+        rateTierRepository.save(ProductRateTierJpaEntity.builder()
+                .id(new ProductRateTierJpaEntityId(productId, (short) 12))
+                .rate(new BigDecimal("3.20"))
+                .build());
+        preferentialRateRepository.save(ProductPreferentialRateJpaEntity.builder()
+                .productPreferentialRateId(new ProductPreferentialRateJpaEntityId(productId, "AUTO_TRANSFER"))
+                .conditionName("자동이체 6회 이상")
+                .rate(new BigDecimal("0.50"))
+                .build());
+        termsRepository.save(ProductTermsJpaEntity.builder()
+                .id(new ProductTermsJpaEntityId(productId, termsId))
+                .displayOrder((short) 1)
+                .build());
+
+        mockMvc.perform(get("/products/{productId}", productId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
-                .andExpect(jsonPath("$.data.productId").value(saved.getProductId()))
+                .andExpect(jsonPath("$.data.productId").value(productId))
                 .andExpect(jsonPath("$.data.productCode").value("DTL-101"))
-                .andExpect(jsonPath("$.data.rateTiers").isArray())
-                .andExpect(jsonPath("$.data.preferentialRates").isArray())
-                .andExpect(jsonPath("$.data.terms").isArray());
+                .andExpect(jsonPath("$.data.productName").value("청년 희망 적금"))
+                .andExpect(jsonPath("$.data.productGroup").value("SAVINGS"))
+                .andExpect(jsonPath("$.data.description").value("만 19~34세 대상 정액적립식 적금"))
+                .andExpect(jsonPath("$.data.baseRate").value(3.20))
+                .andExpect(jsonPath("$.data.maxRate").value(4.50))
+                .andExpect(jsonPath("$.data.minAmount").value(10_000))
+                .andExpect(jsonPath("$.data.maxAmount").value(10_000_000))
+                .andExpect(jsonPath("$.data.amountUnit").value(10_000))
+                .andExpect(jsonPath("$.data.termOptions.length()").value(1))
+                .andExpect(jsonPath("$.data.termOptions[0]").value(12))
+                .andExpect(jsonPath("$.data.rateTiers[0].termMonths").value(12))
+                .andExpect(jsonPath("$.data.rateTiers[0].rate").value(3.20))
+                .andExpect(jsonPath("$.data.preferentialRates[0].conditionCode").value("AUTO_TRANSFER"))
+                .andExpect(jsonPath("$.data.preferentialRates[0].conditionName").value("자동이체 6회 이상"))
+                .andExpect(jsonPath("$.data.preferentialRates[0].rate").value(0.50))
+                .andExpect(jsonPath("$.data.eligibility").value("만 19~34세 개인"))
+                .andExpect(jsonPath("$.data.subscriptionRestrictions[0]").value("1인 1계좌"))
+                .andExpect(jsonPath("$.data.notices[0]").value("중도해지 시 약정금리가 적용되지 않습니다."))
+                .andExpect(jsonPath("$.data.saleStatus").value("ON_SALE"))
+                .andExpect(jsonPath("$.data.saleEndDate").value("2026-12-31"))
+                .andExpect(jsonPath("$.data.terms[0].termsId").value(termsId))
+                .andExpect(jsonPath("$.data.terms[0].displayOrder").value(1))
+                // termsName/version/required/viewRequired는 스펙상 Nullable:X(항상 값 있음)이지만,
+                // P6 TermsQueryPort 연동 전까지는 null로 응답한다 — 스펙과의 알려진 차이를 테스트로 명시.
+                .andExpect(jsonPath("$.data.terms[0].termsName").doesNotExist())
+                .andExpect(jsonPath("$.data.terms[0].version").doesNotExist())
+                .andExpect(jsonPath("$.data.terms[0].required").doesNotExist())
+                .andExpect(jsonPath("$.data.terms[0].viewRequired").doesNotExist());
     }
 
     @Test
     @DisplayName("존재하지 않는 productId면 404 + PRD0201을 반환한다")
     void getProductDetail_notFound() throws Exception {
         mockMvc.perform(get("/products/{productId}", 999_999L))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PRD0201"));
+    }
+
+    @Test
+    @DisplayName("productId가 숫자가 아니면 400 + CMN0001을 반환한다")
+    void getProductDetail_nonNumericId() throws Exception {
+        mockMvc.perform(get("/products/{productId}", "abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
+    }
+
+    @Test
+    @DisplayName("productId가 음수여도 형식은 유효해 404 + PRD0201로 응답한다(존재하지 않는 계좌/상품 처리와 동일)")
+    void getProductDetail_negativeId() throws Exception {
+        mockMvc.perform(get("/products/{productId}", -1L))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PRD0201"));
     }
