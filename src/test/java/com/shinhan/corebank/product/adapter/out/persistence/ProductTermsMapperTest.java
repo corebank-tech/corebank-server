@@ -14,12 +14,14 @@ class ProductTermsMapperTest {
     void toDomain_preservesAllFields() {
         ProductTermsJpaEntity entity = ProductTermsJpaEntity.builder()
                 .id(new ProductTermsJpaEntityId(1L, 2L))
+                .displayOrder((short) 1)
                 .build();
 
         ProductTerms domain = ProductTermsMapper.toDomain(entity);
 
         assertThat(domain.getId().getProductId()).isEqualTo(entity.getId().getProductId());
         assertThat(domain.getId().getTermsId()).isEqualTo(entity.getId().getTermsId());
+        assertThat(domain.getDisplayOrder()).isEqualTo(entity.getDisplayOrder());
     }
 
     @Test
@@ -27,11 +29,13 @@ class ProductTermsMapperTest {
     void toEntity_preservesAllFields() {
         ProductTerms domain = ProductTerms.builder()
                 .id(new ProductTermsId(1L, 2L))
+                .displayOrder((short) 1)
                 .build();
 
         ProductTermsJpaEntity entity = ProductTermsMapper.toEntity(domain);
 
         assertThat(entity.getId().getProductId()).isEqualTo(domain.getId().getProductId());
         assertThat(entity.getId().getTermsId()).isEqualTo(domain.getId().getTermsId());
+        assertThat(entity.getDisplayOrder()).isEqualTo(domain.getDisplayOrder());
     }
 }
