@@ -202,6 +202,9 @@
 | `deposit_type` | `VARCHAR(20)` |  | X |  | 납입 방식. `LUMP_SUM`(한 번에 예치) / `INSTALLMENT`(매월 납입) |
 | `summary` | `VARCHAR(200)` |  | O |  | 상품 한 줄 요약. 목록 화면용 |
 | `description` | `TEXT` |  | O |  | 상품 상세 설명. 상세 화면용 |
+| `eligibility` | `TEXT` |  | O |  | 가입 자격 조건 안내 문구. 상세조회 `data.eligibility` |
+| `subscription_restrictions` | `TEXT` |  | O |  | 가입 제한 사항 목록(JSON 배열 문자열). 상세조회 `data.subscriptionRestrictions`. 애플리케이션의 `StringListJsonConverter`가 `List<String>`으로 변환 |
+| `notices` | `TEXT` |  | O |  | 유의사항 목록(JSON 배열 문자열). 상세조회 `data.notices`. `subscription_restrictions`와 동일한 컨버터 사용 |
 | `base_rate` | `DECIMAL(5,2)` |  | X |  | 기본금리(연 %). 우대금리를 제외한 기준값 |
 | `max_rate` | `DECIMAL(5,2)` |  | X |  | 최고금리(연 %). 우대 조건을 모두 채웠을 때의 상한. 목록 화면 표시용 |
 | `min_amount` | `BIGINT` |  | X |  | 최소 가입금액. 미만이면 PRD0001 |
