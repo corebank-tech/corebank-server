@@ -1,4 +1,4 @@
-package com.shinhan.corebank.account.adapter.in.web;
+package com.shinhan.corebank.account.domain.exception;
 
 import com.shinhan.corebank.common.exception.ErrorCode;
 

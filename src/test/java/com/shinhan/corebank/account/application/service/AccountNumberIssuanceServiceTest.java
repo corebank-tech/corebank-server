@@ -1,6 +1,6 @@
 package com.shinhan.corebank.account.application.service;
 
-import com.shinhan.corebank.account.adapter.in.web.AccountErrorCode;
+import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.account.application.port.out.AccountNumberSequencePort;
 import com.shinhan.corebank.account.domain.AccountNumberPolicy;
 import com.shinhan.corebank.account.domain.AccountNumberSequence;
