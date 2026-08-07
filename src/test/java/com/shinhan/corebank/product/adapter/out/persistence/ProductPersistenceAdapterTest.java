@@ -7,6 +7,7 @@ import com.shinhan.corebank.product.application.ProductSortType;
 import com.shinhan.corebank.product.domain.*;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -71,14 +72,61 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(myCodesInOrder(firstPage)).doesNotContain("SVN-103");
     }
 
+    @Test
+    @DisplayName("정렬 기준(RATE)이 동률이면 productCode 오름차순으로 보조 정렬해 순서가 항상 고정된다")
+    void tieBreaksByProductCode() {
+        repository.save(product("SVN-202", "동률 상품 B", ProductGroup.DEPOSIT, new BigDecimal("3.30"), SaleStatus.ON_SALE));
+        repository.save(product("SVN-201", "동률 상품 A", ProductGroup.DEPOSIT, new BigDecimal("3.30"), SaleStatus.ON_SALE));
+        entityManager.flush();
+        entityManager.clear();
+
+        Page<Product> result = adapter.search(null, null, ProductSortType.RATE, PageRequest.of(0, 20));
+
+        assertThat(codesInOrder(result, "SVN-2")).containsExactly("SVN-201", "SVN-202");
+    }
+
+    @Test
+    @DisplayName("NAME 정렬은 상품명 오름차순으로 정렬한다")
+    void sortByName() {
+        repository.save(product("SVN-302", "가나다예금", ProductGroup.DEPOSIT, new BigDecimal("3.00"), SaleStatus.ON_SALE));
+        repository.save(product("SVN-301", "가나다적금", ProductGroup.DEPOSIT, new BigDecimal("3.00"), SaleStatus.ON_SALE));
+        entityManager.flush();
+        entityManager.clear();
+
+        Page<Product> result = adapter.search(null, null, ProductSortType.NAME, PageRequest.of(0, 20));
+
+        assertThat(codesInOrder(result, "SVN-3")).containsExactly("SVN-302", "SVN-301");
+    }
+
+    @Test
+    @DisplayName("NEW 정렬은 판매 시작일 최신순으로 정렬한다")
+    void sortByNew() {
+        repository.save(product("SVN-401", "신상품 A", ProductGroup.DEPOSIT, new BigDecimal("3.00"), SaleStatus.ON_SALE, LocalDate.of(2026, 1, 1)));
+        repository.save(product("SVN-402", "신상품 B", ProductGroup.DEPOSIT, new BigDecimal("3.00"), SaleStatus.ON_SALE, LocalDate.of(2026, 6, 1)));
+        entityManager.flush();
+        entityManager.clear();
+
+        Page<Product> result = adapter.search(null, null, ProductSortType.NEW, PageRequest.of(0, 20));
+
+        assertThat(codesInOrder(result, "SVN-4")).containsExactly("SVN-402", "SVN-401");
+    }
+
     private static List<String> myCodesInOrder(Page<Product> page) {
+        return codesInOrder(page, "SVN-1");
+    }
+
+    private static List<String> codesInOrder(Page<Product> page, String prefix) {
         return page.getContent().stream()
                 .map(Product::getProductCode)
-                .filter(code -> code.startsWith("SVN-1"))
+                .filter(code -> code.startsWith(prefix))
                 .toList();
     }
 
     private ProductJpaEntity product(String code, String name, ProductGroup group, BigDecimal maxRate, SaleStatus status) {
+        return product(code, name, group, maxRate, status, LocalDate.of(2026, 1, 1));
+    }
+
+    private ProductJpaEntity product(String code, String name, ProductGroup group, BigDecimal maxRate, SaleStatus status, LocalDate saleStartDate) {
         return ProductJpaEntity.builder()
                 .productCode(code)
                 .productName(name)
@@ -95,6 +143,7 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
                 .saleStatus(status)
                 .newFlag(false)
                 .singleAccountLimit(false)
+                .saleStartDate(saleStartDate)
                 .build();
     }
 }

@@ -32,7 +32,7 @@ public class ProductPersistenceAdapter implements ProductQueryPort {
         List<ProductJpaEntity> content = queryFactory
                 .selectFrom(productJpaEntity)
                 .where(conditions)
-                .orderBy(orderSpecifier(sort))
+                .orderBy(orderSpecifier(sort), productJpaEntity.productCode.asc())
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
                 .fetch();
