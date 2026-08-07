@@ -62,7 +62,6 @@ public class AccountNumberSequence {
 
     public String issueNext() {
         if (isExhausted()) {
-            //ACC0303 먼저 발생시켜서 잘못된 내부 호출 막기
             throw new IllegalStateException(
                     "계좌번호 일련번호가 소진되었습니다."
             );
