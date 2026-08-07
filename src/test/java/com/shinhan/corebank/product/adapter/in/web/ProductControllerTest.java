@@ -3,7 +3,8 @@ package com.shinhan.corebank.product.adapter.in.web;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaEntity;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
-import com.shinhan.corebank.product.domain.*;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductTestFixtures;
+import com.shinhan.corebank.product.domain.SaleStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,8 +12,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -30,23 +29,7 @@ class ProductControllerTest extends IntegrationTestSupport {
 
     @BeforeEach
     void seedProduct() {
-        productJpaRepository.save(ProductJpaEntity.builder()
-                .productCode("CTL-101")
-                .productName("정기예금 컨트롤러 테스트")
-                .productGroup(ProductGroup.DEPOSIT)
-                .depositType(DepositType.LUMP_SUM)
-                .baseRate(new BigDecimal("3.00"))
-                .maxRate(new BigDecimal("3.50"))
-                .minAmount(100_000L)
-                .maxAmount(100_000_000L)
-                .amountUnit(10_000L)
-                .minTermMonths((short) 6)
-                .maxTermMonths((short) 36)
-                .interestPayType(InterestPayType.SIMPLE)
-                .saleStatus(SaleStatus.ON_SALE)
-                .newFlag(false)
-                .singleAccountLimit(false)
-                .build());
+        productJpaRepository.save(ProductTestFixtures.productWithCode("CTL-101", "정기예금 컨트롤러 테스트"));
     }
 
     @Test
@@ -99,7 +82,7 @@ class ProductControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("상품 상세를 200 + ApiResponse 봉투로 반환한다")
     void getProductDetail() throws Exception {
-        ProductJpaEntity saved = productJpaRepository.save(detailProduct("DTL-101", SaleStatus.ON_SALE));
+        ProductJpaEntity saved = productJpaRepository.save(ProductTestFixtures.productWithCode("DTL-101"));
 
         mockMvc.perform(get("/products/{productId}", saved.getProductId()))
                 .andExpect(status().isOk())
@@ -122,31 +105,11 @@ class ProductControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("판매중지 상품도 상세조회는 200으로 응답하고 saleStatus로 구분된다")
     void getProductDetail_suspendedStillReturns200() throws Exception {
-        ProductJpaEntity saved = productJpaRepository.save(detailProduct("DTL-102", SaleStatus.SUSPENDED));
+        ProductJpaEntity saved = productJpaRepository.save(ProductTestFixtures.productWithCode("DTL-102", SaleStatus.SUSPENDED));
 
         mockMvc.perform(get("/products/{productId}", saved.getProductId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data.saleStatus").value("SUSPENDED"));
-    }
-
-    private ProductJpaEntity detailProduct(String code, SaleStatus status) {
-        return ProductJpaEntity.builder()
-                .productCode(code)
-                .productName("정기예금 상세조회 테스트")
-                .productGroup(ProductGroup.DEPOSIT)
-                .depositType(DepositType.LUMP_SUM)
-                .baseRate(new BigDecimal("3.00"))
-                .maxRate(new BigDecimal("3.50"))
-                .minAmount(100_000L)
-                .maxAmount(100_000_000L)
-                .amountUnit(10_000L)
-                .minTermMonths((short) 6)
-                .maxTermMonths((short) 36)
-                .interestPayType(InterestPayType.SIMPLE)
-                .saleStatus(status)
-                .newFlag(false)
-                .singleAccountLimit(false)
-                .build();
     }
 }

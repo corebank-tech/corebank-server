@@ -163,6 +163,8 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
     @DisplayName("연관 데이터가 없는 상품도 빈 목록으로 채워서 반환한다")
     void findDetailByProductId_foundWithoutChildren() {
         ProductJpaEntity saved = repository.save(product("SVN-502", "연관데이터 없음", ProductGroup.DEPOSIT, new BigDecimal("3.00"), SaleStatus.ON_SALE));
+        entityManager.flush();
+        entityManager.clear();
 
         Optional<ProductDetail> result = adapter.findDetailByProductId(saved.getProductId());
 
@@ -184,6 +186,8 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
     @DisplayName("판매중지 상품도 상세조회는 조회된다")
     void findDetailByProductId_suspendedStillReturned() {
         ProductJpaEntity saved = repository.save(product("SVN-503", "판매중지 상품", ProductGroup.DEPOSIT, new BigDecimal("2.00"), SaleStatus.SUSPENDED));
+        entityManager.flush();
+        entityManager.clear();
 
         Optional<ProductDetail> result = adapter.findDetailByProductId(saved.getProductId());
 
