@@ -42,6 +42,30 @@ final class ProductTestFixtures {
                 .build();
     }
 
+    static ProductJpaEntity productWithCode(String productCode) {
+        return ProductJpaEntity.builder()
+                .productCode(productCode)
+                .productName("정기예금")
+                .productGroup(ProductGroup.DEPOSIT)
+                .depositType(DepositType.LUMP_SUM)
+                .summary("6개월 이상 정기예금 상품")
+                .description("표준 정기예금 상품 설명")
+                .baseRate(new BigDecimal("2.50"))
+                .maxRate(new BigDecimal("3.00"))
+                .minAmount(100_000L)
+                .maxAmount(100_000_000L)
+                .amountUnit(10_000L)
+                .minTermMonths((short) 6)
+                .maxTermMonths((short) 36)
+                .interestPayType(InterestPayType.SIMPLE)
+                .saleStatus(SaleStatus.ON_SALE)
+                .saleStartDate(LocalDate.of(2026, 1, 1))
+                .saleEndDate(LocalDate.of(2026, 12, 31))
+                .newFlag(false)
+                .singleAccountLimit(false)
+                .build();
+    }
+
     static Product defaultProductDomain() {
         return Product.builder()
                 .productId(1L)
