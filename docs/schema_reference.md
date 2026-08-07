@@ -210,7 +210,7 @@
 | `min_term_months` | `SMALLINT` |  | X |  | 최소 가입기간(개월). 미만이면 PRD0002 |
 | `max_term_months` | `SMALLINT` |  | X |  | 최대 가입기간(개월). 초과하면 PRD0002 |
 | `interest_pay_type` | `VARCHAR(20)` |  | X |  | 이자 계산 방식. `SIMPLE`(단리) / `COMPOUND`(복리) |
-| `sale_status` | `VARCHAR(12)` |  | X |  | 판매 상태. `ON_SALE`(판매중) / `SUSPENDED`(판매중지). 판매중지 상품은 목록에서 빠지고 상세 조회는 PRD0201 |
+| `sale_status` | `VARCHAR(12)` |  | X |  | 판매 상태. `ON_SALE`(판매중) / `SUSPENDED`(판매중지). 판매중지 상품은 목록 조회에서는 빠지지만 상세 조회는 200으로 응답한다(즐겨찾기·공유 링크 진입 지원 목적, `saleStatus`로 프론트가 구분) |
 | `sale_start_date` | `DATE` |  | O |  | 판매 시작일 |
 | `sale_end_date` | `DATE` |  | O |  | 판매 종료일 |
 | `new_flag` | `BOOLEAN` |  | X | `FALSE` | 신상품 뱃지 표시 여부 |
