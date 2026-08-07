@@ -65,11 +65,27 @@ class ProductControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("공개 경로(/api/v1/products, context-path 적용)로 호출해도 정상 응답한다")
+    void searchProducts_publicPath() throws Exception {
+        mockMvc.perform(get("/api/v1/products").contextPath("/api/v1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"));
+    }
+
+    @Test
     @DisplayName("size가 허용 목록(5/10/20/30/50)에 없으면 400 + CMN0005를 반환한다")
     void rejectsInvalidPageSize() throws Exception {
         mockMvc.perform(get("/products").param("size", "7"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0005"));
+    }
+
+    @Test
+    @DisplayName("page가 음수면 400 + CMN0006을 반환한다")
+    void rejectsNegativePage() throws Exception {
+        mockMvc.perform(get("/products").param("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0006"));
     }
 
     @Test
