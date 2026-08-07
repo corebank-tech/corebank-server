@@ -3,6 +3,8 @@ package com.shinhan.corebank.autotransfer.adapter.out.persistence;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -14,6 +16,8 @@ import java.time.LocalDateTime;
         uniqueConstraints = @UniqueConstraint(name = "uk_ate_dup", columnNames = {"auto_transfer_id", "execution_date"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
 public class AutoTransferExecutionJpaEntity {
 
     @Id

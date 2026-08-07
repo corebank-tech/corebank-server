@@ -166,4 +166,30 @@ public class AutoTransfer {
         this.recipientPassbookMemo = recipientPassbookMemo;
     }
 
+    public static AutoTransfer reconstitute(
+            Long autoTransferId, Long customerId, Long withdrawalAccountId, String depositAccountNumber, String payeeName,
+            Long amount, Integer cycleMonths, Integer transferDay, LocalDate startDate, LocalDate endDate, LocalDate nextExecutionDate,
+            String myPassbookMemo, String recipientPassbookMemo, AutoTransferStatus status, LocalDateTime registeredAt,
+            LocalDateTime terminatedAt, LocalDateTime updatedAt) {
+        AutoTransfer e = new AutoTransfer();
+        e.autoTransferId = autoTransferId;
+        e.customerId = customerId;
+        e.withdrawalAccountId = withdrawalAccountId;
+        e.depositAccountNumber = depositAccountNumber;
+        e.payeeName = payeeName;
+        e.amount = amount;
+        e.cycleMonths = cycleMonths;
+        e.transferDay = transferDay;
+        e.startDate = startDate;
+        e.endDate = endDate;
+        e.nextExecutionDate = nextExecutionDate;
+        e.myPassbookMemo = myPassbookMemo;
+        e.recipientPassbookMemo = recipientPassbookMemo;
+        e.status = status;
+        e.registeredAt = registeredAt;
+        e.terminatedAt = terminatedAt;
+        e.updatedAt = updatedAt;
+        return e;
+    }
+
 }
