@@ -14,6 +14,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Entity
 @Table(name = "product")
@@ -45,6 +46,17 @@ public class ProductJpaEntity extends BaseEntity {
 
     @Column(columnDefinition = "TEXT")
     private String description;
+
+    @Column(columnDefinition = "TEXT")
+    private String eligibility;
+
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(columnDefinition = "TEXT")
+    private List<String> subscriptionRestrictions;
+
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(columnDefinition = "TEXT")
+    private List<String> notices;
 
     @Column(precision = 5, scale = 2, nullable = false)
     private BigDecimal baseRate;

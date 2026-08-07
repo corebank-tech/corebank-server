@@ -6,16 +6,19 @@
 
 -- 상품 (product_code 가 UK)
 INSERT INTO product
-  (product_code, product_name, product_group, deposit_type, summary, base_rate, max_rate,
+  (product_code, product_name, product_group, deposit_type, summary, description, base_rate, max_rate,
    min_amount, max_amount, amount_unit, min_term_months, max_term_months,
    interest_pay_type, sale_status, new_flag, single_account_limit, created_at, updated_at) VALUES
   ('PRD_YOUTH_SAVE', '청년 희망 적금', 'SAVINGS', 'INSTALLMENT', '청년 대상 우대 적금',
+   '만 19~34세 대상 정액적립식 적금',
    3.20, 4.50,  10000, 1000000,  10000, 6, 36, 'SIMPLE', 'ON_SALE', TRUE,  TRUE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000'),
   ('PRD_BASIC_DEP',  '기본 정기예금',  'DEPOSIT', 'LUMP_SUM', '기본형 정기예금',
+   '간편하게 가입할 수 있는 기본형 정기예금으로, 안정적인 확정 금리를 제공합니다.',
    2.80, 3.30, 100000, 100000000, 100000, 6, 36, 'SIMPLE', 'ON_SALE', FALSE, FALSE, '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000')
 ON DUPLICATE KEY UPDATE
   product_name = VALUES(product_name), product_group = VALUES(product_group),
   deposit_type = VALUES(deposit_type), summary = VALUES(summary),
+  description = VALUES(description),
   base_rate = VALUES(base_rate), max_rate = VALUES(max_rate),
   min_amount = VALUES(min_amount), max_amount = VALUES(max_amount),
   amount_unit = VALUES(amount_unit), min_term_months = VALUES(min_term_months),

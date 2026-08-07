@@ -9,12 +9,14 @@ import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 @Transactional
@@ -22,6 +24,18 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
 
     @Autowired
     ProductJpaRepository repository;
+
+    @Autowired
+    ProductRateTierJpaRepository rateTierRepository;
+
+    @Autowired
+    ProductPreferentialRateJpaRepository preferentialRateRepository;
+
+    @Autowired
+    ProductTermsJpaRepository termsRepository;
+
+    @Autowired
+    JdbcTemplate jdbcTemplate;
 
     @Autowired
     ProductPersistenceAdapter adapter;
@@ -109,6 +123,76 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
         Page<Product> result = adapter.search(null, null, ProductSortType.NEW, PageRequest.of(0, 20));
 
         assertThat(codesInOrder(result, "SVN-4")).containsExactly("SVN-402", "SVN-401");
+    }
+
+    @Test
+    @DisplayName("존재하는 productId로 상세조회하면 product와 연관 데이터를 모두 채워서 반환한다")
+    void findDetailByProductId_found() {
+        ProductJpaEntity saved = repository.save(product("SVN-501", "상세조회 대상", ProductGroup.DEPOSIT, new BigDecimal("3.00"), SaleStatus.ON_SALE));
+        Long productId = saved.getProductId();
+        Long termsId = jdbcTemplate.queryForObject(
+                "SELECT terms_id FROM terms WHERE terms_code = ?", Long.class, "TERMS_SERVICE");
+
+        rateTierRepository.save(ProductRateTierJpaEntity.builder()
+                .id(new ProductRateTierJpaEntityId(productId, (short) 12))
+                .rate(new BigDecimal("3.20"))
+                .build());
+        preferentialRateRepository.save(ProductPreferentialRateJpaEntity.builder()
+                .productPreferentialRateId(new ProductPreferentialRateJpaEntityId(productId, "AUTO_TRANSFER"))
+                .conditionName("자동이체 우대")
+                .rate(new BigDecimal("0.20"))
+                .build());
+        termsRepository.save(ProductTermsJpaEntity.builder()
+                .id(new ProductTermsJpaEntityId(productId, termsId))
+                .displayOrder((short) 1)
+                .build());
+        entityManager.flush();
+        entityManager.clear();
+
+        Optional<ProductDetail> result = adapter.findDetailByProductId(productId);
+
+        assertThat(result).isPresent();
+        ProductDetail detail = result.get();
+        assertThat(detail.getProduct().getProductCode()).isEqualTo("SVN-501");
+        assertThat(detail.getRateTiers()).extracting(t -> t.getId().getTermMonths()).containsExactly((short) 12);
+        assertThat(detail.getPreferentialRates()).extracting(ProductPreferentialRate::getConditionName).containsExactly("자동이체 우대");
+        assertThat(detail.getTerms()).extracting(t -> t.getId().getTermsId()).containsExactly(termsId);
+    }
+
+    @Test
+    @DisplayName("연관 데이터가 없는 상품도 빈 목록으로 채워서 반환한다")
+    void findDetailByProductId_foundWithoutChildren() {
+        ProductJpaEntity saved = repository.save(product("SVN-502", "연관데이터 없음", ProductGroup.DEPOSIT, new BigDecimal("3.00"), SaleStatus.ON_SALE));
+        entityManager.flush();
+        entityManager.clear();
+
+        Optional<ProductDetail> result = adapter.findDetailByProductId(saved.getProductId());
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getRateTiers()).isEmpty();
+        assertThat(result.get().getPreferentialRates()).isEmpty();
+        assertThat(result.get().getTerms()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 productId면 빈 Optional을 반환한다")
+    void findDetailByProductId_notFound() {
+        Optional<ProductDetail> result = adapter.findDetailByProductId(999_999L);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("판매중지 상품도 상세조회는 조회된다")
+    void findDetailByProductId_suspendedStillReturned() {
+        ProductJpaEntity saved = repository.save(product("SVN-503", "판매중지 상품", ProductGroup.DEPOSIT, new BigDecimal("2.00"), SaleStatus.SUSPENDED));
+        entityManager.flush();
+        entityManager.clear();
+
+        Optional<ProductDetail> result = adapter.findDetailByProductId(saved.getProductId());
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getProduct().getSaleStatus()).isEqualTo(SaleStatus.SUSPENDED);
     }
 
     private static List<String> myCodesInOrder(Page<Product> page) {
