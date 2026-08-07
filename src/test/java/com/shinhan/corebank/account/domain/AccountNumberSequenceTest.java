@@ -3,6 +3,8 @@ package com.shinhan.corebank.account.domain;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.Locale;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -159,5 +161,38 @@ class AccountNumberSequenceTest {
         )
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("계좌 유형과 상품 ID 조합이 올바르지 않습니다.");
+    }
+    @Test
+    @DisplayName("기본 Locale이 비 ASCII 숫자를 사용하는 환경이어도 ASCII 숫자로 계좌번호를 발급한다")
+    void issuesAsciiAccountNumberRegardlessOfDefaultLocale() {
+        // given
+        Locale originalLocale = Locale.getDefault();
+
+        try {
+            Locale.setDefault(Locale.forLanguageTag("ar-EG"));
+
+            AccountNumberSequence sequence =
+                    AccountNumberSequence.reconstitute(
+                            1L,
+                            "088",
+                            AccountType.DEMAND_DEPOSIT,
+                            null,
+                            "10",
+                            0L
+                    );
+
+            // when
+            String accountNumber = sequence.issueNext();
+
+            // then
+            assertThat(accountNumber)
+                    .isEqualTo("088100000001");
+
+            assertThat(accountNumber)
+                    .matches("^[0-9]{12}$");
+
+        } finally {
+            Locale.setDefault(originalLocale);
+        }
     }
 }
