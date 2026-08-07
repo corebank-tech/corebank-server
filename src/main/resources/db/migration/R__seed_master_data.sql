@@ -37,6 +37,17 @@ ON DUPLICATE KEY UPDATE rate = VALUES(rate);
 -- 상품-약관 연결 (product_id + terms_id 가 PK). 필수 동의 여부는 terms.is_required 기준.
 -- 상품군별로 대응하는 약관만 연결한다 (적금 → TERMS_SAVINGS, 예금 → TERMS_DEPOSIT).
 -- display_order: 지금은 상품당 약관이 1건뿐이라 전부 1.
+-- terms.version이 바뀌면 terms_id도 함께 바뀌어(PK: product_id+terms_id) ON DUPLICATE KEY UPDATE가
+-- 걸리지 않고 새 행으로 INSERT되므로, 매핑 대상 product_code x terms_code의 기존 연결을 먼저 지운다.
+DELETE pt FROM product_terms pt
+JOIN product p ON p.product_id = pt.product_id
+JOIN terms t ON t.terms_id = pt.terms_id
+JOIN (
+  SELECT 'PRD_YOUTH_SAVE' AS product_code, 'TERMS_SAVINGS' AS terms_code
+  UNION ALL
+  SELECT 'PRD_BASIC_DEP', 'TERMS_DEPOSIT'
+) mapping ON mapping.product_code = p.product_code AND mapping.terms_code = t.terms_code;
+
 INSERT INTO product_terms (product_id, terms_id, display_order)
 SELECT p.product_id, tm.terms_id, 1
 FROM product p
