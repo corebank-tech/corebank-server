@@ -1,6 +1,7 @@
 package com.shinhan.corebank.product.domain;
 
-import java.util.Objects;
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -11,7 +12,10 @@ public class ProductTerms {
 
     @Builder
     public ProductTerms(ProductTermsId id, Short displayOrder) {
-        this.id = Objects.requireNonNull(id, "id must not be null");
-        this.displayOrder = Objects.requireNonNull(displayOrder, "displayOrder must not be null");
+        if (id == null || displayOrder == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+        this.id = id;
+        this.displayOrder = displayOrder;
     }
 }
