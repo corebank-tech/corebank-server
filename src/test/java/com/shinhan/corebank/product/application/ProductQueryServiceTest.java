@@ -46,6 +46,17 @@ class ProductQueryServiceTest {
     }
 
     @Test
+    @DisplayName("page가 음수면 CMN0006을 던지고 포트는 호출하지 않는다")
+    void rejectsNegativePage() {
+        assertThatThrownBy(() -> productQueryService.search(null, null, ProductSortType.RATE, -1, 10))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.INVALID_PAGE_NUMBER));
+
+        verify(productQueryPort, never()).search(any(), any(), any(), any(Pageable.class));
+    }
+
+    @Test
     @DisplayName("허용된 size면 포트 결과를 그대로 반환한다")
     void delegatesToPort() {
         Page<Product> expected = new PageImpl<>(List.of());

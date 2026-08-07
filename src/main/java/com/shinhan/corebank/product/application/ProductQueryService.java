@@ -27,6 +27,9 @@ public class ProductQueryService implements ProductQueryUseCase {
         if (!ALLOWED_PAGE_SIZES.contains(size)) {
             throw new BusinessException(CommonErrorCode.INVALID_PAGE_SIZE);
         }
+        if (page < 0) {
+            throw new BusinessException(CommonErrorCode.INVALID_PAGE_NUMBER);
+        }
         // TODO: 페이지 크기 검증 추출해야함
 
         return productQueryPort.search(productGroup, keyword, sort, PageRequest.of(page, size));
