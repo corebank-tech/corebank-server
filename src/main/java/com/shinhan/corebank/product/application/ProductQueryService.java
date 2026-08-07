@@ -28,7 +28,7 @@ public class ProductQueryService implements ProductQueryUseCase {
             throw new BusinessException(CommonErrorCode.INVALID_PAGE_SIZE);
         }
         if (page < 0) {
-            throw new BusinessException(CommonErrorCode.INVALID_PAGE_NUMBER);
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "page는 0 이상이어야 합니다.");
         }
         // TODO: 페이지 크기 검증 추출해야함
 

@@ -66,7 +66,7 @@ class ProductControllerTest extends IntegrationTestSupport {
 
     @Test
     @DisplayName("공개 경로(/api/v1/products, context-path 적용)로 호출해도 정상 응답한다")
-    void searchProducts_publicPath() throws Exception {
+    void searchProductsWithPublicPath() throws Exception {
         mockMvc.perform(get("/api/v1/products").contextPath("/api/v1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"));
@@ -81,11 +81,11 @@ class ProductControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("page가 음수면 400 + CMN0006을 반환한다")
+    @DisplayName("page가 음수면 400 + CMN0001을 반환한다")
     void rejectsNegativePage() throws Exception {
         mockMvc.perform(get("/products").param("page", "-1"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("CMN0006"));
+                .andExpect(jsonPath("$.code").value("CMN0001"));
     }
 
     @Test
