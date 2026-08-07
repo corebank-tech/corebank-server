@@ -35,12 +35,14 @@ class ProductTermsJpaRepositoryTest extends IntegrationTestSupport {
         ProductTermsJpaEntityId id = new ProductTermsJpaEntityId(productId, termsId);
         ProductTermsJpaEntity productTerms = ProductTermsJpaEntity.builder()
                 .id(id)
+                .displayOrder((short) 1)
                 .build();
 
         repository.save(productTerms);
         entityManager.flush();
         entityManager.clear();
 
-        assertThat(repository.findById(id)).isPresent();
+        ProductTermsJpaEntity found = repository.findById(id).orElseThrow();
+        assertThat(found.getDisplayOrder()).isEqualTo((short) 1);
     }
 }

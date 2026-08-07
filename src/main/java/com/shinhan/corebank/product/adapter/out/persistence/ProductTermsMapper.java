@@ -11,12 +11,14 @@ final class ProductTermsMapper {
     static ProductTerms toDomain(ProductTermsJpaEntity entity) {
         return ProductTerms.builder()
                 .id(toDomain(entity.getId()))
+                .displayOrder(entity.getDisplayOrder())
                 .build();
     }
 
     static ProductTermsJpaEntity toEntity(ProductTerms domain) {
         return ProductTermsJpaEntity.builder()
                 .id(toEntity(domain.getId()))
+                .displayOrder(domain.getDisplayOrder())
                 .build();
     }
 

@@ -1,5 +1,6 @@
 package com.shinhan.corebank.product.adapter.out.persistence;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -19,4 +20,7 @@ public class ProductTermsJpaEntity {
 
     @EmbeddedId
     private ProductTermsJpaEntityId id;
+
+    @Column(nullable = false)
+    private Short displayOrder;
 }
