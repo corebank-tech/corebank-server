@@ -37,6 +37,13 @@ ON DUPLICATE KEY UPDATE rate = VALUES(rate);
 -- 상품-약관 연결 (product_id + terms_id 가 PK). 필수 동의 여부는 terms.is_required 기준.
 -- 상품군별로 대응하는 약관만 연결한다 (적금 → TERMS_SAVINGS, 예금 → TERMS_DEPOSIT).
 -- display_order: 지금은 상품당 약관이 1건뿐이라 전부 1.
+--
+-- docs/flyway_file_role_guide.md는 "약관처럼 버전 이력이 중요한 데이터는 R이 아니라 V를 쓰라"고
+-- 하지만(terms 테이블이 793a467에서 그 이유로 R->V 이관됨), product_terms는 이 파일이 위에서 시딩하는
+-- product.product_id를 FK로 참조한다. Flyway는 V를 전부 적용한 뒤에야 R을 실행하므로, product_terms를
+-- 별도 V 스크립트로 빼면 product 로우가 아직 없는 시점에 실행되어 조용히 0건만 INSERT되고 끝난다
+-- (product 자체도 V로 옮기지 않는 한 근본 해결 불가 — 이건 이 파일의 원래 스코프를 넘는 변경이라
+-- 보류함). 그래서 product_terms는 예외적으로 R에 남기고, DELETE 후 재삽입으로 버전 변경에 대응한다:
 -- terms.version이 바뀌면 terms_id도 함께 바뀌어(PK: product_id+terms_id) ON DUPLICATE KEY UPDATE가
 -- 걸리지 않고 새 행으로 INSERT되므로, 매핑 대상 product_code x terms_code의 기존 연결을 먼저 지운다.
 DELETE pt FROM product_terms pt
