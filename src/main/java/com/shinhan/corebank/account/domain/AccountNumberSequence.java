@@ -2,6 +2,8 @@ package com.shinhan.corebank.account.domain;
 
 import lombok.Getter;
 
+import java.util.Locale;
+
 @Getter
 public class AccountNumberSequence {
     private final Long sequenceId;
@@ -69,9 +71,8 @@ public class AccountNumberSequence {
 
         long nextSequence = lastSequence + 1;
         String sequencePart = String.format(
-                "%0"
-                        + AccountNumberPolicy.SEQUENCE_LENGTH
-                        + "d",
+                Locale.ROOT,    //Locale.ROOT 적용
+                "%0" + AccountNumberPolicy.SEQUENCE_LENGTH + "d",
                 nextSequence
         );
 
