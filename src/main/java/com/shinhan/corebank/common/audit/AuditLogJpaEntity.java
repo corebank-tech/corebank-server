@@ -1,5 +1,6 @@
 package com.shinhan.corebank.common.audit;
 
+import com.shinhan.corebank.common.util.MaskingUtil;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -8,6 +9,10 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * 감사 로그 (REQ-NFR-010).
@@ -43,14 +48,18 @@ public class AuditLogJpaEntity {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "detail")
-    private String detail;                          // 마스킹 후 저장
+    private Map<String, Object> detail;                          // 마스킹 후 저장
 
     @Column(name = "requested_at", nullable = false)
     private LocalDateTime requestedAt;
 
+    public static final Set<String> FORBIDDEN_DETAIL_KEY = Set.of("birthDate", "otp", "password");
+
+    public static final String ACCOUNT_NUMBER_KEY_SUFFIX = "AccountNumber";
+
     public static AuditLogJpaEntity of(Long customerId, String transactionNumber,
                                        AuditEventType eventType, String requestIp,
-                                       boolean success, String detail, LocalDateTime now) {
+                                       boolean success, Map<String, Object> detail, LocalDateTime now) {
         boolean hasTransactionNumber = transactionNumber != null && !transactionNumber.isBlank();
         if (eventType.isLedgerChanging() && !hasTransactionNumber) {
             throw new IllegalArgumentException(
@@ -67,8 +76,38 @@ public class AuditLogJpaEntity {
         e.eventType = eventType.name();
         e.requestIp = requestIp;
         e.result = success ? "SUCCESS" : "FAILURE";
-        e.detail = detail;
+        e.detail = sanitizeDetail(detail);
         e.requestedAt = now;
         return e;
+    }
+    private static Map<String, Object> sanitizeDetail(Map<String, Object> detail) {
+        if(detail == null) {return null;}
+        Map<String, Object> sanitized = new HashMap<>();
+        for(Map.Entry<String, Object> entry : detail.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+
+            if(FORBIDDEN_DETAIL_KEY.contains(key)) {
+                throw new IllegalArgumentException("detail에 금지된 키가 포함되어 있습니다: " + key);
+            }
+            if(key.toLowerCase().endsWith(ACCOUNT_NUMBER_KEY_SUFFIX.toLowerCase())) {
+                sanitized.put(key, MaskingUtil.maskAccountNumber((String)value));
+            } else {
+                sanitized.put(key, sanitizeValue(value));
+            }
+        }
+        return sanitized;
+    }
+
+    // 재귀
+    @SuppressWarnings("unchecked")
+    private static Object sanitizeValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return sanitizeDetail((Map<String, Object>) map);
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(AuditLogJpaEntity::sanitizeValue).toList();
+        }
+        return value;
     }
 }

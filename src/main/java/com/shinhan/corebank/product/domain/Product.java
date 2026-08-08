@@ -7,6 +7,7 @@ import lombok.Getter;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @AllArgsConstructor
@@ -19,6 +20,9 @@ public class Product {
     private DepositType depositType;
     private String summary;
     private String description;
+    private String eligibility;
+    private List<String> subscriptionRestrictions;
+    private List<String> notices;
     private BigDecimal baseRate;
     private BigDecimal maxRate;
     private Long minAmount;

@@ -55,6 +55,9 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
     testImplementation 'org.testcontainers:testcontainers-mysql'
     testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+
+    // 아키텍처 규칙(헥사고날 레이어 방향) 자동 검증
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
 }
 
 tasks.named('test') {

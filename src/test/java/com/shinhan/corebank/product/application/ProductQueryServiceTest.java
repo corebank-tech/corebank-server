@@ -4,6 +4,7 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.product.application.port.out.ProductQueryPort;
 import com.shinhan.corebank.product.domain.Product;
+import com.shinhan.corebank.product.domain.ProductDetail;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
@@ -66,5 +68,31 @@ class ProductQueryServiceTest {
         Page<Product> result = productQueryService.search(ProductGroup.DEPOSIT, "적금", ProductSortType.NAME, 1, 10);
 
         assertThat(result).isSameAs(expected);
+    }
+
+    @Test
+    @DisplayName("존재하는 productId면 포트 결과를 그대로 반환한다")
+    void getDetail_delegatesToPort() {
+        ProductDetail expected = ProductDetail.builder()
+                .rateTiers(List.of())
+                .preferentialRates(List.of())
+                .terms(List.of())
+                .build();
+        when(productQueryPort.findDetailByProductId(1L)).thenReturn(Optional.of(expected));
+
+        ProductDetail result = productQueryService.getDetail(1L);
+
+        assertThat(result).isSameAs(expected);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 productId면 PRD0201을 던진다")
+    void getDetail_notFound_throwsPrd0201() {
+        when(productQueryPort.findDetailByProductId(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> productQueryService.getDetail(999L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ProductErrorCode.PRODUCT_NOT_FOUND));
     }
 }

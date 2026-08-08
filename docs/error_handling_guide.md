@@ -40,10 +40,9 @@ com.example
 └─ product/                          ← 각자 도메인 (product, account, transfer...)
    ├─ domain/
    │  └─ ProductService.java         ← 여기서 BusinessException 던짐
-   ├─ application/
-   └─ adapter/
-      └─ in/web/
-         └─ ProductErrorCode.java    ← 각자 여기에 자기 Enum 만듦
+   │  └─ exception/
+   │     └─ ProductErrorCode.java    ← 각자 여기에 자기 Enum 만듦
+   └─ application/
 ```
 
 **왜 `common`이 `application` 밑이 아닌가**
@@ -277,10 +276,10 @@ public class ApiExceptionHandler {
 
 ## 3. 각자 할 일 ① — 자기 도메인 오류코드 Enum 만들기
 
-`ErrorCode`를 구현한 Enum을 자기 모듈 `adapter/in/web/`에 만듭니다.
+`ErrorCode`를 구현한 Enum을 자기 모듈 `domain/exception/`에 만듭니다.
 
 ```java
-package com.example.product.adapter.in.web;
+package com.example.product.domain.exception;
 
 import com.example.common.exception.ErrorCode;
 
@@ -338,7 +337,7 @@ public enum ProductErrorCode implements ErrorCode {
 package com.example.product.domain;
 
 import com.example.common.exception.BusinessException;
-import com.example.product.adapter.in.web.ProductErrorCode;
+import com.example.product.domain.exception.ProductErrorCode;
 
 public class ProductService {
 
@@ -454,7 +453,7 @@ public ApiResponse<ProductResponse> getProduct(@PathVariable Long productId) {
 ## 8. 체크리스트
 
 - [ ] 공통 5개 파일을 그대로 복사했는가 (수정하지 않았는가)
-- [ ] 자기 도메인 오류코드 Enum을 `adapter/in/web/`에 만들었는가
+- [ ] 자기 도메인 오류코드 Enum을 `domain/exception/`에 만들었는가
 - [ ] 접두어가 배정표에 있는 것인가
 - [ ] 401·403·조회기간·페이지크기 오류를 새로 안 만들고 `CommonErrorCode`를 썼는가
 - [ ] `throw new BusinessException(...)` 로만 던졌는가 (컨트롤러에서 try-catch 안 함)

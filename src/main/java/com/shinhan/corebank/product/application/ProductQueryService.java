@@ -5,6 +5,7 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import com.shinhan.corebank.product.application.port.out.ProductQueryPort;
 import com.shinhan.corebank.product.domain.Product;
+import com.shinhan.corebank.product.domain.ProductDetail;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -33,5 +34,11 @@ public class ProductQueryService implements ProductQueryUseCase {
         // TODO: 페이지 크기 검증 추출해야함
 
         return productQueryPort.search(productGroup, keyword, sort, PageRequest.of(page, size));
+    }
+
+    @Override
+    public ProductDetail getDetail(Long productId) {
+        return productQueryPort.findDetailByProductId(productId)
+                .orElseThrow(() -> new BusinessException(ProductErrorCode.PRODUCT_NOT_FOUND));
     }
 }

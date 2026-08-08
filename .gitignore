@@ -36,6 +36,9 @@ out/
 ### VS Code ###
 .vscode/
 
+### macOS ###
+.DS_Store
+
 ### Claude Code (로컬 전용, 팀 합의 전까지 비공유) ###
 /CLAUDE.md
 /.claude/

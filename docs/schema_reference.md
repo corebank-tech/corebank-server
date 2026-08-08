@@ -202,6 +202,9 @@
 | `deposit_type` | `VARCHAR(20)` |  | X |  | 납입 방식. `LUMP_SUM`(한 번에 예치) / `INSTALLMENT`(매월 납입) |
 | `summary` | `VARCHAR(200)` |  | O |  | 상품 한 줄 요약. 목록 화면용 |
 | `description` | `TEXT` |  | O |  | 상품 상세 설명. 상세 화면용 |
+| `eligibility` | `TEXT` |  | O |  | 가입 자격 조건 안내 문구. 상세조회 `data.eligibility` |
+| `subscription_restrictions` | `TEXT` |  | O |  | 가입 제한 사항 목록(JSON 배열 문자열). 상세조회 `data.subscriptionRestrictions`. 애플리케이션의 `StringListJsonConverter`가 `List<String>`으로 변환 |
+| `notices` | `TEXT` |  | O |  | 유의사항 목록(JSON 배열 문자열). 상세조회 `data.notices`. `subscription_restrictions`와 동일한 컨버터 사용 |
 | `base_rate` | `DECIMAL(5,2)` |  | X |  | 기본금리(연 %). 우대금리를 제외한 기준값 |
 | `max_rate` | `DECIMAL(5,2)` |  | X |  | 최고금리(연 %). 우대 조건을 모두 채웠을 때의 상한. 목록 화면 표시용 |
 | `min_amount` | `BIGINT` |  | X |  | 최소 가입금액. 미만이면 PRD0001 |
@@ -210,7 +213,7 @@
 | `min_term_months` | `SMALLINT` |  | X |  | 최소 가입기간(개월). 미만이면 PRD0002 |
 | `max_term_months` | `SMALLINT` |  | X |  | 최대 가입기간(개월). 초과하면 PRD0002 |
 | `interest_pay_type` | `VARCHAR(20)` |  | X |  | 이자 계산 방식. `SIMPLE`(단리) / `COMPOUND`(복리) |
-| `sale_status` | `VARCHAR(12)` |  | X |  | 판매 상태. `ON_SALE`(판매중) / `SUSPENDED`(판매중지). 판매중지 상품은 목록에서 빠지고 상세 조회는 PRD0201 |
+| `sale_status` | `VARCHAR(12)` |  | X |  | 판매 상태. `ON_SALE`(판매중) / `SUSPENDED`(판매중지). 판매중지 상품은 목록 조회에서는 빠지지만 상세 조회는 200으로 응답한다(즐겨찾기·공유 링크 진입 지원 목적, `saleStatus`로 프론트가 구분) |
 | `sale_start_date` | `DATE` |  | O |  | 판매 시작일 |
 | `sale_end_date` | `DATE` |  | O |  | 판매 종료일 |
 | `new_flag` | `BOOLEAN` |  | X | `FALSE` | 신상품 뱃지 표시 여부 |
