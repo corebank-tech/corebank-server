@@ -15,7 +15,7 @@ public enum AutoTransferErrorCode implements ErrorCode {
     UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE("AUT0005",400,"입금계좌로 지정할 수 없는 계좌 유형입니다."),
     ONE_TIME_LIMIT_EXCEEDED("AUT0006", 400, "1회 이체한도를 초과했습니다."),
     NOT_FOUND("AUT0201", 404, "자동이체 등록 건을 찾을 수 없습니다."),
-    ACCOUNT_NOT_ACCESSIBLE("AUT0202", 404, "입금계좌를 찾을 수 없습니다."),
+    ACCOUNT_NOT_ACCESSIBLE("AUT0202", 404, "계좌를 확인할 수 없습니다."),
     DUPLICATE_REGISTRATION("AUT0301", 409, "동일 조건의 자동이체가 이미 등록되어 있습니다."),
     NOT_IN_NORMAL_STATUS("AUT0302", 409, "정상 상태가 아닌 자동이체입니다."),
     CANNOT_TERMINATE_ON_EXECUTION_DATE("AUT0303", 409, "실행 예정일 당일에는 해지할 수 없습니다.");
