@@ -26,6 +26,7 @@ import java.util.List;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Builder
+@EntityListeners(AuditingEntityListener.class)
 public class AutoTransferJpaEntity {
 
     @Id
