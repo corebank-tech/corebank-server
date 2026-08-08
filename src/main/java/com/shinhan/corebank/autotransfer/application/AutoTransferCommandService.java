@@ -9,6 +9,7 @@ import com.shinhan.corebank.autotransfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.account.domain.AccountType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +33,20 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase {
 
         // 출금계좌 상태 검증
         if (!accountStatusPort.isActiveAccount(command.withdrawalAccountId())) {
-            throw new BusinessException(AutoTransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
+            throw new BusinessException(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE);
+        }
+
+        // 입금계좌 실존 여부·유형 검증
+        AccountType depositAccountType = accountStatusPort.findAccountTypeByNumber(command.depositAccountNumber())
+                .orElseThrow(() -> new BusinessException(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
+        if (depositAccountType != AccountType.DEMAND_DEPOSIT) {
+            throw new BusinessException(AutoTransferErrorCode.UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE);
+        }
+
+        // 1회 이체한도 검증
+        long oneTimeLimit = transferLimitPort.findOneTimeLimit(command.customerId());
+        if (command.amount() > oneTimeLimit) {
+            throw new BusinessException(AutoTransferErrorCode.ONE_TIME_LIMIT_EXCEEDED);
         }
 
         // 중복 등록 제한
