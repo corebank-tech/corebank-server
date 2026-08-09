@@ -1,7 +1,6 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import com.shinhan.corebank.transfer.domain.LedgerEntry;
-import com.shinhan.corebank.transfer.domain.TransferChannel;
 
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
@@ -24,7 +23,7 @@ public class LedgerEntryMapper {
                 .balanceAfter(domain.getBalanceAfter())
                 .transactionType(domain.getTransactionType())
                 .transactionContent(domain.getTransactionContent())
-                .channel(domain.getChannel() != null ? TransferChannel.valueOf(domain.getChannel()) : null)
+                .channel(domain.getChannel())
                 .reversed(domain.isReversed())
                 .reversalId(domain.getReversalId())
                 .occurredAt(domain.getOccurredAt())
@@ -46,7 +45,7 @@ public class LedgerEntryMapper {
                 .balanceAfter(entity.getBalanceAfter())
                 .transactionType(entity.getTransactionType())
                 .transactionContent(entity.getTransactionContent())
-                .channel(entity.getChannel() != null ? entity.getChannel().name() : null)
+                .channel(entity.getChannel())
                 .reversed(entity.isReversed())
                 .reversalId(entity.getReversalId())
                 .occurredAt(entity.getOccurredAt())

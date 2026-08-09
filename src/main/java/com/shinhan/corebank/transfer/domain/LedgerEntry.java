@@ -20,7 +20,7 @@ public class LedgerEntry {
     private final long balanceAfter;
     private final String transactionType;
     private final String transactionContent;
-    private final String channel;
+    private final TransferChannel channel;
     private final boolean reversed;
     private final Long reversalId;
     private final LocalDateTime occurredAt;

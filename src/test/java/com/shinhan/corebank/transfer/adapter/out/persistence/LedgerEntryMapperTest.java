@@ -29,7 +29,7 @@ class LedgerEntryMapperTest {
                 .balanceAfter(90000L)
                 .transactionType("IMMEDIATE_TRANSFER")
                 .transactionContent("출금통장메모")
-                .channel("WB")
+                .channel(TransferChannel.WB)
                 .reversed(false)
                 .occurredAt(now)
                 .build();
@@ -52,6 +52,6 @@ class LedgerEntryMapperTest {
         assertThat(mappedDomain.getLedgerEntryId()).isEqualTo(domain.getLedgerEntryId());
         assertThat(mappedDomain.getAccountId()).isEqualTo(domain.getAccountId());
         assertThat(mappedDomain.getDirection()).isEqualTo(domain.getDirection());
-        assertThat(mappedDomain.getChannel()).isEqualTo("WB");
+        assertThat(mappedDomain.getChannel()).isEqualTo(TransferChannel.WB);
     }
 }

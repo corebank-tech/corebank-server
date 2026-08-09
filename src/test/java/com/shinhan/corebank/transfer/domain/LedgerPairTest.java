@@ -29,7 +29,7 @@ class LedgerPairTest {
             String txType = "IMMEDIATE_TRANSFER";
             String myMemo = "홍길동이체";
             String recipientMemo = "성춘향입금";
-            String channel = "WB";
+            TransferChannel channel = TransferChannel.WB;
             LocalDateTime occurredAt = LocalDateTime.of(2026, 8, 9, 12, 0, 0);
 
             // when
@@ -58,6 +58,7 @@ class LedgerPairTest {
             assertThat(withdrawal.getBalanceAfter()).isEqualTo(withdrawalBalanceAfter);
             assertThat(withdrawal.getTransactionNumber()).isEqualTo(txNo);
             assertThat(withdrawal.getTransactionContent()).isEqualTo(myMemo);
+            assertThat(withdrawal.getChannel()).isEqualTo(channel);
             assertThat(withdrawal.getOccurredAt()).isEqualTo(occurredAt);
 
             // 입금행 검증
@@ -68,6 +69,7 @@ class LedgerPairTest {
             assertThat(deposit.getBalanceAfter()).isEqualTo(depositBalanceAfter);
             assertThat(deposit.getTransactionNumber()).isEqualTo(txNo);
             assertThat(deposit.getTransactionContent()).isEqualTo(recipientMemo);
+            assertThat(deposit.getChannel()).isEqualTo(channel);
             assertThat(deposit.getOccurredAt()).isEqualTo(occurredAt);
         }
 
@@ -85,7 +87,7 @@ class LedgerPairTest {
                     0L,
                     "IMMEDIATE_TRANSFER",
                     "메모", "메모",
-                    "WB", now
+                    TransferChannel.WB, now
             ))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("0보다 커야 합니다");
@@ -105,7 +107,7 @@ class LedgerPairTest {
                     10000L,
                     "IMMEDIATE_TRANSFER",
                     "메모", "메모",
-                    "WB", now
+                    TransferChannel.WB, now
             ))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("동일할 수 없습니다");

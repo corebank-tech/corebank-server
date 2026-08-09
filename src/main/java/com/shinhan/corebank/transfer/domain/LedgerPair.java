@@ -26,7 +26,7 @@ public class LedgerPair {
             String transactionType,
             String myPassbookMemo,
             String recipientPassbookMemo,
-            String channel,
+            TransferChannel channel,
             LocalDateTime occurredAt
     ) {
         if (amount <= 0) {
