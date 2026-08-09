@@ -167,5 +167,24 @@ class LedgerPairTest {
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
+
+        @Test
+        @DisplayName("occurredAt이 null이면 BusinessException(REQUIRED_FIELD_MISSING) 예외가 발생한다")
+        void throwsExceptionWhenOccurredAtIsNull() {
+            // given & when & then
+            assertThatThrownBy(() -> LedgerPair.forTransfer(
+                    "20260809WB0000000001",
+                    101L, 90000L,
+                    202L, 110000L,
+                    10000L,
+                    "IMMEDIATE_TRANSFER",
+                    "메모", "메모",
+                    TransferChannel.WB,
+                    null
+            ))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
     }
 }

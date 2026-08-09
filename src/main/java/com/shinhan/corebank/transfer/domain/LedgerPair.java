@@ -34,7 +34,7 @@ public class LedgerPair {
             TransferChannel channel,
             LocalDateTime occurredAt
     ) {
-        if (withdrawalAccountId == null || depositAccountId == null) {
+        if (withdrawalAccountId == null || depositAccountId == null || occurredAt == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
         if (amount <= 0) {
@@ -44,7 +44,7 @@ public class LedgerPair {
             throw new BusinessException(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
         }
 
-        LocalDateTime truncatedOccurredAt = occurredAt != null ? occurredAt.truncatedTo(ChronoUnit.MICROS) : null;
+        LocalDateTime truncatedOccurredAt = occurredAt.truncatedTo(ChronoUnit.MICROS);
 
         // 출금 1행 (WITHDRAWAL, 양수 금액)
         LedgerEntry withdrawal = LedgerEntry.builder()
