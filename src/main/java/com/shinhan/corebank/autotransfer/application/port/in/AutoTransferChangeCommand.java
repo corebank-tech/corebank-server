@@ -7,10 +7,10 @@ import lombok.Builder;
 import java.time.LocalDate;
 
 @Builder
-public record AutoTransferChangeCommand(Long amount, Integer cycleMonths, LocalDate endDate,
+public record AutoTransferChangeCommand(Long customerId, Long amount, Integer cycleMonths, LocalDate endDate,
                                         String myPassbookMemo, String recipientPassbookMemo, String authToken, String requestIp) {
     public AutoTransferChangeCommand {
-        if (amount == null || cycleMonths == null || endDate == null || authToken == null || requestIp == null) {
+        if (customerId == null || amount == null || cycleMonths == null || endDate == null || authToken == null || requestIp == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
     }

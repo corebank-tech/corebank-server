@@ -3,14 +3,19 @@ package com.shinhan.corebank.autotransfer.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferChangeCommand;
+import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterCommand;
 import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AuthTokenVerificationPort;
@@ -18,9 +23,12 @@ import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersis
 import com.shinhan.corebank.autotransfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferErrorCode;
+import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
+import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,8 +52,34 @@ class AutoTransferCommandServiceTest {
     @Mock
     TransferLimitPort transferLimitPort;
 
+    @Mock
+    AuditLogService auditLogService;
+
     @InjectMocks
     AutoTransferCommandService autoTransferCommandService;
+
+    private AutoTransfer existingAutoTransfer() {
+        // findById()로 DB에서 막 가져온 상황을 흉내내야 하므로, autoTransferId가 없는 register()가 아니라
+        // 이미 ID가 채번된 상태를 표현하는 reconstitute()를 사용한다.
+        return AutoTransfer.reconstitute(
+                10L, 1L, 2L, "110987654321", "홍길동",
+                10_000L, 1, 15,
+                LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), LocalDate.now().plusDays(10).plusDays(4),
+                "내메모", "받는메모", AutoTransferStatus.NORMAL,
+                LocalDateTime.now(), null, LocalDateTime.now());
+    }
+
+    private AutoTransferChangeCommand.AutoTransferChangeCommandBuilder validChangeCommandBuilder() {
+        return AutoTransferChangeCommand.builder()
+                .customerId(1L)
+                .amount(20_000L)
+                .cycleMonths(3)
+                .endDate(LocalDate.now().plusYears(2))
+                .myPassbookMemo("새메모")
+                .recipientPassbookMemo("새받는메모")
+                .authToken("valid-token")
+                .requestIp("127.0.0.1");
+    }
 
     private AutoTransferRegisterCommand.AutoTransferRegisterCommandBuilder validCommandBuilder() {
         return AutoTransferRegisterCommand.builder()
@@ -157,5 +191,49 @@ class AutoTransferCommandServiceTest {
                         .isEqualTo(AutoTransferErrorCode.DUPLICATE_REGISTRATION));
 
         verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("정상적으로 변경하면 저장하고 감사로그를 남긴다")
+    void change_success() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AutoTransfer result = autoTransferCommandService.change(10L, validChangeCommandBuilder().build());
+
+        assertThat(result.getAmount()).isEqualTo(20_000L);
+        assertThat(result.getCycleMonths()).isEqualTo(3);
+        verify(autoTransferPersistencePort).save(any(AutoTransfer.class));
+        verify(auditLogService).record(eq(1L), isNull(), eq(AuditEventType.AUTO_TRANSFER_INFO_CHANGE),
+                eq("127.0.0.1"), eq(true), any());
+    }
+
+    @Test
+    @DisplayName("대상 자동이체가 없으면 NOT_FOUND를 던진다")
+    void change_notFound_throws() {
+        when(autoTransferPersistencePort.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> autoTransferCommandService.change(999L, validChangeCommandBuilder().build()))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.NOT_FOUND));
+
+        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
+    void change_invalidAuthToken_propagatesException() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
+                .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
+
+        assertThatThrownBy(() -> autoTransferCommandService.change(10L, validChangeCommandBuilder().build()))
+                .isInstanceOf(BusinessException.class);
+
+        verify(autoTransferPersistencePort, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any(), any(), anyBoolean(), any());
     }
 }

@@ -1,8 +1,11 @@
 package com.shinhan.corebank.autotransfer.adapter.in.web;
 
+import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferChangeUseCase;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferQueryUseCase;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.response.PageResponse;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
 import tools.jackson.core.JacksonException;
@@ -25,6 +28,7 @@ public class AutoTransferController {
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
     private final AutoTransferQueryUseCase autoTransferQueryUseCase;
+    private final AutoTransferChangeUseCase autoTransferChangeUseCase;
 
     @PostMapping
     // 멱등성 확인 후, 재요청 -> 저장된 응답, 신규 요청 -> 등록
@@ -72,4 +76,26 @@ public class AutoTransferController {
         Page<AutoTransfer> result = autoTransferQueryUseCase.search(withdrawalAccountId, status, page, size);
         return ApiResponse.success(PageResponse.from(result, AutoTransferListItemResponse::from));
     }
+
+    //변경
+    @PatchMapping("/{autoTransferId}")
+    public ResponseEntity<ApiResponse<AutoTransferResponse>> change(@PathVariable Long autoTransferId,
+                                                                    @RequestHeader("Idempotency-Key") String idempotencyKey,
+                                                                    @RequestBody AutoTransferChangeRequest request,
+                                                                    HttpServletRequest httpRequest) {
+        String requestIp = httpRequest.getRemoteAddr();
+        String endpoint = "Patch /auto-transfer/" + autoTransferId;
+
+        IdempotencyResult idempotencyResult = idempotencyService.begin(idempotencyKey, request.customerId(), endpoint, toJson(request));
+
+        if(idempotencyResult.replay()) {
+            return ResponseEntity.status(idempotencyResult.httpStatus()).body(fromJson(idempotencyResult.responseSnapshot()));
+        }
+        AutoTransfer autoTransfer = autoTransferChangeUseCase.change(autoTransferId, request.toCommand(requestIp));
+        ApiResponse<AutoTransferResponse> response = ApiResponse.success(AutoTransferResponse.from(autoTransfer));
+        idempotencyService.complete(idempotencyKey, (short) HttpStatus.OK.value(), toJson(response));
+
+        return ResponseEntity.ok(response);
+    }
+
 }

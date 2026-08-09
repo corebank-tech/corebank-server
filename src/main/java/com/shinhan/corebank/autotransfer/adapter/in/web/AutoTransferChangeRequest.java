@@ -4,10 +4,11 @@ import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferChangeC
 
 import java.time.LocalDate;
 
-public record AutoTransferChangeRequest(Long amount, Integer cycleMonths, LocalDate endDate, String myPassbookMemo,
+public record AutoTransferChangeRequest(Long customerId, Long amount, Integer cycleMonths, LocalDate endDate, String myPassbookMemo,
                                         String recipientPassbookMemo, String authToken) {
     public AutoTransferChangeCommand toCommand(String requestIp) {
         return AutoTransferChangeCommand.builder()
+                .customerId(customerId)
                 .amount(amount)
                 .cycleMonths(cycleMonths)
                 .endDate(endDate)

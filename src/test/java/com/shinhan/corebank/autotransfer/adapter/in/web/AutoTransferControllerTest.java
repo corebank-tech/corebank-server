@@ -2,6 +2,7 @@ package com.shinhan.corebank.autotransfer.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -160,6 +161,62 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     void search_missingWithdrawalAccountId_returnsBadRequest() throws Exception {
         mockMvc.perform(get("/auto-transfers"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("정상 변경 요청은 200으로 응답하고 변경된 값이 반영된다")
+    void change_success() throws Exception {
+        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
+                autoTransfer(accountId, "110000000005", AutoTransferStatus.NORMAL, 15));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(changeRequestJson(customerId, "change-token-1")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.amount").value(20000))
+                .andExpect(jsonPath("$.data.cycleMonths").value(3));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 자동이체를 변경하려 하면 404 + AUT0201을 반환한다")
+    void change_notFound_returnsAut0201() throws Exception {
+        mockMvc.perform(patch("/auto-transfers/{id}", 999_999L)
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(changeRequestJson(customerId, "change-token-2")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("AUT0201"));
+    }
+
+    @Test
+    @DisplayName("Idempotency-Key 헤더가 없으면 400 + CMN0002를 반환한다")
+    void change_missingIdempotencyKey_returnsCmn0002() throws Exception {
+        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
+                autoTransfer(accountId, "110000000006", AutoTransferStatus.NORMAL, 16));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(changeRequestJson(customerId, "change-token-3")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0002"));
+    }
+
+    private String changeRequestJson(Long customerId, String authToken) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("customerId", customerId);
+        body.put("amount", 20000);
+        body.put("cycleMonths", 3);
+        body.put("endDate", LocalDate.now().plusYears(2).toString());
+        body.put("myPassbookMemo", "새메모");
+        body.put("recipientPassbookMemo", "새받는메모");
+        body.put("authToken", authToken);
+        return OBJECT_MAPPER.writeValueAsString(body);
     }
 
     private AutoTransferJpaEntity autoTransfer(Long withdrawalAccountId, String depositAccountNumber, AutoTransferStatus status, int transferDay) {
