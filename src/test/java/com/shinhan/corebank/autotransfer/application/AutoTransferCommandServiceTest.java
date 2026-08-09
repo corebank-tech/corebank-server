@@ -14,6 +14,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferCancelCommand;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferChangeCommand;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterCommand;
@@ -77,6 +78,13 @@ class AutoTransferCommandServiceTest {
                 .endDate(LocalDate.now().plusYears(2))
                 .myPassbookMemo("새메모")
                 .recipientPassbookMemo("새받는메모")
+                .authToken("valid-token")
+                .requestIp("127.0.0.1");
+    }
+
+    private AutoTransferCancelCommand.AutoTransferCancelCommandBuilder validCancelCommandBuilder() {
+        return AutoTransferCancelCommand.builder()
+                .customerId(1L)
                 .authToken("valid-token")
                 .requestIp("127.0.0.1");
     }
@@ -231,6 +239,49 @@ class AutoTransferCommandServiceTest {
                 .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
 
         assertThatThrownBy(() -> autoTransferCommandService.change(10L, validChangeCommandBuilder().build()))
+                .isInstanceOf(BusinessException.class);
+
+        verify(autoTransferPersistencePort, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any(), any(), anyBoolean(), any());
+    }
+
+    @Test
+    @DisplayName("정상적으로 해지하면 저장하고 감사로그를 남긴다")
+    void cancel_success() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build());
+
+        assertThat(existing.getStatus()).isEqualTo(AutoTransferStatus.TERMINATED);
+        verify(autoTransferPersistencePort).save(any(AutoTransfer.class));
+        verify(auditLogService).record(eq(1L), isNull(), eq(AuditEventType.AUTO_TRANSFER_INFO_CHANGE),
+                eq("127.0.0.1"), eq(true), any());
+    }
+
+    @Test
+    @DisplayName("대상 자동이체가 없으면 NOT_FOUND를 던진다")
+    void cancel_notFound_throws() {
+        when(autoTransferPersistencePort.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> autoTransferCommandService.cancel(999L, validCancelCommandBuilder().build()))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.NOT_FOUND));
+
+        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
+    void cancel_invalidAuthToken_propagatesException() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
+                .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
+
+        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class);
 
         verify(autoTransferPersistencePort, never()).save(any());

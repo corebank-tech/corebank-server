@@ -1,6 +1,7 @@
 package com.shinhan.corebank.autotransfer.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -205,6 +206,79 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                         .content(changeRequestJson(customerId, "change-token-3")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0002"));
+    }
+
+    @Test
+    @DisplayName("정상 해지 요청은 200으로 응답하고 상태가 TERMINATED로 바뀐다")
+    void cancel_success() throws Exception {
+        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
+                autoTransfer(accountId, "110000000007", AutoTransferStatus.NORMAL, 17));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .param("customerId", String.valueOf(customerId))
+                        .param("authToken", "cancel-token-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"));
+
+        entityManager.flush();
+        entityManager.clear();
+        AutoTransferJpaEntity found = autoTransferJpaRepository.findById(saved.getAutoTransferId()).orElseThrow();
+        assertThat(found.getStatus()).isEqualTo(AutoTransferStatus.TERMINATED);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 자동이체를 해지하려 하면 404 + AUT0201을 반환한다")
+    void cancel_notFound_returnsAut0201() throws Exception {
+        mockMvc.perform(delete("/auto-transfers/{id}", 999_999L)
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .param("customerId", String.valueOf(customerId))
+                        .param("authToken", "cancel-token-2"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("AUT0201"));
+    }
+
+    @Test
+    @DisplayName("Idempotency-Key 헤더가 없으면 400 + CMN0002를 반환한다")
+    void cancel_missingIdempotencyKey_returnsCmn0002() throws Exception {
+        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
+                autoTransfer(accountId, "110000000008", AutoTransferStatus.NORMAL, 18));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .param("customerId", String.valueOf(customerId))
+                        .param("authToken", "cancel-token-3"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0002"));
+    }
+
+    @Test
+    @DisplayName("같은 Idempotency-Key로 두 번 해지 요청을 보내면 재생되고 상태 변경은 1번만 일어난다")
+    void cancel_sameIdempotencyKeyTwice_repliesWithoutReapplying() throws Exception {
+        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
+                autoTransfer(accountId, "110000000009", AutoTransferStatus.NORMAL, 19));
+        entityManager.flush();
+        entityManager.clear();
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .header("Idempotency-Key", idempotencyKey)
+                        .param("customerId", String.valueOf(customerId))
+                        .param("authToken", "cancel-token-4"))
+                .andExpect(status().isOk());
+
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .header("Idempotency-Key", idempotencyKey)
+                        .param("customerId", String.valueOf(customerId))
+                        .param("authToken", "cancel-token-4"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"));
     }
 
     private String changeRequestJson(Long customerId, String authToken) throws Exception {

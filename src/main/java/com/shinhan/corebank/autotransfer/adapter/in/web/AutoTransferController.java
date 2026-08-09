@@ -1,7 +1,6 @@
 package com.shinhan.corebank.autotransfer.adapter.in.web;
 
-import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferChangeUseCase;
-import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferQueryUseCase;
+import com.shinhan.corebank.autotransfer.application.port.in.*;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.response.PageResponse;
 import jakarta.servlet.http.HttpServlet;
@@ -11,7 +10,6 @@ import org.springframework.web.bind.annotation.*;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
-import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterUseCase;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.common.idempotency.IdempotencyResult;
 import com.shinhan.corebank.common.idempotency.IdempotencyService;
@@ -19,6 +17,7 @@ import com.shinhan.corebank.common.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+
 
 @RestController
 @RequestMapping("/auto-transfers")
@@ -29,6 +28,7 @@ public class AutoTransferController {
     private final ObjectMapper objectMapper;
     private final AutoTransferQueryUseCase autoTransferQueryUseCase;
     private final AutoTransferChangeUseCase autoTransferChangeUseCase;
+    private final AutoTransferCancelUseCase autoTransferCancelUseCase;
 
     @PostMapping
     // 멱등성 확인 후, 재요청 -> 저장된 응답, 신규 요청 -> 등록
@@ -96,6 +96,40 @@ public class AutoTransferController {
         idempotencyService.complete(idempotencyKey, (short) HttpStatus.OK.value(), toJson(response));
 
         return ResponseEntity.ok(response);
+    }
+
+    // 삭제
+    @DeleteMapping("/{autoTransferId}")
+    public ResponseEntity<ApiResponse<Void>> cancel(@PathVariable Long autoTransferId, @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestParam Long customerId, @RequestParam String authToken, HttpServletRequest httpRequest) {
+
+        String requestIp = httpRequest.getRemoteAddr();
+        String endpoint = "DELETE /auto-transfers/" + autoTransferId;
+        AutoTransferCancelCommand command = AutoTransferCancelCommand.builder()
+                .customerId(customerId)
+                .authToken(authToken)
+                .requestIp(requestIp)
+                .build();
+
+        IdempotencyResult idempotencyResult = idempotencyService.begin(
+                idempotencyKey, customerId, endpoint, toJson(command));
+
+        if (idempotencyResult.replay()) {
+            return ResponseEntity.status(idempotencyResult.httpStatus()).body(fromJsonVoid(idempotencyResult.responseSnapshot()));
+        }
+        autoTransferCancelUseCase.cancel(autoTransferId, command);
+        ApiResponse<Void> response = ApiResponse.success();
+        idempotencyService.complete(idempotencyKey, (short) HttpStatus.OK.value(), toJson(response));
+
+        return ResponseEntity.ok(response);
+    }
+    // 재요청 시 저장된 응답 스냅샷을 그대로 복원 (해지는 data가 없는 응답이라 별도 타입)
+    private ApiResponse<Void> fromJsonVoid(String json) {
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (JacksonException e) {
+            throw new IllegalStateException("저장된 응답을 역직렬화하지 못했습니다.", e);
+        }
     }
 
 }
