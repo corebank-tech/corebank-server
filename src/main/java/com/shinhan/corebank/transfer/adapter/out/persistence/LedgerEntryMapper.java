@@ -17,6 +17,7 @@ public class LedgerEntryMapper {
 
         return LedgerEntryJpaEntity.builder()
                 .ledgerEntryId(domain.getLedgerEntryId())
+                .occurredAt(domain.getOccurredAt() != null ? domain.getOccurredAt().truncatedTo(ChronoUnit.MICROS) : null)
                 .accountId(domain.getAccountId())
                 .transferId(domain.getTransferId())
                 .transactionNumber(domain.getTransactionNumber())
@@ -28,7 +29,6 @@ public class LedgerEntryMapper {
                 .channel(domain.getChannel())
                 .reversed(domain.isReversed())
                 .reversalId(domain.getReversalId())
-                .occurredAt(domain.getOccurredAt() != null ? domain.getOccurredAt().truncatedTo(ChronoUnit.MICROS) : null)
                 .build();
     }
 
@@ -39,6 +39,7 @@ public class LedgerEntryMapper {
 
         return LedgerEntry.builder()
                 .ledgerEntryId(entity.getLedgerEntryId())
+                .occurredAt(entity.getOccurredAt() != null ? entity.getOccurredAt().truncatedTo(ChronoUnit.MICROS) : null)
                 .accountId(entity.getAccountId())
                 .transferId(entity.getTransferId())
                 .transactionNumber(entity.getTransactionNumber())
@@ -50,7 +51,6 @@ public class LedgerEntryMapper {
                 .channel(entity.getChannel())
                 .reversed(entity.isReversed())
                 .reversalId(entity.getReversalId())
-                .occurredAt(entity.getOccurredAt() != null ? entity.getOccurredAt().truncatedTo(ChronoUnit.MICROS) : null)
                 .build();
     }
 }
