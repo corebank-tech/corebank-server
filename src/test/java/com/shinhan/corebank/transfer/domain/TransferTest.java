@@ -10,6 +10,8 @@ import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -63,6 +65,33 @@ class TransferTest {
             assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
             assertThat(transfer.getCreatedAt()).isEqualTo(now);
             assertThat(transfer.getTransferredAt()).isEqualTo(now);
+        }
+
+        @ParameterizedTest
+        @ValueSource(longs = {0L, -1L, -10000L})
+        @DisplayName("이체 금액이 0 이하(0, 음수)이면 BusinessException(INVALID_AMOUNT) 예외가 발생한다")
+        void throwsExceptionWhenAmountIsZeroOrNegative(long invalidAmount) {
+            // given
+            LocalDateTime now = LocalDateTime.now();
+
+            // when & then
+            assertThatThrownBy(() -> Transfer.create(
+                    "20260809WB0000000001",
+                    101L,
+                    202L,
+                    "110222222222",
+                    "성춘향",
+                    invalidAmount,
+                    0L,
+                    TransferType.IMMEDIATE,
+                    TransferChannel.WB,
+                    null, null,
+                    "출금메모", "입금메모",
+                    now
+            ))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_AMOUNT);
         }
 
         @Test
