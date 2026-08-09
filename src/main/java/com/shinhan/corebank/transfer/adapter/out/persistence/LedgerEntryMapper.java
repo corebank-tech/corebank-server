@@ -1,0 +1,55 @@
+package com.shinhan.corebank.transfer.adapter.out.persistence;
+
+import com.shinhan.corebank.transfer.domain.LedgerEntry;
+import com.shinhan.corebank.transfer.domain.TransferChannel;
+
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+public class LedgerEntryMapper {
+
+    public static LedgerEntryJpaEntity toEntity(LedgerEntry domain) {
+        if (domain == null) {
+            return null;
+        }
+
+        return LedgerEntryJpaEntity.builder()
+                .ledgerEntryId(domain.getLedgerEntryId())
+                .accountId(domain.getAccountId())
+                .transferId(domain.getTransferId())
+                .transactionNumber(domain.getTransactionNumber())
+                .direction(domain.getDirection())
+                .amount(domain.getAmount())
+                .balanceAfter(domain.getBalanceAfter())
+                .transactionType(domain.getTransactionType())
+                .transactionContent(domain.getTransactionContent())
+                .channel(domain.getChannel() != null ? TransferChannel.valueOf(domain.getChannel()) : null)
+                .reversed(domain.isReversed())
+                .reversalId(domain.getReversalId())
+                .occurredAt(domain.getOccurredAt())
+                .build();
+    }
+
+    public static LedgerEntry toDomain(LedgerEntryJpaEntity entity) {
+        if (entity == null) {
+            return null;
+        }
+
+        return LedgerEntry.builder()
+                .ledgerEntryId(entity.getLedgerEntryId())
+                .accountId(entity.getAccountId())
+                .transferId(entity.getTransferId())
+                .transactionNumber(entity.getTransactionNumber())
+                .direction(entity.getDirection())
+                .amount(entity.getAmount())
+                .balanceAfter(entity.getBalanceAfter())
+                .transactionType(entity.getTransactionType())
+                .transactionContent(entity.getTransactionContent())
+                .channel(entity.getChannel() != null ? entity.getChannel().name() : null)
+                .reversed(entity.isReversed())
+                .reversalId(entity.getReversalId())
+                .occurredAt(entity.getOccurredAt())
+                .build();
+    }
+}
