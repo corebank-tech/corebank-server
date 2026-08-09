@@ -1,5 +1,10 @@
 package com.shinhan.corebank.autotransfer.adapter.in.web;
 
+import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferQueryUseCase;
+import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
+import com.shinhan.corebank.common.response.PageResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.web.bind.annotation.*;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
@@ -11,11 +16,6 @@ import com.shinhan.corebank.common.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/auto-transfers")
@@ -24,6 +24,7 @@ public class AutoTransferController {
     private final AutoTransferRegisterUseCase autoTransferRegisterUseCase;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
+    private final AutoTransferQueryUseCase autoTransferQueryUseCase;
 
     @PostMapping
     // 멱등성 확인 후, 재요청 -> 저장된 응답, 신규 요청 -> 등록
@@ -59,5 +60,16 @@ public class AutoTransferController {
         } catch (JacksonException e) {
             throw new IllegalStateException("저장된 응답을 역직렬화하지 못했습니다.", e);
         }
+    }
+
+    // 조회
+    @GetMapping
+    public ApiResponse<PageResponse<AutoTransferListItemResponse>> search(
+            @RequestParam Long withdrawalAccountId,
+            @RequestParam(required = false) AutoTransferStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue =  "10") int size) {
+        Page<AutoTransfer> result = autoTransferQueryUseCase.search(withdrawalAccountId, status, page, size);
+        return ApiResponse.success(PageResponse.from(result, AutoTransferListItemResponse::from));
     }
 }

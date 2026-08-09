@@ -1,15 +1,19 @@
 package com.shinhan.corebank.autotransfer.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferJpaEntity;
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferJpaRepository;
+import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -115,6 +119,66 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                         .content(registerRequestJson(customerId, accountId, "different-token")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CMN0302"));
+    }
+
+    @Test
+    @DisplayName("출금계좌ID로 조회하면 등록해둔 자동이체가 목록에 나온다")
+    void search_returnsRegisteredAutoTransfers() throws Exception {
+        autoTransferJpaRepository.save(autoTransfer(accountId, "110000000001", AutoTransferStatus.NORMAL, 10));
+        autoTransferJpaRepository.save(autoTransfer(accountId, "110000000002", AutoTransferStatus.TERMINATED, 11));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/auto-transfers")
+                        .param("withdrawalAccountId", String.valueOf(accountId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.size").value(10))
+                .andExpect(jsonPath("$.data.totalCount").value(2))
+                .andExpect(jsonPath("$.data.items.length()").value(2));
+    }
+
+    @Test
+    @DisplayName("status로 필터링하면 해당 상태만 조회된다")
+    void search_filtersByStatus() throws Exception {
+        autoTransferJpaRepository.save(autoTransfer(accountId, "110000000003", AutoTransferStatus.NORMAL, 12));
+        autoTransferJpaRepository.save(autoTransfer(accountId, "110000000004", AutoTransferStatus.TERMINATED, 13));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/auto-transfers")
+                        .param("withdrawalAccountId", String.valueOf(accountId))
+                        .param("status", "NORMAL"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].status").value("NORMAL"));
+    }
+
+    @Test
+    @DisplayName("withdrawalAccountId가 없으면 400을 반환한다")
+    void search_missingWithdrawalAccountId_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/auto-transfers"))
+                .andExpect(status().isBadRequest());
+    }
+
+    private AutoTransferJpaEntity autoTransfer(Long withdrawalAccountId, String depositAccountNumber, AutoTransferStatus status, int transferDay) {
+        return AutoTransferJpaEntity.builder()
+                .customerId(customerId)
+                .withdrawalAccountId(withdrawalAccountId)
+                .depositAccountNumber(depositAccountNumber)
+                .payeeName("홍길동")
+                .amount(10000L)
+                .cycleMonths(1)
+                .transferDay(transferDay)
+                .startDate(LocalDate.of(2026, 1, 1))
+                .endDate(LocalDate.of(2027, 1, 1))
+                .nextExecutionDate(LocalDate.of(2026, 1, transferDay))
+                .myPassbookMemo("메모")
+                .recipientPassbookMemo("받는메모")
+                .status(status)
+                .registeredAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+                .build();
     }
 
     private String registerRequestJson(Long customerId, Long withdrawalAccountId, String authToken) throws Exception {
