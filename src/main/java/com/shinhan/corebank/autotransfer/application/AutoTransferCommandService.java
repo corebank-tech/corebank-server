@@ -1,5 +1,7 @@
 package com.shinhan.corebank.autotransfer.application;
 
+import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferChangeCommand;
+import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferChangeUseCase;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterCommand;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterUseCase;
 import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
@@ -8,6 +10,8 @@ import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersis
 import com.shinhan.corebank.autotransfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferErrorCode;
+import com.shinhan.corebank.common.audit.AuditEventType;
+import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.account.domain.AccountType;
 import lombok.RequiredArgsConstructor;
@@ -15,15 +19,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class AutoTransferCommandService implements AutoTransferRegisterUseCase {
+public class AutoTransferCommandService implements AutoTransferRegisterUseCase, AutoTransferChangeUseCase {
     private final AutoTransferPersistencePort autoTransferPersistencePort;
     private final AuthTokenVerificationPort authTokenVerificationPort;
     private final AccountStatusPort accountStatusPort;
     private final TransferLimitPort transferLimitPort;
+    private final AuditLogService auditLogService;
 
     @Override
     public AutoTransfer register(AutoTransferRegisterCommand command) {
@@ -60,5 +66,17 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase {
                 command.myPassbookMemo(), command.recipientPassbookMemo(), LocalDateTime.now());
 
         return autoTransferPersistencePort.save(autoTransfer);
+    }
+
+    @Override
+    public AutoTransfer change(Long autoTransferId, AutoTransferChangeCommand command) {
+        AutoTransfer autoTransfer = autoTransferPersistencePort.findById(autoTransferId).orElseThrow(() ->  new BusinessException(AutoTransferErrorCode.NOT_FOUND));
+        authTokenVerificationPort.verify(command.authToken(),autoTransfer.getWithdrawalAccountId(),"AUTO_TRANSFER_CHANGE");
+        autoTransfer.change(command.amount(), command.cycleMonths(), command.endDate(), command.myPassbookMemo(), command.recipientPassbookMemo());
+        AutoTransfer saved = autoTransferPersistencePort.save(autoTransfer);
+        auditLogService.record(saved.getCustomerId(),null, AuditEventType.AUTO_TRANSFER_INFO_CHANGE, command.requestIp(), true, Map.of("autoTransferId", saved.getAutoTransferId(),
+                "amount", saved.getAmount(), "cycleMonths", saved.getCycleMonths(), "endDate", saved.getEndDate().toString()));
+
+        return saved;
     }
 }
