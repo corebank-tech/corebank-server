@@ -1,5 +1,7 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import java.time.temporal.ChronoUnit;
+
 import com.shinhan.corebank.transfer.domain.LedgerEntry;
 
 import lombok.AccessLevel;
@@ -26,7 +28,7 @@ public class LedgerEntryMapper {
                 .channel(domain.getChannel())
                 .reversed(domain.isReversed())
                 .reversalId(domain.getReversalId())
-                .occurredAt(domain.getOccurredAt())
+                .occurredAt(domain.getOccurredAt() != null ? domain.getOccurredAt().truncatedTo(ChronoUnit.MICROS) : null)
                 .build();
     }
 
@@ -48,7 +50,7 @@ public class LedgerEntryMapper {
                 .channel(entity.getChannel())
                 .reversed(entity.isReversed())
                 .reversalId(entity.getReversalId())
-                .occurredAt(entity.getOccurredAt())
+                .occurredAt(entity.getOccurredAt() != null ? entity.getOccurredAt().truncatedTo(ChronoUnit.MICROS) : null)
                 .build();
     }
 }

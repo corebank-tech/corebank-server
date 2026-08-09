@@ -1,6 +1,7 @@
 package com.shinhan.corebank.transfer.domain;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -33,8 +34,10 @@ public class LedgerPair {
             throw new IllegalArgumentException("원장 기표 금액은 0보다 커야 합니다."); // 수정 필요
         }
         if (withdrawalAccountId.equals(depositAccountId)) {
-            throw new IllegalArgumentException("출금 계좌와 입금 계좌는 동일할 수 없습니다."); // 수정 필요
+            throw new IllegalArgumentException("출금 계좌와 입금 계좌는 동일할 수 없습니다.");
         }
+
+        LocalDateTime truncatedOccurredAt = occurredAt != null ? occurredAt.truncatedTo(ChronoUnit.MICROS) : null;
 
         // 출금 1행 (WITHDRAWAL, 양수 금액)
         LedgerEntry withdrawal = LedgerEntry.builder()
@@ -47,7 +50,7 @@ public class LedgerPair {
                 .transactionContent(myPassbookMemo)
                 .channel(channel)
                 .reversed(false)
-                .occurredAt(occurredAt)
+                .occurredAt(truncatedOccurredAt)
                 .build();
 
         // 입금 1행 (DEPOSIT, 양수 금액)
@@ -61,7 +64,7 @@ public class LedgerPair {
                 .transactionContent(recipientPassbookMemo)
                 .channel(channel)
                 .reversed(false)
-                .occurredAt(occurredAt)
+                .occurredAt(truncatedOccurredAt)
                 .build();
         return new LedgerPair(withdrawal, deposit);
     }

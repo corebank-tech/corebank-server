@@ -1,6 +1,7 @@
 package com.shinhan.corebank.transfer.domain;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -71,6 +72,30 @@ class LedgerPairTest {
             assertThat(deposit.getTransactionContent()).isEqualTo(recipientMemo);
             assertThat(deposit.getChannel()).isEqualTo(channel);
             assertThat(deposit.getOccurredAt()).isEqualTo(occurredAt);
+        }
+
+        @Test
+        @DisplayName("occurredAt에 나노초가 포함되어도 마이크로초(MICROS) 단위로 절삭되어 저장된다")
+        void truncatesOccurredAtToMicroseconds() {
+            // given
+            LocalDateTime nanoTime = LocalDateTime.of(2026, 8, 9, 12, 0, 0, 123456789);
+
+            // when
+            LedgerPair pair = LedgerPair.forTransfer(
+                    "20260809WB0000000001",
+                    101L, 90000L,
+                    202L, 110000L,
+                    10000L,
+                    "IMMEDIATE_TRANSFER",
+                    "메모", "메모",
+                    TransferChannel.WB,
+                    nanoTime
+            );
+
+            // then
+            LocalDateTime expectedMicroTime = nanoTime.truncatedTo(ChronoUnit.MICROS);
+            assertThat(pair.getWithdrawalEntry().getOccurredAt()).isEqualTo(expectedMicroTime);
+            assertThat(pair.getDepositEntry().getOccurredAt()).isEqualTo(expectedMicroTime);
         }
 
         @Test
