@@ -1,9 +1,6 @@
 package com.shinhan.corebank.autotransfer.application;
 
-import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferChangeCommand;
-import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferChangeUseCase;
-import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterCommand;
-import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterUseCase;
+import com.shinhan.corebank.autotransfer.application.port.in.*;
 import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AuthTokenVerificationPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
@@ -24,12 +21,13 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class AutoTransferCommandService implements AutoTransferRegisterUseCase, AutoTransferChangeUseCase {
+public class AutoTransferCommandService implements AutoTransferRegisterUseCase, AutoTransferChangeUseCase, AutoTransferCancelUseCase {
     private final AutoTransferPersistencePort autoTransferPersistencePort;
     private final AuthTokenVerificationPort authTokenVerificationPort;
     private final AccountStatusPort accountStatusPort;
     private final TransferLimitPort transferLimitPort;
     private final AuditLogService auditLogService;
+
 
     @Override
     public AutoTransfer register(AutoTransferRegisterCommand command) {
@@ -78,5 +76,16 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
                 "amount", saved.getAmount(), "cycleMonths", saved.getCycleMonths(), "endDate", saved.getEndDate().toString()));
 
         return saved;
+    }
+
+    @Override
+    public void cancel(Long autoTransferId, AutoTransferCancelCommand command) {
+        AutoTransfer autoTransfer = autoTransferPersistencePort.findById(autoTransferId).orElseThrow(()->
+                new BusinessException(AutoTransferErrorCode.NOT_FOUND));
+        authTokenVerificationPort.verify(command.authToken(), autoTransfer.getWithdrawalAccountId(),"AUTO_TRANSFER_CANCEL");
+        autoTransfer.terminate(LocalDateTime.now());
+        AutoTransfer saved = autoTransferPersistencePort.save(autoTransfer);
+        auditLogService.record(saved.getCustomerId(), null, AuditEventType.AUTO_TRANSFER_INFO_CHANGE,
+                command.requestIp(), true, Map.of("autoTransferId", saved.getAutoTransferId(),"action","cancel"));
     }
 }
