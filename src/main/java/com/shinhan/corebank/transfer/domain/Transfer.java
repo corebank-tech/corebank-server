@@ -3,6 +3,9 @@ package com.shinhan.corebank.transfer.domain;
 import java.time.LocalDateTime;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import lombok.Builder;
 import lombok.Getter;
@@ -52,12 +55,14 @@ public class Transfer {
             String recipientPassbookMemo,
             LocalDateTime now
     ) {
-
+        if (withdrawalAccountId == null || depositAccountId == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
         if (amount <= 0) {
-            throw new IllegalArgumentException(""); // 이체 금액 0 이하 안된다!
+            throw new BusinessException(TransferErrorCode.INVALID_AMOUNT);
         }
         if (withdrawalAccountId.equals(depositAccountId)) {
-            throw new IllegalArgumentException(""); // 이체/출금 계좌가 같을 수는 없다!
+            throw new BusinessException(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
         }
 
         return Transfer.builder()

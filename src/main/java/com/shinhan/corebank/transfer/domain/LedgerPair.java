@@ -3,6 +3,10 @@ package com.shinhan.corebank.transfer.domain;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -30,11 +34,14 @@ public class LedgerPair {
             TransferChannel channel,
             LocalDateTime occurredAt
     ) {
+        if (withdrawalAccountId == null || depositAccountId == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
         if (amount <= 0) {
-            throw new IllegalArgumentException("원장 기표 금액은 0보다 커야 합니다."); // 수정 필요
+            throw new BusinessException(TransferErrorCode.INVALID_AMOUNT);
         }
         if (withdrawalAccountId.equals(depositAccountId)) {
-            throw new IllegalArgumentException("출금 계좌와 입금 계좌는 동일할 수 없습니다.");
+            throw new BusinessException(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
         }
 
         LocalDateTime truncatedOccurredAt = occurredAt != null ? occurredAt.truncatedTo(ChronoUnit.MICROS) : null;
@@ -68,8 +75,4 @@ public class LedgerPair {
                 .build();
         return new LedgerPair(withdrawal, deposit);
     }
-
-
-
-
 }

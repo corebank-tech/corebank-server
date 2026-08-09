@@ -3,9 +3,15 @@ package com.shinhan.corebank.transfer.domain;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -98,9 +104,10 @@ class LedgerPairTest {
             assertThat(pair.getDepositEntry().getOccurredAt()).isEqualTo(expectedMicroTime);
         }
 
-        @Test
-        @DisplayName("기표 금액이 0 이하이면 IllegalArgumentException 예외가 발생한다")
-        void throwsExceptionWhenAmountIsZeroOrNegative() {
+        @ParameterizedTest
+        @ValueSource(longs = {0L, -1L, -10000L})
+        @DisplayName("기표 금액이 0 이하(0, 음수)이면 BusinessException(INVALID_AMOUNT) 예외가 발생한다")
+        void throwsExceptionWhenAmountIsZeroOrNegative(long invalidAmount) {
             // given
             LocalDateTime now = LocalDateTime.now();
 
@@ -109,17 +116,18 @@ class LedgerPairTest {
                     "20260809WB0000000001",
                     101L, 90000L,
                     202L, 110000L,
-                    0L,
+                    invalidAmount,
                     "IMMEDIATE_TRANSFER",
                     "메모", "메모",
                     TransferChannel.WB, now
             ))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("0보다 커야 합니다");
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_AMOUNT);
         }
 
         @Test
-        @DisplayName("출금 계좌와 입금 계좌가 동일하면 IllegalArgumentException 예외가 발생한다")
+        @DisplayName("출금 계좌와 입금 계좌가 동일하면 BusinessException(SAME_ACCOUNT_TRANSFER) 예외가 발생한다")
         void throwsExceptionWhenWithdrawalAndDepositAccountAreSame() {
             // given
             LocalDateTime now = LocalDateTime.now();
@@ -134,8 +142,30 @@ class LedgerPairTest {
                     "메모", "메모",
                     TransferChannel.WB, now
             ))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("동일할 수 없습니다");
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
+        }
+
+        @Test
+        @DisplayName("출금 계좌 ID 또는 입금 계좌 ID가 null이면 BusinessException(REQUIRED_FIELD_MISSING) 예외가 발생한다")
+        void throwsExceptionWhenAccountIdIsNull() {
+            // given
+            LocalDateTime now = LocalDateTime.now();
+
+            // when & then
+            assertThatThrownBy(() -> LedgerPair.forTransfer(
+                    "20260809WB0000000001",
+                    null, 90000L,
+                    202L, 110000L,
+                    10000L,
+                    "IMMEDIATE_TRANSFER",
+                    "메모", "메모",
+                    TransferChannel.WB, now
+            ))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
     }
 }
