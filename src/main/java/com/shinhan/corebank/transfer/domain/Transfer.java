@@ -91,6 +91,15 @@ public class Transfer {
         this.withdrawalBalanceAfter = withdrawalBalanceAfter;
     }
 
+    // 이체 완료 처리 (완료 시각 지정)
+    public void complete(long withdrawalBalanceAfter, LocalDateTime completedAt) {
+        this.status = ProcessResultStatus.SUCCESS;
+        this.withdrawalBalanceAfter = withdrawalBalanceAfter;
+        if (completedAt != null) {
+            this.transferredAt = completedAt;
+        }
+    }
+
     // 이체 실패 처리
     public void fail(String errorCode, String errorMessage) {
         this.status = ProcessResultStatus.ERROR;

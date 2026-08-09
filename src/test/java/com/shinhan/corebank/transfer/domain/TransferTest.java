@@ -143,4 +143,33 @@ class TransferTest {
                     .isEqualTo(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
         }
     }
+
+    @Nested
+    @DisplayName("complete 이체 완료 메서드")
+    class CompleteTest {
+
+        @Test
+        @DisplayName("이체 완료 시 상태가 SUCCESS로 변경되고 잔액 및 완료 시각(transferredAt)이 갱신된다")
+        void completesTransferAndUpdatesTransferredAt() {
+            // given
+            LocalDateTime createdAt = LocalDateTime.of(2026, 8, 9, 12, 0, 0);
+            Transfer transfer = Transfer.create(
+                    "20260809WB0000000001",
+                    101L, 202L, "110222222222", "성춘향",
+                    10000L, 0L, TransferType.IMMEDIATE, TransferChannel.WB,
+                    null, null, "출금메모", "입금메모", createdAt
+            );
+
+            LocalDateTime completedAt = createdAt.plusSeconds(5);
+
+            // when
+            transfer.complete(90000L, completedAt);
+
+            // then
+            assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(transfer.getWithdrawalBalanceAfter()).isEqualTo(90000L);
+            assertThat(transfer.getTransferredAt()).isEqualTo(completedAt);
+            assertThat(transfer.getCreatedAt()).isEqualTo(createdAt);
+        }
+    }
 }
