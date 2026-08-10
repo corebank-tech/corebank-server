@@ -53,6 +53,15 @@ class AutoTransferCancelCommandTest {
     }
 
     @Test
+    @DisplayName("requestIp가 공백 문자열이면 CMN0002를 던진다")
+    void blankRequestIp_throwsRequiredFieldMissing() {
+        assertThatThrownBy(() -> validBuilder().requestIp("   ").build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+    }
+
+    @Test
     @DisplayName("authToken이 공백 문자열이면 CMN0002를 던진다")
     void blankAuthToken_throwsRequiredFieldMissing() {
         assertThatThrownBy(() -> validBuilder().accountPasswordAuthToken("   ").build())

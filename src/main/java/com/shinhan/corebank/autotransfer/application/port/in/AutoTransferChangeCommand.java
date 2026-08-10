@@ -32,7 +32,7 @@ public record AutoTransferChangeCommand(Long customerId, Long amount, Integer cy
             throw new BusinessException(AutoTransferErrorCode.MEMO_LENGTH_EXCEEDED);
         }
         //공백 문자열 검증
-        if (accountPasswordAuthToken.isBlank()) {
+        if (accountPasswordAuthToken.isBlank() || requestIp.isBlank()) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
     }

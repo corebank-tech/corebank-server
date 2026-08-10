@@ -69,6 +69,15 @@ class AutoTransferChangeCommandTest {
     }
 
     @Test
+    @DisplayName("requestIp가 공백 문자열이면 CMN0002를 던진다")
+    void blankRequestIp_throwsRequiredFieldMissing() {
+        assertThatThrownBy(() -> validBuilder().requestIp("   ").build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+    }
+
+    @Test
     @DisplayName("myPassbookMemo가 10자를 초과하면 AUT0009를 던진다")
     void myPassbookMemoTooLong_throwsMemoLengthExceeded() {
         assertThatThrownBy(() -> validBuilder().myPassbookMemo("12345678901").build())

@@ -11,7 +11,7 @@ public record AutoTransferCancelCommand (Long customerId, String accountPassword
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
         //공백 문자열 검증
-        if (accountPasswordAuthToken.isBlank()) {
+        if (accountPasswordAuthToken.isBlank() || requestIp.isBlank()) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
     }

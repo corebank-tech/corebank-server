@@ -38,7 +38,7 @@ public record AutoTransferRegisterCommand (Long customerId, Long withdrawalAccou
             throw new BusinessException(AutoTransferErrorCode.MEMO_LENGTH_EXCEEDED);
         }
         //공백 문자열 검증
-        if (payeeName.isBlank() || accountPasswordAuthToken.isBlank()) {
+        if (payeeName.isBlank() || accountPasswordAuthToken.isBlank() || requestIp.isBlank()) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
     }
