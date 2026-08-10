@@ -33,6 +33,7 @@ public class LedgerPair {
             TransferChannel channel,
             LocalDateTime occurredAt
     ) {
+        TransferValidations.requireNonNull(transferId, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requireAccountIdsPresent(withdrawalAccountId, depositAccountId);
         TransferValidations.requireNonNull(occurredAt, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requireNonBlank(transactionNumber, CommonErrorCode.REQUIRED_FIELD_MISSING);

@@ -156,6 +156,28 @@ class LedgerPairTest {
         }
 
         @Test
+        @DisplayName("transferId가 null이면 BusinessException(REQUIRED_FIELD_MISSING) 예외가 발생한다")
+        void throwsExceptionWhenTransferIdIsNull() {
+            // given
+            LocalDateTime now = LocalDateTime.now();
+
+            // when & then
+            assertThatThrownBy(() -> LedgerPair.forTransfer(
+                    null,
+                    "20260809WB0000000001",
+                    101L, 90000L,
+                    202L, 110000L,
+                    10000L,
+                    "IMMEDIATE_TRANSFER",
+                    "메모", "메모",
+                    TransferChannel.WB, now
+            ))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        @Test
         @DisplayName("출금 계좌 ID 또는 입금 계좌 ID가 null이면 BusinessException(REQUIRED_FIELD_MISSING) 예외가 발생한다")
         void throwsExceptionWhenAccountIdIsNull() {
             // given
