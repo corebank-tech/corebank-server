@@ -3,12 +3,9 @@ package com.shinhan.corebank.subscription.adapter.out.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
-import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductTestFixtures;
-import com.shinhan.corebank.subscription.domain.MaturityHandling;
 import jakarta.persistence.EntityManager;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,19 +37,9 @@ class SubscriptionTermsAgreementJpaRepositoryTest extends IntegrationTestSupport
         Long productId = productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
         Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sta_test_user");
         Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000002", customerId, null);
-        Long subscriptionId = subscriptionRepository.save(ProductSubscriptionJpaEntity.builder()
-                .customerId(customerId)
-                .productId(productId)
-                .withdrawalAccountId(withdrawalAccountId)
-                .subscriptionAmount(1_000_000L)
-                .termMonths((short) 12)
-                .baseRate(new BigDecimal("2.50"))
-                .preferentialRate(new BigDecimal("0.30"))
-                .appliedRate(new BigDecimal("2.80"))
-                .maturityHandling(MaturityHandling.TRANSFER)
-                .status(ProcessResultStatus.SUCCESS)
-                .subscribedAt(LocalDateTime.now())
-                .build()).getSubscriptionId();
+        Long subscriptionId = subscriptionRepository
+                .save(SubscriptionTestFixtures.defaultSubscription(customerId, productId, withdrawalAccountId))
+                .getSubscriptionId();
         Long termsId = jdbcTemplate.queryForObject(
                 "SELECT terms_id FROM terms WHERE terms_code = ?", Long.class, "TERMS_SERVICE");
 
@@ -68,6 +55,8 @@ class SubscriptionTermsAgreementJpaRepositoryTest extends IntegrationTestSupport
         entityManager.clear();
 
         SubscriptionTermsAgreementJpaEntity found = repository.findById(id).orElseThrow();
+        assertThat(found.getId().getSubscriptionId()).isEqualTo(subscriptionId);
+        assertThat(found.getId().getTermsId()).isEqualTo(termsId);
         assertThat(found.getTermsVersion()).isEqualTo("v1.2");
         assertThat(found.getReadAt()).isNull();
     }
