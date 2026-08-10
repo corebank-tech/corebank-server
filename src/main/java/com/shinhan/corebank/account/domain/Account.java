@@ -237,9 +237,10 @@ public class Account {
             throw new IllegalStateException("예금·적금 계좌는 만기일이 필요합니다.");
         }
 
-        if (openedDate != null
-                && maturityDate.isBefore(openedDate.toLocalDate())) {
-            throw new IllegalStateException("만기일은 개설일보다 이전일 수 없습니다.");
+        if (maturityDate.atStartOfDay().isBefore(openedDate)) {
+            throw new IllegalStateException(
+                    "만기일은 개설일보다 이전일 수 없습니다."
+            );
         }
     }
 
@@ -281,6 +282,12 @@ public class Account {
 
         if (status != AccountStatus.CLOSED && closedDate != null) {
             throw new IllegalStateException("해지되지 않은 계좌는 해지 시각을 가질 수 없습니다.");
+        }
+
+        if (closedDate != null && closedDate.isBefore(openedDate)) {
+            throw new IllegalStateException(
+                    "해지 시각은 개설 시각보다 이전일 수 없습니다."
+            );
         }
     }
 }
