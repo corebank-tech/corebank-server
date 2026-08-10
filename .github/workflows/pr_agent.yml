@@ -1,0 +1,28 @@
+name: PR Agent
+
+on:
+  pull_request:
+    branches: [ "dev" ]
+    types: [opened, reopened, synchronize]
+  issue_comment:
+    types: [created]
+
+jobs:
+  pr_agent_job:
+    if: >-
+      ${{ github.event.sender.type != 'Bot' &&
+          (github.event_name != 'issue_comment' || github.event.issue.pull_request) }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: PR Agent
+        uses: qodo-ai/pr-agent@064a305c8aac1543edf63b5a6baadcdd942831ac  # main, 확인일자 2026-08-10
+        env:
+          ANTHROPIC.KEY: ${{ secrets.ANTHROPIC_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github_action_config.auto_review: "true"
+          github_action_config.auto_describe: "true"
+          github_action_config.auto_improve: "false"
+          github_action_config.pr_actions: '["opened", "reopened"]'
