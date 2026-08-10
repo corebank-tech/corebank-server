@@ -59,4 +59,20 @@ class IdempotencyServiceTest {
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.DUPLICATE_REQUEST_IN_PROGRESS));
     }
+
+    @Test
+    @DisplayName("존재하지 않는 customerId면(FK 위반) 500 대신 CMN0001로 응답한다")
+    void begin_nonexistentCustomerId_throwsInvalidInput() {
+        String key = "550e8400-e29b-41d4-a716-446655440000";
+        when(repository.findById(key)).thenReturn(Optional.empty());
+        RuntimeException fkRootCause = new RuntimeException(
+                "Cannot add or update a child row: a foreign key constraint fails "
+                        + "(`corebank`.`idempotency_key`, CONSTRAINT `fk_idem_customer` FOREIGN KEY (`customer_id`) REFERENCES `customer` (`customer_id`))");
+        when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("insert failed", fkRootCause));
+
+        assertThatThrownBy(() -> idempotencyService.begin(key, 999_999_999L, "POST /auto-transfers", "{}"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+    }
 }

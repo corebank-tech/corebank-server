@@ -152,6 +152,11 @@ public class AutoTransferController {
         fingerprint.put("endDate", request.endDate());
         fingerprint.put("myPassbookMemo", request.myPassbookMemo());
         fingerprint.put("recipientPassbookMemo", request.recipientPassbookMemo());
+        // 변경 불가 필드도 포함해야 한다 — 빠지면 최초 성공 후 같은 키로 이 필드만 추가한 재요청이
+        // fingerprint 동일 판정을 받아 AUT0003 검증 없이 이전 성공 응답을 그대로 재생해버린다
+        fingerprint.put("withdrawalAccountId", request.withdrawalAccountId());
+        fingerprint.put("depositAccountNumber", request.depositAccountNumber());
+        fingerprint.put("transferDay", request.transferDay());
         return fingerprint;
     }
 

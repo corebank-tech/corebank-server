@@ -38,7 +38,12 @@ public class IdempotencyService {
                 repository.saveAndFlush(IdempotencyKeyJpaEntity.start(key, customerId, endpoint, requestHash, LocalDateTime.now()));
                 return IdempotencyResult.proceed();
             } catch (DataIntegrityViolationException e) {
-                // 동시에 같은 키로 먼저 INSERT를 마친 요청이 있다는 뜻 — 처리 중으로 응답한다
+                // 원인이 둘로 갈린다: (1) 동시에 같은 키로 먼저 INSERT를 마친 요청 -> PK 충돌 -> 처리 중으로 응답
+                //                  (2) 존재하지 않는 customerId -> fk_idem_customer 위반 -> 500 대신 입력값 오류로 응답
+                String message = e.getMostSpecificCause().getMessage();
+                if (message != null && message.contains("fk_idem_customer")) {
+                    throw new BusinessException(CommonErrorCode.INVALID_INPUT, "존재하지 않는 고객입니다.");
+                }
                 throw new BusinessException(CommonErrorCode.DUPLICATE_REQUEST_IN_PROGRESS);
             }
         }

@@ -372,6 +372,42 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("같은 Idempotency-Key로 불변 필드(withdrawalAccountId)만 추가해서 재요청하면 재생 대신 409 + CMN0302를 반환한다")
+    void change_sameKeyWithUnmodifiableFieldAdded_returnsCmn0302() throws Exception {
+        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
+                autoTransfer(accountId, "110000000016", AutoTransferStatus.NORMAL, 27));
+        entityManager.flush();
+        entityManager.clear();
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(changeRequestJson(customerId, "change-token-fp")))
+                .andExpect(status().isOk());
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("customerId", customerId);
+        body.put("amount", 20000);
+        body.put("cycleMonths", 3);
+        body.put("endDate", LocalDate.now().plusYears(2).toString());
+        body.put("myPassbookMemo", "새메모");
+        body.put("recipientPassbookMemo", "새받는메모");
+        body.put("withdrawalAccountId", accountId); // 불변 필드를 슬쩍 추가 — fingerprint가 이걸 반영해야 함
+        body.put("accountPasswordAuthToken", "change-token-fp");
+
+        mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(OBJECT_MAPPER.writeValueAsString(body)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CMN0302"));
+    }
+
+    @Test
     @DisplayName("변경 금액이 1회 이체한도를 초과하면 400 + AUT0006을 반환한다")
     void change_amountExceedsOneTimeLimit_returnsAut0006() throws Exception {
         AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
