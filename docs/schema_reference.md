@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 24개 테이블 · 249개 컬럼
+**대상**: 24개 비즈니스 테이블 + 1개 PK 채번 전용 테이블 (`ledger_entry_id_sequence`) · 250개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -37,17 +37,18 @@
 | 11 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4 |
 | 12 | `transfer` | 이체 거래 | P4 | 20 |
 | 13 | `ledger_entry` | 원장 | P4 | 13 |
-| 14 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6 |
-| 15 | `transfer_limit` | 이체한도 | P1 | 5 |
-| 16 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 4 |
-| 17 | `product_subscription` | 상품가입 | P3 | 18 |
-| 18 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5 |
-| 19 | `scheduled_transfer` | 예약이체 | P3 | 17 |
-| 20 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
-| 21 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8 |
-| 22 | `idempotency_key` | 멱등키 | P5 | 9 |
-| 23 | `audit_log` | 감사 로그 | P5 | 8 |
-| 24 | `common_code` | 공통코드 | P5 | 8 |
+| 14 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1 |
+| 15 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6 |
+| 16 | `transfer_limit` | 이체한도 | P1 | 5 |
+| 17 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 4 |
+| 18 | `product_subscription` | 상품가입 | P3 | 18 |
+| 19 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5 |
+| 20 | `scheduled_transfer` | 예약이체 | P3 | 17 |
+| 21 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
+| 22 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8 |
+| 23 | `idempotency_key` | 멱등키 | P5 | 9 |
+| 24 | `audit_log` | 감사 로그 | P5 | 8 |
+| 25 | `common_code` | 공통코드 | P5 | 8 |
 
 ---
 
