@@ -6,7 +6,6 @@ server:
       cookie:
         http-only: true
         same-site: lax
-
 spring:
   application:
     name: corebank
