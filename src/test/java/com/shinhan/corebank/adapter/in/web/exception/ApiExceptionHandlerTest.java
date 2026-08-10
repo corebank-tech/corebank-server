@@ -101,4 +101,25 @@ class ApiExceptionHandlerTest {
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data").value("hello"));
     }
+
+    @Test
+    @DisplayName("낙관적 락 충돌 -> CMN0303, 409")
+    void optimisticLockFailure() throws Exception {
+        mockMvc.perform(
+                        get("/test/errors/optimistic-lock")
+                )
+                .andExpect(status().isConflict())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("CMN0303")
+                )
+                .andExpect(
+                        jsonPath("$.message")
+                                .value("다른 요청에 의해 정보가 변경되었습니다. 다시 조회한 후 시도해 주세요.")
+                )
+                .andExpect(
+                        jsonPath("$.data")
+                                .doesNotExist()
+                );
+    }
 }

@@ -5,6 +5,7 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.response.ApiResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -12,7 +13,9 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** ApiExceptionHandlerTest 전용. 각 예외 상황을 유발하기 위한 더미 엔드포인트만 제공한다. */
+/**
+ * ApiExceptionHandlerTest 전용. 각 예외 상황을 유발하기 위한 더미 엔드포인트만 제공한다.
+ */
 @RestController
 public class ExceptionHandlerTestController {
 
@@ -44,6 +47,12 @@ public class ExceptionHandlerTestController {
     @GetMapping("/test/errors/unexpected")
     public ApiResponse<Void> unexpected() {
         throw new IllegalStateException("boom");
+    }
+
+    @GetMapping("/test/errors/optimistic-lock") public ApiResponse<Void> optimisticLock() {
+        throw new OptimisticLockingFailureException(
+                "동시 수정 충돌"
+        );
     }
 
     @GetMapping("/test/errors/ok")
