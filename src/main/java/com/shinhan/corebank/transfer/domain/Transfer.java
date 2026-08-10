@@ -85,26 +85,28 @@ public class Transfer {
                 .build();
     }
 
-    // 이체 완료 처리
-    public void complete(long withdrawalBalanceAfter) {
-        this.status = ProcessResultStatus.SUCCESS;
-        this.withdrawalBalanceAfter = withdrawalBalanceAfter;
-    }
-
-    // 이체 완료 처리 (완료 시각 지정)
+    // 이체 완료 처리 (완료 시각으로 transferredAt 갱신)
     public void complete(long withdrawalBalanceAfter, LocalDateTime completedAt) {
+        requireProcessing();
+        TransferValidations.requireNonNull(completedAt, CommonErrorCode.REQUIRED_FIELD_MISSING);
         this.status = ProcessResultStatus.SUCCESS;
         this.withdrawalBalanceAfter = withdrawalBalanceAfter;
-        if (completedAt != null) {
-            this.transferredAt = completedAt;
-        }
+        this.transferredAt = completedAt;
     }
 
     // 이체 실패 처리
     public void fail(String errorCode, String errorMessage) {
+        requireProcessing();
         this.status = ProcessResultStatus.ERROR;
         this.errorCode = errorCode;
         this.errorMessage = errorMessage;
+    }
+
+    // PROCESSING 상태에서만 완료/실패로 전이 가능. 이미 확정된 이체는 재변경 금지.
+    private void requireProcessing() {
+        if (this.status != ProcessResultStatus.PROCESSING) {
+            throw new BusinessException(TransferErrorCode.INVALID_STATUS_TRANSITION);
+        }
     }
 
 }

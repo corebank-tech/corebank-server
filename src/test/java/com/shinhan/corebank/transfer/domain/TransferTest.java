@@ -20,6 +20,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DisplayName("Transfer 도메인 단위 테스트")
 class TransferTest {
 
+    private static Transfer newProcessingTransfer() {
+        return Transfer.create(
+                "20260809WB0000000001",
+                101L, 202L, "110222222222", "성춘향",
+                10000L, 0L, TransferType.IMMEDIATE, TransferChannel.WB,
+                null, null, "출금메모", "입금메모", LocalDateTime.of(2026, 8, 9, 12, 0, 0)
+        );
+    }
+
     @Nested
     @DisplayName("create 팩토리 메서드")
     class CreateTest {
@@ -311,6 +320,81 @@ class TransferTest {
             assertThat(transfer.getWithdrawalBalanceAfter()).isEqualTo(90000L);
             assertThat(transfer.getTransferredAt()).isEqualTo(completedAt);
             assertThat(transfer.getCreatedAt()).isEqualTo(createdAt);
+        }
+
+        @Test
+        @DisplayName("completedAt이 null이면 BusinessException(REQUIRED_FIELD_MISSING) 예외가 발생한다")
+        void throwsExceptionWhenCompletedAtIsNull() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+
+            // when & then
+            assertThatThrownBy(() -> transfer.complete(90000L, null))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+    }
+
+    @Nested
+    @DisplayName("이체 상태 전이 제약")
+    class StatusTransitionTest {
+
+        @Test
+        @DisplayName("이체 실패 처리 시 상태가 ERROR로 변경된다")
+        void failsTransferSuccessfully() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+
+            // when
+            transfer.fail("TRF9999", "잔액 부족");
+
+            // then
+            assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(transfer.getErrorCode()).isEqualTo("TRF9999");
+            assertThat(transfer.getErrorMessage()).isEqualTo("잔액 부족");
+        }
+
+        @Test
+        @DisplayName("이미 완료(SUCCESS)된 이체를 다시 complete()하면 BusinessException(INVALID_STATUS_TRANSITION) 예외가 발생한다")
+        void throwsExceptionWhenCompletingAlreadyCompletedTransfer() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.complete(90000L, LocalDateTime.now());
+
+            // when & then
+            assertThatThrownBy(() -> transfer.complete(90000L, LocalDateTime.now()))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
+        }
+
+        @Test
+        @DisplayName("이미 완료(SUCCESS)된 이체를 fail() 처리하면 BusinessException(INVALID_STATUS_TRANSITION) 예외가 발생한다")
+        void throwsExceptionWhenFailingAlreadyCompletedTransfer() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.complete(90000L, LocalDateTime.now());
+
+            // when & then
+            assertThatThrownBy(() -> transfer.fail("TRF9999", "잔액 부족"))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
+        }
+
+        @Test
+        @DisplayName("이미 실패(ERROR)한 이체를 complete() 처리하면 BusinessException(INVALID_STATUS_TRANSITION) 예외가 발생한다")
+        void throwsExceptionWhenCompletingAlreadyFailedTransfer() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.fail("TRF9999", "잔액 부족");
+
+            // when & then
+            assertThatThrownBy(() -> transfer.complete(90000L, LocalDateTime.now()))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
         }
     }
 }
