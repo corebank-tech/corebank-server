@@ -197,13 +197,15 @@ class AutoTransferTest {
         }
 
         @Test
-        @DisplayName("지원하지 않는 이체주기면 예외")
+        @DisplayName("지원하지 않는 이체주기면 AUT0007")
         void invalidCycle() {
             assertThatThrownBy(() -> AutoTransfer.register(
                     1L, 1L, "110987654321", "홍길동",
                     10000L, 2, TRANSFER_DAY,
                     START, END, null, null, NOW))
-                    .isInstanceOf(IllegalArgumentException.class);
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(AutoTransferErrorCode.INVALID_CYCLE_MONTHS));
         }
     }
 
@@ -291,6 +293,35 @@ class AutoTransferTest {
             assertThat(e.getMyPassbookMemo()).isEqualTo("새내메모");
             assertThat(e.getRecipientPassbookMemo()).isEqualTo("새받는메모");
             assertThat(e.getNextExecutionDate()).isEqualTo(NEXT_EXECUTION);
+        }
+
+        @Test
+        @DisplayName("모든 필드를 null로 넘기면 기존 값이 그대로 유지된다")
+        void allNullFields_keepsExistingValues() {
+            AutoTransfer e = register();
+
+            e.change(null, null, null, null, null);
+
+            assertThat(e.getAmount()).isEqualTo(10000L);
+            assertThat(e.getCycleMonths()).isEqualTo(1);
+            assertThat(e.getEndDate()).isEqualTo(END);
+            assertThat(e.getNextExecutionDate()).isEqualTo(NEXT_EXECUTION);
+            assertThat(e.getMyPassbookMemo()).isEqualTo("내메모");
+            assertThat(e.getRecipientPassbookMemo()).isEqualTo("받는메모");
+        }
+
+        @Test
+        @DisplayName("일부 필드만 넘기면 null인 필드는 기존 값을 유지하고 나머지만 반영된다")
+        void partialFields_onlyProvidedFieldsChange() {
+            AutoTransfer e = register();
+
+            e.change(20000L, null, null, null, null);
+
+            assertThat(e.getAmount()).isEqualTo(20000L);
+            assertThat(e.getCycleMonths()).isEqualTo(1);
+            assertThat(e.getEndDate()).isEqualTo(END);
+            assertThat(e.getMyPassbookMemo()).isEqualTo("내메모");
+            assertThat(e.getRecipientPassbookMemo()).isEqualTo("받는메모");
         }
 
         @Test

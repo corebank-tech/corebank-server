@@ -3,6 +3,7 @@ package com.shinhan.corebank.autotransfer.application.port.in;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.shinhan.corebank.autotransfer.domain.AutoTransferErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import java.time.LocalDate;
@@ -69,6 +70,24 @@ class AutoTransferRegisterCommandTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_INPUT));
+    }
+
+    @Test
+    @DisplayName("amount가 0이면 AUT0008을 던진다")
+    void zeroAmount_throwsInvalidAmount() {
+        assertThatThrownBy(() -> validBuilder().amount(0L).build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.INVALID_AMOUNT));
+    }
+
+    @Test
+    @DisplayName("amount가 음수면 AUT0008을 던진다")
+    void negativeAmount_throwsInvalidAmount() {
+        assertThatThrownBy(() -> validBuilder().amount(-1000L).build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.INVALID_AMOUNT));
     }
 
     @Test

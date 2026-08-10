@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     EntityManager entityManager;
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final AtomicLong CUSTOMER_SEQ = new AtomicLong();
 
     private Long customerId;
     private Long accountId;
@@ -64,6 +66,52 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.withdrawalAccountId").value(accountId))
                 .andExpect(jsonPath("$.data.amount").value(10000))
                 .andExpect(jsonPath("$.data.status").value("NORMAL"));
+    }
+
+    @Test
+    @DisplayName("amount가 음수면 400 + AUT0008을 반환한다")
+    void register_negativeAmount_returnsAut0008() throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("customerId", customerId);
+        body.put("withdrawalAccountId", accountId);
+        body.put("depositAccountNumber", "110987654321");
+        body.put("payeeName", "홍길동");
+        body.put("amount", -100);
+        body.put("cycleMonths", 1);
+        body.put("transferDay", 15);
+        body.put("startDate", LocalDate.now().plusDays(10).toString());
+        body.put("endDate", LocalDate.now().plusMonths(12).toString());
+        body.put("authToken", "token-negative-amount");
+
+        mockMvc.perform(post("/auto-transfers")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(OBJECT_MAPPER.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("AUT0008"));
+    }
+
+    @Test
+    @DisplayName("cycleMonths가 1/3/6이 아니면 400 + AUT0007을 반환한다")
+    void register_invalidCycleMonths_returnsAut0007() throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("customerId", customerId);
+        body.put("withdrawalAccountId", accountId);
+        body.put("depositAccountNumber", "110987654321");
+        body.put("payeeName", "홍길동");
+        body.put("amount", 10000);
+        body.put("cycleMonths", 2);
+        body.put("transferDay", 15);
+        body.put("startDate", LocalDate.now().plusDays(10).toString());
+        body.put("endDate", LocalDate.now().plusMonths(12).toString());
+        body.put("authToken", "token-invalid-cycle");
+
+        mockMvc.perform(post("/auto-transfers")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(OBJECT_MAPPER.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("AUT0007"));
     }
 
     @Test
@@ -132,6 +180,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.clear();
 
         mockMvc.perform(get("/auto-transfers")
+                        .param("customerId", String.valueOf(customerId))
                         .param("withdrawalAccountId", String.valueOf(accountId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
@@ -150,6 +199,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.clear();
 
         mockMvc.perform(get("/auto-transfers")
+                        .param("customerId", String.valueOf(customerId))
                         .param("withdrawalAccountId", String.valueOf(accountId))
                         .param("status", "NORMAL"))
                 .andExpect(status().isOk())
@@ -158,9 +208,35 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("다른 고객 번호로 남의 출금계좌ID를 조회하면 빈 목록을 반환한다 (타 고객 접근 차단)")
+    void search_otherCustomerId_returnsEmptyList() throws Exception {
+        autoTransferJpaRepository.save(autoTransfer(accountId, "110000000012", AutoTransferStatus.NORMAL, 23));
+        entityManager.flush();
+        entityManager.clear();
+
+        Long otherCustomerId = insertCustomer();
+
+        mockMvc.perform(get("/auto-transfers")
+                        .param("customerId", String.valueOf(otherCustomerId))
+                        .param("withdrawalAccountId", String.valueOf(accountId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalCount").value(0))
+                .andExpect(jsonPath("$.data.items.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("customerId가 없으면 400을 반환한다")
+    void search_missingCustomerId_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/auto-transfers")
+                        .param("withdrawalAccountId", String.valueOf(accountId)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     @DisplayName("withdrawalAccountId가 없으면 400을 반환한다")
     void search_missingWithdrawalAccountId_returnsBadRequest() throws Exception {
-        mockMvc.perform(get("/auto-transfers"))
+        mockMvc.perform(get("/auto-transfers")
+                        .param("customerId", String.valueOf(customerId)))
                 .andExpect(status().isBadRequest());
     }
 
@@ -191,6 +267,49 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                         .content(changeRequestJson(customerId, "change-token-2")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("AUT0201"));
+    }
+
+    @Test
+    @DisplayName("일부 필드만 보내면 나머지는 기존 값 그대로 유지된다")
+    void change_partialFields_keepsRestUnchanged() throws Exception {
+        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
+                autoTransfer(accountId, "110000000010", AutoTransferStatus.NORMAL, 20));
+        entityManager.flush();
+        entityManager.clear();
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("customerId", customerId);
+        body.put("amount", 15000);
+        body.put("authToken", "change-token-partial");
+
+        mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(OBJECT_MAPPER.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.amount").value(15000))
+                .andExpect(jsonPath("$.data.cycleMonths").value(1));
+    }
+
+    @Test
+    @DisplayName("withdrawalAccountId 변경을 시도하면 400 + AUT0003을 반환한다")
+    void change_withdrawalAccountId_returnsAut0003() throws Exception {
+        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
+                autoTransfer(accountId, "110000000011", AutoTransferStatus.NORMAL, 22));
+        entityManager.flush();
+        entityManager.clear();
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("customerId", customerId);
+        body.put("withdrawalAccountId", 999999L);
+        body.put("authToken", "change-token-unmodifiable");
+
+        mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(OBJECT_MAPPER.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("AUT0003"));
     }
 
     @Test
@@ -330,11 +449,15 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     }
 
     private Long insertCustomer() {
-        String userId = "u" + System.nanoTime();
+        // 한 테스트 안에서 두 번째 고객을 만들 때 System.nanoTime()이 짧은 간격에선 값이 겹칠 수 있어 카운터로 유일성을 보장한다(user_id는 VARCHAR(20), email은 UNIQUE)
+        long seq = CUSTOMER_SEQ.incrementAndGet();
+        String userId = "u" + seq;
+        String email = "test" + seq + "@test.com";
         entityManager.createNativeQuery(
                         "INSERT INTO customer (user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at) "
-                                + "VALUES (:userId, 'x', '홍길동', '1990-01-01', 'test@test.com', '01012345678', NOW(), NOW(), NOW())")
+                                + "VALUES (:userId, 'x', '홍길동', '1990-01-01', :email, '01012345678', NOW(), NOW(), NOW())")
                 .setParameter("userId", userId)
+                .setParameter("email", email)
                 .executeUpdate();
         return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
     }

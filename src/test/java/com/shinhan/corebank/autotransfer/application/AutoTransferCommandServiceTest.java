@@ -218,6 +218,28 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
+    @DisplayName("일부 필드만 보내면 나머지 필드는 기존 값을 유지한 채 저장된다")
+    void change_partialFields_keepsUnspecifiedFieldsUnchanged() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AutoTransferChangeCommand command = AutoTransferChangeCommand.builder()
+                .customerId(1L)
+                .amount(30_000L)
+                .authToken("valid-token")
+                .requestIp("127.0.0.1")
+                .build();
+
+        AutoTransfer result = autoTransferCommandService.change(10L, command);
+
+        assertThat(result.getAmount()).isEqualTo(30_000L);
+        assertThat(result.getCycleMonths()).isEqualTo(1);
+        assertThat(result.getMyPassbookMemo()).isEqualTo("내메모");
+        assertThat(result.getRecipientPassbookMemo()).isEqualTo("받는메모");
+    }
+
+    @Test
     @DisplayName("대상 자동이체가 없으면 NOT_FOUND를 던진다")
     void change_notFound_throws() {
         when(autoTransferPersistencePort.findById(999L)).thenReturn(Optional.empty());

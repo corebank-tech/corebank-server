@@ -34,46 +34,57 @@ class AutoTransferQueryServiceTest {
     AutoTransferQueryService autoTransferQueryService;
 
     @Test
-    @DisplayName("withdrawalAccountId가 없으면 CMN0002를 던지고 포트는 호출하지 않는다")
-    void rejectsMissingWithdrawalAccountId() {
-        assertThatThrownBy(() -> autoTransferQueryService.search(null, null, 0, 10))
+    @DisplayName("customerId가 없으면 CMN0002를 던지고 포트는 호출하지 않는다")
+    void rejectsMissingCustomerId() {
+        assertThatThrownBy(() -> autoTransferQueryService.search(null, 1L, null, 0, 10))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
 
-        verify(autoTransferQueryPort, never()).search(any(), any(), any(Pageable.class));
+        verify(autoTransferQueryPort, never()).search(any(), any(), any(), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("withdrawalAccountId가 없으면 CMN0002를 던지고 포트는 호출하지 않는다")
+    void rejectsMissingWithdrawalAccountId() {
+        assertThatThrownBy(() -> autoTransferQueryService.search(1L, null, null, 0, 10))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+
+        verify(autoTransferQueryPort, never()).search(any(), any(), any(), any(Pageable.class));
     }
 
     @Test
     @DisplayName("허용되지 않은 size면 CMN0005를 던지고 포트는 호출하지 않는다")
     void rejectsInvalidPageSize() {
-        assertThatThrownBy(() -> autoTransferQueryService.search(1L, null, 0, 7))
+        assertThatThrownBy(() -> autoTransferQueryService.search(1L, 1L, null, 0, 7))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_PAGE_SIZE));
 
-        verify(autoTransferQueryPort, never()).search(any(), any(), any(Pageable.class));
+        verify(autoTransferQueryPort, never()).search(any(), any(), any(), any(Pageable.class));
     }
 
     @Test
     @DisplayName("page가 음수면 CMN0001을 던지고 포트는 호출하지 않는다")
     void rejectsNegativePage() {
-        assertThatThrownBy(() -> autoTransferQueryService.search(1L, null, -1, 10))
+        assertThatThrownBy(() -> autoTransferQueryService.search(1L, 1L, null, -1, 10))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_INPUT));
 
-        verify(autoTransferQueryPort, never()).search(any(), any(), any(Pageable.class));
+        verify(autoTransferQueryPort, never()).search(any(), any(), any(), any(Pageable.class));
     }
 
     @Test
     @DisplayName("검증을 통과하면 포트 결과를 그대로 반환한다")
     void delegatesToPort() {
         Page<AutoTransfer> expected = new PageImpl<>(List.of());
-        when(autoTransferQueryPort.search(1L, AutoTransferStatus.NORMAL, PageRequest.of(0, 10)))
+        when(autoTransferQueryPort.search(1L, 1L, AutoTransferStatus.NORMAL, PageRequest.of(0, 10)))
                 .thenReturn(expected);
 
-        Page<AutoTransfer> result = autoTransferQueryService.search(1L, AutoTransferStatus.NORMAL, 0, 10);
+        Page<AutoTransfer> result = autoTransferQueryService.search(1L, 1L, AutoTransferStatus.NORMAL, 0, 10);
 
         assertThat(result).isSameAs(expected);
     }

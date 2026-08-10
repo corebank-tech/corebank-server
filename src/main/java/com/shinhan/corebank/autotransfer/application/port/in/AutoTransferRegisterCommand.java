@@ -1,5 +1,6 @@
 package com.shinhan.corebank.autotransfer.application.port.in;
 
+import com.shinhan.corebank.autotransfer.domain.AutoTransferErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import lombok.Builder;
@@ -24,6 +25,10 @@ public record AutoTransferRegisterCommand (Long customerId, Long withdrawalAccou
         //계좌번호 형식 검증
         if(!ACCOUNT_NUMBER_PATTERN.matcher(depositAccountNumber).matches()) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        }
+        //금액 검증
+        if (amount <= 0) {
+            throw new BusinessException(AutoTransferErrorCode.INVALID_AMOUNT);
         }
     }
 }

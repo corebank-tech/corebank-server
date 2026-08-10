@@ -69,11 +69,12 @@ public class AutoTransferController {
     // 조회
     @GetMapping
     public ApiResponse<PageResponse<AutoTransferListItemResponse>> search(
+            @RequestParam Long customerId,
             @RequestParam Long withdrawalAccountId,
             @RequestParam(required = false) AutoTransferStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue =  "10") int size) {
-        Page<AutoTransfer> result = autoTransferQueryUseCase.search(withdrawalAccountId, status, page, size);
+        Page<AutoTransfer> result = autoTransferQueryUseCase.search(customerId, withdrawalAccountId, status, page, size);
         return ApiResponse.success(PageResponse.from(result, AutoTransferListItemResponse::from));
     }
 

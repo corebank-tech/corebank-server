@@ -23,8 +23,8 @@ public class AutoTransferQueryService implements AutoTransferQueryUseCase {
     private final AutoTransferQueryPort autoTransferQueryPort;
 
     @Override
-    public Page<AutoTransfer> search(Long withdrawalAccountId, AutoTransferStatus status, int page, int size) {
-        if(withdrawalAccountId == null) {
+    public Page<AutoTransfer> search(Long customerId, Long withdrawalAccountId, AutoTransferStatus status, int page, int size) {
+        if(customerId == null || withdrawalAccountId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
         if (!ALLOWED_PAGE_SIZE.contains(size)) {
@@ -33,6 +33,6 @@ public class AutoTransferQueryService implements AutoTransferQueryUseCase {
         if (page < 0) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT, "page는 0 이상이여야 합니다.");
         }
-        return autoTransferQueryPort.search(withdrawalAccountId,status, PageRequest.of(page,size));
+        return autoTransferQueryPort.search(customerId, withdrawalAccountId, status, PageRequest.of(page,size));
     }
 }

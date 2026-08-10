@@ -44,8 +44,8 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
     }
 
     @Override
-    public Page<AutoTransfer> search(Long withdrawalAccountId, AutoTransferStatus status, Pageable pageable) {
-        Predicate[] conditions = conditions(withdrawalAccountId, status);
+    public Page<AutoTransfer> search(Long customerId, Long withdrawalAccountId, AutoTransferStatus status, Pageable pageable) {
+        Predicate[] conditions = conditions(customerId, withdrawalAccountId, status);
         List<AutoTransferJpaEntity> content = queryFactory
                 .selectFrom(autoTransferJpaEntity)
                 .where(conditions)
@@ -62,8 +62,10 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
         return new PageImpl<>(domainContent, pageable, total == null ? 0 : total);
     }
 
-    private Predicate[] conditions(Long withdrawalAccountId, AutoTransferStatus status) {
+    private Predicate[] conditions(Long customerId, Long withdrawalAccountId, AutoTransferStatus status) {
         return new Predicate[] {
+                // customerId까지 함께 걸어야 withdrawalAccountId만으로 타 고객 자동이체가 조회되는 것을 막을 수 있다(REQ-AUTO-009)
+                autoTransferJpaEntity.customerId.eq(customerId),
                 autoTransferJpaEntity.withdrawalAccountId.eq(withdrawalAccountId),statusEq(status)
         };
     }

@@ -8,6 +8,7 @@ import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,8 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
 
     @Autowired
     EntityManager entityManager;
+
+    private static final AtomicLong CUSTOMER_SEQ = new AtomicLong();
 
     private Long customerId;
     private Long accountA;
@@ -115,7 +118,7 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        Page<AutoTransfer> result = adapter.search(accountA, null, PageRequest.of(0, 10));
+        Page<AutoTransfer> result = adapter.search(customerId, accountA, null, PageRequest.of(0, 10));
 
         assertThat(result.getTotalElements()).isEqualTo(2);
         assertThat(result.getContent())
@@ -131,10 +134,24 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        Page<AutoTransfer> result = adapter.search(accountA, AutoTransferStatus.NORMAL, PageRequest.of(0, 10));
+        Page<AutoTransfer> result = adapter.search(customerId, accountA, AutoTransferStatus.NORMAL, PageRequest.of(0, 10));
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).getStatus()).isEqualTo(AutoTransferStatus.NORMAL);
+    }
+
+    @Test
+    @DisplayName("customerId가 실제 소유자와 다르면 withdrawalAccountId가 맞아도 조회되지 않는다 (타 고객 접근 차단)")
+    void search_customerIdMismatch_returnsEmpty() {
+        repository.save(autoTransfer(accountA, "110000000009", AutoTransferStatus.NORMAL, 10));
+        entityManager.flush();
+        entityManager.clear();
+
+        Long otherCustomerId = insertCustomer();
+
+        Page<AutoTransfer> result = adapter.search(otherCustomerId, accountA, null, PageRequest.of(0, 10));
+
+        assertThat(result.getTotalElements()).isZero();
     }
 
     private AutoTransferJpaEntity autoTransfer(Long withdrawalAccountId, String depositAccountNumber, AutoTransferStatus status, int transferDay) {
@@ -163,11 +180,15 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
         // customer.created_at/updated_at은 V202608041310 마이그레이션에서 DEFAULT CURRENT_TIMESTAMP가
         // 제거됐고(JPA Auditing 정책 전환), Customer용 JPA 엔티티가 아직 없어 Auditing도 안 붙어있다.
         // 그래서 네이티브 INSERT에서 두 값을 직접 채워야 한다.
-        String userId = "u" + System.nanoTime();
+        // 한 테스트 안에서 두 번째 고객을 만들 때 System.nanoTime()이 짧은 간격에선 값이 겹칠 수 있어 카운터로 유일성을 보장한다(user_id는 VARCHAR(20), email은 UNIQUE)
+        long seq = CUSTOMER_SEQ.incrementAndGet();
+        String userId = "u" + seq;
+        String email = "test" + seq + "@test.com";
         entityManager.createNativeQuery(
                         "INSERT INTO customer (user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at) "
-                                + "VALUES (:userId, 'x', '홍길동', '1990-01-01', 'test@test.com', '01012345678', NOW(), NOW(), NOW())")
+                                + "VALUES (:userId, 'x', '홍길동', '1990-01-01', :email, '01012345678', NOW(), NOW(), NOW())")
                 .setParameter("userId", userId)
+                .setParameter("email", email)
                 .executeUpdate();
         return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
     }
