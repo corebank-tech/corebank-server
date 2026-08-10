@@ -2,10 +2,9 @@ package com.shinhan.corebank.account.adapter.out.persistence;
 
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
-import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Component;
 
 import java.util.Objects;
@@ -63,7 +62,7 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
                 entity.getVersion()
         )) {
             throw new BusinessException(
-                    AccountErrorCode.ACCOUNT_CONCURRENT_MODIFICATION
+                    CommonErrorCode.CONCURRENT_MODIFICATION
             );
         }
     }

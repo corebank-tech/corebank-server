@@ -15,6 +15,7 @@ public enum CommonErrorCode implements ErrorCode {
 
     DUPLICATE_REQUEST_IN_PROGRESS("CMN0301", 409, "동일 요청이 처리 중입니다."),
     IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST("CMN0302", 409, "동일한 멱등키가 다른 요청에 사용되었습니다."),
+    CONCURRENT_MODIFICATION("CMN0303", 409, "다른 요청에 의해 정보가 변경되었습니다. 다시 조회한 후 시도해 주세요."),
 
     INTERNAL_ERROR("CMN9999", 500, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
 
@@ -28,7 +29,18 @@ public enum CommonErrorCode implements ErrorCode {
         this.message = message;
     }
 
-    @Override public String getCode()    { return code; }
-    @Override public int    getStatus()  { return status; }
-    @Override public String getMessage() { return message; }
+    @Override
+    public String getCode() {
+        return code;
+    }
+
+    @Override
+    public int getStatus() {
+        return status;
+    }
+
+    @Override
+    public String getMessage() {
+        return message;
+    }
 }

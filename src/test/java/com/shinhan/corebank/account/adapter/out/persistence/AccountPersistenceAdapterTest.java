@@ -5,9 +5,9 @@ import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
-import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -292,21 +292,16 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
 
         // then
         assertThat(thrown)
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> {
+                    BusinessException businessException =
+                            (BusinessException) exception;
 
-        BusinessException exception =
-                (BusinessException) thrown;
-
-        assertThat(exception.getErrorCode())
-                .isEqualTo(
-                        AccountErrorCode.ACCOUNT_CONCURRENT_MODIFICATION
-                );
-
-        assertThat(exception.getMessage())
-                .isEqualTo(
-                        AccountErrorCode.ACCOUNT_CONCURRENT_MODIFICATION
-                                .getMessage()
-                );
+                    assertThat(businessException.getErrorCode())
+                            .isEqualTo(
+                                    CommonErrorCode.CONCURRENT_MODIFICATION
+                            );
+                });
 
         Long currentVersion = jdbcTemplate.queryForObject(
                 """

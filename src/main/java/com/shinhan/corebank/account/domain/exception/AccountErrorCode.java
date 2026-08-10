@@ -10,7 +10,6 @@ public enum AccountErrorCode implements ErrorCode {
     INVALID_ACCOUNT_STATUS("ACC0301", 409, "거래정지 또는 해지 상태의 계좌입니다."),
     WITHDRAWAL_ACCOUNT_UNREGISTRATION_RESTRICTED("ACC0302", 409, "예약이체 또는 자동이체가 등록된 출금계좌는 삭제할 수 없습니다."),
     ACCOUNT_NUMBER_SEQUENCE_EXHAUSTED("ACC0303", 409, "발급 가능한 계좌번호가 모두 사용되었습니다."),
-    ACCOUNT_CONCURRENT_MODIFICATION("ACC0304", 409, "계좌 정보가 다른 요청에 의해 변경되었습니다. 다시 조회한 후 시도해 주세요."),
     ACCOUNT_NUMBER_SEQUENCE_NOT_FOUND("ACC9001", 500, "계좌번호 발급 처리 중 오류가 발생했습니다.");
 
     private final String code;

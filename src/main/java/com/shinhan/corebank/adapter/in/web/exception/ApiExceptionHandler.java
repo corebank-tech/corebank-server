@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 // 모든 예외를 가로채 {code, message, data} 로 변환. 각 파트는 수정할 필요 없음
 // annotations = RestController.class 로 스코프를 제한하지 않는다: 404/405 처럼 핸들러 매칭 자체가
@@ -78,6 +79,22 @@ public class ApiExceptionHandler {
     public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
         log.warn("[{}] {}", CommonErrorCode.INVALID_ENDPOINT.getCode(), e.getMessage());
         return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_ENDPOINT);
+    }
+
+    //낙관적 락 충돌 등 동시 수정 충돌
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleOptimisticLock(
+            OptimisticLockingFailureException e
+    ) {
+        log.warn(
+                "[{}] {}",
+                CommonErrorCode.CONCURRENT_MODIFICATION.getCode(),
+                e.getMessage()
+        );
+
+        return ErrorResponse.toResponseEntity(
+                CommonErrorCode.CONCURRENT_MODIFICATION
+        );
     }
 
     // 그 외 모든 예외 (NPE, DB 오류 등) -> CMN9999. 스택트레이스는 로그에만 남김

@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -100,5 +101,30 @@ class ApiExceptionHandlerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data").value("hello"));
+    }
+
+    @Test
+    @DisplayName("낙관적 락 충돌 -> CMN0303, 409")
+    void optimisticLockFailure() throws Exception {
+        mockMvc.perform(
+                        get("/test/errors/optimistic-lock")
+                )
+                .andExpect(status().isConflict())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("CMN0303")
+                )
+                .andExpect(
+                        jsonPath("$.message")
+                                .value(
+                                        CommonErrorCode
+                                                .CONCURRENT_MODIFICATION
+                                                .getMessage()
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.data")
+                                .doesNotExist()
+                );
     }
 }
