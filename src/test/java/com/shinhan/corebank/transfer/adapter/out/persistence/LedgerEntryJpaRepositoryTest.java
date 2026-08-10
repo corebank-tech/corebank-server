@@ -23,6 +23,9 @@ class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
     private LedgerEntryJpaRepository ledgerEntryJpaRepository;
 
     @Autowired
+    private LedgerEntryIdGenerator ledgerEntryIdGenerator;
+
+    @Autowired
     private EntityManager entityManager;
 
     @Test
@@ -31,7 +34,7 @@ class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
         // given
         LocalDateTime occurredAt = LocalDateTime.of(2026, 8, 9, 12, 0, 0);
         LedgerEntryJpaEntity entity = LedgerEntryJpaEntity.builder()
-                .ledgerEntryId(1L)
+                .ledgerEntryId(ledgerEntryIdGenerator.nextId())
                 .accountId(101L)
                 .transactionNumber("20260809WB0000000001")
                 .direction(LedgerDirection.WITHDRAWAL)
@@ -63,11 +66,9 @@ class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("LedgerPair -> Mapper -> save 흐름에서 출금/입금 원장에 서로 다른 ID를 채워 저장하면 findByLedgerEntryId로 각각 조회된다")
-    void ledgerPairPersistsWithDistinctManuallyAssignedIds() {
+    @DisplayName("LedgerPair -> Mapper -> save 흐름에서 LedgerEntryIdGenerator로 채번한 ID를 채워 저장하면 findByLedgerEntryId로 각각 조회된다")
+    void ledgerPairPersistsWithDistinctGeneratedIds() {
         // given
-        // NOTE: ledgerEntryId 채번 전략이 아직 정해지지 않아, 저장 전 애플리케이션이 직접 ID를 채워야 한다.
-        // (LedgerEntryJpaEntity의 관련 주석 참고)
         LedgerPair pair = LedgerPair.forTransfer(
                 500L,
                 "20260809WB0000000001",
@@ -80,8 +81,10 @@ class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
                 LocalDateTime.of(2026, 8, 9, 12, 0, 0)
         );
 
-        LedgerEntryJpaEntity withdrawalEntity = LedgerEntryMapper.toEntity(pair.getWithdrawalEntry()).toBuilder().ledgerEntryId(10L).build();
-        LedgerEntryJpaEntity depositEntity = LedgerEntryMapper.toEntity(pair.getDepositEntry()).toBuilder().ledgerEntryId(11L).build();
+        LedgerEntryJpaEntity withdrawalEntity = LedgerEntryMapper.toEntity(pair.getWithdrawalEntry())
+                .toBuilder().ledgerEntryId(ledgerEntryIdGenerator.nextId()).build();
+        LedgerEntryJpaEntity depositEntity = LedgerEntryMapper.toEntity(pair.getDepositEntry())
+                .toBuilder().ledgerEntryId(ledgerEntryIdGenerator.nextId()).build();
 
         // when
         LedgerEntryJpaEntity savedWithdrawal = ledgerEntryJpaRepository.save(withdrawalEntity);
@@ -90,10 +93,11 @@ class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
         entityManager.clear();
 
         // then
-        assertThat(savedWithdrawal.getLedgerEntryId()).isEqualTo(10L);
-        assertThat(savedDeposit.getLedgerEntryId()).isEqualTo(11L);
+        assertThat(savedWithdrawal.getLedgerEntryId()).isNotNull();
+        assertThat(savedDeposit.getLedgerEntryId()).isNotNull();
+        assertThat(savedWithdrawal.getLedgerEntryId()).isNotEqualTo(savedDeposit.getLedgerEntryId());
 
-        LedgerEntryJpaEntity foundWithdrawal = ledgerEntryJpaRepository.findByLedgerEntryId(10L).orElseThrow();
+        LedgerEntryJpaEntity foundWithdrawal = ledgerEntryJpaRepository.findByLedgerEntryId(savedWithdrawal.getLedgerEntryId()).orElseThrow();
         assertThat(foundWithdrawal.getDirection()).isEqualTo(LedgerDirection.WITHDRAWAL);
         assertThat(foundWithdrawal.getTransferId()).isEqualTo(500L);
     }
@@ -106,7 +110,7 @@ class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
         LocalDateTime expectedMicroTime = nanoTime.truncatedTo(ChronoUnit.MICROS);
 
         LedgerEntryJpaEntity entity = LedgerEntryJpaEntity.builder()
-                .ledgerEntryId(2L)
+                .ledgerEntryId(ledgerEntryIdGenerator.nextId())
                 .accountId(101L)
                 .transactionNumber("20260809WB0000000002")
                 .direction(LedgerDirection.WITHDRAWAL)
