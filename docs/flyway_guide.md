@@ -114,6 +114,36 @@ public class LedgerEntry {
 
 단일 `@Id`로 매핑하면 `validate`가 통과해도 `save()`가 이상하게 동작합니다.
 
+`ledger_entry_id` 컬럼 자체는 DB에서 `AUTO_INCREMENT`이지만, **Hibernate는 `@IdClass` 복합키 구성 필드에 IDENTITY 채번 전략을 지원하지 않습니다.**
+
+```java
+@Id
+@GeneratedValue(strategy = GenerationType.IDENTITY)  // ❌ 여기서 ApplicationContext 로딩 자체가 실패한다
+private Long ledgerEntryId;
+```
+
+```text
+Caused by: org.hibernate.id.IdentifierGenerationException: Identity generation isn't supported for composite ids
+```
+
+`validate`도 아니고 `save()` 시점도 아니라 **EntityManagerFactory를 만드는 애플리케이션 부팅 시점에 바로 실패**하므로 늦게 발견되진 않지만, DB가 AUTO_INCREMENT라고 해서 그대로 `@GeneratedValue`를 붙이면 안 됩니다.
+
+**채번 전략(확정)**: 전용 카운터 테이블 `ledger_entry_id_sequence`(컬럼은 `sequence_id BIGINT AUTO_INCREMENT` 하나뿐)를 두고, 이 테이블에 빈 행을 저장해 생성된 `AUTO_INCREMENT` 값만 취해 `ledgerEntryId`로 쓴다. `sequence_id` 자체는 단일 `@Id`라 IDENTITY 채번이 정상 동작하며(Hibernate 제약은 오직 `@IdClass` 복합키 구성 필드에만 적용됨), 결과적으로 `ledger_entry_id_sequence`의 `AUTO_INCREMENT`가 곧 `ledgerEntryId`의 전역 채번기 역할을 한다(Hibernate `TABLE` 채번과 동일한 발상). 구현은 `LedgerEntryIdSequenceJpaEntity`/`LedgerEntryIdGenerator` 참고.
+
+```java
+@Component
+@RequiredArgsConstructor
+public class LedgerEntryIdGenerator {
+    private final LedgerEntryIdSequenceJpaRepository repository;
+
+    public Long nextId() {
+        return repository.save(new LedgerEntryIdSequenceJpaEntity()).getSequenceId();
+    }
+}
+```
+
+`ledgerEntryId`가 이렇게 전역 유일하게 채번되므로, `reversal_id`(반대기표가 가리키는 원거래)도 `occurred_at` 없이 이 값 하나로 원거래 원장 행을 특정할 수 있다(조회는 복합키 `findById` 대신 `LedgerEntryJpaRepository.findByLedgerEntryId` 사용).
+
 또한 **파티션 테이블에는 FK를 선언할 수 없어** `account_id`·`transfer_id`에 DB 제약이 없습니다. `@ManyToOne` 매핑은 가능하지만 **정합성은 애플리케이션이 집니다.**
 
 ---

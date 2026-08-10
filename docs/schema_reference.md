@@ -491,6 +491,18 @@
 
 ---
 
+## `ledger_entry_id_sequence`
+
+> `ledger_entry.ledger_entry_id` 전용 채번 카운터
+
+`ledger_entry`는 파티션 키(`occurred_at`)를 포함한 복합 PK `(ledger_entry_id, occurred_at)`를 쓰는데, Hibernate는 `@IdClass` 복합키 구성 필드에 IDENTITY 채번 전략을 지원하지 않는다(`docs/flyway_guide.md` 4-3절 참고). 그래서 `ledger_entry_id` 컬럼 자체의 `AUTO_INCREMENT`는 애플리케이션이 직접 활용할 수 없고, 이 전용 테이블에 빈 행을 저장해 생성되는 `AUTO_INCREMENT` 값만 취해 `ledger_entry_id`로 사용한다. 다른 컬럼은 두지 않는다.
+
+| 컬럼명 | 데이터 타입 | NULL 허용 | 기본값 | 키 | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `sequence_id` | `BIGINT` | X | `AUTO_INCREMENT` | PK | 생성 즉시 `ledger_entry.ledger_entry_id`로 그대로 쓰인다 |
+
+---
+
 ## `favorite_account`
 
 > 자주 쓰는 계좌 (최대 20건은 앱 검증)
