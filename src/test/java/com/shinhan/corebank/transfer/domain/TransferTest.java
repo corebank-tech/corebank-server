@@ -104,6 +104,33 @@ class TransferTest {
                     .isEqualTo(TransferErrorCode.INVALID_AMOUNT);
         }
 
+        @ParameterizedTest
+        @ValueSource(longs = {-1L, -10000L})
+        @DisplayName("수수료(fee)가 음수이면 BusinessException(INVALID_INPUT) 예외가 발생한다")
+        void throwsExceptionWhenFeeIsNegative(long invalidFee) {
+            // given
+            LocalDateTime now = LocalDateTime.now();
+
+            // when & then
+            assertThatThrownBy(() -> Transfer.create(
+                    "20260809WB0000000001",
+                    101L,
+                    202L,
+                    "110222222222",
+                    "성춘향",
+                    10000L,
+                    invalidFee,
+                    TransferType.IMMEDIATE,
+                    TransferChannel.WB,
+                    null, null,
+                    "출금메모", "입금메모",
+                    now
+            ))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.INVALID_INPUT);
+        }
+
         @Test
         @DisplayName("출금 계좌 ID가 null이면 BusinessException(REQUIRED_FIELD_MISSING) 예외가 발생한다")
         void throwsExceptionWhenWithdrawalAccountIdIsNull() {

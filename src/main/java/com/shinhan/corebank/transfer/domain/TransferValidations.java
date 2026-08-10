@@ -33,6 +33,12 @@ final class TransferValidations {
         }
     }
 
+    static void requireNonNegativeFee(long fee) {
+        if (fee < 0) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        }
+    }
+
     static void requireDifferentAccounts(Long withdrawalAccountId, Long depositAccountId) {
         if (withdrawalAccountId.equals(depositAccountId)) {
             throw new BusinessException(TransferErrorCode.SAME_ACCOUNT_TRANSFER);

@@ -63,6 +63,7 @@ public class Transfer {
         TransferValidations.requireNonNull(channel, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requireNonNull(now, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requirePositiveAmount(amount);
+        TransferValidations.requireNonNegativeFee(fee);
         TransferValidations.requireDifferentAccounts(withdrawalAccountId, depositAccountId);
 
         return Transfer.builder()
