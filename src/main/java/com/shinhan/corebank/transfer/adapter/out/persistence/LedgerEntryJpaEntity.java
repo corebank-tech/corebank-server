@@ -23,7 +23,8 @@ public class LedgerEntryJpaEntity {
      * generation isn't supported for composite ids} — 통합 테스트로 실측 확인).
      * 따라서 저장 전 {@link LedgerEntryIdGenerator#nextId()}로 값을 채워야 한다.
      * 이 값은 전용 채번 테이블(ledger_entry_id_sequence)의 AUTO_INCREMENT로 생성되므로
-     * 테이블 전체에서 전역 유일하다.
+     * 항상 이 방법으로만 채번한다면 테이블 전체에서 전역 유일하다. 다만 파티션 테이블 제약상
+     * DB가 이를 강제하지는 않는다({@link LedgerEntryJpaRepository#findByLedgerEntryId} 참고).
      */
     @Id
     @Column(name = "ledger_entry_id")

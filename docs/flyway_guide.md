@@ -122,7 +122,7 @@ public class LedgerEntry {
 private Long ledgerEntryId;
 ```
 
-```
+```text
 Caused by: org.hibernate.id.IdentifierGenerationException: Identity generation isn't supported for composite ids
 ```
 
