@@ -1,0 +1,28 @@
+# .pr_agent.toml
+[config]
+model = "anthropic/claude-haiku-4-5"
+fallback_models = ["anthropic/claude-3-5-haiku"]
+
+[github_app]
+handle_push_trigger = true
+push_commands = ["/describe"]
+
+[pr_reviewer]
+extra_instructions = """
+Please write all review comments and responses in Korean (모든 리뷰 코멘트와 답변은 한국어로 작성).
+Prioritize correctness, security, transaction/amount handling, and data migrations.
+Do not comment on style issues covered by existing linters.
+"""
+
+[pr_code_suggestions]
+num_code_suggestions = 3
+suggestions_score_threshold = 7
+
+[ignore]
+glob = [
+  "**/src/main/generated/**",
+  "**/Q*.java"
+]
+
+[config.ignore_pr_source_branches]
+patterns = ["dependabot/*", "renovate/*"]
