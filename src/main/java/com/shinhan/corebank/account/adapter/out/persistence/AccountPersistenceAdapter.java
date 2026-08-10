@@ -2,8 +2,13 @@ package com.shinhan.corebank.account.adapter.out.persistence;
 
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
+import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
+import com.shinhan.corebank.common.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Component;
+
+import java.util.Objects;
 
 @Component
 @RequiredArgsConstructor
@@ -14,8 +19,8 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
     @Override
     public Account save(Account account) {
         if (account.getAccountId() == null) {
-                return saveNewAccount(account);
-            }
+            return saveNewAccount(account);
+        }
 
         return updateExistingAccount(account);
     }
@@ -39,11 +44,27 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
                         )
                 );
 
+        validateVersion(account, entity);
+
         entity.updateFrom(account);
 
         AccountJpaEntity savedEntity =
                 accountJpaRepository.save(entity);
 
         return AccountMapper.toDomain(savedEntity);
+    }
+
+    private void validateVersion(
+            Account account,
+            AccountJpaEntity entity
+    ) {
+        if (!Objects.equals(
+                account.getVersion(),
+                entity.getVersion()
+        )) {
+            throw new BusinessException(
+                    AccountErrorCode.ACCOUNT_CONCURRENT_MODIFICATION
+            );
+        }
     }
 }

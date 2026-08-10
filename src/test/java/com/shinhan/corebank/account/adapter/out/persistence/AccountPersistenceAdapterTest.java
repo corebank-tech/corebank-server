@@ -5,7 +5,10 @@ import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
+import com.shinhan.corebank.common.exception.BusinessException;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 @Transactional
 class AccountPersistenceAdapterTest extends IntegrationTestSupport {
@@ -33,6 +37,9 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private EntityManager entityManager;
 
     private Long customerId;
 
@@ -128,21 +135,21 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
         // then
         AccountRow row = jdbcTemplate.queryForObject(
                 """
-                SELECT
-                    account_id,
-                    account_number,
-                    customer_id,
-                    product_id,
-                    account_type,
-                    balance,
-                    status,
-                    password_hash,
-                    password_failure_count,
-                    password_locked,
-                    withdrawal_registered
-                FROM account
-                WHERE account_id = ?
-                """,
+                        SELECT
+                            account_id,
+                            account_number,
+                            customer_id,
+                            product_id,
+                            account_type,
+                            balance,
+                            status,
+                            password_hash,
+                            password_failure_count,
+                            password_locked,
+                            withdrawal_registered
+                        FROM account
+                        WHERE account_id = ?
+                        """,
                 (rs, rowNum) -> new AccountRow(
                         rs.getLong("account_id"),
                         rs.getString("account_number"),
@@ -202,7 +209,7 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
             boolean withdrawalRegistered
     ) {
     }
-    
+
     @Test
     @DisplayName("기존 계좌를 다시 저장해도 감사 시각이 유지된다")
     void preserveAuditTimestampsWhenSavingExistingAccount() {
@@ -224,11 +231,9 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
                 accountPersistencePort.save(account);
 
         LocalDateTime createdAt = savedAccount.getCreatedAt();
-        LocalDateTime updatedAt = savedAccount.getUpdatedAt();
 
-        assertThat(savedAccount.getAccountId()).isNotNull();
         assertThat(createdAt).isNotNull();
-        assertThat(updatedAt).isNotNull();
+        assertThat(savedAccount.getUpdatedAt()).isNotNull();
 
         // when
         Account resavedAccount =
@@ -242,6 +247,78 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
                 .isEqualTo(createdAt);
 
         assertThat(resavedAccount.getUpdatedAt())
-                .isEqualTo(updatedAt);
+                .isNotNull();
+    }
+
+    @Test
+    @DisplayName("기존 계좌의 version이 DB version과 다르면 동시 수정 예외가 발생한다")
+    void throwExceptionWhenAccountVersionIsStale() {
+        // given
+        LocalDateTime openedDate =
+                LocalDateTime.of(2026, 8, 10, 10, 0);
+
+        Account account = Account.open(
+                ACCOUNT_NUMBER,
+                customerId,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                openedDate,
+                null
+        );
+
+        Account savedAccount =
+                accountPersistencePort.save(account);
+
+        Long originalVersion = savedAccount.getVersion();
+
+        entityManager.flush();
+
+        jdbcTemplate.update(
+                """
+                        UPDATE account
+                        SET version = version + 1
+                        WHERE account_id = ?
+                        """,
+                savedAccount.getAccountId()
+        );
+
+        entityManager.clear();
+
+        // when
+        Throwable thrown = catchThrowable(
+                () -> accountPersistencePort.save(savedAccount)
+        );
+
+        // then
+        assertThat(thrown)
+                .isInstanceOf(BusinessException.class);
+
+        BusinessException exception =
+                (BusinessException) thrown;
+
+        assertThat(exception.getErrorCode())
+                .isEqualTo(
+                        AccountErrorCode.ACCOUNT_CONCURRENT_MODIFICATION
+                );
+
+        assertThat(exception.getMessage())
+                .isEqualTo(
+                        AccountErrorCode.ACCOUNT_CONCURRENT_MODIFICATION
+                                .getMessage()
+                );
+
+        Long currentVersion = jdbcTemplate.queryForObject(
+                """
+                        SELECT version
+                        FROM account
+                        WHERE account_id = ?
+                        """,
+                Long.class,
+                savedAccount.getAccountId()
+        );
+
+        assertThat(currentVersion)
+                .isEqualTo(originalVersion + 1);
     }
 }
