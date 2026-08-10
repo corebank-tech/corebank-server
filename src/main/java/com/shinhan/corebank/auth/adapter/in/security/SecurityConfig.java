@@ -1,5 +1,7 @@
 package com.shinhan.corebank.auth.adapter.in.security;
 
+import static org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher.pathPattern;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -20,9 +22,13 @@ public class SecurityConfig {
             SessionAccessDeniedHandler deniedHandler
     ) throws Exception {
         http
-                //로그인 요청만 CSRF검사에서 제외
+                // SPA용 CSRF 쿠키를 사용하고 로그인과 ALB 헬스체크만 검사에서 제외
                 .csrf(csrf -> csrf
-                        .ignoringRequestMatchers("/auth/login")
+                        .spa()
+                        .ignoringRequestMatchers(
+                                pathPattern(HttpMethod.POST, "/auth/login"),
+                                pathPattern(HttpMethod.GET, "/actuator/health")
+                        )
                 )
                 .authorizeHttpRequests(authorize -> authorize
 
