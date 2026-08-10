@@ -29,7 +29,6 @@ class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
         // given
         LocalDateTime occurredAt = LocalDateTime.of(2026, 8, 9, 12, 0, 0);
         LedgerEntryJpaEntity entity = LedgerEntryJpaEntity.builder()
-                .ledgerEntryId(1L)
                 .accountId(101L)
                 .transactionNumber("20260809WB0000000001")
                 .direction(LedgerDirection.WITHDRAWAL)

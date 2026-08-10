@@ -18,6 +18,7 @@ import lombok.*;
 public class LedgerEntryJpaEntity {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "ledger_entry_id")
     private Long ledgerEntryId;
 
@@ -57,6 +58,12 @@ public class LedgerEntryJpaEntity {
     @Column(name = "reversed", nullable = false)
     private boolean reversed;
 
+    /**
+     * 반대기표(REVERSAL)가 가리키는 원거래의 ledger_entry_id.
+     * ledgerEntryId는 AUTO_INCREMENT로 테이블 전체에서 전역 유일하므로
+     * occurredAt 없이 이 값 하나로 원거래 원장 행을 특정할 수 있다.
+     * 조회는 복합키 findById 대신 {@link LedgerEntryJpaRepository#findByLedgerEntryId}를 사용한다.
+     */
     @Column(name = "reversal_id")
     private Long reversalId;
 }
