@@ -28,4 +28,10 @@ public class TransactionSequenceJpaEntity {
 
     @Column(name = "updated_at", nullable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime updatedAt;
+
+    public long incrementAndGet() {
+        this.lastSeq += 1;
+        this.updatedAt = LocalDateTime.now();
+        return this.lastSeq;
+    }
 }

@@ -1,0 +1,108 @@
+package com.shinhan.corebank.transfer.adapter.out.persistence;
+
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.transfer.domain.TransferChannel;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+@DisplayName("거래번호 채번기(SequenceGenerator) 통합 테스트")
+class SequenceGeneratorTest extends IntegrationTestSupport {
+
+    private static final LocalDate SEQ_DATE = LocalDate.of(2026, 8, 11);
+    private static final TransferChannel CHANNEL = TransferChannel.WB;
+
+    @Autowired
+    private SequenceGenerator sequenceGenerator;
+
+    @Autowired
+    private TransactionSequenceJpaRepository repository;
+
+    @AfterEach
+    void tearDown() {
+        repository.deleteById(new TransactionSequenceId(SEQ_DATE, CHANNEL.name()));
+    }
+
+    @Test
+    @DisplayName("당일 최초 채번 시 1부터 시작하는 20자리 거래번호를 반환한다")
+    void firstCallOfTheDayStartsFromOne() {
+        // when
+        String transactionNumber = sequenceGenerator.nextTransactionNumber(SEQ_DATE, CHANNEL);
+
+        // then
+        String expectedDatePart = SEQ_DATE.format(DateTimeFormatter.BASIC_ISO_DATE);
+        assertThat(transactionNumber).hasSize(20);
+        assertThat(transactionNumber).isEqualTo(expectedDatePart + "WB" + "0000000001");
+    }
+
+    @Test
+    @DisplayName("연속 호출 시 일련번호가 1씩 증가한다")
+    void sequentialCallsIncrementByOne() {
+        // when
+        String first = sequenceGenerator.nextTransactionNumber(SEQ_DATE, CHANNEL);
+        String second = sequenceGenerator.nextTransactionNumber(SEQ_DATE, CHANNEL);
+
+        // then
+        assertThat(first).endsWith("0000000001");
+        assertThat(second).endsWith("0000000002");
+    }
+
+    @Test
+    @DisplayName("당일 최초 채번 순간을 포함해 동시에 50건을 요청해도 중복 없는 연속 순번이 보장된다")
+    void issuesUniqueSequenceNumbersUnderConcurrency() throws Exception {
+        int requestCount = 50;
+        int threadCount = 10;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch startLatch = new CountDownLatch(1);
+
+        try {
+            // given
+            List<Future<String>> futures = new ArrayList<>();
+            for (int i = 0; i < requestCount; i++) {
+                futures.add(executor.submit(() -> {
+                    startLatch.await();
+                    return sequenceGenerator.nextTransactionNumber(SEQ_DATE, CHANNEL);
+                }));
+            }
+
+            // when
+            startLatch.countDown();
+            List<String> transactionNumbers = new ArrayList<>();
+            for (Future<String> future : futures) {
+                transactionNumbers.add(future.get(60, TimeUnit.SECONDS));
+            }
+
+            // then
+            assertThat(transactionNumbers)
+                    .hasSize(requestCount)
+                    .doesNotHaveDuplicates();
+
+            String datePart = SEQ_DATE.format(DateTimeFormatter.BASIC_ISO_DATE);
+            List<String> expectedNumbers = IntStream.rangeClosed(1, requestCount)
+                    .mapToObj(seq -> datePart + "WB" + String.format("%010d", seq))
+                    .collect(Collectors.toList());
+
+            assertThat(transactionNumbers)
+                    .containsExactlyInAnyOrderElementsOf(expectedNumbers);
+        } finally {
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(30, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+}
