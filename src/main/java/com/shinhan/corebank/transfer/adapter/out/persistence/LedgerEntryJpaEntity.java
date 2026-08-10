@@ -14,11 +14,17 @@ import lombok.*;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
-@Builder
+@Builder(toBuilder = true)
 public class LedgerEntryJpaEntity {
 
+    /**
+     * DB 컬럼은 AUTO_INCREMENT이지만, Hibernate는 {@code @IdClass} 복합키의 구성 필드에
+     * IDENTITY 채번 전략을 지원하지 않는다({@code IdentifierGenerationException: Identity
+     * generation isn't supported for composite ids} — 통합 테스트로 실측 확인).
+     * 따라서 이 필드는 여전히 애플리케이션이 저장 전에 값을 채워야 하며(별도 시퀀스/채번 서비스 필요),
+     * 채번 전략 자체는 이 PR 범위를 벗어나는 별도 설계 결정 사항이다.
+     */
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "ledger_entry_id")
     private Long ledgerEntryId;
 
@@ -60,9 +66,10 @@ public class LedgerEntryJpaEntity {
 
     /**
      * 반대기표(REVERSAL)가 가리키는 원거래의 ledger_entry_id.
-     * ledgerEntryId는 AUTO_INCREMENT로 테이블 전체에서 전역 유일하므로
-     * occurredAt 없이 이 값 하나로 원거래 원장 행을 특정할 수 있다.
-     * 조회는 복합키 findById 대신 {@link LedgerEntryJpaRepository#findByLedgerEntryId}를 사용한다.
+     * DB의 ledger_entry_id는 AUTO_INCREMENT라 전역 유일이 보장되므로, 채번 전략이 확정되면
+     * occurredAt 없이 이 값 하나로 원거래 원장 행을 특정할 수 있다(조회는
+     * {@link LedgerEntryJpaRepository#findByLedgerEntryId} 사용). 다만 위 ledgerEntryId
+     * 채번 전략이 아직 정해지지 않았으므로 이 전제도 함께 확정되어야 한다.
      */
     @Column(name = "reversal_id")
     private Long reversalId;

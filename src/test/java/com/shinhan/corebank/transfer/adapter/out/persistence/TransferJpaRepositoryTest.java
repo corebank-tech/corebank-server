@@ -27,18 +27,7 @@ class TransferJpaRepositoryTest extends IntegrationTestSupport {
 
     @BeforeEach
     void setUp() {
-        entityManager.createNativeQuery("""
-            INSERT INTO customer (customer_id, user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at)
-            VALUES (1, 'user1', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '테스터', '1990-01-01', 'test@test.com', '01012345678', NOW(6), NOW(6), NOW(6))
-            ON DUPLICATE KEY UPDATE customer_id = customer_id
-        """).executeUpdate();
-
-        entityManager.createNativeQuery("""
-            INSERT INTO account (account_id, account_number, customer_id, product_id, account_type, balance, status, password_hash, opened_date, created_at, updated_at)
-            VALUES (101, '110111111111', 1, NULL, 'DEMAND_DEPOSIT', 100000, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '2026-08-01', NOW(6), NOW(6)),
-                   (202, '110222222222', 1, NULL, 'DEMAND_DEPOSIT', 100000, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '2026-08-01', NOW(6), NOW(6))
-            ON DUPLICATE KEY UPDATE account_id = account_id
-        """).executeUpdate();
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
     }
 
     @Test
