@@ -27,7 +27,7 @@ final class ProductSubscriptionMapper {
                 .maturityDate(entity.getMaturityDate())
                 .subscribedAt(entity.getSubscribedAt())
                 .build();
-        }
+    }
 
     static ProductSubscriptionJpaEntity toEntity(ProductSubscription domain) {
         return ProductSubscriptionJpaEntity.builder()
