@@ -27,6 +27,7 @@ class LedgerPairTest {
         @DisplayName("정상적인 이체 정보 입력 시 출금 1행과 입금 1행 원장 쌍이 생성된다")
         void createsWithdrawalAndDepositPairSuccessfully() {
             // given
+            Long transferId = 500L;
             String txNo = "20260809WB0000000001";
             Long withdrawalAccountId = 101L;
             long withdrawalBalanceAfter = 90000L;
@@ -41,6 +42,7 @@ class LedgerPairTest {
 
             // when
             LedgerPair pair = LedgerPair.forTransfer(
+                    transferId,
                     txNo,
                     withdrawalAccountId,
                     withdrawalBalanceAfter,
@@ -59,6 +61,7 @@ class LedgerPairTest {
 
             // 출금행 검증
             LedgerEntry withdrawal = pair.getWithdrawalEntry();
+            assertThat(withdrawal.getTransferId()).isEqualTo(transferId);
             assertThat(withdrawal.getAccountId()).isEqualTo(withdrawalAccountId);
             assertThat(withdrawal.getDirection()).isEqualTo(LedgerDirection.WITHDRAWAL);
             assertThat(withdrawal.getAmount()).isEqualTo(amount);
@@ -70,6 +73,7 @@ class LedgerPairTest {
 
             // 입금행 검증
             LedgerEntry deposit = pair.getDepositEntry();
+            assertThat(deposit.getTransferId()).isEqualTo(transferId);
             assertThat(deposit.getAccountId()).isEqualTo(depositAccountId);
             assertThat(deposit.getDirection()).isEqualTo(LedgerDirection.DEPOSIT);
             assertThat(deposit.getAmount()).isEqualTo(amount);
@@ -88,6 +92,7 @@ class LedgerPairTest {
 
             // when
             LedgerPair pair = LedgerPair.forTransfer(
+                    500L,
                     "20260809WB0000000001",
                     101L, 90000L,
                     202L, 110000L,
@@ -113,6 +118,7 @@ class LedgerPairTest {
 
             // when & then
             assertThatThrownBy(() -> LedgerPair.forTransfer(
+                    500L,
                     "20260809WB0000000001",
                     101L, 90000L,
                     202L, 110000L,
@@ -134,6 +140,7 @@ class LedgerPairTest {
 
             // when & then
             assertThatThrownBy(() -> LedgerPair.forTransfer(
+                    500L,
                     "20260809WB0000000001",
                     101L, 90000L,
                     101L, 110000L,
@@ -155,6 +162,7 @@ class LedgerPairTest {
 
             // when & then
             assertThatThrownBy(() -> LedgerPair.forTransfer(
+                    500L,
                     "20260809WB0000000001",
                     null, 90000L,
                     202L, 110000L,
@@ -173,6 +181,7 @@ class LedgerPairTest {
         void throwsExceptionWhenOccurredAtIsNull() {
             // given & when & then
             assertThatThrownBy(() -> LedgerPair.forTransfer(
+                    500L,
                     "20260809WB0000000001",
                     101L, 90000L,
                     202L, 110000L,

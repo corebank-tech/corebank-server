@@ -22,6 +22,7 @@ public class LedgerPair {
      * 이체용 2행 복식기표 원장 쌍 생성 정적 팩토리 메서드
      */
     public static LedgerPair forTransfer(
+            Long transferId,
             String transactionNumber,
             Long withdrawalAccountId,
             long withdrawalBalanceAfter,
@@ -48,6 +49,7 @@ public class LedgerPair {
 
         // 출금 1행 (WITHDRAWAL, 양수 금액)
         LedgerEntry withdrawal = LedgerEntry.builder()
+                .transferId(transferId)
                 .accountId(withdrawalAccountId)
                 .transactionNumber(transactionNumber)
                 .direction(LedgerDirection.WITHDRAWAL)
@@ -62,6 +64,7 @@ public class LedgerPair {
 
         // 입금 1행 (DEPOSIT, 양수 금액)
         LedgerEntry deposit = LedgerEntry.builder()
+                .transferId(transferId)
                 .accountId(depositAccountId)
                 .transactionNumber(transactionNumber)
                 .direction(LedgerDirection.DEPOSIT)
