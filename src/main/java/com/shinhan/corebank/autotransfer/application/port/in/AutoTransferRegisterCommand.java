@@ -13,13 +13,13 @@ import java.util.regex.Pattern;
 public record AutoTransferRegisterCommand (Long customerId, Long withdrawalAccountId, String depositAccountNumber,
                                            String payeeName, Long amount, Integer cycleMonths, Integer transferDay,
                                            LocalDate startDate, LocalDate endDate, String myPassbookMemo, String recipientPassbookMemo,
-                                           String authToken){
+                                           String accountPasswordAuthToken, String requestIp){
     private static final Pattern ACCOUNT_NUMBER_PATTERN = Pattern.compile("^[0-9]{12}$");
 
     public AutoTransferRegisterCommand {
         //필수값 검증
         if(customerId == null || withdrawalAccountId == null || depositAccountNumber == null || payeeName == null || amount == null
-                || cycleMonths == null || transferDay == null || startDate == null || endDate == null || authToken == null) {
+                || cycleMonths == null || transferDay == null || startDate == null || endDate == null || accountPasswordAuthToken == null || requestIp == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
         //계좌번호 형식 검증
@@ -29,6 +29,17 @@ public record AutoTransferRegisterCommand (Long customerId, Long withdrawalAccou
         //금액 검증
         if (amount <= 0) {
             throw new BusinessException(AutoTransferErrorCode.INVALID_AMOUNT);
+        }
+        //메모 길이 검증
+        if (myPassbookMemo != null && myPassbookMemo.length() > 10) {
+            throw new BusinessException(AutoTransferErrorCode.MEMO_LENGTH_EXCEEDED);
+        }
+        if (recipientPassbookMemo != null && recipientPassbookMemo.length() > 10) {
+            throw new BusinessException(AutoTransferErrorCode.MEMO_LENGTH_EXCEEDED);
+        }
+        //공백 문자열 검증
+        if (payeeName.isBlank() || accountPasswordAuthToken.isBlank()) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
     }
 }

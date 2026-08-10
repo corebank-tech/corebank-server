@@ -7,7 +7,7 @@ import java.time.LocalDate;
 public record AutoTransferChangeRequest(Long customerId, Long amount, Integer cycleMonths, LocalDate endDate, String myPassbookMemo,
                                         String recipientPassbookMemo,
                                         Long withdrawalAccountId, String depositAccountNumber, Integer transferDay,
-                                        String authToken) {
+                                        String accountPasswordAuthToken) {
     public AutoTransferChangeCommand toCommand(String requestIp) {
         return AutoTransferChangeCommand.builder()
                 .customerId(customerId)
@@ -19,7 +19,7 @@ public record AutoTransferChangeRequest(Long customerId, Long amount, Integer cy
                 .withdrawalAccountId(withdrawalAccountId)
                 .depositAccountNumber(depositAccountNumber)
                 .transferDay(transferDay)
-                .authToken(authToken)
+                .accountPasswordAuthToken(accountPasswordAuthToken)
                 .requestIp(requestIp)
                 .build();
     }

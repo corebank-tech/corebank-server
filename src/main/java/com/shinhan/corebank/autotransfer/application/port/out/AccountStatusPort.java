@@ -8,4 +8,5 @@ import java.util.Optional;
 public interface AccountStatusPort {
     boolean isActiveAccount(Long accountId);
     Optional<AccountType> findAccountTypeByNumber(String accountNumber);
+    boolean belongsToCustomer(Long accountId, Long customerId);
 }

@@ -44,6 +44,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final AtomicLong CUSTOMER_SEQ = new AtomicLong();
+    private static final AtomicLong ACCOUNT_SEQ = new AtomicLong();
 
     private Long customerId;
     private Long accountId;
@@ -81,12 +82,48 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("transferDay", 15);
         body.put("startDate", LocalDate.now().plusDays(10).toString());
         body.put("endDate", LocalDate.now().plusMonths(12).toString());
-        body.put("authToken", "token-negative-amount");
+        body.put("accountPasswordAuthToken", "token-negative-amount");
 
         mockMvc.perform(post("/auto-transfers")
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(OBJECT_MAPPER.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("AUT0008"));
+    }
+
+    @Test
+    @DisplayName("실패한 요청을 같은 Idempotency-Key로 재시도하면 PROCESSING에 갇히지 않고 다시 평가된다")
+    void register_failedRequest_canBeRetriedWithSameKey() throws Exception {
+        String idempotencyKey = UUID.randomUUID().toString();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("customerId", customerId);
+        body.put("withdrawalAccountId", accountId);
+        body.put("depositAccountNumber", "110987654321");
+        body.put("payeeName", "홍길동");
+        body.put("amount", -100);
+        body.put("cycleMonths", 1);
+        body.put("transferDay", 15);
+        body.put("startDate", LocalDate.now().plusDays(10).toString());
+        body.put("endDate", LocalDate.now().plusMonths(12).toString());
+        body.put("accountPasswordAuthToken", "retry-token");
+        String json = OBJECT_MAPPER.writeValueAsString(body);
+
+        mockMvc.perform(post("/auto-transfers")
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("AUT0008"));
+
+        entityManager.flush();
+        entityManager.clear();
+
+        // release()가 없었다면 이 두 번째 요청은 CMN0303(처리 중)을 받았을 것 — 여전히 원래 오류(AUT0008)가 나야 정상
+        mockMvc.perform(post("/auto-transfers")
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("AUT0008"));
     }
@@ -104,7 +141,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("transferDay", 15);
         body.put("startDate", LocalDate.now().plusDays(10).toString());
         body.put("endDate", LocalDate.now().plusMonths(12).toString());
-        body.put("authToken", "token-invalid-cycle");
+        body.put("accountPasswordAuthToken", "token-invalid-cycle");
 
         mockMvc.perform(post("/auto-transfers")
                         .header("Idempotency-Key", UUID.randomUUID().toString())
@@ -112,6 +149,17 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                         .content(OBJECT_MAPPER.writeValueAsString(body)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("AUT0007"));
+    }
+
+    @Test
+    @DisplayName("Idempotency-Key가 UUID 형식이 아니면 500 대신 400 + CMN0001을 반환한다")
+    void register_invalidIdempotencyKeyFormat_returnsCmn0001() throws Exception {
+        mockMvc.perform(post("/auto-transfers")
+                        .header("Idempotency-Key", "not-a-uuid")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerRequestJson(customerId, accountId, "token-bad-key")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
     }
 
     @Test
@@ -153,7 +201,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("같은 Idempotency-Key인데 요청 내용이 다르면 409 + CMN0302를 반환한다")
+    @DisplayName("같은 Idempotency-Key인데 요청 내용(금액)이 다르면 409 + CMN0302를 반환한다")
     void register_sameKeyDifferentBody_returnsCmn0302() throws Exception {
         String idempotencyKey = UUID.randomUUID().toString();
 
@@ -163,12 +211,50 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                         .content(registerRequestJson(customerId, accountId, "token-4")))
                 .andExpect(status().isOk());
 
+        Map<String, Object> differentAmountBody = new LinkedHashMap<>();
+        differentAmountBody.put("customerId", customerId);
+        differentAmountBody.put("withdrawalAccountId", accountId);
+        differentAmountBody.put("depositAccountNumber", "110987654321");
+        differentAmountBody.put("payeeName", "홍길동");
+        differentAmountBody.put("amount", 99999);
+        differentAmountBody.put("cycleMonths", 1);
+        differentAmountBody.put("transferDay", 15);
+        differentAmountBody.put("startDate", LocalDate.now().plusDays(10).toString());
+        differentAmountBody.put("endDate", LocalDate.now().plusMonths(12).toString());
+        differentAmountBody.put("myPassbookMemo", "내메모");
+        differentAmountBody.put("recipientPassbookMemo", "받는메모");
+        differentAmountBody.put("accountPasswordAuthToken", "token-4");
+
         mockMvc.perform(post("/auto-transfers")
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(registerRequestJson(customerId, accountId, "different-token")))
+                        .content(OBJECT_MAPPER.writeValueAsString(differentAmountBody)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CMN0302"));
+    }
+
+    @Test
+    @DisplayName("같은 Idempotency-Key로 인증 토큰만 다르게 보내면 충돌이 아니라 재생된다 (OTP 재발급 후 재시도 대응)")
+    void register_sameKeyDifferentAuthTokenOnly_repliesWithoutConflict() throws Exception {
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        mockMvc.perform(post("/auto-transfers")
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerRequestJson(customerId, accountId, "token-original")))
+                .andExpect(status().isOk());
+
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(post("/auto-transfers")
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerRequestJson(customerId, accountId, "token-reissued")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"));
+
+        assertThat(autoTransferJpaRepository.count()).isEqualTo(1);
     }
 
     @Test
@@ -205,6 +291,33 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items.length()").value(1))
                 .andExpect(jsonPath("$.data.items[0].status").value("NORMAL"));
+    }
+
+    @Test
+    @DisplayName("status=ALL이면 필터 없이 전체 조회된다")
+    void search_statusAll_returnsAllStatuses() throws Exception {
+        autoTransferJpaRepository.save(autoTransfer(accountId, "110000000014", AutoTransferStatus.NORMAL, 25));
+        autoTransferJpaRepository.save(autoTransfer(accountId, "110000000015", AutoTransferStatus.TERMINATED, 26));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/auto-transfers")
+                        .param("customerId", String.valueOf(customerId))
+                        .param("withdrawalAccountId", String.valueOf(accountId))
+                        .param("status", "ALL"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(2));
+    }
+
+    @Test
+    @DisplayName("status가 도메인에 없는 값이면 400 + CMN0001을 반환한다")
+    void search_invalidStatus_returnsCmn0001() throws Exception {
+        mockMvc.perform(get("/auto-transfers")
+                        .param("customerId", String.valueOf(customerId))
+                        .param("withdrawalAccountId", String.valueOf(accountId))
+                        .param("status", "NOT_A_STATUS"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
     }
 
     @Test
@@ -259,6 +372,27 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("변경 금액이 1회 이체한도를 초과하면 400 + AUT0006을 반환한다")
+    void change_amountExceedsOneTimeLimit_returnsAut0006() throws Exception {
+        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
+                autoTransfer(accountId, "110000000013", AutoTransferStatus.NORMAL, 24));
+        entityManager.flush();
+        entityManager.clear();
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("customerId", customerId);
+        body.put("amount", 20_000_000);
+        body.put("accountPasswordAuthToken", "change-token-limit");
+
+        mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(OBJECT_MAPPER.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("AUT0006"));
+    }
+
+    @Test
     @DisplayName("존재하지 않는 자동이체를 변경하려 하면 404 + AUT0201을 반환한다")
     void change_notFound_returnsAut0201() throws Exception {
         mockMvc.perform(patch("/auto-transfers/{id}", 999_999L)
@@ -280,7 +414,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("customerId", customerId);
         body.put("amount", 15000);
-        body.put("authToken", "change-token-partial");
+        body.put("accountPasswordAuthToken", "change-token-partial");
 
         mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
@@ -302,7 +436,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("customerId", customerId);
         body.put("withdrawalAccountId", 999999L);
-        body.put("authToken", "change-token-unmodifiable");
+        body.put("accountPasswordAuthToken", "change-token-unmodifiable");
 
         mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
@@ -338,7 +472,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .param("customerId", String.valueOf(customerId))
-                        .param("authToken", "cancel-token-1"))
+                        .header("Account-Password-Auth-Token", "cancel-token-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"));
 
@@ -354,7 +488,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         mockMvc.perform(delete("/auto-transfers/{id}", 999_999L)
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .param("customerId", String.valueOf(customerId))
-                        .param("authToken", "cancel-token-2"))
+                        .header("Account-Password-Auth-Token", "cancel-token-2"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("AUT0201"));
     }
@@ -369,7 +503,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
 
         mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
                         .param("customerId", String.valueOf(customerId))
-                        .param("authToken", "cancel-token-3"))
+                        .header("Account-Password-Auth-Token", "cancel-token-3"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0002"));
     }
@@ -386,7 +520,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
                         .header("Idempotency-Key", idempotencyKey)
                         .param("customerId", String.valueOf(customerId))
-                        .param("authToken", "cancel-token-4"))
+                        .header("Account-Password-Auth-Token", "cancel-token-4"))
                 .andExpect(status().isOk());
 
         entityManager.flush();
@@ -395,7 +529,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
                         .header("Idempotency-Key", idempotencyKey)
                         .param("customerId", String.valueOf(customerId))
-                        .param("authToken", "cancel-token-4"))
+                        .header("Account-Password-Auth-Token", "cancel-token-4"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"));
     }
@@ -408,7 +542,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("endDate", LocalDate.now().plusYears(2).toString());
         body.put("myPassbookMemo", "새메모");
         body.put("recipientPassbookMemo", "새받는메모");
-        body.put("authToken", authToken);
+        body.put("accountPasswordAuthToken", authToken);
         return OBJECT_MAPPER.writeValueAsString(body);
     }
 
@@ -444,7 +578,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("endDate", LocalDate.now().plusMonths(12).toString());
         body.put("myPassbookMemo", "내메모");
         body.put("recipientPassbookMemo", "받는메모");
-        body.put("authToken", authToken);
+        body.put("accountPasswordAuthToken", authToken);
         return OBJECT_MAPPER.writeValueAsString(body);
     }
 
@@ -463,7 +597,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     }
 
     private Long insertAccount(Long customerId) {
-        String accountNumber = String.format("%012d", System.nanoTime() % 1_000_000_000_000L);
+        // System.nanoTime() 기반 생성은 짧은 간격의 연속 호출에서 겹칠 수 있어 카운터로 유일성을 보장한다(uk_account_number)
+        String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
         entityManager.createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, opened_date, created_at, updated_at) "
                                 + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', NOW(), NOW(), NOW())")

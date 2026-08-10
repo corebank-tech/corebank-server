@@ -7,8 +7,8 @@ import java.time.LocalDate;
 public record AutoTransferRegisterRequest (Long customerId, Long withdrawalAccountId, String depositAccountNumber,
                                            String payeeName, Long amount, Integer cycleMonths, Integer transferDay,
                                            LocalDate startDate, LocalDate endDate, String myPassbookMemo, String recipientPassbookMemo,
-                                           String authToken  ){
-    public AutoTransferRegisterCommand toCommand() {
+                                           String accountPasswordAuthToken  ){
+    public AutoTransferRegisterCommand toCommand(String requestIp) {
         return AutoTransferRegisterCommand.builder()
                 .customerId(customerId)
                 .withdrawalAccountId(withdrawalAccountId)
@@ -21,7 +21,8 @@ public record AutoTransferRegisterRequest (Long customerId, Long withdrawalAccou
                 .endDate(endDate)
                 .myPassbookMemo(myPassbookMemo)
                 .recipientPassbookMemo(recipientPassbookMemo)
-                .authToken(authToken)
+                .accountPasswordAuthToken(accountPasswordAuthToken)
+                .requestIp(requestIp)
                 .build();
     }
 }

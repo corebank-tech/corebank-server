@@ -13,7 +13,7 @@ class AutoTransferCancelCommandTest {
     private AutoTransferCancelCommand.AutoTransferCancelCommandBuilder validBuilder() {
         return AutoTransferCancelCommand.builder()
                 .customerId(1L)
-                .authToken("token")
+                .accountPasswordAuthToken("token")
                 .requestIp("127.0.0.1");
     }
 
@@ -37,7 +37,7 @@ class AutoTransferCancelCommandTest {
     @Test
     @DisplayName("authToken이 없으면 CMN0002를 던진다")
     void missingAuthToken_throwsRequiredFieldMissing() {
-        assertThatThrownBy(() -> validBuilder().authToken(null).build())
+        assertThatThrownBy(() -> validBuilder().accountPasswordAuthToken(null).build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -47,6 +47,15 @@ class AutoTransferCancelCommandTest {
     @DisplayName("requestIp가 없으면 CMN0002를 던진다")
     void missingRequestIp_throwsRequiredFieldMissing() {
         assertThatThrownBy(() -> validBuilder().requestIp(null).build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+    }
+
+    @Test
+    @DisplayName("authToken이 공백 문자열이면 CMN0002를 던진다")
+    void blankAuthToken_throwsRequiredFieldMissing() {
+        assertThatThrownBy(() -> validBuilder().accountPasswordAuthToken("   ").build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));

@@ -207,6 +207,18 @@ class AutoTransferTest {
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(AutoTransferErrorCode.INVALID_CYCLE_MONTHS));
         }
+
+        @Test
+        @DisplayName("금액이 0 이하면 AUT0008 (Command 우회 방어)")
+        void invalidAmount() {
+            assertThatThrownBy(() -> AutoTransfer.register(
+                    1L, 1L, "110987654321", "홍길동",
+                    0L, 1, TRANSFER_DAY,
+                    START, END, null, null, NOW))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(AutoTransferErrorCode.INVALID_AMOUNT));
+        }
     }
 
     @Nested
@@ -356,6 +368,17 @@ class AutoTransferTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(AutoTransferErrorCode.INVALID_TRANSFER_PERIOD));
+        }
+
+        @Test
+        @DisplayName("금액이 0 이하면 AUT0008 (Command 우회 방어)")
+        void invalidAmount() {
+            AutoTransfer e = register();
+
+            assertThatThrownBy(() -> e.change(0L, null, null, null, null))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(AutoTransferErrorCode.INVALID_AMOUNT));
         }
 
         @Test

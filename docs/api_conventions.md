@@ -378,6 +378,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `AUT0006` | 400 | 1회 이체한도를 초과했습니다.                                    | ⚠️ 임시 코드. REQ-AUTO-006 등록 시점 한도 검증용. 의미상 `LMT0002`와 중복 — P1이 `LmtErrorCode` 구현하면 `LMT0002`로 교체 예정 |
 | `AUT0007` | 400 | 이체주기는 1개월, 3개월, 6개월 중 하나여야 합니다.                     | REQ-AUTO-001, POL-033 |
 | `AUT0008` | 400 | 이체금액은 0보다 커야 합니다.                                   | REQ-CMN-012 |
+| `AUT0009` | 400 | 통장 표시내용은 10자 이내여야 합니다.                              | DB `VARCHAR(10)` 제약과 동일. `transfer`의 `MEMO_LENGTH_EXCEEDED`와 같은 패턴 |
 | `AUT0201` | 404 | 자동이체 등록 건을 찾을 수 없습니다.                              | `autoTransferId` 없음 |
 | `AUT0202` | 404 | 계좌를 확인할 수 없습니다.                                     | REQ-AUTO-006. 출금계좌 정지/해지·입금계좌 미존재를 구분하지 않고 동일 응답(§8-3, 계좌번호 스캐닝 방지) |
 | `AUT0301` | 409 | 동일 조건의 자동이체가 이미 등록되어 있습니다.                         | REQ-AUTO-007 |

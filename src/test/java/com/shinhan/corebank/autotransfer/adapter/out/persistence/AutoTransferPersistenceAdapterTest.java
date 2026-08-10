@@ -30,6 +30,7 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
     EntityManager entityManager;
 
     private static final AtomicLong CUSTOMER_SEQ = new AtomicLong();
+    private static final AtomicLong ACCOUNT_SEQ = new AtomicLong();
 
     private Long customerId;
     private Long accountA;
@@ -127,6 +128,27 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("registeredAt이 동률이면 autoTransferId 내림차순으로 정렬돼 페이지가 뒤섞이지 않는다")
+    void search_tiedRegisteredAt_ordersByAutoTransferIdDescForDeterministicPaging() {
+        // autoTransfer() 픽스처는 registeredAt이 전부 고정값이라 동률 상황을 자연히 재현한다
+        AutoTransferJpaEntity e1 = repository.save(autoTransfer(accountA, "110000000020", AutoTransferStatus.NORMAL, 10));
+        AutoTransferJpaEntity e2 = repository.save(autoTransfer(accountA, "110000000021", AutoTransferStatus.NORMAL, 11));
+        AutoTransferJpaEntity e3 = repository.save(autoTransfer(accountA, "110000000022", AutoTransferStatus.NORMAL, 12));
+        entityManager.flush();
+        entityManager.clear();
+
+        Page<AutoTransfer> page0 = adapter.search(customerId, accountA, null, PageRequest.of(0, 2));
+        Page<AutoTransfer> page1 = adapter.search(customerId, accountA, null, PageRequest.of(1, 2));
+
+        assertThat(page0.getContent())
+                .extracting(AutoTransfer::getAutoTransferId)
+                .containsExactly(e3.getAutoTransferId(), e2.getAutoTransferId());
+        assertThat(page1.getContent())
+                .extracting(AutoTransfer::getAutoTransferId)
+                .containsExactly(e1.getAutoTransferId());
+    }
+
+    @Test
     @DisplayName("status를 지정하면 해당 상태만 조회된다")
     void search_filterByStatus() {
         repository.save(autoTransfer(accountA, "110000000007", AutoTransferStatus.NORMAL, 10));
@@ -195,7 +217,8 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
 
     private Long insertAccount(Long customerId) {
         // account.created_at/updated_at도 V202608031651 마이그레이션에서 DEFAULT가 제거됐다.
-        String accountNumber = String.format("%012d", System.nanoTime() % 1_000_000_000_000L);
+        // System.nanoTime() 기반 생성은 짧은 간격의 연속 호출에서 겹칠 수 있어 카운터로 유일성을 보장한다(uk_account_number)
+        String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
         entityManager.createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, opened_date, created_at, updated_at) "
                                 + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', NOW(), NOW(), NOW())")

@@ -5,9 +5,13 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import lombok.Builder;
 
 @Builder
-public record AutoTransferCancelCommand (Long customerId, String authToken, String requestIp) {
+public record AutoTransferCancelCommand (Long customerId, String accountPasswordAuthToken, String requestIp) {
     public AutoTransferCancelCommand {
-        if (customerId == null || authToken == null || requestIp == null) {
+        if (customerId == null || accountPasswordAuthToken == null || requestIp == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+        //공백 문자열 검증
+        if (accountPasswordAuthToken.isBlank()) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
     }

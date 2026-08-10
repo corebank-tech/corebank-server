@@ -3,6 +3,7 @@ package com.shinhan.corebank.common.idempotency;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,23 +11,36 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 public class IdempotencyService {
 
     private final IdempotencyKeyJpaRepository repository;
+    private static final Pattern UUID_V4_PATTERN = Pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", Pattern.CASE_INSENSITIVE);
 
     @Transactional
     // 새 요청인지, 중복인지, 충돌인지, 재생해야하는지 판단
     public IdempotencyResult begin(String key, Long customerId, String endpoint, String requestBody) {
+        if (!UUID_V4_PATTERN.matcher(key).matches()) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "Idempotency-Key는 UUID v4 형식이어야 합니다.");
+        }
         String requestHash = sha256(requestBody);
 
         Optional<IdempotencyKeyJpaEntity> existing = repository.findById(key);
         if (existing.isEmpty()) {
-            repository.save(IdempotencyKeyJpaEntity.start(key, customerId, endpoint, requestHash, LocalDateTime.now()));
-            return IdempotencyResult.proceed();
+            try {
+                // saveAndFlush로 즉시 INSERT를 실행해, 동시에 같은 키로 먼저 들어온 요청이 있으면
+                // PK 제약 위반이 이 자리에서 바로 터지게 한다(findById+save 사이 레이스 방지)
+                repository.saveAndFlush(IdempotencyKeyJpaEntity.start(key, customerId, endpoint, requestHash, LocalDateTime.now()));
+                return IdempotencyResult.proceed();
+            } catch (DataIntegrityViolationException e) {
+                // 동시에 같은 키로 먼저 INSERT를 마친 요청이 있다는 뜻 — 처리 중으로 응답한다
+                throw new BusinessException(CommonErrorCode.DUPLICATE_REQUEST_IN_PROGRESS);
+            }
         }
 
         IdempotencyKeyJpaEntity found = existing.get();
@@ -45,16 +59,19 @@ public class IdempotencyService {
         repository.completeIfProcessing(key, httpStatus, responseSnapshot);
     }
 
+    @Transactional
+    // 유스케이스 실행 중 실패해서 complete()까지 못 간 경우 — PROCESSING에 영구히 갇히지 않도록 예약을 해제한다.
+    // 실패한 시도는 처리된 적이 없는 것으로 취급하므로, 상태 전이 대신 레코드 자체를 지운다.
+    public void release(String key) {
+        repository.deleteById(key);
+    }
+
     // 문자열을 SHA-256 알고리즘으로 돌려서 64자리 16진수 문자열로 바꿔주는 유틸 메서드
     private String sha256(String input) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            for (byte b : hash) {
-                sb.append(String.format("%02x", b));
-            }
-            return sb.toString();
+            return HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 알고리즘을 사용할 수 없습니다.", e);
         }

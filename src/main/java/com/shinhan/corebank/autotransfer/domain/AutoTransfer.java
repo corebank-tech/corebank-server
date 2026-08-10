@@ -43,6 +43,10 @@ public class AutoTransfer {
 
         TransferCycle.fromMonths(cycleMonths);
 
+        if (amount <= 0) {
+            throw new BusinessException(AutoTransferErrorCode.INVALID_AMOUNT);
+        }
+
         if (transferDay < 1 || transferDay > 31) {
             throw new BusinessException(AutoTransferErrorCode.INVALID_TRANSFER_DAY);
         }
@@ -143,6 +147,9 @@ public class AutoTransfer {
         Integer newCycleMonths = cycleMonths != null ? cycleMonths : this.cycleMonths;
         LocalDate newEndDate = endDate != null ? endDate : this.endDate;
 
+        if (newAmount <= 0) {
+            throw new BusinessException(AutoTransferErrorCode.INVALID_AMOUNT);
+        }
         TransferCycle.fromMonths(newCycleMonths);
         if (newEndDate.isBefore(this.startDate)) {
             throw new BusinessException(AutoTransferErrorCode.INVALID_TRANSFER_PERIOD, "이체 종료일은 시작일 이후여야 합니다.");

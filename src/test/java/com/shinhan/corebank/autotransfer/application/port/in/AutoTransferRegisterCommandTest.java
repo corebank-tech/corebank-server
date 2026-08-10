@@ -25,7 +25,8 @@ class AutoTransferRegisterCommandTest {
                 .endDate(LocalDate.now().plusYears(1))
                 .myPassbookMemo("내메모")
                 .recipientPassbookMemo("받는메모")
-                .authToken("token");
+                .accountPasswordAuthToken("token")
+                .requestIp("127.0.0.1");
     }
 
     @Test
@@ -48,7 +49,34 @@ class AutoTransferRegisterCommandTest {
     @Test
     @DisplayName("authToken이 없으면 CMN0002를 던진다")
     void missingAuthToken_throwsRequiredFieldMissing() {
-        assertThatThrownBy(() -> validBuilder().authToken(null).build())
+        assertThatThrownBy(() -> validBuilder().accountPasswordAuthToken(null).build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+    }
+
+    @Test
+    @DisplayName("requestIp가 없으면 CMN0002를 던진다")
+    void missingRequestIp_throwsRequiredFieldMissing() {
+        assertThatThrownBy(() -> validBuilder().requestIp(null).build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+    }
+
+    @Test
+    @DisplayName("payeeName이 공백 문자열이면 CMN0002를 던진다")
+    void blankPayeeName_throwsRequiredFieldMissing() {
+        assertThatThrownBy(() -> validBuilder().payeeName("   ").build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+    }
+
+    @Test
+    @DisplayName("authToken이 공백 문자열이면 CMN0002를 던진다")
+    void blankAuthToken_throwsRequiredFieldMissing() {
+        assertThatThrownBy(() -> validBuilder().accountPasswordAuthToken("   ").build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -88,6 +116,24 @@ class AutoTransferRegisterCommandTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(AutoTransferErrorCode.INVALID_AMOUNT));
+    }
+
+    @Test
+    @DisplayName("myPassbookMemo가 10자를 초과하면 AUT0009를 던진다")
+    void myPassbookMemoTooLong_throwsMemoLengthExceeded() {
+        assertThatThrownBy(() -> validBuilder().myPassbookMemo("12345678901").build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.MEMO_LENGTH_EXCEEDED));
+    }
+
+    @Test
+    @DisplayName("recipientPassbookMemo가 10자를 초과하면 AUT0009를 던진다")
+    void recipientPassbookMemoTooLong_throwsMemoLengthExceeded() {
+        assertThatThrownBy(() -> validBuilder().recipientPassbookMemo("12345678901").build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.MEMO_LENGTH_EXCEEDED));
     }
 
     @Test

@@ -49,7 +49,7 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
         List<AutoTransferJpaEntity> content = queryFactory
                 .selectFrom(autoTransferJpaEntity)
                 .where(conditions)
-                .orderBy(autoTransferJpaEntity.registeredAt.desc())
+                .orderBy(autoTransferJpaEntity.registeredAt.desc(), autoTransferJpaEntity.autoTransferId.desc())
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
                 .fetch();

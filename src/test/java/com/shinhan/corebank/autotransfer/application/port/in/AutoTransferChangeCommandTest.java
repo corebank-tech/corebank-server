@@ -20,7 +20,7 @@ class AutoTransferChangeCommandTest {
                 .endDate(LocalDate.now().plusYears(2))
                 .myPassbookMemo("새메모")
                 .recipientPassbookMemo("새받는메모")
-                .authToken("token")
+                .accountPasswordAuthToken("token")
                 .requestIp("127.0.0.1");
     }
 
@@ -44,7 +44,16 @@ class AutoTransferChangeCommandTest {
     @Test
     @DisplayName("authToken이 없으면 CMN0002를 던진다")
     void missingAuthToken_throwsRequiredFieldMissing() {
-        assertThatThrownBy(() -> validBuilder().authToken(null).build())
+        assertThatThrownBy(() -> validBuilder().accountPasswordAuthToken(null).build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+    }
+
+    @Test
+    @DisplayName("authToken이 공백 문자열이면 CMN0002를 던진다")
+    void blankAuthToken_throwsRequiredFieldMissing() {
+        assertThatThrownBy(() -> validBuilder().accountPasswordAuthToken("   ").build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -57,6 +66,24 @@ class AutoTransferChangeCommandTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+    }
+
+    @Test
+    @DisplayName("myPassbookMemo가 10자를 초과하면 AUT0009를 던진다")
+    void myPassbookMemoTooLong_throwsMemoLengthExceeded() {
+        assertThatThrownBy(() -> validBuilder().myPassbookMemo("12345678901").build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.MEMO_LENGTH_EXCEEDED));
+    }
+
+    @Test
+    @DisplayName("recipientPassbookMemo가 10자를 초과하면 AUT0009를 던진다")
+    void recipientPassbookMemoTooLong_throwsMemoLengthExceeded() {
+        assertThatThrownBy(() -> validBuilder().recipientPassbookMemo("12345678901").build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.MEMO_LENGTH_EXCEEDED));
     }
 
     @Test
@@ -75,7 +102,7 @@ class AutoTransferChangeCommandTest {
     void amountCycleMonthsEndDateCanBeNull() {
         AutoTransferChangeCommand command = AutoTransferChangeCommand.builder()
                 .customerId(1L)
-                .authToken("token")
+                .accountPasswordAuthToken("token")
                 .requestIp("127.0.0.1")
                 .build();
 

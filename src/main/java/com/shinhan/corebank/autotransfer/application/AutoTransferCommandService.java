@@ -33,7 +33,12 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
     public AutoTransfer register(AutoTransferRegisterCommand command) {
 
         // 인증 완료 토큰
-        authTokenVerificationPort.verify(command.authToken(),command.withdrawalAccountId(),"AUTO_TRANSFER_REGISTER");
+        authTokenVerificationPort.verify(command.accountPasswordAuthToken(),command.withdrawalAccountId(),"AUTO_TRANSFER_REGISTER");
+
+        // 출금 계좌 소유자 검증
+        if(!accountStatusPort.belongsToCustomer(command.withdrawalAccountId(), command.customerId())) {
+            throw new BusinessException(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE);
+        }
 
         // 출금계좌 상태 검증
         if (!accountStatusPort.isActiveAccount(command.withdrawalAccountId())) {
@@ -63,13 +68,27 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
                 command.amount(), command.cycleMonths(), command.transferDay(), command.startDate(), command.endDate(),
                 command.myPassbookMemo(), command.recipientPassbookMemo(), LocalDateTime.now());
 
-        return autoTransferPersistencePort.save(autoTransfer);
+        AutoTransfer saved = autoTransferPersistencePort.save(autoTransfer);
+        auditLogService.record(saved.getCustomerId(), null, AuditEventType.AUTO_TRANSFER_INFO_CHANGE,
+                command.requestIp(), true, Map.of("autoTransferId", saved.getAutoTransferId(), "action", "register"));
+
+        return saved;
     }
 
     @Override
     public AutoTransfer change(Long autoTransferId, AutoTransferChangeCommand command) {
         AutoTransfer autoTransfer = autoTransferPersistencePort.findById(autoTransferId).orElseThrow(() ->  new BusinessException(AutoTransferErrorCode.NOT_FOUND));
-        authTokenVerificationPort.verify(command.authToken(),autoTransfer.getWithdrawalAccountId(),"AUTO_TRANSFER_CHANGE");
+        if (!autoTransfer.getCustomerId().equals(command.customerId())) {
+            throw new BusinessException(AutoTransferErrorCode.NOT_FOUND);
+        }
+        authTokenVerificationPort.verify(command.accountPasswordAuthToken(),autoTransfer.getWithdrawalAccountId(),"AUTO_TRANSFER_CHANGE");
+        // 이체한도 재검증
+        if (command.amount() != null) {
+            long oneTimeLimit = transferLimitPort.findOneTimeLimit(autoTransfer.getCustomerId());
+            if(command.amount() > oneTimeLimit) {
+                throw new BusinessException(AutoTransferErrorCode.ONE_TIME_LIMIT_EXCEEDED);
+            }
+        }
         autoTransfer.change(command.amount(), command.cycleMonths(), command.endDate(), command.myPassbookMemo(), command.recipientPassbookMemo());
         AutoTransfer saved = autoTransferPersistencePort.save(autoTransfer);
         auditLogService.record(saved.getCustomerId(),null, AuditEventType.AUTO_TRANSFER_INFO_CHANGE, command.requestIp(), true, Map.of("autoTransferId", saved.getAutoTransferId(),
@@ -82,7 +101,10 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
     public void cancel(Long autoTransferId, AutoTransferCancelCommand command) {
         AutoTransfer autoTransfer = autoTransferPersistencePort.findById(autoTransferId).orElseThrow(()->
                 new BusinessException(AutoTransferErrorCode.NOT_FOUND));
-        authTokenVerificationPort.verify(command.authToken(), autoTransfer.getWithdrawalAccountId(),"AUTO_TRANSFER_CANCEL");
+        if (!autoTransfer.getCustomerId().equals(command.customerId())) {
+            throw new BusinessException(AutoTransferErrorCode.NOT_FOUND);
+        }
+        authTokenVerificationPort.verify(command.accountPasswordAuthToken(), autoTransfer.getWithdrawalAccountId(),"AUTO_TRANSFER_CANCEL");
         autoTransfer.terminate(LocalDateTime.now());
         AutoTransfer saved = autoTransferPersistencePort.save(autoTransfer);
         auditLogService.record(saved.getCustomerId(), null, AuditEventType.AUTO_TRANSFER_INFO_CHANGE,
