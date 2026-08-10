@@ -6,7 +6,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.shinhan.corebank.common.exception.CommonErrorCode;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -116,11 +115,7 @@ class ApiExceptionHandlerTest {
                 )
                 .andExpect(
                         jsonPath("$.message")
-                                .value(
-                                        CommonErrorCode
-                                                .CONCURRENT_MODIFICATION
-                                                .getMessage()
-                                )
+                                .value("다른 요청에 의해 정보가 변경되었습니다. 다시 조회한 후 시도해 주세요.")
                 )
                 .andExpect(
                         jsonPath("$.data")

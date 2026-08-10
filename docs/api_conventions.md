@@ -235,7 +235,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `CMN0303` | 409  | 다른 요청에 의해 정보가 변경되었습니다. 다시 조회한 후 시도해 주세요. | 낙관적 락 충돌 등 동시 수정                               | —                                       |
 | `CMN9999` | 500  | 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.        | 예상하지 못한 서버 오류                                  | `INQ9999`, `TRANSACTION_ROLLBACK_ERROR` |
 
-> `CMN0001`, `CMN0201`, `CMN9999`는 `ApiExceptionHandler`가 자동 반환하므로 직접 던지지 않아도 됩니다.
+> `CMN0001`, `CMN0201`, `CMN0303`,`CMN9999`는 `ApiExceptionHandler`가 자동 반환하므로 직접 던지지 않아도 됩니다.
 
 ### 4-2. `ATH` 인증·회원 — P6
 
