@@ -11,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -190,6 +191,76 @@ class LedgerPairTest {
                     "메모", "메모",
                     TransferChannel.WB,
                     null
+            ))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {"   "})
+        @DisplayName("거래번호가 없으면(null/공백) BusinessException(REQUIRED_FIELD_MISSING) 예외가 발생한다")
+        void throwsExceptionWhenTransactionNumberIsBlank(String invalidTxNo) {
+            // given
+            LocalDateTime now = LocalDateTime.now();
+
+            // when & then
+            assertThatThrownBy(() -> LedgerPair.forTransfer(
+                    500L,
+                    invalidTxNo,
+                    101L, 90000L,
+                    202L, 110000L,
+                    10000L,
+                    "IMMEDIATE_TRANSFER",
+                    "메모", "메모",
+                    TransferChannel.WB, now
+            ))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {"   "})
+        @DisplayName("거래유형(transactionType)이 없으면(null/공백) BusinessException(REQUIRED_FIELD_MISSING) 예외가 발생한다")
+        void throwsExceptionWhenTransactionTypeIsBlank(String invalidTxType) {
+            // given
+            LocalDateTime now = LocalDateTime.now();
+
+            // when & then
+            assertThatThrownBy(() -> LedgerPair.forTransfer(
+                    500L,
+                    "20260809WB0000000001",
+                    101L, 90000L,
+                    202L, 110000L,
+                    10000L,
+                    invalidTxType,
+                    "메모", "메모",
+                    TransferChannel.WB, now
+            ))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        @Test
+        @DisplayName("채널(channel)이 null이면 BusinessException(REQUIRED_FIELD_MISSING) 예외가 발생한다")
+        void throwsExceptionWhenChannelIsNull() {
+            // given
+            LocalDateTime now = LocalDateTime.now();
+
+            // when & then
+            assertThatThrownBy(() -> LedgerPair.forTransfer(
+                    500L,
+                    "20260809WB0000000001",
+                    101L, 90000L,
+                    202L, 110000L,
+                    10000L,
+                    "IMMEDIATE_TRANSFER",
+                    "메모", "메모",
+                    null, now
             ))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")

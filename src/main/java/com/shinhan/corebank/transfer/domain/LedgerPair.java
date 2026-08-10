@@ -3,9 +3,7 @@ package com.shinhan.corebank.transfer.domain;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 
-import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -35,15 +33,13 @@ public class LedgerPair {
             TransferChannel channel,
             LocalDateTime occurredAt
     ) {
-        if (withdrawalAccountId == null || depositAccountId == null || occurredAt == null) {
-            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
-        }
-        if (amount <= 0) {
-            throw new BusinessException(TransferErrorCode.INVALID_AMOUNT);
-        }
-        if (withdrawalAccountId.equals(depositAccountId)) {
-            throw new BusinessException(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
-        }
+        TransferValidations.requireAccountIdsPresent(withdrawalAccountId, depositAccountId);
+        TransferValidations.requireNonNull(occurredAt, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonBlank(transactionNumber, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonBlank(transactionType, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonNull(channel, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requirePositiveAmount(amount);
+        TransferValidations.requireDifferentAccounts(withdrawalAccountId, depositAccountId);
 
         LocalDateTime truncatedOccurredAt = occurredAt.truncatedTo(ChronoUnit.MICROS);
 

@@ -55,15 +55,15 @@ public class Transfer {
             String recipientPassbookMemo,
             LocalDateTime now
     ) {
-        if (withdrawalAccountId == null || depositAccountId == null) {
-            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
-        }
-        if (amount <= 0) {
-            throw new BusinessException(TransferErrorCode.INVALID_AMOUNT);
-        }
-        if (withdrawalAccountId.equals(depositAccountId)) {
-            throw new BusinessException(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
-        }
+        TransferValidations.requireAccountIdsPresent(withdrawalAccountId, depositAccountId);
+        TransferValidations.requireNonBlank(transactionNumber, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonBlank(depositAccountNumber, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonBlank(payeeName, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonNull(transferType, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonNull(channel, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonNull(now, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requirePositiveAmount(amount);
+        TransferValidations.requireDifferentAccounts(withdrawalAccountId, depositAccountId);
 
         return Transfer.builder()
                 .transactionNumber(transactionNumber)
