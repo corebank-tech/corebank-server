@@ -9,14 +9,13 @@ on:
 
 jobs:
   pr_agent_job:
-    if: >
+    if: >-
       ${{ github.event.sender.type != 'Bot' &&
           (github.event_name != 'issue_comment' || github.event.issue.pull_request) }}
     runs-on: ubuntu-latest
     permissions:
       issues: write
       pull-requests: write
-      contents: write
     steps:
       - name: PR Agent
         uses: qodo-ai/pr-agent@064a305c8aac1543edf63b5a6baadcdd942831ac  # main, 확인일자 2026-08-10
