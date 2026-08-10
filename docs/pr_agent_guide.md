@@ -49,13 +49,13 @@ CodeRabbit 무료 한도 문제로 PR-Agent(오픈소스, 개인 API 키 기반)
 4. **`Comment`** 버튼을 눌러 등록합니다. (Approve/Request changes 버튼 말고 그냥 코멘트로 남기는 겁니다.)
 5. 등록 후 몇 초~수십 초 내로 PR-Agent 봇이 별도 코멘트로 리뷰 결과를 답니다. (워크플로우가 `issue_comment` 이벤트로 트리거되도록 설정돼 있어서 자동으로 인식합니다.)
 
-```
+```text
 /review --config.model="anthropic/claude-sonnet-5"
 ```
 
 코드 제안까지 받고 싶으면 같은 방식으로:
 
-```
+```text
 /improve --config.model="anthropic/claude-sonnet-5"
 ```
 
@@ -65,7 +65,7 @@ CodeRabbit 무료 한도 문제로 PR-Agent(오픈소스, 개인 API 키 기반)
 
 - `auto_improve`를 로컬에서 임의로 `true`로 바꿔서 push할 때마다 `/improve`가 자동으로 돌게 하지 마세요. (가장 토큰을 많이 씀 — 팀 전체 예산에 영향)
 - 같은 PR에 Sonnet 리뷰를 반복 호출하지 마세요. 코멘트 반영 후 재확인이 필요하면 변경분만 짚어서 `/ask`로 특정 파일/함수만 질문하는 걸 권장합니다.
-- 대용량 자동 생성 코드(QueryDSL Q클래스, Flyway 마이그레이션 SQL 원본)는 리뷰 대상에서 제외되어 있습니다. 이걸 굳이 리뷰에 포함시키려고 설정을 건드리지 마세요.
+- QueryDSL Q클래스 전용 제외 설정은 현재 없습니다(오탐 위험으로 제거함 — 필요 시 QueryDSL 생성 경로를 `build.gradle`에 지정한 뒤 다시 추가 예정). Flyway 마이그레이션 SQL은 스키마 리뷰를 위해 항상 리뷰 대상에 포함됩니다.
 
 ## 5. 예산 모니터링
 
