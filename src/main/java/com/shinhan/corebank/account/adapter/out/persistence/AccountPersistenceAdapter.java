@@ -13,8 +13,36 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
 
     @Override
     public Account save(Account account) {
-        AccountJpaEntity entity = AccountMapper.toEntity(account);
-        AccountJpaEntity savedEntity = accountJpaRepository.save(entity);
+        if (account.getAccountId() == null) {
+                return saveNewAccount(account);
+            }
+
+        return updateExistingAccount(account);
+    }
+
+    private Account saveNewAccount(Account account) {
+        AccountJpaEntity entity =
+                AccountMapper.toEntity(account);
+
+        AccountJpaEntity savedEntity =
+                accountJpaRepository.save(entity);
+
+        return AccountMapper.toDomain(savedEntity);
+    }
+
+    private Account updateExistingAccount(Account account) {
+        AccountJpaEntity entity = accountJpaRepository
+                .findById(account.getAccountId())
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "저장할 계좌를 찾을 수 없습니다."
+                        )
+                );
+
+        entity.updateFrom(account);
+
+        AccountJpaEntity savedEntity =
+                accountJpaRepository.save(entity);
 
         return AccountMapper.toDomain(savedEntity);
     }

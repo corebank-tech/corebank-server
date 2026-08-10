@@ -1,5 +1,6 @@
 package com.shinhan.corebank.account.adapter.out.persistence;
 
+import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.common.entity.BaseEntity;
@@ -104,4 +105,21 @@ public class AccountJpaEntity extends BaseEntity {
     @Version
     @Column(name = "version", nullable = false)
     private Long version;
+
+    public void updateFrom(Account account) {
+        this.balance = account.getBalance();
+        this.status = account.getStatus();
+        this.passwordHash = account.getPasswordHash();
+        this.passwordFailureCount =
+                (byte) account.getPasswordFailureCount();
+        this.passwordLocked = account.isPasswordLocked();
+        this.alias = account.getAlias();
+        this.displayOrder = account.getDisplayOrder();
+        this.withdrawalRegistered = account.isWithdrawalRegistered();
+        this.withdrawalRegisteredAt =
+                account.getWithdrawalRegisteredAt();
+        this.closedDate = account.getClosedDate();
+        this.lastTransactionAt =
+                account.getLastTransactionAt();
+    }
 }

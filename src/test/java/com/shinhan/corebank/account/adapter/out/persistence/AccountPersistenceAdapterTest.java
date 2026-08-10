@@ -202,4 +202,46 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
             boolean withdrawalRegistered
     ) {
     }
+    
+    @Test
+    @DisplayName("기존 계좌를 다시 저장해도 감사 시각이 유지된다")
+    void preserveAuditTimestampsWhenSavingExistingAccount() {
+        // given
+        LocalDateTime openedDate =
+                LocalDateTime.of(2026, 8, 10, 10, 0);
+
+        Account account = Account.open(
+                ACCOUNT_NUMBER,
+                customerId,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                openedDate,
+                null
+        );
+
+        Account savedAccount =
+                accountPersistencePort.save(account);
+
+        LocalDateTime createdAt = savedAccount.getCreatedAt();
+        LocalDateTime updatedAt = savedAccount.getUpdatedAt();
+
+        assertThat(savedAccount.getAccountId()).isNotNull();
+        assertThat(createdAt).isNotNull();
+        assertThat(updatedAt).isNotNull();
+
+        // when
+        Account resavedAccount =
+                accountPersistencePort.save(savedAccount);
+
+        // then
+        assertThat(resavedAccount.getAccountId())
+                .isEqualTo(savedAccount.getAccountId());
+
+        assertThat(resavedAccount.getCreatedAt())
+                .isEqualTo(createdAt);
+
+        assertThat(resavedAccount.getUpdatedAt())
+                .isEqualTo(updatedAt);
+    }
 }
