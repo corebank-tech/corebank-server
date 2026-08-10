@@ -13,6 +13,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @EqualsAndHashCode
 public class LedgerEntryId implements Serializable {
+    private static final long serialVersionUID = 1L;
+
     private Long ledgerEntryId;
     private LocalDateTime occurredAt;
 }
