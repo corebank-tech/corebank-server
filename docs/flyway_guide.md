@@ -114,6 +114,20 @@ public class LedgerEntry {
 
 단일 `@Id`로 매핑하면 `validate`가 통과해도 `save()`가 이상하게 동작합니다.
 
+`ledger_entry_id` 컬럼 자체는 DB에서 `AUTO_INCREMENT`이지만, **Hibernate는 `@IdClass` 복합키 구성 필드에 IDENTITY 채번 전략을 지원하지 않습니다.**
+
+```java
+@Id
+@GeneratedValue(strategy = GenerationType.IDENTITY)  // ❌ 여기서 ApplicationContext 로딩 자체가 실패한다
+private Long ledgerEntryId;
+```
+
+```
+Caused by: org.hibernate.id.IdentifierGenerationException: Identity generation isn't supported for composite ids
+```
+
+`validate`도 아니고 `save()` 시점도 아니라 **EntityManagerFactory를 만드는 애플리케이션 부팅 시점에 바로 실패**하므로 늦게 발견되진 않지만, DB가 AUTO_INCREMENT라고 해서 그대로 `@GeneratedValue`를 붙이면 안 됩니다. `ledgerEntryId`는 저장 전 애플리케이션이 직접 값을 채워야 하며(별도 시퀀스/채번 서비스), 실제 채번 전략은 팀이 별도로 결정해야 합니다.
+
 또한 **파티션 테이블에는 FK를 선언할 수 없어** `account_id`·`transfer_id`에 DB 제약이 없습니다. `@ManyToOne` 매핑은 가능하지만 **정합성은 애플리케이션이 집니다.**
 
 ---
