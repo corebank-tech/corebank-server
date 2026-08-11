@@ -51,4 +51,17 @@ public class AutoTransferExecution {
         this.failureReason = failureReason;
     }
 
+    public static AutoTransferExecution reconstitute(Long executionId, LocalDate executionDate, Long amount, ProcessResultStatus status,
+                                                     String transactionNumber, String failureReason, LocalDateTime executedAt) {
+        AutoTransferExecution e = new AutoTransferExecution();
+        e.executionId = executionId;
+        e.executionDate = executionDate;
+        e.amount = amount;
+        e.status = status;
+        e.transactionNumber = transactionNumber;
+        e.failureReason = failureReason;
+        e.executedAt = executedAt;
+        return e;
+    }
+
 }
