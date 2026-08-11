@@ -13,6 +13,8 @@ import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -63,7 +65,11 @@ public class SequenceGenerator implements TransferSequencePort {
         for (int attempt = 0; attempt < MAX_FIRST_INSERT_RACE_RETRIES; attempt++) {
             try {
                 return requiresNewTransactionTemplate.execute(status -> doIncrement(seqDate, channel));
-            } catch (DataAccessException raceOnFirstOfDayInsert) {
+            } catch (DataIntegrityViolationException | TransientDataAccessException raceOnFirstOfDayInsert) {
+                // 재시도 대상: (seq_date, channel) PK 유일 제약 위반, 또는 InnoDB가 동시 INSERT를
+                // 데드락/락대기타임아웃으로 해소하는 경우(TransientDataAccessException 하위 타입).
+                // 그 외 DataAccessException(SQL 문법, 권한, 연결 장애 등)은 재시도로 해결되지
+                // 않으므로 즉시 전파한다.
                 lastRaceFailure = raceOnFirstOfDayInsert;
             }
         }
