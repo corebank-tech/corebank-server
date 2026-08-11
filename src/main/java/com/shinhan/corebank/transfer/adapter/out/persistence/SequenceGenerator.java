@@ -6,6 +6,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
@@ -35,6 +36,8 @@ public class SequenceGenerator implements TransferSequencePort {
     private static final long INITIAL_SEQUENCE = 1L;
     private static final long MAX_SEQUENCE = 9_999_999_999L;
     private static final int MAX_FIRST_INSERT_RACE_RETRIES = 5;
+    private static final long BACKOFF_MIN_MILLIS = 10L;
+    private static final long BACKOFF_MAX_MILLIS_PER_ATTEMPT = 30L;
 
     private final TransactionSequenceJpaRepository repository;
     private final TransactionTemplate requiresNewTransactionTemplate;
@@ -71,10 +74,28 @@ public class SequenceGenerator implements TransferSequencePort {
                 // 그 외 DataAccessException(SQL 문법, 권한, 연결 장애 등)은 재시도로 해결되지
                 // 않으므로 즉시 전파한다.
                 lastRaceFailure = raceOnFirstOfDayInsert;
+                boolean hasNextAttempt = attempt < MAX_FIRST_INSERT_RACE_RETRIES - 1;
+                if (hasNextAttempt) {
+                    sleepBeforeRetry(attempt);
+                }
             }
         }
 
         throw lastRaceFailure;
+    }
+
+    /**
+     * 재시도 사이에 짧은 jitter를 둬서, 동시에 실패한 스레드들이 같은 타이밍에
+     * 다시 충돌하는 것을 완화한다. attempt가 커질수록 지연 상한도 함께 늘어난다.
+     */
+    private void sleepBeforeRetry(int attempt) {
+        long delayMillis = ThreadLocalRandom.current()
+                .nextLong(BACKOFF_MIN_MILLIS, BACKOFF_MAX_MILLIS_PER_ATTEMPT * (attempt + 1));
+        try {
+            Thread.sleep(delayMillis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private long doIncrement(LocalDate seqDate, String channel) {
