@@ -13,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -65,7 +66,10 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
         return new PageImpl<>(domainContent, pageable, total == null ? 0 : total);
     }
     // 정상 상태이고 오늘이 다음 실행일인 자동이체 등록 목록
+    // 배치 루프 전체를 트랜잭션으로 감싸면 커넥션 풀을 고갈시킬 수 있다
+    // -> 호출부는 트랜잭션이 없고, 조회 이 한 번만 여기서 짧게 트랜잭션을 걸어 끝낸다.
     @Override
+    @Transactional(readOnly = true)
     public List<AutoTransfer> findDueForExecution (LocalDate date) {
         return queryFactory.selectFrom(autoTransferJpaEntity).where(dueForExecutionConditions(date))
                 .orderBy(autoTransferJpaEntity.registeredAt.asc()).fetch().stream().map(AutoTransferMapper::toDomain)
