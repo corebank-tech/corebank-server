@@ -8,7 +8,7 @@ public record ProductAccountOpeningCommand(
         Long customerId,
         Long productId,
         AccountType accountType,
-        String passwordHash,
+        String newAccountPasswordHash,
         LocalDate maturityDate
 ) {
 }

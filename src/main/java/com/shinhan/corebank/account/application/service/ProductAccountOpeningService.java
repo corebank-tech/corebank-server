@@ -46,7 +46,7 @@ public class ProductAccountOpeningService
                 command.customerId(),
                 command.productId(),
                 command.accountType(),
-                command.passwordHash(),
+                command.newAccountPasswordHash(),
                 openedDate,
                 command.maturityDate()
         );
