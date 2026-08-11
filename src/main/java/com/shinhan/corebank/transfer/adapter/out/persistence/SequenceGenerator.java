@@ -7,8 +7,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 import java.util.Optional;
 
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
+import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
@@ -29,6 +31,7 @@ public class SequenceGenerator implements TransferSequencePort {
 
     private static final int SEQUENCE_DIGITS = 10;
     private static final long INITIAL_SEQUENCE = 1L;
+    private static final long MAX_SEQUENCE = 9_999_999_999L;
     private static final int MAX_FIRST_INSERT_RACE_RETRIES = 5;
 
     private final TransactionSequenceJpaRepository repository;
@@ -73,7 +76,11 @@ public class SequenceGenerator implements TransferSequencePort {
                 repository.findBySeqDateAndChannelForUpdate(seqDate, channel);
 
         if (found.isPresent()) {
-            return found.get().incrementAndGet();
+            TransactionSequenceJpaEntity entity = found.get();
+            if (entity.getLastSeq() >= MAX_SEQUENCE) {
+                throw new BusinessException(TransferErrorCode.TRANSACTION_SEQUENCE_EXHAUSTED);
+            }
+            return entity.incrementAndGet();
         }
 
         repository.saveAndFlush(

@@ -17,7 +17,9 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
+import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -85,8 +87,8 @@ class SequenceGeneratorTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("일련번호가 10자리 상한(9999999999)을 초과하면 IllegalStateException을 던진다")
-    void nextTransactionNumber_throwsIllegalState_whenSequenceExceedsTenDigits() {
+    @DisplayName("일련번호가 10자리 상한(9999999999)을 초과하면 BusinessException(TRF9002)을 던진다")
+    void nextTransactionNumber_throwsBusinessException_whenSequenceExceedsTenDigits() {
         // given: 이미 상한에 도달한 채번 행
         repository.saveAndFlush(
                 TransactionSequenceJpaEntity.builder()
@@ -99,7 +101,9 @@ class SequenceGeneratorTest extends IntegrationTestSupport {
 
         // when & then
         assertThatThrownBy(() -> sequenceGenerator.nextTransactionNumber(SEQ_DATE, CHANNEL))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(TransferErrorCode.TRANSACTION_SEQUENCE_EXHAUSTED);
     }
 
     @Test
