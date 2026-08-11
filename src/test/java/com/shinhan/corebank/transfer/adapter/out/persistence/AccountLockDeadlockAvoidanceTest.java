@@ -35,22 +35,26 @@ class AccountLockDeadlockAvoidanceTest extends IntegrationTestSupport {
         seedAccounts();
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
-        CountDownLatch startLatch = new CountDownLatch(1);
+        try {
+            CountDownLatch startLatch = new CountDownLatch(1);
 
-        Future<?> aToB = executor.submit(() -> {
-            await(startLatch);
-            simulator.execute(301L, 302L, 10_000L);
-        });
-        Future<?> bToA = executor.submit(() -> {
-            await(startLatch);
-            simulator.execute(302L, 301L, 5_000L);
-        });
+            Future<?> aToB = executor.submit(() -> {
+                await(startLatch);
+                simulator.execute(301L, 302L, 10_000L);
+            });
+            Future<?> bToA = executor.submit(() -> {
+                await(startLatch);
+                simulator.execute(302L, 301L, 5_000L);
+            });
 
-        // when
-        startLatch.countDown();
-        aToB.get(10, TimeUnit.SECONDS);
-        bToA.get(10, TimeUnit.SECONDS);
-        executor.shutdown();
+            // when
+            startLatch.countDown();
+            aToB.get(10, TimeUnit.SECONDS);
+            bToA.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+        }
 
         // then
         assertThat(balanceOf(301L)).isEqualTo(95_000L);
