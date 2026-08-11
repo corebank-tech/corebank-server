@@ -35,7 +35,8 @@ public class AccountLockJpaEntity {
     @Column(name = "balance", nullable = false)
     private long balance;
 
-    @Column(name = "status", nullable = false, length = 12)
+    /** 상태는 조회 전용이다. 이 어댑터는 status를 변경하지 않으므로 UPDATE SET절에서 제외한다. */
+    @Column(name = "status", nullable = false, length = 12, insertable = false, updatable = false)
     private String status;
 
     /**
