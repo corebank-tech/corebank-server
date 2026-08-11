@@ -329,6 +329,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `TRF0202` | 404 | 거래내역을 찾을 수 없습니다. | 이체 상세 조회 |
 | `TRF0301` | 409 | 거래정지 또는 해지 상태의 입금계좌입니다. | 입금계좌 상태 위반 |
 | `TRF0302` | 409 | 이미 처리 완료(SUCCESS/ERROR)된 이체는 상태를 변경할 수 없습니다. | `Transfer.complete`/`fail`의 상태 전이 가드 |
+| `TRF9001` | 500 | 이체 처리 중 계좌 정보를 확인할 수 없습니다. | 계좌 비관적 락 대상 조회 실패(FK·상위 검증으로 정상 흐름에선 도달 불가) |
 | `TRF9002` | 500 | 거래번호 일련번호 채번 가능 범위를 초과했습니다. | 일자·채널당 10자리 일련번호 소진(실질적으로 도달 불가능한 불변식 위반) |
 
 > 예금주 조회의 문장형 코드 매핑: `ACCOUNT_NOT_FOUND`→`TRF0201` · `ACCOUNT_SUSPENDED`/`ACCOUNT_CLOSED`→`TRF0301` · `UNSUPPORTED_ACCOUNT_TYPE`→`TRF0004` · `SAME_ACCOUNT_TRANSFER`→`TRF0002`
