@@ -64,13 +64,13 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
         List<AutoTransfer> domainContent = content.stream().map(AutoTransferMapper::toDomain).toList();
         return new PageImpl<>(domainContent, pageable, total == null ? 0 : total);
     }
-    // 자동이체 등록건들 중 정상 계좌들만 목록 뽑아옴
+    // 정상 상태이고 오늘이 다음 실행일인 자동이체 등록 목록
     @Override
     public List<AutoTransfer> findDueForExecution (LocalDate date) {
-        return queryFactory.selectFrom(autoTransferJpaEntity).where(autoTransferJpaEntity.status.eq(AutoTransferStatus.NORMAL),
-                autoTransferJpaEntity.nextExecutionDate.eq(date))
-                .orderBy(autoTransferJpaEntity.registeredAt.asc())
-                .fetch().stream().map(AutoTransferMapper::toDomain).toList();
+        return queryFactory.selectFrom(autoTransferJpaEntity).where(dueForExecutionConditions(date))
+                .orderBy(autoTransferJpaEntity.registeredAt.asc()).fetch().stream().map(AutoTransferMapper::toDomain)
+                .toList();
+
     }
 
     private Predicate[] conditions(Long customerId, Long withdrawalAccountId, AutoTransferStatus status) {
@@ -78,6 +78,13 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
                 // customerId까지 함께 걸어야 withdrawalAccountId만으로 타 고객 자동이체가 조회되는 것을 막을 수 있다(REQ-AUTO-009)
                 autoTransferJpaEntity.customerId.eq(customerId),
                 autoTransferJpaEntity.withdrawalAccountId.eq(withdrawalAccountId),statusEq(status)
+        };
+    }
+
+    private Predicate[] dueForExecutionConditions(LocalDate date) {
+        return new Predicate[] {
+                autoTransferJpaEntity.status.eq(AutoTransferStatus.NORMAL),
+                autoTransferJpaEntity.nextExecutionDate.eq(date)
         };
     }
 
