@@ -1,6 +1,7 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccount;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
@@ -19,6 +20,13 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
 
     @Override
     public LockedAccountsForTransfer lockForTransfer(Long withdrawalAccountId, Long depositAccountId) {
+        if (withdrawalAccountId == null || depositAccountId == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+        if (withdrawalAccountId.equals(depositAccountId)) {
+            throw new BusinessException(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
+        }
+
         Long firstId = Math.min(withdrawalAccountId, depositAccountId);
         Long secondId = Math.max(withdrawalAccountId, depositAccountId);
 

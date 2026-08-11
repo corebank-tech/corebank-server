@@ -2,6 +2,7 @@ package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
@@ -138,5 +139,38 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(TransferErrorCode.ACCOUNT_LOCK_TARGET_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("출금계좌 ID가 null이면 BusinessException(CMN0002)을 던진다")
+    void lockForTransfer_throwsBusinessException_whenWithdrawalAccountIdIsNull() {
+        assertThatThrownBy(() -> adapter.lockForTransfer(null, 202L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+    }
+
+    @Test
+    @DisplayName("입금계좌 ID가 null이면 BusinessException(CMN0002)을 던진다")
+    void lockForTransfer_throwsBusinessException_whenDepositAccountIdIsNull() {
+        assertThatThrownBy(() -> adapter.lockForTransfer(101L, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+    }
+
+    @Test
+    @DisplayName("출금/입금 계좌가 동일하면 BusinessException(TRF0002)을 던진다")
+    void lockForTransfer_throwsBusinessException_whenSameAccount() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when & then
+        assertThatThrownBy(() -> adapter.lockForTransfer(101L, 101L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
     }
 }
