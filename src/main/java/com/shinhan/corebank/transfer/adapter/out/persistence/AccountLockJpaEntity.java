@@ -50,10 +50,10 @@ public class AccountLockJpaEntity {
     private long version;
 
     public void debit(long amount) {
-        this.balance -= amount;
+        this.balance = Math.subtractExact(this.balance, amount);
     }
 
     public void credit(long amount) {
-        this.balance += amount;
+        this.balance = Math.addExact(this.balance, amount);
     }
 }
