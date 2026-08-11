@@ -22,9 +22,8 @@ public class SecurityConfig {
             SessionAccessDeniedHandler deniedHandler
     ) throws Exception {
         http
-                // SPA용 CSRF 쿠키를 사용하고 로그인과 ALB 헬스체크만 검사에서 제외
+                // 기본 CSRF 보호를 유지하고 로그인과 ALB 헬스체크만 검사에서 제외
                 .csrf(csrf -> csrf
-                        .spa()
                         .ignoringRequestMatchers(
                                 pathPattern(HttpMethod.POST, "/auth/login"),
                                 pathPattern(HttpMethod.GET, "/actuator/health")
