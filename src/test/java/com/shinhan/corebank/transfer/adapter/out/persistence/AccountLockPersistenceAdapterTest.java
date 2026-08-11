@@ -1,0 +1,56 @@
+package com.shinhan.corebank.transfer.adapter.out.persistence;
+
+import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
+
+import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+@Transactional
+class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
+
+    @Autowired
+    private AccountLockPersistenceAdapter adapter;
+
+    @Autowired
+    private EntityManager entityManager;
+
+    @Test
+    @DisplayName("출금/입금 계좌를 락으로 획득하면 각 계좌의 현재 잔액이 방향에 맞게 반환된다")
+    void lockForTransfer_returnsWithdrawalAndDepositSnapshots() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        LockedAccountsForTransfer locked = adapter.lockForTransfer(101L, 202L);
+
+        // then
+        assertThat(locked.withdrawal().accountId()).isEqualTo(101L);
+        assertThat(locked.withdrawal().balance()).isEqualTo(100000L);
+        assertThat(locked.deposit().accountId()).isEqualTo(202L);
+        assertThat(locked.deposit().balance()).isEqualTo(100000L);
+    }
+
+    @Test
+    @DisplayName("출금/입금 계좌 ID 순서를 반대로 호출해도 방향 매핑은 그대로 유지된다")
+    void lockForTransfer_preservesDirectionRegardlessOfIdOrder() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when: 입금계좌(202)가 출금 역할, 출금계좌(101)가 입금 역할인 이체
+        LockedAccountsForTransfer locked = adapter.lockForTransfer(202L, 101L);
+
+        // then
+        assertThat(locked.withdrawal().accountId()).isEqualTo(202L);
+        assertThat(locked.deposit().accountId()).isEqualTo(101L);
+    }
+}
