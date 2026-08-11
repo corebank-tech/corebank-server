@@ -85,6 +85,24 @@ class SequenceGeneratorTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("일련번호가 10자리 상한(9999999999)을 초과하면 IllegalStateException을 던진다")
+    void nextTransactionNumber_throwsIllegalState_whenSequenceExceedsTenDigits() {
+        // given: 이미 상한에 도달한 채번 행
+        repository.saveAndFlush(
+                TransactionSequenceJpaEntity.builder()
+                        .seqDate(SEQ_DATE)
+                        .channel(CHANNEL.name())
+                        .lastSeq(9_999_999_999L)
+                        .updatedAt(LocalDateTime.now(ZoneOffset.UTC))
+                        .build()
+        );
+
+        // when & then
+        assertThatThrownBy(() -> sequenceGenerator.nextTransactionNumber(SEQ_DATE, CHANNEL))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     @DisplayName("JVM 기본 시간대가 UTC가 아니어도 updated_at은 UTC 기준으로 저장된다")
     void updatedAt_isStoredInUtc_regardlessOfJvmDefaultTimeZone() {
         TimeZone originalTimeZone = TimeZone.getDefault();
