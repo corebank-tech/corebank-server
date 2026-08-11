@@ -31,6 +31,16 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
         return new LockedAccountsForTransfer(toLockedAccount(withdrawalEntity), toLockedAccount(depositEntity));
     }
 
+    @Override
+    public void debit(Long accountId, long amount) {
+        findForUpdate(accountId).debit(amount);
+    }
+
+    @Override
+    public void credit(Long accountId, long amount) {
+        findForUpdate(accountId).credit(amount);
+    }
+
     private AccountLockJpaEntity findForUpdate(Long accountId) {
         return repository.findByAccountIdForUpdate(accountId).orElseThrow();
     }

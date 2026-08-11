@@ -32,4 +32,12 @@ public class AccountLockJpaEntity {
 
     @Column(name = "status", nullable = false, length = 12)
     private String status;
+
+    public void debit(long amount) {
+        this.balance -= amount;
+    }
+
+    public void credit(long amount) {
+        this.balance += amount;
+    }
 }

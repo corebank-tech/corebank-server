@@ -53,4 +53,46 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(locked.withdrawal().accountId()).isEqualTo(202L);
         assertThat(locked.deposit().accountId()).isEqualTo(101L);
     }
+
+    @Test
+    @DisplayName("debit 호출 후 커밋 시점에 계좌 잔액이 차감된 값으로 반영된다")
+    void debit_decreasesBalance() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        adapter.debit(101L, 30000L);
+        entityManager.flush();
+        entityManager.clear();
+
+        // then
+        long balance = ((Number) entityManager
+                .createNativeQuery("SELECT balance FROM account WHERE account_id = 101")
+                .getSingleResult())
+                .longValue();
+        assertThat(balance).isEqualTo(70000L);
+    }
+
+    @Test
+    @DisplayName("credit 호출 후 커밋 시점에 계좌 잔액이 증가된 값으로 반영된다")
+    void credit_increasesBalance() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        adapter.credit(202L, 30000L);
+        entityManager.flush();
+        entityManager.clear();
+
+        // then
+        long balance = ((Number) entityManager
+                .createNativeQuery("SELECT balance FROM account WHERE account_id = 202")
+                .getSingleResult())
+                .longValue();
+        assertThat(balance).isEqualTo(130000L);
+    }
 }
