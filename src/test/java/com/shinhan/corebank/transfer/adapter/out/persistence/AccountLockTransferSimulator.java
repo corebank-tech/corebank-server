@@ -1,6 +1,7 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
+import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
 
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,8 +22,8 @@ class AccountLockTransferSimulator {
 
     @Transactional
     void execute(Long withdrawalAccountId, Long depositAccountId, long amount) {
-        accountLockPort.lockForTransfer(withdrawalAccountId, depositAccountId);
-        accountLockPort.debit(withdrawalAccountId, amount);
-        accountLockPort.credit(depositAccountId, amount);
+        LockedAccountsForTransfer locked = accountLockPort.lockForTransfer(withdrawalAccountId, depositAccountId);
+        accountLockPort.debit(locked.withdrawal(), amount);
+        accountLockPort.credit(locked.deposit(), amount);
     }
 }

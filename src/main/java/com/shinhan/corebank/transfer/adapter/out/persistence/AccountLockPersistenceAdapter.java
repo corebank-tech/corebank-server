@@ -42,13 +42,13 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
     }
 
     @Override
-    public void debit(Long accountId, long amount) {
-        findForUpdate(accountId).debit(amount);
+    public void debit(LockedAccount account, long amount) {
+        findForUpdate(account.accountId()).debit(amount);
     }
 
     @Override
-    public void credit(Long accountId, long amount) {
-        findForUpdate(accountId).credit(amount);
+    public void credit(LockedAccount account, long amount) {
+        findForUpdate(account.accountId()).credit(amount);
     }
 
     private AccountLockJpaEntity findForUpdate(Long accountId) {

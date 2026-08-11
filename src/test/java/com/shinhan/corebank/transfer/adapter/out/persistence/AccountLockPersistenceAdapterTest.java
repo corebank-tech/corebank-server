@@ -3,6 +3,7 @@ package com.shinhan.corebank.transfer.adapter.out.persistence;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.transfer.application.port.out.LockedAccount;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
@@ -67,7 +68,7 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
         entityManager.clear();
 
         // when
-        adapter.debit(101L, 30000L);
+        adapter.debit(new LockedAccount(101L, 100000L, "ACTIVE"), 30000L);
         entityManager.flush();
         entityManager.clear();
 
@@ -88,7 +89,7 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
         entityManager.clear();
 
         // when
-        adapter.credit(202L, 30000L);
+        adapter.credit(new LockedAccount(202L, 100000L, "ACTIVE"), 30000L);
         entityManager.flush();
         entityManager.clear();
 
@@ -114,7 +115,7 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
                 .longValue();
 
         // when
-        adapter.debit(101L, 30000L);
+        adapter.debit(new LockedAccount(101L, 100000L, "ACTIVE"), 30000L);
         entityManager.flush();
         entityManager.clear();
 
