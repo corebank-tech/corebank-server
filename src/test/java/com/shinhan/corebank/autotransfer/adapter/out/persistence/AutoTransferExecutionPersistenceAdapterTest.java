@@ -87,6 +87,27 @@ class AutoTransferExecutionPersistenceAdapterTest extends IntegrationTestSupport
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    @Test
+    @DisplayName("제약 위반을 같은 트랜잭션 안에서 catch해도, 그 트랜잭션에서의 다음 저장 시도는 여전히 실패한다 (R2: catch해도 트랜잭션은 안 살아남)")
+    void save_afterConstraintViolationCaughtInSameTransaction_nextSaveStillFails() {
+        LocalDate executionDate = LocalDate.of(2026, 3, 15);
+        adapter.save(AutoTransferExecution.processing(executionDate, 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)), autoTransferId);
+
+        // 실제로 발생 가능한 시나리오: "이미 처리됨이니 건너뛰자"고 여기서 catch하고 넘어간다고 가정
+        try {
+            adapter.save(AutoTransferExecution.processing(executionDate, 10000L, LocalDateTime.of(2026, 3, 15, 9, 1)), autoTransferId);
+        } catch (DataIntegrityViolationException expected) {
+            // catch했으니 트랜잭션이 괜찮아졌다고 착각하기 쉽지만 아니다 - 아래에서 증명
+        }
+
+        // 같은 트랜잭션 안에서의 그다음 저장(전혀 다른 실행일, 제약과 무관)도 실패해야 한다 -
+        // 이게 실패한다는 것 자체가 "catch해도 트랜잭션은 이미 오염됐다"는 증거.
+        // 실제로 Hibernate가 무슨 예외를 던질지는 버전에 따라 달라질 수 있어 타입은 느슨하게 확인한다.
+        assertThatThrownBy(() -> adapter.save(
+                AutoTransferExecution.processing(LocalDate.of(2026, 3, 16), 10000L, LocalDateTime.of(2026, 3, 16, 9, 0)), autoTransferId))
+                .isInstanceOf(RuntimeException.class);
+    }
+
     private Long insertCustomer() {
         long seq = CUSTOMER_SEQ.incrementAndGet();
         String userId = "u" + seq;
