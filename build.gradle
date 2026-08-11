@@ -49,6 +49,9 @@ dependencies {
     // 검증
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
+    // Swagger / OpenAPI UI
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
+
     // 테스트
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-flyway-test'
