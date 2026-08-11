@@ -289,6 +289,29 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
+    @DisplayName("정상 상태가 아닌 건은 한도 초과 금액을 보내도 AUT0006이 아니라 AUT0302를 던진다")
+    void change_notModifiableStatus_throwsNotInNormalStatus_evenWithOverLimitAmount() {
+        AutoTransfer terminated = AutoTransfer.reconstitute(
+                10L, 1L, 2L, "110987654321", "홍길동",
+                10_000L, 1, 15,
+                LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), null,
+                "내메모", "받는메모", AutoTransferStatus.TERMINATED,
+                LocalDateTime.now(), LocalDateTime.now(), LocalDateTime.now());
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(terminated));
+
+        AutoTransferChangeCommand command = validChangeCommandBuilder().amount(20_000L).build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.change(10L, command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS));
+
+        // 상태 검증이 한도 검증보다 먼저 실행돼야 하므로, 한도 조회 자체가 일어나면 안 된다
+        verify(transferLimitPort, never()).findOneTimeLimit(any());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
     @DisplayName("금액을 안 바꾸면 이체한도를 재검증하지 않는다")
     void change_amountNotProvided_skipsLimitCheck() {
         AutoTransfer existing = existingAutoTransfer();

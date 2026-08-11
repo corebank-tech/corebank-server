@@ -61,6 +61,20 @@ class IdempotencyServiceTest {
     }
 
     @Test
+    @DisplayName("customerId가 null이면 INSERT 시도 없이 CMN0002를 던진다")
+    void begin_nullCustomerId_throwsRequiredFieldMissing() {
+        String key = "550e8400-e29b-41d4-a716-446655440000";
+
+        assertThatThrownBy(() -> idempotencyService.begin(key, null, "POST /auto-transfers", "{}"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+
+        verify(repository, never()).findById(any());
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
     @DisplayName("존재하지 않는 customerId면(FK 위반) 500 대신 CMN0001로 응답한다")
     void begin_nonexistentCustomerId_throwsInvalidInput() {
         String key = "550e8400-e29b-41d4-a716-446655440000";

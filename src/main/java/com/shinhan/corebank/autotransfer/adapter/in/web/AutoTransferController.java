@@ -115,15 +115,17 @@ public class AutoTransferController {
             return ResponseEntity.status(idempotencyResult.httpStatus())
                     .body(fromJson(idempotencyResult.responseSnapshot(), responseType));
         }
+        ApiResponse<T> response;
         try {
-            ApiResponse<T> response = action.get();
-            idempotencyService.complete(idempotencyKey, (short) HttpStatus.OK.value(), toJson(response));
-            return ResponseEntity.ok(response);
+            response = action.get();
         } catch (RuntimeException e) {
-            // PROCESSING에 갇히지 않도록 예약을 해제한다 — 이 시도는 처리된 적 없는 것으로 취급
+            // action() 자체가 실패했을 때만 예약을 해제한다 — 이미 성공한 뒤(complete() 등)에서 실패하면 여기서 release()를 타면 안 된다.
+            // 그러면 이미 커밋된 작업인데 같은 Idempotency-Key로 재시도 시 새로 처리(중복 실행)돼 버린다.
             idempotencyService.release(idempotencyKey);
             throw e;
         }
+        idempotencyService.complete(idempotencyKey, (short) HttpStatus.OK.value(), toJson(response));
+        return ResponseEntity.ok(response);
     }
 
     // 멱등키 해시는 인증 토큰을 제외한 지문으로 계산한다(request_hash 컬럼 코멘트 참고) —

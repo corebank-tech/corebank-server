@@ -78,10 +78,13 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
     @Override
     public AutoTransfer change(Long autoTransferId, AutoTransferChangeCommand command) {
         AutoTransfer autoTransfer = autoTransferPersistencePort.findById(autoTransferId).orElseThrow(() ->  new BusinessException(AutoTransferErrorCode.NOT_FOUND));
-        if (!autoTransfer.getCustomerId().equals(command.customerId())) {
-            throw new BusinessException(AutoTransferErrorCode.NOT_FOUND);
-        }
+        requireOwned(autoTransfer, command.customerId());
         authTokenVerificationPort.verify(command.accountPasswordAuthToken(),autoTransfer.getWithdrawalAccountId(),"AUTO_TRANSFER_CHANGE");
+        // 상태 검증을 한도 검증보다 먼저 해야 한다
+        // — 정상 상태가 아닌 건을 한도 초과 금액으로 바꾸면 진짜 원인(AUT0302)이 아니라 AUT0006으로 잘못 응답하게 된다
+        if (!autoTransfer.getStatus().isModifiable()) {
+            throw new BusinessException(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS);
+        }
         // 이체한도 재검증
         if (command.amount() != null) {
             long oneTimeLimit = transferLimitPort.findOneTimeLimit(autoTransfer.getCustomerId());
@@ -101,13 +104,19 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
     public void cancel(Long autoTransferId, AutoTransferCancelCommand command) {
         AutoTransfer autoTransfer = autoTransferPersistencePort.findById(autoTransferId).orElseThrow(()->
                 new BusinessException(AutoTransferErrorCode.NOT_FOUND));
-        if (!autoTransfer.getCustomerId().equals(command.customerId())) {
-            throw new BusinessException(AutoTransferErrorCode.NOT_FOUND);
-        }
+        requireOwned(autoTransfer, command.customerId());
         authTokenVerificationPort.verify(command.accountPasswordAuthToken(), autoTransfer.getWithdrawalAccountId(),"AUTO_TRANSFER_CANCEL");
         autoTransfer.terminate(LocalDateTime.now());
         AutoTransfer saved = autoTransferPersistencePort.save(autoTransfer);
         auditLogService.record(saved.getCustomerId(), null, AuditEventType.AUTO_TRANSFER_INFO_CHANGE,
                 command.requestIp(), true, Map.of("autoTransferId", saved.getAutoTransferId(),"action","cancel"));
+    }
+
+    // change()/cancel() 둘 다 findById() 이후 소유자 확인이 필요하다
+    // — 존재 자체를 숨기기 위해 별도 코드(FORBIDDEN) 대신 findById 실패와 동일한 NOT_FOUND를 던진다
+    private void requireOwned(AutoTransfer autoTransfer, Long customerId) {
+        if (!autoTransfer.getCustomerId().equals(customerId)) {
+            throw new BusinessException(AutoTransferErrorCode.NOT_FOUND);
+        }
     }
 }

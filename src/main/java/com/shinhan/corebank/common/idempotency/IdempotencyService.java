@@ -28,6 +28,12 @@ public class IdempotencyService {
         if (!UUID_V4_PATTERN.matcher(key).matches()) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT, "Idempotency-Key는 UUID v4 형식이어야 합니다.");
         }
+        // customerId 누락은 이후 INSERT에서 NOT NULL 제약 위반으로 터지는데,
+        // 그 메시지에는 fk_idem_customer가 안 담겨서 DUPLICATE_REQUEST_IN_PROGRESS(409)로 잘못 응답하게 된다.
+        // 요청 검증(toCommand())보다 begin()이 먼저 호출되므로 여기서 직접 막아야 한다.
+        if (customerId == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING, "customerId는 필수입니다.");
+        }
         String requestHash = sha256(requestBody);
 
         Optional<IdempotencyKeyJpaEntity> existing = repository.findById(key);
