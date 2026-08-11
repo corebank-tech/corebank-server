@@ -3,6 +3,7 @@ package com.shinhan.corebank.autotransfer.adapter.out.persistence;
 import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferBatchQueryPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferQueryPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
@@ -13,6 +14,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,9 +23,10 @@ import static com.shinhan.corebank.autotransfer.adapter.out.persistence.QAutoTra
 @Repository
 @RequiredArgsConstructor
 // 이 파일은 DB에 직접 접근하게 해주는 파일
-public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePort, AutoTransferQueryPort {
+public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePort, AutoTransferQueryPort, AutoTransferBatchQueryPort {
     private final AutoTransferJpaRepository autoTransferJpaRepository;
     private final JPAQueryFactory queryFactory;
+
 
     @Override
     public AutoTransfer save(AutoTransfer autoTransfer) {
@@ -60,6 +63,14 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
                 .fetchOne();
         List<AutoTransfer> domainContent = content.stream().map(AutoTransferMapper::toDomain).toList();
         return new PageImpl<>(domainContent, pageable, total == null ? 0 : total);
+    }
+    // 자동이체 등록건들 중 정상 계좌들만 목록 뽑아옴
+    @Override
+    public List<AutoTransfer> findDueForExecution (LocalDate date) {
+        return queryFactory.selectFrom(autoTransferJpaEntity).where(autoTransferJpaEntity.status.eq(AutoTransferStatus.NORMAL),
+                autoTransferJpaEntity.nextExecutionDate.eq(date))
+                .orderBy(autoTransferJpaEntity.registeredAt.asc())
+                .fetch().stream().map(AutoTransferMapper::toDomain).toList();
     }
 
     private Predicate[] conditions(Long customerId, Long withdrawalAccountId, AutoTransferStatus status) {
