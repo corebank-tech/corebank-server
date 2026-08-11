@@ -2,6 +2,7 @@ package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
@@ -76,7 +77,7 @@ public class SequenceGenerator implements TransferSequencePort {
                         .seqDate(seqDate)
                         .channel(channel)
                         .lastSeq(INITIAL_SEQUENCE)
-                        .updatedAt(LocalDateTime.now())
+                        .updatedAt(LocalDateTime.now(ZoneOffset.UTC))
                         .build()
         );
         return INITIAL_SEQUENCE;

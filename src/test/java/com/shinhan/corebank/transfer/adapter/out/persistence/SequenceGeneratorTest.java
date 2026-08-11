@@ -1,9 +1,13 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -61,6 +65,28 @@ class SequenceGeneratorTest extends IntegrationTestSupport {
         // then
         assertThat(first).endsWith("0000000001");
         assertThat(second).endsWith("0000000002");
+    }
+
+    @Test
+    @DisplayName("JVM 기본 시간대가 UTC가 아니어도 updated_at은 UTC 기준으로 저장된다")
+    void updatedAt_isStoredInUtc_regardlessOfJvmDefaultTimeZone() {
+        TimeZone originalTimeZone = TimeZone.getDefault();
+        try {
+            // given
+            TimeZone.setDefault(TimeZone.getTimeZone("Asia/Seoul"));
+
+            // when
+            sequenceGenerator.nextTransactionNumber(SEQ_DATE, CHANNEL);
+
+            // then
+            TransactionSequenceJpaEntity entity = repository
+                    .findById(new TransactionSequenceId(SEQ_DATE, CHANNEL.name()))
+                    .orElseThrow();
+            assertThat(entity.getUpdatedAt())
+                    .isCloseTo(LocalDateTime.now(ZoneOffset.UTC), org.assertj.core.api.Assertions.within(10, ChronoUnit.SECONDS));
+        } finally {
+            TimeZone.setDefault(originalTimeZone);
+        }
     }
 
     @Test
