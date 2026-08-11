@@ -10,8 +10,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -85,12 +87,24 @@ class ProductAccountOpeningRollbackTest
 
         // when
         Throwable thrown = catchThrowable(
-                () -> productAccountOpeningUseCase
-                        .open(command)
+                () -> productAccountOpeningUseCase.open(command)
         );
 
         // then
-        assertThat(thrown).isNotNull();
+        assertThat(thrown)
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasRootCauseInstanceOf(
+                        SQLIntegrityConstraintViolationException.class
+                );
+
+        Throwable rootCause = thrown;
+
+        while (rootCause.getCause() != null) {
+            rootCause = rootCause.getCause();
+        }
+
+        assertThat(rootCause.getMessage())
+                .contains("fk_account_customer");
 
         Long lastSequence =
                 findProductAccountLastSequence(
@@ -103,10 +117,10 @@ class ProductAccountOpeningRollbackTest
         Integer accountCount =
                 jdbcTemplate.queryForObject(
                         """
-                        SELECT COUNT(*)
-                        FROM account
-                        WHERE customer_id = ?
-                        """,
+                                SELECT COUNT(*)
+                                FROM account
+                                WHERE customer_id = ?
+                                """,
                         Integer.class,
                         NON_EXISTENT_CUSTOMER_ID
                 );
@@ -120,12 +134,12 @@ class ProductAccountOpeningRollbackTest
     ) {
         return jdbcTemplate.queryForObject(
                 """
-                SELECT last_sequence
-                FROM account_number_sequence
-                WHERE bank_code = ?
-                  AND account_type = ?
-                  AND product_id = ?
-                """,
+                        SELECT last_sequence
+                        FROM account_number_sequence
+                        WHERE bank_code = ?
+                          AND account_type = ?
+                          AND product_id = ?
+                        """,
                 Long.class,
                 "088",
                 accountType.name(),
