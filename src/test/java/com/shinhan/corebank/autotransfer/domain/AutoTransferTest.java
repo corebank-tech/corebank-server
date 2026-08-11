@@ -197,13 +197,27 @@ class AutoTransferTest {
         }
 
         @Test
-        @DisplayName("지원하지 않는 이체주기면 예외")
+        @DisplayName("지원하지 않는 이체주기면 AUT0007")
         void invalidCycle() {
             assertThatThrownBy(() -> AutoTransfer.register(
                     1L, 1L, "110987654321", "홍길동",
                     10000L, 2, TRANSFER_DAY,
                     START, END, null, null, NOW))
-                    .isInstanceOf(IllegalArgumentException.class);
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(AutoTransferErrorCode.INVALID_CYCLE_MONTHS));
+        }
+
+        @Test
+        @DisplayName("금액이 0 이하면 AUT0008 (Command 우회 방어)")
+        void invalidAmount() {
+            assertThatThrownBy(() -> AutoTransfer.register(
+                    1L, 1L, "110987654321", "홍길동",
+                    0L, 1, TRANSFER_DAY,
+                    START, END, null, null, NOW))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(AutoTransferErrorCode.INVALID_AMOUNT));
         }
     }
 
@@ -294,6 +308,35 @@ class AutoTransferTest {
         }
 
         @Test
+        @DisplayName("모든 필드를 null로 넘기면 기존 값이 그대로 유지된다")
+        void allNullFields_keepsExistingValues() {
+            AutoTransfer e = register();
+
+            e.change(null, null, null, null, null);
+
+            assertThat(e.getAmount()).isEqualTo(10000L);
+            assertThat(e.getCycleMonths()).isEqualTo(1);
+            assertThat(e.getEndDate()).isEqualTo(END);
+            assertThat(e.getNextExecutionDate()).isEqualTo(NEXT_EXECUTION);
+            assertThat(e.getMyPassbookMemo()).isEqualTo("내메모");
+            assertThat(e.getRecipientPassbookMemo()).isEqualTo("받는메모");
+        }
+
+        @Test
+        @DisplayName("일부 필드만 넘기면 null인 필드는 기존 값을 유지하고 나머지만 반영된다")
+        void partialFields_onlyProvidedFieldsChange() {
+            AutoTransfer e = register();
+
+            e.change(20000L, null, null, null, null);
+
+            assertThat(e.getAmount()).isEqualTo(20000L);
+            assertThat(e.getCycleMonths()).isEqualTo(1);
+            assertThat(e.getEndDate()).isEqualTo(END);
+            assertThat(e.getMyPassbookMemo()).isEqualTo("내메모");
+            assertThat(e.getRecipientPassbookMemo()).isEqualTo("받는메모");
+        }
+
+        @Test
         @DisplayName("주기를 바꾸면 다음 실행 예정일이 직전 실행 예정일 기준으로 재산출된다")
         void changeCycleRecalculatesNextExecutionDate() {
             AutoTransfer e = register(); // cycle=1, nextExecutionDate=2025-06-15, transferDay=15
@@ -325,6 +368,17 @@ class AutoTransferTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(AutoTransferErrorCode.INVALID_TRANSFER_PERIOD));
+        }
+
+        @Test
+        @DisplayName("금액이 0 이하면 AUT0008 (Command 우회 방어)")
+        void invalidAmount() {
+            AutoTransfer e = register();
+
+            assertThatThrownBy(() -> e.change(0L, null, null, null, null))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                            .isEqualTo(AutoTransferErrorCode.INVALID_AMOUNT));
         }
 
         @Test

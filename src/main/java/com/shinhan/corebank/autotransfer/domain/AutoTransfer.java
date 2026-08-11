@@ -43,6 +43,10 @@ public class AutoTransfer {
 
         TransferCycle.fromMonths(cycleMonths);
 
+        if (amount <= 0) {
+            throw new BusinessException(AutoTransferErrorCode.INVALID_AMOUNT);
+        }
+
         if (transferDay < 1 || transferDay > 31) {
             throw new BusinessException(AutoTransferErrorCode.INVALID_TRANSFER_DAY);
         }
@@ -132,38 +136,72 @@ public class AutoTransfer {
         return Collections.unmodifiableList(executions);
     }
 
-    // 금액, 주기, 종료일, 통장 표시 내용 변경
+    // 금액, 주기, 종료일, 통장 표시 내용 변경 (null인 필드는 기존 값 유지)
     public void change(Long amount, Integer cycleMonths, LocalDate endDate,
                        String myPassbookMemo, String recipientPassbookMemo) {
         if (!this.status.isModifiable()) {
             throw new BusinessException(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS);
         }
-        TransferCycle.fromMonths(cycleMonths);
-        if (endDate.isBefore(this.startDate)) {
+
+        Long newAmount = amount != null ? amount : this.amount;
+        Integer newCycleMonths = cycleMonths != null ? cycleMonths : this.cycleMonths;
+        LocalDate newEndDate = endDate != null ? endDate : this.endDate;
+
+        if (newAmount <= 0) {
+            throw new BusinessException(AutoTransferErrorCode.INVALID_AMOUNT);
+        }
+        TransferCycle.fromMonths(newCycleMonths);
+        if (newEndDate.isBefore(this.startDate)) {
             throw new BusinessException(AutoTransferErrorCode.INVALID_TRANSFER_PERIOD, "이체 종료일은 시작일 이후여야 합니다.");
         }
-        if (endDate.isAfter(this.startDate.plusMonths(60))) {
+        if (newEndDate.isAfter(this.startDate.plusMonths(60))) {
             throw new BusinessException(AutoTransferErrorCode.INVALID_TRANSFER_PERIOD, "이체 종료일은 시작일로부터 60개월 이내여야 합니다.");
         }
 
         LocalDate newNextExecutionDate = this.nextExecutionDate;
-        if (!cycleMonths.equals(this.cycleMonths)) {
+        if (!newCycleMonths.equals(this.cycleMonths)) {
             // 직전 실행 예정일 기준 재산출: 현재 nextExecutionDate를 옛 주기만큼 되돌린 지점에 새 주기 더하는 방식
             YearMonth cycleBaseMonth = YearMonth.from(this.nextExecutionDate).minusMonths(this.cycleMonths);
-            YearMonth targetMonth = cycleBaseMonth.plusMonths(cycleMonths);
+            YearMonth targetMonth = cycleBaseMonth.plusMonths(newCycleMonths);
             newNextExecutionDate = clampToTransferDay(targetMonth, this.transferDay);
         }
-        if (newNextExecutionDate.isAfter(endDate)) {
+        if (newNextExecutionDate.isAfter(newEndDate)) {
             throw new BusinessException(AutoTransferErrorCode.NO_EXECUTION_WITHIN_PERIOD);
         }
 
         // 모든 검증을 통과한 뒤에만 필드에 반영한다 — 검증 도중 실패하면 엔티티는 변경 전 상태를 유지해야 한다
-        this.cycleMonths = cycleMonths;
+        this.cycleMonths = newCycleMonths;
         this.nextExecutionDate = newNextExecutionDate;
-        this.amount = amount;
-        this.endDate = endDate;
-        this.myPassbookMemo = myPassbookMemo;
-        this.recipientPassbookMemo = recipientPassbookMemo;
+        this.amount = newAmount;
+        this.endDate = newEndDate;
+        this.myPassbookMemo = myPassbookMemo != null ? myPassbookMemo : this.myPassbookMemo;
+        this.recipientPassbookMemo = recipientPassbookMemo != null ? recipientPassbookMemo : this.recipientPassbookMemo;
+    }
+
+    public static AutoTransfer reconstitute(
+            Long autoTransferId, Long customerId, Long withdrawalAccountId, String depositAccountNumber, String payeeName,
+            Long amount, Integer cycleMonths, Integer transferDay, LocalDate startDate, LocalDate endDate, LocalDate nextExecutionDate,
+            String myPassbookMemo, String recipientPassbookMemo, AutoTransferStatus status, LocalDateTime registeredAt,
+            LocalDateTime terminatedAt, LocalDateTime updatedAt) {
+        AutoTransfer e = new AutoTransfer();
+        e.autoTransferId = autoTransferId;
+        e.customerId = customerId;
+        e.withdrawalAccountId = withdrawalAccountId;
+        e.depositAccountNumber = depositAccountNumber;
+        e.payeeName = payeeName;
+        e.amount = amount;
+        e.cycleMonths = cycleMonths;
+        e.transferDay = transferDay;
+        e.startDate = startDate;
+        e.endDate = endDate;
+        e.nextExecutionDate = nextExecutionDate;
+        e.myPassbookMemo = myPassbookMemo;
+        e.recipientPassbookMemo = recipientPassbookMemo;
+        e.status = status;
+        e.registeredAt = registeredAt;
+        e.terminatedAt = terminatedAt;
+        e.updatedAt = updatedAt;
+        return e;
     }
 
 }
