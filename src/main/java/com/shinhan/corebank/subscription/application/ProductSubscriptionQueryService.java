@@ -1,0 +1,48 @@
+package com.shinhan.corebank.subscription.application;
+
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
+import com.shinhan.corebank.product.domain.ProductDetail;
+import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionQueryUseCase;
+import com.shinhan.corebank.subscription.application.port.out.AccountNumberQueryPort;
+import com.shinhan.corebank.subscription.application.port.out.ProductSubscriptionQueryPort;
+import com.shinhan.corebank.subscription.domain.ProductSubscription;
+import com.shinhan.corebank.subscription.domain.ProductSubscriptionResult;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class ProductSubscriptionQueryService implements ProductSubscriptionQueryUseCase {
+    private final ProductSubscriptionQueryPort productSubscriptionQueryPort;
+    private final ProductQueryUseCase productQueryUseCase;
+    private final AccountNumberQueryPort accountNumberQueryPort;
+
+    @Override
+    public ProductSubscriptionResult getResult(Long subscriptionId, Long requestingCustomerId) {
+        ProductSubscription subscription = productSubscriptionQueryPort.findById(subscriptionId)
+                .orElseThrow(() -> new BusinessException(SubscriptionErrorCode.SUBSCRIPTION_NOT_FOUND));
+
+        if (!subscription.getCustomerId().equals(requestingCustomerId)) {
+            throw new BusinessException(CommonErrorCode.FORBIDDEN);
+        }
+
+        ProductDetail productDetail = productQueryUseCase.getDetail(subscription.getProductId());
+
+        String accountNumber = subscription.getAccountId() == null
+                ? null
+                : accountNumberQueryPort.findAccountNumberById(subscription.getAccountId())
+                  .orElse(null);
+
+        return ProductSubscriptionResult.builder()
+                .subscription(subscription)
+                .productName(productDetail.getProduct().getProductName())
+                .productGroup(productDetail.getProduct().getProductGroup())
+                .accountNumber(accountNumber)
+                .build();
+    }
+
+}
