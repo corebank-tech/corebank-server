@@ -1,8 +1,10 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccount;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
+import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import org.springframework.stereotype.Component;
 
@@ -42,7 +44,8 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
     }
 
     private AccountLockJpaEntity findForUpdate(Long accountId) {
-        return repository.findByAccountIdForUpdate(accountId).orElseThrow();
+        return repository.findByAccountIdForUpdate(accountId)
+                .orElseThrow(() -> new BusinessException(TransferErrorCode.ACCOUNT_LOCK_TARGET_NOT_FOUND));
     }
 
     private LockedAccount toLockedAccount(AccountLockJpaEntity entity) {

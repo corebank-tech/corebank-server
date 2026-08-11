@@ -1,7 +1,9 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
+import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
@@ -10,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Transactional
 class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
@@ -94,5 +97,20 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
                 .getSingleResult())
                 .longValue();
         assertThat(balance).isEqualTo(130000L);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 계좌로 락을 시도하면 BusinessException(TRF9001)이 발생한다")
+    void lockForTransfer_throwsBusinessException_whenAccountNotFound() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when & then
+        assertThatThrownBy(() -> adapter.lockForTransfer(101L, 999999L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(TransferErrorCode.ACCOUNT_LOCK_TARGET_NOT_FOUND);
     }
 }
