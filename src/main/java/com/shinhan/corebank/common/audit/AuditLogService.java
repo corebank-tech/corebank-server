@@ -13,19 +13,20 @@ public class AuditLogService {
     private final AuditLogWriter auditLogWriter;
     private final ApplicationEventPublisher eventPublisher;
 
-    // success=false(실패 로그)는 "시도했다"는 사실 자체가 중요해서, 호출한 쪽 트랜잭션이 롤백되어도
-    // 남아야 한다 — 즉시 별도 트랜잭션(REQUIRES_NEW)에 커밋한다.
-    // success=true(성공 로그)는 반대로, 호출한 쪽 트랜잭션이 "진짜로" 커밋된 뒤에만 남아야 한다 —
-    // 그렇지 않으면 본 작업(예: 자동이체 저장)이 뒤늦게 롤백돼도 성공 로그만 남는 모순이 생긴다.
-    // 그래서 성공 로그는 즉시 저장하지 않고 이벤트로 발행해 AuditLogEventListener가 AFTER_COMMIT 시점에 저장한다.
+    // success=false(실패 로그): "시도했다"는 사실 자체가 중요해서 호출자 트랜잭션이 롤백되어도 남아야 한다
+    // → 즉시 별도 트랜잭션(REQUIRES_NEW)에 커밋.
+    // success=true(성공 로그): 호출자 트랜잭션이 "진짜로" 커밋된 뒤에만 남아야 한다
+    // → 이벤트로 발행해 AuditLogEventListener가 AFTER_COMMIT 시점에 저장한다.
+    // 그 저장이 실패해 (리스너가 예외를 잡아서 로그만 남기므로) 이미 커밋된 업무 트랜잭션에는 영향이 없다
+    // — 감사 로그 버그가 실제 업무(예: 자동이체 등록)를 막는 일은 없어야 하기 때문.
     public void record(Long customerId, String transactionNumber, AuditEventType eventType,
                        String requestIp, boolean success, Map<String, Object> detail) {
         LocalDateTime occurredAt = LocalDateTime.now();
-        if (success) {
-            eventPublisher.publishEvent(new AuditLogEvent(customerId, transactionNumber, eventType,
-                    requestIp, true, detail, occurredAt));
+        if (!success) {
+            auditLogWriter.save(customerId, transactionNumber, eventType, requestIp, false, detail, occurredAt);
             return;
         }
-        auditLogWriter.save(customerId, transactionNumber, eventType, requestIp, false, detail, occurredAt);
+        eventPublisher.publishEvent(new AuditLogEvent(customerId, transactionNumber, eventType,
+                requestIp, true, detail, occurredAt));
     }
 }

@@ -8,8 +8,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Map;
 
-// 실제 INSERT를 담당하는 컴포넌트. AuditLogService/AuditLogEventListener가 별도 빈으로 호출해야
-// REQUIRES_NEW가 실제로 걸린다(같은 클래스 안에서 자기 자신을 호출하면 프록시를 안 거쳐 무시됨).
+// 실제 INSERT를 담당하는 컴포넌트. AuditLogService(실패 로그)와 AuditLogEventListener(성공 로그, AFTER_COMMIT 시점)가
+// 둘 다 별도 빈으로 호출해야 REQUIRES_NEW가 실제로 걸린다
+// (같은 클래스 안에서 자기 자신을 호출하면 프록시를 안 거쳐 무시됨).
 @Component
 @RequiredArgsConstructor
 class AuditLogWriter {
