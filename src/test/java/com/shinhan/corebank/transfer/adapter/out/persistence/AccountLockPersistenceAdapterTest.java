@@ -100,6 +100,32 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("debit 이후 계좌의 version이 1 증가한다")
+    void debit_incrementsVersion() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        long versionBefore = ((Number) entityManager
+                .createNativeQuery("SELECT version FROM account WHERE account_id = 101")
+                .getSingleResult())
+                .longValue();
+
+        // when
+        adapter.debit(101L, 30000L);
+        entityManager.flush();
+        entityManager.clear();
+
+        // then
+        long versionAfter = ((Number) entityManager
+                .createNativeQuery("SELECT version FROM account WHERE account_id = 101")
+                .getSingleResult())
+                .longValue();
+        assertThat(versionAfter).isEqualTo(versionBefore + 1);
+    }
+
+    @Test
     @DisplayName("존재하지 않는 계좌로 락을 시도하면 BusinessException(TRF9001)이 발생한다")
     void lockForTransfer_throwsBusinessException_whenAccountNotFound() {
         // given
