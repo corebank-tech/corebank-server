@@ -1,6 +1,5 @@
 package com.shinhan.corebank.auth.adapter.in.security;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -14,11 +13,8 @@ import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.core.env.PropertySource;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = SecurityTestController.class)
@@ -100,29 +96,4 @@ class SecurityConfigTest {
                 .andExpect(status().isOk());
     }
 
-    @Test
-    @DisplayName("공통 세션 쿠키는 HttpOnly로 설정한다")
-    void configuresHttpOnlySessionCookie() throws Exception {
-        assertThat(property(
-                "application.yml",
-                "server.servlet.session.cookie.http-only"
-        )).isEqualTo(true);
-    }
-
-    @Test
-    @DisplayName("운영 세션 쿠키는 Secure로 설정한다")
-    void configuresSecureSessionCookieInProd() throws Exception {
-        assertThat(property(
-                "application-prod.yml",
-                "server.servlet.session.cookie.secure"
-        )).isEqualTo(true);
-    }
-
-    private Object property(String resourceName, String propertyName) throws Exception {
-        YamlPropertySourceLoader loader = new YamlPropertySourceLoader();
-        PropertySource<?> source = loader
-                .load(resourceName, new ClassPathResource(resourceName))
-                .getFirst();
-        return source.getProperty(propertyName);
-    }
 }

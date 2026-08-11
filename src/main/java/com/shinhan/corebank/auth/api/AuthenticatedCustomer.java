@@ -14,7 +14,7 @@ public final class AuthenticatedCustomer {
             String userId,
             String userName
     ) {
-        this.customerId = customerId;
+        this.customerId = Objects.requireNonNull(customerId, "customerId must not be null");
         this.userId = userId;
         this.userName = userName;
     }
@@ -58,9 +58,7 @@ public final class AuthenticatedCustomer {
     @Override
     public String toString() {
         return "AuthenticatedCustomer{" +
-//                "customerId=" + customerId +
-//                ", userId='" + userId + '\'' +
-//                ", userName='" + userName + '\'' +
+                "customerId=" + customerId +
                 '}';
     }
 }
