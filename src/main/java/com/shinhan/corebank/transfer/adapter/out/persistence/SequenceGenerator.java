@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.Objects;
 import java.util.Optional;
 
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
@@ -46,6 +47,9 @@ public class SequenceGenerator implements TransferSequencePort {
 
     @Override
     public String nextTransactionNumber(LocalDate seqDate, TransferChannel channel) {
+        Objects.requireNonNull(seqDate, "seqDate must not be null");
+        Objects.requireNonNull(channel, "channel must not be null");
+
         long nextSeq = incrementAndGet(seqDate, channel.name());
         return format(seqDate, channel, nextSeq);
     }

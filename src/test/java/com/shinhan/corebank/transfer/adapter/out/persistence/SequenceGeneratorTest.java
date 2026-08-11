@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("거래번호 채번기(SequenceGenerator) 통합 테스트")
 class SequenceGeneratorTest extends IntegrationTestSupport {
@@ -65,6 +66,22 @@ class SequenceGeneratorTest extends IntegrationTestSupport {
         // then
         assertThat(first).endsWith("0000000001");
         assertThat(second).endsWith("0000000002");
+    }
+
+    @Test
+    @DisplayName("seqDate가 null이면 즉시 NullPointerException을 던진다")
+    void nextTransactionNumber_throwsNpe_whenSeqDateIsNull() {
+        assertThatThrownBy(() -> sequenceGenerator.nextTransactionNumber(null, CHANNEL))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("seqDate");
+    }
+
+    @Test
+    @DisplayName("channel이 null이면 즉시 NullPointerException을 던진다")
+    void nextTransactionNumber_throwsNpe_whenChannelIsNull() {
+        assertThatThrownBy(() -> sequenceGenerator.nextTransactionNumber(SEQ_DATE, null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("channel");
     }
 
     @Test
