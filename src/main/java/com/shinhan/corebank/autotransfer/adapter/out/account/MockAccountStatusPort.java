@@ -1,0 +1,36 @@
+package com.shinhan.corebank.autotransfer.adapter.out.account;
+
+import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
+import jakarta.persistence.EntityManager;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Component;
+
+import java.util.Optional;
+
+@Component
+@Profile({"local", "test", "scratch"})
+@RequiredArgsConstructor
+public class MockAccountStatusPort implements AccountStatusPort {
+    private final EntityManager entityManager;
+
+    @Override
+    public boolean isActiveAccount(Long accountId) {
+        return true;
+    }
+    @Override
+    public Optional<AccountType> findAccountTypeByNumber(String accountNumber) {
+        return Optional.of(AccountType.DEMAND_DEPOSIT);
+    }
+
+    @Override
+    public boolean belongsToCustomer(Long accountId, Long customerId) {
+        Number count = (Number) entityManager.createNativeQuery(
+                        "SELECT COUNT(*) FROM account WHERE account_id = :accountId AND customer_id = :customerId")
+                .setParameter("accountId", accountId)
+                .setParameter("customerId", customerId)
+                .getSingleResult();
+        return count.longValue() > 0;
+    }
+}

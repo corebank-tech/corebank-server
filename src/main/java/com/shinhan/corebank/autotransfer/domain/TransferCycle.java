@@ -1,6 +1,8 @@
 package com.shinhan.corebank.autotransfer.domain;
 
 
+import com.shinhan.corebank.common.exception.BusinessException;
+
 import java.util.Arrays;
 
 public enum TransferCycle {
@@ -16,6 +18,6 @@ public enum TransferCycle {
         return Arrays.stream(values())  // MONTHLY, QUARTERLY, SEMI_ANNUAL 나열
                 .filter(c -> c.months == months) // 찾는 숫자 필터링
                 .findFirst()    //
-                .orElseThrow(() -> new IllegalArgumentException("지원하지 않는 이체주기: " + months));    // 예외처리
+                .orElseThrow(() -> new BusinessException(AutoTransferErrorCode.INVALID_CYCLE_MONTHS));    // 예외처리
     }
 }
