@@ -1,5 +1,7 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import java.util.Optional;
+
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
@@ -16,6 +18,12 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
 
     public AccountLockPersistenceAdapter(AccountLockJpaRepository repository) {
         this.repository = repository;
+    }
+
+    @Override
+    public Optional<Long> resolveAccountIdByNumber(String accountNumber) {
+        return repository.findByAccountNumber(accountNumber)
+                .map(AccountLockJpaEntity::getAccountId);
     }
 
     @Override

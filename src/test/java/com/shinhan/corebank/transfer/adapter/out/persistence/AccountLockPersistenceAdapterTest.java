@@ -1,5 +1,7 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import java.util.Optional;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
@@ -24,6 +26,36 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
 
     @Autowired
     private EntityManager entityManager;
+
+    @Test
+    @DisplayName("계좌번호로 계좌 ID를 조회한다")
+    void resolveAccountIdByNumber_returnsAccountId() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        Optional<Long> resolved = adapter.resolveAccountIdByNumber("110222222222");
+
+        // then
+        assertThat(resolved).contains(202L);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 계좌번호는 빈 Optional을 반환한다")
+    void resolveAccountIdByNumber_returnsEmpty_whenAccountNumberNotFound() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        Optional<Long> resolved = adapter.resolveAccountIdByNumber("999999999999");
+
+        // then
+        assertThat(resolved).isEmpty();
+    }
 
     @Test
     @DisplayName("출금/입금 계좌를 락으로 획득하면 각 계좌의 현재 잔액이 방향에 맞게 반환된다")

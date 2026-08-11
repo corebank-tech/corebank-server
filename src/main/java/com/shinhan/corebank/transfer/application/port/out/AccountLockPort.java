@@ -1,6 +1,16 @@
 package com.shinhan.corebank.transfer.application.port.out;
 
+import java.util.Optional;
+
 public interface AccountLockPort {
+
+    /**
+     * 입금계좌번호로 계좌 ID를 조회한다. 락을 잡지 않는 단순 조회이며, 반환된 계좌 ID로
+     * 이후 반드시 {@link #lockForTransfer}를 호출해 오름차순 락과 최신 잔액 스냅샷을 얻어야
+     * 한다. 이 메서드에서 먼저 락을 잡으면 lockForTransfer의 오름차순 락 계약이 깨져
+     * 반대 방향 동시 이체(A→B, B→A) 시 데드락이 재발할 수 있다.
+     */
+    Optional<Long> resolveAccountIdByNumber(String accountNumber);
 
     /**
      * 출금/입금 계좌를 계좌 ID 오름차순으로 비관적 락(SELECT FOR UPDATE) 획득한다.

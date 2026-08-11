@@ -21,4 +21,18 @@ public interface AccountLockJpaRepository extends JpaRepository<AccountLockJpaEn
         WHERE a.accountId = :accountId
         """)
     Optional<AccountLockJpaEntity> findByAccountIdForUpdate(@Param("accountId") Long accountId);
+
+    /**
+     * 입금계좌번호 → ID 해석 전용 조회. 의도적으로 락을 잡지 않는다.
+     * 여기서 SELECT FOR UPDATE를 걸면 {@link AccountLockPersistenceAdapter#lockForTransfer}가
+     * 보장하는 account_id 오름차순 락 획득 계약보다 먼저 입금계좌 행에 락이 걸려, 두 이체가
+     * 반대 방향(A→B, B→A)으로 동시 실행될 때 정확히 그 데드락이 재발한다. 이 메서드는 ID만
+     * 얻기 위한 평범한 조회이고, 실제 락은 이후 lockForTransfer가 오름차순으로 잡는다.
+     */
+    @Query("""
+        SELECT a
+        FROM AccountLockJpaEntity a
+        WHERE a.accountNumber = :accountNumber
+        """)
+    Optional<AccountLockJpaEntity> findByAccountNumber(@Param("accountNumber") String accountNumber);
 }
