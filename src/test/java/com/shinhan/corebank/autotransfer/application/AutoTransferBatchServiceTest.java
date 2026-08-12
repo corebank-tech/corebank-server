@@ -3,6 +3,7 @@ package com.shinhan.corebank.autotransfer.application;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -61,8 +62,9 @@ class AutoTransferBatchServiceTest {
 
         autoTransferBatchService.executeDaily(DATE);
 
-        verify(autoTransferBatchItemProcessor).saveProcessing(target, DATE);
-        verify(autoTransferBatchItemProcessor).completeProcessing(target, saved, DATE);
+        var inOrder = inOrder(autoTransferBatchItemProcessor);
+        inOrder.verify(autoTransferBatchItemProcessor).saveProcessing(target, DATE);
+        inOrder.verify(autoTransferBatchItemProcessor).completeProcessing(target, saved, DATE);
     }
 
     @Test
