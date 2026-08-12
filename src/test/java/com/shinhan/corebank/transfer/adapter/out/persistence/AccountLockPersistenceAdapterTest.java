@@ -7,6 +7,7 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccount;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
+import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import jakarta.persistence.EntityManager;
@@ -28,30 +29,30 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
     private EntityManager entityManager;
 
     @Test
-    @DisplayName("계좌번호로 계좌 ID를 조회한다")
-    void resolveAccountIdByNumber_returnsAccountId() {
+    @DisplayName("계좌번호로 계좌 ID와 예금주명을 조회한다")
+    void resolvePayeeByAccountNumber_returnsAccountIdAndPayeeName() {
         // given
         TransferTestFixtures.seedCustomerAndAccounts(entityManager);
         entityManager.flush();
         entityManager.clear();
 
         // when
-        Optional<Long> resolved = adapter.resolveAccountIdByNumber("110222222222");
+        Optional<ResolvedPayee> resolved = adapter.resolvePayeeByAccountNumber("110222222222");
 
         // then
-        assertThat(resolved).contains(202L);
+        assertThat(resolved).contains(new ResolvedPayee(202L, "테스터"));
     }
 
     @Test
     @DisplayName("존재하지 않는 계좌번호는 빈 Optional을 반환한다")
-    void resolveAccountIdByNumber_returnsEmpty_whenAccountNumberNotFound() {
+    void resolvePayeeByAccountNumber_returnsEmpty_whenAccountNumberNotFound() {
         // given
         TransferTestFixtures.seedCustomerAndAccounts(entityManager);
         entityManager.flush();
         entityManager.clear();
 
         // when
-        Optional<Long> resolved = adapter.resolveAccountIdByNumber("999999999999");
+        Optional<ResolvedPayee> resolved = adapter.resolvePayeeByAccountNumber("999999999999");
 
         // then
         assertThat(resolved).isEmpty();
