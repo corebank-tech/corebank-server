@@ -127,6 +127,41 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("계좌 미개설(가입 실패) 적금 건은 autoTransferPrefill을 내려주지 않는다")
+    void getSubscriptionResult_savings_withoutAccount_noAutoTransferPrefill() throws Exception {
+        ProductJpaEntity savingsProduct = productJpaRepository.save(ProductJpaEntity.builder()
+                .productCode("CTL-SAV-02")
+                .productName("청년 희망 적금")
+                .productGroup(ProductGroup.SAVINGS)
+                .depositType(DepositType.INSTALLMENT)
+                .baseRate(new BigDecimal("3.20"))
+                .maxRate(new BigDecimal("4.50"))
+                .minAmount(10_000L)
+                .maxAmount(10_000_000L)
+                .amountUnit(10_000L)
+                .minTermMonths((short) 6)
+                .maxTermMonths((short) 36)
+                .interestPayType(InterestPayType.SIMPLE)
+                .saleStatus(SaleStatus.ON_SALE)
+                .saleEndDate(LocalDate.of(2026, 12, 31))
+                .newFlag(false)
+                .singleAccountLimit(false)
+                .build());
+        Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_ctl_sav_noacc");
+        Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000050", customerId, null);
+        Long subscriptionId = subscriptionJpaRepository.save(
+                SubscriptionTestFixtures.defaultSubscription(customerId, savingsProduct.getProductId(), withdrawalAccountId)
+        ).getSubscriptionId();
+
+        mockMvc.perform(get("/product-subscriptions/{subscriptionId}", subscriptionId)
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.productGroup").value("SAVINGS"))
+                .andExpect(jsonPath("$.data.accountId").doesNotExist())
+                .andExpect(jsonPath("$.data.autoTransferPrefill").doesNotExist());
+    }
+
+    @Test
     @DisplayName("계좌 개설 전(가입 실패) 건은 accountId/accountNumber가 null로 응답한다")
     void getSubscriptionResult_withoutAccount_returnsNullAccountFields() throws Exception {
         Long productId = productJpaRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
