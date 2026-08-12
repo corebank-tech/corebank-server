@@ -209,4 +209,22 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
         mockMvc.perform(get("/product-subscriptions/{subscriptionId}", 1L))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    @DisplayName("subscriptionId가 0이면 400 + CMN0001을 반환한다")
+    void getSubscriptionResult_zeroId_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/product-subscriptions/{subscriptionId}", 0L)
+                        .with(authentication(authenticationOf(1L))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
+    }
+
+    @Test
+    @DisplayName("subscriptionId가 음수면 400 + CMN0001을 반환한다")
+    void getSubscriptionResult_negativeId_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/product-subscriptions/{subscriptionId}", -1L)
+                        .with(authentication(authenticationOf(1L))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
+    }
 }
