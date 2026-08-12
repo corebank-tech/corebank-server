@@ -65,7 +65,7 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
         List<AutoTransfer> domainContent = content.stream().map(AutoTransferMapper::toDomain).toList();
         return new PageImpl<>(domainContent, pageable, total == null ? 0 : total);
     }
-    // 정상 상태이고 오늘이 다음 실행일인 자동이체 등록 목록
+    // 정상 상태이고 오늘이거나 그 이전인 자동이체 등록 목록
     // 배치 루프 전체를 트랜잭션으로 감싸면 커넥션 풀을 고갈시킬 수 있다
     // -> 호출부는 트랜잭션이 없고, 조회 이 한 번만 여기서 짧게 트랜잭션을 걸어 끝낸다.
     @Override
@@ -88,7 +88,7 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
     private Predicate[] dueForExecutionConditions(LocalDate date) {
         return new Predicate[] {
                 autoTransferJpaEntity.status.eq(AutoTransferStatus.NORMAL),
-                autoTransferJpaEntity.nextExecutionDate.eq(date)
+                autoTransferJpaEntity.nextExecutionDate.loe(date)
         };
     }
 

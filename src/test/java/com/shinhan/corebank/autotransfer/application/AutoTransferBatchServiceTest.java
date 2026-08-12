@@ -66,16 +66,37 @@ class AutoTransferBatchServiceTest {
     }
 
     @Test
-    @DisplayName("saveProcessing()이 유니크 제약 위반이면 이미 처리된 것으로 보고 completeProcessing()을 호출하지 않는다")
+    @DisplayName("saveProcessing()이 uk_ate_dup 위반이면 이미 처리된 것으로 보고 completeProcessing()을 호출하지 않는다")
     void executeDaily_saveProcessingConstraintViolation_skipsCompleteProcessing() {
         AutoTransfer target = autoTransfer(10L);
         when(autoTransferBatchQueryPort.findDueForExecution(DATE)).thenReturn(List.of(target));
-        doThrow(new DataIntegrityViolationException("duplicate"))
+        RuntimeException rootCause = new RuntimeException(
+                "Duplicate entry '10-2026-03-15' for key 'auto_transfer_execution.uk_ate_dup'");
+        doThrow(new DataIntegrityViolationException("insert failed", rootCause))
                 .when(autoTransferBatchItemProcessor).saveProcessing(target, DATE);
 
         autoTransferBatchService.executeDaily(DATE);
 
         verify(autoTransferBatchItemProcessor, never()).completeProcessing(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("saveProcessing()이 uk_ate_dup이 아닌 다른 제약 위반으로 실패해도 completeProcessing()을 호출하지 않고 다음 건으로 넘어간다")
+    void executeDaily_saveProcessingOtherConstraintViolation_skipsCompleteProcessingAndContinues() {
+        AutoTransfer failing = autoTransfer(10L);
+        AutoTransfer succeeding = autoTransfer(11L);
+        when(autoTransferBatchQueryPort.findDueForExecution(DATE)).thenReturn(List.of(failing, succeeding));
+        RuntimeException rootCause = new RuntimeException(
+                "Cannot add or update a child row: a foreign key constraint fails (`fk_ate_auto_transfer`)");
+        doThrow(new DataIntegrityViolationException("insert failed", rootCause))
+                .when(autoTransferBatchItemProcessor).saveProcessing(failing, DATE);
+        AutoTransferExecution saved = processingExecution();
+        when(autoTransferBatchItemProcessor.saveProcessing(eq(succeeding), eq(DATE))).thenReturn(saved);
+
+        autoTransferBatchService.executeDaily(DATE);
+
+        verify(autoTransferBatchItemProcessor, never()).completeProcessing(eq(failing), any(), any());
+        verify(autoTransferBatchItemProcessor).completeProcessing(succeeding, saved, DATE);
     }
 
     @Test

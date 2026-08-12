@@ -61,6 +61,10 @@ public class AutoTransferBatchItemProcessor {
 
         TransferResult result = transferExecutionUseCase.execute(command);
 
+        if (!result.status().isConfirmed()) {
+            throw new IllegalStateException("이체 실행 결과가 PROCESSING으로 미확정 - autoTransferId=%d, date=%s"
+                    .formatted(autoTransfer.getAutoTransferId(),date));
+        }
         if (result.status() == ProcessResultStatus.SUCCESS) {
             processingExecution.markSuccess(result.transactionNumber());
         } else {

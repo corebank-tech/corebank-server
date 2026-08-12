@@ -37,7 +37,12 @@ public class AutoTransferBatchService implements AutoTransferBatchUseCase {
         try {
             saved = autoTransferBatchItemProcessor.saveProcessing(autoTransfer, date);
         } catch (DataIntegrityViolationException e) {
-            log.info("이미 처리된 회차 - autoTransferId={}, date={}", autoTransfer.getAutoTransferId(), date);
+            String message = e.getMostSpecificCause().getMessage();
+            if (message != null && message.contains("uk_ate_dup")) {
+                log.info("이미 처리된 회차 - autoTransferId={}, date={}", autoTransfer.getAutoTransferId(), date);
+            } else {
+                log.error("PROCESSING 저장 실패 - autoTransferId={}, date={}", autoTransfer.getAutoTransferId(), date, e);
+            }
             return;
         } catch (Exception e) {
             log.error("PROCESSING 저장 실패 - autoTransferId={}, date={}", autoTransfer.getAutoTransferId(), date, e);

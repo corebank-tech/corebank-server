@@ -157,6 +157,30 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("이체 결과가 PROCESSING(응답 유실·타임아웃)이면 성공/실패로 단정하지 않고 예외를 던져 롤백시킨다")
+    void completeProcessing_transferResultProcessing_throwsAndRollsBack() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
+                .status(ProcessResultStatus.PROCESSING)
+                .build());
+
+        assertThatThrownBy(() -> itemProcessor.completeProcessing(autoTransfer(), saved, today))
+                .isInstanceOf(IllegalStateException.class);
+
+        // completeProcessing() 전체가 롤백되어 회차는 여전히 PROCESSING이어야 하고,
+        // markSuccess/markError 어느 쪽으로도 확정되면 안 된다 - 재확정 배치(4주차)의 몫으로 남겨둠
+        var executionAfter = executionRepository.findById(saved.getExecutionId()).orElseThrow();
+        assertThat(executionAfter.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
+        assertThat(executionAfter.getTransactionNumber()).isNull();
+        assertThat(executionAfter.getFailureReason()).isNull();
+
+        var autoTransferAfter = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        assertThat(autoTransferAfter.getNextExecutionDate()).isEqualTo(today);
+
+        assertThat(auditLogJpaRepository.findAll()).isEmpty();
+    }
+
+    @Test
     @DisplayName("이체 성공 시: 회차가 SUCCESS로 확정되고, 다음 실행일이 갱신되고, 감사로그가 남는다")
     void completeProcessing_success() {
         AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
