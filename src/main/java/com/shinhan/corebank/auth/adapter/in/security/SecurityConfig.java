@@ -37,7 +37,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
 
                         // Swagger-UI/API 문서는 인증 없이 접근 가능하도록 공개
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        // "/swagger-ui.html"은 springdoc 기본 진입 경로(SwaggerWelcomeWebMvc)로,
+                        // "/swagger-ui/**"에 매칭되지 않아 별도로 permitAll 해야 함
+                        .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
                         // 인증된 사용자만 접근 가능
                         .anyRequest().authenticated()
