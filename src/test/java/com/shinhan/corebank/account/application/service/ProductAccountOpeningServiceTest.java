@@ -146,6 +146,15 @@ class ProductAccountOpeningServiceTest {
 
         assertThat(account.getStatus())
                 .isEqualTo(AccountStatus.ACTIVE);
+        
+        assertThat(account.getPasswordFailureCount())
+                .isZero();
+
+        assertThat(account.isPasswordLocked())
+                .isFalse();
+
+        assertThat(account.isWithdrawalRegistered())
+                .isFalse();
     }
 
     @Test
@@ -236,10 +245,10 @@ class ProductAccountOpeningServiceTest {
         ProductAccountOpeningCommand command =
                 new ProductAccountOpeningCommand(
                         CUSTOMER_ID,
-                        null,
+                        PRODUCT_ID,
                         AccountType.DEMAND_DEPOSIT,
                         PASSWORD_HASH,
-                        null
+                        MATURITY_DATE
                 );
 
         // when & then
@@ -254,6 +263,26 @@ class ProductAccountOpeningServiceTest {
                     assertThat(exception.getErrorCode())
                             .isEqualTo(
                                     CommonErrorCode.INVALID_INPUT
+                            );
+                });
+
+        verifyNoInteractions(issueAccountNumberUseCase);
+        verifyNoInteractions(accountPersistencePort);
+    }
+    @Test
+    @DisplayName("상품 계좌 개설 command가 없으면 채번하지 않는다")
+    void rejectNullCommand() {
+        assertThatThrownBy(
+                () -> productAccountOpeningService.open(null)
+        )
+                .isInstanceOf(BusinessException.class)
+                .satisfies(throwable -> {
+                    BusinessException exception =
+                            (BusinessException) throwable;
+
+                    assertThat(exception.getErrorCode())
+                            .isEqualTo(
+                                    CommonErrorCode.REQUIRED_FIELD_MISSING
                             );
                 });
 
