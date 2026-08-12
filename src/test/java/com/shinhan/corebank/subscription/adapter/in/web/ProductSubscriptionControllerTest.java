@@ -81,6 +81,7 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.expectedMaturityAmount").value(1_028_000))
                 .andExpect(jsonPath("$.data.status").value("SUCCESS"))
                 .andExpect(jsonPath("$.data.transactionNumber").value("20260801000000000001"))
+                .andExpect(jsonPath("$.data.subscribedAt").value("2026-08-01T10:30:00"))
                 .andExpect(jsonPath("$.data.autoTransferPrefill").doesNotExist());
     }
 
