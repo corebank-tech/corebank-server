@@ -1,7 +1,6 @@
 package com.shinhan.corebank.subscription.application;
 
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import com.shinhan.corebank.product.domain.ProductDetail;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionQueryUseCase;
@@ -23,12 +22,9 @@ public class ProductSubscriptionQueryService implements ProductSubscriptionQuery
 
     @Override
     public ProductSubscriptionResult getResult(Long subscriptionId, Long requestingCustomerId) {
-        ProductSubscription subscription = productSubscriptionQueryPort.findById(subscriptionId)
+        ProductSubscription subscription = productSubscriptionQueryPort
+                .findByIdAndCustomerId(subscriptionId, requestingCustomerId)
                 .orElseThrow(() -> new BusinessException(SubscriptionErrorCode.SUBSCRIPTION_NOT_FOUND));
-
-        if (!subscription.getCustomerId().equals(requestingCustomerId)) {
-            throw new BusinessException(CommonErrorCode.FORBIDDEN);
-        }
 
         ProductDetail productDetail = productQueryUseCase.getDetail(subscription.getProductId());
 

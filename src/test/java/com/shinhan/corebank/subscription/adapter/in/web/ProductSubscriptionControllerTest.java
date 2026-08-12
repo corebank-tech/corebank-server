@@ -188,8 +188,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("타인 소유 가입건이면 403 + CMN0102를 반환한다")
-    void getSubscriptionResult_forbiddenForOtherCustomer() throws Exception {
+    @DisplayName("타인 소유 가입건이면 404 + PRD0203을 반환한다(존재 여부 비노출)")
+    void getSubscriptionResult_otherCustomer_returnsNotFound() throws Exception {
         Long productId = productJpaRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
         Long ownerCustomerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_ctl_owner");
         Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000040", ownerCustomerId, null);
@@ -199,8 +199,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
 
         mockMvc.perform(get("/product-subscriptions/{subscriptionId}", subscriptionId)
                         .with(authentication(authenticationOf(999_888L))))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("CMN0102"));
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PRD0203"));
     }
 
     @Test

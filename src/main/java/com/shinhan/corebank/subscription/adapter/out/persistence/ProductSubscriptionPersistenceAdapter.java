@@ -13,8 +13,8 @@ public class ProductSubscriptionPersistenceAdapter implements ProductSubscriptio
     private final ProductSubscriptionJpaRepository productSubscriptionJpaRepository;
 
     @Override
-    public Optional<ProductSubscription> findById(Long subscriptionId) {
-        return productSubscriptionJpaRepository.findById(subscriptionId)
+    public Optional<ProductSubscription> findByIdAndCustomerId(Long subscriptionId, Long customerId) {
+        return productSubscriptionJpaRepository.findBySubscriptionIdAndCustomerId(subscriptionId, customerId)
                 .map(ProductSubscriptionMapper::toDomain);
     }
 }
