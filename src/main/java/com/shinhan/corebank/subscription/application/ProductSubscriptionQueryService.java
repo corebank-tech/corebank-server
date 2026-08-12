@@ -28,10 +28,15 @@ public class ProductSubscriptionQueryService implements ProductSubscriptionQuery
 
         ProductDetail productDetail = productQueryUseCase.getDetail(subscription.getProductId());
 
-        String accountNumber = subscription.getAccountId() == null
-                ? null
-                : accountNumberQueryPort.findAccountNumberById(subscription.getAccountId())
-                  .orElse(null);
+        String accountNumber = null;
+
+        if (subscription.getAccountId() != null) {
+            accountNumber = accountNumberQueryPort
+                    .findAccountNumberById(subscription.getAccountId())
+                    .orElseThrow(() -> new BusinessException(
+                            SubscriptionErrorCode.SUBSCRIPTION_ACCOUNT_NOT_FOUND
+                    ));
+        }
 
         return ProductSubscriptionResult.builder()
                 .subscription(subscription)
