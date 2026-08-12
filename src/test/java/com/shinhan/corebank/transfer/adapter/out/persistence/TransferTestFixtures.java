@@ -10,10 +10,10 @@ import lombok.NoArgsConstructor;
  * 새 테스트가 동일한 계좌·고객 데이터가 필요하면 raw SQL을 복붙하지 말고 이 메서드를 재사용한다.
  */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
-final class TransferTestFixtures {
+public final class TransferTestFixtures {
 
     /** customer_id=1, account_id=101(출금)/202(입금) 을 시드한다. */
-    static void seedCustomerAndAccounts(EntityManager entityManager) {
+    public static void seedCustomerAndAccounts(EntityManager entityManager) {
         entityManager.createNativeQuery("""
             INSERT INTO customer (customer_id, user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at)
             VALUES (1, 'user1', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '테스터', '1990-01-01', 'test@test.com', '01012345678', NOW(6), NOW(6), NOW(6))
