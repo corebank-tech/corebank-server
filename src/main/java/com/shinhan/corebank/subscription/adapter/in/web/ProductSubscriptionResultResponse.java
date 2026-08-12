@@ -1,5 +1,6 @@
 package com.shinhan.corebank.subscription.adapter.in.web;
 
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.subscription.domain.ProductSubscription;
@@ -29,7 +30,11 @@ public record ProductSubscriptionResultResponse(
 ) {
     public static ProductSubscriptionResultResponse from(ProductSubscriptionResult result) {
         ProductSubscription s = result.getSubscription();
-        boolean isSavings = result.getProductGroup() == ProductGroup.SAVINGS;
+
+        boolean canCreateAutoTransfer = result.getProductGroup() == ProductGroup.SAVINGS
+                && s.getStatus() == ProcessResultStatus.SUCCESS
+                && s.getAccountId() != null
+                && result.getAccountNumber() != null;
 
         return new ProductSubscriptionResultResponse(
                 s.getSubscriptionId(),
@@ -47,7 +52,7 @@ public record ProductSubscriptionResultResponse(
                 s.getStatus().name(),
                 s.getTransactionNumber(),
                 s.getSubscribedAt(),
-                isSavings ? AutoTransferPrefill.from(s, result.getAccountNumber()) : null
+                canCreateAutoTransfer ? AutoTransferPrefill.from(s, result.getAccountNumber()) : null
         );
     }
 
