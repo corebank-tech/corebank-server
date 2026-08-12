@@ -30,6 +30,11 @@ public class ProductAccountOpeningService
     public AccountOpeningResult open(
             ProductAccountOpeningCommand command
     ) {
+        if (command == null) {
+            throw new BusinessException(
+                    CommonErrorCode.REQUIRED_FIELD_MISSING
+            );
+        }
         validateProductAccountType(command.accountType());
 
         String accountNumber =
