@@ -42,9 +42,9 @@ out/
 ### Claude Code (로컬 전용, 팀 합의 전까지 비공유) ###
 /CLAUDE.md
 /.claude/
-/docs/requirements_overview.md
-/docs/api_endpoint_reference.md
-/docs/api_spec_conflict_report.md
+/docs/personal/requirements_overview.md
+/docs/personal/api_endpoint_reference.md
+/docs/personal/api_spec_conflict_report.md
 
 ### CODEX ###
 /AGENTS.md

@@ -29,9 +29,15 @@ public final class SubscriptionTestFixtures {
      */
     public static ProductSubscriptionJpaEntity defaultSubscription(
             Long customerId, Long productId, Long withdrawalAccountId) {
+        return defaultSubscription(customerId, productId, withdrawalAccountId, null);
+    }
+
+    public static ProductSubscriptionJpaEntity defaultSubscription(
+            Long customerId, Long productId, Long withdrawalAccountId, Long accountId) {
         return ProductSubscriptionJpaEntity.builder()
                 .customerId(customerId)
                 .productId(productId)
+                .accountId(accountId)
                 .withdrawalAccountId(withdrawalAccountId)
                 .subscriptionAmount(1_000_000L)
                 .termMonths((short) 12)
@@ -99,8 +105,8 @@ public final class SubscriptionTestFixtures {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO account (account_number, customer_id, product_id, account_type, status, password_hash, opened_date, created_at, updated_at) "
-                            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO account (account_number, customer_id, product_id, account_type, status, password_hash, opened_date, maturity_date, created_at, updated_at) "
+                            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     Statement.RETURN_GENERATED_KEYS);
             LocalDateTime now = LocalDateTime.now();
             ps.setString(1, accountNumber);
@@ -114,8 +120,13 @@ public final class SubscriptionTestFixtures {
             ps.setString(5, "ACTIVE");
             ps.setString(6, DUMMY_BCRYPT_HASH);
             ps.setObject(7, now);
-            ps.setObject(8, now);
+            if (productId == null) {
+                ps.setNull(8, java.sql.Types.DATE);
+            } else {
+                ps.setObject(8, now.toLocalDate().plusYears(1));
+            }
             ps.setObject(9, now);
+            ps.setObject(10, now);
             return ps;
         }, keyHolder);
         return keyHolder.getKey().longValue();

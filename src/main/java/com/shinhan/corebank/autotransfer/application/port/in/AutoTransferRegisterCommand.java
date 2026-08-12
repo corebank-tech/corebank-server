@@ -6,7 +6,8 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import lombok.Builder;
 
 import java.time.LocalDate;
-import java.util.regex.Pattern;
+
+import static com.shinhan.corebank.common.util.AccountNumberPolicy.ACCOUNT_NUMBER_PATTERN;
 
 @Builder
 // register()에 도달하기 전 단계에서 미리 걸러내는 역할을 하는 파일
@@ -14,7 +15,6 @@ public record AutoTransferRegisterCommand (Long customerId, Long withdrawalAccou
                                            String payeeName, Long amount, Integer cycleMonths, Integer transferDay,
                                            LocalDate startDate, LocalDate endDate, String myPassbookMemo, String recipientPassbookMemo,
                                            String accountPasswordAuthToken, String requestIp){
-    private static final Pattern ACCOUNT_NUMBER_PATTERN = Pattern.compile("^[0-9]{12}$");
 
     public AutoTransferRegisterCommand {
         //필수값 검증

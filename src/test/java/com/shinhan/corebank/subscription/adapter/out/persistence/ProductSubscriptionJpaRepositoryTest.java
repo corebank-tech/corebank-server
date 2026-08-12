@@ -60,4 +60,19 @@ class ProductSubscriptionJpaRepositoryTest extends IntegrationTestSupport {
         assertThat(found.getMaturityDate()).isEqualTo(subscription.getMaturityDate());
         assertThat(found.getSubscribedAt()).isEqualTo(subscription.getSubscribedAt());
     }
+
+    @Test
+    @DisplayName("findBySubscriptionIdAndCustomerId는 소유자가 일치할 때만 값을 반환한다")
+    void findBySubscriptionIdAndCustomerId_ownershipScoped() {
+        Long productId = productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
+        Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_own_test");
+        Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000003", customerId, null);
+        Long subscriptionId = repository.save(
+                SubscriptionTestFixtures.defaultSubscription(customerId, productId, withdrawalAccountId)
+        ).getSubscriptionId();
+
+        assertThat(repository.findBySubscriptionIdAndCustomerId(subscriptionId, customerId)).isPresent();
+        assertThat(repository.findBySubscriptionIdAndCustomerId(subscriptionId, 999_999L)).isEmpty();
+        assertThat(repository.findBySubscriptionIdAndCustomerId(999_999L, customerId)).isEmpty();
+    }
 }
