@@ -1,6 +1,8 @@
 package com.shinhan.corebank.autotransfer.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -59,6 +61,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @DisplayName("정상 등록 요청은 200 + ApiResponse 봉투로 응답한다")
     void register_success() throws Exception {
         mockMvc.perform(post("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(registerRequestJson(customerId, accountId, "token-1")))
@@ -85,6 +89,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("accountPasswordAuthToken", "token-negative-amount");
 
         mockMvc.perform(post("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(OBJECT_MAPPER.writeValueAsString(body)))
@@ -110,6 +116,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         String json = OBJECT_MAPPER.writeValueAsString(body);
 
         mockMvc.perform(post("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
@@ -121,6 +129,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
 
         // release()가 없었다면 이 두 번째 요청은 CMN0303(처리 중)을 받았을 것 — 여전히 원래 오류(AUT0008)가 나야 정상
         mockMvc.perform(post("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
@@ -144,6 +154,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("accountPasswordAuthToken", "token-invalid-cycle");
 
         mockMvc.perform(post("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(OBJECT_MAPPER.writeValueAsString(body)))
@@ -155,6 +167,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @DisplayName("Idempotency-Key가 UUID 형식이 아니면 500 대신 400 + CMN0001을 반환한다")
     void register_invalidIdempotencyKeyFormat_returnsCmn0001() throws Exception {
         mockMvc.perform(post("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", "not-a-uuid")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(registerRequestJson(customerId, accountId, "token-bad-key")))
@@ -166,6 +180,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @DisplayName("Idempotency-Key 헤더가 없으면 400 + CMN0002를 반환한다")
     void register_missingIdempotencyKey_returnsCmn0002() throws Exception {
         mockMvc.perform(post("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(registerRequestJson(customerId, accountId, "token-2")))
                 .andExpect(status().isBadRequest())
@@ -179,6 +195,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         String idempotencyKey = UUID.randomUUID().toString();
 
         mockMvc.perform(post("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson))
@@ -191,6 +209,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.clear();
 
         mockMvc.perform(post("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson))
@@ -206,6 +226,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         String idempotencyKey = UUID.randomUUID().toString();
 
         mockMvc.perform(post("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(registerRequestJson(customerId, accountId, "token-4")))
@@ -226,6 +248,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         differentAmountBody.put("accountPasswordAuthToken", "token-4");
 
         mockMvc.perform(post("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(OBJECT_MAPPER.writeValueAsString(differentAmountBody)))
@@ -239,6 +263,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         String idempotencyKey = UUID.randomUUID().toString();
 
         mockMvc.perform(post("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(registerRequestJson(customerId, accountId, "token-original")))
@@ -248,6 +274,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.clear();
 
         mockMvc.perform(post("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(registerRequestJson(customerId, accountId, "token-reissued")))
@@ -266,6 +294,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.clear();
 
         mockMvc.perform(get("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
                         .param("customerId", String.valueOf(customerId))
                         .param("withdrawalAccountId", String.valueOf(accountId)))
                 .andExpect(status().isOk())
@@ -285,6 +314,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.clear();
 
         mockMvc.perform(get("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
                         .param("customerId", String.valueOf(customerId))
                         .param("withdrawalAccountId", String.valueOf(accountId))
                         .param("status", "NORMAL"))
@@ -302,6 +332,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.clear();
 
         mockMvc.perform(get("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
                         .param("customerId", String.valueOf(customerId))
                         .param("withdrawalAccountId", String.valueOf(accountId))
                         .param("status", "ALL"))
@@ -313,6 +344,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @DisplayName("status가 도메인에 없는 값이면 400 + CMN0001을 반환한다")
     void search_invalidStatus_returnsCmn0001() throws Exception {
         mockMvc.perform(get("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
                         .param("customerId", String.valueOf(customerId))
                         .param("withdrawalAccountId", String.valueOf(accountId))
                         .param("status", "NOT_A_STATUS"))
@@ -330,6 +362,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         Long otherCustomerId = insertCustomer();
 
         mockMvc.perform(get("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
                         .param("customerId", String.valueOf(otherCustomerId))
                         .param("withdrawalAccountId", String.valueOf(accountId)))
                 .andExpect(status().isOk())
@@ -341,6 +374,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @DisplayName("customerId가 없으면 400을 반환한다")
     void search_missingCustomerId_returnsBadRequest() throws Exception {
         mockMvc.perform(get("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
                         .param("withdrawalAccountId", String.valueOf(accountId)))
                 .andExpect(status().isBadRequest());
     }
@@ -349,6 +383,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @DisplayName("withdrawalAccountId가 없으면 400을 반환한다")
     void search_missingWithdrawalAccountId_returnsBadRequest() throws Exception {
         mockMvc.perform(get("/auto-transfers")
+                        .with(user("customer").roles("CUSTOMER"))
                         .param("customerId", String.valueOf(customerId)))
                 .andExpect(status().isBadRequest());
     }
@@ -362,6 +397,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.clear();
 
         mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(changeRequestJson(customerId, "change-token-1")))
@@ -381,6 +418,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         String idempotencyKey = UUID.randomUUID().toString();
 
         mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(changeRequestJson(customerId, "change-token-fp")))
@@ -400,6 +439,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("accountPasswordAuthToken", "change-token-fp");
 
         mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(OBJECT_MAPPER.writeValueAsString(body)))
@@ -421,6 +462,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("accountPasswordAuthToken", "change-token-limit");
 
         mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(OBJECT_MAPPER.writeValueAsString(body)))
@@ -432,6 +475,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @DisplayName("존재하지 않는 자동이체를 변경하려 하면 404 + AUT0201을 반환한다")
     void change_notFound_returnsAut0201() throws Exception {
         mockMvc.perform(patch("/auto-transfers/{id}", 999_999L)
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(changeRequestJson(customerId, "change-token-2")))
@@ -453,6 +498,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("accountPasswordAuthToken", "change-token-partial");
 
         mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(OBJECT_MAPPER.writeValueAsString(body)))
@@ -475,6 +522,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("accountPasswordAuthToken", "change-token-unmodifiable");
 
         mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(OBJECT_MAPPER.writeValueAsString(body)))
@@ -491,6 +540,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.clear();
 
         mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(changeRequestJson(customerId, "change-token-3")))
                 .andExpect(status().isBadRequest())
@@ -506,6 +557,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.clear();
 
         mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .param("customerId", String.valueOf(customerId))
                         .header("Account-Password-Auth-Token", "cancel-token-1"))
@@ -522,6 +575,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @DisplayName("존재하지 않는 자동이체를 해지하려 하면 404 + AUT0201을 반환한다")
     void cancel_notFound_returnsAut0201() throws Exception {
         mockMvc.perform(delete("/auto-transfers/{id}", 999_999L)
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .param("customerId", String.valueOf(customerId))
                         .header("Account-Password-Auth-Token", "cancel-token-2"))
@@ -538,6 +593,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.clear();
 
         mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .param("customerId", String.valueOf(customerId))
                         .header("Account-Password-Auth-Token", "cancel-token-3"))
                 .andExpect(status().isBadRequest())
@@ -554,6 +611,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         String idempotencyKey = UUID.randomUUID().toString();
 
         mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .param("customerId", String.valueOf(customerId))
                         .header("Account-Password-Auth-Token", "cancel-token-4"))
@@ -563,6 +622,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.clear();
 
         mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .param("customerId", String.valueOf(customerId))
                         .header("Account-Password-Auth-Token", "cancel-token-4"))
