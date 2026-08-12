@@ -177,7 +177,7 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("정상 상태이고 다음 실행일이 오늘인 자동이체만 조회된다")
+    @DisplayName("정상 상태이고 다음 실행일이 오늘인 자동이체만 조회된다 (미래 실행일은 제외)")
     void findDueForExecution_filtersByStatusAndNextExecutionDate() {
         LocalDate today = LocalDate.of(2026, 3, 15);
         repository.save(autoTransferDue(accountA, "110000000030", AutoTransferStatus.NORMAL, today));
@@ -191,6 +191,21 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(result)
                 .extracting(AutoTransfer::getDepositAccountNumber)
                 .containsExactly("110000000030");
+    }
+
+    @Test
+    @DisplayName("다음 실행일이 과거(밀린 회차)여도 조회된다 - 실패로 멈춘 건이 다음 배치에서 자동 재시도되게 함")
+    void findDueForExecution_includesPastNextExecutionDate() {
+        LocalDate today = LocalDate.of(2026, 3, 15);
+        repository.save(autoTransferDue(accountA, "110000000035", AutoTransferStatus.NORMAL, today.minusDays(3)));
+        entityManager.flush();
+        entityManager.clear();
+
+        var result = adapter.findDueForExecution(today);
+
+        assertThat(result)
+                .extracting(AutoTransfer::getDepositAccountNumber)
+                .containsExactly("110000000035");
     }
 
     @Test
