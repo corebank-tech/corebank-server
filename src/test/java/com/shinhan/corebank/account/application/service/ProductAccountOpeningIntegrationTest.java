@@ -43,6 +43,9 @@ class ProductAccountOpeningIntegrationTest
     @Autowired
     private EntityManager entityManager;
 
+    @Autowired
+    private Clock clock;
+
     private AccountNumberSequenceTestFixture sequenceFixture;
 
     @BeforeEach
@@ -73,7 +76,7 @@ class ProductAccountOpeningIntegrationTest
         );
 
         LocalDate maturityDate =
-                LocalDate.now().plusYears(1);
+                LocalDate.now(clock).plusYears(1);
 
         ProductAccountOpeningCommand command =
                 new ProductAccountOpeningCommand(

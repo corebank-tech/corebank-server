@@ -146,7 +146,7 @@ class ProductAccountOpeningServiceTest {
 
         assertThat(account.getStatus())
                 .isEqualTo(AccountStatus.ACTIVE);
-        
+
         assertThat(account.getPasswordFailureCount())
                 .isZero();
 

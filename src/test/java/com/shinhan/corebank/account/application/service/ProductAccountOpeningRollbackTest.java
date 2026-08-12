@@ -38,6 +38,9 @@ class ProductAccountOpeningRollbackTest
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private Clock clock;
+
     private AccountNumberSequenceTestFixture sequenceFixture;
 
     private Long productId;
@@ -82,7 +85,7 @@ class ProductAccountOpeningRollbackTest
                         productId,
                         AccountType.TIME_DEPOSIT,
                         PASSWORD_HASH,
-                        LocalDate.now().plusYears(1)
+                        LocalDate.now(clock).plusYears(1)
                 );
 
         // when
