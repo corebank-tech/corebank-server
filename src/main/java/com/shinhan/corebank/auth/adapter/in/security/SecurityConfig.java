@@ -36,6 +36,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/products/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
 
+                        // Swagger-UI/API 문서는 인증 없이 접근 가능하도록 공개
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+
                         // 인증된 사용자만 접근 가능
                         .anyRequest().authenticated()
                 )
