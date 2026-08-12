@@ -19,6 +19,7 @@ import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,8 +30,12 @@ import org.springframework.transaction.annotation.Transactional;
  * 하나의 트랜잭션 안에서 원자적으로 수행한다.
  * propagation을 REQUIRED로 명시한다 — REQUIRES_NEW로 두면 호출자(P5 자동이체 배치 등)가
  * 이 실행을 자신의 트랜잭션에 합류시킬 방법이 없어진다(피호출자 애노테이션이 항상 우선).
+ * @Primary: MockTransferExecutionPort와 test/local 프로필에서 같이 뜨는 동안, 타입 기반으로
+ * TransferExecutionUseCase를 주입받는 소비자(AutoTransferBatchItemProcessor 등)가 두 빈 중
+ * 무엇을 받을지 모호해지는 것을 막는다. 실제 구현체가 나온 이상 기본 후보는 이쪽이어야 한다.
  */
 @Service
+@Primary
 public class TransferExecutionService implements TransferExecutionUseCase {
 
     private static final long FEE = 0L; // 당행 이체 수수료 0 고정 (POL-028)
