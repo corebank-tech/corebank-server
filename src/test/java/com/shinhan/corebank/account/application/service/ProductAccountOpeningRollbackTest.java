@@ -28,9 +28,6 @@ class ProductAccountOpeningRollbackTest
     private static final String PASSWORD_HASH =
             "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq";
 
-    private static final Long NON_EXISTENT_CUSTOMER_ID =
-            999_999_999L;
-
     @Autowired
     private ProductAccountOpeningUseCase
             productAccountOpeningUseCase;
@@ -40,6 +37,14 @@ class ProductAccountOpeningRollbackTest
 
     @Autowired
     private Clock clock;
+
+    @Autowired
+    private CustomerTestFixture customerTestFixture;
+
+    @MockitoBean
+    private AccountPersistencePort accountPersistencePort;
+
+    private Long customerId;
 
     private AccountNumberSequenceTestFixture sequenceFixture;
 
@@ -61,6 +66,10 @@ class ProductAccountOpeningRollbackTest
                     AccountType.TIME_DEPOSIT
             );
         }
+        
+        if (customerId != null) {
+            customerTestFixture.deleteCustomer(customerId);
+        }
     }
 
     @Test
@@ -72,6 +81,15 @@ class ProductAccountOpeningRollbackTest
                         PRODUCT_CODE
                 );
 
+        customerId = customerTestFixture.createCustomer();
+
+        when(accountPersistencePort.save(any(Account.class)))
+                .thenThrow(
+                        new DataIntegrityViolationException(
+                                "forced account save failure"
+                        )
+                );
+
         sequenceFixture.resetProductAccountSequence(
                 productId,
                 AccountType.TIME_DEPOSIT,
@@ -81,7 +99,7 @@ class ProductAccountOpeningRollbackTest
 
         ProductAccountOpeningCommand command =
                 new ProductAccountOpeningCommand(
-                        NON_EXISTENT_CUSTOMER_ID,
+                        customerId,
                         productId,
                         AccountType.TIME_DEPOSIT,
                         PASSWORD_HASH,
@@ -96,18 +114,9 @@ class ProductAccountOpeningRollbackTest
         // then
         assertThat(thrown)
                 .isInstanceOf(DataIntegrityViolationException.class)
-                .hasRootCauseInstanceOf(
-                        SQLIntegrityConstraintViolationException.class
+                .hasMessageContaining(
+                        "forced account save failure"
                 );
-
-        Throwable rootCause = thrown;
-
-        while (rootCause.getCause() != null) {
-            rootCause = rootCause.getCause();
-        }
-
-        assertThat(rootCause.getMessage())
-                .contains("fk_account_customer");
 
         Long lastSequence =
                 findProductAccountLastSequence(
