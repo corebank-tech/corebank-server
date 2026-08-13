@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 @Component
 public class TermsViewHistoryRedisAdapter implements TermsViewHistoryPort {
@@ -29,12 +30,17 @@ public class TermsViewHistoryRedisAdapter implements TermsViewHistoryPort {
 
     @Override
     public Optional<TermsView> find(Long customerId, Long termsId) {
-        String rawViewedAt = redisTemplate.opsForValue().get(key(customerId, termsId));
+        String key = key(customerId, termsId);
+        String rawViewedAt = redisTemplate.opsForValue().get(key);
         if (rawViewedAt == null) {
             return Optional.empty();
         }
         LocalDateTime viewedAt = LocalDateTime.parse(rawViewedAt);
-        return Optional.of(new TermsView(viewedAt, viewedAt.plus(VIEW_TTL)));
+        Long remainingSeconds = redisTemplate.getExpire(key, TimeUnit.SECONDS);
+        LocalDateTime viewExpiresAt = remainingSeconds != null && remainingSeconds >= 0
+                ? LocalDateTime.now().plusSeconds(remainingSeconds)
+                : viewedAt.plus(VIEW_TTL);
+        return Optional.of(new TermsView(viewedAt, viewExpiresAt));
     }
 
     private String key(Long customerId, Long termsId) {

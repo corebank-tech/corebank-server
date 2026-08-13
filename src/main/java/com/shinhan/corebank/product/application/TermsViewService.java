@@ -10,11 +10,9 @@ import com.shinhan.corebank.product.application.port.out.TermsViewHistoryPort;
 import com.shinhan.corebank.product.domain.ProductTermsView;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class TermsViewService implements TermsViewUseCase {
 
     private final ProductQueryPort productQueryPort;
