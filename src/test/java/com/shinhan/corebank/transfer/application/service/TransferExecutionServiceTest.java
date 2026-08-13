@@ -12,6 +12,7 @@ import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 클래스 레벨 @Transactional을 두지 않는다. 픽스처 커밋과 서비스 호출을 테스트 관리
  * 트랜잭션 밖에서 실행해, execute()의 원자성이 테스트 트랜잭션이 아니라
  * TransferExecutionService 자신의 @Transactional에서 나온다는 것을 실제로 검증한다.
+ * 결과가 실제로 커밋되므로, 다른 테스트가 같은 픽스처 계좌(101/202)를 오염된 잔액으로
+ * 재시드하지 않도록 @AfterEach에서 이 테스트가 만든 데이터를 정리한다.
  */
 class TransferExecutionServiceTest extends IntegrationTestSupport {
 
@@ -39,6 +42,13 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
 
     @Autowired
     private PlatformTransactionManager transactionManager;
+
+    @AfterEach
+    void cleanUpCommittedData() {
+        jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202)");
+        jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id = 101 AND deposit_account_id = 202");
+        jdbcTemplate.update("UPDATE account SET balance = 100000 WHERE account_id IN (101, 202)");
+    }
 
     @Test
     @DisplayName("정상 이체는 원장 2행을 기표하고 양쪽 계좌 잔액을 반영한 SUCCESS 결과를 반환한다")

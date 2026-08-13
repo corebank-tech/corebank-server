@@ -24,7 +24,7 @@ public final class TransferTestFixtures {
             INSERT INTO account (account_id, account_number, customer_id, product_id, account_type, balance, status, password_hash, opened_date, created_at, updated_at)
             VALUES (101, '110111111111', 1, NULL, 'DEMAND_DEPOSIT', 100000, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '2026-08-01', NOW(6), NOW(6)),
                    (202, '110222222222', 1, NULL, 'DEMAND_DEPOSIT', 100000, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '2026-08-01', NOW(6), NOW(6))
-            ON DUPLICATE KEY UPDATE account_id = account_id
+            ON DUPLICATE KEY UPDATE balance = VALUES(balance)
         """).executeUpdate();
     }
 }
