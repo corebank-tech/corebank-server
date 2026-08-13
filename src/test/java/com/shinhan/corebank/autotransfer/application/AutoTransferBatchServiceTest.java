@@ -45,7 +45,7 @@ class AutoTransferBatchServiceTest {
                 10000L, 1, 15,
                 LocalDate.of(2026, 1, 1), LocalDate.of(2027, 1, 1), DATE,
                 "메모", "받는메모", AutoTransferStatus.NORMAL,
-                LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0));
+                LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0), 0L);
     }
 
     private AutoTransferExecution processingExecution() {

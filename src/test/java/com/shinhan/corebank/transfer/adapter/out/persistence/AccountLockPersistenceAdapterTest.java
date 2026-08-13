@@ -1,10 +1,13 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import java.util.Optional;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-import com.shinhan.corebank.transfer.application.port.out.LockedAccount;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
+import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
+import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import jakarta.persistence.EntityManager;
@@ -26,6 +29,36 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
     private EntityManager entityManager;
 
     @Test
+    @DisplayName("계좌번호로 계좌 ID와 예금주명을 조회한다")
+    void resolvePayeeByAccountNumber_returnsAccountIdAndPayeeName() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        Optional<ResolvedPayee> resolved = adapter.resolvePayeeByAccountNumber("110222222222");
+
+        // then
+        assertThat(resolved).contains(new ResolvedPayee(202L, "테스터"));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 계좌번호는 빈 Optional을 반환한다")
+    void resolvePayeeByAccountNumber_returnsEmpty_whenAccountNumberNotFound() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        Optional<ResolvedPayee> resolved = adapter.resolvePayeeByAccountNumber("999999999999");
+
+        // then
+        assertThat(resolved).isEmpty();
+    }
+
+    @Test
     @DisplayName("출금/입금 계좌를 락으로 획득하면 각 계좌의 현재 잔액이 방향에 맞게 반환된다")
     void lockForTransfer_returnsWithdrawalAndDepositSnapshots() {
         // given
@@ -38,8 +71,10 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
 
         // then
         assertThat(locked.withdrawal().accountId()).isEqualTo(101L);
+        assertThat(locked.withdrawal().accountNumber()).isEqualTo("110111111111");
         assertThat(locked.withdrawal().balance()).isEqualTo(100000L);
         assertThat(locked.deposit().accountId()).isEqualTo(202L);
+        assertThat(locked.deposit().accountNumber()).isEqualTo("110222222222");
         assertThat(locked.deposit().balance()).isEqualTo(100000L);
     }
 
@@ -60,71 +95,71 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("debit 호출 후 커밋 시점에 계좌 잔액이 차감된 값으로 반영된다")
-    void debit_decreasesBalance() {
+    @DisplayName("applyTransfer 호출 후 커밋 시점에 출금/입금 계좌 잔액이 반영되고 변경 후 잔액을 반환한다")
+    void applyTransfer_updatesBothBalances_andReturnsBalancesAfter() {
         // given
         TransferTestFixtures.seedCustomerAndAccounts(entityManager);
         entityManager.flush();
         entityManager.clear();
 
+        LockedAccountsForTransfer locked = adapter.lockForTransfer(101L, 202L);
+
         // when
-        adapter.debit(new LockedAccount(101L, 100000L, "ACTIVE"), 30000L);
+        TransferBalances balances = adapter.applyTransfer(locked, 30000L);
         entityManager.flush();
         entityManager.clear();
 
         // then
-        long balance = ((Number) entityManager
+        assertThat(balances.withdrawalBalanceAfter()).isEqualTo(70000L);
+        assertThat(balances.depositBalanceAfter()).isEqualTo(130000L);
+
+        long withdrawalBalance = ((Number) entityManager
                 .createNativeQuery("SELECT balance FROM account WHERE account_id = 101")
                 .getSingleResult())
                 .longValue();
-        assertThat(balance).isEqualTo(70000L);
-    }
-
-    @Test
-    @DisplayName("credit 호출 후 커밋 시점에 계좌 잔액이 증가된 값으로 반영된다")
-    void credit_increasesBalance() {
-        // given
-        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
-        entityManager.flush();
-        entityManager.clear();
-
-        // when
-        adapter.credit(new LockedAccount(202L, 100000L, "ACTIVE"), 30000L);
-        entityManager.flush();
-        entityManager.clear();
-
-        // then
-        long balance = ((Number) entityManager
+        long depositBalance = ((Number) entityManager
                 .createNativeQuery("SELECT balance FROM account WHERE account_id = 202")
                 .getSingleResult())
                 .longValue();
-        assertThat(balance).isEqualTo(130000L);
+        assertThat(withdrawalBalance).isEqualTo(70000L);
+        assertThat(depositBalance).isEqualTo(130000L);
     }
 
     @Test
-    @DisplayName("debit 이후 계좌의 version이 1 증가한다")
-    void debit_incrementsVersion() {
+    @DisplayName("applyTransfer 이후 출금/입금 계좌 모두 version이 1씩 증가한다")
+    void applyTransfer_incrementsVersionForBothAccounts() {
         // given
         TransferTestFixtures.seedCustomerAndAccounts(entityManager);
         entityManager.flush();
         entityManager.clear();
 
-        long versionBefore = ((Number) entityManager
+        LockedAccountsForTransfer locked = adapter.lockForTransfer(101L, 202L);
+
+        long withdrawalVersionBefore = ((Number) entityManager
                 .createNativeQuery("SELECT version FROM account WHERE account_id = 101")
+                .getSingleResult())
+                .longValue();
+        long depositVersionBefore = ((Number) entityManager
+                .createNativeQuery("SELECT version FROM account WHERE account_id = 202")
                 .getSingleResult())
                 .longValue();
 
         // when
-        adapter.debit(new LockedAccount(101L, 100000L, "ACTIVE"), 30000L);
+        adapter.applyTransfer(locked, 30000L);
         entityManager.flush();
         entityManager.clear();
 
         // then
-        long versionAfter = ((Number) entityManager
+        long withdrawalVersionAfter = ((Number) entityManager
                 .createNativeQuery("SELECT version FROM account WHERE account_id = 101")
                 .getSingleResult())
                 .longValue();
-        assertThat(versionAfter).isEqualTo(versionBefore + 1);
+        long depositVersionAfter = ((Number) entityManager
+                .createNativeQuery("SELECT version FROM account WHERE account_id = 202")
+                .getSingleResult())
+                .longValue();
+        assertThat(withdrawalVersionAfter).isEqualTo(withdrawalVersionBefore + 1);
+        assertThat(depositVersionAfter).isEqualTo(depositVersionBefore + 1);
     }
 
     @Test
