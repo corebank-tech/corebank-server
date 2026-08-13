@@ -33,6 +33,8 @@ public class SecurityConfig {
 
                         // 로그인 없이 조회할 수 있도록 공개
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+                        // 약관 열람은 이력 기록(누가 봤는지)이 필요해 인증을 요구한다 — /products/** permitAll보다 먼저 매칭돼야 함
+                        .requestMatchers(HttpMethod.GET, "/products/*/terms/*").authenticated()
                         .requestMatchers(HttpMethod.GET, "/products/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
 
