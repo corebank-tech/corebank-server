@@ -3,9 +3,12 @@ package com.shinhan.corebank.autotransfer.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferBatchUseCase;
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferExecutionJpaRepository;
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferJpaEntity;
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferJpaRepository;
@@ -40,6 +43,9 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
     @Autowired
     AutoTransferBatchItemProcessor itemProcessor;
+
+    @Autowired
+    AutoTransferBatchUseCase autoTransferBatchUseCase;
 
     @Autowired
     AutoTransferExecutionJpaRepository executionRepository;
@@ -271,6 +277,28 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
         var autoTransferAfter = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
         assertThat(autoTransferAfter.getStatus()).isEqualTo(AutoTransferStatus.EXPIRED);
+    }
+
+    @Test
+    @DisplayName("completeProcessing() 실패로 회차가 PROCESSING에 멈춘 채 배치를 재실행해도, uk_ate_dup에 막혀 이체가 다시 실행되지 않는다 (REQ-AUTO-017)")
+    void executeDaily_rerunAfterStuckProcessing_doesNotDoubleExecute() {
+        // 1차 실행: saveProcessing()은 성공(PROCESSING 즉시 커밋)하지만 completeProcessing()이
+        // 실패해서 nextExecutionDate가 안 넘어간 채로 남는다 - "멈춘 배치"를 재현(재실행 런북 시나리오)
+        when(transferExecutionUseCase.execute(any())).thenThrow(new RuntimeException("이체 실행 중 장애"));
+
+        autoTransferBatchUseCase.executeDaily(today);
+
+        var afterFirstRun = executionRepository.findAll();
+        assertThat(afterFirstRun).hasSize(1);
+        assertThat(afterFirstRun.get(0).getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
+
+        // 2차 실행(재실행): nextExecutionDate가 여전히 today라 findDueForExecution()이 같은 건을
+        // 다시 찾아내지만, saveProcessing()이 같은 (auto_transfer_id, execution_date)로 또 시도하다가
+        // uk_ate_dup 유니크 제약에 막혀 "이미 처리 중"으로 보고 completeProcessing()을 다시 호출하지 않는다
+        autoTransferBatchUseCase.executeDaily(today);
+
+        verify(transferExecutionUseCase, times(1)).execute(any());
+        assertThat(executionRepository.findAll()).hasSize(1);
     }
 
     private Long insertCustomer() {
