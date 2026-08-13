@@ -1,7 +1,10 @@
 package com.shinhan.corebank.transfer.application.service;
 
+import java.util.Map;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
@@ -15,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,8 +44,9 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
     @AfterEach
     void cleanUpCommittedData() {
-        jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202)");
-        jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id IN (101, 999999)");
+        jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202, 501, 502)");
+        jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id IN (101, 999999, 501)");
+        jdbcTemplate.update("DELETE FROM account WHERE account_id IN (501, 502)");
         jdbcTemplate.update("UPDATE account SET balance = 100000 WHERE account_id IN (101, 202)");
     }
 
@@ -116,4 +121,55 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
                 "SELECT balance FROM account WHERE account_id = 202", Long.class);
         assertThat(depositBalance).isEqualTo(100000L);
     }
+
+    @Test
+    @DisplayName("예기치 못한 RuntimeException이 나면, execute()를 호출자의 트랜잭션 안에서 실행했고 그 트랜잭션이 나중에 롤백되더라도 ERROR 확정 행은 살아남는다")
+    void execute_withUnexpectedRuntimeException_errorRowSurvivesCallerTransactionRollback() {
+        // given: 입금계좌 잔액을 Long.MAX_VALUE 근처로 세팅해 credit()의 Math.addExact가 오버플로우하게 만든다.
+        // (잔액검증은 출금계좌만 보므로 이 시나리오는 BusinessException이 아니라 ArithmeticException 경로를 탄다.)
+        jdbcTemplate.update("""
+            INSERT INTO customer (customer_id, user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at)
+            VALUES (1, 'user1', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '테스터', '1990-01-01', 'test@test.com', '01012345678', NOW(6), NOW(6), NOW(6))
+            ON DUPLICATE KEY UPDATE customer_id = customer_id
+            """);
+        jdbcTemplate.update("""
+            INSERT INTO account (account_id, account_number, customer_id, product_id, account_type, balance, status, password_hash, opened_date, created_at, updated_at)
+            VALUES (501, '110777777777', 1, NULL, 'DEMAND_DEPOSIT', 100000, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '2026-08-01', NOW(6), NOW(6)),
+                   (502, '110888888888', 1, NULL, 'DEMAND_DEPOSIT', ?, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '2026-08-01', NOW(6), NOW(6))
+            ON DUPLICATE KEY UPDATE balance = VALUES(balance)
+            """, Long.MAX_VALUE - 500);
+
+        TransferCommand command = TransferCommand.builder()
+                .withdrawalAccountId(501L)
+                .depositAccountNumber("110888888888")
+                .amount(1000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("오버플로우")
+                .recipientPassbookMemo("오버플로우")
+                .build();
+
+        // execute()를 실제 프로덕션 호출자(AutoTransferBatchItemProcessor.completeProcessing() 등)처럼
+        // 그 자신도 REQUIRES_NEW 트랜잭션 안에서 호출한다고 가정한다.
+        TransactionTemplate callerTransaction = new TransactionTemplate(transactionManager);
+        callerTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+        // when: execute()는 ArithmeticException을 다시 던지고, 이게 호출자 트랜잭션 밖으로
+        // 전파되어 호출자 트랜잭션 전체가 롤백된다.
+        assertThatThrownBy(() -> callerTransaction.executeWithoutResult(status ->
+                transferExecutionService.execute(command)))
+                .isInstanceOf(ArithmeticException.class);
+
+        // then: ERROR 확정 행은 호출자 트랜잭션 롤백과 무관하게 살아남아야 한다.
+        Map<String, Object> transferRow = jdbcTemplate.queryForMap(
+                "SELECT status, error_code FROM transfer WHERE withdrawal_account_id = 501");
+        assertThat(transferRow.get("status")).isEqualTo("ERROR");
+        assertThat(transferRow.get("error_code")).isEqualTo(CommonErrorCode.INTERNAL_ERROR.getCode());
+
+        // then: 원장 0행
+        Long ledgerCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ledger_entry WHERE account_id IN (501, 502)", Long.class);
+        assertThat(ledgerCount).isZero();
+    }
 }
+

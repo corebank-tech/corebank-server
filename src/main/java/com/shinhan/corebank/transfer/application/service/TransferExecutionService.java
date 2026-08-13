@@ -34,14 +34,13 @@ import org.springframework.transaction.support.TransactionTemplate;
  * [계좌번호→ID 해석 → 채번 → (독립 트랜잭션) 계좌 락 획득 → 계좌번호 재검증 → 잔액검증
  * → 잔액 UPDATE → 원장 2행 INSERT → 이체 완료 기록]을 수행한다.
  *
- * <p>기표(락 획득~완료 기록)는 {@code requiresNewTransactionTemplate}으로 별도 트랜잭션에서
- * 실행한다. 실패하면 그 트랜잭션만 독립적으로, 동기적으로 롤백되고(원장 0행 보장), 그 시점에
- * transaction_number 유니크 키가 확실히 반납된 뒤 catch 블록에서 ERROR 확정 행을 새로 INSERT
- * 한다. execute() 자체를 REQUIRED로 감쌌던 Day4 설계에서는, 실패 시 "이미 커밋한 PROCESSING
- * 행을 UPDATE로 ERROR 전환"이 REPEATABLE READ 스냅샷·FK 공유락 때문에 안전하게 되지 않아
- * REQUIRES_NEW로 전환했다 — 호출자(P5 자동이체 배치 등)가 자신의 트랜잭션에 이 실행을 합류시킬
- * 수 없다는 트레이드오프가 있지만, 실패 기록 INSERT 자체는 호출자 트랜잭션이 있으면 거기 합류해
- * 커밋되므로(REQUIRED, TransferSavePort 기본) 호출자 쪽 원자성은 유지된다.
+ * <p>기표(성공)와 ERROR 확정 기록(실패) 모두 {@code requiresNewTransactionTemplate}으로 독립
+ * 커밋한다 — execute()를 호출자(P5 자동이체 배치 등)의 트랜잭션 안에서 불러도 결과는 호출자
+ * 트랜잭션 성공 여부와 무관하게 남는다(REQUIRED였다면 호출자가 나중에 실패할 때 ERROR 행까지
+ * 같이 롤백됨). 대신 SUCCESS 반환 시점에 자금은 이미 확정 이동한 것이므로, 호출자가 이후
+ * 자신의 트랜잭션에서 하는 후속 작업(실행 이력 갱신 등)이 실패해도 그 자금 이동은 롤백되지
+ * 않는다 — 호출자는 이를 "재시도 가능한 실패"가 아니라 "후속 처리 실패, 수동 정합화 필요"로
+ * 다뤄야 한다.
  * @Primary: MockTransferExecutionPort와 test/local 프로필에서 같이 뜨는 동안, 타입 기반으로
  * TransferExecutionUseCase를 주입받는 소비자(AutoTransferBatchItemProcessor 등)가 두 빈 중
  * 무엇을 받을지 모호해지는 것을 막는다. 실제 구현체가 나온 이상 기본 후보는 이쪽이어야 한다.
@@ -167,6 +166,13 @@ public class TransferExecutionService implements TransferExecutionUseCase {
      * 이체 시도를 ERROR로 확정해 새 행으로 남긴다. 위 트랜잭션이 이미 롤백되어 같은
      * transaction_number를 가진 PROCESSING 행은 존재하지 않으므로 새 INSERT로 처리된다.
      *
+     * <p>이 INSERT도 {@code requiresNewTransactionTemplate}(REQUIRES_NEW)으로 독립 커밋한다.
+     * execute()가 호출자(P5 자동이체 배치 등)의 트랜잭션 안에서 실행됐다면, 앰비언트 트랜잭션에
+     * 그냥 합류시킬 경우 이후 호출자 쪽에서 예외가 나 그 트랜잭션이 롤백될 때 방금 남긴 ERROR
+     * 확정 행까지 함께 사라진다 — "실패해도 흔적을 남긴다"는 이 클래스의 핵심 보장이 호출자
+     * 트랜잭션의 성공 여부에 좌우돼서는 안 되므로, 성공 경로와 대칭적으로 항상 독립 트랜잭션에서
+     * 커밋한다.
+     *
      * <p>withdrawal_account_id·deposit_account_id는 transfer 테이블에 FK(NOT NULL)로 걸려
      * 있다. {@code ACCOUNT_LOCK_TARGET_NOT_FOUND}처럼 애초에 존재하지 않는 계좌가 원인인
      * 실패는 이 ERROR 확정 INSERT 자체가 FK 위반으로 실패한다 — 정상 흐름에서는 도달할 수
@@ -176,7 +182,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private TransferResult failTransfer(Transfer created, String errorCode, String errorMessage, RuntimeException cause) {
         created.fail(errorCode, errorMessage);
         try {
-            transferSavePort.save(created);
+            requiresNewTransactionTemplate.executeWithoutResult(status -> transferSavePort.save(created));
         } catch (RuntimeException recordingFailure) {
             throw cause;
         }
