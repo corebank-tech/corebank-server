@@ -117,7 +117,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
                 10000L, 1, 15,
                 LocalDate.of(2026, 1, 1), endDate, today,
                 "메모", "받는메모", AutoTransferStatus.NORMAL,
-                LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0));
+                LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0), 0L);
     }
 
     @Test
@@ -247,13 +247,17 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
                 .status(AutoTransferStatus.NORMAL)
                 .registeredAt(LocalDateTime.of(2026, 1, 1, 0, 0))
                 .updatedAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+                .version(0L)
                 .build());
+        // 위 save()가 UPDATE라 DB의 version이 0 -> 1로 올라간다 - 아래 도메인 객체는 이 최신 버전을 들고 있어야
+        // completeProcessing()의 저장 시도가 낙관적 락 충돌 없이 성공한다
+        AutoTransferJpaEntity afterManualSave = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
         AutoTransfer domainWithNearEndDate = AutoTransfer.reconstitute(
-                autoTransferId, customerId, autoTransferJpaRepository.findById(autoTransferId).orElseThrow().getWithdrawalAccountId(),
+                autoTransferId, customerId, afterManualSave.getWithdrawalAccountId(),
                 "110987654321", "홍길동", 10000L, 1, 15,
                 LocalDate.of(2026, 1, 1), LocalDate.of(2026, 3, 20), today,
                 "메모", "받는메모", AutoTransferStatus.NORMAL,
-                LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0));
+                LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0), afterManualSave.getVersion());
 
         AutoTransferExecution saved = itemProcessor.saveProcessing(domainWithNearEndDate, today);
         when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()

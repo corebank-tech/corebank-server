@@ -23,7 +23,8 @@ final class AutoTransferMapper {
                 entity.getStatus(),
                 entity.getRegisteredAt(),
                 entity.getTerminatedAt(),
-                entity.getUpdatedAt()
+                entity.getUpdatedAt(),
+                entity.getVersion()
         );
     }
 
@@ -46,6 +47,7 @@ final class AutoTransferMapper {
                 .registeredAt(domain.getRegisteredAt())
                 .terminatedAt(domain.getTerminatedAt())
                 .updatedAt(domain.getUpdatedAt())
+                .version(domain.getVersion())
                 .build();
     }
 }

@@ -30,6 +30,7 @@ public class AutoTransfer {
     private LocalDateTime registeredAt;
     private LocalDateTime terminatedAt;
     private LocalDateTime updatedAt;
+    private Long version;
     // 실행 이력은 추가만 허용한다. 외부에서 remove()/clear()로 지울 수 없도록 불변 뷰로만 노출한다.
     @Getter(AccessLevel.NONE)
     private final List<AutoTransferExecution> executions = new ArrayList<>();
@@ -182,7 +183,7 @@ public class AutoTransfer {
             Long autoTransferId, Long customerId, Long withdrawalAccountId, String depositAccountNumber, String payeeName,
             Long amount, Integer cycleMonths, Integer transferDay, LocalDate startDate, LocalDate endDate, LocalDate nextExecutionDate,
             String myPassbookMemo, String recipientPassbookMemo, AutoTransferStatus status, LocalDateTime registeredAt,
-            LocalDateTime terminatedAt, LocalDateTime updatedAt) {
+            LocalDateTime terminatedAt, LocalDateTime updatedAt, Long version) {
         AutoTransfer e = new AutoTransfer();
         e.autoTransferId = autoTransferId;
         e.customerId = customerId;
@@ -201,6 +202,7 @@ public class AutoTransfer {
         e.registeredAt = registeredAt;
         e.terminatedAt = terminatedAt;
         e.updatedAt = updatedAt;
+        e.version = version;
         return e;
     }
 
