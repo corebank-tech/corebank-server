@@ -1,0 +1,27 @@
+package com.shinhan.corebank.autotransfer.adapter.in.scheduler;
+
+import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferBatchUseCase;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDate;
+
+@Component
+@RequiredArgsConstructor
+// 자정 00시 10분 후 자동이체 배치 시작
+public class AutoTransferBatchScheduler {
+    private static final Logger log = LoggerFactory.getLogger(AutoTransferBatchScheduler.class);
+    private final AutoTransferBatchUseCase autoTransferBatchUseCase;
+
+    @Scheduled(cron = "0 10 0 * * *")
+    public void runDailyBatch() {
+        LocalDate today = LocalDate.now();
+        log.info("자동이체 배치 시작 - date={}", today);
+        autoTransferBatchUseCase.executeDaily(today);
+        log.info("자동이체 배치 종료 - date={}", today);
+    }
+
+}
