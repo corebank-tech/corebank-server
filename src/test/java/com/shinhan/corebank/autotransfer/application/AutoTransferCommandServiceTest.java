@@ -28,6 +28,7 @@ import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import org.springframework.dao.OptimisticLockingFailureException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -373,6 +374,23 @@ class AutoTransferCommandServiceTest {
 
         verify(autoTransferPersistencePort, never()).save(any());
         verify(auditLogService, never()).record(any(), any(), any(), any(), anyBoolean(), any());
+    }
+
+    @Test
+    @DisplayName("저장 시점에 낙관적 락 충돌(OptimisticLockingFailureException)이 나면 삼키지 않고 그대로 전파한다")
+    void change_optimisticLockConflict_propagatesException() {
+        // change()는 findById()로 매번 최신 상태를 읽어와 그 자리에서 바로 저장하므로, 순차 테스트로는
+        // 진짜 버전 충돌을 재현할 수 없다(재현하려면 진짜 동시성이 필요) - 대신 영속성 포트가 실제로
+        // 충돌을 던졌을 때 서비스가 그걸 삼키지 않고 그대로 전파하는지만 검증한다. HTTP 레벨 매핑
+        // (CONCURRENT_MODIFICATION 응답)은 ApiExceptionHandler의 공용 핸들러가 이미 담당한다.
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class)))
+                .thenThrow(new OptimisticLockingFailureException("다른 요청이 먼저 이 자동이체를 변경했습니다"));
+
+        assertThatThrownBy(() -> autoTransferCommandService.change(10L, validChangeCommandBuilder().build()))
+                .isInstanceOf(OptimisticLockingFailureException.class);
     }
 
     @Test

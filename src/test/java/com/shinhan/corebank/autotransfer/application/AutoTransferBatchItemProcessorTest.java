@@ -3,15 +3,20 @@ package com.shinhan.corebank.autotransfer.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferExecutionJpaRepository;
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferJpaEntity;
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferJpaRepository;
+import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferBatchUseCase;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
+import com.shinhan.corebank.common.audit.AuditEventType;
+import com.shinhan.corebank.common.audit.AuditLogJpaEntity;
 import com.shinhan.corebank.common.audit.AuditLogJpaRepository;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
@@ -26,8 +31,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -40,6 +47,9 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
     @Autowired
     AutoTransferBatchItemProcessor itemProcessor;
+
+    @Autowired
+    AutoTransferBatchUseCase autoTransferBatchUseCase;
 
     @Autowired
     AutoTransferExecutionJpaRepository executionRepository;
@@ -271,6 +281,122 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
         var autoTransferAfter = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
         assertThat(autoTransferAfter.getStatus()).isEqualTo(AutoTransferStatus.EXPIRED);
+    }
+
+    @Test
+    @DisplayName("completeProcessing() 저장 시점에 낙관적 락 충돌이 나면 삼키지 않고 그대로 전파하고, 고객이 동시에 바꾼 값은 덮어써지지 않는다")
+    void completeProcessing_optimisticLockConflict_propagatesAndPreservesConcurrentChange() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
+                .status(ProcessResultStatus.SUCCESS)
+                .transactionNumber("20260315BT0000000004")
+                .transferredAt(LocalDateTime.now())
+                .withdrawalBalanceAfter(90000L)
+                .build());
+
+        // 고객이 배치와 동시에 금액을 20000원으로 바꿔서 먼저 커밋됐다고 가정 - DB의 version이 0 -> 1로 올라간다
+        autoTransferJpaRepository.save(AutoTransferJpaEntity.builder()
+                .autoTransferId(autoTransferId)
+                .customerId(customerId)
+                .withdrawalAccountId(autoTransferJpaRepository.findById(autoTransferId).orElseThrow().getWithdrawalAccountId())
+                .depositAccountNumber("110987654321")
+                .payeeName("홍길동")
+                .amount(20000L)
+                .cycleMonths(1)
+                .transferDay(15)
+                .startDate(LocalDate.of(2026, 1, 1))
+                .endDate(endDate)
+                .nextExecutionDate(today)
+                .myPassbookMemo("메모")
+                .recipientPassbookMemo("받는메모")
+                .status(AutoTransferStatus.NORMAL)
+                .registeredAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+                .updatedAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+                .version(0L)
+                .build());
+
+        // 배치는 위 변경을 모른 채(autoTransfer() 헬퍼가 항상 version=0인 stale 객체를 리턴) completeProcessing()을 시도한다
+        assertThatThrownBy(() -> itemProcessor.completeProcessing(autoTransfer(), saved, today))
+                .isInstanceOf(OptimisticLockingFailureException.class);
+
+        // completeProcessing() 전체가 롤백됐으므로, 고객이 동시에 바꾼 금액(20000)이 배치의 stale 값(10000)으로
+        // 덮어써지지 않고 그대로 보존돼야 한다 - 이게 이번 R1-a 작업이 막으려던 바로 그 문제
+        var autoTransferAfter = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        assertThat(autoTransferAfter.getAmount()).isEqualTo(20000L);
+        assertThat(autoTransferAfter.getNextExecutionDate()).isEqualTo(today);
+    }
+
+    @Test
+    @DisplayName("execute()가 실구현처럼 독립 커밋(REQUIRES_NEW)하면, completeProcessing() 이후 단계 실패 시 이체 마커는 남고 배치 기록만 롤백된다 - 재시도는 execute()를 다시 부르지 않고 멈춘 회차를 조용히 건너뛴다 (R1-b)")
+    void completeProcessing_dangerousIndependentlyCommittingExecute_createsInconsistencyAndRetryDoesNotReExecute() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+
+        // "위험한" execute() 대역: 실구현이 자기 자신도 REQUIRES_NEW로 독립 커밋한다고 가정하고,
+        // "돈이 나갔다"를 흉내내는 마커를 완전히 별도 트랜잭션에 즉시 커밋한다.
+        // transactionTemplate()은 기본 전파(REQUIRED)라서, 이미 completeProcessing()의
+        // REQUIRES_NEW 트랜잭션 안에서 부르면 새 트랜잭션을 안 만들고 거기 합류해버린다 -
+        // 그러면 나중에 completeProcessing()이 롤백될 때 이 마커도 같이 사라져서 "독립 커밋"을
+        // 재현하지 못한다. 여기서는 반드시 REQUIRES_NEW를 명시해야 한다.
+        TransactionTemplate requiresNewForMarker = new TransactionTemplate(transactionManager);
+        requiresNewForMarker.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        when(transferExecutionUseCase.execute(any())).thenAnswer(invocation -> {
+            requiresNewForMarker.executeWithoutResult(status ->
+                    auditLogJpaRepository.save(AuditLogJpaEntity.of(null, "20260315BT0000000099",
+                            AuditEventType.AUTO_TRANSFER, "127.0.0.1", true, null, LocalDateTime.now())));
+            return TransferResult.builder()
+                    .status(ProcessResultStatus.SUCCESS)
+                    .transactionNumber("20260315BT0000000099")
+                    .transferredAt(LocalDateTime.now())
+                    .withdrawalBalanceAfter(90000L)
+                    .build();
+        });
+
+        // 고객이 배치와 동시에 값을 바꿔서 먼저 커밋됐다고 가정 - completeProcessing()의 이후 단계
+        // (autoTransferPersistencePort.save())가 낙관적 락 충돌로 실패하도록 만든다
+        autoTransferJpaRepository.save(AutoTransferJpaEntity.builder()
+                .autoTransferId(autoTransferId)
+                .customerId(customerId)
+                .withdrawalAccountId(autoTransferJpaRepository.findById(autoTransferId).orElseThrow().getWithdrawalAccountId())
+                .depositAccountNumber("110987654321")
+                .payeeName("홍길동")
+                .amount(20000L)
+                .cycleMonths(1)
+                .transferDay(15)
+                .startDate(LocalDate.of(2026, 1, 1))
+                .endDate(endDate)
+                .nextExecutionDate(today)
+                .myPassbookMemo("메모")
+                .recipientPassbookMemo("받는메모")
+                .status(AutoTransferStatus.NORMAL)
+                .registeredAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+                .updatedAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+                .version(0L)
+                .build());
+
+        // 1차 실행: execute()는 성공(마커 독립 커밋)하지만, 그 이후 단계가 낙관적 락 충돌로 실패해
+        // completeProcessing() 전체가 롤백된다
+        assertThatThrownBy(() -> itemProcessor.completeProcessing(autoTransfer(), saved, today))
+                .isInstanceOf(OptimisticLockingFailureException.class);
+
+        // "돈은 나갔다"(마커는 독립 커밋되어 살아있음) vs "배치 쪽 기록은 롤백됨"(회차가 여전히 PROCESSING) - 불일치 재현
+        assertThat(auditLogJpaRepository.findAll())
+                .extracting(AuditLogJpaEntity::getTransactionNumber)
+                .containsExactly("20260315BT0000000099");
+        AutoTransferExecution stillProcessing = executionRepository.findById(saved.getExecutionId())
+                .map(e -> AutoTransferExecution.reconstitute(e.getExecutionId(), e.getExecutionDate(), e.getAmount(),
+                        e.getStatus(), e.getTransactionNumber(), e.getFailureReason(), e.getExecutedAt()))
+                .orElseThrow();
+        assertThat(stillProcessing.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
+
+        // 2차 실행(재실행): nextExecutionDate가 안 넘어가서 findDueForExecution()이 같은 건을 다시 찾아내지만,
+        // saveProcessing()이 uk_ate_dup(이미 PROCESSING 행 존재)에 막혀 completeProcessing()이 다시 호출되지 않는다
+        // - execute()도 다시 불리지 않는다. "중복 송금"이 아니라 "멈춘 건이 계속 방치된다"는 게 실제 위험이다.
+        autoTransferBatchUseCase.executeDaily(today);
+
+        verify(transferExecutionUseCase, times(1)).execute(any());
+        assertThat(auditLogJpaRepository.findAll()).hasSize(1);
+        assertThat(executionRepository.findAll()).hasSize(1);
+        assertThat(executionRepository.findAll().get(0).getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
     }
 
     private Long insertCustomer() {
