@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
@@ -17,10 +18,11 @@ public class AutoTransferBatchScheduler {
     private static final Logger log = LoggerFactory.getLogger(AutoTransferBatchScheduler.class);
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private final AutoTransferBatchUseCase autoTransferBatchUseCase;
+    private final Clock clock;
 
     @Scheduled(cron = "0 10 0 * * *", zone = "Asia/Seoul")
     public void runDailyBatch() {
-        LocalDate today = LocalDate.now(SEOUL);
+        LocalDate today = LocalDate.now(clock.withZone(SEOUL));
         log.info("자동이체 배치 시작 - date={}", today);
         autoTransferBatchUseCase.executeDaily(today);
         log.info("자동이체 배치 종료 - date={}", today);
