@@ -44,6 +44,7 @@ class TermsViewHistoryRedisAdapterTest extends IntegrationTestSupport {
 
         Long ttlSeconds = redisTemplate.getExpire("terms-view:2:302", java.util.concurrent.TimeUnit.SECONDS);
 
-        assertThat(ttlSeconds).isPositive().isLessThanOrEqualTo(Duration.ofMinutes(30).toSeconds());
+        long expectedSeconds = Duration.ofMinutes(30).toSeconds();
+        assertThat(ttlSeconds).isBetween(expectedSeconds - 5, expectedSeconds);
     }
 }
