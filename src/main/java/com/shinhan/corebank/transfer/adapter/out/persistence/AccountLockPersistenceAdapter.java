@@ -1,10 +1,14 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import java.util.Optional;
+
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccount;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
+import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
+import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import org.springframework.stereotype.Component;
@@ -16,6 +20,11 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
 
     public AccountLockPersistenceAdapter(AccountLockJpaRepository repository) {
         this.repository = repository;
+    }
+
+    @Override
+    public Optional<ResolvedPayee> resolvePayeeByAccountNumber(String accountNumber) {
+        return repository.findPayeeByAccountNumber(accountNumber);
     }
 
     @Override
@@ -42,13 +51,27 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
     }
 
     @Override
-    public void debit(LockedAccount account, long amount) {
-        findForUpdate(account.accountId()).debit(amount);
-    }
+    public TransferBalances applyTransfer(LockedAccountsForTransfer locked, long amount) {
+        Long withdrawalAccountId = locked.withdrawal().accountId();
+        Long depositAccountId = locked.deposit().accountId();
 
-    @Override
-    public void credit(LockedAccount account, long amount) {
-        findForUpdate(account.accountId()).credit(amount);
+        // lockForTransfer와 동일하게 오름차순으로 재조회한다. 같은 트랜잭션이 이미 보유한
+        // 락을 다시 얻는 것이라 데드락 위험은 없지만, 호출 순서 규칙을 한 곳에서만 정의해 둔다.
+        Long firstId = Math.min(withdrawalAccountId, depositAccountId);
+        Long secondId = Math.max(withdrawalAccountId, depositAccountId);
+
+        AccountLockJpaEntity first = findForUpdate(firstId);
+        AccountLockJpaEntity second = findForUpdate(secondId);
+
+        AccountLockJpaEntity withdrawalEntity =
+                withdrawalAccountId.equals(firstId) ? first : second;
+        AccountLockJpaEntity depositEntity =
+                depositAccountId.equals(firstId) ? first : second;
+
+        withdrawalEntity.debit(amount);
+        depositEntity.credit(amount);
+
+        return new TransferBalances(withdrawalEntity.getBalance(), depositEntity.getBalance());
     }
 
     private AccountLockJpaEntity findForUpdate(Long accountId) {
@@ -57,6 +80,11 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
     }
 
     private LockedAccount toLockedAccount(AccountLockJpaEntity entity) {
-        return new LockedAccount(entity.getAccountId(), entity.getBalance(), entity.getStatus());
+        return new LockedAccount(
+                entity.getAccountId(),
+                entity.getAccountNumber(),
+                entity.getBalance(),
+                entity.getStatus()
+        );
     }
 }
