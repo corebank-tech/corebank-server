@@ -3,8 +3,11 @@ package com.shinhan.corebank.account.application.service;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.application.port.in.ProductAccountOpeningCommand;
 import com.shinhan.corebank.account.application.port.in.ProductAccountOpeningUseCase;
+import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
+import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture;
+import com.shinhan.corebank.account.support.CustomerTestFixture;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -12,12 +15,16 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.time.Clock;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 class ProductAccountOpeningRollbackTest
         extends IntegrationTestSupport {
@@ -134,7 +141,7 @@ class ProductAccountOpeningRollbackTest
                                 WHERE customer_id = ?
                                 """,
                         Integer.class,
-                        NON_EXISTENT_CUSTOMER_ID
+                        customerId
                 );
 
         assertThat(accountCount).isZero();
