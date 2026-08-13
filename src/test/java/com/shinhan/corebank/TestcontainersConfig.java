@@ -4,6 +4,7 @@ import java.time.Duration;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
@@ -23,5 +24,13 @@ class TestcontainersConfig {
                 "--collation-server=utf8mb4_0900_ai_ci",
                 "--default-time-zone=+00:00")
             .withStartupTimeout(Duration.ofMinutes(3));
+    }
+
+    @Bean
+    @ServiceConnection(name = "redis")
+    GenericContainer<?> redisContainer() {
+        return new GenericContainer<>(DockerImageName.parse("redis:7.4"))
+                .withExposedPorts(6379)
+                .withStartupTimeout(Duration.ofMinutes(2));
     }
 }

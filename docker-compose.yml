@@ -38,6 +38,16 @@ services:
     networks:
       - corebank-net
 
+  # 로컬 개발용 Redis 7 (약관 열람 이력 TTL 저장)
+  minicore-redis:
+    image: redis:7.4
+    container_name: minicore-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - corebank-net
+
 networks:
   corebank-net:
     driver: bridge

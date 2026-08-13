@@ -16,7 +16,10 @@ spring:
     show-sql: true
   flyway:
     clean-disabled: true
-
+  data:
+    redis:
+      host: localhost
+      port: 6379
 logging:
   level:
     org.hibernate.SQL: debug
