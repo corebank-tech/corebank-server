@@ -1,9 +1,6 @@
 package com.shinhan.corebank.autotransfer.adapter.out.persistence;
 
-import com.shinhan.corebank.autotransfer.domain.AutoTransferErrorCode;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
-import com.shinhan.corebank.autotransfer.domain.TransferCycle;
-import com.shinhan.corebank.common.exception.BusinessException;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -15,7 +12,6 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
