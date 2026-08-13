@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -44,23 +45,26 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private final TransferSequencePort transferSequencePort;
     private final TransferSavePort transferSavePort;
     private final LedgerSavePort ledgerSavePort;
+    private final Clock clock;
 
     public TransferExecutionService(
             AccountLockPort accountLockPort,
             TransferSequencePort transferSequencePort,
             TransferSavePort transferSavePort,
-            LedgerSavePort ledgerSavePort
+            LedgerSavePort ledgerSavePort,
+            Clock clock
     ) {
         this.accountLockPort = accountLockPort;
         this.transferSequencePort = transferSequencePort;
         this.transferSavePort = transferSavePort;
         this.ledgerSavePort = ledgerSavePort;
+        this.clock = clock;
     }
 
     @Override
     @Transactional(propagation = Propagation.REQUIRED)
     public TransferResult execute(TransferCommand command) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
 
         ResolvedPayee payee = accountLockPort.resolvePayeeByAccountNumber(command.depositAccountNumber())
                 .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
