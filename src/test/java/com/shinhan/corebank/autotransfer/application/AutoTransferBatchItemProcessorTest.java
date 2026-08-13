@@ -324,6 +324,17 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
         var autoTransferAfter = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
         assertThat(autoTransferAfter.getAmount()).isEqualTo(20000L);
         assertThat(autoTransferAfter.getNextExecutionDate()).isEqualTo(today);
+
+        // completeProcessing() 전체가 롤백됐어야 하므로, AutoTransfer 저장 전에 이미 SUCCESS로
+        // 저장 시도했던 회차(processingExecution)도 같이 롤백되어 PROCESSING 상태 그대로여야 한다 -
+        // 트랜잭션 경계가 깨져서 회차만 SUCCESS로 확정된 채 남는 걸 놓치지 않기 위한 검증
+        AutoTransferExecution executionAfter = executionRepository.findById(saved.getExecutionId())
+                .map(e -> AutoTransferExecution.reconstitute(e.getExecutionId(), e.getExecutionDate(), e.getAmount(),
+                        e.getStatus(), e.getTransactionNumber(), e.getFailureReason(), e.getExecutedAt()))
+                .orElseThrow();
+        assertThat(executionAfter.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
+        assertThat(executionAfter.getTransactionNumber()).isNull();
+        assertThat(auditLogJpaRepository.findAll()).isEmpty();
     }
 
     @Test
@@ -388,8 +399,21 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
                 .orElseThrow();
         assertThat(stillProcessing.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
 
+        // findDueForExecution()이 이 건을 여전히 대상으로 볼 수 있는 상태인지 확인 - 재시도에서
+        // execute()가 안 불린 이유가 "애초에 대상에서 제외돼서"가 아님을 배제한다
+        var stillEligible = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        assertThat(stillEligible.getStatus()).isEqualTo(AutoTransferStatus.NORMAL);
+        assertThat(stillEligible.getNextExecutionDate()).isEqualTo(today);
+
+        // saveProcessing()을 직접 다시 호출하면 실제로 uk_ate_dup 유니크 제약에 막히는지 직접 증명한다 -
+        // 재시도에서 execute()가 안 불린 게 정확히 이 제약 때문임을 추측이 아니라 사실로 확인한다
+        assertThatThrownBy(() -> itemProcessor.saveProcessing(autoTransfer(), today))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .satisfies(e -> assertThat(((DataIntegrityViolationException) e).getMostSpecificCause().getMessage())
+                        .contains("uk_ate_dup"));
+
         // 2차 실행(재실행): nextExecutionDate가 안 넘어가서 findDueForExecution()이 같은 건을 다시 찾아내지만,
-        // saveProcessing()이 uk_ate_dup(이미 PROCESSING 행 존재)에 막혀 completeProcessing()이 다시 호출되지 않는다
+        // saveProcessing()이 위에서 직접 증명한 uk_ate_dup 제약에 막혀 completeProcessing()이 다시 호출되지 않는다
         // - execute()도 다시 불리지 않는다. "중복 송금"이 아니라 "멈춘 건이 계속 방치된다"는 게 실제 위험이다.
         autoTransferBatchUseCase.executeDaily(today);
 
