@@ -107,8 +107,12 @@ public class TransferExecutionService implements TransferExecutionUseCase {
 
         try {
             Transfer completed = requiresNewTransactionTemplate.execute(status -> {
-                Transfer transfer = transferSavePort.save(created);
-
+                // 계좌 락을 transfer 행 INSERT보다 먼저 잡는다. INSERT는 withdrawal_account_id·
+                // deposit_account_id에 FK가 걸려 있어 대상 계좌 행에 공유락을 요구하는데, 그 순서가
+                // lockForTransfer의 오름차순 규칙을 따르지 않는다(선언 순서=출금→입금). INSERT를
+                // 먼저 하면 두 스레드가 서로 다른 순서로 공유락을 쥔 채 배타락으로 승격하려다
+                // 데드락이 난다 — 락을 먼저 잡아두면 그 시점엔 이미 우리가 배타락을 쥐고 있어
+                // FK의 공유락 요구가 자기 자신과 충돌하지 않는다.
                 LockedAccountsForTransfer locked =
                         accountLockPort.lockForTransfer(command.withdrawalAccountId(), payee.accountId());
 
@@ -120,6 +124,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 if (locked.withdrawal().balance() < command.amount()) {
                     throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
                 }
+
+                Transfer transfer = transferSavePort.save(created);
 
                 TransferBalances balances = accountLockPort.applyTransfer(locked, command.amount());
 

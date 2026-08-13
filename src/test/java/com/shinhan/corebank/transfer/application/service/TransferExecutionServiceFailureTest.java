@@ -13,7 +13,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -92,14 +91,15 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
                 .recipientPassbookMemo("입금메모")
                 .build();
 
-        // when / then: withdrawal_account_id는 transfer 테이블에 FK(NOT NULL)다. lockForTransfer가
-        // "계좌가 없다"고 판단하기도 전에, PROCESSING을 저장하는 첫 INSERT 자체가 FK 위반으로
-        // 실패한다 — AccountLockPort.ACCOUNT_LOCK_TARGET_NOT_FOUND 분기가 아니라 예상 못한
-        // DataIntegrityViolationException 경로를 탄다. 이어서 ERROR 확정 INSERT도 같은 FK
-        // 위반으로 실패하므로, failTransfer는 그 실패를 삼키지 않고 원래 예외를 그대로 던진다.
+        // when / then: lockForTransfer가 계좌 락 획득 단계에서 먼저 "계좌가 없다"고 판단해
+        // ACCOUNT_LOCK_TARGET_NOT_FOUND를 던진다(정상 흐름에서는 발생 불가능한 불변식 위반).
+        // withdrawal_account_id가 transfer 테이블에 FK(NOT NULL)라 이 계좌로는 ERROR 확정
+        // 행조차 남길 수 없으므로(그 INSERT도 같은 FK 위반), failTransfer는 기록 실패를 삼키지
+        // 않고 원래 예외를 그대로 던진다.
         assertThatThrownBy(() -> transferExecutionService.execute(command))
-                .isInstanceOf(DataIntegrityViolationException.class)
-                .hasMessageContaining("fk_transfer_wacc");
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(TransferErrorCode.ACCOUNT_LOCK_TARGET_NOT_FOUND));
 
         // then: transfer 행이 아예 남지 않는다
         Long transferCount = jdbcTemplate.queryForObject(
