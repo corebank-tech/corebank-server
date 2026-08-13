@@ -150,9 +150,9 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     .withdrawalBalanceAfter(completed.getWithdrawalBalanceAfter())
                     .build();
         } catch (BusinessException e) {
-            return failTransfer(created, e.getErrorCode().getCode(), e.getMessage());
+            return failTransfer(created, e.getErrorCode().getCode(), e.getMessage(), e);
         } catch (RuntimeException e) {
-            failTransfer(created, CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.getMessage());
+            failTransfer(created, CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.getMessage(), e);
             throw e;
         }
     }
@@ -160,10 +160,20 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     /**
      * 이체 시도를 ERROR로 확정해 새 행으로 남긴다. 위 트랜잭션이 이미 롤백되어 같은
      * transaction_number를 가진 PROCESSING 행은 존재하지 않으므로 새 INSERT로 처리된다.
+     *
+     * <p>withdrawal_account_id·deposit_account_id는 transfer 테이블에 FK(NOT NULL)로 걸려
+     * 있다. {@code ACCOUNT_LOCK_TARGET_NOT_FOUND}처럼 애초에 존재하지 않는 계좌가 원인인
+     * 실패는 이 ERROR 확정 INSERT 자체가 FK 위반으로 실패한다 — 정상 흐름에서는 도달할 수
+     * 없는 불변식 위반이므로 원장 기표 없이도 어차피 남길 수 없는 경우다. 이때는 기록 실패를
+     * 삼키지 않고 원래 예외(cause)를 그대로 던져, 원인이 FK 오류 뒤에 가려지지 않게 한다.
      */
-    private TransferResult failTransfer(Transfer created, String errorCode, String errorMessage) {
+    private TransferResult failTransfer(Transfer created, String errorCode, String errorMessage, RuntimeException cause) {
         created.fail(errorCode, errorMessage);
-        transferSavePort.save(created);
+        try {
+            transferSavePort.save(created);
+        } catch (RuntimeException recordingFailure) {
+            throw cause;
+        }
 
         return TransferResult.builder()
                 .status(ProcessResultStatus.ERROR)
