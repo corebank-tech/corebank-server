@@ -93,10 +93,9 @@ public class AccountOverviewQueryService
         List<AccountOverviewResult.AccountItem> accountItems =
                 accounts.stream()
                         .filter(account ->
-                                belongsToGroup(
-                                        account,
-                                        groupCode
-                                )
+                                resolveGroupCode(
+                                        account.getAccountType()
+                                ) == groupCode
                         )
                         .map(account ->
                                 toAccountItem(
@@ -121,19 +120,15 @@ public class AccountOverviewQueryService
         );
     }
 
-    private boolean belongsToGroup(
-            Account account,
-            AccountGroupCode groupCode
+    private AccountGroupCode resolveGroupCode(
+            AccountType accountType
     ) {
-        if (groupCode == AccountGroupCode.DEMAND_DEPOSIT) {
-            return account.getAccountType()
-                    == AccountType.DEMAND_DEPOSIT;
-        }
+        return switch (accountType) {
+            case DEMAND_DEPOSIT -> AccountGroupCode.DEMAND_DEPOSIT;
 
-        return account.getAccountType()
-                        == AccountType.TIME_DEPOSIT
-                || account.getAccountType()
-                        == AccountType.INSTALLMENT_SAVINGS;
+            case TIME_DEPOSIT,
+                 INSTALLMENT_SAVINGS -> AccountGroupCode.DEPOSIT_SAVINGS;
+        };
     }
 
     private AccountOverviewResult.AccountItem toAccountItem(
@@ -186,9 +181,9 @@ public class AccountOverviewQueryService
 
     private boolean isTransferEnabled(Account account) {
         return account.getAccountType()
-                        == AccountType.DEMAND_DEPOSIT
+                == AccountType.DEMAND_DEPOSIT
                 && account.getStatus()
-                        == AccountStatus.ACTIVE
+                == AccountStatus.ACTIVE
                 && account.isWithdrawalRegistered();
     }
 }

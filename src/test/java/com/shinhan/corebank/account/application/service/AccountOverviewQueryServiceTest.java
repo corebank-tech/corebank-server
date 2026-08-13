@@ -31,6 +31,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.times;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("전체 계좌 조회 서비스 단위 테스트")
@@ -381,6 +382,121 @@ class AccountOverviewQueryServiceTest {
                 .isFalse();
     }
 
+    @Test
+    @DisplayName("동일 상품 계좌가 여러 개여도 상품명은 한 번만 조회한다")
+    void cachesProductNameWithinRequest() {
+        // given
+        Account firstAccount = createAccount(
+                102L,
+                "088200000001",
+                20L,
+                AccountType.TIME_DEPOSIT,
+                1_000_000L,
+                AccountStatus.ACTIVE,
+                null,
+                false
+        );
+
+        Account secondAccount = createAccount(
+                103L,
+                "088200000002",
+                20L,
+                AccountType.TIME_DEPOSIT,
+                2_000_000L,
+                AccountStatus.ACTIVE,
+                null,
+                false
+        );
+
+        ProductDetail productDetail =
+                mock(ProductDetail.class);
+
+        Product product =
+                mock(Product.class);
+
+        given(accountPersistencePort
+                .findAllByCustomerId(CUSTOMER_ID))
+                .willReturn(List.of(
+                        firstAccount,
+                        secondAccount
+                ));
+
+        given(productQueryUseCase.getDetail(20L))
+                .willReturn(productDetail);
+
+        given(productDetail.getProduct())
+                .willReturn(product);
+
+        given(product.getProductName())
+                .willReturn("신한 정기예금");
+
+        // when
+        AccountOverviewResult result =
+                service.getOverview(CUSTOMER_ID);
+
+        // then
+        assertThat(
+                result.items()
+                        .get(0)
+                        .accounts()
+        )
+                .extracting(
+                        AccountOverviewResult
+                                .AccountItem::accountName
+                )
+                .containsExactly(
+                        "신한 정기예금",
+                        "신한 정기예금"
+                );
+
+        verify(productQueryUseCase, times(1))
+                .getDetail(20L);
+    }
+
+    @Test
+    @DisplayName("해지 계좌도 전체 계좌 조회 결과에 포함한다")
+    void includesClosedAccount() {
+        // given
+        Account closedAccount = createAccount(
+                101L,
+                "088100000001",
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                0L,
+                AccountStatus.CLOSED,
+                "해지 계좌",
+                false
+        );
+
+        given(accountPersistencePort
+                .findAllByCustomerId(CUSTOMER_ID))
+                .willReturn(
+                        List.of(closedAccount)
+                );
+
+        // when
+        AccountOverviewResult result =
+                service.getOverview(CUSTOMER_ID);
+
+        // then
+        assertThat(result.items()).hasSize(1);
+
+        AccountOverviewResult.AccountItem account =
+                result.items()
+                        .get(0)
+                        .accounts()
+                        .get(0);
+
+        assertThat(account.status())
+                .isEqualTo(AccountStatus.CLOSED);
+
+        assertThat(account.transferEnabled())
+                .isFalse();
+
+        assertThat(result.totalAssets())
+                .isZero();
+    }
+
     private Account createAccount(
             Long accountId,
             String accountNumber,
@@ -398,6 +514,13 @@ class AccountOverviewQueryServiceTest {
                 accountType == AccountType.DEMAND_DEPOSIT
                         ? null
                         : LocalDate.of(2027, 1, 1);
+
+        LocalDateTime closedDate =
+                status == AccountStatus.CLOSED
+                        ? LocalDateTime.of(
+                        2026, 8, 12, 10, 0
+                )
+                        : null;
 
         LocalDateTime withdrawalRegisteredAt =
                 withdrawalRegistered
@@ -421,7 +544,7 @@ class AccountOverviewQueryServiceTest {
                 withdrawalRegisteredAt,
                 openedDate,
                 maturityDate,
-                null,
+                closedDate,
                 LocalDateTime.of(2026, 8, 10, 15, 0),
                 0L,
                 openedDate,
