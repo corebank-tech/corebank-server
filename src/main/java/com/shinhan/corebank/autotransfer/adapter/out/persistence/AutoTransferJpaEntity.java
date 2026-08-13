@@ -1,9 +1,6 @@
 package com.shinhan.corebank.autotransfer.adapter.out.persistence;
 
-import com.shinhan.corebank.autotransfer.domain.AutoTransferErrorCode;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
-import com.shinhan.corebank.autotransfer.domain.TransferCycle;
-import com.shinhan.corebank.common.exception.BusinessException;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -15,7 +12,6 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -83,6 +79,10 @@ public class AutoTransferJpaEntity {
     @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 
     // 기존 : excutions 클래스 레벨 @Getter로 노출 및 orphanRemoval=true+cascade=ALL -> 부모를 지우면 이미 저장된 회차 DB 삭제될 수 있음
     @Getter(AccessLevel.NONE)

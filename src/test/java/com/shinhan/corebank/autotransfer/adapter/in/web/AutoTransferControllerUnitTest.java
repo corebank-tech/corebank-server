@@ -59,7 +59,7 @@ class AutoTransferControllerUnitTest {
                 10_000L, 1, 15,
                 LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), LocalDate.now().plusDays(10).plusDays(4),
                 "내메모", "받는메모", AutoTransferStatus.NORMAL,
-                LocalDateTime.now(), null, LocalDateTime.now());
+                LocalDateTime.now(), null, LocalDateTime.now(), 0L);
     }
 
     private AutoTransferRegisterRequest sampleRegisterRequest() {

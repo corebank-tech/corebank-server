@@ -67,7 +67,7 @@ class AutoTransferCommandServiceTest {
                 10_000L, 1, 15,
                 LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), LocalDate.now().plusDays(10).plusDays(4),
                 "내메모", "받는메모", AutoTransferStatus.NORMAL,
-                LocalDateTime.now(), null, LocalDateTime.now());
+                LocalDateTime.now(), null, LocalDateTime.now(), 0L);
     }
 
     private AutoTransferChangeCommand.AutoTransferChangeCommandBuilder validChangeCommandBuilder() {
@@ -120,7 +120,7 @@ class AutoTransferCommandServiceTest {
             return AutoTransfer.reconstitute(
                     100L, arg.getCustomerId(), arg.getWithdrawalAccountId(), arg.getDepositAccountNumber(), arg.getPayeeName(),
                     arg.getAmount(), arg.getCycleMonths(), arg.getTransferDay(), arg.getStartDate(), arg.getEndDate(), arg.getNextExecutionDate(),
-                    arg.getMyPassbookMemo(), arg.getRecipientPassbookMemo(), arg.getStatus(), arg.getRegisteredAt(), arg.getTerminatedAt(), arg.getUpdatedAt());
+                    arg.getMyPassbookMemo(), arg.getRecipientPassbookMemo(), arg.getStatus(), arg.getRegisteredAt(), arg.getTerminatedAt(), arg.getUpdatedAt(), arg.getVersion());
         });
 
         AutoTransfer result = autoTransferCommandService.register(validCommandBuilder().build());
@@ -296,7 +296,7 @@ class AutoTransferCommandServiceTest {
                 10_000L, 1, 15,
                 LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), null,
                 "내메모", "받는메모", AutoTransferStatus.TERMINATED,
-                LocalDateTime.now(), LocalDateTime.now(), LocalDateTime.now());
+                LocalDateTime.now(), LocalDateTime.now(), LocalDateTime.now(), 0L);
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(terminated));
 
         AutoTransferChangeCommand command = validChangeCommandBuilder().amount(20_000L).build();
