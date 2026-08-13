@@ -12,6 +12,7 @@ import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
+import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
 import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.LedgerPair;
@@ -27,8 +28,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 원장 기표 엔진의 유스케이스 구현체.
- * [계좌번호→ID 해석 → 계좌 락 획득 → 채번 → 원장 2행 INSERT → 잔액 UPDATE → 이체 기록]을
- * 하나의 트랜잭션 안에서 원자적으로 수행한다.
+ * [계좌번호→ID 해석 → 계좌 락 획득 → 계좌번호 재검증 → 채번 → 잔액 UPDATE → 원장 2행 INSERT
+ * → 이체 기록]을 하나의 트랜잭션 안에서 원자적으로 수행한다. 계좌번호 재검증: 락 없이 조회한
+ * 입금계좌번호→ID 매핑이 락 획득 시점까지 유효한지 다시 확인해 TOCTOU를 막는다.
  * propagation을 REQUIRED로 명시한다 — REQUIRES_NEW로 두면 호출자(P5 자동이체 배치 등)가
  * 이 실행을 자신의 트랜잭션에 합류시킬 방법이 없어진다(피호출자 애노테이션이 항상 우선).
  * @Primary: MockTransferExecutionPort와 test/local 프로필에서 같이 뜨는 동안, 타입 기반으로
@@ -72,6 +74,11 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         LockedAccountsForTransfer locked =
                 accountLockPort.lockForTransfer(command.withdrawalAccountId(), payee.accountId());
 
+        // 계좌번호 조회(락 없음)와 락 획득 사이에 입금계좌 매핑이 바뀌지 않았는지 재확인한다.
+        if (!command.depositAccountNumber().equals(locked.deposit().accountNumber())) {
+            throw new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND);
+        }
+
         String transactionNumber =
                 transferSequencePort.nextTransactionNumber(now.toLocalDate(), command.channel());
 
@@ -93,16 +100,15 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         );
         transfer = transferSavePort.save(transfer);
 
-        long withdrawalBalanceAfter = Math.subtractExact(locked.withdrawal().balance(), command.amount());
-        long depositBalanceAfter = Math.addExact(locked.deposit().balance(), command.amount());
+        TransferBalances balances = accountLockPort.applyTransfer(locked, command.amount());
 
         LedgerPair pair = LedgerPair.forTransfer(
                 transfer.getTransferId(),
                 transactionNumber,
                 command.withdrawalAccountId(),
-                withdrawalBalanceAfter,
+                balances.withdrawalBalanceAfter(),
                 payee.accountId(),
-                depositBalanceAfter,
+                balances.depositBalanceAfter(),
                 command.amount(),
                 resolveTransactionType(command.transferType()),
                 command.myPassbookMemo(),
@@ -112,10 +118,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         );
         ledgerSavePort.save(pair);
 
-        accountLockPort.debit(locked.withdrawal(), command.amount());
-        accountLockPort.credit(locked.deposit(), command.amount());
-
-        transfer.complete(withdrawalBalanceAfter, now);
+        transfer.complete(balances.withdrawalBalanceAfter(), now);
         transfer = transferSavePort.save(transfer);
 
         return TransferResult.builder()
