@@ -1,5 +1,7 @@
 package com.shinhan.corebank.account.domain;
 
+import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
+import com.shinhan.corebank.common.exception.BusinessException;
 import lombok.Getter;
 
 import java.time.LocalDate;
@@ -38,6 +40,9 @@ public class Account {
 
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;
+
+    private static final int MAX_ALIAS_LENGTH = 24;
+    private static final int MAX_KOREAN_ALIAS_LENGTH = 12;
 
     private Account(
             Long accountId,
@@ -167,6 +172,52 @@ public class Account {
                 createdAt,
                 updatedAt
         );
+    }
+
+    public void changeAlias(String alias) {
+        if (alias == null) {
+            throw new BusinessException(
+                    AccountErrorCode.INVALID_ACCOUNT_ALIAS
+            );
+        }
+
+        String normalizedAlias = alias.strip();
+
+        if (normalizedAlias.isEmpty()) {
+            throw new BusinessException(
+                    AccountErrorCode.INVALID_ACCOUNT_ALIAS
+            );
+        }
+
+        validateAlias(normalizedAlias);
+
+        this.alias = normalizedAlias;
+    }
+
+    public void removeAlias() {
+        this.alias = null;
+    }
+
+    private void validateAlias(String alias) {
+        int totalLength =
+                alias.codePointCount(0, alias.length());
+
+        long koreanLength =
+                alias.codePoints()
+                        .filter(this::isKoreanSyllable)
+                        .count();
+
+        if (totalLength > MAX_ALIAS_LENGTH
+                || koreanLength > MAX_KOREAN_ALIAS_LENGTH) {
+            throw new BusinessException(
+                    AccountErrorCode.INVALID_ACCOUNT_ALIAS
+            );
+        }
+    }
+
+    private boolean isKoreanSyllable(int codePoint) {
+        return codePoint >= 0xAC00
+                && codePoint <= 0xD7A3;
     }
 
     private void validate() {
