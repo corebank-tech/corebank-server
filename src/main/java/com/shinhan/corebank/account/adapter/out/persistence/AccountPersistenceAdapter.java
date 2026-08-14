@@ -7,6 +7,7 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Objects;
 
 @Component
@@ -22,6 +23,15 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
         }
 
         return updateExistingAccount(account);
+    }
+
+    @Override
+    public List<Account> findAllByCustomerId(Long customerId) {
+        return accountJpaRepository
+                .findAllByCustomerId(customerId)
+                .stream()
+                .map(AccountMapper::toDomain)
+                .toList();
     }
 
     private Account saveNewAccount(Account account) {

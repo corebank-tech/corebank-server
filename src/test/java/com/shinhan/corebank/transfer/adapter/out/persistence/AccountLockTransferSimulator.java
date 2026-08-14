@@ -23,7 +23,6 @@ class AccountLockTransferSimulator {
     @Transactional
     void execute(Long withdrawalAccountId, Long depositAccountId, long amount) {
         LockedAccountsForTransfer locked = accountLockPort.lockForTransfer(withdrawalAccountId, depositAccountId);
-        accountLockPort.debit(locked.withdrawal(), amount);
-        accountLockPort.credit(locked.deposit(), amount);
+        accountLockPort.applyTransfer(locked, amount);
     }
 }

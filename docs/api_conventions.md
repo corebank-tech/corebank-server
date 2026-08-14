@@ -133,7 +133,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 }
 ```
 
-### 예외 규정 — 실패 응답에 `data`를 허용하는 2건
+### 예외 규정 — 실패 응답에 `data`를 허용하는 3건
 
 원칙은 실패 시 `data: null`이지만, 잔여 시도 횟수는 화면이 반드시 표시해야 하는 값이라 예외로 허용합니다.
 
@@ -141,8 +141,9 @@ public record ApiResponse<T>(String code, String message, T data) {
 | --- | --- |
 | `POST /api/v1/otp/verify` | `errorCount`, `remainingAttempts` |
 | `POST /api/v1/accounts/{accountId}/password/verify` | `errorCount`, `remainingAttempts` |
+| `POST /api/v1/auth/login` | `errorCount`, `remainingAttempts` |
 
-이 2건 외에는 실패 응답의 `data`가 항상 `null`입니다. 새 예외가 필요하면 이 표에 등록해야 합니다.
+이 3건 외에는 실패 응답의 `data`가 항상 `null`입니다. 새 예외가 필요하면 이 표에 등록해야 합니다.
 
 ---
 
@@ -250,7 +251,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `ATH0007` | 400 | 인증번호가 일치하지 않습니다. | 이메일·비밀번호 재설정 인증번호 불일치 |
 | `ATH0008` | 400 | 인증번호가 만료되었습니다. | 인증번호 유효시간(180초) 초과 |
 | `ATH0009` | 400 | 실명 또는 계좌 정보가 일치하지 않습니다. | 실명계좌 인증 실패 |
-| `ATH0101` | 401 | 아이디 또는 비밀번호가 일치하지 않습니다. | 로그인 실패 |
+| `ATH0101` | 401 | 아이디 또는 비밀번호가 일치하지 않습니다. | 로그인 실패. 존재하는 고객의 비밀번호 불일치에만 `data`에 `errorCount`·`remainingAttempts` 포함 |
 | `ATH0102` | 403 | 비밀번호 5회 오류로 계정이 잠겼습니다. | 계정 잠금 |
 | `ATH0103` | 403 | 이메일 인증 토큰이 유효하지 않습니다. | `emailVerificationToken` 무효·만료 |
 | `ATH0104` | 403 | 약관 동의 토큰이 유효하지 않습니다. | `termsAuthToken` 무효·만료 |
