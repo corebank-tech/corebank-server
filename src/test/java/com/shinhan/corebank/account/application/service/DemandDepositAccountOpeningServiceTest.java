@@ -7,6 +7,8 @@ import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,9 +23,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class DemandDepositAccountOpeningServiceTest {
@@ -175,5 +177,26 @@ class DemandDepositAccountOpeningServiceTest {
                 OPENED_DATE,
                 OPENED_DATE
         );
+    }
+
+    @Test
+    @DisplayName("입출금계좌 개설 command가 없으면 채번하지 않는다")
+    void rejectNullCommand() {
+        assertThatThrownBy(
+                () -> demandDepositAccountOpeningService.open(null)
+        )
+                .isInstanceOf(BusinessException.class)
+                .satisfies(throwable -> {
+                    BusinessException exception =
+                            (BusinessException) throwable;
+
+                    assertThat(exception.getErrorCode())
+                            .isEqualTo(
+                                    CommonErrorCode.REQUIRED_FIELD_MISSING
+                            );
+                });
+
+        verifyNoInteractions(issueAccountNumberUseCase);
+        verifyNoInteractions(accountPersistencePort);
     }
 }

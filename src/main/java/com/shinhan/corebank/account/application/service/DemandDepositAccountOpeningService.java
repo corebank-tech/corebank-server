@@ -7,6 +7,8 @@ import com.shinhan.corebank.account.application.port.in.IssueAccountNumberUseCas
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +29,12 @@ public class DemandDepositAccountOpeningService implements DemandDepositAccountO
     public AccountOpeningResult open(
             DemandDepositAccountOpeningCommand command
     ) {
+        if (command == null) {
+            throw new BusinessException(
+                    CommonErrorCode.REQUIRED_FIELD_MISSING
+            );
+        }
+
         String accountNumber =
                 issueAccountNumberUseCase.issue(
                         AccountType.DEMAND_DEPOSIT,
@@ -41,7 +49,7 @@ public class DemandDepositAccountOpeningService implements DemandDepositAccountO
                 command.customerId(),
                 null,
                 AccountType.DEMAND_DEPOSIT,
-                command.passwordHash(),
+                command.newAccountPasswordHash(),
                 openedDate,
                 null
         );
