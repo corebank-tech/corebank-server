@@ -30,7 +30,6 @@ public class AccountController {
 
     private final AccountOverviewQueryUseCase accountOverviewQueryUseCase;
     private final CurrentCustomerProvider currentCustomerProvider;
-
     private final AccountAliasUseCase accountAliasUseCase;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
