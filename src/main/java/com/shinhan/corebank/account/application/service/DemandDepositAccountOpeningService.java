@@ -7,16 +7,16 @@ import com.shinhan.corebank.account.application.port.in.IssueAccountNumberUseCas
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountType;
-import java.time.Clock;
-import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
+
 @Service 
-@RequiredArgsConstructor public class 
-DemandDepositAccountOpeningService
-        implements DemandDepositAccountOpeningUseCase {
+@RequiredArgsConstructor
+public class DemandDepositAccountOpeningService implements DemandDepositAccountOpeningUseCase {
 
     private final IssueAccountNumberUseCase issueAccountNumberUseCase;
     private final AccountPersistencePort accountPersistencePort;
