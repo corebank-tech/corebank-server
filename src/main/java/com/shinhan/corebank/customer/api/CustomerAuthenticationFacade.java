@@ -9,8 +9,8 @@ public interface CustomerAuthenticationFacade {
     Optional<CustomerAuthenticationData> findByUserId(String userId);
 
     // 로그인 실패 결과를 고객 상태에 반영하도록 요청
-    void updateLoginFailureState(RecordLoginFailureCommand command);
+    LoginFailureState updateLoginFailureState(RecordLoginFailureCommand command);
 
     // 로그인 성공 결과를 고객 상태에 반영하도록 요청
-    void updateLoginSuccessState(RecordLoginSuccessCommand command);
+    LoginSuccessState updateLoginSuccessState(RecordLoginSuccessCommand command);
 }

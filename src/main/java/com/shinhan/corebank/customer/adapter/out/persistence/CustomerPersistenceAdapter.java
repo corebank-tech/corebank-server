@@ -41,7 +41,59 @@ public class CustomerPersistenceAdapter
                 .map(customerMapper::toDomain);
     }
 
-    // 신규 고객을 저장하거나 기존 고객의 변경 상태를 반영
+    // 로그인 상태 변경을 위해 고객을 비관적 락으로 조회하고 도메인으로 변환
+    @Override
+    public Optional<Customer> findByIdForUpdate(Long customerId) {
+        Objects.requireNonNull(
+                customerId,
+                "customerId must not be null"
+        );
+
+        return customerJpaRepository.findByIdForUpdate(customerId)
+                .map(customerMapper::toDomain);
+    }
+
+    // 로그인 실패 횟수와 계정 잠금 상태만 저장
+    @Override
+    public void updateLoginFailureState(Customer customer) {
+        Objects.requireNonNull(
+                customer,
+                "customer must not be null"
+        );
+
+        CustomerJpaEntity entity =
+                findExistingEntityForUpdate(customer.getCustomerId());
+
+        entity.updateLoginFailureState(
+                customer.getLoginFailureCount(),
+                customer.isAccountLocked()
+        );
+
+        customerJpaRepository.save(entity);
+    }
+
+    // 로그인 성공 시각과 접속 IP 및 실패 횟수만 저장
+    @Override
+    public void updateLoginSuccessState(Customer customer) {
+        Objects.requireNonNull(
+                customer,
+                "customer must not be null"
+        );
+
+        CustomerJpaEntity entity =
+                findExistingEntityForUpdate(customer.getCustomerId());
+
+        entity.updateLoginSuccessState(
+                customer.getPreviousLoginAt(),
+                customer.getLastLoginAt(),
+                customer.getLastLoginIp(),
+                customer.getLoginFailureCount()
+        );
+
+        customerJpaRepository.save(entity);
+    }
+
+    // customerId가 없는 신규 고객만 저장
     @Override
     public Customer save(Customer customer) {
         Objects.requireNonNull(
@@ -49,27 +101,31 @@ public class CustomerPersistenceAdapter
                 "customer must not be null"
         );
 
-        if (customer.getCustomerId() == null) {
-            CustomerJpaEntity newEntity =
-                    customerMapper.toEntity(customer);
-
-            CustomerJpaEntity savedEntity =
-                    customerJpaRepository.save(newEntity);
-
-            return customerMapper.toDomain(savedEntity);
+        if (customer.getCustomerId() != null) {
+            throw new IllegalArgumentException(
+                    "신규 고객은 customerId가 없어야 합니다."
+            );
         }
 
-        CustomerJpaEntity existingEntity =
-                customerJpaRepository.findById(customer.getCustomerId())
-                        .orElseThrow(() -> new IllegalStateException(
-                                "저장할 고객이 존재하지 않습니다."
-                        ));
-
-        customerMapper.updateEntity(customer, existingEntity);
+        CustomerJpaEntity newEntity =
+                customerMapper.toEntity(customer);
 
         CustomerJpaEntity savedEntity =
-                customerJpaRepository.save(existingEntity);
+                customerJpaRepository.save(newEntity);
 
         return customerMapper.toDomain(savedEntity);
+    }
+
+    // 상태를 갱신할 기존 고객 Entity를 조회
+    private CustomerJpaEntity findExistingEntityForUpdate(Long customerId) {
+        Objects.requireNonNull(
+                customerId,
+                "customerId must not be null"
+        );
+
+        return customerJpaRepository.findByIdForUpdate(customerId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "저장할 고객이 존재하지 않습니다."
+                ));
     }
 }

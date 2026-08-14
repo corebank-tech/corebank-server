@@ -1,7 +1,6 @@
 package com.shinhan.corebank.customer.adapter.out.persistence;
 
 import com.shinhan.corebank.common.entity.BaseEntity;
-import com.shinhan.corebank.customer.domain.model.Customer;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -85,18 +84,25 @@ public class CustomerJpaEntity extends BaseEntity {
     )
     private LocalDateTime joinedAt;
 
-    // 변경된 customer 도메인 상태를 영속 Entity에 반영
-    public void updateFrom(Customer customer) {
-        this.passwordHash = customer.getPasswordHash();
-        this.userName = customer.getUserName();
-        this.email = customer.getEmail();
-        this.phoneNumber = customer.getPhoneNumber();
-        this.loginFailureCount = customer.getLoginFailureCount();
-        this.accountLocked = customer.isAccountLocked();
-        this.displayOrderType = customer.getDisplayOrderType();
-        this.lastLoginAt = customer.getLastLoginAt();
-        this.lastLoginIp = customer.getLastLoginIp();
-        this.previousLoginAt = customer.getPreviousLoginAt();
-        this.passwordChangedAt = customer.getPasswordChangedAt();
+    // 로그인 실패 횟수와 계정 잠금 상태만 갱신
+    public void updateLoginFailureState(
+            int loginFailureCount,
+            boolean accountLocked
+    ) {
+        this.loginFailureCount = loginFailureCount;
+        this.accountLocked = accountLocked;
+    }
+
+    // 로그인 성공 시각과 접속 IP 및 실패 횟수만 갱신
+    public void updateLoginSuccessState(
+            LocalDateTime previousLoginAt,
+            LocalDateTime lastLoginAt,
+            String lastLoginIp,
+            int loginFailureCount
+    ) {
+        this.previousLoginAt = previousLoginAt;
+        this.lastLoginAt = lastLoginAt;
+        this.lastLoginIp = lastLoginIp;
+        this.loginFailureCount = loginFailureCount;
     }
 }

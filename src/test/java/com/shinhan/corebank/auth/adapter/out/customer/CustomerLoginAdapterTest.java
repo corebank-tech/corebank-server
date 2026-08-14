@@ -1,8 +1,12 @@
 package com.shinhan.corebank.auth.adapter.out.customer;
 
+import com.shinhan.corebank.auth.application.port.out.LoginFailureUpdateResult;
+import com.shinhan.corebank.auth.application.port.out.LoginSuccessUpdateResult;
 import com.shinhan.corebank.auth.domain.model.LoginCustomer;
 import com.shinhan.corebank.customer.api.CustomerAuthenticationData;
 import com.shinhan.corebank.customer.api.CustomerAuthenticationFacade;
+import com.shinhan.corebank.customer.api.LoginFailureState;
+import com.shinhan.corebank.customer.api.LoginSuccessState;
 import com.shinhan.corebank.customer.api.RecordLoginFailureCommand;
 import com.shinhan.corebank.customer.api.RecordLoginSuccessCommand;
 import org.junit.jupiter.api.BeforeEach;
@@ -84,12 +88,19 @@ class CustomerLoginAdapterTest {
     @Test
     @DisplayName("로그인 실패 결과를 customer 모듈에 전달한다")
     void recordLoginFailure() {
-        adapter.recordLoginFailure(1L);
+        given(customerAuthenticationFacade.updateLoginFailureState(
+                new RecordLoginFailureCommand(1L)
+        )).willReturn(new LoginFailureState(4, false));
+
+        LoginFailureUpdateResult result =
+                adapter.recordLoginFailure(1L);
 
         verify(customerAuthenticationFacade)
                 .updateLoginFailureState(
                         new RecordLoginFailureCommand(1L)
                 );
+        assertThat(result.errorCount()).isEqualTo(4);
+        assertThat(result.accountLocked()).isFalse();
     }
 
     // 로그인 성공 상태를 customer command로 변환해 전달
@@ -98,20 +109,48 @@ class CustomerLoginAdapterTest {
     void recordLoginSuccess() {
         LocalDateTime loginAt =
                 LocalDateTime.of(2026, 8, 12, 10, 0);
+        RecordLoginSuccessCommand command =
+                new RecordLoginSuccessCommand(
+                        1L,
+                        loginAt,
+                        "192.168.0.10"
+                );
+        given(customerAuthenticationFacade.updateLoginSuccessState(command))
+                .willReturn(LoginSuccessState.COMPLETED);
 
-        adapter.recordLoginSuccess(
+        LoginSuccessUpdateResult result = adapter.recordLoginSuccess(
                 1L,
                 loginAt,
                 "192.168.0.10"
         );
 
         verify(customerAuthenticationFacade)
-                .updateLoginSuccessState(
-                        new RecordLoginSuccessCommand(
-                                1L,
-                                loginAt,
-                                "192.168.0.10"
-                        )
+                .updateLoginSuccessState(command);
+        assertThat(result).isEqualTo(LoginSuccessUpdateResult.COMPLETED);
+    }
+
+    // customer 모듈의 동시 잠금 결과를 auth 결과로 변환
+    @Test
+    @DisplayName("로그인 성공 처리 중 계정 잠금 결과를 변환한다")
+    void recordLoginSuccessAccountLocked() {
+        LocalDateTime loginAt =
+                LocalDateTime.of(2026, 8, 12, 10, 0);
+        RecordLoginSuccessCommand command =
+                new RecordLoginSuccessCommand(
+                        1L,
+                        loginAt,
+                        "192.168.0.10"
                 );
+        given(customerAuthenticationFacade.updateLoginSuccessState(command))
+                .willReturn(LoginSuccessState.ACCOUNT_LOCKED);
+
+        LoginSuccessUpdateResult result = adapter.recordLoginSuccess(
+                1L,
+                loginAt,
+                "192.168.0.10"
+        );
+
+        assertThat(result)
+                .isEqualTo(LoginSuccessUpdateResult.ACCOUNT_LOCKED);
     }
 }
