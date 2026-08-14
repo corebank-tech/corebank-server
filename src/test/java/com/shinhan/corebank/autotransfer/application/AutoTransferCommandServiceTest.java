@@ -28,6 +28,7 @@ import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -56,6 +57,9 @@ class AutoTransferCommandServiceTest {
     @Mock
     AuditLogService auditLogService;
 
+    @Mock
+    Clock clock;
+
     @InjectMocks
     AutoTransferCommandService autoTransferCommandService;
 
@@ -67,7 +71,7 @@ class AutoTransferCommandServiceTest {
                 10_000L, 1, 15,
                 LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), LocalDate.now().plusDays(10).plusDays(4),
                 "내메모", "받는메모", AutoTransferStatus.NORMAL,
-                LocalDateTime.now(), null, LocalDateTime.now());
+                LocalDateTime.now(), null, LocalDateTime.now(), 0L);
     }
 
     private AutoTransferChangeCommand.AutoTransferChangeCommandBuilder validChangeCommandBuilder() {
@@ -114,13 +118,14 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15)).thenReturn(false);
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
         // 실제 어댑터는 INSERT 후 채번된 ID로 다시 조립해서 돌려준다 — 감사로그가 autoTransferId를 필요로 하므로 그 동작을 흉내낸다
         when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> {
             AutoTransfer arg = invocation.getArgument(0);
             return AutoTransfer.reconstitute(
                     100L, arg.getCustomerId(), arg.getWithdrawalAccountId(), arg.getDepositAccountNumber(), arg.getPayeeName(),
                     arg.getAmount(), arg.getCycleMonths(), arg.getTransferDay(), arg.getStartDate(), arg.getEndDate(), arg.getNextExecutionDate(),
-                    arg.getMyPassbookMemo(), arg.getRecipientPassbookMemo(), arg.getStatus(), arg.getRegisteredAt(), arg.getTerminatedAt(), arg.getUpdatedAt());
+                    arg.getMyPassbookMemo(), arg.getRecipientPassbookMemo(), arg.getStatus(), arg.getRegisteredAt(), arg.getTerminatedAt(), arg.getUpdatedAt(), arg.getVersion());
         });
 
         AutoTransfer result = autoTransferCommandService.register(validCommandBuilder().build());
@@ -296,7 +301,7 @@ class AutoTransferCommandServiceTest {
                 10_000L, 1, 15,
                 LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), null,
                 "내메모", "받는메모", AutoTransferStatus.TERMINATED,
-                LocalDateTime.now(), LocalDateTime.now(), LocalDateTime.now());
+                LocalDateTime.now(), LocalDateTime.now(), LocalDateTime.now(), 0L);
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(terminated));
 
         AutoTransferChangeCommand command = validChangeCommandBuilder().amount(20_000L).build();
@@ -381,6 +386,7 @@ class AutoTransferCommandServiceTest {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
         when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
 
         autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build());
 

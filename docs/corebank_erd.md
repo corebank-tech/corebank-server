@@ -145,6 +145,9 @@ erDiagram
         varchar alias "미지정 시 예금주명 (FAV0001)"
         datetime registered_at "DATETIME(6)"
     }
+    ledger_entry_id_sequence {
+        bigint sequence_id PK "AUTO_INCREMENT (ledger_entry.ledger_entry_id 전용 채번 카운터)"
+    }
 
     %% ---------- P1 ----------
     transfer_limit {
@@ -333,9 +336,10 @@ erDiagram
     customer ||--o{ idempotency_key : "발급"
 
     %% 논리 관계 (ledger_entry 는 파티션 테이블이라 FK 선언 불가)
-    %% 채번 자원 (FK 없음. 거래번호 생성 시 행 단위 락)
+    %% 채번 자원 (FK 없음. 거래번호/원장ID 생성)
     transaction_sequence ||..o{ transfer : "거래번호 채번"
     transaction_sequence ||..o{ ledger_entry : "거래번호 채번"
+    ledger_entry_id_sequence ||..o{ ledger_entry : "ledger_entry_id 전용 채번"
 
     %% 같은 두 엔티티를 두 번 참조하는 관계 (중복 제거 대상이라 명시)
     account ||--o{ transfer : "입금 계좌 (당행)"

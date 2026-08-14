@@ -17,6 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -315,5 +316,66 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
 
         assertThat(currentVersion)
                 .isEqualTo(originalVersion + 1);
+    }
+
+    @Test
+    @DisplayName("고객 ID로 계좌를 조회하면 해당 고객의 계좌만 반환한다")
+    void findAllByCustomerIdReturnsOnlyOwnedAccounts() {
+        // given
+        Long otherCustomerId =
+                customerTestFixture.createCustomer();
+
+        Account firstAccount = Account.open(
+                "088100000002",
+                customerId,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                LocalDateTime.of(2026, 8, 10, 10, 0),
+                null
+        );
+
+        Account secondAccount = Account.open(
+                "088100000003",
+                customerId,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                LocalDateTime.of(2026, 8, 10, 11, 0),
+                null
+        );
+
+        Account otherCustomerAccount = Account.open(
+                "088100000004",
+                otherCustomerId,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                LocalDateTime.of(2026, 8, 10, 12, 0),
+                null
+        );
+
+        accountPersistencePort.save(firstAccount);
+        accountPersistencePort.save(secondAccount);
+        accountPersistencePort.save(otherCustomerAccount);
+
+        // when
+        List<Account> result =
+                accountPersistencePort.findAllByCustomerId(customerId);
+
+        // then
+        assertThat(result).hasSize(2);
+
+        assertThat(result)
+                .extracting(Account::getAccountNumber)
+                .containsExactlyInAnyOrder(
+                        "088100000002",
+                        "088100000003"
+                );
+
+        assertThat(result)
+                .allMatch(account ->
+                        account.getCustomerId().equals(customerId)
+                );
     }
 }

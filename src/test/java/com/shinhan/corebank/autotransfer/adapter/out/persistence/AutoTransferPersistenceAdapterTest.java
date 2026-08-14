@@ -176,6 +176,84 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(result.getTotalElements()).isZero();
     }
 
+    @Test
+    @DisplayName("정상 상태이고 다음 실행일이 오늘인 자동이체만 조회된다 (미래 실행일은 제외)")
+    void findDueForExecution_filtersByStatusAndNextExecutionDate() {
+        LocalDate today = LocalDate.of(2026, 3, 15);
+        repository.save(autoTransferDue(accountA, "110000000030", AutoTransferStatus.NORMAL, today));
+        repository.save(autoTransferDue(accountA, "110000000031", AutoTransferStatus.TERMINATED, today));
+        repository.save(autoTransferDue(accountA, "110000000032", AutoTransferStatus.NORMAL, today.plusDays(1)));
+        entityManager.flush();
+        entityManager.clear();
+
+        var result = adapter.findDueForExecution(today);
+
+        assertThat(result)
+                .extracting(AutoTransfer::getDepositAccountNumber)
+                .containsExactly("110000000030");
+    }
+
+    @Test
+    @DisplayName("다음 실행일이 과거(밀린 회차)여도 조회된다 - 실패로 멈춘 건이 다음 배치에서 자동 재시도되게 함")
+    void findDueForExecution_includesPastNextExecutionDate() {
+        LocalDate today = LocalDate.of(2026, 3, 15);
+        repository.save(autoTransferDue(accountA, "110000000035", AutoTransferStatus.NORMAL, today.minusDays(3)));
+        entityManager.flush();
+        entityManager.clear();
+
+        var result = adapter.findDueForExecution(today);
+
+        assertThat(result)
+                .extracting(AutoTransfer::getDepositAccountNumber)
+                .containsExactly("110000000035");
+    }
+
+    @Test
+    @DisplayName("조회 결과는 registeredAt 오름차순으로 정렬된다 (POL-037)")
+    void findDueForExecution_ordersByRegisteredAtAscending() {
+        LocalDate today = LocalDate.of(2026, 3, 15);
+        AutoTransferJpaEntity later = repository.save(autoTransferDueWithRegisteredAt(
+                accountA, "110000000033", today, LocalDateTime.of(2026, 1, 2, 0, 0)));
+        AutoTransferJpaEntity earlier = repository.save(autoTransferDueWithRegisteredAt(
+                accountA, "110000000034", today, LocalDateTime.of(2026, 1, 1, 0, 0)));
+        entityManager.flush();
+        entityManager.clear();
+
+        var result = adapter.findDueForExecution(today);
+
+        assertThat(result)
+                .extracting(AutoTransfer::getAutoTransferId)
+                .containsExactly(earlier.getAutoTransferId(), later.getAutoTransferId());
+    }
+
+    private AutoTransferJpaEntity autoTransferDue(Long withdrawalAccountId, String depositAccountNumber, AutoTransferStatus status, LocalDate nextExecutionDate) {
+        return autoTransferDueWithRegisteredAt(withdrawalAccountId, depositAccountNumber, status, nextExecutionDate, LocalDateTime.of(2026, 1, 1, 0, 0));
+    }
+
+    private AutoTransferJpaEntity autoTransferDueWithRegisteredAt(Long withdrawalAccountId, String depositAccountNumber, LocalDate nextExecutionDate, LocalDateTime registeredAt) {
+        return autoTransferDueWithRegisteredAt(withdrawalAccountId, depositAccountNumber, AutoTransferStatus.NORMAL, nextExecutionDate, registeredAt);
+    }
+
+    private AutoTransferJpaEntity autoTransferDueWithRegisteredAt(Long withdrawalAccountId, String depositAccountNumber, AutoTransferStatus status, LocalDate nextExecutionDate, LocalDateTime registeredAt) {
+        return AutoTransferJpaEntity.builder()
+                .customerId(customerId)
+                .withdrawalAccountId(withdrawalAccountId)
+                .depositAccountNumber(depositAccountNumber)
+                .payeeName("홍길동")
+                .amount(10000L)
+                .cycleMonths(1)
+                .transferDay(nextExecutionDate.getDayOfMonth())
+                .startDate(LocalDate.of(2026, 1, 1))
+                .endDate(LocalDate.of(2027, 1, 1))
+                .nextExecutionDate(nextExecutionDate)
+                .myPassbookMemo("메모")
+                .recipientPassbookMemo("받는메모")
+                .status(status)
+                .registeredAt(registeredAt)
+                .updatedAt(registeredAt)
+                .build();
+    }
+
     private AutoTransferJpaEntity autoTransfer(Long withdrawalAccountId, String depositAccountNumber, AutoTransferStatus status, int transferDay) {
         return AutoTransferJpaEntity.builder()
                 .customerId(customerId)

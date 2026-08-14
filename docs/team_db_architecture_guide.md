@@ -69,6 +69,7 @@ flowchart TD
   }
   ```
 - ⚠️ **주의**: SQL 마이그레이션(DDL) 작성 시 절대로 `DEFAULT CURRENT_TIMESTAMP`를 쓰지 마세요! 시각 생성은 DB가 아니라 자바 JPA Auditing(`BaseEntity` + `JpaAuditingConfig`의 `Clock.systemUTC()`)이 담당합니다.
+- ℹ️ **예외 — 다른 도메인 테이블의 부분 매핑**: 이 규칙은 "테이블 하나 = 정식(대표) 엔티티 하나"를 전제로 합니다. 다른 도메인이 소유한 테이블을 자기 도메인 목적으로 일부 컬럼만 떼어 매핑하는 경량 엔티티(예: `transfer` 도메인이 `account` 테이블의 락·잔액 컬럼만 매핑하는 `AccountLockJpaEntity`)는 대상이 아닙니다. 이런 부분 매핑이 `createdAt`/`updatedAt`을 실제로 읽지 않는다면 `BaseEntity`를 상속하지 않아도 됩니다 — 상속하면 그 도메인이 관여할 때마다 테이블 소유 도메인의 감사 컬럼(`updated_at`)에 의도치 않은 추가 쓰기가 발생하기 때문입니다.
 
 ### ② `IntegrationTestSupport.java` (모든 통합 테스트의 필수 부모 클래스)
 - **역할**: `@SpringBootTest` 실행 시 로컬 PC에 DB가 켜져 있지 않아도, **Testcontainers가 알아서 MySQL 8.4 1회용 도커 DB를 띄우고 Flyway 마이그레이션까지 마친 완벽한 테스트 환경**을 제공합니다.
