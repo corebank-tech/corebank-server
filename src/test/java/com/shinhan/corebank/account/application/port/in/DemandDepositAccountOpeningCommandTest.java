@@ -96,4 +96,25 @@ class DemandDepositAccountOpeningCommandTest {
                             );
                 });
     }
+
+    @Test
+    @DisplayName("입출금계좌 개설 고객 ID가 음수이면 예외가 발생한다")
+    void rejectNegativeCustomerId() {
+        assertThatThrownBy(
+                () -> new DemandDepositAccountOpeningCommand(
+                        -1L,
+                        PASSWORD_HASH
+                )
+        )
+                .isInstanceOf(BusinessException.class)
+                .satisfies(throwable -> {
+                    BusinessException exception =
+                            (BusinessException) throwable;
+
+                    assertThat(exception.getErrorCode())
+                            .isEqualTo(
+                                    CommonErrorCode.INVALID_INPUT
+                            );
+                });
+    }
 }
