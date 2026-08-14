@@ -1,6 +1,21 @@
-@Service
-@RequiredArgsConstructor
-public class DemandDepositAccountOpeningService
+package com.shinhan.corebank.account.application.service;
+
+import com.shinhan.corebank.account.application.port.in.AccountOpeningResult;
+import com.shinhan.corebank.account.application.port.in.DemandDepositAccountOpeningCommand;
+import com.shinhan.corebank.account.application.port.in.DemandDepositAccountOpeningUseCase;
+import com.shinhan.corebank.account.application.port.in.IssueAccountNumberUseCase;
+import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
+import com.shinhan.corebank.account.domain.Account;
+import com.shinhan.corebank.account.domain.AccountType;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service 
+@RequiredArgsConstructor public class 
+DemandDepositAccountOpeningService
         implements DemandDepositAccountOpeningUseCase {
 
     private final IssueAccountNumberUseCase issueAccountNumberUseCase;
