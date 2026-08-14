@@ -11,15 +11,19 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -179,6 +183,423 @@ class AccountControllerTest extends IntegrationTestSupport {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    @DisplayName("본인 계좌에 별명을 등록한다")
+    void changeAlias() throws Exception {
+        // given
+        Long customerId =
+                customerTestFixture
+                        .createCustomer();
+
+        Account account =
+                createAccount(
+                        customerId,
+                        "088100000031",
+                        null
+                );
+
+        // when & then
+        mockMvc.perform(
+                        put(
+                                "/accounts/{accountId}/alias",
+                                account.getAccountId()
+                        )
+                                .with(authentication(
+                                        authenticationOf(
+                                                customerId
+                                        )
+                                ))
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey()
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "alias": "생활비통장"
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("0000")
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.data.accountId"
+                        ).value(
+                                account.getAccountId()
+                        )
+                )
+                .andExpect(
+                        jsonPath("$.data.alias")
+                                .value("생활비통장")
+                );
+
+        Account savedAccount =
+                accountPersistencePort
+                        .findByAccountIdAndCustomerId(
+                                account.getAccountId(),
+                                customerId
+                        )
+                        .orElseThrow();
+
+        assertThat(savedAccount.getAlias())
+                .isEqualTo("생활비통장");
+    }
+
+    @Test
+    @DisplayName("기존 계좌별명을 수정한다")
+    void updateAlias() throws Exception {
+        // given
+        Long customerId =
+                customerTestFixture
+                        .createCustomer();
+
+        Account account =
+                createAccount(
+                        customerId,
+                        "088100000032",
+                        "생활비통장"
+                );
+
+        // when & then
+        mockMvc.perform(
+                        put(
+                                "/accounts/{accountId}/alias",
+                                account.getAccountId()
+                        )
+                                .with(authentication(
+                                        authenticationOf(
+                                                customerId
+                                        )
+                                ))
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey()
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "alias": "급여통장"
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.data.alias")
+                                .value("급여통장")
+                );
+
+        Account savedAccount =
+                accountPersistencePort
+                        .findByAccountIdAndCustomerId(
+                                account.getAccountId(),
+                                customerId
+                        )
+                        .orElseThrow();
+
+        assertThat(savedAccount.getAlias())
+                .isEqualTo("급여통장");
+    }
+
+    @Test
+    @DisplayName("계좌별명을 삭제한다")
+    void deleteAlias() throws Exception {
+        // given
+        Long customerId =
+                customerTestFixture
+                        .createCustomer();
+
+        Account account =
+                createAccount(
+                        customerId,
+                        "088100000033",
+                        "생활비통장"
+                );
+
+        // when & then
+        mockMvc.perform(
+                        delete(
+                                "/accounts/{accountId}/alias",
+                                account.getAccountId()
+                        )
+                                .with(authentication(
+                                        authenticationOf(
+                                                customerId
+                                        )
+                                ))
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey()
+                                )
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("0000")
+                );
+
+        Account savedAccount =
+                accountPersistencePort
+                        .findByAccountIdAndCustomerId(
+                                account.getAccountId(),
+                                customerId
+                        )
+                        .orElseThrow();
+
+        assertThat(savedAccount.getAlias())
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("타인 계좌별명 변경은 ACC0201을 반환한다")
+    void rejectChangingOtherCustomersAlias()
+            throws Exception {
+
+        // given
+        Long ownerCustomerId =
+                customerTestFixture
+                        .createCustomer();
+
+        Long requesterCustomerId =
+                customerTestFixture
+                        .createCustomer();
+
+        Account account =
+                createAccount(
+                        ownerCustomerId,
+                        "088100000034",
+                        null
+                );
+
+        // when & then
+        mockMvc.perform(
+                        put(
+                                "/accounts/{accountId}/alias",
+                                account.getAccountId()
+                        )
+                                .with(authentication(
+                                        authenticationOf(
+                                                requesterCustomerId
+                                        )
+                                ))
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey()
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "alias": "내계좌"
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(status().isNotFound())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("ACC0201")
+                );
+    }
+
+    @Test
+    @DisplayName("한글 12자를 초과하는 별명은 ACC0001을 반환한다")
+    void rejectTooLongKoreanAlias()
+            throws Exception {
+
+        // given
+        Long customerId =
+                customerTestFixture
+                        .createCustomer();
+
+        Account account =
+                createAccount(
+                        customerId,
+                        "088100000035",
+                        null
+                );
+
+        // when & then
+        mockMvc.perform(
+                        put(
+                                "/accounts/{accountId}/alias",
+                                account.getAccountId()
+                        )
+                                .with(authentication(
+                                        authenticationOf(
+                                                customerId
+                                        )
+                                ))
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey()
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "alias": "가나다라마바사아자차카타파"
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("ACC0001")
+                );
+    }
+
+    @Test
+    @DisplayName("Idempotency-Key가 없으면 CMN0002를 반환한다")
+    void rejectMissingIdempotencyKey()
+            throws Exception {
+
+        // given
+        Long customerId =
+                customerTestFixture
+                        .createCustomer();
+
+        Account account =
+                createAccount(
+                        customerId,
+                        "088100000036",
+                        null
+                );
+
+        // when & then
+        mockMvc.perform(
+                        put(
+                                "/accounts/{accountId}/alias",
+                                account.getAccountId()
+                        )
+                                .with(authentication(
+                                        authenticationOf(
+                                                customerId
+                                        )
+                                ))
+                                .with(csrf())
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "alias": "생활비"
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("CMN0002")
+                );
+    }
+
+    @Test
+    @DisplayName("UUID v4 형식이 아닌 멱등키는 CMN0001을 반환한다")
+    void rejectInvalidIdempotencyKey()
+            throws Exception {
+
+        // given
+        Long customerId =
+                customerTestFixture
+                        .createCustomer();
+
+        Account account =
+                createAccount(
+                        customerId,
+                        "088100000037",
+                        null
+                );
+
+        // when & then
+        mockMvc.perform(
+                        put(
+                                "/accounts/{accountId}/alias",
+                                account.getAccountId()
+                        )
+                                .with(authentication(
+                                        authenticationOf(
+                                                customerId
+                                        )
+                                ))
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        "not-a-uuid"
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "alias": "생활비"
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("CMN0001")
+                );
+    }
+
+    @Test
+    @DisplayName("인증 없이 계좌별명 변경을 요청하면 401을 반환한다")
+    void rejectUnauthenticatedAliasChange()
+            throws Exception {
+
+        // when & then
+        mockMvc.perform(
+                        put(
+                                "/accounts/{accountId}/alias",
+                                1L
+                        )
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey()
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "alias": "생활비"
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(
+                        status().isUnauthorized()
+                );
+    }
+
     private Account createDemandDepositAccount(
             Long customerId,
             String accountNumber,
@@ -226,6 +647,33 @@ class AccountControllerTest extends IntegrationTestSupport {
         );
     }
 
+    private Account createAccount(
+            Long customerId,
+            String accountNumber,
+            String alias
+    ) {
+        Account account = Account.open(
+                accountNumber,
+                customerId,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                LocalDateTime.of(
+                        2026, 8, 1, 10, 0
+                ),
+                null
+        );
+
+        if (alias != null) {
+            account.changeAlias(alias);
+        }
+
+        return accountPersistencePort.save(
+                account
+        );
+    }
+
+
     private UsernamePasswordAuthenticationToken authenticationOf(
             Long customerId
     ) {
@@ -244,5 +692,8 @@ class AccountControllerTest extends IntegrationTestSupport {
                                 "ROLE_CUSTOMER"
                         )
                 );
+    }
+    private String idempotencyKey() {
+        return UUID.randomUUID().toString();
     }
 }

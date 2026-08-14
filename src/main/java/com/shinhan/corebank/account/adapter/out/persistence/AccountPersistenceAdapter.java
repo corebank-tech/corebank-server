@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
@@ -32,6 +33,19 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
                 .stream()
                 .map(AccountMapper::toDomain)
                 .toList();
+    }
+
+    @Override
+    public Optional<Account> findByAccountIdAndCustomerId(
+            Long accountId,
+            Long customerId
+    ) {
+        return accountJpaRepository
+                .findByAccountIdAndCustomerId(
+                        accountId,
+                        customerId
+                )
+                .map(AccountMapper::toDomain);
     }
 
     private Account saveNewAccount(Account account) {

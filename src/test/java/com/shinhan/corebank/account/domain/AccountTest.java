@@ -1,13 +1,14 @@
 package com.shinhan.corebank.account.domain;
 
+import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
+import com.shinhan.corebank.common.exception.BusinessException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
 
 class AccountTest {
 
@@ -512,5 +513,232 @@ class AccountTest {
         ))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("만기일은 개설일보다 이전일 수 없습니다.");
+    }
+
+    @Test
+    @DisplayName("계좌별명을 등록할 수 있다")
+    void changeAlias() {
+        // given
+        Account account = Account.open(
+                ACCOUNT_NUMBER,
+                CUSTOMER_ID,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                OPENED_DATE,
+                null
+        );
+
+        // when
+        account.changeAlias("생활비통장");
+
+        // then
+        assertThat(account.getAlias())
+                .isEqualTo("생활비통장");
+    }
+
+    @Test
+    @DisplayName("기존 계좌별명을 새로운 별명으로 변경할 수 있다")
+    void changeExistingAlias() {
+        // given
+        Account account = Account.open(
+                ACCOUNT_NUMBER,
+                CUSTOMER_ID,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                OPENED_DATE,
+                null
+        );
+
+        account.changeAlias("생활비");
+
+        // when
+        account.changeAlias("급여통장");
+
+        // then
+        assertThat(account.getAlias())
+                .isEqualTo("급여통장");
+    }
+
+    @Test
+    @DisplayName("계좌별명의 앞뒤 공백은 제거한다")
+    void trimAlias() {
+        // given
+        Account account = Account.open(
+                ACCOUNT_NUMBER,
+                CUSTOMER_ID,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                OPENED_DATE,
+                null
+        );
+
+        // when
+        account.changeAlias("  생활비통장  ");
+
+        // then
+        assertThat(account.getAlias())
+                .isEqualTo("생활비통장");
+    }
+
+    @Test
+    @DisplayName("계좌별명을 삭제할 수 있다")
+    void removeAlias() {
+        // given
+        Account account = Account.open(
+                ACCOUNT_NUMBER,
+                CUSTOMER_ID,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                OPENED_DATE,
+                null
+        );
+
+        account.changeAlias("생활비통장");
+
+        // when
+        account.removeAlias();
+
+        // then
+        assertThat(account.getAlias()).isNull();
+    }
+
+    @Test
+    @DisplayName("한글 계좌별명은 12자까지 허용한다")
+    void allowTwelveKoreanCharacters() {
+        // given
+        Account account = Account.open(
+                ACCOUNT_NUMBER,
+                CUSTOMER_ID,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                OPENED_DATE,
+                null
+        );
+
+        String alias = "가나다라마바사아자차카타";
+
+        // when
+        account.changeAlias(alias);
+
+        // then
+        assertThat(account.getAlias())
+                .isEqualTo(alias);
+    }
+
+    @Test
+    @DisplayName("한글 계좌별명이 12자를 초과하면 ACC0001을 발생시킨다")
+    void rejectMoreThanTwelveKoreanCharacters() {
+        // given
+        Account account = Account.open(
+                ACCOUNT_NUMBER,
+                CUSTOMER_ID,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                OPENED_DATE,
+                null
+        );
+
+        String alias = "가나다라마바사아자차카타파";
+
+        // when
+        BusinessException exception =
+                catchThrowableOfType(
+                        () -> account.changeAlias(alias),
+                        BusinessException.class
+                );
+
+        // then
+        assertThat(exception.getErrorCode())
+                .isEqualTo(
+                        AccountErrorCode.INVALID_ACCOUNT_ALIAS
+                );
+    }
+
+    @Test
+    @DisplayName("영숫자 계좌별명은 24자까지 허용한다")
+    void allowTwentyFourAlphaNumericCharacters() {
+        // given
+        Account account = Account.open(
+                ACCOUNT_NUMBER,
+                CUSTOMER_ID,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                OPENED_DATE,
+                null
+        );
+
+        String alias = "abcdefghijklmnopqrstuvwx";
+
+        // when
+        account.changeAlias(alias);
+
+        // then
+        assertThat(account.getAlias())
+                .isEqualTo(alias);
+    }
+
+    @Test
+    @DisplayName("계좌별명이 24자를 초과하면 ACC0001을 발생시킨다")
+    void rejectMoreThanTwentyFourCharacters() {
+        // given
+        Account account = Account.open(
+                ACCOUNT_NUMBER,
+                CUSTOMER_ID,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                OPENED_DATE,
+                null
+        );
+
+        String alias = "abcdefghijklmnopqrstuvwxy";
+
+        // when
+        BusinessException exception =
+                catchThrowableOfType(
+                        () -> account.changeAlias(alias),
+                        BusinessException.class
+                );
+
+        // then
+        assertThat(exception.getErrorCode())
+                .isEqualTo(
+                        AccountErrorCode.INVALID_ACCOUNT_ALIAS
+                );
+    }
+
+    @Test
+    @DisplayName("빈 계좌별명은 ACC0001을 발생시킨다")
+    void rejectBlankAlias() {
+        // given
+        Account account = Account.open(
+                ACCOUNT_NUMBER,
+                CUSTOMER_ID,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                OPENED_DATE,
+                null
+        );
+
+        // when
+        BusinessException exception =
+                catchThrowableOfType(
+                        () -> account.changeAlias("   "),
+                        BusinessException.class
+                );
+
+        // then
+        assertThat(exception.getErrorCode())
+                .isEqualTo(
+                        AccountErrorCode.INVALID_ACCOUNT_ALIAS
+                );
     }
 }
