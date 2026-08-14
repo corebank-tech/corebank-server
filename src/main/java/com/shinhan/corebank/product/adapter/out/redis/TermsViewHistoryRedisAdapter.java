@@ -37,10 +37,11 @@ public class TermsViewHistoryRedisAdapter implements TermsViewHistoryPort {
         }
         LocalDateTime viewedAt = LocalDateTime.parse(rawViewedAt);
         Long remainingSeconds = redisTemplate.getExpire(key, TimeUnit.SECONDS);
-        LocalDateTime viewExpiresAt = remainingSeconds != null && remainingSeconds >= 0
-                ? LocalDateTime.now().plusSeconds(remainingSeconds)
-                : viewedAt.plus(VIEW_TTL);
-        return Optional.of(new TermsView(viewedAt, viewExpiresAt));
+        if (remainingSeconds == null || remainingSeconds <= 0) {
+            // GET과 getExpire 사이에 키가 만료된 경우 — 이미 사라진 이력을 유효한 것처럼 반환하지 않는다.
+            return Optional.empty();
+        }
+        return Optional.of(new TermsView(viewedAt, LocalDateTime.now().plusSeconds(remainingSeconds)));
     }
 
     private String key(Long customerId, Long termsId) {

@@ -38,6 +38,17 @@ class TermsViewHistoryRedisAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("TTL이 만료되면 열람 이력을 인정하지 않는다")
+    void find_afterExpiry_returnsEmpty() throws InterruptedException {
+        String key = "terms-view:10:301";
+        redisTemplate.opsForValue().set(key, java.time.LocalDateTime.now().toString(), Duration.ofMillis(200));
+
+        Thread.sleep(300);
+
+        assertThat(adapter.find(10L, 301L)).isEmpty();
+    }
+
+    @Test
     @DisplayName("TTL이 30분으로 설정된다")
     void record_setsTtl() {
         adapter.record(2L, 302L);
