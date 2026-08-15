@@ -1,5 +1,7 @@
 package com.shinhan.corebank.customer.domain.model;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -106,11 +108,71 @@ public class Customer {
         if (loginIp.length() > MAX_LOGIN_IP_LENGTH) {
             throw new IllegalArgumentException("로그인 IP는 45자를 초과할 수 없습니다.");
         }
+        if (!isValidIpAddress(loginIp)) {
+            throw new IllegalArgumentException("로그인 IP 형식이 올바르지 않습니다.");
+        }
 
         this.previousLoginAt = this.lastLoginAt;
         this.lastLoginAt = loginAt;
         this.lastLoginIp = loginIp;
         this.loginFailureCount = 0;
+    }
+
+    private static boolean isValidIpAddress(String loginIp) {
+        return isValidIpv4Address(loginIp)
+                || isValidIpv6Address(loginIp);
+    }
+
+    private static boolean isValidIpv4Address(String loginIp) {
+        String[] octets = loginIp.split("\\.", -1);
+        if (octets.length != 4) {
+            return false;
+        }
+
+        for (String octet : octets) {
+            if (octet.isEmpty() || octet.length() > 3) {
+                return false;
+            }
+
+            int value = 0;
+            for (int index = 0; index < octet.length(); index++) {
+                char digit = octet.charAt(index);
+                if (digit < '0' || digit > '9') {
+                    return false;
+                }
+                value = value * 10 + (digit - '0');
+            }
+
+            if (value > 255) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static boolean isValidIpv6Address(String loginIp) {
+        if (!loginIp.contains(":")) {
+            return false;
+        }
+
+        for (int index = 0; index < loginIp.length(); index++) {
+            char character = loginIp.charAt(index);
+            boolean ipv6Character = Character.digit(character, 16) >= 0
+                    || character == ':'
+                    || character == '.';
+            if (!ipv6Character) {
+                return false;
+            }
+        }
+
+        try {
+            // ':'가 있는 리터럴만 전달하므로 호스트명에 대한 DNS 조회는 발생하지 않는다.
+            InetAddress.getByName(loginIp);
+            return true;
+        } catch (UnknownHostException exception) {
+            return false;
+        }
     }
 
     private static void validateLoginState(
