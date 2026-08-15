@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Transactional
 @DisplayName("고객 영속성 어댑터 MySQL 통합 테스트")
@@ -129,6 +130,20 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 .isEqualTo("adapter-user");
     }
 
+    // 기존 고객은 범용 save로 다시 저장할 수 없음
+    @Test
+    @DisplayName("customerId가 있는 기존 고객은 신규 저장에서 거부한다")
+    void rejectSavingExistingCustomer() {
+        Customer savedCustomer =
+                customerPersistencePort.save(createCustomer());
+
+        assertThatThrownBy(() ->
+                customerPersistencePort.save(savedCustomer)
+        )
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("신규 고객은 customerId가 없어야 합니다.");
+    }
+
     // 변경된 실패 횟수와 잠금 상태가 MySQL에 반영되는지 검증
     @Test
     @DisplayName("기존 고객의 로그인 실패 횟수와 잠금 상태를 저장한다")
@@ -142,7 +157,7 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
         savedCustomer.recordLoginFailure();
         savedCustomer.recordLoginFailure();
 
-        customerPersistencePort.save(savedCustomer);
+        customerPersistencePort.updateLoginFailureState(savedCustomer);
 
         entityManager.flush();
         entityManager.clear();
@@ -178,7 +193,7 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 "192.168.0.10"
         );
 
-        customerPersistencePort.save(savedCustomer);
+        customerPersistencePort.updateLoginSuccessState(savedCustomer);
 
         entityManager.flush();
         entityManager.clear();

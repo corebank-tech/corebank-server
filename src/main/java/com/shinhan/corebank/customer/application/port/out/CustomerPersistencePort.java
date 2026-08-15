@@ -13,6 +13,15 @@ public interface CustomerPersistencePort {
     // 고객 PK로 고객 조회
     Optional<Customer> findById(Long customerId);
 
-    // 변경된 고객 상태 저장
+    // 로그인 상태 변경을 위해 고객을 비관적 락으로 조회
+    Optional<Customer> findByIdForUpdate(Long customerId);
+
+    // 로그인 실패 관련 필드만 갱신
+    void updateLoginFailureState(Customer customer);
+
+    // 로그인 성공 관련 필드만 갱신
+    void updateLoginSuccessState(Customer customer);
+
+    // customerId가 없는 신규 고객만 저장
     Customer save(Customer customer);
 }

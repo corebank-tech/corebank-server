@@ -62,21 +62,4 @@ public class CustomerMapper {
                 .joinedAt(customer.getJoinedAt())
                 .build();
     }
-
-    // 변경된 Customer 도메인 상태를 기존 JPA Entity에 반영
-    public void updateEntity(
-            Customer customer,
-            CustomerJpaEntity entity
-    ) {
-        Objects.requireNonNull(
-                customer,
-                "customer must not be null"
-        );
-        Objects.requireNonNull(
-                entity,
-                "entity must not be null"
-        );
-
-        entity.updateFrom(customer);
-    }
 }

@@ -1,8 +1,12 @@
 package com.shinhan.corebank.auth.adapter.out.customer;
 
 import com.shinhan.corebank.auth.application.port.out.LoginCustomerPort;
+import com.shinhan.corebank.auth.application.port.out.LoginFailureUpdateResult;
+import com.shinhan.corebank.auth.application.port.out.LoginSuccessUpdateResult;
 import com.shinhan.corebank.auth.domain.model.LoginCustomer;
 import com.shinhan.corebank.customer.api.CustomerAuthenticationFacade;
+import com.shinhan.corebank.customer.api.LoginFailureState;
+import com.shinhan.corebank.customer.api.LoginSuccessState;
 import com.shinhan.corebank.customer.api.RecordLoginFailureCommand;
 import com.shinhan.corebank.customer.api.RecordLoginSuccessCommand;
 import lombok.RequiredArgsConstructor;
@@ -34,21 +38,26 @@ public class CustomerLoginAdapter implements LoginCustomerPort {
 
     // 로그인 실패 결과를 customer 모듈에 전달
     @Override
-    public void recordLoginFailure(Long customerId) {
+    public LoginFailureUpdateResult recordLoginFailure(Long customerId) {
         Objects.requireNonNull(
                 customerId,
                 "customerId must not be null"
         );
 
-        RecordLoginFailureCommand command =
-                new RecordLoginFailureCommand(customerId);
+        LoginFailureState state =
+                customerAuthenticationFacade.updateLoginFailureState(
+                        new RecordLoginFailureCommand(customerId)
+                );
 
-        customerAuthenticationFacade.updateLoginFailureState(command);
+        return new LoginFailureUpdateResult(
+                state.loginFailureCount(),
+                state.accountLocked()
+        );
     }
 
     // 로그인 성공 결과와 접속정보를 customer 모듈에 전달
     @Override
-    public void recordLoginSuccess(
+    public LoginSuccessUpdateResult recordLoginSuccess(
             Long customerId,
             LocalDateTime loginAt,
             String loginIp
@@ -73,6 +82,13 @@ public class CustomerLoginAdapter implements LoginCustomerPort {
                         loginIp
                 );
 
-        customerAuthenticationFacade.updateLoginSuccessState(command);
+        LoginSuccessState state =
+                customerAuthenticationFacade.updateLoginSuccessState(command);
+
+        return switch (state) {
+            case COMPLETED -> LoginSuccessUpdateResult.COMPLETED;
+            case ACCOUNT_LOCKED ->
+                    LoginSuccessUpdateResult.ACCOUNT_LOCKED;
+        };
     }
 }

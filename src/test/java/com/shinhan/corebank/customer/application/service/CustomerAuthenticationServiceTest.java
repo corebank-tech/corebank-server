@@ -1,6 +1,8 @@
 package com.shinhan.corebank.customer.application.service;
 
 import com.shinhan.corebank.customer.api.CustomerAuthenticationData;
+import com.shinhan.corebank.customer.api.LoginFailureState;
+import com.shinhan.corebank.customer.api.LoginSuccessState;
 import com.shinhan.corebank.customer.api.RecordLoginFailureCommand;
 import com.shinhan.corebank.customer.api.RecordLoginSuccessCommand;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
@@ -8,7 +10,6 @@ import com.shinhan.corebank.customer.domain.model.Customer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -73,22 +74,17 @@ class CustomerAuthenticationServiceTest {
     void updateLoginFailureState() {
         Customer customer = createCustomer(1L, 4, false);
 
-        given(customerPersistencePort.findById(1L))
+        given(customerPersistencePort.findByIdForUpdate(1L))
                 .willReturn(Optional.of(customer));
 
-        service.updateLoginFailureState(
+        LoginFailureState result = service.updateLoginFailureState(
                 new RecordLoginFailureCommand(1L)
         );
 
-        ArgumentCaptor<Customer> captor =
-                ArgumentCaptor.forClass(Customer.class);
-
-        verify(customerPersistencePort).save(captor.capture());
-
-        Customer savedCustomer = captor.getValue();
-
-        assertThat(savedCustomer.getLoginFailureCount()).isEqualTo(5);
-        assertThat(savedCustomer.isAccountLocked()).isTrue();
+        verify(customerPersistencePort)
+                .updateLoginFailureState(customer);
+        assertThat(result.loginFailureCount()).isEqualTo(5);
+        assertThat(result.accountLocked()).isTrue();
     }
 
     // 로그인 실패 시 현재 횟수에서 정확히 1회만 증가
@@ -97,44 +93,38 @@ class CustomerAuthenticationServiceTest {
     void incrementLoginFailureCount() {
         Customer customer = createCustomer(1L, 3, false);
 
-        given(customerPersistencePort.findById(1L))
+        given(customerPersistencePort.findByIdForUpdate(1L))
                 .willReturn(Optional.of(customer));
 
-        service.updateLoginFailureState(
+        LoginFailureState result = service.updateLoginFailureState(
                 new RecordLoginFailureCommand(1L)
         );
 
-        ArgumentCaptor<Customer> captor =
-                ArgumentCaptor.forClass(Customer.class);
-
-        verify(customerPersistencePort).save(captor.capture());
-
-        Customer savedCustomer = captor.getValue();
-
-        assertThat(savedCustomer.getLoginFailureCount()).isEqualTo(4);
-        assertThat(savedCustomer.isAccountLocked()).isFalse();
+        verify(customerPersistencePort)
+                .updateLoginFailureState(customer);
+        assertThat(result.loginFailureCount()).isEqualTo(4);
+        assertThat(result.accountLocked()).isFalse();
     }
 
-    // 잠긴 계정은 로그인 실패 처리로 횟수 감소 또는 잠금 해제 불가
+    // 잠긴 계정은 상태를 변경하지 않고 최신 잠금 상태를 반환
     @Test
-    @DisplayName("잠긴 계정의 로그인 실패 상태는 변경할 수 없다")
-    void rejectLoginFailureForLockedCustomer() {
+    @DisplayName("이미 잠긴 계정이면 저장하지 않고 최신 잠금 상태를 반환한다")
+    void returnLockedStateForLockedCustomer() {
         Customer customer = createCustomer(1L, 5, true);
 
-        given(customerPersistencePort.findById(1L))
+        given(customerPersistencePort.findByIdForUpdate(1L))
                 .willReturn(Optional.of(customer));
 
-        assertThatThrownBy(() ->
-                service.updateLoginFailureState(
-                        new RecordLoginFailureCommand(1L)
-                )
-        )
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("잠긴 계정의 로그인 실패 상태는 변경할 수 없습니다.");
+        LoginFailureState result = service.updateLoginFailureState(
+                new RecordLoginFailureCommand(1L)
+        );
 
+        assertThat(result.loginFailureCount()).isEqualTo(5);
+        assertThat(result.accountLocked()).isTrue();
         assertThat(customer.getLoginFailureCount()).isEqualTo(5);
         assertThat(customer.isAccountLocked()).isTrue();
-        verify(customerPersistencePort, never()).save(customer);
+        verify(customerPersistencePort, never())
+                .updateLoginFailureState(customer);
     }
 
     // 로그인 성공 시 실패 횟수를 초기화하고 접속 이력을 이동
@@ -156,10 +146,10 @@ class CustomerAuthenticationServiceTest {
                 null
         );
 
-        given(customerPersistencePort.findById(1L))
+        given(customerPersistencePort.findByIdForUpdate(1L))
                 .willReturn(Optional.of(customer));
 
-        service.updateLoginSuccessState(
+        LoginSuccessState result = service.updateLoginSuccessState(
                 new RecordLoginSuccessCommand(
                         1L,
                         newLoginAt,
@@ -167,28 +157,49 @@ class CustomerAuthenticationServiceTest {
                 )
         );
 
-        ArgumentCaptor<Customer> captor =
-                ArgumentCaptor.forClass(Customer.class);
+        verify(customerPersistencePort)
+                .updateLoginSuccessState(customer);
 
-        verify(customerPersistencePort).save(captor.capture());
-
-        Customer savedCustomer = captor.getValue();
-
-        assertThat(savedCustomer.getLoginFailureCount()).isZero();
-        assertThat(savedCustomer.isAccountLocked()).isFalse();
-        assertThat(savedCustomer.getPreviousLoginAt())
+        assertThat(result).isEqualTo(LoginSuccessState.COMPLETED);
+        assertThat(customer.getLoginFailureCount()).isZero();
+        assertThat(customer.isAccountLocked()).isFalse();
+        assertThat(customer.getPreviousLoginAt())
                 .isEqualTo(previousLastLoginAt);
-        assertThat(savedCustomer.getLastLoginAt())
+        assertThat(customer.getLastLoginAt())
                 .isEqualTo(newLoginAt);
-        assertThat(savedCustomer.getLastLoginIp())
+        assertThat(customer.getLastLoginIp())
                 .isEqualTo("192.168.0.10");
+    }
+
+    // 성공 처리 전에 잠긴 고객은 접속정보와 실패 횟수를 변경하지 않음
+    @Test
+    @DisplayName("로그인 성공 처리 전에 계정이 잠기면 상태를 저장하지 않는다")
+    void returnLockedStateWhenAccountLocksBeforeLoginSuccess() {
+        Customer customer = createCustomer(1L, 5, true);
+
+        given(customerPersistencePort.findByIdForUpdate(1L))
+                .willReturn(Optional.of(customer));
+
+        LoginSuccessState result = service.updateLoginSuccessState(
+                new RecordLoginSuccessCommand(
+                        1L,
+                        LocalDateTime.of(2026, 8, 12, 10, 0),
+                        "192.168.0.10"
+                )
+        );
+
+        assertThat(result).isEqualTo(LoginSuccessState.ACCOUNT_LOCKED);
+        assertThat(customer.getLoginFailureCount()).isEqualTo(5);
+        assertThat(customer.isAccountLocked()).isTrue();
+        verify(customerPersistencePort, never())
+                .updateLoginSuccessState(customer);
     }
 
     // 상태 변경 대상 고객이 없으면 내부 정합성 예외 발생
     @Test
     @DisplayName("상태를 변경할 고객이 없으면 예외가 발생한다")
     void updateLoginFailureStateCustomerNotFound() {
-        given(customerPersistencePort.findById(99L))
+        given(customerPersistencePort.findByIdForUpdate(99L))
                 .willReturn(Optional.empty());
 
         assertThatThrownBy(() ->
