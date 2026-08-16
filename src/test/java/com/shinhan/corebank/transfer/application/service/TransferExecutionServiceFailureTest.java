@@ -166,6 +166,10 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         Long withdrawalBalance = jdbcTemplate.queryForObject(
                 "SELECT balance FROM account WHERE account_id = 101", Long.class);
         assertThat(withdrawalBalance).isEqualTo(100000L);
+
+        Long depositBalance = jdbcTemplate.queryForObject(
+                "SELECT balance FROM account WHERE account_id = 202", Long.class);
+        assertThat(depositBalance).isEqualTo(100000L);
     }
 
     @Test
@@ -190,6 +194,12 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
         assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
         assertThat(result.errorCode()).isEqualTo(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED.getCode());
+
+        Map<String, Object> transferRow = jdbcTemplate.queryForMap(
+                "SELECT status, error_code FROM transfer WHERE transaction_number = ?",
+                result.transactionNumber());
+        assertThat(transferRow.get("status")).isEqualTo("ERROR");
+        assertThat(transferRow.get("error_code")).isEqualTo(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED.getCode());
 
         Long ledgerCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM ledger_entry WHERE transaction_number = ?",
@@ -253,6 +263,15 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         Long ledgerCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM ledger_entry WHERE account_id IN (501, 502)", Long.class);
         assertThat(ledgerCount).isZero();
+
+        // then: 오버플로우로 롤백됐으므로 양쪽 계좌 잔액 모두 시딩 당시 값 그대로다
+        Long withdrawalBalance = jdbcTemplate.queryForObject(
+                "SELECT balance FROM account WHERE account_id = 501", Long.class);
+        assertThat(withdrawalBalance).isEqualTo(100000L);
+
+        Long depositBalance = jdbcTemplate.queryForObject(
+                "SELECT balance FROM account WHERE account_id = 502", Long.class);
+        assertThat(depositBalance).isEqualTo(Long.MAX_VALUE - 500);
     }
 }
 
