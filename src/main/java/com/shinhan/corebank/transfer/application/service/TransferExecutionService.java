@@ -12,6 +12,7 @@ import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCas
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
+import com.shinhan.corebank.transfer.application.port.out.LockedAccountStatus;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
@@ -50,7 +51,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class TransferExecutionService implements TransferExecutionUseCase {
 
     private static final long FEE = 0L; // 당행 이체 수수료 0 고정 (POL-028)
-    private static final String ACTIVE_STATUS = "ACTIVE";
 
     private final AccountLockPort accountLockPort;
     private final TransferSequencePort transferSequencePort;
@@ -125,10 +125,10 @@ public class TransferExecutionService implements TransferExecutionUseCase {
 
                 // 계좌번호 사전 조회 시점 이후 락을 얻기까지 사이에 계좌가 정지/해지됐을 수 있으므로,
                 // 락으로 얻은 최신 상태를 기준으로 재검증한다.
-                if (!ACTIVE_STATUS.equals(locked.withdrawal().status())) {
+                if (locked.withdrawal().status() != LockedAccountStatus.ACTIVE) {
                     throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
                 }
-                if (!ACTIVE_STATUS.equals(locked.deposit().status())) {
+                if (locked.deposit().status() != LockedAccountStatus.ACTIVE) {
                     throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
                 }
 

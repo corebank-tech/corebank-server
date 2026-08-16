@@ -6,6 +6,7 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccount;
+import com.shinhan.corebank.transfer.application.port.out.LockedAccountStatus;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
@@ -84,7 +85,7 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
                 entity.getAccountId(),
                 entity.getAccountNumber(),
                 entity.getBalance(),
-                entity.getStatus()
+                LockedAccountStatus.valueOf(entity.getStatus())
         );
     }
 }
