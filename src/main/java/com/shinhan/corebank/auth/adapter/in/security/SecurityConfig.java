@@ -10,6 +10,10 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
+import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -23,12 +27,25 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    // 로그인 성공 인증정보를 HttpSession에 저장
+    @Bean
+    public SecurityContextRepository securityContextRepository() {
+        return new HttpSessionSecurityContextRepository();
+    }
+
+    // 기존 세션이 있으면 로그인 성공 시 세션 ID를 변경
+    @Bean
+    public SessionAuthenticationStrategy sessionAuthenticationStrategy() {
+        return new ChangeSessionIdAuthenticationStrategy();
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(
             // 요청별 보안 정책을 구성하는 Spring Security 설정 객체
             HttpSecurity http,
             SessionAuthenticationEntryPoint entryPoint,
-            SessionAccessDeniedHandler deniedHandler
+            SessionAccessDeniedHandler deniedHandler,
+            SessionLogoutSuccessHandler logoutSuccessHandler
     ) throws Exception {
         http
                 // 기본 CSRF 보호를 유지하고 로그인과 ALB 헬스체크만 검사에서 제외
@@ -62,6 +79,16 @@ public class SecurityConfig {
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                         .sessionFixation(fixation -> fixation.changeSessionId())
+                )
+                // 로그아웃은 CSRF 검사를 유지한 채 세션과 인증 쿠키를 폐기한다.
+                .logout(logout -> logout
+                        .logoutRequestMatcher(
+                                pathPattern(HttpMethod.POST, "/auth/logout")
+                        )
+                        .invalidateHttpSession(true)
+                        .clearAuthentication(true)
+                        .deleteCookies("JSESSIONID")
+                        .logoutSuccessHandler(logoutSuccessHandler)
                 )
                 .requestCache(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)

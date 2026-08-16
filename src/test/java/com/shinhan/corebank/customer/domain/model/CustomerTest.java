@@ -2,6 +2,8 @@ package com.shinhan.corebank.customer.domain.model;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -34,7 +36,8 @@ class CustomerTest {
         Customer customer = restoreCustomer(2, false);
         LocalDateTime loginAt =
                 LocalDateTime.of(2026, 8, 14, 10, 0);
-        String loginIp = "a".repeat(45);
+        String loginIp =
+                "ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255";
 
         customer.recordLoginSuccess(loginAt, loginIp);
 
@@ -60,6 +63,45 @@ class CustomerTest {
         assertThat(customer.getLastLoginAt()).isNull();
         assertThat(customer.getLastLoginIp()).isNull();
         assertThat(customer.getLoginFailureCount()).isEqualTo(2);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "999.999.999.999",
+            "not-an-ip",
+            "203.0.113.10:8080",
+            "2001:db8::gg"
+    })
+    @DisplayName("IP 형식이 올바르지 않으면 로그인 성공 상태를 기록하지 않는다")
+    void rejectInvalidIpAddress(String invalidIpAddress) {
+        Customer customer = restoreCustomer(2, false);
+
+        assertThatThrownBy(() ->
+                customer.recordLoginSuccess(
+                        LocalDateTime.of(2026, 8, 14, 10, 0),
+                        invalidIpAddress
+                )
+        )
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("로그인 IP 형식이 올바르지 않습니다.");
+
+        assertThat(customer.getLastLoginAt()).isNull();
+        assertThat(customer.getLastLoginIp()).isNull();
+        assertThat(customer.getLoginFailureCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("IPv6 형식의 로그인 IP를 기록한다")
+    void recordLoginSuccessWithIpv6Address() {
+        Customer customer = restoreCustomer(2, false);
+        LocalDateTime loginAt =
+                LocalDateTime.of(2026, 8, 14, 10, 0);
+
+        customer.recordLoginSuccess(loginAt, "2001:db8::1");
+
+        assertThat(customer.getLastLoginAt()).isEqualTo(loginAt);
+        assertThat(customer.getLastLoginIp()).isEqualTo("2001:db8::1");
+        assertThat(customer.getLoginFailureCount()).isZero();
     }
 
     private Customer restoreCustomer(

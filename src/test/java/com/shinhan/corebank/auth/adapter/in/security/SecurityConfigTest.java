@@ -1,5 +1,6 @@
 package com.shinhan.corebank.auth.adapter.in.security;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -10,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.nio.charset.StandardCharsets;
+import org.springframework.mock.web.MockHttpSession;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,9 +21,11 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = SecurityTestController.class)
 @Import({
+        SecurityTestController.class,
         SecurityConfig.class,
         SessionAuthenticationEntryPoint.class,
-        SessionAccessDeniedHandler.class
+        SessionAccessDeniedHandler.class,
+        SessionLogoutSuccessHandler.class
 })
 class SecurityConfigTest {
 
@@ -94,6 +98,54 @@ class SecurityConfigTest {
                         .with(user("customer").roles("CUSTOMER"))
                         .with(csrf()))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("인증된 고객은 CSRF 토큰과 함께 로그아웃할 수 있다")
+    void logsOutAuthenticatedCustomer() throws Exception {
+        MockHttpSession session = new MockHttpSession();
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .contextPath("/api/v1")
+                        .session(session)
+                        .with(user("customer").roles("CUSTOMER"))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.message").value("로그아웃되었습니다."))
+                .andExpect(jsonPath("$.data").value((Object) null))
+                .andExpect(result -> assertThat(
+                        result.getResponse().getCookie("JSESSIONID")
+                ).isNotNull())
+                .andExpect(result -> assertThat(
+                        result.getResponse().getCookie("JSESSIONID").getMaxAge()
+                ).isZero())
+                .andExpect(result -> assertThat(
+                        result.getResponse().getHeader("Cache-Control")
+                ).contains("no-store"));
+
+        assertThat(session.isInvalid()).isTrue();
+    }
+
+    @Test
+    @DisplayName("로그아웃 요청에 CSRF 토큰이 없으면 403 CMN0102를 반환한다")
+    void rejectsLogoutWithoutCsrfToken() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .contextPath("/api/v1")
+                        .with(user("customer").roles("CUSTOMER")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CMN0102"));
+    }
+
+    @Test
+    @DisplayName("인증 세션이 없으면 로그아웃 요청에 401 CMN0101을 반환한다")
+    void rejectsLogoutWithoutSession() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .contextPath("/api/v1")
+                        .with(csrf()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("CMN0101"))
+                .andExpect(jsonPath("$.data").value((Object) null));
     }
 
 }
