@@ -107,6 +107,20 @@ class TransferExecutionServiceConcurrencyTest extends IntegrationTestSupport {
                     "SELECT COALESCE(SUM(amount), 0) FROM ledger_entry WHERE account_id IN (?, ?) AND direction = 'WITHDRAWAL'",
                     Long.class, ACCOUNT_A, ACCOUNT_B);
             assertThat(depositSum).isEqualTo(withdrawalSum);
+
+            // then: 거래번호별로도 DEPOSIT 1행 + WITHDRAWAL 1행이 정확히 존재한다.
+            // (합계만 비교하면 한 이체의 출금 행이 유실되고 다른 이체의 입금 행이 중복돼도
+            // 총합은 우연히 같아질 수 있어, 건별 짝을 직접 확인한다.)
+            Long unbalancedTransactionCount = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM (
+                        SELECT transaction_number
+                        FROM ledger_entry
+                        WHERE account_id IN (?, ?)
+                        GROUP BY transaction_number
+                        HAVING SUM(direction = 'DEPOSIT') <> 1 OR SUM(direction = 'WITHDRAWAL') <> 1
+                    ) unbalanced
+                    """, Long.class, ACCOUNT_A, ACCOUNT_B);
+            assertThat(unbalancedTransactionCount).isZero();
         } finally {
             pool.shutdownNow();
             pool.awaitTermination(5, TimeUnit.SECONDS);

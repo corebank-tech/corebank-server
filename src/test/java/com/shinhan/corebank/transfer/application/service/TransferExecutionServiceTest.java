@@ -48,7 +48,7 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     void cleanUpCommittedData() {
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202)");
         jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id = 101 AND deposit_account_id = 202");
-        jdbcTemplate.update("UPDATE account SET balance = 100000 WHERE account_id IN (101, 202)");
+        jdbcTemplate.update("UPDATE account SET balance = 100000, status = 'ACTIVE' WHERE account_id IN (101, 202)");
     }
 
     @Test
@@ -158,5 +158,9 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         Long withdrawalBalance = jdbcTemplate.queryForObject(
                 "SELECT balance FROM account WHERE account_id = 101", Long.class);
         assertThat(withdrawalBalance).isEqualTo(100000L);
+
+        Long depositBalance = jdbcTemplate.queryForObject(
+                "SELECT balance FROM account WHERE account_id = 202", Long.class);
+        assertThat(depositBalance).isEqualTo(100000L);
     }
 }

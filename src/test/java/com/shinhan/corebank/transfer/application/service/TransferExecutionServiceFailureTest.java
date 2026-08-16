@@ -3,10 +3,12 @@ package com.shinhan.corebank.transfer.application.service;
 import java.util.Map;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
+import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
@@ -47,7 +49,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202, 501, 502)");
         jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id IN (101, 999999, 501)");
         jdbcTemplate.update("DELETE FROM account WHERE account_id IN (501, 502)");
-        jdbcTemplate.update("UPDATE account SET balance = 100000 WHERE account_id IN (101, 202)");
+        jdbcTemplate.update("UPDATE account SET balance = 100000, status = 'ACTIVE' WHERE account_id IN (101, 202)");
     }
 
     @Test
@@ -73,7 +75,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(TransferErrorCode.PAYEE_NOT_FOUND));
 
-        // then: transfer 행이 아예 생기지 않는다 (deposit_account_id가 없어 애초에 저장 불가능)
+        // then: transfer 행이 아예 생기지 않는다 (입금계좌 해석 단계에서 예외가 나 채번·객체 생성에 도달하지 않는다)
         Long transferCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 101", Long.class);
         assertThat(transferCount).isZero();
@@ -100,11 +102,16 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         // ACCOUNT_LOCK_TARGET_NOT_FOUND를 던진다(정상 흐름에서는 발생 불가능한 불변식 위반).
         // withdrawal_account_id가 transfer 테이블에 FK(NOT NULL)라 이 계좌로는 ERROR 확정
         // 행조차 남길 수 없으므로(그 INSERT도 같은 FK 위반), failTransfer는 기록 실패를 삼키지
-        // 않고 원래 예외를 그대로 던진다.
+        // 않고 원래 예외를 그대로 던지되, 기록 실패 원인(FK 위반)은 suppressed로 함께 남긴다.
         assertThatThrownBy(() -> transferExecutionService.execute(command))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(TransferErrorCode.ACCOUNT_LOCK_TARGET_NOT_FOUND));
+                .satisfies(e -> {
+                    assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(TransferErrorCode.ACCOUNT_LOCK_TARGET_NOT_FOUND);
+                    assertThat(e.getSuppressed())
+                            .as("ERROR 확정 기록 실패(FK 위반) 원인이 유실되지 않고 suppressed로 남아야 한다")
+                            .isNotEmpty();
+                });
 
         // then: transfer 행이 아예 남지 않는다
         Long transferCount = jdbcTemplate.queryForObject(
@@ -117,6 +124,82 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         assertThat(ledgerCount).isZero();
 
         // then: 입금계좌 잔액은 그대로다
+        Long depositBalance = jdbcTemplate.queryForObject(
+                "SELECT balance FROM account WHERE account_id = 202", Long.class);
+        assertThat(depositBalance).isEqualTo(100000L);
+    }
+
+    @Test
+    @DisplayName("출금계좌가 정지 상태이면 락 획득 후 최신 상태로 재검증해 ERROR로 기록하고 잔액을 반영하지 않는다")
+    void execute_withSuspendedWithdrawalAccount_recordsErrorTransfer_withoutBalanceChange() {
+        // given: 조회 시점에는 확인할 수 없고, 락을 획득한 뒤에만 알 수 있는 최신 상태(SUSPENDED)를 재현한다.
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        jdbcTemplate.update("UPDATE account SET status = 'SUSPENDED' WHERE account_id = 101");
+
+        TransferCommand command = TransferCommand.builder()
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(30000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build();
+
+        TransferResult result = transferExecutionService.execute(command);
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED.getCode());
+
+        Map<String, Object> transferRow = jdbcTemplate.queryForMap(
+                "SELECT status, error_code FROM transfer WHERE transaction_number = ?",
+                result.transactionNumber());
+        assertThat(transferRow.get("status")).isEqualTo("ERROR");
+        assertThat(transferRow.get("error_code")).isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED.getCode());
+
+        Long ledgerCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ledger_entry WHERE transaction_number = ?",
+                Long.class, result.transactionNumber());
+        assertThat(ledgerCount).isZero();
+
+        Long withdrawalBalance = jdbcTemplate.queryForObject(
+                "SELECT balance FROM account WHERE account_id = 101", Long.class);
+        assertThat(withdrawalBalance).isEqualTo(100000L);
+    }
+
+    @Test
+    @DisplayName("입금계좌가 정지 상태이면 락 획득 후 최신 상태로 재검증해 ERROR로 기록하고 잔액을 반영하지 않는다")
+    void execute_withSuspendedDepositAccount_recordsErrorTransfer_withoutBalanceChange() {
+        // given: 계좌번호 사전 조회 이후, 락 획득 시점 사이에 입금계좌가 정지됐다고 가정한다.
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        jdbcTemplate.update("UPDATE account SET status = 'SUSPENDED' WHERE account_id = 202");
+
+        TransferCommand command = TransferCommand.builder()
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(30000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build();
+
+        TransferResult result = transferExecutionService.execute(command);
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED.getCode());
+
+        Long ledgerCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ledger_entry WHERE transaction_number = ?",
+                Long.class, result.transactionNumber());
+        assertThat(ledgerCount).isZero();
+
+        Long withdrawalBalance = jdbcTemplate.queryForObject(
+                "SELECT balance FROM account WHERE account_id = 101", Long.class);
+        assertThat(withdrawalBalance).isEqualTo(100000L);
+
         Long depositBalance = jdbcTemplate.queryForObject(
                 "SELECT balance FROM account WHERE account_id = 202", Long.class);
         assertThat(depositBalance).isEqualTo(100000L);

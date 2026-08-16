@@ -26,7 +26,7 @@ import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.DefaultTransactionDefinition;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -50,6 +50,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class TransferExecutionService implements TransferExecutionUseCase {
 
     private static final long FEE = 0L; // 당행 이체 수수료 0 고정 (POL-028)
+    private static final String ACTIVE_STATUS = "ACTIVE";
 
     private final AccountLockPort accountLockPort;
     private final TransferSequencePort transferSequencePort;
@@ -72,18 +73,20 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         this.ledgerSavePort = ledgerSavePort;
         this.clock = clock;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
-        this.requiresNewTransactionTemplate.setPropagationBehavior(DefaultTransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Override
     public TransferResult execute(TransferCommand command) {
-        LocalDateTime now = LocalDateTime.now(clock);
+        // 계좌 락 획득 전 시각이므로 채번(영업일자)에만 쓴다. 락 대기로 실제 처리가 지연될 수
+        // 있어 원장·완료 기록에는 락 획득 이후 새로 캡처하는 executedAt을 쓴다.
+        LocalDateTime requestedAt = LocalDateTime.now(clock);
 
         ResolvedPayee payee = accountLockPort.resolvePayeeByAccountNumber(command.depositAccountNumber())
                 .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
 
         String transactionNumber =
-                transferSequencePort.nextTransactionNumber(now.toLocalDate(), command.channel());
+                transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), command.channel());
 
         // 실패해도 ERROR로 남길 수 있도록, DB에 아직 저장되지 않은(transferId=null) 상태로
         // 들고 있는다. 아래 트랜잭션이 실패해 롤백되더라도 이 자바 객체 자체는 영향받지 않는다.
@@ -101,7 +104,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 command.sourceId(),
                 command.myPassbookMemo(),
                 command.recipientPassbookMemo(),
-                now
+                requestedAt
         );
 
         try {
@@ -120,6 +123,15 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     throw new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND);
                 }
 
+                // 계좌번호 사전 조회 시점 이후 락을 얻기까지 사이에 계좌가 정지/해지됐을 수 있으므로,
+                // 락으로 얻은 최신 상태를 기준으로 재검증한다.
+                if (!ACTIVE_STATUS.equals(locked.withdrawal().status())) {
+                    throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
+                }
+                if (!ACTIVE_STATUS.equals(locked.deposit().status())) {
+                    throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
+                }
+
                 if (locked.withdrawal().balance() < command.amount()) {
                     throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
                 }
@@ -127,6 +139,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 Transfer transfer = transferSavePort.save(created);
 
                 TransferBalances balances = accountLockPort.applyTransfer(locked, command.amount());
+
+                LocalDateTime executedAt = LocalDateTime.now(clock);
 
                 LedgerPair pair = LedgerPair.forTransfer(
                         transfer.getTransferId(),
@@ -140,11 +154,11 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                         command.myPassbookMemo(),
                         command.recipientPassbookMemo(),
                         command.channel(),
-                        now
+                        executedAt
                 );
                 ledgerSavePort.save(pair);
 
-                transfer.complete(balances.withdrawalBalanceAfter(), now);
+                transfer.complete(balances.withdrawalBalanceAfter(), executedAt);
                 return transferSavePort.save(transfer);
             });
 
@@ -176,14 +190,18 @@ public class TransferExecutionService implements TransferExecutionUseCase {
      * <p>withdrawal_account_id·deposit_account_id는 transfer 테이블에 FK(NOT NULL)로 걸려
      * 있다. {@code ACCOUNT_LOCK_TARGET_NOT_FOUND}처럼 애초에 존재하지 않는 계좌가 원인인
      * 실패는 이 ERROR 확정 INSERT 자체가 FK 위반으로 실패한다 — 정상 흐름에서는 도달할 수
-     * 없는 불변식 위반이므로 원장 기표 없이도 어차피 남길 수 없는 경우다. 이때는 기록 실패를
-     * 삼키지 않고 원래 예외(cause)를 그대로 던져, 원인이 FK 오류 뒤에 가려지지 않게 한다.
+     * 없는 불변식 위반이므로 원장 기표 없이도 어차피 남길 수 없는 경우다. 이때는 기록 실패
+     * 원인(recordingFailure)을 버리지 않고 원래 예외(cause)에 suppressed로 붙여 함께 던져,
+     * 어느 쪽 원인도 로그에서 유실되지 않게 한다.
      */
     private TransferResult failTransfer(Transfer created, String errorCode, String errorMessage, RuntimeException cause) {
         created.fail(errorCode, errorMessage);
         try {
             requiresNewTransactionTemplate.executeWithoutResult(status -> transferSavePort.save(created));
         } catch (RuntimeException recordingFailure) {
+            if (recordingFailure != cause) {
+                cause.addSuppressed(recordingFailure);
+            }
             throw cause;
         }
 
