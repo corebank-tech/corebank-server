@@ -10,6 +10,7 @@ import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
+import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
@@ -47,7 +48,7 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     void cleanUpCommittedData() {
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202)");
         jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id = 101 AND deposit_account_id = 202");
-        jdbcTemplate.update("UPDATE account SET balance = 100000 WHERE account_id IN (101, 202)");
+        jdbcTemplate.update("UPDATE account SET balance = 100000, status = 'ACTIVE' WHERE account_id IN (101, 202)");
     }
 
     @Test
@@ -114,5 +115,52 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         assertThat(((Number) withdrawalEntry.get("account_id")).longValue()).isEqualTo(101L);
         assertThat(((Number) withdrawalEntry.get("amount")).longValue()).isEqualTo(30000L);
         assertThat(((Number) withdrawalEntry.get("balance_after")).longValue()).isEqualTo(70000L);
+    }
+
+    @Test
+    @DisplayName("출금계좌 잔액보다 큰 금액을 이체하면 transfer는 ERROR로 커밋되고 원장은 0행, 계좌 잔액은 그대로다")
+    void execute_withInsufficientBalance_recordsErrorTransfer_withoutLedgerRows() {
+        // given: 픽스처는 별도 트랜잭션에서 커밋한다. (출금계좌 101 잔액 100,000)
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        TransferCommand command = TransferCommand.builder()
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(150000L) // 잔액(100,000)을 초과하는 금액
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build();
+
+        // when: 테스트 관리 트랜잭션 밖에서 실행한다.
+        TransferResult result = transferExecutionService.execute(command);
+
+        // then: 예외를 던지지 않고 ERROR 결과를 정상 반환한다
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(TransferErrorCode.INSUFFICIENT_BALANCE.getCode());
+
+        // then: transfer 행이 ERROR로 커밋된다 (커밋된 값을 새 커넥션으로 조회)
+        Map<String, Object> transferRow = jdbcTemplate.queryForMap(
+                "SELECT status, error_code FROM transfer WHERE transaction_number = ?",
+                result.transactionNumber());
+        assertThat(transferRow.get("status")).isEqualTo("ERROR");
+        assertThat(transferRow.get("error_code")).isEqualTo(TransferErrorCode.INSUFFICIENT_BALANCE.getCode());
+
+        // then: 원장 0행
+        Long ledgerCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ledger_entry WHERE transaction_number = ?",
+                Long.class, result.transactionNumber());
+        assertThat(ledgerCount).isZero();
+
+        // then: 계좌 잔액은 그대로다
+        Long withdrawalBalance = jdbcTemplate.queryForObject(
+                "SELECT balance FROM account WHERE account_id = 101", Long.class);
+        assertThat(withdrawalBalance).isEqualTo(100000L);
+
+        Long depositBalance = jdbcTemplate.queryForObject(
+                "SELECT balance FROM account WHERE account_id = 202", Long.class);
+        assertThat(depositBalance).isEqualTo(100000L);
     }
 }

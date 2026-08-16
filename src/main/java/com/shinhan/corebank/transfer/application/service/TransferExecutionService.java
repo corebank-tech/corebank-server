@@ -4,12 +4,15 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
+import com.shinhan.corebank.transfer.application.port.out.LockedAccountStatus;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
@@ -23,16 +26,22 @@ import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 원장 기표 엔진의 유스케이스 구현체.
- * [계좌번호→ID 해석 → 계좌 락 획득 → 계좌번호 재검증 → 채번 → 잔액 UPDATE → 원장 2행 INSERT
- * → 이체 기록]을 하나의 트랜잭션 안에서 원자적으로 수행한다. 계좌번호 재검증: 락 없이 조회한
- * 입금계좌번호→ID 매핑이 락 획득 시점까지 유효한지 다시 확인해 TOCTOU를 막는다.
- * propagation을 REQUIRED로 명시한다 — REQUIRES_NEW로 두면 호출자(P5 자동이체 배치 등)가
- * 이 실행을 자신의 트랜잭션에 합류시킬 방법이 없어진다(피호출자 애노테이션이 항상 우선).
+ * [계좌번호→ID 해석 → 채번 → (독립 트랜잭션) 계좌 락 획득 → 계좌번호 재검증 → 잔액검증
+ * → 잔액 UPDATE → 원장 2행 INSERT → 이체 완료 기록]을 수행한다.
+ *
+ * <p>기표(성공)와 ERROR 확정 기록(실패) 모두 {@code requiresNewTransactionTemplate}으로 독립
+ * 커밋한다 — execute()를 호출자(P5 자동이체 배치 등)의 트랜잭션 안에서 불러도 결과는 호출자
+ * 트랜잭션 성공 여부와 무관하게 남는다(REQUIRED였다면 호출자가 나중에 실패할 때 ERROR 행까지
+ * 같이 롤백됨). 대신 SUCCESS 반환 시점에 자금은 이미 확정 이동한 것이므로, 호출자가 이후
+ * 자신의 트랜잭션에서 하는 후속 작업(실행 이력 갱신 등)이 실패해도 그 자금 이동은 롤백되지
+ * 않는다 — 호출자는 이를 "재시도 가능한 실패"가 아니라 "후속 처리 실패, 수동 정합화 필요"로
+ * 다뤄야 한다.
  * @Primary: MockTransferExecutionPort와 test/local 프로필에서 같이 뜨는 동안, 타입 기반으로
  * TransferExecutionUseCase를 주입받는 소비자(AutoTransferBatchItemProcessor 등)가 두 빈 중
  * 무엇을 받을지 모호해지는 것을 막는다. 실제 구현체가 나온 이상 기본 후보는 이쪽이어야 한다.
@@ -48,41 +57,40 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private final TransferSavePort transferSavePort;
     private final LedgerSavePort ledgerSavePort;
     private final Clock clock;
+    private final TransactionTemplate requiresNewTransactionTemplate;
 
     public TransferExecutionService(
             AccountLockPort accountLockPort,
             TransferSequencePort transferSequencePort,
             TransferSavePort transferSavePort,
             LedgerSavePort ledgerSavePort,
-            Clock clock
+            Clock clock,
+            PlatformTransactionManager transactionManager
     ) {
         this.accountLockPort = accountLockPort;
         this.transferSequencePort = transferSequencePort;
         this.transferSavePort = transferSavePort;
         this.ledgerSavePort = ledgerSavePort;
         this.clock = clock;
+        this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
+        this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Override
-    @Transactional(propagation = Propagation.REQUIRED)
     public TransferResult execute(TransferCommand command) {
-        LocalDateTime now = LocalDateTime.now(clock);
+        // 계좌 락 획득 전 시각이므로 채번(영업일자)에만 쓴다. 락 대기로 실제 처리가 지연될 수
+        // 있어 원장·완료 기록에는 락 획득 이후 새로 캡처하는 executedAt을 쓴다.
+        LocalDateTime requestedAt = LocalDateTime.now(clock);
 
         ResolvedPayee payee = accountLockPort.resolvePayeeByAccountNumber(command.depositAccountNumber())
                 .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
 
-        LockedAccountsForTransfer locked =
-                accountLockPort.lockForTransfer(command.withdrawalAccountId(), payee.accountId());
-
-        // 계좌번호 조회(락 없음)와 락 획득 사이에 입금계좌 매핑이 바뀌지 않았는지 재확인한다.
-        if (!command.depositAccountNumber().equals(locked.deposit().accountNumber())) {
-            throw new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND);
-        }
-
         String transactionNumber =
-                transferSequencePort.nextTransactionNumber(now.toLocalDate(), command.channel());
+                transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), command.channel());
 
-        Transfer transfer = Transfer.create(
+        // 실패해도 ERROR로 남길 수 있도록, DB에 아직 저장되지 않은(transferId=null) 상태로
+        // 들고 있는다. 아래 트랜잭션이 실패해 롤백되더라도 이 자바 객체 자체는 영향받지 않는다.
+        Transfer created = Transfer.create(
                 transactionNumber,
                 command.withdrawalAccountId(),
                 payee.accountId(),
@@ -96,36 +104,112 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 command.sourceId(),
                 command.myPassbookMemo(),
                 command.recipientPassbookMemo(),
-                now
+                requestedAt
         );
-        transfer = transferSavePort.save(transfer);
 
-        TransferBalances balances = accountLockPort.applyTransfer(locked, command.amount());
+        try {
+            Transfer completed = requiresNewTransactionTemplate.execute(status -> {
+                // 계좌 락을 transfer 행 INSERT보다 먼저 잡는다. INSERT는 withdrawal_account_id·
+                // deposit_account_id에 FK가 걸려 있어 대상 계좌 행에 공유락을 요구하는데, 그 순서가
+                // lockForTransfer의 오름차순 규칙을 따르지 않는다(선언 순서=출금→입금). INSERT를
+                // 먼저 하면 두 스레드가 서로 다른 순서로 공유락을 쥔 채 배타락으로 승격하려다
+                // 데드락이 난다 — 락을 먼저 잡아두면 그 시점엔 이미 우리가 배타락을 쥐고 있어
+                // FK의 공유락 요구가 자기 자신과 충돌하지 않는다.
+                LockedAccountsForTransfer locked =
+                        accountLockPort.lockForTransfer(command.withdrawalAccountId(), payee.accountId());
 
-        LedgerPair pair = LedgerPair.forTransfer(
-                transfer.getTransferId(),
-                transactionNumber,
-                command.withdrawalAccountId(),
-                balances.withdrawalBalanceAfter(),
-                payee.accountId(),
-                balances.depositBalanceAfter(),
-                command.amount(),
-                resolveTransactionType(command.transferType()),
-                command.myPassbookMemo(),
-                command.recipientPassbookMemo(),
-                command.channel(),
-                now
-        );
-        ledgerSavePort.save(pair);
+                // 계좌번호 조회(락 없음)와 락 획득 사이에 입금계좌 매핑이 바뀌지 않았는지 재확인한다.
+                if (!command.depositAccountNumber().equals(locked.deposit().accountNumber())) {
+                    throw new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND);
+                }
 
-        transfer.complete(balances.withdrawalBalanceAfter(), now);
-        transfer = transferSavePort.save(transfer);
+                // 계좌번호 사전 조회 시점 이후 락을 얻기까지 사이에 계좌가 정지/해지됐을 수 있으므로,
+                // 락으로 얻은 최신 상태를 기준으로 재검증한다.
+                if (locked.withdrawal().status() != LockedAccountStatus.ACTIVE) {
+                    throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
+                }
+                if (locked.deposit().status() != LockedAccountStatus.ACTIVE) {
+                    throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
+                }
+
+                if (locked.withdrawal().balance() < command.amount()) {
+                    throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
+                }
+
+                Transfer transfer = transferSavePort.save(created);
+
+                TransferBalances balances = accountLockPort.applyTransfer(locked, command.amount());
+
+                LocalDateTime executedAt = LocalDateTime.now(clock);
+
+                LedgerPair pair = LedgerPair.forTransfer(
+                        transfer.getTransferId(),
+                        transactionNumber,
+                        command.withdrawalAccountId(),
+                        balances.withdrawalBalanceAfter(),
+                        payee.accountId(),
+                        balances.depositBalanceAfter(),
+                        command.amount(),
+                        resolveTransactionType(command.transferType()),
+                        command.myPassbookMemo(),
+                        command.recipientPassbookMemo(),
+                        command.channel(),
+                        executedAt
+                );
+                ledgerSavePort.save(pair);
+
+                transfer.complete(balances.withdrawalBalanceAfter(), executedAt);
+                return transferSavePort.save(transfer);
+            });
+
+            return TransferResult.builder()
+                    .status(completed.getStatus())
+                    .transactionNumber(completed.getTransactionNumber())
+                    .transferredAt(completed.getTransferredAt())
+                    .withdrawalBalanceAfter(completed.getWithdrawalBalanceAfter())
+                    .build();
+        } catch (BusinessException e) {
+            return failTransfer(created, e.getErrorCode().getCode(), e.getMessage(), e);
+        } catch (RuntimeException e) {
+            failTransfer(created, CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * 이체 시도를 ERROR로 확정해 새 행으로 남긴다. 위 트랜잭션이 이미 롤백되어 같은
+     * transaction_number를 가진 PROCESSING 행은 존재하지 않으므로 새 INSERT로 처리된다.
+     *
+     * <p>이 INSERT도 {@code requiresNewTransactionTemplate}(REQUIRES_NEW)으로 독립 커밋한다.
+     * execute()가 호출자(P5 자동이체 배치 등)의 트랜잭션 안에서 실행됐다면, 앰비언트 트랜잭션에
+     * 그냥 합류시킬 경우 이후 호출자 쪽에서 예외가 나 그 트랜잭션이 롤백될 때 방금 남긴 ERROR
+     * 확정 행까지 함께 사라진다 — "실패해도 흔적을 남긴다"는 이 클래스의 핵심 보장이 호출자
+     * 트랜잭션의 성공 여부에 좌우돼서는 안 되므로, 성공 경로와 대칭적으로 항상 독립 트랜잭션에서
+     * 커밋한다.
+     *
+     * <p>withdrawal_account_id·deposit_account_id는 transfer 테이블에 FK(NOT NULL)로 걸려
+     * 있다. {@code ACCOUNT_LOCK_TARGET_NOT_FOUND}처럼 애초에 존재하지 않는 계좌가 원인인
+     * 실패는 이 ERROR 확정 INSERT 자체가 FK 위반으로 실패한다 — 정상 흐름에서는 도달할 수
+     * 없는 불변식 위반이므로 원장 기표 없이도 어차피 남길 수 없는 경우다. 이때는 기록 실패
+     * 원인(recordingFailure)을 버리지 않고 원래 예외(cause)에 suppressed로 붙여 함께 던져,
+     * 어느 쪽 원인도 로그에서 유실되지 않게 한다.
+     */
+    private TransferResult failTransfer(Transfer created, String errorCode, String errorMessage, RuntimeException cause) {
+        created.fail(errorCode, errorMessage);
+        try {
+            requiresNewTransactionTemplate.executeWithoutResult(status -> transferSavePort.save(created));
+        } catch (RuntimeException recordingFailure) {
+            if (recordingFailure != cause) {
+                cause.addSuppressed(recordingFailure);
+            }
+            throw cause;
+        }
 
         return TransferResult.builder()
-                .status(transfer.getStatus())
-                .transactionNumber(transfer.getTransactionNumber())
-                .transferredAt(transfer.getTransferredAt())
-                .withdrawalBalanceAfter(transfer.getWithdrawalBalanceAfter())
+                .status(ProcessResultStatus.ERROR)
+                .transactionNumber(created.getTransactionNumber())
+                .errorCode(errorCode)
+                .errorMessage(errorMessage)
                 .build();
     }
 
