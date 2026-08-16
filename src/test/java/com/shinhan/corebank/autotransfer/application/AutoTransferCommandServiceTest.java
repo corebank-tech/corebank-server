@@ -28,6 +28,8 @@ import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import org.springframework.dao.OptimisticLockingFailureException;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -55,6 +57,9 @@ class AutoTransferCommandServiceTest {
 
     @Mock
     AuditLogService auditLogService;
+
+    @Mock
+    Clock clock;
 
     @InjectMocks
     AutoTransferCommandService autoTransferCommandService;
@@ -114,6 +119,7 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15)).thenReturn(false);
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
         // 실제 어댑터는 INSERT 후 채번된 ID로 다시 조립해서 돌려준다 — 감사로그가 autoTransferId를 필요로 하므로 그 동작을 흉내낸다
         when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> {
             AutoTransfer arg = invocation.getArgument(0);
@@ -376,11 +382,29 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
+    @DisplayName("저장 시점에 낙관적 락 충돌(OptimisticLockingFailureException)이 나면 삼키지 않고 그대로 전파한다")
+    void change_optimisticLockConflict_propagatesException() {
+        // change()는 findById()로 매번 최신 상태를 읽어와 그 자리에서 바로 저장하므로, 순차 테스트로는
+        // 진짜 버전 충돌을 재현할 수 없다(재현하려면 진짜 동시성이 필요) - 대신 영속성 포트가 실제로
+        // 충돌을 던졌을 때 서비스가 그걸 삼키지 않고 그대로 전파하는지만 검증한다. HTTP 레벨 매핑
+        // (CONCURRENT_MODIFICATION 응답)은 ApiExceptionHandler의 공용 핸들러가 이미 담당한다.
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class)))
+                .thenThrow(new OptimisticLockingFailureException("다른 요청이 먼저 이 자동이체를 변경했습니다"));
+
+        assertThatThrownBy(() -> autoTransferCommandService.change(10L, validChangeCommandBuilder().build()))
+                .isInstanceOf(OptimisticLockingFailureException.class);
+    }
+
+    @Test
     @DisplayName("정상적으로 해지하면 저장하고 감사로그를 남긴다")
     void cancel_success() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
         when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
 
         autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build());
 
