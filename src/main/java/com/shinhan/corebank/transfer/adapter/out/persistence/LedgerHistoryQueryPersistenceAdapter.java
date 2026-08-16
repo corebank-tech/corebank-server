@@ -35,6 +35,7 @@ public class LedgerHistoryQueryPersistenceAdapter implements LedgerHistoryQueryP
                 .selectFrom(ledgerEntryJpaEntity)
                 .where(conditions(query))
                 .orderBy(sortOrder(query.sort()))
+                // query.page()는 0-based (LedgerHistoryQuery 계약: P2가 외부 1-based를 변환해 전달)
                 .offset((long) query.page() * query.size())
                 .limit(query.size())
                 .fetch()
