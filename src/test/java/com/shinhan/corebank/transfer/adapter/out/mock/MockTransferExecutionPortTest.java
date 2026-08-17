@@ -20,6 +20,7 @@ class MockTransferExecutionPortTest {
     void execute_ShouldReturnSuccessWith20CharTransactionNumber() {
         // given
         TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
                 .withdrawalAccountId(1L)
                 .depositAccountNumber("123456789012")
                 .transferType(TransferType.IMMEDIATE)
@@ -48,6 +49,7 @@ class MockTransferExecutionPortTest {
     void execute_ShouldIncrementSequence() {
         // given
         TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
                 .withdrawalAccountId(1L)
                 .depositAccountNumber("123456789012")
                 .transferType(TransferType.IMMEDIATE)

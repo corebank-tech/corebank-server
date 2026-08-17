@@ -131,6 +131,7 @@ class TransferExecutionServiceConcurrencyTest extends IntegrationTestSupport {
         return () -> {
             await(start);
             TransferCommand command = TransferCommand.builder()
+                    .customerId(1L)
                     .withdrawalAccountId(withdrawalAccountId)
                     .depositAccountNumber(depositAccountNumber)
                     .amount(amount)

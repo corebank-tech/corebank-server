@@ -60,6 +60,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
                 TransferTestFixtures.seedCustomerAndAccounts(entityManager));
 
         TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("999999999999")
                 .amount(30000L)
@@ -89,6 +90,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
                 TransferTestFixtures.seedCustomerAndAccounts(entityManager));
 
         TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
                 .withdrawalAccountId(999999L)
                 .depositAccountNumber("110222222222")
                 .amount(30000L)
@@ -138,6 +140,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         jdbcTemplate.update("UPDATE account SET status = 'SUSPENDED' WHERE account_id = 101");
 
         TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110222222222")
                 .amount(30000L)
@@ -181,6 +184,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         jdbcTemplate.update("UPDATE account SET status = 'SUSPENDED' WHERE account_id = 202");
 
         TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110222222222")
                 .amount(30000L)
@@ -233,6 +237,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
             """, Long.MAX_VALUE - 500);
 
         TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
                 .withdrawalAccountId(501L)
                 .depositAccountNumber("110888888888")
                 .amount(1000L)

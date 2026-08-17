@@ -12,6 +12,7 @@ import lombok.Builder;
 
 @Builder
 public record TransferCommand(
+    Long customerId, // 출금계좌 소유권·한도 검증 대상 고객
     Long withdrawalAccountId,
     String depositAccountNumber,
     long amount,
@@ -27,7 +28,7 @@ public record TransferCommand(
     public TransferCommand {
 
         // 필수값 검증
-        if (withdrawalAccountId == null || depositAccountNumber == null ||
+        if (customerId == null || withdrawalAccountId == null || depositAccountNumber == null ||
                 transferType == null || channel == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
