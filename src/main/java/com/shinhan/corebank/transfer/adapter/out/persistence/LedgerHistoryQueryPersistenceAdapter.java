@@ -60,6 +60,7 @@ public class LedgerHistoryQueryPersistenceAdapter implements LedgerHistoryQueryP
                 .select(ledgerEntryJpaEntity.direction, ledgerEntryJpaEntity.count(), ledgerEntryJpaEntity.amount.sumLong())
                 .from(ledgerEntryJpaEntity)
                 .where(conditions(query))
+                .where(excludeReversed())
                 .groupBy(ledgerEntryJpaEntity.direction)
                 .fetch();
 
@@ -105,6 +106,12 @@ public class LedgerHistoryQueryPersistenceAdapter implements LedgerHistoryQueryP
             return null;
         }
         return ledgerEntryJpaEntity.direction.eq(LedgerDirection.valueOf(direction.name()));
+    }
+
+    private BooleanExpression excludeReversed() {
+        // 취소된 원거래(reversed=true)와 그 반대기표(REVERSAL, reversalId != null)는
+        // 목록에는 그대로 노출하되(정책 A) 무효화된 금액이므로 집계에서는 제외한다.
+        return ledgerEntryJpaEntity.reversed.isFalse().and(ledgerEntryJpaEntity.reversalId.isNull());
     }
 
     private BooleanExpression keywordContains(String keyword) {

@@ -175,6 +175,53 @@ class LedgerHistoryQueryPersistenceAdapterTest extends IntegrationTestSupport {
                 .contains("20260720WB0000000001", "20260720WB0000000002");
     }
 
+    @Test
+    @DisplayName("summarize는 취소된 원거래(reversed=true)와 그 반대기표(REVERSAL)를 집계에서 제외한다")
+    void summarize_excludesReversedOriginalAndReversalEntries() {
+        LedgerEntryJpaEntity original = LedgerEntryJpaEntity.builder()
+                .ledgerEntryId(ledgerEntryIdGenerator.nextId())
+                .accountId(ACCOUNT_ID)
+                .transactionNumber("20260720WB0000000001")
+                .direction(LedgerDirection.WITHDRAWAL)
+                .amount(7_000L)
+                .balanceAfter(1_000_000L)
+                .transactionType("IMMEDIATE_TRANSFER")
+                .transactionContent("취소된거래")
+                .channel(TransferChannel.WB)
+                .reversed(true)
+                .occurredAt(LocalDateTime.of(2026, 7, 20, 9, 0, 0))
+                .build();
+        LedgerEntryJpaEntity savedOriginal = ledgerEntryJpaRepository.save(original);
+
+        LedgerEntryJpaEntity reversal = LedgerEntryJpaEntity.builder()
+                .ledgerEntryId(ledgerEntryIdGenerator.nextId())
+                .accountId(ACCOUNT_ID)
+                .transactionNumber("20260720WB0000000002")
+                .direction(LedgerDirection.DEPOSIT)
+                .amount(7_000L)
+                .balanceAfter(1_007_000L)
+                .transactionType("REVERSAL")
+                .transactionContent("반대기표")
+                .channel(TransferChannel.WB)
+                .reversed(false)
+                .reversalId(savedOriginal.getLedgerEntryId())
+                .occurredAt(LocalDateTime.of(2026, 7, 20, 9, 0, 1))
+                .build();
+        ledgerEntryJpaRepository.save(reversal);
+        entityManager.flush();
+        entityManager.clear();
+
+        LedgerHistoryQuery query = julyQuery(LedgerHistoryDirection.ALL, null, LedgerHistorySort.LATEST, 0, 10);
+
+        LedgerHistoryAggregate aggregate = adapter.summarize(query);
+
+        // setUp()의 7/15 입금 2만, 7/10 출금 1만만 집계되고, 취소된 7천원 쌍은 제외되어야 한다.
+        assertThat(aggregate.depositCount()).isEqualTo(1);
+        assertThat(aggregate.depositAmount()).isEqualTo(20_000L);
+        assertThat(aggregate.withdrawalCount()).isEqualTo(1);
+        assertThat(aggregate.withdrawalAmount()).isEqualTo(10_000L);
+    }
+
     private LedgerHistoryQuery julyQuery(LedgerHistoryDirection direction, String keyword,
             LedgerHistorySort sort, int page, int size) {
         return LedgerHistoryQuery.builder()
