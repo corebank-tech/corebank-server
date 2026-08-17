@@ -5,6 +5,7 @@ import java.util.Optional;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.transfer.application.port.out.LockedAccountStatus;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountType;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
@@ -42,7 +43,26 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
         Optional<ResolvedPayee> resolved = adapter.resolvePayeeByAccountNumber("110222222222");
 
         // then
-        assertThat(resolved).contains(new ResolvedPayee(202L, "테스터", LockedAccountType.DEMAND_DEPOSIT));
+        assertThat(resolved).contains(
+                new ResolvedPayee(202L, "테스터", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE));
+    }
+
+    @Test
+    @DisplayName("입금계좌가 정지 상태이면 상태값도 함께 조회된다")
+    void resolvePayeeByAccountNumber_returnsSuspendedStatus() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.createNativeQuery("UPDATE account SET status = 'SUSPENDED' WHERE account_id = 202")
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        Optional<ResolvedPayee> resolved = adapter.resolvePayeeByAccountNumber("110222222222");
+
+        // then
+        assertThat(resolved).contains(
+                new ResolvedPayee(202L, "테스터", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.SUSPENDED));
     }
 
     @Test

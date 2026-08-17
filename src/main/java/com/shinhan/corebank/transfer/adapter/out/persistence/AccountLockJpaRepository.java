@@ -36,7 +36,7 @@ public interface AccountLockJpaRepository extends JpaRepository<AccountLockJpaEn
      * 받아 어댑터의 자바 코드에서 enum으로 변환한다.
      */
     @Query("""
-        SELECT a.accountId AS accountId, c.userName AS payeeName, a.accountType AS accountType
+        SELECT a.accountId AS accountId, c.userName AS payeeName, a.accountType AS accountType, a.status AS status
         FROM AccountLockJpaEntity a
         JOIN CustomerNameJpaEntity c ON a.customerId = c.customerId
         WHERE a.accountNumber = :accountNumber
@@ -47,6 +47,7 @@ public interface AccountLockJpaRepository extends JpaRepository<AccountLockJpaEn
         Long getAccountId();
         String getPayeeName();
         String getAccountType();
+        String getStatus();
     }
 
     /**

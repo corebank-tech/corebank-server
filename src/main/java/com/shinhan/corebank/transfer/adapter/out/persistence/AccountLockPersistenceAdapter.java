@@ -31,7 +31,8 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
                 .map(row -> new ResolvedPayee(
                         row.getAccountId(),
                         row.getPayeeName(),
-                        LockedAccountType.valueOf(row.getAccountType())));
+                        LockedAccountType.valueOf(row.getAccountType()),
+                        LockedAccountStatus.valueOf(row.getStatus())));
     }
 
     @Override
