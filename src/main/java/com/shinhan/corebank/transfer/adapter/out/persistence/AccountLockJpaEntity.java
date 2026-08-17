@@ -1,11 +1,7 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import com.shinhan.corebank.transfer.application.port.out.LockedAccountType;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
@@ -59,13 +55,9 @@ public class AccountLockJpaEntity {
     @Column(name = "withdrawal_registered", nullable = false, insertable = false, updatable = false)
     private boolean withdrawalRegistered;
 
-    /**
-     * 상품유형(TRF0004 입금계좌 검증용). 조회 전용. JPQL 생성자식(new ResolvedPayee(...))에서
-     * 바로 LockedAccountType으로 꺼내 쓸 수 있도록 String이 아닌 enum으로 매핑한다.
-     */
-    @Enumerated(EnumType.STRING)
+    /** 상품유형(TRF0004 입금계좌 검증용). 조회 전용. */
     @Column(name = "account_type", nullable = false, length = 24, insertable = false, updatable = false)
-    private LockedAccountType accountType;
+    private String accountType;
 
     /**
      * account.version은 P2(계좌 도메인)의 낙관적 락 컬럼이다. 이체 실행 경로는 비관적 락으로
