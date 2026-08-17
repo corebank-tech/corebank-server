@@ -91,53 +91,58 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         // 있어 원장·완료 기록에는 락 획득 이후 새로 캡처하는 executedAt을 쓴다.
         LocalDateTime requestedAt = LocalDateTime.now(clock);
 
-        // 1차 검증(락 이전) ⓪: 인증 완료 토큰. IMMEDIATE만 authToken이 있으므로(TransferCommand
-        // 계약) SCHEDULED/AUTO(시스템 트리거, 세션 없음)는 이 검증을 건너뛴다.
-        if (command.authToken() != null) {
-            transferAuthTokenVerificationPort.verify(
-                    command.authToken(), command.withdrawalAccountId(), "TRANSFER_EXECUTE");
-        }
-
-        // 1차 검증(락 이전) ①: 출금계좌 소유·등록 여부. 존재하지 않는 계좌도 "내 소유가 아님"과
-        // 구분하지 않고 같은 TRF0001로 묶는다 — 계좌ID가 이제 HTTP 요청 바디로 들어오므로
-        // 계좌 존재 여부를 스캐닝하는 데 악용되지 않도록 한다.
-        accountLockPort.findWithdrawalAccountDetail(command.withdrawalAccountId())
-                .filter(detail -> detail.customerId().equals(command.customerId()) && detail.withdrawalRegistered())
-                .orElseThrow(() -> new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
-
-        ResolvedPayee payee = accountLockPort.resolvePayeeByAccountNumber(command.depositAccountNumber())
-                .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
-
-        // 1차 검증(락 이전) ②: 입금계좌 상품유형. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을
-        // 묶어두는 상품이라 이체로 추가 입금할 수 없다. 정기적금(INSTALLMENT_SAVINGS)은 매달
-        // 나눠 넣는 게 상품 목적이라 허용한다(REQ-TRSF-030).
-        if (payee.accountType() == LockedAccountType.TIME_DEPOSIT) {
-            throw new BusinessException(TransferErrorCode.UNSUPPORTED_ACCOUNT_TYPE);
-        }
-
-        String transactionNumber =
-                transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), command.channel());
-
-        // 실패해도 ERROR로 남길 수 있도록, DB에 아직 저장되지 않은(transferId=null) 상태로
-        // 들고 있는다. 아래 트랜잭션이 실패해 롤백되더라도 이 자바 객체 자체는 영향받지 않는다.
-        Transfer created = Transfer.create(
-                transactionNumber,
-                command.withdrawalAccountId(),
-                payee.accountId(),
-                command.depositAccountNumber(),
-                payee.payeeName(),
-                command.amount(),
-                FEE,
-                command.transferType(),
-                command.channel(),
-                resolveSourceType(command.transferType()),
-                command.sourceId(),
-                command.myPassbookMemo(),
-                command.recipientPassbookMemo(),
-                requestedAt
-        );
-
+        // 사전 검증도 이 try 안에 넣어 항상 TransferResult를 반환한다 — 호출자는 예외를 안 던진다고 가정한다.
+        Transfer created = null;
         try {
+            // 1차 검증(락 이전) ⓪: 인증 완료 토큰. IMMEDIATE만 authToken이 있으므로(TransferCommand
+            // 계약) SCHEDULED/AUTO(시스템 트리거, 세션 없음)는 이 검증을 건너뛴다.
+            if (command.authToken() != null) {
+                transferAuthTokenVerificationPort.verify(
+                        command.authToken(), command.withdrawalAccountId(), "TRANSFER_EXECUTE");
+            }
+
+            // 1차 검증(락 이전) ①: 출금계좌 소유·등록 여부. 존재하지 않는 계좌도 "내 소유가 아님"과
+            // 구분하지 않고 같은 TRF0001로 묶는다 — 계좌ID가 이제 HTTP 요청 바디로 들어오므로
+            // 계좌 존재 여부를 스캐닝하는 데 악용되지 않도록 한다.
+            // TODO(#100): 출금계좌 등록 플로우가 없어 현재는 모든 실계좌가 이 필터를 통과 못 한다.
+            accountLockPort.findWithdrawalAccountDetail(command.withdrawalAccountId())
+                    .filter(detail -> detail.customerId().equals(command.customerId()) && detail.withdrawalRegistered())
+                    .orElseThrow(() -> new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
+
+            ResolvedPayee payee = accountLockPort.resolvePayeeByAccountNumber(command.depositAccountNumber())
+                    .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
+
+            // 1차 검증(락 이전) ②: 입금계좌 상품유형. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을
+            // 묶어두는 상품이라 이체로 추가 입금할 수 없다. 정기적금(INSTALLMENT_SAVINGS)은 매달
+            // 나눠 넣는 게 상품 목적이라 허용한다(REQ-TRSF-030).
+            if (payee.accountType() == LockedAccountType.TIME_DEPOSIT) {
+                throw new BusinessException(TransferErrorCode.UNSUPPORTED_ACCOUNT_TYPE);
+            }
+
+            String transactionNumber =
+                    transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), command.channel());
+
+            // 실패해도 ERROR로 남길 수 있도록, DB에 아직 저장되지 않은(transferId=null) 상태로
+            // 들고 있는다. 아래 트랜잭션이 실패해 롤백되더라도 이 자바 객체 자체는 영향받지 않는다.
+            created = Transfer.create(
+                    transactionNumber,
+                    command.withdrawalAccountId(),
+                    payee.accountId(),
+                    command.depositAccountNumber(),
+                    payee.payeeName(),
+                    command.amount(),
+                    FEE,
+                    command.transferType(),
+                    command.channel(),
+                    resolveSourceType(command.transferType()),
+                    command.sourceId(),
+                    command.myPassbookMemo(),
+                    command.recipientPassbookMemo(),
+                    requestedAt
+            );
+            // 람다가 캡처하려면 effectively-final이어야 하는데 created는 재대입되므로 복사본을 둔다.
+            Transfer createdTransfer = created;
+
             Transfer completed = requiresNewTransactionTemplate.execute(status -> {
                 // 한도 락을 계좌 락보다 먼저 획득한다(P1-P4 합의: 한도 → 계좌 순서). 위반 시
                 // LMT0002/LMT0003을 던진다 — 여기서 예외가 나면 아래 계좌 락은 아예 시도되지 않는다.
@@ -170,7 +175,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
                 }
 
-                Transfer transfer = transferSavePort.save(created);
+                Transfer transfer = transferSavePort.save(createdTransfer);
 
                 TransferBalances balances = accountLockPort.applyTransfer(locked, command.amount());
 
@@ -203,9 +208,19 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     .withdrawalBalanceAfter(completed.getWithdrawalBalanceAfter())
                     .build();
         } catch (BusinessException e) {
+            // created가 없으면(payee 해석·채번 전 실패) 남길 행 자체가 없으니 결과만 만든다.
+            if (created == null) {
+                return TransferResult.builder()
+                        .status(ProcessResultStatus.ERROR)
+                        .errorCode(e.getErrorCode().getCode())
+                        .errorMessage(e.getMessage())
+                        .build();
+            }
             return failTransfer(created, e.getErrorCode().getCode(), e.getMessage(), e);
         } catch (RuntimeException e) {
-            failTransfer(created, CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.getMessage(), e);
+            if (created != null) {
+                failTransfer(created, CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.getMessage(), e);
+            }
             throw e;
         }
     }

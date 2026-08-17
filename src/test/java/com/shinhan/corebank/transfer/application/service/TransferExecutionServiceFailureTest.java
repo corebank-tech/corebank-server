@@ -4,7 +4,6 @@ import java.util.Map;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
-import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
@@ -55,8 +54,8 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("입금계좌번호가 존재하지 않으면 transfer 행을 만들지 않고 예외를 던진다")
-    void execute_withUnknownDepositAccountNumber_throwsWithoutCreatingTransferRow() {
+    @DisplayName("입금계좌번호가 존재하지 않으면 transfer 행을 만들지 않고 ERROR 결과를 반환한다")
+    void execute_withUnknownDepositAccountNumber_returnsErrorResultWithoutCreatingTransferRow() {
         // given: 출금계좌만 존재, 입금계좌번호는 어떤 계좌에도 매칭되지 않는다.
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 TransferTestFixtures.seedCustomerAndAccounts(entityManager));
@@ -73,13 +72,13 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
                 .recipientPassbookMemo("입금메모")
                 .build();
 
-        // when / then: 채번·저장 전에 터지므로 ERROR 결과가 아니라 예외로 전파된다.
-        assertThatThrownBy(() -> transferExecutionService.execute(command))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(TransferErrorCode.PAYEE_NOT_FOUND));
+        // when: 채번·저장 전에 실패하므로 남길 transfer 행이 없어 예외 대신 ERROR 결과로 돌아온다.
+        TransferResult result = transferExecutionService.execute(command);
 
-        // then: transfer 행이 아예 생기지 않는다 (입금계좌 해석 단계에서 예외가 나 채번·객체 생성에 도달하지 않는다)
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(TransferErrorCode.PAYEE_NOT_FOUND.getCode());
+
+        // then: transfer 행이 아예 생기지 않는다 (입금계좌 해석 단계에서 실패해 채번·객체 생성에 도달하지 않는다)
         Long transferCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 101", Long.class);
         assertThat(transferCount).isZero();
@@ -87,7 +86,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
     @Test
     @DisplayName("존재하지 않는 출금계좌로 이체를 시도하면 소유권 1차 검증에서 TRF0001로 거부되고 transfer 행을 만들지 않는다")
-    void execute_withUnknownWithdrawalAccount_throwsWithoutCreatingTransferRow() {
+    void execute_withUnknownWithdrawalAccount_returnsErrorResultWithoutCreatingTransferRow() {
         // given: 입금계좌(202)만 존재. 출금계좌 999999는 account 테이블에 아예 없다.
         // findWithdrawalAccountDetail은 존재하지 않는 계좌를 "내 소유가 아님"과 구분하지 않으므로
         // 락 획득(lockForTransfer)까지 가지 않고 1차 검증에서 먼저 거부된다.
@@ -106,10 +105,10 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
                 .recipientPassbookMemo("입금메모")
                 .build();
 
-        assertThatThrownBy(() -> transferExecutionService.execute(command))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
+        TransferResult result = transferExecutionService.execute(command);
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED.getCode());
 
         // then: transfer 행이 아예 생기지 않는다
         Long transferCount = jdbcTemplate.queryForObject(
@@ -129,7 +128,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
     @Test
     @DisplayName("요청자 소유가 아닌 출금계좌로 이체를 시도하면 TRF0001로 거부되고 transfer 행을 만들지 않는다")
-    void execute_withNotOwnedWithdrawalAccount_throwsWithoutCreatingTransferRow() {
+    void execute_withNotOwnedWithdrawalAccount_returnsErrorResultWithoutCreatingTransferRow() {
         // given: 출금계좌(101)의 실제 소유자는 customer_id=1이지만, 요청은 customerId=2로 온다.
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 TransferTestFixtures.seedCustomerAndAccounts(entityManager));
@@ -146,10 +145,10 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
                 .recipientPassbookMemo("입금메모")
                 .build();
 
-        assertThatThrownBy(() -> transferExecutionService.execute(command))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
+        TransferResult result = transferExecutionService.execute(command);
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED.getCode());
 
         Long transferCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 101", Long.class);
@@ -158,7 +157,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
     @Test
     @DisplayName("출금계좌로 등록되지 않은 계좌로 이체를 시도하면 TRF0001로 거부되고 transfer 행을 만들지 않는다")
-    void execute_withUnregisteredWithdrawalAccount_throwsWithoutCreatingTransferRow() {
+    void execute_withUnregisteredWithdrawalAccount_returnsErrorResultWithoutCreatingTransferRow() {
         // given: 202는 픽스처에서 withdrawal_registered=FALSE로 시드된다. 101로 입금해
         // 별도 계좌 시드 없이 재사용한다.
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
@@ -176,10 +175,10 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
                 .recipientPassbookMemo("입금메모")
                 .build();
 
-        assertThatThrownBy(() -> transferExecutionService.execute(command))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
+        TransferResult result = transferExecutionService.execute(command);
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED.getCode());
 
         Long transferCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 202", Long.class);
@@ -188,7 +187,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
     @Test
     @DisplayName("정기예금 계좌로는 입금할 수 없어 TRF0004로 거부되고 transfer 행을 만들지 않는다")
-    void execute_withTimeDepositAsPayeeAccount_throwsWithoutCreatingTransferRow() {
+    void execute_withTimeDepositAsPayeeAccount_returnsErrorResultWithoutCreatingTransferRow() {
         // given: 601은 정기예금(TIME_DEPOSIT) 계좌다. REQ-TRSF-030에 따라 정기적금은 허용되지만
         // 정기예금은 입금계좌로 지정할 수 없다. product_id는 NOT NULL FK라 최소 상품 행(701)도
         // 함께 시드한다.
@@ -222,10 +221,10 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
                 .recipientPassbookMemo("입금메모")
                 .build();
 
-        assertThatThrownBy(() -> transferExecutionService.execute(command))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(TransferErrorCode.UNSUPPORTED_ACCOUNT_TYPE));
+        TransferResult result = transferExecutionService.execute(command);
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(TransferErrorCode.UNSUPPORTED_ACCOUNT_TYPE.getCode());
 
         Long transferCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 101", Long.class);
