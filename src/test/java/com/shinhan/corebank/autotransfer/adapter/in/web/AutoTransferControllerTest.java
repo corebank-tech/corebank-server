@@ -13,9 +13,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferExecutionJpaEntity;
+import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferExecutionJpaRepository;
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferJpaEntity;
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferJpaRepository;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -43,6 +46,9 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
 
     @Autowired
     AutoTransferJpaRepository autoTransferJpaRepository;
+
+    @Autowired
+    AutoTransferExecutionJpaRepository autoTransferExecutionJpaRepository;
 
     @Autowired
     EntityManager entityManager;
@@ -410,6 +416,93 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("정상 결과조회 요청은 200으로 응답하고 정상/오류 이력과 집계가 함께 내려온다")
+    void searchExecutionHistory_success() throws Exception {
+        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
+                autoTransfer(accountId, "110000000050", AutoTransferStatus.NORMAL, 10));
+        entityManager.flush();
+
+        LocalDate today = LocalDate.now();
+        autoTransferExecutionJpaRepository.save(execution(saved, today, ProcessResultStatus.SUCCESS, 10000L, "TXN0010", null));
+        autoTransferExecutionJpaRepository.save(execution(saved, today.minusDays(1), ProcessResultStatus.ERROR, 5000L, null, "잔액부족"));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/auto-transfers/executions")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("withdrawalAccountId", String.valueOf(accountId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.items.length()").value(2))
+                .andExpect(jsonPath("$.data.items[0].status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.items[1].status").value("ERROR"))
+                .andExpect(jsonPath("$.data.items[1].failureReason").value("잔액부족"))
+                .andExpect(jsonPath("$.data.summary.successCount").value(1))
+                .andExpect(jsonPath("$.data.summary.successAmount").value(10000))
+                .andExpect(jsonPath("$.data.summary.errorCount").value(1))
+                .andExpect(jsonPath("$.data.summary.errorAmount").value(5000));
+    }
+
+    @Test
+    @DisplayName("조회기간 밖의 회차는 조회되지 않는다")
+    void searchExecutionHistory_excludesExecutionsOutsidePeriod() throws Exception {
+        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
+                autoTransfer(accountId, "110000000052", AutoTransferStatus.NORMAL, 12));
+        entityManager.flush();
+        LocalDate inRange = LocalDate.now();
+        LocalDate outOfRange = LocalDate.now().minusMonths(2);
+        autoTransferExecutionJpaRepository.save(execution(saved, inRange, ProcessResultStatus.SUCCESS, 10000L, "TXN0012", null));
+        autoTransferExecutionJpaRepository.save(execution(saved, outOfRange, ProcessResultStatus.SUCCESS, 20000L, "TXN0013", null));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/auto-transfers/executions")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("withdrawalAccountId", String.valueOf(accountId))
+                        .param("fromDate", inRange.minusDays(1).toString())
+                        .param("toDate", inRange.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.summary.successAmount").value(10000));
+    }
+
+    @Test
+    @DisplayName("다른 고객의 출금계좌ID로 결과조회하면 빈 목록을 반환한다 (타 고객 접근 차단)")
+    void searchExecutionHistory_otherCustomersWithdrawalAccount_returnsEmpty() throws Exception {
+        Long otherCustomerId = insertCustomer();
+        Long otherAccountId = insertAccount(otherCustomerId);
+        AutoTransferJpaEntity otherAutoTransfer = autoTransferJpaRepository.save(
+                autoTransfer(otherCustomerId, otherAccountId, "110000000051", AutoTransferStatus.NORMAL, 11));
+        entityManager.flush();
+        autoTransferExecutionJpaRepository.save(execution(otherAutoTransfer, LocalDate.now(), ProcessResultStatus.SUCCESS, 10000L, "TXN0011", null));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/auto-transfers/executions")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("withdrawalAccountId", String.valueOf(otherAccountId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalCount").value(0))
+                .andExpect(jsonPath("$.data.items.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("withdrawalAccountId가 없으면 400을 반환한다")
+    void searchExecutionHistory_missingWithdrawalAccountId_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/auto-transfers/executions")
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("인증 없이 결과조회를 요청하면 401을 반환한다")
+    void searchExecutionHistory_withoutAuthentication_returnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/auto-transfers/executions")
+                        .param("withdrawalAccountId", String.valueOf(accountId)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("정상 변경 요청은 200으로 응답하고 변경된 값이 반영된다")
     void change_success() throws Exception {
         AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
@@ -734,6 +827,19 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                 .recipientPassbookMemo("받는메모")
                 .status(status)
                 .registeredAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+                .build();
+    }
+
+    private AutoTransferExecutionJpaEntity execution(AutoTransferJpaEntity autoTransfer, LocalDate executionDate,
+            ProcessResultStatus status, Long amount, String transactionNumber, String failureReason) {
+        return AutoTransferExecutionJpaEntity.builder()
+                .autoTransfer(autoTransfer)
+                .executionDate(executionDate)
+                .amount(amount)
+                .status(status)
+                .transactionNumber(transactionNumber)
+                .failureReason(failureReason)
+                .executedAt(executionDate.atStartOfDay())
                 .build();
     }
 
