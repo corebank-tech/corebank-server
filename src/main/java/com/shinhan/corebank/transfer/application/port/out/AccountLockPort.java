@@ -13,6 +13,12 @@ public interface AccountLockPort {
     Optional<ResolvedPayee> resolvePayeeByAccountNumber(String accountNumber);
 
     /**
+     * 출금계좌 ID로 소유자(customerId)·출금계좌 등록 여부를 조회한다. 락을 잡지 않는 단순
+     * 조회이며, lockForTransfer 이전 1차 검증(소유 아님·미등록 → TRF0001)에 쓴다.
+     */
+    Optional<WithdrawalAccountDetail> findWithdrawalAccountDetail(Long accountId);
+
+    /**
      * 출금/입금 계좌를 계좌 ID 오름차순으로 비관적 락(SELECT FOR UPDATE) 획득한다.
      * 데드락 방지를 위해 락 획득 순서는 항상 ID 오름차순이며, 반환값의 출금/입금
      * 방향은 파라미터로 전달된 역할을 그대로 보존한다.

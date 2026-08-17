@@ -10,6 +10,7 @@ import com.shinhan.corebank.transfer.application.port.out.LockedAccountStatus;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
+import com.shinhan.corebank.transfer.application.port.out.WithdrawalAccountDetail;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import org.springframework.stereotype.Component;
@@ -26,6 +27,11 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
     @Override
     public Optional<ResolvedPayee> resolvePayeeByAccountNumber(String accountNumber) {
         return repository.findPayeeByAccountNumber(accountNumber);
+    }
+
+    @Override
+    public Optional<WithdrawalAccountDetail> findWithdrawalAccountDetail(Long accountId) {
+        return repository.findWithdrawalAccountDetailByAccountId(accountId);
     }
 
     @Override

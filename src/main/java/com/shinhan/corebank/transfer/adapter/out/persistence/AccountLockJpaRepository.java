@@ -3,6 +3,7 @@ package com.shinhan.corebank.transfer.adapter.out.persistence;
 import java.util.Optional;
 
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
+import com.shinhan.corebank.transfer.application.port.out.WithdrawalAccountDetail;
 
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -32,10 +33,23 @@ public interface AccountLockJpaRepository extends JpaRepository<AccountLockJpaEn
      * 얻기 위한 평범한 조회이고, 실제 락은 이후 lockForTransfer가 오름차순으로 잡는다.
      */
     @Query("""
-        SELECT new com.shinhan.corebank.transfer.application.port.out.ResolvedPayee(a.accountId, c.userName)
+        SELECT new com.shinhan.corebank.transfer.application.port.out.ResolvedPayee(a.accountId, c.userName, a.accountType)
         FROM AccountLockJpaEntity a
         JOIN CustomerNameJpaEntity c ON a.customerId = c.customerId
         WHERE a.accountNumber = :accountNumber
         """)
     Optional<ResolvedPayee> findPayeeByAccountNumber(@Param("accountNumber") String accountNumber);
+
+    /**
+     * 출금계좌 소유·등록 여부 1차 검증(락 이전)용 조회. 의도적으로 락을 잡지 않는다 —
+     * 계좌번호 해석(findPayeeByAccountNumber)과 동일한 이유로, 여기서 락을 걸면
+     * lockForTransfer의 오름차순 락 획득 계약보다 먼저 출금계좌 행에 락이 걸린다.
+     */
+    @Query("""
+        SELECT new com.shinhan.corebank.transfer.application.port.out.WithdrawalAccountDetail(
+            a.accountId, a.customerId, a.withdrawalRegistered)
+        FROM AccountLockJpaEntity a
+        WHERE a.accountId = :accountId
+        """)
+    Optional<WithdrawalAccountDetail> findWithdrawalAccountDetailByAccountId(@Param("accountId") Long accountId);
 }
