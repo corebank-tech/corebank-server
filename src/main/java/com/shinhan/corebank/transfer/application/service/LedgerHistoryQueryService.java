@@ -67,6 +67,8 @@ public class LedgerHistoryQueryService implements LedgerHistoryQueryUseCase {
                 .transactionContent(entry.getTransactionContent())
                 .balanceAfter(entry.getBalanceAfter())
                 .channel(entry.getChannel())
+                .reversed(entry.isReversed())
+                .reversalId(entry.getReversalId())
                 .build();
     }
 }

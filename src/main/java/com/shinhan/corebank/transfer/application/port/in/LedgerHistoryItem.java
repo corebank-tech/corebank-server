@@ -18,6 +18,8 @@ public record LedgerHistoryItem(
         long amount,
         String transactionContent,
         long balanceAfter,
-        TransferChannel channel
+        TransferChannel channel,
+        boolean reversed,
+        Long reversalId
 ) {
 }

@@ -72,6 +72,8 @@ class LedgerHistoryQueryServiceTest {
         assertThat(item.transactionNumber()).isEqualTo("20260715WB0000000001");
         assertThat(item.direction()).isEqualTo(LedgerDirection.DEPOSIT);
         assertThat(item.amount()).isEqualTo(20_000L);
+        assertThat(item.reversed()).isFalse();
+        assertThat(item.reversalId()).isNull();
 
         assertThat(result.totalCount()).isEqualTo(25L);
         assertThat(result.totalPages()).isEqualTo(3); // ceil(25/10)
@@ -81,6 +83,61 @@ class LedgerHistoryQueryServiceTest {
         assertThat(result.summary().depositCount()).isEqualTo(1L);
         assertThat(result.summary().depositAmount()).isEqualTo(20_000L);
         assertThat(result.summary().withdrawalCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("취소된 원거래와 반대기표는 reversed·reversalId가 그대로 LedgerHistoryItem에 담긴다")
+    void query_mapsReversedAndReversalId() {
+        service = new LedgerHistoryQueryService(ledgerHistoryQueryPort);
+
+        LedgerHistoryQuery query = LedgerHistoryQuery.builder()
+                .accountId(101L)
+                .fromDate(LocalDate.of(2026, 7, 1))
+                .toDate(LocalDate.of(2026, 7, 31))
+                .direction(LedgerHistoryDirection.ALL)
+                .sort(LedgerHistorySort.LATEST)
+                .page(0)
+                .size(10)
+                .build();
+
+        LedgerEntry reversedOriginal = LedgerEntry.builder()
+                .ledgerEntryId(1L)
+                .transactionNumber("20260720WB0000000001")
+                .occurredAt(LocalDateTime.of(2026, 7, 20, 9, 0, 0))
+                .transactionType("IMMEDIATE_TRANSFER")
+                .direction(LedgerDirection.WITHDRAWAL)
+                .amount(7_000L)
+                .transactionContent("취소된거래")
+                .balanceAfter(1_000_000L)
+                .channel(TransferChannel.WB)
+                .reversed(true)
+                .build();
+        LedgerEntry reversalEntry = LedgerEntry.builder()
+                .ledgerEntryId(2L)
+                .transactionNumber("20260720WB0000000002")
+                .occurredAt(LocalDateTime.of(2026, 7, 20, 9, 0, 1))
+                .transactionType("REVERSAL")
+                .direction(LedgerDirection.DEPOSIT)
+                .amount(7_000L)
+                .transactionContent("반대기표")
+                .balanceAfter(1_007_000L)
+                .channel(TransferChannel.WB)
+                .reversalId(1L)
+                .build();
+
+        when(ledgerHistoryQueryPort.findEntries(query)).thenReturn(List.of(reversalEntry, reversedOriginal));
+        when(ledgerHistoryQueryPort.countEntries(query)).thenReturn(2L);
+        when(ledgerHistoryQueryPort.summarize(query)).thenReturn(LedgerHistoryAggregate.empty());
+
+        LedgerHistoryResult result = service.query(query);
+
+        LedgerHistoryItem mappedReversal = result.items().get(0);
+        assertThat(mappedReversal.reversed()).isFalse();
+        assertThat(mappedReversal.reversalId()).isEqualTo(1L);
+
+        LedgerHistoryItem mappedOriginal = result.items().get(1);
+        assertThat(mappedOriginal.reversed()).isTrue();
+        assertThat(mappedOriginal.reversalId()).isNull();
     }
 
     @Test
