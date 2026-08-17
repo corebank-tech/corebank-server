@@ -78,6 +78,25 @@ class TransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("출금계좌와 입금계좌가 같으면 200 + ApiResponse 봉투로 TRF0002 ERROR 결과를 반환한다")
+    void execute_withSameWithdrawalAndDepositAccount_returnsErrorResult() throws Exception {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        mockMvc.perform(post("/transfers")
+                        .with(authentication(authenticationOf(1L)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .header("Account-Password-Auth-Token", "dummy-auth-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(transferRequestJson(101L, "110111111111", 30000L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.status").value("ERROR"))
+                .andExpect(jsonPath("$.data.errorCode").value("TRF0002"));
+    }
+
+    @Test
     @DisplayName("인증 없이 이체를 요청하면 401을 반환한다")
     void execute_withoutAuthentication_returnsUnauthorized() throws Exception {
         mockMvc.perform(post("/transfers")

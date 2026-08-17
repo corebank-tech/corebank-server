@@ -186,6 +186,36 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("출금계좌와 입금계좌가 같으면 한도를 소모하기 전에 TRF0002로 거부되고 transfer 행을 만들지 않는다")
+    void execute_withSameWithdrawalAndDepositAccount_returnsErrorResultWithoutReservingLimit() {
+        // given: 101을 출금·입금 양쪽에 그대로 쓴다. 금액을 1회 한도(1,000만원)보다 크게 잡아,
+        // 한도 검증이 동일계좌 검증보다 먼저 돌면 LMT0002가 나올 걸 TRF0002로 구분해낸다.
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .authToken("dummy-auth-token")
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110111111111")
+                .amount(10_000_001L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build();
+
+        TransferResult result = transferExecutionService.execute(command);
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(TransferErrorCode.SAME_ACCOUNT_TRANSFER.getCode());
+
+        Long transferCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 101", Long.class);
+        assertThat(transferCount).isZero();
+    }
+
+    @Test
     @DisplayName("정기예금 계좌로는 입금할 수 없어 TRF0004로 거부되고 transfer 행을 만들지 않는다")
     void execute_withTimeDepositAsPayeeAccount_returnsErrorResultWithoutCreatingTransferRow() {
         // given: 601은 정기예금(TIME_DEPOSIT) 계좌다. REQ-TRSF-030에 따라 정기적금은 허용되지만

@@ -112,7 +112,13 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             ResolvedPayee payee = accountLockPort.resolvePayeeByAccountNumber(command.depositAccountNumber())
                     .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
 
-            // 1차 검증(락 이전) ③: 입금계좌 상품유형. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을
+            // 1차 검증(락 이전) ③: 동일계좌 이체 거부. 한도 예약(checkAndReserve) 전에 걸러야
+            // 동일계좌 요청이 한도부터 소모하고 나서 거부되는 걸 막을 수 있다.
+            if (command.withdrawalAccountId().equals(payee.accountId())) {
+                throw new BusinessException(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
+            }
+
+            // 1차 검증(락 이전) ④: 입금계좌 상품유형. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을
             // 묶어두는 상품이라 이체로 추가 입금할 수 없다. 정기적금(INSTALLMENT_SAVINGS)은 매달
             // 나눠 넣는 게 상품 목적이라 허용한다(REQ-TRSF-030).
             if (payee.accountType() == LockedAccountType.TIME_DEPOSIT) {
