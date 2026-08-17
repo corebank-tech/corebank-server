@@ -94,13 +94,6 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         // 사전 검증도 이 try 안에 넣어 항상 TransferResult를 반환한다 — 호출자는 예외를 안 던진다고 가정한다.
         Transfer created = null;
         try {
-            // 1차 검증(락 이전) ⓪: 인증 완료 토큰. IMMEDIATE만 authToken이 있으므로(TransferCommand
-            // 계약) SCHEDULED/AUTO(시스템 트리거, 세션 없음)는 이 검증을 건너뛴다.
-            if (command.authToken() != null) {
-                transferAuthTokenVerificationPort.verify(
-                        command.authToken(), command.withdrawalAccountId(), "TRANSFER_EXECUTE");
-            }
-
             // 1차 검증(락 이전) ①: 출금계좌 소유·등록 여부. 존재하지 않는 계좌도 "내 소유가 아님"과
             // 구분하지 않고 같은 TRF0001로 묶는다 — 계좌ID가 이제 HTTP 요청 바디로 들어오므로
             // 계좌 존재 여부를 스캐닝하는 데 악용되지 않도록 한다.
@@ -109,10 +102,17 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     .filter(detail -> detail.customerId().equals(command.customerId()) && detail.withdrawalRegistered())
                     .orElseThrow(() -> new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
 
+            // 1차 검증(락 이전) ②: 인증 완료 토큰. 소유권 검증 뒤로 옮김 — 남의 계좌면 토큰 소비 전에 거부된다.
+            // IMMEDIATE만 authToken이 있으므로 SCHEDULED/AUTO는 건너뛴다.
+            if (command.authToken() != null) {
+                transferAuthTokenVerificationPort.verify(
+                        command.authToken(), command.withdrawalAccountId(), "TRANSFER_EXECUTE");
+            }
+
             ResolvedPayee payee = accountLockPort.resolvePayeeByAccountNumber(command.depositAccountNumber())
                     .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
 
-            // 1차 검증(락 이전) ②: 입금계좌 상품유형. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을
+            // 1차 검증(락 이전) ③: 입금계좌 상품유형. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을
             // 묶어두는 상품이라 이체로 추가 입금할 수 없다. 정기적금(INSTALLMENT_SAVINGS)은 매달
             // 나눠 넣는 게 상품 목적이라 허용한다(REQ-TRSF-030).
             if (payee.accountType() == LockedAccountType.TIME_DEPOSIT) {
