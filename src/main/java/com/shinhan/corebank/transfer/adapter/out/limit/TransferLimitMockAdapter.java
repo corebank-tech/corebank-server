@@ -4,7 +4,6 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.transfer.domain.exception.LimitErrorCode;
 
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,9 +13,9 @@ import org.springframework.stereotype.Component;
  * autotransfer.adapter.out.limit.MockTransferLimitPort와 이름이 같으면 스프링 빈 이름이
  * 단순 클래스명 기준이라 패키지가 달라도 충돌하므로, 이 모듈의 *Adapter 네이밍 컨벤션으로
  * 구분한다.
+ * 이 포트의 다른 구현체가 없어 @Profile로 좁히면 prod 기동이 실패한다 - P1 실구현 전까지 모든 프로필에서 활성화한다.
  */
 @Component
-@Profile({"local", "test", "scratch"})
 public class TransferLimitMockAdapter implements TransferLimitPort {
 
     private static final long ONE_TIME_LIMIT = 10_000_000L;
