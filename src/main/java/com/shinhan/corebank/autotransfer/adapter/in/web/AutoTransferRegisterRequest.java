@@ -4,11 +4,11 @@ import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegiste
 
 import java.time.LocalDate;
 
-public record AutoTransferRegisterRequest (Long customerId, Long withdrawalAccountId, String depositAccountNumber,
+public record AutoTransferRegisterRequest (Long withdrawalAccountId, String depositAccountNumber,
                                            String payeeName, Long amount, Integer cycleMonths, Integer transferDay,
                                            LocalDate startDate, LocalDate endDate, String myPassbookMemo, String recipientPassbookMemo,
                                            String accountPasswordAuthToken  ){
-    public AutoTransferRegisterCommand toCommand(String requestIp) {
+    public AutoTransferRegisterCommand toCommand(String requestIp, Long customerId) {
         return AutoTransferRegisterCommand.builder()
                 .customerId(customerId)
                 .withdrawalAccountId(withdrawalAccountId)
