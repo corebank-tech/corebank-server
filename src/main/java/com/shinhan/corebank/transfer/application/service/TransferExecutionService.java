@@ -18,6 +18,7 @@ import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTrans
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
 import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
+import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.LedgerPair;
 import com.shinhan.corebank.transfer.domain.Transfer;
@@ -54,6 +55,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private static final long FEE = 0L; // 당행 이체 수수료 0 고정 (POL-028)
 
     private final AccountLockPort accountLockPort;
+    private final TransferLimitPort transferLimitPort;
     private final TransferSequencePort transferSequencePort;
     private final TransferSavePort transferSavePort;
     private final LedgerSavePort ledgerSavePort;
@@ -62,6 +64,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
 
     public TransferExecutionService(
             AccountLockPort accountLockPort,
+            TransferLimitPort transferLimitPort,
             TransferSequencePort transferSequencePort,
             TransferSavePort transferSavePort,
             LedgerSavePort ledgerSavePort,
@@ -69,6 +72,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             PlatformTransactionManager transactionManager
     ) {
         this.accountLockPort = accountLockPort;
+        this.transferLimitPort = transferLimitPort;
         this.transferSequencePort = transferSequencePort;
         this.transferSavePort = transferSavePort;
         this.ledgerSavePort = ledgerSavePort;
@@ -124,6 +128,10 @@ public class TransferExecutionService implements TransferExecutionUseCase {
 
         try {
             Transfer completed = requiresNewTransactionTemplate.execute(status -> {
+                // 한도 락을 계좌 락보다 먼저 획득한다(P1-P4 합의: 한도 → 계좌 순서). 위반 시
+                // LMT0002/LMT0003을 던진다 — 여기서 예외가 나면 아래 계좌 락은 아예 시도되지 않는다.
+                transferLimitPort.checkAndReserve(command.customerId(), command.amount());
+
                 // 계좌 락을 transfer 행 INSERT보다 먼저 잡는다. INSERT는 withdrawal_account_id·
                 // deposit_account_id에 FK가 걸려 있어 대상 계좌 행에 공유락을 요구하는데, 그 순서가
                 // lockForTransfer의 오름차순 규칙을 따르지 않는다(선언 순서=출금→입금). INSERT를

@@ -11,6 +11,7 @@ import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
+import com.shinhan.corebank.transfer.domain.exception.LimitErrorCode;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import jakarta.persistence.EntityManager;
@@ -312,6 +313,46 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         Long depositBalance = jdbcTemplate.queryForObject(
                 "SELECT balance FROM account WHERE account_id = 202", Long.class);
         assertThat(depositBalance).isEqualTo(100000L);
+    }
+
+    @Test
+    @DisplayName("1회 이체한도(Mock 고정 상한)를 초과하면 락 획득 후 ERROR로 기록하고 잔액을 반영하지 않는다")
+    void execute_withAmountExceedingOneTimeLimit_recordsErrorTransfer_withoutBalanceChange() {
+        // given: MockTransferLimitPort의 고정 상한(1,000만원)을 넘는 금액으로 요청한다.
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        jdbcTemplate.update("UPDATE account SET balance = 20000000 WHERE account_id = 101");
+
+        TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(10_000_001L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build();
+
+        TransferResult result = transferExecutionService.execute(command);
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(LimitErrorCode.ONE_TIME_LIMIT_EXCEEDED.getCode());
+
+        Map<String, Object> transferRow = jdbcTemplate.queryForMap(
+                "SELECT status, error_code FROM transfer WHERE transaction_number = ?",
+                result.transactionNumber());
+        assertThat(transferRow.get("status")).isEqualTo("ERROR");
+        assertThat(transferRow.get("error_code")).isEqualTo(LimitErrorCode.ONE_TIME_LIMIT_EXCEEDED.getCode());
+
+        Long ledgerCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ledger_entry WHERE transaction_number = ?",
+                Long.class, result.transactionNumber());
+        assertThat(ledgerCount).isZero();
+
+        Long withdrawalBalance = jdbcTemplate.queryForObject(
+                "SELECT balance FROM account WHERE account_id = 101", Long.class);
+        assertThat(withdrawalBalance).isEqualTo(20000000L);
     }
 
     @Test
