@@ -296,6 +296,22 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("다른 고객이 로그인한 상태로 남의 출금계좌로 자동이체를 등록하려 하면 404 + AUT0202를 반환한다 (IDOR 차단)")
+    void register_otherCustomersWithdrawalAccount_returnsAut0202() throws Exception {
+        Long attackerCustomerId = insertCustomer();
+
+        // accountId는 @BeforeEach에서 customerId(피해자) 소유로 만들어짐 — attackerCustomerId 세션으로 그 계좌를 자기 것인 양 등록 시도
+        mockMvc.perform(post("/auto-transfers")
+                        .with(authentication(authenticationOf(attackerCustomerId)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerRequestJson(accountId, "attacker-token")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("AUT0202"));
+    }
+
+    @Test
     @DisplayName("출금계좌ID로 조회하면 등록해둔 자동이체가 목록에 나온다")
     void search_returnsRegisteredAutoTransfers() throws Exception {
         autoTransferJpaRepository.save(autoTransfer(accountId, "110000000001", AutoTransferStatus.NORMAL, 10));
