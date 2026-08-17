@@ -46,9 +46,10 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
     @AfterEach
     void cleanUpCommittedData() {
-        jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202, 501, 502)");
-        jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id IN (101, 999999, 501)");
-        jdbcTemplate.update("DELETE FROM account WHERE account_id IN (501, 502)");
+        jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202, 501, 502, 601)");
+        jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id IN (101, 202, 999999, 501)");
+        jdbcTemplate.update("DELETE FROM account WHERE account_id IN (501, 502, 601)");
+        jdbcTemplate.update("DELETE FROM product WHERE product_id = 701");
         jdbcTemplate.update("UPDATE account SET balance = 100000, status = 'ACTIVE' WHERE account_id IN (101, 202)");
     }
 
@@ -83,9 +84,11 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("존재하지 않는 출금계좌로 이체를 시도하면 ERROR 행조차 남기지 못하고 원래 예외가 그대로 전파된다")
-    void execute_withUnknownWithdrawalAccount_propagatesOriginalException() {
+    @DisplayName("존재하지 않는 출금계좌로 이체를 시도하면 소유권 1차 검증에서 TRF0001로 거부되고 transfer 행을 만들지 않는다")
+    void execute_withUnknownWithdrawalAccount_throwsWithoutCreatingTransferRow() {
         // given: 입금계좌(202)만 존재. 출금계좌 999999는 account 테이블에 아예 없다.
+        // findWithdrawalAccountDetail은 존재하지 않는 계좌를 "내 소유가 아님"과 구분하지 않으므로
+        // 락 획득(lockForTransfer)까지 가지 않고 1차 검증에서 먼저 거부된다.
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 TransferTestFixtures.seedCustomerAndAccounts(entityManager));
 
@@ -100,22 +103,12 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
                 .recipientPassbookMemo("입금메모")
                 .build();
 
-        // when / then: lockForTransfer가 계좌 락 획득 단계에서 먼저 "계좌가 없다"고 판단해
-        // ACCOUNT_LOCK_TARGET_NOT_FOUND를 던진다(정상 흐름에서는 발생 불가능한 불변식 위반).
-        // withdrawal_account_id가 transfer 테이블에 FK(NOT NULL)라 이 계좌로는 ERROR 확정
-        // 행조차 남길 수 없으므로(그 INSERT도 같은 FK 위반), failTransfer는 기록 실패를 삼키지
-        // 않고 원래 예외를 그대로 던지되, 기록 실패 원인(FK 위반)은 suppressed로 함께 남긴다.
         assertThatThrownBy(() -> transferExecutionService.execute(command))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> {
-                    assertThat(((BusinessException) e).getErrorCode())
-                            .isEqualTo(TransferErrorCode.ACCOUNT_LOCK_TARGET_NOT_FOUND);
-                    assertThat(e.getSuppressed())
-                            .as("ERROR 확정 기록 실패(FK 위반) 원인이 유실되지 않고 suppressed로 남아야 한다")
-                            .isNotEmpty();
-                });
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
 
-        // then: transfer 행이 아예 남지 않는다
+        // then: transfer 행이 아예 생기지 않는다
         Long transferCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 999999", Long.class);
         assertThat(transferCount).isZero();
@@ -129,6 +122,108 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         Long depositBalance = jdbcTemplate.queryForObject(
                 "SELECT balance FROM account WHERE account_id = 202", Long.class);
         assertThat(depositBalance).isEqualTo(100000L);
+    }
+
+    @Test
+    @DisplayName("요청자 소유가 아닌 출금계좌로 이체를 시도하면 TRF0001로 거부되고 transfer 행을 만들지 않는다")
+    void execute_withNotOwnedWithdrawalAccount_throwsWithoutCreatingTransferRow() {
+        // given: 출금계좌(101)의 실제 소유자는 customer_id=1이지만, 요청은 customerId=2로 온다.
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        TransferCommand command = TransferCommand.builder()
+                .customerId(2L)
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(30000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build();
+
+        assertThatThrownBy(() -> transferExecutionService.execute(command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
+
+        Long transferCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 101", Long.class);
+        assertThat(transferCount).isZero();
+    }
+
+    @Test
+    @DisplayName("출금계좌로 등록되지 않은 계좌로 이체를 시도하면 TRF0001로 거부되고 transfer 행을 만들지 않는다")
+    void execute_withUnregisteredWithdrawalAccount_throwsWithoutCreatingTransferRow() {
+        // given: 202는 픽스처에서 withdrawal_registered=FALSE로 시드된다. 101로 입금해
+        // 별도 계좌 시드 없이 재사용한다.
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .withdrawalAccountId(202L)
+                .depositAccountNumber("110111111111")
+                .amount(30000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build();
+
+        assertThatThrownBy(() -> transferExecutionService.execute(command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
+
+        Long transferCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 202", Long.class);
+        assertThat(transferCount).isZero();
+    }
+
+    @Test
+    @DisplayName("정기예금 계좌로는 입금할 수 없어 TRF0004로 거부되고 transfer 행을 만들지 않는다")
+    void execute_withTimeDepositAsPayeeAccount_throwsWithoutCreatingTransferRow() {
+        // given: 601은 정기예금(TIME_DEPOSIT) 계좌다. REQ-TRSF-030에 따라 정기적금은 허용되지만
+        // 정기예금은 입금계좌로 지정할 수 없다. product_id는 NOT NULL FK라 최소 상품 행(701)도
+        // 함께 시드한다.
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+            entityManager.createNativeQuery("""
+                INSERT INTO product (product_id, product_code, product_name, product_group, deposit_type,
+                    base_rate, max_rate, min_amount, max_amount, amount_unit, min_term_months, max_term_months,
+                    interest_pay_type, sale_status, created_at, updated_at)
+                VALUES (701, 'TRF-TEST-001', '테스트 정기예금', 'DEPOSIT', 'LUMP_SUM',
+                    2.50, 3.00, 100000, 100000000, 10000, 6, 36,
+                    'SIMPLE', 'ON_SALE', NOW(6), NOW(6))
+                ON DUPLICATE KEY UPDATE product_id = product_id
+                """).executeUpdate();
+            entityManager.createNativeQuery("""
+                INSERT INTO account (account_id, account_number, customer_id, product_id, account_type, balance, status, password_hash, opened_date, maturity_date, created_at, updated_at)
+                VALUES (601, '110666666666', 1, 701, 'TIME_DEPOSIT', 0, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '2026-08-01', '2027-08-01', NOW(6), NOW(6))
+                ON DUPLICATE KEY UPDATE account_type = VALUES(account_type)
+                """).executeUpdate();
+        });
+
+        TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110666666666")
+                .amount(30000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build();
+
+        assertThatThrownBy(() -> transferExecutionService.execute(command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(TransferErrorCode.UNSUPPORTED_ACCOUNT_TYPE));
+
+        Long transferCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 101", Long.class);
+        assertThat(transferCount).isZero();
     }
 
     @Test
@@ -230,9 +325,9 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
             ON DUPLICATE KEY UPDATE customer_id = customer_id
             """);
         jdbcTemplate.update("""
-            INSERT INTO account (account_id, account_number, customer_id, product_id, account_type, balance, status, password_hash, opened_date, created_at, updated_at)
-            VALUES (501, '110777777777', 1, NULL, 'DEMAND_DEPOSIT', 100000, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '2026-08-01', NOW(6), NOW(6)),
-                   (502, '110888888888', 1, NULL, 'DEMAND_DEPOSIT', ?, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '2026-08-01', NOW(6), NOW(6))
+            INSERT INTO account (account_id, account_number, customer_id, product_id, account_type, balance, status, password_hash, withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at)
+            VALUES (501, '110777777777', 1, NULL, 'DEMAND_DEPOSIT', 100000, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', TRUE, NOW(6), '2026-08-01', NOW(6), NOW(6)),
+                   (502, '110888888888', 1, NULL, 'DEMAND_DEPOSIT', ?, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', FALSE, NULL, '2026-08-01', NOW(6), NOW(6))
             ON DUPLICATE KEY UPDATE balance = VALUES(balance)
             """, Long.MAX_VALUE - 500);
 

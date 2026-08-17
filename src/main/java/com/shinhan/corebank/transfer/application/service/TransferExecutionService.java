@@ -13,6 +13,7 @@ import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountStatus;
+import com.shinhan.corebank.transfer.application.port.out.LockedAccountType;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
@@ -82,8 +83,22 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         // 있어 원장·완료 기록에는 락 획득 이후 새로 캡처하는 executedAt을 쓴다.
         LocalDateTime requestedAt = LocalDateTime.now(clock);
 
+        // 1차 검증(락 이전) ①: 출금계좌 소유·등록 여부. 존재하지 않는 계좌도 "내 소유가 아님"과
+        // 구분하지 않고 같은 TRF0001로 묶는다 — 계좌ID가 이제 HTTP 요청 바디로 들어오므로
+        // 계좌 존재 여부를 스캐닝하는 데 악용되지 않도록 한다.
+        accountLockPort.findWithdrawalAccountDetail(command.withdrawalAccountId())
+                .filter(detail -> detail.customerId().equals(command.customerId()) && detail.withdrawalRegistered())
+                .orElseThrow(() -> new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
+
         ResolvedPayee payee = accountLockPort.resolvePayeeByAccountNumber(command.depositAccountNumber())
                 .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
+
+        // 1차 검증(락 이전) ②: 입금계좌 상품유형. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을
+        // 묶어두는 상품이라 이체로 추가 입금할 수 없다. 정기적금(INSTALLMENT_SAVINGS)은 매달
+        // 나눠 넣는 게 상품 목적이라 허용한다(REQ-TRSF-030).
+        if (payee.accountType() == LockedAccountType.TIME_DEPOSIT) {
+            throw new BusinessException(TransferErrorCode.UNSUPPORTED_ACCOUNT_TYPE);
+        }
 
         String transactionNumber =
                 transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), command.channel());
