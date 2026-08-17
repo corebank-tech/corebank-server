@@ -17,6 +17,7 @@ import com.shinhan.corebank.transfer.application.port.out.LockedAccountType;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
+import com.shinhan.corebank.transfer.application.port.out.TransferAuthTokenVerificationPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
@@ -56,6 +57,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
 
     private final AccountLockPort accountLockPort;
     private final TransferLimitPort transferLimitPort;
+    private final TransferAuthTokenVerificationPort transferAuthTokenVerificationPort;
     private final TransferSequencePort transferSequencePort;
     private final TransferSavePort transferSavePort;
     private final LedgerSavePort ledgerSavePort;
@@ -65,6 +67,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     public TransferExecutionService(
             AccountLockPort accountLockPort,
             TransferLimitPort transferLimitPort,
+            TransferAuthTokenVerificationPort transferAuthTokenVerificationPort,
             TransferSequencePort transferSequencePort,
             TransferSavePort transferSavePort,
             LedgerSavePort ledgerSavePort,
@@ -73,6 +76,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     ) {
         this.accountLockPort = accountLockPort;
         this.transferLimitPort = transferLimitPort;
+        this.transferAuthTokenVerificationPort = transferAuthTokenVerificationPort;
         this.transferSequencePort = transferSequencePort;
         this.transferSavePort = transferSavePort;
         this.ledgerSavePort = ledgerSavePort;
@@ -86,6 +90,13 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         // 계좌 락 획득 전 시각이므로 채번(영업일자)에만 쓴다. 락 대기로 실제 처리가 지연될 수
         // 있어 원장·완료 기록에는 락 획득 이후 새로 캡처하는 executedAt을 쓴다.
         LocalDateTime requestedAt = LocalDateTime.now(clock);
+
+        // 1차 검증(락 이전) ⓪: 인증 완료 토큰. IMMEDIATE만 authToken이 있으므로(TransferCommand
+        // 계약) SCHEDULED/AUTO(시스템 트리거, 세션 없음)는 이 검증을 건너뛴다.
+        if (command.authToken() != null) {
+            transferAuthTokenVerificationPort.verify(
+                    command.authToken(), command.withdrawalAccountId(), "TRANSFER_EXECUTE");
+        }
 
         // 1차 검증(락 이전) ①: 출금계좌 소유·등록 여부. 존재하지 않는 계좌도 "내 소유가 아님"과
         // 구분하지 않고 같은 TRF0001로 묶는다 — 계좌ID가 이제 HTTP 요청 바디로 들어오므로

@@ -20,7 +20,8 @@ public record TransferCommand(
     TransferChannel channel,
     String myPassbookMemo,
     String recipientPassbookMemo,
-    Long sourceId // 이체를 발생시킨 원본 거래 역추적 목적으로 사용
+    Long sourceId, // 이체를 발생시킨 원본 거래 역추적 목적으로 사용
+    String authToken // Account-Password-Auth-Token. IMMEDIATE만 필수(REQ-TRSF-009) — SCHEDULED/AUTO는 시스템 트리거라 세션이 없음
 ) {
 
     private static final Pattern ACCOUNT_NUMBER_PATTERN = Pattern.compile("^[0-9]{12}$");
@@ -55,6 +56,12 @@ public record TransferCommand(
         }
         if ((transferType == TransferType.SCHEDULED || transferType == TransferType.AUTO)
                 && sourceId == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        // 즉시 이체만 인증 토큰 필수. 예약/자동 이체는 시스템(배치)이 트리거하므로 실시간
+        // 사용자 세션이 없어 인증 토큰을 받을 수 없다.
+        if (transferType == TransferType.IMMEDIATE && (authToken == null || authToken.isBlank())) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
     }

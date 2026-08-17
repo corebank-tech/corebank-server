@@ -21,6 +21,7 @@ class MockTransferExecutionPortTest {
         // given
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
+                .authToken("dummy-auth-token")
                 .withdrawalAccountId(1L)
                 .depositAccountNumber("123456789012")
                 .transferType(TransferType.IMMEDIATE)
@@ -50,6 +51,7 @@ class MockTransferExecutionPortTest {
         // given
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
+                .authToken("dummy-auth-token")
                 .withdrawalAccountId(1L)
                 .depositAccountNumber("123456789012")
                 .transferType(TransferType.IMMEDIATE)

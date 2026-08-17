@@ -63,6 +63,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
+                .authToken("dummy-auth-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("999999999999")
                 .amount(30000L)
@@ -95,6 +96,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
+                .authToken("dummy-auth-token")
                 .withdrawalAccountId(999999L)
                 .depositAccountNumber("110222222222")
                 .amount(30000L)
@@ -134,6 +136,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
         TransferCommand command = TransferCommand.builder()
                 .customerId(2L)
+                .authToken("dummy-auth-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110222222222")
                 .amount(30000L)
@@ -163,6 +166,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
+                .authToken("dummy-auth-token")
                 .withdrawalAccountId(202L)
                 .depositAccountNumber("110111111111")
                 .amount(30000L)
@@ -208,6 +212,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
+                .authToken("dummy-auth-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110666666666")
                 .amount(30000L)
@@ -237,6 +242,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
+                .authToken("dummy-auth-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110222222222")
                 .amount(30000L)
@@ -281,6 +287,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
+                .authToken("dummy-auth-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110222222222")
                 .amount(30000L)
@@ -325,6 +332,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
+                .authToken("dummy-auth-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110222222222")
                 .amount(10_000_001L)
@@ -374,6 +382,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
 
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
+                .authToken("dummy-auth-token")
                 .withdrawalAccountId(501L)
                 .depositAccountNumber("110888888888")
                 .amount(1000L)

@@ -86,6 +86,22 @@ class TransferCommandTest {
     }
 
     @Test
+    @DisplayName("즉시 이체인데 인증 토큰이 없으면 REQUIRED_FIELD_MISSING 에러가 발생한다.")
+    void immediateTransferWithoutAuthToken_ThrowsException() {
+        assertThatThrownBy(() -> TransferCommand.builder()
+                .customerId(1L)
+                .withdrawalAccountId(1L)
+                .depositAccountNumber("123456789012")
+                .amount(10000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                // authToken 누락
+                .build())
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining(CommonErrorCode.REQUIRED_FIELD_MISSING.getMessage());
+    }
+
+    @Test
     @DisplayName("정상적인 즉시 이체 요청은 예외 없이 생성된다.")
     void validImmediateTransfer_Success() {
         assertDoesNotThrow(() -> TransferCommand.builder()
@@ -95,6 +111,22 @@ class TransferCommandTest {
                 .amount(10000L)
                 .transferType(TransferType.IMMEDIATE)
                 .channel(TransferChannel.WB)
+                .authToken("dummy-auth-token")
+                .build());
+    }
+
+    @Test
+    @DisplayName("자동 이체는 인증 토큰이 없어도 예외 없이 생성된다 (시스템 트리거라 실시간 세션이 없음)")
+    void validAutoTransfer_WithoutAuthToken_Success() {
+        assertDoesNotThrow(() -> TransferCommand.builder()
+                .customerId(1L)
+                .withdrawalAccountId(1L)
+                .depositAccountNumber("123456789012")
+                .amount(10000L)
+                .transferType(TransferType.AUTO)
+                .channel(TransferChannel.BT)
+                .sourceId(100L)
+                // authToken 없음
                 .build());
     }
 }
