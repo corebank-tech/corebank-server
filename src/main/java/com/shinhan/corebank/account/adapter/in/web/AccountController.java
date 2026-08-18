@@ -5,20 +5,15 @@ import com.shinhan.corebank.account.application.port.in.AccountAliasUseCase;
 import com.shinhan.corebank.account.application.port.in.AccountOverviewQueryUseCase;
 import com.shinhan.corebank.account.application.port.in.AccountOverviewResult;
 import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
-import com.shinhan.corebank.common.idempotency.IdempotencyResult;
-import com.shinhan.corebank.common.idempotency.IdempotencyService;
+import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 
-import java.util.function.Supplier;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -30,10 +25,8 @@ public class AccountController {
 
     private final AccountOverviewQueryUseCase accountOverviewQueryUseCase;
     private final CurrentCustomerProvider currentCustomerProvider;
-
     private final AccountAliasUseCase accountAliasUseCase;
-    private final IdempotencyService idempotencyService;
-    private final ObjectMapper objectMapper;
+    private final IdempotentRequestExecutor idempotentRequestExecutor;
 
     @GetMapping
     public ApiResponse<AccountOverviewResponse> getAccounts() {
@@ -71,7 +64,7 @@ public class AccountController {
                         + accountId
                         + "/alias";
 
-        return withIdempotency(
+        return idempotentRequestExecutor.execute(
                 idempotencyKey,
                 customerId,
                 endpoint,
@@ -119,7 +112,7 @@ public class AccountController {
                         + accountId
                         + "/alias";
 
-        return withIdempotency(
+        return idempotentRequestExecutor.execute(
                 idempotencyKey,
                 customerId,
                 endpoint,
@@ -186,86 +179,4 @@ public class AccountController {
 
         return fingerprint;
     }
-
-    private <T> ResponseEntity<ApiResponse<T>>
-    withIdempotency(
-            String idempotencyKey,
-            Long customerId,
-            String endpoint,
-            Object fingerprint,
-            TypeReference<ApiResponse<T>>
-                    responseType,
-            Supplier<ApiResponse<T>> action
-    ) {
-        IdempotencyResult idempotencyResult =
-                idempotencyService.begin(
-                        idempotencyKey,
-                        customerId,
-                        endpoint,
-                        toJson(fingerprint)
-                );
-
-        if (idempotencyResult.replay()) {
-            return ResponseEntity
-                    .status(
-                            idempotencyResult
-                                    .httpStatus()
-                    )
-                    .body(
-                            fromJson(
-                                    idempotencyResult
-                                            .responseSnapshot(),
-                                    responseType
-                            )
-                    );
-        }
-
-        ApiResponse<T> response;
-
-        try {
-            response = action.get();
-        } catch (RuntimeException e) {
-            idempotencyService.release(
-                    idempotencyKey
-            );
-
-            throw e;
-        }
-
-        idempotencyService.complete(
-                idempotencyKey,
-                (short) HttpStatus.OK.value(),
-                toJson(response)
-        );
-
-        return ResponseEntity.ok(response);
-    }
-
-    private String toJson(Object value) {
-        try {
-            return objectMapper
-                    .writeValueAsString(value);
-        } catch (JacksonException e) {
-            throw new IllegalStateException(
-                    "요청/응답을 JSON으로 직렬화하지 못했습니다.",
-                    e
-            );
-        }
-    }
-
-    private <T> T fromJson(
-            String json,
-            TypeReference<T> type
-    ) {
-        try {
-            return objectMapper
-                    .readValue(json, type);
-        } catch (JacksonException e) {
-            throw new IllegalStateException(
-                    "저장된 응답을 역직렬화하지 못했습니다.",
-                    e
-            );
-        }
-    }
-
 }

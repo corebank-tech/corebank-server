@@ -600,6 +600,54 @@ class AccountControllerTest extends IntegrationTestSupport {
                 );
     }
 
+    @Test
+    @DisplayName("CSRF 토큰 없이 계좌별명 변경을 요청하면 403을 반환한다")
+    void rejectAliasChangeWithoutCsrf()
+            throws Exception {
+
+        // given
+        Long customerId =
+                customerTestFixture.createCustomer();
+
+        Account account =
+                createAccount(
+                        customerId,
+                        "088100000038",
+                        null
+                );
+
+        // when & then
+        mockMvc.perform(
+                        put(
+                                "/accounts/{accountId}/alias",
+                                account.getAccountId()
+                        )
+                                .with(authentication(
+                                        authenticationOf(customerId)
+                                ))
+                                // intentionally no csrf()
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey()
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "alias": "생활비"
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(status().isForbidden())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("CMN0102")
+                );
+    }
+
     private Account createDemandDepositAccount(
             Long customerId,
             String accountNumber,
