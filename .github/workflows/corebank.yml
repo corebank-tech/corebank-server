@@ -133,6 +133,17 @@ jobs:
                 - DB_PASSWORD=DB_PASSWORD_PLACEHOLDER
                 - FLYWAY_USER=FLYWAY_USER_PLACEHOLDER
                 - FLYWAY_PASSWORD=FLYWAY_PASSWORD_PLACEHOLDER
+                - REDIS_HOST=corebank-redis
+              networks:
+                - corebank-net
+              depends_on:
+                - corebank-redis
+
+            # 약관 열람 이력 TTL 저장용 Redis (내부 네트워크 전용, 포트 미노출)
+            corebank-redis:
+              image: redis:7.4
+              container_name: corebank-redis
+              restart: unless-stopped
               networks:
                 - corebank-net
 
