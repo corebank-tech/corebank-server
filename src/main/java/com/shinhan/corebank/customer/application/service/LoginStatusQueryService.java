@@ -4,7 +4,8 @@ import com.shinhan.corebank.account.application.port.in.AccountOverviewQueryUseC
 import com.shinhan.corebank.account.application.port.in.AccountOverviewResult;
 import com.shinhan.corebank.customer.application.port.in.LoginStatusQueryUseCase;
 import com.shinhan.corebank.customer.application.port.in.LoginStatusResult;
-import com.shinhan.corebank.customer.application.port.out.LoginHistoryQueryPort;
+import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
+import com.shinhan.corebank.customer.domain.model.Customer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,21 +18,20 @@ import java.util.Objects;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class LoginStatusQueryService implements LoginStatusQueryUseCase {
-    private final LoginHistoryQueryPort loginHistoryQueryPort;
     private final AccountOverviewQueryUseCase accountOverviewQueryUseCase;
+    private final CustomerPersistencePort customerPersistencePort;
 
     @Override
-    public LoginStatusResult getLoginStatus(Long customerId, String currentIp) {
-        LocalDateTime previousLoginAt = loginHistoryQueryPort.findPreviousSuccessfulLogin(customerId).orElse(null);
+    public LoginStatusResult getLoginStatus(Long customerId) {
+        Customer customer = customerPersistencePort.findById(customerId).orElseThrow(()-> new IllegalStateException("로그인 상태 조회 대상 고객이 존재하지 않습니다."));
         LocalDateTime lastTransactionAt = findLastTransactionAt(customerId);
-        return new LoginStatusResult(previousLoginAt, currentIp, lastTransactionAt);
+        return new LoginStatusResult(customer.getPreviousLoginAt(), customer.getLastLoginIp(), lastTransactionAt);
     }
 
     private LocalDateTime findLastTransactionAt(Long customerId) {
         AccountOverviewResult overview = accountOverviewQueryUseCase.getOverview(customerId);
-        return overview.items().stream().flatMap(group -> group.accounts().stream())
+        return overview.items().stream().flatMap(g -> g.accounts().stream())
                 .map(AccountOverviewResult.AccountItem::lastTransactionAt).filter(Objects::nonNull)
-                .max(Comparator.naturalOrder())
-                .orElse(null);
+                .max(Comparator.naturalOrder()).orElse(null);
     }
 }
