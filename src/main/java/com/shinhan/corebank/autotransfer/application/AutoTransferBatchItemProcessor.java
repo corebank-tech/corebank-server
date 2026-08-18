@@ -64,12 +64,12 @@ public class AutoTransferBatchItemProcessor {
 
         if (!result.status().isConfirmed()) {
             throw new IllegalStateException("이체 실행 결과가 PROCESSING으로 미확정 - autoTransferId=%d, date=%s"
-                    .formatted(autoTransfer.getAutoTransferId(),date));
+                    .formatted(autoTransfer.getAutoTransferId(), date));
         }
         if (result.status() == ProcessResultStatus.SUCCESS) {
             processingExecution.markSuccess(result.transactionNumber());
         } else {
-            processingExecution.markError(result.errorMessage());
+            processingExecution.markError(result.errorMessage(), result.transactionNumber());
             log.warn("자동이체 실행 실패 - autoTransferId={}, date={}, errorCode={}, errorMessage={}",
                     autoTransfer.getAutoTransferId(), date, result.errorCode(), result.errorMessage());
         }
@@ -81,9 +81,9 @@ public class AutoTransferBatchItemProcessor {
         }
         autoTransferPersistencePort.save(autoTransfer);
 
-        if (result.status() == ProcessResultStatus.SUCCESS) {
+        if (processingExecution.getTransactionNumber() != null) {
             auditLogService.record(autoTransfer.getCustomerId(), processingExecution.getTransactionNumber(),
-                    AuditEventType.AUTO_TRANSFER, SYSTEM_REQUEST_IP, true,
+                    AuditEventType.AUTO_TRANSFER, SYSTEM_REQUEST_IP, result.status() == ProcessResultStatus.SUCCESS,
                     Map.of("autoTransferId", autoTransfer.getAutoTransferId(), "executionDate", date));
         }
     }
