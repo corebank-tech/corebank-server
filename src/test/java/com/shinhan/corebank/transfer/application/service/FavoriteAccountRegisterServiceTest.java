@@ -10,6 +10,8 @@ import com.shinhan.corebank.transfer.application.port.out.LockedAccountStatus;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountType;
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.domain.FavoriteAccount;
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -55,5 +58,18 @@ class FavoriteAccountRegisterServiceTest {
         assertThat(result.depositAccountNumber()).isEqualTo("110222222222");
         assertThat(result.payeeName()).isEqualTo("홍길동");
         assertThat(result.transferable()).isTrue();
+    }
+
+    @Test
+    @DisplayName("입금계좌를 찾을 수 없으면 TRF0201을 던진다")
+    void register_whenPayeeNotFound_throwsPayeeNotFound() {
+        service = new FavoriteAccountRegisterService(accountLockPort, persistencePort);
+
+        when(accountLockPort.resolvePayeeByAccountNumber("999999999999")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.register(new FavoriteAccountRegisterCommand(1L, "999999999999", null)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(TransferErrorCode.PAYEE_NOT_FOUND));
     }
 }
