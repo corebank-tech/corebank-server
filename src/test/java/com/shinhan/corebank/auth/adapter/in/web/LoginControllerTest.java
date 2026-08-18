@@ -1,5 +1,6 @@
 package com.shinhan.corebank.auth.adapter.in.web;
 
+import com.shinhan.corebank.auth.adapter.in.security.CsrfTokenCookieIssuer;
 import com.shinhan.corebank.auth.adapter.in.security.SecurityConfig;
 import com.shinhan.corebank.auth.adapter.in.security.SessionAccessDeniedHandler;
 import com.shinhan.corebank.auth.adapter.in.security.SessionAuthenticationEntryPoint;
@@ -59,6 +60,9 @@ class LoginControllerTest {
     @MockitoBean
     SessionLoginManager sessionLoginManager;
 
+    @MockitoBean
+    CsrfTokenCookieIssuer csrfTokenCookieIssuer;
+
     @Test
     @DisplayName("로그인 성공 시 고객정보와 세션 만료시각을 반환한다")
     void logsInSuccessfully() throws Exception {
@@ -104,6 +108,10 @@ class LoginControllerTest {
                 any(HttpServletRequest.class),
                 any(HttpServletResponse.class)
         );
+        verify(csrfTokenCookieIssuer).rotate(
+                any(HttpServletRequest.class),
+                any(HttpServletResponse.class)
+        );
     }
 
     @Test
@@ -121,6 +129,10 @@ class LoginControllerTest {
 
         verify(sessionLoginManager, never()).establishSession(
                 any(LoginResult.class),
+                any(HttpServletRequest.class),
+                any(HttpServletResponse.class)
+        );
+        verify(csrfTokenCookieIssuer, never()).rotate(
                 any(HttpServletRequest.class),
                 any(HttpServletResponse.class)
         );
