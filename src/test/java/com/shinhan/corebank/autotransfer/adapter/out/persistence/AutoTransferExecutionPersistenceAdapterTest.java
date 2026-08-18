@@ -124,7 +124,7 @@ class AutoTransferExecutionPersistenceAdapterTest extends IntegrationTestSupport
 
         AutoTransferExecution error = AutoTransferExecution.processing(
                 LocalDate.of(2026, 3, 17), 10000L, LocalDateTime.of(2026, 3, 17, 9, 0));
-        error.markError("잔액 부족");
+        error.markError("잔액 부족", null);
         adapter.save(error, autoTransferId);
 
         List<StuckExecution> result = adapter.findAllProcessing();
