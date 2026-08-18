@@ -4,11 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.autotransfer.application.port.out.StuckExecution;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -106,6 +109,79 @@ class AutoTransferExecutionPersistenceAdapterTest extends IntegrationTestSupport
         assertThatThrownBy(() -> adapter.save(
                 AutoTransferExecution.processing(LocalDate.of(2026, 3, 16), 10000L, LocalDateTime.of(2026, 3, 16, 9, 0)), autoTransferId))
                 .isInstanceOf(RuntimeException.class);
+    }
+
+    @Test
+    @DisplayName("PROCESSING 상태 회차만 반환하고 SUCCESS/ERROR는 제외한다")
+    void findAllProcessing_returnsOnlyProcessingExecutions() {
+        adapter.save(AutoTransferExecution.processing(
+                LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)), autoTransferId);
+
+        AutoTransferExecution success = AutoTransferExecution.processing(
+                LocalDate.of(2026, 3, 16), 10000L, LocalDateTime.of(2026, 3, 16, 9, 0));
+        success.markSuccess("20260316BT0000000001");
+        adapter.save(success, autoTransferId);
+
+        AutoTransferExecution error = AutoTransferExecution.processing(
+                LocalDate.of(2026, 3, 17), 10000L, LocalDateTime.of(2026, 3, 17, 9, 0));
+        error.markError("잔액 부족");
+        adapter.save(error, autoTransferId);
+
+        List<StuckExecution> result = adapter.findAllProcessing();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).execution().getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
+        assertThat(result.get(0).execution().getExecutionDate()).isEqualTo(LocalDate.of(2026, 3, 15));
+        assertThat(result.get(0).autoTransfer().getAutoTransferId()).isEqualTo(autoTransferId);
+    }
+
+    @Test
+    @DisplayName("PROCESSING 상태 회차가 없으면 빈 리스트를 반환한다")
+    void findAllProcessing_noProcessingExecutions_returnsEmpty() {
+        AutoTransferExecution success = AutoTransferExecution.processing(
+                LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0));
+        success.markSuccess("20260315BT0000000001");
+        adapter.save(success, autoTransferId);
+
+        List<StuckExecution> result = adapter.findAllProcessing();
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("서로 다른 자동이체의 PROCESSING 회차가 모두 각자의 AutoTransfer와 함께 반환된다")
+    void findAllProcessing_multipleAutoTransfers_allIncludedWithOwnParent() {
+        Long otherCustomerId = insertCustomer();
+        Long otherAccountId = insertAccount(otherCustomerId);
+        AutoTransferJpaEntity otherEntity = autoTransferJpaRepository.save(AutoTransferJpaEntity.builder()
+                .customerId(otherCustomerId)
+                .withdrawalAccountId(otherAccountId)
+                .depositAccountNumber("110987654322")
+                .payeeName("김철수")
+                .amount(20000L)
+                .cycleMonths(1)
+                .transferDay(15)
+                .startDate(LocalDate.of(2026, 1, 1))
+                .endDate(LocalDate.of(2027, 1, 1))
+                .nextExecutionDate(LocalDate.of(2026, 3, 15))
+                .myPassbookMemo("메모2")
+                .recipientPassbookMemo("받는메모2")
+                .status(AutoTransferStatus.NORMAL)
+                .registeredAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+                .updatedAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+                .build());
+        Long otherAutoTransferId = otherEntity.getAutoTransferId();
+
+        adapter.save(AutoTransferExecution.processing(
+                LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)), autoTransferId);
+        adapter.save(AutoTransferExecution.processing(
+                LocalDate.of(2026, 3, 15), 20000L, LocalDateTime.of(2026, 3, 15, 9, 0)), otherAutoTransferId);
+
+        List<StuckExecution> result = adapter.findAllProcessing();
+
+        assertThat(result).hasSize(2);
+        assertThat(result).extracting(r -> r.autoTransfer().getAutoTransferId())
+                .containsExactlyInAnyOrder(autoTransferId, otherAutoTransferId);
     }
 
     private Long insertCustomer() {

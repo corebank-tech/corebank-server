@@ -14,5 +14,5 @@ public interface AutoTransferExecutionJpaRepository extends JpaRepository<AutoTr
             join fetch e.autoTransfer
             where e.status = :status
             """)
-    List<AutoTransferExecutionJpaEntity> findAllByStatusWithAutoTransfer(@Param("status")ProcessResultStatus processResultStatus);
+    List<AutoTransferExecutionJpaEntity> findAllByStatusWithAutoTransfer(@Param("status")ProcessResultStatus status);
 }
