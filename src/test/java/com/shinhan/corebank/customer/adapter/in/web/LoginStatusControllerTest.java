@@ -31,14 +31,16 @@ class LoginStatusControllerTest extends IntegrationTestSupport {
 
     private static final AtomicLong CUSTOMER_SEQ = new AtomicLong();
     private static final AtomicLong ACCOUNT_SEQ = new AtomicLong();
+    private static final AtomicLong LEDGER_SEQ = new AtomicLong();
 
     @Test
     @DisplayName("직전 로그인 일시·직전 로그인 IP·보유 계좌 중 가장 최근 거래일시를 함께 반환한다")
     void getLoginStatus_returnsPreviousLoginCurrentLoginIpAndLastTransactionAt() throws Exception {
         Long customerId = insertCustomer(LocalDateTime.of(2026, 3, 5, 10, 0), "2.2.2.2");
 
-        insertAccount(customerId, LocalDateTime.of(2026, 3, 1, 8, 0));
-        insertAccount(customerId, LocalDateTime.of(2026, 3, 9, 15, 0)); // 가장 최근 거래
+        Long accountId = insertAccount(customerId);
+        insertLedgerEntry(accountId, LocalDateTime.of(2026, 3, 1, 8, 0));
+        insertLedgerEntry(accountId, LocalDateTime.of(2026, 3, 9, 15, 0)); // 가장 최근 거래
         entityManager.flush();
         entityManager.clear();
 
@@ -95,16 +97,29 @@ class LoginStatusControllerTest extends IntegrationTestSupport {
         return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
     }
 
-    private void insertAccount(Long customerId, LocalDateTime lastTransactionAt) {
+    private Long insertAccount(Long customerId) {
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
         entityManager.createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, "
-                                + "opened_date, last_transaction_at, created_at, updated_at) "
-                                + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', NOW(), "
-                                + ":lastTransactionAt, NOW(), NOW())")
+                                + "opened_date, created_at, updated_at) "
+                                + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', NOW(), NOW(), NOW())")
                 .setParameter("accountNumber", accountNumber)
                 .setParameter("customerId", customerId)
-                .setParameter("lastTransactionAt", lastTransactionAt)
+                .executeUpdate();
+        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+    }
+
+    private void insertLedgerEntry(Long accountId, LocalDateTime occurredAt) {
+        // transaction_number 형식: YYYYMMDD(8) + 채널 영문 2 + 일련 10 = 20자 (ck_le_txno)
+        String transactionNumber = "20260301WB" + String.format("%010d", LEDGER_SEQ.incrementAndGet());
+        entityManager.createNativeQuery(
+                        "INSERT INTO ledger_entry (account_id, transaction_number, direction, amount, balance_after, "
+                                + "transaction_type, channel, occurred_at) "
+                                + "VALUES (:accountId, :transactionNumber, 'WITHDRAWAL', 10000, 100000, "
+                                + "'IMMEDIATE_TRANSFER', 'WB', :occurredAt)")
+                .setParameter("accountId", accountId)
+                .setParameter("transactionNumber", transactionNumber)
+                .setParameter("occurredAt", occurredAt)
                 .executeUpdate();
     }
 }
