@@ -30,8 +30,10 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import org.springframework.dao.OptimisticLockingFailureException;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -119,7 +121,8 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15)).thenReturn(false);
-        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+        when(clock.instant()).thenReturn(Instant.now());
+        when(clock.getZone()).thenReturn(ZoneOffset.UTC);
         // 실제 어댑터는 INSERT 후 채번된 ID로 다시 조립해서 돌려준다 — 감사로그가 autoTransferId를 필요로 하므로 그 동작을 흉내낸다
         when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> {
             AutoTransfer arg = invocation.getArgument(0);
@@ -404,7 +407,8 @@ class AutoTransferCommandServiceTest {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
         when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+        when(clock.instant()).thenReturn(Instant.now());
+        when(clock.getZone()).thenReturn(ZoneOffset.UTC);
 
         autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build());
 

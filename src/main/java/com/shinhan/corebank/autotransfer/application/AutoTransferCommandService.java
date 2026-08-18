@@ -17,7 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Map;
 
 @Service
@@ -29,7 +28,6 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
     private final AccountStatusPort accountStatusPort;
     private final TransferLimitPort transferLimitPort;
     private final AuditLogService auditLogService;
-    private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private final Clock clock;
 
     @Override
@@ -69,7 +67,7 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
 
         AutoTransfer autoTransfer = AutoTransfer.register(command.customerId(), command.withdrawalAccountId(), command.depositAccountNumber(), command.payeeName(),
                 command.amount(), command.cycleMonths(), command.transferDay(), command.startDate(), command.endDate(),
-                command.myPassbookMemo(), command.recipientPassbookMemo(), LocalDateTime.now(clock.withZone(SEOUL)));
+                command.myPassbookMemo(), command.recipientPassbookMemo(), LocalDateTime.now(clock));
 
         AutoTransfer saved = autoTransferPersistencePort.save(autoTransfer);
         auditLogService.record(saved.getCustomerId(), null, AuditEventType.AUTO_TRANSFER_INFO_CHANGE,
@@ -109,7 +107,7 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
                 new BusinessException(AutoTransferErrorCode.NOT_FOUND));
         requireOwned(autoTransfer, command.customerId());
         authTokenVerificationPort.verify(command.accountPasswordAuthToken(), autoTransfer.getWithdrawalAccountId(), "AUTO_TRANSFER_CANCEL");
-        autoTransfer.terminate(LocalDateTime.now(clock.withZone(SEOUL)));
+        autoTransfer.terminate(LocalDateTime.now(clock));
         AutoTransfer saved = autoTransferPersistencePort.save(autoTransfer);
         auditLogService.record(saved.getCustomerId(), null, AuditEventType.AUTO_TRANSFER_INFO_CHANGE,
                 command.requestIp(), true, Map.of("autoTransferId", saved.getAutoTransferId(), "action", "cancel"));
