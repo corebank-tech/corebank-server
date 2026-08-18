@@ -2,6 +2,7 @@ package com.shinhan.corebank.account.domain;
 
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import lombok.Getter;
 
 import java.time.LocalDate;
@@ -177,17 +178,11 @@ public class Account {
     public void changeAlias(String alias) {
         if (alias == null) {
             throw new BusinessException(
-                    AccountErrorCode.INVALID_ACCOUNT_ALIAS
+                    CommonErrorCode.REQUIRED_FIELD_MISSING
             );
         }
 
         String normalizedAlias = alias.strip();
-
-        if (normalizedAlias.isEmpty()) {
-            throw new BusinessException(
-                    AccountErrorCode.INVALID_ACCOUNT_ALIAS
-            );
-        }
 
         validateAlias(normalizedAlias);
 

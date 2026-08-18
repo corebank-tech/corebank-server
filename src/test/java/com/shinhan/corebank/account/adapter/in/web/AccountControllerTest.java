@@ -648,6 +648,92 @@ class AccountControllerTest extends IntegrationTestSupport {
                 );
     }
 
+    @Test
+    @DisplayName("계좌별명이 누락되면 CMN0002를 반환한다")
+    void rejectMissingAlias()
+            throws Exception {
+
+        Long customerId =
+                customerTestFixture.createCustomer();
+
+        Account account =
+                createAccount(
+                        customerId,
+                        "088100000038",
+                        null
+                );
+
+        mockMvc.perform(
+                        put(
+                                "/accounts/{accountId}/alias",
+                                account.getAccountId()
+                        )
+                                .with(authentication(
+                                        authenticationOf(customerId)
+                                ))
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey()
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content("{}")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("CMN0002")
+                );
+    }
+
+    @Test
+    @DisplayName("계좌별명이 공백뿐이면 CMN0002를 반환한다")
+    void rejectBlankAlias()
+            throws Exception {
+
+        Long customerId =
+                customerTestFixture.createCustomer();
+
+        Account account =
+                createAccount(
+                        customerId,
+                        "088100000039",
+                        null
+                );
+
+        mockMvc.perform(
+                        put(
+                                "/accounts/{accountId}/alias",
+                                account.getAccountId()
+                        )
+                                .with(authentication(
+                                        authenticationOf(customerId)
+                                ))
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey()
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                        {
+                                          "alias": "   "
+                                        }
+                                        """
+                                )
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("CMN0002")
+                );
+    }
+
     private Account createDemandDepositAccount(
             Long customerId,
             String accountNumber,

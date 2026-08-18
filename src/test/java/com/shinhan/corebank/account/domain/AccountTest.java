@@ -2,6 +2,7 @@ package com.shinhan.corebank.account.domain;
 
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -739,6 +740,34 @@ class AccountTest {
         assertThat(exception.getErrorCode())
                 .isEqualTo(
                         AccountErrorCode.INVALID_ACCOUNT_ALIAS
+                );
+    }
+
+    @Test
+    @DisplayName("계좌별명이 null이면 필수 입력값 누락 오류가 발생한다")
+    void rejectNullAlias() {
+        // given
+        Account account = Account.open(
+                ACCOUNT_NUMBER,
+                CUSTOMER_ID,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                OPENED_DATE,
+                null
+        );
+
+        // when
+        BusinessException exception =
+                catchThrowableOfType(
+                        () -> account.changeAlias(null),
+                        BusinessException.class
+                );
+
+        // then
+        assertThat(exception.getErrorCode())
+                .isEqualTo(
+                        CommonErrorCode.REQUIRED_FIELD_MISSING
                 );
     }
 }
