@@ -3,9 +3,8 @@ package com.shinhan.corebank.subscription.application;
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.util.MaskingUtil;
-import com.shinhan.corebank.product.application.ProductErrorCode;
+import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import com.shinhan.corebank.product.application.port.in.TermsViewUseCase;
-import com.shinhan.corebank.product.application.port.out.ProductQueryPort;
 import com.shinhan.corebank.product.application.port.out.TermsQueryPort;
 import com.shinhan.corebank.product.application.port.out.TermsSummary;
 import com.shinhan.corebank.product.domain.*;
@@ -32,15 +31,16 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class ProductSubscriptionValidationService implements ProductSubscriptionValidationUseCase {
 
-    private final ProductQueryPort productQueryPort;
+    private final ProductQueryUseCase productQueryUseCase;
     private final AccountLookupPort accountLookupPort;
     private final TermsQueryPort termsQueryPort;
     private final TermsViewUseCase termsViewUseCase;
 
     @Override
     public SubscriptionValidation validate(ProductSubscriptionValidationCommand command) {
-        ProductDetail detail = productQueryPort.findDetailByProductId(command.productId())
-                .orElseThrow(() -> new BusinessException(ProductErrorCode.PRODUCT_NOT_FOUND));
+        // 아웃 포트(ProductQueryPort) 대신 공개된 인 포트로 조회 — PRODUCT_NOT_FOUND 판정을
+        // ProductQueryService.getDetail()과 중복시키지 않고 그쪽 검증 변경에도 자동으로 맞춰간다.
+        ProductDetail detail = productQueryUseCase.getDetail(command.productId());
         Product product = detail.getProduct();
 
         WithdrawableAccount account = accountLookupPort
@@ -51,6 +51,9 @@ public class ProductSubscriptionValidationService implements ProductSubscription
         Integer termMonths = command.termMonths();
         List<SubscriptionViolation> violations = new ArrayList<>();
 
+        if (product.getSaleStatus() != SaleStatus.ON_SALE) {
+            violations.add(new SubscriptionViolation("productId", "판매중인 상품이 아닙니다."));
+        }
         if (subscriptionAmount < product.getMinAmount() || subscriptionAmount > product.getMaxAmount()) {
             violations.add(new SubscriptionViolation(
                     "subscriptionAmount", "가입금액이 상품 한도 범위를 벗어났습니다."));

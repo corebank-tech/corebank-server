@@ -4,7 +4,7 @@ import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.product.application.ProductErrorCode;
 import com.shinhan.corebank.product.application.port.in.TermsViewUseCase;
-import com.shinhan.corebank.product.application.port.out.ProductQueryPort;
+import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import com.shinhan.corebank.product.application.port.out.TermsQueryPort;
 import com.shinhan.corebank.product.application.port.out.TermsSummary;
 import com.shinhan.corebank.product.domain.*;
@@ -32,7 +32,7 @@ import static org.mockito.Mockito.when;
 class ProductSubscriptionValidationServiceTest {
 
     @Mock
-    ProductQueryPort productQueryPort;
+    ProductQueryUseCase productQueryUseCase;
     @Mock
     AccountLookupPort accountLookupPort;
     @Mock
@@ -51,7 +51,8 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("상품이 없으면 PRD0201을 던진다")
     void validate_productNotFound() {
-        when(productQueryPort.findDetailByProductId(PRODUCT_ID)).thenReturn(Optional.empty());
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenThrow(new BusinessException(ProductErrorCode.PRODUCT_NOT_FOUND));
 
         assertThatThrownBy(() -> service.validate(command(500_000L, 12, List.of(), List.of())))
                 .isInstanceOf(BusinessException.class)
@@ -62,8 +63,8 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("출금계좌가 본인 소유·등록 계좌가 아니면 ACC0201을 던진다")
     void validate_accountNotFound() {
-        when(productQueryPort.findDetailByProductId(PRODUCT_ID))
-                .thenReturn(Optional.of(depositDetail(12, "3.20")));
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(depositDetail(12, "3.20"));
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.validate(command(500_000L, 12, List.of(), List.of())))
@@ -75,8 +76,8 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("가입금액이 상품 한도를 벗어나면 valid=false + violations에 담긴다")
     void validate_amountOutOfRange() {
-        when(productQueryPort.findDetailByProductId(PRODUCT_ID))
-                .thenReturn(Optional.of(depositDetail(12, "3.20")));
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(depositDetail(12, "3.20"));
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 100_000_000L)));
 
@@ -92,8 +93,8 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("가입금액이 amountUnit의 배수가 아니면 violations에 담긴다")
     void validate_amountNotUnitMultiple() {
-        when(productQueryPort.findDetailByProductId(PRODUCT_ID))
-                .thenReturn(Optional.of(depositDetail(12, "3.20")));
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(depositDetail(12, "3.20"));
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 100_000_000L)));
 
@@ -107,8 +108,8 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("rate tier에 없는 termMonths를 요청하면 violations에 담긴다")
     void validate_termMonthsNotInTiers() {
-        when(productQueryPort.findDetailByProductId(PRODUCT_ID))
-                .thenReturn(Optional.of(depositDetail(12, "3.20"))); // 12개월 tier만 존재
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(depositDetail(12, "3.20")); // 12개월 tier만 존재
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 100_000_000L)));
 
@@ -121,8 +122,8 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("정기예금은 출금가능금액이 부족하면 violations에 담기고 잔액을 응답에 채운다")
     void validate_deposit_insufficientBalance() {
-        when(productQueryPort.findDetailByProductId(PRODUCT_ID))
-                .thenReturn(Optional.of(depositDetail(12, "3.20")));
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(depositDetail(12, "3.20"));
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 300_000L)));
 
@@ -136,7 +137,7 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("정기적금은 출금계좌 잔액을 검증하지 않고, 응답의 잔액 필드도 null이다")
     void validate_savings_skipsBalanceCheck() {
-        when(productQueryPort.findDetailByProductId(PRODUCT_ID)).thenReturn(Optional.of(savingsDetail(12, "3.20")));
+        when(productQueryUseCase.getDetail(PRODUCT_ID)).thenReturn(savingsDetail(12, "3.20"));
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 0L)));
 
@@ -149,8 +150,8 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("정상 케이스면 valid=true와 함께 만기금액·적용금리를 계산해서 반환한다")
     void validate_success() {
-        when(productQueryPort.findDetailByProductId(PRODUCT_ID))
-                .thenReturn(Optional.of(depositDetail(12, "3.20")));
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(depositDetail(12, "3.20"));
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
 
@@ -167,10 +168,25 @@ class ProductSubscriptionValidationServiceTest {
     }
 
     @Test
+    @DisplayName("판매중지 상품이면 violations에 담긴다")
+    void validate_productNotOnSale() {
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(suspendedDepositDetail());
+        when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
+                .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
+
+        SubscriptionValidation result = service.validate(command(6_000_000L, 12, List.of(), List.of()));
+
+        assertThat(result.isValid()).isFalse();
+        assertThat(result.getViolations())
+                .anySatisfy(v -> assertThat(v.reason()).contains("판매중인 상품이 아닙니다"));
+    }
+
+    @Test
     @DisplayName("필수 약관에 동의하지 않았으면 violations에 담긴다")
     void validate_missingRequiredTermsAgreement() {
-        when(productQueryPort.findDetailByProductId(PRODUCT_ID))
-                .thenReturn(Optional.of(depositDetailWithRequiredTerms()));
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(depositDetailWithRequiredTerms());
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
         when(termsQueryPort.findByIds(List.of(TERMS_ID)))
@@ -188,8 +204,8 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("동의한 약관 버전이 현재 버전과 다르면 violations에 담긴다")
     void validate_termsVersionMismatch() {
-        when(productQueryPort.findDetailByProductId(PRODUCT_ID))
-                .thenReturn(Optional.of(depositDetailWithRequiredTerms()));
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(depositDetailWithRequiredTerms());
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
         // viewRequired=false로 둬서 버전 불일치만 단독으로 확인
@@ -206,8 +222,8 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("열람이 필요한 약관인데 열람 이력이 없으면 violations에 담긴다")
     void validate_termsViewRequiredNotViewed() {
-        when(productQueryPort.findDetailByProductId(PRODUCT_ID))
-                .thenReturn(Optional.of(depositDetailWithRequiredTerms()));
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(depositDetailWithRequiredTerms());
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
         when(termsQueryPort.findByIds(List.of(TERMS_ID)))
@@ -224,8 +240,8 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("satisfiedConditionCodes에 상품의 우대조건 코드가 포함되면 preferentialRate에 합산된다")
     void validate_appliedPreferentialRate() {
-        when(productQueryPort.findDetailByProductId(PRODUCT_ID))
-                .thenReturn(Optional.of(depositDetailWithPreferentialRate("AUTO_TRANSFER", "0.50")));
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(depositDetailWithPreferentialRate("AUTO_TRANSFER", "0.50"));
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
 
@@ -240,8 +256,8 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("satisfiedConditionCodes에 상품에 없는 코드를 보내면 조용히 무시된다")
     void validate_unknownConditionCodeIgnored() {
-        when(productQueryPort.findDetailByProductId(PRODUCT_ID))
-                .thenReturn(Optional.of(depositDetailWithPreferentialRate("AUTO_TRANSFER", "0.50")));
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(depositDetailWithPreferentialRate("AUTO_TRANSFER", "0.50"));
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
 
@@ -263,6 +279,7 @@ class ProductSubscriptionValidationServiceTest {
         Product product = Product.builder()
                 .productId(PRODUCT_ID)
                 .productGroup(ProductGroup.DEPOSIT)
+                .saleStatus(SaleStatus.ON_SALE)
                 .minAmount(100_000L)
                 .maxAmount(50_000_000L)
                 .amountUnit(10_000L)
@@ -281,11 +298,32 @@ class ProductSubscriptionValidationServiceTest {
                 .build();
     }
 
+    private ProductDetail suspendedDepositDetail() {
+        ProductDetail base = depositDetail(12, "3.20");
+        Product suspended = Product.builder()
+                .productId(PRODUCT_ID)
+                .productGroup(ProductGroup.DEPOSIT)
+                .saleStatus(SaleStatus.SUSPENDED)
+                .minAmount(base.getProduct().getMinAmount())
+                .maxAmount(base.getProduct().getMaxAmount())
+                .amountUnit(base.getProduct().getAmountUnit())
+                .minTermMonths(base.getProduct().getMinTermMonths())
+                .maxTermMonths(base.getProduct().getMaxTermMonths())
+                .build();
+        return ProductDetail.builder()
+                .product(suspended)
+                .rateTiers(base.getRateTiers())
+                .preferentialRates(List.of())
+                .terms(List.of())
+                .build();
+    }
+
     private ProductDetail savingsDetail(int termMonths, String rate) {
         ProductDetail deposit = depositDetail(termMonths, rate);
         Product savingsProduct = Product.builder()
                 .productId(PRODUCT_ID)
                 .productGroup(ProductGroup.SAVINGS)
+                .saleStatus(deposit.getProduct().getSaleStatus())
                 .minAmount(deposit.getProduct().getMinAmount())
                 .maxAmount(deposit.getProduct().getMaxAmount())
                 .amountUnit(deposit.getProduct().getAmountUnit())
