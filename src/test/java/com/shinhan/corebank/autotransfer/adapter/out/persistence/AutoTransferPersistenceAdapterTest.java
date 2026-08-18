@@ -3,8 +3,11 @@ package com.shinhan.corebank.autotransfer.adapter.out.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryAggregate;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryRow;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -25,6 +28,9 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
 
     @Autowired
     AutoTransferPersistenceAdapter adapter;
+
+    @Autowired
+    AutoTransferExecutionJpaRepository executionRepository;
 
     @Autowired
     EntityManager entityManager;
@@ -224,6 +230,149 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(result)
                 .extracting(AutoTransfer::getAutoTransferId)
                 .containsExactly(earlier.getAutoTransferId(), later.getAutoTransferId());
+    }
+
+    @Test
+    @DisplayName("조회기간 내 정상/오류 회차만 조회되고, 기간 밖·PROCESSING 회차는 제외된다")
+    void search_executionHistory_filtersByPeriodAndExcludesProcessing() {
+        AutoTransferJpaEntity autoTransfer = repository.save(autoTransfer(accountA, "110000000040", AutoTransferStatus.NORMAL, 10));
+        entityManager.flush();
+
+        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 10), ProcessResultStatus.SUCCESS, 10000L, "TXN0001", null));
+        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 20), ProcessResultStatus.ERROR, 5000L, null, "잔액부족"));
+        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 2, 1), ProcessResultStatus.SUCCESS, 10000L, "TXN0002", null)); // 기간 밖
+        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 15), ProcessResultStatus.PROCESSING, 10000L, null, null)); // 아직 확정 안 됨
+        entityManager.flush();
+        entityManager.clear();
+
+        Page<AutoTransferExecutionHistoryRow> result = adapter.search(customerId, accountA,
+                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), PageRequest.of(0, 10));
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getContent())
+                .extracting(AutoTransferExecutionHistoryRow::status)
+                .containsExactlyInAnyOrder(ProcessResultStatus.SUCCESS, ProcessResultStatus.ERROR);
+        assertThat(result.getContent())
+                .filteredOn(row -> row.status() == ProcessResultStatus.ERROR)
+                .extracting(AutoTransferExecutionHistoryRow::failureReason)
+                .containsExactly("잔액부족");
+    }
+
+    @Test
+    @DisplayName("customerId가 다르면 withdrawalAccountId가 같아도 조회되지 않는다 (타 고객 접근 차단)")
+    void search_executionHistory_customerIdMismatch_returnsEmpty() {
+        AutoTransferJpaEntity autoTransfer = repository.save(autoTransfer(accountA, "110000000041", AutoTransferStatus.NORMAL, 10));
+        entityManager.flush();
+        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 10), ProcessResultStatus.SUCCESS, 10000L, "TXN0003", null));
+        entityManager.flush();
+        entityManager.clear();
+
+        Long otherCustomerId = insertCustomer();
+
+        Page<AutoTransferExecutionHistoryRow> result = adapter.search(otherCustomerId, accountA,
+                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), PageRequest.of(0, 10));
+
+        assertThat(result.getTotalElements()).isZero();
+    }
+
+    @Test
+    @DisplayName("정렬은 실행일자(executionDate) 내림차순이 우선이다 — executedAt이 같아도 executionDate가 늦은 쪽이 먼저 나온다")
+    void search_executionHistory_ordersByExecutionDateDescFirst() {
+        AutoTransferJpaEntity autoTransfer = repository.save(autoTransfer(accountA, "110000000043", AutoTransferStatus.NORMAL, 10));
+        entityManager.flush();
+
+        // uk_ate_dup(auto_transfer_id, execution_date) 제약 때문에 executionDate는 다르게 하고,
+        // executedAt은 같은 값으로 맞춰서 "executionDate만 다른" 상황을 재현한다.
+        LocalDateTime tiedExecutedAt = LocalDateTime.of(2026, 3, 10, 9, 0);
+        AutoTransferExecutionJpaEntity e1 = executionRepository.save(
+                executionWithExecutedAt(autoTransfer, LocalDate.of(2026, 3, 10), tiedExecutedAt, ProcessResultStatus.SUCCESS, 10000L, "TXN0006", null));
+        AutoTransferExecutionJpaEntity e2 = executionRepository.save(
+                executionWithExecutedAt(autoTransfer, LocalDate.of(2026, 3, 11), tiedExecutedAt, ProcessResultStatus.SUCCESS, 10000L, "TXN0007", null));
+        entityManager.flush();
+        entityManager.clear();
+
+        Page<AutoTransferExecutionHistoryRow> result = adapter.search(customerId, accountA,
+                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(AutoTransferExecutionHistoryRow::executionId)
+                .containsExactly(e2.getExecutionId(), e1.getExecutionId());
+    }
+
+    @Test
+    @DisplayName("executionDate가 같으면 executedAt 내림차순으로, 그것도 같으면 executionId 내림차순으로 정렬된다")
+    void search_executionHistory_sameExecutionDate_ordersByExecutedAtThenExecutionId() {
+        // 같은 출금계좌 아래 서로 다른 자동이체 두 건이 같은 날 실행됐지만 실행시각이 다른 상황
+        AutoTransferJpaEntity autoTransferA = repository.save(autoTransfer(accountA, "110000000044", AutoTransferStatus.NORMAL, 12));
+        AutoTransferJpaEntity autoTransferB = repository.save(autoTransfer(accountA, "110000000045", AutoTransferStatus.NORMAL, 13));
+        entityManager.flush();
+
+        LocalDate sameDate = LocalDate.of(2026, 3, 12);
+        AutoTransferExecutionJpaEntity earlier = executionRepository.save(
+                executionWithExecutedAt(autoTransferA, sameDate, sameDate.atTime(9, 0), ProcessResultStatus.SUCCESS, 10000L, "TXN0008", null));
+        AutoTransferExecutionJpaEntity later = executionRepository.save(
+                executionWithExecutedAt(autoTransferB, sameDate, sameDate.atTime(15, 0), ProcessResultStatus.SUCCESS, 10000L, "TXN0009", null));
+        entityManager.flush();
+        entityManager.clear();
+
+        Page<AutoTransferExecutionHistoryRow> result = adapter.search(customerId, accountA,
+                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(AutoTransferExecutionHistoryRow::executionId)
+                .containsExactly(later.getExecutionId(), earlier.getExecutionId());
+    }
+
+    @Test
+    @DisplayName("정상/오류 처리 건수·금액을 정확히 집계하고 PROCESSING은 집계에서 제외한다")
+    void summarize_aggregatesSuccessAndErrorExcludingProcessing() {
+        AutoTransferJpaEntity autoTransfer = repository.save(autoTransfer(accountA, "110000000042", AutoTransferStatus.NORMAL, 10));
+        entityManager.flush();
+
+        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 5), ProcessResultStatus.SUCCESS, 10000L, "TXN0004", null));
+        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 10), ProcessResultStatus.SUCCESS, 20000L, "TXN0005", null));
+        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 15), ProcessResultStatus.ERROR, 5000L, null, "잔액부족"));
+        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 20), ProcessResultStatus.PROCESSING, 7000L, null, null));
+        entityManager.flush();
+        entityManager.clear();
+
+        AutoTransferExecutionHistoryAggregate result = adapter.summarize(customerId, accountA,
+                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31));
+
+        assertThat(result.successCount()).isEqualTo(2);
+        assertThat(result.successAmount()).isEqualTo(30000L);
+        assertThat(result.errorCount()).isEqualTo(1);
+        assertThat(result.errorAmount()).isEqualTo(5000L);
+    }
+
+    @Test
+    @DisplayName("일치하는 회차가 없으면 집계는 전부 0이다")
+    void summarize_noMatches_returnsZeros() {
+        AutoTransferExecutionHistoryAggregate result = adapter.summarize(customerId, accountA,
+                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31));
+
+        assertThat(result.successCount()).isZero();
+        assertThat(result.successAmount()).isZero();
+        assertThat(result.errorCount()).isZero();
+        assertThat(result.errorAmount()).isZero();
+    }
+
+    private AutoTransferExecutionJpaEntity execution(AutoTransferJpaEntity autoTransfer, LocalDate executionDate,
+            ProcessResultStatus status, Long amount, String transactionNumber, String failureReason) {
+        return executionWithExecutedAt(autoTransfer, executionDate, executionDate.atStartOfDay(), status, amount, transactionNumber, failureReason);
+    }
+
+    private AutoTransferExecutionJpaEntity executionWithExecutedAt(AutoTransferJpaEntity autoTransfer, LocalDate executionDate,
+            LocalDateTime executedAt, ProcessResultStatus status, Long amount, String transactionNumber, String failureReason) {
+        return AutoTransferExecutionJpaEntity.builder()
+                .autoTransfer(autoTransfer)
+                .executionDate(executionDate)
+                .amount(amount)
+                .status(status)
+                .transactionNumber(transactionNumber)
+                .failureReason(failureReason)
+                .executedAt(executedAt)
+                .build();
     }
 
     private AutoTransferJpaEntity autoTransferDue(Long withdrawalAccountId, String depositAccountNumber, AutoTransferStatus status, LocalDate nextExecutionDate) {

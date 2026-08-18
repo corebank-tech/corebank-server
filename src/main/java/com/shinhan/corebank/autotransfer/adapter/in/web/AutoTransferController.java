@@ -20,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -35,6 +36,7 @@ public class AutoTransferController {
     private final AutoTransferChangeUseCase autoTransferChangeUseCase;
     private final AutoTransferCancelUseCase autoTransferCancelUseCase;
     private final CurrentCustomerProvider currentCustomerProvider;
+    private final AutoTransferExecutionHistoryQueryUseCase autoTransferExecutionHistoryQueryUseCase;
 
     @PostMapping
     // 멱등성 확인 후, 재요청 -> 저장된 응답, 신규 요청 -> 등록
@@ -187,6 +189,20 @@ public class AutoTransferController {
         } catch (JacksonException e) {
             throw new IllegalStateException("저장된 응답을 역직렬화하지 못했습니다.", e);
         }
+    }
+
+    // 결과조회
+    @GetMapping("/executions")
+    public ApiResponse<AutoTransferExecutionHistoryPageResponse> searchExecutionHistory(
+            @RequestParam Long withdrawalAccountId,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
+        AutoTransferExecutionHistoryResult result = autoTransferExecutionHistoryQueryUseCase.search(
+                customerId, withdrawalAccountId, fromDate, toDate, page, size);
+        return ApiResponse.success(AutoTransferExecutionHistoryPageResponse.from(result));
     }
 
 }
