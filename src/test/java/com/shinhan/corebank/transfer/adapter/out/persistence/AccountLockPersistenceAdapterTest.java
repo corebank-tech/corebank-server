@@ -189,6 +189,33 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("applyTransfer 호출 시 전달한 executedAt으로 출금/입금 계좌의 last_transaction_at이 갱신된다")
+    void applyTransfer_updatesLastTransactionAt_forBothAccounts() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        LockedAccountsForTransfer locked = adapter.lockForTransfer(101L, 202L);
+        LocalDateTime executedAt = LocalDateTime.of(2026, 8, 18, 10, 30, 0);
+
+        // when
+        adapter.applyTransfer(locked, 30000L, executedAt);
+        entityManager.flush();
+        entityManager.clear();
+
+        // then
+        LocalDateTime withdrawalLastTransactionAt = (LocalDateTime) entityManager
+                .createNativeQuery("SELECT last_transaction_at FROM account WHERE account_id = 101")
+                .getSingleResult();
+        LocalDateTime depositLastTransactionAt = (LocalDateTime) entityManager
+                .createNativeQuery("SELECT last_transaction_at FROM account WHERE account_id = 202")
+                .getSingleResult();
+        assertThat(withdrawalLastTransactionAt).isEqualTo(executedAt);
+        assertThat(depositLastTransactionAt).isEqualTo(executedAt);
+    }
+
+    @Test
     @DisplayName("applyTransfer 이후 출금/입금 계좌 모두 version이 1씩 증가한다")
     void applyTransfer_incrementsVersionForBothAccounts() {
         // given
