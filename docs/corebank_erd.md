@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 24 테이블 / 금액 BIGINT · 시각 DATETIME(6) UTC
+> **DBMS**: MySQL 8.4 / 25 테이블 / 금액 BIGINT · 시각 DATETIME(6) UTC
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -9,7 +9,7 @@
 erDiagram
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 24 테이블 / 금액 BIGINT · 시각 DATETIME(6) UTC
+    %% MySQL 8.4 / 25 테이블 / 금액 BIGINT · 시각 DATETIME(6) UTC
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -160,6 +160,14 @@ erDiagram
         bigint customer_id PK
         date usage_date PK "KST 기준 영업일"
         bigint used_amount "SUCCESS 확정 건만 합산"
+    }
+    transfer_limit_history {
+        bigint history_id PK "AUTO_INCREMENT"
+        bigint customer_id FK
+        bigint before_one_time_limit "변경 전 1회 한도"
+        bigint after_one_time_limit "변경 후 1회 한도"
+        bigint before_daily_limit "변경 전 1일 한도"
+        bigint after_daily_limit "변경 후 1일 한도"
     }
 
     %% ---------- P3 ----------
@@ -323,6 +331,7 @@ erDiagram
     customer ||--o{ favorite_account : "등록"
     customer ||--o| transfer_limit : "한도보유"
     customer ||--o{ transfer_limit_daily_usage : "일별사용"
+    customer ||--o{ transfer_limit_history : "한도변경이력"
     customer ||--o{ product_subscription : "가입"
     product ||--o{ product_subscription : "가입대상"
     account ||--o| product_subscription : "개설계좌"

@@ -49,7 +49,7 @@ spring.flyway.clean-disabled: true
 
 ---
 
-## 3. 규칙 4가지
+## 3. 규칙 5가지
 
 **① 적용된 `V` 파일은 절대 수정하지 않습니다.**
 변경은 새 파일에 `ALTER`로 씁니다.
@@ -68,6 +68,23 @@ ALTER TABLE account ADD COLUMN nickname VARCHAR(30) NULL COMMENT '별칭';
 **④ 시드 데이터 분리 (V__ vs R__)**
 이력 보존이 필수적인 데이터(예: 약관)나 보안 분리가 필요한 데이터는 **새 `V__` 파일에 `INSERT`** 방식으로 누적해야 합니다.
 `R__` 스크립트는 체크섬이 바뀌면 전체가 재실행되므로, 과거 이력을 훼손하지 않는 **순수 교체 가능한 마스터 데이터(예: 공통 코드, 단순 상품 마스터)** 시딩에만 사용해야 합니다. (작성 시 `ON DUPLICATE KEY UPDATE` 패턴 유지)
+
+**⑤ 한 `V` 파일은 한 테이블만 다룹니다.**
+MySQL은 DDL이 **암묵적 커밋**이라 실패해도 롤백되지 않습니다. 여러 테이블을 한 파일에 묶으면 중간에 실패했을 때 앞 테이블은 이미 변경된 채로 남고, Flyway는 그 마이그레이션을 실패로 기록합니다. 재시도해도 앞부분이 `Duplicate column name` 등으로 다시 실패하므로 수동 복구가 필요합니다.
+
+```sql
+-- ❌ 한 파일에서 두 테이블
+ALTER TABLE transfer_limit             ADD COLUMN created_at DATETIME(6) NULL;
+ALTER TABLE transfer_limit_daily_usage ADD COLUMN created_at DATETIME(6) NULL;  -- 여기서 실패하면 위는 남는다
+
+-- ✅ 테이블별로 파일 분리
+-- V202608181253__add_created_at_to_transfer_limit.sql
+-- V202608181254__add_created_at_to_transfer_limit_daily_usage.sql
+```
+
+한 파일 안의 여러 문장(`ALTER` → `UPDATE` → `ALTER`)도 같은 이유로 부분 적용될 수 있습니다. 파일 분리는 이를 **한 테이블 범위로 좁히는 완화책**이며 부분 적용 자체를 막지는 못하므로, 문장 수는 최소로 유지합니다.
+
+> 이 규칙 이전에 작성된 파일은 **①(체크섬 불변)이 우선**하므로 그대로 둡니다. 소급 분리하지 마십시오.
 
 ---
 
