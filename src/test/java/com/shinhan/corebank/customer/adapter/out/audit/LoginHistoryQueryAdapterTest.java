@@ -6,7 +6,6 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogJpaEntity;
 import com.shinhan.corebank.common.audit.AuditLogJpaRepository;
-import com.shinhan.corebank.customer.application.port.out.PreviousLoginRecord;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -28,7 +27,7 @@ class LoginHistoryQueryAdapterTest extends IntegrationTestSupport {
     EntityManager entityManager;
 
     @Test
-    @DisplayName("로그인 성공 기록이 2건 이상이면, 가장 최근(이번 로그인)이 아니라 그 직전 기록을 반환한다")
+    @DisplayName("로그인 성공 기록이 2건 이상이면, 가장 최근(이번 로그인)이 아니라 그 직전 기록의 일시를 반환한다")
     void findPreviousSuccessfulLogin_returnsSecondMostRecentSuccess() {
         Long customerId = 1L;
         saveLogin(customerId, true, "1.1.1.1", LocalDateTime.of(2026, 3, 1, 9, 0));
@@ -37,11 +36,9 @@ class LoginHistoryQueryAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        Optional<PreviousLoginRecord> result = adapter.findPreviousSuccessfulLogin(customerId);
+        Optional<LocalDateTime> result = adapter.findPreviousSuccessfulLogin(customerId);
 
-        assertThat(result).isPresent();
-        assertThat(result.get().loginAt()).isEqualTo(LocalDateTime.of(2026, 3, 5, 10, 0));
-        assertThat(result.get().loginIp()).isEqualTo("2.2.2.2");
+        assertThat(result).contains(LocalDateTime.of(2026, 3, 5, 10, 0));
     }
 
     @Test
@@ -52,7 +49,7 @@ class LoginHistoryQueryAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        Optional<PreviousLoginRecord> result = adapter.findPreviousSuccessfulLogin(customerId);
+        Optional<LocalDateTime> result = adapter.findPreviousSuccessfulLogin(customerId);
 
         assertThat(result).isEmpty();
     }
@@ -60,7 +57,7 @@ class LoginHistoryQueryAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("로그인 기록이 아예 없으면 빈 Optional을 반환한다")
     void findPreviousSuccessfulLogin_noLogins_returnsEmpty() {
-        Optional<PreviousLoginRecord> result = adapter.findPreviousSuccessfulLogin(999L);
+        Optional<LocalDateTime> result = adapter.findPreviousSuccessfulLogin(999L);
 
         assertThat(result).isEmpty();
     }
@@ -75,10 +72,9 @@ class LoginHistoryQueryAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        Optional<PreviousLoginRecord> result = adapter.findPreviousSuccessfulLogin(customerId);
+        Optional<LocalDateTime> result = adapter.findPreviousSuccessfulLogin(customerId);
 
-        assertThat(result).isPresent();
-        assertThat(result.get().loginIp()).isEqualTo("1.1.1.1");
+        assertThat(result).contains(LocalDateTime.of(2026, 3, 1, 9, 0));
     }
 
     @Test
@@ -92,7 +88,7 @@ class LoginHistoryQueryAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        Optional<PreviousLoginRecord> result = adapter.findPreviousSuccessfulLogin(customerId);
+        Optional<LocalDateTime> result = adapter.findPreviousSuccessfulLogin(customerId);
 
         assertThat(result).isEmpty();
     }

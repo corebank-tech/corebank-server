@@ -4,6 +4,7 @@ import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.customer.application.port.in.LoginStatusQueryUseCase;
 import com.shinhan.corebank.customer.application.port.in.LoginStatusResult;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,9 +18,10 @@ public class LoginStatusController {
     private final CurrentCustomerProvider currentCustomerProvider;
 
     @GetMapping("/login-status")
-    public ApiResponse<LoginStatusResponse> getLoginStatus() {
+    public ApiResponse<LoginStatusResponse> getLoginStatus(HttpServletRequest httpRequest) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
-        LoginStatusResult result = loginStatusQueryUseCase.getLoginStatus(customerId);
+        String currentIp = httpRequest.getRemoteAddr();
+        LoginStatusResult result = loginStatusQueryUseCase.getLoginStatus(customerId, currentIp);
 
         return ApiResponse.success(LoginStatusResponse.from(result));
     }

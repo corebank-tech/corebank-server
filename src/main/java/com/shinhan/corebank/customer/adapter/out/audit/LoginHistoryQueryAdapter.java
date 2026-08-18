@@ -4,9 +4,9 @@ import com.querydsl.core.types.Projections;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.customer.application.port.out.LoginHistoryQueryPort;
-import com.shinhan.corebank.customer.application.port.out.PreviousLoginRecord;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static com.shinhan.corebank.common.audit.QAuditLogJpaEntity.auditLogJpaEntity;
@@ -20,9 +20,9 @@ public class LoginHistoryQueryAdapter implements LoginHistoryQueryPort {
     }
 
     @Override
-    public Optional<PreviousLoginRecord> findPreviousSuccessfulLogin(Long customerId) {
-        PreviousLoginRecord previous = queryFactory
-                .select(Projections.constructor(PreviousLoginRecord.class, auditLogJpaEntity.requestedAt, auditLogJpaEntity.requestIp))
+    public Optional<LocalDateTime> findPreviousSuccessfulLogin(Long customerId) {
+        LocalDateTime previous = queryFactory
+                .select(auditLogJpaEntity.requestedAt)
                 .from(auditLogJpaEntity)
                 .where(auditLogJpaEntity.customerId.eq(customerId), auditLogJpaEntity.eventType.eq(AuditEventType.LOGIN.name()), auditLogJpaEntity.result.eq("SUCCESS"))
                 .orderBy(auditLogJpaEntity.requestedAt.desc(), auditLogJpaEntity.auditLogId.desc())

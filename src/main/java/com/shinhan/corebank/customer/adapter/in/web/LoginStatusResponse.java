@@ -4,8 +4,8 @@ import com.shinhan.corebank.customer.application.port.in.LoginStatusResult;
 
 import java.time.LocalDateTime;
 
-public record LoginStatusResponse(LocalDateTime previousLoginAt, String previousLoginIp) {
+public record LoginStatusResponse(LocalDateTime previousLoginAt, String currentIp, LocalDateTime lastTransactionAt) {
     public static LoginStatusResponse from(LoginStatusResult result) {
-        return new LoginStatusResponse(result.previousLoginAt(), result.previousLoginIp());
+        return new LoginStatusResponse(result.previousLoginAt(), result.currentIp(), result.lastTransactionAt());
     }
 }

@@ -2,5 +2,6 @@ package com.shinhan.corebank.customer.application.port.in;
 
 import java.time.LocalDateTime;
 
-public record LoginStatusResult(LocalDateTime previousLoginAt, String previousLoginIp) {
+// 대시보드 접속현황에 표시할 값
+public record LoginStatusResult(LocalDateTime previousLoginAt, String currentIp, LocalDateTime lastTransactionAt) {
 }
