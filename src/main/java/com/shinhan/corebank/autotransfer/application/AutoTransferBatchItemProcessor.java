@@ -13,7 +13,6 @@ import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
-import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +25,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -38,6 +38,8 @@ public class AutoTransferBatchItemProcessor {
 
     // 배치는 HTTP 요청이 아니라 클라이언트 IP가 없다 - "서버 자신이 트리거함"을 나타내는 관용적 루프백 주소.
     private static final String SYSTEM_REQUEST_IP = "127.0.0.1";
+    private static final int CONSECUTIVE_FAILURE_THRESHOLD = 3;
+
 
     private final AutoTransferExecutionPersistencePort autoTransferExecutionPersistencePort;
     private final AutoTransferPersistencePort autoTransferPersistencePort;
@@ -115,6 +117,17 @@ public class AutoTransferBatchItemProcessor {
         }
 
         autoTransferExecutionPersistencePort.save(execution, autoTransfer.getAutoTransferId());
+
+        if (execution.getStatus() == ProcessResultStatus.ERROR) {
+            List<AutoTransferExecution> recent = autoTransferExecutionPersistencePort
+                    .findRecentByAutoTransferId(autoTransfer.getAutoTransferId(), CONSECUTIVE_FAILURE_THRESHOLD);
+            boolean allFailed = recent.size() == CONSECUTIVE_FAILURE_THRESHOLD
+                    && recent.stream().allMatch(e -> e.getStatus() == ProcessResultStatus.ERROR);
+            if (allFailed) {
+                log.warn("자동이체 연속 실패 감지 - autoTransferId={}, 연속실패건수={}",
+                        autoTransfer.getAutoTransferId(), CONSECUTIVE_FAILURE_THRESHOLD);
+            }
+        }
 
         autoTransfer.advanceNextExecutionDate();
         if(autoTransfer.getNextExecutionDate().isAfter(autoTransfer.getEndDate())) {

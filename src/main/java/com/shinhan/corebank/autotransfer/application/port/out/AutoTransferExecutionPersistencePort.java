@@ -15,4 +15,7 @@ public interface AutoTransferExecutionPersistencePort {
 
     // 재확정 배치 대상 - PROCESSING 상태로 멈춰있는 회차 전체 ( 부모 AutoTransfer 포함 )
     List<StuckExecution> findAllProcessing();
+
+    // 연속 실패 감지용 - 자동이체의 최근 실행이력을 최신순으로 limit개만 조회
+    List<AutoTransferExecution> findRecentByAutoTransferId(Long autoTransferId, int limit);
 }

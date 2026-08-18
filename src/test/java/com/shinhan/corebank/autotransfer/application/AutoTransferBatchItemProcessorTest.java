@@ -33,7 +33,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -47,6 +50,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 그 안에서 일어난 REQUIRES_NEW 커밋이 진짜 영구적인지 확인할 수 없다(테스트 종료 시 다 같이
  * 롤백돼버리면 구분이 안 됨). 대신 각 테스트 끝나고 수동으로 정리한다.
  */
+@ExtendWith(OutputCaptureExtension.class)
 class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
     @Autowired
@@ -571,6 +575,49 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
         var autoTransferAfter = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
         assertThat(autoTransferAfter.getStatus()).isEqualTo(AutoTransferStatus.EXPIRED);
+    }
+
+    @Test
+    @DisplayName("같은 자동이체가 재확정으로 3회 연속 ERROR가 되면 WARN 로그를 남긴다")
+    void reconcileStuckExecution_threeConsecutiveFailures_logsWarn(CapturedOutput output) {
+        when(transferLookupPort.findBySourceAndDate(any(), any())).thenReturn(Optional.empty());
+
+        reconcileOnDate(today.minusDays(2));
+        reconcileOnDate(today.minusDays(1));
+        reconcileOnDate(today);
+
+        assertThat(output).contains("자동이체 연속 실패 감지").contains("autoTransferId=" + autoTransferId);
+    }
+
+    @Test
+    @DisplayName("최근 3건 중 하나라도 SUCCESS면 연속 실패로 보지 않고 WARN 로그를 남기지 않는다")
+    void reconcileStuckExecution_notAllRecentFailed_doesNotLogWarn(CapturedOutput output) {
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today.minusDays(2)))
+                .thenReturn(Optional.of(new TransferLookupResult("20260313BT0000000001", ProcessResultStatus.SUCCESS, null)));
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today.minusDays(1))).thenReturn(Optional.empty());
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today)).thenReturn(Optional.empty());
+
+        reconcileOnDate(today.minusDays(2));
+        reconcileOnDate(today.minusDays(1));
+        reconcileOnDate(today);
+
+        assertThat(output).doesNotContain("자동이체 연속 실패 감지");
+    }
+
+    // autoTransfer()는 version을 0L로 고정해서 반환하는데, reconcileStuckExecution()이
+    // 매번 autoTransferPersistencePort.save()로 버전을 올리기 때문에 이 헬퍼를 여러 번
+    // 부르는 테스트(연속 실패 시나리오)에서는 DB의 최신 버전을 매번 다시 읽어와야 한다.
+    private void reconcileOnDate(LocalDate date) {
+        AutoTransferJpaEntity entity = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        AutoTransfer current = AutoTransfer.reconstitute(
+                autoTransferId, customerId, entity.getWithdrawalAccountId(),
+                "110987654321", "홍길동", 10000L, 1, 15,
+                LocalDate.of(2026, 1, 1), endDate, entity.getNextExecutionDate(),
+                "메모", "받는메모", entity.getStatus(),
+                LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0), entity.getVersion());
+
+        AutoTransferExecution saved = itemProcessor.saveProcessing(current, date);
+        itemProcessor.reconcileStuckExecution(new StuckExecution(current, saved));
     }
 
     private Long insertCustomer() {

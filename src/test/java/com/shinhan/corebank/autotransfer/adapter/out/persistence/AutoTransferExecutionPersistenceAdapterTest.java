@@ -184,6 +184,28 @@ class AutoTransferExecutionPersistenceAdapterTest extends IntegrationTestSupport
                 .containsExactlyInAnyOrder(autoTransferId, otherAutoTransferId);
     }
 
+    @Test
+    @DisplayName("findRecentByAutoTransferId()는 실행일 최신순으로 limit개만 반환한다")
+    void findRecentByAutoTransferId_returnsMostRecentLimitedByCount() {
+        adapter.save(AutoTransferExecution.processing(
+                LocalDate.of(2026, 3, 12), 10000L, LocalDateTime.of(2026, 3, 12, 9, 0)), autoTransferId);
+        adapter.save(AutoTransferExecution.processing(
+                LocalDate.of(2026, 3, 13), 10000L, LocalDateTime.of(2026, 3, 13, 9, 0)), autoTransferId);
+        adapter.save(AutoTransferExecution.processing(
+                LocalDate.of(2026, 3, 14), 10000L, LocalDateTime.of(2026, 3, 14, 9, 0)), autoTransferId);
+        adapter.save(AutoTransferExecution.processing(
+                LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)), autoTransferId);
+
+        List<AutoTransferExecution> result = adapter.findRecentByAutoTransferId(autoTransferId, 3);
+
+        assertThat(result).hasSize(3);
+        assertThat(result).extracting(AutoTransferExecution::getExecutionDate)
+                .containsExactly(
+                        LocalDate.of(2026, 3, 15),
+                        LocalDate.of(2026, 3, 14),
+                        LocalDate.of(2026, 3, 13));
+    }
+
     private Long insertCustomer() {
         long seq = CUSTOMER_SEQ.incrementAndGet();
         String userId = "u" + seq;

@@ -5,6 +5,7 @@ import com.shinhan.corebank.autotransfer.application.port.out.StuckExecution;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -30,5 +31,11 @@ public class AutoTransferExecutionPersistenceAdapter implements AutoTransferExec
                         AutoTransferExecutionMapper.toDomain(entity)))
                 .toList();
 
+    }
+    @Override
+    public List<AutoTransferExecution> findRecentByAutoTransferId(Long autoTransferId, int limit) {
+        return autoTransferExecutionJpaRepository.findRecentByAutoTransferId(autoTransferId, PageRequest.of(0, limit)).stream()
+                .map(AutoTransferExecutionMapper::toDomain)
+                .toList();
     }
 }
