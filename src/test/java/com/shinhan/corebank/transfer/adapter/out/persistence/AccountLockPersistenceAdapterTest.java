@@ -1,13 +1,17 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.transfer.application.port.out.LockedAccountStatus;
+import com.shinhan.corebank.transfer.application.port.out.LockedAccountType;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
+import com.shinhan.corebank.transfer.application.port.out.WithdrawalAccountDetail;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import jakarta.persistence.EntityManager;
@@ -40,7 +44,26 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
         Optional<ResolvedPayee> resolved = adapter.resolvePayeeByAccountNumber("110222222222");
 
         // then
-        assertThat(resolved).contains(new ResolvedPayee(202L, "테스터"));
+        assertThat(resolved).contains(
+                new ResolvedPayee(202L, "테스터", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE));
+    }
+
+    @Test
+    @DisplayName("입금계좌가 정지 상태이면 상태값도 함께 조회된다")
+    void resolvePayeeByAccountNumber_returnsSuspendedStatus() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.createNativeQuery("UPDATE account SET status = 'SUSPENDED' WHERE account_id = 202")
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        Optional<ResolvedPayee> resolved = adapter.resolvePayeeByAccountNumber("110222222222");
+
+        // then
+        assertThat(resolved).contains(
+                new ResolvedPayee(202L, "테스터", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.SUSPENDED));
     }
 
     @Test
@@ -56,6 +79,46 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
 
         // then
         assertThat(resolved).isEmpty();
+    }
+
+    @Test
+    @DisplayName("출금계좌 ID로 소유자·출금계좌 등록 여부를 조회한다")
+    void findWithdrawalAccountDetail_returnsCustomerIdAndRegistrationStatus() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        Optional<WithdrawalAccountDetail> detail = adapter.findWithdrawalAccountDetail(101L);
+
+        // then
+        assertThat(detail).contains(new WithdrawalAccountDetail(101L, 1L, true));
+    }
+
+    @Test
+    @DisplayName("출금계좌로 등록되지 않은 계좌는 withdrawalRegistered=false로 조회된다")
+    void findWithdrawalAccountDetail_returnsFalse_whenNotRegisteredAsWithdrawalAccount() {
+        // given: 202는 픽스처에서 출금계좌로 등록되지 않음
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        Optional<WithdrawalAccountDetail> detail = adapter.findWithdrawalAccountDetail(202L);
+
+        // then
+        assertThat(detail).contains(new WithdrawalAccountDetail(202L, 1L, false));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 계좌 ID로 조회하면 빈 Optional을 반환한다")
+    void findWithdrawalAccountDetail_returnsEmpty_whenAccountNotFound() {
+        // when
+        Optional<WithdrawalAccountDetail> detail = adapter.findWithdrawalAccountDetail(999999L);
+
+        // then
+        assertThat(detail).isEmpty();
     }
 
     @Test
@@ -105,7 +168,7 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
         LockedAccountsForTransfer locked = adapter.lockForTransfer(101L, 202L);
 
         // when
-        TransferBalances balances = adapter.applyTransfer(locked, 30000L);
+        TransferBalances balances = adapter.applyTransfer(locked, 30000L, LocalDateTime.now());
         entityManager.flush();
         entityManager.clear();
 
@@ -123,6 +186,33 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
                 .longValue();
         assertThat(withdrawalBalance).isEqualTo(70000L);
         assertThat(depositBalance).isEqualTo(130000L);
+    }
+
+    @Test
+    @DisplayName("applyTransfer 호출 시 전달한 executedAt으로 출금/입금 계좌의 last_transaction_at이 갱신된다")
+    void applyTransfer_updatesLastTransactionAt_forBothAccounts() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        LockedAccountsForTransfer locked = adapter.lockForTransfer(101L, 202L);
+        LocalDateTime executedAt = LocalDateTime.of(2026, 8, 18, 10, 30, 0);
+
+        // when
+        adapter.applyTransfer(locked, 30000L, executedAt);
+        entityManager.flush();
+        entityManager.clear();
+
+        // then
+        LocalDateTime withdrawalLastTransactionAt = (LocalDateTime) entityManager
+                .createNativeQuery("SELECT last_transaction_at FROM account WHERE account_id = 101")
+                .getSingleResult();
+        LocalDateTime depositLastTransactionAt = (LocalDateTime) entityManager
+                .createNativeQuery("SELECT last_transaction_at FROM account WHERE account_id = 202")
+                .getSingleResult();
+        assertThat(withdrawalLastTransactionAt).isEqualTo(executedAt);
+        assertThat(depositLastTransactionAt).isEqualTo(executedAt);
     }
 
     @Test
@@ -145,7 +235,7 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
                 .longValue();
 
         // when
-        adapter.applyTransfer(locked, 30000L);
+        adapter.applyTransfer(locked, 30000L, LocalDateTime.now());
         entityManager.flush();
         entityManager.clear();
 

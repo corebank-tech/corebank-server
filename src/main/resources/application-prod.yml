@@ -20,6 +20,9 @@ spring:
     user: ${FLYWAY_USER}
     password: ${FLYWAY_PASSWORD}
     clean-disabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST}
 
 management:
   endpoints:

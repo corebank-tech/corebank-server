@@ -59,6 +59,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 TransferTestFixtures.seedCustomerAndAccounts(entityManager));
 
         TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .authToken("dummy-auth-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110222222222")
                 .amount(30000L)
@@ -125,6 +127,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 TransferTestFixtures.seedCustomerAndAccounts(entityManager));
 
         TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .authToken("dummy-auth-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110222222222")
                 .amount(150000L) // 잔액(100,000)을 초과하는 금액

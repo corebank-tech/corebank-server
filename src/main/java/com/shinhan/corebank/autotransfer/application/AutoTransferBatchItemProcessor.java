@@ -49,6 +49,7 @@ public class AutoTransferBatchItemProcessor {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void completeProcessing(AutoTransfer autoTransfer, AutoTransferExecution processingExecution, LocalDate date) {
         TransferCommand command = TransferCommand.builder()
+                .customerId(autoTransfer.getCustomerId())
                 .withdrawalAccountId(autoTransfer.getWithdrawalAccountId())
                 .depositAccountNumber(autoTransfer.getDepositAccountNumber())
                 .amount(autoTransfer.getAmount())

@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class TransferTestFixtures {
 
-    /** customer_id=1, account_id=101(출금)/202(입금) 을 시드한다. */
+    /** customer_id=1, account_id=101(출금, withdrawal_registered=TRUE)/202(입금) 을 시드한다. */
     public static void seedCustomerAndAccounts(EntityManager entityManager) {
         entityManager.createNativeQuery("""
             INSERT INTO customer (customer_id, user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at)
@@ -21,9 +21,9 @@ public final class TransferTestFixtures {
         """).executeUpdate();
 
         entityManager.createNativeQuery("""
-            INSERT INTO account (account_id, account_number, customer_id, product_id, account_type, balance, status, password_hash, opened_date, created_at, updated_at)
-            VALUES (101, '110111111111', 1, NULL, 'DEMAND_DEPOSIT', 100000, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '2026-08-01', NOW(6), NOW(6)),
-                   (202, '110222222222', 1, NULL, 'DEMAND_DEPOSIT', 100000, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '2026-08-01', NOW(6), NOW(6))
+            INSERT INTO account (account_id, account_number, customer_id, product_id, account_type, balance, status, password_hash, withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at)
+            VALUES (101, '110111111111', 1, NULL, 'DEMAND_DEPOSIT', 100000, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', TRUE, NOW(6), '2026-08-01', NOW(6), NOW(6)),
+                   (202, '110222222222', 1, NULL, 'DEMAND_DEPOSIT', 100000, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', FALSE, NULL, '2026-08-01', NOW(6), NOW(6))
             ON DUPLICATE KEY UPDATE balance = VALUES(balance)
         """).executeUpdate();
     }
