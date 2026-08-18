@@ -2,6 +2,9 @@ package com.shinhan.corebank.autotransfer.application;
 
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionPersistencePort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
+import com.shinhan.corebank.autotransfer.application.port.out.StuckExecution;
+import com.shinhan.corebank.autotransfer.application.port.out.TransferLookupPort;
+import com.shinhan.corebank.autotransfer.application.port.out.TransferLookupResult;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import com.shinhan.corebank.common.audit.AuditEventType;
@@ -23,6 +26,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
 
 
 @Component
@@ -38,6 +42,7 @@ public class AutoTransferBatchItemProcessor {
     private final AutoTransferPersistencePort autoTransferPersistencePort;
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final AuditLogService auditLogService;
+    private final TransferLookupPort transferLookupPort;
 
     // DB에 지금부터 처리 시작 남
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -90,5 +95,24 @@ public class AutoTransferBatchItemProcessor {
             auditLogService.record(autoTransfer.getCustomerId(), processingExecution.getTransactionNumber(),
                     AuditEventType.AUTO_TRANSFER, SYSTEM_REQUEST_IP, succeeded, detail);
         }
+    }
+
+    // transfer 테이블에 실제 거래가 있었는지만 확인해서 확정
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void reconcileStuckExecution(StuckExecution stuckExecution) {
+        AutoTransfer autoTransfer = stuckExecution.autoTransfer();
+        AutoTransferExecution execution = stuckExecution.execution();
+
+        Optional<TransferLookupResult> lookup = transferLookupPort.findBySourceAndDate(autoTransfer.getAutoTransferId(), execution.getExecutionDate());
+
+        if(lookup.isEmpty()) {
+            execution.markError("실행 중 확인 불가로 재확정 배치가 오류 처리함", null);
+        } else if (lookup.get().status() == ProcessResultStatus.SUCCESS) {
+            execution.markSuccess(lookup.get().transactionNumber());
+        } else {
+            execution.markError(lookup.get().errorMessage(), lookup.get().transactionNumber());
+        }
+
+        autoTransferExecutionPersistencePort.save(execution, autoTransfer.getAutoTransferId());
     }
 }
