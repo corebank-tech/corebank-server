@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -38,11 +39,13 @@ public class AutoTransferBatchItemProcessor {
     private final AutoTransferPersistencePort autoTransferPersistencePort;
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final AuditLogService auditLogService;
+    private final Clock clock;
+
 
     // DB에 지금부터 처리 시작 남
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public AutoTransferExecution saveProcessing(AutoTransfer autoTransfer, LocalDate date) {
-        AutoTransferExecution processing = AutoTransferExecution.processing(date, autoTransfer.getAmount(), LocalDateTime.now());
+        AutoTransferExecution processing = AutoTransferExecution.processing(date, autoTransfer.getAmount(), LocalDateTime.now(clock));
         return autoTransferExecutionPersistencePort.save(processing, autoTransfer.getAutoTransferId());
     }
 
@@ -78,7 +81,7 @@ public class AutoTransferBatchItemProcessor {
 
         autoTransfer.advanceNextExecutionDate();
         if (autoTransfer.getNextExecutionDate().isAfter(autoTransfer.getEndDate())) {
-            autoTransfer.expire(LocalDateTime.now());
+            autoTransfer.expire(LocalDateTime.now(clock));
         }
         autoTransferPersistencePort.save(autoTransfer);
 

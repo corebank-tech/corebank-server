@@ -12,18 +12,23 @@ import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferBatchUs
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferExecutionJpaRepository;
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferJpaEntity;
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferJpaRepository;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionPersistencePort;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogJpaEntity;
 import com.shinhan.corebank.common.audit.AuditLogJpaRepository;
+import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import jakarta.persistence.EntityManager;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,6 +70,15 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
     @Autowired
     PlatformTransactionManager transactionManager;
+
+    @Autowired
+    AutoTransferExecutionPersistencePort autoTransferExecutionPersistencePort;
+
+    @Autowired
+    AutoTransferPersistencePort autoTransferPersistencePort;
+
+    @Autowired
+    AuditLogService auditLogService;
 
     @MockitoBean
     TransferExecutionUseCase transferExecutionUseCase;
@@ -447,6 +461,72 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
         assertThat(auditLogJpaRepository.findAll()).hasSize(1);
         assertThat(executionRepository.findAll()).hasSize(1);
         assertThat(executionRepository.findAll().get(0).getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
+    }
+
+    @Test
+    @DisplayName("saveProcessing()은 주입된 Clock 기준으로 executedAt을 기록한다(UTC 고정 시각으로 결정론적 검증)")
+    void saveProcessing_usesInjectedClock_forExecutedAt() {
+        LocalDateTime fixedUtc = LocalDateTime.of(2026, 3, 15, 15, 10, 0); // KST 00:10과 같은 순간
+        Clock fixedClock = Clock.fixed(fixedUtc.toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
+        AutoTransferBatchItemProcessor processorWithFixedClock = new AutoTransferBatchItemProcessor(
+                autoTransferExecutionPersistencePort, autoTransferPersistencePort, transferExecutionUseCase,
+                auditLogService, fixedClock);
+
+        AutoTransferExecution saved = processorWithFixedClock.saveProcessing(autoTransfer(), today);
+
+        assertThat(saved.getExecutedAt()).isEqualTo(fixedUtc);
+    }
+
+    @Test
+    @DisplayName("만료 처리 시각(terminatedAt)도 주입된 Clock 기준으로 결정론적으로 기록된다")
+    void completeProcessing_expiresWithInjectedClockTime() {
+        LocalDateTime fixedUtc = LocalDateTime.of(2026, 3, 15, 15, 10, 0);
+        Clock fixedClock = Clock.fixed(fixedUtc.toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
+        AutoTransferBatchItemProcessor processorWithFixedClock = new AutoTransferBatchItemProcessor(
+                autoTransferExecutionPersistencePort, autoTransferPersistencePort, transferExecutionUseCase,
+                auditLogService, fixedClock);
+
+        // endDate를 이번 회차 실행일 다음달 이전으로 좁혀서, advanceNextExecutionDate() 이후 만료되게 한다
+        autoTransferJpaRepository.save(AutoTransferJpaEntity.builder()
+                .autoTransferId(autoTransferId)
+                .customerId(customerId)
+                .withdrawalAccountId(autoTransferJpaRepository.findById(autoTransferId).orElseThrow().getWithdrawalAccountId())
+                .depositAccountNumber("110987654321")
+                .payeeName("홍길동")
+                .amount(10000L)
+                .cycleMonths(1)
+                .transferDay(15)
+                .startDate(LocalDate.of(2026, 1, 1))
+                .endDate(LocalDate.of(2026, 3, 20))
+                .nextExecutionDate(today)
+                .myPassbookMemo("메모")
+                .recipientPassbookMemo("받는메모")
+                .status(AutoTransferStatus.NORMAL)
+                .registeredAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+                .updatedAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+                .version(0L)
+                .build());
+        AutoTransferJpaEntity afterManualSave = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        AutoTransfer domainWithNearEndDate = AutoTransfer.reconstitute(
+                autoTransferId, customerId, afterManualSave.getWithdrawalAccountId(),
+                "110987654321", "홍길동", 10000L, 1, 15,
+                LocalDate.of(2026, 1, 1), LocalDate.of(2026, 3, 20), today,
+                "메모", "받는메모", AutoTransferStatus.NORMAL,
+                LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0), afterManualSave.getVersion());
+
+        AutoTransferExecution saved = processorWithFixedClock.saveProcessing(domainWithNearEndDate, today);
+        when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
+                .status(ProcessResultStatus.SUCCESS)
+                .transactionNumber("20260315BT0000000099")
+                .transferredAt(LocalDateTime.now())
+                .withdrawalBalanceAfter(90000L)
+                .build());
+
+        processorWithFixedClock.completeProcessing(domainWithNearEndDate, saved, today);
+
+        var autoTransferAfter = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        assertThat(autoTransferAfter.getStatus()).isEqualTo(AutoTransferStatus.EXPIRED);
+        assertThat(autoTransferAfter.getTerminatedAt()).isEqualTo(fixedUtc);
     }
 
     private Long insertCustomer() {
