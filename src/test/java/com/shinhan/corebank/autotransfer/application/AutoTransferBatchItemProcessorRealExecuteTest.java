@@ -20,6 +20,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -99,6 +100,11 @@ class AutoTransferBatchItemProcessorRealExecuteTest extends IntegrationTestSuppo
             auditLogJpaRepository.deleteAll();
             executionRepository.deleteAll();
             autoTransferJpaRepository.deleteAll();
+            // account가 customer를 FK로 참조하므로 account를 먼저 지운다
+            entityManager.createNativeQuery("DELETE FROM account WHERE customer_id = :id")
+                    .setParameter("id", customerId).executeUpdate();
+            entityManager.createNativeQuery("DELETE FROM customer WHERE customer_id = :id")
+                    .setParameter("id", customerId).executeUpdate();
         });
     }
 
@@ -116,7 +122,9 @@ class AutoTransferBatchItemProcessorRealExecuteTest extends IntegrationTestSuppo
     @Test
     @DisplayName("주입된 TransferExecutionUseCase가 real 구현(TransferExecutionService)이다 - Mock이 여전히 @Primary를 못 이긴다는 전제 확인")
     void injectedBeanIsRealImplementation() {
-        assertThat(transferExecutionUseCase.getClass().getSimpleName()).isEqualTo("TransferExecutionService");
+        // getClass() 대신 AopUtils.getTargetClass()를 쓴다 - AOP 프록시로 감싸져도(나중에
+        // @Transactional 등이 붙어도) 실제 타깃 클래스를 정확히 가리켜서 이 단정이 안 깨진다.
+        assertThat(AopUtils.getTargetClass(transferExecutionUseCase).getSimpleName()).isEqualTo("TransferExecutionService");
     }
 
     @Test

@@ -212,6 +212,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
         assertThat(autoTransferAfter.getStatus()).isEqualTo(AutoTransferStatus.NORMAL);
 
         assertThat(auditLogJpaRepository.findAll()).hasSize(1);
+        assertThat(auditLogJpaRepository.findAll().get(0).getDetail()).doesNotContainKey("errorCode");
     }
 
     @Test
@@ -256,7 +257,9 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
         assertThat(executionAfter.getTransactionNumber()).isEqualTo("20260315BT0000000002");
 
         assertThat(auditLogJpaRepository.findAll()).hasSize(1);
-        assertThat(auditLogJpaRepository.findAll().get(0).getResult()).isEqualTo("FAILURE");
+        var auditLog = auditLogJpaRepository.findAll().get(0);
+        assertThat(auditLog.getResult()).isEqualTo("FAILURE");
+        assertThat(auditLog.getDetail()).containsEntry("errorCode", "LMT0001");
     }
 
     @Test

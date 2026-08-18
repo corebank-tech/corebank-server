@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -81,10 +82,13 @@ public class AutoTransferBatchItemProcessor {
         }
         autoTransferPersistencePort.save(autoTransfer);
 
-        if (processingExecution.getTransactionNumber() != null) {
+        if (StringUtils.hasText(processingExecution.getTransactionNumber())) {
+            boolean succeeded = result.status() == ProcessResultStatus.SUCCESS;
+            Map<String, Object> detail = succeeded
+                    ? Map.of("autoTransferId", autoTransfer.getAutoTransferId(), "executionDate", date)
+                    : Map.of("autoTransferId", autoTransfer.getAutoTransferId(), "executionDate", date, "errorCode", result.errorCode());
             auditLogService.record(autoTransfer.getCustomerId(), processingExecution.getTransactionNumber(),
-                    AuditEventType.AUTO_TRANSFER, SYSTEM_REQUEST_IP, result.status() == ProcessResultStatus.SUCCESS,
-                    Map.of("autoTransferId", autoTransfer.getAutoTransferId(), "executionDate", date));
+                    AuditEventType.AUTO_TRANSFER, SYSTEM_REQUEST_IP, succeeded, detail);
         }
     }
 }
