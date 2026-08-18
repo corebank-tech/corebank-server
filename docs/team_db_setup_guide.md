@@ -83,11 +83,33 @@ ON DUPLICATE KEY UPDATE name = VALUES(name), updated_at = VALUES(updated_at);
 - **로컬 환경(`local`)**: 실수로 공용 개발 DB에 연결된 상태에서 `clean`을 실행하는 것을 막기 위해 로컬에서도 기본적으로 비활성화합니다.
 
 > 💡 **로컬에서 DB 초기화가 필요할 때는?**
-> `flyway clean`을 사용하지 말고, 아래와 같이 로컬 DB 도커 컨테이너 자체를 재생성(볼륨 삭제 포함)하는 방식을 권장합니다.
-> ```bash
-> docker compose down -v
-> docker compose up -d minicore-mysql
-> ```
+> `flyway clean`을 사용하지 말고, 아래 3단계로 로컬 DB 도커 컨테이너 자체를 재생성(볼륨 삭제 포함)하는 방식을 권장합니다.
+
+### 로컬 DB 리셋 절차 (3단계)
+
+**1단계. 컨테이너 + 볼륨 삭제**
+
+```bash
+docker compose down -v
+```
+
+`-v` 플래그가 `mysql-data` 볼륨까지 삭제하므로, 컨테이너를 다시 올리면 `docker/mysql/init/01-databases.sql`이 재실행되어 `minicore` / `minicore_scratch` DB가 깨끗하게 생성됩니다.
+
+**2단계. 컨테이너 재기동**
+
+```bash
+docker compose up -d minicore-mysql
+```
+
+healthcheck의 `start_period`가 30초이므로, DB가 준비될 때까지 약 30~40초 정도 기다립니다.
+
+**3단계. 앱 부팅 (Flyway 자동 실행)**
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=local'
+```
+
+부팅되면 Flyway가 `src/main/resources/db/migration`의 `V202608010900` ~ `V202608010980` 9개 + `R__seed_master_data` 1개를 순차 적용합니다.
 
 ---
 

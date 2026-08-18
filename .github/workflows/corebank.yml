@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "dev" ]
 
 env:
   JAVA_VERSION: '21'
@@ -133,6 +133,24 @@ jobs:
                 - DB_PASSWORD=DB_PASSWORD_PLACEHOLDER
                 - FLYWAY_USER=FLYWAY_USER_PLACEHOLDER
                 - FLYWAY_PASSWORD=FLYWAY_PASSWORD_PLACEHOLDER
+                - REDIS_HOST=corebank-redis
+              networks:
+                - corebank-net
+              depends_on:
+                corebank-redis:
+                  condition: service_healthy
+
+            # 약관 열람 이력 TTL 저장용 Redis (내부 네트워크 전용, 포트 미노출)
+            corebank-redis:
+              image: redis:7.4
+              container_name: corebank-redis
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "redis-cli", "ping"]
+                interval: 5s
+                timeout: 3s
+                retries: 10
+                start_period: 5s
               networks:
                 - corebank-net
 

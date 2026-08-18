@@ -1,0 +1,20 @@
+# .pr_agent.toml
+[config]
+model = "anthropic/claude-haiku-4-5-20251001"
+response_language = "ko-KR"
+ignore_pr_source_branches = ["^dependabot/.*$", "^renovate/.*$"]
+restricted_mode = true
+
+[github_app]
+handle_push_trigger = true
+push_commands = ["/describe"]
+
+[pr_reviewer]
+extra_instructions = """
+Prioritize correctness, security, transaction/amount handling, and data migrations.
+Do not comment on style issues covered by existing linters.
+"""
+
+[pr_code_suggestions]
+num_code_suggestions = 3
+suggestions_score_threshold = 7

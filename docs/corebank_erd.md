@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 23 테이블 / 금액 BIGINT · 시각 DATETIME(6) UTC
+> **DBMS**: MySQL 8.4 / 24 테이블 / 금액 BIGINT · 시각 DATETIME(6) UTC
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -9,7 +9,7 @@
 erDiagram
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 23 테이블 / 금액 BIGINT · 시각 DATETIME(6) UTC
+    %% MySQL 8.4 / 24 테이블 / 금액 BIGINT · 시각 DATETIME(6) UTC
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -88,9 +88,9 @@ erDiagram
         int display_order "사용자 지정 표시순서"
         boolean withdrawal_registered "응답 withdrawalAccountRegistered"
         datetime withdrawal_registered_at "DATETIME(6)"
-        date opened_date
+        datetime opened_date
         date maturity_date
-        date closed_date
+        datetime closed_date
         datetime last_transaction_at "DATETIME(6)"
         bigint version "낙관적 락"
     }
@@ -145,6 +145,9 @@ erDiagram
         varchar alias "미지정 시 예금주명 (FAV0001)"
         datetime registered_at "DATETIME(6)"
     }
+    ledger_entry_id_sequence {
+        bigint sequence_id PK "AUTO_INCREMENT (ledger_entry.ledger_entry_id 전용 채번 카운터)"
+    }
 
     %% ---------- P1 ----------
     transfer_limit {
@@ -196,7 +199,6 @@ erDiagram
     product_terms {
         bigint product_id PK
         bigint terms_id PK
-        boolean required
     }
     product_subscription {
         bigint subscription_id PK
@@ -295,6 +297,16 @@ erDiagram
         json detail "민감정보 마스킹 후 저장"
         datetime requested_at "DATETIME(6)"
     }
+    common_code {
+        varchar code_group PK "예: ACCOUNT_STATUS"
+        varchar code PK "서버 Enum 값과 일치. 예: ACTIVE"
+        varchar code_name "화면 표시 한글명"
+        int sort_order
+        char use_yn "Y / N"
+        varchar description "VARCHAR(200)"
+        datetime created_at "DATETIME(6)"
+        datetime updated_at "DATETIME(6)"
+    }
 
     %% ---------- 관계 ----------
     customer ||--o{ customer_terms_agreement : "동의"
@@ -324,9 +336,10 @@ erDiagram
     customer ||--o{ idempotency_key : "발급"
 
     %% 논리 관계 (ledger_entry 는 파티션 테이블이라 FK 선언 불가)
-    %% 채번 자원 (FK 없음. 거래번호 생성 시 행 단위 락)
+    %% 채번 자원 (FK 없음. 거래번호/원장ID 생성)
     transaction_sequence ||..o{ transfer : "거래번호 채번"
     transaction_sequence ||..o{ ledger_entry : "거래번호 채번"
+    ledger_entry_id_sequence ||..o{ ledger_entry : "ledger_entry_id 전용 채번"
 
     %% 같은 두 엔티티를 두 번 참조하는 관계 (중복 제거 대상이라 명시)
     account ||--o{ transfer : "입금 계좌 (당행)"

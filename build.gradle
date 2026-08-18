@@ -18,6 +18,10 @@ repositories {
     mavenCentral()
 }
 
+ext {
+    queryDslVersion = '7.1'
+}
+
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     compileOnly 'org.projectlombok:lombok'
@@ -33,6 +37,11 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     runtimeOnly 'com.mysql:mysql-connector-j'
 
+    // Querydsl (OpenFeign 포크, io.github.openfeign.querydsl)
+    implementation "io.github.openfeign.querydsl:querydsl-jpa:${queryDslVersion}"
+    annotationProcessor "io.github.openfeign.querydsl:querydsl-apt:${queryDslVersion}:jpa"
+    annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
+
     // Flyway (Boot 4: 스타터 필수)
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
     implementation 'org.flywaydb:flyway-mysql'
@@ -40,12 +49,22 @@ dependencies {
     // 검증
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
+    // Swagger / OpenAPI UI
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
+
     // 테스트
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-flyway-test'
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
     testImplementation 'org.testcontainers:testcontainers-mysql'
     testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.springframework.security:spring-security-test'
+
+    // 아키텍처 규칙(헥사고날 레이어 방향) 자동 검증
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
+
+    //세션·인증 필터
+    implementation 'org.springframework.boot:spring-boot-starter-security'
 }
 
 tasks.named('test') {

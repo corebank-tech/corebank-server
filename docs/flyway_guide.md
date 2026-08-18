@@ -65,8 +65,9 @@ ALTER TABLE account ADD COLUMN nickname VARCHAR(30) NULL COMMENT '별칭';
 **③ 자기 도메인 파일만 만듭니다.**
 남의 테이블을 고쳐야 하면 담당자에게 요청하십시오. 접두어 소유 원칙(`common_rev` §3-2)과 같습니다.
 
-**④ 시드는 `R__`에만.**
-`R__`은 체크섬이 바뀌면 재실행되므로 반드시 **멱등**해야 합니다. 전부 `ON DUPLICATE KEY UPDATE`로 작성돼 있으니 그 패턴을 유지하십시오.
+**④ 시드 데이터 분리 (V__ vs R__)**
+이력 보존이 필수적인 데이터(예: 약관)나 보안 분리가 필요한 데이터는 **새 `V__` 파일에 `INSERT`** 방식으로 누적해야 합니다.
+`R__` 스크립트는 체크섬이 바뀌면 전체가 재실행되므로, 과거 이력을 훼손하지 않는 **순수 교체 가능한 마스터 데이터(예: 공통 코드, 단순 상품 마스터)** 시딩에만 사용해야 합니다. (작성 시 `ON DUPLICATE KEY UPDATE` 패턴 유지)
 
 ---
 
@@ -112,6 +113,36 @@ public class LedgerEntry {
 ```
 
 단일 `@Id`로 매핑하면 `validate`가 통과해도 `save()`가 이상하게 동작합니다.
+
+`ledger_entry_id` 컬럼 자체는 DB에서 `AUTO_INCREMENT`이지만, **Hibernate는 `@IdClass` 복합키 구성 필드에 IDENTITY 채번 전략을 지원하지 않습니다.**
+
+```java
+@Id
+@GeneratedValue(strategy = GenerationType.IDENTITY)  // ❌ 여기서 ApplicationContext 로딩 자체가 실패한다
+private Long ledgerEntryId;
+```
+
+```text
+Caused by: org.hibernate.id.IdentifierGenerationException: Identity generation isn't supported for composite ids
+```
+
+`validate`도 아니고 `save()` 시점도 아니라 **EntityManagerFactory를 만드는 애플리케이션 부팅 시점에 바로 실패**하므로 늦게 발견되진 않지만, DB가 AUTO_INCREMENT라고 해서 그대로 `@GeneratedValue`를 붙이면 안 됩니다.
+
+**채번 전략(확정)**: 전용 카운터 테이블 `ledger_entry_id_sequence`(컬럼은 `sequence_id BIGINT AUTO_INCREMENT` 하나뿐)를 두고, 이 테이블에 빈 행을 저장해 생성된 `AUTO_INCREMENT` 값만 취해 `ledgerEntryId`로 쓴다. `sequence_id` 자체는 단일 `@Id`라 IDENTITY 채번이 정상 동작하며(Hibernate 제약은 오직 `@IdClass` 복합키 구성 필드에만 적용됨), 결과적으로 `ledger_entry_id_sequence`의 `AUTO_INCREMENT`가 곧 `ledgerEntryId`의 전역 채번기 역할을 한다(Hibernate `TABLE` 채번과 동일한 발상). 구현은 `LedgerEntryIdSequenceJpaEntity`/`LedgerEntryIdGenerator` 참고.
+
+```java
+@Component
+@RequiredArgsConstructor
+public class LedgerEntryIdGenerator {
+    private final LedgerEntryIdSequenceJpaRepository repository;
+
+    public Long nextId() {
+        return repository.save(new LedgerEntryIdSequenceJpaEntity()).getSequenceId();
+    }
+}
+```
+
+`ledgerEntryId`가 이렇게 전역 유일하게 채번되므로, `reversal_id`(반대기표가 가리키는 원거래)도 `occurred_at` 없이 이 값 하나로 원거래 원장 행을 특정할 수 있다(조회는 복합키 `findById` 대신 `LedgerEntryJpaRepository.findByLedgerEntryId` 사용).
 
 또한 **파티션 테이블에는 FK를 선언할 수 없어** `account_id`·`transfer_id`에 DB 제약이 없습니다. `@ManyToOne` 매핑은 가능하지만 **정합성은 애플리케이션이 집니다.**
 

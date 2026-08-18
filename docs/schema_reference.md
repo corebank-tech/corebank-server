@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 23개 테이블 · 241개 컬럼
+**대상**: 24개 비즈니스 테이블 + 1개 PK 채번 전용 테이블 (`ledger_entry_id_sequence`) · 250개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -32,21 +32,23 @@
 | 6 | `product` | 상품 | P3 | 22 |
 | 7 | `product_rate_tier` | 상품 기간별 금리 | P3 | 3 |
 | 8 | `product_preferential_rate` | 상품 우대금리 | P3 | 4 |
-| 9 | `product_terms` | 상품-약관 연결 | P3 | 3 |
+| 9 | `product_terms` | 상품-약관 연결 | P3 | 2 |
 | 10 | `account` | 계좌 | P2 | 21 |
 | 11 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4 |
 | 12 | `transfer` | 이체 거래 | P4 | 20 |
 | 13 | `ledger_entry` | 원장 | P4 | 13 |
-| 14 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6 |
-| 15 | `transfer_limit` | 이체한도 | P1 | 5 |
-| 16 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 4 |
-| 17 | `product_subscription` | 상품가입 | P3 | 18 |
-| 18 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5 |
-| 19 | `scheduled_transfer` | 예약이체 | P3 | 17 |
-| 20 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
-| 21 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8 |
-| 22 | `idempotency_key` | 멱등키 | P5 | 9 |
-| 23 | `audit_log` | 감사 로그 | P5 | 8 |
+| 14 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1 |
+| 15 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6 |
+| 16 | `transfer_limit` | 이체한도 | P1 | 5 |
+| 17 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 4 |
+| 18 | `product_subscription` | 상품가입 | P3 | 18 |
+| 19 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5 |
+| 20 | `scheduled_transfer` | 예약이체 | P3 | 17 |
+| 21 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
+| 22 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8 |
+| 23 | `idempotency_key` | 멱등키 | P5 | 9 |
+| 24 | `audit_log` | 감사 로그 | P5 | 8 |
+| 25 | `common_code` | 공통코드 | P5 | 8 |
 
 ---
 
@@ -75,8 +77,8 @@
 | `previous_login_at` | `DATETIME(6)` |  | O |  | 직전 로그인 시각. 대시보드의 `previousLoginAt`. 부정 접속을 고객이 알아채는 단서 |
 | `password_changed_at` | `DATETIME(6)` |  | O |  | 로그인 비밀번호 최종 변경 일시. 직전 비밀번호 재사용 제한(ATH0003) 판정 보조 |
 | `joined_at` | `DATETIME(6)` |  | X |  | 회원가입 완료 일시. 고객정보 조회의 `joinedAt` |
-| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 생성 일시 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 최종 수정 일시 |
+| `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시 |
 
 **인덱스**
 
@@ -101,8 +103,8 @@
 | `content` | `TEXT` |  | X |  | 약관 전문. 약관 본문 조회 응답의 `content` |
 | `is_required` | `BOOLEAN` |  | X | `FALSE` | 필수 동의 여부. FALSE면 선택 약관이라 미동의해도 가입이 진행된다 |
 | `view_required` | `BOOLEAN` |  | X | `FALSE` | 전문 열람 강제 여부. TRUE면 동의 전에 본문을 열어야 하며 이력이 없으면 PRD0005 |
-| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 생성 일시 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 최종 수정 일시 |
+| `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시 |
 
 **인덱스**
 
@@ -151,7 +153,7 @@
 | `used` | `BOOLEAN` |  | X | `FALSE` | 사용 완료 여부. 검증 성공 시 TRUE로 바꿔 재사용을 막는다 |
 | `verified_at` | `DATETIME(6)` |  | O |  | 검증 성공 시각. 미검증이면 NULL |
 | `expires_at` | `DATETIME(6)` |  | X |  | 유효시간 만료 시각. 발급 시각 + 180초 |
-| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 발급 요청 시각 |
+| `created_at` | `DATETIME(6)` |  | X |  | 발급 요청 시각 |
 
 **인덱스**
 
@@ -198,9 +200,12 @@
 | `product_code` | `VARCHAR(20)` | **UK** | X |  | 상품 업무 코드. 화면·시드 데이터가 상품을 지칭하는 안정적 키 |
 | `product_name` | `VARCHAR(100)` |  | X |  | 화면에 노출하는 상품명 |
 | `product_group` | `VARCHAR(12)` |  | X |  | SAVINGS(정기적금) / DEPOSIT(정기예금) |
-| `deposit_type` | `VARCHAR(20)` |  | X |  | 납입 방식. `거치식`(한 번에 예치) / `적립식`(매월 납입) |
+| `deposit_type` | `VARCHAR(20)` |  | X |  | 납입 방식. `LUMP_SUM`(한 번에 예치) / `INSTALLMENT`(매월 납입) |
 | `summary` | `VARCHAR(200)` |  | O |  | 상품 한 줄 요약. 목록 화면용 |
 | `description` | `TEXT` |  | O |  | 상품 상세 설명. 상세 화면용 |
+| `eligibility` | `TEXT` |  | O |  | 가입 자격 조건 안내 문구. 상세조회 `data.eligibility` |
+| `subscription_restrictions` | `TEXT` |  | O |  | 가입 제한 사항 목록(JSON 배열 문자열). 상세조회 `data.subscriptionRestrictions`. 애플리케이션의 `StringListJsonConverter`가 `List<String>`으로 변환 |
+| `notices` | `TEXT` |  | O |  | 유의사항 목록(JSON 배열 문자열). 상세조회 `data.notices`. `subscription_restrictions`와 동일한 컨버터 사용 |
 | `base_rate` | `DECIMAL(5,2)` |  | X |  | 기본금리(연 %). 우대금리를 제외한 기준값 |
 | `max_rate` | `DECIMAL(5,2)` |  | X |  | 최고금리(연 %). 우대 조건을 모두 채웠을 때의 상한. 목록 화면 표시용 |
 | `min_amount` | `BIGINT` |  | X |  | 최소 가입금액. 미만이면 PRD0001 |
@@ -208,14 +213,14 @@
 | `amount_unit` | `BIGINT` |  | X |  | 가입금액 입력 단위. 이 값의 배수가 아니면 PRD0004 |
 | `min_term_months` | `SMALLINT` |  | X |  | 최소 가입기간(개월). 미만이면 PRD0002 |
 | `max_term_months` | `SMALLINT` |  | X |  | 최대 가입기간(개월). 초과하면 PRD0002 |
-| `interest_pay_type` | `VARCHAR(20)` |  | X |  | 이자 계산 방식. `단리` / `복리` |
-| `sale_status` | `VARCHAR(12)` |  | X |  | 판매 상태. `ON_SALE`(판매중) / `SUSPENDED`(판매중지). 판매중지 상품은 목록에서 빠지고 상세 조회는 PRD0201 |
+| `interest_pay_type` | `VARCHAR(20)` |  | X |  | 이자 계산 방식. `SIMPLE`(단리) / `COMPOUND`(복리) |
+| `sale_status` | `VARCHAR(12)` |  | X |  | 판매 상태. `ON_SALE`(판매중) / `SUSPENDED`(판매중지). 판매중지 상품은 목록 조회에서는 빠지지만 상세 조회는 200으로 응답한다(즐겨찾기·공유 링크 진입 지원 목적, `saleStatus`로 프론트가 구분) |
 | `sale_start_date` | `DATE` |  | O |  | 판매 시작일 |
 | `sale_end_date` | `DATE` |  | O |  | 판매 종료일 |
 | `new_flag` | `BOOLEAN` |  | X | `FALSE` | 신상품 뱃지 표시 여부 |
 | `single_account_limit` | `BOOLEAN` |  | X | `FALSE` | 1인 1계좌 제한 상품인지. TRUE인 상품만 중복 가입 시 PRD0301을 던진다 |
-| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 생성 일시 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 최종 수정 일시 |
+| `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시 |
 
 **인덱스**
 
@@ -263,11 +268,13 @@
 
 > 상품-약관 연결
 
-| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
-| --- | --- | --- | --- | --- | --- |
-| `product_id` | `BIGINT` | **PK** **FK** | X |  | 대상 상품 → `product.product_id` |
-| `terms_id` | `BIGINT` | **PK** **FK** | X |  | 연결된 약관 (버전 포함) → `terms.terms_id` |
-| `required` | `BOOLEAN` |  | X | `FALSE` | **이 상품에서** 필수 동의인지. `terms.is_required`와 별개로 상품마다 다를 수 있다 |
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보                                             |
+| --- | --- | --- | --- | --- |----------------------------------------------------|
+| `product_id` | `BIGINT` | **PK** **FK** | X |  | 대상 상품 → `product.product_id`                       |
+| `terms_id` | `BIGINT` | **PK** **FK** | X |  | 연결된 약관 (버전 포함) → `terms.terms_id`                  |
+| `display_order` | `SMALLINT` |  | X |  | 상품 상세조회에서 이 약관을 보여줄 순서(오름차순). — `terms` 자체의 속성이 아님 |
+
+필수 동의 여부는 상품별 오버라이드 없이 `terms.is_required` 단일 기준으로 판단한다.
 
 ---
 
@@ -279,29 +286,29 @@
 
 계좌별명·표시순서(구 `account_preference`)와 출금계좌 등록(구 `withdrawal_account`)을 흡수했다. `balance`는 조회용 캐시이며 진실의 원천은 `ledger_entry`다.
 
-| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
-| --- | --- | --- | --- | --- | --- |
-| `account_id` | `BIGINT` | **PK** | X |  | 계좌 내부 식별자. 본인 계좌에만 사용한다 (타 고객 계좌는 번호로 지칭) |
-| `account_number` | `CHAR(12)` | **UK** | X |  | 하이픈 없는 숫자 12자리 |
-| `customer_id` | `BIGINT` | **FK** | X |  | 예금주 → `customer.customer_id` |
-| `product_id` | `BIGINT` | **FK** | O |  | 입출금계좌는 NULL → `product.product_id` |
-| `account_type` | `VARCHAR(24)` |  | X |  | 계좌 종류. `DEMAND_DEPOSIT`(입출금) / `TIME_DEPOSIT`(정기예금) / `INSTALLMENT_SAVINGS`(정기적금) |
-| `balance` | `BIGINT` |  | X | `0` | 현재 잔액. **조회 성능용 캐시**이며 진실의 원천은 `ledger_entry` 합계다. 배치로 대사한다 |
-| `status` | `VARCHAR(12)` |  | X |  | 계좌 상태. `ACTIVE`(정상) / `SUSPENDED`(거래정지) / `CLOSED`(해지) |
-| `password_hash` | `CHAR(60)` |  | X |  | 계좌비밀번호 4자리의 BCrypt 해시 |
-| `password_failure_count` | `TINYINT` |  | X | `0` | 계좌비밀번호 연속 오류 횟수. 검증 실패 응답의 `errorCount` |
-| `password_locked` | `BOOLEAN` |  | X | `FALSE` | 계좌비밀번호 잠금 여부. 5회 오류 시 TRUE가 되어 거래가 정지된다 (APW0101) |
-| `alias` | `VARCHAR(24)` |  | O |  | 고객이 붙인 계좌별명. 계좌명 표시 시 상품명보다 우선한다 |
-| `display_order` | `INT` |  | O |  | 고객이 지정한 계좌 목록 표시 순서 |
-| `withdrawal_registered` | `BOOLEAN` |  | X | `FALSE` | 출금계좌로 등록됐는지. 이체·상품가입의 출금 원천이 될 수 있는지를 가른다 |
-| `withdrawal_registered_at` | `DATETIME(6)` |  | O |  | 출금계좌 등록 시각. 미등록이면 NULL |
-| `opened_date` | `DATE` |  | X |  | 계좌 개설일 |
-| `maturity_date` | `DATE` |  | O |  | 만기일. 예·적금 계좌만 값이 있다 |
-| `closed_date` | `DATE` |  | O |  | 해지일. `status = CLOSED` 전환 시각 |
-| `last_transaction_at` | `DATETIME(6)` |  | O |  | 최근 거래 일시. 전체 계좌 조회의 `lastTransactionAt` |
-| `version` | `BIGINT` |  | X | `0` | 낙관적 락 버전. 배치·조회 경로의 갱신 충돌을 잡는다 (이체 실행 경로는 비관적 락) |
-| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 생성 일시 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 최종 수정 일시 |
+| 컬럼                         | 타입            | 키      | Null | 기본값      | 담기는 정보                                                                            |
+|----------------------------|---------------|--------|------|----------|-----------------------------------------------------------------------------------|
+| `account_id`               | `BIGINT`      | **PK** | X    |          | 계좌 내부 식별자. 본인 계좌에만 사용한다 (타 고객 계좌는 번호로 지칭)                                         |
+| `account_number`           | `CHAR(12)`    | **UK** | X    |          | 하이픈 없는 숫자 12자리                                                                    |
+| `customer_id`              | `BIGINT`      | **FK** | X    |          | 예금주 → `customer.customer_id`                                                      |
+| `product_id`               | `BIGINT`      | **FK** | O    |          | 입출금계좌는 NULL → `product.product_id`                                                |
+| `account_type`             | `VARCHAR(24)` |        | X    |          | 계좌 종류. `DEMAND_DEPOSIT`(입출금) / `TIME_DEPOSIT`(정기예금) / `INSTALLMENT_SAVINGS`(정기적금) |
+| `balance`                  | `BIGINT`      |        | X    | `0`      | 현재 잔액. **조회 성능용 캐시**이며 진실의 원천은 `ledger_entry` 합계다. 배치로 대사한다                       |
+| `status`                   | `VARCHAR(12)` |        | X    | `ACTIVE` | 계좌 상태. `ACTIVE`(정상) / `SUSPENDED`(거래정지) / `CLOSED`(해지)                            |
+| `password_hash`            | `CHAR(60)`    |        | X    |          | 계좌비밀번호 4자리의 BCrypt 해시                                                             |
+| `password_failure_count`   | `TINYINT`     |        | X    | `0`      | 계좌비밀번호 연속 오류 횟수. 검증 실패 응답의 `errorCount`                                           |
+| `password_locked`          | `BOOLEAN`     |        | X    | `FALSE`  | 계좌비밀번호 잠금 여부. 5회 오류 시 TRUE가 되어 거래가 정지된다 (APW0101)                                 |
+| `alias`                    | `VARCHAR(24)` |        | O    |          | 고객이 붙인 계좌별명. 계좌명 표시 시 상품명보다 우선한다                                                  |
+| `display_order`            | `INT`         |        | O    |          | 고객이 지정한 계좌 목록 표시 순서                                                               |
+| `withdrawal_registered`    | `BOOLEAN`     |        | X    | `FALSE`  | 출금계좌로 등록됐는지. 이체·상품가입의 출금 원천이 될 수 있는지를 가른다                                         |
+| `withdrawal_registered_at` | `DATETIME(6)` |        | O    |          | 출금계좌 등록 시각. 미등록이면 NULL                                                            |
+| `opened_date`              | `DATETIME(6)` |        | X    |          | 계좌 개설일                                                                            |
+| `maturity_date`            | `DATE`        |        | O    |          | 만기일. 예·적금 계좌만 값이 있다                                                               |
+| `closed_date`              | `DATETIME(6)` |        | O    |          | 해지일.                                                                              |
+| `last_transaction_at`      | `DATETIME(6)` |        | O    |          | 최근 거래 일시. 전체 계좌 조회의 `lastTransactionAt`                                           |
+| `version`                  | `BIGINT`      |        | X    | `0`      | 낙관적 락 버전. 배치·조회 경로의 갱신 충돌을 잡는다 (이체 실행 경로는 비관적 락)                                  |
+| `created_at`               | `DATETIME(6)` |        | X    |          | 행 생성 일시. JPA Auditing이 UTC 기준으로 자동 설정                                             |
+| `updated_at`               | `DATETIME(6)` |        | X    |          | 행 최종 수정 일시. JPA Auditing이 UTC 기준으로 자동 설정                                          |
 
 **인덱스**
 
@@ -313,10 +320,65 @@
 
 **CHECK 제약**
 
-| 이름 | 조건 |
-| --- | --- |
-| `ck_account_balance` | `balance >= 0` |
-| `ck_account_number` | `account_number REGEXP '^[0-9]{12}$'` |
+| 이름                                    | 조건                                                                                                                                                   | 설명                                                 |
+|---------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------|
+| `ck_account_balance`                  | `balance >= 0`                                                                                                                                       | 계좌 잔액은 0원 이상이어야 한다.                                |
+| `ck_account_number`                   | `account_number REGEXP '^[0-9]{12}$'`                                                                                                                | 계좌번호는 하이픈 없는 숫자 12자리여야 한다.                         |
+| `ck_account_type`                     | `account_type IN ('DEMAND_DEPOSIT', 'TIME_DEPOSIT', 'INSTALLMENT_SAVINGS')`                                                                          | 계좌 유형은 입출금·정기예금·정기적금 중 하나여야 한다.                    |
+| `ck_account_status`                   | `status IN ('ACTIVE', 'SUSPENDED', 'CLOSED')`                                                                                                        | 계좌 상태는 정상·거래정지·해지 중 하나여야 한다.                       |
+| `ck_account_password_lock_state`      | 오류 횟수가 `0~4`이면 `password_locked = FALSE`, 오류 횟수가 `5`이면 `password_locked = TRUE`                                                                      | 계좌비밀번호 연속 오류 횟수와 잠금 상태가 항상 일치해야 한다.                |
+| `ck_account_withdrawal_registered`    | `withdrawal_registered IN (FALSE, TRUE)`                                                                                                             | 출금계좌 등록 여부는 Boolean 값이어야 한다.                       |
+| `ck_account_product`                  | `DEMAND_DEPOSIT`이면 `product_id IS NULL`<br>`TIME_DEPOSIT` 또는 `INSTALLMENT_SAVINGS`이면 `product_id IS NOT NULL`                                        | 입출금계좌에는 상품이 연결되지 않고, 예·적금계좌에는 상품이 반드시 연결되어야 한다.    |
+| `ck_account_maturity`                 | `DEMAND_DEPOSIT`이면 `maturity_date IS NULL`<br>`TIME_DEPOSIT` 또는 `INSTALLMENT_SAVINGS`이면 `maturity_date IS NOT NULL AND maturity_date >= opened_date` | 입출금계좌에는 만기일이 없고, 예·적금계좌의 만기일은 개설일 이후여야 한다.         |
+| `ck_account_withdrawal_type`          | `withdrawal_registered = FALSE OR account_type = 'DEMAND_DEPOSIT'`                                                                                   | 출금계좌 등록은 입출금계좌에만 허용한다.                             |
+| `ck_account_withdrawal_registered_at` | 미등록이면 `withdrawal_registered_at IS NULL`<br>등록이면 `withdrawal_registered_at IS NOT NULL`                                                              | 출금계좌 등록 여부와 등록 일시의 존재 여부가 일치해야 한다.                 |
+| `ck_account_closed_date`              | `CLOSED`이면 `closed_date IS NOT NULL AND closed_date >= opened_date`<br>`CLOSED`가 아니면 `closed_date IS NULL`                                           | 해지 계좌에는 개설일 이후의 해지일이 있어야 하며, 미해지 계좌에는 해지일이 없어야 한다. |
+
+---
+
+## `account_number_sequence`
+
+> 은행·상품별 계좌번호 채번
+
+은행·계좌 유형·상품별 계좌번호 발급 규칙과 마지막 발급 일련번호를 관리한다.
+
+### 계좌번호 구성
+```text
+은행코드 3자리 + 상품 Prefix 2자리 + 일련번호 7자리
+```
+
+| 컬럼명              | 데이터 타입      | NULL 허용 |      기본값       | 키  | 설명                                                              |
+|:-----------------|:------------|:-------:|:--------------:|:--:|:----------------------------------------------------------------|
+| `sequence_id`    | BIGINT      |    X    | AUTO_INCREMENT | PK | 계좌번호 채번 규칙 식별자                                                  |
+| `bank_code`      | CHAR(3)     |    X    |       없음       |    | 계좌번호 앞 3자리에 포함되는 은행코드                                           |
+| `account_type`   | VARCHAR(24) |    X    |       없음       |    | 계좌 유형 (`DEMAND_DEPOSIT`, `TIME_DEPOSIT`, `INSTALLMENT_SAVINGS`) |
+| `product_id`     | BIGINT      |    O    |      NULL      | FK | 연결 상품 식별자. 입출금계좌는 `NULL`                                        |
+| `product_prefix` | CHAR(2)     |    X    |       없음       |    | 계좌번호에 포함되는 상품별 Prefix                                           |
+| `last_sequence`  | BIGINT      |    X    |      `0`       |    | 마지막으로 발급한 7자리 일련번호                                              |
+| `created_at`     | DATETIME(6) |    X    |       없음       |    | 채번 규칙 생성 일시                                                     |
+| `updated_at`     | DATETIME(6) |    X    |       없음       |    | 채번 규칙 최종 수정 일시                                                  |
+
+**인덱스**
+
+| 종류 | 이름                                   | 컬럼                                        | 용도                               |
+| :--- |:-------------------------------------|:------------------------------------------|:---------------------------------|
+| PRIMARY | `PRIMARY`                            | `sequence_id`                             | 채번 규칙 식별 및 PK 조회                 |
+| UNIQUE | `uk_account_number_sequence_prefix`  | `bank_code`, `product_prefix`             | 같은 은행 내 Prefix 중복 방지             |
+| UNIQUE | `uk_account_number_sequence_rule` | `bank_code`, `COALESCE(product_id, 0)`                 | 같은 입출금, 예·적금 상품의 채번 규칙 중복 방지     |
+| INDEX | `ix_account_number_sequence_lookup`  | `bank_code`, `account_type`, `product_id` | 계좌번호 발급 시 채번 행 조회 및 비관적 락 범위 최소화 |
+| INDEX | `ix_account_number_sequence_product` | `product_id`                              | 상품 FK 검사 및 상품 기준 조회 지원           |
+
+**CHECK 제약**
+
+| 이름 | 조건 | 설명 |
+| :--- | :--- | :--- |
+| `PRIMARY` | `sequence_id` (PK) | 행별 고유값 (채번 규칙 행 식별) |
+| `fk_account_number_sequence_product` | `product_id` (FK -> `product.product_id`) | 존재하는 상품만 채번 규칙 연결 가능 |
+| `ck_account_number_sequence_bank_code` | `bank_code REGEXP '^[0-9]{3}$'` (CHECK) | 은행코드 형식 검증 (숫자 3자리) |
+| `ck_account_number_sequence_prefix` | `product_prefix REGEXP '^[0-9]{2}$'` (CHECK) | 상품 Prefix 형식 검증 (숫자 2자리) |
+| `ck_account_number_sequence_type` | `account_type IN ('DEMAND_DEPOSIT', 'TIME_DEPOSIT', 'INSTALLMENT_SAVINGS')` (CHECK) | 허용된 계좌 유형 중 하나인지 검증 |
+| `ck_account_number_sequence_product` | `DEMAND_DEPOSIT이면 product_id IS NULL, 예·적금이면 product_id IS NOT NULL` (CHECK) | 입출금은 상품 없음, 예·적금은 상품 필수 (정합성 보장) |
+| `ck_account_number_sequence_value` | `last_sequence BETWEEN 0 AND 9999999` (CHECK) | 일련번호가 7자리 범위(0 ~ 9,999,999)를 초과하지 않도록 제한 |
 
 ---
 
@@ -333,7 +395,7 @@
 | `seq_date` | `DATE` | **PK** | X |  | 채번 기준 영업일. KST 기준이며 거래번호 앞 8자리와 같다 |
 | `channel` | `CHAR(2)` | **PK** | X |  | 채널 코드. `WB`(인터넷뱅킹) / `BT`(배치·예약이체). 거래번호 9~10번째 자리 |
 | `last_seq` | `BIGINT` |  | X | `0` | 해당 일자·채널에서 마지막으로 나간 일련번호. 다음 거래는 이 값 + 1을 받는다 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 마지막 채번 시각 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 마지막 채번 시각 |
 
 **CHECK 제약**
 
@@ -370,7 +432,7 @@
 | `error_code` | `VARCHAR(10)` |  | O |  | 실패 시 오류코드 |
 | `error_message` | `VARCHAR(200)` |  | O |  | 실패 시 사유 문구 |
 | `transferred_at` | `DATETIME(6)` |  | X |  | 이체 처리 일시 |
-| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 생성 일시 |
+| `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
 
 **인덱스**
 
@@ -430,6 +492,18 @@
 
 ---
 
+## `ledger_entry_id_sequence`
+
+> `ledger_entry.ledger_entry_id` 전용 채번 카운터
+
+`ledger_entry`는 파티션 키(`occurred_at`)를 포함한 복합 PK `(ledger_entry_id, occurred_at)`를 쓰는데, Hibernate는 `@IdClass` 복합키 구성 필드에 IDENTITY 채번 전략을 지원하지 않는다(`docs/flyway_guide.md` 4-3절 참고). 그래서 `ledger_entry_id` 컬럼 자체의 `AUTO_INCREMENT`는 애플리케이션이 직접 활용할 수 없고, 이 전용 테이블에 빈 행을 저장해 생성되는 `AUTO_INCREMENT` 값만 취해 `ledger_entry_id`로 사용한다. 다른 컬럼은 두지 않는다.
+
+| 컬럼명 | 데이터 타입 | NULL 허용 | 기본값 | 키 | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `sequence_id` | `BIGINT` | X | `AUTO_INCREMENT` | PK | 생성 즉시 `ledger_entry.ledger_entry_id`로 그대로 쓰인다 |
+
+---
+
 ## `favorite_account`
 
 > 자주 쓰는 계좌 (최대 20건은 앱 검증)
@@ -463,7 +537,7 @@
 | `one_time_limit` | `BIGINT` |  | X |  | 1회 이체한도. 초과하면 LMT0002 |
 | `daily_limit` | `BIGINT` |  | X |  | 1일 이체한도. 초과하면 LMT0003 |
 | `version` | `BIGINT` |  | X | `0` | 낙관적 락 버전 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 최종 수정 일시 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시 |
 
 **CHECK 제약**
 
@@ -485,7 +559,7 @@
 | `customer_id` | `BIGINT` | **PK** **FK** | X |  | 대상 고객 → `customer.customer_id` |
 | `usage_date` | `DATE` | **PK** | X |  | 사용액 집계 기준일. KST 영업일이며 매일 새 행이 생긴다 |
 | `used_amount` | `BIGINT` |  | X | `0` | 해당 일자에 `SUCCESS`로 확정된 이체금액 누계. 오류·취소·미실행 예약은 빠진다 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 마지막 사용액 갱신 시각 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 마지막 사용액 갱신 시각 |
 
 **CHECK 제약**
 
@@ -612,7 +686,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | `status` | `VARCHAR(12)` |  | X |  | **등록 건** 생명주기 상태. `NORMAL`(운용 중) / `EXPIRED`(기간 만료로 시스템 자동 종료) / `TERMINATED`(고객 직접 해지). 회차 실행결과와는 전혀 다른 개념이다 |
 | `registered_at` | `DATETIME(6)` |  | X |  | 등록 일시 |
 | `terminated_at` | `DATETIME(6)` |  | O |  | 해지·만료 전환 시각 |
-| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 행 최종 수정 일시 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시 |
 | `active_dup_key` | `VARCHAR(64)` *GEN* | **UK** | O |  | **생성 컬럼.** `NORMAL`일 때만 값이 생겨 중복 등록을 막는다 (AUT0301) |
 
 **인덱스**
@@ -673,7 +747,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | `state` | `VARCHAR(12)` |  | X |  | 처리 상태. `PROCESSING`(처리 중) / `COMPLETED`(완료). 재요청 시 CMN0301과 200 반환을 가르는 기준 |
 | `http_status` | `SMALLINT` |  | O |  | 저장된 응답의 HTTP 상태코드 |
 | `response_snapshot` | `JSON` |  | O |  | 저장된 응답 본문. 재요청 시 그대로 되돌려준다 |
-| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 최초 요청 수신 시각 |
+| `created_at` | `DATETIME(6)` |  | X |  | 최초 요청 수신 시각 |
 | `expires_at` | `DATETIME(6)` |  | X |  | 만료 시각. 24시간 경과 건은 배치가 지운다 |
 
 **인덱스**
@@ -707,5 +781,30 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | --- | --- | --- |
 | INDEX | `ix_audit_customer` | `customer_id, requested_at DESC` |
 | INDEX | `ix_audit_txno` | `transaction_number` |
+
+---
+
+## `common_code`
+
+> 공통코드 (REQ-CMN-023). 코드값 → 화면 표시명 매핑
+
+`code` 값은 서버 Enum 값과 문자열이 정확히 일치해야 한다. Enum에는 있는데 이 테이블에 행이 없으면 프론트가 표시명 매핑에 실패한다. P5 테이블 중 유일하게 `created_at`/`updated_at`을 모두 가져 `BaseEntity`를 상속한다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `code_group` | `VARCHAR(50)` | **PK** | X |  | 코드 그룹명. 예: `ACCOUNT_STATUS` |
+| `code` | `VARCHAR(50)` | **PK** | X |  | 코드값. 서버 Enum 값과 일치. 예: `ACTIVE` |
+| `code_name` | `VARCHAR(100)` |  | X |  | 화면 표시 한글명. 예: `정상` |
+| `sort_order` | `INT` |  | X |  | 드롭다운 표시 순서 |
+| `use_yn` | `CHAR(1)` |  | X | `Y` | 사용 여부. `Y`/`N`. 물리 삭제 대신 사용 |
+| `description` | `VARCHAR(200)` |  | O |  | 관리자용 설명 |
+| `created_at` | `DATETIME(6)` |  | X |  | JPA Auditing |
+| `updated_at` | `DATETIME(6)` |  | X |  | JPA Auditing |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| INDEX | `ix_common_code_group` | `code_group, use_yn, sort_order` |
 
 ---
