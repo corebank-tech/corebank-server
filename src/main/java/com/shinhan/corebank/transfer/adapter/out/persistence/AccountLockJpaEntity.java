@@ -51,6 +51,14 @@ public class AccountLockJpaEntity {
     @Column(name = "status", nullable = false, length = 12, insertable = false, updatable = false)
     private String status;
 
+    /** 출금계좌 등록 여부(TRF0001 검증용). 조회 전용. */
+    @Column(name = "withdrawal_registered", nullable = false, insertable = false, updatable = false)
+    private boolean withdrawalRegistered;
+
+    /** 상품유형(TRF0004 입금계좌 검증용). 조회 전용. */
+    @Column(name = "account_type", nullable = false, length = 24, insertable = false, updatable = false)
+    private String accountType;
+
     /**
      * account.version은 P2(계좌 도메인)의 낙관적 락 컬럼이다. 이체 실행 경로는 비관적 락으로
      * 진행 중 동시 접근을 막지만, 락 반납 이후 이 행의 과거 스냅샷을 들고 있던 다른 경로(P2)가
