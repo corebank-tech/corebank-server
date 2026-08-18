@@ -4,13 +4,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
+import com.shinhan.corebank.account.application.port.in.AccountGroupCode;
+import com.shinhan.corebank.account.application.port.in.AccountOverviewQueryUseCase;
+import com.shinhan.corebank.account.application.port.in.AccountOverviewResult;
+import com.shinhan.corebank.account.domain.AccountStatus;
+import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.customer.application.port.in.LoginStatusResult;
-import com.shinhan.corebank.customer.application.port.out.AccountLastTransactionQueryPort;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,7 +32,7 @@ class LoginStatusQueryServiceTest {
     CustomerPersistencePort customerPersistencePort;
 
     @Mock
-    AccountLastTransactionQueryPort accountLastTransactionQueryPort;
+    AccountOverviewQueryUseCase accountOverviewQueryUseCase;
 
     @InjectMocks
     LoginStatusQueryService service;
@@ -35,17 +41,18 @@ class LoginStatusQueryServiceTest {
     @DisplayName("고객의 직전 접속일시·접속IP와, 보유 계좌 중 가장 최근 거래일시를 함께 반환한다")
     void getLoginStatus_combinesPreviousLoginCurrentLoginIpAndLastTransactionAt() {
         LocalDateTime previousLoginAt = LocalDateTime.of(2026, 3, 5, 10, 0);
-        LocalDateTime lastTransactionAt = LocalDateTime.of(2026, 3, 12, 15, 0);
         when(customerPersistencePort.findById(1L))
                 .thenReturn(Optional.of(customerWith(1L, previousLoginAt, "203.245.11.87")));
-        when(accountLastTransactionQueryPort.findLatestTransactionAt(1L))
-                .thenReturn(Optional.of(lastTransactionAt));
+        when(accountOverviewQueryUseCase.getOverview(1L)).thenReturn(overviewWithTransactionDates(
+                LocalDateTime.of(2026, 3, 10, 9, 0),
+                LocalDateTime.of(2026, 3, 12, 15, 0), // 가장 최근
+                LocalDateTime.of(2026, 3, 1, 8, 0)));
 
         LoginStatusResult result = service.getLoginStatus(1L);
 
         assertThat(result.previousLoginAt()).isEqualTo(previousLoginAt);
         assertThat(result.currentLoginIp()).isEqualTo("203.245.11.87");
-        assertThat(result.lastTransactionAt()).isEqualTo(lastTransactionAt);
+        assertThat(result.lastTransactionAt()).isEqualTo(LocalDateTime.of(2026, 3, 12, 15, 0));
     }
 
     @Test
@@ -53,8 +60,7 @@ class LoginStatusQueryServiceTest {
     void getLoginStatus_noPreviousLogin_previousLoginAtIsNull() {
         when(customerPersistencePort.findById(2L))
                 .thenReturn(Optional.of(customerWith(2L, null, "1.1.1.1")));
-        when(accountLastTransactionQueryPort.findLatestTransactionAt(2L))
-                .thenReturn(Optional.empty());
+        when(accountOverviewQueryUseCase.getOverview(2L)).thenReturn(overviewWithTransactionDates());
 
         LoginStatusResult result = service.getLoginStatus(2L);
 
@@ -66,8 +72,7 @@ class LoginStatusQueryServiceTest {
     void getLoginStatus_noTransactions_lastTransactionAtIsNull() {
         when(customerPersistencePort.findById(3L))
                 .thenReturn(Optional.of(customerWith(3L, null, "1.1.1.1")));
-        when(accountLastTransactionQueryPort.findLatestTransactionAt(3L))
-                .thenReturn(Optional.empty());
+        when(accountOverviewQueryUseCase.getOverview(3L)).thenReturn(overviewWithTransactionDates((LocalDateTime) null));
 
         LoginStatusResult result = service.getLoginStatus(3L);
 
@@ -104,5 +109,17 @@ class LoginStatusQueryServiceTest {
                 joinedAt,
                 joinedAt
         );
+    }
+
+    private AccountOverviewResult overviewWithTransactionDates(LocalDateTime... transactionDates) {
+        // List.of()는 null 원소를 못 담아서(거래 이력 없는 계좌 테스트용) Arrays.asList()를 쓴다
+        List<AccountOverviewResult.AccountItem> accounts = java.util.Arrays.asList(transactionDates).stream()
+                .map(date -> new AccountOverviewResult.AccountItem(
+                        1L, "계좌", "110000000001", AccountType.DEMAND_DEPOSIT, 10_000L,
+                        AccountStatus.ACTIVE, LocalDate.of(2026, 1, 1), date, null, true))
+                .toList();
+        AccountOverviewResult.Group group = new AccountOverviewResult.Group(
+                AccountGroupCode.DEMAND_DEPOSIT, "입출금계좌", 10_000L, accounts);
+        return new AccountOverviewResult(OffsetDateTime.now(), 10_000L, List.of(group));
     }
 }
