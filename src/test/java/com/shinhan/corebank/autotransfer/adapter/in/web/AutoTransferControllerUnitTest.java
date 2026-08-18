@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferCancelUseCase;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferChangeUseCase;
+import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferExecutionHistoryQueryUseCase;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferQueryUseCase;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterUseCase;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
@@ -50,10 +51,13 @@ class AutoTransferControllerUnitTest {
     HttpServletRequest httpServletRequest;
     @Mock
     CurrentCustomerProvider currentCustomerProvider;
+    @Mock
+    AutoTransferExecutionHistoryQueryUseCase autoTransferExecutionHistoryQueryUseCase;
 
     private AutoTransferController newController() {
         return new AutoTransferController(autoTransferRegisterUseCase, idempotencyService, new ObjectMapper(),
-                autoTransferQueryUseCase, autoTransferChangeUseCase, autoTransferCancelUseCase, currentCustomerProvider);
+                autoTransferQueryUseCase, autoTransferChangeUseCase, autoTransferCancelUseCase, currentCustomerProvider,
+                autoTransferExecutionHistoryQueryUseCase);
     }
 
     private AutoTransfer sampleAutoTransfer() {
