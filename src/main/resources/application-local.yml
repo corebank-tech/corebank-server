@@ -16,6 +16,9 @@ spring:
     show-sql: true
   flyway:
     clean-disabled: true
+  data:
+    redis:
+      host: localhost
 
 logging:
   level:
