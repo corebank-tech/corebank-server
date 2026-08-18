@@ -134,6 +134,7 @@ jobs:
                 - FLYWAY_USER=FLYWAY_USER_PLACEHOLDER
                 - FLYWAY_PASSWORD=FLYWAY_PASSWORD_PLACEHOLDER
                 - REDIS_HOST=corebank-redis
+                - CORS_ALLOWED_ORIGINS=CORS_ALLOWED_ORIGINS_PLACEHOLDER
               networks:
                 - corebank-net
               depends_on:
@@ -170,7 +171,8 @@ jobs:
           sed -i "s|DB_PASSWORD_PLACEHOLDER|${{ secrets.DB_PASSWORD }}|g" docker-compose.yml
           sed -i "s|FLYWAY_USER_PLACEHOLDER|${{ secrets.FLYWAY_USER }}|g" docker-compose.yml
           sed -i "s|FLYWAY_PASSWORD_PLACEHOLDER|${{ secrets.FLYWAY_PASSWORD }}|g" docker-compose.yml
-          
+          sed -i "s|CORS_ALLOWED_ORIGINS_PLACEHOLDER|${{ secrets.CORS_ALLOWED_ORIGINS }}|g" docker-compose.yml
+
           # Docker Compose를 이용한 최신 이미지 풀 및 무중단/선언적 배포
           docker compose pull
           docker compose up -d --remove-orphans
