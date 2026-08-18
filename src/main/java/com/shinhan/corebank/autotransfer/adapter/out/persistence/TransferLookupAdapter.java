@@ -20,7 +20,7 @@ public class TransferLookupAdapter implements TransferLookupPort {
     @Override
     public Optional<TransferLookupResult> findBySourceAndDate(Long autoTransferId, LocalDate executionDate) {
         return transferLookupJpaRepository.findBySourceAndDate(SOURCE_TYPE_AUTO, autoTransferId, executionDate.atStartOfDay(),
-                executionDate.plusDays(1).atStartOfDay())
+                executionDate.plusDays(1).atStartOfDay()).stream().findFirst()
                 .map(e -> new TransferLookupResult(e.getTransactionNumber(), e.getStatus(), e.getErrorMessage()));
     }
 

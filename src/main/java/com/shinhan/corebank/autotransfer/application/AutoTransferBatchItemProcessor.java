@@ -112,8 +112,12 @@ public class AutoTransferBatchItemProcessor {
             execution.markError("실행 중 확인 불가로 재확정 배치가 오류 처리함", null);
         } else if (lookup.get().status() == ProcessResultStatus.SUCCESS) {
             execution.markSuccess(lookup.get().transactionNumber());
-        } else {
+        } else if (lookup.get().status() == ProcessResultStatus.ERROR){
             execution.markError(lookup.get().errorMessage(), lookup.get().transactionNumber());
+        } else {
+            log.warn("재확정 배치가 예상치 못한 transfer 상태를 조회함 - autoTransferId={}, status={}",
+                    autoTransfer.getAutoTransferId(), lookup.get().status());
+            execution.markError("실행 중 확인 불가로 재확정 배치가 오류 처리함", null);
         }
 
         autoTransferExecutionPersistencePort.save(execution, autoTransfer.getAutoTransferId());

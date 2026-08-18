@@ -90,6 +90,27 @@ class TransferLookupAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("같은 자동이체·날짜에 transfer 행이 여러 건이면 가장 최근(transferredAt 기준) 행을 반환한다")
+    void findBySourceAndDate_multipleMatches_returnsMostRecent() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+        Long depositAccountId = insertAccount(customerId);
+        Long autoTransferId = 5005L;
+        insertTransfer(withdrawalAccountId, depositAccountId, "20260315BT0000000005",
+                ProcessResultStatus.ERROR, "AUTO", autoTransferId, "잔액 부족",
+                LocalDateTime.of(2026, 3, 15, 0, 10, 0));
+        insertTransfer(withdrawalAccountId, depositAccountId, "20260315BT0000000006",
+                ProcessResultStatus.SUCCESS, "AUTO", autoTransferId, null,
+                LocalDateTime.of(2026, 3, 15, 0, 20, 0));
+
+        Optional<TransferLookupResult> result = adapter.findBySourceAndDate(autoTransferId, LocalDate.of(2026, 3, 15));
+
+        assertThat(result).isPresent();
+        assertThat(result.get().transactionNumber()).isEqualTo("20260315BT0000000006");
+        assertThat(result.get().status()).isEqualTo(ProcessResultStatus.SUCCESS);
+    }
+
+    @Test
     @DisplayName("같은 autoTransferId라도 source_type이 AUTO가 아니면 매칭되지 않는다")
     void findBySourceAndDate_differentSourceType_returnsEmpty() {
         Long customerId = insertCustomer();

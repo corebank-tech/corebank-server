@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 @Table(name = "transfer")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-// transfer 테이블 거냥한 autotransfer 도메인 전용 경량 매핑 ( 조회 전용 )
+// transfer 테이블 겨냥한 autotransfer 도메인 전용 경량 매핑 ( 조회 전용 )
 public class TransferLookupJpaEntity {
 
     @Id

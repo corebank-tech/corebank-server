@@ -507,6 +507,24 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("재확정: transfer 조회 결과가 SUCCESS/ERROR가 아닌 예상 밖 상태면 크래시 없이 고정 사유로 ERROR 확정하고 WARN 로그를 남긴다")
+    void reconcileStuckExecution_unexpectedStatus_marksErrorWithFixedReasonAndLogsWarn(CapturedOutput output) {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
+                .thenReturn(Optional.of(new TransferLookupResult(null, ProcessResultStatus.PROCESSING, null)));
+
+        itemProcessor.reconcileStuckExecution(new StuckExecution(autoTransfer(), saved));
+
+        var executionAfter = executionRepository.findById(saved.getExecutionId()).orElseThrow();
+        assertThat(executionAfter.getStatus()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(executionAfter.getFailureReason()).isEqualTo("실행 중 확인 불가로 재확정 배치가 오류 처리함");
+        assertThat(executionAfter.getTransactionNumber()).isNull();
+        assertThat(output).contains("재확정 배치가 예상치 못한 transfer 상태를 조회함")
+                .contains("autoTransferId=" + autoTransferId)
+                .contains("status=PROCESSING");
+    }
+
+    @Test
     @DisplayName("reconcileStuckExecutions()는 findAllProcessing()이 찾은 모든 회차를 각각 재확정한다")
     void reconcileStuckExecutions_reconcilesEveryStuckExecution() {
         itemProcessor.saveProcessing(autoTransfer(), today);
