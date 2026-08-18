@@ -13,6 +13,7 @@ import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
+import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import lombok.RequiredArgsConstructor;
@@ -114,5 +115,11 @@ public class AutoTransferBatchItemProcessor {
         }
 
         autoTransferExecutionPersistencePort.save(execution, autoTransfer.getAutoTransferId());
+
+        autoTransfer.advanceNextExecutionDate();
+        if(autoTransfer.getNextExecutionDate().isAfter(autoTransfer.getEndDate())) {
+            autoTransfer.expire(LocalDateTime.now());
+        }
+        autoTransferPersistencePort.save(autoTransfer);
     }
 }

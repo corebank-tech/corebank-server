@@ -516,6 +516,63 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
         assertThat(executionRepository.findAll().get(0).getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
     }
 
+    @Test
+    @DisplayName("재확정 시에도 completeProcessing()과 동일하게 nextExecutionDate가 다음 주기로 갱신된다")
+    void reconcileStuckExecution_advancesNextExecutionDate() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
+                .thenReturn(Optional.of(new TransferLookupResult(
+                        "20260315BT0000000004", ProcessResultStatus.SUCCESS, null)));
+
+        itemProcessor.reconcileStuckExecution(new StuckExecution(autoTransfer(), saved));
+
+        var autoTransferAfter = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        assertThat(autoTransferAfter.getNextExecutionDate()).isEqualTo(LocalDate.of(2026, 4, 15));
+        assertThat(autoTransferAfter.getStatus()).isEqualTo(AutoTransferStatus.NORMAL);
+    }
+
+    @Test
+    @DisplayName("재확정으로 다음 실행일이 종료일을 넘으면 자동이체가 만료(EXPIRED)된다")
+    void reconcileStuckExecution_pastEndDate_expiresAutoTransfer() {
+        // endDate를 이번 회차 실행일 다음달 이전으로 좁혀서, advanceNextExecutionDate() 이후 만료되게 한다
+        autoTransferJpaRepository.save(AutoTransferJpaEntity.builder()
+                .autoTransferId(autoTransferId)
+                .customerId(customerId)
+                .withdrawalAccountId(autoTransferJpaRepository.findById(autoTransferId).orElseThrow().getWithdrawalAccountId())
+                .depositAccountNumber("110987654321")
+                .payeeName("홍길동")
+                .amount(10000L)
+                .cycleMonths(1)
+                .transferDay(15)
+                .startDate(LocalDate.of(2026, 1, 1))
+                .endDate(LocalDate.of(2026, 3, 20))
+                .nextExecutionDate(today)
+                .myPassbookMemo("메모")
+                .recipientPassbookMemo("받는메모")
+                .status(AutoTransferStatus.NORMAL)
+                .registeredAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+                .updatedAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+                .version(0L)
+                .build());
+        AutoTransferJpaEntity afterManualSave = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        AutoTransfer domainWithNearEndDate = AutoTransfer.reconstitute(
+                autoTransferId, customerId, afterManualSave.getWithdrawalAccountId(),
+                "110987654321", "홍길동", 10000L, 1, 15,
+                LocalDate.of(2026, 1, 1), LocalDate.of(2026, 3, 20), today,
+                "메모", "받는메모", AutoTransferStatus.NORMAL,
+                LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0), afterManualSave.getVersion());
+
+        AutoTransferExecution saved = itemProcessor.saveProcessing(domainWithNearEndDate, today);
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
+                .thenReturn(Optional.of(new TransferLookupResult(
+                        "20260315BT0000000005", ProcessResultStatus.SUCCESS, null)));
+
+        itemProcessor.reconcileStuckExecution(new StuckExecution(domainWithNearEndDate, saved));
+
+        var autoTransferAfter = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        assertThat(autoTransferAfter.getStatus()).isEqualTo(AutoTransferStatus.EXPIRED);
+    }
+
     private Long insertCustomer() {
         long seq = CUSTOMER_SEQ.incrementAndGet();
         String userId = "u" + seq;
