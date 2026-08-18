@@ -212,14 +212,39 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
         assertThat(autoTransferAfter.getStatus()).isEqualTo(AutoTransferStatus.NORMAL);
 
         assertThat(auditLogJpaRepository.findAll()).hasSize(1);
+        assertThat(auditLogJpaRepository.findAll().get(0).getDetail()).doesNotContainKey("errorCode");
     }
 
     @Test
-    @DisplayName("이체 실패 시: 회차가 ERROR로 확정되지만 다음 실행일은 그대로 갱신되고, 감사로그는 안 남는다")
-    void completeProcessing_failure() {
+    @DisplayName("채번 이전 실패 시: 회차가 ERROR로 확정되지만 다음 실행일은 그대로 갱신되고, 거래번호가 없어 감사로그는 안 남는다")
+    void completeProcessing_failureBeforeSequencing_noAuditLog() {
         AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
         when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
                 .status(ProcessResultStatus.ERROR)
+                .errorCode("TRF0001")
+                .errorMessage("출금계좌가 등록되지 않았습니다.")
+                .build());
+
+        itemProcessor.completeProcessing(autoTransfer(), saved, today);
+
+        var executionAfter = executionRepository.findById(saved.getExecutionId()).orElseThrow();
+        assertThat(executionAfter.getStatus()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(executionAfter.getFailureReason()).isEqualTo("출금계좌가 등록되지 않았습니다.");
+        assertThat(executionAfter.getTransactionNumber()).isNull();
+
+        var autoTransferAfter = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        assertThat(autoTransferAfter.getNextExecutionDate()).isEqualTo(LocalDate.of(2026, 4, 15));
+
+        assertThat(auditLogJpaRepository.findAll()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("채번 이후 실패(한도초과·잔액부족 등) 시: 실행이력에 거래번호가 함께 남고, 실패 감사로그도 남는다")
+    void completeProcessing_failureAfterSequencing_savesTransactionNumberAndAuditLog() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
+                .status(ProcessResultStatus.ERROR)
+                .transactionNumber("20260315BT0000000002")
                 .errorCode("LMT0001")
                 .errorMessage("잔액 부족")
                 .build());
@@ -229,11 +254,12 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
         var executionAfter = executionRepository.findById(saved.getExecutionId()).orElseThrow();
         assertThat(executionAfter.getStatus()).isEqualTo(ProcessResultStatus.ERROR);
         assertThat(executionAfter.getFailureReason()).isEqualTo("잔액 부족");
+        assertThat(executionAfter.getTransactionNumber()).isEqualTo("20260315BT0000000002");
 
-        var autoTransferAfter = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
-        assertThat(autoTransferAfter.getNextExecutionDate()).isEqualTo(LocalDate.of(2026, 4, 15));
-
-        assertThat(auditLogJpaRepository.findAll()).isEmpty();
+        assertThat(auditLogJpaRepository.findAll()).hasSize(1);
+        var auditLog = auditLogJpaRepository.findAll().get(0);
+        assertThat(auditLog.getResult()).isEqualTo("FAILURE");
+        assertThat(auditLog.getDetail()).containsEntry("errorCode", "LMT0001");
     }
 
     @Test

@@ -195,6 +195,49 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(result.get().getProduct().getSaleStatus()).isEqualTo(SaleStatus.SUSPENDED);
     }
 
+    @Test
+    @DisplayName("존재하는 productId면 existsProduct가 true를 반환한다")
+    void existsProduct_true() {
+        ProductJpaEntity saved = repository.save(product("EXS-101", "존재 확인용", ProductGroup.DEPOSIT,
+                new BigDecimal("2.00"), SaleStatus.ON_SALE));
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(adapter.existsProduct(saved.getProductId())).isTrue();
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 productId면 existsProduct가 false를 반환한다")
+    void existsProduct_false() {
+        assertThat(adapter.existsProduct(999_999L)).isFalse();
+    }
+
+    @Test
+    @DisplayName("product_terms 연결이 있으면 existsProductTerms가 true를 반환한다")
+    void existsProductTerms_true() {
+        ProductJpaEntity saved = repository.save(product("EXS-102", "약관 연결 확인용", ProductGroup.DEPOSIT,
+                new BigDecimal("2.00"), SaleStatus.ON_SALE));
+        Long termsId = jdbcTemplate.queryForObject(
+                "SELECT terms_id FROM terms WHERE terms_code = ?", Long.class, "TERMS_DEPOSIT");
+        termsRepository.save(ProductTermsJpaEntity.builder()
+                .id(new ProductTermsJpaEntityId(saved.getProductId(), termsId))
+                .displayOrder((short) 1)
+                .build());
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(adapter.existsProductTerms(saved.getProductId(), termsId)).isTrue();
+    }
+
+    @Test
+    @DisplayName("product_terms 연결이 없으면 existsProductTerms가 false를 반환한다")
+    void existsProductTerms_false() {
+        ProductJpaEntity saved = repository.save(product("EXS-103", "약관 미연결", ProductGroup.DEPOSIT,
+                new BigDecimal("2.00"), SaleStatus.ON_SALE));
+
+        assertThat(adapter.existsProductTerms(saved.getProductId(), 999_999L)).isFalse();
+    }
+
     private static List<String> myCodesInOrder(Page<Product> page) {
         return codesInOrder(page, "SVN-1");
     }

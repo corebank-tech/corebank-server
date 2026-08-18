@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import com.shinhan.corebank.common.exception.BusinessException;
@@ -64,7 +65,7 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
     }
 
     @Override
-    public TransferBalances applyTransfer(LockedAccountsForTransfer locked, long amount) {
+    public TransferBalances applyTransfer(LockedAccountsForTransfer locked, long amount, LocalDateTime executedAt) {
         Long withdrawalAccountId = locked.withdrawal().accountId();
         Long depositAccountId = locked.deposit().accountId();
 
@@ -81,8 +82,8 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
         AccountLockJpaEntity depositEntity =
                 depositAccountId.equals(firstId) ? first : second;
 
-        withdrawalEntity.debit(amount);
-        depositEntity.credit(amount);
+        withdrawalEntity.debit(amount, executedAt);
+        depositEntity.credit(amount, executedAt);
 
         return new TransferBalances(withdrawalEntity.getBalance(), depositEntity.getBalance());
     }

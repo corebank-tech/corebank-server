@@ -59,7 +59,12 @@ public class SecurityConfig {
 
                         // 로그인 없이 조회할 수 있도록 공개
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/products/**").permitAll()
+                        // 목록/상세는 공개, 약관 열람은 이력 기록(누가 봤는지)이 필요해 인증을 요구한다.
+                        // /products/**(다단계 와일드카드) 대신 세그먼트를 명시해 두 규칙이 겹치지 않게 해서,
+                        // 아래 순서가 바뀌어도 약관 열람 경로가 실수로 permitAll에 흡수되지 않는다.
+                        .requestMatchers(HttpMethod.GET, "/products").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/products/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/products/*/terms/*").authenticated()
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
 
                         // Swagger-UI/API 문서는 인증 없이 접근 가능하도록 공개

@@ -1,5 +1,8 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import java.time.LocalDateTime;
+import java.util.Objects;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -15,11 +18,13 @@ import lombok.NoArgsConstructor;
  * account 테이블을 겨냥한 transfer 도메인 전용 경량 매핑.
  * account 모듈의 AccountJpaEntity(정식/대표 엔티티)와는 별개의 부분 매핑이며, 이체 실행 중
  * 계좌 락·잔액 변경에 필요한 컬럼(account_id, account_number, customer_id, balance, status,
- * version)만 다룬다.
+ * last_transaction_at, version)만 다룬다.
  * account 패키지를 import하지 않는다.
  * BaseEntity(createdAt/updatedAt)는 의도적으로 상속하지 않는다 — 이 엔티티는 어디서도
  * 감사 필드를 읽지 않고, 상속 시 debit/credit마다 P2 소유 감사 컬럼(updated_at)에
- * 이 어댑터의 책임 범위 밖의 쓰기가 추가로 발생하기 때문이다.
+ * 이 어댑터의 책임 범위 밖의 쓰기가 추가로 발생하기 때문이다. last_transaction_at은 예외다 —
+ * 감사 컬럼이 아니라 "마지막 거래 시각"이라는 업무적 사실이고, 그 사실을 만드는 이벤트(이체
+ * 실행)를 이 어댑터가 직접 다루므로 여기서 갱신한다(#150).
  */
 @Entity
 @Table(name = "account")
@@ -69,11 +74,19 @@ public class AccountLockJpaEntity {
     @Column(name = "version", nullable = false)
     private long version;
 
-    public void debit(long amount) {
+    /** 마지막 거래 시각(#150). 이체 실행(debit/credit) 시점에만 이 어댑터가 갱신한다. */
+    @Column(name = "last_transaction_at", columnDefinition = "DATETIME(6)")
+    private LocalDateTime lastTransactionAt;
+
+    public void debit(long amount, LocalDateTime executedAt) {
+        Objects.requireNonNull(executedAt, "executedAt");
         this.balance = Math.subtractExact(this.balance, amount);
+        this.lastTransactionAt = executedAt;
     }
 
-    public void credit(long amount) {
+    public void credit(long amount, LocalDateTime executedAt) {
+        Objects.requireNonNull(executedAt, "executedAt");
         this.balance = Math.addExact(this.balance, amount);
+        this.lastTransactionAt = executedAt;
     }
 }

@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 24개 비즈니스 테이블 + 1개 PK 채번 전용 테이블 (`ledger_entry_id_sequence`) · 250개 컬럼
+**대상**: 25개 비즈니스 테이블 + 1개 PK 채번 전용 테이블 (`ledger_entry_id_sequence`) · 259개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -39,16 +39,17 @@
 | 13 | `ledger_entry` | 원장 | P4 | 13 |
 | 14 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1 |
 | 15 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6 |
-| 16 | `transfer_limit` | 이체한도 | P1 | 5 |
-| 17 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 4 |
-| 18 | `product_subscription` | 상품가입 | P3 | 18 |
-| 19 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5 |
-| 20 | `scheduled_transfer` | 예약이체 | P3 | 17 |
-| 21 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
-| 22 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8 |
-| 23 | `idempotency_key` | 멱등키 | P5 | 9 |
-| 24 | `audit_log` | 감사 로그 | P5 | 8 |
-| 25 | `common_code` | 공통코드 | P5 | 8 |
+| 16 | `transfer_limit` | 이체한도 | P1 | 6 |
+| 17 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 5 |
+| 18 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 8 |
+| 19 | `product_subscription` | 상품가입 | P3 | 18 |
+| 20 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5 |
+| 21 | `scheduled_transfer` | 예약이체 | P3 | 17 |
+| 22 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
+| 23 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8 |
+| 24 | `idempotency_key` | 멱등키 | P5 | 9 |
+| 25 | `audit_log` | 감사 로그 | P5 | 8 |
+| 26 | `common_code` | 공통코드 | P5 | 8 |
 
 ---
 
@@ -537,6 +538,7 @@
 | `one_time_limit` | `BIGINT` |  | X |  | 1회 이체한도. 초과하면 LMT0002 |
 | `daily_limit` | `BIGINT` |  | X |  | 1일 이체한도. 초과하면 LMT0003 |
 | `version` | `BIGINT` |  | X | `0` | 낙관적 락 버전 |
+| `created_at` | `DATETIME(6)` |  | X |  | 한도 최초 부여 일시. REQ-TRSF-029로 가입 시 생성된다 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시 |
 
 **CHECK 제약**
@@ -559,6 +561,7 @@
 | `customer_id` | `BIGINT` | **PK** **FK** | X |  | 대상 고객 → `customer.customer_id` |
 | `usage_date` | `DATE` | **PK** | X |  | 사용액 집계 기준일. KST 영업일이며 매일 새 행이 생긴다 |
 | `used_amount` | `BIGINT` |  | X | `0` | 해당 일자에 `SUCCESS`로 확정된 이체금액 누계. 오류·취소·미실행 예약은 빠진다 |
+| `created_at` | `DATETIME(6)` |  | X |  | 해당 일자 첫 이체로 행이 생성된 시각 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 마지막 사용액 갱신 시각 |
 
 **CHECK 제약**
@@ -566,6 +569,29 @@
 | 이름 | 조건 |
 | --- | --- |
 | `ck_tldu_used` | `used_amount >= 0` |
+
+---
+
+## `transfer_limit_history`
+
+> 이체한도 변경 이력 (P1 소유 경계 유지)
+
+REQ-TRSF-025의 "변경 이력을 저장한다"를 담는다. 한도 변경 1건당 1행이 쌓이는 append-only 테이블이다. 변경자·요청 IP 같은 감사 정보는 `audit_log`의 책임이므로 여기에는 값의 전후 변화만 남긴다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `history_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 이력 식별자 |
+| `customer_id` | `BIGINT` | **FK** | X |  | 대상 고객 → `customer.customer_id` |
+| `before_one_time_limit` | `BIGINT` |  | X |  | 변경 전 1회 이체한도 |
+| `after_one_time_limit` | `BIGINT` |  | X |  | 변경 후 1회 이체한도 |
+| `before_daily_limit` | `BIGINT` |  | X |  | 변경 전 1일 이체한도 |
+| `after_daily_limit` | `BIGINT` |  | X |  | 변경 후 1일 이체한도 |
+| `created_at` | `DATETIME(6)` |  | X |  | 변경이 일어난 시각 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시. append-only라 `created_at`과 같은 값이 유지된다 |
+
+**제약·인덱스를 두지 않은 이유**
+
+`CHECK` 제약은 두지 않는다 — 적재되는 값은 `transfer_limit`의 `ck_tl_positive`·`ck_tl_order`를 이미 통과한 데이터의 복사본이다. 별도 인덱스도 두지 않는다 — 이력 조회 요구사항이 아직 없고, FK가 `customer_id` 인덱스를 자동 생성한다. 조회 API가 생기면 그때 추가한다.
 
 ---
 

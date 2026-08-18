@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -64,12 +65,12 @@ public class AutoTransferBatchItemProcessor {
 
         if (!result.status().isConfirmed()) {
             throw new IllegalStateException("이체 실행 결과가 PROCESSING으로 미확정 - autoTransferId=%d, date=%s"
-                    .formatted(autoTransfer.getAutoTransferId(),date));
+                    .formatted(autoTransfer.getAutoTransferId(), date));
         }
         if (result.status() == ProcessResultStatus.SUCCESS) {
             processingExecution.markSuccess(result.transactionNumber());
         } else {
-            processingExecution.markError(result.errorMessage());
+            processingExecution.markError(result.errorMessage(), result.transactionNumber());
             log.warn("자동이체 실행 실패 - autoTransferId={}, date={}, errorCode={}, errorMessage={}",
                     autoTransfer.getAutoTransferId(), date, result.errorCode(), result.errorMessage());
         }
@@ -81,10 +82,13 @@ public class AutoTransferBatchItemProcessor {
         }
         autoTransferPersistencePort.save(autoTransfer);
 
-        if (result.status() == ProcessResultStatus.SUCCESS) {
+        if (StringUtils.hasText(processingExecution.getTransactionNumber())) {
+            boolean succeeded = result.status() == ProcessResultStatus.SUCCESS;
+            Map<String, Object> detail = succeeded
+                    ? Map.of("autoTransferId", autoTransfer.getAutoTransferId(), "executionDate", date)
+                    : Map.of("autoTransferId", autoTransfer.getAutoTransferId(), "executionDate", date, "errorCode", result.errorCode());
             auditLogService.record(autoTransfer.getCustomerId(), processingExecution.getTransactionNumber(),
-                    AuditEventType.AUTO_TRANSFER, SYSTEM_REQUEST_IP, true,
-                    Map.of("autoTransferId", autoTransfer.getAutoTransferId(), "executionDate", date));
+                    AuditEventType.AUTO_TRANSFER, SYSTEM_REQUEST_IP, succeeded, detail);
         }
     }
 }

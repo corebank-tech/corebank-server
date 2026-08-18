@@ -1,5 +1,7 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import java.time.LocalDateTime;
+
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
 
@@ -23,6 +25,6 @@ class AccountLockTransferSimulator {
     @Transactional
     void execute(Long withdrawalAccountId, Long depositAccountId, long amount) {
         LockedAccountsForTransfer locked = accountLockPort.lockForTransfer(withdrawalAccountId, depositAccountId);
-        accountLockPort.applyTransfer(locked, amount);
+        accountLockPort.applyTransfer(locked, amount, LocalDateTime.now());
     }
 }

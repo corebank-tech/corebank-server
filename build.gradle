@@ -37,6 +37,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     runtimeOnly 'com.mysql:mysql-connector-j'
 
+    // Redis (약관 열람 이력, TTL 기반)
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
     // Querydsl (OpenFeign 포크, io.github.openfeign.querydsl)
     implementation "io.github.openfeign.querydsl:querydsl-jpa:${queryDslVersion}"
     annotationProcessor "io.github.openfeign.querydsl:querydsl-apt:${queryDslVersion}:jpa"
