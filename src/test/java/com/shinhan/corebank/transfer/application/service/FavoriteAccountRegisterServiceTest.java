@@ -106,4 +106,24 @@ class FavoriteAccountRegisterServiceTest {
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(FavoriteAccountErrorCode.FAVORITE_ACCOUNT_ALREADY_EXISTS));
     }
+
+    @Test
+    @DisplayName("별칭 미지정 시 예금주명이 기본 별칭으로 저장된다")
+    void register_withoutAlias_defaultsToPayeeName() {
+        service = new FavoriteAccountRegisterService(accountLockPort, persistencePort);
+
+        when(accountLockPort.resolvePayeeByAccountNumber("110222222222"))
+                .thenReturn(Optional.of(new ResolvedPayee(202L, "홍길동", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE)));
+        when(persistencePort.countByCustomerId(1L)).thenReturn(0L);
+        when(persistencePort.save(any(FavoriteAccount.class)))
+                .thenAnswer(invocation -> {
+                    FavoriteAccount arg = invocation.getArgument(0);
+                    return FavoriteAccount.of(11L, arg.getCustomerId(), arg.getDepositAccountNumber(),
+                            arg.getPayeeName(), arg.getAlias(), arg.getRegisteredAt());
+                });
+
+        FavoriteAccountResult result = service.register(new FavoriteAccountRegisterCommand(1L, "110222222222", null));
+
+        assertThat(result.alias()).isEqualTo("홍길동");
+    }
 }
