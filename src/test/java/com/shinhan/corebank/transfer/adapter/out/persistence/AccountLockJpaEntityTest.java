@@ -1,5 +1,7 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import java.time.LocalDateTime;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -17,7 +19,7 @@ class AccountLockJpaEntityTest {
                 .status("ACTIVE")
                 .build();
 
-        assertThatThrownBy(() -> entity.credit(1L))
+        assertThatThrownBy(() -> entity.credit(1L, LocalDateTime.now()))
                 .isInstanceOf(ArithmeticException.class);
     }
 
@@ -30,7 +32,7 @@ class AccountLockJpaEntityTest {
                 .status("ACTIVE")
                 .build();
 
-        assertThatThrownBy(() -> entity.debit(1L))
+        assertThatThrownBy(() -> entity.debit(1L, LocalDateTime.now()))
                 .isInstanceOf(ArithmeticException.class);
     }
 }

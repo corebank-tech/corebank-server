@@ -183,9 +183,9 @@ public class TransferExecutionService implements TransferExecutionUseCase {
 
                 Transfer transfer = transferSavePort.save(createdTransfer);
 
-                TransferBalances balances = accountLockPort.applyTransfer(locked, command.amount());
-
                 LocalDateTime executedAt = LocalDateTime.now(clock);
+
+                TransferBalances balances = accountLockPort.applyTransfer(locked, command.amount(), executedAt);
 
                 LedgerPair pair = LedgerPair.forTransfer(
                         transfer.getTransferId(),

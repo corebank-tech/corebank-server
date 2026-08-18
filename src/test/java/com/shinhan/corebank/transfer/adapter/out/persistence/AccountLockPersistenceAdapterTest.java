@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import com.shinhan.corebank.IntegrationTestSupport;
@@ -167,7 +168,7 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
         LockedAccountsForTransfer locked = adapter.lockForTransfer(101L, 202L);
 
         // when
-        TransferBalances balances = adapter.applyTransfer(locked, 30000L);
+        TransferBalances balances = adapter.applyTransfer(locked, 30000L, LocalDateTime.now());
         entityManager.flush();
         entityManager.clear();
 
@@ -207,7 +208,7 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
                 .longValue();
 
         // when
-        adapter.applyTransfer(locked, 30000L);
+        adapter.applyTransfer(locked, 30000L, LocalDateTime.now());
         entityManager.flush();
         entityManager.clear();
 
