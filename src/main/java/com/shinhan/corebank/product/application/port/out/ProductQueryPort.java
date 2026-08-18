@@ -12,4 +12,6 @@ import java.util.Optional;
 public interface ProductQueryPort {
     Page<Product> search(ProductGroup productGroup, String keyword, ProductSortType sort, Pageable pageable);
     Optional<ProductDetail> findDetailByProductId(Long productId);
+    boolean existsProduct(Long productId);
+    boolean existsProductTerms(Long productId, Long termsId);
 }

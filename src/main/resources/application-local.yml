@@ -23,3 +23,9 @@ spring:
 logging:
   level:
     org.hibernate.SQL: debug
+
+app:
+  security:
+    cors:
+      allowed-origins:
+        - http://localhost:5173

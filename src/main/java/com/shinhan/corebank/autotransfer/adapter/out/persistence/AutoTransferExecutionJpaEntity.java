@@ -40,7 +40,7 @@ public class AutoTransferExecutionJpaEntity {
     private ProcessResultStatus status;
 
     @Column(name = "transaction_number", columnDefinition = "CHAR(20)")
-    private String transactionNumber;   // 성공 시에만. 실패는 null
+    private String transactionNumber;   // 성공 또는 채번 이후 실패시에만. 채번 이전 실패는 null
 
     @Column(name = "failure_reason", length = 200)
     private String failureReason;   // 실패 시에만. 성공은 null

@@ -1,6 +1,7 @@
 package com.shinhan.corebank.product.adapter.in.web;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaEntity;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductPreferentialRateJpaEntity;
@@ -26,9 +27,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -218,5 +222,65 @@ class ProductControllerTest extends IntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data.saleStatus").value("SUSPENDED"));
+    }
+
+    @Test
+    @DisplayName("약관 본문 조회 성공 시 200 + 본문/열람이력을 반환한다")
+    void getProductTerms_success() throws Exception {
+        Long productId = productJpaRepository.save(ProductTestFixtures.productWithCode("TRM-101")).getProductId();
+        Long termsId = jdbcTemplate.queryForObject(
+                "SELECT terms_id FROM terms WHERE terms_code = ?", Long.class, "TERMS_DEPOSIT");
+        termsRepository.save(ProductTermsJpaEntity.builder()
+                .id(new ProductTermsJpaEntityId(productId, termsId))
+                .displayOrder((short) 1)
+                .build());
+
+        mockMvc.perform(get("/products/{productId}/terms/{termsId}", productId, termsId)
+                        .with(authentication(authenticationOf(1L))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.termsId").value(termsId))
+                .andExpect(jsonPath("$.data.termsName").value("예금거래 기본약관"))
+                .andExpect(jsonPath("$.data.required").value(true))
+                .andExpect(jsonPath("$.data.viewRequired").value(true))
+                .andExpect(jsonPath("$.data.content").value("(내용)"))
+                .andExpect(jsonPath("$.data.viewedAt").exists())
+                .andExpect(jsonPath("$.data.viewExpiresAt").exists());
+    }
+
+    @Test
+    @DisplayName("인증 없이 요청하면 401 + CMN0101을 반환한다")
+    void getProductTerms_unauthenticated() throws Exception {
+        Long productId = productJpaRepository.save(ProductTestFixtures.productWithCode("TRM-102")).getProductId();
+
+        mockMvc.perform(get("/products/{productId}/terms/{termsId}", productId, 1L))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("CMN0101"));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 productId면 404 + PRD0201을 반환한다")
+    void getProductTerms_productNotFound() throws Exception {
+        mockMvc.perform(get("/products/{productId}/terms/{termsId}", 999_999L, 1L)
+                        .with(authentication(authenticationOf(1L))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PRD0201"));
+    }
+
+    @Test
+    @DisplayName("상품에 연결되지 않은 termsId면 404 + PRD0202를 반환한다")
+    void getProductTerms_termsNotLinked() throws Exception {
+        Long productId = productJpaRepository.save(ProductTestFixtures.productWithCode("TRM-103")).getProductId();
+
+        mockMvc.perform(get("/products/{productId}/terms/{termsId}", productId, 999_999L)
+                        .with(authentication(authenticationOf(1L))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PRD0202"));
+    }
+
+    private UsernamePasswordAuthenticationToken authenticationOf(Long customerId) {
+        AuthenticatedCustomer customer = new AuthenticatedCustomer(customerId, "user" + customerId, "테스터");
+        return UsernamePasswordAuthenticationToken.authenticated(
+                customer, null, AuthorityUtils.createAuthorityList("ROLE_CUSTOMER"));
     }
 }
