@@ -137,13 +137,20 @@ jobs:
               networks:
                 - corebank-net
               depends_on:
-                - corebank-redis
+                corebank-redis:
+                  condition: service_healthy
 
             # 약관 열람 이력 TTL 저장용 Redis (내부 네트워크 전용, 포트 미노출)
             corebank-redis:
               image: redis:7.4
               container_name: corebank-redis
               restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "redis-cli", "ping"]
+                interval: 5s
+                timeout: 3s
+                retries: 10
+                start_period: 5s
               networks:
                 - corebank-net
 
