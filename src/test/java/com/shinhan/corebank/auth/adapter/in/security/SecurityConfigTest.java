@@ -215,8 +215,7 @@ class SecurityConfigTest {
                         .contextPath("/api/v1")
                         .session(session)
                         .with(user("customer").roles("CUSTOMER"))
-                        .cookie(new Cookie("XSRF-TOKEN", "valid-token"))
-                        .header("X-XSRF-TOKEN", "valid-token"))
+                        .with(csrf().asHeader()))
                 .andExpect(status().isOk());
     }
 
@@ -228,8 +227,8 @@ class SecurityConfigTest {
         mockMvc.perform(post("/api/v1/auth/logout")
                         .contextPath("/api/v1")
                         .session(session)
-                        .cookie(new Cookie("XSRF-TOKEN", "valid-token"))
-                        .header("X-XSRF-TOKEN", "valid-token")
+                        .cookie(new Cookie("XSRF-TOKEN", "issued-token"))
+                        .with(csrf().asHeader())
                         .with(user("customer").roles("CUSTOMER"))
                 )
                 .andExpect(status().isOk())
