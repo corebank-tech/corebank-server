@@ -276,13 +276,13 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("정렬은 실행일시 내림차순이고, 동률이면 executionId 내림차순으로 정렬돼 페이지가 뒤섞이지 않는다")
-    void search_executionHistory_ordersByExecutedAtDescThenExecutionIdDesc() {
+    @DisplayName("정렬은 실행일자(executionDate) 내림차순이 우선이다 — executedAt이 같아도 executionDate가 늦은 쪽이 먼저 나온다")
+    void search_executionHistory_ordersByExecutionDateDescFirst() {
         AutoTransferJpaEntity autoTransfer = repository.save(autoTransfer(accountA, "110000000043", AutoTransferStatus.NORMAL, 10));
         entityManager.flush();
 
         // uk_ate_dup(auto_transfer_id, execution_date) 제약 때문에 executionDate는 다르게 하고,
-        // executedAt만 같은 값으로 맞춰서 동률 정렬 상황을 재현한다.
+        // executedAt은 같은 값으로 맞춰서 "executionDate만 다른" 상황을 재현한다.
         LocalDateTime tiedExecutedAt = LocalDateTime.of(2026, 3, 10, 9, 0);
         AutoTransferExecutionJpaEntity e1 = executionRepository.save(
                 executionWithExecutedAt(autoTransfer, LocalDate.of(2026, 3, 10), tiedExecutedAt, ProcessResultStatus.SUCCESS, 10000L, "TXN0006", null));
@@ -297,6 +297,30 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(result.getContent())
                 .extracting(AutoTransferExecutionHistoryRow::executionId)
                 .containsExactly(e2.getExecutionId(), e1.getExecutionId());
+    }
+
+    @Test
+    @DisplayName("executionDate가 같으면 executedAt 내림차순으로, 그것도 같으면 executionId 내림차순으로 정렬된다")
+    void search_executionHistory_sameExecutionDate_ordersByExecutedAtThenExecutionId() {
+        // 같은 출금계좌 아래 서로 다른 자동이체 두 건이 같은 날 실행됐지만 실행시각이 다른 상황
+        AutoTransferJpaEntity autoTransferA = repository.save(autoTransfer(accountA, "110000000044", AutoTransferStatus.NORMAL, 12));
+        AutoTransferJpaEntity autoTransferB = repository.save(autoTransfer(accountA, "110000000045", AutoTransferStatus.NORMAL, 13));
+        entityManager.flush();
+
+        LocalDate sameDate = LocalDate.of(2026, 3, 12);
+        AutoTransferExecutionJpaEntity earlier = executionRepository.save(
+                executionWithExecutedAt(autoTransferA, sameDate, sameDate.atTime(9, 0), ProcessResultStatus.SUCCESS, 10000L, "TXN0008", null));
+        AutoTransferExecutionJpaEntity later = executionRepository.save(
+                executionWithExecutedAt(autoTransferB, sameDate, sameDate.atTime(15, 0), ProcessResultStatus.SUCCESS, 10000L, "TXN0009", null));
+        entityManager.flush();
+        entityManager.clear();
+
+        Page<AutoTransferExecutionHistoryRow> result = adapter.search(customerId, accountA,
+                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(AutoTransferExecutionHistoryRow::executionId)
+                .containsExactly(later.getExecutionId(), earlier.getExecutionId());
     }
 
     @Test

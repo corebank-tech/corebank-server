@@ -5,7 +5,12 @@ import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
-import com.shinhan.corebank.autotransfer.application.port.out.*;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferBatchQueryPort;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryAggregate;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryQueryPort;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryRow;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferQueryPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
@@ -120,7 +125,7 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
                 .from(autoTransferExecutionJpaEntity)
                 .join(autoTransferExecutionJpaEntity.autoTransfer, autoTransferJpaEntity)
                 .where(conditions)
-                .orderBy(autoTransferExecutionJpaEntity.executedAt.desc(), autoTransferExecutionJpaEntity.executionId.desc())
+                .orderBy(autoTransferExecutionJpaEntity.executionDate.desc(),autoTransferExecutionJpaEntity.executedAt.desc(),autoTransferExecutionJpaEntity.executionId.desc())
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
                 .fetch();
