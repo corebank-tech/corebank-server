@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -87,5 +88,22 @@ class FavoriteAccountRegisterServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(FavoriteAccountErrorCode.MAX_FAVORITE_ACCOUNTS_EXCEEDED));
+    }
+
+    @Test
+    @DisplayName("DB 유니크 제약 위반 시 FAV0301로 변환한다")
+    void register_whenDuplicateKey_throwsAlreadyExists() {
+        service = new FavoriteAccountRegisterService(accountLockPort, persistencePort);
+
+        when(accountLockPort.resolvePayeeByAccountNumber("110222222222"))
+                .thenReturn(Optional.of(new ResolvedPayee(202L, "홍길동", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE)));
+        when(persistencePort.countByCustomerId(1L)).thenReturn(0L);
+        when(persistencePort.save(any(FavoriteAccount.class)))
+                .thenThrow(new DataIntegrityViolationException("uk_fav"));
+
+        assertThatThrownBy(() -> service.register(new FavoriteAccountRegisterCommand(1L, "110222222222", null)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(FavoriteAccountErrorCode.FAVORITE_ACCOUNT_ALREADY_EXISTS));
     }
 }
