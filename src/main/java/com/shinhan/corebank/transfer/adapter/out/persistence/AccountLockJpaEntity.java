@@ -1,6 +1,7 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -78,11 +79,13 @@ public class AccountLockJpaEntity {
     private LocalDateTime lastTransactionAt;
 
     public void debit(long amount, LocalDateTime executedAt) {
+        Objects.requireNonNull(executedAt, "executedAt");
         this.balance = Math.subtractExact(this.balance, amount);
         this.lastTransactionAt = executedAt;
     }
 
     public void credit(long amount, LocalDateTime executedAt) {
+        Objects.requireNonNull(executedAt, "executedAt");
         this.balance = Math.addExact(this.balance, amount);
         this.lastTransactionAt = executedAt;
     }

@@ -35,4 +35,30 @@ class AccountLockJpaEntityTest {
         assertThatThrownBy(() -> entity.debit(1L, LocalDateTime.now()))
                 .isInstanceOf(ArithmeticException.class);
     }
+
+    @Test
+    @DisplayName("credit 시 executedAt이 null이면 NullPointerException을 던진다(#150)")
+    void credit_throwsNullPointerException_whenExecutedAtIsNull() {
+        AccountLockJpaEntity entity = AccountLockJpaEntity.builder()
+                .accountId(1L)
+                .balance(0L)
+                .status("ACTIVE")
+                .build();
+
+        assertThatThrownBy(() -> entity.credit(1L, null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    @DisplayName("debit 시 executedAt이 null이면 NullPointerException을 던진다(#150)")
+    void debit_throwsNullPointerException_whenExecutedAtIsNull() {
+        AccountLockJpaEntity entity = AccountLockJpaEntity.builder()
+                .accountId(1L)
+                .balance(100L)
+                .status("ACTIVE")
+                .build();
+
+        assertThatThrownBy(() -> entity.debit(1L, null))
+                .isInstanceOf(NullPointerException.class);
+    }
 }
