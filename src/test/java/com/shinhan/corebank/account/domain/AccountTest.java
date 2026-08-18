@@ -716,7 +716,7 @@ class AccountTest {
     }
 
     @Test
-    @DisplayName("빈 계좌별명은 ACC0001을 발생시킨다")
+    @DisplayName("계좌별명이 공백뿐이면 필수 입력값 누락 오류가 발생한다")
     void rejectBlankAlias() {
         // given
         Account account = Account.open(
@@ -739,7 +739,7 @@ class AccountTest {
         // then
         assertThat(exception.getErrorCode())
                 .isEqualTo(
-                        AccountErrorCode.INVALID_ACCOUNT_ALIAS
+                        CommonErrorCode.REQUIRED_FIELD_MISSING
                 );
     }
 

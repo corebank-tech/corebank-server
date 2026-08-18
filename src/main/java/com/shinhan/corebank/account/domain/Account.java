@@ -176,7 +176,7 @@ public class Account {
     }
 
     public void changeAlias(String alias) {
-        if (alias == null) {
+        if (alias == null || alias.isBlank()) {
             throw new BusinessException(
                     CommonErrorCode.REQUIRED_FIELD_MISSING
             );
