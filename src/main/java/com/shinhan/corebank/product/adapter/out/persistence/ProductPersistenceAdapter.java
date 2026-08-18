@@ -78,6 +78,16 @@ public class ProductPersistenceAdapter implements ProductQueryPort {
         };
     }
 
+    @Override
+    public boolean existsProduct(Long productId) {
+        return productJpaRepository.existsById(productId);
+    }
+
+    @Override
+    public boolean existsProductTerms(Long productId, Long termsId) {
+        return productTermsJpaRepository.existsById(new ProductTermsJpaEntityId(productId, termsId));
+    }
+
     private BooleanExpression productGroupEq(ProductGroup productGroup) {
         return productGroup != null ? productJpaEntity.productGroup.eq(productGroup) : null;
     }

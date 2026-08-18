@@ -4,7 +4,9 @@ import com.shinhan.corebank.common.exception.ErrorCode;
 
 public enum ProductErrorCode implements ErrorCode {
 
-    PRODUCT_NOT_FOUND("PRD0201", 404, "상품을 찾을 수 없습니다.");
+    PRODUCT_NOT_FOUND("PRD0201", 404, "상품을 찾을 수 없습니다."),
+    TERMS_NOT_FOUND("PRD0202", 404, "약관을 찾을 수 없습니다.");
+
     private final String code;
     private final int status;
     private final String message;
