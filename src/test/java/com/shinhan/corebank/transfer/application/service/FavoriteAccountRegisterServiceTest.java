@@ -11,6 +11,7 @@ import com.shinhan.corebank.transfer.application.port.out.LockedAccountType;
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.domain.FavoriteAccount;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.transfer.domain.exception.FavoriteAccountErrorCode;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import org.junit.jupiter.api.DisplayName;
@@ -71,5 +72,20 @@ class FavoriteAccountRegisterServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(TransferErrorCode.PAYEE_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("이미 20건 등록된 고객이 등록을 시도하면 FAV0302를 던진다")
+    void register_whenAtMaxCount_throwsMaxExceeded() {
+        service = new FavoriteAccountRegisterService(accountLockPort, persistencePort);
+
+        when(accountLockPort.resolvePayeeByAccountNumber("110222222222"))
+                .thenReturn(Optional.of(new ResolvedPayee(202L, "홍길동", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE)));
+        when(persistencePort.countByCustomerId(1L)).thenReturn(20L);
+
+        assertThatThrownBy(() -> service.register(new FavoriteAccountRegisterCommand(1L, "110222222222", null)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(FavoriteAccountErrorCode.MAX_FAVORITE_ACCOUNTS_EXCEEDED));
     }
 }
