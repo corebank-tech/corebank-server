@@ -51,7 +51,7 @@ docker compose up -d minicore-redis
 로컬과 달리 EC2 쪽 Redis는 **팀원이 직접 세팅할 필요 없이 CI/CD 파이프라인이 자동으로 띄웁니다.**
 
 - `.github/workflows/corebank.yml`의 `deploy` job이 `main` 브랜치 push 시 SSM으로 EC2에 접속해 `docker-compose.yml`을 인라인으로 생성·실행합니다.
-- 이 인라인 compose에 `corebank-redis` 서비스(image `redis:7.4`)가 `corebank-server`와 같은 `corebank-net` 브릿지 네트워크에 정의되어 있으며, **호스트에 포트를 노출하지 않습니다** (컨테이너 간 통신만 필요하므로 외부 접근 불가 = 별도 인증 불필요).
+- 이 인라인 compose에 `corebank-redis` 서비스(image `redis:7.4`)가 `corebank-server`와 같은 `corebank-net` 브릿지 네트워크에 정의되어 있으며, **호스트에 포트를 노출하지 않습니다.** 단, 포트 미노출이 인증을 대체하진 않습니다 — `corebank-net`에 신뢰할 수 없는 컨테이너가 추가되면 그 컨테이너에서도 Redis에 접근할 수 있으므로, 이 네트워크에는 항상 우리가 정의한 컨테이너만 붙는다는 전제로 무인증 운영 중입니다. 전제가 깨지면(예: 다른 서비스 컨테이너를 같은 네트워크에 붙이는 경우) Redis ACL/password를 추가하고 Spring Secret으로 주입해야 합니다.
 - `corebank-server` 컨테이너에는 `REDIS_HOST=corebank-redis` 환경변수가 주입되고, `application-prod.yml`의 `spring.data.redis.host: ${REDIS_HOST}`가 이를 읽어 연결합니다.
 
 즉, EC2 Redis 버전을 바꾸거나 설정을 바꿔야 할 때만 `.github/workflows/corebank.yml`의 `corebank-redis` 서비스 블록을 수정하면 되고, 별도로 EC2에 수동 접속해 Redis를 설치/기동할 필요는 없습니다.
@@ -69,7 +69,7 @@ prod에서는 앱 자체(`corebank-server`)도 Docker 컨테이너로 뜹니다.
 | `application.yml` (공통) | `spring.data.redis.port: 6379` | local/prod 모두 동일한 포트라 공통으로 관리 |
 | `application-local.yml` | `spring.data.redis.host: localhost` | 앱이 호스트에서 직접 실행됨 |
 | `application-prod.yml` | `spring.data.redis.host: ${REDIS_HOST}` | 앱도 컨테이너라 컨테이너명으로 접속 |
-| `application-test.yml` | (없음) | `TestcontainersConfig`의 `@ServiceConnection`이 매 테스트마다 랜덤 포트로 자동 주입 — yml 설정은 무시됨 |
+| `application-test.yml` | (없음) | 현재(`#67` 머지 전)는 `TestcontainersConfig`에 Redis 컨테이너가 없어 `MySQLContainer`만 `@ServiceConnection`으로 등록됨. 테스트도 공통 `port: 6379` + 기본 host(`localhost`)를 그대로 사용. `#67`이 머지되면 Redis용 `@ServiceConnection`이 추가되어 매 테스트마다 랜덤 포트가 자동 주입되고, 이때는 yml 설정보다 우선 적용됨(Spring Boot service connection이 property보다 우선) |
 | `application-scratch.yml` | (없음) | host 미지정 시 Spring Boot 기본값(`localhost`)을 타서 공통 `port: 6379`와 합쳐지면 local과 동일하게 연결됨 |
 
 ---
@@ -83,4 +83,8 @@ prod에서는 앱 자체(`corebank-server`)도 Docker 컨테이너로 뜹니다.
 - `docker compose down` / `docker compose rm`으로 컨테이너를 지우면 데이터도 함께 사라집니다(별도 volume 미사용). 컨테이너를 내리지 않고 유지했는데도 사라졌다면 TTL 설정값을 코드에서 다시 확인해주세요.
 
 **Q3. EC2에서 Redis 연결이 안 될 때는 어디를 봐야 하나요?**
-- `corebank-server`와 `corebank-redis`가 같은 `corebank-net` 네트워크에 있는지, GitHub Actions 배포 로그에서 `corebank-redis` 컨테이너가 정상적으로 `docker compose up -d`에 포함되어 기동됐는지 확인하세요. Redis는 포트를 노출하지 않으므로 EC2 호스트에서 `redis-cli -h localhost`로는 접근할 수 없고, 반드시 같은 네트워크의 컨테이너 안에서만 접근 가능합니다.
+- `corebank-server`와 `corebank-redis`가 같은 `corebank-net` 네트워크에 있는지, GitHub Actions 배포 로그에서 `corebank-redis` 컨테이너가 정상적으로 `docker compose up -d`에 포함되어 기동됐는지 확인하세요. Redis는 포트를 게시(publish)하지 않으므로 EC2 호스트에서 `redis-cli -h localhost`로는 접근할 수 없습니다(호스트-컨테이너 포트 매핑이 없기 때문). 연결 확인은 컨테이너 안에서 직접 `PING`을 날리는 방식을 쓰세요.
+
+```bash
+docker exec corebank-redis redis-cli PING
+```
