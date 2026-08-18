@@ -95,6 +95,11 @@ public class SecurityConfig {
     }
 
     @Bean
+    public CsrfTokenRequestAttributeHandler csrfTokenRequestHandler() {
+        return new CsrfTokenRequestAttributeHandler();
+    }
+
+    @Bean
     public SecurityFilterChain securityFilterChain(
             // 요청별 보안 정책을 구성하는 Spring Security 설정 객체
             HttpSecurity http,
@@ -102,7 +107,8 @@ public class SecurityConfig {
             SessionAccessDeniedHandler deniedHandler,
             SessionLogoutSuccessHandler logoutSuccessHandler,
             CorsConfigurationSource corsConfigurationSource,
-            CookieCsrfTokenRepository csrfTokenRepository
+            CookieCsrfTokenRepository csrfTokenRepository,
+            CsrfTokenRequestAttributeHandler csrfTokenRequestHandler
     ) throws Exception {
         http
                 .cors(cors -> cors
@@ -111,9 +117,7 @@ public class SecurityConfig {
                 // 기본 CSRF 보호를 유지하고 로그인과 회원가입, ALB 헬스체크만 검사에서 제외
                 .csrf(csrf -> {
                     csrf.csrfTokenRepository(csrfTokenRepository);
-                    csrf.csrfTokenRequestHandler(
-                            new CsrfTokenRequestAttributeHandler()
-                    );
+                    csrf.csrfTokenRequestHandler(csrfTokenRequestHandler);
                     csrf.ignoringRequestMatchers(
                                 pathPattern(HttpMethod.POST, "/auth/login"),
                                 pathPattern(HttpMethod.POST, "/auth/terms/check"),

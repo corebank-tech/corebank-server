@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 public class CsrfTokenCookieIssuer {
 
     private final CookieCsrfTokenRepository csrfTokenRepository;
+    private final CsrfTokenRequestAttributeHandler csrfTokenRequestHandler;
 
     public void rotate(
             HttpServletRequest request,
@@ -22,7 +24,6 @@ public class CsrfTokenCookieIssuer {
         CsrfToken csrfToken = csrfTokenRepository.generateToken(request);
         csrfTokenRepository.saveToken(csrfToken, request, response);
 
-        request.setAttribute(CsrfToken.class.getName(), csrfToken);
-        request.setAttribute(csrfToken.getParameterName(), csrfToken);
+        csrfTokenRequestHandler.handle(request, response, () -> csrfToken);
     }
 }
