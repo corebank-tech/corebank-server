@@ -64,7 +64,9 @@ COMMENT '가입으로 개설된 계좌'`)라 조립 시점에는 아직 없고, 
 
 #### 오류코드 — 신규 enum을 만들지 않는다
 
-`Transfer.create()`와 동일하게 `CommonErrorCode`만 사용한다.
+필수값 검증은 `Transfer.create()`와 동일하게 `CommonErrorCode`를 쓴다. 금액 검증은 다르다 —
+`Transfer`는 `TransferErrorCode.INVALID_AMOUNT`(`TRF0003`)를 쓰지만 여기서는
+`CommonErrorCode.INVALID_INPUT`을 쓴다. 아래 3번(계층) 때문이다.
 
 | 검증 | 오류코드 |
 | --- | --- |
