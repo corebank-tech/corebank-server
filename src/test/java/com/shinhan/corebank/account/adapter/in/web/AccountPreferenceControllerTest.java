@@ -867,6 +867,53 @@ class AccountPreferenceControllerTest
         ).isEqualTo(2);
     }
 
+    @Test
+    @DisplayName("보유 계좌가 있는데 빈 accountIds를 요청하면 ACC0002를 반환한다")
+    void rejectEmptyAccountIdsWhenCustomerHasAccounts()
+            throws Exception {
+
+        // given
+        Long customerId =
+                customerTestFixture.createCustomer();
+
+        createAccount(
+                customerId,
+                "088100000079"
+        );
+
+        // when & then
+        mockMvc.perform(
+                        put(
+                                "/account-preferences/display-order"
+                        )
+                                .with(authentication(
+                                        authenticationOf(
+                                                customerId
+                                        )
+                                ))
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey()
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        """
+                                                {
+                                                  "accountIds": []
+                                                }
+                                                """
+                                )
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("ACC0002")
+                );
+    }
+
     private Account createAccount(
             Long customerId,
             String accountNumber
