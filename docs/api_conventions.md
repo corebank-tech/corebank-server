@@ -187,7 +187,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `ACC` | 계좌 | P2 | REQ-ACCT-001~005·010~015 |
 | `INQ` | 조회(계좌·거래내역) | P2 | REQ-INQR |
 | `PRD` | 상품·상품가입 | P3 | REQ-PRDT |
-| `SCD` | 예약이체 | P3 | REQ-SCD |
+| `SCD` | 예약이체 | P5 | REQ-SCD |
 | `TRF` | 이체·원장 | P4 | REQ-TRSF-001~009·014~023·028·030~036 |
 | `FAV` | 자주 쓰는 계좌 | P4 | REQ-TRSF-026·034~036 |
 | `LMT` | 이체한도 | P1 | REQ-TRSF-010~013·024·025·029 |
@@ -365,13 +365,18 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 > `PRD0001`~`PRD0007`은 가입 사전 검증(`POST /product-subscriptions/validation`)에서는 예외로 던지지 않고 `200` + `valid=false` + `violations[].code`로 반환합니다 — 필드별 오류를 화면에 동시에 표시해야 해서 하나만 틀려도 `400`을 던지면 나머지 검증 결과를 알 수 없기 때문입니다. HTTP 열의 `400`은 검증 실패가 곧 요청 거부인 엔드포인트(실제 가입 실행 등)에서 던질 때 적용됩니다.
 
-### 4-12. `SCD` 예약이체 — P3
+### 4-12. `SCD` 예약이체 — P5
 
 | 코드 | HTTP | 메시지 | 의미 |
 | --- | --- | --- | --- |
 | `SCD0001` | 400 | 예약일자는 익일부터 1년 이내여야 합니다. | 예약일 범위 위반 |
 | `SCD0002` | 400 | 예약이체 실행일이 지났습니다. | 배치 미실행 상태로 실행일 경과 |
+| `SCD0005` | 400 | 이체금액은 0보다 커야 합니다. | 등록 시 금액 검증 (AUT0008과 동일 패턴) |
+| `SCD0006` | 400 | 통장 표시내용은 10자 이내여야 합니다. | 등록 시 메모 길이 검증 (AUT0009와 동일 패턴) |
+| `SCD0007` | 400 | 입금계좌로 지정할 수 없는 계좌 유형입니다. | REQ-SCD-006 입금계좌 유형 검증 (AUT0005와 동일 패턴) |
+| `SCD0008` | 400 | 1회 이체한도를 초과했습니다. | REQ-SCD-006 1회한도 검증 (AUT0006과 동일 패턴) |
 | `SCD0201` | 404 | 예약이체를 찾을 수 없습니다. | `scheduledTransferId` 없음 |
+| `SCD0202` | 404 | 계좌를 확인할 수 없습니다. | 출금계좌 소유·상태, 입금계좌 실존 (AUT0202와 동일 패턴, §8-3) |
 | `SCD0301` | 409 | 동일 조건의 예약이체가 이미 등록되어 있습니다. | 중복 등록 |
 | `SCD0302` | 409 | 대기 상태가 아닌 예약이체는 취소할 수 없습니다. | `WAITING` 외 상태 |
 | `SCD0303` | 409 | 실행 예정일 당일에는 취소할 수 없습니다. | 전일 23:59:59까지만 가능 |
@@ -568,13 +573,13 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 사용자의 평문 비밀번호나 OTP 코드를 최종 거래 API에 직접 전송하지 않고, 사전 검증 단계에서 발급받은 일회성 난수 토큰(Opaque Token)을 전달하여 권한을 증명합니다.
 
-| 토큰명 (발급 API) | 유효시간 | 사용처 |
-| --- | --- | --- |
-| `otpAuthToken` (`POST /otp/verify`) | 300초 | OTP 필요 거래 전체 |
-| `accountPasswordAuthToken` (`POST /accounts/{accountId}/password/verify`) | 300초 | 이체, 이체한도 변경, 상품가입, 예약이체, 자동이체, 출금계좌 등록 |
-| `emailVerificationToken` (`POST /auth/email-verifications/{id}/verify`) | 회원가입 세션 내 | 회원가입, 이메일 변경 |
-| `termsAuthToken` (`POST /auth/terms/check`) | 회원가입 세션 내 | 회원가입 입력검증 |
-| `accountAuthToken` (`POST /auth/verify-account`) | 회원가입 세션 내 | 회원가입 입력검증 |
+| 토큰명 (발급 API) | 유효시간         | 사용처                                                           |
+| --- |------------------|------------------------------------------------------------------|
+| `otpAuthToken` (`POST /otp/verify`) | 300초            | OTP 필요 거래 전체                                               |
+| `accountPasswordAuthToken` (`POST /accounts/{accountId}/password/verify`) | 300초            | 이체, 이체한도 변경, 상품가입, 예약이체, 자동이체, 출금계좌 등록 |
+| `emailVerificationToken` (`POST /auth/email-verifications/{id}/verify`) | 1800초           | 회원가입, 이메일 변경                                            |
+| `termsAuthToken` (`POST /auth/terms/check`) | 1800초           | signup/validate 성공 시 1회 소비                                 |
+| `accountAuthToken` (`POST /auth/verify-account`) | 회원가입 세션 내 | 회원가입 입력검증                                                |
 
 **명명 및 형식 규칙**
 
