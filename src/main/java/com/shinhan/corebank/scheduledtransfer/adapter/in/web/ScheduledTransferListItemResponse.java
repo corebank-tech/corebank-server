@@ -1,30 +1,30 @@
 package com.shinhan.corebank.scheduledtransfer.adapter.in.web;
 
 import com.shinhan.corebank.common.util.MaskingUtil;
-import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferListItem;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 
 import java.time.LocalDate;
 
 public record ScheduledTransferListItemResponse(Long scheduledTransferId, LocalDate scheduledDate,
-                                                 String withdrawalAccountNumber, String payeeBankName,
-                                                 String payeeAccountNumber, String payeeName, Long amount,
-                                                 ScheduledTransferStatus status, boolean cancelable) {
+                                                String withdrawalAccountNumber, String payeeBankName,
+                                                String accountNumber, String payeeName, Long amount,
+                                                ScheduledTransferStatus status, boolean cancelable) {
 
     private static final String BANK_CODE_SHINHAN = "088";
     private static final String BANK_NAME_SHINHAN = "신한은행";
 
-    public static ScheduledTransferListItemResponse from(ScheduledTransfer scheduledTransfer, String rawWithdrawalAccountNumber) {
+    public static ScheduledTransferListItemResponse from(ScheduledTransferListItem item) {
         return new ScheduledTransferListItemResponse(
-                scheduledTransfer.getScheduledTransferId(),
-                scheduledTransfer.getScheduledDate(),
-                MaskingUtil.maskAccountNumber(rawWithdrawalAccountNumber),
-                resolveBankName(scheduledTransfer.getPayeeBankCode()),
-                MaskingUtil.maskAccountNumber(scheduledTransfer.getPayeeAccountNumber()),
-                MaskingUtil.maskName(scheduledTransfer.getPayeeName()),
-                scheduledTransfer.getAmount(),
-                scheduledTransfer.getStatus(),
-                scheduledTransfer.getStatus() == ScheduledTransferStatus.WAITING
+                item.scheduledTransferId(),
+                item.scheduledDate(),
+                MaskingUtil.maskAccountNumber(item.withdrawalAccountNumber()),
+                resolveBankName(item.payeeBankCode()),
+                MaskingUtil.maskAccountNumber(item.payeeAccountNumber()),
+                MaskingUtil.maskName(item.payeeName()),
+                item.amount(),
+                item.status(),
+                item.cancelable()
         );
     }
 

@@ -6,12 +6,10 @@ import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 // 이 포트의 다른 구현체가 없어 @Profile로 좁히면 prod 기동이 실패한다 - 실구현 전까지 모든 프로필에서 활성화한다.
-// 빈 이름 명시: autotransfer.adapter.out.account.MockAccountStatusPort와 클래스 단순이름이 같아
-// 기본 빈 이름(mockAccountStatusPort)이 충돌한다.
+// 빈 이름 명시: autotransfer.adapter.out.account.MockAccountStatusPort와 클래스 단순이름이 같아 기본 빈 이름(mockAccountStatusPort)이 충돌한다.
 @Component("scheduledTransferMockAccountStatusPort")
 @RequiredArgsConstructor
 public class MockAccountStatusPort implements AccountStatusPort {
@@ -43,5 +41,21 @@ public class MockAccountStatusPort implements AccountStatusPort {
                 .setParameter("accountId", accountId)
                 .getResultList();
         return result.isEmpty() ? Optional.empty() : Optional.of((String) result.get(0));
+    }
+
+    @Override
+    public Map<Long, String> findAccountNumbersByIds(Collection<Long> accountIds) {
+        if (accountIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Object[]> rows = entityManager.createNativeQuery(
+                        "SELECT account_id, account_number FROM account WHERE account_id IN (:accountIds)")
+                .setParameter("accountIds", accountIds)
+                .getResultList();
+        Map<Long, String> result = new HashMap<>();
+        for (Object[] row : rows) {
+            result.put(((Number) row[0]).longValue(), (String) row[1]);
+        }
+        return result;
     }
 }
