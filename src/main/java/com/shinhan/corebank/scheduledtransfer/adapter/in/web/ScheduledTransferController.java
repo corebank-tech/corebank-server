@@ -1,12 +1,20 @@
 package com.shinhan.corebank.scheduledtransfer.adapter.in.web;
 
 import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.idempotency.IdempotencyResult;
 import com.shinhan.corebank.common.idempotency.IdempotencyService;
 import com.shinhan.corebank.common.response.ApiResponse;
+import com.shinhan.corebank.common.response.PageResponse;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferQueryUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferRegisterUseCase;
+import com.shinhan.corebank.scheduledtransfer.application.port.out.AccountStatusPort;
+import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
+import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +22,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -23,6 +32,8 @@ import java.util.function.Supplier;
 @RequiredArgsConstructor
 public class ScheduledTransferController {
     private final ScheduledTransferRegisterUseCase scheduledTransferRegisterUseCase;
+    private final ScheduledTransferQueryUseCase scheduledTransferQueryUseCase;
+    private final AccountStatusPort accountStatusPort;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
     private final CurrentCustomerProvider currentCustomerProvider;
@@ -38,6 +49,41 @@ public class ScheduledTransferController {
                 new TypeReference<>() {},
                 () -> ApiResponse.success(ScheduledTransferResponse.from(
                         scheduledTransferRegisterUseCase.register(request.toCommand(requestIp, customerId)))));
+    }
+
+    // 조회
+    @GetMapping
+    public ApiResponse<PageResponse<ScheduledTransferListItemResponse>> search(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long withdrawalAccountId,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
+        Page<ScheduledTransfer> result = scheduledTransferQueryUseCase.search(
+                customerId, parseStatus(status), withdrawalAccountId, startDate, endDate, page, size);
+        return ApiResponse.success(PageResponse.from(result, this::toListItem));
+    }
+
+    // ALL은 도메인 Enum에 없는 "조회 조건 전용" 값 — ALL과 미전달 둘 다 "조건 없음"으로 동일하게 처리한다(api_conventions.md §5-10)
+    private ScheduledTransferStatus parseStatus(String status) {
+        if (status == null || status.equals("ALL")) {
+            return null;
+        }
+        try {
+            return ScheduledTransferStatus.valueOf(status);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "status 값이 올바르지 않습니다.");
+        }
+    }
+
+    // withdrawal_account_id는 FK로 account 존재가 보장돼 있어 정상적으로는 항상 값이 있다 —
+    // 그럼에도 없으면(데이터 정합성 문제) 사용자에게 잘못을 돌릴 수 없는 서버측 오류라 500으로 떨어지게 둔다
+    private ScheduledTransferListItemResponse toListItem(ScheduledTransfer scheduledTransfer) {
+        String rawWithdrawalAccountNumber = accountStatusPort.findAccountNumberById(scheduledTransfer.getWithdrawalAccountId())
+                .orElseThrow(() -> new IllegalStateException("출금계좌 정보를 확인할 수 없습니다."));
+        return ScheduledTransferListItemResponse.from(scheduledTransfer, rawWithdrawalAccountNumber);
     }
 
     // 멱등키 처리 5단계를 한 곳에 모은 공용 헬퍼 (AutoTransferController와 동일 패턴)
