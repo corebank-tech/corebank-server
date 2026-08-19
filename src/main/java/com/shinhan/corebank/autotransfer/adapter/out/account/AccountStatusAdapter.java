@@ -3,14 +3,14 @@ package com.shinhan.corebank.autotransfer.adapter.out.account;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.annotation.Primary;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
 
 @Component
-@Primary
 @RequiredArgsConstructor
+@Profile("prod")
 public class AccountStatusAdapter implements AccountStatusPort {
     private static final String STATUS_ACTIVE = "ACTIVE";
 
