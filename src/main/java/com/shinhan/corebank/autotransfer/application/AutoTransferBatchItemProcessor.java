@@ -67,6 +67,7 @@ public class AutoTransferBatchItemProcessor {
                 .myPassbookMemo(autoTransfer.getMyPassbookMemo())
                 .recipientPassbookMemo(autoTransfer.getRecipientPassbookMemo())
                 .sourceId(autoTransfer.getAutoTransferId())
+                .executionDate(date)
                 .build();
 
         TransferResult result = transferExecutionUseCase.execute(command);

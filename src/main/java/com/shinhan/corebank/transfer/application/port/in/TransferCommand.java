@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.application.port.in;
 
+import java.time.LocalDate;
 import java.util.regex.Pattern;
 
 import com.shinhan.corebank.common.exception.BusinessException;
@@ -21,6 +22,7 @@ public record TransferCommand(
     String myPassbookMemo,
     String recipientPassbookMemo,
     Long sourceId, // 이체를 발생시킨 원본 거래 역추적 목적으로 사용
+    LocalDate executionDate, // sourceId와 함께 멱등키를 구성하는 실행일자. SCHEDULED/AUTO 전용
     String authToken // Account-Password-Auth-Token. IMMEDIATE만 필수(REQ-TRSF-009) — SCHEDULED/AUTO는 시스템 트리거라 세션이 없음
 ) {
 
@@ -56,6 +58,15 @@ public record TransferCommand(
         }
         if ((transferType == TransferType.SCHEDULED || transferType == TransferType.AUTO)
                 && sourceId == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        // 이체 유형에 따른 실행일자(executionDate) 필수 여부 검증 — sourceId와 동일한 규칙
+        if (transferType == TransferType.IMMEDIATE && executionDate != null) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        }
+        if ((transferType == TransferType.SCHEDULED || transferType == TransferType.AUTO)
+                && executionDate == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
 
