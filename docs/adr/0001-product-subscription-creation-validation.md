@@ -49,8 +49,13 @@ PR #65 리뷰에서 `ProductSubscription`이 `@AllArgsConstructor` + `@Builder`�
 
 PR #65가 지적한 **자체 불변식(self-invariant)** 으로 한정한다.
 
-- 필수 식별자 null 여부: `customerId`, `productId`, `accountId`
+- 필수 식별자 null 여부: `customerId`, `productId`, `withdrawalAccountId`
 - 금액·기간의 양수 여부: `subscriptionAmount > 0`, `termMonths > 0`
+
+**`accountId`는 검증 대상이 아니다.** 가입 결과로 개설되는 계좌(`account_id BIGINT NULL
+COMMENT '가입으로 개설된 계좌'`)라 조립 시점에는 아직 없고, `PROCESSING` / `ERROR` 상태
+레코드에는 끝까지 null로 남는다. 필수 계좌는 초입금 출금계좌인 `withdrawal_account_id`
+(`NOT NULL`) 쪽이다.
 
 **`Product`의 min/max 정책과의 교차 검증은 제외한다.** 가입금액이 `product.min_amount` ~ `max_amount`
 범위인지(`PRD0001`), 가입기간이 `min_term_months` ~ `max_term_months` 범위인지(`PRD0002`),
