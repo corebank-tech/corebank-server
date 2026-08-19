@@ -42,7 +42,7 @@ class TransferPersistenceAdapterTest extends IntegrationTestSupport {
                 101L, 202L, "110222222222", "성춘향",
                 10000L, 0L,
                 TransferType.IMMEDIATE, TransferChannel.WB,
-                null, null,
+                null, null, null,
                 "이체출금", "이체입금",
                 LocalDateTime.now()
         );
@@ -71,7 +71,7 @@ class TransferPersistenceAdapterTest extends IntegrationTestSupport {
                 101L, 202L, "110222222222", "성춘향",
                 10000L, 0L,
                 TransferType.IMMEDIATE, TransferChannel.WB,
-                null, null,
+                null, null, null,
                 "이체출금", "이체입금",
                 LocalDateTime.now()
         );

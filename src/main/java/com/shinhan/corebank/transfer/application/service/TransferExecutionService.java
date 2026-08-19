@@ -142,6 +142,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     command.channel(),
                     resolveSourceType(command.transferType()),
                     command.sourceId(),
+                    command.executionDate(),
                     command.myPassbookMemo(),
                     command.recipientPassbookMemo(),
                     requestedAt
