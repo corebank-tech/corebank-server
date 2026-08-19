@@ -12,59 +12,103 @@
 -- 규칙 위반에 대한 의도적 예외 (팀 확인 완료, #179): flyway_guide.md
 -- 규칙 ③(자기 도메인 파일만 작성)·⑤(한 파일 한 테이블)를 이 마이그레이션은
 -- 의도적으로 어긴다. 이건 특정 도메인의 기능 변경이 아니라 DB 전체에
--- 걸친 일회성 타임존 컷오버이고, 테이블별로 20여 개 파일로 쪼개 순차
--- 적용하면 그 사이(첫 파일 적용~마지막 파일 적용 사이) DB가 절반은
--- KST로 보정되고 절반은 UTC로 남은 상태로 관측된다. 이는 규칙이 원래
--- 막으려는 "부분 실패로 인한 불일치"보다 더 큰 불일치를 만들어낸다.
+-- 걸친 일회성 타임존 컷오버이고, 테이블별로 쪼개 순차 적용하면 그 사이
+-- DB가 일부는 KST로 보정되고 일부는 UTC로 남은 상태로 관측된다.
 --
--- 대상 판별: information_schema.COLUMNS에서 DATA_TYPE='datetime'인
--- 컬럼을 전부 순회해 +9시간(INTERVAL 9 HOUR) 보정한다. DATE 타입
--- (birth_date 등)은 대상에서 자연히 제외된다. flyway_schema_history는
--- Flyway 내부 테이블이라 명시적으로 제외한다.
+-- PR #191 리뷰 반영: 최초 버전은 information_schema 커서를 순회하는
+-- CREATE PROCEDURE 방식이었으나, MySQL에서 CREATE/DROP PROCEDURE는 DDL로
+-- 분류되어 실행 시점에 암시적 커밋을 일으킨다("Statements That Cause an
+-- Implicit Commit"). 그러면 CALL 도중 일부 테이블만 처리한 채 실패해도
+-- 이미 처리된 테이블은 롤백되지 않아, 정작 막으려던 "일부는 KST·일부는
+-- UTC" 상태를 방지하지 못한다. 그래서 CREATE PROCEDURE 없이 순수 DML
+-- (UPDATE)만으로 다시 작성했다 — DDL이 없으므로 Flyway가 이 스크립트
+-- 전체를 하나의 트랜잭션으로 실행해 실패 시 전체 롤백이 가능하다.
+-- 대상 컬럼 목록은 전 마이그레이션 적용 후 information_schema.COLUMNS를
+-- 조회해 확정했다(DATA_TYPE = 'datetime', flyway_schema_history 제외).
 --
--- 주의(ledger_entry): occurred_at은 PK이자 RANGE 파티션 키다. UPDATE로
--- 값이 바뀌면 MySQL이 필요 시 파티션 간 행 이동을 수행한다. 이 마이그레이션
--- 시점의 데이터 규모(데모/개발 데이터)에서는 허용 가능한 비용으로 판단했다.
+-- 주의(ledger_entry): 이 테이블은 COMMENT에 "APPEND-ONLY. UPDATE/DELETE
+-- 금지"라고 명시돼 있어 occurred_at에 대한 UPDATE는 원래 이 테이블의
+-- 불변식을 어긴다. 아직 실제 서비스 운영 전(데이터 없음) 단계라 이번
+-- 1회 타임존 컷오버에 한해 예외로 포함하기로 팀에서 확인했다(#179).
+-- 서비스 운영 개시 이후에는 이런 일괄 UPDATE를 다시 쓸 수 없다.
+--
+-- 주의(ledger_entry 파티션): occurred_at은 RANGE COLUMNS 파티션 키다.
+-- 이 시점 데이터는 월별 파티션(p202607~p202612)이 이미 다 만들어져
+-- 있어(V202608010930), +9시간 보정으로 인한 파티션 간 이동은 같은
+-- 테이블 안에서 안전하게 처리된다. pmax(MAXVALUE) 캐치올은 2027년
+-- 이후 데이터에만 관여한다.
 -- ====================================================================
 
-DELIMITER $$
+UPDATE account SET withdrawal_registered_at = withdrawal_registered_at + INTERVAL 9 HOUR WHERE withdrawal_registered_at IS NOT NULL;
+UPDATE account SET opened_date = opened_date + INTERVAL 9 HOUR WHERE opened_date IS NOT NULL;
+UPDATE account SET closed_date = closed_date + INTERVAL 9 HOUR WHERE closed_date IS NOT NULL;
+UPDATE account SET last_transaction_at = last_transaction_at + INTERVAL 9 HOUR WHERE last_transaction_at IS NOT NULL;
+UPDATE account SET created_at = created_at + INTERVAL 9 HOUR WHERE created_at IS NOT NULL;
+UPDATE account SET updated_at = updated_at + INTERVAL 9 HOUR WHERE updated_at IS NOT NULL;
 
-CREATE PROCEDURE shift_datetime_columns_to_kst()
-BEGIN
-    DECLARE done INT DEFAULT FALSE;
-    DECLARE v_table_name VARCHAR(64);
-    DECLARE v_column_name VARCHAR(64);
-    DECLARE cur CURSOR FOR
-        SELECT TABLE_NAME, COLUMN_NAME
-        FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND DATA_TYPE = 'datetime'
-          AND TABLE_NAME <> 'flyway_schema_history';
-    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+UPDATE account_number_sequence SET created_at = created_at + INTERVAL 9 HOUR WHERE created_at IS NOT NULL;
+UPDATE account_number_sequence SET updated_at = updated_at + INTERVAL 9 HOUR WHERE updated_at IS NOT NULL;
 
-    OPEN cur;
+UPDATE audit_log SET requested_at = requested_at + INTERVAL 9 HOUR WHERE requested_at IS NOT NULL;
 
-    read_loop: LOOP
-        FETCH cur INTO v_table_name, v_column_name;
-        IF done THEN
-            LEAVE read_loop;
-        END IF;
+UPDATE auto_transfer SET registered_at = registered_at + INTERVAL 9 HOUR WHERE registered_at IS NOT NULL;
+UPDATE auto_transfer SET terminated_at = terminated_at + INTERVAL 9 HOUR WHERE terminated_at IS NOT NULL;
+UPDATE auto_transfer SET updated_at = updated_at + INTERVAL 9 HOUR WHERE updated_at IS NOT NULL;
 
-        SET @sql = CONCAT(
-            'UPDATE `', v_table_name, '` ',
-            'SET `', v_column_name, '` = `', v_column_name, '` + INTERVAL 9 HOUR ',
-            'WHERE `', v_column_name, '` IS NOT NULL'
-        );
-        PREPARE stmt FROM @sql;
-        EXECUTE stmt;
-        DEALLOCATE PREPARE stmt;
-    END LOOP;
+UPDATE auto_transfer_execution SET executed_at = executed_at + INTERVAL 9 HOUR WHERE executed_at IS NOT NULL;
 
-    CLOSE cur;
-END$$
+UPDATE common_code SET created_at = created_at + INTERVAL 9 HOUR WHERE created_at IS NOT NULL;
+UPDATE common_code SET updated_at = updated_at + INTERVAL 9 HOUR WHERE updated_at IS NOT NULL;
 
-DELIMITER ;
+UPDATE customer SET last_login_at = last_login_at + INTERVAL 9 HOUR WHERE last_login_at IS NOT NULL;
+UPDATE customer SET previous_login_at = previous_login_at + INTERVAL 9 HOUR WHERE previous_login_at IS NOT NULL;
+UPDATE customer SET password_changed_at = password_changed_at + INTERVAL 9 HOUR WHERE password_changed_at IS NOT NULL;
+UPDATE customer SET joined_at = joined_at + INTERVAL 9 HOUR WHERE joined_at IS NOT NULL;
+UPDATE customer SET created_at = created_at + INTERVAL 9 HOUR WHERE created_at IS NOT NULL;
+UPDATE customer SET updated_at = updated_at + INTERVAL 9 HOUR WHERE updated_at IS NOT NULL;
 
-CALL shift_datetime_columns_to_kst();
+UPDATE customer_terms_agreement SET agreed_at = agreed_at + INTERVAL 9 HOUR WHERE agreed_at IS NOT NULL;
 
-DROP PROCEDURE shift_datetime_columns_to_kst;
+UPDATE favorite_account SET registered_at = registered_at + INTERVAL 9 HOUR WHERE registered_at IS NOT NULL;
+
+UPDATE idempotency_key SET created_at = created_at + INTERVAL 9 HOUR WHERE created_at IS NOT NULL;
+UPDATE idempotency_key SET expires_at = expires_at + INTERVAL 9 HOUR WHERE expires_at IS NOT NULL;
+
+-- APPEND-ONLY 예외 (파일 상단 설명 참고)
+UPDATE ledger_entry SET occurred_at = occurred_at + INTERVAL 9 HOUR WHERE occurred_at IS NOT NULL;
+
+UPDATE notification SET read_at = read_at + INTERVAL 9 HOUR WHERE read_at IS NOT NULL;
+UPDATE notification SET occurred_at = occurred_at + INTERVAL 9 HOUR WHERE occurred_at IS NOT NULL;
+
+UPDATE product SET created_at = created_at + INTERVAL 9 HOUR WHERE created_at IS NOT NULL;
+UPDATE product SET updated_at = updated_at + INTERVAL 9 HOUR WHERE updated_at IS NOT NULL;
+
+UPDATE product_subscription SET subscribed_at = subscribed_at + INTERVAL 9 HOUR WHERE subscribed_at IS NOT NULL;
+
+UPDATE scheduled_transfer SET registered_at = registered_at + INTERVAL 9 HOUR WHERE registered_at IS NOT NULL;
+UPDATE scheduled_transfer SET executed_at = executed_at + INTERVAL 9 HOUR WHERE executed_at IS NOT NULL;
+UPDATE scheduled_transfer SET canceled_at = canceled_at + INTERVAL 9 HOUR WHERE canceled_at IS NOT NULL;
+
+UPDATE subscription_terms_agreement SET read_at = read_at + INTERVAL 9 HOUR WHERE read_at IS NOT NULL;
+UPDATE subscription_terms_agreement SET agreed_at = agreed_at + INTERVAL 9 HOUR WHERE agreed_at IS NOT NULL;
+
+UPDATE terms SET created_at = created_at + INTERVAL 9 HOUR WHERE created_at IS NOT NULL;
+UPDATE terms SET updated_at = updated_at + INTERVAL 9 HOUR WHERE updated_at IS NOT NULL;
+
+UPDATE transaction_sequence SET updated_at = updated_at + INTERVAL 9 HOUR WHERE updated_at IS NOT NULL;
+
+UPDATE transfer SET transferred_at = transferred_at + INTERVAL 9 HOUR WHERE transferred_at IS NOT NULL;
+UPDATE transfer SET created_at = created_at + INTERVAL 9 HOUR WHERE created_at IS NOT NULL;
+
+UPDATE transfer_limit SET created_at = created_at + INTERVAL 9 HOUR WHERE created_at IS NOT NULL;
+UPDATE transfer_limit SET updated_at = updated_at + INTERVAL 9 HOUR WHERE updated_at IS NOT NULL;
+
+UPDATE transfer_limit_daily_usage SET created_at = created_at + INTERVAL 9 HOUR WHERE created_at IS NOT NULL;
+UPDATE transfer_limit_daily_usage SET updated_at = updated_at + INTERVAL 9 HOUR WHERE updated_at IS NOT NULL;
+
+UPDATE transfer_limit_history SET created_at = created_at + INTERVAL 9 HOUR WHERE created_at IS NOT NULL;
+UPDATE transfer_limit_history SET updated_at = updated_at + INTERVAL 9 HOUR WHERE updated_at IS NOT NULL;
+
+UPDATE verification_request SET verified_at = verified_at + INTERVAL 9 HOUR WHERE verified_at IS NOT NULL;
+UPDATE verification_request SET expires_at = expires_at + INTERVAL 9 HOUR WHERE expires_at IS NOT NULL;
+UPDATE verification_request SET created_at = created_at + INTERVAL 9 HOUR WHERE created_at IS NOT NULL;
