@@ -194,7 +194,11 @@ public class Account {
     }
 
     public void changeDisplayOrder(int displayOrder) {
-        validateDisplayOrder(displayOrder);
+        if (displayOrder <= 0) {
+            throw new BusinessException(
+                    AccountErrorCode.INVALID_DISPLAY_ORDER
+            );
+        }
         this.displayOrder = displayOrder;
     }
 
@@ -234,7 +238,7 @@ public class Account {
         validatePasswordLockState();
         validateWithdrawalRegistration();
         validateClosedState();
-        validateDisplayOrder(displayOrder);
+        validateDisplayOrder();
     }
 
     private void validateAccountNumber() {
@@ -347,10 +351,10 @@ public class Account {
         }
     }
 
-    private void validateDisplayOrder(Integer displayOrder) {
+    private void validateDisplayOrder() {
         if (displayOrder != null && displayOrder <= 0) {
-            throw new BusinessException(
-                    AccountErrorCode.INVALID_DISPLAY_ORDER
+            throw new IllegalStateException(
+                    "계좌 표시순서는 1 이상이어야 합니다."
             );
         }
     }
