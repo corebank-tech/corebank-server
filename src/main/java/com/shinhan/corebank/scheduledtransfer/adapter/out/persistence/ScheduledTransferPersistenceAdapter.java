@@ -45,6 +45,17 @@ public class ScheduledTransferPersistenceAdapter implements ScheduledTransferPer
     }
 
     @Override
+    public boolean saveIfStillProcessing(ScheduledTransfer scheduledTransfer) {
+        int updated = scheduledTransferJpaRepository.finalizeIfProcessing(
+                scheduledTransfer.getScheduledTransferId(),
+                scheduledTransfer.getStatus().name(),
+                scheduledTransfer.getTransactionNumber(),
+                scheduledTransfer.getFailureReason(),
+                scheduledTransfer.getExecutedAt());
+        return updated > 0;
+    }
+
+    @Override
     public List<ScheduledTransfer> findAllProcessing() {
         return scheduledTransferJpaRepository.findByStatus(ScheduledTransferStatus.PROCESSING)
                 .stream()
