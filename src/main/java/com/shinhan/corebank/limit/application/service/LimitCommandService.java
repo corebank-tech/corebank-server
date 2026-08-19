@@ -16,15 +16,9 @@ public class LimitCommandService implements LimitCommandUseCase {
 
     private final TransferLimitCommandPort transferLimitCommandPort;
 
-    /**
-     * 신규 가입 고객에게 정책 기본값을 부여한다. 이미 한도가 있으면 조용히 지나가
-     * 가입 재시도가 깨지지 않게 한다.
-     */
+    /** 신규 가입 고객에게 정책 기본값을 부여한다(REQ-TRSF-029). */
     @Override
     public void create(Long customerId) {
-        if (transferLimitCommandPort.findByCustomerId(customerId).isPresent()) {
-            return;
-        }
         transferLimitCommandPort.save(TransferLimit.create(customerId));
     }
 
