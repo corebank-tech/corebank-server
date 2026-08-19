@@ -43,8 +43,10 @@ class ProductAccountOpeningServiceTest {
     private static final String PASSWORD_HASH =
             "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq";
 
+    private static final ZoneOffset KST = ZoneOffset.ofHours(9);
+
     private static final LocalDateTime OPENED_DATE =
-            LocalDateTime.of(2026, 8, 11, 14, 0);
+            LocalDateTime.of(2026, 8, 11, 23, 0);
 
     private static final LocalDate MATURITY_DATE =
             LocalDate.of(2027, 8, 11);
@@ -61,7 +63,7 @@ class ProductAccountOpeningServiceTest {
     void setUp() {
         Clock clock = Clock.fixed(
                 Instant.parse("2026-08-11T14:00:00Z"),
-                ZoneOffset.UTC
+                KST
         );
 
         productAccountOpeningService =
