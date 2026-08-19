@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 25 테이블 / 금액 BIGINT · 시각 DATETIME(6) UTC
+> **DBMS**: MySQL 8.4 / 25 테이블 / 금액 BIGINT · 시각 DATETIME(6) KST
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -9,7 +9,7 @@
 erDiagram
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 25 테이블 / 금액 BIGINT · 시각 DATETIME(6) UTC
+    %% MySQL 8.4 / 25 테이블 / 금액 BIGINT · 시각 DATETIME(6) KST
     %% =================================================================
 
     %% ---------- P6 ----------

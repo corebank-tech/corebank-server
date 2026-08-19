@@ -54,7 +54,7 @@ flowchart TD
 이번 작업으로 생성된 인프라 공통 클래스들은 팀원 여러분들이 **직접 코드를 구현할 때 반드시 상속하고 규칙을 준수**해야 하는 핵심 기반입니다.
 
 ### ① `BaseEntity.java` (모든 JPA 엔티티의 필수 부모 클래스)
-- **역할**: 생성 시각(`createdAt`)과 수정 시각(`updatedAt`)을 공통으로 관리하며, `DATETIME(6)` 타입으로 **100% 글로벌 표준 UTC(+00:00) 시각**을 자동 주입합니다.
+- **역할**: 생성 시각(`createdAt`)과 수정 시각(`updatedAt`)을 공통으로 관리하며, `DATETIME(6)` 타입으로 **KST(+09:00) 시각**을 자동 주입합니다.
 - **상속 방법 (필수)**: 새로 만드는 모든 비즈니스 `@Entity` 클래스는 무조건 `extends BaseEntity`를 상속해야 합니다.
   ```java
   package com.shinhan.corebank.account;
@@ -68,7 +68,7 @@ flowchart TD
       // 생성일자 필드를 직접 선언하지 마세요!
   }
   ```
-- ⚠️ **주의**: SQL 마이그레이션(DDL) 작성 시 절대로 `DEFAULT CURRENT_TIMESTAMP`를 쓰지 마세요! 시각 생성은 DB가 아니라 자바 JPA Auditing(`BaseEntity` + `JpaAuditingConfig`의 `Clock.systemUTC()`)이 담당합니다.
+- ⚠️ **주의**: SQL 마이그레이션(DDL) 작성 시 절대로 `DEFAULT CURRENT_TIMESTAMP`를 쓰지 마세요! 시각 생성은 DB가 아니라 자바 JPA Auditing(`BaseEntity` + `JpaAuditingConfig`의 `Clock.system(ZoneId.of("Asia/Seoul"))`)이 담당합니다.
 - ℹ️ **예외 — 다른 도메인 테이블의 부분 매핑**: 이 규칙은 "테이블 하나 = 정식(대표) 엔티티 하나"를 전제로 합니다. 다른 도메인이 소유한 테이블을 자기 도메인 목적으로 일부 컬럼만 떼어 매핑하는 경량 엔티티(예: `transfer` 도메인이 `account` 테이블의 락·잔액 컬럼만 매핑하는 `AccountLockJpaEntity`)는 대상이 아닙니다. 이런 부분 매핑이 `createdAt`/`updatedAt`을 실제로 읽지 않는다면 `BaseEntity`를 상속하지 않아도 됩니다 — 상속하면 그 도메인이 관여할 때마다 테이블 소유 도메인의 감사 컬럼(`updated_at`)에 의도치 않은 추가 쓰기가 발생하기 때문입니다.
 
 ### ② `IntegrationTestSupport.java` (모든 통합 테스트의 필수 부모 클래스)
@@ -104,4 +104,4 @@ flowchart TD
 | **Flyway 동작** | 시작 시 자동 실행 (`V...` + `R...`) | 시작 시 매번 빈 DB에 전체 실행 | 시작 시 미적용 스크립트만 자동 실행 |
 | **JPA DDL 모드** | `validate` (스키마 불일치 시 에러) | `validate` | `validate` |
 | **시드 데이터** | `DemoDataLoader` 자동 로딩 ⭕ | 자동 로딩 ❌ (순수 테스트 데이터만) | 자동 로딩 ❌ (보안 및 데이터 보호) |
-| **타임존 관리** | DB/JVM: **UTC** / 로그: **KST** | DB/JVM: **UTC** / 로그: **KST** | DB/JVM: **UTC** / 로그: **KST** |
+| **타임존 관리** | DB/JVM/로그 모두 **KST** (변환 없음) | DB/JVM/로그 모두 **KST** (변환 없음) | DB/JVM/로그 모두 **KST** (변환 없음) |
