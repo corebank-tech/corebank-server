@@ -40,8 +40,9 @@ class LoginServiceTest {
     private static final String REQUEST_IP = "192.168.0.10";
     private static final String RAW_PASSWORD = "CorrectPassword1!";
     private static final String PASSWORD_HASH = "bcrypt-password-hash";
+    private static final ZoneOffset KST = ZoneOffset.ofHours(9);
     private static final LocalDateTime LOGIN_AT =
-            LocalDateTime.of(2026, 8, 15, 1, 30);
+            LocalDateTime.of(2026, 8, 15, 10, 30);
 
     @Mock
     private LoginCustomerPort loginCustomerPort;
@@ -64,7 +65,7 @@ class LoginServiceTest {
     void setUp() {
         Clock clock = Clock.fixed(
                 Instant.parse("2026-08-15T01:30:00Z"),
-                ZoneOffset.UTC
+                KST
         );
 
         service = new LoginService(
