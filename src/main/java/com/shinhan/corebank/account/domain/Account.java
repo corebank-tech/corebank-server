@@ -196,7 +196,7 @@ public class Account {
     public void validateWithdrawalRegistrationAllowed() {
         if (accountType != AccountType.DEMAND_DEPOSIT) {
             throw new BusinessException(
-                    CommonErrorCode.INVALID_INPUT
+                    AccountErrorCode.INVALID_WITHDRAWAL_ACCOUNT_TYPE
             );
         }
 

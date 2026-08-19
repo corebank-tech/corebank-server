@@ -56,6 +56,8 @@ public class WithdrawalAccountRegisterService
         // 등록 자체가 가능한 계좌인지 먼저 확인한다.
         account.validateWithdrawalRegistrationAllowed();
 
+        // TODO P6: passwordLocked 시 APW0101 연동
+
         authVerificationPort.verifyAccountPasswordToken(
                 command.accountPasswordAuthToken(),
                 command.customerId(),
