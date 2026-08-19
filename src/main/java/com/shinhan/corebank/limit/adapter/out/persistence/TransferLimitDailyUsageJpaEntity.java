@@ -29,7 +29,7 @@ public class TransferLimitDailyUsageJpaEntity extends BaseEntity {
     @Column(name = "customer_id")
     private Long customerId;
 
-    /** KST 영업일. UTC 로 산출하면 매일 09시 이전 이체가 전날에 붙는다. */
+    /** KST 영업일. 시각이 아니라 날짜만 담으므로 자정 경계로 집계가 갈린다. */
     @Id
     @Column(name = "usage_date")
     private LocalDate usageDate;

@@ -6,8 +6,8 @@ import lombok.Getter;
 
 /**
  * 고객·일자 단위 한도 사용액. usage_date 는 KST 영업일 기준이며, 정상 확정된
- * 이체만 합산한다(REQ-TRSF-011). 서버가 UTC 로 동작하므로 이 일자를 구할 때는
- * 반드시 Asia/Seoul 로 변환해야 한다.
+ * 이체만 합산한다(REQ-TRSF-011). 서버·DB 가 KST 로 동작하므로(REQ-NFR-018)
+ * 시간대 변환 없이 Clock 이 주는 일자를 그대로 쓴다.
  */
 @Getter
 public class TransferLimitDailyUsage {
