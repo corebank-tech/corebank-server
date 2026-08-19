@@ -34,6 +34,7 @@ class SequenceGeneratorTest extends IntegrationTestSupport {
 
     private static final LocalDate SEQ_DATE = LocalDate.of(2026, 8, 11);
     private static final TransferChannel CHANNEL = TransferChannel.WB;
+    private static final ZoneOffset KST = ZoneOffset.ofHours(9);
 
     @Autowired
     private SequenceGenerator sequenceGenerator;
@@ -95,7 +96,7 @@ class SequenceGeneratorTest extends IntegrationTestSupport {
                         .seqDate(SEQ_DATE)
                         .channel(CHANNEL.name())
                         .lastSeq(9_999_999_999L)
-                        .updatedAt(LocalDateTime.now(ZoneOffset.UTC))
+                        .updatedAt(LocalDateTime.now(KST))
                         .build()
         );
 
@@ -107,12 +108,12 @@ class SequenceGeneratorTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("JVM 기본 시간대가 UTC가 아니어도 updated_at은 UTC 기준으로 저장된다")
-    void updatedAt_isStoredInUtc_regardlessOfJvmDefaultTimeZone() {
+    @DisplayName("JVM 기본 시간대가 KST가 아니어도 updated_at은 KST 기준으로 저장된다")
+    void updatedAt_isStoredInKst_regardlessOfJvmDefaultTimeZone() {
         TimeZone originalTimeZone = TimeZone.getDefault();
         try {
             // given
-            TimeZone.setDefault(TimeZone.getTimeZone("Asia/Seoul"));
+            TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
 
             // when
             sequenceGenerator.nextTransactionNumber(SEQ_DATE, CHANNEL);
@@ -122,7 +123,7 @@ class SequenceGeneratorTest extends IntegrationTestSupport {
                     .findById(new TransactionSequenceId(SEQ_DATE, CHANNEL.name()))
                     .orElseThrow();
             assertThat(entity.getUpdatedAt())
-                    .isCloseTo(LocalDateTime.now(ZoneOffset.UTC), org.assertj.core.api.Assertions.within(10, ChronoUnit.SECONDS));
+                    .isCloseTo(LocalDateTime.now(KST), org.assertj.core.api.Assertions.within(10, ChronoUnit.SECONDS));
         } finally {
             TimeZone.setDefault(originalTimeZone);
         }

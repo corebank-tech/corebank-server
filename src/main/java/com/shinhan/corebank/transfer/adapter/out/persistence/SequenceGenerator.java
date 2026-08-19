@@ -2,7 +2,7 @@ package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 import java.util.Optional;
@@ -38,6 +38,7 @@ public class SequenceGenerator implements TransferSequencePort {
     private static final int MAX_FIRST_INSERT_RACE_RETRIES = 5;
     private static final long BACKOFF_MIN_MILLIS = 10L;
     private static final long BACKOFF_MAX_MILLIS_PER_ATTEMPT = 30L;
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final TransactionSequenceJpaRepository repository;
     private final TransactionTemplate requiresNewTransactionTemplate;
@@ -115,7 +116,7 @@ public class SequenceGenerator implements TransferSequencePort {
                         .seqDate(seqDate)
                         .channel(channel)
                         .lastSeq(INITIAL_SEQUENCE)
-                        .updatedAt(LocalDateTime.now(ZoneOffset.UTC))
+                        .updatedAt(LocalDateTime.now(KST))
                         .build()
         );
         return INITIAL_SEQUENCE;

@@ -26,6 +26,10 @@ public class AutoTransferBatchScheduler {
         log.info("자동이체 배치 시작 - date={}", today);
         autoTransferBatchUseCase.executeDaily(today);
         log.info("자동이체 배치 종료 - date={}", today);
+
+        log.info("재확정 배치 시작 - date={}", today);
+        autoTransferBatchUseCase.reconcileStuckExecutions(today);
+        log.info("재확정 배치 종료 - date={}", today);
     }
 
 }

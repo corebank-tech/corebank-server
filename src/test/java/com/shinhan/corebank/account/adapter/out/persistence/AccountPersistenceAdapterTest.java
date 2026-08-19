@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -377,5 +378,93 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
                 .allMatch(account ->
                         account.getCustomerId().equals(customerId)
                 );
+    }
+
+    @Test
+    @DisplayName("계좌 ID와 고객 ID로 본인 계좌를 조회한다")
+    void findByAccountIdAndCustomerId() {
+        // given
+        Account savedAccount =
+                accountPersistencePort.save(
+                        Account.open(
+                                "088100000021",
+                                customerId,
+                                null,
+                                AccountType.DEMAND_DEPOSIT,
+                                PASSWORD_HASH,
+                                LocalDateTime.of(
+                                        2026, 8, 10, 10, 0
+                                ),
+                                null
+                        )
+                );
+
+        // when
+        Optional<Account> result =
+                accountPersistencePort
+                        .findByAccountIdAndCustomerId(
+                                savedAccount.getAccountId(),
+                                customerId
+                        );
+
+        // then
+        assertThat(result).isPresent();
+
+        assertThat(result.get().getAccountId())
+                .isEqualTo(
+                        savedAccount.getAccountId()
+                );
+
+        assertThat(result.get().getCustomerId())
+                .isEqualTo(customerId);
+    }
+
+    @Test
+    @DisplayName("다른 고객의 계좌는 계좌 ID로 조회해도 반환하지 않는다")
+    void findByAccountIdAndDifferentCustomerIdReturnsEmpty() {
+        // given
+        Long otherCustomerId =
+                customerTestFixture.createCustomer();
+
+        Account savedAccount =
+                accountPersistencePort.save(
+                        Account.open(
+                                "088100000022",
+                                customerId,
+                                null,
+                                AccountType.DEMAND_DEPOSIT,
+                                PASSWORD_HASH,
+                                LocalDateTime.of(
+                                        2026, 8, 10, 10, 0
+                                ),
+                                null
+                        )
+                );
+
+        // when
+        Optional<Account> result =
+                accountPersistencePort
+                        .findByAccountIdAndCustomerId(
+                                savedAccount.getAccountId(),
+                                otherCustomerId
+                        );
+
+        // then
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 계좌 ID는 빈 결과를 반환한다")
+    void findByNonExistingAccountIdReturnsEmpty() {
+        // when
+        Optional<Account> result =
+                accountPersistencePort
+                        .findByAccountIdAndCustomerId(
+                                Long.MAX_VALUE,
+                                customerId
+                        );
+
+        // then
+        assertThat(result).isEmpty();
     }
 }

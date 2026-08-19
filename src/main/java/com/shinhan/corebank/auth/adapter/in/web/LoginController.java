@@ -1,5 +1,6 @@
 package com.shinhan.corebank.auth.adapter.in.web;
 
+import com.shinhan.corebank.auth.adapter.in.security.CsrfTokenCookieIssuer;
 import com.shinhan.corebank.auth.adapter.in.security.SessionLoginManager;
 import com.shinhan.corebank.auth.application.port.in.LoginCommand;
 import com.shinhan.corebank.auth.application.port.in.LoginResult;
@@ -25,6 +26,7 @@ public class LoginController {
     private final LoginUseCase loginUseCase;
     private final ClientIpResolver clientIpResolver;
     private final SessionLoginManager sessionLoginManager;
+    private final CsrfTokenCookieIssuer csrfTokenCookieIssuer;
 
     @PostMapping("/login")
     public ApiResponse<LoginResponse> login(
@@ -49,6 +51,11 @@ public class LoginController {
                         servletRequest,
                         servletResponse
                 );
+
+        csrfTokenCookieIssuer.rotate(
+                servletRequest,
+                servletResponse
+        );
 
         LoginResponse response = new LoginResponse(
                 loginResult.customerId(),

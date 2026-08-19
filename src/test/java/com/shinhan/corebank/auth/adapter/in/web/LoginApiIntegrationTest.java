@@ -29,7 +29,6 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -92,6 +91,7 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
         assertThat(preLoginResponse.statusCode()).isEqualTo(200);
 
         String previousSessionId = currentSessionId();
+        String previousCsrfToken = currentCsrfToken();
         Instant requestedAt = Instant.now();
 
         HttpResponse<String> loginResponse = httpClient.send(
@@ -109,8 +109,15 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
                     assertThat(cookie).contains("JSESSIONID=");
                     assertThat(cookie).containsIgnoringCase("HttpOnly");
                     assertThat(cookie).containsIgnoringCase("SameSite=Lax");
+                })
+                .anySatisfy(cookie -> {
+                    assertThat(cookie).contains("XSRF-TOKEN=");
+                    assertThat(cookie).containsIgnoringCase("Path=/");
+                    assertThat(cookie).containsIgnoringCase("SameSite=Lax");
+                    assertThat(cookie).doesNotContain("HttpOnly");
                 });
         assertThat(currentSessionId).isNotEqualTo(previousSessionId);
+        assertThat(currentCsrfToken()).isNotEqualTo(previousCsrfToken);
         assertThat(body.get("code").asText()).isEqualTo("0000");
         assertThat(body.get("data").get("customerId").asLong())
                 .isEqualTo(customerId);
@@ -155,9 +162,12 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
 
         assertThat(response.statusCode()).isEqualTo(401);
         assertThat(response.headers().allValues("Set-Cookie"))
-                .noneMatch(cookie -> cookie.contains("JSESSIONID="));
+                .noneMatch(cookie -> cookie.contains("JSESSIONID="))
+                .noneMatch(cookie -> cookie.contains("XSRF-TOKEN="));
         assertThat(cookieManager.getCookieStore().getCookies())
                 .noneMatch(cookie -> "JSESSIONID".equals(cookie.getName()));
+        assertThat(cookieManager.getCookieStore().getCookies())
+                .noneMatch(cookie -> "XSRF-TOKEN".equals(cookie.getName()));
         assertThat(body.get("code").asText()).isEqualTo("ATH0101");
         assertThat(body.get("data").get("errorCount").asInt())
                 .isEqualTo(1);
@@ -177,7 +187,7 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("로그아웃하면 세션과 JSESSIONID가 폐기되고 보호 API 접근이 차단된다")
+    @DisplayName("로그아웃 후 세션과 CSRF 토큰을 폐기하고 재로그인 시 모두 재발급한다")
     void invalidatesSessionAndAuthenticationOnLogout() throws Exception {
         HttpResponse<String> loginResponse = httpClient.send(
                 loginRequest(RAW_PASSWORD),
@@ -185,23 +195,14 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
         );
 
         assertThat(loginResponse.statusCode()).isEqualTo(200);
-        assertThat(currentSessionId()).isNotBlank();
-
-        HttpResponse<String> csrfResponse = httpClient.send(
-                HttpRequest.newBuilder(uri("/products/test-csrf"))
-                        .GET()
-                        .build(),
-                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
-        );
-        JsonNode csrfBody = objectMapper.readTree(csrfResponse.body());
-
-        assertThat(csrfResponse.statusCode()).isEqualTo(200);
+        String loggedInSessionId = currentSessionId();
+        String csrfToken = currentCsrfToken();
 
         HttpResponse<String> logoutResponse = httpClient.send(
                 HttpRequest.newBuilder(uri("/auth/logout"))
                         .header(
-                                csrfBody.get("headerName").asText(),
-                                csrfBody.get("token").asText()
+                                "X-XSRF-TOKEN",
+                                csrfToken
                         )
                         .POST(HttpRequest.BodyPublishers.noBody())
                         .build(),
@@ -224,6 +225,8 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
                 });
         assertThat(cookieManager.getCookieStore().getCookies())
                 .noneMatch(cookie -> "JSESSIONID".equals(cookie.getName()));
+        assertThat(cookieManager.getCookieStore().getCookies())
+                .noneMatch(cookie -> "XSRF-TOKEN".equals(cookie.getName()));
 
         HttpResponse<String> protectedResponse = httpClient.send(
                 HttpRequest.newBuilder(uri("/accounts"))
@@ -236,6 +239,15 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
 
         assertThat(protectedResponse.statusCode()).isEqualTo(401);
         assertThat(protectedBody.get("code").asText()).isEqualTo("CMN0101");
+
+        HttpResponse<String> reloginResponse = httpClient.send(
+                loginRequest(RAW_PASSWORD),
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
+        );
+
+        assertThat(reloginResponse.statusCode()).isEqualTo(200);
+        assertThat(currentSessionId()).isNotEqualTo(loggedInSessionId);
+        assertThat(currentCsrfToken()).isNotEqualTo(csrfToken);
     }
 
     private HttpRequest loginRequest(String password) {
@@ -275,6 +287,18 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
                 ));
     }
 
+    private String currentCsrfToken() {
+        return cookieManager.getCookieStore()
+                .getCookies()
+                .stream()
+                .filter(cookie -> "XSRF-TOKEN".equals(cookie.getName()))
+                .map(HttpCookie::getValue)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "XSRF-TOKEN 쿠키가 존재하지 않습니다."
+                ));
+    }
+
     private Long insertCustomer() {
         String passwordHash = passwordEncoder.encode(RAW_PASSWORD);
 
@@ -291,7 +315,7 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
                     updated_at
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?,
-                    UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), UTC_TIMESTAMP(6)
+                    NOW(6), NOW(6), NOW(6)
                 )
                 """,
                 USER_ID,
@@ -330,16 +354,12 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
     static class TestSessionController {
 
         @GetMapping("/products/test-session")
-        void createSession(HttpServletRequest request) {
+        void createSession(
+                HttpServletRequest request,
+                CsrfToken csrfToken
+        ) {
             request.getSession(true);
-        }
-
-        @GetMapping("/products/test-csrf")
-        Map<String, String> csrfToken(CsrfToken csrfToken) {
-            return Map.of(
-                    "headerName", csrfToken.getHeaderName(),
-                    "token", csrfToken.getToken()
-            );
+            csrfToken.getToken();
         }
     }
 }

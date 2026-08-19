@@ -1,5 +1,8 @@
 package com.shinhan.corebank.account.domain;
 
+import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import lombok.Getter;
 
 import java.time.LocalDate;
@@ -38,6 +41,9 @@ public class Account {
 
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;
+
+    private static final int MAX_ALIAS_LENGTH = 24;
+    private static final int MAX_KOREAN_ALIAS_LENGTH = 12;
 
     private Account(
             Long accountId,
@@ -169,6 +175,59 @@ public class Account {
         );
     }
 
+    public void changeAlias(String alias) {
+        if (alias == null || alias.isBlank()) {
+            throw new BusinessException(
+                    CommonErrorCode.REQUIRED_FIELD_MISSING
+            );
+        }
+
+        String normalizedAlias = alias.strip();
+
+        validateAlias(normalizedAlias);
+
+        this.alias = normalizedAlias;
+    }
+
+    public void removeAlias() {
+        this.alias = null;
+    }
+
+    public void changeDisplayOrder(int displayOrder) {
+        if (displayOrder <= 0) {
+            throw new BusinessException(
+                    AccountErrorCode.INVALID_DISPLAY_ORDER
+            );
+        }
+        this.displayOrder = displayOrder;
+    }
+
+    public void resetDisplayOrder() {
+        this.displayOrder = null;
+    }
+
+    private void validateAlias(String alias) {
+        int totalLength =
+                alias.codePointCount(0, alias.length());
+
+        long koreanLength =
+                alias.codePoints()
+                        .filter(this::isKoreanSyllable)
+                        .count();
+
+        if (totalLength > MAX_ALIAS_LENGTH
+                || koreanLength > MAX_KOREAN_ALIAS_LENGTH) {
+            throw new BusinessException(
+                    AccountErrorCode.INVALID_ACCOUNT_ALIAS
+            );
+        }
+    }
+
+    private boolean isKoreanSyllable(int codePoint) {
+        return codePoint >= 0xAC00
+                && codePoint <= 0xD7A3;
+    }
+
     private void validate() {
         validateAccountNumber();
         validateCustomer();
@@ -179,6 +238,7 @@ public class Account {
         validatePasswordLockState();
         validateWithdrawalRegistration();
         validateClosedState();
+        validateDisplayOrder();
     }
 
     private void validateAccountNumber() {
@@ -290,4 +350,13 @@ public class Account {
             );
         }
     }
+
+    private void validateDisplayOrder() {
+        if (displayOrder != null && displayOrder <= 0) {
+            throw new IllegalStateException(
+                    "계좌 표시순서는 1 이상이어야 합니다."
+            );
+        }
+    }
 }
+

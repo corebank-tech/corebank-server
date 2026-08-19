@@ -17,6 +17,19 @@ class SecurityTestController {
         return ApiResponse.success();
     }
 
+    @PostMapping({
+            "/auth/terms/check",
+            "/auth/verify-account",
+            "/auth/check-id",
+            "/auth/signup/validate",
+            "/auth/signup/complete",
+            "/auth/email-verifications",
+            "/auth/email-verifications/{emailVerificationId}/verify"
+    })
+    ApiResponse<Void> signup() {
+        return ApiResponse.success();
+    }
+
     @GetMapping("/products/test")
     ApiResponse<String> publicProduct() {
         return ApiResponse.success("product");
