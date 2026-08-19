@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+// 회원가입 약관 조회와 동의 검증 HTTP API를 제공한다.
 @RestController
 @RequestMapping("/auth/terms")
 public class SignupTermsController {

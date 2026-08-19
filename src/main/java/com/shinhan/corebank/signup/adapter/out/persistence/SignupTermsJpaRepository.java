@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
 
+// 회원가입 유형의 최신 약관 행을 조회한다.
 public interface SignupTermsJpaRepository
         extends JpaRepository<SignupTermsJpaEntity, Long> {
 

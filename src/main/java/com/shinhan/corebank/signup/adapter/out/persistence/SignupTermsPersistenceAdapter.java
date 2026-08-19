@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
+// 회원가입용 최신 약관을 JPA 저장소에서 조회한다.
 @Component
 public class SignupTermsPersistenceAdapter
         implements SignupTermsQueryPort {

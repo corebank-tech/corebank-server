@@ -16,6 +16,10 @@ public interface CustomerJpaRepository
     // 로그인 아이디로 고객 Entity 조회
     Optional<CustomerJpaEntity> findByUserId(String userId);
 
+    boolean existsByUserId(String userId);
+
+    boolean existsByEmail(String email);
+
     // 로그인 상태 변경 중 같은 고객의 동시 수정을 직렬화
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
