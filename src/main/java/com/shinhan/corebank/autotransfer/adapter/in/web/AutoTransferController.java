@@ -1,11 +1,18 @@
 package com.shinhan.corebank.autotransfer.adapter.in.web;
 
+import com.shinhan.corebank.adapter.in.web.exception.ErrorResponse;
 import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.autotransfer.application.port.in.*;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.response.PageResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
@@ -28,6 +35,7 @@ import java.util.function.Supplier;
 @RestController
 @RequestMapping("/auto-transfers")
 @RequiredArgsConstructor
+@Tag(name = "자동이체", description = "자동이체 등록·조회·변경·해지 및 처리결과 조회 API")
 public class AutoTransferController {
     private final AutoTransferRegisterUseCase autoTransferRegisterUseCase;
     private final IdempotencyService idempotencyService;
@@ -40,7 +48,26 @@ public class AutoTransferController {
 
     @PostMapping
     // 멱등성 확인 후, 재요청 -> 저장된 응답, 신규 요청 -> 등록
-    public ResponseEntity<ApiResponse<AutoTransferResponse>> register (@RequestHeader("Idempotency-Key") String idempotencyKey,
+    @Operation(summary = "자동이체 등록", description = """
+            지정한 출금계좌에서 주기적으로 자동이체를 실행하도록 등록한다. 동일한 Idempotency-Key와 동일한 요청 내용으로 \
+            재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "등록 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "`AUT0001` 이체지정일 범위 오류 · `AUT0002` 이체기간 오류 · `AUT0004` 종료일 이전 최초 실행 없음 · " +
+                            "`AUT0005` 입금 불가 상품유형 · `AUT0006` 1회 이체한도 초과 · `AUT0007` 이체주기 오류 · " +
+                            "`AUT0008` 이체금액 오류 · `AUT0009` 통장 표시내용 길이 초과",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "`AUT0202` 출금계좌 소유자 아님/비활성 또는 입금계좌를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "`AUT0301` 동일 조건의 자동이체 중복 등록 · `CMN0301`/`CMN0302` 멱등키 충돌",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<ApiResponse<AutoTransferResponse>> register (
+            @Parameter(description = "멱등키. 동일 키로 재요청 시 재처리 없이 저장된 응답을 반환", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
                                                                        @RequestBody AutoTransferRegisterRequest request,
                                                                        HttpServletRequest httpRequest) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
@@ -53,8 +80,27 @@ public class AutoTransferController {
 
     //변경
     @PatchMapping("/{autoTransferId}")
-    public ResponseEntity<ApiResponse<AutoTransferResponse>> change(@PathVariable Long autoTransferId,
-                                                                    @RequestHeader("Idempotency-Key") String idempotencyKey,
+    @Operation(summary = "자동이체 변경", description = """
+            등록된 자동이체의 금액·이체주기·종료일·통장 표시내용을 변경한다. 출금계좌·입금계좌·이체지정일은 변경할 수 없다. \
+            동일한 Idempotency-Key와 동일한 요청 내용으로 재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "변경 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "`AUT0002` 이체기간 오류 · `AUT0003` 변경 불가 항목 포함 · `AUT0004` 종료일 이전 최초 실행 없음 · " +
+                            "`AUT0006` 1회 이체한도 초과 · `AUT0007` 이체주기 오류 · `AUT0008` 이체금액 오류 · `AUT0009` 통장 표시내용 길이 초과",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "`AUT0201` 자동이체 등록 건을 찾을 수 없음(본인 소유가 아닌 경우도 동일)",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "`AUT0302` 정상 상태가 아닌 자동이체 · `CMN0301`/`CMN0302` 멱등키 충돌",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<ApiResponse<AutoTransferResponse>> change(
+            @Parameter(description = "변경할 자동이체 ID", required = true, example = "1")
+            @PathVariable Long autoTransferId,
+            @Parameter(description = "멱등키. 동일 키로 재요청 시 재처리 없이 저장된 응답을 반환", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
                                                                     @RequestBody AutoTransferChangeRequest request,
                                                                     HttpServletRequest httpRequest) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
@@ -68,7 +114,24 @@ public class AutoTransferController {
 
     // 삭제
     @DeleteMapping("/{autoTransferId}")
-    public ResponseEntity<ApiResponse<Void>> cancel(@PathVariable Long autoTransferId, @RequestHeader("Idempotency-Key") String idempotencyKey,
+    @Operation(summary = "자동이체 해지", description = """
+            등록된 자동이체를 해지한다. 다음 실행 예정일 당일에는 해지할 수 없다. 동일한 Idempotency-Key와 동일한 \
+            요청 내용으로 재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "해지 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "`AUT0201` 자동이체 등록 건을 찾을 수 없음(본인 소유가 아닌 경우도 동일)",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
+                    description = "`AUT0302` 정상 상태가 아닌 자동이체 · `AUT0303` 실행 예정일 당일 해지 시도 · `CMN0301`/`CMN0302` 멱등키 충돌",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<ApiResponse<Void>> cancel(
+            @Parameter(description = "해지할 자동이체 ID", required = true, example = "1")
+            @PathVariable Long autoTransferId,
+            @Parameter(description = "멱등키. 동일 키로 재요청 시 재처리 없이 저장된 응답을 반환", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @Parameter(description = "계좌 비밀번호 인증 완료 후 발급되는 1회성 인증 토큰", required = true)
             @RequestHeader("Account-Password-Auth-Token") String accountPasswordAuthToken, HttpServletRequest httpRequest) {
 
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
@@ -90,10 +153,21 @@ public class AutoTransferController {
 
     // 조회
     @GetMapping
+    @Operation(summary = "자동이체 목록조회", description = "내 출금계좌 기준으로 등록된 자동이체 목록을 상태별로 조회한다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "`CMN0001` status 값이 올바르지 않음 · `CMN0002` 필수값 누락 · `CMN0005` 지원하지 않는 페이지 크기(5/10/20/30/50 중 하나여야 함)",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public ApiResponse<PageResponse<AutoTransferListItemResponse>> search(
+            @Parameter(description = "출금계좌 ID (내 계좌)", required = true, example = "1001")
             @RequestParam Long withdrawalAccountId,
+            @Parameter(description = "자동이체 상태 필터. 미전달 또는 ALL이면 전체 조회", example = "NORMAL")
             @RequestParam(required = false) String status,
+            @Parameter(description = "페이지 번호(0부터 시작)", example = "0")
             @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "페이지 크기. 5/10/20/30/50 중 하나만 허용", example = "10")
             @RequestParam(defaultValue =  "10") int size) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         Page<AutoTransfer> result = autoTransferQueryUseCase.search(customerId, withdrawalAccountId, parseStatus(status), page, size);
@@ -193,11 +267,26 @@ public class AutoTransferController {
 
     // 결과조회
     @GetMapping("/executions")
+    @Operation(summary = "자동이체 처리결과 조회", description = """
+            내 출금계좌 기준으로 자동이체 실행 이력을 조회기간별로 조회한다. 조회기간을 지정하지 않으면 \
+            최근 1개월(오늘 기준)을 기본값으로 조회한다.""")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "`CMN0002` 필수값 누락 · `CMN0005` 지원하지 않는 페이지 크기(5/10/20/30/50 중 하나여야 함) · " +
+                            "`CMN0001` 조회 시작일이 종료일보다 늦음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public ApiResponse<AutoTransferExecutionHistoryPageResponse> searchExecutionHistory(
+            @Parameter(description = "출금계좌 ID (내 계좌)", required = true, example = "1001")
             @RequestParam Long withdrawalAccountId,
+            @Parameter(description = "조회기간 시작일. 미전달 시 toDate로부터 1개월 전", example = "2026-07-20")
             @RequestParam(required = false) LocalDate fromDate,
+            @Parameter(description = "조회기간 종료일. 미전달 시 오늘", example = "2026-08-20")
             @RequestParam(required = false) LocalDate toDate,
+            @Parameter(description = "페이지 번호(0부터 시작)", example = "0")
             @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "페이지 크기. 5/10/20/30/50 중 하나만 허용", example = "10")
             @RequestParam(defaultValue = "10") int size) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         AutoTransferExecutionHistoryResult result = autoTransferExecutionHistoryQueryUseCase.search(
