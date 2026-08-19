@@ -64,6 +64,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     void seedCustomerAndAccount() {
         customerId = insertCustomer();
         accountId = insertAccount(customerId);
+        // 실구현 AccountStatusAdapter가 @Primary가 된 뒤로 입금계좌도 실제 DB에 있어야 통과한다(#180)
+        insertAccountWithNumber("110987654321", insertCustomer());
     }
 
     @Test
@@ -876,6 +878,10 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     private Long insertAccount(Long customerId) {
         // System.nanoTime() 기반 생성은 짧은 간격의 연속 호출에서 겹칠 수 있어 카운터로 유일성을 보장한다(uk_account_number)
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
+        return insertAccountWithNumber(accountNumber, customerId);
+    }
+
+    private Long insertAccountWithNumber(String accountNumber, Long customerId) {
         entityManager.createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, opened_date, created_at, updated_at) "
                                 + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', NOW(), NOW(), NOW())")
