@@ -43,6 +43,14 @@ public class ScheduledTransferPersistenceAdapter implements ScheduledTransferPer
                 .map(ScheduledTransferMapper::toDomain)
                 .toList();
     }
+
+    @Override
+    public List<ScheduledTransfer> findAllProcessing() {
+        return scheduledTransferJpaRepository.findByStatus(ScheduledTransferStatus.PROCESSING)
+                .stream()
+                .map(ScheduledTransferMapper::toDomain)
+                .toList();
+    }
     @Override
     public ScheduledTransfer save(ScheduledTransfer scheduledTransfer) {
         try {

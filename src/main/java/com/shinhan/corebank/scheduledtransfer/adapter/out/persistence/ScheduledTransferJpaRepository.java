@@ -17,6 +17,9 @@ public interface ScheduledTransferJpaRepository extends JpaRepository<ScheduledT
     List<ScheduledTransferJpaEntity> findByStatusAndScheduledDateOrderByRegisteredAtAsc(
             ScheduledTransferStatus status, LocalDate scheduledDate);
 
+    // PROCESSING에 멈춘 건 전체 조회 (재확정 배치 대상)
+    List<ScheduledTransferJpaEntity> findByStatus(ScheduledTransferStatus status);
+
     // WAITING -> PROCESSING 조건부 UPDATE. 영향받은 행이 1이면 선점 성공, 0이면 이미 다른 실행이 선점함.
     @Modifying
     @Query(value = "UPDATE scheduled_transfer SET status = 'PROCESSING' WHERE scheduled_transfer_id = :id AND status = 'WAITING'",
