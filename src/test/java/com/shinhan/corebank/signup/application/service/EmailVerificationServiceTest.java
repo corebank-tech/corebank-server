@@ -80,7 +80,8 @@ class EmailVerificationServiceTest {
                 new SignupTokenProperties(
                         Duration.ofMinutes(30),
                         Duration.ofMinutes(3),
-                        TOKEN_TTL
+                        TOKEN_TTL,
+                        Duration.ofMinutes(10)
                 ),
                 clock
         );
