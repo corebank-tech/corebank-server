@@ -309,8 +309,8 @@ class ScheduledTransferCommandServiceTest {
     }
 
     @Test
-    @DisplayName("소유자가 아니면 FORBIDDEN(403)을 던진다 — 존재를 숨기지 않는다")
-    void cancel_customerIdMismatch_throwsForbidden() {
+    @DisplayName("소유자가 아니면 존재를 숨기기 위해 NOT_FOUND(404)를 던진다 (api_conventions.md §8-3)")
+    void cancel_customerIdMismatch_throwsNotFound() {
         ScheduledTransfer existing = existingScheduledTransfer(ScheduledTransferStatus.WAITING, LocalDate.now().plusDays(10));
         when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
 
@@ -319,7 +319,7 @@ class ScheduledTransferCommandServiceTest {
         assertThatThrownBy(() -> scheduledTransferCommandService.cancel(10L, command))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(CommonErrorCode.FORBIDDEN));
+                        .isEqualTo(ScheduledTransferErrorCode.NOT_FOUND));
 
         verify(authTokenVerificationPort, never()).verify(any(), any(), any());
         verify(scheduledTransferPersistencePort, never()).save(any());

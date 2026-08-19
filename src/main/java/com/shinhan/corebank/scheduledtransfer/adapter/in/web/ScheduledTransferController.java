@@ -39,7 +39,6 @@ public class ScheduledTransferController {
     private final CurrentCustomerProvider currentCustomerProvider;
     private final ScheduledTransferCancelUseCase scheduledTransferCancelUseCase;
 
-
     @PostMapping
     // 멱등성 확인 후, 재요청 -> 저장된 응답, 신규 요청 -> 등록
     public ResponseEntity<ApiResponse<ScheduledTransferResponse>> register(@RequestHeader("Idempotency-Key") String idempotencyKey,

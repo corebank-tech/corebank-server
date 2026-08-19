@@ -4,7 +4,6 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelCommand;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferRegisterCommand;
@@ -125,10 +124,10 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
         return saved;
     }
 
-    // 예약이체 취소 403/404를 구분
+    // 존재 여부를 숨기기 위해 findById 실패와 동일한 NOT_FOUND로 응답한다 (api_conventions.md §8-3)
     private void requireOwned(ScheduledTransfer scheduledTransfer, Long customerId) {
         if (!scheduledTransfer.getCustomerId().equals(customerId)) {
-            throw new BusinessException(CommonErrorCode.FORBIDDEN);
+            throw new BusinessException(ScheduledTransferErrorCode.NOT_FOUND);
         }
     }
 }
