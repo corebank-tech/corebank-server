@@ -90,20 +90,20 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
         TransferTestFixtures.seedCustomerAndAccounts(entityManager);
         entityManager.createNativeQuery("""
             INSERT INTO account (account_id, account_number, customer_id, product_id, account_type, balance, status, password_hash, withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at)
-            VALUES (204, '110444444444', 1, NULL, 'DEMAND_DEPOSIT', 50000, 'SUSPENDED', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', FALSE, NULL, '2026-08-01', NOW(6), NOW(6))
+            VALUES (204, '110999999999', 1, NULL, 'DEMAND_DEPOSIT', 50000, 'SUSPENDED', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', FALSE, NULL, '2026-08-01', NOW(6), NOW(6))
             """).executeUpdate();
         entityManager.flush();
         entityManager.clear();
 
         // when
         Map<String, ResolvedPayee> resolved = adapter.resolvePayeesByAccountNumbers(
-                List.of("110222222222", "110444444444", "999999999999"));
+                List.of("110222222222", "110999999999", "999999999999"));
 
         // then
         assertThat(resolved).hasSize(2);
         assertThat(resolved.get("110222222222")).isEqualTo(
                 new ResolvedPayee(202L, "테스터", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE));
-        assertThat(resolved.get("110444444444")).isEqualTo(
+        assertThat(resolved.get("110999999999")).isEqualTo(
                 new ResolvedPayee(204L, "테스터", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.SUSPENDED));
     }
 

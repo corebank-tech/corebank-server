@@ -32,13 +32,11 @@ public class FavoriteAccountQueryService implements FavoriteAccountQueryUseCase 
         Map<String, ResolvedPayee> payeesByAccountNumber = accountLockPort.resolvePayeesByAccountNumbers(
                 favoriteAccounts.stream().map(FavoriteAccount::getDepositAccountNumber).toList());
         return favoriteAccounts.stream()
-                .map(favoriteAccount -> toResult(favoriteAccount, payeesByAccountNumber.get(favoriteAccount.getDepositAccountNumber())))
+                .map(favoriteAccount -> {
+                    ResolvedPayee payee = payeesByAccountNumber.get(favoriteAccount.getDepositAccountNumber());
+                    boolean transferable = payee != null && payee.status() == LockedAccountStatus.ACTIVE;
+                    return FavoriteAccountResult.of(favoriteAccount, transferable);
+                })
                 .toList();
-    }
-
-    private FavoriteAccountResult toResult(FavoriteAccount favoriteAccount, ResolvedPayee payee) {
-        boolean transferable = payee != null && payee.status() == LockedAccountStatus.ACTIVE;
-        return new FavoriteAccountResult(favoriteAccount.getFavoriteAccountId(), favoriteAccount.getAlias(),
-                favoriteAccount.getDepositAccountNumber(), favoriteAccount.getPayeeName(), transferable);
     }
 }

@@ -50,14 +50,9 @@ public class FavoriteAccountRegisterService implements FavoriteAccountRegisterUs
 
         try {
             FavoriteAccount saved = persistencePort.save(favoriteAccount);
-            return toResult(saved, payee.status() == LockedAccountStatus.ACTIVE);
+            return FavoriteAccountResult.of(saved, payee.status() == LockedAccountStatus.ACTIVE);
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(FavoriteAccountErrorCode.FAVORITE_ACCOUNT_ALREADY_EXISTS);
         }
-    }
-
-    private FavoriteAccountResult toResult(FavoriteAccount favoriteAccount, boolean transferable) {
-        return new FavoriteAccountResult(favoriteAccount.getFavoriteAccountId(), favoriteAccount.getAlias(),
-                favoriteAccount.getDepositAccountNumber(), favoriteAccount.getPayeeName(), transferable);
     }
 }
