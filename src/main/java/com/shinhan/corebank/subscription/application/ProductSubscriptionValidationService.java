@@ -169,6 +169,8 @@ public class ProductSubscriptionValidationService implements ProductSubscription
     // satisfiedConditionCodes 중 이 상품에 실제로 정의된 조건만 인정해서 합산한다.
     // 조건 충족 여부 자체(예: 자동이체 6회 이상 실행됐는지)는 클라이언트가 신고한 값을 그대로
     // 신뢰한다 — §3-5 참고: 스키마에 조건 임계치가 구조화돼 있지 않아 서버가 직접 판정할 근거가 없다.
+    // 기표가 일어나는 실제 가입(#69)에서는 이 방식을 복사하지 말 것 — 자동이체 실행 이력 등
+    // 서버가 보유한 증빙으로 재판정해야 한다(PR #147 리뷰 합의).
     private BigDecimal calculatePreferentialRate(
             List<ProductPreferentialRate> preferentialRates, List<String> satisfiedConditionCodes) {
         Set<String> satisfied = new HashSet<>(satisfiedConditionCodes);
