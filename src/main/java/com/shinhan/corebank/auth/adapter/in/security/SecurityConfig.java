@@ -66,6 +66,7 @@ public class SecurityConfig {
                 "Accept",
                 "Content-Type",
                 "X-XSRF-TOKEN",
+                "X-Signup-Token",
                 "Idempotency-Key"
         ));
         configuration.setAllowCredentials(true);

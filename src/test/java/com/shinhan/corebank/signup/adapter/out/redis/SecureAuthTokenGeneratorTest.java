@@ -50,7 +50,7 @@ class SecureAuthTokenGeneratorTest {
     }
 
     @Test
-    @DisplayName("아이디·이메일·계좌 인증 토큰도 256비트 난수로 생성한다")
+    @DisplayName("아이디·이메일·계좌·임시가입 토큰도 256비트 난수로 생성한다")
     void generatesOtherSignupTokens() {
         assertToken(
                 generator.generateUserIdCheckToken(),
@@ -63,6 +63,10 @@ class SecureAuthTokenGeneratorTest {
         assertToken(
                 generator.generateAccountAuthToken(),
                 "ACCOUNT_AUTH_"
+        );
+        assertToken(
+                generator.generateTempSignupToken(),
+                "TEMP_SIGNUP_"
         );
     }
 

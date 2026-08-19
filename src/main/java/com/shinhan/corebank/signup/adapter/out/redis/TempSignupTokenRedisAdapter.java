@@ -1,7 +1,7 @@
 package com.shinhan.corebank.signup.adapter.out.redis;
 
-import com.shinhan.corebank.signup.application.port.out.AccountAuthTokenPort;
-import com.shinhan.corebank.signup.domain.model.AccountAuthTokenPayload;
+import com.shinhan.corebank.signup.application.port.out.TempSignupTokenPort;
+import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -10,16 +10,16 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.Optional;
 
-// accountAuthToken을 Redis에 저장하고 원자적으로 소비한다.
+// tempSignupToken을 Redis에 저장하고 조회하거나 원자적으로 소비한다.
 @Component
-public class AccountAuthTokenRedisAdapter implements AccountAuthTokenPort {
+public class TempSignupTokenRedisAdapter implements TempSignupTokenPort {
 
-    private static final String KEY_PREFIX = "signup:account-auth:";
+    static final String KEY_PREFIX = "signup:temp-signup:";
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
-    public AccountAuthTokenRedisAdapter(
+    public TempSignupTokenRedisAdapter(
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper
     ) {
@@ -28,11 +28,7 @@ public class AccountAuthTokenRedisAdapter implements AccountAuthTokenPort {
     }
 
     @Override
-    public void save(
-            String token,
-            AccountAuthTokenPayload payload,
-            Duration ttl
-    ) {
+    public void save(String token, TempSignupTokenPayload payload, Duration ttl) {
         try {
             redisTemplate.opsForValue().set(
                     key(token),
@@ -41,35 +37,40 @@ public class AccountAuthTokenRedisAdapter implements AccountAuthTokenPort {
             );
         } catch (JacksonException exception) {
             throw new IllegalStateException(
-                    "계좌 인증 토큰 직렬화에 실패했습니다.",
+                    "임시 회원가입 토큰 직렬화에 실패했습니다.",
                     exception
             );
         }
     }
 
     @Override
-    public Optional<AccountAuthTokenPayload> find(String token) {
+    public Optional<TempSignupTokenPayload> find(String token) {
+        if (token == null || token.isBlank()) {
+            return Optional.empty();
+        }
         return deserialize(redisTemplate.opsForValue().get(key(token)));
     }
 
     @Override
-    public Optional<AccountAuthTokenPayload> consume(String token) {
+    public Optional<TempSignupTokenPayload> consume(String token) {
+        if (token == null || token.isBlank()) {
+            return Optional.empty();
+        }
         return deserialize(redisTemplate.opsForValue().getAndDelete(key(token)));
     }
 
-    private Optional<AccountAuthTokenPayload> deserialize(String json) {
+    private Optional<TempSignupTokenPayload> deserialize(String json) {
         if (json == null) {
             return Optional.empty();
         }
-
         try {
             return Optional.of(objectMapper.readValue(
                     json,
-                    AccountAuthTokenPayload.class
+                    TempSignupTokenPayload.class
             ));
         } catch (JacksonException exception) {
             throw new IllegalStateException(
-                    "계좌 인증 토큰 역직렬화에 실패했습니다.",
+                    "임시 회원가입 토큰 역직렬화에 실패했습니다.",
                     exception
             );
         }

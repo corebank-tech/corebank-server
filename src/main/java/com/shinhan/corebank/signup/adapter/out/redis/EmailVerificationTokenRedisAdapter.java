@@ -50,8 +50,16 @@ public class EmailVerificationTokenRedisAdapter
     }
 
     @Override
+    public Optional<EmailVerificationTokenPayload> find(String token) {
+        return deserialize(redisTemplate.opsForValue().get(key(token)));
+    }
+
+    @Override
     public Optional<EmailVerificationTokenPayload> consume(String token) {
-        String json = redisTemplate.opsForValue().getAndDelete(key(token));
+        return deserialize(redisTemplate.opsForValue().getAndDelete(key(token)));
+    }
+
+    private Optional<EmailVerificationTokenPayload> deserialize(String json) {
         if (json == null) {
             return Optional.empty();
         }
