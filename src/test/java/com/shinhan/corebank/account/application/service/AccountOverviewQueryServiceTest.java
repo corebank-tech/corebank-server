@@ -454,47 +454,121 @@ class AccountOverviewQueryServiceTest {
     }
 
     @Test
-    @DisplayName("해지 계좌도 전체 계좌 조회 결과에 포함한다")
-    void includesClosedAccount() {
+    @DisplayName("해지 계좌는 전체 계좌 조회와 자산 합계에서 제외하고 정지 계좌는 포함한다")
+    void excludeClosedAccountFromOverview() {
         // given
-        Account closedAccount = createAccount(
-                101L,
-                "088100000001",
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                0L,
-                AccountStatus.CLOSED,
-                "해지 계좌",
-                false
-        );
+        Long customerId = 1L;
 
-        given(accountPersistencePort
-                .findAllByCustomerId(CUSTOMER_ID))
-                .willReturn(
-                        List.of(closedAccount)
+        Account activeAccount =
+                createAccountWithStatus(
+                        101L,
+                        "088100000101",
+                        customerId,
+                        10_000L,
+                        AccountStatus.ACTIVE,
+                        LocalDateTime.of(
+                                2026, 8, 1, 10, 0
+                        ),
+                        null
                 );
+
+        Account suspendedAccount =
+                createAccountWithStatus(
+                        102L,
+                        "088100000102",
+                        customerId,
+                        20_000L,
+                        AccountStatus.SUSPENDED,
+                        LocalDateTime.of(
+                                2026, 8, 2, 10, 0
+                        ),
+                        null
+                );
+
+        Account closedAccount =
+                createAccountWithStatus(
+                        103L,
+                        "088100000103",
+                        customerId,
+                        30_000L,
+                        AccountStatus.CLOSED,
+                        LocalDateTime.of(
+                                2026, 8, 3, 10, 0
+                        ),
+                        LocalDateTime.of(
+                                2026, 8, 10, 10, 0
+                        )
+                );
+
+        given(
+                accountPersistencePort
+                        .findAllByCustomerId(
+                                customerId
+                        )
+        ).willReturn(
+                List.of(
+                        activeAccount,
+                        suspendedAccount,
+                        closedAccount
+                )
+        );
 
         // when
         AccountOverviewResult result =
-                service.getOverview(CUSTOMER_ID);
+                service.getOverview(
+                                customerId
+                        );
 
         // then
-        assertThat(result.items()).hasSize(1);
-
-        AccountOverviewResult.AccountItem account =
+        List<Long> accountIds =
                 result.items()
-                        .get(0)
-                        .accounts()
-                        .get(0);
+                        .stream()
+                        .flatMap(group ->
+                                group.accounts()
+                                        .stream()
+                        )
+                        .map(account ->
+                                account.accountId()
+                        )
+                        .toList();
 
-        assertThat(account.status())
-                .isEqualTo(AccountStatus.CLOSED);
+        assertThat(accountIds)
+                .containsExactlyInAnyOrder(
+                        101L,
+                        102L
+                );
 
-        assertThat(account.transferEnabled())
-                .isFalse();
+        assertThat(accountIds)
+                .doesNotContain(
+                        103L
+                );
 
-        assertThat(result.totalAssets())
-                .isZero();
+        /*
+         * ACTIVE 10,000
+         * + SUSPENDED 20,000
+         * = 30,000
+         *
+         * CLOSED 30,000은 제외한다.
+         */
+        assertThat(
+                result.totalAssets()
+        ).isEqualTo(
+                30_000L
+        );
+
+        long groupTotalBalance =
+                result.items()
+                        .stream()
+                        .mapToLong(group ->
+                                group.groupTotalBalance()
+                        )
+                        .sum();
+
+        assertThat(
+                groupTotalBalance
+        ).isEqualTo(
+                30_000L
+        );
     }
 
     private Account createAccount(
@@ -551,4 +625,39 @@ class AccountOverviewQueryServiceTest {
                 openedDate
         );
     }
+
+    private Account createAccountWithStatus(
+            Long accountId,
+            String accountNumber,
+            Long customerId,
+            Long balance,
+            AccountStatus status,
+            LocalDateTime openedDate,
+            LocalDateTime closedDate
+    ) {
+        return Account.reconstitute(
+                accountId,
+                accountNumber,
+                customerId,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                balance,
+                status,
+                PASSWORD_HASH,
+                0,
+                false,
+                null,
+                null,
+                false,
+                null,
+                openedDate,
+                null,
+                closedDate,
+                null,
+                0L,
+                openedDate,
+                openedDate
+        );
+    }
+
 }

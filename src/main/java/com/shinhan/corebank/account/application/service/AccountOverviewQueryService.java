@@ -40,8 +40,15 @@ public class AccountOverviewQueryService
     @Override
     public AccountOverviewResult getOverview(Long customerId) {
         List<Account> accounts =
-                accountPersistencePort
-                        .findAllByCustomerId(customerId);
+                accountPersistencePort.findAllByCustomerId(
+                                customerId
+                        )
+                        .stream()
+                        .filter(account ->
+                                account.getStatus()
+                                        != AccountStatus.CLOSED
+                        )
+                        .toList();
 
         OffsetDateTime asOf =
                 OffsetDateTime.ofInstant(

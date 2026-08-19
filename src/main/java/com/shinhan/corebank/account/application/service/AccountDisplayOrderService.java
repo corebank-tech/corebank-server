@@ -5,6 +5,7 @@ import com.shinhan.corebank.account.application.port.in.AccountDisplayOrderResul
 import com.shinhan.corebank.account.application.port.in.AccountDisplayOrderUseCase;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
+import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -30,18 +31,24 @@ public class AccountDisplayOrderService
     public AccountDisplayOrderResult saveDisplayOrder(
             AccountDisplayOrderCommand command
     ) {
-        List<Account> accounts =
+        List<Account> ownedAccounts =
                 accountPersistencePort.findAllByCustomerId(
                         command.customerId()
                 );
 
+        List<Account> displayableAccounts =
+                filterDisplayableAccounts(
+                        ownedAccounts
+                );
+
         validateDisplayOrderRequest(
                 command.accountIds(),
-                accounts
+                ownedAccounts,
+                displayableAccounts
         );
 
         Map<Long, Account> accountById =
-                createAccountMap(accounts);
+                createAccountMap(displayableAccounts);
 
         for (int index = 0;
              index < command.accountIds().size();
@@ -68,8 +75,11 @@ public class AccountDisplayOrderService
             Long customerId
     ) {
         List<Account> accounts =
-                accountPersistencePort.findAllByCustomerId(
-                        customerId
+                filterDisplayableAccounts(
+                        accountPersistencePort
+                                .findAllByCustomerId(
+                                        customerId
+                                )
                 );
 
         for (Account account : accounts) {
@@ -94,7 +104,8 @@ public class AccountDisplayOrderService
 
     private void validateDisplayOrderRequest(
             List<Long> requestedAccountIds,
-            List<Account> accounts
+            List<Account> ownedAccounts,
+            List<Account> displayableAccounts
     ) {
         Set<Long> requestedIdSet =
                 new HashSet<>(requestedAccountIds);
@@ -107,10 +118,11 @@ public class AccountDisplayOrderService
         }
 
         Set<Long> ownedAccountIds =
-                accounts.stream()
+                ownedAccounts.stream()
                         .map(Account::getAccountId)
                         .collect(
-                                java.util.stream.Collectors.toSet()
+                                java.util.stream.Collectors
+                                        .toSet()
                         );
 
         boolean containsUnknownAccount =
@@ -129,7 +141,15 @@ public class AccountDisplayOrderService
             );
         }
 
-        if (!requestedIdSet.equals(ownedAccountIds)) {
+        Set<Long> displayableAccountIds =
+                displayableAccounts.stream()
+                        .map(Account::getAccountId)
+                        .collect(
+                                java.util.stream.Collectors
+                                        .toSet()
+                        );
+
+        if (!requestedIdSet.equals(displayableAccountIds)) {
             throw new BusinessException(
                     AccountErrorCode.INVALID_DISPLAY_ORDER
             );
@@ -156,5 +176,16 @@ public class AccountDisplayOrderService
         return Comparator
                 .comparing(Account::getOpenedDate)
                 .thenComparing(Account::getAccountId);
+    }
+
+    private List<Account> filterDisplayableAccounts(
+            List<Account> accounts
+    ) {
+        return accounts.stream()
+                .filter(account ->
+                        account.getStatus()
+                                != AccountStatus.CLOSED
+                )
+                .toList();
     }
 }

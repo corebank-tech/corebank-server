@@ -263,8 +263,8 @@ class AccountDisplayOrderServiceTest {
     }
 
     @Test
-    @DisplayName("본인 계좌가 누락되면 ACC0002를 발생시킨다")
-    void rejectMissingAccount() {
+    @DisplayName("표시 대상 계좌가 누락되면 ACC0002를 발생시킨다")
+    void rejectMissingDisplayableAccount() {
         // given
         Account account101 =
                 createAccount(
@@ -493,11 +493,194 @@ class AccountDisplayOrderServiceTest {
         );
     }
 
+    @Test
+    @DisplayName("해지 계좌는 표시순서 저장 대상에서 제외한다")
+    void excludeClosedAccountFromDisplayOrder() {
+        // given
+        Account activeAccount =
+                createAccount(
+                        101L,
+                        "088100000101",
+                        LocalDateTime.of(
+                                2026, 8, 1, 10, 0
+                        ),
+                        null
+                );
+
+        Account suspendedAccount =
+                createAccount(
+                        102L,
+                        "088100000102",
+                        LocalDateTime.of(
+                                2026, 8, 2, 10, 0
+                        ),
+                        null,
+                        AccountStatus.SUSPENDED,
+                        null
+                );
+
+        Account closedAccount =
+                createClosedAccount(
+                        103L,
+                        "088100000103",
+                        LocalDateTime.of(
+                                2026, 8, 3, 10, 0
+                        ),
+                        3
+                );
+
+        when(
+                accountPersistencePort
+                        .findAllByCustomerId(
+                                CUSTOMER_ID
+                        )
+        ).thenReturn(
+                List.of(
+                        activeAccount,
+                        suspendedAccount,
+                        closedAccount
+                )
+        );
+
+        AccountDisplayOrderCommand command =
+                new AccountDisplayOrderCommand(
+                        CUSTOMER_ID,
+                        List.of(
+                                102L,
+                                101L
+                        )
+                );
+
+        // when
+        AccountDisplayOrderResult result =
+                accountDisplayOrderService
+                        .saveDisplayOrder(
+                                command
+                        );
+
+        // then
+        assertThat(
+                suspendedAccount.getDisplayOrder()
+        ).isEqualTo(1);
+
+        assertThat(
+                activeAccount.getDisplayOrder()
+        ).isEqualTo(2);
+
+        assertThat(result.accountIds())
+                .containsExactly(
+                        102L,
+                        101L
+                );
+
+        verify(accountPersistencePort)
+                .save(suspendedAccount);
+
+        verify(accountPersistencePort)
+                .save(activeAccount);
+
+        verify(
+                accountPersistencePort,
+                never()
+        ).save(
+                closedAccount
+        );
+    }
+
+    @Test
+    @DisplayName("해지 계좌가 표시순서 요청에 포함되면 ACC0002를 발생시킨다")
+    void rejectClosedAccountInDisplayOrderRequest() {
+        // given
+        Account activeAccount =
+                createAccount(
+                        101L,
+                        "088100000101",
+                        LocalDateTime.of(
+                                2026, 8, 1, 10, 0
+                        ),
+                        null
+                );
+
+        Account closedAccount =
+                createClosedAccount(
+                        102L,
+                        "088100000102",
+                        LocalDateTime.of(
+                                2026, 8, 2, 10, 0
+                        ),
+                        null
+                );
+
+        when(
+                accountPersistencePort
+                        .findAllByCustomerId(
+                                CUSTOMER_ID
+                        )
+        ).thenReturn(
+                List.of(
+                        activeAccount,
+                        closedAccount
+                )
+        );
+
+        AccountDisplayOrderCommand command =
+                new AccountDisplayOrderCommand(
+                        CUSTOMER_ID,
+                        List.of(
+                                101L,
+                                102L
+                        )
+                );
+
+        // when
+        BusinessException exception =
+                catchThrowableOfType(
+                        BusinessException.class,
+                        () ->
+                                accountDisplayOrderService
+                                        .saveDisplayOrder(
+                                                command
+                                        )
+                );
+
+        // then
+        assertThat(exception.getErrorCode())
+                .isEqualTo(
+                        AccountErrorCode
+                                .INVALID_DISPLAY_ORDER
+                );
+
+        verify(
+                accountPersistencePort,
+                never()
+        ).save(
+                org.mockito.ArgumentMatchers.any()
+        );
+    }
+
     private Account createAccount(
             Long accountId,
             String accountNumber,
             LocalDateTime openedDate,
             Integer displayOrder
+    ) {
+        return createAccount(
+                accountId,
+                accountNumber,
+                openedDate,
+                displayOrder,
+                AccountStatus.ACTIVE,
+                null
+        );
+    }
+
+    private Account createAccount(
+            Long accountId,
+            String accountNumber,
+            LocalDateTime openedDate,
+            Integer displayOrder,
+            AccountStatus status,
+            LocalDateTime closedDate
     ) {
         return Account.reconstitute(
                 accountId,
@@ -506,7 +689,7 @@ class AccountDisplayOrderServiceTest {
                 null,
                 AccountType.DEMAND_DEPOSIT,
                 0L,
-                AccountStatus.ACTIVE,
+                status,
                 PASSWORD_HASH,
                 0,
                 false,
@@ -516,11 +699,27 @@ class AccountDisplayOrderServiceTest {
                 null,
                 openedDate,
                 null,
-                null,
+                closedDate,
                 null,
                 0L,
                 openedDate,
                 openedDate
+        );
+    }
+
+    private Account createClosedAccount(
+            Long accountId,
+            String accountNumber,
+            LocalDateTime openedDate,
+            Integer displayOrder
+    ) {
+        return createAccount(
+                accountId,
+                accountNumber,
+                openedDate,
+                displayOrder,
+                AccountStatus.CLOSED,
+                openedDate.plusDays(1)
         );
     }
 }
