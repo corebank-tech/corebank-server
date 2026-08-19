@@ -83,11 +83,25 @@ maxRate  = MAX(rateTiers[].rate) + SUM(preferentialRates[].rate)
 | `sort: "rate"` (금리순) | `sort=RATE` | `max_rate DESC` |
 | `sort: "latest"` (최신순) | `sort=NEW` | `sale_start_date DESC` |
 | — | `sort=NAME` | `product_name ASC` (FE 셀렉트에 없음, 필요하면 추가) |
-| — | `page` / `size` | 기본 `page=0&size=10` |
+| — | `page` / `size` | 기본 `page=0&size=10`. **`size`는 허용값 목록** — 아래 |
 
 **필터·정렬을 서버로 넘겨야 하는 이유**: 현재 `product-card-grid.tsx`의 `useMemo`가 받은 배열 안에서 정렬합니다. 서버는 기본 10건만 주므로, 12건 중 상위 10건을 받아 그 안에서 다시 정렬하면 **11·12번째 상품이 영원히 안 보입니다**. 필터도 마찬가지로 페이지 단위로만 걸립니다.
 
-**페이징 UI가 없습니다.** 12건 / `size=10` = 2페이지입니다. 페이지네이션을 붙이거나 `size`를 충분히 크게 지정하거나, 둘 중 하나는 반드시 필요합니다.
+**페이징 UI가 없습니다.** 12건 / `size=10` = 2페이지입니다. 페이지네이션을 붙이거나 `size`를 키우거나, 둘 중 하나는 반드시 필요합니다.
+
+#### `size`는 아무 값이나 못 넣습니다
+
+`ProductQueryService.ALLOWED_PAGE_SIZES`가 **`{5, 10, 20, 30, 50}` 허용값 목록**이고, 여기 없는 값은 `400 CMN0005`(지원하지 않는 페이지 크기입니다)로 떨어집니다.
+
+```
+size=10   200   items=10  totalPages=2
+size=12   400   CMN0005
+size=20   200   items=12  totalPages=1
+size=50   200   items=12  totalPages=1
+size=100  400   CMN0005
+```
+
+한 화면에 12건을 전부 뿌리려면 **`size=20`** 을 쓰십시오. `size=12`나 `size=100`은 400입니다. 상품이 50건을 넘어가면 페이지네이션 외에 방법이 없으니, 지금 붙여두는 편이 낫습니다.
 
 정렬 3종이 실제로 다른 결과를 냅니다 (실서버 응답):
 
@@ -216,7 +230,7 @@ const rows = rateTiers.map(t => ({
 ### FE
 
 - [ ] 필터·정렬을 클라이언트 `useMemo`에서 서버 파라미터(`productGroup`/`sort`)로 이관
-- [ ] 페이지네이션 추가 또는 `size` 명시 (12건 / 기본 10건 = 2페이지)
+- [ ] 페이지네이션 추가 또는 `size=20` 명시 (12건 / 기본 10건 = 2페이지. `size`는 `{5,10,20,30,50}`만 허용 — §4-1)
 - [ ] `PageResponse`의 배열 필드명이 `items`인 것 확인 (`content` 아님)
 - [ ] `ProductCard.id`를 `"P001"` 문자열 → 서버 `productId`(숫자)로 교체, 하드코딩 금지
 - [ ] `rates[].primeRate`를 `preferentialRates` 합으로 계산 (§5-1)
