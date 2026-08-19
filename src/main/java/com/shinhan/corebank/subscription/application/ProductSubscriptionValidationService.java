@@ -77,7 +77,7 @@ public class ProductSubscriptionValidationService implements ProductSubscription
         }
 
         Optional<ProductRateTier> rateTier = detail.getRateTiers().stream()
-                .filter(tier -> tier.getId().getTermMonths() == termMonths)
+                .filter(tier -> tier.getId().getTermMonths().intValue() == termMonths)
                 .findFirst();
         if (rateTier.isEmpty()) {
             violations.add(SubscriptionViolation.of(

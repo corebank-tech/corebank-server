@@ -1,16 +1,29 @@
 package com.shinhan.corebank.product.domain;
 
-import lombok.AllArgsConstructor;
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import lombok.Builder;
 import lombok.Getter;
 
 import java.math.BigDecimal;
 
 @Getter
-@AllArgsConstructor
-@Builder
 public class ProductPreferentialRate {
-    private ProductPreferentialRateId productPreferentialRateId;
-    private String conditionName;
-    private BigDecimal rate;
+    private final ProductPreferentialRateId productPreferentialRateId;
+    private final String conditionName;
+    private final BigDecimal rate;
+
+    @Builder
+    public ProductPreferentialRate(ProductPreferentialRateId productPreferentialRateId,
+                                   String conditionName,
+                                   BigDecimal rate) {
+        if (productPreferentialRateId == null
+                || conditionName == null || conditionName.isBlank()
+                || rate == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+        this.productPreferentialRateId = productPreferentialRateId;
+        this.conditionName = conditionName;
+        this.rate = rate;
+    }
 }
