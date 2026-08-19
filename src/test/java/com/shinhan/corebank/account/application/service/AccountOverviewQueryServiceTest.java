@@ -457,13 +457,11 @@ class AccountOverviewQueryServiceTest {
     @DisplayName("해지 계좌는 전체 계좌 조회와 자산 합계에서 제외하고 정지 계좌는 포함한다")
     void excludeClosedAccountFromOverview() {
         // given
-        Long customerId = 1L;
-
         Account activeAccount =
                 createAccountWithStatus(
                         101L,
                         "088100000101",
-                        customerId,
+                        CUSTOMER_ID,
                         10_000L,
                         AccountStatus.ACTIVE,
                         LocalDateTime.of(
@@ -476,7 +474,7 @@ class AccountOverviewQueryServiceTest {
                 createAccountWithStatus(
                         102L,
                         "088100000102",
-                        customerId,
+                        CUSTOMER_ID,
                         20_000L,
                         AccountStatus.SUSPENDED,
                         LocalDateTime.of(
@@ -489,7 +487,7 @@ class AccountOverviewQueryServiceTest {
                 createAccountWithStatus(
                         103L,
                         "088100000103",
-                        customerId,
+                        CUSTOMER_ID,
                         30_000L,
                         AccountStatus.CLOSED,
                         LocalDateTime.of(
@@ -503,7 +501,7 @@ class AccountOverviewQueryServiceTest {
         given(
                 accountPersistencePort
                         .findAllByCustomerId(
-                                customerId
+                                CUSTOMER_ID
                         )
         ).willReturn(
                 List.of(
@@ -516,7 +514,7 @@ class AccountOverviewQueryServiceTest {
         // when
         AccountOverviewResult result =
                 service.getOverview(
-                                customerId
+                                CUSTOMER_ID
                         );
 
         // then
