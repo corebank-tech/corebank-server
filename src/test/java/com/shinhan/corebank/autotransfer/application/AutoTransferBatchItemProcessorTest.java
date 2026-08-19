@@ -12,6 +12,9 @@ import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferBatchUs
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferExecutionJpaRepository;
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferJpaEntity;
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferJpaRepository;
+import com.shinhan.corebank.autotransfer.application.port.out.StuckExecution;
+import com.shinhan.corebank.autotransfer.application.port.out.TransferLookupPort;
+import com.shinhan.corebank.autotransfer.application.port.out.TransferLookupResult;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
@@ -24,12 +27,16 @@ import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -43,6 +50,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 그 안에서 일어난 REQUIRES_NEW 커밋이 진짜 영구적인지 확인할 수 없다(테스트 종료 시 다 같이
  * 롤백돼버리면 구분이 안 됨). 대신 각 테스트 끝나고 수동으로 정리한다.
  */
+@ExtendWith(OutputCaptureExtension.class)
 class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
     @Autowired
@@ -68,6 +76,9 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
     @MockitoBean
     TransferExecutionUseCase transferExecutionUseCase;
+
+    @MockitoBean
+    TransferLookupPort transferLookupPort;
 
     private static final AtomicLong CUSTOMER_SEQ = new AtomicLong();
     private static final AtomicLong ACCOUNT_SEQ = new AtomicLong();
@@ -447,6 +458,184 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
         assertThat(auditLogJpaRepository.findAll()).hasSize(1);
         assertThat(executionRepository.findAll()).hasSize(1);
         assertThat(executionRepository.findAll().get(0).getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
+    }
+
+    @Test
+    @DisplayName("재확정: transfer 테이블에 SUCCESS 행이 있으면 그 거래번호로 확정한다")
+    void reconcileStuckExecution_found_success_marksSuccess() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
+                .thenReturn(Optional.of(new TransferLookupResult(
+                        "20260315BT0000000001", ProcessResultStatus.SUCCESS, null)));
+
+        itemProcessor.reconcileStuckExecution(new StuckExecution(autoTransfer(), saved));
+
+        var executionAfter = executionRepository.findById(saved.getExecutionId()).orElseThrow();
+        assertThat(executionAfter.getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(executionAfter.getTransactionNumber()).isEqualTo("20260315BT0000000001");
+    }
+
+    @Test
+    @DisplayName("재확정: transfer 테이블에 ERROR 행이 있으면 그 행의 실패사유·거래번호를 그대로 확정한다")
+    void reconcileStuckExecution_found_error_marksErrorWithActualReason() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
+                .thenReturn(Optional.of(new TransferLookupResult(
+                        "20260315BT0000000002", ProcessResultStatus.ERROR, "잔액 부족")));
+
+        itemProcessor.reconcileStuckExecution(new StuckExecution(autoTransfer(), saved));
+
+        var executionAfter = executionRepository.findById(saved.getExecutionId()).orElseThrow();
+        assertThat(executionAfter.getStatus()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(executionAfter.getFailureReason()).isEqualTo("잔액 부족");
+        assertThat(executionAfter.getTransactionNumber()).isEqualTo("20260315BT0000000002");
+    }
+
+    @Test
+    @DisplayName("재확정: transfer 테이블에 행이 없으면 고정 사유로 ERROR 확정하고 거래번호는 null이다")
+    void reconcileStuckExecution_notFound_marksErrorWithFixedReason() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
+                .thenReturn(Optional.empty());
+
+        itemProcessor.reconcileStuckExecution(new StuckExecution(autoTransfer(), saved));
+
+        var executionAfter = executionRepository.findById(saved.getExecutionId()).orElseThrow();
+        assertThat(executionAfter.getStatus()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(executionAfter.getFailureReason()).isEqualTo("실행 중 확인 불가로 재확정 배치가 오류 처리함");
+        assertThat(executionAfter.getTransactionNumber()).isNull();
+    }
+
+    @Test
+    @DisplayName("재확정: transfer 조회 결과가 SUCCESS/ERROR가 아닌 예상 밖 상태면 크래시 없이 고정 사유로 ERROR 확정하고 WARN 로그를 남긴다")
+    void reconcileStuckExecution_unexpectedStatus_marksErrorWithFixedReasonAndLogsWarn(CapturedOutput output) {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
+                .thenReturn(Optional.of(new TransferLookupResult(null, ProcessResultStatus.PROCESSING, null)));
+
+        itemProcessor.reconcileStuckExecution(new StuckExecution(autoTransfer(), saved));
+
+        var executionAfter = executionRepository.findById(saved.getExecutionId()).orElseThrow();
+        assertThat(executionAfter.getStatus()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(executionAfter.getFailureReason()).isEqualTo("실행 중 확인 불가로 재확정 배치가 오류 처리함");
+        assertThat(executionAfter.getTransactionNumber()).isNull();
+        assertThat(output).contains("재확정 배치가 예상치 못한 transfer 상태를 조회함")
+                .contains("autoTransferId=" + autoTransferId)
+                .contains("status=PROCESSING");
+    }
+
+    @Test
+    @DisplayName("reconcileStuckExecutions()는 findAllProcessing()이 찾은 모든 회차를 각각 재확정한다")
+    void reconcileStuckExecutions_reconcilesEveryStuckExecution() {
+        itemProcessor.saveProcessing(autoTransfer(), today);
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
+                .thenReturn(Optional.of(new TransferLookupResult(
+                        "20260315BT0000000003", ProcessResultStatus.SUCCESS, null)));
+
+        autoTransferBatchUseCase.reconcileStuckExecutions(today);
+
+        assertThat(executionRepository.findAll()).hasSize(1);
+        assertThat(executionRepository.findAll().get(0).getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
+    }
+
+    @Test
+    @DisplayName("재확정 시에도 completeProcessing()과 동일하게 nextExecutionDate가 다음 주기로 갱신된다")
+    void reconcileStuckExecution_advancesNextExecutionDate() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
+                .thenReturn(Optional.of(new TransferLookupResult(
+                        "20260315BT0000000004", ProcessResultStatus.SUCCESS, null)));
+
+        itemProcessor.reconcileStuckExecution(new StuckExecution(autoTransfer(), saved));
+
+        var autoTransferAfter = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        assertThat(autoTransferAfter.getNextExecutionDate()).isEqualTo(LocalDate.of(2026, 4, 15));
+        assertThat(autoTransferAfter.getStatus()).isEqualTo(AutoTransferStatus.NORMAL);
+    }
+
+    @Test
+    @DisplayName("재확정으로 다음 실행일이 종료일을 넘으면 자동이체가 만료(EXPIRED)된다")
+    void reconcileStuckExecution_pastEndDate_expiresAutoTransfer() {
+        // endDate를 이번 회차 실행일 다음달 이전으로 좁혀서, advanceNextExecutionDate() 이후 만료되게 한다
+        autoTransferJpaRepository.save(AutoTransferJpaEntity.builder()
+                .autoTransferId(autoTransferId)
+                .customerId(customerId)
+                .withdrawalAccountId(autoTransferJpaRepository.findById(autoTransferId).orElseThrow().getWithdrawalAccountId())
+                .depositAccountNumber("110987654321")
+                .payeeName("홍길동")
+                .amount(10000L)
+                .cycleMonths(1)
+                .transferDay(15)
+                .startDate(LocalDate.of(2026, 1, 1))
+                .endDate(LocalDate.of(2026, 3, 20))
+                .nextExecutionDate(today)
+                .myPassbookMemo("메모")
+                .recipientPassbookMemo("받는메모")
+                .status(AutoTransferStatus.NORMAL)
+                .registeredAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+                .updatedAt(LocalDateTime.of(2026, 1, 1, 0, 0))
+                .version(0L)
+                .build());
+        AutoTransferJpaEntity afterManualSave = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        AutoTransfer domainWithNearEndDate = AutoTransfer.reconstitute(
+                autoTransferId, customerId, afterManualSave.getWithdrawalAccountId(),
+                "110987654321", "홍길동", 10000L, 1, 15,
+                LocalDate.of(2026, 1, 1), LocalDate.of(2026, 3, 20), today,
+                "메모", "받는메모", AutoTransferStatus.NORMAL,
+                LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0), afterManualSave.getVersion());
+
+        AutoTransferExecution saved = itemProcessor.saveProcessing(domainWithNearEndDate, today);
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
+                .thenReturn(Optional.of(new TransferLookupResult(
+                        "20260315BT0000000005", ProcessResultStatus.SUCCESS, null)));
+
+        itemProcessor.reconcileStuckExecution(new StuckExecution(domainWithNearEndDate, saved));
+
+        var autoTransferAfter = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        assertThat(autoTransferAfter.getStatus()).isEqualTo(AutoTransferStatus.EXPIRED);
+    }
+
+    @Test
+    @DisplayName("같은 자동이체가 재확정으로 3회 연속 ERROR가 되면 WARN 로그를 남긴다")
+    void reconcileStuckExecution_threeConsecutiveFailures_logsWarn(CapturedOutput output) {
+        when(transferLookupPort.findBySourceAndDate(any(), any())).thenReturn(Optional.empty());
+
+        reconcileOnDate(today.minusDays(2));
+        reconcileOnDate(today.minusDays(1));
+        reconcileOnDate(today);
+
+        assertThat(output).contains("자동이체 연속 실패 감지").contains("autoTransferId=" + autoTransferId);
+    }
+
+    @Test
+    @DisplayName("최근 3건 중 하나라도 SUCCESS면 연속 실패로 보지 않고 WARN 로그를 남기지 않는다")
+    void reconcileStuckExecution_notAllRecentFailed_doesNotLogWarn(CapturedOutput output) {
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today.minusDays(2)))
+                .thenReturn(Optional.of(new TransferLookupResult("20260313BT0000000001", ProcessResultStatus.SUCCESS, null)));
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today.minusDays(1))).thenReturn(Optional.empty());
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today)).thenReturn(Optional.empty());
+
+        reconcileOnDate(today.minusDays(2));
+        reconcileOnDate(today.minusDays(1));
+        reconcileOnDate(today);
+
+        assertThat(output).doesNotContain("자동이체 연속 실패 감지");
+    }
+
+    // autoTransfer()는 version을 0L로 고정해서 반환하는데, reconcileStuckExecution()이
+    // 매번 autoTransferPersistencePort.save()로 버전을 올리기 때문에 이 헬퍼를 여러 번
+    // 부르는 테스트(연속 실패 시나리오)에서는 DB의 최신 버전을 매번 다시 읽어와야 한다.
+    private void reconcileOnDate(LocalDate date) {
+        AutoTransferJpaEntity entity = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        AutoTransfer current = AutoTransfer.reconstitute(
+                autoTransferId, customerId, entity.getWithdrawalAccountId(),
+                "110987654321", "홍길동", 10000L, 1, 15,
+                LocalDate.of(2026, 1, 1), endDate, entity.getNextExecutionDate(),
+                "메모", "받는메모", entity.getStatus(),
+                LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0), entity.getVersion());
+
+        AutoTransferExecution saved = itemProcessor.saveProcessing(current, date);
+        itemProcessor.reconcileStuckExecution(new StuckExecution(current, saved));
     }
 
     private Long insertCustomer() {

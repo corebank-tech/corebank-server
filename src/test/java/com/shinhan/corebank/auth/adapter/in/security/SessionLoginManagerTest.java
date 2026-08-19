@@ -23,9 +23,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class SessionLoginManagerTest {
 
+    private static final ZoneOffset KST = ZoneOffset.ofHours(9);
     private static final Clock FIXED_CLOCK = Clock.fixed(
             Instant.parse("2026-08-16T01:00:00Z"),
-            ZoneOffset.UTC
+            KST
     );
 
     private final HttpSessionSecurityContextRepository repository =
@@ -98,7 +99,7 @@ class SessionLoginManagerTest {
         );
 
         assertThat(sessionExpiresAt)
-                .isEqualTo(OffsetDateTime.parse("2026-08-16T01:10:00Z"));
+                .isEqualTo(OffsetDateTime.parse("2026-08-16T10:10:00+09:00"));
     }
 
     private MockHttpServletRequest requestWithSession(int timeoutSeconds) {
