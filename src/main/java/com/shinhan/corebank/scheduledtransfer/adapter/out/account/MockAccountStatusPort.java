@@ -6,6 +6,7 @@ import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
 
 // 이 포트의 다른 구현체가 없어 @Profile로 좁히면 prod 기동이 실패한다 - 실구현 전까지 모든 프로필에서 활성화한다.
@@ -33,5 +34,14 @@ public class MockAccountStatusPort implements AccountStatusPort {
                 .setParameter("customerId", customerId)
                 .getSingleResult();
         return count.longValue() > 0;
+    }
+
+    @Override
+    public Optional<String> findAccountNumberById(Long accountId) {
+        List<?> result = entityManager.createNativeQuery(
+                        "SELECT account_number FROM account WHERE account_id = :accountId")
+                .setParameter("accountId", accountId)
+                .getResultList();
+        return result.isEmpty() ? Optional.empty() : Optional.of((String) result.get(0));
     }
 }
