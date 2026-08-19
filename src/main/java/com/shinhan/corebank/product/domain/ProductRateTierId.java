@@ -8,6 +8,6 @@ import lombok.Getter;
 @EqualsAndHashCode
 @AllArgsConstructor
 public class ProductRateTierId {
-    private long productId;
-    private short termMonths;
+    private Long productId;
+    private Short termMonths;
 }

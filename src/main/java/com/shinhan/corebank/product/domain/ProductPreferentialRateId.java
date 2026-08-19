@@ -8,6 +8,6 @@ import lombok.Getter;
 @EqualsAndHashCode
 @AllArgsConstructor
 public class ProductPreferentialRateId {
-    private long productId;
+    private Long productId;
     private String conditionCode;
 }
