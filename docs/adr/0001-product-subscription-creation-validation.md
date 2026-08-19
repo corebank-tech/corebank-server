@@ -86,6 +86,13 @@ COMMENT '가입으로 개설된 계좌'`)라 조립 시점에는 아직 없고, 
 향후 정말로 subscription 도메인 고유 오류코드가 필요해지면 `application`이 아니라
 `subscription/domain/exception/`에 둔다.
 
+#### 빌더 우회는 코드가 아니라 컨벤션으로 막는다
+
+`builder()`는 public이므로 신규 생성 경로에서도 `create()` 대신 호출해 검증을 건너뛸 수 있다.
+빌더를 `private`으로 닫고 매퍼용 `reconstitute(...)`를 따로 두면 코드 레벨로 강제할 수 있지만,
+`Transfer`도 `@Builder`가 public인 채로 같은 구조를 쓰고 있어 이 클래스만 규칙을 달리할 이유가
+약하다. 리뷰와 이 ADR로 보장한다.
+
 #### 구현 시점
 
 **이 이슈에서는 코드를 변경하지 않는다.** `create()`는 실제 호출자가 생기는 **#69 PR에서 함께 추가**한다.
