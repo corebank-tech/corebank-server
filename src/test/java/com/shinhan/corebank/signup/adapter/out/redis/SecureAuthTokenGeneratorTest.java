@@ -48,4 +48,24 @@ class SecureAuthTokenGeneratorTest {
 
         assertThat(tokens).hasSize(1_000);
     }
+
+    @Test
+    @DisplayName("아이디와 이메일 인증 토큰도 256비트 난수로 생성한다")
+    void generatesOtherSignupTokens() {
+        assertToken(
+                generator.generateUserIdCheckToken(),
+                "USER_ID_CHECK_"
+        );
+        assertToken(
+                generator.generateEmailVerificationToken(),
+                "EMAIL_VERIFICATION_"
+        );
+    }
+
+    private void assertToken(String token, String prefix) {
+        assertThat(token).startsWith(prefix);
+        assertThat(Base64.getUrlDecoder().decode(
+                token.substring(prefix.length())
+        )).hasSize(32);
+    }
 }
