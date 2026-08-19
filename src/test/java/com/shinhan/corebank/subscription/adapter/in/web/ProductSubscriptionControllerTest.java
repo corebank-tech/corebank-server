@@ -155,7 +155,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                                 """.formatted(productId, accountId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.valid").value(false))
-                .andExpect(jsonPath("$.data.violations[0].field").value("agreedTerms"));
+                .andExpect(jsonPath("$.data.violations[0].field").value("agreedTerms"))
+                .andExpect(jsonPath("$.data.violations[0].code").value("PRD0003"));
     }
 
     private Long seedAccount(String accountNumber, Long customerId, long balance) {

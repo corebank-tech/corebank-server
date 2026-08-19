@@ -353,6 +353,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `PRD0004` | 400 | 가입금액이 상품의 입력 단위에 맞지 않습니다. | amountUnit 배수 위반 |
 | `PRD0005` | 400 | 약관 전문을 확인한 후 동의해 주세요. | viewRequired=true 약관 열람 이력 없음·만료 |
 | `PRD0006` | 400 | 약관이 변경되었습니다. 다시 확인해 주세요. | 동의한 약관 버전과 현재 버전 불일치 |
+| `PRD0007` | 400 | 판매중인 상품이 아닙니다. | 판매중지·판매종료 상품 가입 시도 |
 | `PRD0201` | 404 | 상품을 찾을 수 없습니다. | `productId` 없음 |
 | `PRD0202` | 404 | 약관을 찾을 수 없습니다. | `termsId` 없음 |
 | `PRD0203` | 404 | 가입 내역을 찾을 수 없습니다. | `subscriptionId` 없음 |

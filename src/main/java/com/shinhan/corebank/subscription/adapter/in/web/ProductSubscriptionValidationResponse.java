@@ -38,9 +38,9 @@ public record ProductSubscriptionValidationResponse(
                 validation.getWithdrawalAccountBalance());
     }
 
-    public record ViolationItem(String field, String reason) {
+    public record ViolationItem(String field, String code, String reason) {
         static ViolationItem from(SubscriptionViolation violation) {
-            return new ViolationItem(violation.field(), violation.reason());
+            return new ViolationItem(violation.field(), violation.code(), violation.reason());
         }
     }
 }

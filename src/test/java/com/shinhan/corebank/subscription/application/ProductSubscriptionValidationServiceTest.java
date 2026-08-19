@@ -118,7 +118,7 @@ class ProductSubscriptionValidationServiceTest {
         SubscriptionValidation result = service.validate(command(505_000L, 12, List.of(), List.of()));
 
         assertThat(result.isValid()).isFalse();
-        assertThat(result.getViolations()).anySatisfy(v -> assertThat(v.reason()).contains("입력 단위"));
+        assertThat(result.getViolations()).anySatisfy(v -> assertThat(v.code()).isEqualTo("PRD0004"));
     }
 
     @Test
@@ -133,6 +133,7 @@ class ProductSubscriptionValidationServiceTest {
 
         assertThat(result.isValid()).isFalse();
         assertThat(result.getViolations()).extracting("field").contains("termMonths");
+        assertThat(result.getViolations()).anySatisfy(v -> assertThat(v.code()).isEqualTo("PRD0002"));
     }
 
     @Test
@@ -146,7 +147,10 @@ class ProductSubscriptionValidationServiceTest {
         SubscriptionValidation result = service.validate(command(500_000L, 12, List.of(), List.of()));
 
         assertThat(result.isValid()).isFalse();
-        assertThat(result.getViolations()).anySatisfy(v -> assertThat(v.field()).isEqualTo("withdrawalAccountId"));
+        assertThat(result.getViolations()).anySatisfy(v -> {
+            assertThat(v.field()).isEqualTo("withdrawalAccountId");
+            assertThat(v.code()).isEqualTo("LMT0001");
+        });
         assertThat(result.getWithdrawalAccountBalance()).isEqualTo(300_000L);
     }
 
@@ -194,8 +198,10 @@ class ProductSubscriptionValidationServiceTest {
         SubscriptionValidation result = service.validate(command(6_000_000L, 12, List.of(), List.of()));
 
         assertThat(result.isValid()).isFalse();
-        assertThat(result.getViolations())
-                .anySatisfy(v -> assertThat(v.reason()).contains("판매중인 상품이 아닙니다"));
+        assertThat(result.getViolations()).anySatisfy(v -> {
+            assertThat(v.code()).isEqualTo("PRD0007");
+            assertThat(v.reason()).contains("판매중인 상품이 아닙니다");
+        });
     }
 
     @Test
@@ -213,7 +219,9 @@ class ProductSubscriptionValidationServiceTest {
         assertThat(result.isValid()).isFalse();
         assertThat(result.getViolations()).anySatisfy(v -> {
             assertThat(v.field()).isEqualTo("agreedTerms");
-            assertThat(v.reason()).contains("필수 약관");
+            assertThat(v.code()).isEqualTo("PRD0003");
+            // 어느 약관인지 알 수 있게 코드와 별개로 termsId 꼬리표가 붙는다
+            assertThat(v.reason()).contains("필수 약관").contains("termsId=" + TERMS_ID);
         });
     }
 
@@ -232,7 +240,7 @@ class ProductSubscriptionValidationServiceTest {
                 command(6_000_000L, 12, List.of(new AgreedTerms(TERMS_ID, "v1.1")), List.of()));
 
         assertThat(result.isValid()).isFalse();
-        assertThat(result.getViolations()).anySatisfy(v -> assertThat(v.reason()).contains("약관이 변경"));
+        assertThat(result.getViolations()).anySatisfy(v -> assertThat(v.code()).isEqualTo("PRD0006"));
     }
 
     @Test
@@ -250,7 +258,7 @@ class ProductSubscriptionValidationServiceTest {
                 command(6_000_000L, 12, List.of(new AgreedTerms(TERMS_ID, "v1.2")), List.of()));
 
         assertThat(result.isValid()).isFalse();
-        assertThat(result.getViolations()).anySatisfy(v -> assertThat(v.reason()).contains("전문을 확인"));
+        assertThat(result.getViolations()).anySatisfy(v -> assertThat(v.code()).isEqualTo("PRD0005"));
     }
 
     @Test

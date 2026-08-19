@@ -16,6 +16,7 @@ import com.shinhan.corebank.subscription.application.port.out.WithdrawableAccoun
 import com.shinhan.corebank.subscription.domain.SubscriptionMaturityCalculator;
 import com.shinhan.corebank.subscription.domain.SubscriptionValidation;
 import com.shinhan.corebank.subscription.domain.SubscriptionViolation;
+import com.shinhan.corebank.subscription.domain.SubscriptionViolationCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -59,29 +60,30 @@ public class ProductSubscriptionValidationService implements ProductSubscription
         List<SubscriptionViolation> violations = new ArrayList<>();
 
         if (product.getSaleStatus() != SaleStatus.ON_SALE) {
-            violations.add(new SubscriptionViolation("productId", "판매중인 상품이 아닙니다."));
+            violations.add(SubscriptionViolation.of(
+                    "productId", SubscriptionViolationCode.PRODUCT_NOT_ON_SALE));
         }
         if (subscriptionAmount < product.getMinAmount() || subscriptionAmount > product.getMaxAmount()) {
-            violations.add(new SubscriptionViolation(
-                    "subscriptionAmount", "가입금액이 상품 한도 범위를 벗어났습니다."));
+            violations.add(SubscriptionViolation.of(
+                    "subscriptionAmount", SubscriptionViolationCode.AMOUNT_OUT_OF_RANGE));
         }
         if (subscriptionAmount % product.getAmountUnit() != 0) {
-            violations.add(new SubscriptionViolation(
-                    "subscriptionAmount", "가입금액이 상품의 입력 단위에 맞지 않습니다."));
+            violations.add(SubscriptionViolation.of(
+                    "subscriptionAmount", SubscriptionViolationCode.AMOUNT_UNIT_MISMATCH));
         }
 
         Optional<ProductRateTier> rateTier = detail.getRateTiers().stream()
                 .filter(tier -> tier.getId().getTermMonths() == termMonths)
                 .findFirst();
         if (rateTier.isEmpty()) {
-            violations.add(new SubscriptionViolation(
-                    "termMonths", "가입기간이 상품 허용 범위를 벗어났습니다."));
+            violations.add(SubscriptionViolation.of(
+                    "termMonths", SubscriptionViolationCode.TERM_NOT_ALLOWED));
         }
 
         boolean checkBalance = product.getProductGroup() == ProductGroup.DEPOSIT;
         if (checkBalance && account.balance() < subscriptionAmount) {
-            violations.add(new SubscriptionViolation(
-                    "withdrawalAccountId", "출금가능금액이 부족합니다."));
+            violations.add(SubscriptionViolation.of(
+                    "withdrawalAccountId", SubscriptionViolationCode.INSUFFICIENT_BALANCE));
         }
 
         violations.addAll(validateTerms(detail.getTerms(), command.agreedTerms(), command.customerId()));
@@ -144,17 +146,17 @@ public class ProductSubscriptionValidationService implements ProductSubscription
             }
             String agreedVersion = agreedVersionByTermsId.get(termsId);
             if (agreedVersion == null) {
-                violations.add(new SubscriptionViolation(
-                        "agreedTerms", "필수 약관에 동의하지 않았습니다. (termsId=" + termsId + ")"));
+                violations.add(SubscriptionViolation.of("agreedTerms",
+                        SubscriptionViolationCode.REQUIRED_TERMS_NOT_AGREED, "termsId=" + termsId));
                 continue;
             }
             if (summary.viewRequired() && !termsViewUseCase.isViewed(customerId, termsId)) {
-                violations.add(new SubscriptionViolation(
-                        "agreedTerms", "약관 전문을 확인한 후 동의해 주세요. (termsId=" + termsId + ")"));
+                violations.add(SubscriptionViolation.of("agreedTerms",
+                        SubscriptionViolationCode.TERMS_NOT_VIEWED, "termsId=" + termsId));
             }
             if (!agreedVersion.equals(summary.version())) {
-                violations.add(new SubscriptionViolation(
-                        "agreedTerms", "약관이 변경되었습니다. 다시 확인해 주세요. (termsId=" + termsId + ")"));
+                violations.add(SubscriptionViolation.of("agreedTerms",
+                        SubscriptionViolationCode.TERMS_VERSION_MISMATCH, "termsId=" + termsId));
             }
         }
         return violations;
