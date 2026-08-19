@@ -2,9 +2,13 @@ package com.shinhan.corebank.scheduledtransfer.application;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultItem;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultPage;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultSummary;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferListItem;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferQueryUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.AccountStatusPort;
+import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferExecutionResultAggregate;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferQueryPort;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
@@ -14,6 +18,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -25,9 +30,11 @@ import java.util.Set;
 public class ScheduledTransferQueryService implements ScheduledTransferQueryUseCase {
     private static final Set<Integer> ALLOWED_PAGE_SIZE = Set.of(5, 10, 20, 30, 50);
     private static final int MAX_RANGE_DAYS = 365;
+    private static final int DEFAULT_PERIOD_MONTHS = 1;
 
     private final ScheduledTransferQueryPort scheduledTransferQueryPort;
     private final AccountStatusPort accountStatusPort;
+    private final Clock clock;
 
     @Override
     public Page<ScheduledTransferListItem> search(Long customerId, ScheduledTransferStatus status, Long
@@ -65,6 +72,45 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
         return result.map(scheduledTransfer -> toItem(scheduledTransfer, withdrawalAccountNumbers));
     }
 
+    @Override
+    public ScheduledTransferExecutionResultPage searchExecutionResults(Long customerId, Long withdrawalAccountId,
+                                                                        LocalDate fromDate, LocalDate toDate, int page, int size) {
+        if (customerId == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+        if (!ALLOWED_PAGE_SIZE.contains(size)) {
+            throw new BusinessException(CommonErrorCode.INVALID_PAGE_SIZE);
+        }
+        if (page < 0) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "page는 0 이상이어야 합니다.");
+        }
+        // REQ-SCD-014: 조회기간 기본값 1개월 — toDate 없으면 오늘, fromDate 없으면 toDate-1개월
+        LocalDate today = LocalDate.now(clock);
+        LocalDate resolvedToDate = toDate != null ? toDate : today;
+        LocalDate resolvedFromDate = fromDate != null ? fromDate : resolvedToDate.minusMonths(DEFAULT_PERIOD_MONTHS);
+        if (resolvedFromDate.isAfter(resolvedToDate)) {
+            throw new BusinessException(CommonErrorCode.INVALID_DATE_RANGE);
+        }
+        if (resolvedFromDate.plusDays(MAX_RANGE_DAYS).isBefore(resolvedToDate)) {
+            throw new BusinessException(CommonErrorCode.DATE_RANGE_EXCEEDED);
+        }
+
+        Page<ScheduledTransfer> result = scheduledTransferQueryPort.searchExecutionResults(
+                customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, PageRequest.of(page, size));
+        ScheduledTransferExecutionResultAggregate aggregate = scheduledTransferQueryPort.summarizeExecutionResults(
+                customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate);
+
+        List<Long> withdrawalAccountIds = result.getContent().stream()
+                .map(ScheduledTransfer::getWithdrawalAccountId)
+                .distinct()
+                .toList();
+        Map<Long, String> withdrawalAccountNumbers = accountStatusPort.findAccountNumbersByIds(withdrawalAccountIds);
+
+        Page<ScheduledTransferExecutionResultItem> itemPage =
+                result.map(scheduledTransfer -> toResultItem(scheduledTransfer, withdrawalAccountNumbers));
+        return new ScheduledTransferExecutionResultPage(itemPage, toSummary(aggregate));
+    }
+
     private ScheduledTransferListItem toItem(ScheduledTransfer scheduledTransfer, Map<Long, String> withdrawalAccountNumbers) {
         String withdrawalAccountNumber = withdrawalAccountNumbers.get(scheduledTransfer.getWithdrawalAccountId());
 
@@ -82,5 +128,31 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
                 scheduledTransfer.getStatus(),
                 scheduledTransfer.getStatus() == ScheduledTransferStatus.WAITING
         );
+    }
+
+    private ScheduledTransferExecutionResultItem toResultItem(ScheduledTransfer scheduledTransfer, Map<Long, String> withdrawalAccountNumbers) {
+        String withdrawalAccountNumber = withdrawalAccountNumbers.get(scheduledTransfer.getWithdrawalAccountId());
+
+        if (withdrawalAccountNumber == null) {
+            throw new IllegalStateException("출금계좌 정보를 확인할 수 없습니다.");
+        }
+        return new ScheduledTransferExecutionResultItem(
+                scheduledTransfer.getScheduledTransferId(),
+                scheduledTransfer.getStatus(),
+                scheduledTransfer.getScheduledDate(),
+                withdrawalAccountNumber,
+                scheduledTransfer.getPayeeAccountNumber(),
+                scheduledTransfer.getPayeeName(),
+                scheduledTransfer.getAmount(),
+                scheduledTransfer.getTransactionNumber(),
+                scheduledTransfer.getFailureReason()
+        );
+    }
+
+    private ScheduledTransferExecutionResultSummary toSummary(ScheduledTransferExecutionResultAggregate aggregate) {
+        return new ScheduledTransferExecutionResultSummary(
+                aggregate.successCount(), aggregate.successAmount(),
+                aggregate.failedCount(), aggregate.failedAmount(),
+                aggregate.canceledCount(), aggregate.canceledAmount());
     }
 }
