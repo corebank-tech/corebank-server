@@ -1,9 +1,11 @@
 package com.shinhan.corebank.scheduledtransfer.adapter.out.persistence;
 
+import com.querydsl.core.Tuple;
 import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferExecutionResultAggregate;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferPersistencePort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferQueryPort;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
@@ -79,6 +81,60 @@ public class ScheduledTransferPersistenceAdapter implements ScheduledTransferPer
         return new PageImpl<>(domainContent, pageable, total == null ? 0 : total);
     }
 
+    @Override
+    public Page<ScheduledTransfer> searchExecutionResults(Long customerId, Long withdrawalAccountId,
+                                                          LocalDate fromDate, LocalDate toDate, Pageable pageable) {
+        Predicate[] conditions = executionResultConditions(customerId, withdrawalAccountId, fromDate, toDate);
+        List<ScheduledTransferJpaEntity> content = queryFactory
+                .selectFrom(scheduledTransferJpaEntity)
+                .where(conditions)
+                .orderBy(scheduledTransferJpaEntity.scheduledDate.desc(), scheduledTransferJpaEntity.scheduledTransferId.desc())
+                .offset(pageable.getOffset())
+                .limit(pageable.getPageSize())
+                .fetch();
+        Long total = queryFactory
+                .select(scheduledTransferJpaEntity.count())
+                .from(scheduledTransferJpaEntity)
+                .where(conditions)
+                .fetchOne();
+        List<ScheduledTransfer> domainContent = content.stream().map(ScheduledTransferMapper::toDomain).toList();
+        return new PageImpl<>(domainContent, pageable, total == null ? 0 : total);
+    }
+
+    @Override
+    // 정상/오류/취소 : 건수·금액 집계
+    public ScheduledTransferExecutionResultAggregate summarizeExecutionResults(Long customerId, Long withdrawalAccountId,
+                                                                                LocalDate fromDate, LocalDate toDate) {
+        Predicate[] conditions = executionResultConditions(customerId, withdrawalAccountId, fromDate, toDate);
+        List<Tuple> rows = queryFactory
+                .select(scheduledTransferJpaEntity.status, scheduledTransferJpaEntity.count(),
+                        scheduledTransferJpaEntity.amount.sumLong())
+                .from(scheduledTransferJpaEntity)
+                .where(conditions)
+                .groupBy(scheduledTransferJpaEntity.status)
+                .fetch();
+
+        long successCount = 0L, successAmount = 0L, failedCount = 0L, failedAmount = 0L, canceledCount = 0L, canceledAmount = 0L;
+        for (Tuple row : rows) {
+            ScheduledTransferStatus status = row.get(scheduledTransferJpaEntity.status);
+            long count = row.get(scheduledTransferJpaEntity.count());
+            Long amountSum = row.get(scheduledTransferJpaEntity.amount.sumLong());
+            long amount = amountSum == null ? 0L : amountSum;
+            if (status == ScheduledTransferStatus.SUCCESS) {
+                successCount = count;
+                successAmount = amount;
+            } else if (status == ScheduledTransferStatus.FAILED) {
+                failedCount = count;
+                failedAmount = amount;
+            } else if (status == ScheduledTransferStatus.CANCELED) {
+                canceledCount = count;
+                canceledAmount = amount;
+            }
+        }
+        return new ScheduledTransferExecutionResultAggregate(successCount, successAmount, failedCount, failedAmount,
+                canceledCount, canceledAmount);
+    }
+
     private Predicate[] conditions(Long customerId, ScheduledTransferStatus status, Long withdrawalAccountId,
                                    LocalDate fromDate, LocalDate toDate) {
         return new Predicate[]{
@@ -87,6 +143,20 @@ public class ScheduledTransferPersistenceAdapter implements ScheduledTransferPer
                 withdrawalAccountIdEq(withdrawalAccountId),
                 scheduledDateGoe(fromDate),
                 scheduledDateLoe(toDate)
+        };
+    }
+
+    // search()/summarize() 공통 조건: 소유자 확인 + 조회기간 + WAITING/PROCESSING 제외
+    private Predicate[] executionResultConditions(Long customerId, Long withdrawalAccountId,
+                                                   LocalDate fromDate, LocalDate toDate) {
+        return new Predicate[]{
+                scheduledTransferJpaEntity.customerId.eq(customerId),
+                withdrawalAccountIdEq(withdrawalAccountId),
+                scheduledDateGoe(fromDate),
+                scheduledDateLoe(toDate),
+                // WAITING/PROCESSING은 아직 확정 안 된 상태라 "결과"가 아님 (REQ-SCD-014)
+                scheduledTransferJpaEntity.status.in(ScheduledTransferStatus.SUCCESS, ScheduledTransferStatus.FAILED,
+                        ScheduledTransferStatus.CANCELED)
         };
     }
 
