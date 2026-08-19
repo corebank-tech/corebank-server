@@ -315,7 +315,7 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
                     updated_at
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?,
-                    UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), UTC_TIMESTAMP(6)
+                    NOW(6), NOW(6), NOW(6)
                 )
                 """,
                 USER_ID,
