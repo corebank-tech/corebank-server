@@ -1,6 +1,8 @@
 package com.shinhan.corebank.transfer.application.port.out;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 
 public interface AccountLockPort {
@@ -12,6 +14,12 @@ public interface AccountLockPort {
      * 오름차순 락 계약이 깨져 반대 방향 동시 이체(A→B, B→A) 시 데드락이 재발할 수 있다.
      */
     Optional<ResolvedPayee> resolvePayeeByAccountNumber(String accountNumber);
+
+    /**
+     * resolvePayeeByAccountNumber의 일괄 조회 버전 (N+1 방지용). 존재하지 않는 계좌번호는
+     * 결과 맵에서 생략된다.
+     */
+    Map<String, ResolvedPayee> resolvePayeesByAccountNumbers(Collection<String> accountNumbers);
 
     /**
      * 출금계좌 ID로 소유자(customerId)·출금계좌 등록 여부를 조회한다. 락을 잡지 않는 단순
