@@ -1,12 +1,14 @@
 package com.shinhan.corebank.transfer.application.service;
 
 import java.util.List;
+import java.util.Map;
 
 import com.shinhan.corebank.transfer.application.port.in.FavoriteAccountQueryUseCase;
 import com.shinhan.corebank.transfer.application.port.in.FavoriteAccountResult;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.FavoriteAccountPersistencePort;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountStatus;
+import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.domain.FavoriteAccount;
 
 import org.springframework.stereotype.Service;
@@ -26,15 +28,16 @@ public class FavoriteAccountQueryService implements FavoriteAccountQueryUseCase 
 
     @Override
     public List<FavoriteAccountResult> queryAll(Long customerId) {
-        return persistencePort.findAllByCustomerId(customerId).stream()
-                .map(this::toResult)
+        List<FavoriteAccount> favoriteAccounts = persistencePort.findAllByCustomerId(customerId);
+        Map<String, ResolvedPayee> payeesByAccountNumber = accountLockPort.resolvePayeesByAccountNumbers(
+                favoriteAccounts.stream().map(FavoriteAccount::getDepositAccountNumber).toList());
+        return favoriteAccounts.stream()
+                .map(favoriteAccount -> toResult(favoriteAccount, payeesByAccountNumber.get(favoriteAccount.getDepositAccountNumber())))
                 .toList();
     }
 
-    private FavoriteAccountResult toResult(FavoriteAccount favoriteAccount) {
-        boolean transferable = accountLockPort.resolvePayeeByAccountNumber(favoriteAccount.getDepositAccountNumber())
-                .map(payee -> payee.status() == LockedAccountStatus.ACTIVE)
-                .orElse(false);
+    private FavoriteAccountResult toResult(FavoriteAccount favoriteAccount, ResolvedPayee payee) {
+        boolean transferable = payee != null && payee.status() == LockedAccountStatus.ACTIVE;
         return new FavoriteAccountResult(favoriteAccount.getFavoriteAccountId(), favoriteAccount.getAlias(),
                 favoriteAccount.getDepositAccountNumber(), favoriteAccount.getPayeeName(), transferable);
     }

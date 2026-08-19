@@ -1,6 +1,8 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import com.shinhan.corebank.IntegrationTestSupport;
@@ -78,6 +80,38 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
         Optional<ResolvedPayee> resolved = adapter.resolvePayeeByAccountNumber("999999999999");
 
         // then
+        assertThat(resolved).isEmpty();
+    }
+
+    @Test
+    @DisplayName("여러 계좌번호를 한 번에 조회하면 계좌번호별로 매핑된 결과를 반환한다")
+    void resolvePayeesByAccountNumbers_returnsMapKeyedByAccountNumber() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.createNativeQuery("""
+            INSERT INTO account (account_id, account_number, customer_id, product_id, account_type, balance, status, password_hash, withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at)
+            VALUES (204, '110444444444', 1, NULL, 'DEMAND_DEPOSIT', 50000, 'SUSPENDED', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', FALSE, NULL, '2026-08-01', NOW(6), NOW(6))
+            """).executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        Map<String, ResolvedPayee> resolved = adapter.resolvePayeesByAccountNumbers(
+                List.of("110222222222", "110444444444", "999999999999"));
+
+        // then
+        assertThat(resolved).hasSize(2);
+        assertThat(resolved.get("110222222222")).isEqualTo(
+                new ResolvedPayee(202L, "테스터", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE));
+        assertThat(resolved.get("110444444444")).isEqualTo(
+                new ResolvedPayee(204L, "테스터", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.SUSPENDED));
+    }
+
+    @Test
+    @DisplayName("빈 목록을 전달하면 조회 없이 빈 맵을 반환한다")
+    void resolvePayeesByAccountNumbers_returnsEmptyMap_whenInputEmpty() {
+        Map<String, ResolvedPayee> resolved = adapter.resolvePayeesByAccountNumbers(List.of());
+
         assertThat(resolved).isEmpty();
     }
 

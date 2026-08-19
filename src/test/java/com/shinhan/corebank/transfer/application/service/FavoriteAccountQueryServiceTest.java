@@ -2,7 +2,7 @@ package com.shinhan.corebank.transfer.application.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 
 import com.shinhan.corebank.transfer.application.port.in.FavoriteAccountResult;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
@@ -43,10 +43,10 @@ class FavoriteAccountQueryServiceTest {
                 LocalDateTime.of(2026, 8, 17, 10, 0, 0));
 
         when(persistencePort.findAllByCustomerId(1L)).thenReturn(List.of(active, closed));
-        when(accountLockPort.resolvePayeeByAccountNumber("110222222222"))
-                .thenReturn(Optional.of(new ResolvedPayee(202L, "홍길동", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE)));
-        when(accountLockPort.resolvePayeeByAccountNumber("110333333333"))
-                .thenReturn(Optional.of(new ResolvedPayee(203L, "김철수", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.CLOSED)));
+        when(accountLockPort.resolvePayeesByAccountNumbers(List.of("110222222222", "110333333333")))
+                .thenReturn(Map.of(
+                        "110222222222", new ResolvedPayee(202L, "홍길동", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE),
+                        "110333333333", new ResolvedPayee(203L, "김철수", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.CLOSED)));
 
         List<FavoriteAccountResult> results = service.queryAll(1L);
 
@@ -64,7 +64,7 @@ class FavoriteAccountQueryServiceTest {
                 LocalDateTime.of(2026, 8, 18, 10, 0, 0));
 
         when(persistencePort.findAllByCustomerId(1L)).thenReturn(List.of(favoriteAccount));
-        when(accountLockPort.resolvePayeeByAccountNumber("110222222222")).thenReturn(Optional.empty());
+        when(accountLockPort.resolvePayeesByAccountNumbers(List.of("110222222222"))).thenReturn(Map.of());
 
         List<FavoriteAccountResult> results = service.queryAll(1L);
 
