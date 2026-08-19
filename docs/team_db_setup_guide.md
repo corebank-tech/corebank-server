@@ -19,7 +19,7 @@ docker compose up -d minicore-mysql
   - **Host**: `localhost` / **Port**: `3306`
   - **Database**: `minicore` (테스트 스크래치용: `minicore_scratch`)
   - **Username**: `root` / **Password**: `localpw`
-  - **타임존 및 셋업**: 글로벌 표준인 **`UTC(+00:00)`** 및 `utf8mb4_0900_ai_ci`로 고정되어 있습니다.
+  - **타임존 및 셋업**: **`KST(+09:00)`** 및 `utf8mb4_0900_ai_ci`로 고정되어 있습니다.
 
 ### 2단계: 애플리케이션 기동 및 스키마 자동 생성 확인
 ```bash
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS account (
   COLLATE=utf8mb4_0900_ai_ci;
 ```
 1. **`TIMESTAMP` 타입 사용 절대 금지**: 무조건 `DATETIME(6)`을 사용합니다.
-2. **`DEFAULT CURRENT_TIMESTAMP` 사용 절대 금지**: 생성/수정 시각은 DB 기본값이 아니라 **JPA Auditing(`BaseEntity`)이 UTC 시각을 주입**합니다.
+2. **`DEFAULT CURRENT_TIMESTAMP` 사용 절대 금지**: 생성/수정 시각은 DB 기본값이 아니라 **JPA Auditing(`BaseEntity`)이 KST 시각을 주입**합니다.
 3. **모든 비즈니스 엔티티는 `BaseEntity`를 상속(`extends`)**:
    ```java
    @Entity
@@ -148,5 +148,5 @@ class AccountServiceTest extends IntegrationTestSupport {
   docker compose up -d minicore-mysql
   ```
 
-**Q2. 로그에 KST(한국 시간)로 찍히는데 DB에는 9시간 이전 시간(UTC)으로 들어갑니다. 정상인가요?**  
-- **정상입니다.** 글로벌 서비스 표준에 따라 DB 저장 및 서버 JVM 시스템 시간은 **UTC**로 통일되어 있으며, 개발/운영 모니터링 편의성을 위해 콘솔 로그(`logback-spring.xml`)에서만 `KST(Asia/Seoul)`로 변환하여 보여주도록 설계되었습니다. 절.대. 컨테이너나 JVM에 `TZ=Asia/Seoul`을 넣지 마시길 바랍니다.
+**Q2. 로그, DB, JVM 시스템 시간이 전부 같은 시각으로 보입니다. 정상인가요?**  
+- **정상입니다.** 2026-08-19부로 DB 저장 및 서버 JVM 시스템 시간을 **KST(Asia/Seoul)**로 통일하고, 기존에 있던 UTC 저장·KST 로그변환 과정을 없앴습니다(#179). `Dockerfile`(`-Duser.timezone=Asia/Seoul`), `application.yml`(`hibernate.jdbc.time_zone`), JDBC URL(`connectionTimeZone`), `JpaAuditingConfig`의 `Clock` 빈이 모두 Asia/Seoul 기준으로 맞춰져 있어 변환 없이 그대로 KST로 저장·표시됩니다. 컨테이너나 JVM에 `TZ=UTC`를 넣지 마시길 바랍니다.
