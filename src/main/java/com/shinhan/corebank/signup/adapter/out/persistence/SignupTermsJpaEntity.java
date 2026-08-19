@@ -4,6 +4,7 @@ import com.shinhan.corebank.common.entity.BaseEntity;
 import com.shinhan.corebank.signup.domain.model.TermsType;
 import jakarta.persistence.*;
 
+// terms 테이블의 회원가입 약관 필드를 JPA로 매핑한다.
 @Entity
 @Table(name = "terms")
 public class SignupTermsJpaEntity extends BaseEntity {

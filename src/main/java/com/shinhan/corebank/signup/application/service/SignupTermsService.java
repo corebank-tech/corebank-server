@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+// 회원가입 약관 조회·동의 검증·약관 인증 토큰 발급을 처리한다.
 @Service
 public class SignupTermsService implements
         GetSignupTermsUseCase,

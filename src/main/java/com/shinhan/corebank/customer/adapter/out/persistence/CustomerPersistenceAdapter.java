@@ -53,6 +53,18 @@ public class CustomerPersistenceAdapter
                 .map(customerMapper::toDomain);
     }
 
+    @Override
+    public boolean existsByUserId(String userId) {
+        Objects.requireNonNull(userId, "userId must not be null");
+        return customerJpaRepository.existsByUserId(userId);
+    }
+
+    @Override
+    public boolean existsByEmail(String email) {
+        Objects.requireNonNull(email, "email must not be null");
+        return customerJpaRepository.existsByEmail(email);
+    }
+
     // 로그인 실패 횟수와 계정 잠금 상태만 저장
     @Override
     public void updateLoginFailureState(Customer customer) {
