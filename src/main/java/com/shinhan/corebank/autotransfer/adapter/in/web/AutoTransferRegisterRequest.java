@@ -27,7 +27,7 @@ public record AutoTransferRegisterRequest (
         String myPassbookMemo,
         @Schema(description = "상대 통장에 남길 표시내용. 최대 10자", example = "홍길동", maxLength = 10)
         String recipientPassbookMemo,
-        @Schema(description = "계좌 비밀번호 인증 완료 후 발급되는 1회성 인증 토큰", required = true)
+        @Schema(description = "계좌 비밀번호 인증 완료 후 발급되는 1회성 인증 토큰")
         String accountPasswordAuthToken  ){
     public AutoTransferRegisterCommand toCommand(String requestIp, Long customerId) {
         return AutoTransferRegisterCommand.builder()

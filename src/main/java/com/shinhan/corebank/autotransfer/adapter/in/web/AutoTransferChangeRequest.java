@@ -23,7 +23,7 @@ public record AutoTransferChangeRequest(
         String depositAccountNumber,
         @Schema(description = "변경 불가 항목. null이 아닌 값을 보내면 AUT0003으로 거부됨 - 항상 비워서 보낼 것", nullable = true)
         Integer transferDay,
-        @Schema(description = "계좌 비밀번호 인증 완료 후 발급되는 1회성 인증 토큰", required = true)
+        @Schema(description = "계좌 비밀번호 인증 완료 후 발급되는 1회성 인증 토큰")
         String accountPasswordAuthToken) {
     public AutoTransferChangeCommand toCommand(String requestIp, Long customerId) {
         return AutoTransferChangeCommand.builder()
