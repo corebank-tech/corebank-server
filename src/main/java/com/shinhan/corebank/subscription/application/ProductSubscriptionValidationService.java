@@ -67,7 +67,11 @@ public class ProductSubscriptionValidationService implements ProductSubscription
             violations.add(SubscriptionViolation.of(
                     "subscriptionAmount", SubscriptionViolationCode.AMOUNT_OUT_OF_RANGE));
         }
-        if (subscriptionAmount % product.getAmountUnit() != 0) {
+        // amountUnit이 0이면 나머지 연산에서 ArithmeticException이 나므로 단축 평가로 먼저 걸러낸다.
+        // DB 제약(ck_product_amount_unit)이 막아 주지만, 마스터데이터 오류로 사전 검증 전체가
+        // 500이 되는 것보다 단위 검증만 생략하는 편이 낫다.
+        Long amountUnit = product.getAmountUnit();
+        if (amountUnit != null && amountUnit > 0 && subscriptionAmount % amountUnit != 0) {
             violations.add(SubscriptionViolation.of(
                     "subscriptionAmount", SubscriptionViolationCode.AMOUNT_UNIT_MISMATCH));
         }

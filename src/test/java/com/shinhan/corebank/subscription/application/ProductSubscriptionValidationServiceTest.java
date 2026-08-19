@@ -308,6 +308,19 @@ class ProductSubscriptionValidationServiceTest {
         assertThat(result.getMaturityDate()).isEqualTo(LocalDate.of(2028, 3, 15));
     }
 
+    @Test
+    @DisplayName("마스터데이터의 amountUnit이 0이어도 500이 아니라 단위 검증만 생략한다")
+    void validate_zeroAmountUnitDoesNotThrow() {
+        when(productQueryUseCase.getDetail(PRODUCT_ID)).thenReturn(brokenAmountUnitDetail());
+        when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
+                .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
+
+        SubscriptionValidation result = service.validate(command(505_000L, 12, List.of(), List.of()));
+
+        assertThat(result.isValid()).isTrue();
+        assertThat(result.getViolations()).noneSatisfy(v -> assertThat(v.code()).isEqualTo("PRD0004"));
+    }
+
     private ProductSubscriptionValidationCommand command(
             Long amount, Integer termMonths, List<AgreedTerms> agreedTerms, List<String> satisfiedCodes) {
         return new ProductSubscriptionValidationCommand(
@@ -332,6 +345,26 @@ class ProductSubscriptionValidationServiceTest {
         return ProductDetail.builder()
                 .product(product)
                 .rateTiers(List.of(tier))
+                .preferentialRates(List.of())
+                .terms(List.of())
+                .build();
+    }
+
+    private ProductDetail brokenAmountUnitDetail() {
+        ProductDetail base = depositDetail(12, "3.20");
+        Product broken = Product.builder()
+                .productId(PRODUCT_ID)
+                .productGroup(ProductGroup.DEPOSIT)
+                .saleStatus(SaleStatus.ON_SALE)
+                .minAmount(base.getProduct().getMinAmount())
+                .maxAmount(base.getProduct().getMaxAmount())
+                .amountUnit(0L)
+                .minTermMonths(base.getProduct().getMinTermMonths())
+                .maxTermMonths(base.getProduct().getMaxTermMonths())
+                .build();
+        return ProductDetail.builder()
+                .product(broken)
+                .rateTiers(base.getRateTiers())
                 .preferentialRates(List.of())
                 .terms(List.of())
                 .build();
