@@ -4,7 +4,10 @@ import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferPersistencePort;
+import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLookupPort;
+import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLookupResult;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
+import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
@@ -21,6 +24,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
@@ -34,6 +38,7 @@ public class ScheduledTransferBatchItemProcessor {
     private final ScheduledTransferPersistencePort scheduledTransferPersistencePort;
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final AuditLogService auditLogService;
+    private final TransferLookupPort transferLookupPort;
 
     // WAITING -> PROCESSING 원자적 선점 (REQ-SCD-013 멱등성 방어)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -73,13 +78,44 @@ public class ScheduledTransferBatchItemProcessor {
         }
         scheduledTransferPersistencePort.save(scheduledTransfer);
 
-        if (StringUtils.hasText(scheduledTransfer.getTransactionNumber())) {
-            boolean succeeded = result.status() == ProcessResultStatus.SUCCESS;
-            Map<String, Object> detail = succeeded
-                    ? Map.of("scheduledTransferId", scheduledTransfer.getScheduledTransferId(), "executionDate", date)
-                    : Map.of("scheduledTransferId", scheduledTransfer.getScheduledTransferId(), "executionDate", date, "errorCode", result.errorCode());
-            auditLogService.record(scheduledTransfer.getCustomerId(), scheduledTransfer.getTransactionNumber(),
-                    AuditEventType.SCHEDULED_TRANSFER, SYSTEM_REQUEST_IP, succeeded, detail);
+        recordAudit(scheduledTransfer, date, result.status() == ProcessResultStatus.SUCCESS, result.errorCode());
+    }
+
+    // transfer 테이블에 실제 거래가 있었는지만 확인해서 확정 (PROCESSING에 멈춘 건 재확정)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void reconcileStuckExecution(ScheduledTransfer scheduledTransfer) {
+        Optional<TransferLookupResult> lookup = transferLookupPort.findBySourceAndDate(
+                scheduledTransfer.getScheduledTransferId(), scheduledTransfer.getScheduledDate());
+
+        LocalDateTime now = LocalDateTime.now();
+        if (lookup.isEmpty()) {
+            scheduledTransfer.markFailed("실행 중 확인 불가로 재확정 배치가 오류 처리함", null, now);
+        } else if (lookup.get().status() == ProcessResultStatus.SUCCESS) {
+            scheduledTransfer.markSuccess(lookup.get().transactionNumber(), now);
+        } else if (lookup.get().status() == ProcessResultStatus.ERROR) {
+            scheduledTransfer.markFailed(lookup.get().errorMessage(), lookup.get().transactionNumber(), now);
+        } else {
+            log.warn("재확정 배치가 예상치 못한 transfer 상태를 조회함 - scheduledTransferId={}, status={}",
+                    scheduledTransfer.getScheduledTransferId(), lookup.get().status());
+            scheduledTransfer.markFailed("실행 중 확인 불가로 재확정 배치가 오류 처리함", null, now);
         }
+
+        scheduledTransferPersistencePort.save(scheduledTransfer);
+
+        recordAudit(scheduledTransfer, scheduledTransfer.getScheduledDate(),
+                scheduledTransfer.getStatus() == ScheduledTransferStatus.SUCCESS, null);
+    }
+
+    private void recordAudit(ScheduledTransfer scheduledTransfer, LocalDate date, boolean succeeded, String errorCode) {
+        if (!StringUtils.hasText(scheduledTransfer.getTransactionNumber())) {
+            return;
+        }
+        Map<String, Object> detail = succeeded
+                ? Map.of("scheduledTransferId", scheduledTransfer.getScheduledTransferId(), "executionDate", date)
+                : errorCode != null
+                    ? Map.of("scheduledTransferId", scheduledTransfer.getScheduledTransferId(), "executionDate", date, "errorCode", errorCode)
+                    : Map.of("scheduledTransferId", scheduledTransfer.getScheduledTransferId(), "executionDate", date);
+        auditLogService.record(scheduledTransfer.getCustomerId(), scheduledTransfer.getTransactionNumber(),
+                AuditEventType.SCHEDULED_TRANSFER, SYSTEM_REQUEST_IP, succeeded, detail);
     }
 }

@@ -27,6 +27,14 @@ public class ScheduledTransferBatchService implements ScheduledTransferBatchUseC
         }
     }
 
+    @Override
+    public void reconcileStuckExecutions(LocalDate date) {
+        List<ScheduledTransfer> stuck = scheduledTransferBatchQueryPort.findAllProcessing();
+        for (ScheduledTransfer scheduledTransfer : stuck) {
+            reconcileOne(scheduledTransfer, date);
+        }
+    }
+
     // 건별 예외 격리: 한 건의 실패/중복이 나머지 건 처리를 막으면 안됨
     private void processOne(ScheduledTransfer scheduledTransfer, LocalDate date) {
         boolean claimed;
@@ -47,6 +55,16 @@ public class ScheduledTransferBatchService implements ScheduledTransferBatchUseC
             scheduledTransferBatchItemProcessor.completeProcessing(scheduledTransfer, date);
         } catch (Exception e) {
             log.error("예약이체 배치 처리 실패 - scheduledTransferId={}, date={}",
+                    scheduledTransfer.getScheduledTransferId(), date, e);
+        }
+    }
+
+    // 재확정 건별 예외 격리 - 한 건의 재확정 실패가 나머지 건을 막으면 안됨
+    private void reconcileOne(ScheduledTransfer scheduledTransfer, LocalDate date) {
+        try {
+            scheduledTransferBatchItemProcessor.reconcileStuckExecution(scheduledTransfer);
+        } catch (Exception e) {
+            log.error("재확정 배치 처리 실패 - scheduledTransferId={}, date={}",
                     scheduledTransfer.getScheduledTransferId(), date, e);
         }
     }
