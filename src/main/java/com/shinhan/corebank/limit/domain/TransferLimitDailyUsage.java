@@ -31,7 +31,14 @@ public class TransferLimitDailyUsage {
         return new TransferLimitDailyUsage(customerId, usageDate, usedAmount);
     }
 
+    /**
+     * 확정된 이체 금액을 당일 누적에 더한다. 사용액은 누적 카운터라 감소하지 않는다.
+     * 음수는 호출자 버그다 - 사용자가 보낸 음수 금액은 TransferCommand 가 이미 막는다.
+     */
     public void add(long amount) {
+        if (amount < 0) {
+            throw new IllegalArgumentException("이체 금액은 음수일 수 없습니다.");
+        }
         this.usedAmount = Math.addExact(this.usedAmount, amount);
     }
 
