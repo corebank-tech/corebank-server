@@ -30,9 +30,11 @@ public class TransactionSequenceJpaEntity {
     @Column(name = "updated_at", nullable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime updatedAt;
 
+    private static final ZoneOffset KST = ZoneOffset.ofHours(9);
+
     public long incrementAndGet() {
         this.lastSeq += 1;
-        this.updatedAt = LocalDateTime.now(ZoneOffset.UTC);
+        this.updatedAt = LocalDateTime.now(KST);
         return this.lastSeq;
     }
 }
