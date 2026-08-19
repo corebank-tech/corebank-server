@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 import com.shinhan.corebank.common.exception.BusinessException;
@@ -26,10 +27,12 @@ public class FavoriteAccountRegisterService implements FavoriteAccountRegisterUs
 
     private final AccountLockPort accountLockPort;
     private final FavoriteAccountPersistencePort persistencePort;
+    private final Clock clock;
 
-    public FavoriteAccountRegisterService(AccountLockPort accountLockPort, FavoriteAccountPersistencePort persistencePort) {
+    public FavoriteAccountRegisterService(AccountLockPort accountLockPort, FavoriteAccountPersistencePort persistencePort, Clock clock) {
         this.accountLockPort = accountLockPort;
         this.persistencePort = persistencePort;
+        this.clock = clock;
     }
 
     @Override
@@ -43,7 +46,7 @@ public class FavoriteAccountRegisterService implements FavoriteAccountRegisterUs
 
         FavoriteAccount favoriteAccount = FavoriteAccount.register(
                 command.customerId(), command.depositAccountNumber(), payee.payeeName(),
-                command.alias(), LocalDateTime.now());
+                command.alias(), LocalDateTime.now(clock));
 
         try {
             FavoriteAccount saved = persistencePort.save(favoriteAccount);
