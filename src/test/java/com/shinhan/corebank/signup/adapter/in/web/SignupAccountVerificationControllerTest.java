@@ -170,10 +170,13 @@ class SignupAccountVerificationControllerTest {
     private void assertInvalidRequest(String content) throws Exception {
         mockMvc.perform(post("/api/v1/auth/verify-account")
                         .contextPath("/api/v1")
-                        .contentType(APPLICATION_JSON)
-                        .content(content))
+                .contentType(APPLICATION_JSON)
+                .content(content))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("CMN0001"));
+                .andExpect(jsonPath("$.code").value("CMN0001"))
+                .andExpect(jsonPath("$.message")
+                        .value("입력값이 올바르지 않습니다."))
+                .andExpect(jsonPath("$.data").doesNotExist());
         verify(useCase, never()).verify(any());
     }
 }
