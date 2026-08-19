@@ -40,18 +40,19 @@ public class TransferController {
 
     @PostMapping
     @Operation(summary = "이체 실행", description = """
-            내 계좌에서 상대 계좌로 즉시이체를 실행한다. 동일한 Idempotency-Key로 재요청하면 \
+            내 계좌에서 상대 계좌로 즉시이체를 실행한다. 동일한 Idempotency-Key와 동일한 요청 내용으로 재요청하면 \
             새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "이체 요청이 접수됨 (처리 결과는 응답 본문의 status로 구분 — 실행 자체의 성공 여부와 이체 성공 여부는 다르다)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = """
+            이체 요청이 처리됨. 실행 자체의 성공 여부와 이체 성공 여부는 다르다 — 응답 본문의 status로 \
+            판단한다. status=ERROR면 errorCode에 `TRF0001`(등록되지 않은 출금계좌) · `TRF0002`(출금·입금계좌 동일) \
+            · `TRF0004`(입금 불가 상품유형) · `TRF0201`(입금계좌를 찾을 수 없음) · `TRF0301`/`TRF0304`(거래정지·해지 \
+            상태의 입금/출금계좌) · `TRF0303`(출금계좌 잔액 부족) 중 하나가 담긴다.""")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "`TRF0001` 등록되지 않은 출금계좌 · `TRF0002` 출금·입금계좌 동일 · `TRF0003` 이체금액 형식 오류 · `TRF0004` 입금 불가 상품유형 · `TRF0005` 통장 표시내용 길이 초과",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "`TRF0201` 입금계좌를 찾을 수 없음",
+                    description = "`TRF0003` 이체금액 형식 오류 · `TRF0005` 통장 표시내용 길이 초과 (요청 파싱 단계에서 즉시 거부됨)",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
-                    description = "`TRF0301`/`TRF0304` 거래정지·해지 상태의 입금/출금계좌 · `TRF0303` 출금계좌 잔액 부족 · `CMN0301`/`CMN0302` 멱등키 충돌",
+                    description = "`CMN0301`/`CMN0302` 멱등키 충돌",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<ApiResponse<TransferResponse>> execute(
