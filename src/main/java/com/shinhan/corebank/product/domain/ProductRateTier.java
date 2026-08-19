@@ -1,15 +1,23 @@
 package com.shinhan.corebank.product.domain;
 
-import lombok.AllArgsConstructor;
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import lombok.Builder;
 import lombok.Getter;
 
 import java.math.BigDecimal;
 
 @Getter
-@AllArgsConstructor
-@Builder
 public class ProductRateTier {
-    private ProductRateTierId id;
-    private BigDecimal rate;
+    private final ProductRateTierId id;
+    private final BigDecimal rate;
+
+    @Builder
+    public ProductRateTier(ProductRateTierId id, BigDecimal rate) {
+        if (id == null || rate == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+        this.id = id;
+        this.rate = rate;
+    }
 }
