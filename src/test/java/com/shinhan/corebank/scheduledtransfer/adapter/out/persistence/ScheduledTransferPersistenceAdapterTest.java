@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferExecutionResultAggregate;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
+import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import com.shinhan.corebank.scheduledtransfer.domain.exception.ScheduledTransferErrorCode;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
@@ -107,6 +109,65 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
                         onEarlierDate.getScheduledTransferId(),
                         firstOnLaterDate.getScheduledTransferId(),
                         secondOnLaterDate.getScheduledTransferId());
+    }
+
+    @Test
+    @DisplayName("searchExecutionResults()는 WAITING을 제외하고 SUCCESS/FAILED/CANCELED만 scheduledDate 내림차순으로 조회한다")
+    void searchExecutionResults_excludesWaiting_ordersByScheduledDateDesc() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+
+        adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId, "088", "110111111111", "홍길동",
+                10_000L, LocalDate.now().plusDays(10), "메모", "메모", LocalDateTime.now()));
+        ScheduledTransfer success = saveTerminal(customerId, withdrawalAccountId, ScheduledTransferStatus.SUCCESS,
+                LocalDate.now().minusDays(5), 10_000L, "TXN0001", null);
+        ScheduledTransfer failed = saveTerminal(customerId, withdrawalAccountId, ScheduledTransferStatus.FAILED,
+                LocalDate.now().minusDays(3), 20_000L, null, "잔액 부족");
+        ScheduledTransfer canceled = saveTerminal(customerId, withdrawalAccountId, ScheduledTransferStatus.CANCELED,
+                LocalDate.now().minusDays(1), 30_000L, null, null);
+        entityManager.flush();
+
+        Page<ScheduledTransfer> result = adapter.searchExecutionResults(customerId, null,
+                LocalDate.now().minusDays(10), LocalDate.now(), PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(ScheduledTransfer::getScheduledTransferId)
+                .containsExactly(canceled.getScheduledTransferId(), failed.getScheduledTransferId(), success.getScheduledTransferId());
+    }
+
+    @Test
+    @DisplayName("summarizeExecutionResults()는 정상/오류/취소 각각의 건수·금액을 실제 합계와 일치하게 집계한다")
+    void summarizeExecutionResults_aggregatesCorrectly() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+
+        // 집계 대상 아님 - 아직 결과가 아닌 WAITING
+        adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId, "088", "110111111111", "홍길동",
+                999_999L, LocalDate.now().plusDays(10), "메모", "메모", LocalDateTime.now()));
+        saveTerminal(customerId, withdrawalAccountId, ScheduledTransferStatus.SUCCESS, LocalDate.now().minusDays(5), 10_000L, "TXN0001", null);
+        saveTerminal(customerId, withdrawalAccountId, ScheduledTransferStatus.SUCCESS, LocalDate.now().minusDays(4), 15_000L, "TXN0002", null);
+        saveTerminal(customerId, withdrawalAccountId, ScheduledTransferStatus.FAILED, LocalDate.now().minusDays(3), 20_000L, null, "잔액 부족");
+        saveTerminal(customerId, withdrawalAccountId, ScheduledTransferStatus.CANCELED, LocalDate.now().minusDays(1), 30_000L, null, null);
+        entityManager.flush();
+
+        ScheduledTransferExecutionResultAggregate aggregate = adapter.summarizeExecutionResults(customerId, null,
+                LocalDate.now().minusDays(10), LocalDate.now());
+
+        assertThat(aggregate.successCount()).isEqualTo(2L);
+        assertThat(aggregate.successAmount()).isEqualTo(25_000L);
+        assertThat(aggregate.failedCount()).isEqualTo(1L);
+        assertThat(aggregate.failedAmount()).isEqualTo(20_000L);
+        assertThat(aggregate.canceledCount()).isEqualTo(1L);
+        assertThat(aggregate.canceledAmount()).isEqualTo(30_000L);
+    }
+
+    private ScheduledTransfer saveTerminal(Long customerId, Long withdrawalAccountId, ScheduledTransferStatus status,
+                                           LocalDate scheduledDate, Long amount, String transactionNumber, String failureReason) {
+        ScheduledTransfer domain = ScheduledTransfer.reconstitute(
+                null, customerId, withdrawalAccountId, "088", "110987654321", "홍길동", amount, scheduledDate,
+                "메모", "메모", status, transactionNumber, LocalDateTime.now().minusDays(30), LocalDateTime.now(),
+                null, failureReason);
+        return adapter.save(domain);
     }
 
     private Long insertCustomer() {
