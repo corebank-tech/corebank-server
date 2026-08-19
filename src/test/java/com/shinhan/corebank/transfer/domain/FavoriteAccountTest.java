@@ -50,6 +50,25 @@ class FavoriteAccountTest {
     }
 
     @Test
+    @DisplayName("별칭 미지정 시 예금주명이 한글 12자여도(가중치 24) 기본 별칭으로 등록된다")
+    void register_withoutAlias_payeeNameAtBoundary_succeeds() {
+        String payeeName = "가".repeat(12);
+
+        FavoriteAccount favoriteAccount = FavoriteAccount.register(1L, "110222222222", payeeName, null, NOW);
+
+        assertThat(favoriteAccount.getAlias()).isEqualTo(payeeName);
+    }
+
+    @Test
+    @DisplayName("별칭 미지정 시 예금주명이 한글 13자면(가중치 26) FAV0001로 거부된다")
+    void register_withoutAlias_payeeNameOverBoundary_throwsException() {
+        String payeeName = "가".repeat(13);
+
+        assertThatThrownBy(() -> FavoriteAccount.register(1L, "110222222222", payeeName, null, NOW))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
     @DisplayName("of()로 재구성하면 전달한 값을 그대로 보존한다(재검증하지 않는다)")
     void of_reconstructsWithoutRevalidation() {
         FavoriteAccount favoriteAccount = FavoriteAccount.of(1L, 1L, "110222222222", "홍길동", "가".repeat(13), NOW);
