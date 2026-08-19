@@ -1,4 +1,4 @@
-package com.shinhan.corebank.product.application.port.out;
+package com.shinhan.corebank.terms.api;
 
 public record TermsSummary(
         Long termsId,
