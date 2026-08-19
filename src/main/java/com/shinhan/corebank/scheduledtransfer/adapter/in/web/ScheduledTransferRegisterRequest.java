@@ -4,21 +4,22 @@ import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTrans
 
 import java.time.LocalDate;
 
-public record ScheduledTransferRegisterRequest(Long withdrawalAccountId, String payeeAccountNumber,
+public record ScheduledTransferRegisterRequest(Long withdrawalAccountId, String depositAccountNumber,
                                                 String payeeName, Long amount, LocalDate scheduledDate,
                                                 String myPassbookMemo, String recipientPassbookMemo,
-                                                String accountPasswordAuthToken) {
+                                                String accountPasswordAuthToken, String otpAuthToken) {
     public ScheduledTransferRegisterCommand toCommand(String requestIp, Long customerId) {
         return ScheduledTransferRegisterCommand.builder()
                 .customerId(customerId)
                 .withdrawalAccountId(withdrawalAccountId)
-                .payeeAccountNumber(payeeAccountNumber)
+                .depositAccountNumber(depositAccountNumber)
                 .payeeName(payeeName)
                 .amount(amount)
                 .scheduledDate(scheduledDate)
                 .myPassbookMemo(myPassbookMemo)
                 .recipientPassbookMemo(recipientPassbookMemo)
                 .accountPasswordAuthToken(accountPasswordAuthToken)
+                .otpAuthToken(otpAuthToken)
                 .requestIp(requestIp)
                 .build();
     }

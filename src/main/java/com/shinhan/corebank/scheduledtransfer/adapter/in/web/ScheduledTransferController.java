@@ -110,7 +110,7 @@ public class ScheduledTransferController {
     private Map<String, Object> fingerprint(ScheduledTransferRegisterRequest request) {
         Map<String, Object> fingerprint = new LinkedHashMap<>();
         fingerprint.put("withdrawalAccountId", request.withdrawalAccountId());
-        fingerprint.put("payeeAccountNumber", request.payeeAccountNumber());
+        fingerprint.put("depositAccountNumber", request.depositAccountNumber());
         fingerprint.put("payeeName", request.payeeName());
         fingerprint.put("amount", request.amount());
         fingerprint.put("scheduledDate", request.scheduledDate());

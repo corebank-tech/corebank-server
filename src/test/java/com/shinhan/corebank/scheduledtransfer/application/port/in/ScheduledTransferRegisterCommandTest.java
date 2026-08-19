@@ -16,13 +16,14 @@ class ScheduledTransferRegisterCommandTest {
         return ScheduledTransferRegisterCommand.builder()
                 .customerId(1L)
                 .withdrawalAccountId(2L)
-                .payeeAccountNumber("110987654321")
+                .depositAccountNumber("110987654321")
                 .payeeName("홍길동")
                 .amount(10000L)
                 .scheduledDate(LocalDate.now().plusDays(1))
                 .myPassbookMemo("내메모")
                 .recipientPassbookMemo("받는메모")
                 .accountPasswordAuthToken("token")
+                .otpAuthToken("otp-token")
                 .requestIp("127.0.0.1");
     }
 
@@ -31,7 +32,7 @@ class ScheduledTransferRegisterCommandTest {
     void success() {
         ScheduledTransferRegisterCommand command = validBuilder().build();
 
-        assertThat(command.payeeAccountNumber()).isEqualTo("110987654321");
+        assertThat(command.depositAccountNumber()).isEqualTo("110987654321");
     }
 
     @Test
@@ -47,6 +48,24 @@ class ScheduledTransferRegisterCommandTest {
     @DisplayName("authToken이 없으면 CMN0002를 던진다")
     void missingAuthToken_throwsRequiredFieldMissing() {
         assertThatThrownBy(() -> validBuilder().accountPasswordAuthToken(null).build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+    }
+
+    @Test
+    @DisplayName("otpAuthToken이 없으면 CMN0002를 던진다")
+    void missingOtpAuthToken_throwsRequiredFieldMissing() {
+        assertThatThrownBy(() -> validBuilder().otpAuthToken(null).build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+    }
+
+    @Test
+    @DisplayName("otpAuthToken이 공백 문자열이면 CMN0002를 던진다")
+    void blankOtpAuthToken_throwsRequiredFieldMissing() {
+        assertThatThrownBy(() -> validBuilder().otpAuthToken("   ").build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -73,7 +92,7 @@ class ScheduledTransferRegisterCommandTest {
     @Test
     @DisplayName("계좌번호가 12자리 숫자가 아니면 CMN0001을 던진다")
     void invalidAccountNumberFormat_throwsInvalidInput() {
-        assertThatThrownBy(() -> validBuilder().payeeAccountNumber("abc").build())
+        assertThatThrownBy(() -> validBuilder().depositAccountNumber("abc").build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_INPUT));

@@ -11,19 +11,19 @@ import static com.shinhan.corebank.common.util.AccountNumberPolicy.ACCOUNT_NUMBE
 
 @Builder
 // register()에 도달하기 전 단계에서 미리 걸러내는 역할을 하는 파일
-public record ScheduledTransferRegisterCommand(Long customerId, Long withdrawalAccountId, String payeeAccountNumber,
+public record ScheduledTransferRegisterCommand(Long customerId, Long withdrawalAccountId, String depositAccountNumber,
                                                String payeeName, Long amount, LocalDate scheduledDate,
                                                String myPassbookMemo, String recipientPassbookMemo,
-                                               String accountPasswordAuthToken, String requestIp) {
+                                               String accountPasswordAuthToken, String otpAuthToken, String requestIp) {
 
     public ScheduledTransferRegisterCommand {
         // 필수값 검증
-        if (customerId == null || withdrawalAccountId == null || payeeAccountNumber == null || payeeName == null
-                || amount == null || scheduledDate == null || accountPasswordAuthToken == null || requestIp == null) {
+        if (customerId == null || withdrawalAccountId == null || depositAccountNumber == null || payeeName == null
+                || amount == null || scheduledDate == null || accountPasswordAuthToken == null || otpAuthToken == null || requestIp == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
         // 계좌번호 형식 검증
-        if (!ACCOUNT_NUMBER_PATTERN.matcher(payeeAccountNumber).matches()) {
+        if (!ACCOUNT_NUMBER_PATTERN.matcher(depositAccountNumber).matches()) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
         // 금액 검증
@@ -38,7 +38,7 @@ public record ScheduledTransferRegisterCommand(Long customerId, Long withdrawalA
             throw new BusinessException(ScheduledTransferErrorCode.MEMO_LENGTH_EXCEEDED);
         }
         // 공백 문자열 검증
-        if (payeeName.isBlank() || accountPasswordAuthToken.isBlank() || requestIp.isBlank()) {
+        if (payeeName.isBlank() || accountPasswordAuthToken.isBlank() || otpAuthToken.isBlank() || requestIp.isBlank()) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
     }
