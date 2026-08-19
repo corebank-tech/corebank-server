@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -117,6 +118,47 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         assertThat(((Number) withdrawalEntry.get("account_id")).longValue()).isEqualTo(101L);
         assertThat(((Number) withdrawalEntry.get("amount")).longValue()).isEqualTo(30000L);
         assertThat(((Number) withdrawalEntry.get("balance_after")).longValue()).isEqualTo(70000L);
+    }
+
+    @Test
+    @DisplayName("동일 sourceId+executionDate로 execute()를 두 번 호출해도 실제 이체는 1회만 발생하고 동일 결과가 반환된다")
+    void execute_sameSourceAndExecutionDate_isIdempotent() {
+        // given
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        LocalDate executionDate = LocalDate.of(2026, 8, 20);
+        TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(30000L)
+                .transferType(TransferType.AUTO)
+                .channel(TransferChannel.BT)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .sourceId(555L)
+                .executionDate(executionDate)
+                .build();
+
+        // when: 같은 회차를 두 번 실행한다 (당일 안전장치 미작동 후 익일 재시도 시나리오와 동일한 모양)
+        TransferResult first = transferExecutionService.execute(command);
+        TransferResult second = transferExecutionService.execute(command);
+
+        // then: 두 번째 호출은 재처리 없이 첫 번째와 동일한 결과를 반환한다
+        assertThat(first.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(second.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(second.transactionNumber()).isEqualTo(first.transactionNumber());
+        assertThat(second.withdrawalBalanceAfter()).isEqualTo(first.withdrawalBalanceAfter());
+
+        // then: 잔액은 1회만 차감되고, transfer 행도 1건만 존재한다
+        Long withdrawalBalance = jdbcTemplate.queryForObject(
+                "SELECT balance FROM account WHERE account_id = 101", Long.class);
+        assertThat(withdrawalBalance).isEqualTo(70000L);
+
+        Integer transferRowCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transfer WHERE source_type = 'AUTO' AND source_id = 555", Integer.class);
+        assertThat(transferRowCount).isEqualTo(1);
     }
 
     @Test
