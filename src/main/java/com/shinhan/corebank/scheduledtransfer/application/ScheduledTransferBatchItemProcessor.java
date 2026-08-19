@@ -100,7 +100,14 @@ public class ScheduledTransferBatchItemProcessor {
             scheduledTransfer.markFailed("실행 중 확인 불가로 재확정 배치가 오류 처리함", null, now);
         }
 
-        scheduledTransferPersistencePort.save(scheduledTransfer);
+        // claim()과 대칭되는 가드: 재확정 배치는 findAllProcessing()로 조회만 하고 선점 단계가 없어서,
+        // 동시에 두 번 돌면 이 저장 시점에 가드가 필요하다. 0건이면 이미 다른 실행이 먼저 확정한 것.
+        boolean confirmed = scheduledTransferPersistencePort.saveIfStillProcessing(scheduledTransfer);
+        if (!confirmed) {
+            log.info("이미 다른 재확정 실행이 먼저 확정함(중복 재확정 방어) - scheduledTransferId={}",
+                    scheduledTransfer.getScheduledTransferId());
+            return;
+        }
 
         recordAudit(scheduledTransfer, scheduledTransfer.getScheduledDate(),
                 scheduledTransfer.getStatus() == ScheduledTransferStatus.SUCCESS, null);
