@@ -50,7 +50,8 @@ PR #65 리뷰에서 `ProductSubscription`이 `@AllArgsConstructor` + `@Builder`�
 PR #65가 지적한 **자체 불변식(self-invariant)** 으로 한정한다.
 
 - 필수 식별자 null 여부: `customerId`, `productId`, `withdrawalAccountId`
-- 금액·기간의 양수 여부: `subscriptionAmount > 0`, `termMonths > 0`
+- 금액·기간의 null 또는 비양수 여부: `subscriptionAmount`, `termMonths` (둘 다 래퍼 타입이라
+  null이 언박싱 NPE로 새지 않도록 null을 먼저 본다)
 
 **`accountId`는 검증 대상이 아니다.** 가입 결과로 개설되는 계좌(`account_id BIGINT NULL
 COMMENT '가입으로 개설된 계좌'`)라 조립 시점에는 아직 없고, `PROCESSING` / `ERROR` 상태
@@ -71,7 +72,7 @@ COMMENT '가입으로 개설된 계좌'`)라 조립 시점에는 아직 없고, 
 | 검증 | 오류코드 |
 | --- | --- |
 | 필수 식별자 null | `CommonErrorCode.REQUIRED_FIELD_MISSING` (`CMN0002`, 400) |
-| 금액·기간 비양수 | `CommonErrorCode.INVALID_INPUT` (`CMN0001`, 400) |
+| 금액·기간 null 또는 비양수 | `CommonErrorCode.INVALID_INPUT` (`CMN0001`, 400) |
 
 이슈 #76의 최초 결론 코멘트는 "신규 `ProductSubscriptionErrorCode`"를 만든다고 적었으나, 코드 확인 후 철회한다.
 
