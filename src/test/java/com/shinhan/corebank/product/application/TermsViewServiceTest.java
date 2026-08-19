@@ -2,11 +2,11 @@ package com.shinhan.corebank.product.application;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.product.application.port.out.ProductQueryPort;
-import com.shinhan.corebank.product.application.port.out.TermsDetail;
-import com.shinhan.corebank.product.application.port.out.TermsQueryPort;
 import com.shinhan.corebank.product.application.port.out.TermsView;
 import com.shinhan.corebank.product.application.port.out.TermsViewHistoryPort;
 import com.shinhan.corebank.product.domain.ProductTermsView;
+import com.shinhan.corebank.terms.api.TermsDetail;
+import com.shinhan.corebank.terms.api.TermsQueryPort;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

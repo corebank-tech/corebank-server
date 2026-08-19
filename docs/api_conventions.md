@@ -564,13 +564,13 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 사용자의 평문 비밀번호나 OTP 코드를 최종 거래 API에 직접 전송하지 않고, 사전 검증 단계에서 발급받은 일회성 난수 토큰(Opaque Token)을 전달하여 권한을 증명합니다.
 
-| 토큰명 (발급 API) | 유효시간 | 사용처 |
-| --- | --- | --- |
-| `otpAuthToken` (`POST /otp/verify`) | 300초 | OTP 필요 거래 전체 |
-| `accountPasswordAuthToken` (`POST /accounts/{accountId}/password/verify`) | 300초 | 이체, 이체한도 변경, 상품가입, 예약이체, 자동이체, 출금계좌 등록 |
-| `emailVerificationToken` (`POST /auth/email-verifications/{id}/verify`) | 회원가입 세션 내 | 회원가입, 이메일 변경 |
-| `termsAuthToken` (`POST /auth/terms/check`) | 회원가입 세션 내 | 회원가입 입력검증 |
-| `accountAuthToken` (`POST /auth/verify-account`) | 회원가입 세션 내 | 회원가입 입력검증 |
+| 토큰명 (발급 API) | 유효시간         | 사용처                                                           |
+| --- |------------------|------------------------------------------------------------------|
+| `otpAuthToken` (`POST /otp/verify`) | 300초            | OTP 필요 거래 전체                                               |
+| `accountPasswordAuthToken` (`POST /accounts/{accountId}/password/verify`) | 300초            | 이체, 이체한도 변경, 상품가입, 예약이체, 자동이체, 출금계좌 등록 |
+| `emailVerificationToken` (`POST /auth/email-verifications/{id}/verify`) | 1800초           | 회원가입, 이메일 변경                                            |
+| `termsAuthToken` (`POST /auth/terms/check`) | 1800초           | signup/validate 성공 시 1회 소비                                 |
+| `accountAuthToken` (`POST /auth/verify-account`) | 회원가입 세션 내 | 회원가입 입력검증                                                |
 
 **명명 및 형식 규칙**
 

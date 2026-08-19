@@ -24,3 +24,8 @@ spring:
   data:
     redis:
       port: 6379
+
+app:
+  signup:
+    token:
+      terms-auth-ttl: 30m
