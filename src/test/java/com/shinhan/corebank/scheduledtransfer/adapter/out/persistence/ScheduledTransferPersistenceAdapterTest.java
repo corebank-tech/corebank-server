@@ -14,6 +14,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 @Transactional
@@ -76,6 +78,35 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
 
         assertThat(saved.getScheduledTransferId()).isNotNull();
         assertThat(saved.getAmount()).isEqualTo(20_000L);
+    }
+
+    @Test
+    @DisplayName("search()는 scheduledDate 오름차순, 동일 날짜면 scheduledTransferId 오름차순으로 정렬한다")
+    void search_ordersByScheduledDateThenId() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+        LocalDate earlierDate = LocalDate.now().plusDays(5);
+        LocalDate laterDate = LocalDate.now().plusDays(10);
+
+        // laterDate에 먼저 저장해서, 정렬이 등록 순서가 아니라 scheduledDate/id 기준임을 검증한다
+        ScheduledTransfer firstOnLaterDate = adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110111111111", "홍길동", 10_000L, laterDate, "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+        ScheduledTransfer secondOnLaterDate = adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110222222222", "홍길동", 20_000L, laterDate, "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+        ScheduledTransfer onEarlierDate = adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110333333333", "홍길동", 30_000L, earlierDate, "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+
+        Page<ScheduledTransfer> result = adapter.search(customerId, null, null, null, null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(ScheduledTransfer::getScheduledTransferId)
+                .containsExactly(
+                        onEarlierDate.getScheduledTransferId(),
+                        firstOnLaterDate.getScheduledTransferId(),
+                        secondOnLaterDate.getScheduledTransferId());
     }
 
     private Long insertCustomer() {

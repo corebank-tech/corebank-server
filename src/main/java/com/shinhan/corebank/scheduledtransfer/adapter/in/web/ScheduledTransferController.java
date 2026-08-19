@@ -1,12 +1,19 @@
 package com.shinhan.corebank.scheduledtransfer.adapter.in.web;
 
 import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.idempotency.IdempotencyResult;
 import com.shinhan.corebank.common.idempotency.IdempotencyService;
 import com.shinhan.corebank.common.response.ApiResponse;
+import com.shinhan.corebank.common.response.PageResponse;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferListItem;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferQueryUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferRegisterUseCase;
+import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +21,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -23,6 +31,7 @@ import java.util.function.Supplier;
 @RequiredArgsConstructor
 public class ScheduledTransferController {
     private final ScheduledTransferRegisterUseCase scheduledTransferRegisterUseCase;
+    private final ScheduledTransferQueryUseCase scheduledTransferQueryUseCase;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
     private final CurrentCustomerProvider currentCustomerProvider;
@@ -30,14 +39,41 @@ public class ScheduledTransferController {
     @PostMapping
     // 멱등성 확인 후, 재요청 -> 저장된 응답, 신규 요청 -> 등록
     public ResponseEntity<ApiResponse<ScheduledTransferResponse>> register(@RequestHeader("Idempotency-Key") String idempotencyKey,
-                                                                            @RequestBody ScheduledTransferRegisterRequest request,
-                                                                            HttpServletRequest httpRequest) {
+                                                                           @RequestBody ScheduledTransferRegisterRequest request,
+                                                                           HttpServletRequest httpRequest) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         String requestIp = httpRequest.getRemoteAddr();
         return withIdempotency(idempotencyKey, customerId, "POST /scheduled-transfers", fingerprint(request),
                 new TypeReference<>() {},
                 () -> ApiResponse.success(ScheduledTransferResponse.from(
                         scheduledTransferRegisterUseCase.register(request.toCommand(requestIp, customerId)))));
+    }
+
+    // 조회
+    @GetMapping
+    public ApiResponse<PageResponse<ScheduledTransferListItemResponse>> search(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long withdrawalAccountId,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
+        Page<ScheduledTransferListItem> result = scheduledTransferQueryUseCase.search(
+                customerId, parseStatus(status), withdrawalAccountId, fromDate, toDate, page, size);
+        return ApiResponse.success(PageResponse.from(result, ScheduledTransferListItemResponse::from));
+    }
+
+    // ALL은 도메인 Enum에 없는 "조회 조건 전용" 값 — ALL과 미전달 둘 다 "조건 없음"으로 동일하게 처리한다(api_conventions.md §5-10)
+    private ScheduledTransferStatus parseStatus(String status) {
+        if (status == null || status.equals("ALL")) {
+            return null;
+        }
+        try {
+            return ScheduledTransferStatus.valueOf(status);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "status 값이 올바르지 않습니다.");
+        }
     }
 
     // 멱등키 처리 5단계를 한 곳에 모은 공용 헬퍼 (AutoTransferController와 동일 패턴)
