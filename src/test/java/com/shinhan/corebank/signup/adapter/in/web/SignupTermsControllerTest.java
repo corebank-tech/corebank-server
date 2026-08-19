@@ -112,6 +112,21 @@ class SignupTermsControllerTest {
     }
 
     @Test
+    @DisplayName("agreedTerms에 null 원소가 있으면 CMN0001을 반환한다")
+    void rejectsNullAgreedTerm() throws Exception {
+        performCheckTerms("""
+                {
+                  "agreedTerms": [null]
+                }
+                """)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
+
+        verify(checkTermsAgreementUseCase, never())
+                .checkTermsAgreement(any(CheckTermsAgreementCommand.class));
+    }
+
+    @Test
     @DisplayName("termsId가 양수가 아니면 CMN0001을 반환한다")
     void rejectsInvalidTermsId() throws Exception {
         performCheckTerms("""

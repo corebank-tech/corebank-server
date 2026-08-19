@@ -3,12 +3,13 @@ package com.shinhan.corebank.signup.adapter.in.web.dto;
 import com.shinhan.corebank.signup.application.port.in.CheckTermsAgreementCommand;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
 
 public record CheckTermsAgreementRequest(
         @NotEmpty
-        List<@Valid AgreedTermRequest> agreedTerms
+        List<@NotNull @Valid AgreedTermRequest> agreedTerms
 ) {
 
     public CheckTermsAgreementCommand toCommand() {
