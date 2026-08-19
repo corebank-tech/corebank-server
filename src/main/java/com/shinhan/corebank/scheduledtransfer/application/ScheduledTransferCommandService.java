@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -27,6 +28,7 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
 
     // 1차는 당행 전용 상수. 별도 은행 테이블 없음(scheduled_transfer.payee_bank_code 스키마 주석 참고)
     private static final String PAYEE_BANK_CODE = "088";
+    private static final int MAX_SCHEDULED_DAYS = 365;
 
     private final ScheduledTransferPersistencePort scheduledTransferPersistencePort;
     private final AuthTokenVerificationPort authTokenVerificationPort;
@@ -38,9 +40,16 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
     @Override
     public ScheduledTransfer register(ScheduledTransferRegisterCommand command) {
 
+        // 예정일자 범위 검증 — 외부 조회 없이 입력값만으로 판단 가능하므로 인증(1회성 토큰 소비)보다 먼저 수행한다
+        LocalDate today = LocalDate.now(clock);
+        if (!command.scheduledDate().isAfter(today) ||
+                command.scheduledDate().isAfter(today.plusDays(MAX_SCHEDULED_DAYS))) {
+            throw new BusinessException(ScheduledTransferErrorCode.INVALID_SCHEDULED_DATE);
+        }
+
         // 인증 완료 토큰
         authTokenVerificationPort.verify(command.accountPasswordAuthToken(), command.withdrawalAccountId(), "SCHEDULED_TRANSFER_REGISTER");
-
+        authTokenVerificationPort.verify(command.otpAuthToken(), command.withdrawalAccountId(), "SCHEDULED_TRANSFER_REGISTER_OTP");
         // 출금 계좌 소유자 검증
         if (!accountStatusPort.belongsToCustomer(command.withdrawalAccountId(), command.customerId())) {
             throw new BusinessException(ScheduledTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE);
@@ -52,7 +61,7 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
         }
 
         // 입금계좌 실존 여부·유형 검증
-        AccountType payeeAccountType = accountStatusPort.findAccountTypeByNumber(command.payeeAccountNumber())
+        AccountType payeeAccountType = accountStatusPort.findAccountTypeByNumber(command.depositAccountNumber())
                 .orElseThrow(() -> new BusinessException(ScheduledTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
         if (payeeAccountType != AccountType.DEMAND_DEPOSIT) {
             throw new BusinessException(ScheduledTransferErrorCode.UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE);
@@ -66,12 +75,12 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
 
         // 중복 등록 제한
         if (scheduledTransferPersistencePort.existsActiveDuplicate(command.customerId(), command.withdrawalAccountId(),
-                command.payeeAccountNumber(), command.amount(), command.scheduledDate())) {
+                command.depositAccountNumber(), command.amount(), command.scheduledDate())) {
             throw new BusinessException(ScheduledTransferErrorCode.DUPLICATE_REGISTRATION);
         }
 
         ScheduledTransfer scheduledTransfer = ScheduledTransfer.register(command.customerId(), command.withdrawalAccountId(),
-                PAYEE_BANK_CODE, command.payeeAccountNumber(), command.payeeName(), command.amount(), command.scheduledDate(),
+                PAYEE_BANK_CODE, command.depositAccountNumber(), command.payeeName(), command.amount(), command.scheduledDate(),
                 command.myPassbookMemo(), command.recipientPassbookMemo(), LocalDateTime.now(clock));
 
         ScheduledTransfer saved = scheduledTransferPersistencePort.save(scheduledTransfer);

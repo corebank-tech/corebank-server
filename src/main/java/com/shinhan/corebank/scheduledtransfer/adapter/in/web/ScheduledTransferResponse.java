@@ -5,7 +5,7 @@ import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 
 import java.time.LocalDate;
 
-public record ScheduledTransferResponse(Long scheduledTransferId, Long withdrawalAccountId, String payeeAccountNumber,
+public record ScheduledTransferResponse(Long scheduledTransferId, Long withdrawalAccountId, String depositAccountNumber,
                                         String payeeName, Long amount, LocalDate scheduledDate,
                                         String myPassbookMemo, String recipientPassbookMemo,
                                         ScheduledTransferStatus status) {
