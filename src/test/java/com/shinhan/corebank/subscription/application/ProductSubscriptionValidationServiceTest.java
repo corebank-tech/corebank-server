@@ -13,14 +13,18 @@ import com.shinhan.corebank.subscription.application.port.in.ProductSubscription
 import com.shinhan.corebank.subscription.application.port.out.AccountLookupPort;
 import com.shinhan.corebank.subscription.application.port.out.WithdrawableAccount;
 import com.shinhan.corebank.subscription.domain.SubscriptionValidation;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,8 +44,20 @@ class ProductSubscriptionValidationServiceTest {
     @Mock
     TermsViewUseCase termsViewUseCase;
 
-    @InjectMocks
+    // 2027-03-14T15:30:00Z == 2027-03-15 00:30 KST — UTC 날짜와 KST 날짜가 갈리는 경계 시각.
+    // Clock을 주입하지 않으면 이 경계를 재현할 수 없어 만기일 KST 계산을 검증할 수 없다.
+    // "오늘"과 겹치지 않는 시각을 고른 이유: 겹치면 Clock을 안 쓰는 코드(LocalDate.now())도
+    // 우연히 같은 날짜를 내놓아서, 회귀가 생겨도 테스트가 통과해 버린다.
+    private static final Clock FIXED_CLOCK =
+            Clock.fixed(Instant.parse("2027-03-14T15:30:00Z"), ZoneOffset.UTC);
+
     ProductSubscriptionValidationService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new ProductSubscriptionValidationService(
+                productQueryUseCase, accountLookupPort, termsQueryPort, termsViewUseCase, FIXED_CLOCK);
+    }
 
     private static final Long PRODUCT_ID = 2001L;
     private static final Long ACCOUNT_ID = 101L;
@@ -267,6 +283,21 @@ class ProductSubscriptionValidationServiceTest {
         assertThat(result.isValid()).isTrue();
         assertThat(result.getPreferentialRate()).isEqualByComparingTo("0.00");
         assertThat(result.getAppliedRate()).isEqualByComparingTo("3.20");
+    }
+
+    @Test
+    @DisplayName("UTC 날짜와 KST 날짜가 갈리는 시각에도 만기일은 KST 기준으로 계산된다")
+    void validate_maturityDateUsesKst() {
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(depositDetail(12, "3.20"));
+        when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
+                .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
+
+        SubscriptionValidation result = service.validate(command(6_000_000L, 12, List.of(), List.of()));
+
+        // 고정 시각은 UTC로 2027-03-14, KST로 2027-03-15.
+        // KST 기준이면 2028-03-15, UTC 기준이면 2028-03-14가 나온다.
+        assertThat(result.getMaturityDate()).isEqualTo(LocalDate.of(2028, 3, 15));
     }
 
     private ProductSubscriptionValidationCommand command(

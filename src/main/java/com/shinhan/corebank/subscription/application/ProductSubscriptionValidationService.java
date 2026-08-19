@@ -21,7 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -31,10 +33,15 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class ProductSubscriptionValidationService implements ProductSubscriptionValidationUseCase {
 
+    // 컨테이너 TZ가 UTC로 고정돼 있어(Dockerfile, docker-compose.yml) LocalDate.now()는 UTC 날짜를 준다.
+    // ledger.seq_date / limit.usage_date가 "KST 기준 영업일"인 것과 맞춰 만기일도 KST로 계산한다.
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
     private final ProductQueryUseCase productQueryUseCase;
     private final AccountLookupPort accountLookupPort;
     private final TermsQueryPort termsQueryPort;
     private final TermsViewUseCase termsViewUseCase;
+    private final Clock clock;
 
     @Override
     public SubscriptionValidation validate(ProductSubscriptionValidationCommand command) {
@@ -107,7 +114,7 @@ public class ProductSubscriptionValidationService implements ProductSubscription
                 .baseRate(baseRate)
                 .preferentialRate(preferentialRate)
                 .appliedRate(appliedRate)
-                .maturityDate(LocalDate.now().plusMonths(termMonths))
+                .maturityDate(LocalDate.now(clock.withZone(KST)).plusMonths(termMonths))
                 .expectedPrincipal(calculation.expectedPrincipal())
                 .expectedInterest(calculation.expectedInterest())
                 .expectedMaturityAmount(calculation.expectedMaturityAmount())
