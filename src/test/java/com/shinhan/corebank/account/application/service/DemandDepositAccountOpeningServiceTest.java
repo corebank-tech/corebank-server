@@ -39,12 +39,14 @@ class DemandDepositAccountOpeningServiceTest {
     private static final String PASSWORD_HASH =
             "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq";
 
+    private static final ZoneOffset KST = ZoneOffset.ofHours(9);
+
     private static final LocalDateTime OPENED_DATE =
             LocalDateTime.of(
                     2026,
                     8,
                     12,
-                    13,
+                    22,
                     0
             );
 
@@ -61,7 +63,7 @@ class DemandDepositAccountOpeningServiceTest {
     void setUp() {
         Clock clock = Clock.fixed(
                 Instant.parse("2026-08-12T13:00:00Z"),
-                ZoneOffset.UTC
+                KST
         );
 
         demandDepositAccountOpeningService =
