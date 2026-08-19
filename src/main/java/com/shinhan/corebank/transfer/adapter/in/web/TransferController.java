@@ -70,6 +70,7 @@ public class TransferController {
     @GetMapping("/payee")
     @Operation(summary = "수취인(예금주) 조회", description = "이체 실행 전 입금계좌번호로 예금주명을 조회한다.")
     @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
                     description = "`TRF0201` 입금계좌를 찾을 수 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),

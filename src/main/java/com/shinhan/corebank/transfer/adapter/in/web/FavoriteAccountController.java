@@ -50,6 +50,7 @@ public class FavoriteAccountController {
             입금계좌번호를 자주 쓰는 계좌로 등록한다. 동일한 Idempotency-Key로 재요청하면 \
             새로 등록하지 않고 저장된 응답을 그대로 반환한다.""")
     @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "등록 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "`FAV0001` 별칭 길이 제한 초과",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
