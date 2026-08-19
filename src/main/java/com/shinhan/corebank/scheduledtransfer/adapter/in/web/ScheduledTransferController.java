@@ -7,6 +7,7 @@ import com.shinhan.corebank.common.idempotency.IdempotencyResult;
 import com.shinhan.corebank.common.idempotency.IdempotencyService;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.common.response.PageResponse;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultPage;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferListItem;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferQueryUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferRegisterUseCase;
@@ -62,6 +63,20 @@ public class ScheduledTransferController {
         Page<ScheduledTransferListItem> result = scheduledTransferQueryUseCase.search(
                 customerId, parseStatus(status), withdrawalAccountId, fromDate, toDate, page, size);
         return ApiResponse.success(PageResponse.from(result, ScheduledTransferListItemResponse::from));
+    }
+
+    // 처리결과 조회
+    @GetMapping("/executions")
+    public ApiResponse<ScheduledTransferExecutionResultPageResponse> searchExecutionResults(
+            @RequestParam(required = false) Long withdrawalAccountId,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
+        ScheduledTransferExecutionResultPage result = scheduledTransferQueryUseCase.searchExecutionResults(
+                customerId, withdrawalAccountId, fromDate, toDate, page, size);
+        return ApiResponse.success(ScheduledTransferExecutionResultPageResponse.from(result));
     }
 
     // ALL은 도메인 Enum에 없는 "조회 조건 전용" 값 — ALL과 미전달 둘 다 "조건 없음"으로 동일하게 처리한다(api_conventions.md §5-10)
