@@ -39,9 +39,13 @@ public class TransferLimit {
 
     /**
      * 한도를 변경한다. 정책 상한 검사는 요청 DTO 의 Bean Validation 이 담당하고(CMN0001),
-     * 여기서는 두 한도 사이의 관계만 본다.
+     * 여기서는 두 한도 사이의 관계와 최소값만 본다. 경계를 0 초과로 잡은 것은
+     * transfer_limit 의 ck_tl_positive 제약과 맞추기 위해서다.
      */
     public void update(long newOneTimeLimit, long newDailyLimit) {
+        if (newOneTimeLimit <= 0 || newDailyLimit <= 0) {
+            throw new IllegalArgumentException("이체한도는 0보다 커야 합니다.");
+        }
         if (newOneTimeLimit > newDailyLimit) {
             throw new BusinessException(LmtErrorCode.ONE_TIME_LIMIT_OVER_DAILY);
         }
