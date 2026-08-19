@@ -193,6 +193,15 @@ public class Account {
         this.alias = null;
     }
 
+    public void changeDisplayOrder(int displayOrder) {
+        validateDisplayOrder(displayOrder);
+        this.displayOrder = displayOrder;
+    }
+
+    public void resetDisplayOrder() {
+        this.displayOrder = null;
+    }
+
     private void validateAlias(String alias) {
         int totalLength =
                 alias.codePointCount(0, alias.length());
@@ -225,6 +234,7 @@ public class Account {
         validatePasswordLockState();
         validateWithdrawalRegistration();
         validateClosedState();
+        validateDisplayOrder(displayOrder);
     }
 
     private void validateAccountNumber() {
@@ -336,4 +346,13 @@ public class Account {
             );
         }
     }
+
+    private void validateDisplayOrder(Integer displayOrder) {
+        if (displayOrder != null && displayOrder <= 0) {
+            throw new BusinessException(
+                    AccountErrorCode.INVALID_DISPLAY_ORDER
+            );
+        }
+    }
 }
+

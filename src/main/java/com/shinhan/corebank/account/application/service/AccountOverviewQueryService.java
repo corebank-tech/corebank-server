@@ -16,6 +16,7 @@ import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -97,6 +98,7 @@ public class AccountOverviewQueryService
                                         account.getAccountType()
                                 ) == groupCode
                         )
+                        .sorted(accountDisplayOrderComparator())
                         .map(account ->
                                 toAccountItem(
                                         account,
@@ -185,5 +187,17 @@ public class AccountOverviewQueryService
                 && account.getStatus()
                 == AccountStatus.ACTIVE
                 && account.isWithdrawalRegistered();
+    }
+
+    private Comparator<Account> accountDisplayOrderComparator() {
+        return Comparator
+                .comparing(
+                        Account::getDisplayOrder,
+                        Comparator.nullsLast(
+                                Integer::compareTo
+                        )
+                )
+                .thenComparing(Account::getOpenedDate)
+                .thenComparing(Account::getAccountId);
     }
 }
