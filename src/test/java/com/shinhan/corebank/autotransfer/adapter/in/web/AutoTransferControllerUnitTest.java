@@ -9,8 +9,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferCancelUseCase;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferChangeUseCase;
+import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferExecutionHistoryQueryUseCase;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferQueryUseCase;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterUseCase;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
@@ -47,10 +49,15 @@ class AutoTransferControllerUnitTest {
     AutoTransferCancelUseCase autoTransferCancelUseCase;
     @Mock
     HttpServletRequest httpServletRequest;
+    @Mock
+    CurrentCustomerProvider currentCustomerProvider;
+    @Mock
+    AutoTransferExecutionHistoryQueryUseCase autoTransferExecutionHistoryQueryUseCase;
 
     private AutoTransferController newController() {
         return new AutoTransferController(autoTransferRegisterUseCase, idempotencyService, new ObjectMapper(),
-                autoTransferQueryUseCase, autoTransferChangeUseCase, autoTransferCancelUseCase);
+                autoTransferQueryUseCase, autoTransferChangeUseCase, autoTransferCancelUseCase, currentCustomerProvider,
+                autoTransferExecutionHistoryQueryUseCase);
     }
 
     private AutoTransfer sampleAutoTransfer() {
@@ -59,11 +66,11 @@ class AutoTransferControllerUnitTest {
                 10_000L, 1, 15,
                 LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), LocalDate.now().plusDays(10).plusDays(4),
                 "내메모", "받는메모", AutoTransferStatus.NORMAL,
-                LocalDateTime.now(), null, LocalDateTime.now());
+                LocalDateTime.now(), null, LocalDateTime.now(), 0L);
     }
 
     private AutoTransferRegisterRequest sampleRegisterRequest() {
-        return new AutoTransferRegisterRequest(1L, 2L, "110987654321", "홍길동", 10_000L, 1, 15,
+        return new AutoTransferRegisterRequest(2L, "110987654321", "홍길동", 10_000L, 1, 15,
                 LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), "내메모", "받는메모", "token");
     }
 
@@ -71,6 +78,7 @@ class AutoTransferControllerUnitTest {
     @DisplayName("action() 성공 후 complete()가 실패하면, 이미 성공한 처리인데도 release()가 호출되면 안 된다")
     void register_completeFailsAfterActionSucceeds_doesNotReleaseIdempotencyKey() {
         when(httpServletRequest.getRemoteAddr()).thenReturn("127.0.0.1");
+        when(currentCustomerProvider.getCurrentCustomerId()).thenReturn(1L);
         when(idempotencyService.begin(eq("key-1"), eq(1L), any(), any())).thenReturn(IdempotencyResult.proceed());
         when(autoTransferRegisterUseCase.register(any())).thenReturn(sampleAutoTransfer());
         doThrow(new RuntimeException("complete 저장 중 장애"))
@@ -89,6 +97,7 @@ class AutoTransferControllerUnitTest {
     @DisplayName("action() 자체가 실패하면 release()가 호출된다")
     void register_actionFails_releasesIdempotencyKey() {
         when(httpServletRequest.getRemoteAddr()).thenReturn("127.0.0.1");
+        when(currentCustomerProvider.getCurrentCustomerId()).thenReturn(1L);
         when(idempotencyService.begin(eq("key-2"), eq(1L), any(), any())).thenReturn(IdempotencyResult.proceed());
         when(autoTransferRegisterUseCase.register(any()))
                 .thenThrow(new RuntimeException("등록 처리 중 실패"));

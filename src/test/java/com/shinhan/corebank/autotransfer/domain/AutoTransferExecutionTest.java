@@ -95,15 +95,27 @@ class AutoTransferExecutionTest {
     class MarkError {
 
         @Test
-        @DisplayName("PROCESSING 상태면 ERROR로 전환되고 실패사유가 저장된다")
-        void error() {
+        @DisplayName("채번 이전 실패는 ERROR로 전환되고 실패사유만 저장된다(거래번호 없음)")
+        void error_beforeSequencing_transactionNumberIsNull() {
             AutoTransferExecution e = processing();
 
-            e.markError("잔액 부족");
+            e.markError("출금계좌 미등록", null);
+
+            assertThat(e.getStatus()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(e.getFailureReason()).isEqualTo("출금계좌 미등록");
+            assertThat(e.getTransactionNumber()).isNull();
+        }
+
+        @Test
+        @DisplayName("채번 이후 실패는 실패사유와 거래번호가 함께 저장된다")
+        void error_afterSequencing_transactionNumberIsSaved() {
+            AutoTransferExecution e = processing();
+
+            e.markError("잔액 부족", "TXN0000000000000001");
 
             assertThat(e.getStatus()).isEqualTo(ProcessResultStatus.ERROR);
             assertThat(e.getFailureReason()).isEqualTo("잔액 부족");
-            assertThat(e.getTransactionNumber()).isNull();
+            assertThat(e.getTransactionNumber()).isEqualTo("TXN0000000000000001");
         }
 
         @Test
@@ -112,7 +124,7 @@ class AutoTransferExecutionTest {
             AutoTransferExecution e = processing();
             e.markSuccess("TXN0000000000000001");
 
-            assertThatThrownBy(() -> e.markError("잔액 부족"))
+            assertThatThrownBy(() -> e.markError("잔액 부족", null))
                     .isInstanceOf(IllegalStateException.class);
         }
 
@@ -121,7 +133,7 @@ class AutoTransferExecutionTest {
         void rejectsNullFailureReason() {
             AutoTransferExecution e = processing();
 
-            assertThatThrownBy(() -> e.markError(null))
+            assertThatThrownBy(() -> e.markError(null, null))
                     .isInstanceOf(IllegalArgumentException.class);
 
             assertThat(e.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
@@ -133,9 +145,9 @@ class AutoTransferExecutionTest {
         void rejectsBlankFailureReason() {
             AutoTransferExecution e = processing();
 
-            assertThatThrownBy(() -> e.markError(""))
+            assertThatThrownBy(() -> e.markError("", null))
                     .isInstanceOf(IllegalArgumentException.class);
-            assertThatThrownBy(() -> e.markError("   "))
+            assertThatThrownBy(() -> e.markError("   ", null))
                     .isInstanceOf(IllegalArgumentException.class);
 
             assertThat(e.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);

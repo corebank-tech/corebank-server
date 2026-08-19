@@ -19,7 +19,13 @@ spring:
   data:
     redis:
       host: localhost
-      port: 6379
+
 logging:
   level:
     org.hibernate.SQL: debug
+
+app:
+  security:
+    cors:
+      allowed-origins:
+        - http://localhost:5173

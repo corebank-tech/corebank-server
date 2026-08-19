@@ -12,7 +12,7 @@ public class AutoTransferExecution {
     private LocalDate executionDate;
     private Long amount;
     private ProcessResultStatus status;
-    private String transactionNumber;   // 성공 시에만. 그 외는 null
+    private String transactionNumber;   // 성공 또는 채번 이후 실패시에만. 채번 이전 실패는 null
     private String failureReason;   // 실패 시에만. 그 외는 null
     private LocalDateTime executedAt;   // 실제 실행 시각, 예정일과 다를 수 있음
 
@@ -40,7 +40,7 @@ public class AutoTransferExecution {
     }
 
     // PROCESSING -> ERROR. 실패 사유 없이는 실패로 확정할 수 없다 — 상태를 바꾸기 전에 검증한다.
-    public void markError(String failureReason) {
+    public void markError(String failureReason, String transactionNumber) {
         if (this.status != ProcessResultStatus.PROCESSING) {
             throw new IllegalStateException("처리중 상태에서만 실패로 전환할 수 있습니다.");
         }
@@ -49,6 +49,7 @@ public class AutoTransferExecution {
         }
         this.status = ProcessResultStatus.ERROR;
         this.failureReason = failureReason;
+        this.transactionNumber = transactionNumber;
     }
 
     public static AutoTransferExecution reconstitute(Long executionId, LocalDate executionDate, Long amount, ProcessResultStatus status,

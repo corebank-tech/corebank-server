@@ -1,5 +1,6 @@
 package com.shinhan.corebank.autotransfer.adapter.in.web;
 
+import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.autotransfer.application.port.in.*;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
@@ -19,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -33,17 +35,20 @@ public class AutoTransferController {
     private final AutoTransferQueryUseCase autoTransferQueryUseCase;
     private final AutoTransferChangeUseCase autoTransferChangeUseCase;
     private final AutoTransferCancelUseCase autoTransferCancelUseCase;
+    private final CurrentCustomerProvider currentCustomerProvider;
+    private final AutoTransferExecutionHistoryQueryUseCase autoTransferExecutionHistoryQueryUseCase;
 
     @PostMapping
     // 멱등성 확인 후, 재요청 -> 저장된 응답, 신규 요청 -> 등록
     public ResponseEntity<ApiResponse<AutoTransferResponse>> register (@RequestHeader("Idempotency-Key") String idempotencyKey,
                                                                        @RequestBody AutoTransferRegisterRequest request,
                                                                        HttpServletRequest httpRequest) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
         String requestIp = httpRequest.getRemoteAddr();
-        return withIdempotency(idempotencyKey, request.customerId(), "POST /auto-transfers", fingerprint(request),
+        return withIdempotency(idempotencyKey, customerId, "POST /auto-transfers", fingerprint(request),
                 new TypeReference<>() {},
                 () -> ApiResponse.success(AutoTransferResponse.from(
-                        autoTransferRegisterUseCase.register(request.toCommand(requestIp)))));
+                        autoTransferRegisterUseCase.register(request.toCommand(requestIp, customerId)))));
     }
 
     //변경
@@ -52,19 +57,21 @@ public class AutoTransferController {
                                                                     @RequestHeader("Idempotency-Key") String idempotencyKey,
                                                                     @RequestBody AutoTransferChangeRequest request,
                                                                     HttpServletRequest httpRequest) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
         String requestIp = httpRequest.getRemoteAddr();
         String endpoint = "PATCH /auto-transfers/" + autoTransferId;
-        return withIdempotency(idempotencyKey, request.customerId(), endpoint, fingerprint(request),
+        return withIdempotency(idempotencyKey, customerId, endpoint, fingerprint(request),
                 new TypeReference<>() {},
                 () -> ApiResponse.success(AutoTransferResponse.from(
-                        autoTransferChangeUseCase.change(autoTransferId, request.toCommand(requestIp)))));
+                        autoTransferChangeUseCase.change(autoTransferId, request.toCommand(requestIp, customerId)))));
     }
 
     // 삭제
     @DeleteMapping("/{autoTransferId}")
     public ResponseEntity<ApiResponse<Void>> cancel(@PathVariable Long autoTransferId, @RequestHeader("Idempotency-Key") String idempotencyKey,
-            @RequestParam Long customerId, @RequestHeader("Account-Password-Auth-Token") String accountPasswordAuthToken, HttpServletRequest httpRequest) {
+            @RequestHeader("Account-Password-Auth-Token") String accountPasswordAuthToken, HttpServletRequest httpRequest) {
 
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
         String requestIp = httpRequest.getRemoteAddr();
         String endpoint = "DELETE /auto-transfers/" + autoTransferId;
         AutoTransferCancelCommand command = AutoTransferCancelCommand.builder()
@@ -84,11 +91,11 @@ public class AutoTransferController {
     // 조회
     @GetMapping
     public ApiResponse<PageResponse<AutoTransferListItemResponse>> search(
-            @RequestParam Long customerId,
             @RequestParam Long withdrawalAccountId,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue =  "10") int size) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
         Page<AutoTransfer> result = autoTransferQueryUseCase.search(customerId, withdrawalAccountId, parseStatus(status), page, size);
         return ApiResponse.success(PageResponse.from(result, AutoTransferListItemResponse::from));
     }
@@ -132,7 +139,6 @@ public class AutoTransferController {
     // OTP·계좌비밀번호 인증 토큰을 재발급받아 재시도해도 같은 요청으로 인식되도록
     private Map<String, Object> fingerprint(AutoTransferRegisterRequest request) {
         Map<String, Object> fingerprint = new LinkedHashMap<>();
-        fingerprint.put("customerId", request.customerId());
         fingerprint.put("withdrawalAccountId", request.withdrawalAccountId());
         fingerprint.put("depositAccountNumber", request.depositAccountNumber());
         fingerprint.put("payeeName", request.payeeName());
@@ -148,7 +154,6 @@ public class AutoTransferController {
 
     private Map<String, Object> fingerprint(AutoTransferChangeRequest request) {
         Map<String, Object> fingerprint = new LinkedHashMap<>();
-        fingerprint.put("customerId", request.customerId());
         fingerprint.put("amount", request.amount());
         fingerprint.put("cycleMonths", request.cycleMonths());
         fingerprint.put("endDate", request.endDate());
@@ -184,6 +189,20 @@ public class AutoTransferController {
         } catch (JacksonException e) {
             throw new IllegalStateException("저장된 응답을 역직렬화하지 못했습니다.", e);
         }
+    }
+
+    // 결과조회
+    @GetMapping("/executions")
+    public ApiResponse<AutoTransferExecutionHistoryPageResponse> searchExecutionHistory(
+            @RequestParam Long withdrawalAccountId,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
+        AutoTransferExecutionHistoryResult result = autoTransferExecutionHistoryQueryUseCase.search(
+                customerId, withdrawalAccountId, fromDate, toDate, page, size);
+        return ApiResponse.success(AutoTransferExecutionHistoryPageResponse.from(result));
     }
 
 }

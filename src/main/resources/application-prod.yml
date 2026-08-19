@@ -20,6 +20,9 @@ spring:
     user: ${FLYWAY_USER}
     password: ${FLYWAY_PASSWORD}
     clean-disabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST}
 
 management:
   endpoints:
@@ -29,3 +32,9 @@ management:
   endpoint:
     health:
       show-details: never
+
+app:
+  security:
+    cors:
+      #프론트엔드 운영 도메인 입력 ex)CORS_ALLOWED_ORIGINS=https://www.example.com
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:}

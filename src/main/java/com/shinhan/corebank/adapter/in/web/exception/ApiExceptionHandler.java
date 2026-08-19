@@ -2,6 +2,7 @@ package com.shinhan.corebank.adapter.in.web.exception;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -49,6 +50,13 @@ public class ApiExceptionHandler {
         String message = "'%s' 파라미터 값이 올바르지 않습니다.".formatted(e.getName());
         log.warn("[{}] {}", CommonErrorCode.INVALID_INPUT.getCode(), message);
         return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_INPUT, message);
+    }
+
+    // @Validated 붙은 컨트롤러의 PathVariable/RequestParam 제약(@Positive 등) 위반 -> CMN0001
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException e) {
+        log.warn("[{}] {}", CommonErrorCode.INVALID_INPUT.getCode(), e.getMessage());
+        return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_INPUT);
     }
 
     // 필수 쿼리 파라미터 누락 -> CMN0002
