@@ -259,6 +259,24 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
         assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000004");
     }
 
+    @Test
+    @DisplayName("재확정이 동시에 두 번 수행돼도(같은 PROCESSING 스냅샷을 각자 읽음) 감사로그는 1건만 남는다")
+    void reconcileStuckExecution_concurrentDuplicateRun_recordsAuditLogOnlyOnce() {
+        itemProcessor.claim(scheduledTransferId);
+        when(transferLookupPort.findBySourceAndDate(scheduledTransferId, SCHEDULED_DATE))
+                .thenReturn(Optional.of(new TransferLookupResult("20260315BT0000000099", ProcessResultStatus.SUCCESS, null)));
+        // 두 재확정 실행이 저장 전에 각자 findAllProcessing()으로 같은 PROCESSING 스냅샷을 읽었다고 가정
+        ScheduledTransfer firstSnapshot = reloadAsDomain();
+        ScheduledTransfer secondSnapshot = reloadAsDomain();
+
+        itemProcessor.reconcileStuckExecution(firstSnapshot);
+        itemProcessor.reconcileStuckExecution(secondSnapshot);
+
+        ScheduledTransferJpaEntity after = scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
+        assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.SUCCESS);
+        assertThat(auditLogJpaRepository.findAll()).hasSize(1);
+    }
+
     private Long insertCustomer() {
         long seq = CUSTOMER_SEQ.incrementAndGet();
         entityManager.createNativeQuery(

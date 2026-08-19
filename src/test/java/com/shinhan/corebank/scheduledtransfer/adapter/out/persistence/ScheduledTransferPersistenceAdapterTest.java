@@ -187,6 +187,64 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
                 .containsExactly(toBeProcessing.getScheduledTransferId());
     }
 
+    @Test
+    @DisplayName("saveIfStillProcessing()은 PROCESSING 건이면 최종 상태로 확정하고 true를 반환한다")
+    void saveIfStillProcessing_processingRow_confirmsAndReturnsTrue() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+        ScheduledTransfer saved = adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110111111111", "홍길동", 10_000L, LocalDate.now().plusDays(10), "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+        adapter.claimForProcessing(saved.getScheduledTransferId());
+        entityManager.clear();
+
+        ScheduledTransfer toConfirm = ScheduledTransfer.reconstitute(
+                saved.getScheduledTransferId(), customerId, withdrawalAccountId, "088", "110111111111", "홍길동",
+                10_000L, LocalDate.now().plusDays(10), "메모", "메모", ScheduledTransferStatus.SUCCESS,
+                "20260315BT0000000010", saved.getRegisteredAt(), LocalDateTime.now(), null, null);
+
+        boolean confirmed = adapter.saveIfStillProcessing(toConfirm);
+        entityManager.clear();
+
+        assertThat(confirmed).isTrue();
+        ScheduledTransfer after = adapter.findById(saved.getScheduledTransferId()).orElseThrow();
+        assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.SUCCESS);
+        assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000010");
+    }
+
+    @Test
+    @DisplayName("saveIfStillProcessing()은 이미 최종 확정된(PROCESSING 아닌) 건에는 false를 반환하고 값을 바꾸지 않는다 (동시 재확정 방어)")
+    void saveIfStillProcessing_alreadyConfirmedRow_returnsFalseAndDoesNotOverwrite() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+        ScheduledTransfer saved = adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110111111111", "홍길동", 10_000L, LocalDate.now().plusDays(10), "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+        adapter.claimForProcessing(saved.getScheduledTransferId());
+        entityManager.clear();
+
+        ScheduledTransfer firstConfirm = ScheduledTransfer.reconstitute(
+                saved.getScheduledTransferId(), customerId, withdrawalAccountId, "088", "110111111111", "홍길동",
+                10_000L, LocalDate.now().plusDays(10), "메모", "메모", ScheduledTransferStatus.SUCCESS,
+                "20260315BT0000000011", saved.getRegisteredAt(), LocalDateTime.now(), null, null);
+        adapter.saveIfStillProcessing(firstConfirm);
+        entityManager.clear();
+
+        // 동시에 두 번째 재확정 실행이 같은 건을 다른 결과(FAILED)로 확정하려는 상황을 재현
+        ScheduledTransfer secondConfirm = ScheduledTransfer.reconstitute(
+                saved.getScheduledTransferId(), customerId, withdrawalAccountId, "088", "110111111111", "홍길동",
+                10_000L, LocalDate.now().plusDays(10), "메모", "메모", ScheduledTransferStatus.FAILED,
+                null, saved.getRegisteredAt(), LocalDateTime.now(), null, "잔액 부족");
+
+        boolean confirmed = adapter.saveIfStillProcessing(secondConfirm);
+        entityManager.clear();
+
+        assertThat(confirmed).isFalse();
+        ScheduledTransfer after = adapter.findById(saved.getScheduledTransferId()).orElseThrow();
+        assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.SUCCESS);
+        assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000011");
+    }
+
     private Long insertCustomer() {
         long seq = CUSTOMER_SEQ.incrementAndGet();
         entityManager.createNativeQuery(
