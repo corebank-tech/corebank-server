@@ -1,6 +1,7 @@
 package com.shinhan.corebank.limit.domain;
 
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 
 import lombok.Getter;
@@ -44,7 +45,7 @@ public class TransferLimit {
      */
     public void update(long newOneTimeLimit, long newDailyLimit) {
         if (newOneTimeLimit <= 0 || newDailyLimit <= 0) {
-            throw new IllegalArgumentException("이체한도는 0보다 커야 합니다.");
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "이체한도는 0보다 커야 합니다.");
         }
         if (newOneTimeLimit > newDailyLimit) {
             throw new BusinessException(LmtErrorCode.ONE_TIME_LIMIT_OVER_DAILY);
