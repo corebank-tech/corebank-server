@@ -422,6 +422,77 @@ class AccountDisplayOrderServiceTest {
                 .save(account103);
     }
 
+    @Test
+    @DisplayName("이미 표시순서가 초기화된 계좌는 다시 저장하지 않는다")
+    void doesNotSaveAlreadyResetAccount() {
+        // given
+        Account alreadyResetAccount =
+                createAccount(
+                        101L,
+                        "088100000101",
+                        LocalDateTime.of(
+                                2026, 8, 1, 10, 0
+                        ),
+                        null
+                );
+
+        Account customOrderedAccount =
+                createAccount(
+                        102L,
+                        "088100000102",
+                        LocalDateTime.of(
+                                2026, 8, 2, 10, 0
+                        ),
+                        1
+                );
+
+        when(
+                accountPersistencePort.findAllByCustomerId(
+                        CUSTOMER_ID
+                )
+        ).thenReturn(
+                List.of(
+                        alreadyResetAccount,
+                        customOrderedAccount
+                )
+        );
+
+        // when
+        AccountDisplayOrderResult result =
+                accountDisplayOrderService
+                        .resetDisplayOrder(
+                                CUSTOMER_ID
+                        );
+
+        // then
+        assertThat(
+                alreadyResetAccount.getDisplayOrder()
+        ).isNull();
+
+        assertThat(
+                customOrderedAccount.getDisplayOrder()
+        ).isNull();
+
+        assertThat(result.accountIds())
+                .containsExactly(
+                        101L,
+                        102L
+                );
+
+        verify(
+                accountPersistencePort,
+                never()
+        ).save(
+                alreadyResetAccount
+        );
+
+        verify(
+                accountPersistencePort
+        ).save(
+                customOrderedAccount
+        );
+    }
+
     private Account createAccount(
             Long accountId,
             String accountNumber,

@@ -73,6 +73,9 @@ public class AccountDisplayOrderService
                 );
 
         for (Account account : accounts) {
+            if (account.getDisplayOrder() == null) {
+                continue;
+            }
             account.resetDisplayOrder();
 
             accountPersistencePort.save(account);
