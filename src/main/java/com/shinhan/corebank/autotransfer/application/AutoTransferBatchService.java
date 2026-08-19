@@ -2,6 +2,8 @@ package com.shinhan.corebank.autotransfer.application;
 
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferBatchUseCase;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferBatchQueryPort;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionPersistencePort;
+import com.shinhan.corebank.autotransfer.application.port.out.StuckExecution;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import lombok.RequiredArgsConstructor;
@@ -22,12 +24,21 @@ public class AutoTransferBatchService implements AutoTransferBatchUseCase {
 
     private final AutoTransferBatchQueryPort autoTransferBatchQueryPort;
     private final AutoTransferBatchItemProcessor autoTransferBatchItemProcessor;
+    private final AutoTransferExecutionPersistencePort autoTransferExecutionPersistencePort;
 
     @Override
     public void executeDaily(LocalDate date) {
         List<AutoTransfer> targets = autoTransferBatchQueryPort.findDueForExecution(date);
         for (AutoTransfer autoTransfer : targets) {
             processOne(autoTransfer, date);
+        }
+    }
+
+    @Override
+    public void reconcileStuckExecutions(LocalDate date) {
+        List<StuckExecution> stuckExecutions = autoTransferExecutionPersistencePort.findAllProcessing();
+        for (StuckExecution stuckExecution : stuckExecutions) {
+            reconcileOne(stuckExecution, date);
         }
     }
 
@@ -53,6 +64,17 @@ public class AutoTransferBatchService implements AutoTransferBatchUseCase {
             autoTransferBatchItemProcessor.completeProcessing(autoTransfer, saved, date);
         } catch (Exception e) {
             log.error("자동이체 배치 처리 실패 - autoTransferId={}, date={}", autoTransfer.getAutoTransferId(), date, e);
+        }
+    }
+
+    // 재확정 건별 예외 격리 - 한 건의 재확정 실패가 나머지 건을 막으면 안됨
+    private void reconcileOne(StuckExecution stuckExecution, LocalDate date) {
+        Long autoTransferId = stuckExecution.autoTransfer().getAutoTransferId();
+        try {
+            autoTransferBatchItemProcessor.reconcileStuckExecution(stuckExecution);
+        } catch (Exception e) {
+            log.error("재확정 배치 처리 실패 - autoTransferId={}, executionId={}, date={}", autoTransferId,
+                    stuckExecution.execution().getExecutionId(), date, e);
         }
     }
 }

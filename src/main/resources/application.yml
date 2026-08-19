@@ -14,7 +14,7 @@ spring:
     properties:
       hibernate:
         jdbc:
-          time_zone: UTC
+          time_zone: Asia/Seoul
           batch_size: 50
   flyway:
     enabled: true

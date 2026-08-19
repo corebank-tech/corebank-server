@@ -16,13 +16,13 @@ class TestcontainersConfig {
     MySQLContainer mysqlContainer() {
         return new MySQLContainer(DockerImageName.parse("mysql:8.4.10"))
             .withDatabaseName("minicore")
-            .withUrlParam("connectionTimeZone", "UTC")
+            .withUrlParam("connectionTimeZone", "Asia/Seoul")
             .withUrlParam("forceConnectionTimeZoneToSession", "true")
             .withUrlParam("characterEncoding", "UTF-8")
             .withCommand(
                 "--character-set-server=utf8mb4",
                 "--collation-server=utf8mb4_0900_ai_ci",
-                "--default-time-zone=+00:00")
+                "--default-time-zone=+09:00")
             .withStartupTimeout(Duration.ofMinutes(3));
     }
 

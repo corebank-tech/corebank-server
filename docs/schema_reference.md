@@ -16,7 +16,9 @@
 | `Null` = X | `NOT NULL` |
 | `Null` = O | `NULL` 허용 |
 
-금액은 전부 `BIGINT`(원 단위 정수), 금리는 `DECIMAL(5,2)`(연 %), 시각은 `DATETIME(6)`(UTC 저장·KST 표시), 계좌번호는 `CHAR(12)`, 거래번호는 `CHAR(20)`입니다.
+금액은 전부 `BIGINT`(원 단위 정수), 금리는 `DECIMAL(5,2)`(연 %), 계좌번호는 `CHAR(12)`, 거래번호는 `CHAR(20)`입니다.
+
+시각은 `DATETIME(6)`입니다. MySQL의 `DATETIME`은 시간대 정보를 갖지 않는 벽시각(wall-clock) 그대로를 저장하며 자동 UTC 변환이 없습니다 — KST는 애플리케이션(Hibernate `hibernate.jdbc.time_zone`, JDBC `connectionTimeZone`, `JpaAuditingConfig`의 `Clock`)이 값을 쓰고 읽을 때 지키는 저장·표시 계약입니다.
 
 ---
 
@@ -308,8 +310,8 @@
 | `closed_date`              | `DATETIME(6)` |        | O    |          | 해지일.                                                                              |
 | `last_transaction_at`      | `DATETIME(6)` |        | O    |          | 최근 거래 일시. 전체 계좌 조회의 `lastTransactionAt`                                           |
 | `version`                  | `BIGINT`      |        | X    | `0`      | 낙관적 락 버전. 배치·조회 경로의 갱신 충돌을 잡는다 (이체 실행 경로는 비관적 락)                                  |
-| `created_at`               | `DATETIME(6)` |        | X    |          | 행 생성 일시. JPA Auditing이 UTC 기준으로 자동 설정                                             |
-| `updated_at`               | `DATETIME(6)` |        | X    |          | 행 최종 수정 일시. JPA Auditing이 UTC 기준으로 자동 설정                                          |
+| `created_at`               | `DATETIME(6)` |        | X    |          | 행 생성 일시. JPA Auditing이 KST 기준으로 자동 설정                                             |
+| `updated_at`               | `DATETIME(6)` |        | X    |          | 행 최종 수정 일시. JPA Auditing이 KST 기준으로 자동 설정                                          |
 
 **인덱스**
 

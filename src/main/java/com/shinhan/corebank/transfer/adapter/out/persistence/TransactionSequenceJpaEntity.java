@@ -2,7 +2,7 @@ package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -30,9 +30,11 @@ public class TransactionSequenceJpaEntity {
     @Column(name = "updated_at", nullable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime updatedAt;
 
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
     public long incrementAndGet() {
         this.lastSeq += 1;
-        this.updatedAt = LocalDateTime.now(ZoneOffset.UTC);
+        this.updatedAt = LocalDateTime.now(KST);
         return this.lastSeq;
     }
 }
