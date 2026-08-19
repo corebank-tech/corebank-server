@@ -4,6 +4,7 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
+import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -19,7 +20,7 @@ import java.io.Serializable;
 @Embeddable
 @Getter
 @EqualsAndHashCode
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ProductPreferentialRateJpaEntityId implements Serializable {
 
     private static final long serialVersionUID = 1L;

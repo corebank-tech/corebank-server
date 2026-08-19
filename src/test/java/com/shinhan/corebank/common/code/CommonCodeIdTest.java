@@ -51,10 +51,10 @@ class CommonCodeIdTest {
     }
 
     @Test
-    @DisplayName("@IdClass 규약대로 public 무인자 생성자를 유지한다")
-    void keepsPublicNoArgConstructorForIdClass() throws NoSuchMethodException {
+    @DisplayName("무인자 생성자는 Hibernate 전용이므로 protected 로 제한한다")
+    void restrictsNoArgConstructorToProtected() throws NoSuchMethodException {
         Constructor<CommonCodeId> constructor = CommonCodeId.class.getDeclaredConstructor();
 
-        assertThat(Modifier.isPublic(constructor.getModifiers())).isTrue();
+        assertThat(Modifier.isProtected(constructor.getModifiers())).isTrue();
     }
 }

@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Modifier;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -41,5 +43,13 @@ class SubscriptionTermsAgreementJpaEntityIdTest {
         SubscriptionTermsAgreementJpaEntityId id = new SubscriptionTermsAgreementJpaEntityId();
 
         assertThat(id.getSubscriptionId()).isNull();
+    }
+
+    @Test
+    @DisplayName("무인자 생성자는 Hibernate 전용이므로 protected 로 제한한다")
+    void restrictsNoArgConstructorToProtected() throws NoSuchMethodException {
+        Constructor<SubscriptionTermsAgreementJpaEntityId> constructor = SubscriptionTermsAgreementJpaEntityId.class.getDeclaredConstructor();
+
+        assertThat(Modifier.isProtected(constructor.getModifiers())).isTrue();
     }
 }
