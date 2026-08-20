@@ -63,6 +63,12 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
             throw new BusinessException(ScheduledTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE);
         }
 
+        // 출금계좌 등록 여부 검증 — 출금계좌로 등록 안 된 계좌는 실제 실행 시점(TransferExecutionService)에서
+        // 매번 거부되므로, 등록 시점에 미리 막아야 "등록은 성공했는데 실행이 계속 안 되는" 상황을 방지한다
+        if (!accountStatusPort.isWithdrawalRegistered(command.withdrawalAccountId())) {
+            throw new BusinessException(ScheduledTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE);
+        }
+
         // 입금계좌 실존 여부·유형 검증
         AccountType payeeAccountType = accountStatusPort.findAccountTypeByNumber(command.depositAccountNumber())
                 .orElseThrow(() -> new BusinessException(ScheduledTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
