@@ -96,12 +96,13 @@ public record ProductDetailResponse(
             Integer displayOrder
     ) {
         static TermsItem from(ProductTerms terms) {
+            // termsName/version/required/viewRequired: P6 TermsQueryPort 연동 전까지 null 스텁 (§6)
             return new TermsItem(
                     terms.getId().getTermsId(),
-                    terms.getTermsName(),
-                    terms.getVersion(),
-                    terms.getRequired(),
-                    terms.getViewRequired(),
+                    null,
+                    null,
+                    null,
+                    null,
                     (int) terms.getDisplayOrder());
         }
     }

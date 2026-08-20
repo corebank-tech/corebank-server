@@ -188,12 +188,12 @@ class ProductControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.saleEndDate").value("2026-12-31"))
                 .andExpect(jsonPath("$.data.terms[0].termsId").value(termsId))
                 .andExpect(jsonPath("$.data.terms[0].displayOrder").value(1))
-                // 약관 메타는 terms 테이블에서 병합된다. V202608061441__insert_terms_v1_0.sql이
-                // 넣은 TERMS_SAVINGS v1.0 값이다.
-                .andExpect(jsonPath("$.data.terms[0].termsName").value("적립식예금 약관"))
-                .andExpect(jsonPath("$.data.terms[0].version").value("v1.0"))
-                .andExpect(jsonPath("$.data.terms[0].required").value(true))
-                .andExpect(jsonPath("$.data.terms[0].viewRequired").value(true));
+                // termsName/version/required/viewRequired는 스펙상 Nullable:X(항상 값 있음)이지만,
+                // P6 TermsQueryPort 연동 전까지는 null로 응답한다 — 스펙과의 알려진 차이를 테스트로 명시.
+                .andExpect(jsonPath("$.data.terms[0].termsName").doesNotExist())
+                .andExpect(jsonPath("$.data.terms[0].version").doesNotExist())
+                .andExpect(jsonPath("$.data.terms[0].required").doesNotExist())
+                .andExpect(jsonPath("$.data.terms[0].viewRequired").doesNotExist());
     }
 
     @Test
