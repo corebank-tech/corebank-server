@@ -4,6 +4,7 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultItem;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultPage;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultSort;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultSummary;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferListItem;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferQueryUseCase;
@@ -74,7 +75,8 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
 
     @Override
     public ScheduledTransferExecutionResultPage searchExecutionResults(Long customerId, Long withdrawalAccountId,
-                                                                        LocalDate fromDate, LocalDate toDate, int page, int size) {
+                                                                        LocalDate fromDate, LocalDate toDate,
+                                                                        ScheduledTransferExecutionResultSort sort, int page, int size) {
         if (customerId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
@@ -96,7 +98,7 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
         }
 
         Page<ScheduledTransfer> result = scheduledTransferQueryPort.searchExecutionResults(
-                customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, PageRequest.of(page, size));
+                customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, sort, PageRequest.of(page, size));
         ScheduledTransferExecutionResultAggregate aggregate = scheduledTransferQueryPort.summarizeExecutionResults(
                 customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate);
 
@@ -140,6 +142,7 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
                 scheduledTransfer.getScheduledTransferId(),
                 scheduledTransfer.getStatus(),
                 scheduledTransfer.getExecutedAt(),
+                scheduledTransfer.getCanceledAt(),
                 withdrawalAccountNumber,
                 scheduledTransfer.getPayeeAccountNumber(),
                 scheduledTransfer.getPayeeName(),
