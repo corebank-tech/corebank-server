@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 25개 비즈니스 테이블 + 1개 PK 채번 전용 테이블 (`ledger_entry_id_sequence`) · 259개 컬럼
+**대상**: 25개 비즈니스 테이블 + 1개 PK 채번 전용 테이블 (`ledger_entry_id_sequence`) · 260개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -37,7 +37,7 @@
 | 9 | `product_terms` | 상품-약관 연결 | P3 | 2 |
 | 10 | `account` | 계좌 | P2 | 21 |
 | 11 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4 |
-| 12 | `transfer` | 이체 거래 | P4 | 20 |
+| 12 | `transfer` | 이체 거래 | P4 | 21 |
 | 13 | `ledger_entry` | 원장 | P4 | 13 |
 | 14 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1 |
 | 15 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6 |
@@ -412,7 +412,7 @@
 
 > 이체 거래 (즉시·예약·자동 3종의 단일 수렴점)
 
-즉시·예약·자동이체 3종이 모두 이 테이블 1행으로 수렴한다. 예약·자동은 `source_type`·`source_id`로 원본을 역추적한다. `status = ERROR`인 행은 원장 기표가 0행이다.
+즉시·예약·자동이체 3종이 모두 이 테이블 1행으로 수렴한다. 예약·자동은 `source_type`·`source_id`로 원본을 역추적한다. `status = ERROR`인 행은 원장 기표가 0행이다. 예약·자동이체는 `uk_transfer_source_execution_date`(`source_type, source_id, execution_date`)로 같은 회차의 중복 실행을 상태(PROCESSING/SUCCESS/ERROR)와 무관하게 DB 레벨에서 막는다 — 즉시이체는 세 컬럼 모두 NULL이라 이 제약의 영향을 받지 않는다(MySQL은 NULL을 서로 다른 값으로 취급).
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
@@ -429,6 +429,7 @@
 | `status` | `VARCHAR(12)` |  | X |  | 처리 결과. `SUCCESS`(정상) / `ERROR`(오류) / `PROCESSING`(응답 유실·타임아웃 시에만) |
 | `source_type` | `VARCHAR(12)` |  | O |  | 이 이체를 만든 원본 구분. `SCHEDULED`(예약이체) / `AUTO`(자동이체). 즉시이체는 NULL |
 | `source_id` | `BIGINT` |  | O |  | 예약·자동이체 원본 PK. `source_type`과 함께 역추적에 쓴다 |
+| `execution_date` | `DATE` |  | O |  | `source_id`와 함께 멱등키를 구성하는 회차 실행일자. SCHEDULED/AUTO 전용(즉시이체는 NULL). 배치가 실제로 호출된 날짜가 아니라 그 회차의 논리적 실행일(`scheduled_transfer.scheduled_date` / `auto_transfer_execution.execution_date`)이 들어가야 크래시 후 재시도가 같은 회차로 식별된다 |
 | `my_passbook_memo` | `VARCHAR(10)` |  | O |  | 내 통장에 찍히는 문구. 최대 10자 |
 | `recipient_passbook_memo` | `VARCHAR(10)` |  | O |  | 받는 분 통장에 찍히는 문구 |
 | `withdrawal_balance_after` | `BIGINT` |  | O |  | 출금 직후 출금계좌 잔액. 성공 시에만 값이 있다 |
@@ -443,7 +444,7 @@
 | --- | --- | --- |
 | UNIQUE | `uk_transfer_txno` | `transaction_number` |
 | INDEX | `ix_transfer_wacc` | `withdrawal_account_id, transferred_at DESC` |
-| INDEX | `ix_transfer_source` | `source_type, source_id` |
+| UNIQUE | `uk_transfer_source_execution_date` | `source_type, source_id, execution_date` |
 
 **CHECK 제약**
 

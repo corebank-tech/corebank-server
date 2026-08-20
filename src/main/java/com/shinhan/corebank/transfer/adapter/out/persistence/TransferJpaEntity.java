@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
@@ -65,6 +66,9 @@ public class TransferJpaEntity {
 
     @Column(name = "source_id")
     private Long sourceId;
+
+    @Column(name = "execution_date")
+    private LocalDate executionDate;
 
     @Column(name = "my_passbook_memo", length = 10)
     private String myPassbookMemo;
