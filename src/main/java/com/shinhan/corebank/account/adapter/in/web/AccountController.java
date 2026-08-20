@@ -77,7 +77,7 @@ public class AccountController {
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "400",
-                    description = "`CMN0001` 잘못된 입력값 · `CMN0002` 필수 Idempotency-Key 누락 · `ACC0001` 계좌별명 길이 제한 초과",
+                    description = "`CMN0001` 잘못된 입력값 · `CMN0002` 필수 입력값 또는 Idempotency-Key 누락 · `ACC0001` 계좌별명 길이 제한 초과",
                     content = @Content(
                             schema = @Schema(
                                     implementation = ErrorResponse.class
