@@ -11,6 +11,7 @@ public interface AccountStatusPort {
     boolean isActiveAccount(Long accountId);
     Optional<AccountType> findAccountTypeByNumber(String accountNumber);
     boolean belongsToCustomer(Long accountId, Long customerId);
+    boolean isWithdrawalRegistered(Long accountId);
     Optional<String> findAccountNumberById(Long accountId);
     Map<Long, String> findAccountNumbersByIds(Collection<Long> accountIds);
 

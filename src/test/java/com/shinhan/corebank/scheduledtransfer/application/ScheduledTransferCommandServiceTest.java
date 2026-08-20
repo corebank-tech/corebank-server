@@ -88,6 +88,7 @@ class ScheduledTransferCommandServiceTest {
     void register_success() {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(scheduledTransferPersistencePort.existsActiveDuplicate(eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
@@ -173,11 +174,28 @@ class ScheduledTransferCommandServiceTest {
     }
 
     @Test
+    @DisplayName("출금계좌로 등록되지 않은 계좌면 ACCOUNT_NOT_ACCESSIBLE을 던진다")
+    void register_withdrawalAccountNotRegistered_throwsAccountNotAccessible() {
+        stubClock();
+        when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
+        when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(false);
+
+        assertThatThrownBy(() -> scheduledTransferCommandService.register(validCommandBuilder().build()))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ScheduledTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
+
+        verify(accountStatusPort, never()).findAccountTypeByNumber(any());
+    }
+
+    @Test
     @DisplayName("입금계좌가 존재하지 않으면 ACCOUNT_NOT_ACCESSIBLE을 던진다")
     void register_payeeAccountNotFound_throwsAccountNotAccessible() {
         stubClock();
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> scheduledTransferCommandService.register(validCommandBuilder().build()))
@@ -192,6 +210,7 @@ class ScheduledTransferCommandServiceTest {
         stubClock();
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.TIME_DEPOSIT));
 
         assertThatThrownBy(() -> scheduledTransferCommandService.register(validCommandBuilder().build()))
@@ -206,6 +225,7 @@ class ScheduledTransferCommandServiceTest {
         stubClock();
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(5_000L);
 
@@ -223,6 +243,7 @@ class ScheduledTransferCommandServiceTest {
         stubClock();
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(scheduledTransferPersistencePort.existsActiveDuplicate(eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
@@ -242,6 +263,7 @@ class ScheduledTransferCommandServiceTest {
         stubClock();
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(scheduledTransferPersistencePort.existsActiveDuplicate(eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
