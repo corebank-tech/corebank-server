@@ -16,6 +16,10 @@ public interface AutoTransferExecutionPersistencePort {
     // 재확정 배치 대상 - PROCESSING 상태로 멈춰있는 회차 전체 ( 부모 AutoTransfer 포함 )
     List<StuckExecution> findAllProcessing();
 
+    // PROCESSING 상태일 때만 최종 확정(SUCCESS/ERROR) 저장 - 영향받은 행이 없으면 이미 다른 재확정 실행이
+    // 먼저 이 건을 확정한 것(중복 재확정 방어). claim 단계가 없는 reconcileStuckExecution() 전용 가드.
+    boolean saveIfStillProcessing(AutoTransferExecution execution);
+
     // 연속 실패 감지용 - 자동이체의 최근 실행이력을 최신순으로 limit개만 조회
     List<AutoTransferExecution> findRecentByAutoTransferId(Long autoTransferId, int limit);
 }
