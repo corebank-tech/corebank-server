@@ -38,4 +38,12 @@ public class AutoTransferExecutionPersistenceAdapter implements AutoTransferExec
                 .map(AutoTransferExecutionMapper::toDomain)
                 .toList();
     }
+
+    @Override
+    public boolean saveIfStillProcessing(AutoTransferExecution execution) {
+        int updated = autoTransferExecutionJpaRepository.finalizeIfProcessing(
+                execution.getExecutionId(), execution.getStatus().name(),
+                execution.getTransactionNumber(), execution.getFailureReason());
+        return updated > 0;
+    }
 }

@@ -6,7 +6,6 @@ import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
-import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
@@ -36,12 +35,12 @@ public class ApiExceptionHandler {
     // @Valid 본문 검증 실패 (예: @Min(1) 인데 0) -> CMN0001
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException e) {
-        FieldError first = e.getBindingResult().getFieldErrors().stream().findFirst().orElse(null);
-        String message = (first == null)
-                ? CommonErrorCode.INVALID_INPUT.getMessage()
-                : "%s: %s".formatted(first.getField(), first.getDefaultMessage());
-        log.warn("[{}] {}", CommonErrorCode.INVALID_INPUT.getCode(), message);
-        return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_INPUT, message);
+        log.warn(
+                "[{}] 요청 본문 검증 실패: {}개 필드 오류",
+                CommonErrorCode.INVALID_INPUT.getCode(),
+                e.getBindingResult().getFieldErrorCount()
+        );
+        return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_INPUT);
     }
 
     // 파라미터 타입 불일치 (예: Long 자리에 abc, Enum 에 없는 값) -> CMN0001

@@ -206,6 +206,51 @@ class AutoTransferExecutionPersistenceAdapterTest extends IntegrationTestSupport
                         LocalDate.of(2026, 3, 13));
     }
 
+    @Test
+    @DisplayName("saveIfStillProcessing()은 현재 PROCESSING이면 확정 저장하고 true를 반환한다")
+    void saveIfStillProcessing_currentlyProcessing_savesAndReturnsTrue() {
+        AutoTransferExecution saved = adapter.save(AutoTransferExecution.processing(
+                LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)), autoTransferId);
+        AutoTransferExecution toFinalize = AutoTransferExecution.reconstitute(saved.getExecutionId(), saved.getExecutionDate(),
+                saved.getAmount(), saved.getStatus(), null, null, saved.getExecutedAt());
+        toFinalize.markSuccess("20260315BT0000000001");
+
+        boolean confirmed = adapter.saveIfStillProcessing(toFinalize);
+
+        assertThat(confirmed).isTrue();
+        // 네이티브 UPDATE는 영속성 컨텍스트를 안 거쳐서, 위에서 로드해둔 1차 캐시가 stale한 채로 남는다 - 비워야 DB를 다시 읽는다
+        entityManager.clear();
+        var after = executionRepository.findById(saved.getExecutionId()).orElseThrow();
+        assertThat(after.getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000001");
+    }
+
+    @Test
+    @DisplayName("saveIfStillProcessing()은 이미 PROCESSING이 아니면(다른 실행이 먼저 확정) 저장하지 않고 false를 반환한다")
+    void saveIfStillProcessing_alreadyFinalized_doesNotOverwriteAndReturnsFalse() {
+        AutoTransferExecution saved = adapter.save(AutoTransferExecution.processing(
+                LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)), autoTransferId);
+        AutoTransferExecution firstFinalize = AutoTransferExecution.reconstitute(saved.getExecutionId(), saved.getExecutionDate(),
+                saved.getAmount(), saved.getStatus(), null, null, saved.getExecutedAt());
+        firstFinalize.markSuccess("20260315BT0000000001");
+        adapter.saveIfStillProcessing(firstFinalize);
+        entityManager.clear();
+
+        // 두 번째 실행은 저장 전 스냅샷 기준으로 아직 PROCESSING이라고 믿고 ERROR로 확정 시도한다
+        AutoTransferExecution secondFinalize = AutoTransferExecution.reconstitute(saved.getExecutionId(), saved.getExecutionDate(),
+                saved.getAmount(), ProcessResultStatus.PROCESSING, null, null, saved.getExecutedAt());
+        secondFinalize.markError("실행 중 확인 불가로 재확정 배치가 오류 처리함", null);
+
+        boolean confirmed = adapter.saveIfStillProcessing(secondFinalize);
+
+        assertThat(confirmed).isFalse();
+        entityManager.clear();
+        // 첫 번째가 확정한 SUCCESS/거래번호가 두 번째의 ERROR로 덮어써지지 않아야 한다
+        var after = executionRepository.findById(saved.getExecutionId()).orElseThrow();
+        assertThat(after.getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000001");
+    }
+
     private Long insertCustomer() {
         long seq = CUSTOMER_SEQ.incrementAndGet();
         String userId = "u" + seq;

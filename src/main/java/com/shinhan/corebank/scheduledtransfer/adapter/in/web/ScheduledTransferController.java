@@ -7,6 +7,8 @@ import com.shinhan.corebank.common.idempotency.IdempotencyResult;
 import com.shinhan.corebank.common.idempotency.IdempotencyService;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.common.response.PageResponse;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelCommand;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferListItem;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferQueryUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferRegisterUseCase;
@@ -35,6 +37,7 @@ public class ScheduledTransferController {
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
     private final CurrentCustomerProvider currentCustomerProvider;
+    private final ScheduledTransferCancelUseCase scheduledTransferCancelUseCase;
 
     @PostMapping
     // 멱등성 확인 후, 재요청 -> 저장된 응답, 신규 요청 -> 등록
@@ -47,6 +50,37 @@ public class ScheduledTransferController {
                 new TypeReference<>() {},
                 () -> ApiResponse.success(ScheduledTransferResponse.from(
                         scheduledTransferRegisterUseCase.register(request.toCommand(requestIp, customerId)))));
+    }
+
+    // 취소
+    @PostMapping("/{scheduledTransferId}/cancel")
+    public ResponseEntity<ApiResponse<ScheduledTransferCancelResponse>> cancel(
+            @PathVariable Long scheduledTransferId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestHeader("Account-Password-Auth-Token") String accountPasswordAuthToken,
+            @RequestHeader("Otp-Auth-Token") String otpAuthToken,
+            HttpServletRequest httpRequest) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
+        String requestIp = httpRequest.getRemoteAddr();
+        String endpoint = "POST /scheduled-transfers/" + scheduledTransferId + "/cancel";
+        ScheduledTransferCancelCommand command = ScheduledTransferCancelCommand.builder()
+                .customerId(customerId)
+                .accountPasswordAuthToken(accountPasswordAuthToken)
+                .otpAuthToken(otpAuthToken)
+                .requestIp(requestIp)
+                .build();
+
+        return withIdempotency(idempotencyKey, customerId, endpoint, fingerprint(command),
+                new TypeReference<>() {},
+                () -> ApiResponse.success(ScheduledTransferCancelResponse.from(
+                        scheduledTransferCancelUseCase.cancel(scheduledTransferId, command))));
+    }
+
+    // 멱등키 해시는 인증 토큰을 제외한 지문으로 계산 (AutoTransferController.cancel()과 동일 패턴)
+    private Map<String, Object> fingerprint(ScheduledTransferCancelCommand command) {
+        Map<String, Object> fingerprint = new LinkedHashMap<>();
+        fingerprint.put("customerId", command.customerId());
+        return fingerprint;
     }
 
     // 조회
