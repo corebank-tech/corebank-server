@@ -113,8 +113,8 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("searchExecutionResults()는 WAITING을 제외하고 SUCCESS/FAILED/CANCELED만 scheduledDate 내림차순으로 조회한다")
-    void searchExecutionResults_excludesWaiting_ordersByScheduledDateDesc() {
+    @DisplayName("searchExecutionResults()는 WAITING을 제외하고 SUCCESS/FAILED/CANCELED만 처리결과 기준일(executedAt/canceledAt) 내림차순으로 조회한다")
+    void searchExecutionResults_excludesWaiting_ordersByEffectiveDateDesc() {
         Long customerId = insertCustomer();
         Long withdrawalAccountId = insertAccount(customerId);
 
@@ -134,6 +134,38 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(result.getContent())
                 .extracting(ScheduledTransfer::getScheduledTransferId)
                 .containsExactly(canceled.getScheduledTransferId(), failed.getScheduledTransferId(), success.getScheduledTransferId());
+    }
+
+    @Test
+    @DisplayName("조회기간은 예정일(scheduledDate)이 아니라 실제 처리일(executedAt)을 기준으로 필터링한다 " +
+            "(PR #223 리뷰) - 예정일이 조회기간 밖이어도 실제 처리일이 안이면 포함되고, 그 반대는 제외된다")
+    void searchExecutionResults_filtersByExecutedAtNotScheduledDate() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+        LocalDate scheduledOutsideRange = LocalDate.now().minusDays(20);
+        LocalDate executedInsideRange = LocalDate.now().minusDays(2);
+
+        // 예정일은 조회기간(최근 10일) 밖이지만, 실제 처리는 조회기간 안에 됨 - 포함돼야 함
+        ScheduledTransfer executedLate = adapter.save(ScheduledTransfer.reconstitute(
+                null, customerId, withdrawalAccountId, "088", "110987654321", "홍길동", 10_000L,
+                scheduledOutsideRange, "메모", "메모", ScheduledTransferStatus.SUCCESS, "TXN0010",
+                LocalDateTime.now().minusDays(30), executedInsideRange.atTime(9, 0), null, null));
+        // 예정일은 조회기간 안이지만, 실제 처리(executedAt)는 조회기간 밖 - 제외돼야 함
+        ScheduledTransfer executedTooEarly = adapter.save(ScheduledTransfer.reconstitute(
+                null, customerId, withdrawalAccountId, "088", "110987654321", "홍길동", 20_000L,
+                LocalDate.now().minusDays(3), "메모", "메모", ScheduledTransferStatus.SUCCESS, "TXN0011",
+                LocalDateTime.now().minusDays(30), LocalDate.now().minusDays(20).atTime(9, 0), null, null));
+        entityManager.flush();
+
+        Page<ScheduledTransfer> result = adapter.searchExecutionResults(customerId, null,
+                LocalDate.now().minusDays(10), LocalDate.now(), PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(ScheduledTransfer::getScheduledTransferId)
+                .containsExactly(executedLate.getScheduledTransferId());
+        assertThat(result.getContent())
+                .extracting(ScheduledTransfer::getScheduledTransferId)
+                .doesNotContain(executedTooEarly.getScheduledTransferId());
     }
 
     @Test
@@ -162,12 +194,17 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(aggregate.canceledAmount()).isEqualTo(30_000L);
     }
 
+    // effectiveDate가 처리결과 조회의 조회기간/정렬 기준(executedAt 또는 canceledAt)이 되도록,
+    // SUCCESS/FAILED는 executedAt에, CANCELED는 canceledAt에 채운다(scheduledDate는 별도 의미 없이 동일값 사용)
     private ScheduledTransfer saveTerminal(Long customerId, Long withdrawalAccountId, ScheduledTransferStatus status,
-                                           LocalDate scheduledDate, Long amount, String transactionNumber, String failureReason) {
+                                           LocalDate effectiveDate, Long amount, String transactionNumber, String failureReason) {
+        LocalDateTime effectiveAt = effectiveDate.atTime(9, 0);
+        LocalDateTime executedAt = status == ScheduledTransferStatus.CANCELED ? null : effectiveAt;
+        LocalDateTime canceledAt = status == ScheduledTransferStatus.CANCELED ? effectiveAt : null;
         ScheduledTransfer domain = ScheduledTransfer.reconstitute(
-                null, customerId, withdrawalAccountId, "088", "110987654321", "홍길동", amount, scheduledDate,
-                "메모", "메모", status, transactionNumber, LocalDateTime.now().minusDays(30), LocalDateTime.now(),
-                null, failureReason);
+                null, customerId, withdrawalAccountId, "088", "110987654321", "홍길동", amount, effectiveDate,
+                "메모", "메모", status, transactionNumber, LocalDateTime.now().minusDays(30), executedAt,
+                canceledAt, failureReason);
         return adapter.save(domain);
     }
 

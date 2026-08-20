@@ -3,6 +3,8 @@ package com.shinhan.corebank.scheduledtransfer.adapter.out.persistence;
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.core.types.dsl.Coalesce;
+import com.querydsl.core.types.dsl.ComparableExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferExecutionResultAggregate;
@@ -20,6 +22,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -122,7 +125,7 @@ public class ScheduledTransferPersistenceAdapter implements ScheduledTransferPer
         List<ScheduledTransferJpaEntity> content = queryFactory
                 .selectFrom(scheduledTransferJpaEntity)
                 .where(conditions)
-                .orderBy(scheduledTransferJpaEntity.scheduledDate.desc(), scheduledTransferJpaEntity.scheduledTransferId.desc())
+                .orderBy(effectiveDate().desc(), scheduledTransferJpaEntity.scheduledTransferId.desc())
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
                 .fetch();
@@ -180,18 +183,35 @@ public class ScheduledTransferPersistenceAdapter implements ScheduledTransferPer
         };
     }
 
-    // search()/summarize() 공통 조건: 소유자 확인 + 조회기간 + WAITING/PROCESSING 제외
+    // searchExecutionResults()/summarizeExecutionResults() 공통 조건: 소유자 확인 + 조회기간 + WAITING/PROCESSING 제외
+    // 조회기간은 예정일(scheduledDate)이 아니라 처리결과 기준일(effectiveDate)로 건다 — 응답에 내려가는 날짜(executedAt/canceledAt)와
+    // 조회 조건을 일치시키기 위함(PR #223 리뷰, vsopsw). scheduledDate 기준이면 예정일과 실제 처리일이 다를 때
+    // "조회기간엔 안 걸리는데 결과엔 나오는" 또는 그 반대 불일치가 생길 수 있었음.
     private Predicate[] executionResultConditions(Long customerId, Long withdrawalAccountId,
                                                    LocalDate fromDate, LocalDate toDate) {
         return new Predicate[]{
                 scheduledTransferJpaEntity.customerId.eq(customerId),
                 withdrawalAccountIdEq(withdrawalAccountId),
-                scheduledDateGoe(fromDate),
-                scheduledDateLoe(toDate),
+                effectiveDateGoe(fromDate),
+                effectiveDateLoe(toDate),
                 // WAITING/PROCESSING은 아직 확정 안 된 상태라 "결과"가 아님 (REQ-SCD-014)
                 scheduledTransferJpaEntity.status.in(ScheduledTransferStatus.SUCCESS, ScheduledTransferStatus.FAILED,
                         ScheduledTransferStatus.CANCELED)
         };
+    }
+
+    // 처리결과 기준일: SUCCESS/FAILED는 executedAt, CANCELED는 canceledAt — 둘 중 하나만 채워지므로 COALESCE로 표현
+    private ComparableExpression<LocalDateTime> effectiveDate() {
+        return new Coalesce<>(LocalDateTime.class, scheduledTransferJpaEntity.executedAt, scheduledTransferJpaEntity.canceledAt)
+                .getValue();
+    }
+
+    private BooleanExpression effectiveDateGoe(LocalDate fromDate) {
+        return fromDate != null ? effectiveDate().goe(fromDate.atStartOfDay()) : null;
+    }
+
+    private BooleanExpression effectiveDateLoe(LocalDate toDate) {
+        return toDate != null ? effectiveDate().lt(toDate.plusDays(1).atStartOfDay()) : null;
     }
 
     private BooleanExpression statusEq(ScheduledTransferStatus status) {
