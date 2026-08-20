@@ -98,8 +98,13 @@ class AutoTransferQueryServiceTest {
         Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, AutoTransferStatus.NORMAL, 0, 10);
 
         assertThat(result.getContent()).hasSize(1);
-        assertThat(result.getContent().get(0).autoTransfer()).isSameAs(autoTransfer);
-        assertThat(result.getContent().get(0).fromAlias()).isEqualTo("월세계좌");
+        AutoTransferListItem item = result.getContent().get(0);
+        assertThat(item.autoTransferId()).isEqualTo(autoTransfer.getAutoTransferId());
+        assertThat(item.depositAccountNumber()).isEqualTo(autoTransfer.getDepositAccountNumber());
+        assertThat(item.payeeName()).isEqualTo(autoTransfer.getPayeeName());
+        assertThat(item.amount()).isEqualTo(autoTransfer.getAmount());
+        assertThat(item.status()).isEqualTo(autoTransfer.getStatus());
+        assertThat(item.fromAlias()).isEqualTo("월세계좌");
     }
 
     @Test
