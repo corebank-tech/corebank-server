@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -40,6 +41,13 @@ public class AccountStatusAdapter implements AccountStatusPort {
     }
 
     @Override
+    public boolean isWithdrawalRegistered(Long accountId) {
+        return accountLookupJpaRepository.findById(accountId)
+                .map(AccountLookupJpaEntity::isWithdrawalRegistered)
+                .orElse(false);
+    }
+
+    @Override
     public Optional<String> findAccountNumberById(Long accountId) {
         return accountLookupJpaRepository.findById(accountId)
                 .map(AccountLookupJpaEntity::getAccountNumber);
@@ -52,5 +60,20 @@ public class AccountStatusAdapter implements AccountStatusPort {
         }
         return accountLookupJpaRepository.findAllById(accountIds).stream()
                 .collect(Collectors.toMap(AccountLookupJpaEntity::getAccountId, AccountLookupJpaEntity::getAccountNumber));
+    }
+
+    @Override
+    public Map<Long, String> findAccountAliasesByIds(Collection<Long> accountIds) {
+        if (accountIds.isEmpty()) {
+            return Map.of();
+        }
+        // alias는 nullable - null인 행은 결과 Map에서 제외(별칭 미설정)
+        Map<Long, String> result = new HashMap<>();
+        for (AccountLookupJpaEntity entity : accountLookupJpaRepository.findAllById(accountIds)) {
+            if (entity.getAlias() != null) {
+                result.put(entity.getAccountId(), entity.getAlias());
+            }
+        }
+        return result;
     }
 }
