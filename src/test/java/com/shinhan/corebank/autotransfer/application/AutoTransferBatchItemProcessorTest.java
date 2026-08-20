@@ -622,6 +622,39 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
         assertThat(output).doesNotContain("자동이체 연속 실패 감지");
     }
 
+    @Test
+    @DisplayName("재확정이 동시에 두 번 수행돼도(같은 PROCESSING 스냅샷을 각자 읽음) 두 번째는 조용히 스킵되고 " +
+            "nextExecutionDate도 한 번만 갱신된다 - saveIfStillProcessing() 가드가 없으면 두 번째가 stale 버전으로 " +
+            "autoTransfer를 저장 시도해 OptimisticLockingFailureException이 터진다")
+    void reconcileStuckExecution_concurrentDuplicateRun_secondRunSkipsSilently() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
+                .thenReturn(Optional.of(new TransferLookupResult(
+                        "20260315BT0000000099", ProcessResultStatus.SUCCESS, null)));
+
+        // 두 재확정 실행이 저장 전에 각자 findAllProcessing()으로 같은 PROCESSING 스냅샷(같은 version=0)을 읽었다고 가정
+        AutoTransferExecution firstSnapshot = reloadExecution(saved.getExecutionId());
+        AutoTransferExecution secondSnapshot = reloadExecution(saved.getExecutionId());
+
+        itemProcessor.reconcileStuckExecution(new StuckExecution(autoTransfer(), firstSnapshot));
+        itemProcessor.reconcileStuckExecution(new StuckExecution(autoTransfer(), secondSnapshot));
+
+        var executionAfter = executionRepository.findById(saved.getExecutionId()).orElseThrow();
+        assertThat(executionAfter.getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(executionAfter.getTransactionNumber()).isEqualTo("20260315BT0000000099");
+
+        // 한 번만 갱신됐어야 한다 - 가드가 없으면 두 번째 호출이 stale autoTransfer(version=0)를 저장 시도해서
+        // 이 assert에 도달하기 전에 OptimisticLockingFailureException으로 테스트가 실패한다
+        var autoTransferAfter = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        assertThat(autoTransferAfter.getNextExecutionDate()).isEqualTo(LocalDate.of(2026, 4, 15));
+    }
+
+    private AutoTransferExecution reloadExecution(Long executionId) {
+        var e = executionRepository.findById(executionId).orElseThrow();
+        return AutoTransferExecution.reconstitute(e.getExecutionId(), e.getExecutionDate(), e.getAmount(),
+                e.getStatus(), e.getTransactionNumber(), e.getFailureReason(), e.getExecutedAt());
+    }
+
     // autoTransfer()는 version을 0L로 고정해서 반환하는데, reconcileStuckExecution()이
     // 매번 autoTransferPersistencePort.save()로 버전을 올리기 때문에 이 헬퍼를 여러 번
     // 부르는 테스트(연속 실패 시나리오)에서는 DB의 최신 버전을 매번 다시 읽어와야 한다.
