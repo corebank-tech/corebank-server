@@ -82,4 +82,71 @@ class ScheduledTransferTest {
                             .isEqualTo(ScheduledTransferErrorCode.INVALID_AMOUNT));
         }
     }
+
+    @Nested
+    @DisplayName("cancel()")
+    class Cancel {
+
+        private ScheduledTransfer withStatus(ScheduledTransferStatus status, LocalDate scheduledDate) {
+            return ScheduledTransfer.reconstitute(
+                    1L, 1L, 2L, PAYEE_BANK_CODE, "110987654321", "홍길동",
+                    10_000L, scheduledDate, "내메모", "받는메모", status,
+                    null, NOW, null, null, null);
+        }
+
+        @Test
+        @DisplayName("WAITING이고 예정일 전이면 CANCELED로 전환되고 canceledAt이 기록된다")
+        void success() {
+            ScheduledTransfer s = withStatus(ScheduledTransferStatus.WAITING, LocalDate.of(2025, 6, 2));
+            LocalDateTime cancelTime = LocalDateTime.of(2025, 6, 1, 10, 0);
+
+            s.cancel(cancelTime);
+
+            assertThat(s.getStatus()).isEqualTo(ScheduledTransferStatus.CANCELED);
+            assertThat(s.getCanceledAt()).isEqualTo(cancelTime);
+        }
+
+        @Test
+        @DisplayName("WAITING이 아니면(PROCESSING) SCD0302를 던진다")
+        void notWaiting_throwsNotInWaitingStatus() {
+            ScheduledTransfer s = withStatus(ScheduledTransferStatus.PROCESSING, LocalDate.of(2025, 6, 2));
+
+            assertThatThrownBy(() -> s.cancel(LocalDateTime.of(2025, 6, 1, 10, 0)))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ScheduledTransferErrorCode.NOT_IN_WAITING_STATUS));
+        }
+
+        @Test
+        @DisplayName("이미 CANCELED면 SCD0302를 던진다 (멱등 처리는 애플리케이션 계층 책임)")
+        void alreadyCanceled_throwsNotInWaitingStatus() {
+            ScheduledTransfer s = withStatus(ScheduledTransferStatus.CANCELED, LocalDate.of(2025, 6, 2));
+
+            assertThatThrownBy(() -> s.cancel(LocalDateTime.of(2025, 6, 1, 10, 0)))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ScheduledTransferErrorCode.NOT_IN_WAITING_STATUS));
+        }
+
+        @Test
+        @DisplayName("예정일 당일이면 SCD0303을 던진다")
+        void onScheduledDate_throwsCannotCancelOnExecutionDate() {
+            ScheduledTransfer s = withStatus(ScheduledTransferStatus.WAITING, LocalDate.of(2025, 6, 1));
+
+            assertThatThrownBy(() -> s.cancel(LocalDateTime.of(2025, 6, 1, 10, 0)))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ScheduledTransferErrorCode.CANNOT_CANCEL_ON_EXECUTION_DATE));
+        }
+
+        @Test
+        @DisplayName("예정일 전일 23:59:59는 취소 가능하다 (경계값)")
+        void dayBeforeScheduledDate_success() {
+            ScheduledTransfer s = withStatus(ScheduledTransferStatus.WAITING, LocalDate.of(2025, 6, 2));
+
+            s.cancel(LocalDateTime.of(2025, 6, 1, 23, 59, 59));
+
+            assertThat(s.getStatus()).isEqualTo(ScheduledTransferStatus.CANCELED);
+        }
+    }
 }

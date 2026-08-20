@@ -4,6 +4,8 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelCommand;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferRegisterCommand;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferRegisterUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.AccountStatusPort;
@@ -11,6 +13,7 @@ import com.shinhan.corebank.scheduledtransfer.application.port.out.AuthTokenVeri
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferPersistencePort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
+import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import com.shinhan.corebank.scheduledtransfer.domain.exception.ScheduledTransferErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,7 +27,7 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class ScheduledTransferCommandService implements ScheduledTransferRegisterUseCase {
+public class ScheduledTransferCommandService implements ScheduledTransferRegisterUseCase, ScheduledTransferCancelUseCase {
 
     // 1차는 당행 전용 상수. 별도 은행 테이블 없음(scheduled_transfer.payee_bank_code 스키마 주석 참고)
     private static final String PAYEE_BANK_CODE = "088";
@@ -88,5 +91,43 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
                 command.requestIp(), true, Map.of("scheduledTransferId", saved.getScheduledTransferId(), "action", "register"));
 
         return saved;
+    }
+
+    @Override
+    public ScheduledTransfer cancel(Long scheduledTransferId, ScheduledTransferCancelCommand command) {
+        ScheduledTransfer scheduledTransfer = scheduledTransferPersistencePort.findById(scheduledTransferId)
+                .orElseThrow(() -> new BusinessException(ScheduledTransferErrorCode.NOT_FOUND));
+        requireOwned(scheduledTransfer, command.customerId());
+
+        // 이미 취소된 건 재요청은 멱등 성공 처리
+        if (scheduledTransfer.getStatus() == ScheduledTransferStatus.CANCELED) {
+            return scheduledTransfer;
+        }
+        if (!scheduledTransfer.getStatus().isCancelable()) {
+            throw new BusinessException(ScheduledTransferErrorCode.NOT_IN_WAITING_STATUS);
+        }
+
+        // 예정일 당일 여부
+        LocalDate today = LocalDate.now(clock);
+        if (!scheduledTransfer.getScheduledDate().isAfter(today)) {
+            throw new BusinessException(ScheduledTransferErrorCode.CANNOT_CANCEL_ON_EXECUTION_DATE);
+        }
+
+        authTokenVerificationPort.verify(command.accountPasswordAuthToken(), scheduledTransfer.getWithdrawalAccountId(), "SCHEDULED_TRANSFER_CANCEL");
+        authTokenVerificationPort.verify(command.otpAuthToken(), scheduledTransfer.getWithdrawalAccountId(), "SCHEDULED_TRANSFER_CANCEL_OTP");
+
+        scheduledTransfer.cancel(LocalDateTime.now(clock));
+        ScheduledTransfer saved = scheduledTransferPersistencePort.save(scheduledTransfer);
+        auditLogService.record(saved.getCustomerId(), null, AuditEventType.SCHEDULED_TRANSFER_INFO_CHANGE,
+                command.requestIp(), true, Map.of("scheduledTransferId", saved.getScheduledTransferId(), "action", "cancel"));
+
+        return saved;
+    }
+
+    // 존재 여부를 숨기기 위해 findById 실패와 동일한 NOT_FOUND로 응답한다 (api_conventions.md §8-3)
+    private void requireOwned(ScheduledTransfer scheduledTransfer, Long customerId) {
+        if (!scheduledTransfer.getCustomerId().equals(customerId)) {
+            throw new BusinessException(ScheduledTransferErrorCode.NOT_FOUND);
+        }
     }
 }

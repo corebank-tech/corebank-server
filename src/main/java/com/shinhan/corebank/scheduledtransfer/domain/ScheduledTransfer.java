@@ -84,4 +84,15 @@ public class ScheduledTransfer {
         s.failureReason = failureReason;
         return s;
     }
+
+    public void cancel(LocalDateTime now) {
+        if (this.status != ScheduledTransferStatus.WAITING) {
+            throw new BusinessException(ScheduledTransferErrorCode.NOT_IN_WAITING_STATUS);
+        }
+        if (!this.scheduledDate.isAfter(now.toLocalDate())) {
+            throw new BusinessException(ScheduledTransferErrorCode.CANNOT_CANCEL_ON_EXECUTION_DATE);
+        }
+        this.status = ScheduledTransferStatus.CANCELED;
+        this.canceledAt = now;
+    }
 }
