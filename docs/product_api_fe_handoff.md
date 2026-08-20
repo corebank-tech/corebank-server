@@ -264,9 +264,9 @@ const rows = rateTiers.map(t => ({
 
 시드 12건 중 `COMPOUND`는 내집마련 적금·프라임 정기예금 2건이고 나머지는 `SIMPLE`입니다.
 
-### 5-4. `terms[]`의 약관 이름·버전·동의 여부 → **서버가 고쳤습니다 (#57, PR #192)**
+### 5-4. `terms[]`의 약관 이름·버전·동의 여부 → **서버가 고쳤습니다 (#57, PR #205·#192)**
 
-이전까지 `termsName`·`version`·`required`·`viewRequired`가 전부 null이었습니다. `terms`를 독립 바운디드 컨텍스트(`com.shinhan.corebank.terms`)로 승격하고 상품 상세조회에서 병합하는 방식으로 해소됐습니다.
+이전까지 `termsName`·`version`·`required`·`viewRequired`가 전부 null이었습니다. PR #205가 `terms`를 독립 바운디드 컨텍스트(`com.shinhan.corebank.terms`)로 만들고, PR #192가 그 `TermsQueryPort`를 써서 상품 상세조회에 병합하며 해소됐습니다.
 
 ```json
 "terms": [{"termsId": 4, "termsName": "예금거래 기본약관", "version": "v1.0",
@@ -301,9 +301,9 @@ const rows = rateTiers.map(t => ({
 
 - [x] 상품 시드 12건 확충 — #176
 - [x] `ProductDetailResponse`에 `summary`·`minTermMonths`·`maxTermMonths`·`interestPayType` 추가 (§5-3)
-- [x] `terms[]` 약관 메타 병합 — #57 / PR #192 (`terms` 모듈 신설). 이 브랜치 작업이 아닙니다 (§5-4)
+- [x] `terms[]` 약관 메타 병합 — #57 / PR #205(`terms` 모듈 신설) + PR #192(상품 상세 배선). 이 브랜치 작업이 아닙니다 (§5-4)
 - [ ] `openapi.yaml`을 레포에 반영 — FE `orval.config.ts`가 이 파일을 단일 계약 출처로 보고 있고, 없으면 `pnpm codegen`이 의도적으로 실패합니다. `GET /v3/api-docs.yaml`이 현재 401이라 `SecurityConfig`의 permitAll 패턴(`/v3/api-docs/**`)이 `.yaml` 경로를 못 잡는 것부터 고쳐야 합니다
-- [x] `MockTermsQueryPort` 제거 — PR #192가 `TermsPersistenceAdapter`로 대체하며 삭제 (#178 무의미해짐)
+- [x] `MockTermsQueryPort` 제거 — PR #205가 `TermsPersistenceAdapter`로 대체하며 삭제 (#178 무의미해짐)
 
 ---
 
