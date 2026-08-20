@@ -31,6 +31,9 @@ public class AccountLookupJpaEntity {
     @Column(name = "status", nullable = false, length = 12, insertable = false, updatable = false)
     private String status;
 
+    @Column(name = "alias", length = 24, insertable = false, updatable = false)
+    private String alias;
+
     @Column(name = "withdrawal_registered", nullable = false, insertable = false, updatable = false)
     private boolean withdrawalRegistered;
 }

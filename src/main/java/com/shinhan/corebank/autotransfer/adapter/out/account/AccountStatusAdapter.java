@@ -35,6 +35,12 @@ public class AccountStatusAdapter implements AccountStatusPort {
     }
 
     @Override
+    public Optional<String> findAccountAlias(Long accountId) {
+        return accountLookupJpaRepository.findById(accountId)
+                .map(AccountLookupJpaEntity::getAlias);
+    }
+
+    @Override
     public boolean isWithdrawalRegistered(Long accountId) {
         return accountLookupJpaRepository.findById(accountId)
                 .map(AccountLookupJpaEntity::isWithdrawalRegistered)
