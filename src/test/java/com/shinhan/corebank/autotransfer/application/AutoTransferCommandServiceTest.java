@@ -116,6 +116,7 @@ class AutoTransferCommandServiceTest {
     void register_success() {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15)).thenReturn(false);
@@ -179,10 +180,27 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
+    @DisplayName("출금계좌로 등록되지 않은 계좌면 ACCOUNT_NOT_ACCESSIBLE을 던진다")
+    void register_withdrawalAccountNotRegistered_throwsAccountNotAccessible() {
+        when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
+        when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(false);
+
+        assertThatThrownBy(() -> autoTransferCommandService.register(validCommandBuilder().build()))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
+
+        verify(accountStatusPort, never()).findAccountTypeByNumber(any());
+        verify(autoTransferPersistencePort, never()).existsActiveDuplicate(any(), any(), anyInt());
+    }
+
+    @Test
     @DisplayName("입금계좌가 존재하지 않으면 ACCOUNT_NOT_ACCESSIBLE을 던진다")
     void register_depositAccountNotFound_throwsAccountNotAccessible() {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> autoTransferCommandService.register(validCommandBuilder().build()))
@@ -196,6 +214,7 @@ class AutoTransferCommandServiceTest {
     void register_unsupportedDepositAccountType_throws() {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.TIME_DEPOSIT));
 
         assertThatThrownBy(() -> autoTransferCommandService.register(validCommandBuilder().build()))
@@ -209,6 +228,7 @@ class AutoTransferCommandServiceTest {
     void register_exceedsOneTimeLimit_throws() {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(5_000L);
 
@@ -225,6 +245,7 @@ class AutoTransferCommandServiceTest {
     void register_duplicateRegistration_throws() {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15)).thenReturn(true);

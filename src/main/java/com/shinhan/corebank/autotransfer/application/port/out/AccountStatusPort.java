@@ -9,6 +9,7 @@ public interface AccountStatusPort {
     boolean isActiveAccount(Long accountId);
     Optional<AccountType> findAccountTypeByNumber(String accountNumber);
     boolean belongsToCustomer(Long accountId, Long customerId);
+    boolean isWithdrawalRegistered(Long accountId);
 
     // 별칭 미설정 계좌는 Optional.empty() - scheduledtransfer의 findAccountAliasesByIds()와 동일하게 alias는 nullable
     Optional<String> findAccountAlias(Long accountId);

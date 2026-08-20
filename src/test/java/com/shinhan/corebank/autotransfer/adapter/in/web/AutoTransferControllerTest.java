@@ -907,12 +907,15 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
     }
 
+    // withdrawal_registered=TRUE로 채운다 - 등록 시 출금계좌 등록 여부 검증(#234)이 이 값을 확인하므로,
+    // 별도로 미등록 케이스를 검증하는 테스트가 아니면 정상 출금계좌로 취급돼야 한다
     private Long insertAccount(Long customerId) {
         // System.nanoTime() 기반 생성은 짧은 간격의 연속 호출에서 겹칠 수 있어 카운터로 유일성을 보장한다(uk_account_number)
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
         entityManager.createNativeQuery(
-                        "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, opened_date, created_at, updated_at) "
-                                + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', NOW(), NOW(), NOW())")
+                        "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, "
+                                + "withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at) "
+                                + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', TRUE, NOW(), NOW(), NOW(), NOW())")
                 .setParameter("accountNumber", accountNumber)
                 .setParameter("customerId", customerId)
                 .executeUpdate();

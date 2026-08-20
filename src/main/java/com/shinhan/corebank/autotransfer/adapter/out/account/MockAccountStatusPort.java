@@ -44,4 +44,13 @@ public class MockAccountStatusPort implements AccountStatusPort {
                 .getResultList();
         return result.isEmpty() ? Optional.empty() : Optional.ofNullable((String) result.get(0));
     }
+
+    @Override
+    public boolean isWithdrawalRegistered(Long accountId) {
+        List<?> result = entityManager.createNativeQuery(
+                        "SELECT withdrawal_registered FROM account WHERE account_id = :accountId")
+                .setParameter("accountId", accountId)
+                .getResultList();
+        return !result.isEmpty() && Boolean.TRUE.equals(result.get(0));
+    }
 }
