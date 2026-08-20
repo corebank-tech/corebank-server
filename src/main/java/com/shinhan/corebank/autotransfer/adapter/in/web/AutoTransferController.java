@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
-import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.common.idempotency.IdempotencyResult;
 import com.shinhan.corebank.common.idempotency.IdempotencyService;
 import com.shinhan.corebank.common.response.ApiResponse;
@@ -96,7 +95,7 @@ public class AutoTransferController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue =  "10") int size) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
-        Page<AutoTransfer> result = autoTransferQueryUseCase.search(customerId, withdrawalAccountId, parseStatus(status), page, size);
+        Page<AutoTransferListItem> result = autoTransferQueryUseCase.search(customerId, withdrawalAccountId, parseStatus(status), page, size);
         return ApiResponse.success(PageResponse.from(result, AutoTransferListItemResponse::from));
     }
 
