@@ -103,7 +103,8 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
     }
 
     // transfer 테이블엔 customer_id가 없어(withdrawal_account_id만 있음) AccountLockPort로
-    // 계좌 소유자를 확인한다 — TransferExecutionService의 1차 검증과 동일한 관행.
+    // 계좌 소유자를 확인한다. TransferExecutionService의 1차 검증과 달리 withdrawalRegistered()는
+    // 보지 않는다 — 출금계좌 등록을 해지한 뒤에도 과거 이체 이력은 계속 조회할 수 있어야 한다.
     private boolean isOwnedBy(Long customerId, Long withdrawalAccountId) {
         return accountLockPort.findWithdrawalAccountDetail(withdrawalAccountId)
                 .filter(detail -> detail.customerId().equals(customerId))

@@ -133,6 +133,21 @@ class TransferHistoryQueryPersistenceAdapterTest extends IntegrationTestSupport 
     }
 
     @Test
+    @DisplayName("toDate 23:59:59와 fromDate 00:00:00 경계의 이체도 포함된다 (inclusive 경계 검증)")
+    void search_includesBoundaryTimestamps() {
+        seedTransfer("20260801IT0000000010", 5_000L, LocalDateTime.of(2026, 8, 1, 0, 0, 0), ProcessResultStatus.SUCCESS);
+        seedTransfer("20260831IT0000000011", 6_000L, LocalDateTime.of(2026, 8, 31, 23, 59, 59), ProcessResultStatus.SUCCESS);
+        entityManager.flush();
+        entityManager.clear();
+
+        Page<Transfer> result = adapter.search(WITHDRAWAL_ACCOUNT_ID, null,
+                LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), TransferHistorySort.LATEST, PageRequest.of(0, 20));
+
+        assertThat(result.getContent()).extracting(Transfer::getTransactionNumber)
+                .contains("20260801IT0000000010", "20260831IT0000000011");
+    }
+
+    @Test
     @DisplayName("페이징이 적용된다")
     void search_appliesPaging() {
         Page<Transfer> result = adapter.search(WITHDRAWAL_ACCOUNT_ID, null,

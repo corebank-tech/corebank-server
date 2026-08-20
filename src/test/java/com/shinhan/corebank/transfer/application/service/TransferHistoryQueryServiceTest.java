@@ -34,7 +34,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -132,6 +131,25 @@ class TransferHistoryQueryServiceTest {
                         .isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
 
         verifySearchPortNeverCalled();
+    }
+
+    @Test
+    @DisplayName("출금계좌 등록이 해지된 계좌라도(withdrawalRegistered=false) 소유자면 조회된다")
+    void search_allowsUnregisteredWithdrawalAccount_whenStillOwned() {
+        stubClock();
+        when(accountLockPort.findWithdrawalAccountDetail(WITHDRAWAL_ACCOUNT_ID))
+                .thenReturn(Optional.of(new WithdrawalAccountDetail(WITHDRAWAL_ACCOUNT_ID, CUSTOMER_ID, false)));
+        LocalDate fromDate = LocalDate.of(2026, 8, 1);
+        LocalDate toDate = LocalDate.of(2026, 8, 20);
+        when(transferHistoryQueryPort.search(WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(java.util.List.of()));
+        when(transferHistoryQueryPort.summarize(WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate))
+                .thenReturn(TransferHistoryAggregate.empty());
+
+        TransferHistoryPage result = transferHistoryQueryService.search(
+                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, 0, 10);
+
+        assertThat(result.page().getContent()).isEmpty();
     }
 
     @Test
