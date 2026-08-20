@@ -11,14 +11,14 @@ import lombok.Getter;
 @Getter
 public class TransferLimitHistory {
 
-    private final Long historyId;
+    private final Long transferLimitHistoryId;
     private final Long customerId;
     private final long beforeOneTimeLimit;
     private final long beforeDailyLimit;
 
-    private TransferLimitHistory(Long historyId, Long customerId,
+    private TransferLimitHistory(Long transferLimitHistoryId, Long customerId,
                                  long beforeOneTimeLimit, long beforeDailyLimit) {
-        this.historyId = historyId;
+        this.transferLimitHistoryId = transferLimitHistoryId;
         this.customerId = customerId;
         this.beforeOneTimeLimit = beforeOneTimeLimit;
         this.beforeDailyLimit = beforeDailyLimit;
@@ -30,8 +30,8 @@ public class TransferLimitHistory {
         return new TransferLimitHistory(null, customerId, beforeOneTimeLimit, beforeDailyLimit);
     }
 
-    public static TransferLimitHistory restore(Long historyId, Long customerId,
+    public static TransferLimitHistory restore(Long transferLimitHistoryId, Long customerId,
                                                long beforeOneTimeLimit, long beforeDailyLimit) {
-        return new TransferLimitHistory(historyId, customerId, beforeOneTimeLimit, beforeDailyLimit);
+        return new TransferLimitHistory(transferLimitHistoryId, customerId, beforeOneTimeLimit, beforeDailyLimit);
     }
 }

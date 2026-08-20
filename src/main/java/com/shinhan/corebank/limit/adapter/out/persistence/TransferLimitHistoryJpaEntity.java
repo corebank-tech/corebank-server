@@ -22,7 +22,7 @@ public class TransferLimitHistoryJpaEntity extends BaseEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "history_id")
-    private Long historyId;
+    private Long transferLimitHistoryId;
 
     @Column(name = "customer_id", nullable = false)
     private Long customerId;
@@ -35,7 +35,7 @@ public class TransferLimitHistoryJpaEntity extends BaseEntity {
     private long beforeDailyLimit;
 
     private TransferLimitHistoryJpaEntity(TransferLimitHistory history) {
-        this.historyId = history.getHistoryId();
+        this.transferLimitHistoryId = history.getTransferLimitHistoryId();
         this.customerId = history.getCustomerId();
         this.beforeOneTimeLimit = history.getBeforeOneTimeLimit();
         this.beforeDailyLimit = history.getBeforeDailyLimit();
@@ -46,6 +46,6 @@ public class TransferLimitHistoryJpaEntity extends BaseEntity {
     }
 
     TransferLimitHistory toDomain() {
-        return TransferLimitHistory.restore(historyId, customerId, beforeOneTimeLimit, beforeDailyLimit);
+        return TransferLimitHistory.restore(transferLimitHistoryId, customerId, beforeOneTimeLimit, beforeDailyLimit);
     }
 }
