@@ -256,8 +256,11 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     return existing.get();
                 }
             }
+            // 재조회가 비었다는 건 이 unique 충돌이 멱등성 제약이 아니었다는 뜻이다(FK/CHECK 등) -
+            // 일반 RuntimeException과 동일하게 ERROR로 확정 기록하되 예외는 그대로 전파해 호출자가
+            // 이를 정상적인 이체 실패로 오인하지 않게 한다.
             if (created != null) {
-                return failTransfer(created, CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.getMessage(), e);
+                failTransfer(created, CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.getMessage(), e);
             }
             throw e;
         } catch (RuntimeException e) {
