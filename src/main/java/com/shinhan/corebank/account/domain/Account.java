@@ -193,6 +193,52 @@ public class Account {
         this.alias = null;
     }
 
+    public void validateWithdrawalRegistrationAllowed() {
+        if (accountType != AccountType.DEMAND_DEPOSIT) {
+            throw new BusinessException(
+                    AccountErrorCode.INVALID_WITHDRAWAL_ACCOUNT_TYPE
+            );
+        }
+
+        if (status != AccountStatus.ACTIVE) {
+            throw new BusinessException(
+                    AccountErrorCode.INVALID_ACCOUNT_STATUS
+            );
+        }
+    }
+
+    public void registerWithdrawalAccount(
+            LocalDateTime registeredAt
+    ) {
+        if (withdrawalRegistered) {
+            return;
+        }
+
+        validateWithdrawalRegistrationAllowed();
+
+        if (registeredAt == null) {
+            throw new IllegalArgumentException(
+                    "출금계좌 등록 시각은 필수입니다."
+            );
+        }
+
+        this.withdrawalRegistered = true;
+        this.withdrawalRegisteredAt = registeredAt;
+    }
+
+    public void changeDisplayOrder(int displayOrder) {
+        if (displayOrder <= 0) {
+            throw new BusinessException(
+                    AccountErrorCode.INVALID_DISPLAY_ORDER
+            );
+        }
+        this.displayOrder = displayOrder;
+    }
+
+    public void resetDisplayOrder() {
+        this.displayOrder = null;
+    }
+
     private void validateAlias(String alias) {
         int totalLength =
                 alias.codePointCount(0, alias.length());
@@ -225,6 +271,7 @@ public class Account {
         validatePasswordLockState();
         validateWithdrawalRegistration();
         validateClosedState();
+        validateDisplayOrder();
     }
 
     private void validateAccountNumber() {
@@ -336,4 +383,13 @@ public class Account {
             );
         }
     }
+
+    private void validateDisplayOrder() {
+        if (displayOrder != null && displayOrder <= 0) {
+            throw new IllegalStateException(
+                    "계좌 표시순서는 1 이상이어야 합니다."
+            );
+        }
+    }
 }
+
