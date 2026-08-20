@@ -15,7 +15,7 @@
 
 1. 상품 12건(적금 6 / 예금 6)이 시드에 들어갔습니다. FE 목업 `MOCK_PRODUCTS`의 6건은 **이름·금리·기간·금액을 그대로** 서버에 이식했으니 카드 표시값은 동일합니다.
 2. FE가 지금 클라이언트에서 하는 **필터·정렬을 서버 파라미터로 옮겨야** 합니다. 기본 `size=10`이라 12건 중 10건만 내려오는데, 그 10건 안에서 다시 정렬하면 틀린 결과가 나옵니다.
-3. 상세 화면의 `rates[].primeRate`와 `guide[]`는 서버 모델에 없습니다. **`primeRate`는 FE 계산이 맞고, `guide[]`는 일부만 FE 조립이 가능**합니다 — 자세한 건 §5.
+3. 상세 응답에 빠져 있던 `summary`·`minTermMonths`·`maxTermMonths`·`interestPayType`과 `terms[]`의 약관 이름·버전·동의 여부는 **서버가 채웠습니다**. 남은 건 `rates[].primeRate`와 `guide[]` 둘이고, 둘 다 FE에서 계산·조립하는 게 맞습니다 — §5.
 
 ---
 
@@ -127,9 +127,9 @@ sort=NAME p0  급여이체 기본정기 내집마련 시니어 청년희망 코�
 | `maxRate` | `maxRate` | OK |
 | `minAmount` / `maxAmount` | `minAmount` / `maxAmount` | OK |
 | `notices` | `notices` | OK (상품당 4건) |
-| `summary` | **없음** | §5-3 |
-| `period` | **없음** (`termOptions`로 유추) | §5-3 |
-| `interestMethod` | **없음** | §5-3 |
+| `summary` | `summary` | OK (추가됨) |
+| `period` | `minTermMonths` / `maxTermMonths` | FE 포맷팅 (추가됨) — §5-3 |
+| `interestMethod` | `interestPayType` | 축이 다름 — §5-3 |
 | `rates[].primeRate` | **없음** | §5-1 |
 | `guide[]` | 일부만 | §5-2 |
 
@@ -139,9 +139,11 @@ sort=NAME p0  급여이체 기본정기 내집마련 시니어 청년희망 코�
 {
   "productId": 3, "productCode": "PRD_CORE_DEP", "productName": "코어 정기예금",
   "productGroup": "DEPOSIT",
+  "summary": "여윳돈을 안전하게 굴리는 기본 정기예금입니다.",
   "description": "목돈을 정해진 기간 동안 예치하고 만기에 원금과 이자를 함께 받는 거치식 정기예금입니다.",
   "baseRate": 3.1, "maxRate": 3.85,
   "minAmount": 100000, "maxAmount": 500000000, "amountUnit": 100000,
+  "minTermMonths": 6, "maxTermMonths": 36, "interestPayType": "SIMPLE",
   "termOptions": [6, 12, 24, 36],
   "rateTiers": [
     {"termMonths": 6, "rate": 3.1}, {"termMonths": 12, "rate": 3.45},
@@ -155,15 +157,20 @@ sort=NAME p0  급여이체 기본정기 내집마련 시니어 청년희망 코�
   "subscriptionRestrictions": ["가입 후 추가 납입은 불가합니다.", "만기 전 중도해지 시 중도해지이율이 적용됩니다."],
   "notices": ["...4건..."],
   "saleStatus": "ON_SALE", "saleEndDate": null,
-  "terms": [{"termsId": 4, "termsName": null, "version": null, "required": null, "viewRequired": null, "displayOrder": 1}]
+  "terms": [{"termsId": 4, "termsName": "예금거래 기본약관", "version": "v1.0",
+             "required": true, "viewRequired": true, "displayOrder": 1}]
 }
 ```
 
-`terms[]`의 `termsName`·`version`·`required`·`viewRequired`가 null인 것은 **시드 문제가 아니라 서버의 의도된 스텁**입니다 (`ProductDetailResponse.TermsItem.from()` 주석 — P6 `TermsQueryPort` 연동 전까지). 약관 이름이 필요하면 `GET /products/{productId}/terms/{termsId}`(인증 필요)를 쓰십시오.
+`terms[]`의 약관 이름·버전·동의 여부는 이전까지 null 스텁이었으나 이제 채워집니다. 약관 **본문**이 필요하면 여전히 `GET /products/{productId}/terms/{termsId}`(인증 필요)를 쓰십시오 — 상세 응답에는 본문이 없습니다.
+
+`minTermMonths`/`maxTermMonths`와 `termOptions`는 **출처가 다릅니다.** 앞의 둘은 `product` 테이블 컬럼이고 `termOptions`는 `rateTiers`에서 파생됩니다. 현재 시드는 둘을 일치시켜 뒀지만 구조적으로 보장되는 값은 아니니, 가입 가능 기간 선택지는 `termOptions`를 쓰십시오.
 
 ---
 
-## 5. 어긋나는 3건 — 누가 고치나
+## 5. 어긋났던 4건 — 누가 고치나
+
+5-1·5-2는 FE가, 5-3·5-4는 서버가 고칩니다. 서버 몫 둘은 이미 반영됐습니다.
 
 ### 5-1. `rates[].primeRate` (기간별 우대금리) → **FE가 계산**
 
@@ -197,7 +204,7 @@ const rows = rateTiers.map(t => ({
 | guide 행 | 서버 필드 | 처리 |
 | --- | --- | --- |
 | 가입대상 | `eligibility` | 그대로 |
-| 가입기간 | `termOptions` | `${termOptions[0]}개월 이상 ${termOptions.at(-1)}개월 이하` |
+| 가입기간 | `minTermMonths` / `maxTermMonths` | `${minTermMonths}개월 이상 ${maxTermMonths}개월 이하` (§5-3에서 추가됨) |
 | 가입금액 | `minAmount`/`maxAmount`/`amountUnit` | FE 포맷팅 (`amountUnit`은 배수 검증용, 안내 문구에 넣을지는 FE 판단) |
 | 이자지급시기 | 없음 | §5-3 |
 | 중도해지 | 없음 | `subscriptionRestrictions`/`notices`가 이미 문장으로 담고 있음 |
@@ -209,21 +216,36 @@ const rows = rateTiers.map(t => ({
 - `subscriptionRestrictions`: `"만기 전 중도해지 시 중도해지이율이 적용됩니다."`
 - `notices`: `"만기 전 중도해지 시 약정이율보다 낮은 중도해지이율이 적용되어 이자가 줄어듭니다."`
 
-### 5-3. `summary` · `period` · `interestMethod` → **서버 DTO 누락, 서버가 고침**
+### 5-3. `summary` · `period` · `interestMethod` → **서버가 고쳤습니다**
 
-이건 FE 잘못이 아니라 **`ProductDetailResponse`의 필드 누락**입니다. 컬럼은 DB에 이미 다 있고 DTO에만 안 실려 있습니다.
+`ProductDetailResponse`의 필드 누락이었고, 컬럼은 DB에 이미 다 있었습니다. 아래 3종을 상세 응답에 추가했습니다.
 
-| 필드 | DB 컬럼 | 현재 |
+| 필드 | 상세 응답 | FE 처리 |
 | --- | --- | --- |
-| `summary` | `product.summary` | 목록 응답에만 있음 |
-| `minTermMonths` / `maxTermMonths` | `product.min_term_months` / `max_term_months` | 목록 응답에만 있음 |
-| `interestPayType` | `product.interest_pay_type` | 어느 응답에도 없음 |
+| `summary` | 추가됨 | 그대로 |
+| `minTermMonths` / `maxTermMonths` | 추가됨 | `${minTermMonths}개월 ~ ${maxTermMonths}개월` 포맷팅 |
+| `interestPayType` | 추가됨 | 아래 주의 |
 
-**서버 쪽에서 상세 응답에 이 3종을 추가하겠습니다.** 그때까지 FE는 목록에서 받은 값을 상세로 넘기거나 `termOptions`로 대체하십시오.
+타입과 필드 순서는 목록 응답(`ProductListItemResponse`)을 그대로 따랐으므로, 두 응답에서 생성되는 FE 타입이 갈리지 않습니다.
 
-한 가지 주의: `interestPayType`은 `SIMPLE`/`COMPOUND`(**단리/복리 = 이자 계산 방식**)이고, FE의 `interestMethod` "만기일시지급식"은 **지급 시기**입니다. 서로 다른 축이라 그대로 매핑하면 안 됩니다. 지금 FE는 전 상품 "만기일시지급식" 고정값이라 실질 정보가 없으니, 라벨을 **"이자계산방식: 단리 / 복리"** 로 바꾸는 걸 권합니다. 지급 시기가 정말 필요하면 컬럼 추가를 별도로 논의하겠습니다.
+**`interestPayType`을 `interestMethod`에 그대로 매핑하면 안 됩니다.** 값은 `SIMPLE`/`COMPOUND`이고 이는 **이자 계산 방식(단리/복리)** 입니다. FE의 "만기일시지급식"은 **지급 시기**라 서로 다른 축입니다. 지금 FE는 전 상품 고정값이라 실질 정보가 없으니, 라벨을 **"이자계산방식: 단리 / 복리"** 로 바꾸는 걸 권합니다. 지급 시기가 정말 필요하면 컬럼 추가를 별도로 논의하겠습니다.
 
----
+시드 12건 중 `COMPOUND`는 내집마련 적금·프라임 정기예금 2건이고 나머지는 `SIMPLE`입니다.
+
+### 5-4. `terms[]`의 약관 이름·버전·동의 여부 → **서버가 고쳤습니다**
+
+이전까지 `termsName`·`version`·`required`·`viewRequired`가 전부 null이었습니다. "P6 연동 전까지 스텁"이라고 적혀 있었지만 실제로는 `TermsQueryPort.findByIds()`가 이미 구현·테스트까지 돼 있고 아무도 호출하지 않던 배선 누락이었습니다. `ProductQueryService`가 상세 조회 시 병합하도록 연결했습니다.
+
+```json
+"terms": [{"termsId": 4, "termsName": "예금거래 기본약관", "version": "v1.0",
+           "required": true, "viewRequired": true, "displayOrder": 1}]
+```
+
+- `required` — 필수 동의 약관 여부. 가입 플로우 C-03 약관 동의 화면의 "필수/선택" 배지에 쓰십시오.
+- `viewRequired` — 열람까지 해야 하는 약관 여부. 현재 시드의 상품 약관 2종은 둘 다 `true`입니다.
+- `displayOrder` — 노출 순서. 서버가 이 순서로 정렬해 내려줍니다.
+
+약관 **본문**은 여전히 상세 응답에 없습니다. `GET /products/{productId}/terms/{termsId}`(인증 필요)를 쓰십시오.
 
 ## 6. 액션 아이템
 
@@ -236,14 +258,16 @@ const rows = rateTiers.map(t => ({
 - [ ] `rates[].primeRate`를 `preferentialRates` 합으로 계산 (§5-1)
 - [ ] `guide[]`를 서버 필드 조립 방식으로 재구성 (§5-2)
 - [ ] `interestMethod` 라벨을 "이자계산방식(단리/복리)"로 변경 검토 (§5-3)
+- [ ] `terms[].required`/`viewRequired`를 약관 동의 화면(C-03)의 필수·선택 배지에 연결 (§5-4)
 - [ ] 기간별 우대금리가 기획 요구사항인지 회신 (§5-1)
 
 ### BE (P3)
 
 - [x] 상품 시드 12건 확충 — #176
-- [ ] `ProductDetailResponse`에 `summary`·`minTermMonths`·`maxTermMonths`·`interestPayType` 추가 (§5-3)
-- [ ] `openapi.yaml`을 레포에 반영 — FE `orval.config.ts`가 이 파일을 단일 계약 출처로 보고 있고, 없으면 `pnpm codegen`이 의도적으로 실패합니다
-- [ ] `terms[]` 스텁 해소 — P6 `TermsQueryPort` 연동
+- [x] `ProductDetailResponse`에 `summary`·`minTermMonths`·`maxTermMonths`·`interestPayType` 추가 (§5-3)
+- [x] `terms[]` 약관 메타 병합 (§5-4)
+- [ ] `openapi.yaml`을 레포에 반영 — FE `orval.config.ts`가 이 파일을 단일 계약 출처로 보고 있고, 없으면 `pnpm codegen`이 의도적으로 실패합니다. `GET /v3/api-docs.yaml`이 현재 401이라 `SecurityConfig`의 permitAll 패턴(`/v3/api-docs/**`)이 `.yaml` 경로를 못 잡는 것부터 고쳐야 합니다
+- [ ] `MockTermsQueryPort`를 P6 실제 어댑터로 교체 — 포트 시그니처는 그대로
 
 ---
 
