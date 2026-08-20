@@ -1,6 +1,7 @@
 package com.shinhan.corebank.limit.adapter.in.web;
 
 import com.shinhan.corebank.adapter.in.web.exception.ErrorResponse;
+import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.common.response.ApiResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -8,6 +9,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 /**
  * 이체한도 API 의 Swagger 명세. 컨트롤러가 애너테이션에 묻히지 않도록 분리했다.
@@ -43,5 +45,5 @@ public interface LimitControllerDocs {
                     )
             )
     })
-    ApiResponse<LimitResponse> getTransferLimit();
+    ApiResponse<LimitResponse> getTransferLimit(@AuthenticationPrincipal AuthenticatedCustomer customer);
 }
