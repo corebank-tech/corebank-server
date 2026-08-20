@@ -1,5 +1,7 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 import com.shinhan.corebank.transfer.application.port.out.WithdrawalAccountDetail;
@@ -44,6 +46,27 @@ public interface AccountLockJpaRepository extends JpaRepository<AccountLockJpaEn
     Optional<PayeeProjection> findPayeeByAccountNumber(@Param("accountNumber") String accountNumber);
 
     interface PayeeProjection {
+        Long getAccountId();
+        String getPayeeName();
+        String getAccountType();
+        String getStatus();
+    }
+
+    /**
+     * findPayeeByAccountNumber의 일괄 조회 버전. 결과를 계좌번호별로 다시 매핑해야 하므로
+     * accountNumber도 함께 프로젝션한다.
+     */
+    @Query("""
+        SELECT a.accountNumber AS accountNumber, a.accountId AS accountId, c.userName AS payeeName,
+               a.accountType AS accountType, a.status AS status
+        FROM AccountLockJpaEntity a
+        JOIN CustomerNameJpaEntity c ON a.customerId = c.customerId
+        WHERE a.accountNumber IN :accountNumbers
+        """)
+    List<BatchPayeeProjection> findPayeesByAccountNumbers(@Param("accountNumbers") Collection<String> accountNumbers);
+
+    interface BatchPayeeProjection {
+        String getAccountNumber();
         Long getAccountId();
         String getPayeeName();
         String getAccountType();

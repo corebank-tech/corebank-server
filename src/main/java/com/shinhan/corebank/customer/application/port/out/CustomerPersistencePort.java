@@ -16,6 +16,11 @@ public interface CustomerPersistencePort {
     // 로그인 상태 변경을 위해 고객을 비관적 락으로 조회
     Optional<Customer> findByIdForUpdate(Long customerId);
 
+    // 회원가입 시 아이디와 이메일의 중복 여부만 효율적으로 조회한다.
+    boolean existsByUserId(String userId);
+
+    boolean existsByEmail(String email);
+
     // 로그인 실패 관련 필드만 갱신
     void updateLoginFailureState(Customer customer);
 

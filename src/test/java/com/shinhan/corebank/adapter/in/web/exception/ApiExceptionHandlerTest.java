@@ -6,7 +6,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import org.hamcrest.Matchers;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,14 +34,15 @@ class ApiExceptionHandlerTest {
     }
 
     @Test
-    @DisplayName("@Valid 검증 실패 -> CMN0001, 필드명이 포함된 메시지")
+    @DisplayName("@Valid 검증 실패 -> CMN0001 공통 메시지")
     void validationFailure() throws Exception {
         mockMvc.perform(post("/test/errors/validate")
                         .contentType(APPLICATION_JSON)
                         .content("{\"name\":\"\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0001"))
-                .andExpect(jsonPath("$.message").value(Matchers.containsString("name")));
+                .andExpect(jsonPath("$.message").value("입력값이 올바르지 않습니다."))
+                .andExpect(jsonPath("$.data").doesNotExist());
     }
 
     @Test

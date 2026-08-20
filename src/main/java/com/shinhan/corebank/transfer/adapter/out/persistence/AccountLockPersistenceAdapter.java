@@ -1,7 +1,10 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
@@ -34,6 +37,21 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
                         row.getPayeeName(),
                         LockedAccountType.valueOf(row.getAccountType()),
                         LockedAccountStatus.valueOf(row.getStatus())));
+    }
+
+    @Override
+    public Map<String, ResolvedPayee> resolvePayeesByAccountNumbers(Collection<String> accountNumbers) {
+        if (accountNumbers.isEmpty()) {
+            return Map.of();
+        }
+        return repository.findPayeesByAccountNumbers(accountNumbers).stream()
+                .collect(Collectors.toMap(
+                        AccountLockJpaRepository.BatchPayeeProjection::getAccountNumber,
+                        row -> new ResolvedPayee(
+                                row.getAccountId(),
+                                row.getPayeeName(),
+                                LockedAccountType.valueOf(row.getAccountType()),
+                                LockedAccountStatus.valueOf(row.getStatus()))));
     }
 
     @Override

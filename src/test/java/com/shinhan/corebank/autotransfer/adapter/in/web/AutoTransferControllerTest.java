@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -334,6 +335,39 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.size").value(10))
                 .andExpect(jsonPath("$.data.totalCount").value(2))
                 .andExpect(jsonPath("$.data.items.length()").value(2));
+    }
+
+    @Test
+    @DisplayName("응답에 출금계좌 별칭(fromAlias)과 등록일시(registeredAt)가 포함된다")
+    void search_includesFromAliasAndRegisteredAt() throws Exception {
+        entityManager.createNativeQuery("UPDATE account SET alias = :alias WHERE account_id = :accountId")
+                .setParameter("alias", "월세계좌")
+                .setParameter("accountId", accountId)
+                .executeUpdate();
+        autoTransferJpaRepository.save(autoTransfer(accountId, "110000000005", AutoTransferStatus.NORMAL, 14));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/auto-transfers")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("withdrawalAccountId", String.valueOf(accountId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].fromAlias").value("월세계좌"))
+                .andExpect(jsonPath("$.data.items[0].registeredAt").exists());
+    }
+
+    @Test
+    @DisplayName("출금계좌 별칭이 없으면 fromAlias는 null로 응답된다")
+    void search_withoutAlias_fromAliasIsNull() throws Exception {
+        autoTransferJpaRepository.save(autoTransfer(accountId, "110000000006", AutoTransferStatus.NORMAL, 16));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/auto-transfers")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("withdrawalAccountId", String.valueOf(accountId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].fromAlias").value(nullValue()));
     }
 
     @Test
@@ -873,12 +907,15 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
     }
 
+    // withdrawal_registered=TRUE로 채운다 - 등록 시 출금계좌 등록 여부 검증(#234)이 이 값을 확인하므로,
+    // 별도로 미등록 케이스를 검증하는 테스트가 아니면 정상 출금계좌로 취급돼야 한다
     private Long insertAccount(Long customerId) {
         // System.nanoTime() 기반 생성은 짧은 간격의 연속 호출에서 겹칠 수 있어 카운터로 유일성을 보장한다(uk_account_number)
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
         entityManager.createNativeQuery(
-                        "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, opened_date, created_at, updated_at) "
-                                + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', NOW(), NOW(), NOW())")
+                        "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, "
+                                + "withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at) "
+                                + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', TRUE, NOW(), NOW(), NOW(), NOW())")
                 .setParameter("accountNumber", accountNumber)
                 .setParameter("customerId", customerId)
                 .executeUpdate();

@@ -21,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import static com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture.DEMAND_DEPOSIT_PREFIX;
+import static com.shinhan.corebank.common.util.AccountNumberPolicy.ACCOUNT_NUMBER_PATTERN;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("계좌번호 채번 동시성 통합 테스트")
@@ -111,7 +112,7 @@ class AccountNumberIssuanceConcurrencyTest
 
         assertThat(accountNumbers)
                 .allMatch(number ->
-                        number.matches("^[0-9]{12}$")
+                        ACCOUNT_NUMBER_PATTERN.matcher(number).matches()
                 );
         assertThat(accountNumbers)
                 .allMatch(number ->

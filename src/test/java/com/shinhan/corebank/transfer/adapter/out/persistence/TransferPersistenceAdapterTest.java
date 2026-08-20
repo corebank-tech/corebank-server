@@ -1,10 +1,12 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
+import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
 
 import jakarta.persistence.EntityManager;
@@ -42,7 +44,7 @@ class TransferPersistenceAdapterTest extends IntegrationTestSupport {
                 101L, 202L, "110222222222", "성춘향",
                 10000L, 0L,
                 TransferType.IMMEDIATE, TransferChannel.WB,
-                null, null,
+                null, null, null,
                 "이체출금", "이체입금",
                 LocalDateTime.now()
         );
@@ -63,6 +65,32 @@ class TransferPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("executionDate가 있는 자동이체를 저장하면 execution_date 컬럼에 그대로 반영된다")
+    void save_autoTransferWithExecutionDate_persistsExecutionDate() {
+        // given
+        LocalDate executionDate = LocalDate.of(2026, 8, 20);
+        Transfer transfer = Transfer.create(
+                "20260820AT0000000001",
+                101L, 202L, "110222222222", "성춘향",
+                10000L, 0L,
+                TransferType.AUTO, TransferChannel.BT,
+                TransferSourceType.AUTO, 77L, executionDate,
+                "이체출금", "이체입금",
+                LocalDateTime.now()
+        );
+
+        // when
+        Transfer saved = adapter.save(transfer);
+        entityManager.flush();
+        entityManager.clear();
+
+        // then
+        TransferJpaEntity found = repository.findByTransactionNumber("20260820AT0000000001").orElseThrow();
+        assertThat(found.getExecutionDate()).isEqualTo(executionDate);
+        assertThat(saved.getExecutionDate()).isEqualTo(executionDate);
+    }
+
+    @Test
     @DisplayName("complete()로 상태가 바뀐 이체를 재저장하면 SUCCESS 상태와 잔액이 반영된다")
     void save_completedTransfer_persistsSuccessStatus() {
         // given
@@ -71,7 +99,7 @@ class TransferPersistenceAdapterTest extends IntegrationTestSupport {
                 101L, 202L, "110222222222", "성춘향",
                 10000L, 0L,
                 TransferType.IMMEDIATE, TransferChannel.WB,
-                null, null,
+                null, null, null,
                 "이체출금", "이체입금",
                 LocalDateTime.now()
         );

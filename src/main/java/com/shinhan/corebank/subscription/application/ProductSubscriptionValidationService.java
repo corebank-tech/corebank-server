@@ -5,8 +5,6 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import com.shinhan.corebank.product.application.port.in.TermsViewUseCase;
-import com.shinhan.corebank.product.application.port.out.TermsQueryPort;
-import com.shinhan.corebank.product.application.port.out.TermsSummary;
 import com.shinhan.corebank.product.domain.*;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionValidationCommand;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionValidationCommand.AgreedTerms;
@@ -17,6 +15,8 @@ import com.shinhan.corebank.subscription.domain.SubscriptionMaturityCalculator;
 import com.shinhan.corebank.subscription.domain.SubscriptionValidation;
 import com.shinhan.corebank.subscription.domain.SubscriptionViolation;
 import com.shinhan.corebank.subscription.domain.SubscriptionViolationCode;
+import com.shinhan.corebank.terms.api.TermsQueryPort;
+import com.shinhan.corebank.terms.api.TermsSummary;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -77,7 +77,7 @@ public class ProductSubscriptionValidationService implements ProductSubscription
         }
 
         Optional<ProductRateTier> rateTier = detail.getRateTiers().stream()
-                .filter(tier -> tier.getId().getTermMonths() == termMonths)
+                .filter(tier -> tier.getId().getTermMonths().intValue() == termMonths)
                 .findFirst();
         if (rateTier.isEmpty()) {
             violations.add(SubscriptionViolation.of(
