@@ -89,7 +89,12 @@ class SignupTermsServiceTest {
                 signupTermsQueryPort,
                 termsAuthTokenPort,
                 authTokenGeneratorPort,
-                new SignupTokenProperties(TERMS_AUTH_TTL)
+                new SignupTokenProperties(
+                        TERMS_AUTH_TTL,
+                        Duration.ofMinutes(3),
+                        Duration.ofMinutes(30),
+                        Duration.ofMinutes(10)
+                )
         );
 
         given(signupTermsQueryPort.findLatestSignupTerms())

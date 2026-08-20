@@ -215,6 +215,24 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     // 통합 테스트에서 사용할 신규 고객 생성
+    @Test
+    @DisplayName("회원가입 중복확인을 위해 아이디와 이메일 존재 여부를 조회한다")
+    void checksRegistrationDuplicates() {
+        customerPersistencePort.save(createCustomer());
+        entityManager.flush();
+
+        assertThat(customerPersistencePort.existsByUserId("adapter-user"))
+                .isTrue();
+        assertThat(customerPersistencePort.existsByEmail(
+                "adapter-user@example.com"
+        )).isTrue();
+        assertThat(customerPersistencePort.existsByUserId("unused-user"))
+                .isFalse();
+        assertThat(customerPersistencePort.existsByEmail(
+                "unused@example.com"
+        )).isFalse();
+    }
+
     private Customer createCustomer() {
         LocalDateTime joinedAt =
                 LocalDateTime.of(2026, 1, 1, 9, 0);

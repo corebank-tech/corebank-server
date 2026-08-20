@@ -29,3 +29,8 @@ app:
   signup:
     token:
       terms-auth-ttl: 30m
+      user-id-check-ttl: 3m
+      email-verification-ttl: 30m
+      account-auth-ttl: 10m
+    email-verification:
+      code-ttl: 3m

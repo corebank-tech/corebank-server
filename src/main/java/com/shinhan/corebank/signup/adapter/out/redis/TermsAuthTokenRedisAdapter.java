@@ -10,6 +10,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.Optional;
 
+// 약관 동의 인증 토큰을 Redis에 저장하고 한 번만 소비한다.
 @Component
 public class TermsAuthTokenRedisAdapter implements TermsAuthTokenPort {
 

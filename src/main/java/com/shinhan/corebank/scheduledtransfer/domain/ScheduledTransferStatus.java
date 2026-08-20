@@ -6,4 +6,8 @@ public enum ScheduledTransferStatus {
     SUCCESS,    // 성공
     FAILED,     // 오류
     CANCELED;   // 고객 취소
+
+    public boolean isCancelable() {
+        return this == WAITING;
+    }
 }
