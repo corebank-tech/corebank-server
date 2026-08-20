@@ -120,7 +120,14 @@ public class AutoTransferBatchItemProcessor {
             execution.markError("실행 중 확인 불가로 재확정 배치가 오류 처리함", null);
         }
 
-        autoTransferExecutionPersistencePort.save(execution, autoTransfer.getAutoTransferId());
+        // claim 단계가 없는 reconcileStuckExecution() 전용 가드: findAllProcessing()으로 조회만 하고
+        // 선점하지 않아서, 동시에 두 번 돌면 이 저장 시점에 가드가 필요하다. 0건이면 이미 다른 실행이 먼저 확정한 것.
+        boolean confirmed = autoTransferExecutionPersistencePort.saveIfStillProcessing(execution);
+        if (!confirmed) {
+            log.info("이미 다른 재확정 실행이 먼저 확정함(중복 재확정 방어) - autoTransferId={}, executionId={}",
+                    autoTransfer.getAutoTransferId(), execution.getExecutionId());
+            return;
+        }
 
         if (execution.getStatus() == ProcessResultStatus.ERROR) {
             List<AutoTransferExecution> recent = autoTransferExecutionPersistencePort
