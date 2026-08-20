@@ -58,12 +58,12 @@ class AutoTransferBatchServiceTest {
         AutoTransfer target = autoTransfer(10L);
         when(autoTransferBatchQueryPort.findDueForExecution(DATE)).thenReturn(List.of(target));
         AutoTransferExecution saved = processingExecution();
-        when(autoTransferBatchItemProcessor.saveProcessing(eq(target), eq(DATE))).thenReturn(saved);
+        when(autoTransferBatchItemProcessor.saveProcessing(eq(target))).thenReturn(saved);
 
         autoTransferBatchService.executeDaily(DATE);
 
         var inOrder = inOrder(autoTransferBatchItemProcessor);
-        inOrder.verify(autoTransferBatchItemProcessor).saveProcessing(target, DATE);
+        inOrder.verify(autoTransferBatchItemProcessor).saveProcessing(target);
         inOrder.verify(autoTransferBatchItemProcessor).completeProcessing(target, saved, DATE);
     }
 
@@ -75,7 +75,7 @@ class AutoTransferBatchServiceTest {
         RuntimeException rootCause = new RuntimeException(
                 "Duplicate entry '10-2026-03-15' for key 'auto_transfer_execution.uk_ate_dup'");
         doThrow(new DataIntegrityViolationException("insert failed", rootCause))
-                .when(autoTransferBatchItemProcessor).saveProcessing(target, DATE);
+                .when(autoTransferBatchItemProcessor).saveProcessing(target);
 
         autoTransferBatchService.executeDaily(DATE);
 
@@ -91,9 +91,9 @@ class AutoTransferBatchServiceTest {
         RuntimeException rootCause = new RuntimeException(
                 "Cannot add or update a child row: a foreign key constraint fails (`fk_ate_auto_transfer`)");
         doThrow(new DataIntegrityViolationException("insert failed", rootCause))
-                .when(autoTransferBatchItemProcessor).saveProcessing(failing, DATE);
+                .when(autoTransferBatchItemProcessor).saveProcessing(failing);
         AutoTransferExecution saved = processingExecution();
-        when(autoTransferBatchItemProcessor.saveProcessing(eq(succeeding), eq(DATE))).thenReturn(saved);
+        when(autoTransferBatchItemProcessor.saveProcessing(eq(succeeding))).thenReturn(saved);
 
         autoTransferBatchService.executeDaily(DATE);
 
@@ -108,9 +108,9 @@ class AutoTransferBatchServiceTest {
         AutoTransfer succeeding = autoTransfer(11L);
         when(autoTransferBatchQueryPort.findDueForExecution(DATE)).thenReturn(List.of(failing, succeeding));
         doThrow(new RuntimeException("DB 연결 장애"))
-                .when(autoTransferBatchItemProcessor).saveProcessing(failing, DATE);
+                .when(autoTransferBatchItemProcessor).saveProcessing(failing);
         AutoTransferExecution saved = processingExecution();
-        when(autoTransferBatchItemProcessor.saveProcessing(eq(succeeding), eq(DATE))).thenReturn(saved);
+        when(autoTransferBatchItemProcessor.saveProcessing(eq(succeeding))).thenReturn(saved);
 
         autoTransferBatchService.executeDaily(DATE);
 
@@ -126,8 +126,8 @@ class AutoTransferBatchServiceTest {
         when(autoTransferBatchQueryPort.findDueForExecution(DATE)).thenReturn(List.of(failing, succeeding));
         AutoTransferExecution savedFailing = processingExecution();
         AutoTransferExecution savedSucceeding = processingExecution();
-        when(autoTransferBatchItemProcessor.saveProcessing(eq(failing), eq(DATE))).thenReturn(savedFailing);
-        when(autoTransferBatchItemProcessor.saveProcessing(eq(succeeding), eq(DATE))).thenReturn(savedSucceeding);
+        when(autoTransferBatchItemProcessor.saveProcessing(eq(failing))).thenReturn(savedFailing);
+        when(autoTransferBatchItemProcessor.saveProcessing(eq(succeeding))).thenReturn(savedSucceeding);
         doThrow(new RuntimeException("이체 실행 중 장애"))
                 .when(autoTransferBatchItemProcessor).completeProcessing(failing, savedFailing, DATE);
 
@@ -143,7 +143,7 @@ class AutoTransferBatchServiceTest {
 
         autoTransferBatchService.executeDaily(DATE);
 
-        verify(autoTransferBatchItemProcessor, never()).saveProcessing(any(), any());
+        verify(autoTransferBatchItemProcessor, never()).saveProcessing(any());
         verify(autoTransferBatchItemProcessor, never()).completeProcessing(any(), any(), any());
     }
 }
