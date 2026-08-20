@@ -162,7 +162,7 @@ sort=NAME p0  급여이체 기본정기 내집마련 시니어 청년희망 코�
 }
 ```
 
-`terms[]`의 약관 이름·버전·동의 여부는 이전까지 null 스텁이었으나 이제 채워집니다. 약관 **본문**이 필요하면 여전히 `GET /products/{productId}/terms/{termsId}`(인증 필요)를 쓰십시오 — 상세 응답에는 본문이 없습니다.
+`terms[]`의 약관 이름·버전·동의 여부는 이전까지 null 스텁이었으나 이제 채워집니다. 약관 **본문**이 필요하면 여전히 `GET /api/v1/products/{productId}/terms/{termsId}`(인증 필요)를 쓰십시오 — 상세 응답에는 본문이 없습니다.
 
 `minTermMonths`/`maxTermMonths`와 `termOptions`는 **출처가 다릅니다.** 앞의 둘은 `product` 테이블 컬럼이고 `termOptions`는 `rateTiers`에서 파생됩니다. 현재 시드는 둘을 일치시켜 뒀지만 구조적으로 보장되는 값은 아니니, 가입 가능 기간 선택지는 `termOptions`를 쓰십시오.
 
@@ -183,7 +183,7 @@ subscription               preferential_rate DECIMAL(5,2)    ← 가입 결과�
 
 `subscription` 테이블이 가입 시점 금리를 `base_rate` / `preferential_rate` / `applied_rate`로 스냅샷하는데, `preferential_rate`가 **기간과 무관한 단일 값**입니다. 즉 "24개월은 우대 0.30%p"라고 화면에 표시한 뒤 가입하면 다른 값이 찍히는 사고가 납니다. 실제 은행 상품에서도 우대금리는 *조건* 단위(급여이체 +0.2%p)지 *기간* 단위가 아닙니다.
 
-**확정된 방식**: 우대금리 합을 전 행 동일한 값으로 표시합니다. 서버 스키마·시드 변경은 없습니다.
+**확정된 방식**: 우대금리 합을 전 행 동일한 값으로 표시합니다. 서버 스키마·시드 변경은 없습니다. 다만 이 값은 **최대 가능 우대금리**이지 실제 적용될 우대금리가 아닙니다 — 아래 주의를 반드시 읽으십시오.
 
 ```ts
 const primeRate = preferentialRates.reduce((s, r) => s + r.rate, 0)
@@ -195,7 +195,20 @@ const rows = rateTiers.map(t => ({
 }))
 ```
 
-이 식은 #68 가입 사전 검증의 적용금리 계산(`applied_rate = base_rate + preferential_rate`)과 같은 규칙이라, 조회 화면과 가입 결과가 어긋나지 않습니다.
+> **주의 — 이 `primeRate`는 최대 가능 우대금리입니다.**
+>
+> #68 가입 사전 검증(`ProductSubscriptionValidationService.calculatePreferentialRate()`)은 **`satisfiedConditionCodes`에 담겨 온 조건만** 합산해 `preferentialRate`/`appliedRate`를 계산합니다. 전체 합과 같아지는 건 고객이 모든 우대조건을 충족했을 때뿐입니다.
+>
+> ```java
+> preferentialRates.stream()
+>     .filter(pr -> satisfied.contains(pr.getProductPreferentialRateId().getConditionCode()))
+>     .map(ProductPreferentialRate::getRate)
+>     .reduce(BigDecimal.ZERO, BigDecimal::add);
+> ```
+>
+> 상세 화면의 금리표는 "조건 다 채우면 여기까지"를 보여주는 안내이고, 가입 화면에서 실제로 적용될 금리는 사전 검증 응답의 `appliedRate`를 그대로 써야 합니다. 두 값을 같은 라벨로 노출하면 고객이 오해합니다.
+>
+> 조건 충족 여부는 **FE가 `satisfiedConditionCodes`로 신고**합니다. 서버는 스키마에 조건 임계치가 구조화돼 있지 않아 직접 판정하지 않고 신고값을 신뢰합니다(해당 메서드 주석 참고). 상세 응답의 `preferentialRates[].conditionCode`를 그대로 실어 보내면 됩니다.
 
 현재 시드는 `max_rate = MAX(rateTiers[].rate) + SUM(preferentialRates[].rate)`로 맞춰져 있어서(12건 전부 검증), 위 식으로 계산한 각 행의 `maxRate` 최대값이 카드의 `maxRate`와 정확히 일치합니다.
 
@@ -206,10 +219,27 @@ const rows = rateTiers.map(t => ({
 | guide 행 | 서버 필드 | 처리 |
 | --- | --- | --- |
 | 가입대상 | `eligibility` | 그대로 |
-| 가입기간 | `minTermMonths` / `maxTermMonths` | `${minTermMonths}개월 이상 ${maxTermMonths}개월 이하` (§5-3에서 추가됨) |
+| 가입기간 | `termOptions` | **범위가 아니라 선택지**로 안내 — 아래 주의 |
 | 가입금액 | `minAmount`/`maxAmount`/`amountUnit` | FE 포맷팅 (`amountUnit`은 배수 검증용, 안내 문구에 넣을지는 FE 판단) |
 | 이자지급시기 | 없음 | §5-3 |
 | 중도해지 | 없음 | `subscriptionRestrictions`/`notices`가 이미 문장으로 담고 있음 |
+
+> **주의 — 가입 가능 기간은 `minTermMonths ~ maxTermMonths` 범위가 아닙니다.**
+>
+> #68 사전 검증은 선택한 `termMonths`와 일치하는 rate tier가 없으면 `TERM_NOT_ALLOWED`(`PRD0002`)로 막습니다. 범위 검사가 아니라 **`termOptions` 집합에 들어 있는지**를 봅니다.
+>
+> ```java
+> Optional<ProductRateTier> rateTier = detail.getRateTiers().stream()
+>         .filter(tier -> tier.getId().getTermMonths().intValue() == termMonths)
+>         .findFirst();
+> if (rateTier.isEmpty()) { /* TERM_NOT_ALLOWED */ }
+> ```
+>
+> 시드에 실제로 걸리는 케이스가 있습니다. `PRD_SHORT_DEP`(코어 단기예금)는 `minTermMonths=1`, `maxTermMonths=12`지만 `termOptions=[1, 3, 6, 12]`입니다. **2개월은 범위 안이지만 가입하면 막힙니다.**
+>
+> 그래서 가입기간 안내는 `1 · 3 · 6 · 12개월 중 선택`처럼 `termOptions`를 그대로 노출하고, 기간 선택 UI도 `termOptions`로만 구성하십시오. `minTermMonths`/`maxTermMonths`는 요약 카드의 표시용으로만 쓰는 게 안전합니다.
+>
+> `PRD0002`의 서버 메시지가 "가입기간이 상품 허용 범위를 벗어났습니다"인데 실제 규칙은 범위가 아니라 집합 포함이라, 이 문구를 그대로 노출하면 고객이 헷갈립니다. FE에서 문구를 바꿔 쓰는 걸 권합니다.
 
 **가입기간·가입금액을 서버에 문자열 컬럼으로 넣는 방식은 피했습니다.** `min_term_months` 같은 정형 필드와 진실이 이중화되면, #68 사전 검증은 정형 필드를 쓰는데 화면은 문자열을 보게 되어 "화면엔 6개월부터라는데 검증은 12개월부터"가 나옵니다.
 
@@ -234,9 +264,9 @@ const rows = rateTiers.map(t => ({
 
 시드 12건 중 `COMPOUND`는 내집마련 적금·프라임 정기예금 2건이고 나머지는 `SIMPLE`입니다.
 
-### 5-4. `terms[]`의 약관 이름·버전·동의 여부 → **서버가 고쳤습니다**
+### 5-4. `terms[]`의 약관 이름·버전·동의 여부 → **서버가 고쳤습니다 (#57, PR #192)**
 
-이전까지 `termsName`·`version`·`required`·`viewRequired`가 전부 null이었습니다. "P6 연동 전까지 스텁"이라고 적혀 있었지만 실제로는 `TermsQueryPort.findByIds()`가 이미 구현·테스트까지 돼 있고 아무도 호출하지 않던 배선 누락이었습니다. `ProductQueryService`가 상세 조회 시 병합하도록 연결했습니다.
+이전까지 `termsName`·`version`·`required`·`viewRequired`가 전부 null이었습니다. `terms`를 독립 바운디드 컨텍스트(`com.shinhan.corebank.terms`)로 승격하고 상품 상세조회에서 병합하는 방식으로 해소됐습니다.
 
 ```json
 "terms": [{"termsId": 4, "termsName": "예금거래 기본약관", "version": "v1.0",
@@ -244,10 +274,12 @@ const rows = rateTiers.map(t => ({
 ```
 
 - `required` — 필수 동의 약관 여부. 가입 플로우 C-03 약관 동의 화면의 "필수/선택" 배지에 쓰십시오.
-- `viewRequired` — 열람까지 해야 하는 약관 여부. 현재 시드의 상품 약관 2종은 둘 다 `true`입니다.
+- `viewRequired` — 전문 열람까지 해야 하는 약관 여부. **`true`면 본문 조회 전까지 동의 체크박스를 비활성화해야 합니다.** 가입 실행 시 서버가 열람 이력(Redis)을 재검증하므로 FE 상태값만으로는 통과하지 못합니다.
 - `displayOrder` — 노출 순서. 서버가 이 순서로 정렬해 내려줍니다.
 
-약관 **본문**은 여전히 상세 응답에 없습니다. `GET /products/{productId}/terms/{termsId}`(인증 필요)를 쓰십시오.
+네 필드 모두 이제 항상 값이 있습니다. FE의 `null` 방어 처리는 필요 없습니다.
+
+약관 **본문**은 상세 응답에 없습니다. `GET /api/v1/products/{productId}/terms/{termsId}`(인증 필요)를 쓰십시오. 이 호출이 곧 열람 이력 기록이라, `viewRequired=true` 약관은 반드시 이 엔드포인트를 거쳐야 합니다.
 
 ## 6. 액션 아이템
 
@@ -257,19 +289,21 @@ const rows = rateTiers.map(t => ({
 - [ ] 페이지네이션 추가 또는 `size=20` 명시 (12건 / 기본 10건 = 2페이지. `size`는 `{5,10,20,30,50}`만 허용 — §4-1)
 - [ ] `PageResponse`의 배열 필드명이 `items`인 것 확인 (`content` 아님)
 - [ ] `ProductCard.id`를 `"P001"` 문자열 → 서버 `productId`(숫자)로 교체, 하드코딩 금지
-- [ ] `rates[].primeRate`를 `preferentialRates` 합으로 계산 (§5-1)
+- [ ] `rates[].primeRate`를 `preferentialRates` 합(= **최대 가능** 우대금리)으로 계산 (§5-1)
 - [ ] `guide[]`를 서버 필드 조립 방식으로 재구성 (§5-2)
 - [ ] `interestMethod` 라벨을 "이자계산방식(단리/복리)"로 변경 검토 (§5-3)
-- [ ] `terms[].required`/`viewRequired`를 약관 동의 화면(C-03)의 필수·선택 배지에 연결 (§5-4)
+- [ ] `terms[].required`/`viewRequired`를 약관 동의 화면(C-03)의 필수·선택 배지에 연결하고, `viewRequired=true`는 본문 조회 전까지 체크박스 비활성 (§5-4)
+- [ ] 기간 선택 UI를 `termOptions`로만 구성 — `minTermMonths~maxTermMonths` 범위로 만들면 가입 시 `PRD0002`로 막힙니다 (§5-2)
+- [ ] 상세 화면의 `primeRate`(최대 가능)와 가입 화면의 `appliedRate`(실제 적용)를 다른 라벨로 구분하고, 사전 검증에 `satisfiedConditionCodes` 전달 (§5-1)
 - [x] 기간별 우대금리 도입 여부 확정 — 도입하지 않고 우대금리 합을 전 행 동일하게 표시 (§5-1)
 
 ### BE (P3)
 
 - [x] 상품 시드 12건 확충 — #176
 - [x] `ProductDetailResponse`에 `summary`·`minTermMonths`·`maxTermMonths`·`interestPayType` 추가 (§5-3)
-- [x] `terms[]` 약관 메타 병합 (§5-4)
+- [x] `terms[]` 약관 메타 병합 — #57 / PR #192 (`terms` 모듈 신설). 이 브랜치 작업이 아닙니다 (§5-4)
 - [ ] `openapi.yaml`을 레포에 반영 — FE `orval.config.ts`가 이 파일을 단일 계약 출처로 보고 있고, 없으면 `pnpm codegen`이 의도적으로 실패합니다. `GET /v3/api-docs.yaml`이 현재 401이라 `SecurityConfig`의 permitAll 패턴(`/v3/api-docs/**`)이 `.yaml` 경로를 못 잡는 것부터 고쳐야 합니다
-- [ ] `MockTermsQueryPort`를 P6 실제 어댑터로 교체 — 포트 시그니처는 그대로
+- [x] `MockTermsQueryPort` 제거 — PR #192가 `TermsPersistenceAdapter`로 대체하며 삭제 (#178 무의미해짐)
 
 ---
 
