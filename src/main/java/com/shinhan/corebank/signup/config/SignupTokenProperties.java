@@ -10,6 +10,7 @@ public record SignupTokenProperties(
         Duration termsAuthTtl,
         Duration userIdCheckTtl,
         Duration emailVerificationTtl,
-        Duration accountAuthTtl
+        Duration accountAuthTtl,
+        Duration tempSignupTtl
 ) {
 }
