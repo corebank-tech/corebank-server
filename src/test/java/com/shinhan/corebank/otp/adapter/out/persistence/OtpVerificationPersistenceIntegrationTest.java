@@ -12,8 +12,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Clock;
-import java.time.LocalDateTime;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,7 +23,6 @@ class OtpVerificationPersistenceIntegrationTest extends IntegrationTestSupport {
     @Autowired CustomerTestFixture customerFixture;
     @Autowired IssueOtpUseCase issueOtpUseCase;
     @Autowired JdbcTemplate jdbcTemplate;
-    @Autowired Clock clock;
 
     @Test
     @DisplayName("두 번째 OTP 발급은 기존 활성 OTP를 만료시키고 신규 요청만 활성으로 남긴다")
@@ -65,19 +62,23 @@ class OtpVerificationPersistenceIntegrationTest extends IntegrationTestSupport {
                   AND purpose = 'OTP_TRANSACTION'
                   AND used = FALSE
                   AND locked = FALSE
-                  AND expires_at > ?
+                  AND expires_at > (
+                      SELECT created_at
+                      FROM verification_request
+                      WHERE verification_request_id = ?
+                  )
                 """,
                 Integer.class,
                 customerId,
-                LocalDateTime.now(clock)
+                second.otpRequestId()
         );
-        LocalDateTime secondExpiresAt = jdbcTemplate.queryForObject(
+        Integer secondValiditySeconds = jdbcTemplate.queryForObject(
                 """
-                SELECT expires_at
+                SELECT TIMESTAMPDIFF(SECOND, created_at, expires_at)
                 FROM verification_request
                 WHERE verification_request_id = ?
                 """,
-                LocalDateTime.class,
+                Integer.class,
                 second.otpRequestId()
         );
 
@@ -86,6 +87,6 @@ class OtpVerificationPersistenceIntegrationTest extends IntegrationTestSupport {
         assertThat(firstRow.get("code_hash").toString()).isNotEqualTo(first.otpCode());
         assertThat(firstRow.get("transaction_type")).isEqualTo("IMMEDIATE_TRANSFER");
         assertThat(activeCount).isOne();
-        assertThat(secondExpiresAt).isAfter(LocalDateTime.now(clock).plusMinutes(2));
+        assertThat(secondValiditySeconds).isEqualTo(180);
     }
 }
