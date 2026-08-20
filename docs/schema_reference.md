@@ -770,7 +770,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
 | `idempotency_key` | `CHAR(36)` | **PK** | X |  | 클라이언트가 보낸 `Idempotency-Key` 헤더값(UUID v4). 같은 요청의 중복 실행을 막는 기준 |
-| `customer_id` | `BIGINT` | **FK** | X |  | 요청 고객 → `customer.customer_id` |
+| `customer_id` | `BIGINT` | **FK** | O |  | 요청 고객 → `customer.customer_id`. 고객 생성 전 회원가입 완료 멱등키 예약은 `NULL` |
 | `endpoint` | `VARCHAR(120)` |  | X |  | 요청 대상 엔드포인트. 같은 키가 다른 API에 재사용되는 것을 걸러낸다 |
 | `request_hash` | `CHAR(64)` |  | X |  | 요청 본문의 SHA-256 해시. 같은 키인데 값이 다르면 CMN0302 |
 | `state` | `VARCHAR(12)` |  | X |  | 처리 상태. `PROCESSING`(처리 중) / `COMPLETED`(완료). 재요청 시 CMN0301과 200 반환을 가르는 기준 |

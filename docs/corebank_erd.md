@@ -288,7 +288,7 @@ erDiagram
     }
     idempotency_key {
         char idempotency_key PK "UUID v4"
-        bigint customer_id FK
+        bigint customer_id FK "회원가입 완료 사전 예약은 NULL"
         varchar endpoint "VARCHAR(120)"
         char request_hash "SHA-256. *AuthToken 필드 제외 후 계산"
         varchar state "PROCESSING / COMPLETED"
@@ -343,7 +343,7 @@ erDiagram
     customer ||--o{ auto_transfer : "등록"
     account ||--o{ auto_transfer : "출금"
     auto_transfer ||--o{ auto_transfer_execution : "회차"
-    customer ||--o{ idempotency_key : "발급"
+    customer o|--o{ idempotency_key : "발급"
 
     %% 논리 관계 (ledger_entry 는 파티션 테이블이라 FK 선언 불가)
     %% 채번 자원 (FK 없음. 거래번호/원장ID 생성)

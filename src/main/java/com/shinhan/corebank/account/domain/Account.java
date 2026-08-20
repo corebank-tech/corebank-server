@@ -129,6 +129,26 @@ public class Account {
         );
     }
 
+    // 기존 은행 원장의 계좌 상태를 신규 인터넷뱅킹 고객 계좌로 가져온다.
+    public static Account importExisting(
+            String accountNumber,
+            Long customerId,
+            Long productId,
+            AccountType accountType,
+            long balance,
+            AccountStatus status,
+            String passwordHash,
+            LocalDateTime openedDate,
+            LocalDate maturityDate
+    ) {
+        return new Account(
+                null, accountNumber, customerId, productId, accountType,
+                balance, status, passwordHash, 0, false, null, null,
+                false, null, openedDate, maturityDate, null, null,
+                null, null, null
+        );
+    }
+
     public static Account reconstitute(
             Long accountId,
             String accountNumber,
