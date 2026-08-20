@@ -50,13 +50,20 @@ public class AutoTransferBatchItemProcessor {
     // DB에 지금부터 처리 시작 남
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public AutoTransferExecution saveProcessing(AutoTransfer autoTransfer, LocalDate date) {
-        AutoTransferExecution processing = AutoTransferExecution.processing(date, autoTransfer.getAmount(), LocalDateTime.now());
+        // executionDate는 배치가 도는 날(date)이 아니라 이 회차의 논리적 실행일(nextExecutionDate)이어야
+        // completeProcessing()이 만드는 TransferCommand.executionDate와 같은 값을 가리켜, 멱등성
+        // 사전조회가 재시도 날짜가 달라져도 같은 회차로 인식한다.
+        AutoTransferExecution processing = AutoTransferExecution.processing(autoTransfer.getNextExecutionDate(), autoTransfer.getAmount(), LocalDateTime.now());
         return autoTransferExecutionPersistencePort.save(processing, autoTransfer.getAutoTransferId());
     }
 
     // 실제 이체 및 다음 실행일 계산
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void completeProcessing(AutoTransfer autoTransfer, AutoTransferExecution processingExecution, LocalDate date) {
+        // saveProcessing()과 동일하게, 이 회차의 논리적 실행일(nextExecutionDate)을 써야 한다 -
+        // 그래야 전날 후속처리 실패로 nextExecutionDate가 안 넘어가 다음날 배치가 같은 회차를
+        // date=다음날로 재선택해도, 멱등성 사전조회가 첫 시도와 같은 키로 인식해 중복 송금을 막는다.
+        LocalDate executionDate = autoTransfer.getNextExecutionDate();
         TransferCommand command = TransferCommand.builder()
                 .customerId(autoTransfer.getCustomerId())
                 .withdrawalAccountId(autoTransfer.getWithdrawalAccountId())
@@ -67,7 +74,7 @@ public class AutoTransferBatchItemProcessor {
                 .myPassbookMemo(autoTransfer.getMyPassbookMemo())
                 .recipientPassbookMemo(autoTransfer.getRecipientPassbookMemo())
                 .sourceId(autoTransfer.getAutoTransferId())
-                .executionDate(date)
+                .executionDate(executionDate)
                 .build();
 
         TransferResult result = transferExecutionUseCase.execute(command);
@@ -94,8 +101,8 @@ public class AutoTransferBatchItemProcessor {
         if (StringUtils.hasText(processingExecution.getTransactionNumber())) {
             boolean succeeded = result.status() == ProcessResultStatus.SUCCESS;
             Map<String, Object> detail = succeeded
-                    ? Map.of("autoTransferId", autoTransfer.getAutoTransferId(), "executionDate", date)
-                    : Map.of("autoTransferId", autoTransfer.getAutoTransferId(), "executionDate", date, "errorCode", result.errorCode());
+                    ? Map.of("autoTransferId", autoTransfer.getAutoTransferId(), "executionDate", executionDate)
+                    : Map.of("autoTransferId", autoTransfer.getAutoTransferId(), "executionDate", executionDate, "errorCode", result.errorCode());
             auditLogService.record(autoTransfer.getCustomerId(), processingExecution.getTransactionNumber(),
                     AuditEventType.AUTO_TRANSFER, SYSTEM_REQUEST_IP, succeeded, detail);
         }
