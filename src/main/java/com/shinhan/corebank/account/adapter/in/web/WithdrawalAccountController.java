@@ -1,7 +1,6 @@
 package com.shinhan.corebank.account.adapter.in.web;
 
-import com.shinhan.corebank.account.application.port.in.WithdrawalAccountRegisterResult;
-import com.shinhan.corebank.account.application.port.in.WithdrawalAccountRegisterUseCase;
+import com.shinhan.corebank.account.application.port.in.*;
 import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
@@ -25,8 +24,14 @@ public class WithdrawalAccountController {
     private static final String REGISTER_SUCCESS_MESSAGE =
             "출금계좌가 등록되었습니다.";
 
+    private static final String UNREGISTER_SUCCESS_MESSAGE =
+            "출금계좌 등록이 삭제되었습니다.";
+
     private final WithdrawalAccountRegisterUseCase
             withdrawalAccountRegisterUseCase;
+
+    private final WithdrawalAccountUnregisterUseCase
+            withdrawalAccountUnregisterUseCase;
 
     private final CurrentCustomerProvider
             currentCustomerProvider;
@@ -81,6 +86,54 @@ public class WithdrawalAccountController {
                             WithdrawalAccountRegisterResponse
                                     .from(result),
                             REGISTER_SUCCESS_MESSAGE
+                    );
+                }
+        );
+    }
+
+    @DeleteMapping("/{accountId}")
+    public ResponseEntity<
+            ApiResponse<WithdrawalAccountUnregisterResponse>
+            > unregister(
+            @PathVariable
+            @Positive
+            Long accountId,
+
+            @RequestHeader("Idempotency-Key")
+            String idempotencyKey
+    ) {
+        Long customerId =
+                currentCustomerProvider
+                        .getCurrentCustomerId();
+
+        String endpoint =
+                "DELETE /withdrawal-accounts/"
+                        + accountId;
+
+        return idempotentRequestExecutor.execute(
+                idempotencyKey,
+                customerId,
+                endpoint,
+                fingerprint(
+                        customerId,
+                        accountId
+                ),
+                new TypeReference<>() {
+                },
+                () -> {
+                    WithdrawalAccountUnregisterResult result =
+                            withdrawalAccountUnregisterUseCase
+                                    .unregister(
+                                            new WithdrawalAccountUnregisterCommand(
+                                                    customerId,
+                                                    accountId
+                                            )
+                                    );
+
+                    return ApiResponse.success(
+                            WithdrawalAccountUnregisterResponse
+                                    .from(result),
+                            UNREGISTER_SUCCESS_MESSAGE
                     );
                 }
         );

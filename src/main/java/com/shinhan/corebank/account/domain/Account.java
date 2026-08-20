@@ -226,6 +226,15 @@ public class Account {
         this.withdrawalRegisteredAt = registeredAt;
     }
 
+    public void unregisterWithdrawalAccount() {
+        if (!withdrawalRegistered) {
+            return;
+        }
+
+        this.withdrawalRegistered = false;
+        this.withdrawalRegisteredAt = null;
+    }
+
     public void changeDisplayOrder(int displayOrder) {
         if (displayOrder <= 0) {
             throw new BusinessException(
