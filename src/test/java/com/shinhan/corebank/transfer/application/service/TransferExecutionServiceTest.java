@@ -3,6 +3,11 @@ package com.shinhan.corebank.transfer.application.service;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
@@ -159,6 +164,74 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         Integer transferRowCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM transfer WHERE source_type = 'AUTO' AND source_id = 555", Integer.class);
         assertThat(transferRowCount).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("동일 sourceId+executionDate로 execute()를 동시에 두 번 호출해도 실제 이체는 1회만 발생하고 동일 결과가 반환된다")
+    void execute_concurrentSameSourceAndExecutionDate_appliesTransferOnlyOnce() throws Exception {
+        // given
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        LocalDate executionDate = LocalDate.of(2026, 8, 20);
+        TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(30000L)
+                .transferType(TransferType.AUTO)
+                .channel(TransferChannel.BT)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .sourceId(556L)
+                .executionDate(executionDate)
+                .build();
+
+        // when: 두 스레드가 사전조회를 모두 통과한 뒤 동시에 INSERT를 시도하도록 CountDownLatch로 출발선을 맞춘다.
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        TransferResult first;
+        TransferResult second;
+        try {
+            Future<TransferResult> firstCall = executor.submit(() -> callAfterLatches(ready, start, command));
+            Future<TransferResult> secondCall = executor.submit(() -> callAfterLatches(ready, start, command));
+
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            first = firstCall.get(10, TimeUnit.SECONDS);
+            second = secondCall.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        // then: 한쪽은 정상 처리되고, 다른 쪽은 uk_transfer_source_execution_date 충돌 후 재조회로 같은 결과를 받는다
+        assertThat(first.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(second.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(second.transactionNumber()).isEqualTo(first.transactionNumber());
+        assertThat(second.withdrawalBalanceAfter()).isEqualTo(first.withdrawalBalanceAfter());
+
+        // then: 잔액은 1회만 차감되고, transfer/원장 행도 1건씩만 존재한다
+        Long withdrawalBalance = jdbcTemplate.queryForObject(
+                "SELECT balance FROM account WHERE account_id = 101", Long.class);
+        assertThat(withdrawalBalance).isEqualTo(70000L);
+
+        Integer transferRowCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transfer WHERE source_type = 'AUTO' AND source_id = 556", Integer.class);
+        assertThat(transferRowCount).isEqualTo(1);
+
+        Long ledgerRowCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ledger_entry WHERE transaction_number = ?",
+                Long.class, first.transactionNumber());
+        assertThat(ledgerRowCount).isEqualTo(2L);
+    }
+
+    private TransferResult callAfterLatches(CountDownLatch ready, CountDownLatch start, TransferCommand command)
+            throws InterruptedException {
+        ready.countDown();
+        start.await();
+        return transferExecutionService.execute(command);
     }
 
     @Test

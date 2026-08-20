@@ -1,8 +1,8 @@
 package com.shinhan.corebank.transfer.application.service;
 
 import java.time.Clock;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
@@ -242,15 +242,22 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             return failTransfer(created, e.getErrorCode().getCode(), e.getMessage(), e);
         } catch (DataIntegrityViolationException e) {
             // 사전조회 이후 동시에 들어온 다른 execute() 호출이 같은 sourceId+executionDate로
-            // 먼저 커밋한 경우. InnoDB는 유니크 인덱스 충돌 시 상대 트랜잭션의 커밋/롤백까지
-            // INSERT를 블로킹하므로, 이 예외를 받은 시점엔 상대는 이미 커밋되어 있다 — 재조회하면
-            // 그 결과를 그대로 얻을 수 있다.
+            // 먼저 커밋했을 가능성을 재조회로 확인한다. REQUIRES_NEW로 새 스냅샷을 떠야 하는
+            // 이유: InnoDB는 유니크 인덱스 충돌 시 상대 트랜잭션의 커밋/롤백까지 INSERT를
+            // 블로킹하므로 상대는 이미 커밋되어 있지만, 앰비언트 트랜잭션(REPEATABLE_READ)에
+            // 그냥 얹히면 execute() 진입 시 사전조회가 고정한 read view 때문에 그 커밋을 못 볼
+            // 수 있다. 조회가 비어 있으면(=이 unique 충돌이 아니었던 경우) 아래로 자연히
+            // 넘어가 다른 RuntimeException과 동일하게 ERROR로 확정한다.
             if (command.sourceId() != null) {
-                var existing = transferLookupPort.findBySourceAndExecutionDate(
-                        resolveSourceType(command.transferType()), command.sourceId(), command.executionDate());
+                Optional<TransferResult> existing = requiresNewTransactionTemplate.execute(status ->
+                        transferLookupPort.findBySourceAndExecutionDate(
+                                resolveSourceType(command.transferType()), command.sourceId(), command.executionDate()));
                 if (existing.isPresent()) {
                     return existing.get();
                 }
+            }
+            if (created != null) {
+                return failTransfer(created, CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.getMessage(), e);
             }
             throw e;
         } catch (RuntimeException e) {
