@@ -8,6 +8,7 @@ import com.shinhan.corebank.common.idempotency.IdempotencyService;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.common.response.PageResponse;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultPage;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultSort;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelCommand;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferListItem;
@@ -105,11 +106,12 @@ public class ScheduledTransferController {
             @RequestParam(required = false) Long withdrawalAccountId,
             @RequestParam(required = false) LocalDate fromDate,
             @RequestParam(required = false) LocalDate toDate,
+            @RequestParam(defaultValue = "LATEST") ScheduledTransferExecutionResultSort sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         ScheduledTransferExecutionResultPage result = scheduledTransferQueryUseCase.searchExecutionResults(
-                customerId, withdrawalAccountId, fromDate, toDate, page, size);
+                customerId, withdrawalAccountId, fromDate, toDate, sort, page, size);
         return ApiResponse.success(ScheduledTransferExecutionResultPageResponse.from(result));
     }
 
