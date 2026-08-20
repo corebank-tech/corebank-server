@@ -173,7 +173,7 @@ class WithdrawalAccountRegisterServiceTest {
     }
 
     @Test
-    @DisplayName("이미 등록된 출금계좌는 기존 등록 시각을 반환하고 인증 및 저장을 다시 수행하지 않는다")
+    @DisplayName("이미 등록된 출금계좌도 인증한 뒤 기존 등록 시각을 반환하고 저장하지 않는다")
     void returnExistingRegistrationWhenAlreadyRegistered() {
         // given
         LocalDateTime existingRegisteredAt =
@@ -215,7 +215,7 @@ class WithdrawalAccountRegisterServiceTest {
                                 )
                 );
 
-        verifyNoInteractions(authVerificationPort);
+        verifyAuthenticationTokens();
 
         verify(accountPersistencePort, never())
                 .save(any());
@@ -288,7 +288,7 @@ class WithdrawalAccountRegisterServiceTest {
                                 .INVALID_WITHDRAWAL_ACCOUNT_TYPE
                 );
 
-        verifyNoInteractions(authVerificationPort);
+        verifyAuthenticationTokens();
 
         verify(accountPersistencePort, never())
                 .save(any());
@@ -328,7 +328,7 @@ class WithdrawalAccountRegisterServiceTest {
                                 .INVALID_WITHDRAWAL_ACCOUNT_TYPE
                 );
 
-        verifyNoInteractions(authVerificationPort);
+        verifyAuthenticationTokens();
 
         verify(accountPersistencePort, never())
                 .save(any());
@@ -368,7 +368,7 @@ class WithdrawalAccountRegisterServiceTest {
                                 .INVALID_ACCOUNT_STATUS
                 );
 
-        verifyNoInteractions(authVerificationPort);
+        verifyAuthenticationTokens();
 
         verify(accountPersistencePort, never())
                 .save(any());
@@ -408,7 +408,7 @@ class WithdrawalAccountRegisterServiceTest {
                                 .INVALID_ACCOUNT_STATUS
                 );
 
-        verifyNoInteractions(authVerificationPort);
+        verifyAuthenticationTokens();
 
         verify(accountPersistencePort, never())
                 .save(any());
@@ -528,6 +528,22 @@ class WithdrawalAccountRegisterServiceTest {
 
         assertThat(account.getWithdrawalRegisteredAt())
                 .isNull();
+    }
+
+    private void verifyAuthenticationTokens() {
+        verify(authVerificationPort)
+                .verifyAccountPasswordToken(
+                        ACCOUNT_PASSWORD_AUTH_TOKEN,
+                        CUSTOMER_ID,
+                        ACCOUNT_ID
+                );
+
+        verify(authVerificationPort)
+                .verifyOtpToken(
+                        OTP_AUTH_TOKEN,
+                        CUSTOMER_ID,
+                        ACCOUNT_ID
+                );
     }
 
     private WithdrawalAccountRegisterCommand createCommand() {

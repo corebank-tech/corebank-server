@@ -1,6 +1,7 @@
 package com.shinhan.corebank.account.adapter.out.auth;
 
 import com.shinhan.corebank.account.application.port.out.WithdrawalAccountAuthVerificationPort;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Component;
  * P6 구현 완료 후 실제 인증 Adapter로 교체한다.
  */
 @Component
+@Profile({"local", "test", "scratch"})
 public class WithdrawalAccountAuthTokenMockAdapter
         implements WithdrawalAccountAuthVerificationPort {
 

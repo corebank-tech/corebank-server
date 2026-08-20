@@ -46,18 +46,6 @@ public class WithdrawalAccountRegisterService
                         )
                 );
 
-        // 이미 등록돼 있으면 상태를 다시 변경하거나
-        // 인증토큰을 소비하지 않고 기존 결과를 반환한다.
-        if (account.isWithdrawalRegistered()) {
-            return toResult(account);
-        }
-
-        // 인증토큰을 소비하기 전에
-        // 등록 자체가 가능한 계좌인지 먼저 확인한다.
-        account.validateWithdrawalRegistrationAllowed();
-
-        // TODO P6: passwordLocked 시 APW0101 연동
-
         authVerificationPort.verifyAccountPasswordToken(
                 command.accountPasswordAuthToken(),
                 command.customerId(),
@@ -69,6 +57,17 @@ public class WithdrawalAccountRegisterService
                 command.customerId(),
                 command.accountId()
         );
+
+        // 유효한 인증을 거친 재요청이면 상태를 다시 변경하지 않고
+        // 기존 등록 결과를 반환한다.
+        if (account.isWithdrawalRegistered()) {
+            return toResult(account);
+        }
+
+        // TODO P6: passwordLocked 시 APW0101 연동
+
+        // 새로 등록하는 경우에만 등록 가능 상태를 검증한다.
+        account.validateWithdrawalRegistrationAllowed();
 
         OffsetDateTime registeredAt =
                 OffsetDateTime.ofInstant(
