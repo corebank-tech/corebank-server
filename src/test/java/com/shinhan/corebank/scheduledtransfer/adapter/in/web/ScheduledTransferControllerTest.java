@@ -4,6 +4,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -126,6 +127,38 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.items[0].payeeAccountNumber").doesNotExist())
                 .andExpect(jsonPath("$.data.items[0].withdrawalAccountNumber").exists())
                 .andExpect(jsonPath("$.data.items[0].payeeBankName").value("신한은행"));
+    }
+
+    @Test
+    @DisplayName("응답 항목은 출금계좌 별칭(fromAlias)·통장 표시내용(myPassbookMemo)·등록일시(registeredAt)를 내려준다")
+    void search_includesFromAliasMemoAndRegisteredAt() throws Exception {
+        entityManager.createNativeQuery("UPDATE account SET alias = :alias WHERE account_id = :accountId")
+                .setParameter("alias", "우리집")
+                .setParameter("accountId", accountId)
+                .executeUpdate();
+        ScheduledTransferJpaEntity entity = scheduledTransfer(accountId, LocalDate.now().plusDays(5));
+        scheduledTransferJpaRepository.save(entity);
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/scheduled-transfers")
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].fromAlias").value("우리집"))
+                .andExpect(jsonPath("$.data.items[0].registeredAt").exists());
+    }
+
+    @Test
+    @DisplayName("출금계좌에 별칭이 없으면 fromAlias는 응답에서 null이다")
+    void search_fromAliasNull_whenAccountAliasNotSet() throws Exception {
+        scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now().plusDays(5)));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/scheduled-transfers")
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].fromAlias").value(nullValue()));
     }
 
     @Test

@@ -63,14 +63,15 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
         Page<ScheduledTransfer> result = scheduledTransferQueryPort.search(customerId, status, withdrawalAccountId,
                 fromDate, toDate, PageRequest.of(page, size));
 
-        // 페이지 내 출금계좌번호를 한 번에 조회 — 원소마다 개별 조회하면 size만큼 N+1이 발생한다
+        // 페이지 내 출금계좌번호·별칭을 한 번에 조회 — 원소마다 개별 조회하면 size만큼 N+1이 발생한다
         List<Long> withdrawalAccountIds = result.getContent().stream()
                 .map(ScheduledTransfer::getWithdrawalAccountId)
                 .distinct()
                 .toList();
         Map<Long, String> withdrawalAccountNumbers = accountStatusPort.findAccountNumbersByIds(withdrawalAccountIds);
+        Map<Long, String> withdrawalAccountAliases = accountStatusPort.findAccountAliasesByIds(withdrawalAccountIds);
 
-        return result.map(scheduledTransfer -> toItem(scheduledTransfer, withdrawalAccountNumbers));
+        return result.map(scheduledTransfer -> toItem(scheduledTransfer, withdrawalAccountNumbers, withdrawalAccountAliases));
     }
 
     @Override
@@ -113,22 +114,28 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
         return new ScheduledTransferExecutionResultPage(itemPage, toSummary(aggregate));
     }
 
-    private ScheduledTransferListItem toItem(ScheduledTransfer scheduledTransfer, Map<Long, String> withdrawalAccountNumbers) {
+    private ScheduledTransferListItem toItem(ScheduledTransfer scheduledTransfer, Map<Long, String> withdrawalAccountNumbers,
+                                             Map<Long, String> withdrawalAccountAliases) {
         String withdrawalAccountNumber = withdrawalAccountNumbers.get(scheduledTransfer.getWithdrawalAccountId());
 
         if (withdrawalAccountNumber == null) {
             throw new IllegalStateException("출금계좌 정보를 확인할 수 없습니다.");
         }
+        // 별칭은 미설정일 수 있어 Map에 키 자체가 없을 수 있음 - null 허용
+        String fromAlias = withdrawalAccountAliases.get(scheduledTransfer.getWithdrawalAccountId());
         return new ScheduledTransferListItem(
                 scheduledTransfer.getScheduledTransferId(),
                 scheduledTransfer.getScheduledDate(),
                 withdrawalAccountNumber,
+                fromAlias,
                 scheduledTransfer.getPayeeBankCode(),
                 scheduledTransfer.getPayeeAccountNumber(),
                 scheduledTransfer.getPayeeName(),
                 scheduledTransfer.getAmount(),
+                scheduledTransfer.getMyPassbookMemo(),
                 scheduledTransfer.getStatus(),
-                scheduledTransfer.getStatus() == ScheduledTransferStatus.WAITING
+                scheduledTransfer.getStatus() == ScheduledTransferStatus.WAITING,
+                scheduledTransfer.getRegisteredAt()
         );
     }
 
