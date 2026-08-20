@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
+import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.TransferSourceType;
 
 import org.springframework.stereotype.Component;
@@ -29,5 +30,11 @@ public class TransferLookupPersistenceAdapter implements TransferLookupPort {
                         .errorCode(entity.getErrorCode())
                         .errorMessage(entity.getErrorMessage())
                         .build());
+    }
+
+    @Override
+    public Optional<Transfer> findByTransactionNumber(String transactionNumber) {
+        return repository.findByTransactionNumber(transactionNumber)
+                .map(TransferMapper::toDomain);
     }
 }
