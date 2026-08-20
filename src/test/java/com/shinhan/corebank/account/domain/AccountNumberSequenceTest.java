@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Locale;
 
+import static com.shinhan.corebank.common.util.AccountNumberPolicy.ACCOUNT_NUMBER_PATTERN;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -189,7 +190,7 @@ class AccountNumberSequenceTest {
                     .isEqualTo("088100000001");
 
             assertThat(accountNumber)
-                    .matches("^[0-9]{12}$");
+                    .matches(ACCOUNT_NUMBER_PATTERN);
 
         } finally {
             Locale.setDefault(originalLocale);
