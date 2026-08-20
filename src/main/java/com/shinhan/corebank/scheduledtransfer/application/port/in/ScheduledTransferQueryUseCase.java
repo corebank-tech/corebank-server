@@ -11,5 +11,5 @@ public interface ScheduledTransferQueryUseCase {
 
     // REQ-SCD-014: 처리결과 조회 - SUCCESS/FAILED/CANCELED만 대상, 목록 상단에 3종 집계 포함
     ScheduledTransferExecutionResultPage searchExecutionResults(Long customerId, Long withdrawalAccountId,
-                                    LocalDate fromDate, LocalDate toDate, int page, int size);
+                                    LocalDate fromDate, LocalDate toDate, ScheduledTransferExecutionResultSort sort, int page, int size);
 }
