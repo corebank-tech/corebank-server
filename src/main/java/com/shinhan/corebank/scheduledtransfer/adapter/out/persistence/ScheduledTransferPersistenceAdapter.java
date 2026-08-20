@@ -4,6 +4,7 @@ import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferBatchQueryPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferPersistencePort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferQueryPort;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
@@ -24,10 +25,43 @@ import static com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.QSc
 
 @Repository
 @RequiredArgsConstructor
-public class ScheduledTransferPersistenceAdapter implements ScheduledTransferPersistencePort, ScheduledTransferQueryPort {
+public class ScheduledTransferPersistenceAdapter implements ScheduledTransferPersistencePort, ScheduledTransferQueryPort, ScheduledTransferBatchQueryPort {
     private final ScheduledTransferJpaRepository scheduledTransferJpaRepository;
     private final JPAQueryFactory queryFactory;
 
+
+    @Override
+    public boolean claimForProcessing(Long scheduledTransferId) {
+        return scheduledTransferJpaRepository.claimForProcessing(scheduledTransferId) > 0;
+    }
+
+    @Override
+    public List<ScheduledTransfer> findDueForExecution(LocalDate date) {
+        return scheduledTransferJpaRepository
+                .findByStatusAndScheduledDateOrderByRegisteredAtAsc(ScheduledTransferStatus.WAITING, date)
+                .stream()
+                .map(ScheduledTransferMapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public boolean saveIfStillProcessing(ScheduledTransfer scheduledTransfer) {
+        int updated = scheduledTransferJpaRepository.finalizeIfProcessing(
+                scheduledTransfer.getScheduledTransferId(),
+                scheduledTransfer.getStatus().name(),
+                scheduledTransfer.getTransactionNumber(),
+                scheduledTransfer.getFailureReason(),
+                scheduledTransfer.getExecutedAt());
+        return updated > 0;
+    }
+
+    @Override
+    public List<ScheduledTransfer> findAllProcessing() {
+        return scheduledTransferJpaRepository.findByStatus(ScheduledTransferStatus.PROCESSING)
+                .stream()
+                .map(ScheduledTransferMapper::toDomain)
+                .toList();
+    }
     @Override
     public ScheduledTransfer save(ScheduledTransfer scheduledTransfer) {
         try {
