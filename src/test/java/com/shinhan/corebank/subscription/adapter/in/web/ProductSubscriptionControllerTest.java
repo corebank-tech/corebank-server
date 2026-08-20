@@ -486,6 +486,74 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.code").value("APW0002"));
     }
 
+    // toBusinessException()이 이번에 새로 짠 코드다 — SubscriptionViolation(#68이 이미 코드를
+    // 들고 있음)을 문자열 매칭 없이 그대로 감싸서 던지는데, 이 경로를 지나가는 테스트가 지금까지
+    // 하나도 없었다. amountOutOfRange 하나만 대표로 확인하면 나머지 violation 코드(PRD0002~0006)도
+    // 같은 매핑 함수를 타므로 메커니즘 자체는 충분히 검증된다.
+    @Test
+    @DisplayName("사전검증 위반(가입금액 범위 초과)이 있으면 실행 API도 400 + PRD0001을 반환한다")
+    void execute_amountOutOfRange_returnsPrd0001() throws Exception {
+        Long productId = seedSavingsProduct("EXE-108", false);
+        Long withdrawalAccountId = seedAccount("110000009008", customerId, 10_000_000L);
+
+        mockMvc.perform(post("/product-subscriptions")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .contentType("application/json")
+                        // seedSavingsProduct의 maxAmount(10,000,000)를 초과 — amountUnit(10,000)의
+                        // 배수라 AMOUNT_UNIT_MISMATCH는 안 겹치고 AMOUNT_OUT_OF_RANGE만 걸린다
+                        .content(executeRequestJson(productId, withdrawalAccountId, 50_000_000L, 12)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PRD0001"));
+    }
+
+    // fingerprint()에 newAccountPassword를 빠뜨렸던 실수를 실제로 한 번 저지른 적이 있어서
+    // (이전 리뷰에서 발견·수정) 회귀 가드로 남긴다 — 이 필드가 다시 빠지면 다른 비밀번호로 보낸
+    // 재요청이 조용히 최초 응답으로 재생돼버리는데, 그건 단순 버그가 아니라 보안적으로 의미 있는
+    // 사고(요청 내용이 다른데 같은 요청으로 취급)라 일반적인 CMN0302 테스트보다 이 필드를 직접 겨냥한다.
+    @Test
+    @DisplayName("같은 Idempotency-Key인데 신규 계좌 비밀번호가 다르면 재생 대신 409 + CMN0302를 반환한다")
+    void execute_sameIdempotencyKeyDifferentPassword_returnsConflict() throws Exception {
+        Long productId = seedSavingsProduct("EXE-109", false);
+        Long withdrawalAccountId = seedAccount("110000009009", customerId, 10_000_000L);
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        mockMvc.perform(post("/product-subscriptions")
+                        .header("Idempotency-Key", idempotencyKey)
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(executeRequestJson(productId, withdrawalAccountId, 500_000L, 12)))
+                .andExpect(status().isOk());
+
+        entityManager.flush();
+        entityManager.clear();
+
+        String differentPasswordJson = """
+                {
+                  "productId": %d,
+                  "subscriptionAmount": 500000,
+                  "termMonths": 12,
+                  "withdrawalAccountId": %d,
+                  "newAccountPassword": "9999",
+                  "newAccountPasswordConfirm": "9999",
+                  "accountPasswordAuthToken": "ACC_PWD_test",
+                  "otpAuthToken": "OTP_AUTH_test",
+                  "agreedTerms": []
+                }
+                """.formatted(productId, withdrawalAccountId);
+
+        mockMvc.perform(post("/product-subscriptions")
+                        .header("Idempotency-Key", idempotencyKey)
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(differentPasswordJson))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CMN0302"));
+    }
+
     // 클래스 레벨 @Transactional을 이 테스트만 무시한다(Propagation.NOT_SUPPORTED) — 테스트
     // 트랜잭션에 얹혀만 있으면 execute()의 실패가 "롤백-전용" 플래그만 세우고 실제 ROLLBACK은
     // 테스트가 끝날 때까지 미뤄져서, 이 테스트가 관측하려는 "부분 실패 시 즉시 전량 롤백"을
