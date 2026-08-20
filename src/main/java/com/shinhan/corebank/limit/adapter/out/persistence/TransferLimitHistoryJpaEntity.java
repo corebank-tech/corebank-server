@@ -27,25 +27,18 @@ public class TransferLimitHistoryJpaEntity extends BaseEntity {
     @Column(name = "customer_id", nullable = false)
     private Long customerId;
 
+    /** 변경 직전 값. 변경 후 값은 다음 이력의 이 컬럼, 마지막이면 transfer_limit 의 현재값이다. */
     @Column(name = "before_one_time_limit", nullable = false)
     private long beforeOneTimeLimit;
 
-    @Column(name = "after_one_time_limit", nullable = false)
-    private long afterOneTimeLimit;
-
     @Column(name = "before_daily_limit", nullable = false)
     private long beforeDailyLimit;
-
-    @Column(name = "after_daily_limit", nullable = false)
-    private long afterDailyLimit;
 
     private TransferLimitHistoryJpaEntity(TransferLimitHistory history) {
         this.historyId = history.getHistoryId();
         this.customerId = history.getCustomerId();
         this.beforeOneTimeLimit = history.getBeforeOneTimeLimit();
-        this.afterOneTimeLimit = history.getAfterOneTimeLimit();
         this.beforeDailyLimit = history.getBeforeDailyLimit();
-        this.afterDailyLimit = history.getAfterDailyLimit();
     }
 
     static TransferLimitHistoryJpaEntity from(TransferLimitHistory history) {
@@ -53,7 +46,6 @@ public class TransferLimitHistoryJpaEntity extends BaseEntity {
     }
 
     TransferLimitHistory toDomain() {
-        return TransferLimitHistory.restore(historyId, customerId,
-                beforeOneTimeLimit, afterOneTimeLimit, beforeDailyLimit, afterDailyLimit);
+        return TransferLimitHistory.restore(historyId, customerId, beforeOneTimeLimit, beforeDailyLimit);
     }
 }

@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 25개 비즈니스 테이블 + 1개 PK 채번 전용 테이블 (`ledger_entry_id_sequence`) · 260개 컬럼
+**대상**: 25개 비즈니스 테이블 + 1개 PK 채번 전용 테이블 (`ledger_entry_id_sequence`) · 258개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -43,7 +43,7 @@
 | 15 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6 |
 | 16 | `transfer_limit` | 이체한도 | P1 | 6 |
 | 17 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 5 |
-| 18 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 8 |
+| 18 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 6 |
 | 19 | `product_subscription` | 상품가입 | P3 | 18 |
 | 20 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5 |
 | 21 | `scheduled_transfer` | 예약이체 | P3 | 17 |
@@ -579,22 +579,22 @@
 
 > 이체한도 변경 이력 (P1 소유 경계 유지)
 
-REQ-TRSF-025의 "변경 이력을 저장한다"를 담는다. 한도 변경 1건당 1행이 쌓이는 append-only 테이블이다. 변경자·요청 IP 같은 감사 정보는 `audit_log`의 책임이므로 여기에는 값의 전후 변화만 남긴다.
+REQ-TRSF-025의 "변경 이력을 저장한다"를 담는다. 한도 변경 1건당 1행이 쌓이는 append-only 테이블이다. 변경자·요청 IP 같은 감사 정보는 `audit_log`의 책임이므로 여기에는 값의 변화만 남긴다.
+
+**변경 후 값은 저장하지 않는다.** 이력 N의 변경 후 값은 이력 N+1의 `before_*`와 같고, 마지막 이력의 변경 후 값은 `transfer_limit`의 현재값과 같다. 같은 값을 두 군데 두면 어긋날 여지만 생긴다. 조회할 때는 원하는 건수보다 한 건 더 읽어 인접 행끼리 짝을 맞추고, 마지막 행만 `transfer_limit`을 읽어 채운다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
 | `history_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 이력 식별자 |
 | `customer_id` | `BIGINT` | **FK** | X |  | 대상 고객 → `customer.customer_id` |
-| `before_one_time_limit` | `BIGINT` |  | X |  | 변경 전 1회 이체한도 |
-| `after_one_time_limit` | `BIGINT` |  | X |  | 변경 후 1회 이체한도 |
-| `before_daily_limit` | `BIGINT` |  | X |  | 변경 전 1일 이체한도 |
-| `after_daily_limit` | `BIGINT` |  | X |  | 변경 후 1일 이체한도 |
+| `before_one_time_limit` | `BIGINT` |  | X |  | 변경 직전 1회 이체한도 |
+| `before_daily_limit` | `BIGINT` |  | X |  | 변경 직전 1일 이체한도 |
 | `created_at` | `DATETIME(6)` |  | X |  | 변경이 일어난 시각 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시. append-only라 `created_at`과 같은 값이 유지된다 |
 
 **제약·인덱스를 두지 않은 이유**
 
-`CHECK` 제약은 두지 않는다 — 적재되는 값은 `transfer_limit`의 `ck_tl_positive`·`ck_tl_order`를 이미 통과한 데이터의 복사본이다. 별도 인덱스도 두지 않는다 — 이력 조회 요구사항이 아직 없고, FK가 `customer_id` 인덱스를 자동 생성한다. 조회 API가 생기면 그때 추가한다.
+`CHECK` 제약은 두지 않는다 — 적재되는 값은 `transfer_limit`의 `ck_tl_positive`·`ck_tl_order`를 이미 통과한 값이다. 별도 인덱스도 두지 않는다 — 이력 조회 요구사항이 아직 없고, FK가 `customer_id` 인덱스를 자동 생성한다. 조회 API가 생기면 그때 추가한다.
 
 ---
 
