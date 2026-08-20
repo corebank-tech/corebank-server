@@ -141,11 +141,11 @@ class ScheduledTransferQueryServiceTest {
 
     @Test
     @DisplayName("검증을 통과하면 포트 결과를 ScheduledTransferListItem으로 매핑하고, "
-            + "동일 출금계좌는 한 번만 조회한다 (N+1 방지)")
+            + "동일 출금계좌는 한 번만 조회한다 (N+1 방지). fromAlias·myPassbookMemo·registeredAt도 함께 매핑된다")
     void delegatesToPortAndMapsWithBulkAccountLookup() {
         ScheduledTransfer waiting = ScheduledTransfer.reconstitute(
                 101L, 1L, 2L, "088", "110987654321", "홍길동", 300_000L,
-                LocalDate.of(2026, 9, 1), null, null, ScheduledTransferStatus.WAITING,
+                LocalDate.of(2026, 9, 1), "생활비", null, ScheduledTransferStatus.WAITING,
                 null, LocalDateTime.of(2026, 8, 1, 10, 0), null, null, null);
         ScheduledTransfer success = ScheduledTransfer.reconstitute(
                 102L, 1L, 2L, "088", "110111111111", "김철수", 50_000L,
@@ -156,6 +156,8 @@ class ScheduledTransferQueryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(waiting, success)));
         when(accountStatusPort.findAccountNumbersByIds(List.of(2L)))
                 .thenReturn(Map.of(2L, "110123456789"));
+        when(accountStatusPort.findAccountAliasesByIds(List.of(2L)))
+                .thenReturn(Map.of(2L, "우리집"));
 
         Page<ScheduledTransferListItem> result = scheduledTransferQueryService.search(
                 1L, ScheduledTransferStatus.WAITING, 2L, null, null, 0, 10);
@@ -164,10 +166,35 @@ class ScheduledTransferQueryServiceTest {
         ScheduledTransferListItem first = result.getContent().get(0);
         assertThat(first.scheduledTransferId()).isEqualTo(101L);
         assertThat(first.withdrawalAccountNumber()).isEqualTo("110123456789");
+        assertThat(first.fromAlias()).isEqualTo("우리집");
+        assertThat(first.myPassbookMemo()).isEqualTo("생활비");
+        assertThat(first.registeredAt()).isEqualTo(LocalDateTime.of(2026, 8, 1, 10, 0));
         assertThat(first.cancelable()).isTrue();
         assertThat(result.getContent().get(1).cancelable()).isFalse();
 
         verify(accountStatusPort, times(1)).findAccountNumbersByIds(List.of(2L));
+        verify(accountStatusPort, times(1)).findAccountAliasesByIds(List.of(2L));
+    }
+
+    @Test
+    @DisplayName("출금계좌에 별칭이 설정돼 있지 않으면 fromAlias는 null로 매핑된다")
+    void mapsFromAliasNull_whenAliasNotSet() {
+        ScheduledTransfer waiting = ScheduledTransfer.reconstitute(
+                101L, 1L, 2L, "088", "110987654321", "홍길동", 300_000L,
+                LocalDate.of(2026, 9, 1), null, null, ScheduledTransferStatus.WAITING,
+                null, LocalDateTime.of(2026, 8, 1, 10, 0), null, null, null);
+
+        when(scheduledTransferQueryPort.search(1L, null, null, null, null, PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(List.of(waiting)));
+        when(accountStatusPort.findAccountNumbersByIds(List.of(2L)))
+                .thenReturn(Map.of(2L, "110123456789"));
+        when(accountStatusPort.findAccountAliasesByIds(List.of(2L)))
+                .thenReturn(Map.of());
+
+        Page<ScheduledTransferListItem> result = scheduledTransferQueryService.search(
+                1L, null, null, null, null, 0, 10);
+
+        assertThat(result.getContent().get(0).fromAlias()).isNull();
     }
 
     private void verifyPortNeverCalled() {
