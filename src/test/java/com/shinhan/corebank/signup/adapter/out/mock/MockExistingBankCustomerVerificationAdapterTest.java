@@ -71,14 +71,18 @@ class MockExistingBankCustomerVerificationAdapterTest {
     }
 
     @Test
-    @DisplayName("입출금식이 아닌 기존 계좌는 회원가입 인증에 사용할 수 없다")
-    void rejectsNonDemandDepositAccount() {
-        assertInformationMismatch(adapter.verify(
-                USER_NAME,
-                BIRTH_DATE,
-                "220123456789",
-                CORRECT_PASSWORD
-        ));
+    @DisplayName("동일 Mock 고객의 입출금계좌 두 개를 전체 계좌로 반환한다")
+    void returnsAllDemandDepositAccountsForCustomer() {
+        assertThat(adapter.findAllByCustomerId("BANK_CUSTOMER_001"))
+                .extracting(account -> account.accountNumber())
+                .containsExactly("110123456789", "110987654321");
+        assertThat(adapter.findAllByCustomerId("BANK_CUSTOMER_001"))
+                .allSatisfy(account -> {
+                    assertThat(account.accountType())
+                            .isEqualTo("DEMAND_DEPOSIT");
+                    assertThat(account.productId()).isNull();
+                    assertThat(account.maturityDate()).isNull();
+                });
     }
 
     @Test
