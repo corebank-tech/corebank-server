@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 25개 비즈니스 테이블 + 1개 PK 채번 전용 테이블 (`ledger_entry_id_sequence`) · 258개 컬럼
+**대상**: 25개 비즈니스 테이블 + 1개 PK 채번 전용 테이블 (`ledger_entry_id_sequence`) · 257개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -41,7 +41,7 @@
 | 13 | `ledger_entry` | 원장 | P4 | 13 |
 | 14 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1 |
 | 15 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6 |
-| 16 | `transfer_limit` | 이체한도 | P1 | 6 |
+| 16 | `transfer_limit` | 이체한도 | P1 | 5 |
 | 17 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 5 |
 | 18 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 6 |
 | 19 | `product_subscription` | 상품가입 | P3 | 18 |
@@ -540,7 +540,6 @@
 | `customer_id` | `BIGINT` | **PK** **FK** | X |  | 대상 고객. 고객당 1행 → `customer.customer_id` |
 | `one_time_limit` | `BIGINT` |  | X |  | 1회 이체한도. 초과하면 LMT0002 |
 | `daily_limit` | `BIGINT` |  | X |  | 1일 이체한도. 초과하면 LMT0003 |
-| `version` | `BIGINT` |  | X | `0` | 낙관적 락 버전 |
 | `created_at` | `DATETIME(6)` |  | X |  | 한도 최초 부여 일시. REQ-TRSF-029로 가입 시 생성된다 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시 |
 
@@ -550,6 +549,10 @@
 | --- | --- |
 | `ck_tl_order` | `one_time_limit <= daily_limit` |
 | `ck_tl_positive` | `one_time_limit > 0 AND daily_limit > 0` |
+
+**낙관적 락을 쓰지 않는다**
+
+`version` 컬럼은 `V202608201115`로 제거했다. 한도 변경과 이체 실행 모두 비관적 락(`SELECT ... FOR UPDATE`)으로 간다. 이체는 이 테이블을 읽기만 하므로 버전 검증을 하려면 커밋 직전에 의미 없는 `UPDATE`를 넣어야 하고, 그러면 같은 고객의 동시 이체가 서로 충돌해 재시도가 생긴다.
 
 ---
 

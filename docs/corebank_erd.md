@@ -155,7 +155,6 @@ erDiagram
         bigint customer_id PK
         bigint one_time_limit
         bigint daily_limit
-        bigint version
     }
     transfer_limit_daily_usage {
         bigint customer_id PK
