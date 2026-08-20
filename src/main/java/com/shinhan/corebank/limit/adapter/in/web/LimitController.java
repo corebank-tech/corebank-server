@@ -27,6 +27,6 @@ public class LimitController implements LimitControllerDocs {
     public ApiResponse<LimitResponse> getTransferLimit(@AuthenticationPrincipal AuthenticatedCustomer customer) {
         LimitResult result = limitQueryUseCase.get(customer.customerId());
 
-        return ApiResponse.success(LimitMapper.toResponse(result));
+        return ApiResponse.success(LimitResponse.from(result));
     }
 }
