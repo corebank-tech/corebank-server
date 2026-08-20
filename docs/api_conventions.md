@@ -362,6 +362,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `PRD0202` | 404 | 약관을 찾을 수 없습니다. | `termsId` 없음 |
 | `PRD0203` | 404 | 가입 내역을 찾을 수 없습니다. | `subscriptionId` 없음 |
 | `PRD0301` | 409 | 이미 가입한 상품입니다. | 1인 1계좌 제한 상품 중복 가입 |
+| `PRD9001` | 500 | 상품 약관 정보를 확인할 수 없습니다. | `product_terms`가 가리키는 `terms` 행 없음(FK·상위 검증으로 정상 흐름에선 도달 불가) |
 
 > `PRD0001`~`PRD0007`은 가입 사전 검증(`POST /product-subscriptions/validation`)에서는 예외로 던지지 않고 `200` + `valid=false` + `violations[].code`로 반환합니다 — 필드별 오류를 화면에 동시에 표시해야 해서 하나만 틀려도 `400`을 던지면 나머지 검증 결과를 알 수 없기 때문입니다. HTTP 열의 `400`은 검증 실패가 곧 요청 거부인 엔드포인트(실제 가입 실행 등)에서 던질 때 적용됩니다.
 
