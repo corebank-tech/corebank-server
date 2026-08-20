@@ -4,14 +4,15 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.AccountStatusPort;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
 
-// 이 포트의 다른 구현체가 없어 @Profile로 좁히면 prod 기동이 실패한다 - 실구현 전까지 모든 프로필에서 활성화한다.
 // 빈 이름 명시: autotransfer.adapter.out.account.MockAccountStatusPort와 클래스 단순이름이 같아 기본 빈 이름(mockAccountStatusPort)이 충돌한다.
 @Component("scheduledTransferMockAccountStatusPort")
 @RequiredArgsConstructor
+@Profile({"local", "test", "scratch"})
 public class MockAccountStatusPort implements AccountStatusPort {
     private final EntityManager entityManager;
 
