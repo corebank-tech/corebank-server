@@ -29,6 +29,11 @@ public class SecureAuthTokenGenerator implements AuthTokenGeneratorPort {
         return generate("EMAIL_VERIFICATION_");
     }
 
+    @Override
+    public String generateAccountAuthToken() {
+        return generate("ACCOUNT_AUTH_");
+    }
+
     // 모든 인증 완료 토큰은 동일한 256bit CSPRNG 정책을 적용한다.
     private String generate(String prefix) {
         byte[] randomBytes = new byte[TOKEN_BYTES];
