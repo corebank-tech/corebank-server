@@ -168,6 +168,7 @@ class TransferHistoryQueryServiceTest {
     @Test
     @DisplayName("시작일이 종료일보다 늦으면 CMN0003을 던진다")
     void search_rejectsFromDateAfterToDate() {
+        stubClock();
         stubOwnership(CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID);
         LocalDate fromDate = LocalDate.of(2026, 6, 2);
         LocalDate toDate = LocalDate.of(2026, 6, 1);
@@ -182,6 +183,7 @@ class TransferHistoryQueryServiceTest {
     @Test
     @DisplayName("조회기간이 365일을 초과하면 CMN0004를 던진다")
     void search_rejectsRangeExceeding365Days() {
+        stubClock();
         stubOwnership(CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID);
         LocalDate fromDate = LocalDate.of(2026, 1, 1);
         LocalDate toDate = fromDate.plusDays(366);
@@ -196,6 +198,7 @@ class TransferHistoryQueryServiceTest {
     @Test
     @DisplayName("조회기간이 정확히 365일이면 통과한다 (경계값)")
     void search_allowsExactly365Days() {
+        stubClock();
         stubOwnership(CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID);
         LocalDate fromDate = LocalDate.of(2026, 1, 1);
         LocalDate toDate = fromDate.plusDays(365);
@@ -213,6 +216,7 @@ class TransferHistoryQueryServiceTest {
     @Test
     @DisplayName("정상 조회 시 포트 결과를 TransferHistoryItem/Summary로 매핑한다")
     void search_mapsItemsAndSummary() {
+        stubClock();
         stubOwnership(CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID);
         LocalDate fromDate = LocalDate.of(2026, 8, 1);
         LocalDate toDate = LocalDate.of(2026, 8, 20);

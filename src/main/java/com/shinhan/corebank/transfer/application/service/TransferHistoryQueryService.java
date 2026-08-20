@@ -64,8 +64,8 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
         }
         requireOwnership(customerId, withdrawalAccountId);
 
-        // clock은 실제로 기본값이 필요할 때만 호출한다 — fromDate/toDate가 모두 주어지면 불필요
-        LocalDate resolvedToDate = toDate != null ? toDate : LocalDate.now(clock);
+        LocalDate today = LocalDate.now(clock);
+        LocalDate resolvedToDate = toDate != null ? toDate : today;
         LocalDate resolvedFromDate = fromDate != null ? fromDate : resolvedToDate.minusMonths(DEFAULT_PERIOD_MONTHS);
         if (resolvedFromDate.isAfter(resolvedToDate)) {
             throw new BusinessException(CommonErrorCode.INVALID_DATE_RANGE);
