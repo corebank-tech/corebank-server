@@ -8,6 +8,7 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import jakarta.persistence.EntityManager;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.endsWith;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -54,6 +56,9 @@ class WithdrawalAccountControllerTest
 
     @Autowired
     private EntityManager entityManager;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Test
     @DisplayName("본인 입출금계좌를 출금계좌로 등록한다")
@@ -720,7 +725,7 @@ class WithdrawalAccountControllerTest
     @DisplayName(
             "타인 소유 계좌 등록은 ACC0201을 반환한다"
     )
-    void rejectOtherCustomersAccount()
+    void rejectRegisterOtherCustomersAccount()
             throws Exception {
 
         // given
@@ -886,6 +891,453 @@ class WithdrawalAccountControllerTest
         return accountPersistencePort.save(account);
     }
 
+    @Test
+    @DisplayName("등록된 출금계좌를 삭제한다")
+    void unregisterWithdrawalAccount()
+            throws Exception {
+
+        // given
+        Long customerId =
+                customerTestFixture.createCustomer();
+
+        Account account =
+                createRegisteredWithdrawalAccount(
+                        customerId,
+                        "088199900031"
+                );
+
+        // when & then
+        mockMvc.perform(
+                        delete(
+                                "/withdrawal-accounts/{accountId}",
+                                account.getAccountId()
+                        )
+                                .with(
+                                        authentication(
+                                                authenticationOf(
+                                                        customerId
+                                                )
+                                        )
+                                )
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey()
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("0000")
+                )
+                .andExpect(
+                        jsonPath("$.message")
+                                .value(
+                                        "출금계좌 등록이 삭제되었습니다."
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.data.accountId")
+                                .value(
+                                        account.getAccountId()
+                                )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.data.withdrawalAccountRegistered"
+                        )
+                                .value(false)
+                );
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Account savedAccount =
+                findAccount(
+                        account.getAccountId(),
+                        customerId
+                );
+
+        assertThat(
+                savedAccount.isWithdrawalRegistered()
+        ).isFalse();
+
+        assertThat(
+                savedAccount.getWithdrawalRegisteredAt()
+        ).isNull();
+    }
+
+    @Test
+    @DisplayName("이미 미등록된 출금계좌를 삭제해도 성공한다")
+    void unregisterAlreadyUnregisteredAccount()
+            throws Exception {
+
+        // given
+        Long customerId =
+                customerTestFixture.createCustomer();
+
+        Account account =
+                createAccount(
+                        customerId,
+                        "088199900032",
+                        AccountStatus.ACTIVE
+                );
+
+        // when & then
+        mockMvc.perform(
+                        delete(
+                                "/withdrawal-accounts/{accountId}",
+                                account.getAccountId()
+                        )
+                                .with(
+                                        authentication(
+                                                authenticationOf(
+                                                        customerId
+                                                )
+                                        )
+                                )
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey()
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("0000")
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.data.withdrawalAccountRegistered"
+                        )
+                                .value(false)
+                );
+    }
+
+    @Test
+    @DisplayName("다른 고객의 출금계좌는 ACC0201을 반환한다")
+    void rejectUnregisterOtherCustomersAccount()
+            throws Exception {
+
+        // given
+        Long ownerCustomerId =
+                customerTestFixture.createCustomer();
+
+        Long requesterCustomerId =
+                customerTestFixture.createCustomer();
+
+        Account account =
+                createRegisteredWithdrawalAccount(
+                        ownerCustomerId,
+                        "088199900033"
+                );
+
+        // when & then
+        mockMvc.perform(
+                        delete(
+                                "/withdrawal-accounts/{accountId}",
+                                account.getAccountId()
+                        )
+                                .with(
+                                        authentication(
+                                                authenticationOf(
+                                                        requesterCustomerId
+                                                )
+                                        )
+                                )
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey()
+                                )
+                )
+                .andExpect(
+                        status().isNotFound()
+                )
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("ACC0201")
+                );
+    }
+
+    @Test
+    @DisplayName("WAITING 예약이체가 있으면 출금계좌 삭제를 거부한다")
+    void rejectWhenWaitingScheduledTransferExists()
+            throws Exception {
+
+        // given
+        Long customerId =
+                customerTestFixture.createCustomer();
+
+        Account account =
+                createRegisteredWithdrawalAccount(
+                        customerId,
+                        "088199900034"
+                );
+
+        jdbcTemplate.update(
+                """
+                        INSERT INTO scheduled_transfer (
+                            customer_id,
+                            withdrawal_account_id,
+                            payee_bank_code,
+                            payee_account_number,
+                            payee_name,
+                            amount,
+                            scheduled_date,
+                            status,
+                            registered_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                customerId,
+                account.getAccountId(),
+                "088",
+                "088299900011",
+                "테스트",
+                10_000L,
+                "2026-08-21",
+                "WAITING",
+                "2026-08-20 10:00:00"
+        );
+
+        // when & then
+        mockMvc.perform(
+                        delete(
+                                "/withdrawal-accounts/{accountId}",
+                                account.getAccountId()
+                        )
+                                .with(
+                                        authentication(
+                                                authenticationOf(
+                                                        customerId
+                                                )
+                                        )
+                                )
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey()
+                                )
+                )
+                .andExpect(
+                        status().isConflict()
+                )
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("ACC0302")
+                );
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Account savedAccount =
+                findAccount(
+                        account.getAccountId(),
+                        customerId
+                );
+
+        assertThat(
+                savedAccount.isWithdrawalRegistered()
+        ).isTrue();
+
+        assertThat(
+                savedAccount.getWithdrawalRegisteredAt()
+        ).isNotNull();
+    }
+
+    @Test
+    @DisplayName("NORMAL 자동이체가 있으면 출금계좌 삭제를 거부한다")
+    void rejectWhenNormalAutoTransferExists()
+            throws Exception {
+
+        // given
+        Long customerId =
+                customerTestFixture.createCustomer();
+
+        Account account =
+                createRegisteredWithdrawalAccount(
+                        customerId,
+                        "088199900035"
+                );
+
+        jdbcTemplate.update(
+                """
+                        INSERT INTO auto_transfer (
+                            customer_id,
+                            withdrawal_account_id,
+                            deposit_account_number,
+                            payee_name,
+                            amount,
+                            cycle_months,
+                            transfer_day,
+                            start_date,
+                            end_date,
+                            next_execution_date,
+                            status,
+                            registered_at,
+                            updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                customerId,
+                account.getAccountId(),
+                "088299900012",
+                "테스트",
+                10_000L,
+                1,
+                20,
+                "2026-08-01",
+                "2026-12-31",
+                "2026-09-20",
+                "NORMAL",
+                "2026-08-20 10:00:00",
+                "2026-08-20 10:00:00"
+        );
+
+        // when & then
+        mockMvc.perform(
+                        delete(
+                                "/withdrawal-accounts/{accountId}",
+                                account.getAccountId()
+                        )
+                                .with(
+                                        authentication(
+                                                authenticationOf(
+                                                        customerId
+                                                )
+                                        )
+                                )
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey()
+                                )
+                )
+                .andExpect(
+                        status().isConflict()
+                )
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("ACC0302")
+                );
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Account savedAccount =
+                findAccount(
+                        account.getAccountId(),
+                        customerId
+                );
+
+        assertThat(
+                savedAccount.isWithdrawalRegistered()
+        ).isTrue();
+    }
+
+    @Test
+    @DisplayName("같은 Idempotency-Key로 출금계좌 삭제를 재요청해도 성공한다")
+    void replaySameUnregisterRequest()
+            throws Exception {
+
+        // given
+        Long customerId =
+                customerTestFixture.createCustomer();
+
+        Account account =
+                createRegisteredWithdrawalAccount(
+                        customerId,
+                        "088199900036"
+                );
+
+        String idempotencyKey =
+                idempotencyKey();
+
+        // 첫 번째 요청
+        mockMvc.perform(
+                        delete(
+                                "/withdrawal-accounts/{accountId}",
+                                account.getAccountId()
+                        )
+                                .with(
+                                        authentication(
+                                                authenticationOf(
+                                                        customerId
+                                                )
+                                        )
+                                )
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey
+                                )
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath(
+                                "$.data.withdrawalAccountRegistered"
+                        )
+                                .value(false)
+                );
+
+        /*
+         * Idempotency bulk update 이후
+         * persistence context를 비운다.
+         */
+        entityManager.flush();
+        entityManager.clear();
+
+        // 두 번째 요청
+        mockMvc.perform(
+                        delete(
+                                "/withdrawal-accounts/{accountId}",
+                                account.getAccountId()
+                        )
+                                .with(
+                                        authentication(
+                                                authenticationOf(
+                                                        customerId
+                                                )
+                                        )
+                                )
+                                .with(csrf())
+                                .header(
+                                        "Idempotency-Key",
+                                        idempotencyKey
+                                )
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath(
+                                "$.data.withdrawalAccountRegistered"
+                        )
+                                .value(false)
+                );
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Account savedAccount =
+                findAccount(
+                        account.getAccountId(),
+                        customerId
+                );
+
+        assertThat(
+                savedAccount.isWithdrawalRegistered()
+        ).isFalse();
+
+        assertThat(
+                savedAccount.getWithdrawalRegisteredAt()
+        ).isNull();
+    }
+
     private Account findAccount(
             Long accountId,
             Long customerId
@@ -896,6 +1348,31 @@ class WithdrawalAccountControllerTest
                         customerId
                 )
                 .orElseThrow();
+    }
+
+    private Account createRegisteredWithdrawalAccount(
+            Long customerId,
+            String accountNumber
+    ) {
+        Account account =
+                createAccount(
+                        customerId,
+                        accountNumber,
+                        AccountStatus.ACTIVE
+                );
+
+        account.registerWithdrawalAccount(
+                LocalDateTime.of(
+                        2026,
+                        8,
+                        19,
+                        14,
+                        30
+                )
+        );
+
+        return accountPersistencePort
+                .save(account);
     }
 
     private String requestJson(

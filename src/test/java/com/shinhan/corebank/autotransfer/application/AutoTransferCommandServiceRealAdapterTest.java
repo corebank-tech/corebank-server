@@ -95,6 +95,23 @@ class AutoTransferCommandServiceRealAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("출금계좌로 등록되지 않은 계좌면(withdrawal_registered=FALSE) real adapter가 걸러내서 AUT0202를 던진다")
+    void register_withdrawalNotRegisteredAccount_blockedByRealAdapter() {
+        Long customerId = insertCustomer();
+        Long notRegisteredAccountId = insertAccountWithoutWithdrawalRegistration(customerId);
+        Long depositCustomerId = insertCustomer();
+        insertAccount(depositCustomerId, "ACTIVE");
+        String depositAccountNumber = lastInsertedAccountNumber;
+
+        AutoTransferRegisterCommand command = registerCommandBuilder(customerId, notRegisteredAccountId, depositAccountNumber).build();
+
+        assertThatThrownBy(() -> commandService.register(command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
+    }
+
+    @Test
     @DisplayName("출금계좌 ACTIVE + 입금계좌 실존하면 real adapter를 통과해서 등록된다")
     void register_activeAccountsBothExist_passesRealAdapter() {
         Long customerId = insertCustomer();
@@ -146,16 +163,31 @@ class AutoTransferCommandServiceRealAdapterTest extends IntegrationTestSupport {
         return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
     }
 
+    // withdrawal_registered=TRUE로 채운다 - 등록 시 출금계좌 등록 여부 검증(#234)이 이 값을 확인하므로,
+    // 이 테스트들의 원래 의도(SUSPENDED/입금계좌 미존재로 걸러지는지)를 그대로 검증하려면 출금계좌 등록 자체는 정상이어야 한다
     private Long insertAccount(Long customerId, String status) {
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
         entityManager.createNativeQuery(
-                        "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, opened_date, created_at, updated_at) "
-                                + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', :status, 'x', NOW(), NOW(), NOW())")
+                        "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, "
+                                + "withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at) "
+                                + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', :status, 'x', TRUE, NOW(), NOW(), NOW(), NOW())")
                 .setParameter("accountNumber", accountNumber)
                 .setParameter("customerId", customerId)
                 .setParameter("status", status)
                 .executeUpdate();
         lastInsertedAccountNumber = accountNumber;
+        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+    }
+
+    private Long insertAccountWithoutWithdrawalRegistration(Long customerId) {
+        String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
+        entityManager.createNativeQuery(
+                        "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, "
+                                + "withdrawal_registered, opened_date, created_at, updated_at) "
+                                + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', FALSE, NOW(), NOW(), NOW())")
+                .setParameter("accountNumber", accountNumber)
+                .setParameter("customerId", customerId)
+                .executeUpdate();
         return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
     }
 }
