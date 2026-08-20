@@ -3,6 +3,8 @@ package com.shinhan.corebank.scheduledtransfer.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.IntegrationTestSupport;
@@ -10,6 +12,7 @@ import com.shinhan.corebank.common.audit.AuditLogJpaRepository;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledTransferJpaEntity;
 import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledTransferJpaRepository;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferBatchUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLookupResult;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
@@ -39,6 +42,9 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
     @Autowired
     ScheduledTransferBatchItemProcessor itemProcessor;
+
+    @Autowired
+    ScheduledTransferBatchUseCase scheduledTransferBatchUseCase;
 
     @Autowired
     ScheduledTransferJpaRepository scheduledTransferJpaRepository;
@@ -127,6 +133,60 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
         boolean secondClaim = itemProcessor.claim(scheduledTransferId);
 
         assertThat(secondClaim).isFalse();
+    }
+
+    @Test
+    @DisplayName("동일 예약건에 배치가 중복 수행돼도(executeDaily 두 번 호출) claim 경쟁으로 이체는 1회만 발생한다 " +
+            "- 실제 서비스/영속성을 그대로 쓰고 TransferExecutionUseCase만 mock으로 둔다 (#184 DoD)")
+    void executeDaily_duplicateBatchRun_executesTransferOnlyOnce() {
+        when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
+                .status(ProcessResultStatus.SUCCESS)
+                .transactionNumber("20260315BT0000000005")
+                .transferredAt(LocalDateTime.now())
+                .build());
+
+        // 같은 예약건을 대상으로 executeDaily()를 두 번 호출해 "중복 배치 실행"을 재현한다.
+        // 두 번째 호출의 findDueForExecution()은 여전히 이 건을 WAITING이 아닌 걸로 보지 않고 그대로 대상에 포함시킬 수 있지만
+        // (조회 조건이 상태 변화를 실시간 반영 안 할 수 있음을 배제하지 않기 위해), claim()의 조건부 UPDATE가 실제 방어선이다.
+        scheduledTransferBatchUseCase.executeDaily(SCHEDULED_DATE);
+        scheduledTransferBatchUseCase.executeDaily(SCHEDULED_DATE);
+
+        verify(transferExecutionUseCase, times(1)).execute(any());
+        ScheduledTransferJpaEntity after = scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
+        assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.SUCCESS);
+        assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000005");
+    }
+
+    @Test
+    @DisplayName("두 배치 실행이 findDueForExecution()으로 같은 WAITING 스냅샷을 각자 읽고 claim 경쟁을 해도 " +
+            "(executeDaily 두 번 호출로는 위 테스트가 이미 재현하지만, 첫 실행이 완전히 끝나버리면 두 번째는 조회 조건에서 " +
+            "걸러질 뿐 claim 자체가 경합하지 않을 수 있다 - 이 테스트는 claim() 경합 자체를 직접 재현) 이체는 1회만 발생한다")
+    void claim_concurrentDuplicateRun_executesTransferOnlyOnce() {
+        when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
+                .status(ProcessResultStatus.SUCCESS)
+                .transactionNumber("20260315BT0000000006")
+                .transferredAt(LocalDateTime.now())
+                .build());
+
+        // 두 실행이 저장 전에 각자 findDueForExecution()으로 같은 WAITING 스냅샷을 읽었다고 가정하고,
+        // 실제 배치 오케스트레이션(processOne)과 동일하게 claim() -> 성공했을 때만 completeProcessing()을 따른다.
+        ScheduledTransfer target = reloadAsDomain();
+
+        boolean firstClaimed = itemProcessor.claim(target.getScheduledTransferId());
+        if (firstClaimed) {
+            itemProcessor.completeProcessing(target, SCHEDULED_DATE);
+        }
+        boolean secondClaimed = itemProcessor.claim(target.getScheduledTransferId());
+        if (secondClaimed) {
+            itemProcessor.completeProcessing(target, SCHEDULED_DATE);
+        }
+
+        assertThat(firstClaimed).isTrue();
+        assertThat(secondClaimed).isFalse();
+        verify(transferExecutionUseCase, times(1)).execute(any());
+        ScheduledTransferJpaEntity after = scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
+        assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.SUCCESS);
+        assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000006");
     }
 
     @Test
