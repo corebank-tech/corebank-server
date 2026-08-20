@@ -7,6 +7,7 @@ import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -90,10 +91,21 @@ public class WithdrawalAccountController {
     public ResponseEntity<
             ApiResponse<WithdrawalAccountRegisterResponse>
             > register(
+
+            @Parameter(
+                    description = "출금계좌로 등록할 계좌의 내부 식별자",
+                    required = true,
+                    example = "101"
+            )
             @PathVariable
             @Positive
             Long accountId,
 
+            @Parameter(
+                    description = "멱등키. 동일 키와 동일 요청 재요청 시 저장된 응답 반환",
+                    required = true,
+                    example = "550e8400-e29b-41d4-a716-446655440000"
+            )
             @RequestHeader("Idempotency-Key")
             String idempotencyKey,
 

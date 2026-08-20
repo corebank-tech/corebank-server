@@ -207,10 +207,20 @@ public class AccountController {
     })
     public ResponseEntity<ApiResponse<Void>>
     deleteAlias(
+            @Parameter(
+                    description = "별명을 삭제할 계좌의 내부 식별자",
+                    required = true,
+                    example = "101"
+            )
             @PathVariable
             @Positive
             Long accountId,
 
+            @Parameter(
+                    description = "멱등키. 동일 키와 동일 요청 재요청 시 저장된 응답 반환",
+                    required = true,
+                    example = "550e8400-e29b-41d4-a716-446655440000"
+            )
             @RequestHeader("Idempotency-Key")
             String idempotencyKey
     ) {
