@@ -59,6 +59,7 @@ public class ScheduledTransferBatchItemProcessor {
                 .myPassbookMemo(scheduledTransfer.getMyPassbookMemo())
                 .recipientPassbookMemo(scheduledTransfer.getRecipientPassbookMemo())
                 .sourceId(scheduledTransfer.getScheduledTransferId())
+                .executionDate(scheduledTransfer.getScheduledDate())
                 .build();
 
         TransferResult result = transferExecutionUseCase.execute(command);
