@@ -3,14 +3,18 @@ package com.shinhan.corebank.scheduledtransfer.application.port.in;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 public record ScheduledTransferListItem(Long scheduledTransferId,
                                         LocalDate scheduledDate,
                                         String withdrawalAccountNumber,
+                                        String fromAlias,
                                         String payeeBankCode,
                                         String payeeAccountNumber,
                                         String payeeName,
                                         Long amount,
+                                        String myPassbookMemo,
                                         ScheduledTransferStatus status,
-                                        boolean cancelable) {
+                                        boolean cancelable,
+                                        LocalDateTime registeredAt) {
 }
