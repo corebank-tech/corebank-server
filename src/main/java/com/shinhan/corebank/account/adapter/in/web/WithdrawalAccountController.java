@@ -1,9 +1,16 @@
 package com.shinhan.corebank.account.adapter.in.web;
 
 import com.shinhan.corebank.account.application.port.in.*;
+import com.shinhan.corebank.adapter.in.web.exception.ErrorResponse;
 import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +26,10 @@ import java.util.Map;
 @RequestMapping("/withdrawal-accounts")
 @RequiredArgsConstructor
 @Validated
+@Tag(
+        name = "출금계좌",
+        description = "출금계좌 관리 API"
+)
 public class WithdrawalAccountController {
 
     private static final String REGISTER_SUCCESS_MESSAGE =
@@ -40,13 +51,66 @@ public class WithdrawalAccountController {
             idempotentRequestExecutor;
 
     @PutMapping("/{accountId}")
+    @Operation(
+            summary = "출금계좌 등록",
+            description = """
+                    로그인한 고객이 소유한 입출금계좌를 출금계좌로 등록한다.
+                    계좌비밀번호 및 OTP 인증 완료 후 발급된 인증 토큰이 필요하며,
+                    동일한 Idempotency-Key와 동일한 요청으로 재요청하면
+                    저장된 응답을 반환한다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "출금계좌 등록 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "`CMN0001` 잘못된 입력값 · `CMN0002` 필수 Idempotency-Key 누락 · `ACC0003` 출금계좌 등록 불가 계좌 유형",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "`ACC0201` 계좌를 찾을 수 없거나 접근할 수 없음",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "`ACC0301` 거래정지 또는 해지 상태 · `CMN0301`/`CMN0302` 멱등키 충돌",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            )
+    })
     public ResponseEntity<
             ApiResponse<WithdrawalAccountRegisterResponse>
             > register(
+
+            @Parameter(
+                    description = "출금계좌로 등록할 계좌의 내부 식별자",
+                    required = true,
+                    example = "101"
+            )
             @PathVariable
             @Positive
             Long accountId,
 
+            @Parameter(
+                    description = "멱등키. 동일 키와 동일 요청 재요청 시 저장된 응답 반환",
+                    required = true,
+                    example = "550e8400-e29b-41d4-a716-446655440000"
+            )
             @RequestHeader("Idempotency-Key")
             String idempotencyKey,
 
@@ -92,6 +156,49 @@ public class WithdrawalAccountController {
     }
 
     @DeleteMapping("/{accountId}")
+    @Operation(
+            summary = "출금계좌 등록 삭제",
+            description = """
+                    로그인한 고객이 소유한 계좌의 출금계좌 등록을 삭제한다.
+                    예약이체 또는 자동이체에서 사용 중인 출금계좌는 삭제할 수 없다.
+                    이미 출금계좌 등록이 해제된 경우에도 성공으로 처리하며,
+                    동일한 Idempotency-Key와 동일한 요청으로 재요청하면
+                    저장된 응답을 반환한다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "출금계좌 등록 삭제 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "`CMN0001` 잘못된 입력값 · `CMN0002` 필수 Idempotency-Key 누락",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "`ACC0201` 계좌를 찾을 수 없거나 접근할 수 없음",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "`ACC0302` 예약이체 또는 자동이체 사용으로 삭제 불가 · `CMN0301`/`CMN0302` 멱등키 충돌",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            )
+    })
     public ResponseEntity<
             ApiResponse<WithdrawalAccountUnregisterResponse>
             > unregister(

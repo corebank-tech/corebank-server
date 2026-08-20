@@ -33,4 +33,11 @@ public class AccountStatusAdapter implements AccountStatusPort {
     public boolean belongsToCustomer(Long accountId, Long customerId) {
         return accountLookupJpaRepository.existsByAccountIdAndCustomerId(accountId, customerId);
     }
+
+    @Override
+    public boolean isWithdrawalRegistered(Long accountId) {
+        return accountLookupJpaRepository.findById(accountId)
+                .map(AccountLookupJpaEntity::isWithdrawalRegistered)
+                .orElse(false);
+    }
 }
