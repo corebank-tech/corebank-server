@@ -9,6 +9,8 @@ import com.shinhan.corebank.signup.domain.model.ExistingBankCustomerProfile;
 import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -69,5 +71,36 @@ class SignupConfirmationServiceTest {
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT);
+    }
+
+    @ParameterizedTest(name = "{0} -> {1}")
+    @CsvSource({
+            "a@example.com,     '*@example.com'",
+            "ab@example.com,    'a*@example.com'",
+            "abc@example.com,   'ab*@example.com'",
+            "abcd@example.com,  'abc*@example.com'",
+            "abcde@example.com, 'abc**@example.com'"
+    })
+    void masksAtLeastOneEmailCharacterAndExposesAtMostThree(
+            String email,
+            String expected
+    ) {
+        TempSignupTokenPayload payload = new TempSignupTokenPayload(
+                List.of(), "BANK_CUSTOMER_001", "BANK_ACCOUNT_001",
+                "honggildong", "hash", email,
+                "01012345678", Instant.parse("2026-08-20T01:00:00Z")
+        );
+        given(tempTokenPort.find("TEMP")).willReturn(Optional.of(payload));
+        given(profilePort.findByCustomerId("BANK_CUSTOMER_001"))
+                .willReturn(Optional.of(new ExistingBankCustomerProfile(
+                        "BANK_CUSTOMER_001", "홍길동", LocalDate.of(1990, 1, 1)
+                )));
+        SignupConfirmationService service = new SignupConfirmationService(
+                tempTokenPort, profilePort
+        );
+
+        SignupConfirmationResult result = service.getConfirmation("TEMP");
+
+        assertThat(result.email()).isEqualTo(expected);
     }
 }

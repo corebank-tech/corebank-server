@@ -113,10 +113,15 @@ public class SignupTokenTransitionRedisAdapter
                 Long.toString(ttl.toMillis())
         );
 
-        if (result != null && result == DESTINATION_ALREADY_EXISTS) {
+        if (result == null) {
+            throw new IllegalStateException(
+                    "Redis 토큰 전환 결과를 확인할 수 없습니다."
+            );
+        }
+        if (result == DESTINATION_ALREADY_EXISTS) {
             throw new IllegalStateException("임시 회원가입 토큰이 충돌했습니다.");
         }
-        return result != null && result == SUCCESS;
+        return result == SUCCESS;
     }
 
     private String serialize(TempSignupTokenPayload payload) {

@@ -77,8 +77,11 @@ public class SignupConfirmationService
         int atIndex = email.indexOf('@');
         String local = email.substring(0, atIndex);
         String domain = email.substring(atIndex);
-        int visibleLength = Math.min(3, Math.max(1, local.length() - 1));
+        int visibleLength = Math.min(3, Math.max(0, local.length() - 1));
+        int maskedLength = local.length() - visibleLength;
 
-        return local.substring(0, visibleLength) + "*" + domain;
+        return local.substring(0, visibleLength)
+                + "*".repeat(maskedLength)
+                + domain;
     }
 }
