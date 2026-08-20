@@ -4,6 +4,8 @@ import lombok.Getter;
 
 import java.util.Locale;
 
+import static com.shinhan.corebank.common.util.AccountNumberPolicy.ACCOUNT_NUMBER_PATTERN;
+
 @Getter
 public class AccountNumberSequence {
     private final Long sequenceId;
@@ -133,7 +135,7 @@ public class AccountNumberSequence {
                     "생성된 계좌번호 길이가 올바르지 않습니다."
             );
         }
-        if(!accountNumber.matches("^[0-9]{12}$")){
+        if(!ACCOUNT_NUMBER_PATTERN.matcher(accountNumber).matches()){
             throw new IllegalStateException(
                     "생성된 계좌번호가 숫자 12자리가 아닙니다."
             );

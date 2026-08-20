@@ -8,6 +8,8 @@ import lombok.Getter;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import static com.shinhan.corebank.common.util.AccountNumberPolicy.ACCOUNT_NUMBER_PATTERN;
+
 //이후 각 api에서 필요한 함수는 나중에 구현
 @Getter
 public class Account {
@@ -284,7 +286,7 @@ public class Account {
     }
 
     private void validateAccountNumber() {
-        if (accountNumber == null || !accountNumber.matches("^[0-9]{12}$")) {
+        if (accountNumber == null || !ACCOUNT_NUMBER_PATTERN.matcher(accountNumber).matches()) {
             throw new IllegalStateException("계좌번호는 숫자 12자리여야 합니다.");
         }
     }
