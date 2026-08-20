@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -334,6 +335,39 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.size").value(10))
                 .andExpect(jsonPath("$.data.totalCount").value(2))
                 .andExpect(jsonPath("$.data.items.length()").value(2));
+    }
+
+    @Test
+    @DisplayName("응답에 출금계좌 별칭(fromAlias)과 등록일시(registeredAt)가 포함된다")
+    void search_includesFromAliasAndRegisteredAt() throws Exception {
+        entityManager.createNativeQuery("UPDATE account SET alias = :alias WHERE account_id = :accountId")
+                .setParameter("alias", "월세계좌")
+                .setParameter("accountId", accountId)
+                .executeUpdate();
+        autoTransferJpaRepository.save(autoTransfer(accountId, "110000000005", AutoTransferStatus.NORMAL, 14));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/auto-transfers")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("withdrawalAccountId", String.valueOf(accountId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].fromAlias").value("월세계좌"))
+                .andExpect(jsonPath("$.data.items[0].registeredAt").exists());
+    }
+
+    @Test
+    @DisplayName("출금계좌 별칭이 없으면 fromAlias는 null로 응답된다")
+    void search_withoutAlias_fromAliasIsNull() throws Exception {
+        autoTransferJpaRepository.save(autoTransfer(accountId, "110000000006", AutoTransferStatus.NORMAL, 16));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/auto-transfers")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("withdrawalAccountId", String.valueOf(accountId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].fromAlias").value(nullValue()));
     }
 
     @Test
