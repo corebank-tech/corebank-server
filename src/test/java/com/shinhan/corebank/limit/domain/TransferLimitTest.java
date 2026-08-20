@@ -17,7 +17,7 @@ class TransferLimitTest {
     @DisplayName("1회 한도를 0 이하로 변경하려 하면 거부해 기존 한도가 유지된다")
     void update_nonPositiveOneTimeLimit_throwsAndKeepsLimits() {
         // given
-        TransferLimit limit = TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L, 0L);
+        TransferLimit limit = TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L);
 
         // when & then
         assertThatThrownBy(() -> limit.update(-1L, 5_000_000L))
@@ -35,7 +35,7 @@ class TransferLimitTest {
     @DisplayName("1일 한도를 0 이하로 변경하려 해도 같은 기준으로 거부한다")
     void update_nonPositiveDailyLimit_throws() {
         // given - transfer_limit 의 ck_tl_positive 가 두 컬럼 모두 0 초과만 허용한다
-        TransferLimit limit = TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L, 0L);
+        TransferLimit limit = TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L);
 
         // when & then
         assertThatThrownBy(() -> limit.update(1_000_000L, -1L))

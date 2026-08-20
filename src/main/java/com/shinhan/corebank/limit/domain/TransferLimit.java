@@ -19,23 +19,21 @@ public class TransferLimit {
     private final Long customerId;
     private long oneTimeLimit;
     private long dailyLimit;
-    private final Long version;
 
-    private TransferLimit(Long customerId, long oneTimeLimit, long dailyLimit, Long version) {
+    private TransferLimit(Long customerId, long oneTimeLimit, long dailyLimit) {
         this.customerId = customerId;
         this.oneTimeLimit = oneTimeLimit;
         this.dailyLimit = dailyLimit;
-        this.version = version;
     }
 
     /** 신규 가입 고객에게 정책 기본값을 부여한다. */
     public static TransferLimit create(Long customerId) {
-        return new TransferLimit(customerId, DEFAULT_ONE_TIME_LIMIT, DEFAULT_DAILY_LIMIT, null);
+        return new TransferLimit(customerId, DEFAULT_ONE_TIME_LIMIT, DEFAULT_DAILY_LIMIT);
     }
 
     /** 영속화된 값을 도메인 객체로 되살린다. 이미 저장된 값이므로 검증하지 않는다. */
-    public static TransferLimit restore(Long customerId, long oneTimeLimit, long dailyLimit, Long version) {
-        return new TransferLimit(customerId, oneTimeLimit, dailyLimit, version);
+    public static TransferLimit restore(Long customerId, long oneTimeLimit, long dailyLimit) {
+        return new TransferLimit(customerId, oneTimeLimit, dailyLimit);
     }
 
     /**

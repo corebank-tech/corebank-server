@@ -7,7 +7,6 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -28,16 +27,10 @@ public class TransferLimitJpaEntity extends BaseEntity {
     @Column(name = "daily_limit", nullable = false)
     private long dailyLimit;
 
-    /** 낙관적 락. 한도 변경이 동시에 들어오면 나중 저장이 충돌로 감지된다. */
-    @Version
-    @Column(name = "version", nullable = false)
-    private Long version;
-
     private TransferLimitJpaEntity(TransferLimit limit) {
         this.customerId = limit.getCustomerId();
         this.oneTimeLimit = limit.getOneTimeLimit();
         this.dailyLimit = limit.getDailyLimit();
-        this.version = limit.getVersion();
     }
 
     static TransferLimitJpaEntity from(TransferLimit limit) {
@@ -45,7 +38,7 @@ public class TransferLimitJpaEntity extends BaseEntity {
     }
 
     TransferLimit toDomain() {
-        return TransferLimit.restore(customerId, oneTimeLimit, dailyLimit, version);
+        return TransferLimit.restore(customerId, oneTimeLimit, dailyLimit);
     }
 
     void apply(long oneTimeLimit, long dailyLimit) {
