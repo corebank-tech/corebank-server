@@ -1,10 +1,13 @@
 package com.shinhan.corebank.subscription.adapter.in.web;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.adapter.out.persistence.AccountJpaEntity;
 import com.shinhan.corebank.account.adapter.out.persistence.AccountJpaRepository;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaEntity;
@@ -22,6 +25,7 @@ import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.SaleStatus;
 import com.shinhan.corebank.subscription.adapter.out.persistence.ProductSubscriptionJpaRepository;
 import com.shinhan.corebank.subscription.adapter.out.persistence.SubscriptionTestFixtures;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,7 +40,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -65,6 +71,10 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     CustomerTestFixture customerTestFixture;
     @Autowired
     ProductSubscriptionJpaRepository subscriptionJpaRepository;
+    @Autowired
+    EntityManager entityManager;
+
+    private final ObjectMapper jackson = new ObjectMapper();
 
     private Long customerId;
 
@@ -346,6 +356,182 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                         .with(authentication(authenticationOf(1L))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0001"));
+    }
+
+    @Test
+    @DisplayName("정기적금 가입 실행 성공 시 계좌가 개설되고 가입 건이 SUCCESS로 저장된다")
+    void execute_success_createsAccountAndSubscription() throws Exception {
+        Long productId = seedSavingsProduct("EXE-101", false);
+        Long withdrawalAccountId = seedAccount("110000009001", customerId, 10_000_000L);
+
+        mockMvc.perform(post("/product-subscriptions")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(executeRequestJson(productId, withdrawalAccountId, 500_000L, 12)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.transactionNumber").doesNotExist())
+                .andExpect(jsonPath("$.data.accountNumber").isNotEmpty())
+                .andExpect(jsonPath("$.data.appliedRate").value(3.20));
+    }
+
+    @Test
+    @DisplayName("같은 Idempotency-Key로 재요청하면 신규 가입 없이 최초 응답을 재생한다")
+    void execute_sameIdempotencyKey_returnsFirstResponseWithoutDuplicateSubscription() throws Exception {
+        Long productId = seedSavingsProduct("EXE-102", false);
+        Long withdrawalAccountId = seedAccount("110000009002", customerId, 10_000_000L);
+        String idempotencyKey = UUID.randomUUID().toString();
+        String requestJson = executeRequestJson(productId, withdrawalAccountId, 500_000L, 12);
+
+        String first = mockMvc.perform(post("/product-subscriptions")
+                        .header("Idempotency-Key", idempotencyKey)
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(requestJson))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // 같은 테스트 트랜잭션 안에서 순차 호출하면 idempotency_key 행이 1차 호출 때 로드된 채로
+        // 영속성 컨텍스트에 남아있어, complete()의 벌크 UPDATE(@Modifying) 결과가 반영 안 된 stale
+        // 상태로 재조회될 수 있다 — flush+clear로 비운다.
+        entityManager.flush();
+        entityManager.clear();
+
+        String second = mockMvc.perform(post("/product-subscriptions")
+                        .header("Idempotency-Key", idempotencyKey)
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(requestJson))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // MySQL의 JSON 컬럼(idempotency_key.response_snapshot)은 저장 시 숫자를 정규화해서
+        // 소수 끝자리 0을 지울 수 있다("3.20" -> "3.2") — 바이트 단위 비교 대신 JsonNode로
+        // 구조적으로 비교한다.
+        assertThat(jackson.readTree(second)).isEqualTo(jackson.readTree(first));
+
+        Long subscriptionId = jackson.readTree(first).get("data").get("subscriptionId").asLong();
+        assertThat(subscriptionJpaRepository.count()).isEqualTo(1);
+        assertThat(subscriptionJpaRepository.findById(subscriptionId)).isPresent();
+    }
+
+    @Test
+    @DisplayName("정기예금은 아직 지원하지 않아 400 + CMN0001을 반환한다")
+    void execute_timeDeposit_returnsInvalidInput() throws Exception {
+        Long productId = productJpaRepository.save(ProductTestFixtures.productWithCode("EXE-103")).getProductId();
+        rateTierRepository.save(ProductRateTierJpaEntity.builder()
+                .id(new ProductRateTierJpaEntityId(productId, (short) 12))
+                .rate(new BigDecimal("3.20"))
+                .build());
+        Long withdrawalAccountId = seedAccount("110000009003", customerId, 10_000_000L);
+
+        mockMvc.perform(post("/product-subscriptions")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(executeRequestJson(productId, withdrawalAccountId, 500_000L, 12)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
+    }
+
+    @Test
+    @DisplayName("1인1계좌 제한 상품에 이미 가입한 이력이 있으면 409 + PRD0301을 반환한다")
+    void execute_alreadySubscribedSingleAccountLimitProduct_returns409() throws Exception {
+        Long productId = seedSavingsProduct("EXE-104", true);
+        Long withdrawalAccountId = seedAccount("110000009004", customerId, 10_000_000L);
+        subscriptionJpaRepository.save(
+                SubscriptionTestFixtures.defaultSubscription(customerId, productId, withdrawalAccountId));
+
+        mockMvc.perform(post("/product-subscriptions")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(executeRequestJson(productId, withdrawalAccountId, 500_000L, 12)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PRD0301"));
+    }
+
+    @Test
+    @DisplayName("신규 계좌 비밀번호와 확인값이 다르면 400 + APW0002를 반환한다")
+    void execute_newPasswordConfirmMismatch_returnsApw0002() throws Exception {
+        Long productId = seedSavingsProduct("EXE-105", false);
+        Long withdrawalAccountId = seedAccount("110000009005", customerId, 10_000_000L);
+
+        mockMvc.perform(post("/product-subscriptions")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "productId": %d,
+                                  "subscriptionAmount": 500000,
+                                  "termMonths": 12,
+                                  "withdrawalAccountId": %d,
+                                  "newAccountPassword": "1234",
+                                  "newAccountPasswordConfirm": "9999",
+                                  "accountPasswordAuthToken": "ACC_PWD_test",
+                                  "otpAuthToken": "OTP_AUTH_test",
+                                  "agreedTerms": []
+                                }
+                                """.formatted(productId, withdrawalAccountId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("APW0002"));
+    }
+
+    private Long seedSavingsProduct(String productCode, boolean singleAccountLimit) {
+        Long productId = productJpaRepository.save(ProductJpaEntity.builder()
+                .productCode(productCode)
+                .productName("청년 희망 적금")
+                .productGroup(ProductGroup.SAVINGS)
+                .depositType(DepositType.INSTALLMENT)
+                .summary("테스트용 적금")
+                .description("테스트용 적금 설명")
+                .baseRate(new BigDecimal("2.50"))
+                .maxRate(new BigDecimal("3.20"))
+                .minAmount(100_000L)
+                .maxAmount(10_000_000L)
+                .amountUnit(10_000L)
+                .minTermMonths((short) 6)
+                .maxTermMonths((short) 36)
+                .interestPayType(InterestPayType.SIMPLE)
+                .saleStatus(SaleStatus.ON_SALE)
+                .saleStartDate(LocalDate.of(2026, 1, 1))
+                .saleEndDate(LocalDate.of(2026, 12, 31))
+                .newFlag(false)
+                .singleAccountLimit(singleAccountLimit)
+                .build()).getProductId();
+        rateTierRepository.save(ProductRateTierJpaEntity.builder()
+                .id(new ProductRateTierJpaEntityId(productId, (short) 12))
+                .rate(new BigDecimal("3.20"))
+                .build());
+        new AccountNumberSequenceTestFixture(jdbcTemplate).resetProductAccountSequence(
+                productId, AccountType.INSTALLMENT_SAVINGS,
+                AccountNumberSequenceTestFixture.INSTALLMENT_SAVINGS_PREFIX, 0L);
+        return productId;
+    }
+
+    private String executeRequestJson(Long productId, Long withdrawalAccountId, Long amount, int termMonths) {
+        return """
+                {
+                  "productId": %d,
+                  "subscriptionAmount": %d,
+                  "termMonths": %d,
+                  "withdrawalAccountId": %d,
+                  "newAccountPassword": "1234",
+                  "newAccountPasswordConfirm": "1234",
+                  "accountPasswordAuthToken": "ACC_PWD_test",
+                  "otpAuthToken": "OTP_AUTH_test",
+                  "agreedTerms": []
+                }
+                """.formatted(productId, amount, termMonths, withdrawalAccountId);
     }
 
     private Long seedAccount(String accountNumber, Long customerId, long balance) {
