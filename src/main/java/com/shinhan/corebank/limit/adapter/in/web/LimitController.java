@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/transfer-limits")
 @RequiredArgsConstructor
-public class LimitController {
+public class LimitController implements LimitControllerDocs {
 
     private final LimitQueryUseCase limitQueryUseCase;
     private final CurrentCustomerProvider currentCustomerProvider;
@@ -22,6 +22,7 @@ public class LimitController {
      * 세션 고객 본인의 이체한도와 당일 사용 현황을 조회한다(REQ-TRSF-024).
      * 클라이언트가 보낸 고객 식별자는 신뢰하지 않는다(REQ-NFR-007).
      */
+    @Override
     @GetMapping
     public ApiResponse<LimitResponse> getTransferLimit() {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
