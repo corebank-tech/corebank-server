@@ -13,3 +13,4 @@ interface ScheduledTransferUsageJpaRepository
             String status
     );
 }
+
