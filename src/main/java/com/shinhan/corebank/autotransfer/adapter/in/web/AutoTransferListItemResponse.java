@@ -1,7 +1,6 @@
 package com.shinhan.corebank.autotransfer.adapter.in.web;
 
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferListItem;
-import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 
 import java.time.LocalDate;
@@ -12,10 +11,8 @@ public record AutoTransferListItemResponse(Long autoTransferId, String depositAc
                                            Integer transferDay, Integer cycleMonths, String myPassbookMemo,
                                            AutoTransferStatus status, LocalDateTime registeredAt) {
     public static AutoTransferListItemResponse from(AutoTransferListItem item) {
-        AutoTransfer autoTransfer = item.autoTransfer();
-        return new AutoTransferListItemResponse(autoTransfer.getAutoTransferId(),
-                autoTransfer.getDepositAccountNumber(), item.fromAlias(), autoTransfer.getPayeeName(), autoTransfer.getAmount(),
-                autoTransfer.getStartDate(), autoTransfer.getEndDate(), autoTransfer.getTransferDay(), autoTransfer.getCycleMonths(),
-                autoTransfer.getMyPassbookMemo(), autoTransfer.getStatus(), autoTransfer.getRegisteredAt());
+        return new AutoTransferListItemResponse(item.autoTransferId(), item.depositAccountNumber(), item.fromAlias(),
+                item.payeeName(), item.amount(), item.startDate(), item.endDate(), item.transferDay(), item.cycleMonths(),
+                item.myPassbookMemo(), item.status(), item.registeredAt());
     }
 }

@@ -1,7 +1,20 @@
 package com.shinhan.corebank.autotransfer.application.port.in;
 
-import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
+import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 
-// AutoTransfer 필드를 그대로 재사용 - 목록조회는 계좌가 항상 하나뿐이라 별칭만 덧붙이면 된다(#236)
-public record AutoTransferListItem(AutoTransfer autoTransfer, String fromAlias) {
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+public record AutoTransferListItem(Long autoTransferId,
+                                   String depositAccountNumber,
+                                   String fromAlias,
+                                   String payeeName,
+                                   Long amount,
+                                   LocalDate startDate,
+                                   LocalDate endDate,
+                                   Integer transferDay,
+                                   Integer cycleMonths,
+                                   String myPassbookMemo,
+                                   AutoTransferStatus status,
+                                   LocalDateTime registeredAt) {
 }

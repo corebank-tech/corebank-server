@@ -4,6 +4,7 @@ import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferListIte
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferQueryUseCase;
 import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferQueryPort;
+import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
@@ -38,6 +39,23 @@ public class AutoTransferQueryService implements AutoTransferQueryUseCase {
         // withdrawalAccountId가 필수 파라미터라 페이지 안 모든 행이 같은 계좌 - 별칭은 요청당 1회만 조회
         String fromAlias = accountStatusPort.findAccountAlias(withdrawalAccountId).orElse(null);
         return autoTransferQueryPort.search(customerId, withdrawalAccountId, status, PageRequest.of(page,size))
-                .map(autoTransfer -> new AutoTransferListItem(autoTransfer, fromAlias));
+                .map(autoTransfer -> toItem(autoTransfer, fromAlias));
+    }
+
+    private AutoTransferListItem toItem(AutoTransfer autoTransfer, String fromAlias) {
+        return new AutoTransferListItem(
+                autoTransfer.getAutoTransferId(),
+                autoTransfer.getDepositAccountNumber(),
+                fromAlias,
+                autoTransfer.getPayeeName(),
+                autoTransfer.getAmount(),
+                autoTransfer.getStartDate(),
+                autoTransfer.getEndDate(),
+                autoTransfer.getTransferDay(),
+                autoTransfer.getCycleMonths(),
+                autoTransfer.getMyPassbookMemo(),
+                autoTransfer.getStatus(),
+                autoTransfer.getRegisteredAt()
+        );
     }
 }
