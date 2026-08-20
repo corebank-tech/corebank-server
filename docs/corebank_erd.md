@@ -155,7 +155,6 @@ erDiagram
         bigint customer_id PK
         bigint one_time_limit
         bigint daily_limit
-        bigint version
     }
     transfer_limit_daily_usage {
         bigint customer_id PK
@@ -165,10 +164,8 @@ erDiagram
     transfer_limit_history {
         bigint history_id PK "AUTO_INCREMENT"
         bigint customer_id FK
-        bigint before_one_time_limit "변경 전 1회 한도"
-        bigint after_one_time_limit "변경 후 1회 한도"
-        bigint before_daily_limit "변경 전 1일 한도"
-        bigint after_daily_limit "변경 후 1일 한도"
+        bigint before_one_time_limit "변경 직전 1회 한도"
+        bigint before_daily_limit "변경 직전 1일 한도"
     }
 
     %% ---------- P3 ----------
