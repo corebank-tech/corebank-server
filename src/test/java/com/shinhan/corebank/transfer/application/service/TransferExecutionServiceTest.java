@@ -235,6 +235,60 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("동일 sourceId+executionDate로 둘 다 실패하는 execute()를 동시에 호출해도 예외 없이 동일 ERROR 결과가 반환된다")
+    void execute_concurrentSameSourceAndExecutionDateBothFail_returnsSameErrorResultWithoutThrowing() throws Exception {
+        // given: 잔액(100,000)보다 큰 금액이라 두 호출 모두 BusinessException(INSUFFICIENT_BALANCE)으로 실패한다.
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        LocalDate executionDate = LocalDate.of(2026, 8, 20);
+        TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(150000L)
+                .transferType(TransferType.AUTO)
+                .channel(TransferChannel.BT)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .sourceId(557L)
+                .executionDate(executionDate)
+                .build();
+
+        // when: 두 스레드가 사전조회를 모두 통과한 뒤 동시에 실행해, 둘 다 실패 확정(failTransfer) INSERT에서
+        // uk_transfer_source_execution_date로 경합하게 만든다.
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        TransferResult first;
+        TransferResult second;
+        try {
+            Future<TransferResult> firstCall = executor.submit(() -> callAfterLatches(ready, start, command));
+            Future<TransferResult> secondCall = executor.submit(() -> callAfterLatches(ready, start, command));
+
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            first = firstCall.get(10, TimeUnit.SECONDS);
+            second = secondCall.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        // then: 어느 쪽도 예외 없이 동일한 ERROR 결과를 반환한다 (실패를 먼저 확정한 쪽의 결과를 재조회로 공유)
+        assertThat(first.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(second.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(first.errorCode()).isEqualTo(TransferErrorCode.INSUFFICIENT_BALANCE.getCode());
+        assertThat(second.errorCode()).isEqualTo(TransferErrorCode.INSUFFICIENT_BALANCE.getCode());
+        assertThat(second.transactionNumber()).isEqualTo(first.transactionNumber());
+
+        // then: transfer 행은 1건만 ERROR로 커밋된다
+        Integer transferRowCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transfer WHERE source_type = 'AUTO' AND source_id = 557", Integer.class);
+        assertThat(transferRowCount).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("출금계좌 잔액보다 큰 금액을 이체하면 transfer는 ERROR로 커밋되고 원장은 0행, 계좌 잔액은 그대로다")
     void execute_withInsufficientBalance_recordsErrorTransfer_withoutLedgerRows() {
         // given: 픽스처는 별도 트랜잭션에서 커밋한다. (출금계좌 101 잔액 100,000)
