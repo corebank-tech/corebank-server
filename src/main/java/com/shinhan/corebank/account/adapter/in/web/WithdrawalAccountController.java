@@ -1,7 +1,6 @@
 package com.shinhan.corebank.account.adapter.in.web;
 
-import com.shinhan.corebank.account.application.port.in.WithdrawalAccountRegisterResult;
-import com.shinhan.corebank.account.application.port.in.WithdrawalAccountRegisterUseCase;
+import com.shinhan.corebank.account.application.port.in.*;
 import com.shinhan.corebank.adapter.in.web.exception.ErrorResponse;
 import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
@@ -157,6 +156,49 @@ public class WithdrawalAccountController {
     }
 
     @DeleteMapping("/{accountId}")
+    @Operation(
+            summary = "출금계좌 등록 삭제",
+            description = """
+                    로그인한 고객이 소유한 계좌의 출금계좌 등록을 삭제한다.
+                    예약이체 또는 자동이체에서 사용 중인 출금계좌는 삭제할 수 없다.
+                    이미 출금계좌 등록이 해제된 경우에도 성공으로 처리하며,
+                    동일한 Idempotency-Key와 동일한 요청으로 재요청하면
+                    저장된 응답을 반환한다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "출금계좌 등록 삭제 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "`CMN0001` 잘못된 입력값 · `CMN0002` 필수 Idempotency-Key 누락",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "`ACC0201` 계좌를 찾을 수 없거나 접근할 수 없음",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "`ACC0302` 예약이체 또는 자동이체 사용으로 삭제 불가 · `CMN0301`/`CMN0302` 멱등키 충돌",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            )
+    })
     public ResponseEntity<
             ApiResponse<WithdrawalAccountUnregisterResponse>
             > unregister(
