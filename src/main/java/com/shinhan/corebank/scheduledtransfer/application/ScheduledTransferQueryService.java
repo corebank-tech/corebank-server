@@ -139,7 +139,7 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
         return new ScheduledTransferExecutionResultItem(
                 scheduledTransfer.getScheduledTransferId(),
                 scheduledTransfer.getStatus(),
-                scheduledTransfer.getScheduledDate(),
+                scheduledTransfer.getExecutedAt(),
                 withdrawalAccountNumber,
                 scheduledTransfer.getPayeeAccountNumber(),
                 scheduledTransfer.getPayeeName(),

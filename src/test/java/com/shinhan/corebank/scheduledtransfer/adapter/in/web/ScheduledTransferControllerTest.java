@@ -222,8 +222,8 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.items.length()").value(2))
                 .andExpect(jsonPath("$.data.summary.successCount").value(1))
                 .andExpect(jsonPath("$.data.summary.successAmount").value(10000))
-                .andExpect(jsonPath("$.data.summary.failedCount").value(1))
-                .andExpect(jsonPath("$.data.summary.failedAmount").value(20000));
+                .andExpect(jsonPath("$.data.summary.failureCount").value(1))
+                .andExpect(jsonPath("$.data.summary.failureAmount").value(20000));
     }
 
     @Test
@@ -238,7 +238,10 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                         .with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].accountNumber").value("110******321"))
-                .andExpect(jsonPath("$.data.items[0].transactionNumber").value("20260805BT0000000002"));
+                .andExpect(jsonPath("$.data.items[0].transactionNumber").value("20260805BT0000000002"))
+                // 실행일시는 executedAt으로 확정한다(api_conventions.md §6-4) - scheduledDate(예정일)로 회귀하지 않도록 필드명을 고정
+                .andExpect(jsonPath("$.data.items[0].executedAt").exists())
+                .andExpect(jsonPath("$.data.items[0].scheduledDate").doesNotExist());
     }
 
     @Test

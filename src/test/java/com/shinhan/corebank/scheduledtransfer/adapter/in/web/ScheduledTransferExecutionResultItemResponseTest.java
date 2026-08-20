@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultItem;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +12,7 @@ class ScheduledTransferExecutionResultItemResponseTest {
 
     private ScheduledTransferExecutionResultItem item(ScheduledTransferStatus status, String transactionNumber, String failureReason) {
         return new ScheduledTransferExecutionResultItem(
-                7001L, status, LocalDate.of(2026, 8, 5), "110123456789", "110987654321", "홍길동",
+                7001L, status, LocalDateTime.of(2026, 8, 5, 9, 0), "110123456789", "110987654321", "홍길동",
                 300_000L, transactionNumber, failureReason);
     }
 

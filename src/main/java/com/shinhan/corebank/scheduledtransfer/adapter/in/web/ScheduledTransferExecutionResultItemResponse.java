@@ -4,11 +4,12 @@ import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultItem;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
+// executedAt은 실제 실행(확정)시각(api_conventions.md §6-4) - CANCELED 건은 실행된 적이 없어 null
 public record ScheduledTransferExecutionResultItemResponse(Long scheduledTransferId,
                                                             ScheduledTransferStatus status,
-                                                            LocalDate scheduledDate,
+                                                            LocalDateTime executedAt,
                                                             String withdrawalAccountNumber,
                                                             String accountNumber,
                                                             String payeeName,
@@ -19,7 +20,7 @@ public record ScheduledTransferExecutionResultItemResponse(Long scheduledTransfe
         return new ScheduledTransferExecutionResultItemResponse(
                 item.scheduledTransferId(),
                 item.status(),
-                item.scheduledDate(),
+                item.executedAt(),
                 MaskingUtil.maskAccountNumber(item.withdrawalAccountNumber()),
                 MaskingUtil.maskAccountNumber(item.payeeAccountNumber()),
                 MaskingUtil.maskName(item.payeeName()),
