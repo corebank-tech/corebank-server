@@ -115,6 +115,7 @@ erDiagram
         varchar status "SUCCESS / ERROR / PROCESSING"
         varchar source_type "SCHEDULED / AUTO"
         bigint source_id
+        date execution_date "source_id와 함께 멱등키. SCHEDULED/AUTO 전용"
         varchar my_passbook_memo "TRF0005 최대 10자"
         varchar recipient_passbook_memo "VARCHAR(10)"
         bigint withdrawal_balance_after

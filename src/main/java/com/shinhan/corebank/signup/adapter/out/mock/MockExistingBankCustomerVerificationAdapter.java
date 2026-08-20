@@ -1,20 +1,24 @@
 package com.shinhan.corebank.signup.adapter.out.mock;
 
 import com.shinhan.corebank.signup.application.port.out.ExistingBankCustomerVerificationPort;
+import com.shinhan.corebank.signup.application.port.out.ExistingBankCustomerProfilePort;
 import com.shinhan.corebank.signup.domain.model.ExistingBankAccountVerification;
+import com.shinhan.corebank.signup.domain.model.ExistingBankCustomerProfile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 // Phase 1의 고객 원장과 실패 상태를 메모리로 제공하며 서버 재시작 시 상태는 초기화된다.
 @Component
 public class MockExistingBankCustomerVerificationAdapter
-        implements ExistingBankCustomerVerificationPort {
+        implements ExistingBankCustomerVerificationPort,
+        ExistingBankCustomerProfilePort {
 
     private static final int MAX_ATTEMPTS = 5;
     private static final DateTimeFormatter BIRTH_DATE_FORMATTER =
@@ -99,6 +103,21 @@ public class MockExistingBankCustomerVerificationAdapter
                     owner.existingBankAccountId()
             );
         }
+    }
+
+    @Override
+    public Optional<ExistingBankCustomerProfile> findByCustomerId(
+            String customerId
+    ) {
+        return accountsByNumber.values().stream()
+                .filter(owner -> owner.existingBankCustomerId()
+                        .equals(customerId))
+                .findFirst()
+                .map(owner -> new ExistingBankCustomerProfile(
+                        owner.existingBankCustomerId(),
+                        owner.userName(),
+                        owner.birthDate()
+                ));
     }
 
     private boolean matchesCustomer(

@@ -14,5 +14,7 @@ public interface EmailVerificationTokenPort {
             Duration ttl
     );
 
+    Optional<EmailVerificationTokenPayload> find(String token);
+
     Optional<EmailVerificationTokenPayload> consume(String token);
 }

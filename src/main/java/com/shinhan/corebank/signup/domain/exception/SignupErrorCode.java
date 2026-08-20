@@ -5,10 +5,28 @@ import com.shinhan.corebank.common.exception.ErrorCode;
 // 회원가입 과정에서 사용하는 업무 오류 코드와 메시지를 정의한다.
 public enum SignupErrorCode implements ErrorCode {
 
+    INVALID_PASSWORD_FORMAT(
+            "ATH0001",
+            400,
+            "비밀번호 규칙에 맞지 않습니다."
+    ),
+
+    PASSWORD_CONFIRMATION_MISMATCH(
+            "ATH0002",
+            400,
+            "비밀번호와 확인값이 일치하지 않습니다."
+    ),
+
     INVALID_USER_ID_FORMAT(
             "ATH0004",
             400,
             "아이디 형식이 올바르지 않습니다."
+    ),
+
+    USER_ID_CHECK_REQUIRED(
+            "ATH0005",
+            400,
+            "아이디 중복확인을 완료해 주세요."
     ),
 
     REQUIRED_TERMS_NOT_AGREED(

@@ -49,8 +49,16 @@ public class UserIdCheckTokenRedisAdapter
     }
 
     @Override
+    public Optional<UserIdCheckTokenPayload> find(String token) {
+        return deserialize(redisTemplate.opsForValue().get(key(token)));
+    }
+
+    @Override
     public Optional<UserIdCheckTokenPayload> consume(String token) {
-        String json = redisTemplate.opsForValue().getAndDelete(key(token));
+        return deserialize(redisTemplate.opsForValue().getAndDelete(key(token)));
+    }
+
+    private Optional<UserIdCheckTokenPayload> deserialize(String json) {
         if (json == null) {
             return Optional.empty();
         }

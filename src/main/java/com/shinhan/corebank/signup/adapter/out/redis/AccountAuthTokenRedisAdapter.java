@@ -48,8 +48,16 @@ public class AccountAuthTokenRedisAdapter implements AccountAuthTokenPort {
     }
 
     @Override
+    public Optional<AccountAuthTokenPayload> find(String token) {
+        return deserialize(redisTemplate.opsForValue().get(key(token)));
+    }
+
+    @Override
     public Optional<AccountAuthTokenPayload> consume(String token) {
-        String json = redisTemplate.opsForValue().getAndDelete(key(token));
+        return deserialize(redisTemplate.opsForValue().getAndDelete(key(token)));
+    }
+
+    private Optional<AccountAuthTokenPayload> deserialize(String json) {
         if (json == null) {
             return Optional.empty();
         }

@@ -63,7 +63,8 @@ class SignupAccountVerificationServiceTest {
                         Duration.ofMinutes(30),
                         Duration.ofMinutes(3),
                         Duration.ofMinutes(30),
-                        ACCOUNT_AUTH_TTL
+                        ACCOUNT_AUTH_TTL,
+                        Duration.ofMinutes(30)
                 ),
                 Clock.fixed(NOW, ZoneOffset.UTC)
         );

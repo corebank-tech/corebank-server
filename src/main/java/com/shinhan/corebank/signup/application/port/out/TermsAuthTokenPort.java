@@ -14,6 +14,8 @@ public interface TermsAuthTokenPort {
             Duration ttl
     );
 
+    Optional<TermsAuthTokenPayload> find(String termsAuthToken);
+
     Optional<TermsAuthTokenPayload> consume(
             String termsAuthToken
     );

@@ -14,5 +14,7 @@ public interface AccountAuthTokenPort {
             Duration ttl
     );
 
+    Optional<AccountAuthTokenPayload> find(String token);
+
     Optional<AccountAuthTokenPayload> consume(String token);
 }

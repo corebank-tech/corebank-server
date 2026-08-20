@@ -22,6 +22,7 @@ import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogJpaEntity;
 import com.shinhan.corebank.common.audit.AuditLogJpaRepository;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import jakarta.persistence.EntityManager;
@@ -34,6 +35,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
@@ -224,6 +226,38 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
         assertThat(auditLogJpaRepository.findAll()).hasSize(1);
         assertThat(auditLogJpaRepository.findAll().get(0).getDetail()).doesNotContainKey("errorCode");
+    }
+
+    @Test
+    @DisplayName("배치 호출일과 이 회차의 논리적 실행일(nextExecutionDate)이 다르면(전날 후속처리 실패 후 익일 재시도), " +
+            "saveProcessing()/completeProcessing() 모두 배치 호출일이 아니라 nextExecutionDate를 executionDate로 써서 " +
+            "멱등성 사전조회가 첫 시도와 같은 키로 인식하게 한다 (PR #217 리뷰)")
+    void completeProcessing_batchDateDiffersFromNextExecutionDate_usesLogicalExecutionDateAsIdempotencyKey() {
+        // given: nextExecutionDate는 3/15(today)에 그대로 멈춰있는데, 배치는 하루 늦게(3/16) 이 건을 재시도한다
+        LocalDate logicalExecutionDate = today;
+        LocalDate batchRunDate = today.plusDays(1);
+
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), batchRunDate);
+
+        // then: PROCESSING 행의 executionDate는 배치 호출일이 아니라 논리적 실행일이어야 한다
+        var savedEntity = executionRepository.findById(saved.getExecutionId()).orElseThrow();
+        assertThat(savedEntity.getExecutionDate()).isEqualTo(logicalExecutionDate);
+
+        when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
+                .status(ProcessResultStatus.SUCCESS)
+                .transactionNumber("20260315BT0000000001")
+                .transferredAt(LocalDateTime.now())
+                .withdrawalBalanceAfter(90000L)
+                .build());
+
+        itemProcessor.completeProcessing(autoTransfer(), saved, batchRunDate);
+
+        // then: TransferExecutionService로 넘기는 TransferCommand.executionDate도 배치 호출일이 아니라
+        // 논리적 실행일이어야 한다 - 이래야 첫 시도가 이미 성공해 커밋되어 있었다면 사전조회가 같은
+        // (sourceId, executionDate) 키로 그 결과를 찾아 재처리(중복 송금)를 막는다
+        ArgumentCaptor<TransferCommand> commandCaptor = ArgumentCaptor.forClass(TransferCommand.class);
+        verify(transferExecutionUseCase).execute(commandCaptor.capture());
+        assertThat(commandCaptor.getValue().executionDate()).isEqualTo(logicalExecutionDate);
     }
 
     @Test
@@ -600,9 +634,9 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     void reconcileStuckExecution_threeConsecutiveFailures_logsWarn(CapturedOutput output) {
         when(transferLookupPort.findBySourceAndDate(any(), any())).thenReturn(Optional.empty());
 
-        reconcileOnDate(today.minusDays(2));
-        reconcileOnDate(today.minusDays(1));
-        reconcileOnDate(today);
+        reconcileOnDate();
+        reconcileOnDate();
+        reconcileOnDate();
 
         assertThat(output).contains("자동이체 연속 실패 감지").contains("autoTransferId=" + autoTransferId);
     }
@@ -610,14 +644,18 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Test
     @DisplayName("최근 3건 중 하나라도 SUCCESS면 연속 실패로 보지 않고 WARN 로그를 남기지 않는다")
     void reconcileStuckExecution_notAllRecentFailed_doesNotLogWarn(CapturedOutput output) {
-        when(transferLookupPort.findBySourceAndDate(autoTransferId, today.minusDays(2)))
+        // saveProcessing()이 executionDate로 nextExecutionDate를 쓰므로, 3번의 재확정은 실제로
+        // 3/15(today) -> 4/15 -> 5/15(cycleMonths=1, transferDay=15) 순으로 조회된다.
+        LocalDate secondCycleDate = LocalDate.of(2026, 4, 15);
+        LocalDate thirdCycleDate = LocalDate.of(2026, 5, 15);
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
                 .thenReturn(Optional.of(new TransferLookupResult("20260313BT0000000001", ProcessResultStatus.SUCCESS, null)));
-        when(transferLookupPort.findBySourceAndDate(autoTransferId, today.minusDays(1))).thenReturn(Optional.empty());
-        when(transferLookupPort.findBySourceAndDate(autoTransferId, today)).thenReturn(Optional.empty());
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, secondCycleDate)).thenReturn(Optional.empty());
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, thirdCycleDate)).thenReturn(Optional.empty());
 
-        reconcileOnDate(today.minusDays(2));
-        reconcileOnDate(today.minusDays(1));
-        reconcileOnDate(today);
+        reconcileOnDate();
+        reconcileOnDate();
+        reconcileOnDate();
 
         assertThat(output).doesNotContain("자동이체 연속 실패 감지");
     }
@@ -658,7 +696,9 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     // autoTransfer()는 version을 0L로 고정해서 반환하는데, reconcileStuckExecution()이
     // 매번 autoTransferPersistencePort.save()로 버전을 올리기 때문에 이 헬퍼를 여러 번
     // 부르는 테스트(연속 실패 시나리오)에서는 DB의 최신 버전을 매번 다시 읽어와야 한다.
-    private void reconcileOnDate(LocalDate date) {
+    // saveProcessing()이 이제 nextExecutionDate를 executionDate로 쓰므로, 세 번을 연달아 부르면
+    // 실제 조회되는 날짜는 (호출 인자가 아니라) 매번 한 사이클씩(월 단위) 전진한다.
+    private void reconcileOnDate() {
         AutoTransferJpaEntity entity = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
         AutoTransfer current = AutoTransfer.reconstitute(
                 autoTransferId, customerId, entity.getWithdrawalAccountId(),
@@ -667,7 +707,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
                 "메모", "받는메모", entity.getStatus(),
                 LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0), entity.getVersion());
 
-        AutoTransferExecution saved = itemProcessor.saveProcessing(current, date);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(current, current.getNextExecutionDate());
         itemProcessor.reconcileStuckExecution(new StuckExecution(current, saved));
     }
 

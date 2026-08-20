@@ -32,5 +32,6 @@ app:
       user-id-check-ttl: 3m
       email-verification-ttl: 30m
       account-auth-ttl: 10m
+      temp-signup-ttl: 30m
     email-verification:
       code-ttl: 3m
