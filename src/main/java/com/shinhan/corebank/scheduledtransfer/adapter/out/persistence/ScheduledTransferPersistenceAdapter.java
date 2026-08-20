@@ -4,9 +4,11 @@ import com.querydsl.core.Tuple;
 import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.Coalesce;
+import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.dsl.ComparableExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultSort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferExecutionResultAggregate;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferBatchQueryPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferPersistencePort;
@@ -120,12 +122,13 @@ public class ScheduledTransferPersistenceAdapter implements ScheduledTransferPer
 
     @Override
     public Page<ScheduledTransfer> searchExecutionResults(Long customerId, Long withdrawalAccountId,
-                                                          LocalDate fromDate, LocalDate toDate, Pageable pageable) {
+                                                          LocalDate fromDate, LocalDate toDate,
+                                                          ScheduledTransferExecutionResultSort sort, Pageable pageable) {
         Predicate[] conditions = executionResultConditions(customerId, withdrawalAccountId, fromDate, toDate);
         List<ScheduledTransferJpaEntity> content = queryFactory
                 .selectFrom(scheduledTransferJpaEntity)
                 .where(conditions)
-                .orderBy(effectiveDate().desc(), scheduledTransferJpaEntity.scheduledTransferId.desc())
+                .orderBy(effectiveDateSortOrder(sort))
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
                 .fetch();
@@ -212,6 +215,14 @@ public class ScheduledTransferPersistenceAdapter implements ScheduledTransferPer
 
     private BooleanExpression effectiveDateLoe(LocalDate toDate) {
         return toDate != null ? effectiveDate().lt(toDate.plusDays(1).atStartOfDay()) : null;
+    }
+
+    // LedgerHistorySort(transfer 도메인)와 동일 패턴: OLDEST=오름차순, 그 외(LATEST)=내림차순
+    private OrderSpecifier<?>[] effectiveDateSortOrder(ScheduledTransferExecutionResultSort sort) {
+        if (sort == ScheduledTransferExecutionResultSort.OLDEST) {
+            return new OrderSpecifier<?>[] { effectiveDate().asc(), scheduledTransferJpaEntity.scheduledTransferId.asc() };
+        }
+        return new OrderSpecifier<?>[] { effectiveDate().desc(), scheduledTransferJpaEntity.scheduledTransferId.desc() };
     }
 
     private BooleanExpression statusEq(ScheduledTransferStatus status) {
