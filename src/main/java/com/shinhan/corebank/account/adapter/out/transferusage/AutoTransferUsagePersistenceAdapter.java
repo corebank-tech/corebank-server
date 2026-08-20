@@ -1,6 +1,7 @@
 package com.shinhan.corebank.account.adapter.out.transferusage;
 
 import com.shinhan.corebank.account.application.port.out.AutoTransferUsageQueryPort;
+import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -10,7 +11,7 @@ public class AutoTransferUsagePersistenceAdapter
         implements AutoTransferUsageQueryPort {
 
     private static final String BLOCKING_STATUS =
-            "NORMAL";
+        AutoTransferStatus.NORMAL.name();
 
     private final AutoTransferUsageJpaRepository repository;
 
