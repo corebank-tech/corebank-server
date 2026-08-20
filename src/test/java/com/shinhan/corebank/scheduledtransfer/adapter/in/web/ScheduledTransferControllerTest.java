@@ -4,6 +4,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -129,6 +130,38 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("응답 항목은 출금계좌 별칭(fromAlias)·통장 표시내용(myPassbookMemo)·등록일시(registeredAt)를 내려준다")
+    void search_includesFromAliasMemoAndRegisteredAt() throws Exception {
+        entityManager.createNativeQuery("UPDATE account SET alias = :alias WHERE account_id = :accountId")
+                .setParameter("alias", "우리집")
+                .setParameter("accountId", accountId)
+                .executeUpdate();
+        ScheduledTransferJpaEntity entity = scheduledTransfer(accountId, LocalDate.now().plusDays(5));
+        scheduledTransferJpaRepository.save(entity);
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/scheduled-transfers")
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].fromAlias").value("우리집"))
+                .andExpect(jsonPath("$.data.items[0].registeredAt").exists());
+    }
+
+    @Test
+    @DisplayName("출금계좌에 별칭이 없으면 fromAlias는 응답에서 null이다")
+    void search_fromAliasNull_whenAccountAliasNotSet() throws Exception {
+        scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now().plusDays(5)));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/scheduled-transfers")
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].fromAlias").value(nullValue()));
+    }
+
+    @Test
     @DisplayName("status로 필터링하면 해당 상태만 조회된다")
     void search_filtersByStatus() throws Exception {
         ScheduledTransferJpaEntity waiting = scheduledTransfer(accountId, LocalDate.now().plusDays(5));
@@ -202,6 +235,94 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    @DisplayName("처리결과 조회는 WAITING을 제외하고 SUCCESS/FAILED/CANCELED만 반환하며, 상단에 집계를 포함한다")
+    void searchExecutionResults_excludesWaitingAndIncludesSummary() throws Exception {
+        scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now().plusDays(5)));
+        scheduledTransferJpaRepository.save(terminalScheduledTransfer(accountId, ScheduledTransferStatus.SUCCESS,
+                LocalDate.now().minusDays(5), 10_000L, "20260805BT0000000001", null));
+        scheduledTransferJpaRepository.save(terminalScheduledTransfer(accountId, ScheduledTransferStatus.FAILED,
+                LocalDate.now().minusDays(3), 20_000L, null, "잔액 부족"));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/scheduled-transfers/executions")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("fromDate", LocalDate.now().minusDays(10).toString())
+                        .param("toDate", LocalDate.now().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.items.length()").value(2))
+                .andExpect(jsonPath("$.data.summary.successCount").value(1))
+                .andExpect(jsonPath("$.data.summary.successAmount").value(10000))
+                .andExpect(jsonPath("$.data.summary.failureCount").value(1))
+                .andExpect(jsonPath("$.data.summary.failureAmount").value(20000));
+    }
+
+    @Test
+    @DisplayName("처리결과 조회 응답도 accountNumber 필드로 마스킹된 상대방 계좌번호를 내려준다")
+    void searchExecutionResults_responseUsesAccountNumberField() throws Exception {
+        scheduledTransferJpaRepository.save(terminalScheduledTransfer(accountId, ScheduledTransferStatus.SUCCESS,
+                LocalDate.now().minusDays(1), 10_000L, "20260805BT0000000002", null));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/scheduled-transfers/executions")
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].accountNumber").value("110******321"))
+                .andExpect(jsonPath("$.data.items[0].transactionNumber").value("20260805BT0000000002"))
+                // 실행일시는 executedAt으로 확정한다(api_conventions.md §6-4) - scheduledDate(예정일)로 회귀하지 않도록 필드명을 고정
+                .andExpect(jsonPath("$.data.items[0].executedAt").exists())
+                .andExpect(jsonPath("$.data.items[0].scheduledDate").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("다른 고객의 처리결과는 조회되지 않는다 (IDOR 차단)")
+    void searchExecutionResults_otherCustomersScheduledTransfer_returnsEmptyList() throws Exception {
+        Long otherCustomerId = insertCustomer();
+        Long otherAccountId = insertAccount(otherCustomerId);
+        ScheduledTransferJpaEntity othersTransfer = ScheduledTransferJpaEntity.builder()
+                .customerId(otherCustomerId)
+                .withdrawalAccountId(otherAccountId)
+                .payeeBankCode("088")
+                .payeeAccountNumber("110987654321")
+                .payeeName("홍길동")
+                .amount(10_000L)
+                .scheduledDate(LocalDate.now().minusDays(1))
+                .status(ScheduledTransferStatus.SUCCESS)
+                .transactionNumber("20260805BT0000000003")
+                .registeredAt(LocalDateTime.now())
+                .executedAt(LocalDateTime.now())
+                .build();
+        scheduledTransferJpaRepository.save(othersTransfer);
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/scheduled-transfers/executions")
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalCount").value(0))
+                .andExpect(jsonPath("$.data.items.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("허용되지 않은 size로 처리결과를 조회하면 400 + CMN0005를 반환한다")
+    void searchExecutionResults_invalidPageSize_returnsCmn0005() throws Exception {
+        mockMvc.perform(get("/scheduled-transfers/executions")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("size", "7"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0005"));
+    }
+
+    @Test
+    @DisplayName("인증 없이 처리결과 조회를 요청하면 401을 반환한다")
+    void searchExecutionResults_withoutAuthentication_returnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/scheduled-transfers/executions"))
+                .andExpect(status().isUnauthorized());
+    }
+
     private UsernamePasswordAuthenticationToken authenticationOf(Long customerId) {
         AuthenticatedCustomer customer = new AuthenticatedCustomer(customerId, "user" + customerId, "테스터");
         return UsernamePasswordAuthenticationToken.authenticated(
@@ -233,6 +354,24 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                 .scheduledDate(scheduledDate)
                 .status(ScheduledTransferStatus.WAITING)
                 .registeredAt(LocalDateTime.now())
+                .build();
+    }
+
+    private ScheduledTransferJpaEntity terminalScheduledTransfer(Long withdrawalAccountId, ScheduledTransferStatus status,
+            LocalDate scheduledDate, Long amount, String transactionNumber, String failureReason) {
+        return ScheduledTransferJpaEntity.builder()
+                .customerId(customerId)
+                .withdrawalAccountId(withdrawalAccountId)
+                .payeeBankCode("088")
+                .payeeAccountNumber("110987654321")
+                .payeeName("홍길동")
+                .amount(amount)
+                .scheduledDate(scheduledDate)
+                .status(status)
+                .transactionNumber(transactionNumber)
+                .failureReason(failureReason)
+                .registeredAt(LocalDateTime.now().minusDays(30))
+                .executedAt(LocalDateTime.now())
                 .build();
     }
 

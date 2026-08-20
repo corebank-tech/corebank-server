@@ -59,4 +59,21 @@ public class MockAccountStatusPort implements AccountStatusPort {
         }
         return result;
     }
+
+    @Override
+    public Map<Long, String> findAccountAliasesByIds(Collection<Long> accountIds) {
+        if (accountIds.isEmpty()) {
+            return Map.of();
+        }
+        // alias는 nullable - null인 행은 결과 Map에서 제외(별칭 미설정)
+        List<Object[]> rows = entityManager.createNativeQuery(
+                        "SELECT account_id, alias FROM account WHERE account_id IN (:accountIds) AND alias IS NOT NULL")
+                .setParameter("accountIds", accountIds)
+                .getResultList();
+        Map<Long, String> result = new HashMap<>();
+        for (Object[] row : rows) {
+            result.put(((Number) row[0]).longValue(), (String) row[1]);
+        }
+        return result;
+    }
 }
