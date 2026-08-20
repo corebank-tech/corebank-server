@@ -1,8 +1,10 @@
 package com.shinhan.corebank.transfer.application.service;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -14,7 +16,15 @@ import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
+import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
+import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
+import com.shinhan.corebank.transfer.application.port.out.TransferAuthTokenVerificationPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
+import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
+import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
@@ -49,6 +59,30 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
 
     @Autowired
     private PlatformTransactionManager transactionManager;
+
+    @Autowired
+    private AccountLockPort accountLockPort;
+
+    @Autowired
+    private TransferLimitPort transferLimitPort;
+
+    @Autowired
+    private TransferAuthTokenVerificationPort transferAuthTokenVerificationPort;
+
+    @Autowired
+    private TransferSequencePort transferSequencePort;
+
+    @Autowired
+    private TransferSavePort transferSavePort;
+
+    @Autowired
+    private TransferLookupPort transferLookupPort;
+
+    @Autowired
+    private LedgerSavePort ledgerSavePort;
+
+    @Autowired
+    private Clock clock;
 
     @AfterEach
     void cleanUpCommittedData() {
@@ -255,19 +289,31 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 .executionDate(executionDate)
                 .build();
 
-        // when: 두 스레드가 사전조회를 모두 통과한 뒤 동시에 실행해, 둘 다 실패 확정(failTransfer) INSERT에서
-        // uk_transfer_source_execution_date로 경합하게 만든다.
+        // when: ready/start 래치는 스레드 "시작" 지점만 맞출 뿐, 그 뒤로는 스케줄링에 따라 한쪽이
+        // 실패 확정(failTransfer)까지 통째로 끝내버릴 수 있다 — 그러면 다른 쪽은 맨 앞 사전조회
+        // (findBySourceAndExecutionDate)에서 그 결과를 그냥 돌려받고 끝나, failTransfer()의
+        // DataIntegrityViolationException 재조회 경로를 타지 않고도 테스트가 통과해버린다. 두
+        // 스레드의 "첫 번째" 사전조회 호출이 둘 다 빈 결과로 끝날 때까지 대기시키는 래핑 포트로
+        // 그 경로를 실제로 강제한다.
+        CountDownLatch bothPreChecksEmpty = new CountDownLatch(2);
+        TransferExecutionService serviceUnderTest = new TransferExecutionService(
+                accountLockPort,
+                transferLimitPort,
+                transferAuthTokenVerificationPort,
+                transferSequencePort,
+                transferSavePort,
+                new PreCheckBarrierTransferLookupPort(transferLookupPort, bothPreChecksEmpty),
+                ledgerSavePort,
+                clock,
+                transactionManager
+        );
+
         ExecutorService executor = Executors.newFixedThreadPool(2);
-        CountDownLatch ready = new CountDownLatch(2);
-        CountDownLatch start = new CountDownLatch(1);
         TransferResult first;
         TransferResult second;
         try {
-            Future<TransferResult> firstCall = executor.submit(() -> callAfterLatches(ready, start, command));
-            Future<TransferResult> secondCall = executor.submit(() -> callAfterLatches(ready, start, command));
-
-            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
-            start.countDown();
+            Future<TransferResult> firstCall = executor.submit(() -> serviceUnderTest.execute(command));
+            Future<TransferResult> secondCall = executor.submit(() -> serviceUnderTest.execute(command));
 
             first = firstCall.get(10, TimeUnit.SECONDS);
             second = secondCall.get(10, TimeUnit.SECONDS);
@@ -286,6 +332,38 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         Integer transferRowCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM transfer WHERE source_type = 'AUTO' AND source_id = 557", Integer.class);
         assertThat(transferRowCount).isEqualTo(1);
+    }
+
+    // execute() 안에서 이 메서드는 스레드당 최소 1번(맨 앞 사전조회), 많으면 2번(DataIntegrityViolationException
+    // 이후 재조회) 호출된다. 스레드별 "첫 번째" 호출에서만 장벽을 걸어야 한다 — 두 번째(재조회) 호출까지 걸면
+    // 둘 중 하나만 그 경로를 타는 상황에서 나머지 하나가 영원히 대기하게 된다.
+    private static class PreCheckBarrierTransferLookupPort implements TransferLookupPort {
+        private final TransferLookupPort delegate;
+        private final CountDownLatch bothPreChecksEmpty;
+        private final ThreadLocal<Boolean> preCheckSeen = ThreadLocal.withInitial(() -> false);
+
+        PreCheckBarrierTransferLookupPort(TransferLookupPort delegate, CountDownLatch bothPreChecksEmpty) {
+            this.delegate = delegate;
+            this.bothPreChecksEmpty = bothPreChecksEmpty;
+        }
+
+        @Override
+        public Optional<TransferResult> findBySourceAndExecutionDate(
+                TransferSourceType sourceType, Long sourceId, LocalDate executionDate) {
+            boolean isPreCheck = !preCheckSeen.get();
+            preCheckSeen.set(true);
+
+            Optional<TransferResult> result = delegate.findBySourceAndExecutionDate(sourceType, sourceId, executionDate);
+            if (isPreCheck) {
+                bothPreChecksEmpty.countDown();
+                try {
+                    bothPreChecksEmpty.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            return result;
+        }
     }
 
     @Test
