@@ -7,6 +7,7 @@ import com.shinhan.corebank.otp.application.port.out.OtpAuthTokenStorePort;
 import com.shinhan.corebank.otp.application.port.out.OtpTransactionDataCanonicalizerPort;
 import com.shinhan.corebank.otp.application.port.out.OtpVerificationRequestPort;
 import com.shinhan.corebank.otp.domain.exception.OtpErrorCode;
+import com.shinhan.corebank.otp.domain.model.OtpAuthTokenPayload;
 import com.shinhan.corebank.otp.domain.model.OtpVerificationRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,9 +33,13 @@ public class OtpAuthTokenVerificationService implements OtpAuthTokenVerifier {
         }
         transactionDataValidator.validate(verification.transactionData());
 
-        String requestId = authTokenStorePort.findRequestId(verification.otpAuthToken())
+        OtpAuthTokenPayload payload = authTokenStorePort.find(verification.otpAuthToken())
                 .orElseThrow(() -> new BusinessException(OtpErrorCode.INVALID_AUTH_TOKEN));
-        OtpVerificationRequest request = requestPort.findVerifiedById(requestId)
+        if (!payload.customerId().equals(verification.customerId())) {
+            throw new BusinessException(OtpErrorCode.INVALID_AUTH_TOKEN);
+        }
+
+        OtpVerificationRequest request = requestPort.findVerifiedById(payload.otpRequestId())
                 .orElseThrow(() -> new BusinessException(OtpErrorCode.INVALID_AUTH_TOKEN));
 
         if (!request.belongsTo(verification.customerId())) {
@@ -50,7 +55,7 @@ public class OtpAuthTokenVerificationService implements OtpAuthTokenVerifier {
             throw new BusinessException(OtpErrorCode.TRANSACTION_MISMATCH);
         }
 
-        if (!authTokenStorePort.consumeIfMatches(verification.otpAuthToken(), requestId)) {
+        if (!authTokenStorePort.consumeIfMatches(verification.otpAuthToken(), payload)) {
             throw new BusinessException(OtpErrorCode.INVALID_AUTH_TOKEN);
         }
     }

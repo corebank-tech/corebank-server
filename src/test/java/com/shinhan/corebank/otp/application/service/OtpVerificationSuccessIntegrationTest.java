@@ -12,6 +12,8 @@ import com.shinhan.corebank.otp.application.port.in.IssueOtpUseCase;
 import com.shinhan.corebank.otp.application.port.in.VerifyOtpCommand;
 import com.shinhan.corebank.otp.application.port.in.VerifyOtpResult;
 import com.shinhan.corebank.otp.application.port.in.VerifyOtpUseCase;
+import com.shinhan.corebank.otp.adapter.out.redis.OtpAuthTokenRedisAdapter;
+import com.shinhan.corebank.otp.domain.model.OtpAuthTokenPayload;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,6 +36,7 @@ class OtpVerificationSuccessIntegrationTest extends IntegrationTestSupport {
     @Autowired IssueOtpUseCase issueOtpUseCase;
     @Autowired VerifyOtpUseCase verifyOtpUseCase;
     @Autowired OtpAuthTokenVerifier otpAuthTokenVerifier;
+    @Autowired OtpAuthTokenRedisAdapter otpAuthTokenRedisAdapter;
     @Autowired StringRedisTemplate redisTemplate;
     @Autowired JdbcTemplate jdbcTemplate;
 
@@ -95,8 +98,8 @@ class OtpVerificationSuccessIntegrationTest extends IntegrationTestSupport {
 
         assertThat(state.get("used")).isEqualTo(true);
         assertThat(state.get("verified_at")).isNotNull();
-        assertThat(redisTemplate.opsForValue().get(REDIS_PREFIX + otpAuthToken))
-                .isEqualTo(otpRequestId);
+        assertThat(otpAuthTokenRedisAdapter.find(otpAuthToken))
+                .contains(new OtpAuthTokenPayload(otpRequestId, customerId));
         assertThat(ttlSeconds).isBetween(295L, 300L);
 
         OtpAuthTokenVerification verification = new OtpAuthTokenVerification(

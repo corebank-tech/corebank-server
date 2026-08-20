@@ -10,6 +10,7 @@ import com.shinhan.corebank.otp.application.port.out.OtpVerificationRequestPort;
 import com.shinhan.corebank.otp.config.OtpProperties;
 import com.shinhan.corebank.otp.domain.exception.OtpErrorCode;
 import com.shinhan.corebank.otp.domain.model.OtpAttemptResult;
+import com.shinhan.corebank.otp.domain.model.OtpAuthTokenPayload;
 import com.shinhan.corebank.otp.domain.model.OtpVerificationRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -62,7 +63,10 @@ public class OtpVerificationProcessor {
         // Redis 저장 실패 시 검증 완료 DB 변경도 함께 롤백되도록 처리 트랜잭션 안에서 저장한다.
         authTokenStorePort.save(
                 otpAuthToken,
-                request.verificationRequestId(),
+                new OtpAuthTokenPayload(
+                        request.verificationRequestId(),
+                        request.customerId()
+                ),
                 properties.authTokenTtl()
         );
         return OtpVerificationProcessResult.success(otpAuthToken);

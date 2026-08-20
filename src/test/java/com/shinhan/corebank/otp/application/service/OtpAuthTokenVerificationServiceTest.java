@@ -6,6 +6,7 @@ import com.shinhan.corebank.otp.api.OtpTransactionType;
 import com.shinhan.corebank.otp.application.port.out.OtpAuthTokenStorePort;
 import com.shinhan.corebank.otp.application.port.out.OtpTransactionDataCanonicalizerPort;
 import com.shinhan.corebank.otp.application.port.out.OtpVerificationRequestPort;
+import com.shinhan.corebank.otp.domain.model.OtpAuthTokenPayload;
 import com.shinhan.corebank.otp.domain.model.OtpVerificationRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -47,8 +48,8 @@ class OtpAuthTokenVerificationServiceTest {
     @DisplayName("거래내용이 다르면 OTP0102를 반환하고 토큰을 유지한다")
     void transactionMismatchDoesNotConsume() {
         Map<String, Object> data = Map.of("amount", 200_000L);
-        when(tokenStorePort.findRequestId("OTP_AUTH_test"))
-                .thenReturn(Optional.of("OTP_REQ_test"));
+        when(tokenStorePort.find("OTP_AUTH_test"))
+                .thenReturn(Optional.of(payload(1L)));
         when(requestPort.findVerifiedById("OTP_REQ_test"))
                 .thenReturn(Optional.of(verifiedRequest()));
         when(canonicalizerPort.canonicalize(data)).thenReturn("{\"amount\":200000}");
@@ -67,15 +68,78 @@ class OtpAuthTokenVerificationServiceTest {
 
         verify(tokenStorePort, never()).consumeIfMatches(
                 org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyString()
+                org.mockito.ArgumentMatchers.any()
         );
     }
 
+    @Test
+    @DisplayName("Redis 페이로드 고객이 세션 고객과 다르면 OTP0101을 반환한다")
+    void redisCustomerMismatchReturnsInvalidToken() {
+        Map<String, Object> data = Map.of("amount", 100_000L);
+        when(tokenStorePort.find("OTP_AUTH_test"))
+                .thenReturn(Optional.of(payload(2L)));
+
+        assertThatThrownBy(() -> service.verifyAndConsume(
+                new OtpAuthTokenVerification(
+                        "OTP_AUTH_test",
+                        1L,
+                        OtpTransactionType.IMMEDIATE_TRANSFER,
+                        data
+                )
+        )).isInstanceOfSatisfying(BusinessException.class, exception ->
+                org.assertj.core.api.Assertions.assertThat(exception.getErrorCode().getCode())
+                        .isEqualTo("OTP0101")
+        );
+
+        verify(requestPort, never()).findVerifiedById(
+                org.mockito.ArgumentMatchers.anyString()
+        );
+        verify(tokenStorePort, never()).consumeIfMatches(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any()
+        );
+    }
+
+    @Test
+    @DisplayName("DB 요청 고객이 세션 및 Redis 고객과 다르면 OTP0101을 반환한다")
+    void databaseCustomerMismatchReturnsInvalidToken() {
+        Map<String, Object> data = Map.of("amount", 100_000L);
+        when(tokenStorePort.find("OTP_AUTH_test"))
+                .thenReturn(Optional.of(payload(1L)));
+        when(requestPort.findVerifiedById("OTP_REQ_test"))
+                .thenReturn(Optional.of(verifiedRequest(2L)));
+
+        assertThatThrownBy(() -> service.verifyAndConsume(
+                new OtpAuthTokenVerification(
+                        "OTP_AUTH_test",
+                        1L,
+                        OtpTransactionType.IMMEDIATE_TRANSFER,
+                        data
+                )
+        )).isInstanceOfSatisfying(BusinessException.class, exception ->
+                org.assertj.core.api.Assertions.assertThat(exception.getErrorCode().getCode())
+                        .isEqualTo("OTP0101")
+        );
+
+        verify(tokenStorePort, never()).consumeIfMatches(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any()
+        );
+    }
+
+    private OtpAuthTokenPayload payload(Long customerId) {
+        return new OtpAuthTokenPayload("OTP_REQ_test", customerId);
+    }
+
     private OtpVerificationRequest verifiedRequest() {
+        return verifiedRequest(1L);
+    }
+
+    private OtpVerificationRequest verifiedRequest(Long customerId) {
         LocalDateTime now = LocalDateTime.of(2026, 8, 20, 10, 0);
         return new OtpVerificationRequest(
                 "OTP_REQ_test",
-                1L,
+                customerId,
                 OtpTransactionType.IMMEDIATE_TRANSFER,
                 "{\"amount\":100000}",
                 "hash",
