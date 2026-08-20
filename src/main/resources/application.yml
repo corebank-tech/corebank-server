@@ -26,6 +26,9 @@ spring:
       port: 6379
 
 app:
+  otp:
+    code-ttl: 3m
+    auth-token-ttl: 5m
   signup:
     token:
       terms-auth-ttl: 30m
