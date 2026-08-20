@@ -27,7 +27,7 @@ public record ProductDetailResponse(
         LocalDate saleEndDate,
         List<TermsItem> terms
 ) {
-    public static ProductDetailResponse from(ProductDetail detail) {
+    public static ProductDetailResponse from(ProductDetailView detail) {
         Product product = detail.getProduct();
         List<RateTierItem> rateTierItems = detail.getRateTiers().stream()
                 .map(RateTierItem::from)
@@ -83,19 +83,18 @@ public record ProductDetailResponse(
             Long termsId,
             String termsName,
             String version,
-            Boolean required,
-            Boolean viewRequired,
-            Integer displayOrder
+            boolean required,
+            boolean viewRequired,
+            int displayOrder
     ) {
-        static TermsItem from(ProductTerms terms) {
-            // termsName/version/required/viewRequired: P6 TermsQueryPort 연동 전까지 null 스텁 (§6)
+        static TermsItem from(ProductTermsDetail terms) {
             return new TermsItem(
-                    terms.getId().getTermsId(),
-                    null,
-                    null,
-                    null,
-                    null,
-                    (int) terms.getDisplayOrder());
+                    terms.getTermsId(),
+                    terms.getTermsName(),
+                    terms.getVersion(),
+                    terms.isRequired(),
+                    terms.isViewRequired(),
+                    terms.getDisplayOrder());
         }
     }
 }

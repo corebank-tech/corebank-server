@@ -7,7 +7,7 @@ import com.shinhan.corebank.product.application.ProductSortType;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import com.shinhan.corebank.product.application.port.in.TermsViewUseCase;
 import com.shinhan.corebank.product.domain.Product;
-import com.shinhan.corebank.product.domain.ProductDetail;
+import com.shinhan.corebank.product.domain.ProductDetailView;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.ProductTermsView;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +36,7 @@ public class ProductController {
 
     @GetMapping("/{productId}")
     public ApiResponse<ProductDetailResponse> getProductDetail(@PathVariable Long productId) {
-        ProductDetail detail = productQueryUseCase.getDetail(productId);
+        ProductDetailView detail = productQueryUseCase.getDetailWithTerms(productId);
         return ApiResponse.success(ProductDetailResponse.from(detail));
     }
 
