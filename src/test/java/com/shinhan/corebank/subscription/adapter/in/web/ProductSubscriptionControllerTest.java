@@ -486,6 +486,64 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.code").value("APW0002"));
     }
 
+    // 클래스 레벨 @Transactional을 이 테스트만 무시한다(Propagation.NOT_SUPPORTED) — 테스트
+    // 트랜잭션에 얹혀만 있으면 execute()의 실패가 "롤백-전용" 플래그만 세우고 실제 ROLLBACK은
+    // 테스트가 끝날 때까지 미뤄져서, 이 테스트가 관측하려는 "부분 실패 시 즉시 전량 롤백"을
+    // 같은 트랜잭션 안에서는 확인할 수 없다(실제로 그렇게 짰다가 count()가 롤백 전 값을 그대로
+    // 봐서 실패하는 걸 확인함). 이 테스트만 실제 물리 커밋/롤백 경계를 쓰게 해서 진짜 검증한다.
+    // 대신 자동 롤백 정리가 안 되니 상품코드·계좌번호·고객 식별자를 이 테스트 전용으로 고유하게 써서
+    // 남는 데이터가 다른 테스트와 충돌하지 않게 한다.
+    @Test
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    @DisplayName("계좌개설 이후 단계(약관동의 저장)가 실패하면 계좌개설·가입저장까지 전량 롤백된다")
+    void execute_termsAgreementSaveFails_rollsBackAccountAndSubscription() throws Exception {
+        Long productId = seedSavingsProduct("EXE-106", false);
+        Long withdrawalAccountId = seedAccount("110000009006", customerId, 10_000_000L);
+        try {
+            long accountCountBefore = accountJpaRepository.count();
+            long subscriptionCountBefore = subscriptionJpaRepository.count();
+
+            // subscription_terms_agreement.terms_id는 terms 테이블 FK다 — 존재하지 않는 termsId를
+            // 넣으면 약관동의 저장 단계(계좌개설·가입저장 다음)에서 확실히 실패한다. 계좌개설이
+            // 이미 끝난 뒤에 터지는 실패라 "전량 롤백" 여부를 검증하기에 적합하다.
+            String requestJson = """
+                    {
+                      "productId": %d,
+                      "subscriptionAmount": 500000,
+                      "termMonths": 12,
+                      "withdrawalAccountId": %d,
+                      "newAccountPassword": "1234",
+                      "newAccountPasswordConfirm": "1234",
+                      "accountPasswordAuthToken": "ACC_PWD_test",
+                      "otpAuthToken": "OTP_AUTH_test",
+                      "agreedTerms": [{"termsId": 999999999, "version": "v1.0"}]
+                    }
+                    """.formatted(productId, withdrawalAccountId);
+
+            mockMvc.perform(post("/product-subscriptions")
+                            .header("Idempotency-Key", UUID.randomUUID().toString())
+                            .with(authentication(authenticationOf(customerId)))
+                            .with(csrf())
+                            .contentType("application/json")
+                            .content(requestJson))
+                    .andExpect(status().is5xxServerError());
+
+            assertThat(accountJpaRepository.count()).isEqualTo(accountCountBefore);
+            assertThat(subscriptionJpaRepository.count()).isEqualTo(subscriptionCountBefore);
+        } finally {
+            // NOT_SUPPORTED라 이 테스트가 setUp()에서 만든 데이터(고객·출금계좌·상품·채번행)는
+            // 자동 롤백되지 않고 실제로 커밋된다 — 특히 account_number_sequence의
+            // uk_account_number_sequence_prefix가 (bank_code, product_prefix) 조합 전역 유니크라,
+            // 안 지우면 이후 다른 테스트가 같은 prefix("30")로 채번 행을 만들 때마다 충돌한다
+            // (실제로 이 정리 없이 돌렸다가 다른 테스트 2개가 DuplicateKeyException으로 깨지는 걸 확인함).
+            jdbcTemplate.update("DELETE FROM account_number_sequence WHERE bank_code = '088' AND product_id = ?", productId);
+            jdbcTemplate.update("DELETE FROM product_rate_tier WHERE product_id = ?", productId);
+            jdbcTemplate.update("DELETE FROM account WHERE account_id = ?", withdrawalAccountId);
+            jdbcTemplate.update("DELETE FROM product WHERE product_id = ?", productId);
+            jdbcTemplate.update("DELETE FROM customer WHERE customer_id = ?", customerId);
+        }
+    }
+
     private Long seedSavingsProduct(String productCode, boolean singleAccountLimit) {
         Long productId = productJpaRepository.save(ProductJpaEntity.builder()
                 .productCode(productCode)
