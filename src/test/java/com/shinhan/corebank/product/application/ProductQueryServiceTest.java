@@ -5,6 +5,16 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.product.application.port.out.ProductQueryPort;
 import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductDetail;
+import com.shinhan.corebank.product.domain.ProductDetailView;
+import com.shinhan.corebank.product.domain.ProductPreferentialRate;
+import com.shinhan.corebank.product.domain.ProductPreferentialRateId;
+import com.shinhan.corebank.product.domain.ProductRateTier;
+import com.shinhan.corebank.product.domain.ProductRateTierId;
+import com.shinhan.corebank.product.domain.ProductTerms;
+import com.shinhan.corebank.product.domain.ProductTermsDetail;
+import com.shinhan.corebank.product.domain.ProductTermsId;
+import com.shinhan.corebank.terms.api.TermsQueryPort;
+import com.shinhan.corebank.terms.api.TermsSummary;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,12 +27,14 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,6 +44,9 @@ class ProductQueryServiceTest {
 
     @Mock
     ProductQueryPort productQueryPort;
+
+    @Mock
+    TermsQueryPort termsQueryPort;
 
     @InjectMocks
     ProductQueryService productQueryService;
@@ -71,7 +86,7 @@ class ProductQueryServiceTest {
     }
 
     @Test
-    @DisplayName("존재하는 productId면 포트 결과를 그대로 반환한다")
+    @DisplayName("getDetail은 상품 포트 결과를 그대로 반환하고 약관은 조회하지 않는다")
     void getDetail_delegatesToPort() {
         ProductDetail expected = ProductDetail.builder()
                 .rateTiers(List.of())
@@ -83,6 +98,90 @@ class ProductQueryServiceTest {
         ProductDetail result = productQueryService.getDetail(1L);
 
         assertThat(result).isSameAs(expected);
+        verify(termsQueryPort, never()).findByIds(any());
+    }
+
+    @Test
+    @DisplayName("getDetailWithTerms는 상품 포트 결과를 그대로 옮겨 담는다")
+    void getDetailWithTerms_copiesProductFields() {
+        Product product = Product.builder().productId(1L).productName("청년 희망 적금").build();
+        List<ProductRateTier> rateTiers = List.of(ProductRateTier.builder()
+                .id(new ProductRateTierId(1L, (short) 12))
+                .rate(new BigDecimal("3.20"))
+                .build());
+        List<ProductPreferentialRate> preferentialRates = List.of(ProductPreferentialRate.builder()
+                .productPreferentialRateId(new ProductPreferentialRateId(1L, "AUTO_TRANSFER"))
+                .conditionName("자동이체 6회 이상")
+                .rate(new BigDecimal("0.50"))
+                .build());
+        ProductDetail detail = ProductDetail.builder()
+                .product(product)
+                .rateTiers(rateTiers)
+                .preferentialRates(preferentialRates)
+                .terms(List.of())
+                .build();
+        when(productQueryPort.findDetailByProductId(1L)).thenReturn(Optional.of(detail));
+        when(termsQueryPort.findByIds(List.of())).thenReturn(List.of());
+
+        ProductDetailView result = productQueryService.getDetailWithTerms(1L);
+
+        assertThat(result.getProduct()).isSameAs(product);
+        assertThat(result.getRateTiers()).isSameAs(rateTiers);
+        assertThat(result.getPreferentialRates()).isSameAs(preferentialRates);
+        assertThat(result.getTerms()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("약관 연결에 terms 정보를 합치고 포트가 준 표시순서를 유지한다")
+    void getDetailWithTerms_mergesTerms() {
+        // ProductQueryPort는 display_order 오름차순으로 넘겨준다 (ProductTermsJpaRepositoryTest에서 보장)
+        ProductDetail detail = ProductDetail.builder()
+                .rateTiers(List.of())
+                .preferentialRates(List.of())
+                .terms(List.of(productTerms(10L, (short) 1), productTerms(20L, (short) 2)))
+                .build();
+        when(productQueryPort.findDetailByProductId(1L)).thenReturn(Optional.of(detail));
+        // 약관 조회 결과 순서는 보장되지 않으므로 일부러 뒤집어 준다
+        when(termsQueryPort.findByIds(argThat(ids -> ids.size() == 2 && ids.containsAll(List.of(10L, 20L)))))
+                .thenReturn(List.of(
+                        new TermsSummary(20L, "마케팅 정보 수신 동의", "v1.1", false, false),
+                        new TermsSummary(10L, "예금거래 기본약관", "v1.0", true, true)));
+
+        List<ProductTermsDetail> terms = productQueryService.getDetailWithTerms(1L).getTerms();
+
+        assertThat(terms).extracting(ProductTermsDetail::getTermsId).containsExactly(10L, 20L);
+        assertThat(terms.get(0).getTermsName()).isEqualTo("예금거래 기본약관");
+        assertThat(terms.get(0).getVersion()).isEqualTo("v1.0");
+        assertThat(terms.get(0).isRequired()).isTrue();
+        assertThat(terms.get(0).isViewRequired()).isTrue();
+        assertThat(terms.get(0).getDisplayOrder()).isEqualTo((short) 1);
+        assertThat(terms.get(1).getTermsName()).isEqualTo("마케팅 정보 수신 동의");
+        assertThat(terms.get(1).isRequired()).isFalse();
+        assertThat(terms.get(1).getDisplayOrder()).isEqualTo((short) 2);
+    }
+
+    @Test
+    @DisplayName("연결된 약관이 terms에 없으면 PRD9001을 던진다")
+    void getDetailWithTerms_missingTerms_throwsPrd9001() {
+        ProductDetail detail = ProductDetail.builder()
+                .rateTiers(List.of())
+                .preferentialRates(List.of())
+                .terms(List.of(productTerms(10L, (short) 1)))
+                .build();
+        when(productQueryPort.findDetailByProductId(1L)).thenReturn(Optional.of(detail));
+        when(termsQueryPort.findByIds(List.of(10L))).thenReturn(List.of());
+
+        assertThatThrownBy(() -> productQueryService.getDetailWithTerms(1L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ProductErrorCode.PRODUCT_TERMS_NOT_RESOLVED));
+    }
+
+    private ProductTerms productTerms(Long termsId, short displayOrder) {
+        return ProductTerms.builder()
+                .id(new ProductTermsId(1L, termsId))
+                .displayOrder(displayOrder)
+                .build();
     }
 
     @Test
