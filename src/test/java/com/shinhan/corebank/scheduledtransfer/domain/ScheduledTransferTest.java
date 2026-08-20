@@ -84,6 +84,57 @@ class ScheduledTransferTest {
     }
 
     @Nested
+    @DisplayName("markSuccess() / markFailed()")
+    class MarkResult {
+
+        private ScheduledTransfer processing() {
+            return ScheduledTransfer.reconstitute(
+                    100L, 1L, 2L, PAYEE_BANK_CODE, "110987654321", "홍길동", 10_000L,
+                    LocalDate.of(2025, 6, 2), "내메모", "받는메모", ScheduledTransferStatus.PROCESSING,
+                    null, NOW, null, null, null);
+        }
+
+        @Test
+        @DisplayName("markSuccess() 호출 시 SUCCESS로 확정되고 거래번호·실행시각이 채워진다")
+        void markSuccess_setsSuccessStatus() {
+            ScheduledTransfer s = processing();
+            LocalDateTime executedAt = NOW.plusMinutes(10);
+
+            s.markSuccess("20250602BT0000000001", executedAt);
+
+            assertThat(s.getStatus()).isEqualTo(ScheduledTransferStatus.SUCCESS);
+            assertThat(s.getTransactionNumber()).isEqualTo("20250602BT0000000001");
+            assertThat(s.getExecutedAt()).isEqualTo(executedAt);
+            assertThat(s.getFailureReason()).isNull();
+        }
+
+        @Test
+        @DisplayName("markFailed() 호출 시 FAILED로 확정되고 실패사유·거래번호(있으면)·실행시각이 채워진다")
+        void markFailed_setsFailedStatus() {
+            ScheduledTransfer s = processing();
+            LocalDateTime executedAt = NOW.plusMinutes(10);
+
+            s.markFailed("잔액 부족", "20250602BT0000000002", executedAt);
+
+            assertThat(s.getStatus()).isEqualTo(ScheduledTransferStatus.FAILED);
+            assertThat(s.getFailureReason()).isEqualTo("잔액 부족");
+            assertThat(s.getTransactionNumber()).isEqualTo("20250602BT0000000002");
+            assertThat(s.getExecutedAt()).isEqualTo(executedAt);
+        }
+
+        @Test
+        @DisplayName("markFailed()는 거래번호가 없어도(null) 실패 확정이 가능하다")
+        void markFailed_withoutTransactionNumber_stillSetsFailedStatus() {
+            ScheduledTransfer s = processing();
+
+            s.markFailed("실행 중 확인 불가로 재확정 배치가 오류 처리함", null, NOW.plusMinutes(10));
+
+            assertThat(s.getStatus()).isEqualTo(ScheduledTransferStatus.FAILED);
+            assertThat(s.getTransactionNumber()).isNull();
+        }
+    }
+
+    @Nested
     @DisplayName("cancel()")
     class Cancel {
 
