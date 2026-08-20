@@ -10,9 +10,11 @@ import com.shinhan.corebank.limit.domain.TransferLimit;
 import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -31,7 +33,11 @@ public class LimitQueryService implements LimitQueryUseCase {
     @Override
     public LimitResult get(Long customerId) {
         TransferLimit limit = transferLimitQueryPort.findByCustomerId(customerId)
-                .orElseGet(() -> TransferLimit.create(customerId));
+                .orElseGet(() -> {
+                    // 가입 시 기본값 부여(REQ-TRSF-029)가 회원가입 흐름에 연결되면 이 경로는 데이터 결함이 된다.
+                    log.warn("이체한도 행이 없어 정책 기본값으로 응답합니다 - customerId={}", customerId);
+                    return TransferLimit.create(customerId);
+                });
 
         LocalDate today = LocalDate.now(clock);
         TransferLimitDailyUsage usage = transferLimitQueryPort.findUsage(customerId, today)
