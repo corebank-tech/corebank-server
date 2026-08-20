@@ -28,7 +28,7 @@ import com.shinhan.corebank.scheduledtransfer.domain.exception.ScheduledTransfer
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -78,9 +78,11 @@ class ScheduledTransferCommandServiceTest {
 
     // LocalDate.now(clock)/LocalDateTime.now(clock)이 내부적으로 instant()/getZone()을 호출하므로 이 둘을 스텁한다.
     // 예정일자 검증이 맨 앞으로 이동한 이후로는 register()에 도달하는 모든 테스트가 이 스텁을 필요로 한다.
+    // zone은 운영 Clock 빈(JpaAuditingConfig)과 동일한 Asia/Seoul이어야 한다 — UTC로 고정하면
+    // 픽스처가 쓰는 LocalDate.now()(JVM 기본 zone)와 KST 자정~09시 구간에 날짜가 하루 어긋난다.
     private void stubClock() {
         when(clock.instant()).thenReturn(Instant.now());
-        when(clock.getZone()).thenReturn(ZoneOffset.UTC);
+        when(clock.getZone()).thenReturn(ZoneId.of("Asia/Seoul"));
     }
 
     @Test
