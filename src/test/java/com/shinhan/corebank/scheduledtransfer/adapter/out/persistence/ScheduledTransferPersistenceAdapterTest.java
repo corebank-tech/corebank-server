@@ -12,6 +12,7 @@ import com.shinhan.corebank.scheduledtransfer.domain.exception.ScheduledTransfer
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -168,6 +169,140 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
                 "메모", "메모", status, transactionNumber, LocalDateTime.now().minusDays(30), LocalDateTime.now(),
                 null, failureReason);
         return adapter.save(domain);
+    }
+
+    @Test
+    @DisplayName("findDueForExecution()은 status=WAITING, scheduledDate 일치 건을 registeredAt 오름차순으로 조회한다")
+    void findDueForExecution_returnsWaitingDueRowsOrderedByRegisteredAt() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+        LocalDate dueDate = LocalDate.now().plusDays(10);
+
+        ScheduledTransfer later = adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110111111111", "홍길동", 10_000L, dueDate, "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+        ScheduledTransfer earlier = adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110222222222", "홍길동", 20_000L, dueDate, "메모", "메모", LocalDateTime.now().minusHours(1)));
+        entityManager.flush();
+        // 다른 날짜 - 대상 아님
+        adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110333333333", "홍길동", 30_000L, dueDate.plusDays(1), "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+
+        List<ScheduledTransfer> due = adapter.findDueForExecution(dueDate);
+
+        assertThat(due).extracting(ScheduledTransfer::getScheduledTransferId)
+                .containsExactly(earlier.getScheduledTransferId(), later.getScheduledTransferId());
+    }
+
+    @Test
+    @DisplayName("claimForProcessing()은 WAITING 건을 PROCESSING으로 바꾸고 true를 반환한다")
+    void claimForProcessing_waitingRow_returnsTrueAndUpdatesStatus() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+        ScheduledTransfer saved = adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110111111111", "홍길동", 10_000L, LocalDate.now().plusDays(10), "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+
+        boolean claimed = adapter.claimForProcessing(saved.getScheduledTransferId());
+        entityManager.clear();
+
+        assertThat(claimed).isTrue();
+        assertThat(adapter.findById(saved.getScheduledTransferId()).orElseThrow().getStatus())
+                .isEqualTo(ScheduledTransferStatus.PROCESSING);
+    }
+
+    @Test
+    @DisplayName("claimForProcessing()은 이미 WAITING이 아닌 건에는 false를 반환한다 (중복 선점 방어)")
+    void claimForProcessing_nonWaitingRow_returnsFalse() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+        ScheduledTransfer saved = adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110111111111", "홍길동", 10_000L, LocalDate.now().plusDays(10), "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+        adapter.claimForProcessing(saved.getScheduledTransferId());
+        entityManager.clear();
+
+        boolean secondClaim = adapter.claimForProcessing(saved.getScheduledTransferId());
+
+        assertThat(secondClaim).isFalse();
+    }
+
+    @Test
+    @DisplayName("findAllProcessing()은 status=PROCESSING 건만 조회한다")
+    void findAllProcessing_returnsOnlyProcessingRows() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+        ScheduledTransfer waiting = adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110111111111", "홍길동", 10_000L, LocalDate.now().plusDays(10), "메모", "메모", LocalDateTime.now()));
+        ScheduledTransfer toBeProcessing = adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110222222222", "홍길동", 20_000L, LocalDate.now().plusDays(11), "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+        adapter.claimForProcessing(toBeProcessing.getScheduledTransferId());
+        entityManager.clear();
+
+        List<ScheduledTransfer> stuck = adapter.findAllProcessing();
+
+        assertThat(stuck).extracting(ScheduledTransfer::getScheduledTransferId)
+                .containsExactly(toBeProcessing.getScheduledTransferId());
+    }
+
+    @Test
+    @DisplayName("saveIfStillProcessing()은 PROCESSING 건이면 최종 상태로 확정하고 true를 반환한다")
+    void saveIfStillProcessing_processingRow_confirmsAndReturnsTrue() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+        ScheduledTransfer saved = adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110111111111", "홍길동", 10_000L, LocalDate.now().plusDays(10), "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+        adapter.claimForProcessing(saved.getScheduledTransferId());
+        entityManager.clear();
+
+        ScheduledTransfer toConfirm = ScheduledTransfer.reconstitute(
+                saved.getScheduledTransferId(), customerId, withdrawalAccountId, "088", "110111111111", "홍길동",
+                10_000L, LocalDate.now().plusDays(10), "메모", "메모", ScheduledTransferStatus.SUCCESS,
+                "20260315BT0000000010", saved.getRegisteredAt(), LocalDateTime.now(), null, null);
+
+        boolean confirmed = adapter.saveIfStillProcessing(toConfirm);
+        entityManager.clear();
+
+        assertThat(confirmed).isTrue();
+        ScheduledTransfer after = adapter.findById(saved.getScheduledTransferId()).orElseThrow();
+        assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.SUCCESS);
+        assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000010");
+    }
+
+    @Test
+    @DisplayName("saveIfStillProcessing()은 이미 최종 확정된(PROCESSING 아닌) 건에는 false를 반환하고 값을 바꾸지 않는다 (동시 재확정 방어)")
+    void saveIfStillProcessing_alreadyConfirmedRow_returnsFalseAndDoesNotOverwrite() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+        ScheduledTransfer saved = adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110111111111", "홍길동", 10_000L, LocalDate.now().plusDays(10), "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+        adapter.claimForProcessing(saved.getScheduledTransferId());
+        entityManager.clear();
+
+        ScheduledTransfer firstConfirm = ScheduledTransfer.reconstitute(
+                saved.getScheduledTransferId(), customerId, withdrawalAccountId, "088", "110111111111", "홍길동",
+                10_000L, LocalDate.now().plusDays(10), "메모", "메모", ScheduledTransferStatus.SUCCESS,
+                "20260315BT0000000011", saved.getRegisteredAt(), LocalDateTime.now(), null, null);
+        adapter.saveIfStillProcessing(firstConfirm);
+        entityManager.clear();
+
+        // 동시에 두 번째 재확정 실행이 같은 건을 다른 결과(FAILED)로 확정하려는 상황을 재현
+        ScheduledTransfer secondConfirm = ScheduledTransfer.reconstitute(
+                saved.getScheduledTransferId(), customerId, withdrawalAccountId, "088", "110111111111", "홍길동",
+                10_000L, LocalDate.now().plusDays(10), "메모", "메모", ScheduledTransferStatus.FAILED,
+                null, saved.getRegisteredAt(), LocalDateTime.now(), null, "잔액 부족");
+
+        boolean confirmed = adapter.saveIfStillProcessing(secondConfirm);
+        entityManager.clear();
+
+        assertThat(confirmed).isFalse();
+        ScheduledTransfer after = adapter.findById(saved.getScheduledTransferId()).orElseThrow();
+        assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.SUCCESS);
+        assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000011");
     }
 
     private Long insertCustomer() {

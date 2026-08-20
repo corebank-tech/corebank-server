@@ -85,6 +85,21 @@ public class ScheduledTransfer {
         return s;
     }
 
+    // 배치 실행 성공
+    public void markSuccess(String transactionNumber, LocalDateTime executedAt) {
+        this.status = ScheduledTransferStatus.SUCCESS;
+        this.transactionNumber = transactionNumber;
+        this.executedAt = executedAt;
+    }
+
+    // 배치 실행 실패 - 실패해도 transactionNumber가 채워지는 경우가 있어 같이 받는다
+    public void markFailed(String failureReason, String transactionNumber, LocalDateTime executedAt) {
+        this.status = ScheduledTransferStatus.FAILED;
+        this.failureReason = failureReason;
+        this.transactionNumber = transactionNumber;
+        this.executedAt = executedAt;
+    }
+
     public void cancel(LocalDateTime now) {
         if (this.status != ScheduledTransferStatus.WAITING) {
             throw new BusinessException(ScheduledTransferErrorCode.NOT_IN_WAITING_STATUS);
