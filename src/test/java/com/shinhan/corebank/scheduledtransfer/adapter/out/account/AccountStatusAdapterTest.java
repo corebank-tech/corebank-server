@@ -130,6 +130,52 @@ class AccountStatusAdapterTest extends IntegrationTestSupport {
         assertThat(adapter.findAccountNumbersByIds(List.of())).isEmpty();
     }
 
+    @Test
+    @DisplayName("출금계좌로 등록된 계좌는 true를 반환한다")
+    void isWithdrawalRegistered_registered_returnsTrue() {
+        Long customerId = insertCustomer();
+        Long accountId = insertAccount(customerId, nextAccountNumber(), "ACTIVE", true);
+
+        assertThat(adapter.isWithdrawalRegistered(accountId)).isTrue();
+    }
+
+    @Test
+    @DisplayName("출금계좌로 등록되지 않은 계좌는 false를 반환한다")
+    void isWithdrawalRegistered_notRegistered_returnsFalse() {
+        Long customerId = insertCustomer();
+        Long accountId = insertAccount(customerId, nextAccountNumber(), "ACTIVE", false);
+
+        assertThat(adapter.isWithdrawalRegistered(accountId)).isFalse();
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 계좌ID는 false를 반환한다")
+    void isWithdrawalRegistered_notFound_returnsFalse() {
+        assertThat(adapter.isWithdrawalRegistered(999_999_999L)).isFalse();
+    }
+
+    @Test
+    @DisplayName("별칭이 설정된 계좌만 결과 맵에 포함되고, 미설정 계좌는 키 자체가 빠진다")
+    void findAccountAliasesByIds_excludesUnsetAlias() {
+        Long customerId = insertCustomer();
+        Long withAliasId = insertAccount(customerId, nextAccountNumber(), "ACTIVE", true);
+        Long withoutAliasId = insertAccount(customerId, nextAccountNumber(), "ACTIVE", true);
+        entityManager.createNativeQuery("UPDATE account SET alias = :alias WHERE account_id = :accountId")
+                .setParameter("alias", "월세계좌")
+                .setParameter("accountId", withAliasId)
+                .executeUpdate();
+
+        Map<Long, String> result = adapter.findAccountAliasesByIds(List.of(withAliasId, withoutAliasId));
+
+        assertThat(result).containsEntry(withAliasId, "월세계좌").doesNotContainKey(withoutAliasId);
+    }
+
+    @Test
+    @DisplayName("빈 컬렉션을 넘기면 빈 맵을 반환한다")
+    void findAccountAliasesByIds_empty_returnsEmptyMap() {
+        assertThat(adapter.findAccountAliasesByIds(List.of())).isEmpty();
+    }
+
     private String nextAccountNumber() {
         return String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
     }
@@ -146,12 +192,19 @@ class AccountStatusAdapterTest extends IntegrationTestSupport {
     }
 
     private Long insertAccount(Long customerId, String accountNumber, String status) {
+        return insertAccount(customerId, accountNumber, status, true);
+    }
+
+    private Long insertAccount(Long customerId, String accountNumber, String status, boolean withdrawalRegistered) {
         entityManager.createNativeQuery(
-                        "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, opened_date, created_at, updated_at) "
-                                + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', :status, 'x', NOW(), NOW(), NOW())")
+                        "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, "
+                                + "withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at) "
+                                + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', :status, 'x', :withdrawalRegistered, "
+                                + "CASE WHEN :withdrawalRegistered THEN NOW() ELSE NULL END, NOW(), NOW(), NOW())")
                 .setParameter("accountNumber", accountNumber)
                 .setParameter("customerId", customerId)
                 .setParameter("status", status)
+                .setParameter("withdrawalRegistered", withdrawalRegistered)
                 .executeUpdate();
         return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
     }

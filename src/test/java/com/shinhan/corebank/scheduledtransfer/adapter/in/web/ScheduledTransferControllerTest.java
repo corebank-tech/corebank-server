@@ -389,8 +389,9 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     private Long insertAccount(Long customerId) {
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
         entityManager.createNativeQuery(
-                        "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, opened_date, created_at, updated_at) "
-                                + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', NOW(), NOW(), NOW())")
+                        "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, "
+                                + "withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at) "
+                                + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', TRUE, NOW(), NOW(), NOW(), NOW())")
                 .setParameter("accountNumber", accountNumber)
                 .setParameter("customerId", customerId)
                 .executeUpdate();
