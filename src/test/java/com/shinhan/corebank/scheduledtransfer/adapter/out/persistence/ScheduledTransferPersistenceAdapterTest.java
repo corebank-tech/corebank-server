@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultSort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferExecutionResultAggregate;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
@@ -129,7 +130,7 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
 
         Page<ScheduledTransfer> result = adapter.searchExecutionResults(customerId, null,
-                LocalDate.now().minusDays(10), LocalDate.now(), PageRequest.of(0, 10));
+                LocalDate.now().minusDays(10), LocalDate.now(), ScheduledTransferExecutionResultSort.LATEST, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(ScheduledTransfer::getScheduledTransferId)
@@ -158,7 +159,7 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
 
         Page<ScheduledTransfer> result = adapter.searchExecutionResults(customerId, null,
-                LocalDate.now().minusDays(10), LocalDate.now(), PageRequest.of(0, 10));
+                LocalDate.now().minusDays(10), LocalDate.now(), ScheduledTransferExecutionResultSort.LATEST, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(ScheduledTransfer::getScheduledTransferId)

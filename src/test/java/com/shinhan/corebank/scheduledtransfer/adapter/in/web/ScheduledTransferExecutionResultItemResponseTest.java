@@ -12,7 +12,7 @@ class ScheduledTransferExecutionResultItemResponseTest {
 
     private ScheduledTransferExecutionResultItem item(ScheduledTransferStatus status, String transactionNumber, String failureReason) {
         return new ScheduledTransferExecutionResultItem(
-                7001L, status, LocalDateTime.of(2026, 8, 5, 9, 0), "110123456789", "110987654321", "홍길동",
+                7001L, status, LocalDateTime.of(2026, 8, 5, 9, 0), null, "110123456789", "110987654321", "홍길동",
                 300_000L, transactionNumber, failureReason);
     }
 
@@ -48,5 +48,18 @@ class ScheduledTransferExecutionResultItemResponseTest {
                 item(ScheduledTransferStatus.CANCELED, null, null));
 
         assertThat(canceled.status()).isEqualTo(ScheduledTransferStatus.CANCELED);
+    }
+
+    @Test
+    @DisplayName("CANCELED 건은 executedAt은 null, canceledAt은 채워져서 전달된다")
+    void canceledItem_hasCanceledAtNotExecutedAt() {
+        ScheduledTransferExecutionResultItem canceledItem = new ScheduledTransferExecutionResultItem(
+                7002L, ScheduledTransferStatus.CANCELED, null, LocalDateTime.of(2026, 8, 4, 15, 0),
+                "110123456789", "110987654321", "홍길동", 300_000L, null, null);
+
+        ScheduledTransferExecutionResultItemResponse response = ScheduledTransferExecutionResultItemResponse.from(canceledItem);
+
+        assertThat(response.executedAt()).isNull();
+        assertThat(response.canceledAt()).isEqualTo(LocalDateTime.of(2026, 8, 4, 15, 0));
     }
 }
