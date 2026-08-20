@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -24,6 +25,7 @@ class OtpVerificationPersistenceIntegrationTest extends IntegrationTestSupport {
     @Autowired CustomerTestFixture customerFixture;
     @Autowired IssueOtpUseCase issueOtpUseCase;
     @Autowired JdbcTemplate jdbcTemplate;
+    @Autowired Clock clock;
 
     @Test
     @DisplayName("두 번째 OTP 발급은 기존 활성 OTP를 만료시키고 신규 요청만 활성으로 남긴다")
@@ -63,10 +65,11 @@ class OtpVerificationPersistenceIntegrationTest extends IntegrationTestSupport {
                   AND purpose = 'OTP_TRANSACTION'
                   AND used = FALSE
                   AND locked = FALSE
-                  AND expires_at > NOW(6)
+                  AND expires_at > ?
                 """,
                 Integer.class,
-                customerId
+                customerId,
+                LocalDateTime.now(clock)
         );
         LocalDateTime secondExpiresAt = jdbcTemplate.queryForObject(
                 """
@@ -83,6 +86,6 @@ class OtpVerificationPersistenceIntegrationTest extends IntegrationTestSupport {
         assertThat(firstRow.get("code_hash").toString()).isNotEqualTo(first.otpCode());
         assertThat(firstRow.get("transaction_type")).isEqualTo("IMMEDIATE_TRANSFER");
         assertThat(activeCount).isOne();
-        assertThat(secondExpiresAt).isAfter(LocalDateTime.now().plusMinutes(2));
+        assertThat(secondExpiresAt).isAfter(LocalDateTime.now(clock).plusMinutes(2));
     }
 }

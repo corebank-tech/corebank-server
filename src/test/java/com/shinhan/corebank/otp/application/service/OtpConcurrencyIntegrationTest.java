@@ -18,6 +18,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +43,7 @@ class OtpConcurrencyIntegrationTest extends IntegrationTestSupport {
     @Autowired VerifyOtpUseCase verifyOtpUseCase;
     @Autowired JdbcTemplate jdbcTemplate;
     @Autowired StringRedisTemplate redisTemplate;
+    @Autowired Clock clock;
 
     private Long customerId;
     private final List<String> authTokens = new CopyOnWriteArrayList<>();
@@ -162,10 +165,11 @@ class OtpConcurrencyIntegrationTest extends IntegrationTestSupport {
                   AND purpose = 'OTP_TRANSACTION'
                   AND used = FALSE
                   AND locked = FALSE
-                  AND expires_at > NOW(6)
+                  AND expires_at > ?
                 """,
                 Integer.class,
-                currentCustomerId
+                currentCustomerId,
+                LocalDateTime.now(clock)
         );
     }
 
