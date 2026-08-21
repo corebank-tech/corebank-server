@@ -22,17 +22,24 @@
 
 `account` 테이블을 부분 매핑하는 4개 도메인은 성격이 같지 않다.
 
-| 도메인 | 클래스 | 하는 일 | 공개 UseCase로 대체 |
+| 도메인 | 클래스 | 하는 일 | 공개 UseCase 전환 |
 | --- | --- | --- | --- |
-| `transfer` | `AccountLockJpaEntity` | `SELECT ... FOR UPDATE` 락 + `balance` / `last_transaction_at` **쓰기**, `@Version` | 불가 |
+| `transfer` | `AccountLockJpaEntity` | `SELECT ... FOR UPDATE` 락 + `balance` / `last_transaction_at` **쓰기**, `@Version` | 계약 재설계 필요 |
 | `autotransfer` | `AccountLookupJpaEntity` | 읽기 전용 (`status`, `customer_id`, `alias`, `withdrawal_registered`) | 가능 |
 | `scheduledtransfer` | `AccountLookupJpaEntity` | 읽기 전용 + 일괄 조회 | 가능 |
 | `subscription` | `SubscriptionAccountJpaEntity` | 읽기 전용 (`findById` 단건) | 가능 |
 
-`transfer`가 대체 불가인 이유는 `AccountLockPort`의 계약에 있다. `lockForTransfer`가 계좌 ID
+`transfer`가 다른 이유는 `AccountLockPort`의 계약에 있다. `lockForTransfer`가 계좌 ID
 오름차순으로 비관적 락을 잡고, `applyTransfer`가 **같은 트랜잭션 안에서** 두 계좌의 잔액을
-원자적으로 변경한다. 락의 수명이 호출자 트랜잭션에 묶여 있어야 하므로 이 조합을 공개 UseCase
-경계 뒤로 밀어낼 수 없다.
+원자적으로 변경한다. 이 락 순서 계약을 account 공개 API 뒤로 옮기려면 account 인 포트가
+락 획득 순서와 락 획득~변경 사이의 재검증 지점까지 드러내야 해서 별도 재설계가 필요하다.
+
+**트랜잭션 때문에 불가능한 것은 아니다**(PR #271 리뷰 지적). 공개 UseCase도 기본 전파
+(`REQUIRED`)로 호출자 트랜잭션에 참여하므로 락 획득·잔액 변경 자체는 공개 UseCase 뒤에서
+얼마든지 가능하다. 실제로 `transfer`의 `ProductSubscriptionDepositService`(공개 인 포트
+`ProductSubscriptionDepositUseCase`)가 상품가입 실행의 트랜잭션에 참여한 채로
+락 획득 → 출금계좌 재검증 → 잔액 변경 → 원장 기표를 한 UseCase 안에서 수행한다.
+즉 `transfer`의 부분 매핑은 "기술적 불가"가 아니라 **미뤄둔 재설계**다.
 
 즉 §3-①이 사례로 든 `AccountLockJpaEntity`는 **쓰기·락 케이스**이고, 그 근거를
 읽기 전용 조회까지 일반화한 것이 혼선의 원인이었다.
@@ -57,10 +64,14 @@
 
 ## 결정
 
-**다른 도메인이 소유한 테이블은 읽기 전용이면 소유 도메인의 공개 UseCase를 경유하고,
-쓰기·락이 필요할 때만 부분 매핑을 쓴다.**
+**다른 도메인이 소유한 테이블을 읽기 전용으로 접근할 때는 소유 도메인의 공개 UseCase를
+경유하는 것을 기본으로 한다. 부분 매핑은 트랜잭션 요구사항상 불가피한 쓰기·락에 한해
+별도 ADR과 도메인 소유자 합의를 거친 명시적 예외로만 둔다.**
 
-판단 기준은 "도메인 개수"나 "기존 관례"가 아니라 **그 접근이 쓰기·락을 포함하는가**다.
+"쓰기·락이면 부분 매핑을 써도 된다"는 일반 허용 규칙이 아니다 — 위에서 봤듯 쓰기·락도
+공개 UseCase 뒤에서 성립한다. 부분 매핑을 남기려면 그 도메인이 왜 소유 도메인의 공개 계약
+뒤로 갈 수 없는지를 매번 근거로 제시하고 소유 도메인(P2)과 합의해야 한다.
+판단 기준은 "도메인 개수"나 "기존 관례"가 아니다.
 
 ### 1. `subscription` — 공개 UseCase로 통일 (이 이슈에서 수행)
 
@@ -75,8 +86,10 @@
 
 ### 2. `transfer` — 부분 매핑 유지 (명시적 예외)
 
-`AccountLockJpaEntity`는 그대로 둔다. 근거는 "선례"가 아니라 **락·쓰기가 호출자 트랜잭션에
-묶여야 한다**는 점이며, §3-①에 그 기준을 적는다.
+`AccountLockJpaEntity`는 그대로 둔다. 근거는 "선례"도 "트랜잭션상 불가능"도 아니라
+**`lockForTransfer` → `applyTransfer` 계약을 account 공개 API 뒤로 옮기려면 별도 재설계가
+필요하고 그 범위를 이번에 다루지 않는다**는 점이다. 현재 유일하게 승인된 예외이며,
+재설계 시점에 다시 판단한다.
 
 ### 3. `autotransfer` / `scheduledtransfer` — 후속 이슈로 분리
 
@@ -91,7 +104,8 @@
 변경량은 가장 적다. 그러나 "활성인가 / 본인 소유인가 / 출금계좌로 등록됐는가"라는 동일한 판정이
 도메인마다 복제된다 — 실제로 `autotransfer`와 `scheduledtransfer`의 `AccountStatusAdapter`에
 `isActiveAccount` / `belongsToCustomer` / `isWithdrawalRegistered`가 그대로 중복돼 있다.
-`account` 스키마가 바뀌어도 컴파일러가 잡지 못하고 Hibernate `validate` 기동 실패로만 드러난다.
+소유 도메인의 내부 스키마 변경이 호출 도메인에 그대로 전파된다 — `account`가 컬럼을 바꾸면
+부분 매핑을 가진 도메인마다 Hibernate `validate` 기동 실패로 드러나고, 컴파일 시점에는 알 수 없다.
 심사 중이던 PR #265를 상당 부분 되돌려야 한다는 점도 있다. 기각.
 
 ### (B) 4개 도메인 동시 전환
@@ -105,7 +119,8 @@
 - `subscription`이 `account`를 읽는 경로가 공개 UseCase 하나로 통일된다.
 - `account` 공개면에 `WithdrawableAccountQueryUseCase`가 추가되고, 출금계좌 판정 규칙이
   소유 도메인 한 곳에만 남는다.
-- `team_db_architecture_guide.md` §3-①에 판단 기준(읽기 전용 → 공개 UseCase, 쓰기·락 → 부분 매핑)이
-  기록되어 다음 도메인이 같은 고민을 반복하지 않는다.
+- `team_db_architecture_guide.md` §3-①에 판단 기준(읽기 전용 → 공개 UseCase가 기본, 타 도메인
+  테이블 쓰기·락 → 별도 ADR·소유자 합의를 거친 명시적 예외)이 기록되어 다음 도메인이 같은
+  고민을 반복하지 않는다.
 - `autotransfer` / `scheduledtransfer` 전환은 후속 이슈로 남는다. 남겨둔 부분 매핑은
   "아직 안 바꾼 것"이지 "표준"이 아니다.
