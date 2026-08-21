@@ -6,6 +6,7 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductTestFixtures;
 import jakarta.persistence.EntityManager;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -74,5 +75,23 @@ class ProductSubscriptionJpaRepositoryTest extends IntegrationTestSupport {
         assertThat(repository.findBySubscriptionIdAndCustomerId(subscriptionId, customerId)).isPresent();
         assertThat(repository.findBySubscriptionIdAndCustomerId(subscriptionId, 999_999L)).isEmpty();
         assertThat(repository.findBySubscriptionIdAndCustomerId(999_999L, customerId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findAllByCustomerIdAndProductIdForUpdate는 customerId+productId 조합이 일치하는 행만 반환한다")
+    void findAllByCustomerIdAndProductIdForUpdate_returnsOnlyMatchingCombination() {
+        Long productId = productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
+        Long otherProductId = productRepository.save(ProductTestFixtures.productWithCode("SVN-002")).getProductId();
+        Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_lock_test");
+        Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000005", customerId, null);
+
+        repository.save(SubscriptionTestFixtures.defaultSubscription(customerId, productId, withdrawalAccountId));
+        repository.save(SubscriptionTestFixtures.defaultSubscription(customerId, otherProductId, withdrawalAccountId));
+
+        List<ProductSubscriptionJpaEntity> found =
+                repository.findAllByCustomerIdAndProductIdForUpdate(customerId, productId);
+
+        assertThat(found).hasSize(1);
+        assertThat(found.get(0).getProductId()).isEqualTo(productId);
     }
 }
