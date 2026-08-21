@@ -21,6 +21,7 @@ class AutoTransferChangeCommandTest {
                 .myPassbookMemo("새메모")
                 .recipientPassbookMemo("새받는메모")
                 .accountPasswordAuthToken("token")
+                .otpAuthToken("otp-token")
                 .requestIp("127.0.0.1");
     }
 
@@ -54,6 +55,24 @@ class AutoTransferChangeCommandTest {
     @DisplayName("authToken이 공백 문자열이면 CMN0002를 던진다")
     void blankAuthToken_throwsRequiredFieldMissing() {
         assertThatThrownBy(() -> validBuilder().accountPasswordAuthToken("   ").build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+    }
+
+    @Test
+    @DisplayName("otpAuthToken이 없으면 CMN0002를 던진다")
+    void missingOtpAuthToken_throwsRequiredFieldMissing() {
+        assertThatThrownBy(() -> validBuilder().otpAuthToken(null).build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+    }
+
+    @Test
+    @DisplayName("otpAuthToken이 공백 문자열이면 CMN0002를 던진다")
+    void blankOtpAuthToken_throwsRequiredFieldMissing() {
+        assertThatThrownBy(() -> validBuilder().otpAuthToken("   ").build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -112,6 +131,7 @@ class AutoTransferChangeCommandTest {
         AutoTransferChangeCommand command = AutoTransferChangeCommand.builder()
                 .customerId(1L)
                 .accountPasswordAuthToken("token")
+                .otpAuthToken("otp-token")
                 .requestIp("127.0.0.1")
                 .build();
 

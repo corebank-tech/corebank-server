@@ -3,6 +3,7 @@ package com.shinhan.corebank.autotransfer.application;
 import com.shinhan.corebank.autotransfer.application.port.in.*;
 import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AuthTokenVerificationPort;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferOtpVerificationPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
 import com.shinhan.corebank.autotransfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
@@ -26,6 +27,7 @@ import java.util.Map;
 public class AutoTransferCommandService implements AutoTransferRegisterUseCase, AutoTransferChangeUseCase, AutoTransferCancelUseCase {
     private final AutoTransferPersistencePort autoTransferPersistencePort;
     private final AuthTokenVerificationPort authTokenVerificationPort;
+    private final AutoTransferOtpVerificationPort autoTransferOtpVerificationPort;
     private final AccountStatusPort accountStatusPort;
     private final TransferLimitPort transferLimitPort;
     private final AuditLogService auditLogService;
@@ -34,9 +36,6 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
 
     @Override
     public AutoTransfer register(AutoTransferRegisterCommand command) {
-
-        // 인증 완료 토큰
-        authTokenVerificationPort.verify(command.accountPasswordAuthToken(), command.withdrawalAccountId(), "AUTO_TRANSFER_REGISTER");
 
         // 출금 계좌 소유자 검증
         if (!accountStatusPort.belongsToCustomer(command.withdrawalAccountId(), command.customerId())) {
@@ -73,6 +72,13 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
             throw new BusinessException(AutoTransferErrorCode.DUPLICATE_REGISTRATION);
         }
 
+        // 인증 완료 토큰 — OTP는 성공 시 즉시 소비되므로 위 선행 검증을 모두 통과한 뒤 상태 변경 직전에 검증한다
+        // (otp_integration_guide.md §9)
+        authTokenVerificationPort.verify(command.accountPasswordAuthToken(), command.withdrawalAccountId(), "AUTO_TRANSFER_REGISTER");
+        autoTransferOtpVerificationPort.verifyRegisterAndConsume(command.otpAuthToken(), command.customerId(),
+                command.withdrawalAccountId(), command.depositAccountNumber(), command.amount(), command.cycleMonths(),
+                command.transferDay(), command.startDate(), command.endDate());
+
         AutoTransfer autoTransfer = AutoTransfer.register(command.customerId(), command.withdrawalAccountId(), command.depositAccountNumber(), command.payeeName(),
                 command.amount(), command.cycleMonths(), command.transferDay(), command.startDate(), command.endDate(),
                 command.myPassbookMemo(), command.recipientPassbookMemo(), LocalDateTime.now(clock.withZone(SEOUL)));
@@ -89,6 +95,8 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
         AutoTransfer autoTransfer = autoTransferPersistencePort.findById(autoTransferId).orElseThrow(() -> new BusinessException(AutoTransferErrorCode.NOT_FOUND));
         requireOwned(autoTransfer, command.customerId());
         authTokenVerificationPort.verify(command.accountPasswordAuthToken(), autoTransfer.getWithdrawalAccountId(), "AUTO_TRANSFER_CHANGE");
+        autoTransferOtpVerificationPort.verifyChangeAndConsume(command.otpAuthToken(), command.customerId(), autoTransferId,
+                command.amount(), command.cycleMonths(), command.endDate());
         // 상태 검증을 한도 검증보다 먼저 해야 한다
         // — 정상 상태가 아닌 건을 한도 초과 금액으로 바꾸면 진짜 원인(AUT0302)이 아니라 AUT0006으로 잘못 응답하게 된다
         if (!autoTransfer.getStatus().isModifiable()) {
@@ -115,6 +123,7 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
                 new BusinessException(AutoTransferErrorCode.NOT_FOUND));
         requireOwned(autoTransfer, command.customerId());
         authTokenVerificationPort.verify(command.accountPasswordAuthToken(), autoTransfer.getWithdrawalAccountId(), "AUTO_TRANSFER_CANCEL");
+        autoTransferOtpVerificationPort.verifyCancelAndConsume(command.otpAuthToken(), command.customerId(), autoTransferId);
         autoTransfer.terminate(LocalDateTime.now(clock.withZone(SEOUL)));
         AutoTransfer saved = autoTransferPersistencePort.save(autoTransfer);
         auditLogService.record(saved.getCustomerId(), null, AuditEventType.AUTO_TRANSFER_INFO_CHANGE,

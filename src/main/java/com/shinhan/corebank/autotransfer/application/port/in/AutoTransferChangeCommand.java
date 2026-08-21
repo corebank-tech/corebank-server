@@ -11,9 +11,9 @@ import java.time.LocalDate;
 public record AutoTransferChangeCommand(Long customerId, Long amount, Integer cycleMonths, LocalDate endDate,
                                         String myPassbookMemo, String recipientPassbookMemo,
                                         Long withdrawalAccountId, String depositAccountNumber, Integer transferDay,
-                                        String accountPasswordAuthToken, String requestIp) {
+                                        String accountPasswordAuthToken, String otpAuthToken, String requestIp) {
     public AutoTransferChangeCommand {
-        if (customerId == null || accountPasswordAuthToken == null || requestIp == null) {
+        if (customerId == null || accountPasswordAuthToken == null || otpAuthToken == null || requestIp == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
         // 출금계좌·입금계좌·이체지정일은 변경 불가(REQ-AUTO-010) — 값이 오면 무시하지 않고 명시적으로 거부한다
@@ -32,7 +32,7 @@ public record AutoTransferChangeCommand(Long customerId, Long amount, Integer cy
             throw new BusinessException(AutoTransferErrorCode.MEMO_LENGTH_EXCEEDED);
         }
         //공백 문자열 검증
-        if (accountPasswordAuthToken.isBlank() || requestIp.isBlank()) {
+        if (accountPasswordAuthToken.isBlank() || otpAuthToken.isBlank() || requestIp.isBlank()) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
     }

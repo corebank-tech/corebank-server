@@ -14,6 +14,7 @@ class AutoTransferCancelCommandTest {
         return AutoTransferCancelCommand.builder()
                 .customerId(1L)
                 .accountPasswordAuthToken("token")
+                .otpAuthToken("otp-token")
                 .requestIp("127.0.0.1");
     }
 
@@ -38,6 +39,24 @@ class AutoTransferCancelCommandTest {
     @DisplayName("authToken이 없으면 CMN0002를 던진다")
     void missingAuthToken_throwsRequiredFieldMissing() {
         assertThatThrownBy(() -> validBuilder().accountPasswordAuthToken(null).build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+    }
+
+    @Test
+    @DisplayName("otpAuthToken이 없으면 CMN0002를 던진다")
+    void missingOtpAuthToken_throwsRequiredFieldMissing() {
+        assertThatThrownBy(() -> validBuilder().otpAuthToken(null).build())
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+    }
+
+    @Test
+    @DisplayName("otpAuthToken이 공백 문자열이면 CMN0002를 던진다")
+    void blankOtpAuthToken_throwsRequiredFieldMissing() {
+        assertThatThrownBy(() -> validBuilder().otpAuthToken("   ").build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
