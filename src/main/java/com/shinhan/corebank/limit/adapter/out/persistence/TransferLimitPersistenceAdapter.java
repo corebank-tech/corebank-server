@@ -7,6 +7,7 @@ import com.shinhan.corebank.limit.application.port.out.TransferLimitCommandPort;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
 import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
+import com.shinhan.corebank.limit.domain.TransferLimitHistory;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -17,6 +18,7 @@ public class TransferLimitPersistenceAdapter implements TransferLimitQueryPort, 
 
     private final TransferLimitJpaRepository limitRepository;
     private final TransferLimitDailyUsageJpaRepository usageRepository;
+    private final TransferLimitHistoryJpaRepository historyRepository;
 
     @Override
     public Optional<TransferLimit> findByCustomerId(Long customerId) {
@@ -27,6 +29,16 @@ public class TransferLimitPersistenceAdapter implements TransferLimitQueryPort, 
     public Optional<TransferLimitDailyUsage> findUsage(Long customerId, LocalDate usageDate) {
         return usageRepository.findById(new TransferLimitDailyUsageId(customerId, usageDate))
                 .map(TransferLimitDailyUsageJpaEntity::toDomain);
+    }
+
+    @Override
+    public Optional<TransferLimit> findByCustomerIdForUpdate(Long customerId) {
+        return limitRepository.findByCustomerIdForUpdate(customerId).map(TransferLimitJpaEntity::toDomain);
+    }
+
+    @Override
+    public void saveHistory(TransferLimitHistory history) {
+        historyRepository.save(TransferLimitHistoryJpaEntity.from(history));
     }
 
     @Override
