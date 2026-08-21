@@ -15,6 +15,7 @@ public interface ExistingSubscriptionPort {
     //      스냅샷을 무시하고 항상 최신 커밋 데이터를 읽는다.
     // 반드시 쓰기 트랜잭션이 이미 열려 있는 상태(ProductSubscriptionExecuteService.execute()의
     // @Transactional 내부)에서만 호출한다 — 트랜잭션 밖에서 호출하면 락이 리포지토리 메서드
-    // 종료와 함께 즉시 풀려 보호 효과가 없다.
+    // 종료와 함께 즉시 풀려 보호 효과가 없다. 구현체가 Propagation.MANDATORY로 이를 강제하므로
+    // 트랜잭션 밖 호출은 조용히 통과하지 않고 즉시 예외가 된다.
     boolean existsActiveSubscription(Long customerId, Long productId);
 }
