@@ -1,11 +1,7 @@
 package com.shinhan.corebank.batch.adapter.in.scheduler;
 
-import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferBatchUseCase;
-import com.shinhan.corebank.batch.application.port.out.BatchExecutionLockPort;
-import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferBatchUseCase;
+import com.shinhan.corebank.batch.application.port.in.DailyTransferBatchUseCase;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -16,40 +12,13 @@ import java.time.ZoneId;
 @Component
 @RequiredArgsConstructor
 public class DailyTransferBatchScheduler {
-    private static final Logger log = LoggerFactory.getLogger(DailyTransferBatchScheduler.class);
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
-    private static final String JOB_NAME = "DAILY_TRANSFER_BATCH";
-    private final AutoTransferBatchUseCase autoTransferBatchUseCase;
-    private final ScheduledTransferBatchUseCase scheduledTransferBatchUseCase;
-    private final BatchExecutionLockPort batchExecutionLockPort;
+    private final DailyTransferBatchUseCase dailyTransferBatchUseCase;
     private final Clock clock;
 
     // 자정 00시 10분 후 자동이체 -> 예약이체 순으로 배치 시작
     @Scheduled(cron = "0 10 0 * * *", zone = "Asia/Seoul")
     public void runDailyBatch() {
-        if (!batchExecutionLockPort.tryAcquire(JOB_NAME)) {
-            log.warn("이미 실행 중인 배치가 있어 이번 트리거는 건너뜀 - jobName={}", JOB_NAME);
-            return;
-        }
-        try {
-            LocalDate today = LocalDate.now(clock.withZone(SEOUL));
-            log.info("자동이체 배치 시작 - date={}", today);
-            autoTransferBatchUseCase.executeDaily(today);
-            log.info("자동이체 배치 종료 - date={}", today);
-
-            log.info("재확정 배치 시작 - date={}", today);
-            autoTransferBatchUseCase.reconcileStuckExecutions(today);
-            log.info("재확정 배치 종료 - date={}", today);
-
-            log.info("예약이체 배치 시작 - date={}", today);
-            scheduledTransferBatchUseCase.executeDaily(today);
-            log.info("예약이체 배치 종료 - date={}", today);
-
-            log.info("예약이체 재확정 배치 시작 - date={}", today);
-            scheduledTransferBatchUseCase.reconcileStuckExecutions(today);
-            log.info("예약이체 재확정 배치 종료 - date={}", today);
-        } finally {
-            batchExecutionLockPort.release(JOB_NAME);
-        }
+        dailyTransferBatchUseCase.run(LocalDate.now(clock.withZone(SEOUL)));
     }
 }
