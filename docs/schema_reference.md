@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 25개 비즈니스 테이블 + 1개 PK 채번 전용 테이블 (`ledger_entry_id_sequence`) · 256개 컬럼
+**대상**: 25개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 259개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -52,6 +52,7 @@
 | 24 | `idempotency_key` | 멱등키 | P5 | 9  |
 | 25 | `audit_log` | 감사 로그 | P5 | 8  |
 | 26 | `common_code` | 공통코드 | P5 | 8  |
+| 27 | `batch_execution_lock` | 배치 중복 트리거 방지 락 | P5 | 3  |
 
 ---
 
@@ -837,5 +838,19 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | 종류 | 이름 | 컬럼 |
 | --- | --- | --- |
 | INDEX | `ix_common_code_group` | `code_group, use_yn, sort_order` |
+
+---
+
+## `batch_execution_lock`
+
+> 배치 중복 트리거 방지 락 (#189). Apache Fineract `SchedulerTriggerListener.vetoJobExecution()` 패턴 참고
+
+다중 인스턴스 배포 시 같은 배치(`DailyTransferBatchScheduler.runDailyBatch()`)가 동시에 두 번 트리거되는 걸 막는다. `SELECT ... FOR UPDATE`로 행을 잠그고 플래그만 확인·갱신한 뒤 즉시 커밋하는 짧은 트랜잭션이라, 배치 실행 전체 동안 이 테이블을 잠그지 않는다. `currently_running=TRUE`인 채로 `updated_at`이 stale 임계값(6시간)보다 오래되면 서버 크래시로 락 해제가 못 불린 것으로 보고 강제로 재획득한다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. 현재는 `DAILY_TRANSFER_BATCH` 한 행뿐 |
+| `currently_running` | `BOOLEAN` |  | X | `FALSE` | 이 배치가 지금 실행 중인지. 트리거 시작 시 `TRUE`, 종료 시(성공/실패 무관) `FALSE`로 되돌림 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각. stale(크래시로 방치됨) 판단 기준 |
 
 ---
