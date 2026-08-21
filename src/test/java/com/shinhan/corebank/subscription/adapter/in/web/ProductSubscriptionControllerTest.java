@@ -314,6 +314,26 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("가입 건에 연결된 계좌가 타 고객 소유면 PRD9001을 반환한다")
+    void getSubscriptionResult_accountOwnedByOtherCustomer_returnsAccountNotFound() throws Exception {
+        Long productId = productJpaRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
+        Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_ctl_owner");
+        Long otherCustomerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_ctl_other");
+        Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000031", customerId, null);
+        Long otherCustomerAccountId =
+                SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000032", otherCustomerId, productId);
+        Long subscriptionId = subscriptionJpaRepository.save(
+                SubscriptionTestFixtures.defaultSubscription(
+                        customerId, productId, withdrawalAccountId, otherCustomerAccountId)
+        ).getSubscriptionId();
+
+        mockMvc.perform(get("/product-subscriptions/{subscriptionId}", subscriptionId)
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("PRD9001"));
+    }
+
+    @Test
     @DisplayName("존재하지 않는 가입건이면 404 + PRD0203을 반환한다")
     void getSubscriptionResult_notFound() throws Exception {
         mockMvc.perform(get("/product-subscriptions/{subscriptionId}", 999_999L)
