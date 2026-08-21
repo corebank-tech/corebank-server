@@ -81,17 +81,25 @@ public class SecurityConfig {
     @Bean
     public CookieCsrfTokenRepository csrfTokenRepository(
             @Value("${server.servlet.session.cookie.secure:false}")
-            boolean secure
+            boolean secure,
+            @Value("${app.security.csrf.cookie-domain:}")
+            String cookieDomain
     ) {
         CookieCsrfTokenRepository repository =
                 CookieCsrfTokenRepository.withHttpOnlyFalse();
         repository.setCookieName("XSRF-TOKEN");
         repository.setHeaderName("X-XSRF-TOKEN");
-        repository.setCookieCustomizer(cookie -> cookie
-                .path("/")
-                .httpOnly(false)
-                .secure(secure)
-                .sameSite("Lax"));
+        repository.setCookieCustomizer(cookie -> {
+            cookie.path("/")
+                    .httpOnly(false)
+                    .secure(secure)
+                    .sameSite("Lax");
+
+            // 운영 FE와 API 서브도메인이 CSRF 쿠키를 공유할 때만 Domain을 지정한다.
+            if (cookieDomain != null && !cookieDomain.isBlank()) {
+                cookie.domain(cookieDomain.trim());
+            }
+        });
         return repository;
     }
 
