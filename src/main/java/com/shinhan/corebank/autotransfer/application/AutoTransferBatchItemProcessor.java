@@ -49,8 +49,8 @@ public class AutoTransferBatchItemProcessor {
 
     // DB에 지금부터 처리 시작 남
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public AutoTransferExecution saveProcessing(AutoTransfer autoTransfer, LocalDate date) {
-        // executionDate는 배치가 도는 날(date)이 아니라 이 회차의 논리적 실행일(nextExecutionDate)이어야
+    public AutoTransferExecution saveProcessing(AutoTransfer autoTransfer) {
+        // executionDate는 배치가 도는 날이 아니라 이 회차의 논리적 실행일(nextExecutionDate)이어야
         // completeProcessing()이 만드는 TransferCommand.executionDate와 같은 값을 가리켜, 멱등성
         // 사전조회가 재시도 날짜가 달라져도 같은 회차로 인식한다.
         AutoTransferExecution processing = AutoTransferExecution.processing(autoTransfer.getNextExecutionDate(), autoTransfer.getAmount(), LocalDateTime.now());

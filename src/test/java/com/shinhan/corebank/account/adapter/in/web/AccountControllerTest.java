@@ -1,12 +1,20 @@
 package com.shinhan.corebank.account.adapter.in.web;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.account.application.port.in.AccountTransactionQueryUseCase;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.transfer.application.port.in.LedgerHistoryItem;
+import com.shinhan.corebank.transfer.application.port.in.LedgerHistoryResult;
+import com.shinhan.corebank.transfer.application.port.in.LedgerHistorySummary;
+import com.shinhan.corebank.transfer.domain.LedgerDirection;
+import com.shinhan.corebank.transfer.domain.TransferChannel;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,13 +22,19 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -42,6 +56,9 @@ class AccountControllerTest extends IntegrationTestSupport {
 
     @Autowired
     private CustomerTestFixture customerTestFixture;
+
+    @MockitoBean
+    private AccountTransactionQueryUseCase accountTransactionQueryUseCase;
 
     @Test
     @DisplayName("로그인 고객의 전체 계좌를 조회한다")
@@ -219,10 +236,10 @@ class AccountControllerTest extends IntegrationTestSupport {
                                 )
                                 .content(
                                         """
-                                        {
-                                          "alias": "생활비통장"
-                                        }
-                                        """
+                                                {
+                                                  "alias": "생활비통장"
+                                                }
+                                                """
                                 )
                 )
                 .andExpect(status().isOk())
@@ -290,10 +307,10 @@ class AccountControllerTest extends IntegrationTestSupport {
                                 )
                                 .content(
                                         """
-                                        {
-                                          "alias": "급여통장"
-                                        }
-                                        """
+                                                {
+                                                  "alias": "급여통장"
+                                                }
+                                                """
                                 )
                 )
                 .andExpect(status().isOk())
@@ -406,10 +423,10 @@ class AccountControllerTest extends IntegrationTestSupport {
                                 )
                                 .content(
                                         """
-                                        {
-                                          "alias": "내계좌"
-                                        }
-                                        """
+                                                {
+                                                  "alias": "내계좌"
+                                                }
+                                                """
                                 )
                 )
                 .andExpect(status().isNotFound())
@@ -457,10 +474,10 @@ class AccountControllerTest extends IntegrationTestSupport {
                                 )
                                 .content(
                                         """
-                                        {
-                                          "alias": "가나다라마바사아자차카타파"
-                                        }
-                                        """
+                                                {
+                                                  "alias": "가나다라마바사아자차카타파"
+                                                }
+                                                """
                                 )
                 )
                 .andExpect(status().isBadRequest())
@@ -504,10 +521,10 @@ class AccountControllerTest extends IntegrationTestSupport {
                                 )
                                 .content(
                                         """
-                                        {
-                                          "alias": "생활비"
-                                        }
-                                        """
+                                                {
+                                                  "alias": "생활비"
+                                                }
+                                                """
                                 )
                 )
                 .andExpect(status().isBadRequest())
@@ -555,10 +572,10 @@ class AccountControllerTest extends IntegrationTestSupport {
                                 )
                                 .content(
                                         """
-                                        {
-                                          "alias": "생활비"
-                                        }
-                                        """
+                                                {
+                                                  "alias": "생활비"
+                                                }
+                                                """
                                 )
                 )
                 .andExpect(status().isBadRequest())
@@ -589,10 +606,10 @@ class AccountControllerTest extends IntegrationTestSupport {
                                 )
                                 .content(
                                         """
-                                        {
-                                          "alias": "생활비"
-                                        }
-                                        """
+                                                {
+                                                  "alias": "생활비"
+                                                }
+                                                """
                                 )
                 )
                 .andExpect(
@@ -635,10 +652,10 @@ class AccountControllerTest extends IntegrationTestSupport {
                                 )
                                 .content(
                                         """
-                                        {
-                                          "alias": "생활비"
-                                        }
-                                        """
+                                                {
+                                                  "alias": "생활비"
+                                                }
+                                                """
                                 )
                 )
                 .andExpect(status().isForbidden())
@@ -721,10 +738,10 @@ class AccountControllerTest extends IntegrationTestSupport {
                                 )
                                 .content(
                                         """
-                                        {
-                                          "alias": "   "
-                                        }
-                                        """
+                                                {
+                                                  "alias": "   "
+                                                }
+                                                """
                                 )
                 )
                 .andExpect(status().isBadRequest())
@@ -732,6 +749,524 @@ class AccountControllerTest extends IntegrationTestSupport {
                         jsonPath("$.code")
                                 .value("CMN0002")
                 );
+    }
+
+    @Test
+    @DisplayName("계좌 거래내역을 조회한다")
+    void getAccountTransactions() throws Exception {
+        // given
+        Long customerId = 1L;
+        Long accountId = 101L;
+
+        LedgerHistoryResult result =
+                LedgerHistoryResult.builder()
+                        .summary(
+                                LedgerHistorySummary.builder()
+                                        .depositCount(3L)
+                                        .depositAmount(150_000L)
+                                        .withdrawalCount(5L)
+                                        .withdrawalAmount(82_000L)
+                                        .build()
+                        )
+                        .page(0)
+                        .size(10)
+                        .totalCount(8L)
+                        .totalPages(1)
+                        .items(
+                                List.of(
+                                        LedgerHistoryItem.builder()
+                                                .ledgerEntryId(1001L)
+                                                .transactionNumber(
+                                                        "20260820WB0000000001"
+                                                )
+                                                .occurredAt(
+                                                        LocalDateTime.of(
+                                                                2026,
+                                                                8,
+                                                                20,
+                                                                13,
+                                                                20
+                                                        )
+                                                )
+                                                .transactionType(
+                                                        "IMMEDIATE_TRANSFER"
+                                                )
+                                                .direction(
+                                                        LedgerDirection.WITHDRAWAL
+                                                )
+                                                .amount(20_000L)
+                                                .transactionContent("점심")
+                                                .balanceAfter(980_000L)
+                                                .channel(TransferChannel.WB)
+                                                .reversed(true)
+                                                .reversalId(2001L)
+                                                .build()
+                                )
+                        )
+                        .build();
+
+        given(
+                accountTransactionQueryUseCase
+                        .getTransactions(
+                                eq(customerId),
+                                eq(accountId),
+                                any(),
+                                any(),
+                                any(),
+                                any(),
+                                any(),
+                                eq(1),
+                                eq(10)
+                        )
+        ).willReturn(result);
+
+        // when & then
+        mockMvc.perform(
+                        get(
+                                "/accounts/{accountId}/transactions",
+                                accountId
+                        )
+                                .with(
+                                        authentication(
+                                                authenticationOf(customerId)
+                                        )
+                                )
+                                .param("fromDate", "2026-08-01")
+                                .param("toDate", "2026-08-20")
+                                .param("direction", "ALL")
+                                .param("keyword", "점심")
+                                .param("sort", "LATEST")
+                                .param("page", "1")
+                                .param("size", "10")
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("0000")
+                )
+                .andExpect(
+                        jsonPath("$.message")
+                                .value("정상 처리되었습니다.")
+                )
+                .andExpect(
+                        jsonPath("$.data.summary.depositCount")
+                                .value(3)
+                )
+                .andExpect(
+                        jsonPath("$.data.summary.depositAmount")
+                                .value(150_000)
+                )
+                .andExpect(
+                        jsonPath("$.data.summary.withdrawalCount")
+                                .value(5)
+                )
+                .andExpect(
+                        jsonPath("$.data.summary.withdrawalAmount")
+                                .value(82_000)
+                )
+                .andExpect(
+                        jsonPath("$.data.page")
+                                .value(1)
+                )
+                .andExpect(
+                        jsonPath("$.data.size")
+                                .value(10)
+                )
+                .andExpect(
+                        jsonPath("$.data.totalCount")
+                                .value(8)
+                )
+                .andExpect(
+                        jsonPath("$.data.totalPages")
+                                .value(1)
+                )
+                .andExpect(
+                        jsonPath("$.data.items.length()")
+                                .value(1)
+                )
+                .andExpect(
+                        jsonPath("$.data.items[0].ledgerEntryId")
+                                .value(1001L)
+                )
+                .andExpect(
+                        jsonPath("$.data.items[0].transactionNumber")
+                                .value("20260820WB0000000001")
+                )
+                .andExpect(
+                        jsonPath("$.data.items[0].occurredAt")
+                                .value("2026-08-20T13:20:00")
+                )
+                .andExpect(
+                        jsonPath("$.data.items[0].transactionType")
+                                .value("IMMEDIATE_TRANSFER")
+                )
+                .andExpect(
+                        jsonPath("$.data.items[0].withdrawalAmount")
+                                .value(20_000L)
+                )
+                .andExpect(
+                        jsonPath("$.data.items[0].depositAmount")
+                                .doesNotExist()
+                )
+                .andExpect(
+                        jsonPath("$.data.items[0].transactionContent")
+                                .value("점심")
+                )
+                .andExpect(
+                        jsonPath("$.data.items[0].balanceAfter")
+                                .value(980_000L)
+                )
+                .andExpect(
+                        jsonPath("$.data.items[0].channel")
+                                .value("WB")
+                ).andExpect(
+                        jsonPath("$.data.items[0].reversed")
+                                .value(true)
+                )
+                .andExpect(
+                        jsonPath("$.data.items[0].reversalId")
+                                .value(2001L)
+                );
+    }
+
+    @Test
+    @DisplayName("거래내역이 없으면 200과 빈 목록을 반환한다")
+    void getAccountTransactionsReturnsEmptyItems()
+            throws Exception {
+
+        // given
+        Long customerId = 1L;
+        Long accountId = 101L;
+
+        LedgerHistoryResult result =
+                LedgerHistoryResult.builder()
+                        .summary(
+                                LedgerHistorySummary.empty()
+                        )
+                        .page(0)
+                        .size(10)
+                        .totalCount(0L)
+                        .totalPages(0)
+                        .items(List.of())
+                        .build();
+
+        given(
+                accountTransactionQueryUseCase
+                        .getTransactions(
+                                eq(customerId),
+                                eq(accountId),
+                                isNull(),
+                                isNull(),
+                                isNull(),
+                                isNull(),
+                                isNull(),
+                                eq(1),
+                                eq(10)
+                        )
+        ).willReturn(result);
+
+        // when & then
+        mockMvc.perform(
+                        get(
+                                "/accounts/{accountId}/transactions",
+                                accountId
+                        )
+                                .with(
+                                        authentication(
+                                                authenticationOf(customerId)
+                                        )
+                                )
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("0000")
+                )
+                .andExpect(
+                        jsonPath("$.data.page")
+                                .value(1)
+                )
+                .andExpect(
+                        jsonPath("$.data.size")
+                                .value(10)
+                )
+                .andExpect(
+                        jsonPath("$.data.totalCount")
+                                .value(0)
+                )
+                .andExpect(
+                        jsonPath("$.data.totalPages")
+                                .value(0)
+                )
+                .andExpect(
+                        jsonPath("$.data.summary.depositCount")
+                                .value(0)
+                )
+                .andExpect(
+                        jsonPath("$.data.summary.withdrawalCount")
+                                .value(0)
+                )
+                .andExpect(
+                        jsonPath("$.data.items")
+                                .isArray()
+                )
+                .andExpect(
+                        jsonPath("$.data.items")
+                                .isEmpty()
+                );
+    }
+
+    @Test
+    @DisplayName("유효하지 않은 거래 방향은 CMN0001을 반환한다")
+    void rejectInvalidTransactionDirection()
+            throws Exception {
+
+        Long customerId = 1L;
+
+        mockMvc.perform(
+                        get(
+                                "/accounts/{accountId}/transactions",
+                                101L
+                        )
+                                .with(
+                                        authentication(
+                                                authenticationOf(customerId)
+                                        )
+                                )
+                                .param(
+                                        "direction",
+                                        "INVALID"
+                                )
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("CMN0001")
+                );
+
+        verify(
+                accountTransactionQueryUseCase,
+                never()
+        ).getTransactions(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                anyInt(),
+                anyInt()
+        );
+    }
+
+    @Test
+    @DisplayName("유효하지 않은 정렬 기준은 CMN0001을 반환한다")
+    void rejectInvalidTransactionSort()
+            throws Exception {
+
+        Long customerId = 1L;
+
+        mockMvc.perform(
+                        get(
+                                "/accounts/{accountId}/transactions",
+                                101L
+                        )
+                                .with(
+                                        authentication(
+                                                authenticationOf(customerId)
+                                        )
+                                )
+                                .param(
+                                        "sort",
+                                        "INVALID"
+                                )
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("CMN0001")
+                );
+
+        verify(
+                accountTransactionQueryUseCase,
+                never()
+        ).getTransactions(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                anyInt(),
+                anyInt()
+        );
+    }
+
+    @Test
+    @DisplayName("페이지 번호가 0이면 CMN0001을 반환한다")
+    void rejectZeroTransactionPage()
+            throws Exception {
+
+        Long customerId = 1L;
+
+        mockMvc.perform(
+                        get(
+                                "/accounts/{accountId}/transactions",
+                                101L
+                        )
+                                .with(
+                                        authentication(
+                                                authenticationOf(customerId)
+                                        )
+                                )
+                                .param(
+                                        "page",
+                                        "0"
+                                )
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("CMN0001")
+                );
+
+        verify(
+                accountTransactionQueryUseCase,
+                never()
+        ).getTransactions(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                anyInt(),
+                anyInt()
+        );
+    }
+
+    @Test
+    @DisplayName("잘못된 날짜 형식은 CMN0001을 반환한다")
+    void rejectInvalidTransactionDateFormat()
+            throws Exception {
+
+        Long customerId = 1L;
+
+        mockMvc.perform(
+                        get(
+                                "/accounts/{accountId}/transactions",
+                                101L
+                        )
+                                .with(
+                                        authentication(
+                                                authenticationOf(customerId)
+                                        )
+                                )
+                                .param(
+                                        "fromDate",
+                                        "2026-99-99"
+                                )
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("CMN0001")
+                );
+
+        verify(
+                accountTransactionQueryUseCase,
+                never()
+        ).getTransactions(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                anyInt(),
+                anyInt()
+        );
+    }
+
+    @Test
+    @DisplayName("본인 소유가 아닌 계좌 거래내역 조회는 ACC0201을 반환한다")
+    void rejectOtherCustomersAccountTransactions()
+            throws Exception {
+
+        Long customerId = 1L;
+        Long accountId = 999L;
+
+        given(
+                accountTransactionQueryUseCase
+                        .getTransactions(
+                                eq(customerId),
+                                eq(accountId),
+                                isNull(),
+                                isNull(),
+                                isNull(),
+                                isNull(),
+                                isNull(),
+                                eq(1),
+                                eq(10)
+                        )
+        ).willThrow(
+                new BusinessException(
+                        AccountErrorCode
+                                .ACCOUNT_NOT_FOUND_OR_FORBIDDEN
+                )
+        );
+
+        mockMvc.perform(
+                        get(
+                                "/accounts/{accountId}/transactions",
+                                accountId
+                        )
+                                .with(
+                                        authentication(
+                                                authenticationOf(customerId)
+                                        )
+                                )
+                )
+                .andExpect(status().isNotFound())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("ACC0201")
+                );
+    }
+
+    @Test
+    @DisplayName("인증 없이 계좌 거래내역을 조회하면 401을 반환한다")
+    void rejectUnauthenticatedAccountTransactionQuery()
+            throws Exception {
+
+        mockMvc.perform(
+                        get(
+                                "/accounts/{accountId}/transactions",
+                                101L
+                        )
+                )
+                .andExpect(
+                        status().isUnauthorized()
+                );
+
+        verify(
+                accountTransactionQueryUseCase,
+                never()
+        ).getTransactions(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                anyInt(),
+                anyInt()
+        );
     }
 
     private Account createDemandDepositAccount(
@@ -750,8 +1285,8 @@ class AccountControllerTest extends IntegrationTestSupport {
         LocalDateTime withdrawalRegisteredAt =
                 withdrawalRegistered
                         ? LocalDateTime.of(
-                                2026, 8, 2, 10, 0
-                        )
+                        2026, 8, 2, 10, 0
+                )
                         : null;
 
         return Account.reconstitute(
@@ -827,6 +1362,7 @@ class AccountControllerTest extends IntegrationTestSupport {
                         )
                 );
     }
+
     private String idempotencyKey() {
         return UUID.randomUUID().toString();
     }

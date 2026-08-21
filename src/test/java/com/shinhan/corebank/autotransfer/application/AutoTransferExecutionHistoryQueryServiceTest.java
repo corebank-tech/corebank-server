@@ -106,12 +106,12 @@ class AutoTransferExecutionHistoryQueryServiceTest {
     }
 
     @Test
-    @DisplayName("조회 시작일이 종료일보다 늦으면 INVALID_INPUT을 던진다")
-    void search_fromDateAfterToDate_throwsInvalidInput() {
+    @DisplayName("조회 시작일이 종료일보다 늦으면 INVALID_DATE_RANGE를 던진다")
+    void search_fromDateAfterToDate_throwsInvalidDateRange() {
         assertThatThrownBy(() -> service.search(1L, 2L,
                 LocalDate.of(2026, 3, 20), LocalDate.of(2026, 3, 10), 0, 10))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_DATE_RANGE));
     }
 
     @Test

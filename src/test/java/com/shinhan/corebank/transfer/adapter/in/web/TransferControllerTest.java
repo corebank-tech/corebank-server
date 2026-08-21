@@ -55,6 +55,8 @@ class TransferControllerTest extends IntegrationTestSupport {
     void cleanUpCommittedData() {
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202)");
         jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id = 101");
+        jdbcTemplate.update("DELETE FROM transfer WHERE transaction_number IN " +
+                "('20260810IT0000000010','20260810IT0000000011','20260810IT0000000012')");
         jdbcTemplate.update("UPDATE account SET balance = 100000, status = 'ACTIVE' WHERE account_id IN (101, 202)");
     }
 
@@ -131,6 +133,100 @@ class TransferControllerTest extends IntegrationTestSupport {
                         .param("accountNumber", "999999999999"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("TRF0201"));
+    }
+
+    @Test
+    @DisplayName("이체결과 목록 조회: 본인 계좌면 200 + 집계·항목을 반환한다")
+    void searchHistory_success() throws Exception {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+            entityManager.createNativeQuery("""
+                INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id, deposit_account_number,
+                    payee_name, amount, fee, transfer_type, channel, status, transferred_at, created_at)
+                VALUES ('20260810IT0000000010', 101, 202, '110222222222', '성춘향', 10000, 0, 'IMMEDIATE', 'BT', 'SUCCESS',
+                    '2026-08-10 09:00:00', NOW(6))
+                ON DUPLICATE KEY UPDATE transaction_number = transaction_number
+            """).executeUpdate();
+        });
+
+        mockMvc.perform(get("/transfers")
+                        .with(authentication(authenticationOf(1L)))
+                        .param("withdrawalAccountId", "101")
+                        .param("fromDate", "2026-08-01")
+                        .param("toDate", "2026-08-31"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.asOf").exists())
+                .andExpect(jsonPath("$.data.summary.successCount").value(1))
+                .andExpect(jsonPath("$.data.items[0].transactionNumber").value("20260810IT0000000010"))
+                .andExpect(jsonPath("$.data.items[0].payeeName").value("성*향"))
+                .andExpect(jsonPath("$.data.items[0].accountNumber").value("110******222"));
+    }
+
+    @Test
+    @DisplayName("이체결과 목록 조회: 남의 출금계좌면 400 + TRF0001을 반환한다")
+    void searchHistory_notOwned_returnsTrf0001() throws Exception {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        mockMvc.perform(get("/transfers")
+                        .with(authentication(authenticationOf(2L)))
+                        .param("withdrawalAccountId", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TRF0001"));
+    }
+
+    @Test
+    @DisplayName("이체결과 상세 조회: 본인 거래면 200 + 상세 정보를 반환한다")
+    void getHistoryDetail_success() throws Exception {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+            entityManager.createNativeQuery("""
+                INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id, deposit_account_number,
+                    payee_name, amount, fee, transfer_type, channel, status, transferred_at, created_at)
+                VALUES ('20260810IT0000000011', 101, 202, '110222222222', '성춘향', 20000, 0, 'IMMEDIATE', 'BT', 'SUCCESS',
+                    '2026-08-10 09:00:00', NOW(6))
+                ON DUPLICATE KEY UPDATE transaction_number = transaction_number
+            """).executeUpdate();
+        });
+
+        mockMvc.perform(get("/transfers/20260810IT0000000011")
+                        .with(authentication(authenticationOf(1L))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.transactionNumber").value("20260810IT0000000011"))
+                .andExpect(jsonPath("$.data.amount").value(20000))
+                .andExpect(jsonPath("$.data.payeeName").value("성*향"))
+                .andExpect(jsonPath("$.data.accountNumber").value("110******222"));
+    }
+
+    @Test
+    @DisplayName("이체결과 상세 조회: 존재하지 않는 거래번호면 404 + TRF0202를 반환한다")
+    void getHistoryDetail_notFound_returnsTrf0202() throws Exception {
+        mockMvc.perform(get("/transfers/NOT-EXIST")
+                        .with(authentication(authenticationOf(1L))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TRF0202"));
+    }
+
+    @Test
+    @DisplayName("이체결과 상세 조회: 남의 거래면 404 + TRF0202를 반환한다")
+    void getHistoryDetail_notOwned_returnsTrf0202() throws Exception {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+            entityManager.createNativeQuery("""
+                INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id, deposit_account_number,
+                    payee_name, amount, fee, transfer_type, channel, status, transferred_at, created_at)
+                VALUES ('20260810IT0000000012', 101, 202, '110222222222', '성춘향', 30000, 0, 'IMMEDIATE', 'BT', 'SUCCESS',
+                    '2026-08-10 09:00:00', NOW(6))
+                ON DUPLICATE KEY UPDATE transaction_number = transaction_number
+            """).executeUpdate();
+        });
+
+        mockMvc.perform(get("/transfers/20260810IT0000000012")
+                        .with(authentication(authenticationOf(2L))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TRF0202"));
     }
 
     private UsernamePasswordAuthenticationToken authenticationOf(Long customerId) {

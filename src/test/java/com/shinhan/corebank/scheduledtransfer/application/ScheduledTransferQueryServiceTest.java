@@ -73,6 +73,7 @@ class ScheduledTransferQueryServiceTest {
     @Test
     @DisplayName("withdrawalAccountId가 없어도 정상 조회된다 (REQ-SCD-007: 미지정 시 전체 계좌)")
     void allowsMissingWithdrawalAccountId() {
+        stubClock();
         when(scheduledTransferQueryPort.search(1L, null, null, null, null, PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(List.of()));
 
@@ -106,6 +107,7 @@ class ScheduledTransferQueryServiceTest {
     @Test
     @DisplayName("시작일만 있고 종료일이 없으면 범위 검증 없이 그대로 조회한다")
     void allowsOnlyFromDate() {
+        stubClock();
         LocalDate fromDate = LocalDate.of(2026, 1, 1);
         when(scheduledTransferQueryPort.search(1L, null, null, fromDate, null, PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(List.of()));
@@ -146,6 +148,7 @@ class ScheduledTransferQueryServiceTest {
     @Test
     @DisplayName("조회기간이 정확히 365일이면 통과한다 (경계값)")
     void allowsExactly365Days() {
+        stubClock();
         LocalDate fromDate = LocalDate.of(2026, 1, 1);
         LocalDate toDate = fromDate.plusDays(365);
         when(scheduledTransferQueryPort.search(1L, null, null, fromDate, toDate, PageRequest.of(0, 10)))
@@ -160,6 +163,7 @@ class ScheduledTransferQueryServiceTest {
     @DisplayName("검증을 통과하면 포트 결과를 ScheduledTransferListItem으로 매핑하고, "
             + "동일 출금계좌는 한 번만 조회한다 (N+1 방지). fromAlias·myPassbookMemo·registeredAt도 함께 매핑된다")
     void delegatesToPortAndMapsWithBulkAccountLookup() {
+        stubClock();
         ScheduledTransfer waiting = ScheduledTransfer.reconstitute(
                 101L, 1L, 2L, "088", "110987654321", "홍길동", 300_000L,
                 LocalDate.of(2026, 9, 1), "생활비", null, ScheduledTransferStatus.WAITING,
@@ -196,6 +200,7 @@ class ScheduledTransferQueryServiceTest {
     @Test
     @DisplayName("출금계좌에 별칭이 설정돼 있지 않으면 fromAlias는 null로 매핑된다")
     void mapsFromAliasNull_whenAliasNotSet() {
+        stubClock();
         ScheduledTransfer waiting = ScheduledTransfer.reconstitute(
                 101L, 1L, 2L, "088", "110987654321", "홍길동", 300_000L,
                 LocalDate.of(2026, 9, 1), null, null, ScheduledTransferStatus.WAITING,
@@ -212,6 +217,28 @@ class ScheduledTransferQueryServiceTest {
                 1L, null, null, null, null, 0, 10);
 
         assertThat(result.getContent().get(0).fromAlias()).isNull();
+    }
+
+    @Test
+    @DisplayName("WAITING이어도 실행 예정일이 오늘이면 cancelable은 false다 (SCD0303과 동일 기준, PR #227 리뷰)")
+    void cancelableIsFalse_whenWaitingButScheduledForToday() {
+        stubClock();
+        ScheduledTransfer waitingToday = ScheduledTransfer.reconstitute(
+                101L, 1L, 2L, "088", "110987654321", "홍길동", 300_000L,
+                TODAY, null, null, ScheduledTransferStatus.WAITING,
+                null, LocalDateTime.of(2026, 8, 1, 10, 0), null, null, null);
+
+        when(scheduledTransferQueryPort.search(1L, null, null, null, null, PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(List.of(waitingToday)));
+        when(accountStatusPort.findAccountNumbersByIds(List.of(2L)))
+                .thenReturn(Map.of(2L, "110123456789"));
+        when(accountStatusPort.findAccountAliasesByIds(List.of(2L)))
+                .thenReturn(Map.of());
+
+        Page<ScheduledTransferListItem> result = scheduledTransferQueryService.search(
+                1L, null, null, null, null, 0, 10);
+
+        assertThat(result.getContent().get(0).cancelable()).isFalse();
     }
 
     private void verifyPortNeverCalled() {

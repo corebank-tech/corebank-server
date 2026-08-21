@@ -23,6 +23,7 @@ import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
+import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
@@ -363,6 +364,11 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 }
             }
             return result;
+        }
+
+        @Override
+        public Optional<Transfer> findByTransactionNumber(String transactionNumber) {
+            return delegate.findByTransactionNumber(transactionNumber);
         }
     }
 
