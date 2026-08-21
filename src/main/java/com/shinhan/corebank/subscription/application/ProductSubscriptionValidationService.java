@@ -3,6 +3,7 @@ package com.shinhan.corebank.subscription.application;
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.util.MaskingUtil;
+import com.shinhan.corebank.product.application.ProductErrorCode;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import com.shinhan.corebank.product.application.port.in.TermsViewUseCase;
 import com.shinhan.corebank.product.domain.*;
@@ -133,6 +134,16 @@ public class ProductSubscriptionValidationService implements ProductSubscription
     private List<SubscriptionViolation> validateTerms(
             List<ProductTerms> productTerms, List<ProductSubscriptionValidationCommand.AgreedTerms> agreedTerms, Long customerId) {
         List<Long> termsIds = productTerms.stream().map(pt -> pt.getId().getTermsId()).toList();
+        Set<Long> termsIdSet = new HashSet<>(termsIds);
+        // 클라이언트가 이 상품에 연결되지 않은(또는 존재하지 않는) termsId로 동의를 보내면
+        // 여기서 즉시 걸러야 한다 — 그냥 통과시키면 이후 SubscriptionTermsAgreement 저장 시점의
+        // FK 위반으로 훨씬 늦게(계좌 개설까지 끝난 뒤) 실패한다. productId 미존재와 같은 성격의
+        // "참조 무결성" 오류라 violations 누적이 아니라 즉시 예외로 던진다(PRD0201과 동일한 패턴).
+        for (ProductSubscriptionValidationCommand.AgreedTerms agreed : agreedTerms) {
+            if (!termsIdSet.contains(agreed.termsId())) {
+                throw new BusinessException(ProductErrorCode.TERMS_NOT_FOUND);
+            }
+        }
         if (termsIds.isEmpty()) {
             return List.of();
         }
