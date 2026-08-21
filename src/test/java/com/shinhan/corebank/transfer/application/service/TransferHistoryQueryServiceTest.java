@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
@@ -321,7 +322,9 @@ class TransferHistoryQueryServiceTest {
     }
 
     private void verifySearchPortNeverCalled() {
-        org.mockito.Mockito.verify(transferHistoryQueryPort, never())
+        verify(transferHistoryQueryPort, never())
                 .search(any(), any(), any(), any(), any(), any(Pageable.class));
+        verify(transferHistoryQueryPort, never())
+                .summarize(any(), any(), any(), any());
     }
 }
