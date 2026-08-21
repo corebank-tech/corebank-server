@@ -27,7 +27,10 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties(CorsProperties.class)
+@EnableConfigurationProperties({
+        CorsProperties.class,
+        CsrfProperties.class
+})
 public class SecurityConfig {
 
     // 로그인 비밀번호 해시 검증에 사용할 BCrypt Encoder
@@ -81,17 +84,24 @@ public class SecurityConfig {
     @Bean
     public CookieCsrfTokenRepository csrfTokenRepository(
             @Value("${server.servlet.session.cookie.secure:false}")
-            boolean secure
+            boolean secure,
+            CsrfProperties csrfProperties
     ) {
         CookieCsrfTokenRepository repository =
                 CookieCsrfTokenRepository.withHttpOnlyFalse();
         repository.setCookieName("XSRF-TOKEN");
         repository.setHeaderName("X-XSRF-TOKEN");
-        repository.setCookieCustomizer(cookie -> cookie
-                .path("/")
-                .httpOnly(false)
-                .secure(secure)
-                .sameSite("Lax"));
+        repository.setCookieCustomizer(cookie -> {
+            cookie.path("/")
+                    .httpOnly(false)
+                    .secure(secure)
+                    .sameSite("Lax");
+
+            // 운영 FE와 API 서브도메인이 CSRF 쿠키를 공유할 때만 Domain을 지정한다.
+            if (csrfProperties.cookieDomain() != null) {
+                cookie.domain(csrfProperties.cookieDomain());
+            }
+        });
         return repository;
     }
 
