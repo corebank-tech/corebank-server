@@ -28,6 +28,7 @@ import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import org.springframework.dao.OptimisticLockingFailureException;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -224,7 +225,7 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
-    @DisplayName("1회 이체한도를 초과하면 ONE_TIME_LIMIT_EXCEEDED를 던진다")
+    @DisplayName("1회 이체한도를 초과하면 LMT0002를 던진다")
     void register_exceedsOneTimeLimit_throws() {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
@@ -235,7 +236,7 @@ class AutoTransferCommandServiceTest {
         assertThatThrownBy(() -> autoTransferCommandService.register(validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(AutoTransferErrorCode.ONE_TIME_LIMIT_EXCEEDED));
+                        .isEqualTo(LmtErrorCode.ONE_TIME_LIMIT_EXCEEDED));
 
         verify(autoTransferPersistencePort, never()).existsActiveDuplicate(any(), any(), anyInt());
     }
@@ -299,7 +300,7 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
-    @DisplayName("변경 금액이 1회 이체한도를 초과하면 ONE_TIME_LIMIT_EXCEEDED를 던지고 저장하지 않는다")
+    @DisplayName("변경 금액이 1회 이체한도를 초과하면 LMT0002를 던지고 저장하지 않는다")
     void change_amountExceedsOneTimeLimit_throws() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
@@ -310,13 +311,13 @@ class AutoTransferCommandServiceTest {
         assertThatThrownBy(() -> autoTransferCommandService.change(10L, command))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(AutoTransferErrorCode.ONE_TIME_LIMIT_EXCEEDED));
+                        .isEqualTo(LmtErrorCode.ONE_TIME_LIMIT_EXCEEDED));
 
         verify(autoTransferPersistencePort, never()).save(any());
     }
 
     @Test
-    @DisplayName("정상 상태가 아닌 건은 한도 초과 금액을 보내도 AUT0006이 아니라 AUT0302를 던진다")
+    @DisplayName("정상 상태가 아닌 건은 한도 초과 금액을 보내도 LMT0002가 아니라 AUT0302를 던진다")
     void change_notModifiableStatus_throwsNotInNormalStatus_evenWithOverLimitAmount() {
         AutoTransfer terminated = AutoTransfer.reconstitute(
                 10L, 1L, 2L, "110987654321", "홍길동",
