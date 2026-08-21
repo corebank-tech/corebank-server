@@ -8,6 +8,8 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -1065,10 +1067,17 @@ class WithdrawalAccountControllerTest
                 );
     }
 
-    @Test
-    @DisplayName("WAITING 예약이체가 있으면 출금계좌 삭제를 거부한다")
-    void rejectWhenWaitingScheduledTransferExists()
-            throws Exception {
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                    "WAITING",
+                    "PROCESSING"
+            }
+    )
+    @DisplayName("WAITING 또는 PROCESSING 예약이체가 있으면 출금계좌 삭제를 거부한다")
+    void rejectWhenBlockingScheduledTransferExists(
+            String status
+    ) throws Exception {
 
         // given
         Long customerId =
@@ -1102,7 +1111,7 @@ class WithdrawalAccountControllerTest
                 "테스트",
                 10_000L,
                 "2026-08-21",
-                "WAITING",
+                status,
                 "2026-08-20 10:00:00"
         );
 
