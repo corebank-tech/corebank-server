@@ -4,6 +4,7 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelCommand;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferRegisterCommand;
@@ -79,7 +80,7 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
         // 1회 이체한도 검증
         long oneTimeLimit = transferLimitPort.findOneTimeLimit(command.customerId());
         if (command.amount() > oneTimeLimit) {
-            throw new BusinessException(ScheduledTransferErrorCode.ONE_TIME_LIMIT_EXCEEDED);
+            throw new BusinessException(LmtErrorCode.ONE_TIME_LIMIT_EXCEEDED);
         }
 
         // 중복 등록 제한
