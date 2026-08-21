@@ -30,7 +30,7 @@ public record ScheduledTransferListItemResponse(
         String myPassbookMemo,
         @Schema(description = "예약이체 상태")
         ScheduledTransferStatus status,
-        @Schema(description = "취소 가능 여부 (상태가 WAITING이면 true)")
+        @Schema(description = "취소 가능 여부 (상태가 WAITING이고 실행 예정일이 오늘 이후면 true)")
         boolean cancelable,
         @Schema(description = "등록일시")
         LocalDateTime registeredAt) {
