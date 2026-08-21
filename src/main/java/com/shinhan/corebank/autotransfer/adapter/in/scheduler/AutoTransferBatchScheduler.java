@@ -1,6 +1,7 @@
 package com.shinhan.corebank.autotransfer.adapter.in.scheduler;
 
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferBatchUseCase;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferBatchUseCase;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +19,7 @@ public class AutoTransferBatchScheduler {
     private static final Logger log = LoggerFactory.getLogger(AutoTransferBatchScheduler.class);
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private final AutoTransferBatchUseCase autoTransferBatchUseCase;
+    private final ScheduledTransferBatchUseCase scheduledTransferBatchUseCase;
     private final Clock clock;
 
     @Scheduled(cron = "0 10 0 * * *", zone = "Asia/Seoul")
@@ -30,6 +32,14 @@ public class AutoTransferBatchScheduler {
         log.info("재확정 배치 시작 - date={}", today);
         autoTransferBatchUseCase.reconcileStuckExecutions(today);
         log.info("재확정 배치 종료 - date={}", today);
+
+        log.info("예약이체 배치 시작 - date={}", today);
+        scheduledTransferBatchUseCase.executeDaily(today);
+        log.info("예약이체 배치 종료 - date={}", today);
+
+        log.info("예약이체 재확정 배치 시작 - date={}", today);
+        scheduledTransferBatchUseCase.reconcileStuckExecutions(today);
+        log.info("예약이체 재확정 배치 종료 - date={}", today);
     }
 
 }
