@@ -5,9 +5,13 @@ import com.shinhan.corebank.account.application.port.in.AccountAliasUseCase;
 import com.shinhan.corebank.account.application.port.in.AccountOverviewQueryUseCase;
 import com.shinhan.corebank.account.application.port.in.AccountOverviewResult;
 import com.shinhan.corebank.adapter.in.web.exception.ErrorResponse;
+import com.shinhan.corebank.account.application.port.in.*;
 import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
+import com.shinhan.corebank.transfer.application.port.in.LedgerHistoryDirection;
+import com.shinhan.corebank.transfer.application.port.in.LedgerHistoryResult;
+import com.shinhan.corebank.transfer.application.port.in.LedgerHistorySort;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -16,11 +20,13 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import tools.jackson.core.type.TypeReference;
 
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -35,6 +41,7 @@ import java.util.Map;
 public class AccountController {
 
     private final AccountOverviewQueryUseCase accountOverviewQueryUseCase;
+    private final AccountTransactionQueryUseCase accountTransactionQueryUseCase;
     private final CurrentCustomerProvider currentCustomerProvider;
     private final AccountAliasUseCase accountAliasUseCase;
     private final IdempotentRequestExecutor idempotentRequestExecutor;
@@ -252,6 +259,66 @@ public class AccountController {
 
                     return ApiResponse.success();
                 }
+        );
+    }
+
+    @GetMapping("/{accountId}/transactions")
+    public ApiResponse<AccountTransactionResponse>
+    getTransactions(
+            @PathVariable
+            @Positive
+            Long accountId,
+
+            @RequestParam(required = false)
+            @DateTimeFormat(
+                    iso = DateTimeFormat.ISO.DATE
+            )
+            LocalDate fromDate,
+
+            @RequestParam(required = false)
+            @DateTimeFormat(
+                    iso = DateTimeFormat.ISO.DATE
+            )
+            LocalDate toDate,
+
+            @RequestParam(required = false)
+            LedgerHistoryDirection direction,
+
+            @RequestParam(required = false)
+            String keyword,
+
+            @RequestParam(required = false)
+            LedgerHistorySort sort,
+
+            @RequestParam(defaultValue = "1")
+            @Positive
+            int page,
+
+            @RequestParam(defaultValue = "10")
+            int size
+    ) {
+        Long customerId =
+                currentCustomerProvider
+                        .getCurrentCustomerId();
+
+        LedgerHistoryResult result =
+                accountTransactionQueryUseCase
+                        .getTransactions(
+                                customerId,
+                                accountId,
+                                fromDate,
+                                toDate,
+                                direction,
+                                keyword,
+                                sort,
+                                page,
+                                size
+                        );
+
+        return ApiResponse.success(
+                AccountTransactionResponse.from(
+                        result
+                )
         );
     }
 
