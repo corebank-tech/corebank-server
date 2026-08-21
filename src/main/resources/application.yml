@@ -26,6 +26,11 @@ spring:
       port: 6379
 
 app:
+  otp:
+    code-ttl: 3m
+    auth-token-ttl: 5m
+    # Phase 1 최종 범위는 실제 발송 없는 Mock OTP이므로 모든 환경에서 번호를 응답한다.
+    expose-code: true
   signup:
     token:
       terms-auth-ttl: 30m
