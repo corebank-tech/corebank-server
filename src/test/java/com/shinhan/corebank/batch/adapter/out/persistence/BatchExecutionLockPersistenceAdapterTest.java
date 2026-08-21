@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import jakarta.persistence.EntityManager;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +34,9 @@ class BatchExecutionLockPersistenceAdapterTest extends IntegrationTestSupport {
 
     @Autowired
     PlatformTransactionManager transactionManager;
+
+    @Autowired
+    Clock clock;
 
     private static final AtomicLong JOB_SEQ = new AtomicLong();
 
@@ -95,11 +100,15 @@ class BatchExecutionLockPersistenceAdapterTest extends IntegrationTestSupport {
     @DisplayName("실행 중이어도 마지막 갱신이 stale 임계값(6시간)보다 오래됐으면 강제로 재획득한다")
     void tryAcquire_staleLock_forciblyReacquires() {
         adapter.tryAcquire(jobName);
-        // 서버 크래시로 release()가 못 불린 상황을 흉내 - updated_at을 임계값보다 더 과거로 되돌림
+        // 서버 크래시로 release()가 못 불린 상황을 흉내 - updated_at을 임계값보다 더 과거로 되돌림.
+        // DB의 NOW() 대신 어댑터와 동일한 Clock 빈으로 계산한다 - DB 컨테이너와 JVM은 서로 다른
+        // 프로세스의 시계라 6시간 경계값 근처에서 미세한 시계 오차로 흔들릴 수 있다(CI에서 실제로 발생).
+        LocalDateTime sevenHoursAgo = LocalDateTime.now(clock).minusHours(7);
         transactionTemplate().executeWithoutResult(status ->
                 entityManager.createNativeQuery(
-                                "UPDATE batch_execution_lock SET updated_at = DATE_SUB(NOW(), INTERVAL 7 HOUR) "
+                                "UPDATE batch_execution_lock SET updated_at = :updatedAt "
                                         + "WHERE job_name = :jobName")
+                        .setParameter("updatedAt", sevenHoursAgo)
                         .setParameter("jobName", jobName)
                         .executeUpdate());
 
@@ -114,10 +123,12 @@ class BatchExecutionLockPersistenceAdapterTest extends IntegrationTestSupport {
     @DisplayName("실행 중이고 갱신된 지 얼마 안 됐으면(stale 임계값 이내) 여전히 선점에 실패한다")
     void tryAcquire_recentlyRunning_stillReturnsFalse() {
         adapter.tryAcquire(jobName);
+        LocalDateTime fiveHoursAgo = LocalDateTime.now(clock).minusHours(5);
         transactionTemplate().executeWithoutResult(status ->
                 entityManager.createNativeQuery(
-                                "UPDATE batch_execution_lock SET updated_at = DATE_SUB(NOW(), INTERVAL 5 HOUR) "
+                                "UPDATE batch_execution_lock SET updated_at = :updatedAt "
                                         + "WHERE job_name = :jobName")
+                        .setParameter("updatedAt", fiveHoursAgo)
                         .setParameter("jobName", jobName)
                         .executeUpdate());
 
