@@ -10,4 +10,6 @@ public interface ScheduledTransferPersistencePort {
     Optional<ScheduledTransfer> findById(Long scheduledTransferId);
     boolean existsActiveDuplicate(Long customerId, Long withdrawalAccountId, String payeeAccountNumber,
                                   Long amount, LocalDate scheduledDate);
+    boolean claimForProcessing(Long scheduledTransferId);
+    boolean saveIfStillProcessing(ScheduledTransfer scheduledTransfer);
 }

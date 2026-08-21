@@ -1,0 +1,18 @@
+package com.shinhan.corebank.scheduledtransfer.application.port.in;
+
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
+import lombok.Builder;
+
+@Builder
+public record ScheduledTransferCancelCommand(Long customerId, String accountPasswordAuthToken, String otpAuthToken, String requestIp) {
+    public ScheduledTransferCancelCommand {
+        if (customerId == null || accountPasswordAuthToken == null || otpAuthToken == null || requestIp == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+        // 공백 문자열 검증
+        if (accountPasswordAuthToken.isBlank() || otpAuthToken.isBlank() || requestIp.isBlank()) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+    }
+}

@@ -27,6 +27,11 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
     }
 
     @Override
+    public boolean existsByAccountNumber(String accountNumber) {
+        return accountJpaRepository.existsByAccountNumber(accountNumber);
+    }
+
+    @Override
     public List<Account> findAllByCustomerId(Long customerId) {
         return accountJpaRepository
                 .findAllByCustomerId(customerId)

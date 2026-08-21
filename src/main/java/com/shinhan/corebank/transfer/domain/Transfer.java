@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.domain;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
@@ -27,6 +28,7 @@ public class Transfer {
     private ProcessResultStatus status;
     private TransferSourceType sourceType;
     private Long sourceId;
+    private LocalDate executionDate;
     private String myPassbookMemo;
     private String recipientPassbookMemo;
     private Long withdrawalBalanceAfter;
@@ -51,6 +53,7 @@ public class Transfer {
             TransferChannel channel,
             TransferSourceType sourceType,
             Long sourceId,
+            LocalDate executionDate,
             String myPassbookMemo,
             String recipientPassbookMemo,
             LocalDateTime now
@@ -79,6 +82,7 @@ public class Transfer {
                 .status(ProcessResultStatus.PROCESSING)
                 .sourceType(sourceType)
                 .sourceId(sourceId)
+                .executionDate(executionDate)
                 .myPassbookMemo(myPassbookMemo)
                 .recipientPassbookMemo(recipientPassbookMemo)
                 .transferredAt(now)

@@ -10,5 +10,7 @@ public interface UserIdCheckTokenPort {
 
     void save(String token, UserIdCheckTokenPayload payload, Duration ttl);
 
+    Optional<UserIdCheckTokenPayload> find(String token);
+
     Optional<UserIdCheckTokenPayload> consume(String token);
 }

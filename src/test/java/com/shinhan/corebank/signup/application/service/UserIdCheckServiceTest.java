@@ -54,6 +54,8 @@ class UserIdCheckServiceTest {
                 new SignupTokenProperties(
                         Duration.ofMinutes(30),
                         USER_ID_TTL,
+                        Duration.ofMinutes(30),
+                        Duration.ofMinutes(10),
                         Duration.ofMinutes(30)
                 ),
                 clock

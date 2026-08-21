@@ -1,6 +1,7 @@
 package com.shinhan.corebank.common.idempotency;
 
 import java.util.function.Supplier;
+import java.util.function.ToLongFunction;
 
 import com.shinhan.corebank.common.response.ApiResponse;
 
@@ -39,6 +40,41 @@ public class IdempotentRequestExecutor {
             throw e;
         }
         idempotencyService.complete(idempotencyKey, (short) HttpStatus.OK.value(), toJson(response));
+        return ResponseEntity.ok(response);
+    }
+
+    // 고객 생성 전 회원가입 완료 요청을 고객 ID 없이 멱등하게 실행한다.
+    public <T> ResponseEntity<ApiResponse<T>> executeAnonymous(
+            String idempotencyKey,
+            String endpoint,
+            Object fingerprint,
+            TypeReference<ApiResponse<T>> responseType,
+            ToLongFunction<T> customerIdExtractor,
+            Supplier<ApiResponse<T>> action
+    ) {
+        IdempotencyResult result = idempotencyService.beginAnonymous(
+                idempotencyKey,
+                endpoint,
+                toJson(fingerprint)
+        );
+        if (result.replay()) {
+            return ResponseEntity.status(result.httpStatus())
+                    .body(fromJson(result.responseSnapshot(), responseType));
+        }
+
+        ApiResponse<T> response;
+        try {
+            response = action.get();
+        } catch (RuntimeException exception) {
+            idempotencyService.release(idempotencyKey);
+            throw exception;
+        }
+        idempotencyService.completeAnonymous(
+                idempotencyKey,
+                customerIdExtractor.applyAsLong(response.data()),
+                (short) HttpStatus.OK.value(),
+                toJson(response)
+        );
         return ResponseEntity.ok(response);
     }
 

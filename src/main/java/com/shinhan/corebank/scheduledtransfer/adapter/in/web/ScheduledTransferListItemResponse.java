@@ -7,6 +7,7 @@ import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 public record ScheduledTransferListItemResponse(
         @Schema(description = "예약이체 ID")
@@ -15,6 +16,8 @@ public record ScheduledTransferListItemResponse(
         LocalDate scheduledDate,
         @Schema(description = "출금계좌번호 (마스킹, 예: 110******877)")
         String withdrawalAccountNumber,
+        @Schema(description = "출금계좌 별칭 (미설정 시 null)")
+        String fromAlias,
         @Schema(description = "입금은행명. 1차는 당행 전용이라 항상 \"신한은행\"", example = "신한은행")
         String payeeBankName,
         @Schema(description = "입금계좌번호 (마스킹, 예: 110******877)")
@@ -23,10 +26,14 @@ public record ScheduledTransferListItemResponse(
         String payeeName,
         @Schema(description = "이체금액")
         Long amount,
+        @Schema(description = "내 통장 표시내용")
+        String myPassbookMemo,
         @Schema(description = "예약이체 상태")
         ScheduledTransferStatus status,
         @Schema(description = "취소 가능 여부 (상태가 WAITING이면 true)")
-        boolean cancelable) {
+        boolean cancelable,
+        @Schema(description = "등록일시")
+        LocalDateTime registeredAt) {
 
     private static final String BANK_CODE_SHINHAN = "088";
     private static final String BANK_NAME_SHINHAN = "신한은행";
@@ -36,12 +43,15 @@ public record ScheduledTransferListItemResponse(
                 item.scheduledTransferId(),
                 item.scheduledDate(),
                 MaskingUtil.maskAccountNumber(item.withdrawalAccountNumber()),
+                item.fromAlias(),
                 resolveBankName(item.payeeBankCode()),
                 MaskingUtil.maskAccountNumber(item.payeeAccountNumber()),
                 MaskingUtil.maskName(item.payeeName()),
                 item.amount(),
+                item.myPassbookMemo(),
                 item.status(),
-                item.cancelable()
+                item.cancelable(),
+                item.registeredAt()
         );
     }
 
