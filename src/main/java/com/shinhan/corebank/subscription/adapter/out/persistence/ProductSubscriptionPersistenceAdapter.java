@@ -31,7 +31,9 @@ public class ProductSubscriptionPersistenceAdapter
 
     @Override
     public boolean existsActiveSubscription(Long customerId, Long productId) {
-        return productSubscriptionJpaRepository.existsByCustomerIdAndProductIdAndStatus(
-                customerId, productId, ProcessResultStatus.SUCCESS);
+        return productSubscriptionJpaRepository
+                .findAllByCustomerIdAndProductIdForUpdate(customerId, productId)
+                .stream()
+                .anyMatch(entity -> entity.getStatus() == ProcessResultStatus.SUCCESS);
     }
 }
