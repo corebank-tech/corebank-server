@@ -31,11 +31,13 @@ public record AutoTransferListItemResponse(
         String myPassbookMemo,
         @Schema(description = "자동이체 상태")
         AutoTransferStatus status,
+        @Schema(description = "해지 가능 여부 (상태가 NORMAL이고 다음 실행 예정일이 오늘이 아니면 true)")
+        boolean cancelable,
         @Schema(description = "등록일시")
         LocalDateTime registeredAt) {
     public static AutoTransferListItemResponse from(AutoTransferListItem item) {
         return new AutoTransferListItemResponse(item.autoTransferId(), item.depositAccountNumber(), item.fromAlias(),
                 item.payeeName(), item.amount(), item.startDate(), item.endDate(), item.transferDay(), item.cycleMonths(),
-                item.myPassbookMemo(), item.status(), item.registeredAt());
+                item.myPassbookMemo(), item.status(), item.cancelable(), item.registeredAt());
     }
 }
