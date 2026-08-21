@@ -20,7 +20,7 @@ class CsrfCookieDomainTest {
         CookieCsrfTokenRepository repository =
                 securityConfig.csrfTokenRepository(
                         true,
-                        "corebank.cloud"
+                        new CsrfProperties("corebank.cloud")
                 );
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -42,7 +42,10 @@ class CsrfCookieDomainTest {
     @DisplayName("쿠키 도메인이 비어 있으면 로컬 CSRF 쿠키는 host-only로 발급된다")
     void keepsLocalCsrfCookieHostOnly() {
         CookieCsrfTokenRepository repository =
-                securityConfig.csrfTokenRepository(false, " ");
+                securityConfig.csrfTokenRepository(
+                        false,
+                        new CsrfProperties(" ")
+                );
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -64,7 +67,7 @@ class CsrfCookieDomainTest {
         CookieCsrfTokenRepository repository =
                 securityConfig.csrfTokenRepository(
                         true,
-                        "corebank.cloud"
+                        new CsrfProperties("corebank.cloud")
                 );
         MockHttpServletResponse response = new MockHttpServletResponse();
 
