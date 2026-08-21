@@ -8,6 +8,7 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaEntity;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductRateTierJpaEntity;
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import javax.sql.DataSource;
 import java.math.BigDecimal;
@@ -65,6 +67,11 @@ class ProductSubscriptionExecuteConcurrencyIntegrationTest extends IntegrationTe
     private CustomerTestFixture customerTestFixture;
     @Autowired
     private DataSource dataSource;
+
+    // 상품가입 실행은 실제 OTP 발급 없이 otp.api 경계만 검증한다 — OTP 자체의 발급/소비 로직은
+    // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
+    @MockitoBean
+    private OtpAuthTokenVerifier otpAuthTokenVerifier;
 
     private ExecutorService executor;
     private Long customerId;
