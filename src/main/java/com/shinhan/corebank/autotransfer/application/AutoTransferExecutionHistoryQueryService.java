@@ -50,7 +50,7 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
         LocalDate resolvedToDate = toDate != null ? toDate : today;
         LocalDate resolvedFromDate = fromDate != null ? fromDate : resolvedToDate.minusMonths(DEFAULT_PERIOD_MONTHS);
         if (resolvedFromDate.isAfter(resolvedToDate)) {
-            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "조회 시작일은 종료일보다 늦을 수 없습니다.");
+            throw new BusinessException(CommonErrorCode.INVALID_DATE_RANGE);
         }
 
         Pageable pageable = PageRequest.of(page, size);
