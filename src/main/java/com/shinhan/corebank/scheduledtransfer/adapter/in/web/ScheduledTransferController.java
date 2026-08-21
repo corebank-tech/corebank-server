@@ -58,7 +58,7 @@ public class ScheduledTransferController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "등록 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "`SCD0001` 예약일자 범위 오류 · `SCD0005` 이체금액 오류 · `SCD0006` 통장 표시내용 길이 초과 · " +
-                            "`SCD0007` 입금 불가 상품유형 · `SCD0008` 1회 이체한도 초과",
+                            "`SCD0007` 입금 불가 상품유형 · `LMT0002` 1회 이체한도 초과",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
