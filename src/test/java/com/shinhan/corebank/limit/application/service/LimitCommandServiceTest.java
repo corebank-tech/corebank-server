@@ -13,6 +13,7 @@ import com.shinhan.corebank.limit.application.port.in.dto.LimitCommand;
 import com.shinhan.corebank.limit.application.port.in.dto.LimitResult;
 import com.shinhan.corebank.limit.application.port.out.AuthTokenVerificationPort;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitCommandPort;
+import com.shinhan.corebank.limit.application.port.out.TransferLimitHistoryPort;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
 import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import com.shinhan.corebank.otp.domain.exception.OtpErrorCode;
@@ -42,6 +43,8 @@ class LimitCommandServiceTest {
     TransferLimitCommandPort transferLimitCommandPort;
     @Mock
     TransferLimitQueryPort transferLimitQueryPort;
+    @Mock
+    TransferLimitHistoryPort transferLimitHistoryPort;
     @Mock
     AuthTokenVerificationPort authTokenVerificationPort;
 
@@ -81,7 +84,7 @@ class LimitCommandServiceTest {
 
         // then
         ArgumentCaptor<TransferLimitHistory> captor = ArgumentCaptor.forClass(TransferLimitHistory.class);
-        verify(transferLimitCommandPort).saveHistory(captor.capture());
+        verify(transferLimitHistoryPort).save(captor.capture());
         assertThat(captor.getValue().getBeforeOneTimeLimit()).isEqualTo(1_000_000L);
         assertThat(captor.getValue().getBeforeDailyLimit()).isEqualTo(5_000_000L);
     }
@@ -116,7 +119,7 @@ class LimitCommandServiceTest {
 
         // then
         ArgumentCaptor<TransferLimitHistory> captor = ArgumentCaptor.forClass(TransferLimitHistory.class);
-        verify(transferLimitCommandPort).saveHistory(captor.capture());
+        verify(transferLimitHistoryPort).save(captor.capture());
         assertThat(captor.getValue().getBeforeOneTimeLimit()).isEqualTo(1_000_000L);
         assertThat(captor.getValue().getBeforeDailyLimit()).isEqualTo(5_000_000L);
         assertThat(result.oneTimeLimit()).isEqualTo(3_000_000L);
@@ -171,6 +174,7 @@ class LimitCommandServiceTest {
     private LimitCommandService service() {
         Clock clock = Clock.fixed(TODAY.atTime(14, 0).atZone(SEOUL).toInstant(), SEOUL);
         return new LimitCommandService(
-                transferLimitCommandPort, transferLimitQueryPort, authTokenVerificationPort, clock);
+                transferLimitCommandPort, transferLimitQueryPort, transferLimitHistoryPort,
+                authTokenVerificationPort, clock);
     }
 }

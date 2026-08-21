@@ -8,6 +8,7 @@ import com.shinhan.corebank.limit.application.port.in.dto.LimitCommand;
 import com.shinhan.corebank.limit.application.port.in.dto.LimitResult;
 import com.shinhan.corebank.limit.application.port.out.AuthTokenVerificationPort;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitCommandPort;
+import com.shinhan.corebank.limit.application.port.out.TransferLimitHistoryPort;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
 import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
@@ -26,6 +27,7 @@ public class LimitCommandService implements LimitCommandUseCase {
 
     private final TransferLimitCommandPort transferLimitCommandPort;
     private final TransferLimitQueryPort transferLimitQueryPort;
+    private final TransferLimitHistoryPort transferLimitHistoryPort;
     private final AuthTokenVerificationPort authTokenVerificationPort;
     private final Clock clock;
 
@@ -57,7 +59,7 @@ public class LimitCommandService implements LimitCommandUseCase {
                     return TransferLimit.create(customerId);
                 });
 
-        transferLimitCommandPort.saveHistory(
+        transferLimitHistoryPort.save(
                 TransferLimitHistory.create(customerId, limit.getOneTimeLimit(), limit.getDailyLimit()));
 
         limit.update(command.oneTimeLimit(), command.dailyLimit());
