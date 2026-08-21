@@ -8,4 +8,8 @@ public interface AuthTokenGeneratorPort {
     String generateUserIdCheckToken();
 
     String generateEmailVerificationToken();
+
+    String generateAccountAuthToken();
+
+    String generateTempSignupToken();
 }

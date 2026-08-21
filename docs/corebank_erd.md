@@ -115,6 +115,7 @@ erDiagram
         varchar status "SUCCESS / ERROR / PROCESSING"
         varchar source_type "SCHEDULED / AUTO"
         bigint source_id
+        date execution_date "source_id와 함께 멱등키. SCHEDULED/AUTO 전용"
         varchar my_passbook_memo "TRF0005 최대 10자"
         varchar recipient_passbook_memo "VARCHAR(10)"
         bigint withdrawal_balance_after
@@ -154,7 +155,6 @@ erDiagram
         bigint customer_id PK
         bigint one_time_limit
         bigint daily_limit
-        bigint version
     }
     transfer_limit_daily_usage {
         bigint customer_id PK
@@ -164,10 +164,8 @@ erDiagram
     transfer_limit_history {
         bigint history_id PK "AUTO_INCREMENT"
         bigint customer_id FK
-        bigint before_one_time_limit "변경 전 1회 한도"
-        bigint after_one_time_limit "변경 후 1회 한도"
-        bigint before_daily_limit "변경 전 1일 한도"
-        bigint after_daily_limit "변경 후 1일 한도"
+        bigint before_one_time_limit "변경 직전 1회 한도"
+        bigint before_daily_limit "변경 직전 1일 한도"
     }
 
     %% ---------- P3 ----------
@@ -287,7 +285,7 @@ erDiagram
     }
     idempotency_key {
         char idempotency_key PK "UUID v4"
-        bigint customer_id FK
+        bigint customer_id FK "회원가입 완료 사전 예약은 NULL"
         varchar endpoint "VARCHAR(120)"
         char request_hash "SHA-256. *AuthToken 필드 제외 후 계산"
         varchar state "PROCESSING / COMPLETED"
@@ -342,7 +340,7 @@ erDiagram
     customer ||--o{ auto_transfer : "등록"
     account ||--o{ auto_transfer : "출금"
     auto_transfer ||--o{ auto_transfer_execution : "회차"
-    customer ||--o{ idempotency_key : "발급"
+    customer o|--o{ idempotency_key : "발급"
 
     %% 논리 관계 (ledger_entry 는 파티션 테이블이라 FK 선언 불가)
     %% 채번 자원 (FK 없음. 거래번호/원장ID 생성)

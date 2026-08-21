@@ -8,6 +8,8 @@ import lombok.Getter;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import static com.shinhan.corebank.common.util.AccountNumberPolicy.ACCOUNT_NUMBER_PATTERN;
+
 //이후 각 api에서 필요한 함수는 나중에 구현
 @Getter
 public class Account {
@@ -127,6 +129,26 @@ public class Account {
         );
     }
 
+    // 기존 은행 원장의 계좌 상태를 신규 인터넷뱅킹 고객 계좌로 가져온다.
+    public static Account importExisting(
+            String accountNumber,
+            Long customerId,
+            Long productId,
+            AccountType accountType,
+            long balance,
+            AccountStatus status,
+            String passwordHash,
+            LocalDateTime openedDate,
+            LocalDate maturityDate
+    ) {
+        return new Account(
+                null, accountNumber, customerId, productId, accountType,
+                balance, status, passwordHash, 0, false, null, null,
+                false, null, openedDate, maturityDate, null, null,
+                null, null, null
+        );
+    }
+
     public static Account reconstitute(
             Long accountId,
             String accountNumber,
@@ -193,6 +215,48 @@ public class Account {
         this.alias = null;
     }
 
+    public void validateWithdrawalRegistrationAllowed() {
+        if (accountType != AccountType.DEMAND_DEPOSIT) {
+            throw new BusinessException(
+                    AccountErrorCode.INVALID_WITHDRAWAL_ACCOUNT_TYPE
+            );
+        }
+
+        if (status != AccountStatus.ACTIVE) {
+            throw new BusinessException(
+                    AccountErrorCode.INVALID_ACCOUNT_STATUS
+            );
+        }
+    }
+
+    public void registerWithdrawalAccount(
+            LocalDateTime registeredAt
+    ) {
+        if (withdrawalRegistered) {
+            return;
+        }
+
+        validateWithdrawalRegistrationAllowed();
+
+        if (registeredAt == null) {
+            throw new IllegalArgumentException(
+                    "출금계좌 등록 시각은 필수입니다."
+            );
+        }
+
+        this.withdrawalRegistered = true;
+        this.withdrawalRegisteredAt = registeredAt;
+    }
+
+    public void unregisterWithdrawalAccount() {
+        if (!withdrawalRegistered) {
+            return;
+        }
+
+        this.withdrawalRegistered = false;
+        this.withdrawalRegisteredAt = null;
+    }
+
     public void changeDisplayOrder(int displayOrder) {
         if (displayOrder <= 0) {
             throw new BusinessException(
@@ -242,7 +306,7 @@ public class Account {
     }
 
     private void validateAccountNumber() {
-        if (accountNumber == null || !accountNumber.matches("^[0-9]{12}$")) {
+        if (accountNumber == null || !ACCOUNT_NUMBER_PATTERN.matcher(accountNumber).matches()) {
             throw new IllegalStateException("계좌번호는 숫자 12자리여야 합니다.");
         }
     }

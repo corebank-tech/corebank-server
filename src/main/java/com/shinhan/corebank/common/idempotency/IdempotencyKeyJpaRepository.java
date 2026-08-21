@@ -24,4 +24,22 @@ public interface IdempotencyKeyJpaRepository extends JpaRepository<IdempotencyKe
     int completeIfProcessing(@Param("key") String key,
                               @Param("httpStatus") short httpStatus,
                               @Param("responseSnapshot") String responseSnapshot);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE IdempotencyKeyJpaEntity e
+           SET e.customerId = :customerId,
+               e.state = com.shinhan.corebank.common.idempotency.IdempotencyState.COMPLETED,
+               e.httpStatus = :httpStatus,
+               e.responseSnapshot = :responseSnapshot
+         WHERE e.idempotencyKey = :key
+           AND e.state = com.shinhan.corebank.common.idempotency.IdempotencyState.PROCESSING
+           AND e.customerId IS NULL
+        """)
+    int completeAnonymousIfProcessing(
+            @Param("key") String key,
+            @Param("customerId") Long customerId,
+            @Param("httpStatus") short httpStatus,
+            @Param("responseSnapshot") String responseSnapshot
+    );
 }

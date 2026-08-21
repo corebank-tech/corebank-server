@@ -50,16 +50,22 @@ public class TermsAuthTokenRedisAdapter implements TermsAuthTokenPort {
     }
 
     @Override
+    public Optional<TermsAuthTokenPayload> find(String termsAuthToken) {
+        return deserialize(redisTemplate.opsForValue().get(key(termsAuthToken)));
+    }
+
+    @Override
     public Optional<TermsAuthTokenPayload> consume(
             String termsAuthToken
     ) {
-        String json = redisTemplate.opsForValue()
-                .getAndDelete(key(termsAuthToken));
+        return deserialize(redisTemplate.opsForValue()
+                .getAndDelete(key(termsAuthToken)));
+    }
 
+    private Optional<TermsAuthTokenPayload> deserialize(String json) {
         if (json == null) {
             return Optional.empty();
         }
-
         try {
             return Optional.of(
                     objectMapper.readValue(

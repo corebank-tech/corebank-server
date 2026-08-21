@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.domain;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
@@ -25,7 +26,7 @@ class TransferTest {
                 "20260809WB0000000001",
                 101L, 202L, "110222222222", "성춘향",
                 10000L, 0L, TransferType.IMMEDIATE, TransferChannel.WB,
-                null, null, "출금메모", "입금메모", LocalDateTime.of(2026, 8, 9, 12, 0, 0)
+                null, null, null, "출금메모", "입금메모", LocalDateTime.of(2026, 8, 9, 12, 0, 0)
         );
     }
 
@@ -59,8 +60,7 @@ class TransferTest {
                     fee,
                     transferType,
                     channel,
-                    null,
-                    null,
+                    null, null, null,
                     "출금메모",
                     "입금메모",
                     now
@@ -75,6 +75,26 @@ class TransferTest {
             assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
             assertThat(transfer.getCreatedAt()).isEqualTo(now);
             assertThat(transfer.getTransferredAt()).isEqualTo(now);
+        }
+
+        @Test
+        @DisplayName("executionDate가 함께 전달되면 Transfer 도메인에 그대로 저장된다")
+        void createTransfer_StoresExecutionDate() {
+            // given
+            LocalDate executionDate = LocalDate.of(2026, 8, 20);
+            LocalDateTime now = LocalDateTime.of(2026, 8, 20, 9, 0, 0);
+
+            // when
+            Transfer transfer = Transfer.create(
+                    "20260820AT0000000001",
+                    101L, 202L, "110222222222", "성춘향",
+                    10000L, 0L, TransferType.AUTO, TransferChannel.BT,
+                    TransferSourceType.AUTO, 55L, executionDate,
+                    "출금메모", "입금메모", now
+            );
+
+            // then
+            assertThat(transfer.getExecutionDate()).isEqualTo(executionDate);
         }
 
         @ParameterizedTest
@@ -95,7 +115,7 @@ class TransferTest {
                     0L,
                     TransferType.IMMEDIATE,
                     TransferChannel.WB,
-                    null, null,
+                    null, null, null,
                     "출금메모", "입금메모",
                     now
             ))
@@ -122,7 +142,7 @@ class TransferTest {
                     invalidFee,
                     TransferType.IMMEDIATE,
                     TransferChannel.WB,
-                    null, null,
+                    null, null, null,
                     "출금메모", "입금메모",
                     now
             ))
@@ -148,7 +168,7 @@ class TransferTest {
                     0L,
                     TransferType.IMMEDIATE,
                     TransferChannel.WB,
-                    null, null,
+                    null, null, null,
                     "출금메모", "입금메모",
                     now
             ))
@@ -174,7 +194,7 @@ class TransferTest {
                     0L,
                     TransferType.IMMEDIATE,
                     TransferChannel.WB,
-                    null, null,
+                    null, null, null,
                     "출금메모", "입금메모",
                     now
             ))
@@ -200,7 +220,7 @@ class TransferTest {
                     0L,
                     TransferType.IMMEDIATE,
                     TransferChannel.WB,
-                    null, null,
+                    null, null, null,
                     "출금메모", "입금메모",
                     now
             ))
@@ -222,7 +242,7 @@ class TransferTest {
                     invalidTxNo,
                     101L, 202L, "110222222222", "성춘향",
                     10000L, 0L, TransferType.IMMEDIATE, TransferChannel.WB,
-                    null, null, "출금메모", "입금메모", now
+                    null, null, null, "출금메모", "입금메모", now
             ))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
@@ -242,7 +262,7 @@ class TransferTest {
                     "20260809WB0000000001",
                     101L, 202L, invalidAccountNumber, "성춘향",
                     10000L, 0L, TransferType.IMMEDIATE, TransferChannel.WB,
-                    null, null, "출금메모", "입금메모", now
+                    null, null, null, "출금메모", "입금메모", now
             ))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
@@ -262,7 +282,7 @@ class TransferTest {
                     "20260809WB0000000001",
                     101L, 202L, "110222222222", invalidPayeeName,
                     10000L, 0L, TransferType.IMMEDIATE, TransferChannel.WB,
-                    null, null, "출금메모", "입금메모", now
+                    null, null, null, "출금메모", "입금메모", now
             ))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
@@ -280,7 +300,7 @@ class TransferTest {
                     "20260809WB0000000001",
                     101L, 202L, "110222222222", "성춘향",
                     10000L, 0L, null, TransferChannel.WB,
-                    null, null, "출금메모", "입금메모", now
+                    null, null, null, "출금메모", "입금메모", now
             ))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
@@ -297,8 +317,7 @@ class TransferTest {
             assertThatThrownBy(() -> Transfer.create(
                     "20260809WB0000000001",
                     101L, 202L, "110222222222", "성춘향",
-                    10000L, 0L, TransferType.IMMEDIATE, null,
-                    null, null, "출금메모", "입금메모", now
+                    10000L, 0L, TransferType.IMMEDIATE, null, null, null, null, "출금메모", "입금메모", now
             ))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
@@ -313,7 +332,7 @@ class TransferTest {
                     "20260809WB0000000001",
                     101L, 202L, "110222222222", "성춘향",
                     10000L, 0L, TransferType.IMMEDIATE, TransferChannel.WB,
-                    null, null, "출금메모", "입금메모", null
+                    null, null, null, "출금메모", "입금메모", null
             ))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
@@ -334,7 +353,7 @@ class TransferTest {
                     "20260809WB0000000001",
                     101L, 202L, "110222222222", "성춘향",
                     10000L, 0L, TransferType.IMMEDIATE, TransferChannel.WB,
-                    null, null, "출금메모", "입금메모", createdAt
+                    null, null, null, "출금메모", "입금메모", createdAt
             );
 
             LocalDateTime completedAt = createdAt.plusSeconds(5);

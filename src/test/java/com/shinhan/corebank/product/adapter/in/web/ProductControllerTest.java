@@ -119,6 +119,7 @@ class ProductControllerTest extends IntegrationTestSupport {
                 .productName("청년 희망 적금")
                 .productGroup(ProductGroup.SAVINGS)
                 .depositType(DepositType.INSTALLMENT)
+                .summary("청년 대상 우대 적금")
                 .description("만 19~34세 대상 정액적립식 적금")
                 .eligibility("만 19~34세 개인")
                 .subscriptionRestrictions(List.of("1인 1계좌"))
@@ -138,7 +139,8 @@ class ProductControllerTest extends IntegrationTestSupport {
                 .build());
         Long productId = saved.getProductId();
         Long termsId = jdbcTemplate.queryForObject(
-                "SELECT terms_id FROM terms WHERE terms_code = ?", Long.class, "TERMS_SAVINGS");
+                "SELECT terms_id FROM terms WHERE terms_code = ? AND version = ?",
+                Long.class, "TERMS_SAVINGS", "v1.0");
 
         rateTierRepository.save(ProductRateTierJpaEntity.builder()
                 .id(new ProductRateTierJpaEntityId(productId, (short) 12))
@@ -161,12 +163,18 @@ class ProductControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.productCode").value("DTL-101"))
                 .andExpect(jsonPath("$.data.productName").value("청년 희망 적금"))
                 .andExpect(jsonPath("$.data.productGroup").value("SAVINGS"))
+                .andExpect(jsonPath("$.data.summary").value("청년 대상 우대 적금"))
                 .andExpect(jsonPath("$.data.description").value("만 19~34세 대상 정액적립식 적금"))
                 .andExpect(jsonPath("$.data.baseRate").value(3.20))
                 .andExpect(jsonPath("$.data.maxRate").value(4.50))
                 .andExpect(jsonPath("$.data.minAmount").value(10_000))
                 .andExpect(jsonPath("$.data.maxAmount").value(10_000_000))
                 .andExpect(jsonPath("$.data.amountUnit").value(10_000))
+                // minTermMonths/maxTermMonths는 product 컬럼값, termOptions는 rateTiers에서 파생된다.
+                // 둘은 별개 출처라 rateTier가 일부 기간만 등록된 이 픽스처에서는 값이 다르다.
+                .andExpect(jsonPath("$.data.minTermMonths").value(6))
+                .andExpect(jsonPath("$.data.maxTermMonths").value(36))
+                .andExpect(jsonPath("$.data.interestPayType").value("SIMPLE"))
                 .andExpect(jsonPath("$.data.termOptions.length()").value(1))
                 .andExpect(jsonPath("$.data.termOptions[0]").value(12))
                 .andExpect(jsonPath("$.data.rateTiers[0].termMonths").value(12))
@@ -181,12 +189,10 @@ class ProductControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.saleEndDate").value("2026-12-31"))
                 .andExpect(jsonPath("$.data.terms[0].termsId").value(termsId))
                 .andExpect(jsonPath("$.data.terms[0].displayOrder").value(1))
-                // termsName/version/required/viewRequired는 스펙상 Nullable:X(항상 값 있음)이지만,
-                // P6 TermsQueryPort 연동 전까지는 null로 응답한다 — 스펙과의 알려진 차이를 테스트로 명시.
-                .andExpect(jsonPath("$.data.terms[0].termsName").doesNotExist())
-                .andExpect(jsonPath("$.data.terms[0].version").doesNotExist())
-                .andExpect(jsonPath("$.data.terms[0].required").doesNotExist())
-                .andExpect(jsonPath("$.data.terms[0].viewRequired").doesNotExist());
+                .andExpect(jsonPath("$.data.terms[0].termsName").value("적립식예금 약관"))
+                .andExpect(jsonPath("$.data.terms[0].version").value("v1.0"))
+                .andExpect(jsonPath("$.data.terms[0].required").value(true))
+                .andExpect(jsonPath("$.data.terms[0].viewRequired").value(true));
     }
 
     @Test

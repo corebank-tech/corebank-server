@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 25개 비즈니스 테이블 + 1개 PK 채번 전용 테이블 (`ledger_entry_id_sequence`) · 259개 컬럼
+**대상**: 25개 비즈니스 테이블 + 1개 PK 채번 전용 테이블 (`ledger_entry_id_sequence`) · 257개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -37,13 +37,13 @@
 | 9 | `product_terms` | 상품-약관 연결 | P3 | 2 |
 | 10 | `account` | 계좌 | P2 | 21 |
 | 11 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4 |
-| 12 | `transfer` | 이체 거래 | P4 | 20 |
+| 12 | `transfer` | 이체 거래 | P4 | 21 |
 | 13 | `ledger_entry` | 원장 | P4 | 13 |
 | 14 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1 |
 | 15 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6 |
-| 16 | `transfer_limit` | 이체한도 | P1 | 6 |
+| 16 | `transfer_limit` | 이체한도 | P1 | 5 |
 | 17 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 5 |
-| 18 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 8 |
+| 18 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 6 |
 | 19 | `product_subscription` | 상품가입 | P3 | 18 |
 | 20 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5 |
 | 21 | `scheduled_transfer` | 예약이체 | P3 | 17 |
@@ -412,7 +412,7 @@
 
 > 이체 거래 (즉시·예약·자동 3종의 단일 수렴점)
 
-즉시·예약·자동이체 3종이 모두 이 테이블 1행으로 수렴한다. 예약·자동은 `source_type`·`source_id`로 원본을 역추적한다. `status = ERROR`인 행은 원장 기표가 0행이다.
+즉시·예약·자동이체 3종이 모두 이 테이블 1행으로 수렴한다. 예약·자동은 `source_type`·`source_id`로 원본을 역추적한다. `status = ERROR`인 행은 원장 기표가 0행이다. 예약·자동이체는 `uk_transfer_source_execution_date`(`source_type, source_id, execution_date`)로 같은 회차의 중복 실행을 상태(PROCESSING/SUCCESS/ERROR)와 무관하게 DB 레벨에서 막는다 — 즉시이체는 세 컬럼 모두 NULL이라 이 제약의 영향을 받지 않는다(MySQL은 NULL을 서로 다른 값으로 취급).
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
@@ -429,6 +429,7 @@
 | `status` | `VARCHAR(12)` |  | X |  | 처리 결과. `SUCCESS`(정상) / `ERROR`(오류) / `PROCESSING`(응답 유실·타임아웃 시에만) |
 | `source_type` | `VARCHAR(12)` |  | O |  | 이 이체를 만든 원본 구분. `SCHEDULED`(예약이체) / `AUTO`(자동이체). 즉시이체는 NULL |
 | `source_id` | `BIGINT` |  | O |  | 예약·자동이체 원본 PK. `source_type`과 함께 역추적에 쓴다 |
+| `execution_date` | `DATE` |  | O |  | `source_id`와 함께 멱등키를 구성하는 회차 실행일자. SCHEDULED/AUTO 전용(즉시이체는 NULL). 배치가 실제로 호출된 날짜가 아니라 그 회차의 논리적 실행일(`scheduled_transfer.scheduled_date` / `auto_transfer_execution.execution_date`)이 들어가야 크래시 후 재시도가 같은 회차로 식별된다 |
 | `my_passbook_memo` | `VARCHAR(10)` |  | O |  | 내 통장에 찍히는 문구. 최대 10자 |
 | `recipient_passbook_memo` | `VARCHAR(10)` |  | O |  | 받는 분 통장에 찍히는 문구 |
 | `withdrawal_balance_after` | `BIGINT` |  | O |  | 출금 직후 출금계좌 잔액. 성공 시에만 값이 있다 |
@@ -443,7 +444,7 @@
 | --- | --- | --- |
 | UNIQUE | `uk_transfer_txno` | `transaction_number` |
 | INDEX | `ix_transfer_wacc` | `withdrawal_account_id, transferred_at DESC` |
-| INDEX | `ix_transfer_source` | `source_type, source_id` |
+| UNIQUE | `uk_transfer_source_execution_date` | `source_type, source_id, execution_date` |
 
 **CHECK 제약**
 
@@ -539,7 +540,6 @@
 | `customer_id` | `BIGINT` | **PK** **FK** | X |  | 대상 고객. 고객당 1행 → `customer.customer_id` |
 | `one_time_limit` | `BIGINT` |  | X |  | 1회 이체한도. 초과하면 LMT0002 |
 | `daily_limit` | `BIGINT` |  | X |  | 1일 이체한도. 초과하면 LMT0003 |
-| `version` | `BIGINT` |  | X | `0` | 낙관적 락 버전 |
 | `created_at` | `DATETIME(6)` |  | X |  | 한도 최초 부여 일시. REQ-TRSF-029로 가입 시 생성된다 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시 |
 
@@ -549,6 +549,10 @@
 | --- | --- |
 | `ck_tl_order` | `one_time_limit <= daily_limit` |
 | `ck_tl_positive` | `one_time_limit > 0 AND daily_limit > 0` |
+
+**낙관적 락을 쓰지 않는다**
+
+`version` 컬럼은 `V202608201115`로 제거했다. 한도 변경과 이체 실행 모두 비관적 락(`SELECT ... FOR UPDATE`)으로 간다. 이체는 이 테이블을 읽기만 하므로 버전 검증을 하려면 커밋 직전에 의미 없는 `UPDATE`를 넣어야 하고, 그러면 같은 고객의 동시 이체가 서로 충돌해 재시도가 생긴다.
 
 ---
 
@@ -578,22 +582,22 @@
 
 > 이체한도 변경 이력 (P1 소유 경계 유지)
 
-REQ-TRSF-025의 "변경 이력을 저장한다"를 담는다. 한도 변경 1건당 1행이 쌓이는 append-only 테이블이다. 변경자·요청 IP 같은 감사 정보는 `audit_log`의 책임이므로 여기에는 값의 전후 변화만 남긴다.
+REQ-TRSF-025의 "변경 이력을 저장한다"를 담는다. 한도 변경 1건당 1행이 쌓이는 append-only 테이블이다. 변경자·요청 IP 같은 감사 정보는 `audit_log`의 책임이므로 여기에는 값의 변화만 남긴다.
+
+**변경 후 값은 저장하지 않는다.** 이력 N의 변경 후 값은 이력 N+1의 `before_*`와 같고, 마지막 이력의 변경 후 값은 `transfer_limit`의 현재값과 같다. 같은 값을 두 군데 두면 어긋날 여지만 생긴다. 조회할 때는 원하는 건수보다 한 건 더 읽어 인접 행끼리 짝을 맞추고, 마지막 행만 `transfer_limit`을 읽어 채운다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
 | `history_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 이력 식별자 |
 | `customer_id` | `BIGINT` | **FK** | X |  | 대상 고객 → `customer.customer_id` |
-| `before_one_time_limit` | `BIGINT` |  | X |  | 변경 전 1회 이체한도 |
-| `after_one_time_limit` | `BIGINT` |  | X |  | 변경 후 1회 이체한도 |
-| `before_daily_limit` | `BIGINT` |  | X |  | 변경 전 1일 이체한도 |
-| `after_daily_limit` | `BIGINT` |  | X |  | 변경 후 1일 이체한도 |
+| `before_one_time_limit` | `BIGINT` |  | X |  | 변경 직전 1회 이체한도 |
+| `before_daily_limit` | `BIGINT` |  | X |  | 변경 직전 1일 이체한도 |
 | `created_at` | `DATETIME(6)` |  | X |  | 변경이 일어난 시각 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시. append-only라 `created_at`과 같은 값이 유지된다 |
 
 **제약·인덱스를 두지 않은 이유**
 
-`CHECK` 제약은 두지 않는다 — 적재되는 값은 `transfer_limit`의 `ck_tl_positive`·`ck_tl_order`를 이미 통과한 데이터의 복사본이다. 별도 인덱스도 두지 않는다 — 이력 조회 요구사항이 아직 없고, FK가 `customer_id` 인덱스를 자동 생성한다. 조회 API가 생기면 그때 추가한다.
+`CHECK` 제약은 두지 않는다 — 적재되는 값은 `transfer_limit`의 `ck_tl_positive`·`ck_tl_order`를 이미 통과한 값이다. 별도 인덱스도 두지 않는다 — 이력 조회 요구사항이 아직 없고, FK가 `customer_id` 인덱스를 자동 생성한다. 조회 API가 생기면 그때 추가한다.
 
 ---
 
@@ -769,7 +773,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
 | `idempotency_key` | `CHAR(36)` | **PK** | X |  | 클라이언트가 보낸 `Idempotency-Key` 헤더값(UUID v4). 같은 요청의 중복 실행을 막는 기준 |
-| `customer_id` | `BIGINT` | **FK** | X |  | 요청 고객 → `customer.customer_id` |
+| `customer_id` | `BIGINT` | **FK** | O |  | 요청 고객 → `customer.customer_id`. 고객 생성 전 회원가입 완료 멱등키 예약은 `NULL` |
 | `endpoint` | `VARCHAR(120)` |  | X |  | 요청 대상 엔드포인트. 같은 키가 다른 API에 재사용되는 것을 걸러낸다 |
 | `request_hash` | `CHAR(64)` |  | X |  | 요청 본문의 SHA-256 해시. 같은 키인데 값이 다르면 CMN0302 |
 | `state` | `VARCHAR(12)` |  | X |  | 처리 상태. `PROCESSING`(처리 중) / `COMPLETED`(완료). 재요청 시 CMN0301과 200 반환을 가르는 기준 |

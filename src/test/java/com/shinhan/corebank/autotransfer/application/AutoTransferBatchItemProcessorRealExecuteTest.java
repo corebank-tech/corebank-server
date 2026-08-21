@@ -132,7 +132,7 @@ class AutoTransferBatchItemProcessorRealExecuteTest extends IntegrationTestSuppo
             "출금계좌 등록 플로우(#100) 부재로 채번 이전 단계에서 TRF0001로 안전하게 ERROR 확정된다 - " +
             "성공 케이스(원장 실제 기표) 자체는 #100 해결 전까지 여전히 재현 불가")
     void completeProcessing_withRealExecute_currentlyAlwaysFailsAtWithdrawalRegistration() {
-        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
 
         itemProcessor.completeProcessing(autoTransfer(), saved, today);
 

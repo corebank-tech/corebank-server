@@ -7,12 +7,17 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferListItem;
+import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferQueryPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +34,9 @@ class AutoTransferQueryServiceTest {
 
     @Mock
     AutoTransferQueryPort autoTransferQueryPort;
+
+    @Mock
+    AccountStatusPort accountStatusPort;
 
     @InjectMocks
     AutoTransferQueryService autoTransferQueryService;
@@ -78,14 +86,37 @@ class AutoTransferQueryServiceTest {
     }
 
     @Test
-    @DisplayName("검증을 통과하면 포트 결과를 그대로 반환한다")
+    @DisplayName("검증을 통과하면 포트 결과를 fromAlias와 함께 반환한다")
     void delegatesToPort() {
-        Page<AutoTransfer> expected = new PageImpl<>(List.of());
+        AutoTransfer autoTransfer = AutoTransfer.register(1L, 1L, "110987654321", "홍길동", 100_000L, 1, 15,
+                LocalDate.now().plusDays(1), LocalDate.now().plusMonths(6), null, null, LocalDateTime.now());
+        Page<AutoTransfer> pageFromPort = new PageImpl<>(List.of(autoTransfer));
         when(autoTransferQueryPort.search(1L, 1L, AutoTransferStatus.NORMAL, PageRequest.of(0, 10)))
-                .thenReturn(expected);
+                .thenReturn(pageFromPort);
+        when(accountStatusPort.findAccountAlias(1L)).thenReturn(Optional.of("월세계좌"));
 
-        Page<AutoTransfer> result = autoTransferQueryService.search(1L, 1L, AutoTransferStatus.NORMAL, 0, 10);
+        Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, AutoTransferStatus.NORMAL, 0, 10);
 
-        assertThat(result).isSameAs(expected);
+        assertThat(result.getContent()).hasSize(1);
+        AutoTransferListItem item = result.getContent().get(0);
+        assertThat(item.autoTransferId()).isEqualTo(autoTransfer.getAutoTransferId());
+        assertThat(item.depositAccountNumber()).isEqualTo(autoTransfer.getDepositAccountNumber());
+        assertThat(item.payeeName()).isEqualTo(autoTransfer.getPayeeName());
+        assertThat(item.amount()).isEqualTo(autoTransfer.getAmount());
+        assertThat(item.status()).isEqualTo(autoTransfer.getStatus());
+        assertThat(item.fromAlias()).isEqualTo("월세계좌");
+    }
+
+    @Test
+    @DisplayName("출금계좌 별칭이 없으면 fromAlias는 null로 채워진다")
+    void fromAliasIsNullWhenNotSet() {
+        Page<AutoTransfer> pageFromPort = new PageImpl<>(List.of());
+        when(autoTransferQueryPort.search(1L, 1L, null, PageRequest.of(0, 10))).thenReturn(pageFromPort);
+        when(accountStatusPort.findAccountAlias(1L)).thenReturn(Optional.empty());
+
+        Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, null, 0, 10);
+
+        assertThat(result.getContent()).isEmpty();
+        verify(accountStatusPort).findAccountAlias(1L);
     }
 }

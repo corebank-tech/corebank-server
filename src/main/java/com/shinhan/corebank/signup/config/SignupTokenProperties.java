@@ -9,6 +9,8 @@ import java.time.Duration;
 public record SignupTokenProperties(
         Duration termsAuthTtl,
         Duration userIdCheckTtl,
-        Duration emailVerificationTtl
+        Duration emailVerificationTtl,
+        Duration accountAuthTtl,
+        Duration tempSignupTtl
 ) {
 }

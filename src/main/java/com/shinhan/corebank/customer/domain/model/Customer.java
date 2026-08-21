@@ -35,6 +35,23 @@ public class Customer {
     private final LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    // 검증된 회원가입 정보로 신규 인터넷뱅킹 고객을 생성한다.
+    public static Customer register(
+            String userId,
+            String passwordHash,
+            String userName,
+            LocalDate birthDate,
+            String email,
+            String phoneNumber,
+            LocalDateTime joinedAt
+    ) {
+        return new Customer(
+                null, userId, passwordHash, userName, birthDate, email,
+                phoneNumber, 0, false, "OPENED_DATE_ASC", null, null,
+                null, joinedAt, joinedAt, null, null
+        );
+    }
+
     // 영속 상태를 불변식 검증 후 도메인 모델로 복원
     public static Customer restore(
             Long customerId,

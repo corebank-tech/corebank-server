@@ -25,7 +25,7 @@ public class IdempotencyKeyJpaEntity {
     @Column(name = "idempotency_key", columnDefinition = "CHAR(36)")
     private String idempotencyKey;                  // UUID v4. 자동 생성 아님
 
-    @Column(name = "customer_id", nullable = false)
+    @Column(name = "customer_id")
     private Long customerId;
 
     @Column(name = "endpoint", nullable = false, length = 120)
