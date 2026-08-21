@@ -70,6 +70,10 @@ flowchart TD
   ```
 - ⚠️ **주의**: SQL 마이그레이션(DDL) 작성 시 절대로 `DEFAULT CURRENT_TIMESTAMP`를 쓰지 마세요! 시각 생성은 DB가 아니라 자바 JPA Auditing(`BaseEntity` + `JpaAuditingConfig`의 `Clock.system(ZoneId.of("Asia/Seoul"))`)이 담당합니다.
 - ℹ️ **예외 — 다른 도메인 테이블의 부분 매핑**: 이 규칙은 "테이블 하나 = 정식(대표) 엔티티 하나"를 전제로 합니다. 다른 도메인이 소유한 테이블을 자기 도메인 목적으로 일부 컬럼만 떼어 매핑하는 경량 엔티티(예: `transfer` 도메인이 `account` 테이블의 락·잔액 컬럼만 매핑하는 `AccountLockJpaEntity`)는 대상이 아닙니다. 이런 부분 매핑이 `createdAt`/`updatedAt`을 실제로 읽지 않는다면 `BaseEntity`를 상속하지 않아도 됩니다 — 상속하면 그 도메인이 관여할 때마다 테이블 소유 도메인의 감사 컬럼(`updated_at`)에 의도치 않은 추가 쓰기가 발생하기 때문입니다.
+- ⚠️ **단, 부분 매핑을 언제 써도 되는지는 따로 판단하세요 (ADR-0002)**: 위 예외는 "부분 매핑을 이미 쓰기로 정했을 때 `BaseEntity`를 어떻게 할지"에 대한 규칙이지, 부분 매핑 자체를 권장하는 규칙이 아닙니다.
+  - **읽기 전용 조회는 소유 도메인의 공개 UseCase(인 포트) 호출이 기본입니다.** 판정 규칙이 소유 도메인 한 곳에만 남고, 소유 도메인의 내부 스키마 변경이 호출 도메인으로 직접 전파되지 않습니다(공개 계약이 바뀌는 경우에만 컴파일 타임에 드러납니다). 예 — `subscription`의 `AccountLookupAdapter` → `account`의 `WithdrawableAccountQueryUseCase`(#263), `AccountNumberQueryAdapter` → `AccountNumberQueryUseCase`(#177). 이때 호출 도메인의 아웃 포트와 값 객체는 그대로 두고 **어댑터에서 변환**해서, 타 도메인 타입이 application 계층으로 새지 않게 합니다.
+  - **타 도메인 테이블에 쓰기·락이 필요하면, 트랜잭션 요구사항상 불가피한 경우에 한해 별도 ADR과 도메인 소유자 합의를 거친 명시적 예외로 둡니다.** "쓰기·락이면 부분 매핑을 써도 된다"는 일반 허용 규칙이 아닙니다 — 공개 UseCase도 기본 전파(`REQUIRED`)로 호출자 트랜잭션에 참여하므로 락 획득·잔액 변경 자체는 공개 UseCase 뒤에서도 가능합니다. 실제로 `transfer`의 `ProductSubscriptionDepositService`(공개 인 포트 `ProductSubscriptionDepositUseCase`)가 상품가입 실행의 트랜잭션에 참여한 채로 락 획득 → 재검증 → 잔액 변경을 수행합니다. `transfer`의 `AccountLockJpaEntity`를 남겨둔 이유는 트랜잭션상 불가능해서가 아니라, `lockForTransfer` → `applyTransfer` 계약을 account 공개 API 뒤로 옮기려면 별도 재설계가 필요해 그 범위를 미뤘기 때문입니다(현재 유일한 승인된 예외).
+  - `autotransfer`·`scheduledtransfer`의 `AccountLookupJpaEntity`는 읽기 전용이라 이 기준상 UseCase 대상이지만 아직 전환 전입니다 — 남아 있다는 이유로 새 코드에서 따라 쓰지 마세요. 대안 검토와 결정 근거는 `docs/adr/0002-cross-domain-account-read-mechanism.md`에 있습니다.
 
 ### ② `IntegrationTestSupport.java` (모든 통합 테스트의 필수 부모 클래스)
 - **역할**: `@SpringBootTest` 실행 시 로컬 PC에 DB가 켜져 있지 않아도, **Testcontainers가 알아서 MySQL 8.4 1회용 도커 DB를 띄우고 Flyway 마이그레이션까지 마친 완벽한 테스트 환경**을 제공합니다.
