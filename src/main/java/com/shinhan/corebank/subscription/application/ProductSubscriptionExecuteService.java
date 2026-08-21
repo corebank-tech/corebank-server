@@ -43,7 +43,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ProductSubscriptionExecuteService implements ProductSubscriptionExecuteUseCase {
 
-    // ProductSubscriptionValidationService와 동일한 이유(컨테이너 TZ UTC 고정) — 개설일도 KST 기준으로 맞춘다.
+    // ProductSubscriptionValidationService와 동일한 이유 — 개설일도 주입 Clock의 존에 기대지 않고 KST로 맞춘다.
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final ProductSubscriptionAuthTokenVerificationPort authTokenVerificationPort;

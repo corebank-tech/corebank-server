@@ -35,8 +35,10 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class ProductSubscriptionValidationService implements ProductSubscriptionValidationUseCase {
 
-    // 컨테이너 TZ가 UTC로 고정돼 있어(Dockerfile, docker-compose.yml) LocalDate.now()는 UTC 날짜를 준다.
-    // ledger.seq_date / limit.usage_date가 "KST 기준 영업일"인 것과 맞춰 만기일도 KST로 계산한다.
+    // 운영 Clock 빈은 #179(2026-08-19, 서버·DB 타임존 KST 통일)로 이미 KST지만, 주입되는 Clock의
+    // 존까지 보장되지는 않는다(이 서비스의 테스트는 UTC 고정 Clock을 넣는다).
+    // ledger.seq_date / limit.usage_date가 "KST 기준 영업일"인 것과 맞춰, 만기일은 주입 Clock의
+    // 존에 기대지 않고 여기서 KST를 명시해 계산한다.
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final ProductQueryUseCase productQueryUseCase;
