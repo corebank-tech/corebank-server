@@ -1,4 +1,4 @@
-package com.shinhan.corebank.autotransfer.adapter.in.scheduler;
+package com.shinhan.corebank.batch.adapter.in.scheduler;
 
 import static org.mockito.Mockito.inOrder;
 
@@ -15,7 +15,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-class AutoTransferBatchSchedulerTest {
+class DailyTransferBatchSchedulerTest {
 
     @Mock
     AutoTransferBatchUseCase autoTransferBatchUseCase;
@@ -30,8 +30,8 @@ class AutoTransferBatchSchedulerTest {
         Clock fixedClock = Clock.fixed(
                 fixedDate.atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant(),
                 ZoneId.of("Asia/Seoul"));
-        AutoTransferBatchScheduler scheduler =
-                new AutoTransferBatchScheduler(autoTransferBatchUseCase, scheduledTransferBatchUseCase, fixedClock);
+        DailyTransferBatchScheduler scheduler =
+                new DailyTransferBatchScheduler(autoTransferBatchUseCase, scheduledTransferBatchUseCase, fixedClock);
 
         scheduler.runDailyBatch();
 

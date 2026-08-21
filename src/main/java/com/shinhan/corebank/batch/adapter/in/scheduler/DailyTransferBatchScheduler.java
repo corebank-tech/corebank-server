@@ -1,4 +1,4 @@
-package com.shinhan.corebank.autotransfer.adapter.in.scheduler;
+package com.shinhan.corebank.batch.adapter.in.scheduler;
 
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferBatchUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferBatchUseCase;
@@ -14,9 +14,9 @@ import java.time.ZoneId;
 
 @Component
 @RequiredArgsConstructor
-// 자정 00시 10분 후 자동이체 배치 시작
-public class AutoTransferBatchScheduler {
-    private static final Logger log = LoggerFactory.getLogger(AutoTransferBatchScheduler.class);
+public class DailyTransferBatchScheduler {
+    // 자정 00시 10분 후 자동이체 -> 예약이체 순으로 배치 시작
+    private static final Logger log = LoggerFactory.getLogger(DailyTransferBatchScheduler.class);
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private final AutoTransferBatchUseCase autoTransferBatchUseCase;
     private final ScheduledTransferBatchUseCase scheduledTransferBatchUseCase;
@@ -41,5 +41,4 @@ public class AutoTransferBatchScheduler {
         scheduledTransferBatchUseCase.reconcileStuckExecutions(today);
         log.info("예약이체 재확정 배치 종료 - date={}", today);
     }
-
 }
