@@ -9,7 +9,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record TransferRequest(
         @Schema(description = "출금계좌 ID (내 계좌)", example = "1001")
         Long withdrawalAccountId,
-        @Schema(description = "입금계좌번호 (하이픈 없이)", example = "11012345678901")
+        @Schema(description = "입금계좌번호 (하이픈 없이)", example = "110123456789")
         String depositAccountNumber,
         @Schema(description = "이체금액. 1원 이상의 정수", example = "50000", minimum = "1")
         long amount,
