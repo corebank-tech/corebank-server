@@ -16,5 +16,6 @@ public record AutoTransferListItem(Long autoTransferId,
                                    Integer cycleMonths,
                                    String myPassbookMemo,
                                    AutoTransferStatus status,
+                                   boolean cancelable,
                                    LocalDateTime registeredAt) {
 }
