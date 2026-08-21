@@ -14,6 +14,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.Set;
 
 @Service
@@ -24,6 +26,7 @@ public class AutoTransferQueryService implements AutoTransferQueryUseCase {
 
     private final AutoTransferQueryPort autoTransferQueryPort;
     private final AccountStatusPort accountStatusPort;
+    private final Clock clock;
 
     @Override
     public Page<AutoTransferListItem> search(Long customerId, Long withdrawalAccountId, AutoTransferStatus status, int page, int size) {
@@ -38,11 +41,13 @@ public class AutoTransferQueryService implements AutoTransferQueryUseCase {
         }
         // withdrawalAccountId가 필수 파라미터라 페이지 안 모든 행이 같은 계좌 - 별칭은 요청당 1회만 조회
         String fromAlias = accountStatusPort.findAccountAlias(withdrawalAccountId).orElse(null);
+        LocalDate today = LocalDate.now(clock);
         return autoTransferQueryPort.search(customerId, withdrawalAccountId, status, PageRequest.of(page,size))
-                .map(autoTransfer -> toItem(autoTransfer, fromAlias));
+                .map(autoTransfer -> toItem(autoTransfer, fromAlias, today));
     }
 
-    private AutoTransferListItem toItem(AutoTransfer autoTransfer, String fromAlias) {
+    private AutoTransferListItem toItem(AutoTransfer autoTransfer, String fromAlias, LocalDate today) {
+        boolean cancelable = autoTransfer.getStatus().isModifiable() && !autoTransfer.getNextExecutionDate().equals(today);
         return new AutoTransferListItem(
                 autoTransfer.getAutoTransferId(),
                 autoTransfer.getDepositAccountNumber(),
@@ -55,6 +60,7 @@ public class AutoTransferQueryService implements AutoTransferQueryUseCase {
                 autoTransfer.getCycleMonths(),
                 autoTransfer.getMyPassbookMemo(),
                 autoTransfer.getStatus(),
+                cancelable,
                 autoTransfer.getRegisteredAt()
         );
     }
