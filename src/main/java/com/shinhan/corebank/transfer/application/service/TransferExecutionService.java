@@ -121,9 +121,26 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     .filter(detail -> detail.customerId().equals(command.customerId()) && detail.withdrawalRegistered())
                     .orElseThrow(() -> new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
 
-            // 1차 검증(락 이전) ②: 인증 완료 토큰. 소유권 검증 뒤로 옮김 — 남의 계좌면 토큰 소비 전에 거부된다.
+            ResolvedPayee payee = accountLockPort.resolvePayeeByAccountNumber(command.depositAccountNumber())
+                    .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
+
+            // 1차 검증(락 이전) ②: 동일계좌 이체 거부. 한도 예약(checkAndReserve) 전에 걸러야
+            // 동일계좌 요청이 한도부터 소모하고 나서 거부되는 걸 막을 수 있다.
+            if (command.withdrawalAccountId().equals(payee.accountId())) {
+                throw new BusinessException(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
+            }
+
+            // 1차 검증(락 이전) ③: 입금계좌 상품유형. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을
+            // 묶어두는 상품이라 이체로 추가 입금할 수 없다. 정기적금(INSTALLMENT_SAVINGS)은 매달
+            // 나눠 넣는 게 상품 목적이라 허용한다(REQ-TRSF-030).
+            if (payee.accountType() == LockedAccountType.TIME_DEPOSIT) {
+                throw new BusinessException(TransferErrorCode.UNSUPPORTED_ACCOUNT_TYPE);
+            }
+
+            // 1차 검증(락 이전) ④: 인증 완료 토큰. OTP는 성공 시 즉시 소비되므로 위 무관한 검증을
+            // 모두 통과한 뒤, 채번(상태 변경의 시작점) 직전에 검증한다(otp_integration_guide.md §9).
             // IMMEDIATE만 authToken/otpAuthToken이 있으므로 SCHEDULED/AUTO는 건너뛴다(예약/자동이체는
-            // 등록 시점에 이미 검증됐고 배치 실행 시 재검증하지 않는다, otp_integration_guide.md).
+            // 등록 시점에 이미 검증됐고 배치 실행 시 재검증하지 않는다).
             if (command.authToken() != null) {
                 transferAuthTokenVerificationPort.verify(
                         command.authToken(), command.withdrawalAccountId(), "TRANSFER_EXECUTE");
@@ -132,22 +149,6 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 transferOtpVerificationPort.verifyAndConsume(
                         command.otpAuthToken(), command.customerId(), command.withdrawalAccountId(),
                         command.depositAccountNumber(), command.amount());
-            }
-
-            ResolvedPayee payee = accountLockPort.resolvePayeeByAccountNumber(command.depositAccountNumber())
-                    .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
-
-            // 1차 검증(락 이전) ③: 동일계좌 이체 거부. 한도 예약(checkAndReserve) 전에 걸러야
-            // 동일계좌 요청이 한도부터 소모하고 나서 거부되는 걸 막을 수 있다.
-            if (command.withdrawalAccountId().equals(payee.accountId())) {
-                throw new BusinessException(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
-            }
-
-            // 1차 검증(락 이전) ④: 입금계좌 상품유형. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을
-            // 묶어두는 상품이라 이체로 추가 입금할 수 없다. 정기적금(INSTALLMENT_SAVINGS)은 매달
-            // 나눠 넣는 게 상품 목적이라 허용한다(REQ-TRSF-030).
-            if (payee.accountType() == LockedAccountType.TIME_DEPOSIT) {
-                throw new BusinessException(TransferErrorCode.UNSUPPORTED_ACCOUNT_TYPE);
             }
 
             String transactionNumber =
