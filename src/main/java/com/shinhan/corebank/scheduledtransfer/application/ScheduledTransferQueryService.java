@@ -71,7 +71,8 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
         Map<Long, String> withdrawalAccountNumbers = accountStatusPort.findAccountNumbersByIds(withdrawalAccountIds);
         Map<Long, String> withdrawalAccountAliases = accountStatusPort.findAccountAliasesByIds(withdrawalAccountIds);
 
-        return result.map(scheduledTransfer -> toItem(scheduledTransfer, withdrawalAccountNumbers, withdrawalAccountAliases));
+        LocalDate today = LocalDate.now(clock);
+        return result.map(scheduledTransfer -> toItem(scheduledTransfer, withdrawalAccountNumbers, withdrawalAccountAliases, today));
     }
 
     @Override
@@ -115,7 +116,7 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
     }
 
     private ScheduledTransferListItem toItem(ScheduledTransfer scheduledTransfer, Map<Long, String> withdrawalAccountNumbers,
-                                             Map<Long, String> withdrawalAccountAliases) {
+                                             Map<Long, String> withdrawalAccountAliases, LocalDate today) {
         String withdrawalAccountNumber = withdrawalAccountNumbers.get(scheduledTransfer.getWithdrawalAccountId());
 
         if (withdrawalAccountNumber == null) {
@@ -123,6 +124,10 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
         }
         // 별칭은 미설정일 수 있어 Map에 키 자체가 없을 수 있음 - null 허용
         String fromAlias = withdrawalAccountAliases.get(scheduledTransfer.getWithdrawalAccountId());
+        // ScheduledTransfer.cancel()과 동일한 조건이어야 한다 - WAITING이어도 실행 예정일 당일이면
+        // SCD0303으로 취소가 거부되므로(도메인 규칙), 목록의 cancelable도 같은 기준으로 계산한다(PR #227 리뷰, vsopsw)
+        boolean cancelable = scheduledTransfer.getStatus() == ScheduledTransferStatus.WAITING
+                && scheduledTransfer.getScheduledDate().isAfter(today);
         return new ScheduledTransferListItem(
                 scheduledTransfer.getScheduledTransferId(),
                 scheduledTransfer.getScheduledDate(),
@@ -134,7 +139,7 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
                 scheduledTransfer.getAmount(),
                 scheduledTransfer.getMyPassbookMemo(),
                 scheduledTransfer.getStatus(),
-                scheduledTransfer.getStatus() == ScheduledTransferStatus.WAITING,
+                cancelable,
                 scheduledTransfer.getRegisteredAt()
         );
     }
