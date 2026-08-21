@@ -1,8 +1,8 @@
 package com.shinhan.corebank.transfer.application.service;
 
 import java.time.Clock;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
@@ -20,6 +20,7 @@ import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
 import com.shinhan.corebank.transfer.application.port.out.TransferAuthTokenVerificationPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.LedgerPair;
 import com.shinhan.corebank.transfer.domain.Transfer;
@@ -28,6 +29,7 @@ import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 
 import org.springframework.context.annotation.Primary;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -60,6 +62,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private final TransferAuthTokenVerificationPort transferAuthTokenVerificationPort;
     private final TransferSequencePort transferSequencePort;
     private final TransferSavePort transferSavePort;
+    private final TransferLookupPort transferLookupPort;
     private final LedgerSavePort ledgerSavePort;
     private final Clock clock;
     private final TransactionTemplate requiresNewTransactionTemplate;
@@ -70,6 +73,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             TransferAuthTokenVerificationPort transferAuthTokenVerificationPort,
             TransferSequencePort transferSequencePort,
             TransferSavePort transferSavePort,
+            TransferLookupPort transferLookupPort,
             LedgerSavePort ledgerSavePort,
             Clock clock,
             PlatformTransactionManager transactionManager
@@ -79,6 +83,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         this.transferAuthTokenVerificationPort = transferAuthTokenVerificationPort;
         this.transferSequencePort = transferSequencePort;
         this.transferSavePort = transferSavePort;
+        this.transferLookupPort = transferLookupPort;
         this.ledgerSavePort = ledgerSavePort;
         this.clock = clock;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
@@ -87,6 +92,17 @@ public class TransferExecutionService implements TransferExecutionUseCase {
 
     @Override
     public TransferResult execute(TransferCommand command) {
+        // 멱등성 사전조회: SCHEDULED/AUTO는 sourceId+executionDate가 이미 처리된 회차인지
+        // 먼저 확인한다. 배치의 당일 안전장치(재확정)가 크래시 등으로 못 돌아 다음날 같은
+        // 회차가 다시 execute()로 들어와도, 여기서 걸러 재처리 없이 기존 결과를 그대로 돌려준다.
+        if (command.sourceId() != null) {
+            var existing = transferLookupPort.findBySourceAndExecutionDate(
+                    resolveSourceType(command.transferType()), command.sourceId(), command.executionDate());
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+        }
+
         // 계좌 락 획득 전 시각이므로 채번(영업일자)에만 쓴다. 락 대기로 실제 처리가 지연될 수
         // 있어 원장·완료 기록에는 락 획득 이후 새로 캡처하는 executedAt을 쓴다.
         LocalDateTime requestedAt = LocalDateTime.now(clock);
@@ -142,6 +158,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     command.channel(),
                     resolveSourceType(command.transferType()),
                     command.sourceId(),
+                    command.executionDate(),
                     command.myPassbookMemo(),
                     command.recipientPassbookMemo(),
                     requestedAt
@@ -222,13 +239,43 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                         .errorMessage(e.getMessage())
                         .build();
             }
-            return failTransfer(created, e.getErrorCode().getCode(), e.getMessage(), e);
+            return failTransfer(command, created, e.getErrorCode().getCode(), e.getMessage(), e);
+        } catch (DataIntegrityViolationException e) {
+            // 사전조회 이후 동시에 들어온 다른 execute() 호출이 같은 sourceId+executionDate로
+            // 먼저 커밋했을 가능성을 재조회로 확인한다. REQUIRES_NEW로 새 스냅샷을 떠야 하는
+            // 이유: InnoDB는 유니크 인덱스 충돌 시 상대 트랜잭션의 커밋/롤백까지 INSERT를
+            // 블로킹하므로 상대는 이미 커밋되어 있지만, 앰비언트 트랜잭션(REPEATABLE_READ)에
+            // 그냥 얹히면 execute() 진입 시 사전조회가 고정한 read view 때문에 그 커밋을 못 볼
+            // 수 있다. 조회가 비어 있으면(=이 unique 충돌이 아니었던 경우) 아래로 자연히
+            // 넘어가 다른 RuntimeException과 동일하게 ERROR로 확정한다.
+            Optional<TransferResult> existing = requeryExistingResult(command);
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+            // 재조회가 비었다는 건 이 unique 충돌이 멱등성 제약이 아니었다는 뜻이다(FK/CHECK 등) -
+            // 일반 RuntimeException과 동일하게 ERROR로 확정 기록하되 예외는 그대로 전파해 호출자가
+            // 이를 정상적인 이체 실패로 오인하지 않게 한다.
+            if (created != null) {
+                failTransfer(command, created, CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.getMessage(), e);
+            }
+            throw e;
         } catch (RuntimeException e) {
             if (created != null) {
-                failTransfer(created, CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.getMessage(), e);
+                failTransfer(command, created, CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.getMessage(), e);
             }
             throw e;
         }
+    }
+
+    // execute()가 REQUIRES_NEW로 새 스냅샷을 떠야 상대가 이미 커밋한 sourceId+executionDate
+    // 행을 볼 수 있는 이유는 위 catch (DataIntegrityViolationException) 코멘트를 참고.
+    private Optional<TransferResult> requeryExistingResult(TransferCommand command) {
+        if (command.sourceId() == null) {
+            return Optional.empty();
+        }
+        return requiresNewTransactionTemplate.execute(status ->
+                transferLookupPort.findBySourceAndExecutionDate(
+                        resolveSourceType(command.transferType()), command.sourceId(), command.executionDate()));
     }
 
     /**
@@ -249,10 +296,22 @@ public class TransferExecutionService implements TransferExecutionUseCase {
      * 원인(recordingFailure)을 버리지 않고 원래 예외(cause)에 suppressed로 붙여 함께 던져,
      * 어느 쪽 원인도 로그에서 유실되지 않게 한다.
      */
-    private TransferResult failTransfer(Transfer created, String errorCode, String errorMessage, RuntimeException cause) {
+    private TransferResult failTransfer(
+            TransferCommand command, Transfer created, String errorCode, String errorMessage, RuntimeException cause) {
         created.fail(errorCode, errorMessage);
         try {
             requiresNewTransactionTemplate.executeWithoutResult(status -> transferSavePort.save(created));
+        } catch (DataIntegrityViolationException recordingFailure) {
+            // 이 ERROR 확정 INSERT 자체가 uk_transfer_source_execution_date에 걸렸다는 건, 동일
+            // sourceId+executionDate로 실패한 경쟁 요청이 먼저 ERROR를 커밋했다는 뜻이다. 성공
+            // 경로와 동일하게 그 결과를 재조회해 반환한다 — 그러지 않으면 이 요청의 원인(cause)이
+            // 그대로 전파돼, 재시도한 호출자가 예외를 정상적인 execute() 결과 대신 받게 된다.
+            Optional<TransferResult> existing = requeryExistingResult(command);
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+            cause.addSuppressed(recordingFailure);
+            throw cause;
         } catch (RuntimeException recordingFailure) {
             if (recordingFailure != cause) {
                 cause.addSuppressed(recordingFailure);

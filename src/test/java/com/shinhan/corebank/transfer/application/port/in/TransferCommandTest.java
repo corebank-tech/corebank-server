@@ -3,6 +3,8 @@ package com.shinhan.corebank.transfer.application.port.in;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
+import java.time.LocalDate;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -71,6 +73,40 @@ class TransferCommandTest {
     }
 
     @Test
+    @DisplayName("즉시 이체인데 실행일자(executionDate)가 있으면 INVALID_INPUT 에러가 발생한다.")
+    void immediateTransferWithExecutionDate_ThrowsException() {
+        assertThatThrownBy(() -> TransferCommand.builder()
+                .customerId(1L)
+                .withdrawalAccountId(1L)
+                .depositAccountNumber("123456789012")
+                .amount(10000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .authToken("dummy-auth-token")
+                .executionDate(LocalDate.now()) // 즉시 이체인데 executionDate 존재
+                .build())
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining(CommonErrorCode.INVALID_INPUT.getMessage());
+    }
+
+    @Test
+    @DisplayName("예약/자동 이체인데 실행일자(executionDate)가 없으면 REQUIRED_FIELD_MISSING 에러가 발생한다.")
+    void scheduledTransferWithoutExecutionDate_ThrowsException() {
+        assertThatThrownBy(() -> TransferCommand.builder()
+                .customerId(1L)
+                .withdrawalAccountId(1L)
+                .depositAccountNumber("123456789012")
+                .amount(10000L)
+                .transferType(TransferType.SCHEDULED)
+                .channel(TransferChannel.WB)
+                .sourceId(100L)
+                // executionDate 누락
+                .build())
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining(CommonErrorCode.REQUIRED_FIELD_MISSING.getMessage());
+    }
+
+    @Test
     @DisplayName("customerId가 없으면 REQUIRED_FIELD_MISSING 에러가 발생한다.")
     void missingCustomerId_ThrowsException() {
         assertThatThrownBy(() -> TransferCommand.builder()
@@ -126,6 +162,7 @@ class TransferCommandTest {
                 .transferType(TransferType.AUTO)
                 .channel(TransferChannel.BT)
                 .sourceId(100L)
+                .executionDate(LocalDate.now())
                 // authToken 없음
                 .build());
     }

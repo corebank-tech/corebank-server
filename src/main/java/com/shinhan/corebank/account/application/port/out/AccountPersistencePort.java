@@ -9,6 +9,8 @@ public interface AccountPersistencePort {
 
     Account save(Account account);
 
+    boolean existsByAccountNumber(String accountNumber);
+
     List<Account> findAllByCustomerId(Long customerId);
 
     Optional<Account> findByAccountIdAndCustomerId(

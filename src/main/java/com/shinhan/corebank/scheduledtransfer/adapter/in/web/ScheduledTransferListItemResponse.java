@@ -5,11 +5,12 @@ import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTrans
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 public record ScheduledTransferListItemResponse(Long scheduledTransferId, LocalDate scheduledDate,
-                                                String withdrawalAccountNumber, String payeeBankName,
-                                                String accountNumber, String payeeName, Long amount,
-                                                ScheduledTransferStatus status, boolean cancelable) {
+                                                String withdrawalAccountNumber, String fromAlias, String payeeBankName,
+                                                String accountNumber, String payeeName, Long amount, String myPassbookMemo,
+                                                ScheduledTransferStatus status, boolean cancelable, LocalDateTime registeredAt) {
 
     private static final String BANK_CODE_SHINHAN = "088";
     private static final String BANK_NAME_SHINHAN = "신한은행";
@@ -19,12 +20,15 @@ public record ScheduledTransferListItemResponse(Long scheduledTransferId, LocalD
                 item.scheduledTransferId(),
                 item.scheduledDate(),
                 MaskingUtil.maskAccountNumber(item.withdrawalAccountNumber()),
+                item.fromAlias(),
                 resolveBankName(item.payeeBankCode()),
                 MaskingUtil.maskAccountNumber(item.payeeAccountNumber()),
                 MaskingUtil.maskName(item.payeeName()),
                 item.amount(),
+                item.myPassbookMemo(),
                 item.status(),
-                item.cancelable()
+                item.cancelable(),
+                item.registeredAt()
         );
     }
 

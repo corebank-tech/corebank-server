@@ -46,7 +46,7 @@ public class AutoTransferBatchService implements AutoTransferBatchUseCase {
     private void processOne(AutoTransfer autoTransfer, LocalDate date) {
         AutoTransferExecution saved;
         try {
-            saved = autoTransferBatchItemProcessor.saveProcessing(autoTransfer, date);
+            saved = autoTransferBatchItemProcessor.saveProcessing(autoTransfer);
         } catch (DataIntegrityViolationException e) {
             String message = e.getMostSpecificCause().getMessage();
             if (message != null && message.contains("uk_ate_dup")) {

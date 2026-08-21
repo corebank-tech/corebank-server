@@ -22,6 +22,7 @@ import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogJpaEntity;
 import com.shinhan.corebank.common.audit.AuditLogJpaRepository;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import jakarta.persistence.EntityManager;
@@ -34,6 +35,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
@@ -144,7 +146,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Test
     @DisplayName("saveProcessing()은 PROCESSING 행을 즉시 커밋한다")
     void saveProcessing_commitsImmediately() {
-        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
 
         assertThat(saved.getExecutionId()).isNotNull();
         assertThat(saved.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
@@ -154,16 +156,16 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Test
     @DisplayName("같은 자동이체·같은 실행일로 saveProcessing()을 두 번 호출하면 두 번째는 유니크 제약 위반으로 실패한다")
     void saveProcessing_duplicate_throws() {
-        itemProcessor.saveProcessing(autoTransfer(), today);
+        itemProcessor.saveProcessing(autoTransfer());
 
-        assertThatThrownBy(() -> itemProcessor.saveProcessing(autoTransfer(), today))
+        assertThatThrownBy(() -> itemProcessor.saveProcessing(autoTransfer()))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
     @DisplayName("completeProcessing()이 예외를 던져도, 이미 커밋된 saveProcessing()의 결과는 롤백되지 않는다")
     void completeProcessing_throws_doesNotRollbackEarlierSaveProcessing() {
-        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
         when(transferExecutionUseCase.execute(any())).thenThrow(new RuntimeException("이체 실행 중 장애"));
 
         assertThatThrownBy(() -> itemProcessor.completeProcessing(autoTransfer(), saved, today))
@@ -180,7 +182,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Test
     @DisplayName("이체 결과가 PROCESSING(응답 유실·타임아웃)이면 성공/실패로 단정하지 않고 예외를 던져 롤백시킨다")
     void completeProcessing_transferResultProcessing_throwsAndRollsBack() {
-        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
         when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
                 .status(ProcessResultStatus.PROCESSING)
                 .build());
@@ -204,7 +206,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Test
     @DisplayName("이체 성공 시: 회차가 SUCCESS로 확정되고, 다음 실행일이 갱신되고, 감사로그가 남는다")
     void completeProcessing_success() {
-        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
         when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
                 .status(ProcessResultStatus.SUCCESS)
                 .transactionNumber("20260315BT0000000001")
@@ -227,9 +229,41 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("배치 호출일과 이 회차의 논리적 실행일(nextExecutionDate)이 다르면(전날 후속처리 실패 후 익일 재시도), " +
+            "saveProcessing()/completeProcessing() 모두 배치 호출일이 아니라 nextExecutionDate를 executionDate로 써서 " +
+            "멱등성 사전조회가 첫 시도와 같은 키로 인식하게 한다 (PR #217 리뷰)")
+    void completeProcessing_batchDateDiffersFromNextExecutionDate_usesLogicalExecutionDateAsIdempotencyKey() {
+        // given: nextExecutionDate는 3/15(today)에 그대로 멈춰있는데, 배치는 하루 늦게(3/16) 이 건을 재시도한다
+        LocalDate logicalExecutionDate = today;
+        LocalDate batchRunDate = today.plusDays(1);
+
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
+
+        // then: PROCESSING 행의 executionDate는 배치 호출일이 아니라 논리적 실행일이어야 한다
+        var savedEntity = executionRepository.findById(saved.getExecutionId()).orElseThrow();
+        assertThat(savedEntity.getExecutionDate()).isEqualTo(logicalExecutionDate);
+
+        when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
+                .status(ProcessResultStatus.SUCCESS)
+                .transactionNumber("20260315BT0000000001")
+                .transferredAt(LocalDateTime.now())
+                .withdrawalBalanceAfter(90000L)
+                .build());
+
+        itemProcessor.completeProcessing(autoTransfer(), saved, batchRunDate);
+
+        // then: TransferExecutionService로 넘기는 TransferCommand.executionDate도 배치 호출일이 아니라
+        // 논리적 실행일이어야 한다 - 이래야 첫 시도가 이미 성공해 커밋되어 있었다면 사전조회가 같은
+        // (sourceId, executionDate) 키로 그 결과를 찾아 재처리(중복 송금)를 막는다
+        ArgumentCaptor<TransferCommand> commandCaptor = ArgumentCaptor.forClass(TransferCommand.class);
+        verify(transferExecutionUseCase).execute(commandCaptor.capture());
+        assertThat(commandCaptor.getValue().executionDate()).isEqualTo(logicalExecutionDate);
+    }
+
+    @Test
     @DisplayName("채번 이전 실패 시: 회차가 ERROR로 확정되지만 다음 실행일은 그대로 갱신되고, 거래번호가 없어 감사로그는 안 남는다")
     void completeProcessing_failureBeforeSequencing_noAuditLog() {
-        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
         when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
                 .status(ProcessResultStatus.ERROR)
                 .errorCode("TRF0001")
@@ -252,7 +286,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Test
     @DisplayName("채번 이후 실패(한도초과·잔액부족 등) 시: 실행이력에 거래번호가 함께 남고, 실패 감사로그도 남는다")
     void completeProcessing_failureAfterSequencing_savesTransactionNumberAndAuditLog() {
-        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
         when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
                 .status(ProcessResultStatus.ERROR)
                 .transactionNumber("20260315BT0000000002")
@@ -306,7 +340,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
                 "메모", "받는메모", AutoTransferStatus.NORMAL,
                 LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0), afterManualSave.getVersion());
 
-        AutoTransferExecution saved = itemProcessor.saveProcessing(domainWithNearEndDate, today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(domainWithNearEndDate);
         when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
                 .status(ProcessResultStatus.SUCCESS)
                 .transactionNumber("20260315BT0000000002")
@@ -323,7 +357,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Test
     @DisplayName("completeProcessing() 저장 시점에 낙관적 락 충돌이 나면 삼키지 않고 그대로 전파하고, 고객이 동시에 바꾼 값은 덮어써지지 않는다")
     void completeProcessing_optimisticLockConflict_propagatesAndPreservesConcurrentChange() {
-        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
         when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
                 .status(ProcessResultStatus.SUCCESS)
                 .transactionNumber("20260315BT0000000004")
@@ -377,7 +411,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Test
     @DisplayName("execute()가 실구현처럼 독립 커밋(REQUIRES_NEW)하면, completeProcessing() 이후 단계 실패 시 이체 마커는 남고 배치 기록만 롤백된다 - 재시도는 execute()를 다시 부르지 않고 멈춘 회차를 조용히 건너뛴다 (R1-b)")
     void completeProcessing_dangerousIndependentlyCommittingExecute_createsInconsistencyAndRetryDoesNotReExecute() {
-        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
 
         // "위험한" execute() 대역: 실구현이 자기 자신도 REQUIRES_NEW로 독립 커밋한다고 가정하고,
         // "돈이 나갔다"를 흉내내는 마커를 완전히 별도 트랜잭션에 즉시 커밋한다.
@@ -444,7 +478,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
         // saveProcessing()을 직접 다시 호출하면 실제로 uk_ate_dup 유니크 제약에 막히는지 직접 증명한다 -
         // 재시도에서 execute()가 안 불린 게 정확히 이 제약 때문임을 추측이 아니라 사실로 확인한다
-        assertThatThrownBy(() -> itemProcessor.saveProcessing(autoTransfer(), today))
+        assertThatThrownBy(() -> itemProcessor.saveProcessing(autoTransfer()))
                 .isInstanceOf(DataIntegrityViolationException.class)
                 .satisfies(e -> assertThat(((DataIntegrityViolationException) e).getMostSpecificCause().getMessage())
                         .contains("uk_ate_dup"));
@@ -463,7 +497,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Test
     @DisplayName("재확정: transfer 테이블에 SUCCESS 행이 있으면 그 거래번호로 확정한다")
     void reconcileStuckExecution_found_success_marksSuccess() {
-        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
         when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
                 .thenReturn(Optional.of(new TransferLookupResult(
                         "20260315BT0000000001", ProcessResultStatus.SUCCESS, null)));
@@ -478,7 +512,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Test
     @DisplayName("재확정: transfer 테이블에 ERROR 행이 있으면 그 행의 실패사유·거래번호를 그대로 확정한다")
     void reconcileStuckExecution_found_error_marksErrorWithActualReason() {
-        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
         when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
                 .thenReturn(Optional.of(new TransferLookupResult(
                         "20260315BT0000000002", ProcessResultStatus.ERROR, "잔액 부족")));
@@ -494,7 +528,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Test
     @DisplayName("재확정: transfer 테이블에 행이 없으면 고정 사유로 ERROR 확정하고 거래번호는 null이다")
     void reconcileStuckExecution_notFound_marksErrorWithFixedReason() {
-        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
         when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
                 .thenReturn(Optional.empty());
 
@@ -509,7 +543,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Test
     @DisplayName("재확정: transfer 조회 결과가 SUCCESS/ERROR가 아닌 예상 밖 상태면 크래시 없이 고정 사유로 ERROR 확정하고 WARN 로그를 남긴다")
     void reconcileStuckExecution_unexpectedStatus_marksErrorWithFixedReasonAndLogsWarn(CapturedOutput output) {
-        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
         when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
                 .thenReturn(Optional.of(new TransferLookupResult(null, ProcessResultStatus.PROCESSING, null)));
 
@@ -527,7 +561,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Test
     @DisplayName("reconcileStuckExecutions()는 findAllProcessing()이 찾은 모든 회차를 각각 재확정한다")
     void reconcileStuckExecutions_reconcilesEveryStuckExecution() {
-        itemProcessor.saveProcessing(autoTransfer(), today);
+        itemProcessor.saveProcessing(autoTransfer());
         when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
                 .thenReturn(Optional.of(new TransferLookupResult(
                         "20260315BT0000000003", ProcessResultStatus.SUCCESS, null)));
@@ -541,7 +575,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Test
     @DisplayName("재확정 시에도 completeProcessing()과 동일하게 nextExecutionDate가 다음 주기로 갱신된다")
     void reconcileStuckExecution_advancesNextExecutionDate() {
-        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
         when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
                 .thenReturn(Optional.of(new TransferLookupResult(
                         "20260315BT0000000004", ProcessResultStatus.SUCCESS, null)));
@@ -584,7 +618,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
                 "메모", "받는메모", AutoTransferStatus.NORMAL,
                 LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0), afterManualSave.getVersion());
 
-        AutoTransferExecution saved = itemProcessor.saveProcessing(domainWithNearEndDate, today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(domainWithNearEndDate);
         when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
                 .thenReturn(Optional.of(new TransferLookupResult(
                         "20260315BT0000000005", ProcessResultStatus.SUCCESS, null)));
@@ -600,9 +634,9 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     void reconcileStuckExecution_threeConsecutiveFailures_logsWarn(CapturedOutput output) {
         when(transferLookupPort.findBySourceAndDate(any(), any())).thenReturn(Optional.empty());
 
-        reconcileOnDate(today.minusDays(2));
-        reconcileOnDate(today.minusDays(1));
-        reconcileOnDate(today);
+        reconcileOnDate();
+        reconcileOnDate();
+        reconcileOnDate();
 
         assertThat(output).contains("자동이체 연속 실패 감지").contains("autoTransferId=" + autoTransferId);
     }
@@ -610,14 +644,18 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Test
     @DisplayName("최근 3건 중 하나라도 SUCCESS면 연속 실패로 보지 않고 WARN 로그를 남기지 않는다")
     void reconcileStuckExecution_notAllRecentFailed_doesNotLogWarn(CapturedOutput output) {
-        when(transferLookupPort.findBySourceAndDate(autoTransferId, today.minusDays(2)))
+        // saveProcessing()이 executionDate로 nextExecutionDate를 쓰므로, 3번의 재확정은 실제로
+        // 3/15(today) -> 4/15 -> 5/15(cycleMonths=1, transferDay=15) 순으로 조회된다.
+        LocalDate secondCycleDate = LocalDate.of(2026, 4, 15);
+        LocalDate thirdCycleDate = LocalDate.of(2026, 5, 15);
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
                 .thenReturn(Optional.of(new TransferLookupResult("20260313BT0000000001", ProcessResultStatus.SUCCESS, null)));
-        when(transferLookupPort.findBySourceAndDate(autoTransferId, today.minusDays(1))).thenReturn(Optional.empty());
-        when(transferLookupPort.findBySourceAndDate(autoTransferId, today)).thenReturn(Optional.empty());
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, secondCycleDate)).thenReturn(Optional.empty());
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, thirdCycleDate)).thenReturn(Optional.empty());
 
-        reconcileOnDate(today.minusDays(2));
-        reconcileOnDate(today.minusDays(1));
-        reconcileOnDate(today);
+        reconcileOnDate();
+        reconcileOnDate();
+        reconcileOnDate();
 
         assertThat(output).doesNotContain("자동이체 연속 실패 감지");
     }
@@ -627,7 +665,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
             "nextExecutionDate도 한 번만 갱신된다 - saveIfStillProcessing() 가드가 없으면 두 번째가 stale 버전으로 " +
             "autoTransfer를 저장 시도해 OptimisticLockingFailureException이 터진다")
     void reconcileStuckExecution_concurrentDuplicateRun_secondRunSkipsSilently() {
-        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer(), today);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
         when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
                 .thenReturn(Optional.of(new TransferLookupResult(
                         "20260315BT0000000099", ProcessResultStatus.SUCCESS, null)));
@@ -658,7 +696,9 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     // autoTransfer()는 version을 0L로 고정해서 반환하는데, reconcileStuckExecution()이
     // 매번 autoTransferPersistencePort.save()로 버전을 올리기 때문에 이 헬퍼를 여러 번
     // 부르는 테스트(연속 실패 시나리오)에서는 DB의 최신 버전을 매번 다시 읽어와야 한다.
-    private void reconcileOnDate(LocalDate date) {
+    // saveProcessing()이 이제 nextExecutionDate를 executionDate로 쓰므로, 세 번을 연달아 부르면
+    // 실제 조회되는 날짜는 (호출 인자가 아니라) 매번 한 사이클씩(월 단위) 전진한다.
+    private void reconcileOnDate() {
         AutoTransferJpaEntity entity = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
         AutoTransfer current = AutoTransfer.reconstitute(
                 autoTransferId, customerId, entity.getWithdrawalAccountId(),
@@ -667,7 +707,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
                 "메모", "받는메모", entity.getStatus(),
                 LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0), entity.getVersion());
 
-        AutoTransferExecution saved = itemProcessor.saveProcessing(current, date);
+        AutoTransferExecution saved = itemProcessor.saveProcessing(current);
         itemProcessor.reconcileStuckExecution(new StuckExecution(current, saved));
     }
 

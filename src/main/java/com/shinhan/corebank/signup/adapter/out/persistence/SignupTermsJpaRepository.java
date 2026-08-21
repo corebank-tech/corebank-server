@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
+import java.util.Optional;
 
 // 회원가입 유형의 최신 약관 행을 조회한다.
 public interface SignupTermsJpaRepository
@@ -31,5 +32,10 @@ public interface SignupTermsJpaRepository
             """)
     List<SignupTermsJpaEntity> findLatestByTermsType(
             TermsType termsType
+    );
+
+    Optional<SignupTermsJpaEntity> findByTermsIdAndVersion(
+            Long termsId,
+            String version
     );
 }

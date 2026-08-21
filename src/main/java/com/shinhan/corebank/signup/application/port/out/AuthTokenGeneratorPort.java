@@ -10,4 +10,6 @@ public interface AuthTokenGeneratorPort {
     String generateEmailVerificationToken();
 
     String generateAccountAuthToken();
+
+    String generateTempSignupToken();
 }

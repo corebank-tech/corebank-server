@@ -20,6 +20,8 @@ import java.util.regex.Pattern;
 public class IdempotencyService {
 
     private final IdempotencyKeyJpaRepository repository;
+    private static final String ANONYMOUS_SIGNUP_ENDPOINT =
+            "POST /auth/signup/complete";
     private static final Pattern UUID_V4_PATTERN = Pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", Pattern.CASE_INSENSITIVE);
 
     @Transactional
@@ -31,7 +33,8 @@ public class IdempotencyService {
         // customerId 누락은 이후 INSERT에서 NOT NULL 제약 위반으로 터지는데,
         // 그 메시지에는 fk_idem_customer가 안 담겨서 DUPLICATE_REQUEST_IN_PROGRESS(409)로 잘못 응답하게 된다.
         // 요청 검증(toCommand())보다 begin()이 먼저 호출되므로 여기서 직접 막아야 한다.
-        if (customerId == null) {
+        if (customerId == null
+                && !ANONYMOUS_SIGNUP_ENDPOINT.equals(endpoint)) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING, "customerId는 필수입니다.");
         }
         String requestHash = sha256(requestBody);
@@ -65,9 +68,49 @@ public class IdempotencyService {
     }
 
     @Transactional
+    // 고객 생성 전 회원가입 완료 요청의 멱등 처리를 시작한다.
+    public IdempotencyResult beginAnonymous(
+            String key,
+            String endpoint,
+            String requestBody
+    ) {
+        if (!ANONYMOUS_SIGNUP_ENDPOINT.equals(endpoint)) {
+            throw new BusinessException(
+                    CommonErrorCode.INVALID_INPUT,
+                    "익명 멱등 처리를 지원하지 않는 API입니다."
+            );
+        }
+        return begin(key, null, endpoint, requestBody);
+    }
+
+    @Transactional
     // 완료
     public void complete(String key, short httpStatus, String responseSnapshot) {
         repository.completeIfProcessing(key, httpStatus, responseSnapshot);
+    }
+
+    @Transactional
+    // 고객 생성 전 예약한 익명 멱등키를 생성된 고객과 연결하면서 완료한다.
+    public void completeAnonymous(
+            String key,
+            Long customerId,
+            short httpStatus,
+            String responseSnapshot
+    ) {
+        if (customerId == null) {
+            throw new IllegalArgumentException("customerId must not be null");
+        }
+        int updated = repository.completeAnonymousIfProcessing(
+                key,
+                customerId,
+                httpStatus,
+                responseSnapshot
+        );
+        if (updated != 1) {
+            throw new IllegalStateException(
+                    "처리 중인 익명 멱등키를 완료하지 못했습니다."
+            );
+        }
     }
 
     @Transactional

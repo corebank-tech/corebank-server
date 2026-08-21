@@ -92,6 +92,34 @@ class AccountStatusAdapterTest extends IntegrationTestSupport {
         assertThat(adapter.belongsToCustomer(accountId, attackerId)).isFalse();
     }
 
+    @Test
+    @DisplayName("별칭이 설정된 계좌는 별칭을 반환한다")
+    void findAccountAlias_set_returnsAlias() {
+        Long customerId = insertCustomer();
+        Long accountId = insertAccount(customerId, nextAccountNumber(), "ACTIVE");
+        entityManager.createNativeQuery("UPDATE account SET alias = :alias WHERE account_id = :accountId")
+                .setParameter("alias", "월세계좌")
+                .setParameter("accountId", accountId)
+                .executeUpdate();
+
+        assertThat(adapter.findAccountAlias(accountId)).contains("월세계좌");
+    }
+
+    @Test
+    @DisplayName("별칭이 미설정이면 빈 값을 반환한다")
+    void findAccountAlias_notSet_returnsEmpty() {
+        Long customerId = insertCustomer();
+        Long accountId = insertAccount(customerId, nextAccountNumber(), "ACTIVE");
+
+        assertThat(adapter.findAccountAlias(accountId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 계좌ID는 빈 값을 반환한다")
+    void findAccountAlias_notFound_returnsEmpty() {
+        assertThat(adapter.findAccountAlias(999_999_999L)).isEmpty();
+    }
+
     private String nextAccountNumber() {
         return String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
     }
