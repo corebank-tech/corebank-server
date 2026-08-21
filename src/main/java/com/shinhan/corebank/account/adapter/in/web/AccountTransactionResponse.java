@@ -66,7 +66,9 @@ public record AccountTransactionResponse(
             Long depositAmount,
             String transactionContent,
             long balanceAfter,
-            TransferChannel channel
+            TransferChannel channel,
+            boolean reversed,
+            Long reversalId
     ) {
 
         private static TransactionItemResponse from(
@@ -78,16 +80,18 @@ public record AccountTransactionResponse(
                     item.occurredAt(),
                     item.transactionType(),
                     item.direction()
-                                    == LedgerDirection.WITHDRAWAL
+                            == LedgerDirection.WITHDRAWAL
                             ? item.amount()
                             : null,
                     item.direction()
-                                    == LedgerDirection.DEPOSIT
+                            == LedgerDirection.DEPOSIT
                             ? item.amount()
                             : null,
                     item.transactionContent(),
                     item.balanceAfter(),
-                    item.channel()
+                    item.channel(),
+                    item.reversed(),
+                    item.reversalId()
             );
         }
     }

@@ -798,8 +798,8 @@ class AccountControllerTest extends IntegrationTestSupport {
                                                 .transactionContent("점심")
                                                 .balanceAfter(980_000L)
                                                 .channel(TransferChannel.WB)
-                                                .reversed(false)
-                                                .reversalId(null)
+                                                .reversed(true)
+                                                .reversalId(2001L)
                                                 .build()
                                 )
                         )
@@ -919,6 +919,13 @@ class AccountControllerTest extends IntegrationTestSupport {
                 .andExpect(
                         jsonPath("$.data.items[0].channel")
                                 .value("WB")
+                ).andExpect(
+                        jsonPath("$.data.items[0].reversed")
+                                .value(true)
+                )
+                .andExpect(
+                        jsonPath("$.data.items[0].reversalId")
+                                .value(2001L)
                 );
     }
 
