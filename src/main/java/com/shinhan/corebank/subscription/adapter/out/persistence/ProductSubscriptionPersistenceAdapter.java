@@ -15,6 +15,7 @@ import java.util.Optional;
 public class ProductSubscriptionPersistenceAdapter
         implements ProductSubscriptionQueryPort, SaveProductSubscriptionPort, ExistingSubscriptionPort {
     private final ProductSubscriptionJpaRepository productSubscriptionJpaRepository;
+    private final ProductLockJpaRepository productLockJpaRepository;
 
     @Override
     public Optional<ProductSubscription> findByIdAndCustomerId(Long subscriptionId, Long customerId) {
@@ -31,6 +32,11 @@ public class ProductSubscriptionPersistenceAdapter
 
     @Override
     public boolean existsActiveSubscription(Long customerId, Long productId) {
+        // 1) product 행에 먼저 락을 걸어 같은 productId로 동시에 들어온 다른 트랜잭션을 이 트랜잭션이
+        //    끝날 때까지 대기시킨다(순서 직렬화).
+        // 2) 뒤이은 조회도 반드시 잠금 조회로 한다 — 평범한 SELECT는 REPEATABLE READ 스냅샷에 묶여
+        //    상대가 그 사이 커밋한 행을 못 본다(ProductSubscriptionJpaRepository 주석 참고).
+        productLockJpaRepository.findByIdForUpdate(productId);
         return productSubscriptionJpaRepository
                 .findAllByCustomerIdAndProductIdForUpdate(customerId, productId)
                 .stream()
