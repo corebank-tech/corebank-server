@@ -77,4 +77,42 @@ class TransferLookupPersistenceAdapterTest extends IntegrationTestSupport {
         // then
         assertThat(found).isEmpty();
     }
+
+    @Test
+    @DisplayName("거래번호로 저장된 이체가 있으면 도메인 객체를 반환한다")
+    void findByTransactionNumber_existingTransfer_returnsTransfer() {
+        // given
+        Transfer transfer = Transfer.create(
+                "20260820IT0000000099",
+                101L, 202L, "110222222222", "성춘향",
+                15000L, 0L,
+                TransferType.IMMEDIATE, TransferChannel.BT,
+                null, null, null,
+                "이체출금", "이체입금",
+                LocalDateTime.of(2026, 8, 20, 10, 0, 0)
+        );
+        transfer.complete(85000L, LocalDateTime.of(2026, 8, 20, 10, 0, 1));
+        saveAdapter.save(transfer);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        Optional<Transfer> found = lookupAdapter.findByTransactionNumber("20260820IT0000000099");
+
+        // then
+        assertThat(found).isPresent();
+        assertThat(found.get().getWithdrawalAccountId()).isEqualTo(101L);
+        assertThat(found.get().getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(found.get().getAmount()).isEqualTo(15000L);
+    }
+
+    @Test
+    @DisplayName("해당 거래번호로 저장된 이체가 없으면 빈 값을 반환한다")
+    void findByTransactionNumber_noTransfer_returnsEmpty() {
+        // when
+        Optional<Transfer> found = lookupAdapter.findByTransactionNumber("NOT-EXIST");
+
+        // then
+        assertThat(found).isEmpty();
+    }
 }

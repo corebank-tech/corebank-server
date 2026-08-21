@@ -309,6 +309,36 @@ class ProductSubscriptionValidationServiceTest {
     }
 
     @Test
+    @DisplayName("상품에 필수 약관이 하나도 없어도, 존재하지 않는 termsId로 동의를 보내면 PRD0202를 던진다")
+    void validate_agreedTermsWithUnknownTermsId_noProductTerms_throwsPrd0202() {
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(depositDetail(12, "3.20")); // terms=List.of() — 상품에 연결된 약관 없음
+        when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
+                .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
+
+        assertThatThrownBy(() -> service.validate(
+                command(6_000_000L, 12, List.of(new AgreedTerms(999_999L, "v1.0")), List.of())))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ProductErrorCode.TERMS_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("상품에 연결되지 않은 termsId로 동의를 보내면 PRD0202를 던진다")
+    void validate_agreedTermsWithTermsIdNotLinkedToProduct_throwsPrd0202() {
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(depositDetailWithRequiredTerms()); // TERMS_ID(301)만 연결됨
+        when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
+                .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
+
+        assertThatThrownBy(() -> service.validate(
+                command(6_000_000L, 12, List.of(new AgreedTerms(999_999L, "v1.0")), List.of())))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ProductErrorCode.TERMS_NOT_FOUND));
+    }
+
+    @Test
     @DisplayName("마스터데이터의 amountUnit이 0이어도 500이 아니라 단위 검증만 생략한다")
     void validate_zeroAmountUnitDoesNotThrow() {
         when(productQueryUseCase.getDetail(PRODUCT_ID)).thenReturn(brokenAmountUnitDetail());
