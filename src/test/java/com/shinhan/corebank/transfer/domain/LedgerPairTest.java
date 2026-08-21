@@ -289,4 +289,87 @@ class LedgerPairTest {
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
     }
+
+    @Nested
+    @DisplayName("forProductSubscription 팩토리 메서드")
+    class ForProductSubscriptionTest {
+
+        @Test
+        @DisplayName("상품가입 초입금은 transfer_id 없이 PRODUCT_SUBSCRIPTION 유형의 원장 쌍이 생성된다")
+        void createsPairWithoutTransferId() {
+            // given
+            String txNo = "20260821WB0000000001";
+            Long withdrawalAccountId = 101L;
+            Long depositAccountId = 202L;
+            LocalDateTime occurredAt = LocalDateTime.of(2026, 8, 21, 12, 0, 0);
+
+            // when
+            LedgerPair pair = LedgerPair.forProductSubscription(
+                    txNo,
+                    withdrawalAccountId, 9_500_000L,
+                    depositAccountId, 500_000L,
+                    500_000L,
+                    "상품가입", "상품가입",
+                    TransferChannel.WB, occurredAt);
+
+            // then
+            LedgerEntry withdrawal = pair.getWithdrawalEntry();
+            assertThat(withdrawal.getTransferId()).isNull();
+            assertThat(withdrawal.getTransactionType()).isEqualTo("PRODUCT_SUBSCRIPTION");
+            assertThat(withdrawal.getAccountId()).isEqualTo(withdrawalAccountId);
+            assertThat(withdrawal.getDirection()).isEqualTo(LedgerDirection.WITHDRAWAL);
+            assertThat(withdrawal.getBalanceAfter()).isEqualTo(9_500_000L);
+
+            LedgerEntry deposit = pair.getDepositEntry();
+            assertThat(deposit.getTransferId()).isNull();
+            assertThat(deposit.getTransactionType()).isEqualTo("PRODUCT_SUBSCRIPTION");
+            assertThat(deposit.getAccountId()).isEqualTo(depositAccountId);
+            assertThat(deposit.getDirection()).isEqualTo(LedgerDirection.DEPOSIT);
+            assertThat(deposit.getBalanceAfter()).isEqualTo(500_000L);
+
+            assertThat(withdrawal.getTransactionNumber()).isEqualTo(deposit.getTransactionNumber());
+            assertThat(withdrawal.getOccurredAt()).isEqualTo(deposit.getOccurredAt());
+        }
+
+        @ParameterizedTest
+        @ValueSource(longs = {0L, -1L})
+        @DisplayName("초입금액이 0 이하이면 BusinessException(INVALID_AMOUNT) 예외가 발생한다")
+        void throwsExceptionWhenAmountIsNotPositive(long invalidAmount) {
+            // given
+            LocalDateTime now = LocalDateTime.now();
+
+            // when & then
+            assertThatThrownBy(() -> LedgerPair.forProductSubscription(
+                    "20260821WB0000000001",
+                    101L, 9_500_000L,
+                    202L, 500_000L,
+                    invalidAmount,
+                    "상품가입", "상품가입",
+                    TransferChannel.WB, now))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_AMOUNT);
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {"   "})
+        @DisplayName("거래번호가 없으면(null/공백) BusinessException(REQUIRED_FIELD_MISSING) 예외가 발생한다")
+        void throwsExceptionWhenTransactionNumberIsBlank(String invalidTxNo) {
+            // given
+            LocalDateTime now = LocalDateTime.now();
+
+            // when & then
+            assertThatThrownBy(() -> LedgerPair.forProductSubscription(
+                    invalidTxNo,
+                    101L, 9_500_000L,
+                    202L, 500_000L,
+                    500_000L,
+                    "상품가입", "상품가입",
+                    TransferChannel.WB, now))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+    }
 }
