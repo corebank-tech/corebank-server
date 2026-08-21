@@ -1,9 +1,5 @@
 package com.shinhan.corebank.customer.application.service;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.when;
-
 import com.shinhan.corebank.account.application.port.in.AccountGroupCode;
 import com.shinhan.corebank.account.application.port.in.AccountOverviewQueryUseCase;
 import com.shinhan.corebank.account.application.port.in.AccountOverviewResult;
@@ -12,18 +8,22 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.customer.application.port.in.LoginStatusResult;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class LoginStatusQueryServiceTest {
@@ -114,7 +114,7 @@ class LoginStatusQueryServiceTest {
         // List.of()는 null 원소를 못 담아서(거래 이력 없는 계좌 테스트용) Arrays.asList()를 쓴다
         List<AccountOverviewResult.AccountItem> accounts = java.util.Arrays.asList(transactionDates).stream()
                 .map(date -> new AccountOverviewResult.AccountItem(
-                        1L, "계좌", "110000000001", AccountType.DEMAND_DEPOSIT, 10_000L,
+                        1L, "계좌", "110000000001", AccountType.DEMAND_DEPOSIT, 10_000L, 10_000L,
                         AccountStatus.ACTIVE, LocalDate.of(2026, 1, 1), date, null, true))
                 .toList();
         AccountOverviewResult.Group group = new AccountOverviewResult.Group(

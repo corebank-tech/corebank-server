@@ -148,6 +148,10 @@ class AccountControllerTest extends IntegrationTestSupport {
                 ).value(1_500_000L))
 
                 .andExpect(jsonPath(
+                        "$.data.items[0].accounts[0].availableBalance"
+                ).value(1_500_000L))
+
+                .andExpect(jsonPath(
                         "$.data.items[0].accounts[0].status"
                 ).value("ACTIVE"))
 

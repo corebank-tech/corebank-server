@@ -28,6 +28,7 @@ public record AccountOverviewResult(
             String accountNumber,
             AccountType accountType,
             long balance,
+            long availableBalance,
             AccountStatus status,
             LocalDate openedDate,
             LocalDateTime lastTransactionAt,

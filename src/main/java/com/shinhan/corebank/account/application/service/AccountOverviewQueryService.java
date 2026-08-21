@@ -153,6 +153,7 @@ public class AccountOverviewQueryService
                 account.getAccountNumber(),
                 account.getAccountType(),
                 account.getBalance(),
+                resolveAvailableBalance(account),
                 account.getStatus(),
                 account.getOpenedDate().toLocalDate(),
                 account.getLastTransactionAt(),
@@ -186,6 +187,18 @@ public class AccountOverviewQueryService
                 .getDetail(productId)
                 .getProduct()
                 .getProductName();
+    }
+
+    private long resolveAvailableBalance(Account account) {
+        if (account.getStatus() != AccountStatus.ACTIVE) {
+            return 0L;
+        }
+
+        if (account.isPasswordLocked()) {
+            return 0L;
+        }
+
+        return account.getBalance();
     }
 
     private boolean isTransferEnabled(Account account) {

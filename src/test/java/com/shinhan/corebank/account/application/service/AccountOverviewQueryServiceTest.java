@@ -514,8 +514,8 @@ class AccountOverviewQueryServiceTest {
         // when
         AccountOverviewResult result =
                 service.getOverview(
-                                CUSTOMER_ID
-                        );
+                        CUSTOMER_ID
+                );
 
         // then
         List<Long> accountIds =
@@ -567,6 +567,136 @@ class AccountOverviewQueryServiceTest {
         ).isEqualTo(
                 30_000L
         );
+    }
+
+    @Test
+    @DisplayName("활성 상태이고 비밀번호가 잠기지 않은 계좌는 잔액 전체를 출금가능금액으로 반환한다")
+    void returnsBalanceAsAvailableBalanceForActiveAccount() {
+        // given
+        Account account = createAccount(
+                101L,
+                "088100000001",
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                500_000L,
+                AccountStatus.ACTIVE,
+                null,
+                false
+        );
+
+        given(
+                accountPersistencePort
+                        .findAllByCustomerId(CUSTOMER_ID)
+        ).willReturn(List.of(account));
+
+        // when
+        AccountOverviewResult result =
+                service.getOverview(CUSTOMER_ID);
+
+        // then
+        AccountOverviewResult.AccountItem item =
+                result.items()
+                        .get(0)
+                        .accounts()
+                        .get(0);
+
+        assertThat(item.balance())
+                .isEqualTo(500_000L);
+
+        assertThat(item.availableBalance())
+                .isEqualTo(500_000L);
+    }
+
+    @Test
+    @DisplayName("거래정지 계좌는 잔액이 있어도 출금가능금액을 0으로 반환한다")
+    void returnsZeroAvailableBalanceForSuspendedAccount() {
+        // given
+        Account account = createAccount(
+                101L,
+                "088100000001",
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                500_000L,
+                AccountStatus.SUSPENDED,
+                null,
+                false
+        );
+
+        given(
+                accountPersistencePort
+                        .findAllByCustomerId(CUSTOMER_ID)
+        ).willReturn(List.of(account));
+
+        // when
+        AccountOverviewResult result =
+                service.getOverview(CUSTOMER_ID);
+
+        // then
+        AccountOverviewResult.AccountItem item =
+                result.items()
+                        .get(0)
+                        .accounts()
+                        .get(0);
+
+        assertThat(item.balance())
+                .isEqualTo(500_000L);
+
+        assertThat(item.availableBalance())
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("계좌비밀번호가 잠긴 계좌는 출금가능금액을 0으로 반환한다")
+    void returnsZeroAvailableBalanceForPasswordLockedAccount() {
+        // given
+        LocalDateTime openedDate =
+                LocalDateTime.of(2026, 1, 1, 10, 0);
+
+        Account account = Account.reconstitute(
+                101L,
+                "088100000001",
+                CUSTOMER_ID,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                500_000L,
+                AccountStatus.ACTIVE,
+                PASSWORD_HASH,
+                5,
+                true,
+                null,
+                null,
+                false,
+                null,
+                openedDate,
+                null,
+                null,
+                LocalDateTime.of(2026, 8, 10, 15, 0),
+                0L,
+                openedDate,
+                openedDate
+        );
+
+        given(
+                accountPersistencePort
+                        .findAllByCustomerId(CUSTOMER_ID)
+        ).willReturn(List.of(account));
+
+        // when
+        AccountOverviewResult result =
+                service.getOverview(CUSTOMER_ID);
+
+        // then
+        AccountOverviewResult.AccountItem item =
+                result.items()
+                        .get(0)
+                        .accounts()
+                        .get(0);
+
+        assertThat(item.balance())
+                .isEqualTo(500_000L);
+
+        assertThat(item.availableBalance())
+                .isZero();
     }
 
     private Account createAccount(

@@ -102,6 +102,12 @@ public record AccountOverviewResponse(
             @Schema(description = "계좌 잔액(원)", example = "2500000")
             long balance,
 
+            @Schema(
+                    description = "현재 출금가능금액(원). 출금 제한 상태이면 0",
+                    example = "2500000"
+            )
+            long availableBalance,
+
             @Schema(description = "계좌 상태", example = "ACTIVE")
             AccountStatus status,
 
@@ -141,6 +147,7 @@ public record AccountOverviewResponse(
                     account.accountNumber(),
                     account.accountType(),
                     account.balance(),
+                    account.availableBalance(),
                     account.status(),
                     account.openedDate(),
                     account.lastTransactionAt(),
