@@ -11,6 +11,10 @@ import lombok.NoArgsConstructor;
 // account 모듈의 AccountJpaEntity/AccountJpaRepository는 import하지 않는다 — transfer 모듈의
 // AccountLockJpaEntity와 동일한 관례. 이 어댑터는 절대 값을 쓰지 않으므로 모든 컬럼을
 // insertable/updatable=false로 막는다.
+//
+// 계좌번호 단건 조회(#177)는 account 공개 UseCase(AccountNumberQueryUseCase)로 이관했고, 이 매핑은
+// 가입 사전검증의 출금계좌 조회(AccountLookupPort) 전용으로 남아 있다. 두 경로를 어느 쪽으로
+// 통일할지는 후속 이슈에서 판단한다.
 @Entity
 @Table(name = "account")
 @Getter
