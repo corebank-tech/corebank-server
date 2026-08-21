@@ -121,7 +121,6 @@ class CustomerTest {
                 "01012345678",
                 loginFailureCount,
                 accountLocked,
-                "OPENED_DATE_ASC",
                 null,
                 null,
                 null,

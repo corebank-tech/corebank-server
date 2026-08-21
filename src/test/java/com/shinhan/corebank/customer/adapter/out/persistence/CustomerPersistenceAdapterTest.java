@@ -55,7 +55,6 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 "01012345678",
                 3,
                 false,
-                "OPENED_DATE_ASC",
                 lastLoginAt,
                 "127.0.0.1",
                 previousLoginAt,
@@ -94,8 +93,6 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 .isEqualTo("01012345678");
         assertThat(foundCustomer.getLoginFailureCount()).isEqualTo(3);
         assertThat(foundCustomer.isAccountLocked()).isFalse();
-        assertThat(foundCustomer.getDisplayOrderType())
-                .isEqualTo("OPENED_DATE_ASC");
         assertThat(foundCustomer.getLastLoginAt())
                 .isEqualTo(lastLoginAt);
         assertThat(foundCustomer.getLastLoginIp())
@@ -247,7 +244,6 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 "01012345678",
                 3,
                 false,
-                "OPENED_DATE_ASC",
                 LocalDateTime.of(2026, 8, 10, 9, 0),
                 "127.0.0.1",
                 LocalDateTime.of(2026, 8, 9, 9, 0),

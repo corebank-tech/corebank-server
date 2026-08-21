@@ -62,9 +62,6 @@ public class CustomerJpaEntity extends BaseEntity {
     @Column(name = "account_locked", nullable = false)
     private boolean accountLocked;
 
-    @Column(name = "display_order_type", nullable = false, length = 20)
-    private String displayOrderType;
-
     @Column(name = "last_login_at", columnDefinition = "DATETIME(6)")
     private LocalDateTime lastLoginAt;
 

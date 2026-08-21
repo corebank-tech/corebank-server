@@ -11,17 +11,17 @@ import org.junit.jupiter.api.Test;
 
 class AutoTransferListItemResponseTest {
 
-    private AutoTransferListItem item(String fromAlias) {
+    private AutoTransferListItem item(String fromAlias, boolean cancelable) {
         return new AutoTransferListItem(
                 1L, "110987654321", fromAlias, "홍길동", 100_000L,
                 LocalDate.of(2026, 8, 20), LocalDate.of(2027, 2, 20), 15, 1,
-                "내메모", AutoTransferStatus.NORMAL, LocalDateTime.of(2026, 8, 1, 10, 0));
+                "내메모", AutoTransferStatus.NORMAL, cancelable, LocalDateTime.of(2026, 8, 1, 10, 0));
     }
 
     @Test
     @DisplayName("fromAlias는 AutoTransferListItem에 담긴 값을 그대로 반영한다")
     void reflectsFromAlias() {
-        AutoTransferListItemResponse response = AutoTransferListItemResponse.from(item("월세계좌"));
+        AutoTransferListItemResponse response = AutoTransferListItemResponse.from(item("월세계좌", true));
 
         assertThat(response.fromAlias()).isEqualTo("월세계좌");
     }
@@ -29,7 +29,7 @@ class AutoTransferListItemResponseTest {
     @Test
     @DisplayName("별칭이 없으면 fromAlias는 null로 전달된다")
     void fromAliasIsNullWhenNotSet() {
-        AutoTransferListItemResponse response = AutoTransferListItemResponse.from(item(null));
+        AutoTransferListItemResponse response = AutoTransferListItemResponse.from(item(null, true));
 
         assertThat(response.fromAlias()).isNull();
     }
@@ -37,8 +37,18 @@ class AutoTransferListItemResponseTest {
     @Test
     @DisplayName("registeredAt은 AutoTransferListItem의 값을 그대로 노출한다")
     void reflectsRegisteredAt() {
-        AutoTransferListItemResponse response = AutoTransferListItemResponse.from(item(null));
+        AutoTransferListItemResponse response = AutoTransferListItemResponse.from(item(null, true));
 
         assertThat(response.registeredAt()).isEqualTo(LocalDateTime.of(2026, 8, 1, 10, 0));
+    }
+
+    @Test
+    @DisplayName("cancelable은 AutoTransferListItem에 담긴 값을 그대로 반영한다 (#264)")
+    void reflectsCancelable() {
+        AutoTransferListItemResponse cancelableResponse = AutoTransferListItemResponse.from(item(null, true));
+        AutoTransferListItemResponse notCancelableResponse = AutoTransferListItemResponse.from(item(null, false));
+
+        assertThat(cancelableResponse.cancelable()).isTrue();
+        assertThat(notCancelableResponse.cancelable()).isFalse();
     }
 }

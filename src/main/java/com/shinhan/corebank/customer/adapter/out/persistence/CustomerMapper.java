@@ -26,7 +26,6 @@ public class CustomerMapper {
                 entity.getPhoneNumber(),
                 entity.getLoginFailureCount(),
                 entity.isAccountLocked(),
-                entity.getDisplayOrderType(),
                 entity.getLastLoginAt(),
                 entity.getLastLoginIp(),
                 entity.getPreviousLoginAt(),
@@ -54,7 +53,6 @@ public class CustomerMapper {
                 .phoneNumber(customer.getPhoneNumber())
                 .loginFailureCount(customer.getLoginFailureCount())
                 .accountLocked(customer.isAccountLocked())
-                .displayOrderType(customer.getDisplayOrderType())
                 .lastLoginAt(customer.getLastLoginAt())
                 .lastLoginIp(customer.getLastLoginIp())
                 .previousLoginAt(customer.getPreviousLoginAt())

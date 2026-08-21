@@ -184,8 +184,7 @@ class CustomerLoginFailureConcurrencyIntegrationTest
                     account_locked,
                     password_hash,
                     email,
-                    phone_number,
-                    display_order_type
+                    phone_number
                 FROM customer
                 WHERE customer_id = ?
                 """,
@@ -194,8 +193,7 @@ class CustomerLoginFailureConcurrencyIntegrationTest
                         resultSet.getBoolean("account_locked"),
                         resultSet.getString("password_hash"),
                         resultSet.getString("email"),
-                        resultSet.getString("phone_number"),
-                        resultSet.getString("display_order_type")
+                        resultSet.getString("phone_number")
                 ),
                 customerId
         );
@@ -207,8 +205,6 @@ class CustomerLoginFailureConcurrencyIntegrationTest
         assertThat(persistedState.passwordHash()).isEqualTo(PASSWORD_HASH);
         assertThat(persistedState.email()).isEqualTo(EMAIL);
         assertThat(persistedState.phoneNumber()).isEqualTo("01012345678");
-        assertThat(persistedState.displayOrderType())
-                .isEqualTo("OPENED_DATE_ASC");
     }
 
     private void deleteTestCustomer() {
@@ -245,8 +241,7 @@ class CustomerLoginFailureConcurrencyIntegrationTest
             boolean accountLocked,
             String passwordHash,
             String email,
-            String phoneNumber,
-            String displayOrderType
+            String phoneNumber
     ) {
     }
 }
