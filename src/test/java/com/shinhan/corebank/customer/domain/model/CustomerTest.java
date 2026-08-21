@@ -104,6 +104,39 @@ class CustomerTest {
         assertThat(customer.getLoginFailureCount()).isZero();
     }
 
+    @Test
+    @DisplayName("검증된 휴대폰 번호와 이메일로 고객 연락처를 변경한다")
+    void changesContactInfo() {
+        Customer customer = restoreCustomer(0, false);
+        LocalDateTime updatedAt =
+                LocalDateTime.of(2026, 8, 21, 16, 20);
+
+        customer.changeContactInfo(
+                "01087654321",
+                "newmail@corebank.com",
+                updatedAt
+        );
+
+        assertThat(customer.getPhoneNumber()).isEqualTo("01087654321");
+        assertThat(customer.getEmail()).isEqualTo("newmail@corebank.com");
+        assertThat(customer.getUpdatedAt()).isEqualTo(updatedAt);
+    }
+
+    @Test
+    @DisplayName("연락처 변경 필수값이 없으면 고객 상태를 변경하지 않는다")
+    void rejectsMissingContactInfo() {
+        Customer customer = restoreCustomer(0, false);
+
+        assertThatThrownBy(() -> customer.changeContactInfo(
+                null,
+                "newmail@corebank.com",
+                LocalDateTime.now()
+        )).isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(customer.getPhoneNumber()).isEqualTo("01012345678");
+        assertThat(customer.getEmail()).isEqualTo("user01@example.com");
+    }
+
     private Customer restoreCustomer(
             int loginFailureCount,
             boolean accountLocked

@@ -27,6 +27,9 @@ public interface CustomerPersistencePort {
     // 로그인 성공 관련 필드만 갱신
     void updateLoginSuccessState(Customer customer);
 
+    // 고객의 휴대폰 번호와 이메일을 갱신하고 저장 결과를 반환한다.
+    Customer updateContactInfo(Customer customer);
+
     // customerId가 없는 신규 고객만 저장
     Customer save(Customer customer);
 }
