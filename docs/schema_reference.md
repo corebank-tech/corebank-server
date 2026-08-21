@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 25개 비즈니스 테이블 + 1개 PK 채번 전용 테이블 (`ledger_entry_id_sequence`) · 257개 컬럼
+**대상**: 25개 비즈니스 테이블 + 1개 PK 채번 전용 테이블 (`ledger_entry_id_sequence`) · 256개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -25,33 +25,33 @@
 ## 테이블 목록
 
 | # | 테이블 | 설명 | 담당 | 컬럼 |
-| --- | --- | --- | --- | --- |
-| 1 | `customer` | 고객 | P6 | 17 |
+| --- | --- | --- | --- |----|
+| 1 | `customer` | 고객 | P6 | 16 |
 | 2 | `terms` | 약관 | P6 | 10 |
-| 3 | `customer_terms_agreement` | 회원가입 약관 동의 | P6 | 4 |
+| 3 | `customer_terms_agreement` | 회원가입 약관 동의 | P6 | 4  |
 | 4 | `verification_request` | 인증 요청 | P6 | 13 |
-| 5 | `notification` | 알림 | P6 | 9 |
+| 5 | `notification` | 알림 | P6 | 9  |
 | 6 | `product` | 상품 | P3 | 22 |
-| 7 | `product_rate_tier` | 상품 기간별 금리 | P3 | 3 |
-| 8 | `product_preferential_rate` | 상품 우대금리 | P3 | 4 |
-| 9 | `product_terms` | 상품-약관 연결 | P3 | 2 |
+| 7 | `product_rate_tier` | 상품 기간별 금리 | P3 | 3  |
+| 8 | `product_preferential_rate` | 상품 우대금리 | P3 | 4  |
+| 9 | `product_terms` | 상품-약관 연결 | P3 | 2  |
 | 10 | `account` | 계좌 | P2 | 21 |
-| 11 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4 |
+| 11 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4  |
 | 12 | `transfer` | 이체 거래 | P4 | 21 |
 | 13 | `ledger_entry` | 원장 | P4 | 13 |
-| 14 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1 |
-| 15 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6 |
-| 16 | `transfer_limit` | 이체한도 | P1 | 5 |
-| 17 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 5 |
-| 18 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 6 |
+| 14 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1  |
+| 15 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6  |
+| 16 | `transfer_limit` | 이체한도 | P1 | 5  |
+| 17 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 5  |
+| 18 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 6  |
 | 19 | `product_subscription` | 상품가입 | P3 | 18 |
-| 20 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5 |
+| 20 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5  |
 | 21 | `scheduled_transfer` | 예약이체 | P3 | 17 |
 | 22 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
-| 23 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8 |
-| 24 | `idempotency_key` | 멱등키 | P5 | 9 |
-| 25 | `audit_log` | 감사 로그 | P5 | 8 |
-| 26 | `common_code` | 공통코드 | P5 | 8 |
+| 23 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8  |
+| 24 | `idempotency_key` | 멱등키 | P5 | 9  |
+| 25 | `audit_log` | 감사 로그 | P5 | 8  |
+| 26 | `common_code` | 공통코드 | P5 | 8  |
 
 ---
 
@@ -74,7 +74,6 @@
 | `phone_number` | `VARCHAR(11)` |  | X |  | 휴대폰 번호. 하이픈 없이 숫자만 저장하고 응답 시 중간 4자리를 마스킹한다 |
 | `login_failure_count` | `TINYINT` |  | X | `0` | 로그인 비밀번호 연속 오류 횟수. 5회 도달 시 `account_locked`가 TRUE로 바뀐다 (ATH0102) |
 | `account_locked` | `BOOLEAN` |  | X | `FALSE` | 계정 잠금 여부. `login_failure_count` 5회 도달 시 TRUE, 관리자 잠금 해제로 FALSE 복귀 |
-| `display_order_type` | `VARCHAR(20)` |  | X | `'OPENED_DATE_ASC'` | 계좌 목록 정렬 방식. `CUSTOM`(사용자 지정 순서) / `OPENED_DATE_ASC`(개설일 오름차순) |
 | `last_login_at` | `DATETIME(6)` |  | O |  | 가장 최근 로그인 시각. 대시보드의 `currentLoginAt` |
 | `last_login_ip` | `VARCHAR(45)` |  | O |  | 가장 최근 로그인 IP. 대시보드의 `currentLoginIp` |
 | `previous_login_at` | `DATETIME(6)` |  | O |  | 직전 로그인 시각. 대시보드의 `previousLoginAt`. 부정 접속을 고객이 알아채는 단서 |

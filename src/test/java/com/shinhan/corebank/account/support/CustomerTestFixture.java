@@ -41,7 +41,6 @@ public class CustomerTestFixture {
                     phone_number,
                     login_failure_count,
                     account_locked,
-                    display_order_type,
                     last_login_at,
                     last_login_ip,
                     previous_login_at,
@@ -49,7 +48,7 @@ public class CustomerTestFixture {
                     joined_at,
                     created_at,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 userId,
                 PASSWORD_HASH,
@@ -59,7 +58,6 @@ public class CustomerTestFixture {
                 "01012345678",
                 0,
                 false,
-                "OPENED_DATE_ASC",
                 null,
                 null,
                 null,

@@ -431,8 +431,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 |  | `WITHDRAWAL` | 출금 |
 | `TransactionSortOrder` | `LATEST` | 최신순 |
 |  | `OLDEST` | 과거순 |
-| `AccountDisplayOrder` | `CUSTOM` | 사용자 지정 순서 |
-|  | `OPENED_DATE_ASC` | 개설일 오름차순 |
+
 
 ### 5-3. 상품 — P3
 
