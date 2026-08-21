@@ -9,7 +9,7 @@ import java.time.LocalDate;
 public record ScheduledTransferRegisterRequest(
         @Schema(description = "출금계좌 ID (내 계좌)", example = "1001")
         Long withdrawalAccountId,
-        @Schema(description = "입금계좌번호 (하이픈 없이, 당행 전용)", example = "11012345678901")
+        @Schema(description = "입금계좌번호 (하이픈 없이, 당행 전용)", example = "110123456789")
         String depositAccountNumber,
         @Schema(description = "예금주명", example = "홍길동")
         String payeeName,
