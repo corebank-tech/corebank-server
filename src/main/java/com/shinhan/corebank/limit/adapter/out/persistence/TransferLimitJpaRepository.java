@@ -22,4 +22,16 @@ public interface TransferLimitJpaRepository extends JpaRepository<TransferLimitJ
         WHERE l.customerId = :customerId
         """)
     Optional<TransferLimitJpaEntity> findByCustomerIdForUpdate(@Param("customerId") Long customerId);
+
+    /**
+     * 이체 실행(REQ-TRSF-010·011) 경로에서 S-Lock 을 잡고 조회한다. 이체는 한도를 읽기만 하므로
+     * 이체끼리는 서로 막지 않고, 한도 변경의 X-Lock 만 대기시킨다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("""
+        SELECT l
+        FROM TransferLimitJpaEntity l
+        WHERE l.customerId = :customerId
+        """)
+    Optional<TransferLimitJpaEntity> findByCustomerIdForShare(@Param("customerId") Long customerId);
 }
