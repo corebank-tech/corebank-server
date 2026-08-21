@@ -14,6 +14,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Map;
 import java.util.Optional;
 
+import static java.time.Duration.ofMillis;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
@@ -50,5 +52,24 @@ class OtpIssueServiceTest {
         ordered.verify(processor).issue(command);
         ordered.verify(issueLockPort).release(1L, "owner-1");
         assertThat(result).isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("잠금 재시도 간격은 지수 증가하고 200ms를 넘지 않는다")
+    void capsExponentialBackoffAtTwoHundredMilliseconds() {
+        long interval = ofMillis(10).toNanos();
+
+        interval = OtpIssueService.nextRetryIntervalNanos(interval);
+        assertThat(interval).isEqualTo(ofMillis(20).toNanos());
+        interval = OtpIssueService.nextRetryIntervalNanos(interval);
+        assertThat(interval).isEqualTo(ofMillis(40).toNanos());
+        interval = OtpIssueService.nextRetryIntervalNanos(interval);
+        assertThat(interval).isEqualTo(ofMillis(80).toNanos());
+        interval = OtpIssueService.nextRetryIntervalNanos(interval);
+        assertThat(interval).isEqualTo(ofMillis(160).toNanos());
+        interval = OtpIssueService.nextRetryIntervalNanos(interval);
+        assertThat(interval).isEqualTo(ofMillis(200).toNanos());
+        interval = OtpIssueService.nextRetryIntervalNanos(interval);
+        assertThat(interval).isEqualTo(ofMillis(200).toNanos());
     }
 }

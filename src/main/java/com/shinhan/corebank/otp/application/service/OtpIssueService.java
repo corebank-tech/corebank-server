@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.LockSupport;
 
 // 고객별 발급 잠금을 획득한 뒤 신규 Mock OTP 발급을 위임한다.
@@ -22,7 +23,10 @@ public class OtpIssueService implements IssueOtpUseCase {
 
     private static final Duration LOCK_TTL = Duration.ofSeconds(30);
     private static final Duration LOCK_WAIT_TIMEOUT = Duration.ofSeconds(5);
-    private static final long RETRY_INTERVAL_NANOS = Duration.ofMillis(10).toNanos();
+    private static final long INITIAL_RETRY_INTERVAL_NANOS =
+            Duration.ofMillis(10).toNanos();
+    private static final long MAX_RETRY_INTERVAL_NANOS =
+            Duration.ofMillis(200).toNanos();
 
     private final OtpIssueLockPort issueLockPort;
     private final OtpIssueProcessor processor;
@@ -46,19 +50,50 @@ public class OtpIssueService implements IssueOtpUseCase {
 
     private String acquireLock(Long customerId) {
         long deadline = System.nanoTime() + LOCK_WAIT_TIMEOUT.toNanos();
+        long retryIntervalNanos = INITIAL_RETRY_INTERVAL_NANOS;
         do {
             Optional<String> ownerId = issueLockPort.tryAcquire(customerId, LOCK_TTL);
             if (ownerId.isPresent()) {
                 return ownerId.get();
             }
-            LockSupport.parkNanos(RETRY_INTERVAL_NANOS);
+
+            long remainingNanos = deadline - System.nanoTime();
+            if (remainingNanos <= 0) {
+                break;
+            }
+            // 동일 고객의 동시 요청이 Redis를 고정 간격으로 두드리지 않도록
+            // 최대 200ms의 지수 backoff와 jitter를 적용한다.
+            long waitNanos = Math.min(
+                    remainingNanos,
+                    jitteredWaitNanos(retryIntervalNanos)
+            );
+            LockSupport.parkNanos(waitNanos);
             if (Thread.currentThread().isInterrupted()) {
                 Thread.currentThread().interrupt();
                 throw new BusinessException(CommonErrorCode.CONCURRENT_MODIFICATION);
             }
+            retryIntervalNanos = nextRetryIntervalNanos(retryIntervalNanos);
         } while (System.nanoTime() < deadline);
 
         throw new BusinessException(CommonErrorCode.CONCURRENT_MODIFICATION);
+    }
+
+    static long nextRetryIntervalNanos(long currentIntervalNanos) {
+        return Math.min(currentIntervalNanos * 2, MAX_RETRY_INTERVAL_NANOS);
+    }
+
+    private long jitteredWaitNanos(long retryIntervalNanos) {
+        long lowerBound = Math.max(
+                INITIAL_RETRY_INTERVAL_NANOS,
+                retryIntervalNanos - retryIntervalNanos / 4
+        );
+        if (lowerBound == retryIntervalNanos) {
+            return retryIntervalNanos;
+        }
+        return ThreadLocalRandom.current().nextLong(
+                lowerBound,
+                retryIntervalNanos + 1
+        );
     }
 
     private void releaseLock(Long customerId, String ownerId) {

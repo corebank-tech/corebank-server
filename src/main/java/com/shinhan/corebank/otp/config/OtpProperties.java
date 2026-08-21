@@ -8,6 +8,7 @@ import java.time.Duration;
 @ConfigurationProperties(prefix = "app.otp")
 public record OtpProperties(
         Duration codeTtl,
-        Duration authTokenTtl
+        Duration authTokenTtl,
+        boolean exposeCode
 ) {
 }

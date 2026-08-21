@@ -6,6 +6,7 @@ import com.shinhan.corebank.otp.application.port.in.IssueOtpResult;
 import com.shinhan.corebank.otp.application.port.in.IssueOtpUseCase;
 import com.shinhan.corebank.otp.application.port.in.VerifyOtpResult;
 import com.shinhan.corebank.otp.application.port.in.VerifyOtpUseCase;
+import com.shinhan.corebank.otp.config.OtpProperties;
 import com.shinhan.corebank.otp.domain.exception.OtpVerificationFailedException;
 import com.shinhan.corebank.otp.domain.model.OtpAttemptResult;
 import org.junit.jupiter.api.DisplayName;
@@ -36,10 +37,12 @@ class OtpControllerTest extends IntegrationTestSupport {
 
     @MockitoBean IssueOtpUseCase issueOtpUseCase;
     @MockitoBean VerifyOtpUseCase verifyOtpUseCase;
+    @MockitoBean OtpProperties otpProperties;
 
     @Test
     @DisplayName("OTP 발급 성공 응답에 요청 ID와 6자리 번호 및 180초를 반환한다")
     void issuesOtpSuccessfully() throws Exception {
+        given(otpProperties.exposeCode()).willReturn(true);
         given(issueOtpUseCase.issue(any())).willReturn(
                 new IssueOtpResult("OTP_REQ_test", "012345", 180)
         );
@@ -54,6 +57,25 @@ class OtpControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.message").value("OTP가 성공적으로 발급되었습니다."))
                 .andExpect(jsonPath("$.data.otpRequestId").value("OTP_REQ_test"))
                 .andExpect(jsonPath("$.data.otpCode").value("012345"))
+                .andExpect(jsonPath("$.data.expiresIn").value(180));
+    }
+
+    @Test
+    @DisplayName("OTP 번호 노출이 꺼지면 발급 성공 응답에서 평문 번호를 제외한다")
+    void omitsOtpCodeWhenExposureIsDisabled() throws Exception {
+        given(otpProperties.exposeCode()).willReturn(false);
+        given(issueOtpUseCase.issue(any())).willReturn(
+                new IssueOtpResult("OTP_REQ_test", "012345", 180)
+        );
+
+        mockMvc.perform(post("/otp/issue")
+                        .with(authentication(authenticationOf(1L)))
+                        .with(csrf())
+                        .contentType(APPLICATION_JSON)
+                        .content(issueBody()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.otpRequestId").value("OTP_REQ_test"))
+                .andExpect(jsonPath("$.data.otpCode").doesNotExist())
                 .andExpect(jsonPath("$.data.expiresIn").value(180));
     }
 

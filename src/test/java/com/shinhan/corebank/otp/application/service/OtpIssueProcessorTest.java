@@ -49,7 +49,11 @@ class OtpIssueProcessorTest {
                 tokenGeneratorPort,
                 codeHashPort,
                 canonicalizerPort,
-                new OtpProperties(Duration.ofMinutes(3), Duration.ofMinutes(5)),
+                new OtpProperties(
+                        Duration.ofMinutes(3),
+                        Duration.ofMinutes(5),
+                        true
+                ),
                 Clock.fixed(Instant.parse("2026-08-20T01:00:00Z"), ZoneOffset.UTC)
         );
         Map<String, Object> data = Map.of("amount", 100_000L);

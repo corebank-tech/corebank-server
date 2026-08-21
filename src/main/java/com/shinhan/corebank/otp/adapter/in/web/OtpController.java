@@ -6,6 +6,7 @@ import com.shinhan.corebank.otp.application.port.in.IssueOtpResult;
 import com.shinhan.corebank.otp.application.port.in.IssueOtpUseCase;
 import com.shinhan.corebank.otp.application.port.in.VerifyOtpResult;
 import com.shinhan.corebank.otp.application.port.in.VerifyOtpUseCase;
+import com.shinhan.corebank.otp.config.OtpProperties;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,6 +23,7 @@ public class OtpController {
     private final CurrentCustomerProvider currentCustomerProvider;
     private final IssueOtpUseCase issueOtpUseCase;
     private final VerifyOtpUseCase verifyOtpUseCase;
+    private final OtpProperties otpProperties;
 
     @PostMapping("/issue")
     public ApiResponse<IssueOtpResponse> issue(
@@ -30,7 +32,7 @@ public class OtpController {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         IssueOtpResult result = issueOtpUseCase.issue(request.toCommand(customerId));
         return ApiResponse.success(
-                IssueOtpResponse.from(result),
+                IssueOtpResponse.from(result, otpProperties.exposeCode()),
                 "OTP가 성공적으로 발급되었습니다."
         );
     }
