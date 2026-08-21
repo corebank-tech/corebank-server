@@ -7,7 +7,6 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.domain.exception.AccountPasswordErrorCode;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.exception.ErrorCode;
 import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
@@ -27,6 +26,8 @@ import com.shinhan.corebank.subscription.domain.SubscriptionTermsAgreement;
 import com.shinhan.corebank.subscription.domain.SubscriptionTermsAgreementId;
 import com.shinhan.corebank.subscription.domain.SubscriptionValidation;
 import com.shinhan.corebank.subscription.domain.SubscriptionViolation;
+import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase;
+import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase.ProductSubscriptionDepositCommand;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -42,7 +43,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ProductSubscriptionExecuteService implements ProductSubscriptionExecuteUseCase {
 
-    // ProductSubscriptionValidationService와 동일한 이유(컨테이너 TZ UTC 고정) — 개설일도 KST 기준으로 맞춘다.
+    // ProductSubscriptionValidationService와 동일한 이유 — 개설일도 주입 Clock의 존에 기대지 않고 KST로 맞춘다.
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final ProductSubscriptionAuthTokenVerificationPort authTokenVerificationPort;
@@ -50,6 +51,7 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
     private final ExistingSubscriptionPort existingSubscriptionPort;
     private final ProductSubscriptionValidationUseCase productSubscriptionValidationUseCase;
     private final ProductAccountOpeningUseCase productAccountOpeningUseCase;
+    private final ProductSubscriptionDepositUseCase productSubscriptionDepositUseCase;
     private final SaveProductSubscriptionPort saveProductSubscriptionPort;
     private final SaveTermsAgreementPort saveTermsAgreementPort;
     private final PasswordEncoder passwordEncoder;
@@ -66,14 +68,6 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
         }
 
         Product product = productQueryUseCase.getDetail(command.productId()).getProduct();
-
-        // 원장 기표 엔진(P4)에 상품가입용 인터페이스가 아직 없어(docs/personal/
-        // P4_INTERFACE_REQUEST_SUBSCRIPTION_LEDGER.md) 초입금이 필요한 정기예금은 이번 범위에서
-        // 지원하지 않는다(2026-08-20 사용자 결정). 정기적금은 초입금 자체가 없어 이 제약과 무관하다.
-        if (product.getProductGroup() != ProductGroup.SAVINGS) {
-            throw new BusinessException(CommonErrorCode.INVALID_INPUT,
-                    "정기예금 가입은 아직 지원하지 않습니다. 정기적금만 가능합니다.");
-        }
 
         if (Boolean.TRUE.equals(product.getSingleAccountLimit())
                 && existingSubscriptionPort.existsActiveSubscription(command.customerId(), command.productId())) {
@@ -99,8 +93,21 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
                 command.otpAuthToken(), command.customerId(), command.withdrawalAccountId());
 
         AccountOpeningResult accountOpeningResult = productAccountOpeningUseCase.open(new ProductAccountOpeningCommand(
-                command.customerId(), command.productId(), AccountType.INSTALLMENT_SAVINGS,
+                command.customerId(), command.productId(), toAccountType(product.getProductGroup()),
                 passwordEncoder.encode(command.newAccountPassword()), validation.getMaturityDate()));
+
+        // 정기예금(DEPOSIT)은 가입 시점에 목돈을 한 번에 넣는 거치식이라 초입금 기표가 필요하다.
+        // 정기적금(SAVINGS)은 다음 회차부터 자동이체로 납입하므로 가입 시점에 옮길 자금이 없어
+        // 거래번호도 계속 null이다.
+        String transactionNumber = null;
+        if (product.getProductGroup() == ProductGroup.DEPOSIT) {
+            transactionNumber = productSubscriptionDepositUseCase.deposit(
+                    new ProductSubscriptionDepositCommand(
+                            command.withdrawalAccountId(),
+                            accountOpeningResult.accountId(),
+                            command.subscriptionAmount()))
+                    .transactionNumber();
+        }
 
         LocalDateTime now = LocalDateTime.now(clock);
         ProductSubscription saved = saveProductSubscriptionPort.save(ProductSubscription.builder()
@@ -116,7 +123,7 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
                 .maturityHandling(MaturityHandling.TRANSFER)
                 .expectedMaturityAmount(validation.getExpectedMaturityAmount())
                 .status(ProcessResultStatus.SUCCESS)
-                .transactionNumber(null)
+                .transactionNumber(transactionNumber)
                 .openedDate(LocalDate.now(clock.withZone(KST)))
                 .maturityDate(validation.getMaturityDate())
                 .subscribedAt(now)
@@ -139,6 +146,12 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
                 saved.getStatus(),
                 saved.getTransactionNumber(),
                 saved.getSubscribedAt());
+    }
+
+    private AccountType toAccountType(ProductGroup productGroup) {
+        return productGroup == ProductGroup.DEPOSIT
+                ? AccountType.TIME_DEPOSIT
+                : AccountType.INSTALLMENT_SAVINGS;
     }
 
     private List<AgreedTerms> toValidationAgreedTerms(List<ProductSubscriptionExecuteCommand.AgreedTerms> agreedTerms) {
