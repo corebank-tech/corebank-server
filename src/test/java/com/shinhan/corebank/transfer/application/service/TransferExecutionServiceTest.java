@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
@@ -21,6 +22,7 @@ import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferAuthTokenVerificationPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferOtpVerificationPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.Transfer;
@@ -35,6 +37,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -71,6 +74,14 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     private TransferAuthTokenVerificationPort transferAuthTokenVerificationPort;
 
     @Autowired
+    private TransferOtpVerificationPort transferOtpVerificationPort;
+
+    // 이체 실행은 실제 OTP 발급 없이 otp.api 경계만 검증한다 — OTP 자체의 발급/소비 로직은
+    // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
+    @MockitoBean
+    private OtpAuthTokenVerifier otpAuthTokenVerifier;
+
+    @Autowired
     private TransferSequencePort transferSequencePort;
 
     @Autowired
@@ -102,6 +113,7 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
                 .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110222222222")
                 .amount(30000L)
@@ -301,6 +313,7 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 accountLockPort,
                 transferLimitPort,
                 transferAuthTokenVerificationPort,
+                transferOtpVerificationPort,
                 transferSequencePort,
                 transferSavePort,
                 new PreCheckBarrierTransferLookupPort(transferLookupPort, bothPreChecksEmpty),
@@ -382,6 +395,7 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
                 .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110222222222")
                 .amount(150000L) // 잔액(100,000)을 초과하는 금액

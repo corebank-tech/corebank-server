@@ -18,6 +18,7 @@ import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTrans
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
 import com.shinhan.corebank.transfer.application.port.out.TransferAuthTokenVerificationPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferOtpVerificationPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
@@ -60,6 +61,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private final AccountLockPort accountLockPort;
     private final TransferLimitPort transferLimitPort;
     private final TransferAuthTokenVerificationPort transferAuthTokenVerificationPort;
+    private final TransferOtpVerificationPort transferOtpVerificationPort;
     private final TransferSequencePort transferSequencePort;
     private final TransferSavePort transferSavePort;
     private final TransferLookupPort transferLookupPort;
@@ -71,6 +73,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             AccountLockPort accountLockPort,
             TransferLimitPort transferLimitPort,
             TransferAuthTokenVerificationPort transferAuthTokenVerificationPort,
+            TransferOtpVerificationPort transferOtpVerificationPort,
             TransferSequencePort transferSequencePort,
             TransferSavePort transferSavePort,
             TransferLookupPort transferLookupPort,
@@ -81,6 +84,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         this.accountLockPort = accountLockPort;
         this.transferLimitPort = transferLimitPort;
         this.transferAuthTokenVerificationPort = transferAuthTokenVerificationPort;
+        this.transferOtpVerificationPort = transferOtpVerificationPort;
         this.transferSequencePort = transferSequencePort;
         this.transferSavePort = transferSavePort;
         this.transferLookupPort = transferLookupPort;
@@ -113,16 +117,21 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             // 1차 검증(락 이전) ①: 출금계좌 소유·등록 여부. 존재하지 않는 계좌도 "내 소유가 아님"과
             // 구분하지 않고 같은 TRF0001로 묶는다 — 계좌ID가 이제 HTTP 요청 바디로 들어오므로
             // 계좌 존재 여부를 스캐닝하는 데 악용되지 않도록 한다.
-            // TODO(#100): 출금계좌 등록 플로우가 없어 현재는 모든 실계좌가 이 필터를 통과 못 한다.
             accountLockPort.findWithdrawalAccountDetail(command.withdrawalAccountId())
                     .filter(detail -> detail.customerId().equals(command.customerId()) && detail.withdrawalRegistered())
                     .orElseThrow(() -> new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
 
             // 1차 검증(락 이전) ②: 인증 완료 토큰. 소유권 검증 뒤로 옮김 — 남의 계좌면 토큰 소비 전에 거부된다.
-            // IMMEDIATE만 authToken이 있으므로 SCHEDULED/AUTO는 건너뛴다.
+            // IMMEDIATE만 authToken/otpAuthToken이 있으므로 SCHEDULED/AUTO는 건너뛴다(예약/자동이체는
+            // 등록 시점에 이미 검증됐고 배치 실행 시 재검증하지 않는다, otp_integration_guide.md).
             if (command.authToken() != null) {
                 transferAuthTokenVerificationPort.verify(
                         command.authToken(), command.withdrawalAccountId(), "TRANSFER_EXECUTE");
+            }
+            if (command.otpAuthToken() != null) {
+                transferOtpVerificationPort.verifyAndConsume(
+                        command.otpAuthToken(), command.customerId(), command.withdrawalAccountId(),
+                        command.depositAccountNumber(), command.amount());
             }
 
             ResolvedPayee payee = accountLockPort.resolvePayeeByAccountNumber(command.depositAccountNumber())

@@ -20,6 +20,7 @@ import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferJpa
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferJpaRepository;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -35,6 +36,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,6 +55,11 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
 
     @Autowired
     EntityManager entityManager;
+
+    // 자동이체 등록/변경/해지는 실제 OTP 발급 없이 otp.api 경계만 검증한다 — OTP 자체의 발급/소비 로직은
+    // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
+    @MockitoBean
+    OtpAuthTokenVerifier otpAuthTokenVerifier;
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final AtomicLong CUSTOMER_SEQ = new AtomicLong();
@@ -96,6 +103,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("startDate", LocalDate.now().plusDays(10).toString());
         body.put("endDate", LocalDate.now().plusMonths(12).toString());
         body.put("accountPasswordAuthToken", "token-negative-amount");
+        body.put("otpAuthToken", "otp-token");
 
         mockMvc.perform(post("/auto-transfers")
                         .with(authentication(authenticationOf(customerId)))
@@ -121,6 +129,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("startDate", LocalDate.now().plusDays(10).toString());
         body.put("endDate", LocalDate.now().plusMonths(12).toString());
         body.put("accountPasswordAuthToken", "retry-token");
+        body.put("otpAuthToken", "otp-token");
         String json = OBJECT_MAPPER.writeValueAsString(body);
 
         mockMvc.perform(post("/auto-transfers")
@@ -159,6 +168,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("startDate", LocalDate.now().plusDays(10).toString());
         body.put("endDate", LocalDate.now().plusMonths(12).toString());
         body.put("accountPasswordAuthToken", "token-invalid-cycle");
+        body.put("otpAuthToken", "otp-token");
 
         mockMvc.perform(post("/auto-transfers")
                         .with(authentication(authenticationOf(customerId)))
@@ -252,6 +262,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         differentAmountBody.put("myPassbookMemo", "내메모");
         differentAmountBody.put("recipientPassbookMemo", "받는메모");
         differentAmountBody.put("accountPasswordAuthToken", "token-4");
+        differentAmountBody.put("otpAuthToken", "otp-token");
 
         mockMvc.perform(post("/auto-transfers")
                         .with(authentication(authenticationOf(customerId)))
@@ -584,6 +595,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("recipientPassbookMemo", "새받는메모");
         body.put("withdrawalAccountId", accountId); // 불변 필드를 슬쩍 추가 — fingerprint가 이걸 반영해야 함
         body.put("accountPasswordAuthToken", "change-token-fp");
+        body.put("otpAuthToken", "otp-token");
 
         mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
                         .with(authentication(authenticationOf(customerId)))
@@ -606,6 +618,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("amount", 20_000_000);
         body.put("accountPasswordAuthToken", "change-token-limit");
+        body.put("otpAuthToken", "otp-token");
 
         mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
                         .with(authentication(authenticationOf(customerId)))
@@ -641,6 +654,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("amount", 15000);
         body.put("accountPasswordAuthToken", "change-token-partial");
+        body.put("otpAuthToken", "otp-token");
 
         mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
                         .with(authentication(authenticationOf(customerId)))
@@ -664,6 +678,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("withdrawalAccountId", 999999L);
         body.put("accountPasswordAuthToken", "change-token-unmodifiable");
+        body.put("otpAuthToken", "otp-token");
 
         mockMvc.perform(patch("/auto-transfers/{id}", saved.getAutoTransferId())
                         .with(authentication(authenticationOf(customerId)))
@@ -724,7 +739,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
-                        .header("Account-Password-Auth-Token", "cancel-token-1"))
+                        .header("Account-Password-Auth-Token", "cancel-token-1")
+                        .header("Otp-Auth-Token", "otp-cancel-token-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"));
 
@@ -741,7 +757,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
-                        .header("Account-Password-Auth-Token", "cancel-token-2"))
+                        .header("Account-Password-Auth-Token", "cancel-token-2")
+                        .header("Otp-Auth-Token", "otp-cancel-token-2"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("AUT0201"));
     }
@@ -757,7 +774,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
-                        .header("Account-Password-Auth-Token", "cancel-token-3"))
+                        .header("Account-Password-Auth-Token", "cancel-token-3")
+                        .header("Otp-Auth-Token", "otp-cancel-token-3"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0002"));
     }
@@ -775,7 +793,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
-                        .header("Account-Password-Auth-Token", "cancel-token-4"))
+                        .header("Account-Password-Auth-Token", "cancel-token-4")
+                        .header("Otp-Auth-Token", "otp-cancel-token-4"))
                 .andExpect(status().isOk());
 
         entityManager.flush();
@@ -785,7 +804,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
-                        .header("Account-Password-Auth-Token", "cancel-token-4"))
+                        .header("Account-Password-Auth-Token", "cancel-token-4")
+                        .header("Otp-Auth-Token", "otp-cancel-token-4"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"));
     }
@@ -804,7 +824,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                         .with(authentication(authenticationOf(attackerCustomerId)))
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
-                        .header("Account-Password-Auth-Token", "attacker-token"))
+                        .header("Account-Password-Auth-Token", "attacker-token")
+                        .header("Otp-Auth-Token", "otp-attacker-token"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("AUT0201"));
     }
@@ -820,7 +841,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
-                        .header("Account-Password-Auth-Token", "no-auth-token"))
+                        .header("Account-Password-Auth-Token", "no-auth-token")
+                        .header("Otp-Auth-Token", "otp-no-auth-token"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -838,6 +860,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("myPassbookMemo", "새메모");
         body.put("recipientPassbookMemo", "새받는메모");
         body.put("accountPasswordAuthToken", authToken);
+        body.put("otpAuthToken", "otp-token");
         return OBJECT_MAPPER.writeValueAsString(body);
     }
 
@@ -890,6 +913,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         body.put("myPassbookMemo", "내메모");
         body.put("recipientPassbookMemo", "받는메모");
         body.put("accountPasswordAuthToken", authToken);
+        body.put("otpAuthToken", "otp-token");
         return OBJECT_MAPPER.writeValueAsString(body);
     }
 

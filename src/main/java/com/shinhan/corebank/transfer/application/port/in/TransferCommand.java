@@ -28,7 +28,8 @@ public record TransferCommand(
     // (#184 구현 시에도 동일). 그래야 크래시 후 재시도가 실제 호출 날짜와 무관하게 같은 회차로
     // 식별되어 멱등성 사전조회에 걸린다.
     LocalDate executionDate,
-    String authToken // Account-Password-Auth-Token. IMMEDIATE만 필수(REQ-TRSF-009) — SCHEDULED/AUTO는 시스템 트리거라 세션이 없음
+    String authToken, // Account-Password-Auth-Token. IMMEDIATE만 필수(REQ-TRSF-009) — SCHEDULED/AUTO는 시스템 트리거라 세션이 없음
+    String otpAuthToken // Otp-Auth-Token. authToken과 동일하게 IMMEDIATE만 필수 — SCHEDULED/AUTO는 등록 시점에 이미 검증됨(otp_integration_guide.md)
 ) {
 
     private static final Pattern ACCOUNT_NUMBER_PATTERN = Pattern.compile("^[0-9]{12}$");
@@ -78,6 +79,9 @@ public record TransferCommand(
         // 즉시 이체만 인증 토큰 필수. 예약/자동 이체는 시스템(배치)이 트리거하므로 실시간
         // 사용자 세션이 없어 인증 토큰을 받을 수 없다.
         if (transferType == TransferType.IMMEDIATE && (authToken == null || authToken.isBlank())) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+        if (transferType == TransferType.IMMEDIATE && (otpAuthToken == null || otpAuthToken.isBlank())) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
     }

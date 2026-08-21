@@ -4,7 +4,8 @@ import com.shinhan.corebank.account.application.port.in.WithdrawalAccountRegiste
 import com.shinhan.corebank.account.application.port.in.WithdrawalAccountRegisterResult;
 import com.shinhan.corebank.account.application.port.in.WithdrawalAccountRegisterUseCase;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
-import com.shinhan.corebank.account.application.port.out.WithdrawalAccountAuthVerificationPort;
+import com.shinhan.corebank.account.application.port.out.WithdrawalAccountOtpVerificationPort;
+import com.shinhan.corebank.account.application.port.out.WithdrawalAccountPasswordVerificationPort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
@@ -26,8 +27,10 @@ public class WithdrawalAccountRegisterService
             ZoneId.of("Asia/Seoul");
 
     private final AccountPersistencePort accountPersistencePort;
-    private final WithdrawalAccountAuthVerificationPort
-            authVerificationPort;
+    private final WithdrawalAccountPasswordVerificationPort
+            passwordVerificationPort;
+    private final WithdrawalAccountOtpVerificationPort
+            otpVerificationPort;
     private final Clock clock;
 
     @Override
@@ -46,13 +49,13 @@ public class WithdrawalAccountRegisterService
                         )
                 );
 
-        authVerificationPort.verifyAccountPasswordToken(
+        passwordVerificationPort.verifyAccountPasswordToken(
                 command.accountPasswordAuthToken(),
                 command.customerId(),
                 command.accountId()
         );
 
-        authVerificationPort.verifyOtpToken(
+        otpVerificationPort.verifyAndConsume(
                 command.otpAuthToken(),
                 command.customerId(),
                 command.accountId()

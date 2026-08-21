@@ -71,7 +71,7 @@ class AutoTransferControllerUnitTest {
 
     private AutoTransferRegisterRequest sampleRegisterRequest() {
         return new AutoTransferRegisterRequest(2L, "110987654321", "홍길동", 10_000L, 1, 15,
-                LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), "내메모", "받는메모", "token");
+                LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), "내메모", "받는메모", "token", "otp-token");
     }
 
     @Test

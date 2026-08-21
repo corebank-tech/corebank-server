@@ -5,6 +5,7 @@ import java.util.Map;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -44,6 +46,11 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    // 이체 실행은 실제 OTP 발급 없이 otp.api 경계만 검증한다 — OTP 자체의 발급/소비 로직은
+    // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
+    @MockitoBean
+    private OtpAuthTokenVerifier otpAuthTokenVerifier;
+
     @AfterEach
     void cleanUpCommittedData() {
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202, 501, 502, 601)");
@@ -63,6 +70,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
                 .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("999999999999")
                 .amount(30000L)
@@ -96,6 +104,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
                 .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
                 .withdrawalAccountId(999999L)
                 .depositAccountNumber("110222222222")
                 .amount(30000L)
@@ -136,6 +145,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         TransferCommand command = TransferCommand.builder()
                 .customerId(2L)
                 .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110222222222")
                 .amount(30000L)
@@ -166,6 +176,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
                 .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
                 .withdrawalAccountId(202L)
                 .depositAccountNumber("110111111111")
                 .amount(30000L)
@@ -196,6 +207,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
                 .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110111111111")
                 .amount(10_000_001L)
@@ -242,6 +254,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
                 .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110666666666")
                 .amount(30000L)
@@ -272,6 +285,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
                 .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110222222222")
                 .amount(30000L)
@@ -317,6 +331,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
                 .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110222222222")
                 .amount(30000L)
@@ -362,6 +377,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
                 .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
                 .withdrawalAccountId(101L)
                 .depositAccountNumber("110222222222")
                 .amount(10_000_001L)
@@ -412,6 +428,7 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
                 .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
                 .withdrawalAccountId(501L)
                 .depositAccountNumber("110888888888")
                 .amount(1000L)
