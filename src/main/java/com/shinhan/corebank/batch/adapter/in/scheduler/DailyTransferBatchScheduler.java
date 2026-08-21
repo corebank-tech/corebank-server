@@ -16,15 +16,15 @@ import java.time.ZoneId;
 @Component
 @RequiredArgsConstructor
 public class DailyTransferBatchScheduler {
-    // 자정 00시 10분 후 자동이체 -> 예약이체 순으로 배치 시작
     private static final Logger log = LoggerFactory.getLogger(DailyTransferBatchScheduler.class);
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
-    private static final String JOB_NAME ="DAILY_TRANSFER_BATCH";
+    private static final String JOB_NAME = "DAILY_TRANSFER_BATCH";
     private final AutoTransferBatchUseCase autoTransferBatchUseCase;
     private final ScheduledTransferBatchUseCase scheduledTransferBatchUseCase;
     private final BatchExecutionLockPort batchExecutionLockPort;
     private final Clock clock;
 
+    // 자정 00시 10분 후 자동이체 -> 예약이체 순으로 배치 시작
     @Scheduled(cron = "0 10 0 * * *", zone = "Asia/Seoul")
     public void runDailyBatch() {
         if (!batchExecutionLockPort.tryAcquire(JOB_NAME)) {

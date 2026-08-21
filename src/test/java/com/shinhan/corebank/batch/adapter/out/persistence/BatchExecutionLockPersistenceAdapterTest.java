@@ -1,6 +1,7 @@
 package com.shinhan.corebank.batch.adapter.out.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import jakarta.persistence.EntityManager;
@@ -128,7 +129,7 @@ class BatchExecutionLockPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("존재하지 않는 jobName으로 선점을 시도하면 예외를 던진다")
     void tryAcquire_unknownJobName_throwsIllegalState() {
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.tryAcquire("NO_SUCH_JOB"))
+        assertThatThrownBy(() -> adapter.tryAcquire("NO_SUCH_JOB"))
                 .isInstanceOf(IllegalStateException.class);
     }
 }
