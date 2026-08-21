@@ -21,6 +21,7 @@ import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTrans
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferRegisterCommand;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.AuthTokenVerificationPort;
+import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferOtpVerificationPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferPersistencePort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
@@ -46,6 +47,9 @@ class ScheduledTransferCommandServiceTest {
 
     @Mock
     AuthTokenVerificationPort authTokenVerificationPort;
+
+    @Mock
+    ScheduledTransferOtpVerificationPort scheduledTransferOtpVerificationPort;
 
     @Mock
     AccountStatusPort accountStatusPort;
@@ -115,7 +119,8 @@ class ScheduledTransferCommandServiceTest {
         assertThat(result.getStatus()).isEqualTo(ScheduledTransferStatus.WAITING);
         verify(scheduledTransferPersistencePort).save(any(ScheduledTransfer.class));
         verify(authTokenVerificationPort).verify(eq("valid-token"), eq(2L), anyString());
-        verify(authTokenVerificationPort).verify(eq("valid-otp-token"), eq(2L), anyString());
+        verify(scheduledTransferOtpVerificationPort).verifyRegisterAndConsume(
+                eq("valid-otp-token"), eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any());
         verify(auditLogService).record(eq(1L), isNull(), eq(AuditEventType.SCHEDULED_TRANSFER_INFO_CHANGE),
                 eq("127.0.0.1"), eq(true), any());
     }
@@ -134,19 +139,51 @@ class ScheduledTransferCommandServiceTest {
                         .isEqualTo(ScheduledTransferErrorCode.INVALID_SCHEDULED_DATE));
 
         verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(scheduledTransferOtpVerificationPort, never()).verifyRegisterAndConsume(any(), any(), any(), any(), any(), any());
     }
 
+    // 계좌비밀번호/OTP 검증은 선행 업무 검증을 모두 통과한 뒤 상태 변경 직전에 수행하므로
+    // (otp_integration_guide.md §9), 실패를 재현하려면 그 앞의 모든 검증을 통과시켜야 한다.
     @Test
-    @DisplayName("인증 토큰이 유효하지 않으면 그 자리에서 예외가 전파되고 이후 검증은 실행되지 않는다")
-    void register_invalidAuthToken_propagatesException() {
+    @DisplayName("계좌비밀번호 인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
+    void register_invalidAccountPasswordAuthToken_propagatesException() {
         stubClock();
+        when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
+        when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
+        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
+        when(scheduledTransferPersistencePort.existsActiveDuplicate(eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
+                .thenReturn(false);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
 
         assertThatThrownBy(() -> scheduledTransferCommandService.register(validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class);
 
-        verify(accountStatusPort, never()).belongsToCustomer(any(), any());
+        verify(scheduledTransferOtpVerificationPort, never()).verifyRegisterAndConsume(any(), any(), any(), any(), any(), any());
+        verify(scheduledTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("OTP 인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
+    void register_invalidOtpAuthToken_propagatesException() {
+        stubClock();
+        when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
+        when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
+        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
+        when(scheduledTransferPersistencePort.existsActiveDuplicate(eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
+                .thenReturn(false);
+        doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
+                .when(scheduledTransferOtpVerificationPort)
+                .verifyRegisterAndConsume(anyString(), any(), any(), any(), any(), any());
+
+        assertThatThrownBy(() -> scheduledTransferCommandService.register(validCommandBuilder().build()))
+                .isInstanceOf(BusinessException.class);
+
+        verify(scheduledTransferPersistencePort, never()).save(any());
     }
 
     @Test
@@ -316,7 +353,7 @@ class ScheduledTransferCommandServiceTest {
 
         assertThat(result.getStatus()).isEqualTo(ScheduledTransferStatus.CANCELED);
         verify(authTokenVerificationPort).verify(eq("valid-token"), eq(2L), anyString());
-        verify(authTokenVerificationPort).verify(eq("valid-otp-token"), eq(2L), anyString());
+        verify(scheduledTransferOtpVerificationPort).verifyCancelAndConsume(eq("valid-otp-token"), eq(1L), eq(10L));
         verify(scheduledTransferPersistencePort).save(any(ScheduledTransfer.class));
         verify(auditLogService).record(eq(1L), isNull(), eq(AuditEventType.SCHEDULED_TRANSFER_INFO_CHANGE),
                 eq("127.0.0.1"), eq(true), any());
@@ -398,13 +435,29 @@ class ScheduledTransferCommandServiceTest {
     }
 
     @Test
-    @DisplayName("인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
+    @DisplayName("계좌비밀번호 인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
     void cancel_invalidAuthToken_propagatesException() {
         stubClock();
         ScheduledTransfer existing = existingScheduledTransfer(ScheduledTransferStatus.WAITING, LocalDate.now(clock).plusDays(10));
         when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
+
+        assertThatThrownBy(() -> scheduledTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
+                .isInstanceOf(BusinessException.class);
+
+        verify(scheduledTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+        verify(scheduledTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("OTP 인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
+    void cancel_invalidOtpAuthToken_propagatesException() {
+        stubClock();
+        ScheduledTransfer existing = existingScheduledTransfer(ScheduledTransferStatus.WAITING, LocalDate.now(clock).plusDays(10));
+        when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
+                .when(scheduledTransferOtpVerificationPort).verifyCancelAndConsume(anyString(), any(), any());
 
         assertThatThrownBy(() -> scheduledTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class);
