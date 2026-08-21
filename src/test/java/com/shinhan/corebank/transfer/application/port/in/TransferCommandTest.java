@@ -122,7 +122,7 @@ class TransferCommandTest {
     }
 
     @Test
-    @DisplayName("즉시 이체인데 인증 토큰이 없으면 REQUIRED_FIELD_MISSING 에러가 발생한다.")
+    @DisplayName("즉시 이체인데 계좌비밀번호 인증 토큰이 없으면 REQUIRED_FIELD_MISSING 에러가 발생한다.")
     void immediateTransferWithoutAuthToken_ThrowsException() {
         assertThatThrownBy(() -> TransferCommand.builder()
                 .customerId(1L)
@@ -131,7 +131,25 @@ class TransferCommandTest {
                 .amount(10000L)
                 .transferType(TransferType.IMMEDIATE)
                 .channel(TransferChannel.WB)
+                .otpAuthToken("dummy-otp-token")
                 // authToken 누락
+                .build())
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining(CommonErrorCode.REQUIRED_FIELD_MISSING.getMessage());
+    }
+
+    @Test
+    @DisplayName("즉시 이체인데 OTP 인증 토큰이 없으면 REQUIRED_FIELD_MISSING 에러가 발생한다.")
+    void immediateTransferWithoutOtpAuthToken_ThrowsException() {
+        assertThatThrownBy(() -> TransferCommand.builder()
+                .customerId(1L)
+                .withdrawalAccountId(1L)
+                .depositAccountNumber("123456789012")
+                .amount(10000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .authToken("dummy-auth-token")
+                // otpAuthToken 누락
                 .build())
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining(CommonErrorCode.REQUIRED_FIELD_MISSING.getMessage());
@@ -148,6 +166,7 @@ class TransferCommandTest {
                 .transferType(TransferType.IMMEDIATE)
                 .channel(TransferChannel.WB)
                 .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
                 .build());
     }
 

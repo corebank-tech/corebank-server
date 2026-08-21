@@ -12,6 +12,7 @@ import java.util.UUID;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
 
 import jakarta.persistence.EntityManager;
@@ -24,6 +25,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -51,6 +53,11 @@ class TransferControllerTest extends IntegrationTestSupport {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    // 이체 실행은 실제 OTP 발급 없이 otp.api 경계만 검증한다 — OTP 자체의 발급/소비 로직은
+    // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
+    @MockitoBean
+    private OtpAuthTokenVerifier otpAuthTokenVerifier;
+
     @AfterEach
     void cleanUpCommittedData() {
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202)");
@@ -71,6 +78,7 @@ class TransferControllerTest extends IntegrationTestSupport {
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .header("Account-Password-Auth-Token", "dummy-auth-token")
+                        .header("Otp-Auth-Token", "dummy-otp-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(transferRequestJson(101L, "110222222222", 30000L)))
                 .andExpect(status().isOk())
@@ -90,6 +98,7 @@ class TransferControllerTest extends IntegrationTestSupport {
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .header("Account-Password-Auth-Token", "dummy-auth-token")
+                        .header("Otp-Auth-Token", "dummy-otp-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(transferRequestJson(101L, "110111111111", 30000L)))
                 .andExpect(status().isOk())
@@ -105,6 +114,7 @@ class TransferControllerTest extends IntegrationTestSupport {
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .header("Account-Password-Auth-Token", "dummy-auth-token")
+                        .header("Otp-Auth-Token", "dummy-otp-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(transferRequestJson(101L, "110222222222", 30000L)))
                 .andExpect(status().isUnauthorized());
