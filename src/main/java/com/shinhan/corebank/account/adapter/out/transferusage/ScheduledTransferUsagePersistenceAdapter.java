@@ -5,13 +5,18 @@ import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 @Component
 @RequiredArgsConstructor
 public class ScheduledTransferUsagePersistenceAdapter
         implements ScheduledTransferUsageQueryPort {
 
-    private static final String BLOCKING_STATUS =
-        ScheduledTransferStatus.WAITING.name();
+    private static final List<String> BLOCKING_STATUSES =
+            List.of(
+                    ScheduledTransferStatus.WAITING.name(),
+                    ScheduledTransferStatus.PROCESSING.name()
+            );
 
     private final ScheduledTransferUsageJpaRepository repository;
 
@@ -20,9 +25,9 @@ public class ScheduledTransferUsagePersistenceAdapter
             Long withdrawalAccountId
     ) {
         return repository
-                .existsByWithdrawalAccountIdAndStatus(
+                .existsByWithdrawalAccountIdAndStatusIn(
                         withdrawalAccountId,
-                        BLOCKING_STATUS
+                        BLOCKING_STATUSES
                 );
     }
 }

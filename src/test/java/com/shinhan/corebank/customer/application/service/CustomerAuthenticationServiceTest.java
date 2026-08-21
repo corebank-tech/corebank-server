@@ -249,7 +249,6 @@ class CustomerAuthenticationServiceTest {
                 "01012345678",
                 loginFailureCount,
                 accountLocked,
-                "OPENED_DATE_ASC",
                 lastLoginAt,
                 lastLoginIp,
                 previousLoginAt,

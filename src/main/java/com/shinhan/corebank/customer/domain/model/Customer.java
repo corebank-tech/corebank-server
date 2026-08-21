@@ -26,7 +26,6 @@ public class Customer {
     private String phoneNumber;
     private int loginFailureCount;
     private boolean accountLocked;
-    private String displayOrderType;
     private LocalDateTime lastLoginAt;
     private String lastLoginIp;
     private LocalDateTime previousLoginAt;
@@ -47,7 +46,7 @@ public class Customer {
     ) {
         return new Customer(
                 null, userId, passwordHash, userName, birthDate, email,
-                phoneNumber, 0, false, "OPENED_DATE_ASC", null, null,
+                phoneNumber, 0, false, null, null,
                 null, joinedAt, joinedAt, null, null
         );
     }
@@ -63,7 +62,6 @@ public class Customer {
             String phoneNumber,
             int loginFailureCount,
             boolean accountLocked,
-            String displayOrderType,
             LocalDateTime lastLoginAt,
             String lastLoginIp,
             LocalDateTime previousLoginAt,
@@ -84,7 +82,6 @@ public class Customer {
                 phoneNumber,
                 loginFailureCount,
                 accountLocked,
-                displayOrderType,
                 lastLoginAt,
                 lastLoginIp,
                 previousLoginAt,

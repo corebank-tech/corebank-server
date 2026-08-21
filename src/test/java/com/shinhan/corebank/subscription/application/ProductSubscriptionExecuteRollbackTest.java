@@ -12,6 +12,7 @@ import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository
 import com.shinhan.corebank.product.adapter.out.persistence.ProductRateTierJpaEntity;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductRateTierJpaEntityId;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductRateTierJpaRepository;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductTestFixtures;
 import com.shinhan.corebank.product.domain.DepositType;
 import com.shinhan.corebank.product.domain.InterestPayType;
 import com.shinhan.corebank.product.domain.ProductGroup;
@@ -44,6 +45,7 @@ import static org.mockito.Mockito.doThrow;
 class ProductSubscriptionExecuteRollbackTest extends IntegrationTestSupport {
 
     private static final String PRODUCT_CODE = "EXE-ROLLBACK-01";
+    private static final String DEPOSIT_PRODUCT_CODE = "EXE-ROLLBACK-02";
 
     @Autowired
     private ProductSubscriptionExecuteUseCase productSubscriptionExecuteUseCase;
@@ -70,8 +72,9 @@ class ProductSubscriptionExecuteRollbackTest extends IntegrationTestSupport {
     @AfterEach
     void tearDown() {
         if (productId != null) {
-            new AccountNumberSequenceTestFixture(jdbcTemplate)
-                    .deleteProductAccountSequence(productId, AccountType.INSTALLMENT_SAVINGS);
+            AccountNumberSequenceTestFixture sequenceFixture = new AccountNumberSequenceTestFixture(jdbcTemplate);
+            sequenceFixture.deleteProductAccountSequence(productId, AccountType.INSTALLMENT_SAVINGS);
+            sequenceFixture.deleteProductAccountSequence(productId, AccountType.TIME_DEPOSIT);
             jdbcTemplate.update("DELETE FROM product_rate_tier WHERE product_id = ?", productId);
             jdbcTemplate.update("DELETE FROM account WHERE product_id = ?", productId);
         }
@@ -110,6 +113,56 @@ class ProductSubscriptionExecuteRollbackTest extends IntegrationTestSupport {
                 .hasMessageContaining("forced terms agreement save failure");
         assertThat(countAccountsByCustomer()).isEqualTo(accountCountBefore);
         assertThat(subscriptionJpaRepository.count()).isEqualTo(subscriptionCountBefore);
+    }
+
+    @Test
+    @DisplayName("정기예금 가입에서 초입금 기표 이후 단계가 실패하면 출금계좌 잔액과 원장까지 전량 롤백된다")
+    void execute_timeDeposit_termsAgreementSaveFails_rollsBackInitialDeposit() {
+        customerId = customerTestFixture.createCustomer();
+        productId = seedDepositProduct();
+        withdrawalAccountId = seedWithdrawalAccount();
+
+        doThrow(new RuntimeException("forced terms agreement save failure"))
+                .when(saveTermsAgreementPort).saveAll(anyList());
+
+        long accountCountBefore = countAccountsByCustomer();
+        long subscriptionCountBefore = subscriptionJpaRepository.count();
+        long ledgerCountBefore = countProductSubscriptionLedgerEntries();
+
+        ProductSubscriptionExecuteCommand command = new ProductSubscriptionExecuteCommand(
+                customerId, productId, 500_000L, 12, withdrawalAccountId,
+                "1234", "1234", "ACC_PWD_test", "OTP_AUTH_test",
+                List.of());
+
+        Throwable thrown = catchThrowable(() -> productSubscriptionExecuteUseCase.execute(command));
+
+        assertThat(thrown).isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("forced terms agreement save failure");
+        assertThat(countAccountsByCustomer()).isEqualTo(accountCountBefore);
+        assertThat(subscriptionJpaRepository.count()).isEqualTo(subscriptionCountBefore);
+        assertThat(countProductSubscriptionLedgerEntries()).isEqualTo(ledgerCountBefore);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT balance FROM account WHERE account_id = ?", Long.class, withdrawalAccountId))
+                .isEqualTo(10_000_000L);
+    }
+
+    private long countProductSubscriptionLedgerEntries() {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ledger_entry WHERE account_id = ? AND transaction_type = 'PRODUCT_SUBSCRIPTION'",
+                Long.class, withdrawalAccountId);
+    }
+
+    private Long seedDepositProduct() {
+        Long id = productJpaRepository.save(
+                ProductTestFixtures.productWithCode(DEPOSIT_PRODUCT_CODE)).getProductId();
+        rateTierRepository.save(ProductRateTierJpaEntity.builder()
+                .id(new ProductRateTierJpaEntityId(id, (short) 12))
+                .rate(new BigDecimal("3.20"))
+                .build());
+        new AccountNumberSequenceTestFixture(jdbcTemplate).resetProductAccountSequence(
+                id, AccountType.TIME_DEPOSIT,
+                AccountNumberSequenceTestFixture.TIME_DEPOSIT_PREFIX, 0L);
+        return id;
     }
 
     private long countAccountsByCustomer() {

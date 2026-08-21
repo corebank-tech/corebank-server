@@ -32,7 +32,7 @@ public class ProductSubscriptionQueryService implements ProductSubscriptionQuery
 
         if (subscription.getAccountId() != null) {
             accountNumber = accountNumberQueryPort
-                    .findAccountNumberById(subscription.getAccountId())
+                    .findAccountNumber(subscription.getAccountId(), requestingCustomerId)
                     .orElseThrow(() -> new BusinessException(
                             SubscriptionErrorCode.SUBSCRIPTION_ACCOUNT_NOT_FOUND
                     ));

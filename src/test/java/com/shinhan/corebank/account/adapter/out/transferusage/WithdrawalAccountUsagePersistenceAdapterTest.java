@@ -78,13 +78,19 @@ class WithdrawalAccountUsagePersistenceAdapterTest
                         .getAccountId();
     }
 
-    @Test
-    @DisplayName("WAITING 예약이체가 있으면 출금계좌 사용 중으로 조회한다")
-    void findWaitingScheduledTransfer() {
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                    "WAITING",
+                    "PROCESSING"
+            }
+    )
+    @DisplayName("WAITING 또는 PROCESSING 예약이체가 있으면 출금계좌 사용 중으로 조회한다")
+    void findBlockingScheduledTransfer(
+            String status
+    ) {
         // given
-        insertScheduledTransfer(
-                "WAITING"
-        );
+        insertScheduledTransfer(status);
 
         // when
         boolean exists =
@@ -100,14 +106,13 @@ class WithdrawalAccountUsagePersistenceAdapterTest
     @ParameterizedTest
     @ValueSource(
             strings = {
-                    "PROCESSING",
                     "SUCCESS",
                     "FAILED",
                     "CANCELED"
             }
     )
-    @DisplayName("WAITING이 아닌 예약이체는 출금계좌 삭제를 막지 않는다")
-    void ignoreNonWaitingScheduledTransfer(
+    @DisplayName("완료·실패·취소 예약이체는 출금계좌 삭제를 막지 않는다")
+    void ignoreNonBlockingScheduledTransfer(
             String status
     ) {
         // given

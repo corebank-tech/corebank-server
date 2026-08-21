@@ -363,6 +363,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `PRD0203` | 404 | 가입 내역을 찾을 수 없습니다. | `subscriptionId` 없음 |
 | `PRD0301` | 409 | 이미 가입한 상품입니다. | 1인 1계좌 제한 상품 중복 가입 |
 | `PRD9001` | 500 | 상품 약관 정보를 확인할 수 없습니다. | `product_terms`가 가리키는 `terms` 행 없음(FK·상위 검증으로 정상 흐름에선 도달 불가) |
+| `PRD9002` | 500 | 가입 처리 중 상품 정보를 확인할 수 없습니다. | 1인 1계좌 제한 판정의 상품 비관적 락 대상 조회 실패(상위 상품조회 검증으로 정상 흐름에선 도달 불가) |
 
 > `PRD0001`~`PRD0007`은 가입 사전 검증(`POST /product-subscriptions/validation`)에서는 예외로 던지지 않고 `200` + `valid=false` + `violations[].code`로 반환합니다 — 필드별 오류를 화면에 동시에 표시해야 해서 하나만 틀려도 `400`을 던지면 나머지 검증 결과를 알 수 없기 때문입니다. HTTP 열의 `400`은 검증 실패가 곧 요청 거부인 엔드포인트(실제 가입 실행 등)에서 던질 때 적용됩니다.
 
@@ -375,7 +376,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `SCD0005` | 400 | 이체금액은 0보다 커야 합니다. | 등록 시 금액 검증 (AUT0008과 동일 패턴) |
 | `SCD0006` | 400 | 통장 표시내용은 10자 이내여야 합니다. | 등록 시 메모 길이 검증 (AUT0009와 동일 패턴) |
 | `SCD0007` | 400 | 입금계좌로 지정할 수 없는 계좌 유형입니다. | REQ-SCD-006 입금계좌 유형 검증 (AUT0005와 동일 패턴) |
-| `SCD0008` | 400 | 1회 이체한도를 초과했습니다. | REQ-SCD-006 1회한도 검증 (AUT0006과 동일 패턴) |
+| `SCD0008` | 400 | 1회 이체한도를 초과했습니다. | ⚠️ 더 이상 이 코드로 던져지지 않음. REQ-SCD-006 1회한도 검증은 실제로 `LMT0002`(P1 `LmtErrorCode`)가 던져짐 — 코드 값 자체는 과거 호환을 위해 유지 (`AUT0006`과 동일 패턴) |
 | `SCD0201` | 404 | 예약이체를 찾을 수 없습니다. | `scheduledTransferId` 없음 |
 | `SCD0202` | 404 | 계좌를 확인할 수 없습니다. | 출금계좌 소유·상태, 입금계좌 실존 (AUT0202와 동일 패턴, §8-3) |
 | `SCD0301` | 409 | 동일 조건의 예약이체가 이미 등록되어 있습니다. | 중복 등록 |
@@ -392,7 +393,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `AUT0003` | 400 | 변경할 수 없는 항목입니다.                                    | 출금·입금계좌·이체지정일 변경 시도 |
 | `AUT0004` | 400 | 최초 이체 예정일이 종료일 이후입니다. 이체 기간 내에 최소 1회 이상 실행되어야 합니다. | 시작일·종료일·이체지정일 조합상 실행 가능한 회차가 없음 |
 | `AUT0005` | 400 | 입금계좌로 지정할 수 없는 계좌 유형입니다.                            | REQ-AUTO-006 |
-| `AUT0006` | 400 | 1회 이체한도를 초과했습니다.                                    | ⚠️ 임시 코드. REQ-AUTO-006 등록 시점 한도 검증용. 의미상 `LMT0002`와 중복 — P1이 `LmtErrorCode` 구현하면 `LMT0002`로 교체 예정 |
+| `AUT0006` | 400 | 1회 이체한도를 초과했습니다.                                    | ⚠️ 더 이상 이 코드로 던져지지 않음. REQ-AUTO-006 등록 시점 한도 검증은 실제로 `LMT0002`(P1 `LmtErrorCode`)가 던져짐 — 코드 값 자체는 과거 호환을 위해 유지 |
 | `AUT0007` | 400 | 이체주기는 1개월, 3개월, 6개월 중 하나여야 합니다.                     | REQ-AUTO-001, POL-033 |
 | `AUT0008` | 400 | 이체금액은 0보다 커야 합니다.                                   | REQ-CMN-012 |
 | `AUT0009` | 400 | 통장 표시내용은 10자 이내여야 합니다.                              | DB `VARCHAR(10)` 제약과 동일. `transfer`의 `MEMO_LENGTH_EXCEEDED`와 같은 패턴 |
@@ -431,8 +432,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 |  | `WITHDRAWAL` | 출금 |
 | `TransactionSortOrder` | `LATEST` | 최신순 |
 |  | `OLDEST` | 과거순 |
-| `AccountDisplayOrder` | `CUSTOM` | 사용자 지정 순서 |
-|  | `OPENED_DATE_ASC` | 개설일 오름차순 |
+
 
 ### 5-3. 상품 — P3
 

@@ -314,6 +314,26 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("가입 건에 연결된 계좌가 타 고객 소유면 PRD9001을 반환한다")
+    void getSubscriptionResult_accountOwnedByOtherCustomer_returnsAccountNotFound() throws Exception {
+        Long productId = productJpaRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
+        Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_ctl_owner");
+        Long otherCustomerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_ctl_other");
+        Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000031", customerId, null);
+        Long otherCustomerAccountId =
+                SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000032", otherCustomerId, productId);
+        Long subscriptionId = subscriptionJpaRepository.save(
+                SubscriptionTestFixtures.defaultSubscription(
+                        customerId, productId, withdrawalAccountId, otherCustomerAccountId)
+        ).getSubscriptionId();
+
+        mockMvc.perform(get("/product-subscriptions/{subscriptionId}", subscriptionId)
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("PRD9001"));
+    }
+
+    @Test
     @DisplayName("존재하지 않는 가입건이면 404 + PRD0203을 반환한다")
     void getSubscriptionResult_notFound() throws Exception {
         mockMvc.perform(get("/product-subscriptions/{subscriptionId}", 999_999L)
@@ -426,14 +446,69 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("정기예금은 아직 지원하지 않아 400 + CMN0001을 반환한다")
-    void execute_timeDeposit_returnsInvalidInput() throws Exception {
-        Long productId = productJpaRepository.save(ProductTestFixtures.productWithCode("EXE-103")).getProductId();
-        rateTierRepository.save(ProductRateTierJpaEntity.builder()
-                .id(new ProductRateTierJpaEntityId(productId, (short) 12))
-                .rate(new BigDecimal("3.20"))
-                .build());
+    @DisplayName("정기예금 가입 실행 시 초입금이 기표되어 출금계좌 잔액이 줄고 신규 계좌에 반영된다")
+    void execute_timeDeposit_movesInitialDepositAndRecordsLedger() throws Exception {
+        Long productId = seedDepositProduct("EXE-103");
         Long withdrawalAccountId = seedAccount("110000009003", customerId, 10_000_000L);
+
+        String response = mockMvc.perform(post("/product-subscriptions")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(executeRequestJson(productId, withdrawalAccountId, 500_000L, 12)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.productGroup").value("DEPOSIT"))
+                .andExpect(jsonPath("$.data.transactionNumber").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode data = jackson.readTree(response).get("data");
+        Long newAccountId = data.get("accountId").asLong();
+        String transactionNumber = data.get("transactionNumber").asText();
+
+        // 잔액 변경은 AccountLockJpaEntity(부분 매핑)로 이뤄져 AccountJpaEntity 캐시에 반영되지
+        // 않는다 — DB 실제 값을 봐야 하므로 flush 후 JdbcTemplate으로 직접 조회한다.
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(balanceOf(withdrawalAccountId)).isEqualTo(9_500_000L);
+        assertThat(balanceOf(newAccountId)).isEqualTo(500_000L);
+
+        assertThat(jdbcTemplate.queryForList(
+                """
+                SELECT account_id, direction, amount, balance_after, transaction_type, transfer_id
+                  FROM ledger_entry
+                 WHERE transaction_number = ?
+                 ORDER BY direction
+                """,
+                transactionNumber))
+                .hasSize(2)
+                .allSatisfy(row -> {
+                    assertThat(row.get("transaction_type")).isEqualTo("PRODUCT_SUBSCRIPTION");
+                    assertThat(row.get("transfer_id")).isNull();
+                    assertThat(row.get("amount")).isEqualTo(500_000L);
+                })
+                .anySatisfy(row -> {
+                    assertThat(row.get("direction")).isEqualTo("DEPOSIT");
+                    assertThat(row.get("account_id")).isEqualTo(newAccountId);
+                    assertThat(row.get("balance_after")).isEqualTo(500_000L);
+                })
+                .anySatisfy(row -> {
+                    assertThat(row.get("direction")).isEqualTo("WITHDRAWAL");
+                    assertThat(row.get("account_id")).isEqualTo(withdrawalAccountId);
+                    assertThat(row.get("balance_after")).isEqualTo(9_500_000L);
+                });
+
+        assertThat(subscriptionJpaRepository.findById(data.get("subscriptionId").asLong())
+                .orElseThrow().getTransactionNumber()).isEqualTo(transactionNumber);
+    }
+
+    @Test
+    @DisplayName("정기예금 가입 시 출금계좌 잔액이 부족하면 400 + LMT0001을 반환하고 계좌가 개설되지 않는다")
+    void execute_timeDeposit_insufficientBalance_returnsLmt0001() throws Exception {
+        Long productId = seedDepositProduct("EXE-108");
+        Long withdrawalAccountId = seedAccount("110000009008", customerId, 100_000L);
 
         mockMvc.perform(post("/product-subscriptions")
                         .header("Idempotency-Key", UUID.randomUUID().toString())
@@ -442,7 +517,15 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                         .contentType("application/json")
                         .content(executeRequestJson(productId, withdrawalAccountId, 500_000L, 12)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("CMN0001"));
+                .andExpect(jsonPath("$.code").value("LMT0001"));
+
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(balanceOf(withdrawalAccountId)).isEqualTo(100_000L);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM account WHERE product_id = ?", Long.class, productId)).isZero();
+        assertThat(subscriptionJpaRepository.count()).isZero();
     }
 
     @Test
@@ -675,6 +758,24 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                 productId, AccountType.INSTALLMENT_SAVINGS,
                 AccountNumberSequenceTestFixture.INSTALLMENT_SAVINGS_PREFIX, 0L);
         return productId;
+    }
+
+    private Long seedDepositProduct(String productCode) {
+        Long productId = productJpaRepository.save(
+                ProductTestFixtures.productWithCode(productCode)).getProductId();
+        rateTierRepository.save(ProductRateTierJpaEntity.builder()
+                .id(new ProductRateTierJpaEntityId(productId, (short) 12))
+                .rate(new BigDecimal("3.20"))
+                .build());
+        new AccountNumberSequenceTestFixture(jdbcTemplate).resetProductAccountSequence(
+                productId, AccountType.TIME_DEPOSIT,
+                AccountNumberSequenceTestFixture.TIME_DEPOSIT_PREFIX, 0L);
+        return productId;
+    }
+
+    private long balanceOf(Long accountId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT balance FROM account WHERE account_id = ?", Long.class, accountId);
     }
 
     private String executeRequestJson(Long productId, Long withdrawalAccountId, Long amount, int termMonths) {

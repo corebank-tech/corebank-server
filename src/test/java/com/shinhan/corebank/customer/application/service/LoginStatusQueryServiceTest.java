@@ -100,7 +100,6 @@ class LoginStatusQueryServiceTest {
                 "01012345678",
                 0,
                 false,
-                "OPENED_DATE_ASC",
                 LocalDateTime.of(2026, 3, 10, 11, 0),
                 lastLoginIp,
                 previousLoginAt,
