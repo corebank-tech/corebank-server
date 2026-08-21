@@ -156,10 +156,11 @@ class TransferControllerTest extends IntegrationTestSupport {
                         .param("toDate", "2026-08-31"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.asOf").exists())
                 .andExpect(jsonPath("$.data.summary.successCount").value(1))
                 .andExpect(jsonPath("$.data.items[0].transactionNumber").value("20260810IT0000000010"))
                 .andExpect(jsonPath("$.data.items[0].payeeName").value("성*향"))
-                .andExpect(jsonPath("$.data.items[0].depositAccountNumber").value("110******222"));
+                .andExpect(jsonPath("$.data.items[0].accountNumber").value("110******222"));
     }
 
     @Test
@@ -196,7 +197,7 @@ class TransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.transactionNumber").value("20260810IT0000000011"))
                 .andExpect(jsonPath("$.data.amount").value(20000))
                 .andExpect(jsonPath("$.data.payeeName").value("성*향"))
-                .andExpect(jsonPath("$.data.depositAccountNumber").value("110******222"));
+                .andExpect(jsonPath("$.data.accountNumber").value("110******222"));
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.shinhan.corebank.transfer.application.service;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.Set;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
@@ -79,8 +80,9 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
                 withdrawalAccountId, status, resolvedFromDate, resolvedToDate, resolvedSort, PageRequest.of(page, size));
         TransferHistoryAggregate aggregate = transferHistoryQueryPort.summarize(
                 withdrawalAccountId, status, resolvedFromDate, resolvedToDate);
+        OffsetDateTime asOf = OffsetDateTime.ofInstant(clock.instant(), clock.getZone());
 
-        return new TransferHistoryPage(result.map(this::toItem), toSummary(aggregate));
+        return new TransferHistoryPage(asOf, result.map(this::toItem), toSummary(aggregate));
     }
 
     @Override

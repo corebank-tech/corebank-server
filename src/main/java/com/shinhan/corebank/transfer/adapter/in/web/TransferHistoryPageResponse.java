@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.adapter.in.web;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryItem;
@@ -8,6 +9,7 @@ import com.shinhan.corebank.transfer.application.port.in.TransferHistoryPage;
 import org.springframework.data.domain.Page;
 
 public record TransferHistoryPageResponse(
+        OffsetDateTime asOf,
         TransferHistorySummaryResponse summary,
         int page,
         int size,
@@ -18,6 +20,7 @@ public record TransferHistoryPageResponse(
     public static TransferHistoryPageResponse from(TransferHistoryPage result) {
         Page<TransferHistoryItem> page = result.page();
         return new TransferHistoryPageResponse(
+                result.asOf(),
                 TransferHistorySummaryResponse.from(result.summary()),
                 page.getNumber(),
                 page.getSize(),

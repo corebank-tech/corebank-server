@@ -8,10 +8,12 @@ import com.shinhan.corebank.transfer.application.port.in.TransferHistoryDetail;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 
+// 필드명은 api_conventions.md §6-2/§6-4 확정 명칭(executedAt/accountNumber/failureReason/balanceAfter)을 따른다 - FE가 직접 의존하는 외부 응답 계약.
+// balanceAfter: withdrawalBalanceAfter는 즉시이체 실행 응답(TransferResponse)만의 예외이고 이체 상세는 balanceAfter로 확정(§6-4)
 public record TransferHistoryDetailResponse(
         String transactionNumber,
         ProcessResultStatus status,
-        String depositAccountNumber,
+        String accountNumber,
         String payeeName,
         long amount,
         long fee,
@@ -19,10 +21,10 @@ public record TransferHistoryDetailResponse(
         TransferChannel channel,
         String myPassbookMemo,
         String recipientPassbookMemo,
-        Long withdrawalBalanceAfter,
+        Long balanceAfter,
         String errorCode,
-        String errorMessage,
-        LocalDateTime transferredAt
+        String failureReason,
+        LocalDateTime executedAt
 ) {
     public static TransferHistoryDetailResponse from(TransferHistoryDetail detail) {
         return new TransferHistoryDetailResponse(
