@@ -21,8 +21,7 @@ public interface ProductSubscriptionExecuteUseCase {
             String newAccountPasswordConfirm,
             String accountPasswordAuthToken,
             String otpAuthToken,
-            List<AgreedTerms> agreedTerms,
-            List<String> satisfiedConditionCodes
+            List<AgreedTerms> agreedTerms
     ) {
         public record AgreedTerms(Long termsId, String version) {
         }

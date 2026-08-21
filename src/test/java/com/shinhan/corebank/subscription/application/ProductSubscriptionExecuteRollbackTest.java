@@ -102,7 +102,7 @@ class ProductSubscriptionExecuteRollbackTest extends IntegrationTestSupport {
         ProductSubscriptionExecuteCommand command = new ProductSubscriptionExecuteCommand(
                 customerId, productId, 500_000L, 12, withdrawalAccountId,
                 "1234", "1234", "ACC_PWD_test", "OTP_AUTH_test",
-                List.of(), List.of());
+                List.of());
 
         Throwable thrown = catchThrowable(() -> productSubscriptionExecuteUseCase.execute(command));
 

@@ -80,11 +80,14 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
             throw new BusinessException(SubscriptionErrorCode.ALREADY_SUBSCRIBED);
         }
 
+        // satisfiedConditionCodes는 항상 빈 리스트로 넘긴다 — 클라이언트가 신고한 우대조건을
+        // 그대로 믿고 실제 가입에 반영하면 안 된다(PR #147 합의). 서버가 자동이체 등록 이력 등으로
+        // 직접 재검증할 수 있게 되기 전까지 실행 시점엔 우대금리를 적용하지 않는다(코드리뷰 반영).
         SubscriptionValidation validation = productSubscriptionValidationUseCase.validate(
                 new ProductSubscriptionValidationCommand(
                         command.customerId(), command.productId(), command.subscriptionAmount(), command.termMonths(),
                         command.withdrawalAccountId(), toValidationAgreedTerms(command.agreedTerms()),
-                        command.satisfiedConditionCodes()));
+                        List.of()));
 
         if (!validation.isValid()) {
             throw toBusinessException(validation.getViolations().get(0));

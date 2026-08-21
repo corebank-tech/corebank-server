@@ -12,6 +12,9 @@ import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaEntity;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductPreferentialRateJpaEntity;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductPreferentialRateJpaEntityId;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductPreferentialRateJpaRepository;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductRateTierJpaEntity;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductRateTierJpaEntityId;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductRateTierJpaRepository;
@@ -61,6 +64,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     ProductJpaRepository productJpaRepository;
     @Autowired
     ProductRateTierJpaRepository rateTierRepository;
+    @Autowired
+    ProductPreferentialRateJpaRepository preferentialRateRepository;
     @Autowired
     ProductTermsJpaRepository termsRepository;
     @Autowired
@@ -545,6 +550,47 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
 
         // 검증 단계에서 걸러졌으므로 계좌개설까지 가지 않았어야 한다
         assertThat(accountJpaRepository.count()).isEqualTo(accountCountBefore);
+    }
+
+    // 실행 API는 satisfiedConditionCodes를 요청 필드로 받지 않는다(ProductSubscriptionExecuteRequest에
+    // 없음) — 클라이언트가 신고한 우대조건을 그대로 믿고 실제 가입에 반영하면 안 되기 때문이다
+    // (PR #147 합의, 코드리뷰 지적으로 재확인). Jackson은 기본적으로 알 수 없는 JSON 필드를 무시하므로,
+    // 이 필드를 요청 본문에 억지로 끼워 넣어도 조용히 버려지고 적용금리는 기본금리만 반영돼야 한다.
+    @Test
+    @DisplayName("실행 요청에 satisfiedConditionCodes를 끼워 넣어도 무시되고 기본금리만 적용된다")
+    void execute_ignoresClientReportedSatisfiedConditionCodes() throws Exception {
+        Long productId = seedSavingsProduct("EXE-111", false);
+        Long withdrawalAccountId = seedAccount("110000009011", customerId, 10_000_000L);
+        preferentialRateRepository.save(ProductPreferentialRateJpaEntity.builder()
+                .productPreferentialRateId(new ProductPreferentialRateJpaEntityId(productId, "AUTO_TRANSFER"))
+                .conditionName("자동이체 6회 이상")
+                .rate(new BigDecimal("0.50"))
+                .build());
+
+        String requestJson = """
+                {
+                  "productId": %d,
+                  "subscriptionAmount": 500000,
+                  "termMonths": 12,
+                  "withdrawalAccountId": %d,
+                  "newAccountPassword": "1234",
+                  "newAccountPasswordConfirm": "1234",
+                  "accountPasswordAuthToken": "ACC_PWD_test",
+                  "otpAuthToken": "OTP_AUTH_test",
+                  "agreedTerms": [],
+                  "satisfiedConditionCodes": ["AUTO_TRANSFER"]
+                }
+                """.formatted(productId, withdrawalAccountId);
+
+        mockMvc.perform(post("/product-subscriptions")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(requestJson))
+                .andExpect(status().isOk())
+                // seedSavingsProduct의 rate tier는 base 3.20 — AUTO_TRANSFER(0.50)가 반영됐다면 3.70이 됐을 것
+                .andExpect(jsonPath("$.data.appliedRate").value(3.20));
     }
 
     // fingerprint()에 newAccountPassword를 빠뜨렸던 실수를 실제로 한 번 저지른 적이 있어서
