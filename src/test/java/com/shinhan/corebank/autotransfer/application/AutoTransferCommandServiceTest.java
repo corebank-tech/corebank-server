@@ -431,6 +431,7 @@ class AutoTransferCommandServiceTest {
     void change_invalidAuthToken_propagatesException() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
 
@@ -447,6 +448,7 @@ class AutoTransferCommandServiceTest {
     void change_invalidOtpAuthToken_propagatesException() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(autoTransferOtpVerificationPort).verifyChangeAndConsume(any(), any(), any(), any(), any(), any());
 
