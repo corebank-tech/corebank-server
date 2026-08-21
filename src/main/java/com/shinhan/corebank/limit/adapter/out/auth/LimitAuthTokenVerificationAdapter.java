@@ -27,7 +27,8 @@ public class LimitAuthTokenVerificationAdapter implements AuthTokenVerificationP
 
     @Override
     public void verifyAccountPassword(String authToken, Long customerId) {
-        // 1차 범위는 OTP 인증까지다. 계좌비밀번호 검증은 2차에 붙는다 - 그때 P6 의 공개 API 에 위임한다.
+        // 1차 범위는 OTP 인증까지다. 이 메서드는 2차를 위해 자리만 잡아 둔 것이고, 그때 P6 의
+        // 계좌비밀번호 공개 API 에 위임하도록 이 안쪽만 채우면 된다. 포트·서비스·테스트는 그대로 둔다.
     }
 
     @Override

@@ -13,7 +13,17 @@ package com.shinhan.corebank.limit.application.port.out;
  */
 public interface AuthTokenVerificationPort {
 
-    /** 계좌비밀번호 검증으로 발급된 토큰(§6-3)이 이 고객의 것인지 확인한다. 위반 시 APW0102. */
+    /**
+     * 계좌비밀번호 검증으로 발급된 토큰(§6-3)이 이 고객의 것인지 확인한다. 위반 시 APW0102.
+     *
+     * <p><b>1차 범위에서는 아무것도 하지 않는다.</b> 계좌비밀번호 발급·검증 기능 자체가 아직 없다.
+     * 그럼에도 메서드를 지금 선언해 두는 이유는, 2차에 그 기능이 붙을 때 <b>포트·서비스·테스트를
+     * 건드리지 않고 어댑터 한 곳만 채우면 되게</b> 하기 위해서다. 요청 DTO 의
+     * accountPasswordAuthToken 필드도 같은 이유로 남겨 두었다.
+     *
+     * <p>2차 착수 신호는 P6 의 계좌비밀번호 공개 API 가 생기거나 AccountPasswordErrorCode 에
+     * APW0102 가 추가되는 시점이다.
+     */
     void verifyAccountPassword(String authToken, Long customerId);
 
     /**
