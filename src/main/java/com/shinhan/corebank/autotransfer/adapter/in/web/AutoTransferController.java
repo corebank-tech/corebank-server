@@ -54,7 +54,7 @@ public class AutoTransferController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "등록 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "`AUT0001` 이체지정일 범위 오류 · `AUT0002` 이체기간 오류 · `AUT0004` 종료일 이전 최초 실행 없음 · " +
-                            "`AUT0005` 입금 불가 상품유형 · `AUT0006` 1회 이체한도 초과 · `AUT0007` 이체주기 오류 · " +
+                            "`AUT0005` 입금 불가 상품유형 · `LMT0002` 1회 이체한도 초과 · `AUT0007` 이체주기 오류 · " +
                             "`AUT0008` 이체금액 오류 · `AUT0009` 통장 표시내용 길이 초과",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
@@ -89,7 +89,7 @@ public class AutoTransferController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "변경 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "`AUT0002` 이체기간 오류 · `AUT0003` 변경 불가 항목 포함 · `AUT0004` 종료일 이전 최초 실행 없음 · " +
-                            "`AUT0006` 1회 이체한도 초과 · `AUT0007` 이체주기 오류 · `AUT0008` 이체금액 오류 · `AUT0009` 통장 표시내용 길이 초과",
+                            "`LMT0002` 1회 이체한도 초과 · `AUT0007` 이체주기 오류 · `AUT0008` 이체금액 오류 · `AUT0009` 통장 표시내용 길이 초과",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
