@@ -294,7 +294,7 @@ class WithdrawalAccountRegisterServiceTest {
                                 .INVALID_WITHDRAWAL_ACCOUNT_TYPE
                 );
 
-        verifyAuthenticationTokens();
+        verifyPasswordVerifiedButOtpNotConsumed();
 
         verify(accountPersistencePort, never())
                 .save(any());
@@ -334,7 +334,7 @@ class WithdrawalAccountRegisterServiceTest {
                                 .INVALID_WITHDRAWAL_ACCOUNT_TYPE
                 );
 
-        verifyAuthenticationTokens();
+        verifyPasswordVerifiedButOtpNotConsumed();
 
         verify(accountPersistencePort, never())
                 .save(any());
@@ -374,7 +374,7 @@ class WithdrawalAccountRegisterServiceTest {
                                 .INVALID_ACCOUNT_STATUS
                 );
 
-        verifyAuthenticationTokens();
+        verifyPasswordVerifiedButOtpNotConsumed();
 
         verify(accountPersistencePort, never())
                 .save(any());
@@ -414,7 +414,7 @@ class WithdrawalAccountRegisterServiceTest {
                                 .INVALID_ACCOUNT_STATUS
                 );
 
-        verifyAuthenticationTokens();
+        verifyPasswordVerifiedButOtpNotConsumed();
 
         verify(accountPersistencePort, never())
                 .save(any());
@@ -549,6 +549,24 @@ class WithdrawalAccountRegisterServiceTest {
                         OTP_AUTH_TOKEN,
                         CUSTOMER_ID,
                         ACCOUNT_ID
+                );
+    }
+
+    // 등록 불가 계좌(유형/상태)는 OTP 소비 전에 걸러져야 한다 - 계좌비밀번호는 검증하되
+    // OTP는 소비되지 않아야 재요청 시 새 OTP를 다시 받지 않아도 된다.
+    private void verifyPasswordVerifiedButOtpNotConsumed() {
+        verify(passwordVerificationPort)
+                .verifyAccountPasswordToken(
+                        ACCOUNT_PASSWORD_AUTH_TOKEN,
+                        CUSTOMER_ID,
+                        ACCOUNT_ID
+                );
+
+        verify(otpVerificationPort, never())
+                .verifyAndConsume(
+                        any(),
+                        any(),
+                        any()
                 );
     }
 

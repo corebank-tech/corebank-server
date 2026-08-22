@@ -55,6 +55,16 @@ public class WithdrawalAccountRegisterService
                 command.accountId()
         );
 
+        // TODO P6: passwordLocked 시 APW0101 연동
+
+        boolean alreadyRegistered = account.isWithdrawalRegistered();
+
+        // 새로 등록하는 경우에만 등록 가능 상태를 OTP 소비 전에 검증한다. OTP는 성공 시 즉시
+        // 소비되므로, 등록 불가 계좌(유형/상태)로 실패할 요청이 OTP부터 소모하지 않게 한다.
+        if (!alreadyRegistered) {
+            account.validateWithdrawalRegistrationAllowed();
+        }
+
         otpVerificationPort.verifyAndConsume(
                 command.otpAuthToken(),
                 command.customerId(),
@@ -63,14 +73,9 @@ public class WithdrawalAccountRegisterService
 
         // 유효한 인증을 거친 재요청이면 상태를 다시 변경하지 않고
         // 기존 등록 결과를 반환한다.
-        if (account.isWithdrawalRegistered()) {
+        if (alreadyRegistered) {
             return toResult(account);
         }
-
-        // TODO P6: passwordLocked 시 APW0101 연동
-
-        // 새로 등록하는 경우에만 등록 가능 상태를 검증한다.
-        account.validateWithdrawalRegistrationAllowed();
 
         OffsetDateTime registeredAt =
                 OffsetDateTime.ofInstant(
