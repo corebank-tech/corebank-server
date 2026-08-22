@@ -42,17 +42,19 @@ public final class IdempotencyFingerprint {
      * path variable 이 섞이거나(PUT /accounts/{accountId}/alias) 본문이 없는 경우(DELETE)에 쓴다.
      * 본문이 없으면 request 에 null 을 넘긴다.
      *
-     * <p>customerId 는 항상 들어간다. 빠지면 다른 고객의 응답이 재생될 수 있어 호출자 선택으로
-     * 두지 않는다(REQ-NFR-007).
+     * <p>customerId 는 항상 세션에서 얻은 값이 들어간다. 빠지거나 다른 값으로 바뀌면 남의 응답이
+     * 재생될 수 있어 호출자 선택으로 두지 않는다(REQ-NFR-007). 그래서 본문과 path variable 을
+     * 먼저 합친 뒤 <b>맨 마지막에</b> 넣는다 - 요청 본문에 customerId 필드가 있어도 클라이언트가
+     * 보낸 값이 인증 주체를 덮어쓰지 못한다.
      */
     public static Map<String, Object> of(Long customerId, Object request, Map<String, Object> pathVariables) {
         Map<String, Object> fingerprint = new TreeMap<>();
-        fingerprint.put("customerId", customerId);
-        fingerprint.putAll(pathVariables);
         if (request != null) {
             fingerprint.putAll(CANONICAL_MAPPER.convertValue(request, FIELD_MAP));
         }
+        fingerprint.putAll(pathVariables);
         fingerprint.keySet().removeIf(IdempotencyFingerprint::isOneTimeToken);
+        fingerprint.put("customerId", customerId);
         return fingerprint;
     }
 

@@ -32,6 +32,28 @@ class IdempotencyFingerprintTest {
         assertThat(IdempotencyFingerprint.of(7L, null)).containsExactly(Map.entry("customerId", 7L));
     }
 
+    private record SpoofedRequest(Long customerId, String alias) {}
+
+    // 클라이언트가 보낸 customerId 가 인증 주체를 덮어쓰면 남의 응답이 재생될 수 있다(REQ-NFR-007).
+    @Test
+    @DisplayName("요청 본문의 customerId 가 세션 고객을 덮어쓰지 못한다")
+    void sessionCustomerIdWinsOverRequestBody() {
+        Map<String, Object> fingerprint =
+                IdempotencyFingerprint.of(7L, new SpoofedRequest(999L, "내 계좌"));
+
+        assertThat(fingerprint).containsEntry("customerId", 7L);
+    }
+
+    @Test
+    @DisplayName("path variable 의 customerId 도 세션 고객을 덮어쓰지 못한다")
+    void sessionCustomerIdWinsOverPathVariables() {
+        Map<String, Object> fingerprint =
+                IdempotencyFingerprint.of(7L, null, Map.of("customerId", 999L, "accountId", 1001L));
+
+        assertThat(fingerprint).containsEntry("customerId", 7L);
+        assertThat(fingerprint).containsEntry("accountId", 1001L);
+    }
+
     @Test
     @DisplayName("본문이 없으면 path variable 만으로 지문을 만든다")
     void buildsFromPathVariablesWhenRequestIsNull() {
