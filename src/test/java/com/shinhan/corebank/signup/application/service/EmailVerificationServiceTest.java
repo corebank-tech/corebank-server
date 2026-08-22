@@ -235,6 +235,87 @@ class EmailVerificationServiceTest {
         verify(tokenPort, never()).save(any(), any(), any());
     }
 
+    @Test
+    @DisplayName("EMAIL_CHANGE 목적과 이메일이 일치하면 인증 토큰을 소비한다")
+    void consumesMatchingEmailChangeToken() {
+        EmailVerificationTokenPayload payload =
+                emailChangePayload("newmail@corebank.com");
+        given(tokenPort.find(TOKEN)).willReturn(Optional.of(payload));
+        given(tokenPort.consume(TOKEN)).willReturn(Optional.of(payload));
+
+        service.verifyAndConsumeForEmailChange(
+                TOKEN,
+                "newmail@corebank.com"
+        );
+
+        verify(tokenPort).consume(TOKEN);
+    }
+
+    @Test
+    @DisplayName("이메일 또는 목적이 다르면 토큰을 소비하지 않고 ATH0103이다")
+    void rejectsMismatchedEmailChangeTokenWithoutConsumption() {
+        given(tokenPort.find(TOKEN)).willReturn(Optional.of(
+                emailChangePayload("other@corebank.com")
+        ));
+
+        BusinessException emailMismatch = catchThrowableOfType(
+                () -> service.verifyAndConsumeForEmailChange(
+                        TOKEN,
+                        "newmail@corebank.com"
+                ),
+                BusinessException.class
+        );
+
+        assertThat(emailMismatch.getErrorCode()).isEqualTo(
+                SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN
+        );
+        verify(tokenPort, never()).consume(any());
+    }
+
+    @Test
+    @DisplayName("SIGN_UP 목적 토큰은 이메일이 같아도 소비하지 않고 ATH0103이다")
+    void rejectsSignUpTokenForEmailChange() {
+        given(tokenPort.find(TOKEN)).willReturn(Optional.of(
+                new EmailVerificationTokenPayload(
+                        "newmail@corebank.com",
+                        EmailVerificationPurpose.SIGN_UP,
+                        LocalDateTime.now(clock)
+                )
+        ));
+
+        BusinessException exception = catchThrowableOfType(
+                () -> service.verifyAndConsumeForEmailChange(
+                        TOKEN,
+                        "newmail@corebank.com"
+                ),
+                BusinessException.class
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(
+                SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN
+        );
+        verify(tokenPort, never()).consume(any());
+    }
+
+    @Test
+    @DisplayName("없거나 이미 소비된 이메일 인증 토큰은 ATH0103이다")
+    void rejectsMissingEmailChangeToken() {
+        given(tokenPort.find(TOKEN)).willReturn(Optional.empty());
+
+        BusinessException exception = catchThrowableOfType(
+                () -> service.verifyAndConsumeForEmailChange(
+                        TOKEN,
+                        "newmail@corebank.com"
+                ),
+                BusinessException.class
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(
+                SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN
+        );
+        verify(tokenPort, never()).consume(any());
+    }
+
     private EmailVerificationRequest activeRequest(
             String code,
             long remainingMinutes
@@ -247,6 +328,15 @@ class EmailVerificationServiceTest {
                 passwordEncoder.encode(code),
                 now.plusMinutes(remainingMinutes),
                 now.minusMinutes(1)
+        );
+    }
+
+    // 이메일 변경 토큰 검증에 사용할 Redis payload를 생성한다.
+    private EmailVerificationTokenPayload emailChangePayload(String email) {
+        return new EmailVerificationTokenPayload(
+                email,
+                EmailVerificationPurpose.EMAIL_CHANGE,
+                LocalDateTime.now(clock)
         );
     }
 
