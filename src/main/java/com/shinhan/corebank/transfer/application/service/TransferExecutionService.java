@@ -137,18 +137,12 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 throw new BusinessException(TransferErrorCode.UNSUPPORTED_ACCOUNT_TYPE);
             }
 
-            // 1차 검증(락 이전) ④: 인증 완료 토큰. OTP는 성공 시 즉시 소비되므로 위 무관한 검증을
-            // 모두 통과한 뒤, 채번(상태 변경의 시작점) 직전에 검증한다(otp_integration_guide.md §9).
-            // IMMEDIATE만 authToken/otpAuthToken이 있으므로 SCHEDULED/AUTO는 건너뛴다(예약/자동이체는
-            // 등록 시점에 이미 검증됐고 배치 실행 시 재검증하지 않는다).
+            // 1차 검증(락 이전) ④: 계좌비밀번호 인증 토큰. IMMEDIATE만 authToken이 있으므로
+            // SCHEDULED/AUTO는 건너뛴다(예약/자동이체는 등록 시점에 이미 검증됐고 배치 실행 시
+            // 재검증하지 않는다).
             if (command.authToken() != null) {
                 transferAuthTokenVerificationPort.verify(
                         command.authToken(), command.withdrawalAccountId(), "TRANSFER_EXECUTE");
-            }
-            if (command.otpAuthToken() != null) {
-                transferOtpVerificationPort.verifyAndConsume(
-                        command.otpAuthToken(), command.customerId(), command.withdrawalAccountId(),
-                        command.depositAccountNumber(), command.amount());
             }
 
             String transactionNumber =
@@ -175,6 +169,35 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             );
             // 람다가 캡처하려면 effectively-final이어야 하는데 created는 재대입되므로 복사본을 둔다.
             Transfer createdTransfer = created;
+
+            // 1차 검증(락 이전) ⑤: 잔액·계좌상태 사전 체크(락 없음, 비authoritative). OTP는
+            // 성공 시 즉시 소비되는 자원이라, 통과 못 할 게 뻔한 요청이 OTP부터 태우지 않도록
+            // 락 획득 전에 미리 걸러낸다. 락이 없어 최종 판정은 아니며, 락 획득 후 재검증(아래
+            // requiresNewTransactionTemplate 안)이 최종 권위를 갖는다 — 이 사전 체크를 통과했어도
+            // 그 사이 상태가 바뀌면 아래에서 다시 걸린다. created 확정 이후에 두는 이유: 여기서
+            // 실패해도 다른 락 안쪽 실패와 동일하게 failTransfer()로 ERROR 행을 남겨야 한다.
+            if (command.otpAuthToken() != null) {
+                accountLockPort.findWithdrawalAccountPreCheckSnapshot(command.withdrawalAccountId())
+                        .ifPresent(snapshot -> {
+                            if (snapshot.status() != LockedAccountStatus.ACTIVE) {
+                                throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
+                            }
+                            if (snapshot.balance() < command.amount()) {
+                                throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
+                            }
+                        });
+                if (payee.status() != LockedAccountStatus.ACTIVE) {
+                    throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
+                }
+            }
+
+            // 1차 검증(락 이전) ⑥: 인증 완료 토큰(OTP). 위 무관한 검증과 사전 체크를 모두 통과한
+            // 뒤, 채번 직후·계좌 락 획득 직전에 소비한다(otp_integration_guide.md §9).
+            if (command.otpAuthToken() != null) {
+                transferOtpVerificationPort.verifyAndConsume(
+                        command.otpAuthToken(), command.customerId(), command.withdrawalAccountId(),
+                        command.depositAccountNumber(), command.amount());
+            }
 
             Transfer completed = requiresNewTransactionTemplate.execute(status -> {
                 // 한도 락을 계좌 락보다 먼저 획득한다(P1-P4 합의: 한도 → 계좌 순서). 위반 시
