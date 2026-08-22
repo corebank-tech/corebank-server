@@ -1,6 +1,7 @@
 package com.shinhan.corebank.account.adapter.in.web;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.account.application.port.out.WithdrawalAccountAuthVerificationPort;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
@@ -19,6 +20,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -61,6 +63,10 @@ class WithdrawalAccountControllerTest
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    // Controller 계약 테스트는 실제 일회용 인증 토큰 저장소와 분리한다.
+    @MockitoBean
+    private WithdrawalAccountAuthVerificationPort authVerificationPort;
 
     @Test
     @DisplayName("본인 입출금계좌를 출금계좌로 등록한다")
