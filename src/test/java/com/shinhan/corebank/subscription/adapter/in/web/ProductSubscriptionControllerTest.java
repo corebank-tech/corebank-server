@@ -321,7 +321,7 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("가입 건에 연결된 계좌가 타 고객 소유면 PRD9001을 반환한다")
+    @DisplayName("가입 건에 연결된 계좌가 타 고객 소유면 PRD9003을 반환한다")
     void getSubscriptionResult_accountOwnedByOtherCustomer_returnsAccountNotFound() throws Exception {
         Long productId = productJpaRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
         Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_ctl_owner");
@@ -337,7 +337,7 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
         mockMvc.perform(get("/product-subscriptions/{subscriptionId}", subscriptionId)
                         .with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.code").value("PRD9001"));
+                .andExpect(jsonPath("$.code").value("PRD9003"));
     }
 
     @Test
