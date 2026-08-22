@@ -1,4 +1,6 @@
 server:
+  # ALB가 TLS를 종료하고 HTTP로 전달하므로, X-Forwarded-* 헤더로 원래 scheme(https)을 인식하게 한다.
+  forward-headers-strategy: framework
   servlet:
     session:
       cookie:
