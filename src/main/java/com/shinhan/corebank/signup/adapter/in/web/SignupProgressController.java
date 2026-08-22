@@ -22,7 +22,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 // 회원가입 입력 검증과 확인정보 조회 HTTP API를 제공한다.
-@Tag(name = "회원가입 진행")
+@Tag(
+        name = "회원가입",
+        description = "회원가입 단계별 인증·입력 검증·가입 완료 API"
+)
 @RestController
 @RequestMapping("/auth/signup")
 public class SignupProgressController {
