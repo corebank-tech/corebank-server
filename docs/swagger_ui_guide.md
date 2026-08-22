@@ -28,11 +28,13 @@ Spring Security 기본 설정(`anyRequest().authenticated()`)을 그대로 두�
 
 ## 3. 인증이 필요한 API를 Swagger UI에서 호출하기
 
-`/swagger-ui/**`, `/v3/api-docs/**`만 `permitAll`이고, 개별 API 엔드포인트(`/products/**` GET, `/actuator/health`, `/auth/login` 제외)는 여전히 `anyRequest().authenticated()`에 걸린다. Swagger UI에서 "Try it out"으로 인증이 필요한 API를 호출하려면 브라우저에 유효한 세션 쿠키가 있어야 한다.
+`/swagger-ui/**`, `/v3/api-docs/**`만 `permitAll`이고, 인증 대상 API는 유효한 로그인 세션이 필요하다. Swagger UI에서 아래 순서로 같은 origin의 API를 호출한다.
 
-- 현재 `auth` 모듈에는 세션에 `AuthenticatedCustomer`를 심는 `POST /auth/login` 컨트롤러가 아직 없다. 로그인 컨트롤러가 준비되기 전까지는 인증이 필요한 API를 Swagger UI에서 직접 호출할 수 없고, `/products/**`(GET)·`/actuator/health`처럼 `permitAll`인 엔드포인트만 테스트 가능하다.
-- **로그인 컨트롤러가 생긴 뒤에도 상태 변경 요청(POST/PUT/DELETE)은 바로 Swagger UI에서 테스트할 수 없다.** `SecurityConfig`는 CSRF 토큰 저장소를 별도로 지정하지 않아 Spring Security 기본값(`HttpSessionCsrfTokenRepository`)을 쓰는데, 이 저장소는 토큰을 서버 세션에만 보관하고 응답으로 클라이언트에 내려주지 않는다. 즉 지금 구조에서는 브라우저(Swagger UI 포함)가 CSRF 토큰 값을 알아낼 방법이 없어, 로그인에 성공해도 상태 변경 요청은 403(`CMN0102`)으로 막힌다.
-- 이는 Swagger UI만의 문제가 아니라 CSRF 토큰을 클라이언트에 노출하는 수단 자체가 앱 전역에 없다는 문제다. 해결 방향은 `CookieCsrfTokenRepository`로 전환해 토큰을 쿠키로 내려주고, `springdoc.swagger-ui.csrf.enabled=true`(및 `cookie-name`/`header-name`)를 설정해 Swagger UI가 쿠키 값을 읽어 요청 헤더에 자동으로 실어 보내게 하는 것이다. 다만 로그인 컨트롤러가 없는 지금은 "로그인 → 쿠키 발급 → Swagger에서 상태 변경 호출"까지 이어지는 흐름을 끝까지 검증할 수 없으므로, 이 작업은 로그인 컨트롤러 도입과 묶어 별도 이슈로 진행한다.
+1. `POST /auth/login`을 실행해 로그인한다. 성공하면 브라우저에 `JSESSIONID`와 `XSRF-TOKEN` 쿠키가 발급된다.
+2. 조회 API는 로그인 세션 쿠키가 자동으로 전달되므로 바로 실행한다.
+3. 상태 변경 API는 `application.yml`의 `springdoc.swagger-ui.csrf.enabled=true` 설정에 따라 Swagger UI가 `XSRF-TOKEN` 쿠키 값을 `X-XSRF-TOKEN` 헤더로 전달한다.
+
+회원가입처럼 `SecurityConfig`에서 CSRF 검사를 제외한 공개 API는 로그인 없이 실행할 수 있다. 인증 API를 테스트할 때는 세션 쿠키의 origin이 일치해야 하므로 로컬 Swagger UI에서는 로컬 API를, 배포 Swagger UI에서는 배포 API를 사용한다.
 
 ## 4. 관련 문서
 
