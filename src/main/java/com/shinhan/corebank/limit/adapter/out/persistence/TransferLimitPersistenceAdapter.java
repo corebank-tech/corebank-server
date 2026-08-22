@@ -45,10 +45,9 @@ public class TransferLimitPersistenceAdapter implements TransferLimitQueryPort, 
 
     @Override
     public TransferLimit save(TransferLimit limit) {
-        TransferLimitJpaEntity entity = limitRepository.findById(limit.getCustomerId())
-                .orElseGet(() -> TransferLimitJpaEntity.from(limit));
-        entity.apply(limit.getOneTimeLimit(), limit.getDailyLimit());
-        return limitRepository.save(entity).toDomain();
+        limitRepository.upsert(limit.getCustomerId(), limit.getOneTimeLimit(),
+                limit.getDailyLimit(), LocalDateTime.now(clock));
+        return limit;
     }
 
     /**

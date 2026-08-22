@@ -1,10 +1,14 @@
 package com.shinhan.corebank.limit.adapter.out.persistence;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface TransferLimitJpaRepository extends JpaRepository<TransferLimitJpaEntity, Long> {
 
@@ -25,4 +29,26 @@ public interface TransferLimitJpaRepository extends JpaRepository<TransferLimitJ
      */
     @Lock(LockModeType.PESSIMISTIC_READ)
     Optional<TransferLimitJpaEntity> findForShareByCustomerId(Long customerId);
+
+    /**
+     * 없으면 INSERT, 있으면 UPDATE 한다. <b>조회 후 저장하는 두 문장으로 바꾸면 안 된다</b> -
+     * SELECT ... FOR UPDATE 는 없는 행을 잠그지 못해, 한도 행이 없는 고객
+     * (LimitCommandService.update 의 폴백)에게 변경이 동시에 들어오면 둘 다 "없음"을 보고
+     * INSERT 한다. TransferLimitSaveConcurrencyTest 가 지킨다.
+     *
+     * <p>네이티브라 두 가지를 직접 챙긴다 - JPA Auditing 을 타지 않아 시각을 자바 Clock 에서
+     * 넘겨받고, 영속성 컨텍스트를 우회하므로 @Modifying 으로 실행 전 flush·실행 후 clear 를 건다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+        INSERT INTO transfer_limit (customer_id, one_time_limit, daily_limit, created_at, updated_at)
+        VALUES (:customerId, :oneTimeLimit, :dailyLimit, :now, :now)
+        ON DUPLICATE KEY UPDATE one_time_limit = :oneTimeLimit,
+                                daily_limit    = :dailyLimit,
+                                updated_at     = :now
+        """, nativeQuery = true)
+    void upsert(@Param("customerId") Long customerId,
+                @Param("oneTimeLimit") long oneTimeLimit,
+                @Param("dailyLimit") long dailyLimit,
+                @Param("now") LocalDateTime now);
 }

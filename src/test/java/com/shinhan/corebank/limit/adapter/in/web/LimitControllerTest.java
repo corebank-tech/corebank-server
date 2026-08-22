@@ -109,6 +109,9 @@ class LimitControllerTest extends IntegrationTestSupport {
 
         entityManager.flush();
         entityManager.clear();
+        // 응답 본문은 저장 여부의 증인이 못 된다 - save() 가 네이티브 upsert 를 쏘고 입력 도메인을
+        // 그대로 돌려주므로, 쓰기가 통째로 빠져도 본문은 새 값으로 나온다. 행을 직접 읽는다.
+        assertThat(savedLimits(customerId)).containsExactly(3_000_000L, 10_000_000L);
         assertThat(historyBeforeValues(customerId)).containsExactly(1_000_000L, 5_000_000L);
     }
 
@@ -163,6 +166,15 @@ class LimitControllerTest extends IntegrationTestSupport {
                 {"oneTimeLimit": %d, "dailyLimit": %d,
                  "accountPasswordAuthToken": "ACC_PWD_TEST", "otpAuthToken": "OTP_AUTH_TEST"}
                 """.formatted(oneTimeLimit, dailyLimit);
+    }
+
+    private List<Long> savedLimits(Long customerId) {
+        Object[] row = (Object[]) entityManager.createNativeQuery(
+                        "SELECT one_time_limit, daily_limit FROM transfer_limit "
+                                + "WHERE customer_id = :customerId")
+                .setParameter("customerId", customerId)
+                .getSingleResult();
+        return List.of(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
     }
 
     private List<Long> historyBeforeValues(Long customerId) {
