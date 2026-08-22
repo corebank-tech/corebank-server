@@ -1,4 +1,4 @@
-package com.shinhan.corebank.autotransfer.application;
+package com.shinhan.corebank.autotransfer.application.service;
 
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionPersistencePort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;

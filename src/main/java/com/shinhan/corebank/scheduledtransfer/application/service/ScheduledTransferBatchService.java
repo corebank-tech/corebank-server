@@ -1,4 +1,4 @@
-package com.shinhan.corebank.scheduledtransfer.application;
+package com.shinhan.corebank.scheduledtransfer.application.service;
 
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferBatchUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferBatchQueryPort;
