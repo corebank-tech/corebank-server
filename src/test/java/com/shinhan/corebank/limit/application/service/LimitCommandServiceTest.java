@@ -53,7 +53,7 @@ class LimitCommandServiceTest {
     @DisplayName("한도를 변경하면 새 값으로 저장하고 변경된 한도와 당일 사용 현황을 함께 반환한다")
     void update_validCommand_savesAndReturnsNewLimits() {
         // given
-        when(transferLimitCommandPort.findByCustomerIdForUpdate(CUSTOMER_ID))
+        when(transferLimitCommandPort.findForUpdateByCustomerId(CUSTOMER_ID))
                 .thenReturn(Optional.of(TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L)));
         when(transferLimitCommandPort.save(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -74,7 +74,7 @@ class LimitCommandServiceTest {
     @DisplayName("변경 직전 값을 이력으로 남긴다")
     void update_savesHistoryWithValuesBeforeChange() {
         // given
-        when(transferLimitCommandPort.findByCustomerIdForUpdate(CUSTOMER_ID))
+        when(transferLimitCommandPort.findForUpdateByCustomerId(CUSTOMER_ID))
                 .thenReturn(Optional.of(TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L)));
         when(transferLimitCommandPort.save(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -103,7 +103,7 @@ class LimitCommandServiceTest {
         verify(authTokenVerificationPort, never())
                 .verifyAndConsumeOtp(any(), any(), anyLong(), anyLong());
         // 인증 전에 X락을 잡으면 실패할 요청이 남의 이체를 대기시킨다.
-        verify(transferLimitCommandPort, never()).findByCustomerIdForUpdate(any());
+        verify(transferLimitCommandPort, never()).findForUpdateByCustomerId(any());
         verify(transferLimitCommandPort, never()).save(any());
     }
 
@@ -111,7 +111,7 @@ class LimitCommandServiceTest {
     @DisplayName("한도 행이 없는 고객은 정책 기본값을 변경 전 값으로 이력에 남긴다")
     void update_limitRowMissing_recordsPolicyDefaultsAsBefore() {
         // given - 가입 시 기본값 부여(REQ-TRSF-029)가 연결되기 전이라 행 없는 고객이 있다
-        when(transferLimitCommandPort.findByCustomerIdForUpdate(CUSTOMER_ID)).thenReturn(Optional.empty());
+        when(transferLimitCommandPort.findForUpdateByCustomerId(CUSTOMER_ID)).thenReturn(Optional.empty());
         when(transferLimitCommandPort.save(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY)).thenReturn(Optional.empty());
@@ -131,7 +131,7 @@ class LimitCommandServiceTest {
     @DisplayName("한도를 읽기 전에 계좌비밀번호와 OTP 토큰을 모두 검증한다")
     void update_verifiesBothAuthTokensBeforeReadingLimit() {
         // given
-        when(transferLimitCommandPort.findByCustomerIdForUpdate(CUSTOMER_ID))
+        when(transferLimitCommandPort.findForUpdateByCustomerId(CUSTOMER_ID))
                 .thenReturn(Optional.of(TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L)));
         when(transferLimitCommandPort.save(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -159,7 +159,7 @@ class LimitCommandServiceTest {
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(OtpErrorCode.TRANSACTION_MISMATCH));
 
-        verify(transferLimitCommandPort, never()).findByCustomerIdForUpdate(any());
+        verify(transferLimitCommandPort, never()).findForUpdateByCustomerId(any());
         verify(transferLimitCommandPort, never()).save(any());
     }
 

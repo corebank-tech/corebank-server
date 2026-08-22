@@ -36,7 +36,7 @@ public class LimitReserveService implements TransferLimitReserver {
      */
     @Override
     public void checkAndReserve(Long customerId, long amount) {
-        TransferLimit limit = transferLimitCommandPort.findByCustomerIdForShare(customerId)
+        TransferLimit limit = transferLimitCommandPort.findForShareByCustomerId(customerId)
                 .orElseGet(() -> {
                     // 가입 시 기본값 부여(REQ-TRSF-029)가 회원가입 흐름에 연결되면 이 경로는 데이터 결함이 된다.
                     log.warn("이체한도 행이 없어 정책 기본값으로 검사합니다 - customerId={}", customerId);

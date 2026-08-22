@@ -63,7 +63,7 @@ public class LimitCommandService implements LimitCommandUseCase, TransferLimitRe
         authTokenVerificationPort.verifyAndConsumeOtp(
                 command.otpAuthToken(), customerId, command.oneTimeLimit(), command.dailyLimit());
 
-        TransferLimit limit = transferLimitCommandPort.findByCustomerIdForUpdate(customerId)
+        TransferLimit limit = transferLimitCommandPort.findForUpdateByCustomerId(customerId)
                 .orElseGet(() -> {
                     // 가입 시 기본값 부여(REQ-TRSF-029)가 회원가입 흐름에 연결되면 이 경로는 데이터 결함이 된다.
                     log.warn("이체한도 행이 없어 정책 기본값에서 변경합니다 - customerId={}", customerId);

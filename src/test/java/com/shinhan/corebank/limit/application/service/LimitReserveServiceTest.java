@@ -104,7 +104,7 @@ class LimitReserveServiceTest {
     @DisplayName("한도 행이 없는 고객은 정책 기본값 1회 100만원으로 검사한다")
     void checkAndReserve_limitRowMissing_checksAgainstPolicyDefault() {
         // given - 가입 시 기본값 부여(REQ-TRSF-029)가 연결되기 전이라 행이 없는 고객이 있다
-        when(transferLimitCommandPort.findByCustomerIdForShare(CUSTOMER_ID)).thenReturn(Optional.empty());
+        when(transferLimitCommandPort.findForShareByCustomerId(CUSTOMER_ID)).thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> serviceAt(TODAY.atTime(14, 0)).checkAndReserve(CUSTOMER_ID, 1_000_001L))
@@ -128,7 +128,7 @@ class LimitReserveServiceTest {
     }
 
     private void givenLimit(long oneTimeLimit, long dailyLimit) {
-        when(transferLimitCommandPort.findByCustomerIdForShare(CUSTOMER_ID))
+        when(transferLimitCommandPort.findForShareByCustomerId(CUSTOMER_ID))
                 .thenReturn(Optional.of(TransferLimit.restore(CUSTOMER_ID, oneTimeLimit, dailyLimit)));
     }
 

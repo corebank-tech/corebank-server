@@ -34,13 +34,13 @@ public class TransferLimitPersistenceAdapter implements TransferLimitQueryPort, 
     }
 
     @Override
-    public Optional<TransferLimit> findByCustomerIdForUpdate(Long customerId) {
-        return limitRepository.findByCustomerIdForUpdate(customerId).map(TransferLimitJpaEntity::toDomain);
+    public Optional<TransferLimit> findForUpdateByCustomerId(Long customerId) {
+        return limitRepository.findForUpdateByCustomerId(customerId).map(TransferLimitJpaEntity::toDomain);
     }
 
     @Override
-    public Optional<TransferLimit> findByCustomerIdForShare(Long customerId) {
-        return limitRepository.findByCustomerIdForShare(customerId).map(TransferLimitJpaEntity::toDomain);
+    public Optional<TransferLimit> findForShareByCustomerId(Long customerId) {
+        return limitRepository.findForShareByCustomerId(customerId).map(TransferLimitJpaEntity::toDomain);
     }
 
     @Override
