@@ -211,6 +211,36 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 .isEqualTo("192.168.0.10");
     }
 
+    // 변경된 휴대폰 번호와 이메일만 MySQL에 반영되는지 검증
+    @Test
+    @DisplayName("기존 고객의 휴대폰 번호와 이메일을 저장한다")
+    void updateContactInfo() {
+        Customer savedCustomer =
+                customerPersistencePort.save(createCustomer());
+        entityManager.flush();
+        entityManager.clear();
+
+        savedCustomer.changeContactInfo(
+                "01087654321",
+                "new-adapter-user@example.com"
+        );
+
+        Customer updated = customerPersistencePort.updateContactInfo(
+                savedCustomer
+        );
+        entityManager.flush();
+        entityManager.clear();
+
+        Customer found = customerPersistencePort.findById(
+                updated.getCustomerId()
+        ).orElseThrow();
+        assertThat(found.getPhoneNumber()).isEqualTo("01087654321");
+        assertThat(found.getEmail())
+                .isEqualTo("new-adapter-user@example.com");
+        assertThat(found.getUserId()).isEqualTo("adapter-user");
+        assertThat(found.getUpdatedAt()).isNotNull();
+    }
+
     // 통합 테스트에서 사용할 신규 고객 생성
     @Test
     @DisplayName("회원가입 중복확인을 위해 아이디와 이메일 존재 여부를 조회한다")
