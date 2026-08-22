@@ -1,4 +1,4 @@
-package com.shinhan.corebank.scheduledtransfer.application;
+package com.shinhan.corebank.scheduledtransfer.application.service;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;

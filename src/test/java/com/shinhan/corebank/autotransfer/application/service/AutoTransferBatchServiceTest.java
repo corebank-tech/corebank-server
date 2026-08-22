@@ -1,4 +1,4 @@
-package com.shinhan.corebank.autotransfer.application;
+package com.shinhan.corebank.autotransfer.application.service;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;

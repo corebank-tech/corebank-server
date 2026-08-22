@@ -1,4 +1,4 @@
-package com.shinhan.corebank.scheduledtransfer.application;
+package com.shinhan.corebank.scheduledtransfer.application.service;
 
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.common.audit.AuditEventType;

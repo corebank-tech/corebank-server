@@ -1,4 +1,4 @@
-package com.shinhan.corebank.scheduledtransfer.application;
+package com.shinhan.corebank.scheduledtransfer.application.service;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
