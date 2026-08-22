@@ -1,9 +1,7 @@
 package com.shinhan.corebank.limit.adapter.in.web;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.common.idempotency.IdempotencyFingerprint;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.limit.application.port.in.LimitCommandUseCase;
@@ -53,18 +51,10 @@ public class LimitController implements LimitControllerDocs {
         Long customerId = customer.customerId();
 
         return idempotentRequestExecutor.execute(
-                idempotencyKey, customerId, "PUT /transfer-limits", fingerprint(customerId, request),
+                idempotencyKey, customerId, "PUT /transfer-limits",
+                IdempotencyFingerprint.of(customerId, request),
                 new TypeReference<>() {},
                 () -> ApiResponse.success(
                         LimitResponse.from(limitCommandUseCase.update(customerId, request.toCommand()))));
-    }
-
-    /** *AuthToken 으로 끝나는 일회성 토큰은 지문에서 제외한다(api_conventions.md §6-3). */
-    private Map<String, Object> fingerprint(Long customerId, LimitUpdateRequest request) {
-        Map<String, Object> fingerprint = new LinkedHashMap<>();
-        fingerprint.put("customerId", customerId);
-        fingerprint.put("oneTimeLimit", request.oneTimeLimit());
-        fingerprint.put("dailyLimit", request.dailyLimit());
-        return fingerprint;
     }
 }
