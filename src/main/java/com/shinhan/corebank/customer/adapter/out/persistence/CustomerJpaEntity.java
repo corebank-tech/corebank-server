@@ -102,4 +102,10 @@ public class CustomerJpaEntity extends BaseEntity {
         this.lastLoginIp = lastLoginIp;
         this.loginFailureCount = loginFailureCount;
     }
+
+    // 고객정보 변경 대상인 휴대폰 번호와 이메일만 갱신한다.
+    public void updateContactInfo(String phoneNumber, String email) {
+        this.phoneNumber = phoneNumber;
+        this.email = email;
+    }
 }

@@ -122,4 +122,12 @@ public class AccountJpaEntity extends BaseEntity {
         this.lastTransactionAt =
                 account.getLastTransactionAt();
     }
+
+    // 계좌비밀번호 해시와 실패 횟수 및 잠금 상태를 반영한다.
+    public void updatePasswordState(Account account) {
+        this.passwordHash = account.getPasswordHash();
+        this.passwordFailureCount =
+                (byte) account.getPasswordFailureCount();
+        this.passwordLocked = account.isPasswordLocked();
+    }
 }
