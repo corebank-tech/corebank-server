@@ -1,6 +1,7 @@
 package com.shinhan.corebank.limit.application.port.in;
 
 import com.shinhan.corebank.limit.application.port.in.dto.LimitCommand;
+import com.shinhan.corebank.limit.application.port.in.dto.LimitResult;
 
 /**
  * 고객이 직접 일으키는 이체한도 상태 변경(REQ-TRSF-025).
@@ -10,5 +11,6 @@ import com.shinhan.corebank.limit.application.port.in.dto.LimitCommand;
  */
 public interface LimitCommandUseCase {
 
-    void update(Long customerId, LimitCommand command);
+    /** 변경된 한도와 당일 사용 현황을 함께 돌려준다. 클라이언트가 재조회하지 않아도 된다. */
+    LimitResult update(Long customerId, LimitCommand command);
 }
