@@ -55,6 +55,10 @@ public class LimitCommandService implements LimitCommandUseCase, TransferLimitRe
      */
     @Override
     public LimitResult update(Long customerId, LimitCommand command) {
+        // 소모 없는 검증을 먼저 끝낸다. 뒤의 verifyAndConsumeOtp 가 토큰을 소비하므로, 여기서
+        // 걸러야 할 입력 실수를 그 뒤에 두면 OTP 를 헛되이 쓰게 된다.
+        TransferLimit.validateOrder(command.oneTimeLimit(), command.dailyLimit());
+
         authTokenVerificationPort.verifyAccountPassword(command.accountPasswordAuthToken(), customerId);
         authTokenVerificationPort.verifyAndConsumeOtp(
                 command.otpAuthToken(), customerId, command.oneTimeLimit(), command.dailyLimit());

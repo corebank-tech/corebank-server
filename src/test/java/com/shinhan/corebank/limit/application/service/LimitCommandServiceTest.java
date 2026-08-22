@@ -3,6 +3,7 @@ package com.shinhan.corebank.limit.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -90,18 +91,19 @@ class LimitCommandServiceTest {
     }
 
     @Test
-    @DisplayName("1회 한도가 1일 한도보다 크면 LMT0004로 거부하고 저장하지 않는다")
-    void update_oneTimeOverDaily_throwsAndDoesNotSave() {
-        // given
-        when(transferLimitCommandPort.findByCustomerIdForUpdate(CUSTOMER_ID))
-                .thenReturn(Optional.of(TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L)));
-
+    @DisplayName("1회 한도가 1일 한도보다 크면 OTP를 소모하기 전에 LMT0004로 거부한다")
+    void update_oneTimeOverDaily_rejectsBeforeConsumingOtp() {
         // when & then
         assertThatThrownBy(() -> service().update(CUSTOMER_ID, command(10_000_000L, 5_000_000L)))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(LmtErrorCode.ONE_TIME_LIMIT_OVER_DAILY));
 
+        // 입력 실수로 토큰이 소모되면 사용자가 OTP를 다시 받아야 한다. 소모 전에 걸러야 한다.
+        verify(authTokenVerificationPort, never())
+                .verifyAndConsumeOtp(any(), any(), anyLong(), anyLong());
+        // 인증 전에 X락을 잡으면 실패할 요청이 남의 이체를 대기시킨다.
+        verify(transferLimitCommandPort, never()).findByCustomerIdForUpdate(any());
         verify(transferLimitCommandPort, never()).save(any());
     }
 
