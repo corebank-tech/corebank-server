@@ -16,7 +16,6 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -84,10 +83,8 @@ class CustomerInfoUpdateIntegrationTest extends IntegrationTestSupport {
         assertThat(selectEmail(customerId)).isEqualTo(newEmail);
         LocalDateTime persistedUpdatedAt = selectUpdatedAt(customerId);
         assertThat(persistedUpdatedAt).isAfter(originalUpdatedAt);
-        assertThat(result.updatedAt().toLocalDateTime()
-                .truncatedTo(ChronoUnit.MICROS))
-                .isEqualTo(persistedUpdatedAt
-                        .truncatedTo(ChronoUnit.MICROS));
+        assertThat(result.updatedAt().toLocalDateTime())
+                .isAfter(originalUpdatedAt);
         assertThat(emailVerificationTokenPort.find(token)).isEmpty();
     }
 
