@@ -32,7 +32,7 @@ public class LimitAuthTokenVerificationAdapter implements AuthTokenVerificationP
     }
 
     @Override
-    public void verifyOtp(String otpAuthToken, Long customerId, long oneTimeLimit, long dailyLimit) {
+    public void verifyAndConsumeOtp(String otpAuthToken, Long customerId, long oneTimeLimit, long dailyLimit) {
         otpAuthTokenVerifier.verifyAndConsume(new OtpAuthTokenVerification(
                 otpAuthToken,
                 customerId,

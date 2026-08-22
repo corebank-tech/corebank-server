@@ -140,7 +140,7 @@ class LimitCommandServiceTest {
 
         // then - 계좌가 아니라 고객 기준으로 검증하고, OTP 에는 바꾸려는 한도를 함께 넘겨 거래내용을 대조하게 한다
         verify(authTokenVerificationPort).verifyAccountPassword("ACC_PWD_TOKEN", CUSTOMER_ID);
-        verify(authTokenVerificationPort).verifyOtp("OTP_AUTH_TOKEN", CUSTOMER_ID, 3_000_000L, 10_000_000L);
+        verify(authTokenVerificationPort).verifyAndConsumeOtp("OTP_AUTH_TOKEN", CUSTOMER_ID, 3_000_000L, 10_000_000L);
     }
 
     @Test
@@ -149,7 +149,7 @@ class LimitCommandServiceTest {
         // given - 인증한 거래내용과 요청 한도가 다르면 otp 모듈이 OTP0102 를 던진다
         doThrow(new BusinessException(OtpErrorCode.TRANSACTION_MISMATCH))
                 .when(authTokenVerificationPort)
-                .verifyOtp("OTP_AUTH_TOKEN", CUSTOMER_ID, 3_000_000L, 10_000_000L);
+                .verifyAndConsumeOtp("OTP_AUTH_TOKEN", CUSTOMER_ID, 3_000_000L, 10_000_000L);
 
         // when & then
         assertThatThrownBy(() -> service().update(CUSTOMER_ID, command(3_000_000L, 10_000_000L)))

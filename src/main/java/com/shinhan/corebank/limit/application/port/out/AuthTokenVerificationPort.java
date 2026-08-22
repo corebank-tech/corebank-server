@@ -27,9 +27,12 @@ public interface AuthTokenVerificationPort {
     void verifyAccountPassword(String authToken, Long customerId);
 
     /**
-     * OTP 토큰을 검증하고 일회용으로 소비한다. 인증 당시 등록한 거래내용과 지금 바꾸려는 한도가
-     * 같은지 대조하므로(§8-2 ④) 인증 통과 후 금액을 바꿔치기할 수 없다.
-     * 토큰 무효는 OTP0101, 거래내용 불일치는 OTP0102 다.
+     * OTP 토큰을 검증하고 <b>일회용으로 소비한다</b>. 성공하면 그 토큰은 다시 쓸 수 없으므로
+     * 호출자가 실패해 재시도하려면 사용자가 OTP 를 다시 받아야 한다. 이름에 Consume 을 넣은 것은
+     * 이 부작용이 호출부에서 보이게 하려는 것이다(otp/api 의 verifyAndConsume 과 같은 뜻).
+     *
+     * <p>인증 당시 등록한 거래내용과 지금 바꾸려는 한도가 같은지 대조하므로(§8-2 ④) 인증 통과 후
+     * 금액을 바꿔치기할 수 없다. 토큰 무효는 OTP0101, 거래내용 불일치는 OTP0102 다.
      */
-    void verifyOtp(String otpAuthToken, Long customerId, long oneTimeLimit, long dailyLimit);
+    void verifyAndConsumeOtp(String otpAuthToken, Long customerId, long oneTimeLimit, long dailyLimit);
 }

@@ -56,7 +56,7 @@ public class LimitCommandService implements LimitCommandUseCase, TransferLimitRe
     @Override
     public LimitResult update(Long customerId, LimitCommand command) {
         authTokenVerificationPort.verifyAccountPassword(command.accountPasswordAuthToken(), customerId);
-        authTokenVerificationPort.verifyOtp(
+        authTokenVerificationPort.verifyAndConsumeOtp(
                 command.otpAuthToken(), customerId, command.oneTimeLimit(), command.dailyLimit());
 
         TransferLimit limit = transferLimitCommandPort.findByCustomerIdForUpdate(customerId)
