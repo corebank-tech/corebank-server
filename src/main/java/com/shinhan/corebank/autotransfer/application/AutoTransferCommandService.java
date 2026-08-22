@@ -12,6 +12,7 @@ import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,7 +64,7 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
         // 1회 이체한도 검증
         long oneTimeLimit = transferLimitPort.findOneTimeLimit(command.customerId());
         if (command.amount() > oneTimeLimit) {
-            throw new BusinessException(AutoTransferErrorCode.ONE_TIME_LIMIT_EXCEEDED);
+            throw new BusinessException(LmtErrorCode.ONE_TIME_LIMIT_EXCEEDED);
         }
 
         // 중복 등록 제한
@@ -95,7 +96,7 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
         AutoTransfer autoTransfer = autoTransferPersistencePort.findById(autoTransferId).orElseThrow(() -> new BusinessException(AutoTransferErrorCode.NOT_FOUND));
         requireOwned(autoTransfer, command.customerId());
         // 상태 검증을 한도 검증보다 먼저 해야 한다
-        // — 정상 상태가 아닌 건을 한도 초과 금액으로 바꾸면 진짜 원인(AUT0302)이 아니라 AUT0006으로 잘못 응답하게 된다
+        // — 정상 상태가 아닌 건을 한도 초과 금액으로 바꾸면 진짜 원인(AUT0302)이 아니라 LMT0002으로 잘못 응답하게 된다
         if (!autoTransfer.getStatus().isModifiable()) {
             throw new BusinessException(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS);
         }
@@ -103,7 +104,7 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
         if (command.amount() != null) {
             long oneTimeLimit = transferLimitPort.findOneTimeLimit(autoTransfer.getCustomerId());
             if (command.amount() > oneTimeLimit) {
-                throw new BusinessException(AutoTransferErrorCode.ONE_TIME_LIMIT_EXCEEDED);
+                throw new BusinessException(LmtErrorCode.ONE_TIME_LIMIT_EXCEEDED);
             }
         }
         // 인증 완료 토큰 — OTP는 성공 시 즉시 소비되므로 위 무관한 검증을 모두 통과한 뒤

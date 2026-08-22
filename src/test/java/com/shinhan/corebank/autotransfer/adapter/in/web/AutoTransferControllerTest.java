@@ -608,8 +608,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("변경 금액이 1회 이체한도를 초과하면 400 + AUT0006을 반환한다")
-    void change_amountExceedsOneTimeLimit_returnsAut0006() throws Exception {
+    @DisplayName("변경 금액이 1회 이체한도를 초과하면 400 + LMT0002를 반환한다")
+    void change_amountExceedsOneTimeLimit_returnsLmt0002() throws Exception {
         AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
                 autoTransfer(accountId, "110000000013", AutoTransferStatus.NORMAL, 24));
         entityManager.flush();
@@ -627,7 +627,7 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(OBJECT_MAPPER.writeValueAsString(body)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("AUT0006"));
+                .andExpect(jsonPath("$.code").value("LMT0002"));
     }
 
     @Test

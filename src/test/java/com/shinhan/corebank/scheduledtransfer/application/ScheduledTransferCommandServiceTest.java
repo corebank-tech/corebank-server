@@ -17,6 +17,7 @@ import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelCommand;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferRegisterCommand;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.AccountStatusPort;
@@ -262,7 +263,7 @@ class ScheduledTransferCommandServiceTest {
     }
 
     @Test
-    @DisplayName("1회 이체한도를 초과하면 ONE_TIME_LIMIT_EXCEEDED를 던진다")
+    @DisplayName("1회 이체한도를 초과하면 LMT0002를 던진다")
     void register_exceedsOneTimeLimit_throws() {
         stubClock();
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
@@ -274,7 +275,7 @@ class ScheduledTransferCommandServiceTest {
         assertThatThrownBy(() -> scheduledTransferCommandService.register(validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ScheduledTransferErrorCode.ONE_TIME_LIMIT_EXCEEDED));
+                        .isEqualTo(LmtErrorCode.ONE_TIME_LIMIT_EXCEEDED));
 
         verify(scheduledTransferPersistencePort, never()).existsActiveDuplicate(any(), any(), any(), any(), any());
     }

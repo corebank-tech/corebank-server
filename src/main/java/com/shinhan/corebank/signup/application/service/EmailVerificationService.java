@@ -14,9 +14,11 @@ import com.shinhan.corebank.signup.application.port.out.EmailVerificationRequest
 import com.shinhan.corebank.signup.application.port.out.EmailVerificationTokenPort;
 import com.shinhan.corebank.signup.application.port.out.SignupCustomerAvailabilityPort;
 import com.shinhan.corebank.signup.application.port.out.VerificationRequestIdGeneratorPort;
+import com.shinhan.corebank.signup.api.EmailChangeVerificationTokenVerifier;
 import com.shinhan.corebank.signup.config.EmailVerificationProperties;
 import com.shinhan.corebank.signup.config.SignupTokenProperties;
 import com.shinhan.corebank.signup.domain.exception.SignupErrorCode;
+import com.shinhan.corebank.signup.domain.model.EmailVerificationPurpose;
 import com.shinhan.corebank.signup.domain.model.EmailVerificationRequest;
 import com.shinhan.corebank.signup.domain.model.EmailVerificationTokenPayload;
 import lombok.RequiredArgsConstructor;
@@ -34,7 +36,8 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class EmailVerificationService implements
         IssueEmailVerificationUseCase,
-        VerifyEmailUseCase {
+        VerifyEmailUseCase,
+        EmailChangeVerificationTokenVerifier {
 
     private static final Pattern CODE_PATTERN = Pattern.compile("^\\d{6}$");
     private static final Pattern EMAIL_PATTERN =
@@ -141,6 +144,48 @@ public class EmailVerificationService implements
         return new VerifyEmailResult(
                 token,
                 now.atZone(clock.getZone()).toOffsetDateTime()
+        );
+    }
+
+    // 이메일과 EMAIL_CHANGE 목적이 일치하는 인증 토큰만 원자적으로 소비한다.
+    @Override
+    public void verifyAndConsumeForEmailChange(
+            String emailVerificationToken,
+            String email
+    ) {
+        if (emailVerificationToken == null
+                || emailVerificationToken.isBlank()
+                || email == null
+                || email.isBlank()) {
+            throw invalidEmailVerificationToken();
+        }
+
+        EmailVerificationTokenPayload payload = tokenPort.find(
+                emailVerificationToken
+        ).orElseThrow(this::invalidEmailVerificationToken);
+        validateEmailChangePayload(payload, email);
+
+        EmailVerificationTokenPayload consumed = tokenPort.consume(
+                emailVerificationToken
+        ).orElseThrow(this::invalidEmailVerificationToken);
+        validateEmailChangePayload(consumed, email);
+    }
+
+    // 인증 토큰이 요청 이메일과 이메일 변경 목적에 묶여 있는지 확인한다.
+    private void validateEmailChangePayload(
+            EmailVerificationTokenPayload payload,
+            String email
+    ) {
+        if (payload.purpose() != EmailVerificationPurpose.EMAIL_CHANGE
+                || !payload.email().equalsIgnoreCase(email)) {
+            throw invalidEmailVerificationToken();
+        }
+    }
+
+    // 이메일 변경 인증 토큰 실패를 공통 ATH0103 예외로 변환한다.
+    private BusinessException invalidEmailVerificationToken() {
+        return new BusinessException(
+                SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN
         );
     }
 }

@@ -105,6 +105,23 @@ public class CustomerPersistenceAdapter
         customerJpaRepository.save(entity);
     }
 
+    // 비관적 락으로 조회한 고객의 연락처를 갱신하고 즉시 DB 제약을 확인한다.
+    @Override
+    public Customer updateContactInfo(Customer customer) {
+        Objects.requireNonNull(customer, "customer must not be null");
+
+        CustomerJpaEntity entity =
+                findExistingEntityForUpdate(customer.getCustomerId());
+        entity.updateContactInfo(
+                customer.getPhoneNumber(),
+                customer.getEmail()
+        );
+
+        CustomerJpaEntity savedEntity =
+                customerJpaRepository.saveAndFlush(entity);
+        return customerMapper.toDomain(savedEntity);
+    }
+
     // customerId가 없는 신규 고객만 저장
     @Override
     public Customer save(Customer customer) {
