@@ -220,12 +220,9 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        LocalDateTime changedAt =
-                LocalDateTime.of(2026, 8, 21, 16, 20);
         savedCustomer.changeContactInfo(
                 "01087654321",
-                "new-adapter-user@example.com",
-                changedAt
+                "new-adapter-user@example.com"
         );
 
         Customer updated = customerPersistencePort.updateContactInfo(

@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Pattern;
@@ -75,8 +74,7 @@ public class CustomerInfoUpdateService implements UpdateCustomerInfoUseCase {
 
         customer.changeContactInfo(
                 requestedPhoneNumber,
-                requestedEmail,
-                LocalDateTime.now(clock)
+                requestedEmail
         );
 
         Customer savedCustomer = updateContactInfo(customer, emailChanged);

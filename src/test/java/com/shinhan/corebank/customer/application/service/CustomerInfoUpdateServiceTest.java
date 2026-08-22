@@ -62,8 +62,7 @@ class CustomerInfoUpdateServiceTest {
         givenCustomer();
         given(customerPersistencePort.existsByEmail("newmail@corebank.com"))
                 .willReturn(false);
-        given(customerPersistencePort.updateContactInfo(any()))
-                .willAnswer(invocation -> invocation.getArgument(0));
+        givenPersistedCustomer();
 
         UpdateCustomerInfoResult result = service.update(command(
                 "01087654321",
@@ -86,8 +85,7 @@ class CustomerInfoUpdateServiceTest {
     @DisplayName("휴대폰 번호만 변경하면 이메일 인증 토큰을 사용하지 않는다")
     void updatesOnlyPhoneNumberWithoutEmailVerification() {
         givenCustomer();
-        given(customerPersistencePort.updateContactInfo(any()))
-                .willAnswer(invocation -> invocation.getArgument(0));
+        givenPersistedCustomer();
 
         UpdateCustomerInfoResult result = service.update(command(
                 "01087654321",
@@ -170,6 +168,14 @@ class CustomerInfoUpdateServiceTest {
                 .willReturn(Optional.of(customer()));
     }
 
+    // Auditing이 반영된 영속화 결과를 반환해 입력 객체 echo로 인한 착시를 방지한다.
+    private void givenPersistedCustomer() {
+        given(customerPersistencePort.updateContactInfo(any()))
+                .willAnswer(invocation -> persistedCustomer(
+                        invocation.getArgument(0)
+                ));
+    }
+
     // 테스트 입력값으로 고객정보 변경 command를 생성한다.
     private UpdateCustomerInfoCommand command(
             String phoneNumber,
@@ -216,6 +222,28 @@ class CustomerInfoUpdateServiceTest {
                 joinedAt,
                 joinedAt,
                 joinedAt
+        );
+    }
+
+    // 저장 시점의 updatedAt을 포함한 고객 객체로 실제 persistence 반환값을 모사한다.
+    private Customer persistedCustomer(Customer customer) {
+        return Customer.restore(
+                customer.getCustomerId(),
+                customer.getUserId(),
+                customer.getPasswordHash(),
+                customer.getUserName(),
+                customer.getBirthDate(),
+                customer.getEmail(),
+                customer.getPhoneNumber(),
+                customer.getLoginFailureCount(),
+                customer.isAccountLocked(),
+                customer.getLastLoginAt(),
+                customer.getLastLoginIp(),
+                customer.getPreviousLoginAt(),
+                customer.getPasswordChangedAt(),
+                customer.getJoinedAt(),
+                customer.getCreatedAt(),
+                LocalDateTime.of(2026, 8, 21, 16, 20)
         );
     }
 }

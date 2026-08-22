@@ -135,8 +135,7 @@ public class Customer {
     // 검증이 끝난 휴대폰 번호와 이메일을 새 값으로 변경한다.
     public void changeContactInfo(
             String phoneNumber,
-            String email,
-            LocalDateTime updatedAt
+            String email
     ) {
         if (phoneNumber == null || phoneNumber.isBlank()) {
             throw new IllegalArgumentException("휴대폰 번호는 필수입니다.");
@@ -144,13 +143,8 @@ public class Customer {
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("이메일은 필수입니다.");
         }
-        if (updatedAt == null) {
-            throw new IllegalArgumentException("고객정보 변경일시는 필수입니다.");
-        }
-
         this.phoneNumber = phoneNumber;
         this.email = email;
-        this.updatedAt = updatedAt;
     }
 
     private static boolean isValidIpAddress(String loginIp) {

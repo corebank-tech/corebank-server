@@ -16,6 +16,7 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -65,6 +66,7 @@ class CustomerInfoUpdateIntegrationTest extends IntegrationTestSupport {
         String token = "EMAIL_VERIFICATION_update_" + sequence;
         String newEmail = "updated" + sequence + "@corebank.com";
         saveEmailToken(token, newEmail, EmailVerificationPurpose.EMAIL_CHANGE);
+        LocalDateTime originalUpdatedAt = selectUpdatedAt(customerId);
 
         UpdateCustomerInfoResult result = updateCustomerInfoUseCase.update(
                 new UpdateCustomerInfoCommand(
@@ -80,6 +82,12 @@ class CustomerInfoUpdateIntegrationTest extends IntegrationTestSupport {
         assertThat(result.email()).startsWith("upda");
         assertThat(selectPhoneNumber(customerId)).isEqualTo("01087654321");
         assertThat(selectEmail(customerId)).isEqualTo(newEmail);
+        LocalDateTime persistedUpdatedAt = selectUpdatedAt(customerId);
+        assertThat(persistedUpdatedAt).isAfter(originalUpdatedAt);
+        assertThat(result.updatedAt().toLocalDateTime()
+                .truncatedTo(ChronoUnit.MICROS))
+                .isEqualTo(persistedUpdatedAt
+                        .truncatedTo(ChronoUnit.MICROS));
         assertThat(emailVerificationTokenPort.find(token)).isEmpty();
     }
 
@@ -178,6 +186,15 @@ class CustomerInfoUpdateIntegrationTest extends IntegrationTestSupport {
         return jdbcTemplate.queryForObject(
                 "SELECT email FROM customer WHERE customer_id = ?",
                 String.class,
+                customerId
+        );
+    }
+
+    // JPA Auditing이 실제 MySQL에 기록한 고객정보 변경일시를 조회한다.
+    private LocalDateTime selectUpdatedAt(Long customerId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT updated_at FROM customer WHERE customer_id = ?",
+                LocalDateTime.class,
                 customerId
         );
     }
