@@ -7,6 +7,7 @@ import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -18,6 +19,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,6 +63,11 @@ class WithdrawalAccountControllerTest
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    // 출금계좌 등록은 실제 OTP 발급 없이 otp.api 경계만 검증한다 — OTP 자체의 발급/소비 로직은
+    // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
+    @MockitoBean
+    private OtpAuthTokenVerifier otpAuthTokenVerifier;
 
     @Test
     @DisplayName("본인 입출금계좌를 출금계좌로 등록한다")

@@ -13,6 +13,7 @@ import com.shinhan.corebank.autotransfer.adapter.out.account.AccountLookupJpaRep
 import com.shinhan.corebank.autotransfer.adapter.out.account.AccountStatusAdapter;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterCommand;
 import com.shinhan.corebank.autotransfer.application.port.out.AuthTokenVerificationPort;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferOtpVerificationPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
 import com.shinhan.corebank.autotransfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
@@ -54,12 +55,13 @@ class AutoTransferCommandServiceRealAdapterTest extends IntegrationTestSupport {
         AccountStatusAdapter realAccountStatusAdapter = new AccountStatusAdapter(accountLookupJpaRepository);
         autoTransferPersistencePort = mock(AutoTransferPersistencePort.class);
         AuthTokenVerificationPort authTokenVerificationPort = mock(AuthTokenVerificationPort.class);
+        AutoTransferOtpVerificationPort autoTransferOtpVerificationPort = mock(AutoTransferOtpVerificationPort.class);
         transferLimitPort = mock(TransferLimitPort.class);
         when(transferLimitPort.findOneTimeLimit(anyLong())).thenReturn(10_000_000L);
         AuditLogService auditLogService = mock(AuditLogService.class);
 
         commandService = new AutoTransferCommandService(
-                autoTransferPersistencePort, authTokenVerificationPort, realAccountStatusAdapter,
+                autoTransferPersistencePort, authTokenVerificationPort, autoTransferOtpVerificationPort, realAccountStatusAdapter,
                 transferLimitPort, auditLogService, Clock.systemDefaultZone());
     }
 
@@ -147,6 +149,7 @@ class AutoTransferCommandServiceRealAdapterTest extends IntegrationTestSupport {
                 .startDate(LocalDate.now().plusDays(10))
                 .endDate(LocalDate.now().plusMonths(12))
                 .accountPasswordAuthToken("token")
+                .otpAuthToken("otp-token")
                 .requestIp("127.0.0.1");
     }
 

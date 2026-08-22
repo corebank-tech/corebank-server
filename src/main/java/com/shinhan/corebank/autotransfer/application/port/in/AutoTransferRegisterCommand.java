@@ -14,12 +14,13 @@ import static com.shinhan.corebank.common.util.AccountNumberPolicy.ACCOUNT_NUMBE
 public record AutoTransferRegisterCommand (Long customerId, Long withdrawalAccountId, String depositAccountNumber,
                                            String payeeName, Long amount, Integer cycleMonths, Integer transferDay,
                                            LocalDate startDate, LocalDate endDate, String myPassbookMemo, String recipientPassbookMemo,
-                                           String accountPasswordAuthToken, String requestIp){
+                                           String accountPasswordAuthToken, String otpAuthToken, String requestIp){
 
     public AutoTransferRegisterCommand {
         //필수값 검증
         if(customerId == null || withdrawalAccountId == null || depositAccountNumber == null || payeeName == null || amount == null
-                || cycleMonths == null || transferDay == null || startDate == null || endDate == null || accountPasswordAuthToken == null || requestIp == null) {
+                || cycleMonths == null || transferDay == null || startDate == null || endDate == null
+                || accountPasswordAuthToken == null || otpAuthToken == null || requestIp == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
         //계좌번호 형식 검증
@@ -38,7 +39,7 @@ public record AutoTransferRegisterCommand (Long customerId, Long withdrawalAccou
             throw new BusinessException(AutoTransferErrorCode.MEMO_LENGTH_EXCEEDED);
         }
         //공백 문자열 검증
-        if (payeeName.isBlank() || accountPasswordAuthToken.isBlank() || requestIp.isBlank()) {
+        if (payeeName.isBlank() || accountPasswordAuthToken.isBlank() || otpAuthToken.isBlank() || requestIp.isBlank()) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
     }

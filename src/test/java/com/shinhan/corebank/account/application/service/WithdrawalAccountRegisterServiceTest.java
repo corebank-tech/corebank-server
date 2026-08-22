@@ -3,7 +3,8 @@ package com.shinhan.corebank.account.application.service;
 import com.shinhan.corebank.account.application.port.in.WithdrawalAccountRegisterCommand;
 import com.shinhan.corebank.account.application.port.in.WithdrawalAccountRegisterResult;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
-import com.shinhan.corebank.account.application.port.out.WithdrawalAccountAuthVerificationPort;
+import com.shinhan.corebank.account.application.port.out.WithdrawalAccountOtpVerificationPort;
+import com.shinhan.corebank.account.application.port.out.WithdrawalAccountPasswordVerificationPort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
@@ -58,8 +59,12 @@ class WithdrawalAccountRegisterServiceTest {
     private AccountPersistencePort accountPersistencePort;
 
     @Mock
-    private WithdrawalAccountAuthVerificationPort
-            authVerificationPort;
+    private WithdrawalAccountPasswordVerificationPort
+            passwordVerificationPort;
+
+    @Mock
+    private WithdrawalAccountOtpVerificationPort
+            otpVerificationPort;
 
     private WithdrawalAccountRegisterService service;
 
@@ -72,7 +77,8 @@ class WithdrawalAccountRegisterServiceTest {
 
         service = new WithdrawalAccountRegisterService(
                 accountPersistencePort,
-                authVerificationPort,
+                passwordVerificationPort,
+                otpVerificationPort,
                 clock
         );
     }
@@ -155,17 +161,17 @@ class WithdrawalAccountRegisterServiceTest {
 
         // then
         InOrder inOrder =
-                inOrder(authVerificationPort);
+                inOrder(passwordVerificationPort, otpVerificationPort);
 
-        inOrder.verify(authVerificationPort)
+        inOrder.verify(passwordVerificationPort)
                 .verifyAccountPasswordToken(
                         ACCOUNT_PASSWORD_AUTH_TOKEN,
                         CUSTOMER_ID,
                         ACCOUNT_ID
                 );
 
-        inOrder.verify(authVerificationPort)
-                .verifyOtpToken(
+        inOrder.verify(otpVerificationPort)
+                .verifyAndConsume(
                         OTP_AUTH_TOKEN,
                         CUSTOMER_ID,
                         ACCOUNT_ID
@@ -248,7 +254,7 @@ class WithdrawalAccountRegisterServiceTest {
                                 .ACCOUNT_NOT_FOUND_OR_FORBIDDEN
                 );
 
-        verifyNoInteractions(authVerificationPort);
+        verifyNoInteractions(passwordVerificationPort, otpVerificationPort);
 
         verify(accountPersistencePort, never())
                 .save(any());
@@ -288,7 +294,7 @@ class WithdrawalAccountRegisterServiceTest {
                                 .INVALID_WITHDRAWAL_ACCOUNT_TYPE
                 );
 
-        verifyAuthenticationTokens();
+        verifyPasswordVerifiedButOtpNotConsumed();
 
         verify(accountPersistencePort, never())
                 .save(any());
@@ -328,7 +334,7 @@ class WithdrawalAccountRegisterServiceTest {
                                 .INVALID_WITHDRAWAL_ACCOUNT_TYPE
                 );
 
-        verifyAuthenticationTokens();
+        verifyPasswordVerifiedButOtpNotConsumed();
 
         verify(accountPersistencePort, never())
                 .save(any());
@@ -368,7 +374,7 @@ class WithdrawalAccountRegisterServiceTest {
                                 .INVALID_ACCOUNT_STATUS
                 );
 
-        verifyAuthenticationTokens();
+        verifyPasswordVerifiedButOtpNotConsumed();
 
         verify(accountPersistencePort, never())
                 .save(any());
@@ -408,7 +414,7 @@ class WithdrawalAccountRegisterServiceTest {
                                 .INVALID_ACCOUNT_STATUS
                 );
 
-        verifyAuthenticationTokens();
+        verifyPasswordVerifiedButOtpNotConsumed();
 
         verify(accountPersistencePort, never())
                 .save(any());
@@ -437,7 +443,7 @@ class WithdrawalAccountRegisterServiceTest {
                         "계좌비밀번호 인증 실패"
                 )
         )
-                .when(authVerificationPort)
+                .when(passwordVerificationPort)
                 .verifyAccountPasswordToken(
                         ACCOUNT_PASSWORD_AUTH_TOKEN,
                         CUSTOMER_ID,
@@ -455,8 +461,8 @@ class WithdrawalAccountRegisterServiceTest {
                         "계좌비밀번호 인증 실패"
                 );
 
-        verify(authVerificationPort, never())
-                .verifyOtpToken(
+        verify(otpVerificationPort, never())
+                .verifyAndConsume(
                         any(),
                         any(),
                         any()
@@ -495,8 +501,8 @@ class WithdrawalAccountRegisterServiceTest {
                         "OTP 인증 실패"
                 )
         )
-                .when(authVerificationPort)
-                .verifyOtpToken(
+                .when(otpVerificationPort)
+                .verifyAndConsume(
                         OTP_AUTH_TOKEN,
                         CUSTOMER_ID,
                         ACCOUNT_ID
@@ -513,7 +519,7 @@ class WithdrawalAccountRegisterServiceTest {
                         "OTP 인증 실패"
                 );
 
-        verify(authVerificationPort)
+        verify(passwordVerificationPort)
                 .verifyAccountPasswordToken(
                         ACCOUNT_PASSWORD_AUTH_TOKEN,
                         CUSTOMER_ID,
@@ -531,18 +537,36 @@ class WithdrawalAccountRegisterServiceTest {
     }
 
     private void verifyAuthenticationTokens() {
-        verify(authVerificationPort)
+        verify(passwordVerificationPort)
                 .verifyAccountPasswordToken(
                         ACCOUNT_PASSWORD_AUTH_TOKEN,
                         CUSTOMER_ID,
                         ACCOUNT_ID
                 );
 
-        verify(authVerificationPort)
-                .verifyOtpToken(
+        verify(otpVerificationPort)
+                .verifyAndConsume(
                         OTP_AUTH_TOKEN,
                         CUSTOMER_ID,
                         ACCOUNT_ID
+                );
+    }
+
+    // 등록 불가 계좌(유형/상태)는 OTP 소비 전에 걸러져야 한다 - 계좌비밀번호는 검증하되
+    // OTP는 소비되지 않아야 재요청 시 새 OTP를 다시 받지 않아도 된다.
+    private void verifyPasswordVerifiedButOtpNotConsumed() {
+        verify(passwordVerificationPort)
+                .verifyAccountPasswordToken(
+                        ACCOUNT_PASSWORD_AUTH_TOKEN,
+                        CUSTOMER_ID,
+                        ACCOUNT_ID
+                );
+
+        verify(otpVerificationPort, never())
+                .verifyAndConsume(
+                        any(),
+                        any(),
+                        any()
                 );
     }
 

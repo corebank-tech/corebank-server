@@ -19,6 +19,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 // Phase 1 기존 은행 고객·계좌 원장과 인증 실패 상태를 메모리로 제공한다.
+// @Profile을 두지 않는 이유(2026-08-21 재확인): 이 프로젝트 범위에는 실제 타행 시스템 연동 계획이
+// 없다(requirements_overview.md "범위 재확인 또는 고도화 후보" 항목). 다른 Mock(OTP/계좌비밀번호/한도)과
+// 달리 "실구현이 나올 때까지"가 아니라 의도된 영구 시뮬레이션 레이어이므로, @Profile로 prod를 제외하면
+// 대체 구현체가 없어 실제 배포(corebank.yml, SPRING_PROFILES_ACTIVE=prod) 시 스프링 컨텍스트 초기화가
+// 실패해 서버가 기동하지 않는다 — 그래서 모든 프로필에서 그대로 활성화한다.
 @Component
 public class MockExistingBankCustomerVerificationAdapter
         implements ExistingBankCustomerVerificationPort,
