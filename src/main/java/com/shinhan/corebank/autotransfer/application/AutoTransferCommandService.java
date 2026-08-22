@@ -124,9 +124,21 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
         AutoTransfer autoTransfer = autoTransferPersistencePort.findById(autoTransferId).orElseThrow(() ->
                 new BusinessException(AutoTransferErrorCode.NOT_FOUND));
         requireOwned(autoTransfer, command.customerId());
+
+        LocalDateTime now = LocalDateTime.now(clock.withZone(SEOUL));
+
+        // terminate()가 내부에서도 같은 검증을 하지만, OTP는 성공 시 즉시 소비되므로 change()와
+        // 동일한 이유로 실패할 수 있는 이 검증들을 OTP 소비 앞으로 당긴다(otp_integration_guide.md §9).
+        if (!autoTransfer.getStatus().isModifiable()) {
+            throw new BusinessException(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS);
+        }
+        if (autoTransfer.getNextExecutionDate().equals(now.toLocalDate())) {
+            throw new BusinessException(AutoTransferErrorCode.CANNOT_TERMINATE_ON_EXECUTION_DATE);
+        }
+
         authTokenVerificationPort.verify(command.accountPasswordAuthToken(), autoTransfer.getWithdrawalAccountId(), "AUTO_TRANSFER_CANCEL");
         autoTransferOtpVerificationPort.verifyCancelAndConsume(command.otpAuthToken(), command.customerId(), autoTransferId);
-        autoTransfer.terminate(LocalDateTime.now(clock.withZone(SEOUL)));
+        autoTransfer.terminate(now);
         AutoTransfer saved = autoTransferPersistencePort.save(autoTransfer);
         auditLogService.record(saved.getCustomerId(), null, AuditEventType.AUTO_TRANSFER_INFO_CHANGE,
                 command.requestIp(), true, Map.of("autoTransferId", saved.getAutoTransferId(), "action", "cancel"));

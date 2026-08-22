@@ -527,6 +527,7 @@ class AutoTransferCommandServiceTest {
     void cancel_invalidAuthToken_propagatesException() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
 
@@ -543,6 +544,7 @@ class AutoTransferCommandServiceTest {
     void cancel_invalidOtpAuthToken_propagatesException() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(autoTransferOtpVerificationPort).verifyCancelAndConsume(any(), any(), any());
 
@@ -551,5 +553,49 @@ class AutoTransferCommandServiceTest {
 
         verify(autoTransferPersistencePort, never()).save(any());
         verify(auditLogService, never()).record(any(), any(), any(), any(), anyBoolean(), any());
+    }
+
+    @Test
+    @DisplayName("정상 상태가 아닌 건은 해지 요청도 OTP를 소비하지 않고 AUT0302를 던진다")
+    void cancel_notModifiableStatus_throwsNotInNormalStatus_withoutConsumingOtp() {
+        AutoTransfer terminated = AutoTransfer.reconstitute(
+                10L, 1L, 2L, "110987654321", "홍길동",
+                10_000L, 1, 15,
+                LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), null,
+                "내메모", "받는메모", AutoTransferStatus.TERMINATED,
+                LocalDateTime.now(), LocalDateTime.now(), LocalDateTime.now(), 0L);
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(terminated));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+
+        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS));
+
+        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("다음 실행 예정일 당일 해지 요청은 OTP를 소비하지 않고 AUT0303을 던진다")
+    void cancel_onExecutionDate_throwsCannotTerminateOnExecutionDate_withoutConsumingOtp() {
+        AutoTransfer dueToday = AutoTransfer.reconstitute(
+                10L, 1L, 2L, "110987654321", "홍길동",
+                10_000L, 1, 15,
+                LocalDate.now().minusMonths(1), LocalDate.now().plusMonths(12), LocalDate.now(),
+                "내메모", "받는메모", AutoTransferStatus.NORMAL,
+                LocalDateTime.now(), null, LocalDateTime.now(), 0L);
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(dueToday));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+
+        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.CANNOT_TERMINATE_ON_EXECUTION_DATE));
+
+        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+        verify(autoTransferPersistencePort, never()).save(any());
     }
 }
