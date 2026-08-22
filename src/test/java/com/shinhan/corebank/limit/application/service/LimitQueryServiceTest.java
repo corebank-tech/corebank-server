@@ -1,6 +1,9 @@
 package com.shinhan.corebank.limit.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.limit.application.port.in.dto.LimitResult;
@@ -137,8 +140,9 @@ class LimitQueryServiceTest {
         // when
         long oneTimeLimit = serviceAt(TODAY.atTime(14, 0)).findOneTimeLimit(CUSTOMER_ID);
 
-        // then
+        // then - 등록 검증에는 1회 한도만 필요하다. 사용액까지 읽으면 등록 요청마다 쓰지 않는 쿼리가 한 건씩 나간다.
         assertThat(oneTimeLimit).isEqualTo(2_000_000L);
+        verify(transferLimitQueryPort, never()).findUsage(any(), any());
     }
 
     @Test
@@ -152,6 +156,7 @@ class LimitQueryServiceTest {
 
         // then - 당일 사용액은 등록 검증에 필요 없으므로 조회하지 않는다
         assertThat(oneTimeLimit).isEqualTo(1_000_000L);
+        verify(transferLimitQueryPort, never()).findUsage(any(), any());
     }
 
     /** 운영 Clock 이 KST 라서(REQ-NFR-018) 테스트도 같은 시간대로 고정한다. */

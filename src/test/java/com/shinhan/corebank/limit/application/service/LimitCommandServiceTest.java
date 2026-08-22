@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,6 +31,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -140,9 +142,13 @@ class LimitCommandServiceTest {
         // when
         service().update(CUSTOMER_ID, command(3_000_000L, 10_000_000L));
 
-        // then - 계좌가 아니라 고객 기준으로 검증하고, OTP 에는 바꾸려는 한도를 함께 넘겨 거래내용을 대조하게 한다
-        verify(authTokenVerificationPort).verifyAccountPassword("ACC_PWD_TOKEN", CUSTOMER_ID);
-        verify(authTokenVerificationPort).verifyAndConsumeOtp("OTP_AUTH_TOKEN", CUSTOMER_ID, 3_000_000L, 10_000_000L);
+        // then - 계좌가 아니라 고객 기준으로 검증하고, OTP 에는 바꾸려는 한도를 함께 넘겨 거래내용을 대조하게 한다.
+        // 순서까지 보는 이유는 인증 전에 X락을 잡으면 실패할 요청이 같은 고객의 이체를 대기시키기 때문이다.
+        InOrder inOrder = inOrder(authTokenVerificationPort, transferLimitCommandPort);
+        inOrder.verify(authTokenVerificationPort).verifyAccountPassword("ACC_PWD_TOKEN", CUSTOMER_ID);
+        inOrder.verify(authTokenVerificationPort)
+                .verifyAndConsumeOtp("OTP_AUTH_TOKEN", CUSTOMER_ID, 3_000_000L, 10_000_000L);
+        inOrder.verify(transferLimitCommandPort).findForUpdateByCustomerId(CUSTOMER_ID);
     }
 
     @Test
