@@ -293,6 +293,19 @@ public class Account {
         return passwordAttemptResult(true);
     }
 
+    // 인증된 신규 해시로 비밀번호를 교체하고 기존 오류 상태를 초기화한다.
+    public void changePassword(String newPasswordHash) {
+        if (newPasswordHash == null || newPasswordHash.isBlank()) {
+            throw new IllegalArgumentException(
+                    "신규 계좌비밀번호 해시는 필수입니다."
+            );
+        }
+
+        this.passwordHash = newPasswordHash;
+        this.passwordFailureCount = 0;
+        this.passwordLocked = false;
+    }
+
     // 최신 검증 상태를 잔여 시도 횟수와 함께 반환한다.
     public AccountPasswordAttemptResult currentPasswordAttemptResult() {
         return passwordAttemptResult(false);
