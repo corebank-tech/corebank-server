@@ -1,0 +1,180 @@
+package com.shinhan.corebank.limit.application.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.limit.application.port.in.dto.LimitCommand;
+import com.shinhan.corebank.limit.application.port.in.dto.LimitResult;
+import com.shinhan.corebank.limit.application.port.out.AuthTokenVerificationPort;
+import com.shinhan.corebank.limit.application.port.out.TransferLimitCommandPort;
+import com.shinhan.corebank.limit.application.port.out.TransferLimitHistoryPort;
+import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
+import com.shinhan.corebank.otp.domain.exception.OtpErrorCode;
+import com.shinhan.corebank.limit.domain.TransferLimit;
+import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
+import com.shinhan.corebank.limit.domain.TransferLimitHistory;
+
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.Optional;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+@ExtendWith(MockitoExtension.class)
+class LimitCommandServiceTest {
+
+    private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+    private static final LocalDate TODAY = LocalDate.of(2026, 8, 21);
+    private static final Long CUSTOMER_ID = 1L;
+
+    @Mock
+    TransferLimitCommandPort transferLimitCommandPort;
+    @Mock
+    TransferLimitQueryPort transferLimitQueryPort;
+    @Mock
+    TransferLimitHistoryPort transferLimitHistoryPort;
+    @Mock
+    AuthTokenVerificationPort authTokenVerificationPort;
+
+    @Test
+    @DisplayName("한도를 변경하면 새 값으로 저장하고 변경된 한도와 당일 사용 현황을 함께 반환한다")
+    void update_validCommand_savesAndReturnsNewLimits() {
+        // given
+        when(transferLimitCommandPort.findByCustomerIdForUpdate(CUSTOMER_ID))
+                .thenReturn(Optional.of(TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L)));
+        when(transferLimitCommandPort.save(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY))
+                .thenReturn(Optional.of(TransferLimitDailyUsage.restore(CUSTOMER_ID, TODAY, 300_000L)));
+
+        // when
+        LimitResult result = service().update(CUSTOMER_ID, command(3_000_000L, 10_000_000L));
+
+        // then
+        assertThat(result.oneTimeLimit()).isEqualTo(3_000_000L);
+        assertThat(result.dailyLimit()).isEqualTo(10_000_000L);
+        assertThat(result.dailyUsedAmount()).isEqualTo(300_000L);
+        assertThat(result.dailyRemainingAmount()).isEqualTo(9_700_000L);
+    }
+
+    @Test
+    @DisplayName("변경 직전 값을 이력으로 남긴다")
+    void update_savesHistoryWithValuesBeforeChange() {
+        // given
+        when(transferLimitCommandPort.findByCustomerIdForUpdate(CUSTOMER_ID))
+                .thenReturn(Optional.of(TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L)));
+        when(transferLimitCommandPort.save(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY)).thenReturn(Optional.empty());
+
+        // when
+        service().update(CUSTOMER_ID, command(3_000_000L, 10_000_000L));
+
+        // then
+        ArgumentCaptor<TransferLimitHistory> captor = ArgumentCaptor.forClass(TransferLimitHistory.class);
+        verify(transferLimitHistoryPort).save(captor.capture());
+        assertThat(captor.getValue().getBeforeOneTimeLimit()).isEqualTo(1_000_000L);
+        assertThat(captor.getValue().getBeforeDailyLimit()).isEqualTo(5_000_000L);
+    }
+
+    @Test
+    @DisplayName("1회 한도가 1일 한도보다 크면 LMT0004로 거부하고 저장하지 않는다")
+    void update_oneTimeOverDaily_throwsAndDoesNotSave() {
+        // given
+        when(transferLimitCommandPort.findByCustomerIdForUpdate(CUSTOMER_ID))
+                .thenReturn(Optional.of(TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L)));
+
+        // when & then
+        assertThatThrownBy(() -> service().update(CUSTOMER_ID, command(10_000_000L, 5_000_000L)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(LmtErrorCode.ONE_TIME_LIMIT_OVER_DAILY));
+
+        verify(transferLimitCommandPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("한도 행이 없는 고객은 정책 기본값을 변경 전 값으로 이력에 남긴다")
+    void update_limitRowMissing_recordsPolicyDefaultsAsBefore() {
+        // given - 가입 시 기본값 부여(REQ-TRSF-029)가 연결되기 전이라 행 없는 고객이 있다
+        when(transferLimitCommandPort.findByCustomerIdForUpdate(CUSTOMER_ID)).thenReturn(Optional.empty());
+        when(transferLimitCommandPort.save(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY)).thenReturn(Optional.empty());
+
+        // when
+        LimitResult result = service().update(CUSTOMER_ID, command(3_000_000L, 10_000_000L));
+
+        // then
+        ArgumentCaptor<TransferLimitHistory> captor = ArgumentCaptor.forClass(TransferLimitHistory.class);
+        verify(transferLimitHistoryPort).save(captor.capture());
+        assertThat(captor.getValue().getBeforeOneTimeLimit()).isEqualTo(1_000_000L);
+        assertThat(captor.getValue().getBeforeDailyLimit()).isEqualTo(5_000_000L);
+        assertThat(result.oneTimeLimit()).isEqualTo(3_000_000L);
+    }
+
+    @Test
+    @DisplayName("한도를 읽기 전에 계좌비밀번호와 OTP 토큰을 모두 검증한다")
+    void update_verifiesBothAuthTokensBeforeReadingLimit() {
+        // given
+        when(transferLimitCommandPort.findByCustomerIdForUpdate(CUSTOMER_ID))
+                .thenReturn(Optional.of(TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L)));
+        when(transferLimitCommandPort.save(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY)).thenReturn(Optional.empty());
+
+        // when
+        service().update(CUSTOMER_ID, command(3_000_000L, 10_000_000L));
+
+        // then - 계좌가 아니라 고객 기준으로 검증하고, OTP 에는 바꾸려는 한도를 함께 넘겨 거래내용을 대조하게 한다
+        verify(authTokenVerificationPort).verifyAccountPassword("ACC_PWD_TOKEN", CUSTOMER_ID);
+        verify(authTokenVerificationPort).verifyOtp("OTP_AUTH_TOKEN", CUSTOMER_ID, 3_000_000L, 10_000_000L);
+    }
+
+    @Test
+    @DisplayName("OTP 검증이 실패하면 한도를 읽지도 저장하지도 않는다")
+    void update_otpVerificationFails_doesNotTouchLimit() {
+        // given - 인증한 거래내용과 요청 한도가 다르면 otp 모듈이 OTP0102 를 던진다
+        doThrow(new BusinessException(OtpErrorCode.TRANSACTION_MISMATCH))
+                .when(authTokenVerificationPort)
+                .verifyOtp("OTP_AUTH_TOKEN", CUSTOMER_ID, 3_000_000L, 10_000_000L);
+
+        // when & then
+        assertThatThrownBy(() -> service().update(CUSTOMER_ID, command(3_000_000L, 10_000_000L)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(OtpErrorCode.TRANSACTION_MISMATCH));
+
+        verify(transferLimitCommandPort, never()).findByCustomerIdForUpdate(any());
+        verify(transferLimitCommandPort, never()).save(any());
+    }
+
+    private LimitCommand command(long oneTimeLimit, long dailyLimit) {
+        return LimitCommand.builder()
+                .oneTimeLimit(oneTimeLimit)
+                .dailyLimit(dailyLimit)
+                .accountPasswordAuthToken("ACC_PWD_TOKEN")
+                .otpAuthToken("OTP_AUTH_TOKEN")
+                .build();
+    }
+
+    /** 운영 Clock 이 KST 라서(REQ-NFR-018) 테스트도 같은 시간대로 고정한다. */
+    private LimitCommandService service() {
+        Clock clock = Clock.fixed(TODAY.atTime(14, 0).atZone(SEOUL).toInstant(), SEOUL);
+        return new LimitCommandService(
+                transferLimitCommandPort, transferLimitQueryPort, transferLimitHistoryPort,
+                authTokenVerificationPort, clock);
+    }
+}
