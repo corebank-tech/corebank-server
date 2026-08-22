@@ -26,6 +26,9 @@ spring:
       port: 6379
 
 app:
+  account:
+    password:
+      auth-token-ttl: 5m
   otp:
     code-ttl: 3m
     auth-token-ttl: 5m

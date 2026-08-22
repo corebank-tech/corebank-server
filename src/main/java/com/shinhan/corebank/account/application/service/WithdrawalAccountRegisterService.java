@@ -64,9 +64,7 @@ public class WithdrawalAccountRegisterService
             return toResult(account);
         }
 
-        // TODO P6: passwordLocked 시 APW0101 연동
-
-        // 새로 등록하는 경우에만 등록 가능 상태를 검증한다.
+        // 인증 Adapter가 비밀번호 잠금을 APW0101로 차단한 뒤 계좌 업무 상태를 검증한다.
         account.validateWithdrawalRegistrationAllowed();
 
         OffsetDateTime registeredAt =
