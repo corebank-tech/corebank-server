@@ -69,7 +69,15 @@ class AccountPasswordChangeServiceTest {
     @Test
     @DisplayName("예금 계좌도 두 인증을 소비하고 BCrypt 해시와 오류 상태를 변경한다")
     void changesProductAccountPassword() {
-        Account account = account(
+        Account initialAccount = account(
+                AccountType.TIME_DEPOSIT,
+                AccountStatus.ACTIVE,
+                3,
+                false,
+                OLD_HASH,
+                LocalDateTime.of(2026, 8, 20, 10, 0)
+        );
+        Account lockedAccount = account(
                 AccountType.TIME_DEPOSIT,
                 AccountStatus.ACTIVE,
                 3,
@@ -86,28 +94,44 @@ class AccountPasswordChangeServiceTest {
                 LocalDateTime.of(2026, 8, 22, 13, 30)
         );
         when(accountPersistencePort
+                .findByAccountIdAndCustomerId(
+                        ACCOUNT_ID,
+                        CUSTOMER_ID
+                ))
+                .thenReturn(Optional.of(initialAccount));
+        when(accountPersistencePort
                 .findByAccountIdAndCustomerIdForUpdate(
                         ACCOUNT_ID,
                         CUSTOMER_ID
                 ))
-                .thenReturn(Optional.of(account));
+                .thenReturn(Optional.of(lockedAccount));
         when(passwordEncoder.encode("5678"))
                 .thenReturn(NEW_HASH);
-        when(accountPersistencePort.updatePasswordState(account))
+        when(accountPersistencePort.updatePasswordState(lockedAccount))
                 .thenReturn(saved);
 
         ChangeAccountPasswordResult result =
                 service.change(command("5678", "5678"));
 
-        assertThat(account.getPasswordHash()).isEqualTo(NEW_HASH);
-        assertThat(account.getPasswordFailureCount()).isZero();
-        assertThat(account.isPasswordLocked()).isFalse();
+        assertThat(initialAccount.getPasswordHash()).isEqualTo(OLD_HASH);
+        assertThat(lockedAccount.getPasswordHash()).isEqualTo(NEW_HASH);
+        assertThat(lockedAccount.getPasswordFailureCount()).isZero();
+        assertThat(lockedAccount.isPasswordLocked()).isFalse();
         assertThat(result.accountId()).isEqualTo(ACCOUNT_ID);
         assertThat(result.updatedAt()).isEqualTo(
                 OffsetDateTime.parse("2026-08-22T13:30:00+09:00")
         );
 
-        InOrder inOrder = inOrder(authVerificationPort);
+        InOrder inOrder = inOrder(
+                accountPersistencePort,
+                authVerificationPort,
+                passwordEncoder
+        );
+        inOrder.verify(accountPersistencePort)
+                .findByAccountIdAndCustomerId(
+                        ACCOUNT_ID,
+                        CUSTOMER_ID
+                );
         inOrder.verify(authVerificationPort)
                 .verifyAccountPasswordToken(
                         "password-token",
@@ -120,7 +144,14 @@ class AccountPasswordChangeServiceTest {
                         CUSTOMER_ID,
                         ACCOUNT_ID
                 );
-        verify(accountPersistencePort).updatePasswordState(account);
+        inOrder.verify(passwordEncoder).encode("5678");
+        inOrder.verify(accountPersistencePort)
+                .findByAccountIdAndCustomerIdForUpdate(
+                        ACCOUNT_ID,
+                        CUSTOMER_ID
+                );
+        inOrder.verify(accountPersistencePort)
+                .updatePasswordState(lockedAccount);
         verify(auditLogService).record(
                 CUSTOMER_ID,
                 null,
@@ -166,7 +197,7 @@ class AccountPasswordChangeServiceTest {
     @DisplayName("타인 소유 또는 없는 계좌는 ACC0201이고 인증 토큰을 소비하지 않는다")
     void rejectsNotFoundOrForbiddenAccount() {
         when(accountPersistencePort
-                .findByAccountIdAndCustomerIdForUpdate(
+                .findByAccountIdAndCustomerId(
                         ACCOUNT_ID,
                         CUSTOMER_ID
                 ))
@@ -195,7 +226,7 @@ class AccountPasswordChangeServiceTest {
                 LocalDateTime.of(2026, 8, 20, 10, 0)
         );
         when(accountPersistencePort
-                .findByAccountIdAndCustomerIdForUpdate(
+                .findByAccountIdAndCustomerId(
                         ACCOUNT_ID,
                         CUSTOMER_ID
                 ))
@@ -225,7 +256,7 @@ class AccountPasswordChangeServiceTest {
                 LocalDateTime.of(2026, 8, 20, 10, 0)
         );
         when(accountPersistencePort
-                .findByAccountIdAndCustomerIdForUpdate(
+                .findByAccountIdAndCustomerId(
                         ACCOUNT_ID,
                         CUSTOMER_ID
                 ))
@@ -246,6 +277,97 @@ class AccountPasswordChangeServiceTest {
         assertThat(exception).hasMessage("OTP 인증 실패");
         assertThat(account.getPasswordHash()).isEqualTo(OLD_HASH);
         verifyNoInteractions(passwordEncoder, auditLogService);
+        verify(accountPersistencePort, never())
+                .findByAccountIdAndCustomerIdForUpdate(any(), any());
+        verify(accountPersistencePort, never())
+                .updatePasswordState(any());
+    }
+
+    @Test
+    @DisplayName("토큰 검증 후 락 재조회에서 계좌가 없으면 ACC0201이고 저장하지 않는다")
+    void rejectsAccountMissingWhenLockIsAcquired() {
+        Account initialAccount = account(
+                AccountType.DEMAND_DEPOSIT,
+                AccountStatus.ACTIVE,
+                0,
+                false,
+                OLD_HASH,
+                LocalDateTime.of(2026, 8, 20, 10, 0)
+        );
+        when(accountPersistencePort.findByAccountIdAndCustomerId(
+                ACCOUNT_ID,
+                CUSTOMER_ID
+        )).thenReturn(Optional.of(initialAccount));
+        when(accountPersistencePort
+                .findByAccountIdAndCustomerIdForUpdate(
+                        ACCOUNT_ID,
+                        CUSTOMER_ID
+                ))
+                .thenReturn(Optional.empty());
+
+        BusinessException exception = catchThrowableOfType(
+                () -> service.change(command("5678", "5678")),
+                BusinessException.class
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(
+                AccountErrorCode.ACCOUNT_NOT_FOUND_OR_FORBIDDEN
+        );
+        verify(authVerificationPort).verifyAccountPasswordToken(
+                "password-token",
+                CUSTOMER_ID,
+                ACCOUNT_ID
+        );
+        verify(authVerificationPort).verifyOtpToken(
+                "otp-token",
+                CUSTOMER_ID,
+                ACCOUNT_ID
+        );
+        verify(passwordEncoder).encode("5678");
+        verifyNoInteractions(auditLogService);
+        verify(accountPersistencePort, never())
+                .updatePasswordState(any());
+    }
+
+    @Test
+    @DisplayName("토큰 검증 중 계좌가 거래정지되면 락 재조회 상태 검증에서 차단한다")
+    void rejectsAccountSuspendedBeforeLockIsAcquired() {
+        Account initialAccount = account(
+                AccountType.DEMAND_DEPOSIT,
+                AccountStatus.ACTIVE,
+                0,
+                false,
+                OLD_HASH,
+                LocalDateTime.of(2026, 8, 20, 10, 0)
+        );
+        Account suspendedAccount = account(
+                AccountType.DEMAND_DEPOSIT,
+                AccountStatus.SUSPENDED,
+                0,
+                false,
+                OLD_HASH,
+                LocalDateTime.of(2026, 8, 22, 14, 0)
+        );
+        when(accountPersistencePort.findByAccountIdAndCustomerId(
+                ACCOUNT_ID,
+                CUSTOMER_ID
+        )).thenReturn(Optional.of(initialAccount));
+        when(accountPersistencePort
+                .findByAccountIdAndCustomerIdForUpdate(
+                        ACCOUNT_ID,
+                        CUSTOMER_ID
+                ))
+                .thenReturn(Optional.of(suspendedAccount));
+
+        BusinessException exception = catchThrowableOfType(
+                () -> service.change(command("5678", "5678")),
+                BusinessException.class
+        );
+
+        assertThat(exception.getErrorCode())
+                .isEqualTo(AccountErrorCode.INVALID_ACCOUNT_STATUS);
+        verify(passwordEncoder).encode("5678");
+        verifyNoInteractions(auditLogService);
         verify(accountPersistencePort, never())
                 .updatePasswordState(any());
     }

@@ -49,7 +49,7 @@ public class AccountPasswordChangeService
         validateCommand(command);
 
         Account account = accountPersistencePort
-                .findByAccountIdAndCustomerIdForUpdate(
+                .findByAccountIdAndCustomerId(
                         command.accountId(),
                         command.customerId()
                 )
@@ -70,12 +70,26 @@ public class AccountPasswordChangeService
                 command.accountId()
         );
 
-        account.changePassword(
-                passwordEncoder.encode(command.newAccountPassword())
+        String encodedPassword = passwordEncoder.encode(
+                command.newAccountPassword()
         );
 
+        Account lockedAccount = accountPersistencePort
+                .findByAccountIdAndCustomerIdForUpdate(
+                        command.accountId(),
+                        command.customerId()
+                )
+                .orElseThrow(() -> new BusinessException(
+                        AccountErrorCode.ACCOUNT_NOT_FOUND_OR_FORBIDDEN
+                ));
+
+        // 인증 중 바뀐 잠금·거래 상태를 락 획득 후 다시 확인한다.
+        validateAccountState(lockedAccount);
+
+        lockedAccount.changePassword(encodedPassword);
+
         Account saved =
-                accountPersistencePort.updatePasswordState(account);
+                accountPersistencePort.updatePasswordState(lockedAccount);
 
         // 인증수단 변경 성공 사실만 기록하고 비밀번호와 토큰은 감사 상세에서 제외한다.
         auditLogService.record(
