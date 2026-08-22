@@ -10,6 +10,7 @@ import com.shinhan.corebank.signup.domain.model.AgreedTerm;
 import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -23,6 +24,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 
 // 회원가입 트랜잭션이 이체한도 기본값까지 함께 만들고 함께 롤백하는지 검증한다(REQ-TRSF-029).
@@ -75,6 +77,10 @@ class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
     }
 
     // 가입이 실패하면 한도도 남지 않는다. 리뷰어(PR #253)가 지적한 "둘 중 하나만 성공하는 경로"가 없다는 뜻이다.
+    //
+    // 고객 아이디로 조인해 세지 않고 캡처한 customerId 로 직접 센다. 조인으로 세면 한도를 아예
+    // 만들지 않아도 0건이 나와 공허하게 참이 된다 - 실제로 registerDefault 호출을 지우고 돌렸을 때
+    // 이 테스트만 통과했다. 캡처는 호출이 있었어야 값이 생기므로 그 구멍을 막는다.
     @Test
     void leavesNoLimitWhenSignupRollsBack() {
         String userId = "lmtrb" + suffix();
@@ -85,7 +91,12 @@ class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
         assertThatThrownBy(() -> completionService.complete(new CompleteSignupCommand(token)))
                 .isInstanceOf(IllegalStateException.class);
 
-        assertThat(countLimitsOf(userId)).isZero();
+        ArgumentCaptor<Long> customerIdCaptor = ArgumentCaptor.forClass(Long.class);
+        then(transferLimitRegistration).should().registerDefault(customerIdCaptor.capture());
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from transfer_limit where customer_id = ?",
+                Integer.class, customerIdCaptor.getValue()))
+                .isZero();
     }
 
     // 반대 방향. 한도 생성이 실패하면 고객도 남지 않는다 - 한도가 없는 고객이 생기지 않는다.
@@ -102,14 +113,6 @@ class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
         assertThat(jdbcTemplate.queryForObject(
                 "select count(*) from customer where user_id = ?", Integer.class, userId))
                 .isZero();
-    }
-
-    private Integer countLimitsOf(String userId) {
-        return jdbcTemplate.queryForObject(
-                "select count(*) from transfer_limit tl"
-                        + " join customer c on c.customer_id = tl.customer_id"
-                        + " where c.user_id = ?",
-                Integer.class, userId);
     }
 
     private String saveTempToken(String userId) {
