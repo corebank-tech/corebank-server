@@ -45,7 +45,7 @@ public class TransferLimitPersistenceAdapter implements TransferLimitQueryPort, 
 
     /** 호출자가 findForUpdateByCustomerId 로 잠근 행에만 쓴다. 그래서 없는 행을 만들지 않는다. */
     @Override
-    public TransferLimit save(TransferLimit limit) {
+    public TransferLimit update(TransferLimit limit) {
         limitRepository.updateLimit(limit.getCustomerId(), limit.getOneTimeLimit(),
                 limit.getDailyLimit(), LocalDateTime.now(clock));
         return limit;

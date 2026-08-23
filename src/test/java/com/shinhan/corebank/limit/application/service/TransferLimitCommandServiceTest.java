@@ -57,7 +57,7 @@ class TransferLimitCommandServiceTest {
         // given
         when(transferLimitCommandPort.findForUpdateByCustomerId(CUSTOMER_ID))
                 .thenReturn(Optional.of(TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L)));
-        when(transferLimitCommandPort.save(any()))
+        when(transferLimitCommandPort.update(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY))
                 .thenReturn(Optional.of(TransferLimitDailyUsage.restore(CUSTOMER_ID, TODAY, 300_000L)));
@@ -78,7 +78,7 @@ class TransferLimitCommandServiceTest {
         // given
         when(transferLimitCommandPort.findForUpdateByCustomerId(CUSTOMER_ID))
                 .thenReturn(Optional.of(TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L)));
-        when(transferLimitCommandPort.save(any()))
+        when(transferLimitCommandPort.update(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY)).thenReturn(Optional.empty());
 
@@ -106,7 +106,7 @@ class TransferLimitCommandServiceTest {
                 .verifyAndConsumeOtp(any(), any(), anyLong(), anyLong());
         // 인증 전에 X락을 잡으면 실패할 요청이 남의 이체를 대기시킨다.
         verify(transferLimitCommandPort, never()).findForUpdateByCustomerId(any());
-        verify(transferLimitCommandPort, never()).save(any());
+        verify(transferLimitCommandPort, never()).update(any());
     }
 
     @Test
@@ -123,7 +123,7 @@ class TransferLimitCommandServiceTest {
 
         // 없는 한도를 바꿨다는 이력이 남으면 감사 이력이 거짓이 된다
         verify(transferLimitHistoryPort, never()).save(any());
-        verify(transferLimitCommandPort, never()).save(any());
+        verify(transferLimitCommandPort, never()).update(any());
     }
 
     @Test
@@ -132,7 +132,7 @@ class TransferLimitCommandServiceTest {
         // given
         when(transferLimitCommandPort.findForUpdateByCustomerId(CUSTOMER_ID))
                 .thenReturn(Optional.of(TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L)));
-        when(transferLimitCommandPort.save(any()))
+        when(transferLimitCommandPort.update(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY)).thenReturn(Optional.empty());
 
@@ -163,7 +163,7 @@ class TransferLimitCommandServiceTest {
                         .isEqualTo(OtpErrorCode.TRANSACTION_MISMATCH));
 
         verify(transferLimitCommandPort, never()).findForUpdateByCustomerId(any());
-        verify(transferLimitCommandPort, never()).save(any());
+        verify(transferLimitCommandPort, never()).update(any());
     }
 
     private TransferLimitCommand command(long oneTimeLimit, long dailyLimit) {

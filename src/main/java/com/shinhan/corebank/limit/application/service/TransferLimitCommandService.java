@@ -64,7 +64,7 @@ public class TransferLimitCommandService implements TransferLimitCommandUseCase 
                 TransferLimitHistory.create(customerId, limit.getOneTimeLimit(), limit.getDailyLimit()));
 
         limit.update(command.oneTimeLimit(), command.dailyLimit());
-        TransferLimit saved = transferLimitCommandPort.save(limit);
+        TransferLimit saved = transferLimitCommandPort.update(limit);
 
         LocalDate today = LocalDate.now(clock);
         TransferLimitDailyUsage usage = transferLimitQueryPort.findUsage(customerId, today)

@@ -9,8 +9,11 @@ import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
 /** 한도 상태를 바꾸는 오퍼레이션. */
 public interface TransferLimitCommandPort {
 
-    /** 한도를 새 값으로 <b>덮어쓴다</b>. 고객이 직접 바꾸는 경로 전용이다. */
-    TransferLimit save(TransferLimit limit);
+    /**
+     * 잠가 둔 한도 행을 새 값으로 갱신한다. <b>단순 UPDATE 다</b> - 호출 전에
+     * findForUpdateByCustomerId 로 행을 잠갔으므로 없는 행을 만들지 않는다.
+     */
+    TransferLimit update(TransferLimit limit);
 
     /**
      * 한도 행이 없을 때만 만든다. 이미 있으면 그대로 둔다 - 고객이 올려 둔 한도를 기본값으로
