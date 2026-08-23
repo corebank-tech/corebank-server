@@ -174,6 +174,34 @@ class TransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("이체결과 목록 조회: all=true면 size가 허용되지 않는 값이어도 200으로 응답하고 전체 건을 한 페이지로 반환한다")
+    void searchHistory_allTrue_returnsAllMatchingRowsInOnePage() throws Exception {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+            entityManager.createNativeQuery("""
+                INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id, deposit_account_number,
+                    payee_name, amount, fee, transfer_type, channel, status, transferred_at, created_at)
+                VALUES ('20260810IT0000000012', 101, 202, '110222222222', '성춘향', 10000, 0, 'IMMEDIATE', 'BT', 'SUCCESS',
+                    '2026-08-10 09:00:00', NOW(6))
+                ON DUPLICATE KEY UPDATE transaction_number = transaction_number
+            """).executeUpdate();
+        });
+
+        mockMvc.perform(get("/transfers")
+                        .with(authentication(authenticationOf(1L)))
+                        .param("withdrawalAccountId", "101")
+                        .param("fromDate", "2026-08-01")
+                        .param("toDate", "2026-08-31")
+                        .param("size", "7")
+                        .param("all", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.totalCount").value(1))
+                .andExpect(jsonPath("$.data.totalPages").value(1))
+                .andExpect(jsonPath("$.data.items.length()").value(1));
+    }
+
+    @Test
     @DisplayName("이체결과 목록 조회: 남의 출금계좌면 400 + TRF0001을 반환한다")
     void searchHistory_notOwned_returnsTrf0001() throws Exception {
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
