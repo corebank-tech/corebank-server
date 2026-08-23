@@ -56,6 +56,7 @@ public class AccountPasswordController {
 
     @PostMapping("/{accountId}/password/verify")
     @Operation(
+            operationId = "verifyAccountPassword",
             summary = "계좌비밀번호 검증",
             description = "로그인 고객이 소유한 계좌의 숫자 4자리 비밀번호를 검증하고 300초 일회용 인증 토큰을 발급한다."
     )
@@ -134,6 +135,7 @@ public class AccountPasswordController {
 
     @PutMapping("/{accountId}/password")
     @Operation(
+          operationId = "updateAccountPassword",
             summary = "계좌비밀번호 변경",
             description = """
                     계좌비밀번호 인증 토큰과 ACCOUNT_PASSWORD_CHANGE 용도의 OTP 인증 토큰을

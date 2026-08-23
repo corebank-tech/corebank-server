@@ -27,22 +27,7 @@ public class TransferLimitJpaEntity extends BaseEntity {
     @Column(name = "daily_limit", nullable = false)
     private long dailyLimit;
 
-    private TransferLimitJpaEntity(TransferLimit limit) {
-        this.customerId = limit.getCustomerId();
-        this.oneTimeLimit = limit.getOneTimeLimit();
-        this.dailyLimit = limit.getDailyLimit();
-    }
-
-    static TransferLimitJpaEntity from(TransferLimit limit) {
-        return new TransferLimitJpaEntity(limit);
-    }
-
     TransferLimit toDomain() {
         return TransferLimit.restore(customerId, oneTimeLimit, dailyLimit);
-    }
-
-    void apply(long oneTimeLimit, long dailyLimit) {
-        this.oneTimeLimit = oneTimeLimit;
-        this.dailyLimit = dailyLimit;
     }
 }

@@ -52,6 +52,7 @@ public class WithdrawalAccountController {
 
     @PutMapping("/{accountId}")
     @Operation(
+                    operationId = "registerWithdrawalAccount",
             summary = "출금계좌 등록",
             description = """
                     로그인한 고객이 소유한 입출금계좌를 출금계좌로 등록한다.
@@ -157,6 +158,7 @@ public class WithdrawalAccountController {
 
     @DeleteMapping("/{accountId}")
     @Operation(
+                    operationId = "unregisterWithdrawalAccount",
             summary = "출금계좌 등록 삭제",
             description = """
                     로그인한 고객이 소유한 계좌의 출금계좌 등록을 삭제한다.

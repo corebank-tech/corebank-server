@@ -1,7 +1,7 @@
 package com.shinhan.corebank.autotransfer.adapter.out.limit;
 
 import com.shinhan.corebank.autotransfer.application.port.out.TransferLimitPort;
-import com.shinhan.corebank.limit.application.port.in.LimitQueryUseCase;
+import com.shinhan.corebank.limit.application.port.in.TransferLimitQueryUseCase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class TransferLimitAdapter implements TransferLimitPort {
 
-    private final LimitQueryUseCase limitQueryUseCase;
+    private final TransferLimitQueryUseCase limitQueryUseCase;
 
     @Override
     public long findOneTimeLimit(Long customerId) {

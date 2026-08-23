@@ -50,6 +50,7 @@ public class AccountController {
 
     @GetMapping
     @Operation(
+            operationId = "getAccounts",
             summary = "전체 계좌 조회",
             description = "로그인한 고객이 보유한 전체 계좌를 유형별로 그룹화하여 조회한다."
     )
@@ -72,6 +73,7 @@ public class AccountController {
 
     @GetMapping("/{accountId}")
     @Operation(
+            operationId = "getAccountDetail",
             summary = "계좌 상세 조회",
             description = "로그인한 고객이 소유한 계좌의 기본정보·잔액·계좌비밀번호 오류 상태를 조회한다."
     )
@@ -128,6 +130,7 @@ public class AccountController {
 
     @PutMapping("/{accountId}/alias")
     @Operation(
+          operationId = "updateAccountAlias",
             summary = "계좌별명 등록/수정",
             description = """
                     로그인한 고객이 소유한 계좌의 별명을 등록하거나 수정한다.
@@ -230,6 +233,7 @@ public class AccountController {
 
     @DeleteMapping("/{accountId}/alias")
     @Operation(
+          operationId = "deleteAccountAlias",
             summary = "계좌별명 삭제",
             description = """
                     로그인한 고객이 소유한 계좌에 설정된 별명을 삭제한다.
@@ -321,6 +325,7 @@ public class AccountController {
     }
 
     @GetMapping("/{accountId}/transactions")
+    @Operation(operationId = "searchAccountTransactions")
     public ApiResponse<AccountTransactionResponse>
     getTransactions(
             @PathVariable

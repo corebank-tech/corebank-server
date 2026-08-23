@@ -10,6 +10,7 @@ import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductDetailView;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.ProductTermsView;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
@@ -24,6 +25,7 @@ public class ProductController {
     private final CurrentCustomerProvider currentCustomerProvider;
 
     @GetMapping
+    @Operation(operationId = "searchProducts")
     public ApiResponse<PageResponse<ProductListItemResponse>> searchProducts(
             @RequestParam(required = false) ProductGroup productGroup,
             @RequestParam(required = false) String keyword,
@@ -35,12 +37,14 @@ public class ProductController {
     }
 
     @GetMapping("/{productId}")
+    @Operation(operationId = "getProductDetail")
     public ApiResponse<ProductDetailResponse> getProductDetail(@PathVariable Long productId) {
         ProductDetailView detail = productQueryUseCase.getDetailWithTerms(productId);
         return ApiResponse.success(ProductDetailResponse.from(detail));
     }
 
     @GetMapping("/{productId}/terms/{termsId}")
+    @Operation(operationId = "getProductTerms")
     public ApiResponse<ProductTermsViewResponse> getProductTerms(
             @PathVariable Long productId,
             @PathVariable Long termsId) {
