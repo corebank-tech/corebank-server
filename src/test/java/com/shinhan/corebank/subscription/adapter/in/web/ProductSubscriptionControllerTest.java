@@ -10,7 +10,9 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
+import com.shinhan.corebank.otp.domain.exception.OtpErrorCode;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaEntity;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductPreferentialRateJpaEntity;
@@ -48,6 +50,8 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -395,8 +399,9 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     void execute_success_createsAccountAndSubscription() throws Exception {
         Long productId = seedSavingsProduct("EXE-101", false);
         Long withdrawalAccountId = seedAccount("110000009001", customerId, 10_000_000L);
+        long withdrawalBalanceBefore = balanceOf(withdrawalAccountId);
 
-        mockMvc.perform(post("/product-subscriptions")
+        String response = mockMvc.perform(post("/product-subscriptions")
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
@@ -407,7 +412,15 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.status").value("SUCCESS"))
                 .andExpect(jsonPath("$.data.transactionNumber").doesNotExist())
                 .andExpect(jsonPath("$.data.accountNumber").isNotEmpty())
-                .andExpect(jsonPath("$.data.appliedRate").value(3.20));
+                .andExpect(jsonPath("$.data.appliedRate").value(3.20))
+                .andReturn().getResponse().getContentAsString();
+
+        // REQ-PRDT-012 인수기준: "적금 가입 직후 신규 계좌 잔액이 0원이고 출금계좌 잔액이 변동하지
+        // 않는다". transactionNumber 부재만으로는 기표가 없었다는 것만 알 뿐, 잔액이 실제로 그대로인지는
+        // 확인되지 않는다 — 두 잔액을 직접 읽어 단언한다.
+        Long newAccountId = jackson.readTree(response).get("data").get("accountId").asLong();
+        assertThat(balanceOf(newAccountId)).isZero();
+        assertThat(balanceOf(withdrawalAccountId)).isEqualTo(withdrawalBalanceBefore);
     }
 
     @Test
@@ -734,6 +747,118 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     // 갈아끼우면 이 클래스의 다른 테스트(약관동의 저장을 실제로 검증하는 성공 케이스 포함)까지
     // 전부 no-op 처리돼버리기 때문에, 별도 클래스(ProductAccountOpeningRollbackTest와 동일 패턴)로
     // 분리했다.
+
+    // REQ-PRDT-010 인수기준: "인증 없이 가입 실행 API 호출 시 거부된다".
+    // 이 클래스의 나머지 테스트는 OtpAuthTokenVerifier를 no-op mock으로 두고 전부 통과시키므로,
+    // 검증이 실패하는 경로는 여기서만 탄다 — 이 테스트가 없으면 OTP 검증 호출 자체가 사라져도
+    // 스위트 전체가 초록이다.
+    @Test
+    @DisplayName("OTP 인증 토큰이 유효하지 않으면 403 + OTP0101을 반환하고 계좌가 개설되지 않는다")
+    void execute_invalidOtpAuthToken_returnsOtp0101() throws Exception {
+        Long productId = seedSavingsProduct("EXE-112", false);
+        Long withdrawalAccountId = seedAccount("110000009012", customerId, 10_000_000L);
+        doThrow(new BusinessException(OtpErrorCode.INVALID_AUTH_TOKEN))
+                .when(otpAuthTokenVerifier).verifyAndConsume(any());
+
+        long accountCountBefore = accountJpaRepository.count();
+        long subscriptionCountBefore = subscriptionJpaRepository.count();
+
+        mockMvc.perform(post("/product-subscriptions")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(executeRequestJson(productId, withdrawalAccountId, 500_000L, 12)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("OTP0101"));
+
+        // OTP 검증은 계좌개설(되돌릴 수 없는 지점) 앞에 있으므로 아무것도 남지 않아야 한다.
+        assertThat(accountJpaRepository.count()).isEqualTo(accountCountBefore);
+        assertThat(subscriptionJpaRepository.count()).isEqualTo(subscriptionCountBefore);
+    }
+
+    // REQ-PRDT-017 인수기준: "약관 본문을 조회하지 않은 상태로 가입 실행 API를 직접 호출하면
+    // 거부된다". 열람 판정은 서비스 단위 테스트(ProductSubscriptionValidationServiceTest)에도 있지만,
+    // 인수기준이 겨냥하는 건 실행 엔드포인트라 실제 Redis 열람이력을 태워 확인한다.
+    @Test
+    @DisplayName("열람이 필요한 약관을 조회하지 않은 채 가입을 실행하면 400 + PRD0005를 반환한다")
+    void execute_termsNotViewed_returnsPrd0005() throws Exception {
+        Long productId = seedSavingsProduct("EXE-113", false);
+        Long termsId = linkSavingsTerms(productId);
+        Long withdrawalAccountId = seedAccount("110000009013", customerId, 10_000_000L);
+
+        long accountCountBefore = accountJpaRepository.count();
+
+        mockMvc.perform(post("/product-subscriptions")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(executeRequestJsonWithTerms(productId, withdrawalAccountId, termsId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PRD0005"));
+
+        assertThat(accountJpaRepository.count()).isEqualTo(accountCountBefore);
+    }
+
+    // REQ-PRDT-005 인수기준의 뒷부분: "동의 이력이 저장된다". 미동의 차단(앞부분)은
+    // validate_missingRequiredTermsAgreement가 이미 커버하지만, 저장 자체를 확인하는 단언은
+    // 없었다 — 기존 성공 테스트는 agreedTerms가 빈 배열이라 저장할 이력이 애초에 없다.
+    @Test
+    @DisplayName("약관 본문을 열람한 뒤 가입하면 동의 이력이 동의한 버전과 함께 저장된다")
+    void execute_savesTermsAgreement() throws Exception {
+        Long productId = seedSavingsProduct("EXE-114", false);
+        Long termsId = linkSavingsTerms(productId);
+        Long withdrawalAccountId = seedAccount("110000009014", customerId, 10_000_000L);
+
+        // 열람 이력은 화면이 보낸 값이 아니라 약관 본문 조회 시점에 서버가 기록한다(REQ-PRDT-017).
+        mockMvc.perform(get("/products/{productId}/terms/{termsId}", productId, termsId)
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isOk());
+
+        String response = mockMvc.perform(post("/product-subscriptions")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(executeRequestJsonWithTerms(productId, withdrawalAccountId, termsId)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        Long subscriptionId = jackson.readTree(response).get("data").get("subscriptionId").asLong();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT terms_version FROM subscription_terms_agreement"
+                        + " WHERE subscription_id = ? AND terms_id = ?",
+                String.class, subscriptionId, termsId))
+                .isEqualTo("v1.0");
+    }
+
+    // 적금 상품에는 TERMS_SAVINGS(필수·열람필수, v1.0)를 연결한다 — 시드 약관이라 버전이 고정이다.
+    private Long linkSavingsTerms(Long productId) {
+        Long termsId = jdbcTemplate.queryForObject(
+                "SELECT terms_id FROM terms WHERE terms_code = ?", Long.class, "TERMS_SAVINGS");
+        termsRepository.save(ProductTermsJpaEntity.builder()
+                .id(new ProductTermsJpaEntityId(productId, termsId))
+                .displayOrder((short) 1)
+                .build());
+        return termsId;
+    }
+
+    private String executeRequestJsonWithTerms(Long productId, Long withdrawalAccountId, Long termsId) {
+        return """
+                {
+                  "productId": %d,
+                  "subscriptionAmount": 500000,
+                  "termMonths": 12,
+                  "withdrawalAccountId": %d,
+                  "newAccountPassword": "1234",
+                  "newAccountPasswordConfirm": "1234",
+                  "accountPasswordAuthToken": "ACC_PWD_test",
+                  "otpAuthToken": "OTP_AUTH_test",
+                  "agreedTerms": [{"termsId": %d, "version": "v1.0"}]
+                }
+                """.formatted(productId, withdrawalAccountId, termsId);
+    }
 
     private Long seedSavingsProduct(String productCode, boolean singleAccountLimit) {
         Long productId = productJpaRepository.save(ProductJpaEntity.builder()
