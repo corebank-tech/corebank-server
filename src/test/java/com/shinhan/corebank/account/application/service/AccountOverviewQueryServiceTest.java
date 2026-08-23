@@ -378,13 +378,6 @@ class AccountOverviewQueryServiceTest {
                 .isTrue();
 
         assertThat(demandAccounts.get(2).transferEnabled())
-                .isFalse();assertThat(demandAccounts.get(0).transferEnabled())
-                .isTrue();
-
-        assertThat(demandAccounts.get(1).transferEnabled())
-                .isFalse();
-
-        assertThat(demandAccounts.get(2).transferEnabled())
                 .isFalse();
 
         List<AccountOverviewResult.AccountItem> savingsAccounts =
