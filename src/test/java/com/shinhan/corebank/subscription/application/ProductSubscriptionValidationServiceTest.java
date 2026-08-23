@@ -51,6 +51,11 @@ class ProductSubscriptionValidationServiceTest {
     private static final Clock FIXED_CLOCK =
             Clock.fixed(Instant.parse("2027-03-14T15:30:00Z"), ZoneOffset.UTC);
 
+    // 2027-01-30T15:00:00Z == 2027-01-31 00:00 KST. 만기일 말일 보정을 재현하려면 가입일이
+    // 반드시 31일이어야 해서 FIXED_CLOCK(3-15)과 별개의 시각이 필요하다.
+    private static final Clock JANUARY_END_CLOCK =
+            Clock.fixed(Instant.parse("2027-01-30T15:00:00Z"), ZoneOffset.UTC);
+
     ProductSubscriptionValidationService service;
 
     @BeforeEach
@@ -306,6 +311,24 @@ class ProductSubscriptionValidationServiceTest {
         // 고정 시각은 UTC로 2027-03-14, KST로 2027-03-15.
         // KST 기준이면 2028-03-15, UTC 기준이면 2028-03-14가 나온다.
         assertThat(result.getMaturityDate()).isEqualTo(LocalDate.of(2028, 3, 15));
+    }
+
+    // REQ-PRDT-014 인수기준: "1월 31일 가입 1개월 상품의 만기일이 2월 말일로 산출된다".
+    // 2027년은 윤년이 아니라 2월 말일이 28일이다.
+    @Test
+    @DisplayName("1월 31일 가입 1개월 상품의 만기일은 없는 날짜(2월 31일) 대신 2월 말일로 보정된다")
+    void validate_maturityDateClampsToEndOfMonth() {
+        ProductSubscriptionValidationService januaryEndService = new ProductSubscriptionValidationService(
+                productQueryUseCase, accountLookupPort, termsQueryPort, termsViewUseCase, JANUARY_END_CLOCK);
+        when(productQueryUseCase.getDetail(PRODUCT_ID))
+                .thenReturn(depositDetail(1, "3.20"));
+        when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
+                .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
+
+        SubscriptionValidation result =
+                januaryEndService.validate(command(6_000_000L, 1, List.of(), List.of()));
+
+        assertThat(result.getMaturityDate()).isEqualTo(LocalDate.of(2027, 2, 28));
     }
 
     @Test

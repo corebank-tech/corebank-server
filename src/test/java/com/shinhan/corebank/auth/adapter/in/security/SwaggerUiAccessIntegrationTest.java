@@ -40,6 +40,14 @@ class SwaggerUiAccessIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isOk());
     }
 
+    // "/v3/api-docs/**"는 확장자가 붙은 형제 경로를 잡지 못해 이 경로만 401이던 이력이 있다.
+    @Test
+    @DisplayName("YAML 형식 API 문서(/v3/api-docs.yaml)도 세션 없이 접근할 수 있다")
+    void permitsApiDocsYamlWithoutSession() throws Exception {
+        mockMvc.perform(get("/api/v1/v3/api-docs.yaml").contextPath("/api/v1"))
+                .andExpect(status().isOk());
+    }
+
     @Test
     @DisplayName("인증·고객·OTP·회원가입·약관 API가 요약과 태그를 포함해 문서화된다")
     void documentsAuthenticationAndSignupApis() throws Exception {

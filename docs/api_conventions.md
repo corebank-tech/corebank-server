@@ -473,7 +473,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `TransferChannel` | `WB` | 인터넷뱅킹 (거래번호 채널코드) |
 |  | `BT` | 배치 (거래번호 채널코드), 예약 이체 |
 
-### 5-6. 예약이체 — P3
+### 5-6. 예약이체 — P5
 
 | Enum | 값 | 의미 |
 | --- | --- | --- |
