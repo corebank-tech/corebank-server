@@ -18,7 +18,13 @@ public enum LmtErrorCode implements ErrorCode {
     INSUFFICIENT_WITHDRAWABLE_AMOUNT("LMT0001", 400, "출금가능금액이 부족합니다."),
     ONE_TIME_LIMIT_EXCEEDED("LMT0002", 400, "1회 이체한도를 초과했습니다."),
     DAILY_LIMIT_EXCEEDED("LMT0003", 400, "1일 이체한도를 초과했습니다."),
-    ONE_TIME_LIMIT_OVER_DAILY("LMT0004", 400, "1회 한도는 1일 한도를 초과할 수 없습니다.");
+    ONE_TIME_LIMIT_OVER_DAILY("LMT0004", 400, "1회 한도는 1일 한도를 초과할 수 없습니다."),
+
+    /**
+     * 가입 연계(REQ-TRSF-029)와 백필이 모든 고객의 한도 행을 보장하므로 이 코드는 나올 수 없다.
+     * 나온다면 사용자 잘못이 아니라 데이터 결함이라 500 이다 - TRF9001·ACC9001 과 같은 성격이다.
+     */
+    TRANSFER_LIMIT_NOT_FOUND("LMT9001", 500, "이체한도 정보를 확인할 수 없습니다.");
 
     private final String code;
     private final int status;

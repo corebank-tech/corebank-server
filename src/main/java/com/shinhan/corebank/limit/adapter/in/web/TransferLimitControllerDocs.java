@@ -92,6 +92,12 @@ public interface TransferLimitControllerDocs {
                     responseCode = "409",
                     description = "`CMN0301`/`CMN0302` 멱등키 충돌",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "500",
+                    description = "`LMT9001` 한도 정보가 없어 변경할 수 없음. "
+                            + "가입 연계(REQ-TRSF-029)와 백필이 보장하므로 나오면 데이터 결함이다",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
     ResponseEntity<ApiResponse<TransferLimitResponse>> updateTransferLimit(

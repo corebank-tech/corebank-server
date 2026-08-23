@@ -110,26 +110,20 @@ class TransferLimitCommandServiceTest {
     }
 
     @Test
-    @DisplayName("한도 행이 없는 고객은 정책 기본값을 변경 전 값으로 이력에 남긴다")
-    void update_limitRowMissing_recordsPolicyDefaultsAsBefore() {
-        // given - 가입 흐름을 거치지 않아 행이 없던 고객. saveIfAbsent 가 기본값 행을 만들고
-        // 그 뒤 잠금 조회가 그 행을 돌려준다
-        when(transferLimitCommandPort.saveIfAbsent(any())).thenReturn(true);
-        when(transferLimitCommandPort.findForUpdateByCustomerId(CUSTOMER_ID))
-                .thenReturn(Optional.of(TransferLimit.create(CUSTOMER_ID)));
-        when(transferLimitCommandPort.save(any()))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-        when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY)).thenReturn(Optional.empty());
+    @DisplayName("한도 행이 없는 고객의 변경 요청은 LMT9001로 거부하고 이력도 남기지 않는다")
+    void update_limitRowMissing_rejectsWithLmt9001() {
+        // given - 가입 연계와 백필이 보장하므로 나올 수 없는 상태다. 나오면 데이터 결함이다
+        when(transferLimitCommandPort.findForUpdateByCustomerId(CUSTOMER_ID)).thenReturn(Optional.empty());
 
-        // when
-        TransferLimitResult result = service().update(CUSTOMER_ID, command(3_000_000L, 10_000_000L));
+        // when & then
+        assertThatThrownBy(() -> service().update(CUSTOMER_ID, command(3_000_000L, 10_000_000L)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(LmtErrorCode.TRANSFER_LIMIT_NOT_FOUND));
 
-        // then
-        ArgumentCaptor<TransferLimitHistory> captor = ArgumentCaptor.forClass(TransferLimitHistory.class);
-        verify(transferLimitHistoryPort).save(captor.capture());
-        assertThat(captor.getValue().getBeforeOneTimeLimit()).isEqualTo(1_000_000L);
-        assertThat(captor.getValue().getBeforeDailyLimit()).isEqualTo(5_000_000L);
-        assertThat(result.oneTimeLimit()).isEqualTo(3_000_000L);
+        // 없는 한도를 바꿨다는 이력이 남으면 감사 이력이 거짓이 된다
+        verify(transferLimitHistoryPort, never()).save(any());
+        verify(transferLimitCommandPort, never()).save(any());
     }
 
     @Test

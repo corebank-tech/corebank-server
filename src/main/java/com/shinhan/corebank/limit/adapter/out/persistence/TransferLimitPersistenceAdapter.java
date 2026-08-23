@@ -52,9 +52,9 @@ public class TransferLimitPersistenceAdapter implements TransferLimitQueryPort, 
     }
 
     @Override
-    public boolean saveIfAbsent(TransferLimit limit) {
-        return limitRepository.insertIfAbsent(limit.getCustomerId(), limit.getOneTimeLimit(),
-                limit.getDailyLimit(), LocalDateTime.now(clock)) == 1;
+    public void saveIfAbsent(TransferLimit limit) {
+        limitRepository.insertIfAbsent(limit.getCustomerId(), limit.getOneTimeLimit(),
+                limit.getDailyLimit(), LocalDateTime.now(clock));
     }
 
     /**

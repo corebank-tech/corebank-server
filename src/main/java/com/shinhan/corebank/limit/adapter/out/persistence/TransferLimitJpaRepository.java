@@ -34,7 +34,7 @@ public interface TransferLimitJpaRepository extends JpaRepository<TransferLimitJ
      * 한도 행이 없으면 정책 기본값으로 만들고, <b>이미 있으면 아무것도 바꾸지 않는다</b>.
      * 가입 시 기본값 부여(REQ-TRSF-029) 전용이다.
      *
-     * <p>upsert 와 갈라 둔 이유는 두 경로의 의도가 반대이기 때문이다. 고객이 한도를 올린 뒤
+     * <p>updateLimit 과 갈라 둔 이유는 두 경로의 의도가 반대이기 때문이다. 고객이 한도를 올린 뒤
      * 이 메서드가 다시 불려도 올린 값이 남아야 한다 - 하나로 합치면 기본값으로 되돌아간다.
      * 기존 고객 백필 마이그레이션이 NOT EXISTS 를 쓴 것과 같은 이유다.
      *
@@ -48,10 +48,10 @@ public interface TransferLimitJpaRepository extends JpaRepository<TransferLimitJ
         VALUES (:customerId, :oneTimeLimit, :dailyLimit, :now, :now)
         ON DUPLICATE KEY UPDATE customer_id = customer_id
         """, nativeQuery = true)
-    int insertIfAbsent(@Param("customerId") Long customerId,
-                       @Param("oneTimeLimit") long oneTimeLimit,
-                       @Param("dailyLimit") long dailyLimit,
-                       @Param("now") LocalDateTime now);
+    void insertIfAbsent(@Param("customerId") Long customerId,
+                        @Param("oneTimeLimit") long oneTimeLimit,
+                        @Param("dailyLimit") long dailyLimit,
+                        @Param("now") LocalDateTime now);
 
     /**
      * 잠가 둔 행의 한도를 갱신한다. <b>단순 UPDATE 다</b> - 호출 전에
