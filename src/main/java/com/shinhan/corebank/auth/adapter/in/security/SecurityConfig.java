@@ -168,7 +168,12 @@ public class SecurityConfig {
                         // Swagger-UI/API 문서는 인증 없이 접근 가능하도록 공개
                         // "/swagger-ui.html"은 springdoc 기본 진입 경로(SwaggerWelcomeWebMvc)로,
                         // "/swagger-ui/**"에 매칭되지 않아 별도로 permitAll 해야 함
-                        .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        // "/v3/api-docs.yaml"도 마찬가지로 "/v3/api-docs/**"에 매칭되지 않는다 —
+                        // "/**"는 슬래시로 구분된 하위 경로만 받고 확장자가 붙은 형제 경로는 못 잡는다
+                        .requestMatchers(
+                                "/swagger-ui.html", "/swagger-ui/**",
+                                "/v3/api-docs/**", "/v3/api-docs.yaml"
+                        ).permitAll()
 
                         // 인증된 사용자만 접근 가능
                         .anyRequest().authenticated()
