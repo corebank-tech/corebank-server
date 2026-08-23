@@ -1,16 +1,20 @@
 package com.shinhan.corebank.scheduledtransfer.adapter.in.web;
 
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.hamcrest.Matchers.nullValue;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
+import com.shinhan.corebank.otp.api.OtpTransactionType;
 import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledTransferJpaEntity;
 import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledTransferJpaRepository;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
@@ -29,6 +33,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,6 +49,11 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
 
     @Autowired
     EntityManager entityManager;
+
+    // 예약이체 등록·취소는 실제 OTP 발급 없이 otp.api 경계만 검증한다 — OTP 자체의 발급/소비 로직은
+    // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
+    @MockitoBean
+    OtpAuthTokenVerifier otpAuthTokenVerifier;
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final AtomicLong CUSTOMER_SEQ = new AtomicLong();
@@ -71,6 +81,10 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data.withdrawalAccountId").value(accountId))
                 .andExpect(jsonPath("$.data.status").value("WAITING"));
+
+        verify(otpAuthTokenVerifier).verifyAndConsume(argThat(verification ->
+                verification.transactionType() == OtpTransactionType.SCHEDULED_TRANSFER
+                        && verification.customerId().equals(customerId)));
     }
 
     @Test

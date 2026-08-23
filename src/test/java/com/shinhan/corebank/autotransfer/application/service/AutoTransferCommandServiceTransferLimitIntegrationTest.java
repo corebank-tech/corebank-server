@@ -7,6 +7,7 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterCommand;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
+import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.util.concurrent.atomic.AtomicLong;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 // TransferLimitAdapter는 이제 @Profile 제한 없이 항상 활성화돼(#187 리뷰 반영, ADR-0002),
@@ -28,6 +30,11 @@ class AutoTransferCommandServiceTransferLimitIntegrationTest extends Integration
 
     @Autowired
     EntityManager entityManager;
+
+    // 실제 OtpAuthTokenVerifier(Redis 기반)를 태우지 않기 위해 Mock으로 대체한다 —
+    // AutoTransferControllerTest와 동일한 패턴(otp_integration_guide.md 연동 전 관례).
+    @MockitoBean
+    OtpAuthTokenVerifier otpAuthTokenVerifier;
 
     private static final AtomicLong CUSTOMER_SEQ = new AtomicLong();
     private static final AtomicLong ACCOUNT_SEQ = new AtomicLong();
@@ -77,6 +84,7 @@ class AutoTransferCommandServiceTransferLimitIntegrationTest extends Integration
                 .startDate(LocalDate.now().plusDays(10))
                 .endDate(LocalDate.now().plusMonths(12))
                 .accountPasswordAuthToken("token")
+                .otpAuthToken("otp-token")
                 .requestIp("127.0.0.1");
     }
 

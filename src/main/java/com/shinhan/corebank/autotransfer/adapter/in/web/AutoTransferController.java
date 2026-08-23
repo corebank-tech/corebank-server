@@ -140,7 +140,9 @@ public class AutoTransferController {
             @Parameter(description = "멱등키. 동일 키로 재요청 시 재처리 없이 저장된 응답을 반환", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Parameter(description = "계좌 비밀번호 인증 완료 후 발급되는 1회성 인증 토큰", required = true)
-            @RequestHeader("Account-Password-Auth-Token") String accountPasswordAuthToken, HttpServletRequest httpRequest) {
+            @RequestHeader("Account-Password-Auth-Token") String accountPasswordAuthToken,
+            @Parameter(description = "OTP 인증 완료 후 발급되는 1회성 인증 토큰", required = true)
+            @RequestHeader("Otp-Auth-Token") String otpAuthToken, HttpServletRequest httpRequest) {
 
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         String requestIp = httpRequest.getRemoteAddr();
@@ -148,6 +150,7 @@ public class AutoTransferController {
         AutoTransferCancelCommand command = AutoTransferCancelCommand.builder()
                 .customerId(customerId)
                 .accountPasswordAuthToken(accountPasswordAuthToken)
+                .otpAuthToken(otpAuthToken)
                 .requestIp(requestIp)
                 .build();
 

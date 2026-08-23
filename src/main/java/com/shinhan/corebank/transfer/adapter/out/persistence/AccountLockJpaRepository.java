@@ -85,4 +85,22 @@ public interface AccountLockJpaRepository extends JpaRepository<AccountLockJpaEn
         WHERE a.accountId = :accountId
         """)
     Optional<WithdrawalAccountDetail> findWithdrawalAccountDetailByAccountId(@Param("accountId") Long accountId);
+
+    /**
+     * 출금계좌 잔액·상태 사전 체크(락 없음)용 조회. findWithdrawalAccountDetailByAccountId와
+     * 동일한 이유로 의도적으로 락을 잡지 않는다. status는 account_type과 동일하게 String
+     * 컬럼이라 JPQL 생성자식으로 바로 enum을 만들 수 없어, 인터페이스 프로젝션으로 raw 값을
+     * 받아 어댑터에서 enum으로 변환한다.
+     */
+    @Query("""
+        SELECT a.balance AS balance, a.status AS status
+        FROM AccountLockJpaEntity a
+        WHERE a.accountId = :accountId
+        """)
+    Optional<PreCheckProjection> findWithdrawalAccountPreCheckByAccountId(@Param("accountId") Long accountId);
+
+    interface PreCheckProjection {
+        long getBalance();
+        String getStatus();
+    }
 }

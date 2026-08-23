@@ -18,6 +18,7 @@ import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTrans
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
 import com.shinhan.corebank.transfer.application.port.out.TransferAuthTokenVerificationPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferOtpVerificationPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
@@ -60,6 +61,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private final AccountLockPort accountLockPort;
     private final TransferLimitPort transferLimitPort;
     private final TransferAuthTokenVerificationPort transferAuthTokenVerificationPort;
+    private final TransferOtpVerificationPort transferOtpVerificationPort;
     private final TransferSequencePort transferSequencePort;
     private final TransferSavePort transferSavePort;
     private final TransferLookupPort transferLookupPort;
@@ -71,6 +73,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             AccountLockPort accountLockPort,
             TransferLimitPort transferLimitPort,
             TransferAuthTokenVerificationPort transferAuthTokenVerificationPort,
+            TransferOtpVerificationPort transferOtpVerificationPort,
             TransferSequencePort transferSequencePort,
             TransferSavePort transferSavePort,
             TransferLookupPort transferLookupPort,
@@ -81,6 +84,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         this.accountLockPort = accountLockPort;
         this.transferLimitPort = transferLimitPort;
         this.transferAuthTokenVerificationPort = transferAuthTokenVerificationPort;
+        this.transferOtpVerificationPort = transferOtpVerificationPort;
         this.transferSequencePort = transferSequencePort;
         this.transferSavePort = transferSavePort;
         this.transferLookupPort = transferLookupPort;
@@ -113,32 +117,32 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             // 1차 검증(락 이전) ①: 출금계좌 소유·등록 여부. 존재하지 않는 계좌도 "내 소유가 아님"과
             // 구분하지 않고 같은 TRF0001로 묶는다 — 계좌ID가 이제 HTTP 요청 바디로 들어오므로
             // 계좌 존재 여부를 스캐닝하는 데 악용되지 않도록 한다.
-            // TODO(#100): 출금계좌 등록 플로우가 없어 현재는 모든 실계좌가 이 필터를 통과 못 한다.
             accountLockPort.findWithdrawalAccountDetail(command.withdrawalAccountId())
                     .filter(detail -> detail.customerId().equals(command.customerId()) && detail.withdrawalRegistered())
                     .orElseThrow(() -> new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
 
-            // 1차 검증(락 이전) ②: 인증 완료 토큰. 소유권 검증 뒤로 옮김 — 남의 계좌면 토큰 소비 전에 거부된다.
-            // IMMEDIATE만 authToken이 있으므로 SCHEDULED/AUTO는 건너뛴다.
-            if (command.authToken() != null) {
-                transferAuthTokenVerificationPort.verify(
-                        command.authToken(), command.withdrawalAccountId(), "TRANSFER_EXECUTE");
-            }
-
             ResolvedPayee payee = accountLockPort.resolvePayeeByAccountNumber(command.depositAccountNumber())
                     .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
 
-            // 1차 검증(락 이전) ③: 동일계좌 이체 거부. 한도 예약(checkAndReserve) 전에 걸러야
+            // 1차 검증(락 이전) ②: 동일계좌 이체 거부. 한도 예약(checkAndReserve) 전에 걸러야
             // 동일계좌 요청이 한도부터 소모하고 나서 거부되는 걸 막을 수 있다.
             if (command.withdrawalAccountId().equals(payee.accountId())) {
                 throw new BusinessException(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
             }
 
-            // 1차 검증(락 이전) ④: 입금계좌 상품유형. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을
+            // 1차 검증(락 이전) ③: 입금계좌 상품유형. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을
             // 묶어두는 상품이라 이체로 추가 입금할 수 없다. 정기적금(INSTALLMENT_SAVINGS)은 매달
             // 나눠 넣는 게 상품 목적이라 허용한다(REQ-TRSF-030).
             if (payee.accountType() == LockedAccountType.TIME_DEPOSIT) {
                 throw new BusinessException(TransferErrorCode.UNSUPPORTED_ACCOUNT_TYPE);
+            }
+
+            // 1차 검증(락 이전) ④: 계좌비밀번호 인증 토큰. IMMEDIATE만 authToken이 있으므로
+            // SCHEDULED/AUTO는 건너뛴다(예약/자동이체는 등록 시점에 이미 검증됐고 배치 실행 시
+            // 재검증하지 않는다).
+            if (command.authToken() != null) {
+                transferAuthTokenVerificationPort.verify(
+                        command.authToken(), command.withdrawalAccountId(), "TRANSFER_EXECUTE");
             }
 
             String transactionNumber =
@@ -165,6 +169,35 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             );
             // 람다가 캡처하려면 effectively-final이어야 하는데 created는 재대입되므로 복사본을 둔다.
             Transfer createdTransfer = created;
+
+            // 1차 검증(락 이전) ⑤: 잔액·계좌상태 사전 체크(락 없음, 비authoritative). OTP는
+            // 성공 시 즉시 소비되는 자원이라, 통과 못 할 게 뻔한 요청이 OTP부터 태우지 않도록
+            // 락 획득 전에 미리 걸러낸다. 락이 없어 최종 판정은 아니며, 락 획득 후 재검증(아래
+            // requiresNewTransactionTemplate 안)이 최종 권위를 갖는다 — 이 사전 체크를 통과했어도
+            // 그 사이 상태가 바뀌면 아래에서 다시 걸린다. created 확정 이후에 두는 이유: 여기서
+            // 실패해도 다른 락 안쪽 실패와 동일하게 failTransfer()로 ERROR 행을 남겨야 한다.
+            if (command.otpAuthToken() != null) {
+                accountLockPort.findWithdrawalAccountPreCheckSnapshot(command.withdrawalAccountId())
+                        .ifPresent(snapshot -> {
+                            if (snapshot.status() != LockedAccountStatus.ACTIVE) {
+                                throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
+                            }
+                            if (snapshot.balance() < command.amount()) {
+                                throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
+                            }
+                        });
+                if (payee.status() != LockedAccountStatus.ACTIVE) {
+                    throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
+                }
+            }
+
+            // 1차 검증(락 이전) ⑥: 인증 완료 토큰(OTP). 위 무관한 검증과 사전 체크를 모두 통과한
+            // 뒤, 채번 직후·계좌 락 획득 직전에 소비한다(otp_integration_guide.md §9).
+            if (command.otpAuthToken() != null) {
+                transferOtpVerificationPort.verifyAndConsume(
+                        command.otpAuthToken(), command.customerId(), command.withdrawalAccountId(),
+                        command.depositAccountNumber(), command.amount());
+            }
 
             Transfer completed = requiresNewTransactionTemplate.execute(status -> {
                 // 한도 락을 계좌 락보다 먼저 획득한다(P1-P4 합의: 한도 → 계좌 순서). 위반 시

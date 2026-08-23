@@ -17,7 +17,8 @@ import com.shinhan.corebank.subscription.application.port.in.ProductSubscription
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionValidationCommand.AgreedTerms;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionValidationUseCase;
 import com.shinhan.corebank.subscription.application.port.out.ExistingSubscriptionPort;
-import com.shinhan.corebank.subscription.application.port.out.ProductSubscriptionAuthTokenVerificationPort;
+import com.shinhan.corebank.subscription.application.port.out.ProductSubscriptionOtpVerificationPort;
+import com.shinhan.corebank.subscription.application.port.out.ProductSubscriptionPasswordVerificationPort;
 import com.shinhan.corebank.subscription.application.port.out.SaveProductSubscriptionPort;
 import com.shinhan.corebank.subscription.application.port.out.SaveTermsAgreementPort;
 import com.shinhan.corebank.subscription.domain.MaturityHandling;
@@ -46,7 +47,8 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
     // ProductSubscriptionValidationService와 동일한 이유 — 개설일도 주입 Clock의 존에 기대지 않고 KST로 맞춘다.
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
-    private final ProductSubscriptionAuthTokenVerificationPort authTokenVerificationPort;
+    private final ProductSubscriptionPasswordVerificationPort passwordVerificationPort;
+    private final ProductSubscriptionOtpVerificationPort otpVerificationPort;
     private final ProductQueryUseCase productQueryUseCase;
     private final ExistingSubscriptionPort existingSubscriptionPort;
     private final ProductSubscriptionValidationUseCase productSubscriptionValidationUseCase;
@@ -87,10 +89,11 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
             throw toBusinessException(validation.getViolations().get(0));
         }
 
-        authTokenVerificationPort.verifyAccountPasswordToken(
+        passwordVerificationPort.verifyAccountPasswordToken(
                 command.accountPasswordAuthToken(), command.customerId(), command.withdrawalAccountId());
-        authTokenVerificationPort.verifyOtpToken(
-                command.otpAuthToken(), command.customerId(), command.withdrawalAccountId());
+        otpVerificationPort.verifyAndConsume(
+                command.otpAuthToken(), command.customerId(), command.productId(),
+                command.subscriptionAmount(), command.termMonths(), command.withdrawalAccountId());
 
         AccountOpeningResult accountOpeningResult = productAccountOpeningUseCase.open(new ProductAccountOpeningCommand(
                 command.customerId(), command.productId(), toAccountType(product.getProductGroup()),

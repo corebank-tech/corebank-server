@@ -18,7 +18,7 @@ public record TransferRequest(
         @Schema(description = "상대 통장에 남길 표시내용. 최대 10자", example = "홍길동", maxLength = 10)
         String recipientPassbookMemo
 ) {
-    public TransferCommand toCommand(Long customerId, String authToken) {
+    public TransferCommand toCommand(Long customerId, String authToken, String otpAuthToken) {
         return TransferCommand.builder()
                 .customerId(customerId)
                 .withdrawalAccountId(withdrawalAccountId)
@@ -29,6 +29,7 @@ public record TransferRequest(
                 .myPassbookMemo(myPassbookMemo)
                 .recipientPassbookMemo(recipientPassbookMemo)
                 .authToken(authToken)
+                .otpAuthToken(otpAuthToken)
                 .build();
     }
 }
