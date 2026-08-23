@@ -97,7 +97,8 @@ class AccountTransactionQueryServiceTest {
                 null,
                 null,
                 1,
-                10
+                10,
+                false
         );
 
         ArgumentCaptor<LedgerHistoryQuery> captor =
@@ -153,6 +154,56 @@ class AccountTransactionQueryServiceTest {
     }
 
     @Test
+    void allTrue_skipsPaginationValidation_buildsUnpagedQuery() {
+        when(
+                accountPersistencePort
+                        .findByAccountIdAndCustomerId(
+                                101L,
+                                1L
+                        )
+        ).thenReturn(
+                Optional.of(
+                        mock(Account.class)
+                )
+        );
+
+        when(
+                ledgerHistoryQueryUseCase
+                        .query(any())
+        ).thenReturn(
+                mock(LedgerHistoryResult.class)
+        );
+
+        service.getTransactions(
+                1L,
+                101L,
+                null,
+                null,
+                null,
+                null,
+                null,
+                0,
+                7,
+                true
+        );
+
+        ArgumentCaptor<LedgerHistoryQuery> captor =
+                ArgumentCaptor.forClass(
+                        LedgerHistoryQuery.class
+                );
+
+        verify(
+                ledgerHistoryQueryUseCase
+        ).query(
+                captor.capture()
+        );
+
+        assertThat(captor.getValue().all()).isTrue();
+        assertThat(captor.getValue().page()).isZero();
+        assertThat(captor.getValue().size()).isZero();
+    }
+
+    @Test
     void accountNotOwned_throwsAcc0201() {
         when(
                 accountPersistencePort
@@ -175,7 +226,8 @@ class AccountTransactionQueryServiceTest {
                                                 null,
                                                 null,
                                                 1,
-                                                10
+                                                10,
+                                                false
                                         ),
                                 BusinessException.class
                         );
@@ -227,7 +279,8 @@ class AccountTransactionQueryServiceTest {
                                                 null,
                                                 LedgerHistorySort.LATEST,
                                                 1,
-                                                10
+                                                10,
+                                                false
                                         ),
                                 BusinessException.class
                         );
@@ -278,7 +331,8 @@ class AccountTransactionQueryServiceTest {
                                                 null,
                                                 LedgerHistorySort.LATEST,
                                                 1,
-                                                10
+                                                10,
+                                                false
                                         ),
                                 BusinessException.class
                         );
@@ -317,7 +371,8 @@ class AccountTransactionQueryServiceTest {
                                                 null,
                                                 null,
                                                 1,
-                                                7
+                                                7,
+                                                false
                                         ),
                                 BusinessException.class
                         );
@@ -356,7 +411,8 @@ class AccountTransactionQueryServiceTest {
                                                 null,
                                                 null,
                                                 0,
-                                                10
+                                                10,
+                                                false
                                         ),
                                 BusinessException.class
                         );
@@ -406,7 +462,8 @@ class AccountTransactionQueryServiceTest {
                 null,
                 LedgerHistorySort.LATEST,
                 2,
-                10
+                10,
+                false
         );
 
         ArgumentCaptor<LedgerHistoryQuery> captor =
