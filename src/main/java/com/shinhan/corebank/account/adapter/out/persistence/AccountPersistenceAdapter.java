@@ -53,6 +53,39 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
                 .map(AccountMapper::toDomain);
     }
 
+    // 계좌비밀번호 상태 변경 중 동일 계좌 요청을 비관적으로 잠근다.
+    @Override
+    public Optional<Account> findByAccountIdAndCustomerIdForUpdate(
+            Long accountId,
+            Long customerId
+    ) {
+        return accountJpaRepository
+                .findByAccountIdAndCustomerIdForUpdate(
+                        accountId,
+                        customerId
+                )
+                .map(AccountMapper::toDomain);
+    }
+
+    // 계좌비밀번호 관련 상태를 즉시 저장하고 DB 제약을 확인한다.
+    @Override
+    public Account updatePasswordState(Account account) {
+        Objects.requireNonNull(account, "account must not be null");
+
+        AccountJpaEntity entity = accountJpaRepository
+                .findById(account.getAccountId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "저장할 계좌를 찾을 수 없습니다."
+                ));
+
+        validateVersion(account, entity);
+        entity.updatePasswordState(account);
+
+        return AccountMapper.toDomain(
+                accountJpaRepository.saveAndFlush(entity)
+        );
+    }
+
     private Account saveNewAccount(Account account) {
         AccountJpaEntity entity =
                 AccountMapper.toEntity(account);

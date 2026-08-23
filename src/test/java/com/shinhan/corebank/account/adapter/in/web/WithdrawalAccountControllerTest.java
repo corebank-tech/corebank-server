@@ -1,6 +1,7 @@
 package com.shinhan.corebank.account.adapter.in.web;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
@@ -64,10 +65,14 @@ class WithdrawalAccountControllerTest
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // 출금계좌 등록은 실제 OTP 발급 없이 otp.api 경계만 검증한다 — OTP 자체의 발급/소비 로직은
-    // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
+    // 출금계좌 등록은 실제 OTP·비밀번호 토큰 발급 없이 각 도메인의 공개 verifier 경계만
+    // 검증한다 — 발급/소비 로직 자체는 otp·account(P6) 도메인 테스트가 담당한다. Mockito void
+    // mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
     @MockitoBean
     private OtpAuthTokenVerifier otpAuthTokenVerifier;
+
+    @MockitoBean
+    private AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
 
     @Test
     @DisplayName("본인 입출금계좌를 출금계좌로 등록한다")

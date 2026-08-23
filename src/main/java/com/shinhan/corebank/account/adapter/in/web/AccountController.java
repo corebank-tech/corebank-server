@@ -6,6 +6,7 @@ import com.shinhan.corebank.account.application.port.in.AccountOverviewQueryUseC
 import com.shinhan.corebank.account.application.port.in.AccountOverviewResult;
 import com.shinhan.corebank.adapter.in.web.exception.ErrorResponse;
 import com.shinhan.corebank.account.application.port.in.*;
+import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
@@ -41,6 +42,7 @@ import java.util.Map;
 public class AccountController {
 
     private final AccountOverviewQueryUseCase accountOverviewQueryUseCase;
+    private final AccountDetailQueryUseCase accountDetailQueryUseCase;
     private final AccountTransactionQueryUseCase accountTransactionQueryUseCase;
     private final CurrentCustomerProvider currentCustomerProvider;
     private final AccountAliasUseCase accountAliasUseCase;
@@ -48,6 +50,7 @@ public class AccountController {
 
     @GetMapping
     @Operation(
+            operationId = "getAccounts",
             summary = "전체 계좌 조회",
             description = "로그인한 고객이 보유한 전체 계좌를 유형별로 그룹화하여 조회한다."
     )
@@ -68,8 +71,66 @@ public class AccountController {
         );
     }
 
+    @GetMapping("/{accountId}")
+    @Operation(
+            operationId = "getAccountDetail",
+            summary = "계좌 상세 조회",
+            description = "로그인한 고객이 소유한 계좌의 기본정보·잔액·계좌비밀번호 오류 상태를 조회한다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "계좌 상세 조회 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "`ACC0201` 계좌를 찾을 수 없거나 접근할 수 없음",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            )
+    })
+    public ApiResponse<AccountDetailResponse> getAccountDetail(
+            @Parameter(
+                    description = "조회할 계좌의 내부 식별자",
+                    required = true,
+                    example = "101"
+            )
+            @PathVariable
+            @Positive
+            Long accountId
+    ) {
+        AuthenticatedCustomer customer =
+                currentCustomerProvider.getCurrentCustomer();
+
+        AccountDetailResult result =
+                accountDetailQueryUseCase.getDetail(
+                        customer.customerId(),
+                        accountId
+                );
+
+        return ApiResponse.success(
+                AccountDetailResponse.from(
+                        result,
+                        customer.userName()
+                )
+        );
+    }
+
     @PutMapping("/{accountId}/alias")
     @Operation(
+          operationId = "updateAccountAlias",
             summary = "계좌별명 등록/수정",
             description = """
                     로그인한 고객이 소유한 계좌의 별명을 등록하거나 수정한다.
@@ -172,6 +233,7 @@ public class AccountController {
 
     @DeleteMapping("/{accountId}/alias")
     @Operation(
+          operationId = "deleteAccountAlias",
             summary = "계좌별명 삭제",
             description = """
                     로그인한 고객이 소유한 계좌에 설정된 별명을 삭제한다.
@@ -263,6 +325,7 @@ public class AccountController {
     }
 
     @GetMapping("/{accountId}/transactions")
+    @Operation(operationId = "searchAccountTransactions")
     public ApiResponse<AccountTransactionResponse>
     getTransactions(
             @PathVariable

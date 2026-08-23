@@ -49,13 +49,12 @@ public class WithdrawalAccountRegisterService
                         )
                 );
 
+        // 비밀번호 잠금(APW0101)은 이 안에서 검증한다(AccountPasswordAuthTokenService).
         passwordVerificationPort.verifyAccountPasswordToken(
                 command.accountPasswordAuthToken(),
                 command.customerId(),
                 command.accountId()
         );
-
-        // TODO P6: passwordLocked 시 APW0101 연동
 
         boolean alreadyRegistered = account.isWithdrawalRegistered();
 

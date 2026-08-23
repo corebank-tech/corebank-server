@@ -316,6 +316,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `LMT0002` | 400 | 1회 이체한도를 초과했습니다. | REQ-TRSF-010 · POL-015 |
 | `LMT0003` | 400 | 1일 이체한도를 초과했습니다. | REQ-TRSF-011 · POL-016 |
 | `LMT0004` | 400 | 1회 한도는 1일 한도를 초과할 수 없습니다. | 한도 변경 시 정합성 위반 |
+| `LMT9001` | 500 | 이체한도 정보를 확인할 수 없습니다. | 한도 행이 없는 고객에게 변경 요청이 들어옴. 가입 연계(REQ-TRSF-029)와 백필이 보장하므로 나오면 데이터 결함이다 |
 
 ### 4-9. `TRF` 이체·원장 — P4
 
@@ -658,6 +659,39 @@ public record ApiResponse<T>(String code, String message, T data) {
 ```
 
 집계는 페이징과 무관하게 조회 조건 전체 합계입니다.
+
+### 6-7. Swagger `operationId` 규칙
+
+**모든 엔드포인트에 `@Operation(operationId = "...")`을 명시합니다.** 생략하면 springdoc이
+자바 메서드명으로 자동 생성하고, 이름이 겹치면 `verify_1`·`register_2`처럼 숫자 접미사를 붙입니다.
+이 숫자는 빈 등록 순서에 의존해서 **컨트롤러가 하나 추가되면 다른 API로 밀립니다.**
+
+프론트는 이 값으로 API 함수와 훅 이름을 생성하므로(`orval`), 서버가 무관한 API를 추가한 것만으로
+프론트 코드가 조용히 깨집니다. 그래서 선택이 아니라 필수입니다.
+
+**이름은 `동사 + 도메인` camelCase로 짓고, 프로젝트 전역에서 유일해야 합니다.**
+
+| 종류 | 규칙 | 예 |
+| --- | --- | --- |
+| 목록 조회 | `get` + 복수형 | `getAutoTransfers` · `getFavoriteAccounts` |
+| 단건 상세 | `get` + 단수형 + `Detail` | `getAccountDetail` · `getTransferDetail` |
+| 조건 검색 | `search` + 복수형 | `searchTransfers` · `searchProducts` |
+| 내 정보 | `get`/`update` + `Me` | `getMe` · `updateMe` |
+| 생성 | `create` · `register` | `createProductSubscription` · `registerWithdrawalAccount` |
+| 변경 | `update` | `updateAccountAlias` · `updateAutoTransfer` |
+| 삭제·해지 | `delete` · `cancel` · `unregister` | `deleteAccountAlias` · `cancelAutoTransfer` |
+| 검증 | `verify` · `validate` · `check` | `verifyOtp` · `validateSignup` |
+| 발급 | `issue` | `issueOtp` · `issueEmailVerification` |
+
+- 메서드명과 같아도 **생략하지 않습니다.** 나중에 다른 컨트롤러가 같은 메서드명을 쓰면 접미사가 붙습니다
+- 도메인을 빼지 않습니다. `verify`가 아니라 `verifyOtp`·`verifyAccountPassword`입니다
+- 반대 동작은 `un~` 접두를 씁니다. `registerWithdrawalAccount` ↔ `unregisterWithdrawalAccount`
+- 이름을 바꾸면 프론트 훅 이름이 함께 바뀝니다. 머지된 뒤의 변경은 FE와 합의합니다
+
+**셀프 체크** — 컨트롤러 PR을 올리기 전에 확인합니다.
+
+- [ ] 새 엔드포인트마다 `operationId`를 붙였는가
+- [ ] 기존 `operationId`와 겹치지 않는가
 
 ---
 

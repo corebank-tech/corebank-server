@@ -17,4 +17,11 @@ public interface AccountPersistencePort {
             Long accountId,
             Long customerId
     );
+
+    Optional<Account> findByAccountIdAndCustomerIdForUpdate(
+            Long accountId,
+            Long customerId
+    );
+
+    Account updatePasswordState(Account account);
 }

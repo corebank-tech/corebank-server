@@ -9,6 +9,7 @@ import com.shinhan.corebank.signup.application.port.in.CompleteSignupCommand;
 import com.shinhan.corebank.signup.application.port.in.CompleteSignupResult;
 import com.shinhan.corebank.signup.application.port.in.CompleteSignupUseCase;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -25,7 +26,10 @@ import tools.jackson.core.type.TypeReference;
 import java.util.Map;
 
 // 회원가입 최종 완료 HTTP API를 제공한다.
-@Tag(name = "회원가입 완료")
+@Tag(
+        name = "회원가입",
+        description = "회원가입 단계별 인증·입력 검증·가입 완료 API"
+)
 @RestController
 @RequestMapping("/auth/signup")
 public class SignupCompletionController {
@@ -44,6 +48,7 @@ public class SignupCompletionController {
     }
 
     @Operation(
+            operationId = "completeSignup",
             summary = "회원가입 완료",
             description = "tempSignupToken을 소비하고 고객·약관 동의·기존 은행 계좌를 원자적으로 등록한다."
     )
@@ -65,6 +70,11 @@ public class SignupCompletionController {
     })
     @PostMapping("/complete")
     public ResponseEntity<ApiResponse<CompleteSignupResponse>> complete(
+            @Parameter(
+                    description = "UUID v4 멱등키",
+                    required = true,
+                    example = "550e8400-e29b-41d4-a716-446655440000"
+            )
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody CompleteSignupRequest request
     ) {
