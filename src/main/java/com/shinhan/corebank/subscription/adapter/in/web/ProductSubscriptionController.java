@@ -9,6 +9,7 @@ import com.shinhan.corebank.subscription.application.port.in.ProductSubscription
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionValidationUseCase;
 import com.shinhan.corebank.subscription.domain.ProductSubscriptionResult;
 import com.shinhan.corebank.subscription.domain.SubscriptionValidation;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class ProductSubscriptionController {
     private final IdempotentRequestExecutor idempotentRequestExecutor;
 
     @PostMapping("/validation")
+    @Operation(operationId = "validateProductSubscription")
     public ApiResponse<ProductSubscriptionValidationResponse> validate(
             @RequestBody @Valid ProductSubscriptionValidationRequest request) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
@@ -42,6 +44,7 @@ public class ProductSubscriptionController {
     }
 
     @GetMapping("/{subscriptionId}")
+    @Operation(operationId = "getProductSubscriptionDetail")
     public ApiResponse<ProductSubscriptionResultResponse> getProductSubscriptions(
             @PathVariable @Positive Long subscriptionId) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
@@ -51,6 +54,7 @@ public class ProductSubscriptionController {
 
     // Idempotency-Key 필수 — api_conventions.md §7-3, "Y" 적용대상에 "상품가입 실행" 명시
     @PostMapping
+    @Operation(operationId = "createProductSubscription")
     public ResponseEntity<ApiResponse<ProductSubscriptionExecuteResponse>> execute(
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @RequestBody @Valid ProductSubscriptionExecuteRequest request) {

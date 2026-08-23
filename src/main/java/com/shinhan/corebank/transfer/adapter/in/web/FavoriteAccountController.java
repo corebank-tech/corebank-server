@@ -46,7 +46,7 @@ public class FavoriteAccountController {
 
     @PostMapping
     // 멱등성 확인 후, 재요청 -> 저장된 응답, 신규 요청 -> 등록 (docs/api_conventions.md §7-3)
-    @Operation(summary = "자주 쓰는 계좌 등록", description = """
+    @Operation(operationId = "registerFavoriteAccount", summary = "자주 쓰는 계좌 등록", description = """
             입금계좌번호를 자주 쓰는 계좌로 등록한다. 동일한 Idempotency-Key와 동일한 요청 내용으로 재요청하면 \
             새로 등록하지 않고 저장된 응답을 그대로 반환한다.""")
     @ApiResponses({
@@ -73,7 +73,7 @@ public class FavoriteAccountController {
     }
 
     @GetMapping
-    @Operation(summary = "자주 쓰는 계좌 목록조회", description = "내가 등록한 자주 쓰는 계좌 목록을 조회한다. 등록 건이 없으면 빈 배열을 반환한다.")
+    @Operation(operationId = "getFavoriteAccounts", summary = "자주 쓰는 계좌 목록조회", description = "내가 등록한 자주 쓰는 계좌 목록을 조회한다. 등록 건이 없으면 빈 배열을 반환한다.")
     public ApiResponse<List<FavoriteAccountResponse>> list() {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         return ApiResponse.success(queryUseCase.queryAll(customerId).stream()

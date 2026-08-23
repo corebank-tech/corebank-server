@@ -42,6 +42,7 @@ public class SignupProgressController {
     }
 
     @Operation(
+            operationId = "validateSignup",
             summary = "회원가입 입력정보 검증",
             description = """
                     최초 요청은 네 인증 토큰을 검증·소비하고 tempSignupToken을 발급한다. \
@@ -79,6 +80,7 @@ public class SignupProgressController {
     }
 
     @Operation(
+            operationId = "getSignupConfirmation",
             summary = "회원가입 확인정보 조회",
             description = "tempSignupToken을 소비하지 않고 마스킹된 확인정보를 조회한다."
     )
