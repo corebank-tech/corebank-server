@@ -54,7 +54,8 @@ public class TransferController {
             이체 요청이 처리됨. 실행 자체의 성공 여부와 이체 성공 여부는 다르다 — 응답 본문의 status로 \
             판단한다. status=ERROR면 errorCode에 `TRF0001`(등록되지 않은 출금계좌) · `TRF0002`(출금·입금계좌 동일) \
             · `TRF0004`(입금 불가 상품유형) · `TRF0201`(입금계좌를 찾을 수 없음) · `TRF0301`/`TRF0304`(거래정지·해지 \
-            상태의 입금/출금계좌) · `TRF0303`(출금계좌 잔액 부족) 중 하나가 담긴다.""")
+            상태의 입금/출금계좌) · `TRF0303`(출금계좌 잔액 부족) · `OTP0101`(OTP 인증 토큰 무효) · `OTP0102`(인증한 \
+            거래 내용과 요청 내용 불일치) 중 하나가 담긴다.""")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "`TRF0003` 이체금액 형식 오류 · `TRF0005` 통장 표시내용 길이 초과 (요청 파싱 단계에서 즉시 거부됨)",
@@ -66,14 +67,16 @@ public class TransferController {
     public ResponseEntity<ApiResponse<TransferResponse>> execute(
             @Parameter(description = "멱등키. 동일 키로 재요청 시 재처리 없이 저장된 응답을 반환", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
             @RequestHeader("Idempotency-Key") String idempotencyKey,
-            @Parameter(description = "계좌 비밀번호/OTP 인증 완료 후 발급되는 1회성 인증 토큰", required = true)
+            @Parameter(description = "계좌 비밀번호 인증 완료 후 발급되는 1회성 인증 토큰", required = true)
             @RequestHeader("Account-Password-Auth-Token") String authToken,
+            @Parameter(description = "OTP 인증 완료 후 발급되는 1회성 인증 토큰", required = true)
+            @RequestHeader("Otp-Auth-Token") String otpAuthToken,
             @RequestBody TransferRequest request) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         return idempotentRequestExecutor.execute(idempotencyKey, customerId, "POST /transfers", fingerprint(customerId, request),
                 new TypeReference<>() {},
                 () -> ApiResponse.success(TransferResponse.from(
-                        transferExecutionUseCase.execute(request.toCommand(customerId, authToken)))));
+                        transferExecutionUseCase.execute(request.toCommand(customerId, authToken, otpAuthToken)))));
     }
 
     @GetMapping("/payee")

@@ -11,6 +11,7 @@ import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTrans
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferRegisterUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.AuthTokenVerificationPort;
+import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferOtpVerificationPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferPersistencePort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
@@ -36,6 +37,7 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
 
     private final ScheduledTransferPersistencePort scheduledTransferPersistencePort;
     private final AuthTokenVerificationPort authTokenVerificationPort;
+    private final ScheduledTransferOtpVerificationPort scheduledTransferOtpVerificationPort;
     private final AccountStatusPort accountStatusPort;
     private final TransferLimitPort transferLimitPort;
     private final AuditLogService auditLogService;
@@ -51,9 +53,6 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
             throw new BusinessException(ScheduledTransferErrorCode.INVALID_SCHEDULED_DATE);
         }
 
-        // 인증 완료 토큰
-        authTokenVerificationPort.verify(command.accountPasswordAuthToken(), command.withdrawalAccountId(), "SCHEDULED_TRANSFER_REGISTER");
-        authTokenVerificationPort.verify(command.otpAuthToken(), command.withdrawalAccountId(), "SCHEDULED_TRANSFER_REGISTER_OTP");
         // 출금 계좌 소유자 검증
         if (!accountStatusPort.belongsToCustomer(command.withdrawalAccountId(), command.customerId())) {
             throw new BusinessException(ScheduledTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE);
@@ -89,6 +88,12 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
             throw new BusinessException(ScheduledTransferErrorCode.DUPLICATE_REGISTRATION);
         }
 
+        // 인증 완료 토큰 — 계좌비밀번호는 P6 실구현 전까지 Mock, OTP는 실제 otp 도메인과 연동한다.
+        // OTP는 성공 시 즉시 소비되므로 위 선행 검증을 모두 통과한 뒤 상태 변경 직전에 검증한다(otp_integration_guide.md §9)
+        authTokenVerificationPort.verify(command.accountPasswordAuthToken(), command.withdrawalAccountId(), "SCHEDULED_TRANSFER_REGISTER");
+        scheduledTransferOtpVerificationPort.verifyRegisterAndConsume(command.otpAuthToken(), command.customerId(),
+                command.withdrawalAccountId(), command.depositAccountNumber(), command.amount(), command.scheduledDate());
+
         ScheduledTransfer scheduledTransfer = ScheduledTransfer.register(command.customerId(), command.withdrawalAccountId(),
                 PAYEE_BANK_CODE, command.depositAccountNumber(), command.payeeName(), command.amount(), command.scheduledDate(),
                 command.myPassbookMemo(), command.recipientPassbookMemo(), LocalDateTime.now(clock));
@@ -121,7 +126,7 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
         }
 
         authTokenVerificationPort.verify(command.accountPasswordAuthToken(), scheduledTransfer.getWithdrawalAccountId(), "SCHEDULED_TRANSFER_CANCEL");
-        authTokenVerificationPort.verify(command.otpAuthToken(), scheduledTransfer.getWithdrawalAccountId(), "SCHEDULED_TRANSFER_CANCEL_OTP");
+        scheduledTransferOtpVerificationPort.verifyCancelAndConsume(command.otpAuthToken(), command.customerId(), scheduledTransferId);
 
         scheduledTransfer.cancel(LocalDateTime.now(clock));
         ScheduledTransfer saved = scheduledTransferPersistencePort.save(scheduledTransfer);

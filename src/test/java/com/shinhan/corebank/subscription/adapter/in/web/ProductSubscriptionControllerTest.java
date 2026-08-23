@@ -10,6 +10,7 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaEntity;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductPreferentialRateJpaEntity;
@@ -37,6 +38,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -78,6 +80,11 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     ProductSubscriptionJpaRepository subscriptionJpaRepository;
     @Autowired
     EntityManager entityManager;
+
+    // 상품가입 실행은 실제 OTP 발급 없이 otp.api 경계만 검증한다 — OTP 자체의 발급/소비 로직은
+    // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
+    @MockitoBean
+    OtpAuthTokenVerifier otpAuthTokenVerifier;
 
     private final ObjectMapper jackson = new ObjectMapper();
 
@@ -314,7 +321,7 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("가입 건에 연결된 계좌가 타 고객 소유면 PRD9001을 반환한다")
+    @DisplayName("가입 건에 연결된 계좌가 타 고객 소유면 PRD9003을 반환한다")
     void getSubscriptionResult_accountOwnedByOtherCustomer_returnsAccountNotFound() throws Exception {
         Long productId = productJpaRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
         Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_ctl_owner");
@@ -330,7 +337,7 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
         mockMvc.perform(get("/product-subscriptions/{subscriptionId}", subscriptionId)
                         .with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.code").value("PRD9001"));
+                .andExpect(jsonPath("$.code").value("PRD9003"));
     }
 
     @Test

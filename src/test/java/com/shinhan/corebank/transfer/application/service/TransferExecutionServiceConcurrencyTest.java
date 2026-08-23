@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,6 +50,11 @@ class TransferExecutionServiceConcurrencyTest extends IntegrationTestSupport {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    // 이체 실행은 실제 OTP 발급 없이 otp.api 경계만 검증한다 — OTP 자체의 발급/소비 로직은
+    // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
+    @MockitoBean
+    private OtpAuthTokenVerifier otpAuthTokenVerifier;
 
     @AfterEach
     void cleanUpCommittedData() {
@@ -133,6 +140,7 @@ class TransferExecutionServiceConcurrencyTest extends IntegrationTestSupport {
             TransferCommand command = TransferCommand.builder()
                     .customerId(1L)
                     .authToken("dummy-auth-token")
+                    .otpAuthToken("dummy-otp-token")
                     .withdrawalAccountId(withdrawalAccountId)
                     .depositAccountNumber(depositAccountNumber)
                     .amount(amount)

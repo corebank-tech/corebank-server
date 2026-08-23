@@ -1,13 +1,14 @@
 package com.shinhan.corebank.account.adapter.in.web;
 
 import com.shinhan.corebank.IntegrationTestSupport;
-import com.shinhan.corebank.account.application.port.out.WithdrawalAccountAuthVerificationPort;
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -19,8 +20,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -64,9 +65,14 @@ class WithdrawalAccountControllerTest
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // Controller 계약 테스트는 실제 일회용 인증 토큰 저장소와 분리한다.
+    // 출금계좌 등록은 실제 OTP·비밀번호 토큰 발급 없이 각 도메인의 공개 verifier 경계만
+    // 검증한다 — 발급/소비 로직 자체는 otp·account(P6) 도메인 테스트가 담당한다. Mockito void
+    // mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
     @MockitoBean
-    private WithdrawalAccountAuthVerificationPort authVerificationPort;
+    private OtpAuthTokenVerifier otpAuthTokenVerifier;
+
+    @MockitoBean
+    private AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
 
     @Test
     @DisplayName("본인 입출금계좌를 출금계좌로 등록한다")

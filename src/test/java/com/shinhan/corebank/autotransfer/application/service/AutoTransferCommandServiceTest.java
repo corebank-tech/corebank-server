@@ -20,6 +20,7 @@ import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterCommand;
 import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AuthTokenVerificationPort;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferOtpVerificationPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
 import com.shinhan.corebank.autotransfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
@@ -31,8 +32,10 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import org.springframework.dao.OptimisticLockingFailureException;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -49,6 +52,9 @@ class AutoTransferCommandServiceTest {
 
     @Mock
     AuthTokenVerificationPort authTokenVerificationPort;
+
+    @Mock
+    AutoTransferOtpVerificationPort autoTransferOtpVerificationPort;
 
     @Mock
     AccountStatusPort accountStatusPort;
@@ -85,6 +91,7 @@ class AutoTransferCommandServiceTest {
                 .myPassbookMemo("새메모")
                 .recipientPassbookMemo("새받는메모")
                 .accountPasswordAuthToken("valid-token")
+                .otpAuthToken("valid-otp-token")
                 .requestIp("127.0.0.1");
     }
 
@@ -92,6 +99,7 @@ class AutoTransferCommandServiceTest {
         return AutoTransferCancelCommand.builder()
                 .customerId(1L)
                 .accountPasswordAuthToken("valid-token")
+                .otpAuthToken("valid-otp-token")
                 .requestIp("127.0.0.1");
     }
 
@@ -109,6 +117,7 @@ class AutoTransferCommandServiceTest {
                 .myPassbookMemo("내메모")
                 .recipientPassbookMemo("받는메모")
                 .accountPasswordAuthToken("valid-token")
+                .otpAuthToken("valid-otp-token")
                 .requestIp("127.0.0.1");
     }
 
@@ -136,21 +145,51 @@ class AutoTransferCommandServiceTest {
         assertThat(result.getWithdrawalAccountId()).isEqualTo(2L);
         assertThat(result.getAmount()).isEqualTo(10_000L);
         verify(autoTransferPersistencePort).save(any(AutoTransfer.class));
+        verify(autoTransferOtpVerificationPort).verifyRegisterAndConsume(
+                eq("valid-otp-token"), eq(1L), eq(2L), eq("110987654321"), eq(10_000L), eq(1), eq(15), any(), any());
         verify(auditLogService).record(eq(1L), isNull(), eq(AuditEventType.AUTO_TRANSFER_INFO_CHANGE),
                 eq("127.0.0.1"), eq(true), any());
     }
 
+    // 인증 토큰은 소유권·업무규칙 검증을 모두 통과한 뒤 상태 변경 직전에 검증하므로
+    // (otp_integration_guide.md §9), 실패를 재현하려면 그 앞의 모든 검증을 통과시켜야 한다.
     @Test
-    @DisplayName("인증 토큰이 유효하지 않으면 그 자리에서 예외가 전파되고 이후 검증은 실행되지 않는다")
-    void register_invalidAuthToken_propagatesException() {
+    @DisplayName("계좌비밀번호 인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
+    void register_invalidAccountPasswordAuthToken_propagatesException() {
+        when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
+        when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
+        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
+        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15)).thenReturn(false);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
 
         assertThatThrownBy(() -> autoTransferCommandService.register(validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class);
 
-        verify(accountStatusPort, never()).belongsToCustomer(any(), any());
-        verify(accountStatusPort, never()).isActiveAccount(any());
+        verify(autoTransferOtpVerificationPort, never())
+                .verifyRegisterAndConsume(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("OTP 인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
+    void register_invalidOtpAuthToken_propagatesException() {
+        when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
+        when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
+        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
+        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15)).thenReturn(false);
+        doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
+                .when(autoTransferOtpVerificationPort)
+                .verifyRegisterAndConsume(any(), any(), any(), any(), any(), any(), any(), any(), any());
+
+        assertThatThrownBy(() -> autoTransferCommandService.register(validCommandBuilder().build()))
+                .isInstanceOf(BusinessException.class);
+
+        verify(autoTransferPersistencePort, never()).save(any());
     }
 
     @Test
@@ -288,6 +327,7 @@ class AutoTransferCommandServiceTest {
                 .customerId(1L)
                 .amount(30_000L)
                 .accountPasswordAuthToken("valid-token")
+                .otpAuthToken("valid-otp-token")
                 .requestIp("127.0.0.1")
                 .build();
 
@@ -350,6 +390,7 @@ class AutoTransferCommandServiceTest {
                 .customerId(1L)
                 .cycleMonths(3)
                 .accountPasswordAuthToken("valid-token")
+                .otpAuthToken("valid-otp-token")
                 .requestIp("127.0.0.1")
                 .build();
 
@@ -389,12 +430,30 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
-    @DisplayName("인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
+    @DisplayName("계좌비밀번호 인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
     void change_invalidAuthToken_propagatesException() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
+
+        assertThatThrownBy(() -> autoTransferCommandService.change(10L, validChangeCommandBuilder().build()))
+                .isInstanceOf(BusinessException.class);
+
+        verify(autoTransferOtpVerificationPort, never()).verifyChangeAndConsume(any(), any(), any(), any(), any(), any());
+        verify(autoTransferPersistencePort, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any(), any(), anyBoolean(), any());
+    }
+
+    @Test
+    @DisplayName("OTP 인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
+    void change_invalidOtpAuthToken_propagatesException() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
+        doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
+                .when(autoTransferOtpVerificationPort).verifyChangeAndConsume(any(), any(), any(), any(), any(), any());
 
         assertThatThrownBy(() -> autoTransferCommandService.change(10L, validChangeCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class);
@@ -467,17 +526,84 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
-    @DisplayName("인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
+    @DisplayName("계좌비밀번호 인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
     void cancel_invalidAuthToken_propagatesException() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
 
         assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class);
 
+        verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
         verify(auditLogService, never()).record(any(), any(), any(), any(), anyBoolean(), any());
+    }
+
+    @Test
+    @DisplayName("OTP 인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
+    void cancel_invalidOtpAuthToken_propagatesException() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+        doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
+                .when(autoTransferOtpVerificationPort).verifyCancelAndConsume(any(), any(), any());
+
+        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
+                .isInstanceOf(BusinessException.class);
+
+        verify(autoTransferPersistencePort, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any(), any(), anyBoolean(), any());
+    }
+
+    @Test
+    @DisplayName("정상 상태가 아닌 건은 해지 요청도 OTP를 소비하지 않고 AUT0302를 던진다")
+    void cancel_notModifiableStatus_throwsNotInNormalStatus_withoutConsumingOtp() {
+        AutoTransfer terminated = AutoTransfer.reconstitute(
+                10L, 1L, 2L, "110987654321", "홍길동",
+                10_000L, 1, 15,
+                LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), null,
+                "내메모", "받는메모", AutoTransferStatus.TERMINATED,
+                LocalDateTime.now(), LocalDateTime.now(), LocalDateTime.now(), 0L);
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(terminated));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+
+        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS));
+
+        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("다음 실행 예정일 당일 해지 요청은 OTP를 소비하지 않고 AUT0303을 던진다")
+    void cancel_onExecutionDate_throwsCannotTerminateOnExecutionDate_withoutConsumingOtp() {
+        // 서비스가 clock.withZone(SEOUL) 기준으로 오늘 날짜를 판정하므로, 픽스처의
+        // nextExecutionDate도 LocalDate.now()(JVM 기본 시간대)가 아니라 같은 고정 Clock에서
+        // 뽑아야 시간대에 따라 날짜가 어긋나 flaky해지지 않는다.
+        Clock fixedClock = Clock.fixed(Instant.parse("2026-08-22T02:00:00Z"), ZoneId.of("Asia/Seoul"));
+        LocalDate today = LocalDate.now(fixedClock);
+        AutoTransfer dueToday = AutoTransfer.reconstitute(
+                10L, 1L, 2L, "110987654321", "홍길동",
+                10_000L, 1, 15,
+                today.minusMonths(1), today.plusMonths(12), today,
+                "내메모", "받는메모", AutoTransferStatus.NORMAL,
+                LocalDateTime.now(), null, LocalDateTime.now(), 0L);
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(dueToday));
+        when(clock.withZone(any())).thenReturn(fixedClock);
+
+        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.CANNOT_TERMINATE_ON_EXECUTION_DATE));
+
+        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+        verify(autoTransferPersistencePort, never()).save(any());
     }
 }

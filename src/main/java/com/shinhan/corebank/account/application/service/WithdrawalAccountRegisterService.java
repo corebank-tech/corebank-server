@@ -4,7 +4,8 @@ import com.shinhan.corebank.account.application.port.in.WithdrawalAccountRegiste
 import com.shinhan.corebank.account.application.port.in.WithdrawalAccountRegisterResult;
 import com.shinhan.corebank.account.application.port.in.WithdrawalAccountRegisterUseCase;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
-import com.shinhan.corebank.account.application.port.out.WithdrawalAccountAuthVerificationPort;
+import com.shinhan.corebank.account.application.port.out.WithdrawalAccountOtpVerificationPort;
+import com.shinhan.corebank.account.application.port.out.WithdrawalAccountPasswordVerificationPort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
@@ -26,8 +27,10 @@ public class WithdrawalAccountRegisterService
             ZoneId.of("Asia/Seoul");
 
     private final AccountPersistencePort accountPersistencePort;
-    private final WithdrawalAccountAuthVerificationPort
-            authVerificationPort;
+    private final WithdrawalAccountPasswordVerificationPort
+            passwordVerificationPort;
+    private final WithdrawalAccountOtpVerificationPort
+            otpVerificationPort;
     private final Clock clock;
 
     @Override
@@ -46,13 +49,22 @@ public class WithdrawalAccountRegisterService
                         )
                 );
 
-        authVerificationPort.verifyAccountPasswordToken(
+        // 비밀번호 잠금(APW0101)은 이 안에서 검증한다(AccountPasswordAuthTokenService).
+        passwordVerificationPort.verifyAccountPasswordToken(
                 command.accountPasswordAuthToken(),
                 command.customerId(),
                 command.accountId()
         );
 
-        authVerificationPort.verifyOtpToken(
+        boolean alreadyRegistered = account.isWithdrawalRegistered();
+
+        // 새로 등록하는 경우에만 등록 가능 상태를 OTP 소비 전에 검증한다. OTP는 성공 시 즉시
+        // 소비되므로, 등록 불가 계좌(유형/상태)로 실패할 요청이 OTP부터 소모하지 않게 한다.
+        if (!alreadyRegistered) {
+            account.validateWithdrawalRegistrationAllowed();
+        }
+
+        otpVerificationPort.verifyAndConsume(
                 command.otpAuthToken(),
                 command.customerId(),
                 command.accountId()
@@ -60,12 +72,9 @@ public class WithdrawalAccountRegisterService
 
         // 유효한 인증을 거친 재요청이면 상태를 다시 변경하지 않고
         // 기존 등록 결과를 반환한다.
-        if (account.isWithdrawalRegistered()) {
+        if (alreadyRegistered) {
             return toResult(account);
         }
-
-        // 인증 Adapter가 비밀번호 잠금을 APW0101로 차단한 뒤 계좌 업무 상태를 검증한다.
-        account.validateWithdrawalRegistrationAllowed();
 
         OffsetDateTime registeredAt =
                 OffsetDateTime.ofInstant(
