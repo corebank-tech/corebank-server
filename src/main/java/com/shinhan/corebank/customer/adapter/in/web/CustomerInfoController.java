@@ -45,6 +45,7 @@ public class CustomerInfoController {
 
     @GetMapping("/me")
     @Operation(
+            operationId = "getMe",
             summary = "내 고객정보 조회",
             description = "로그인한 고객의 기본정보를 개인정보 마스킹 규칙에 따라 조회한다."
     )
@@ -70,6 +71,7 @@ public class CustomerInfoController {
     // 로그인 고객의 연락처를 멱등하게 변경한다.
     @PatchMapping("/me")
     @Operation(
+                  operationId = "updateMe",
             summary = "내 고객정보 변경",
             description = "휴대폰 번호 또는 이메일을 변경한다. 이메일 변경 시 유효한 이메일 인증 토큰이 필요하다."
     )

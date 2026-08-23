@@ -48,6 +48,7 @@ public class SignupCompletionController {
     }
 
     @Operation(
+            operationId = "completeSignup",
             summary = "회원가입 완료",
             description = "tempSignupToken을 소비하고 고객·약관 동의·기존 은행 계좌를 원자적으로 등록한다."
     )

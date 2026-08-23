@@ -49,6 +49,7 @@ public class AccountPreferenceController {
 
     @PutMapping("/display-order")
     @Operation(
+          operationId = "saveAccountDisplayOrder",
             summary = "계좌 표시순서 저장",
             description = """
                     전체 계좌조회 화면에서 사용할 계좌 표시순서를 저장한다.
@@ -143,6 +144,7 @@ public class AccountPreferenceController {
 
     @DeleteMapping("/display-order")
     @Operation(
+          operationId = "resetAccountDisplayOrder",
             summary = "계좌 표시순서 초기화",
             description = "저장된 계좌 표시순서를 삭제하고 기본 표시순서로 초기화한다."
     )

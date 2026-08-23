@@ -40,6 +40,7 @@ public class LoginController {
 
     @PostMapping("/login")
     @Operation(
+            operationId = "login",
             summary = "로그인",
             description = "아이디와 비밀번호를 검증하고 JSESSIONID 세션과 CSRF 쿠키를 발급한다."
     )

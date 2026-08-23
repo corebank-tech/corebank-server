@@ -37,6 +37,7 @@ public class OtpController {
 
     @PostMapping("/issue")
     @Operation(
+            operationId = "issueOtp",
             summary = "거래 OTP 발급",
             description = "로그인 고객의 거래 유형과 핵심 거래정보를 묶어 숫자 6자리 OTP를 발급한다."
     )
@@ -74,6 +75,7 @@ public class OtpController {
 
     @PostMapping("/verify")
     @Operation(
+            operationId = "verifyOtp",
             summary = "거래 OTP 검증",
             description = "발급된 OTP를 검증하고 최종 거래에서 한 번 사용할 수 있는 otpAuthToken을 발급한다."
     )
