@@ -30,7 +30,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * TransferLimitCommandService.update 의 폴백 경로에서는 락이 아무것도 막아 주지 못한다.
  * 스레드별로 독립된 트랜잭션·커넥션이 필요하므로 이 클래스에는 @Transactional 을 두지 않는다.
  */
-@DisplayName("TransferLimitCommandPort 동시 저장 테스트")
+@DisplayName("TransferLimitCommandPort 저장 계약 테스트")
 class TransferLimitSaveConcurrencyTest extends IntegrationTestSupport {
 
     private static final long CUSTOMER_ID = 9301L;
@@ -55,8 +55,8 @@ class TransferLimitSaveConcurrencyTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("한도 행이 없는 고객에게 저장이 동시에 들어와도 전부 성공하고 행이 1건만 생긴다")
-    void save_concurrentOnMissingRow_succeedsWithSingleRow() throws Exception {
+    @DisplayName("한도 행이 없는 고객에게 행 보장이 동시에 들어와도 전부 성공하고 행이 1건만 생긴다")
+    void saveIfAbsent_concurrentOnMissingRow_succeedsWithSingleRow() throws Exception {
         // given - 한도 행이 없는 고객. 조회해서 없으면 INSERT 하는 방식이면 여기서 갈린다
         seedCustomerWithoutLimit();
 
@@ -73,10 +73,13 @@ class TransferLimitSaveConcurrencyTest extends IntegrationTestSupport {
     @Test
     @DisplayName("고객이 한도를 올린 뒤 가입 기본값 부여가 다시 불려도 올린 값이 유지된다")
     void registerDefault_afterCustomerRaisedLimit_keepsRaisedValue() {
-        // given - 고객이 1회 300만 / 1일 1000만으로 올려 둔 상태
+        // given - 고객이 1회 300만 / 1일 1000만으로 올려 둔 상태.
+        // save 는 잠근 행에만 쓰는 계약이라 행을 먼저 만든 뒤 올린다
         seedCustomerWithoutLimit();
-        transactionTemplate.executeWithoutResult(
-                status -> commandPort.save(TransferLimit.restore(CUSTOMER_ID, 3_000_000L, 10_000_000L)));
+        transactionTemplate.executeWithoutResult(status -> {
+            commandPort.saveIfAbsent(TransferLimit.create(CUSTOMER_ID));
+            commandPort.save(TransferLimit.restore(CUSTOMER_ID, 3_000_000L, 10_000_000L));
+        });
 
         // when - 한도가 이미 있는 고객에게 기본값 부여가 불린다.
         // 지금 가입 흐름에서는 customerId 가 매번 새로 채번돼 이 경로가 열려 있지 않지만,
@@ -116,7 +119,7 @@ class TransferLimitSaveConcurrencyTest extends IntegrationTestSupport {
             start.await();
             try {
                 transactionTemplate.executeWithoutResult(
-                        status -> commandPort.save(TransferLimit.create(CUSTOMER_ID)));
+                        status -> commandPort.saveIfAbsent(TransferLimit.create(CUSTOMER_ID)));
                 return "SUCCESS";
             } catch (Exception e) {
                 Throwable root = e;

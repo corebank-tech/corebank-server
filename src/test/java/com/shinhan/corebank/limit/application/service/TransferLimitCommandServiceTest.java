@@ -112,8 +112,11 @@ class TransferLimitCommandServiceTest {
     @Test
     @DisplayName("한도 행이 없는 고객은 정책 기본값을 변경 전 값으로 이력에 남긴다")
     void update_limitRowMissing_recordsPolicyDefaultsAsBefore() {
-        // given - 가입 시 기본값 부여(REQ-TRSF-029)가 연결되기 전이라 행 없는 고객이 있다
-        when(transferLimitCommandPort.findForUpdateByCustomerId(CUSTOMER_ID)).thenReturn(Optional.empty());
+        // given - 가입 흐름을 거치지 않아 행이 없던 고객. saveIfAbsent 가 기본값 행을 만들고
+        // 그 뒤 잠금 조회가 그 행을 돌려준다
+        when(transferLimitCommandPort.saveIfAbsent(any())).thenReturn(true);
+        when(transferLimitCommandPort.findForUpdateByCustomerId(CUSTOMER_ID))
+                .thenReturn(Optional.of(TransferLimit.create(CUSTOMER_ID)));
         when(transferLimitCommandPort.save(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY)).thenReturn(Optional.empty());

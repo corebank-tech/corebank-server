@@ -43,17 +43,18 @@ public class TransferLimitPersistenceAdapter implements TransferLimitQueryPort, 
         return limitRepository.findForShareByCustomerId(customerId).map(TransferLimitJpaEntity::toDomain);
     }
 
+    /** 호출자가 findForUpdateByCustomerId 로 잠근 행에만 쓴다. 그래서 없는 행을 만들지 않는다. */
     @Override
     public TransferLimit save(TransferLimit limit) {
-        limitRepository.upsert(limit.getCustomerId(), limit.getOneTimeLimit(),
+        limitRepository.updateLimit(limit.getCustomerId(), limit.getOneTimeLimit(),
                 limit.getDailyLimit(), LocalDateTime.now(clock));
         return limit;
     }
 
     @Override
-    public void saveIfAbsent(TransferLimit limit) {
-        limitRepository.insertIfAbsent(limit.getCustomerId(), limit.getOneTimeLimit(),
-                limit.getDailyLimit(), LocalDateTime.now(clock));
+    public boolean saveIfAbsent(TransferLimit limit) {
+        return limitRepository.insertIfAbsent(limit.getCustomerId(), limit.getOneTimeLimit(),
+                limit.getDailyLimit(), LocalDateTime.now(clock)) == 1;
     }
 
     /**

@@ -14,9 +14,11 @@ public interface TransferLimitCommandPort {
 
     /**
      * 한도 행이 없을 때만 만든다. 이미 있으면 그대로 둔다 - 고객이 올려 둔 한도를 기본값으로
-     * 되돌리지 않기 위해서다. 가입 시 기본값 부여(REQ-TRSF-029) 전용이다.
+     * 되돌리지 않기 위해서다.
+     *
+     * @return 이번 호출이 행을 만들었으면 true. 변경 경로가 "행이 없던 고객"임을 로그로 남기는 데 쓴다.
      */
-    void saveIfAbsent(TransferLimit limit);
+    boolean saveIfAbsent(TransferLimit limit);
 
     /** 변경을 위해 X-Lock 을 잡고 읽는다. 조회 전용 경로는 TransferLimitQueryPort 를 쓴다. */
     Optional<TransferLimit> findForUpdateByCustomerId(Long customerId);

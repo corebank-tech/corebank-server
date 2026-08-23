@@ -50,12 +50,18 @@ public class TransferLimitCommandService implements TransferLimitCommandUseCase 
         authTokenVerificationPort.verifyAndConsumeOtp(
                 command.otpAuthToken(), customerId, command.oneTimeLimit(), command.dailyLimit());
 
+        // 행을 먼저 보장한 뒤 잠근다. 순서를 바꾸면 한도 행이 없는 고객에게 변경이 동시에 들어올 때
+        // SELECT ... FOR UPDATE 가 잠글 대상이 없어 둘 다 "없음"을 보고 지나가고, 이력 두 건이 모두
+        // 기본값을 변경 전 값으로 남겨 실제 변경 순서를 복원하지 못한다.
+        // 당일 사용액의 lockDailyUsage 와 같은 이유이자 같은 모양이다.
+        if (transferLimitCommandPort.saveIfAbsent(TransferLimit.create(customerId))) {
+            // 가입 연계(REQ-TRSF-029)가 붙은 뒤로 이 로그는 데이터 결함 신호다.
+            // 가입 흐름을 거치지 않고 만들어진 고객이라는 뜻이다.
+            log.warn("이체한도 행이 없어 정책 기본값을 만든 뒤 변경합니다 - customerId={}", customerId);
+        }
+        // 바로 위에서 행을 보장했으므로 비어 있을 수 없다. Optional 을 푸는 것뿐이다.
         TransferLimit limit = transferLimitCommandPort.findForUpdateByCustomerId(customerId)
-                .orElseGet(() -> {
-                    // 가입 시 기본값 부여(REQ-TRSF-029)가 회원가입 흐름에 연결되면 이 경로는 데이터 결함이 된다.
-                    log.warn("이체한도 행이 없어 정책 기본값에서 변경합니다 - customerId={}", customerId);
-                    return TransferLimit.create(customerId);
-                });
+                .orElseThrow();
 
         transferLimitHistoryPort.save(
                 TransferLimitHistory.create(customerId, limit.getOneTimeLimit(), limit.getDailyLimit()));

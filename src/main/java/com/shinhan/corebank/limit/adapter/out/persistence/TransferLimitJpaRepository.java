@@ -48,33 +48,31 @@ public interface TransferLimitJpaRepository extends JpaRepository<TransferLimitJ
         VALUES (:customerId, :oneTimeLimit, :dailyLimit, :now, :now)
         ON DUPLICATE KEY UPDATE customer_id = customer_id
         """, nativeQuery = true)
-    void insertIfAbsent(@Param("customerId") Long customerId,
-                        @Param("oneTimeLimit") long oneTimeLimit,
-                        @Param("dailyLimit") long dailyLimit,
-                        @Param("now") LocalDateTime now);
+    int insertIfAbsent(@Param("customerId") Long customerId,
+                       @Param("oneTimeLimit") long oneTimeLimit,
+                       @Param("dailyLimit") long dailyLimit,
+                       @Param("now") LocalDateTime now);
 
     /**
-     * 한도를 새 값으로 <b>덮어쓴다</b>. 고객이 직접 바꾸는 경로 전용이다 - 가입 시 기본값 부여는
-     * 기존 값을 지우면 안 되므로 insertIfAbsent 를 쓴다.
+     * 잠가 둔 행의 한도를 갱신한다. <b>단순 UPDATE 다</b> - 호출 전에
+     * findForUpdateByCustomerId 로 행을 잠갔으므로 없는 행을 만들 일이 없다.
      *
-     * <p><b>조회 후 저장하는 두 문장으로 바꾸면 안 된다</b> -
-     * SELECT ... FOR UPDATE 는 없는 행을 잠그지 못해, 한도 행이 없는 고객
-     * (TransferLimitCommandService.update 의 폴백)에게 변경이 동시에 들어오면 둘 다 "없음"을 보고
-     * INSERT 한다. TransferLimitSaveConcurrencyTest 가 지킨다.
+     * <p>영향 행 수를 확인하지 않는 것은 그 트랜잭션이 X-Lock 을 쥐고 있어 그 사이 행이
+     * 사라질 수 없기 때문이다. 당일 사용액의 findForUpdate 뒤 saveUsage 도 같다.
      *
-     * <p>네이티브라 두 가지를 직접 챙긴다 - JPA Auditing 을 타지 않아 시각을 자바 Clock 에서
-     * 넘겨받고, 영속성 컨텍스트를 우회하므로 @Modifying 으로 실행 전 flush·실행 후 clear 를 건다.
+     * <p>영속성 컨텍스트를 우회하는 네이티브라 @Modifying 으로 실행 전 flush·실행 후 clear 를
+     * 걸고, JPA Auditing 을 타지 않으므로 updated_at 을 자바 Clock 에서 넘겨받는다.
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = """
-        INSERT INTO transfer_limit (customer_id, one_time_limit, daily_limit, created_at, updated_at)
-        VALUES (:customerId, :oneTimeLimit, :dailyLimit, :now, :now)
-        ON DUPLICATE KEY UPDATE one_time_limit = :oneTimeLimit,
-                                daily_limit    = :dailyLimit,
-                                updated_at     = :now
+        UPDATE transfer_limit
+           SET one_time_limit = :oneTimeLimit,
+               daily_limit    = :dailyLimit,
+               updated_at     = :now
+         WHERE customer_id = :customerId
         """, nativeQuery = true)
-    void upsert(@Param("customerId") Long customerId,
-                @Param("oneTimeLimit") long oneTimeLimit,
-                @Param("dailyLimit") long dailyLimit,
-                @Param("now") LocalDateTime now);
+    void updateLimit(@Param("customerId") Long customerId,
+                     @Param("oneTimeLimit") long oneTimeLimit,
+                     @Param("dailyLimit") long dailyLimit,
+                     @Param("now") LocalDateTime now);
 }
