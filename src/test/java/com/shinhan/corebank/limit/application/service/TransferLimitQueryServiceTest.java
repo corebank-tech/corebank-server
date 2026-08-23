@@ -3,7 +3,7 @@ package com.shinhan.corebank.limit.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
-import com.shinhan.corebank.limit.application.port.in.dto.LimitResult;
+import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitResult;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
 import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
@@ -20,7 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-class LimitQueryServiceTest {
+class TransferLimitQueryServiceTest {
 
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private static final Long CUSTOMER_ID = 1L;
@@ -39,7 +39,7 @@ class LimitQueryServiceTest {
                 .thenReturn(Optional.of(TransferLimitDailyUsage.restore(CUSTOMER_ID, TODAY, 3_000_000L)));
 
         // when
-        LimitResult result = serviceAt(TODAY.atTime(14, 0)).get(CUSTOMER_ID);
+        TransferLimitResult result = serviceAt(TODAY.atTime(14, 0)).get(CUSTOMER_ID);
 
         // then
         assertThat(result.oneTimeLimit()).isEqualTo(2_000_000L);
@@ -56,7 +56,7 @@ class LimitQueryServiceTest {
         when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY)).thenReturn(Optional.empty());
 
         // when
-        LimitResult result = serviceAt(TODAY.atTime(14, 0)).get(CUSTOMER_ID);
+        TransferLimitResult result = serviceAt(TODAY.atTime(14, 0)).get(CUSTOMER_ID);
 
         // then
         assertThat(result.oneTimeLimit()).isEqualTo(1_000_000L);
@@ -72,7 +72,7 @@ class LimitQueryServiceTest {
         when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY)).thenReturn(Optional.empty());
 
         // when
-        LimitResult result = serviceAt(TODAY.atTime(14, 0)).get(CUSTOMER_ID);
+        TransferLimitResult result = serviceAt(TODAY.atTime(14, 0)).get(CUSTOMER_ID);
 
         // then
         assertThat(result.dailyUsedAmount()).isZero();
@@ -89,7 +89,7 @@ class LimitQueryServiceTest {
                 .thenReturn(Optional.of(TransferLimitDailyUsage.restore(CUSTOMER_ID, TODAY, 5_000_000L)));
 
         // when
-        LimitResult result = serviceAt(TODAY.atTime(14, 0)).get(CUSTOMER_ID);
+        TransferLimitResult result = serviceAt(TODAY.atTime(14, 0)).get(CUSTOMER_ID);
 
         // then
         assertThat(result.dailyRemainingAmount()).isZero();
@@ -105,7 +105,7 @@ class LimitQueryServiceTest {
                 .thenReturn(Optional.of(TransferLimitDailyUsage.restore(CUSTOMER_ID, TODAY, 5_000_000L)));
 
         // when
-        LimitResult result = serviceAt(TODAY.atTime(14, 0)).get(CUSTOMER_ID);
+        TransferLimitResult result = serviceAt(TODAY.atTime(14, 0)).get(CUSTOMER_ID);
 
         // then
         assertThat(result.dailyRemainingAmount()).isZero();
@@ -121,15 +121,15 @@ class LimitQueryServiceTest {
                 .thenReturn(Optional.of(TransferLimitDailyUsage.restore(CUSTOMER_ID, TODAY, 700_000L)));
 
         // when
-        LimitResult result = serviceAt(TODAY.atTime(0, 30)).get(CUSTOMER_ID);
+        TransferLimitResult result = serviceAt(TODAY.atTime(0, 30)).get(CUSTOMER_ID);
 
         // then
         assertThat(result.dailyUsedAmount()).isEqualTo(700_000L);
     }
 
     /** 운영 Clock 이 KST 라서(REQ-NFR-018) 테스트도 같은 시간대로 고정한다. */
-    private LimitQueryService serviceAt(LocalDateTime kstNow) {
+    private TransferLimitQueryService serviceAt(LocalDateTime kstNow) {
         Clock clock = Clock.fixed(kstNow.atZone(SEOUL).toInstant(), SEOUL);
-        return new LimitQueryService(transferLimitQueryPort, clock);
+        return new TransferLimitQueryService(transferLimitQueryPort, clock);
     }
 }

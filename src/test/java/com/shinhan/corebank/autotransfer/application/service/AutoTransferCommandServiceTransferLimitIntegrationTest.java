@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 // TransferLimitAdapter는 이제 @Profile 제한 없이 항상 활성화돼(#187 리뷰 반영, ADR-0002),
 // 별도로 real adapter를 조립하지 않아도 스프링이 주입하는 AutoTransferCommandService가 이미
-// limit.LimitQueryUseCase -> 실제 transfer_limit 테이블 경로를 그대로 탄다. 고객별로 심어둔
+// limit.TransferLimitQueryUseCase -> 실제 transfer_limit 테이블 경로를 그대로 탄다. 고객별로 심어둔
 // 커스텀 한도값으로 실제 차단/통과가 갈리는지 증명한다(vsopsw 리뷰, PR #278).
 @Transactional
 class AutoTransferCommandServiceTransferLimitIntegrationTest extends IntegrationTestSupport {
