@@ -32,8 +32,10 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import org.springframework.dao.OptimisticLockingFailureException;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -581,14 +583,19 @@ class AutoTransferCommandServiceTest {
     @Test
     @DisplayName("다음 실행 예정일 당일 해지 요청은 OTP를 소비하지 않고 AUT0303을 던진다")
     void cancel_onExecutionDate_throwsCannotTerminateOnExecutionDate_withoutConsumingOtp() {
+        // 서비스가 clock.withZone(SEOUL) 기준으로 오늘 날짜를 판정하므로, 픽스처의
+        // nextExecutionDate도 LocalDate.now()(JVM 기본 시간대)가 아니라 같은 고정 Clock에서
+        // 뽑아야 시간대에 따라 날짜가 어긋나 flaky해지지 않는다.
+        Clock fixedClock = Clock.fixed(Instant.parse("2026-08-22T02:00:00Z"), ZoneId.of("Asia/Seoul"));
+        LocalDate today = LocalDate.now(fixedClock);
         AutoTransfer dueToday = AutoTransfer.reconstitute(
                 10L, 1L, 2L, "110987654321", "홍길동",
                 10_000L, 1, 15,
-                LocalDate.now().minusMonths(1), LocalDate.now().plusMonths(12), LocalDate.now(),
+                today.minusMonths(1), today.plusMonths(12), today,
                 "내메모", "받는메모", AutoTransferStatus.NORMAL,
                 LocalDateTime.now(), null, LocalDateTime.now(), 0L);
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(dueToday));
-        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+        when(clock.withZone(any())).thenReturn(fixedClock);
 
         assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
