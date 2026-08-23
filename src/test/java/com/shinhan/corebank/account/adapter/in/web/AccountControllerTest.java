@@ -160,8 +160,59 @@ class AccountControllerTest extends IntegrationTestSupport {
                 ).value("2026-08-10T15:00:00"))
 
                 .andExpect(jsonPath(
+                        "$.data.items[0].accounts[0].withdrawalRegistered"
+                ).value(true))
+
+                .andExpect(jsonPath(
                         "$.data.items[0].accounts[0].transferEnabled"
                 ).value(true));
+    }
+
+    @Test
+    @DisplayName("거래정지된 출금계좌는 등록 상태를 유지하지만 이체할 수 없다")
+    void getAccountsDistinguishesWithdrawalRegistrationFromTransferAvailability()
+            throws Exception {
+
+        // given
+        Long customerId =
+                customerTestFixture.createCustomer();
+
+        Account suspendedAccount =
+                createDemandDepositAccount(
+                        customerId,
+                        "088100000013",
+                        1_000_000L,
+                        null,
+                        AccountStatus.SUSPENDED,
+                        true
+                );
+
+        accountPersistencePort.save(
+                suspendedAccount
+        );
+
+        // when & then
+        mockMvc.perform(
+                        get("/accounts")
+                                .with(
+                                        authentication(
+                                                authenticationOf(customerId)
+                                        )
+                                )
+                )
+                .andExpect(status().isOk())
+
+                .andExpect(jsonPath(
+                        "$.data.items[0].accounts[0].status"
+                ).value("SUSPENDED"))
+
+                .andExpect(jsonPath(
+                        "$.data.items[0].accounts[0].withdrawalRegistered"
+                ).value(true))
+
+                .andExpect(jsonPath(
+                        "$.data.items[0].accounts[0].transferEnabled"
+                ).value(false));
     }
 
     @Test

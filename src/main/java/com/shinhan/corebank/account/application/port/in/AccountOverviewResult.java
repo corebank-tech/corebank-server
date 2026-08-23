@@ -32,6 +32,7 @@ public record AccountOverviewResult(
             LocalDate openedDate,
             LocalDateTime lastTransactionAt,
             LocalDate maturityDate,
+            boolean withdrawalRegistered,
             boolean transferEnabled
     ) {
     }
