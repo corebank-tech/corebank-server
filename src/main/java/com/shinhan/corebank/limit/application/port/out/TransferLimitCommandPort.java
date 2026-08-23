@@ -9,7 +9,14 @@ import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
 /** 한도 상태를 바꾸는 오퍼레이션. */
 public interface TransferLimitCommandPort {
 
+    /** 한도를 새 값으로 <b>덮어쓴다</b>. 고객이 직접 바꾸는 경로 전용이다. */
     TransferLimit save(TransferLimit limit);
+
+    /**
+     * 한도 행이 없을 때만 만든다. 이미 있으면 그대로 둔다 - 고객이 올려 둔 한도를 기본값으로
+     * 되돌리지 않기 위해서다. 가입 시 기본값 부여(REQ-TRSF-029) 전용이다.
+     */
+    void saveIfAbsent(TransferLimit limit);
 
     /** 변경을 위해 X-Lock 을 잡고 읽는다. 조회 전용 경로는 TransferLimitQueryPort 를 쓴다. */
     Optional<TransferLimit> findForUpdateByCustomerId(Long customerId);

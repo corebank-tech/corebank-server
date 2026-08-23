@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -12,6 +13,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.limit.api.TransferLimitRegistration;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitCommandPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
 
@@ -36,6 +38,9 @@ class TransferLimitSaveConcurrencyTest extends IntegrationTestSupport {
 
     @Autowired
     private TransferLimitCommandPort commandPort;
+
+    @Autowired
+    private TransferLimitRegistration transferLimitRegistration;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -63,6 +68,25 @@ class TransferLimitSaveConcurrencyTest extends IntegrationTestSupport {
 
         // then - PK 라 중복 INSERT 가 성공했다면 애초에 위에서 걸린다. 행 수로 한 번 더 못박는다
         assertThat(limitRowCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("고객이 한도를 올린 뒤 가입 기본값 부여가 다시 불려도 올린 값이 유지된다")
+    void registerDefault_afterCustomerRaisedLimit_keepsRaisedValue() {
+        // given - 고객이 1회 300만 / 1일 1000만으로 올려 둔 상태
+        seedCustomerWithoutLimit();
+        transactionTemplate.executeWithoutResult(
+                status -> commandPort.save(TransferLimit.restore(CUSTOMER_ID, 3_000_000L, 10_000_000L)));
+
+        // when - 한도가 이미 있는 고객에게 기본값 부여가 불린다.
+        // 지금 가입 흐름에서는 customerId 가 매번 새로 채번돼 이 경로가 열려 있지 않지만,
+        // registerDefault 는 limit/api 의 공개 계약이라 호출자를 한 곳으로 못 박을 수 없다.
+        // 계약이 약속한 것은 "부여"지 "초기화"가 아니므로 그 약속을 여기에 고정한다.
+        transactionTemplate.executeWithoutResult(
+                status -> transferLimitRegistration.registerDefault(CUSTOMER_ID));
+
+        // then - 덮어쓰는 save 를 쓰면 여기서 100만 / 500만으로 되돌아간다
+        assertThat(savedLimits()).containsExactly(3_000_000L, 10_000_000L);
     }
 
     /** 성공이면 "SUCCESS", 아니면 근본 원인 예외의 이름을 돌려준다. */
@@ -110,6 +134,13 @@ class TransferLimitSaveConcurrencyTest extends IntegrationTestSupport {
             VALUES (?, 'limit9301', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '한도경합테스터', '1990-01-01', 'limit9301@test.com', '01099999301', NOW(6), NOW(6), NOW(6))
             ON DUPLICATE KEY UPDATE customer_id = customer_id
             """, CUSTOMER_ID);
+    }
+
+    private List<Long> savedLimits() {
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT one_time_limit, daily_limit FROM transfer_limit WHERE customer_id = ?", CUSTOMER_ID);
+        return List.of(((Number) row.get("one_time_limit")).longValue(),
+                ((Number) row.get("daily_limit")).longValue());
     }
 
     private int limitRowCount() {

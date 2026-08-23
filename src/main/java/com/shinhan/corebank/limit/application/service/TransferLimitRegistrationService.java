@@ -22,10 +22,13 @@ public class TransferLimitRegistrationService implements TransferLimitRegistrati
 
     /**
      * 기본 전파(REQUIRED)라 회원가입 트랜잭션에 참여한다. 이미 있는지 먼저 확인하지 않는다 -
-     * 저장이 upsert 한 문장이라 DB 가 단독으로 판정한다.
+     * saveIfAbsent 가 한 문장이라 DB 가 단독으로 판정한다.
+     *
+     * <p>save 가 아니라 saveIfAbsent 인 것이 핵심이다. save 는 덮어쓰므로, 고객이 한도를 올린
+     * 뒤 이 메서드가 다시 불리면 기본값으로 되돌아간다.
      */
     @Override
     public void registerDefault(Long customerId) {
-        transferLimitCommandPort.save(TransferLimit.create(customerId));
+        transferLimitCommandPort.saveIfAbsent(TransferLimit.create(customerId));
     }
 }

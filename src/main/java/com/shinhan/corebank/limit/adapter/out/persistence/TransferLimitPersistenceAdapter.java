@@ -50,6 +50,12 @@ public class TransferLimitPersistenceAdapter implements TransferLimitQueryPort, 
         return limit;
     }
 
+    @Override
+    public void saveIfAbsent(TransferLimit limit) {
+        limitRepository.insertIfAbsent(limit.getCustomerId(), limit.getOneTimeLimit(),
+                limit.getDailyLimit(), LocalDateTime.now(clock));
+    }
+
     /**
      * 행을 먼저 보장한 뒤 잠근다. 순서를 바꾸면 그날 첫 이체에서 잠글 대상이 없어 동시 요청이
      * 서로를 못 보고 지나간다 - 자세한 이유는 insertIfAbsent 주석에 있다.

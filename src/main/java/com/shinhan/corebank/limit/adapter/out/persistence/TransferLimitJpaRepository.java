@@ -31,7 +31,33 @@ public interface TransferLimitJpaRepository extends JpaRepository<TransferLimitJ
     Optional<TransferLimitJpaEntity> findForShareByCustomerId(Long customerId);
 
     /**
-     * 없으면 INSERT, 있으면 UPDATE 한다. <b>조회 후 저장하는 두 문장으로 바꾸면 안 된다</b> -
+     * 한도 행이 없으면 정책 기본값으로 만들고, <b>이미 있으면 아무것도 바꾸지 않는다</b>.
+     * 가입 시 기본값 부여(REQ-TRSF-029) 전용이다.
+     *
+     * <p>upsert 와 갈라 둔 이유는 두 경로의 의도가 반대이기 때문이다. 고객이 한도를 올린 뒤
+     * 이 메서드가 다시 불려도 올린 값이 남아야 한다 - 하나로 합치면 기본값으로 되돌아간다.
+     * 기존 고객 백필 마이그레이션이 NOT EXISTS 를 쓴 것과 같은 이유다.
+     *
+     * <p>ON DUPLICATE KEY UPDATE 뒤의 customer_id = customer_id 는 아무것도 바꾸지 않는다 -
+     * 목적은 행을 존재하게 만드는 것뿐이다. transfer_limit_daily_usage 의 insertIfAbsent 와
+     * 같은 형태다. 네이티브 INSERT 는 JPA Auditing 을 타지 않아 시각을 직접 채운다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+        INSERT INTO transfer_limit (customer_id, one_time_limit, daily_limit, created_at, updated_at)
+        VALUES (:customerId, :oneTimeLimit, :dailyLimit, :now, :now)
+        ON DUPLICATE KEY UPDATE customer_id = customer_id
+        """, nativeQuery = true)
+    void insertIfAbsent(@Param("customerId") Long customerId,
+                        @Param("oneTimeLimit") long oneTimeLimit,
+                        @Param("dailyLimit") long dailyLimit,
+                        @Param("now") LocalDateTime now);
+
+    /**
+     * 한도를 새 값으로 <b>덮어쓴다</b>. 고객이 직접 바꾸는 경로 전용이다 - 가입 시 기본값 부여는
+     * 기존 값을 지우면 안 되므로 insertIfAbsent 를 쓴다.
+     *
+     * <p><b>조회 후 저장하는 두 문장으로 바꾸면 안 된다</b> -
      * SELECT ... FOR UPDATE 는 없는 행을 잠그지 못해, 한도 행이 없는 고객
      * (LimitCommandService.update 의 폴백)에게 변경이 동시에 들어오면 둘 다 "없음"을 보고
      * INSERT 한다. TransferLimitSaveConcurrencyTest 가 지킨다.
