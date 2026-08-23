@@ -13,9 +13,10 @@ import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTran
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferQueryPort;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
+import com.shinhan.corebank.common.util.PageableResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,16 +41,11 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
     @Override
     public Page<ScheduledTransferListItem> search(Long customerId, ScheduledTransferStatus status, Long
                                                           withdrawalAccountId,
-                                                  LocalDate fromDate, LocalDate toDate, int page, int size) {
+                                                  LocalDate fromDate, LocalDate toDate, int page, int size, boolean all) {
         if (customerId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
-        if (!ALLOWED_PAGE_SIZE.contains(size)) {
-            throw new BusinessException(CommonErrorCode.INVALID_PAGE_SIZE);
-        }
-        if (page < 0) {
-            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "page는 0 이상이어야 합니다.");
-        }
+        Pageable pageable = PageableResolver.resolve(page, size, all, ALLOWED_PAGE_SIZE);
         // REQ-SCD-007: fromDate/toDate 둘 다 선택값이라 기본값을 주입하지 않는다 — 둘 다 있을 때만 검증
         if (fromDate != null && toDate != null) {
             if (fromDate.isAfter(toDate)) {
@@ -61,7 +57,7 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
         }
 
         Page<ScheduledTransfer> result = scheduledTransferQueryPort.search(customerId, status, withdrawalAccountId,
-                fromDate, toDate, PageRequest.of(page, size));
+                fromDate, toDate, pageable);
 
         // 페이지 내 출금계좌번호·별칭을 한 번에 조회 — 원소마다 개별 조회하면 size만큼 N+1이 발생한다
         List<Long> withdrawalAccountIds = result.getContent().stream()
@@ -78,16 +74,11 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
     @Override
     public ScheduledTransferExecutionResultPage searchExecutionResults(Long customerId, Long withdrawalAccountId,
                                                                         LocalDate fromDate, LocalDate toDate,
-                                                                        ScheduledTransferExecutionResultSort sort, int page, int size) {
+                                                                        ScheduledTransferExecutionResultSort sort, int page, int size, boolean all) {
         if (customerId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
-        if (!ALLOWED_PAGE_SIZE.contains(size)) {
-            throw new BusinessException(CommonErrorCode.INVALID_PAGE_SIZE);
-        }
-        if (page < 0) {
-            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "page는 0 이상이어야 합니다.");
-        }
+        Pageable pageable = PageableResolver.resolve(page, size, all, ALLOWED_PAGE_SIZE);
         // REQ-SCD-014: 조회기간 기본값 1개월 — toDate 없으면 오늘, fromDate 없으면 toDate-1개월
         LocalDate today = LocalDate.now(clock);
         LocalDate resolvedToDate = toDate != null ? toDate : today;
@@ -100,7 +91,7 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
         }
 
         Page<ScheduledTransfer> result = scheduledTransferQueryPort.searchExecutionResults(
-                customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, sort, PageRequest.of(page, size));
+                customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, sort, pageable);
         ScheduledTransferExecutionResultAggregate aggregate = scheduledTransferQueryPort.summarizeExecutionResults(
                 customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate);
 
