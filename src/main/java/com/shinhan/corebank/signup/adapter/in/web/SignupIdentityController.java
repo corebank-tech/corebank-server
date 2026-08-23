@@ -44,6 +44,7 @@ public class SignupIdentityController {
     private final VerifyEmailUseCase verifyEmailUseCase;
 
     @Operation(
+            operationId = "checkUserId",
             summary = "회원가입 아이디 중복확인",
             description = "로그인 아이디 형식과 중복 여부를 확인하고 userIdCheckToken을 발급한다."
     )
@@ -78,6 +79,7 @@ public class SignupIdentityController {
     }
 
     @Operation(
+            operationId = "issueEmailVerification",
             summary = "이메일 인증번호 발급",
             description = "회원가입 또는 이메일 변경에 사용할 인증번호와 emailVerificationId를 발급한다."
     )
@@ -111,6 +113,7 @@ public class SignupIdentityController {
     }
 
     @Operation(
+            operationId = "verifyEmail",
             summary = "이메일 인증번호 검증",
             description = "이메일 인증번호를 검증하고 emailVerificationToken을 발급한다."
     )

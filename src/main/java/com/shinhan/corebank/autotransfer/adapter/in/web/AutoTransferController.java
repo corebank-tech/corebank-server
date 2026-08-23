@@ -47,7 +47,7 @@ public class AutoTransferController {
 
     @PostMapping
     // 멱등성 확인 후, 재요청 -> 저장된 응답, 신규 요청 -> 등록
-    @Operation(summary = "자동이체 등록", description = """
+    @Operation(operationId = "registerAutoTransfer", summary = "자동이체 등록", description = """
             지정한 출금계좌에서 주기적으로 자동이체를 실행하도록 등록한다. 동일한 Idempotency-Key와 동일한 요청 내용으로 \
             재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
     @ApiResponses({
@@ -82,7 +82,7 @@ public class AutoTransferController {
 
     //변경
     @PatchMapping("/{autoTransferId}")
-    @Operation(summary = "자동이체 변경", description = """
+    @Operation(operationId = "updateAutoTransfer", summary = "자동이체 변경", description = """
             등록된 자동이체의 금액·이체주기·종료일·통장 표시내용을 변경한다. 출금계좌·입금계좌·이체지정일은 변경할 수 없다. \
             동일한 Idempotency-Key와 동일한 요청 내용으로 재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
     @ApiResponses({
@@ -119,7 +119,7 @@ public class AutoTransferController {
 
     // 삭제
     @DeleteMapping("/{autoTransferId}")
-    @Operation(summary = "자동이체 해지", description = """
+    @Operation(operationId = "cancelAutoTransfer", summary = "자동이체 해지", description = """
             등록된 자동이체를 해지한다. 다음 실행 예정일 당일에는 해지할 수 없다. 동일한 Idempotency-Key와 동일한 \
             요청 내용으로 재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
     @ApiResponses({
@@ -161,7 +161,7 @@ public class AutoTransferController {
 
     // 조회
     @GetMapping
-    @Operation(summary = "자동이체 목록조회", description = "내 출금계좌 기준으로 등록된 자동이체 목록을 상태별로 조회한다.")
+    @Operation(operationId = "getAutoTransfers", summary = "자동이체 목록조회", description = "내 출금계좌 기준으로 등록된 자동이체 목록을 상태별로 조회한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
@@ -278,7 +278,7 @@ public class AutoTransferController {
 
     // 결과조회
     @GetMapping("/executions")
-    @Operation(summary = "자동이체 처리결과 조회", description = """
+    @Operation(operationId = "getAutoTransferExecutions", summary = "자동이체 처리결과 조회", description = """
             내 출금계좌 기준으로 자동이체 실행 이력을 조회기간별로 조회한다. 조회기간을 지정하지 않으면 \
             최근 1개월(오늘 기준)을 기본값으로 조회한다.""")
     @ApiResponses({

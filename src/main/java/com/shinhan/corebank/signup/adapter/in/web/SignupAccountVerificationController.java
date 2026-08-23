@@ -35,6 +35,7 @@ public class SignupAccountVerificationController {
     }
 
     @Operation(
+            operationId = "verifySignupAccount",
             summary = "회원가입 실명·계좌 인증",
             description = "기존 은행 고객의 성명·생년월일·계좌번호·계좌비밀번호를 검증하고 accountAuthToken을 발급한다."
     )

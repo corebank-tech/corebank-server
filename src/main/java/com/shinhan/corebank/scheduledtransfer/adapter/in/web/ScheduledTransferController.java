@@ -51,7 +51,7 @@ public class ScheduledTransferController {
 
     @PostMapping
     // 멱등성 확인 후, 재요청 -> 저장된 응답, 신규 요청 -> 등록
-    @Operation(summary = "예약이체 등록", description = """
+    @Operation(operationId = "registerScheduledTransfer", summary = "예약이체 등록", description = """
             지정한 출금계좌에서 미래 특정일에 1회 실행되도록 예약이체를 등록한다. 동일한 Idempotency-Key와 동일한 \
             요청 내용으로 재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
     @ApiResponses({
@@ -85,7 +85,7 @@ public class ScheduledTransferController {
 
     // 취소
     @PostMapping("/{scheduledTransferId}/cancel")
-    @Operation(summary = "예약이체 취소", description = """
+    @Operation(operationId = "cancelScheduledTransfer", summary = "예약이체 취소", description = """
             대기(WAITING) 상태의 예약이체를 취소한다. 실행 예정일 당일에는 취소할 수 없다. 동일한 Idempotency-Key와 \
             동일한 요청 내용으로 재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
     @ApiResponses({
@@ -135,7 +135,7 @@ public class ScheduledTransferController {
 
     // 조회
     @GetMapping
-    @Operation(summary = "예약이체 목록조회", description = "등록된 예약이체(대기중·실행완료·취소 등) 목록을 상태·출금계좌·조회기간으로 조회한다.")
+    @Operation(operationId = "getScheduledTransfers", summary = "예약이체 목록조회", description = "등록된 예약이체(대기중·실행완료·취소 등) 목록을 상태·출금계좌·조회기간으로 조회한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
@@ -167,7 +167,7 @@ public class ScheduledTransferController {
 
     // 처리결과 조회
     @GetMapping("/executions")
-    @Operation(summary = "예약이체 처리결과 조회", description = """
+    @Operation(operationId = "getScheduledTransferExecutions", summary = "예약이체 처리결과 조회", description = """
             등록된 예약이체의 처리결과(정상/오류/취소)를 조회기간별로 조회한다. 조회기간을 지정하지 않으면 \
             최근 1개월(오늘 기준)을 기본값으로 조회한다. 목록 상단에 정상처리금액·오류처리금액·취소건수 집계를 함께 반환한다.""")
     @ApiResponses({

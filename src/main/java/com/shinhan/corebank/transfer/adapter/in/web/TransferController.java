@@ -47,7 +47,7 @@ public class TransferController {
     private final TransferHistoryQueryUseCase transferHistoryQueryUseCase;
 
     @PostMapping
-    @Operation(summary = "이체 실행", description = """
+    @Operation(operationId = "executeTransfer", summary = "이체 실행", description = """
             내 계좌에서 상대 계좌로 즉시이체를 실행한다. 동일한 Idempotency-Key와 동일한 요청 내용으로 재요청하면 \
             새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = """
@@ -77,7 +77,7 @@ public class TransferController {
     }
 
     @GetMapping("/payee")
-    @Operation(summary = "수취인(예금주) 조회", description = "이체 실행 전 입금계좌번호로 예금주명을 조회한다.")
+    @Operation(operationId = "getTransferPayee", summary = "수취인(예금주) 조회", description = "이체 실행 전 입금계좌번호로 예금주명을 조회한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
@@ -94,7 +94,7 @@ public class TransferController {
     }
 
     @GetMapping
-    @Operation(summary = "이체결과 목록 조회", description = "출금계좌 단위로 기간·처리상태·정렬·페이징 조건에 맞는 이체결과 목록과 집계를 조회한다.")
+    @Operation(operationId = "searchTransfers", summary = "이체결과 목록 조회", description = "출금계좌 단위로 기간·처리상태·정렬·페이징 조건에 맞는 이체결과 목록과 집계를 조회한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
@@ -120,7 +120,7 @@ public class TransferController {
     }
 
     @GetMapping("/{transactionNumber}")
-    @Operation(summary = "이체결과 상세 조회", description = "거래번호로 이체결과 상세를 조회한다.")
+    @Operation(operationId = "getTransferDetail", summary = "이체결과 상세 조회", description = "거래번호로 이체결과 상세를 조회한다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",

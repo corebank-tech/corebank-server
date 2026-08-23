@@ -43,6 +43,7 @@ public class SignupTermsController {
 
     @GetMapping
     @Operation(
+            operationId = "getSignupTerms",
             summary = "회원가입 약관 조회",
             description = "현재 적용 중인 회원가입 약관의 버전·내용·필수 여부·열람 필요 여부를 조회한다."
     )
@@ -63,6 +64,7 @@ public class SignupTermsController {
 
     @PostMapping("/check")
     @Operation(
+            operationId = "checkSignupTerms",
             summary = "회원가입 약관 동의 검증",
             description = "약관 버전·열람·동의 상태를 검증하고 termsAuthToken을 발급한다."
     )

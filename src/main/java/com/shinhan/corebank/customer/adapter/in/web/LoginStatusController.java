@@ -28,6 +28,7 @@ public class LoginStatusController {
 
     @GetMapping("/login-status")
     @Operation(
+            operationId = "getLoginStatus",
             summary = "로그인 상태 조회",
             description = "이전 로그인 일시, 현재 접속 IP와 최근 거래 일시를 조회한다."
     )

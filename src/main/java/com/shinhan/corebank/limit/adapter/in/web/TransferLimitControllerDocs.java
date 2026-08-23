@@ -27,6 +27,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 public interface TransferLimitControllerDocs {
 
     @Operation(
+            operationId = "getTransferLimit",
             summary = "이체한도 조회",
             description = """
                     로그인 고객의 1회 이체한도, 1일 이체한도, 당일 사용금액, 당일 잔여 이체가능금액을 조회한다.
@@ -53,6 +54,7 @@ public interface TransferLimitControllerDocs {
     ApiResponse<TransferLimitResponse> getTransferLimit(@AuthenticationPrincipal AuthenticatedCustomer customer);
 
     @Operation(
+            operationId = "updateTransferLimit",
             summary = "이체한도 변경",
             description = """
                     로그인 고객의 1회·1일 이체한도를 함께 교체한다. 한쪽만 보내는 부분 수정은 허용하지 않는다 —
