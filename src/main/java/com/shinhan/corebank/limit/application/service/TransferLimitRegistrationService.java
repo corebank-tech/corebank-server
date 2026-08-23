@@ -9,9 +9,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * limit/api 의 가입 연계 계약만 맡는다. 고객이 직접 일으키는 변경(LimitCommandUseCase)과
+ * limit/api 의 가입 연계 계약만 맡는다. 고객이 직접 일으키는 변경(TransferLimitCommandUseCase)과
  * 한 클래스에 두지 않는 것은, 스프링의 빈 교체가 타입이 아니라 이름 단위이기 때문이다 -
- * 겸업하면 이 계약을 mock 으로 바꾸는 순간 LimitCommandUseCase 주입처까지 함께 깨진다.
+ * 겸업하면 이 계약을 mock 으로 바꾸는 순간 TransferLimitCommandUseCase 주입처까지 함께 깨진다.
  */
 @Service
 @RequiredArgsConstructor

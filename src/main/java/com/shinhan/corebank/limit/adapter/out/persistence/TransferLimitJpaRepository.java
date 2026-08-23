@@ -59,7 +59,7 @@ public interface TransferLimitJpaRepository extends JpaRepository<TransferLimitJ
      *
      * <p><b>조회 후 저장하는 두 문장으로 바꾸면 안 된다</b> -
      * SELECT ... FOR UPDATE 는 없는 행을 잠그지 못해, 한도 행이 없는 고객
-     * (LimitCommandService.update 의 폴백)에게 변경이 동시에 들어오면 둘 다 "없음"을 보고
+     * (TransferLimitCommandService.update 의 폴백)에게 변경이 동시에 들어오면 둘 다 "없음"을 보고
      * INSERT 한다. TransferLimitSaveConcurrencyTest 가 지킨다.
      *
      * <p>네이티브라 두 가지를 직접 챙긴다 - JPA Auditing 을 타지 않아 시각을 자바 Clock 에서

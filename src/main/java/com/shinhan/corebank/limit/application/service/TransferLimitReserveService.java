@@ -19,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class LimitReserveService implements TransferLimitReserver {
+public class TransferLimitReserveService implements TransferLimitReserver {
 
     private final TransferLimitCommandPort transferLimitCommandPort;
     private final Clock clock;

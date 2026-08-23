@@ -24,7 +24,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
         name = "이체한도",
         description = "이체한도 조회·변경 API"
 )
-public interface LimitControllerDocs {
+public interface TransferLimitControllerDocs {
 
     @Operation(
             summary = "이체한도 조회",
@@ -50,7 +50,7 @@ public interface LimitControllerDocs {
                     )
             )
     })
-    ApiResponse<LimitResponse> getTransferLimit(@AuthenticationPrincipal AuthenticatedCustomer customer);
+    ApiResponse<TransferLimitResponse> getTransferLimit(@AuthenticationPrincipal AuthenticatedCustomer customer);
 
     @Operation(
             summary = "이체한도 변경",
@@ -92,10 +92,10 @@ public interface LimitControllerDocs {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ApiResponse<LimitResponse>> updateTransferLimit(
+    ResponseEntity<ApiResponse<TransferLimitResponse>> updateTransferLimit(
             @Parameter(description = "멱등키. 동일 키로 재요청 시 재처리 없이 저장된 응답을 반환",
                     required = true, example = "550e8400-e29b-41d4-a716-446655440000")
             String idempotencyKey,
-            LimitUpdateRequest request,
+            TransferLimitUpdateRequest request,
             @AuthenticationPrincipal AuthenticatedCustomer customer);
 }

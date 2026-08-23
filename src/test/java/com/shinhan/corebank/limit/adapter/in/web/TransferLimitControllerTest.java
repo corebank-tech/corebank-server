@@ -31,7 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @AutoConfigureMockMvc
 @Transactional
-class LimitControllerTest extends IntegrationTestSupport {
+class TransferLimitControllerTest extends IntegrationTestSupport {
 
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private static final AtomicLong CUSTOMER_SEQ = new AtomicLong();

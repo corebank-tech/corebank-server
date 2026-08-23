@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @RequiredArgsConstructor
-public class LimitAuthTokenVerificationAdapter implements AuthTokenVerificationPort {
+public class TransferLimitAuthTokenVerificationAdapter implements AuthTokenVerificationPort {
 
     private final OtpAuthTokenVerifier otpAuthTokenVerifier;
 

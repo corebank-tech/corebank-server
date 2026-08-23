@@ -9,15 +9,15 @@ import lombok.Builder;
  * 한도 조회 결과(REQ-TRSF-024). 금액은 모두 원 단위 정수다.
  */
 @Builder
-public record LimitResult(
+public record TransferLimitResult(
         long oneTimeLimit,
         long dailyLimit,
         long dailyUsedAmount,
         long dailyRemainingAmount
 ) {
 
-    public static LimitResult from(TransferLimit limit, TransferLimitDailyUsage usage) {
-        return LimitResult.builder()
+    public static TransferLimitResult from(TransferLimit limit, TransferLimitDailyUsage usage) {
+        return TransferLimitResult.builder()
                 .oneTimeLimit(limit.getOneTimeLimit())
                 .dailyLimit(limit.getDailyLimit())
                 .dailyUsedAmount(usage.getUsedAmount())

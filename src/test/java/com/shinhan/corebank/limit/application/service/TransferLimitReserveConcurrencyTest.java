@@ -29,15 +29,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * 잠글 대상 자체가 없다 - 계좌 락에는 없는 문제라 transfer 쪽 테스트에 선례가 없다.
  * 스레드별로 독립된 트랜잭션·커넥션이 필요하므로 이 클래스에는 @Transactional 을 두지 않는다.
  */
-@DisplayName("LimitReserveService 동시 한도 적립 테스트")
-class LimitReserveConcurrencyTest extends IntegrationTestSupport {
+@DisplayName("TransferLimitReserveService 동시 한도 적립 테스트")
+class TransferLimitReserveConcurrencyTest extends IntegrationTestSupport {
 
     private static final long CUSTOMER_ID = 9101L;
     private static final int THREADS = 30;
     private static final long AMOUNT = 10_000L;
 
     @Autowired
-    private LimitReserveService limitReserveService;
+    private TransferLimitReserveService limitReserveService;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;

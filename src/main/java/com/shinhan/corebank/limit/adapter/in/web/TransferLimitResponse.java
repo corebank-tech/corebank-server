@@ -1,6 +1,6 @@
 package com.shinhan.corebank.limit.adapter.in.web;
 
-import com.shinhan.corebank.limit.application.port.in.dto.LimitResult;
+import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitResult;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
@@ -9,7 +9,7 @@ import lombok.Builder;
  * 이체한도 조회 응답(REQ-TRSF-024). 금액은 모두 원 단위 정수다.
  */
 @Builder
-public record LimitResponse(
+public record TransferLimitResponse(
         @Schema(description = "1회 이체한도", example = "1000000")
         long oneTimeLimit,
 
@@ -23,8 +23,8 @@ public record LimitResponse(
         long dailyRemainingAmount
 ) {
 
-    public static LimitResponse from(LimitResult result) {
-        return LimitResponse.builder()
+    public static TransferLimitResponse from(TransferLimitResult result) {
+        return TransferLimitResponse.builder()
                 .oneTimeLimit(result.oneTimeLimit())
                 .dailyLimit(result.dailyLimit())
                 .dailyUsedAmount(result.dailyUsedAmount())

@@ -3,9 +3,9 @@ package com.shinhan.corebank.limit.application.service;
 import java.time.Clock;
 import java.time.LocalDate;
 
-import com.shinhan.corebank.limit.application.port.in.LimitCommandUseCase;
-import com.shinhan.corebank.limit.application.port.in.dto.LimitCommand;
-import com.shinhan.corebank.limit.application.port.in.dto.LimitResult;
+import com.shinhan.corebank.limit.application.port.in.TransferLimitCommandUseCase;
+import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitCommand;
+import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitResult;
 import com.shinhan.corebank.limit.application.port.out.AuthTokenVerificationPort;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitCommandPort;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitHistoryPort;
@@ -23,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class LimitCommandService implements LimitCommandUseCase {
+public class TransferLimitCommandService implements TransferLimitCommandUseCase {
 
     private final TransferLimitCommandPort transferLimitCommandPort;
     private final TransferLimitQueryPort transferLimitQueryPort;
@@ -41,7 +41,7 @@ public class LimitCommandService implements LimitCommandUseCase {
      * 값이고 마지막 이력의 변경 후 값은 transfer_limit 의 현재값이라 저장하지 않는다.
      */
     @Override
-    public LimitResult update(Long customerId, LimitCommand command) {
+    public TransferLimitResult update(Long customerId, TransferLimitCommand command) {
         // 소모 없는 검증을 먼저 끝낸다. 뒤의 verifyAndConsumeOtp 가 토큰을 소비하므로, 여기서
         // 걸러야 할 입력 실수를 그 뒤에 두면 OTP 를 헛되이 쓰게 된다.
         TransferLimit.validateOrder(command.oneTimeLimit(), command.dailyLimit());
@@ -67,6 +67,6 @@ public class LimitCommandService implements LimitCommandUseCase {
         TransferLimitDailyUsage usage = transferLimitQueryPort.findUsage(customerId, today)
                 .orElseGet(() -> TransferLimitDailyUsage.create(customerId, today));
 
-        return LimitResult.from(saved, usage);
+        return TransferLimitResult.from(saved, usage);
     }
 }

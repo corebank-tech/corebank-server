@@ -11,8 +11,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.limit.application.port.in.dto.LimitCommand;
-import com.shinhan.corebank.limit.application.port.in.dto.LimitResult;
+import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitCommand;
+import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitResult;
 import com.shinhan.corebank.limit.application.port.out.AuthTokenVerificationPort;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitCommandPort;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitHistoryPort;
@@ -36,7 +36,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-class LimitCommandServiceTest {
+class TransferLimitCommandServiceTest {
 
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private static final LocalDate TODAY = LocalDate.of(2026, 8, 21);
@@ -63,7 +63,7 @@ class LimitCommandServiceTest {
                 .thenReturn(Optional.of(TransferLimitDailyUsage.restore(CUSTOMER_ID, TODAY, 300_000L)));
 
         // when
-        LimitResult result = service().update(CUSTOMER_ID, command(3_000_000L, 10_000_000L));
+        TransferLimitResult result = service().update(CUSTOMER_ID, command(3_000_000L, 10_000_000L));
 
         // then
         assertThat(result.oneTimeLimit()).isEqualTo(3_000_000L);
@@ -119,7 +119,7 @@ class LimitCommandServiceTest {
         when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY)).thenReturn(Optional.empty());
 
         // when
-        LimitResult result = service().update(CUSTOMER_ID, command(3_000_000L, 10_000_000L));
+        TransferLimitResult result = service().update(CUSTOMER_ID, command(3_000_000L, 10_000_000L));
 
         // then
         ArgumentCaptor<TransferLimitHistory> captor = ArgumentCaptor.forClass(TransferLimitHistory.class);
@@ -169,8 +169,8 @@ class LimitCommandServiceTest {
         verify(transferLimitCommandPort, never()).save(any());
     }
 
-    private LimitCommand command(long oneTimeLimit, long dailyLimit) {
-        return LimitCommand.builder()
+    private TransferLimitCommand command(long oneTimeLimit, long dailyLimit) {
+        return TransferLimitCommand.builder()
                 .oneTimeLimit(oneTimeLimit)
                 .dailyLimit(dailyLimit)
                 .accountPasswordAuthToken("ACC_PWD_TOKEN")
@@ -179,9 +179,9 @@ class LimitCommandServiceTest {
     }
 
     /** 운영 Clock 이 KST 라서(REQ-NFR-018) 테스트도 같은 시간대로 고정한다. */
-    private LimitCommandService service() {
+    private TransferLimitCommandService service() {
         Clock clock = Clock.fixed(TODAY.atTime(14, 0).atZone(SEOUL).toInstant(), SEOUL);
-        return new LimitCommandService(
+        return new TransferLimitCommandService(
                 transferLimitCommandPort, transferLimitQueryPort, transferLimitHistoryPort,
                 authTokenVerificationPort, clock);
     }

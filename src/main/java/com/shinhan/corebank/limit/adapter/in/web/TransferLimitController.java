@@ -4,9 +4,9 @@ import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.common.idempotency.IdempotencyFingerprint;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
-import com.shinhan.corebank.limit.application.port.in.LimitCommandUseCase;
-import com.shinhan.corebank.limit.application.port.in.LimitQueryUseCase;
-import com.shinhan.corebank.limit.application.port.in.dto.LimitResult;
+import com.shinhan.corebank.limit.application.port.in.TransferLimitCommandUseCase;
+import com.shinhan.corebank.limit.application.port.in.TransferLimitQueryUseCase;
+import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitResult;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,10 +23,10 @@ import tools.jackson.core.type.TypeReference;
 @RestController
 @RequestMapping("/transfer-limits")
 @RequiredArgsConstructor
-public class LimitController implements LimitControllerDocs {
+public class TransferLimitController implements TransferLimitControllerDocs {
 
-    private final LimitQueryUseCase limitQueryUseCase;
-    private final LimitCommandUseCase limitCommandUseCase;
+    private final TransferLimitQueryUseCase limitQueryUseCase;
+    private final TransferLimitCommandUseCase limitCommandUseCase;
     private final IdempotentRequestExecutor idempotentRequestExecutor;
 
     /**
@@ -35,18 +35,18 @@ public class LimitController implements LimitControllerDocs {
      */
     @Override
     @GetMapping
-    public ApiResponse<LimitResponse> getTransferLimit(@AuthenticationPrincipal AuthenticatedCustomer customer) {
-        LimitResult result = limitQueryUseCase.get(customer.customerId());
+    public ApiResponse<TransferLimitResponse> getTransferLimit(@AuthenticationPrincipal AuthenticatedCustomer customer) {
+        TransferLimitResult result = limitQueryUseCase.get(customer.customerId());
 
-        return ApiResponse.success(LimitResponse.from(result));
+        return ApiResponse.success(TransferLimitResponse.from(result));
     }
 
     /** 세션 고객 본인의 1회·1일 이체한도를 함께 교체한다(REQ-TRSF-025). */
     @Override
     @PutMapping
-    public ResponseEntity<ApiResponse<LimitResponse>> updateTransferLimit(
+    public ResponseEntity<ApiResponse<TransferLimitResponse>> updateTransferLimit(
             @RequestHeader("Idempotency-Key") String idempotencyKey,
-            @Valid @RequestBody LimitUpdateRequest request,
+            @Valid @RequestBody TransferLimitUpdateRequest request,
             @AuthenticationPrincipal AuthenticatedCustomer customer) {
         Long customerId = customer.customerId();
 
@@ -55,6 +55,6 @@ public class LimitController implements LimitControllerDocs {
                 IdempotencyFingerprint.of(customerId, request),
                 new TypeReference<>() {},
                 () -> ApiResponse.success(
-                        LimitResponse.from(limitCommandUseCase.update(customerId, request.toCommand()))));
+                        TransferLimitResponse.from(limitCommandUseCase.update(customerId, request.toCommand()))));
     }
 }

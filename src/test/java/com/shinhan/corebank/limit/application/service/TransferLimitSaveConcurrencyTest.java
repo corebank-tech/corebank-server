@@ -27,7 +27,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * 한도 행이 없는 고객에게 저장이 동시에 들어와도 안전한지 증명한다. 한도 변경은
  * findForUpdateByCustomerId 로 먼저 잠그지만 SELECT ... FOR UPDATE 는 없는 행을 잠그지 못해
- * LimitCommandService.update 의 폴백 경로에서는 락이 아무것도 막아 주지 못한다.
+ * TransferLimitCommandService.update 의 폴백 경로에서는 락이 아무것도 막아 주지 못한다.
  * 스레드별로 독립된 트랜잭션·커넥션이 필요하므로 이 클래스에는 @Transactional 을 두지 않는다.
  */
 @DisplayName("TransferLimitCommandPort 동시 저장 테스트")

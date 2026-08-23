@@ -7,7 +7,7 @@ import lombok.Builder;
  * 정책 상한(POL-015·016) 검사는 요청 DTO 의 Bean Validation 이 담당한다.
  */
 @Builder
-public record LimitCommand(
+public record TransferLimitCommand(
         long oneTimeLimit,
         long dailyLimit,
         String accountPasswordAuthToken,

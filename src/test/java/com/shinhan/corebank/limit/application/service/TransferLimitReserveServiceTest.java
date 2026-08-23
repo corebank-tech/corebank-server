@@ -27,7 +27,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-class LimitReserveServiceTest {
+class TransferLimitReserveServiceTest {
 
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private static final Long CUSTOMER_ID = 1L;
@@ -138,8 +138,8 @@ class LimitReserveServiceTest {
     }
 
     /** 운영 Clock 이 KST 라서(REQ-NFR-018) 테스트도 같은 시간대로 고정한다. */
-    private LimitReserveService serviceAt(LocalDateTime kstNow) {
+    private TransferLimitReserveService serviceAt(LocalDateTime kstNow) {
         Clock clock = Clock.fixed(kstNow.atZone(SEOUL).toInstant(), SEOUL);
-        return new LimitReserveService(transferLimitCommandPort, clock);
+        return new TransferLimitReserveService(transferLimitCommandPort, clock);
     }
 }

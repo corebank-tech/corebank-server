@@ -1,6 +1,6 @@
 package com.shinhan.corebank.limit.adapter.in.web;
 
-import com.shinhan.corebank.limit.application.port.in.dto.LimitCommand;
+import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitCommand;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
@@ -18,7 +18,7 @@ import jakarta.validation.constraints.Positive;
  * 필드 제약이고, api_conventions.md §4-1 이 도메인 오류코드 신설을 제한한다. 두 값의 관계인
  * "1회 ≤ 1일"만 도메인이 검사해 LMT0004 를 던진다.
  */
-public record LimitUpdateRequest(
+public record TransferLimitUpdateRequest(
         @Schema(description = "1회 이체한도. 최대 5,000만원", example = "3000000")
         @NotNull @Positive @Max(50_000_000L)
         Long oneTimeLimit,
@@ -36,8 +36,8 @@ public record LimitUpdateRequest(
         String otpAuthToken
 ) {
 
-    public LimitCommand toCommand() {
-        return LimitCommand.builder()
+    public TransferLimitCommand toCommand() {
+        return TransferLimitCommand.builder()
                 .oneTimeLimit(oneTimeLimit)
                 .dailyLimit(dailyLimit)
                 .accountPasswordAuthToken(accountPasswordAuthToken)
