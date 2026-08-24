@@ -358,7 +358,13 @@ public class AccountController {
             int page,
 
             @RequestParam(defaultValue = "10")
-            int size
+            int size,
+
+            @Parameter(
+                    description = "true면 페이지 구분 없이 조건에 맞는 전체 건을 반환. page/size는 무시됨"
+            )
+            @RequestParam(defaultValue = "false")
+            boolean all
     ) {
         Long customerId =
                 currentCustomerProvider
@@ -375,7 +381,8 @@ public class AccountController {
                                 keyword,
                                 sort,
                                 page,
-                                size
+                                size,
+                                all
                         );
 
         return ApiResponse.success(

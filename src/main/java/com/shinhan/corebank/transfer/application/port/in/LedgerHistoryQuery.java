@@ -21,7 +21,8 @@ public record LedgerHistoryQuery(
         String keyword,
         LedgerHistorySort sort,
         int page,
-        int size
+        int size,
+        boolean all
 ) {
 
     public LedgerHistoryQuery {
@@ -29,7 +30,8 @@ public record LedgerHistoryQuery(
                 || direction == null || sort == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
-        if (size <= 0 || page < 0) {
+        // all=true면 page/size는 쓰이지 않으므로 검증하지 않는다.
+        if (!all && (size <= 0 || page < 0)) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
     }

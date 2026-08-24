@@ -7,6 +7,7 @@ public enum CommonErrorCode implements ErrorCode {
     INVALID_DATE_RANGE("CMN0003", 400, "조회 시작일이 종료일보다 늦습니다."),
     DATE_RANGE_EXCEEDED("CMN0004", 400, "조회기간이 최대 1년을 초과했습니다."),
     INVALID_PAGE_SIZE("CMN0005", 400, "지원하지 않는 페이지 크기입니다."),
+    ALL_QUERY_TOO_LARGE("CMN0006", 400, "전체조회 결과가 너무 많습니다. 조회기간을 좁혀 주세요."),
 
     UNAUTHORIZED("CMN0101", 401, "인증정보가 없거나 세션이 만료되었습니다."),
     FORBIDDEN("CMN0102", 403, "해당 자원에 접근할 권한이 없습니다."),

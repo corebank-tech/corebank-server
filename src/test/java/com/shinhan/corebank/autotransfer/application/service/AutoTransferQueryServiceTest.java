@@ -56,7 +56,7 @@ class AutoTransferQueryServiceTest {
     @Test
     @DisplayName("customerId가 없으면 CMN0002를 던지고 포트는 호출하지 않는다")
     void rejectsMissingCustomerId() {
-        assertThatThrownBy(() -> autoTransferQueryService.search(null, 1L, null, 0, 10))
+        assertThatThrownBy(() -> autoTransferQueryService.search(null, 1L, null, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -67,7 +67,7 @@ class AutoTransferQueryServiceTest {
     @Test
     @DisplayName("withdrawalAccountId가 없으면 CMN0002를 던지고 포트는 호출하지 않는다")
     void rejectsMissingWithdrawalAccountId() {
-        assertThatThrownBy(() -> autoTransferQueryService.search(1L, null, null, 0, 10))
+        assertThatThrownBy(() -> autoTransferQueryService.search(1L, null, null, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -78,7 +78,7 @@ class AutoTransferQueryServiceTest {
     @Test
     @DisplayName("허용되지 않은 size면 CMN0005를 던지고 포트는 호출하지 않는다")
     void rejectsInvalidPageSize() {
-        assertThatThrownBy(() -> autoTransferQueryService.search(1L, 1L, null, 0, 7))
+        assertThatThrownBy(() -> autoTransferQueryService.search(1L, 1L, null, 0, 7, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_PAGE_SIZE));
@@ -87,9 +87,23 @@ class AutoTransferQueryServiceTest {
     }
 
     @Test
+    @DisplayName("all=true면 size가 허용값이 아니어도 예외 없이 unpaged로 조회한다")
+    void allTrue_skipsPageSizeValidation_usesUnpaged() {
+        stubClock();
+        when(autoTransferQueryPort.search(1L, 1L, null, Pageable.unpaged()))
+                .thenReturn(new PageImpl<>(List.of()));
+        when(accountStatusPort.findAccountAlias(1L)).thenReturn(Optional.empty());
+
+        Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, null, 0, 7, true);
+
+        assertThat(result.getContent()).isEmpty();
+        verify(autoTransferQueryPort).search(1L, 1L, null, Pageable.unpaged());
+    }
+
+    @Test
     @DisplayName("page가 음수면 CMN0001을 던지고 포트는 호출하지 않는다")
     void rejectsNegativePage() {
-        assertThatThrownBy(() -> autoTransferQueryService.search(1L, 1L, null, -1, 10))
+        assertThatThrownBy(() -> autoTransferQueryService.search(1L, 1L, null, -1, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_INPUT));
@@ -108,7 +122,7 @@ class AutoTransferQueryServiceTest {
                 .thenReturn(pageFromPort);
         when(accountStatusPort.findAccountAlias(1L)).thenReturn(Optional.of("월세계좌"));
 
-        Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, AutoTransferStatus.NORMAL, 0, 10);
+        Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, AutoTransferStatus.NORMAL, 0, 10, false);
 
         assertThat(result.getContent()).hasSize(1);
         AutoTransferListItem item = result.getContent().get(0);
@@ -128,7 +142,7 @@ class AutoTransferQueryServiceTest {
         when(autoTransferQueryPort.search(1L, 1L, null, PageRequest.of(0, 10))).thenReturn(pageFromPort);
         when(accountStatusPort.findAccountAlias(1L)).thenReturn(Optional.empty());
 
-        Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, null, 0, 10);
+        Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, null, 0, 10, false);
 
         assertThat(result.getContent()).isEmpty();
         verify(accountStatusPort).findAccountAlias(1L);
@@ -150,7 +164,7 @@ class AutoTransferQueryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(autoTransfer)));
         when(accountStatusPort.findAccountAlias(1L)).thenReturn(Optional.empty());
 
-        Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, null, 0, 10);
+        Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, null, 0, 10, false);
 
         assertThat(result.getContent().get(0).cancelable()).isTrue();
     }
@@ -164,7 +178,7 @@ class AutoTransferQueryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(autoTransfer)));
         when(accountStatusPort.findAccountAlias(1L)).thenReturn(Optional.empty());
 
-        Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, null, 0, 10);
+        Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, null, 0, 10, false);
 
         assertThat(result.getContent().get(0).cancelable()).isFalse();
     }
@@ -179,7 +193,7 @@ class AutoTransferQueryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(terminated, expired)));
         when(accountStatusPort.findAccountAlias(1L)).thenReturn(Optional.empty());
 
-        Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, null, 0, 10);
+        Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, null, 0, 10, false);
 
         assertThat(result.getContent()).extracting(AutoTransferListItem::cancelable)
                 .containsExactly(false, false);
