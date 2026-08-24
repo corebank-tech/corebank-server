@@ -32,8 +32,8 @@ flowchart TD
     F -->|ddl-auto: validate| G{Java @Entity 구조 ==<br/>실제 DB 테이블 구조?}
     G -->|불일치| H[🚨 기동 차단 Error:<br/>Schema-validation: missing column etc.]
     G -->|일치 완벽 통과| I[3단계: Spring Boot 서비스 오픈]
-    I -->|@Profile local| J[DemoDataLoader: 로컬 시드 데이터 자동 로딩]
-    I -->|@Profile prod| K[🚀 트래픽 수신 개시<br/>운영 시드 로딩 차단]
+    I -->|@Profile local 또는 qa-seed| J[DemoDataLoader: QA 시드 데이터 자동 로딩]
+    I -->|@Profile prod 단독| K[🚀 트래픽 수신 개시<br/>QA 시드 로딩 차단]
 ```
 
 ### 🔹 1단계: Flyway 마이그레이션 엔진 최우선 개입
@@ -45,7 +45,7 @@ flowchart TD
 - 만약 엔티티에는 필드가 있는데 SQL 마이그레이션을 안 만들었거나 타입이 다르면 **서버 기동이 즉시 차단**되어 운영 DB 파손을 원천 방지합니다.
 
 ### 🔹 3단계: 환경별 시드 데이터 로딩 및 서비스 오픈
-- 검증이 통과되면 서버가 오픈됩니다. 이때 로컬 환경(`local`)에서는 `DemoDataLoader`가 작동하여 개발/시연 편의를 위한 더미 데이터(`local-demo-data.sql`)를 자동 삽입합니다. (운영 `prod`에서는 안전하게 자동 차단됨)
+- 검증이 통과되면 서버가 오픈됩니다. `DemoDataLoader`는 `local` 또는 명시적인 `qa-seed` 프로필에서 더미 데이터(`local-demo-data.sql`)를 자동 삽입합니다. 팀 QA 배포는 `prod,qa-seed`를 사용하고, `prod` 단독 실행에서는 시드가 차단됩니다.
 
 ---
 
@@ -107,5 +107,5 @@ flowchart TD
 | **접속 계정** | `root` / `localpw` | Testcontainers 자동 임시 계정 | **`app_user`** / **`flyway_user`** (DDL/DML 권한 분리) |
 | **Flyway 동작** | 시작 시 자동 실행 (`V...` + `R...`) | 시작 시 매번 빈 DB에 전체 실행 | 시작 시 미적용 스크립트만 자동 실행 |
 | **JPA DDL 모드** | `validate` (스키마 불일치 시 에러) | `validate` | `validate` |
-| **시드 데이터** | `DemoDataLoader` 자동 로딩 ⭕ | 자동 로딩 ❌ (순수 테스트 데이터만) | 자동 로딩 ❌ (보안 및 데이터 보호) |
+| **시드 데이터** | `DemoDataLoader` 자동 로딩 ⭕ | 자동 로딩 ❌ (순수 테스트 데이터만) | `prod,qa-seed` 팀 QA 배포는 자동 로딩 ⭕ / `prod` 단독은 ❌ |
 | **타임존 관리** | DB/JVM/로그 모두 **KST** (변환 없음) | DB/JVM/로그 모두 **KST** (변환 없음) | DB/JVM/로그 모두 **KST** (변환 없음) |

@@ -126,7 +126,8 @@ jobs:
               ports:
                 - "80:SERVER_PORT_PLACEHOLDER"
               environment:
-                - SPRING_PROFILES_ACTIVE=prod
+                # 운영 설정과 QA 시드를 함께 활성화한다. qa-seed 제거 시 시드 로딩은 차단된다.
+                - SPRING_PROFILES_ACTIVE=prod,qa-seed
                 - DB_HOST=DB_HOST_PLACEHOLDER
                 - DB_USER=DB_USER_PLACEHOLDER
                 - DB_PASSWORD=DB_PASSWORD_PLACEHOLDER

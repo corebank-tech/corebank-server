@@ -25,6 +25,8 @@ logging:
     org.hibernate.SQL: debug
 
 app:
+  demo-data:
+    continue-on-error: true
   security:
     cors:
       allowed-origins:
