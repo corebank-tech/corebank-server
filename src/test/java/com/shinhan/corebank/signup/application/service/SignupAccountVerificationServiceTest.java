@@ -6,7 +6,6 @@ import com.shinhan.corebank.signup.application.port.in.VerifySignupAccountResult
 import com.shinhan.corebank.signup.application.port.out.AccountAuthTokenPort;
 import com.shinhan.corebank.signup.application.port.out.AuthTokenGeneratorPort;
 import com.shinhan.corebank.signup.application.port.out.ExistingBankCustomerVerificationPort;
-import com.shinhan.corebank.signup.application.port.out.SignupCustomerAvailabilityPort;
 import com.shinhan.corebank.signup.config.SignupTokenProperties;
 import com.shinhan.corebank.signup.domain.exception.AccountVerificationFailedException;
 import com.shinhan.corebank.signup.domain.exception.SignupErrorCode;
@@ -31,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -50,7 +50,7 @@ class SignupAccountVerificationServiceTest {
             );
 
     @Mock ExistingBankCustomerVerificationPort verificationPort;
-    @Mock SignupCustomerAvailabilityPort availabilityPort;
+    @Mock RegisteredExistingBankCustomerChecker registrationChecker;
     @Mock AccountAuthTokenPort accountAuthTokenPort;
     @Mock AuthTokenGeneratorPort authTokenGeneratorPort;
 
@@ -60,7 +60,7 @@ class SignupAccountVerificationServiceTest {
     void setUp() {
         service = new SignupAccountVerificationService(
                 verificationPort,
-                availabilityPort,
+                registrationChecker,
                 accountAuthTokenPort,
                 authTokenGeneratorPort,
                 new SignupTokenProperties(
@@ -110,9 +110,9 @@ class SignupAccountVerificationServiceTest {
                 "BANK_CUSTOMER_001",
                 "BANK_ACCOUNT_001"
         ));
-        given(availabilityPort.isExistingBankCustomerRegistered(
-                "BANK_CUSTOMER_001"
-        )).willReturn(true);
+        doThrow(new BusinessException(
+                SignupErrorCode.DUPLICATE_EXISTING_BANK_CUSTOMER
+        )).when(registrationChecker).rejectIfRegistered("BANK_CUSTOMER_001");
 
         assertThatThrownBy(() -> service.verify(COMMAND))
                 .isInstanceOf(BusinessException.class)

@@ -1,16 +1,13 @@
 package com.shinhan.corebank.signup.application.service;
 
-import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.signup.application.port.in.VerifySignupAccountCommand;
 import com.shinhan.corebank.signup.application.port.in.VerifySignupAccountResult;
 import com.shinhan.corebank.signup.application.port.in.VerifySignupAccountUseCase;
 import com.shinhan.corebank.signup.application.port.out.AccountAuthTokenPort;
 import com.shinhan.corebank.signup.application.port.out.AuthTokenGeneratorPort;
 import com.shinhan.corebank.signup.application.port.out.ExistingBankCustomerVerificationPort;
-import com.shinhan.corebank.signup.application.port.out.SignupCustomerAvailabilityPort;
 import com.shinhan.corebank.signup.config.SignupTokenProperties;
 import com.shinhan.corebank.signup.domain.exception.AccountVerificationFailedException;
-import com.shinhan.corebank.signup.domain.exception.SignupErrorCode;
 import com.shinhan.corebank.signup.domain.model.AccountAuthTokenPayload;
 import com.shinhan.corebank.signup.domain.model.ExistingBankAccountVerification;
 import org.springframework.stereotype.Service;
@@ -24,7 +21,7 @@ public class SignupAccountVerificationService
         implements VerifySignupAccountUseCase {
 
     private final ExistingBankCustomerVerificationPort verificationPort;
-    private final SignupCustomerAvailabilityPort availabilityPort;
+    private final RegisteredExistingBankCustomerChecker registrationChecker;
     private final AccountAuthTokenPort accountAuthTokenPort;
     private final AuthTokenGeneratorPort authTokenGeneratorPort;
     private final SignupTokenProperties tokenProperties;
@@ -32,14 +29,14 @@ public class SignupAccountVerificationService
 
     public SignupAccountVerificationService(
             ExistingBankCustomerVerificationPort verificationPort,
-            SignupCustomerAvailabilityPort availabilityPort,
+            RegisteredExistingBankCustomerChecker registrationChecker,
             AccountAuthTokenPort accountAuthTokenPort,
             AuthTokenGeneratorPort authTokenGeneratorPort,
             SignupTokenProperties tokenProperties,
             Clock clock
     ) {
         this.verificationPort = verificationPort;
-        this.availabilityPort = availabilityPort;
+        this.registrationChecker = registrationChecker;
         this.accountAuthTokenPort = accountAuthTokenPort;
         this.authTokenGeneratorPort = authTokenGeneratorPort;
         this.tokenProperties = tokenProperties;
@@ -73,25 +70,15 @@ public class SignupAccountVerificationService
                             verification.errorCount(),
                             verification.remainingAttempts()
                     );
+            // 본인 확인이 끝난 직후에 재가입을 막는다. 여기서 걸러야 약관 동의·
+            // 이메일 인증·정보 입력을 모두 마친 뒤 가입 완료 단계에서 터지지 않는다.
             case VERIFIED -> {
-                rejectAlreadyRegistered(
+                registrationChecker.rejectIfRegistered(
                         verification.existingBankCustomerId()
                 );
                 yield issueToken(verification);
             }
         };
-    }
-
-    // 본인 확인이 끝난 직후에 재가입을 막는다. 여기서 걸러야 약관 동의·이메일
-    // 인증·정보 입력을 모두 마친 뒤 가입 완료 단계에서 터지지 않는다.
-    private void rejectAlreadyRegistered(String existingBankCustomerId) {
-        if (availabilityPort.isExistingBankCustomerRegistered(
-                existingBankCustomerId
-        )) {
-            throw new BusinessException(
-                    SignupErrorCode.DUPLICATE_EXISTING_BANK_CUSTOMER
-            );
-        }
     }
 
     private VerifySignupAccountResult issueToken(

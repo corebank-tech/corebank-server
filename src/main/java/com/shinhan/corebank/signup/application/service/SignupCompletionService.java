@@ -34,6 +34,7 @@ public class SignupCompletionService implements CompleteSignupUseCase {
 
     private final TempSignupTokenClaimPort tokenClaimPort;
     private final SignupCustomerAvailabilityPort availabilityPort;
+    private final RegisteredExistingBankCustomerChecker registrationChecker;
     private final ExistingBankCustomerProfilePort profilePort;
     private final ExistingBankCustomerAccountsPort accountsPort;
     private final SignupCompletionTransactionService transactionService;
@@ -42,6 +43,7 @@ public class SignupCompletionService implements CompleteSignupUseCase {
     public SignupCompletionService(
             TempSignupTokenClaimPort tokenClaimPort,
             SignupCustomerAvailabilityPort availabilityPort,
+            RegisteredExistingBankCustomerChecker registrationChecker,
             ExistingBankCustomerProfilePort profilePort,
             ExistingBankCustomerAccountsPort accountsPort,
             SignupCompletionTransactionService transactionService,
@@ -49,6 +51,7 @@ public class SignupCompletionService implements CompleteSignupUseCase {
     ) {
         this.tokenClaimPort = tokenClaimPort;
         this.availabilityPort = availabilityPort;
+        this.registrationChecker = registrationChecker;
         this.profilePort = profilePort;
         this.accountsPort = accountsPort;
         this.transactionService = transactionService;
@@ -106,13 +109,9 @@ public class SignupCompletionService implements CompleteSignupUseCase {
     }
 
     private void validateAvailability(TempSignupTokenPayload payload) {
-        if (availabilityPort.isExistingBankCustomerRegistered(
+        registrationChecker.rejectIfRegistered(
                 payload.existingBankCustomerId()
-        )) {
-            throw new BusinessException(
-                    SignupErrorCode.DUPLICATE_EXISTING_BANK_CUSTOMER
-            );
-        }
+        );
         if (availabilityPort.isUserIdTaken(payload.userId())) {
             throw new BusinessException(SignupErrorCode.DUPLICATE_USER_ID);
         }

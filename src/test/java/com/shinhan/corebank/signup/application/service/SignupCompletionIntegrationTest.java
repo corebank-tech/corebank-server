@@ -163,6 +163,41 @@ class SignupCompletionIntegrationTest extends IntegrationTestSupport {
                 ));
     }
 
+    // 식별자 컬럼이 생기기 전에 가입한 고객은 그 값이 NULL 이다. 백필이 불가능해
+    // 그대로 두면 이 PR 이 막으려는 재가입이 레거시 고객에게만 뚫린다.
+    @Test
+    void rejectsLegacyCustomerWhoseExistingBankCustomerIdIsNull() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        var registered = completionService.complete(new CompleteSignupCommand(
+                savedToken(
+                        "legacy" + suffix,
+                        "BANK_CUSTOMER_002",
+                        "BANK_ACCOUNT_003"
+                )
+        ));
+        jdbcTemplate.update(
+                "update customer set existing_bank_customer_id = null"
+                        + " where customer_id = ?",
+                registered.customerId()
+        );
+
+        // 같은 사람이 다른 아이디·이메일로 다시 가입을 시도한다.
+        String retryToken = savedToken(
+                "relegacy" + suffix,
+                "BANK_CUSTOMER_002",
+                "BANK_ACCOUNT_003"
+        );
+
+        assertThatThrownBy(() -> completionService.complete(
+                new CompleteSignupCommand(retryToken)
+        )).isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(
+                        ((BusinessException) exception).getErrorCode()
+                ).isEqualTo(
+                        SignupErrorCode.DUPLICATE_EXISTING_BANK_CUSTOMER
+                ));
+    }
+
     @Test
     void registersDifferentExistingBankCustomerAfterAnotherIsRegistered() {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
