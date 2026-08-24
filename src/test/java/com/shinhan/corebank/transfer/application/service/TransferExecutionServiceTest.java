@@ -434,4 +434,54 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 "SELECT balance FROM account WHERE account_id = 202", Long.class);
         assertThat(depositBalance).isEqualTo(100000L);
     }
+
+    @Test
+    @DisplayName("입금계좌가 정기적금(INSTALLMENT_SAVINGS)이면 정상 이체가 성공한다 (REQ-TRSF-030, #317)")
+    void execute_withInstallmentSavingsAsPayeeAccount_completesTransfer() {
+        // given: 602는 정기적금(INSTALLMENT_SAVINGS) 계좌다. REQ-TRSF-030에 따라 정기예금과 달리
+        // 정기적금은 입금계좌로 지정할 수 있다. product_id는 NOT NULL FK라 최소 상품 행(702)도 함께 시드한다.
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+            entityManager.createNativeQuery("""
+                INSERT INTO product (product_id, product_code, product_name, product_group, deposit_type,
+                    base_rate, max_rate, min_amount, max_amount, amount_unit, min_term_months, max_term_months,
+                    interest_pay_type, sale_status, created_at, updated_at)
+                VALUES (702, 'TRF-TEST-002', '테스트 정기적금', 'SAVINGS', 'INSTALLMENT',
+                    2.50, 3.00, 100000, 100000000, 10000, 6, 36,
+                    'SIMPLE', 'ON_SALE', NOW(6), NOW(6))
+                ON DUPLICATE KEY UPDATE product_id = product_id
+                """).executeUpdate();
+            entityManager.createNativeQuery("""
+                INSERT INTO account (account_id, account_number, customer_id, product_id, account_type, balance, status, password_hash, opened_date, maturity_date, created_at, updated_at)
+                VALUES (602, '110666666602', 1, 702, 'INSTALLMENT_SAVINGS', 0, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '2026-08-01', '2027-08-01', NOW(6), NOW(6))
+                ON DUPLICATE KEY UPDATE account_type = VALUES(account_type)
+                """).executeUpdate();
+        });
+
+        TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110666666602")
+                .amount(30000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build();
+
+        TransferResult result = transferExecutionService.execute(command);
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+
+        Map<String, Object> transferRow = jdbcTemplate.queryForMap(
+                "SELECT status, deposit_account_id FROM transfer WHERE transaction_number = ?",
+                result.transactionNumber());
+        assertThat(transferRow.get("status")).isEqualTo("SUCCESS");
+        assertThat(((Number) transferRow.get("deposit_account_id")).longValue()).isEqualTo(602L);
+
+        jdbcTemplate.update("DELETE FROM ledger_entry WHERE transaction_number = ?", result.transactionNumber());
+        jdbcTemplate.update("DELETE FROM transfer WHERE transaction_number = ?", result.transactionNumber());
+    }
 }
