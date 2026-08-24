@@ -1,6 +1,7 @@
 package com.shinhan.corebank.account.application.service;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.account.domain.AccountNumberPolicy;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture;
 import org.junit.jupiter.api.AfterEach;
@@ -64,7 +65,12 @@ class AccountNumberIssuanceRollbackTest
                 );
 
                 assertThat(accountNumber)
-                    .isEqualTo("088100000101");
+                    .isEqualTo(
+                        AccountNumberPolicy.BANK_CODE
+                            + AccountNumberSequenceTestFixture
+                                .DEMAND_DEPOSIT_PREFIX
+                            + "0000101"
+                    );
 
                 throw new ForcedRollbackException();
             })
