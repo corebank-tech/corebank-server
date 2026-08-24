@@ -32,10 +32,10 @@ public class LedgerHistoryQueryService implements LedgerHistoryQueryUseCase {
 
         return LedgerHistoryResult.builder()
                 .summary(toSummary(aggregate))
-                .page(query.page())
-                .size(query.size())
+                .page(query.all() ? 0 : query.page())
+                .size(query.all() ? (int) totalCount : query.size())
                 .totalCount(totalCount)
-                .totalPages(totalPages(totalCount, query.size()))
+                .totalPages(query.all() ? 1 : totalPages(totalCount, query.size()))
                 .items(entries.stream().map(this::toItem).toList())
                 .build();
     }

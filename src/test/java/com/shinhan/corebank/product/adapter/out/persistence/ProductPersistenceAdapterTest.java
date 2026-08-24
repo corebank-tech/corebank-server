@@ -87,6 +87,21 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("Pageable.unpaged()로 조회하면 조건에 맞는 전체 건을 한 페이지로 반환한다")
+    void search_unpaged_returnsAllMatchingRows() {
+        long expectedTotal = repository.findAll().stream()
+                .filter(p -> p.getSaleStatus() == SaleStatus.ON_SALE)
+                .count();
+
+        Page<Product> result = adapter.search(null, null, ProductSortType.NAME, org.springframework.data.domain.Pageable.unpaged());
+
+        assertThat(result.getTotalElements()).isEqualTo(expectedTotal);
+        assertThat(result.getContent()).hasSize((int) expectedTotal);
+        assertThat(result.getTotalPages()).isEqualTo(1);
+        assertThat(result.getNumber()).isZero();
+    }
+
+    @Test
     @DisplayName("정렬 기준(RATE)이 동률이면 productCode 오름차순으로 보조 정렬해 순서가 항상 고정된다")
     void tieBreaksByProductCode() {
         repository.save(product("SVN-202", "동률 상품 B", ProductGroup.DEPOSIT, new BigDecimal("3.30"), SaleStatus.ON_SALE));

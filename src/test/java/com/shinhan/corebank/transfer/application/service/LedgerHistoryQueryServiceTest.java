@@ -141,6 +141,48 @@ class LedgerHistoryQueryServiceTest {
     }
 
     @Test
+    @DisplayName("all=true면 page=0, size=totalCount, totalPages=1로 채워진다")
+    void query_allTrue_fillsPageAsUnpaged() {
+        service = new LedgerHistoryQueryService(ledgerHistoryQueryPort);
+
+        LedgerHistoryQuery query = LedgerHistoryQuery.builder()
+                .accountId(101L)
+                .fromDate(LocalDate.of(2026, 7, 1))
+                .toDate(LocalDate.of(2026, 7, 31))
+                .direction(LedgerHistoryDirection.ALL)
+                .sort(LedgerHistorySort.LATEST)
+                .page(0)
+                .size(0)
+                .all(true)
+                .build();
+
+        LedgerEntry entry = LedgerEntry.builder()
+                .ledgerEntryId(1L)
+                .transactionNumber("20260715WB0000000001")
+                .occurredAt(LocalDateTime.of(2026, 7, 15, 10, 0, 0))
+                .transactionType("IMMEDIATE_TRANSFER")
+                .direction(LedgerDirection.DEPOSIT)
+                .amount(20_000L)
+                .transactionContent("용돈")
+                .balanceAfter(120_000L)
+                .channel(TransferChannel.WB)
+                .build();
+
+        when(ledgerHistoryQueryPort.findEntries(query)).thenReturn(List.of(entry));
+        when(ledgerHistoryQueryPort.countEntries(query)).thenReturn(1L);
+        when(ledgerHistoryQueryPort.summarize(query))
+                .thenReturn(new LedgerHistoryAggregate(1L, 20_000L, 0L, 0L));
+
+        LedgerHistoryResult result = service.query(query);
+
+        assertThat(result.items()).hasSize(1);
+        assertThat(result.page()).isZero();
+        assertThat(result.size()).isEqualTo(1);
+        assertThat(result.totalCount()).isEqualTo(1L);
+        assertThat(result.totalPages()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("일치하는 거래가 없으면 items는 빈 리스트, totalPages는 0이다")
     void query_noMatches_returnsEmptyItemsAndZeroTotalPages() {
         service = new LedgerHistoryQueryService(ledgerHistoryQueryPort);

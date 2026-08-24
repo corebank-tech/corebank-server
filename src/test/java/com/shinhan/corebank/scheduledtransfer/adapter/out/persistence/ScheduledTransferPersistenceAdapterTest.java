@@ -114,6 +114,30 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("search()도 Pageable.unpaged()면 offset/limit 없이 조건에 맞는 전체 건을 반환한다 (#297)")
+    void search_unpaged_returnsAllMatchingRows() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+        LocalDate scheduledDate = LocalDate.now().plusDays(5);
+
+        adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110111111111", "홍길동", 10_000L, scheduledDate, "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+        adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110222222222", "홍길동", 20_000L, scheduledDate, "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+
+        Page<ScheduledTransfer> result = adapter.search(customerId, null, null, null, null,
+                org.springframework.data.domain.Pageable.unpaged());
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalPages()).isEqualTo(1);
+        assertThat(result.getNumber()).isEqualTo(0);
+        assertThat(result.getSize()).isEqualTo(2);
+    }
+
+    @Test
     @DisplayName("searchExecutionResults()는 WAITING을 제외하고 SUCCESS/FAILED/CANCELED만 처리결과 기준일(executedAt/canceledAt) 내림차순으로 조회한다")
     void searchExecutionResults_excludesWaiting_ordersByEffectiveDateDesc() {
         Long customerId = insertCustomer();
@@ -135,6 +159,27 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(result.getContent())
                 .extracting(ScheduledTransfer::getScheduledTransferId)
                 .containsExactly(canceled.getScheduledTransferId(), failed.getScheduledTransferId(), success.getScheduledTransferId());
+    }
+
+    @Test
+    @DisplayName("searchExecutionResults()도 Pageable.unpaged()면 offset/limit 없이 조건에 맞는 전체 건을 반환한다 (#297)")
+    void searchExecutionResults_unpaged_returnsAllMatchingRows() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+
+        saveTerminal(customerId, withdrawalAccountId, ScheduledTransferStatus.SUCCESS,
+                LocalDate.now().minusDays(5), 10_000L, "TXN0002", null);
+        saveTerminal(customerId, withdrawalAccountId, ScheduledTransferStatus.FAILED,
+                LocalDate.now().minusDays(3), 20_000L, null, "잔액 부족");
+        entityManager.flush();
+
+        Page<ScheduledTransfer> result = adapter.searchExecutionResults(customerId, null,
+                LocalDate.now().minusDays(10), LocalDate.now(), ScheduledTransferExecutionResultSort.LATEST,
+                org.springframework.data.domain.Pageable.unpaged());
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalPages()).isEqualTo(1);
     }
 
     @Test

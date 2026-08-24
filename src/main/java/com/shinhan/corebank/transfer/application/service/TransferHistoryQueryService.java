@@ -20,9 +20,10 @@ import com.shinhan.corebank.transfer.application.port.out.TransferHistoryQueryPo
 import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+import com.shinhan.corebank.common.util.PageableResolver;
 
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,16 +54,11 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
 
     @Override
     public TransferHistoryPage search(Long customerId, Long withdrawalAccountId, ProcessResultStatus status,
-                                       LocalDate fromDate, LocalDate toDate, TransferHistorySort sort, int page, int size) {
+                                       LocalDate fromDate, LocalDate toDate, TransferHistorySort sort, int page, int size, boolean all) {
         if (customerId == null || withdrawalAccountId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
-        if (!ALLOWED_PAGE_SIZE.contains(size)) {
-            throw new BusinessException(CommonErrorCode.INVALID_PAGE_SIZE);
-        }
-        if (page < 0) {
-            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "page는 0 이상이어야 합니다.");
-        }
+        Pageable pageable = PageableResolver.resolve(page, size, all, ALLOWED_PAGE_SIZE);
         requireOwnership(customerId, withdrawalAccountId);
 
         LocalDate today = LocalDate.now(clock);
@@ -77,7 +73,7 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
 
         TransferHistorySort resolvedSort = sort != null ? sort : TransferHistorySort.LATEST;
         Page<Transfer> result = transferHistoryQueryPort.search(
-                withdrawalAccountId, status, resolvedFromDate, resolvedToDate, resolvedSort, PageRequest.of(page, size));
+                withdrawalAccountId, status, resolvedFromDate, resolvedToDate, resolvedSort, pageable);
         TransferHistoryAggregate aggregate = transferHistoryQueryPort.summarize(
                 withdrawalAccountId, status, resolvedFromDate, resolvedToDate);
         OffsetDateTime asOf = OffsetDateTime.ofInstant(clock.instant(), clock.getZone());

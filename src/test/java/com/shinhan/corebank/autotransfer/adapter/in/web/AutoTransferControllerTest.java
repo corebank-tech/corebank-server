@@ -349,6 +349,27 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("all=true면 size가 허용되지 않는 값이어도 200으로 응답하고 전체 건을 한 페이지로 반환한다")
+    void search_allTrue_returnsAllMatchingRowsInOnePage() throws Exception {
+        autoTransferJpaRepository.save(autoTransfer(accountId, "110000000021", AutoTransferStatus.NORMAL, 10));
+        autoTransferJpaRepository.save(autoTransfer(accountId, "110000000022", AutoTransferStatus.TERMINATED, 11));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/auto-transfers")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("withdrawalAccountId", String.valueOf(accountId))
+                        .param("size", "7")
+                        .param("all", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.totalCount").value(2))
+                .andExpect(jsonPath("$.data.totalPages").value(1))
+                .andExpect(jsonPath("$.data.items.length()").value(2));
+    }
+
+    @Test
     @DisplayName("응답에 출금계좌 별칭(fromAlias)과 등록일시(registeredAt)가 포함된다")
     void search_includesFromAliasAndRegisteredAt() throws Exception {
         entityManager.createNativeQuery("UPDATE account SET alias = :alias WHERE account_id = :accountId")
@@ -486,6 +507,31 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.summary.successAmount").value(10000))
                 .andExpect(jsonPath("$.data.summary.errorCount").value(1))
                 .andExpect(jsonPath("$.data.summary.errorAmount").value(5000));
+    }
+
+    @Test
+    @DisplayName("all=true면 size가 허용되지 않는 값이어도 200으로 응답하고 전체 이력을 한 페이지로 반환한다")
+    void searchExecutionHistory_allTrue_returnsAllMatchingRowsInOnePage() throws Exception {
+        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
+                autoTransfer(accountId, "110000000051", AutoTransferStatus.NORMAL, 10));
+        entityManager.flush();
+
+        LocalDate today = LocalDate.now();
+        autoTransferExecutionJpaRepository.save(execution(saved, today, ProcessResultStatus.SUCCESS, 10000L, "TXN0011", null));
+        autoTransferExecutionJpaRepository.save(execution(saved, today.minusDays(1), ProcessResultStatus.ERROR, 5000L, null, "잔액부족"));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/auto-transfers/executions")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("withdrawalAccountId", String.valueOf(accountId))
+                        .param("size", "7")
+                        .param("all", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.totalCount").value(2))
+                .andExpect(jsonPath("$.data.totalPages").value(1))
+                .andExpect(jsonPath("$.data.items.length()").value(2));
     }
 
     @Test

@@ -35,13 +35,14 @@ public class ProductPersistenceAdapter implements ProductQueryPort {
     public Page<Product> search(ProductGroup productGroup, String keyword, ProductSortType sort, Pageable pageable) {
         Predicate[] conditions = conditions(productGroup, keyword);
 
-        List<ProductJpaEntity> content = queryFactory
+        var query = queryFactory
                 .selectFrom(productJpaEntity)
                 .where(conditions)
-                .orderBy(orderSpecifier(sort), productJpaEntity.productCode.asc())
-                .offset(pageable.getOffset())
-                .limit(pageable.getPageSize())
-                .fetch();
+                .orderBy(orderSpecifier(sort), productJpaEntity.productCode.asc());
+        if (pageable.isPaged()) {
+            query.offset(pageable.getOffset()).limit(pageable.getPageSize());
+        }
+        List<ProductJpaEntity> content = query.fetch();
 
         Long total = queryFactory
                 .select(productJpaEntity.count())

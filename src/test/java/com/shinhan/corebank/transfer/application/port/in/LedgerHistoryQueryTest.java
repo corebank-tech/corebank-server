@@ -59,6 +59,21 @@ class LedgerHistoryQueryTest {
     }
 
     @Test
+    @DisplayName("all=true면 size가 0 이하여도 정상 생성된다.")
+    void allTrue_skipsSizeValidation() {
+        assertDoesNotThrow(() -> LedgerHistoryQuery.builder()
+                .accountId(1L)
+                .fromDate(LocalDate.of(2026, 7, 1))
+                .toDate(LocalDate.of(2026, 8, 1))
+                .direction(LedgerHistoryDirection.ALL)
+                .sort(LedgerHistorySort.LATEST)
+                .page(0)
+                .size(0)
+                .all(true)
+                .build());
+    }
+
+    @Test
     @DisplayName("page가 음수이면 INVALID_INPUT 에러가 발생한다.")
     void negativePage_ThrowsException() {
         assertThatThrownBy(() -> LedgerHistoryQuery.builder()

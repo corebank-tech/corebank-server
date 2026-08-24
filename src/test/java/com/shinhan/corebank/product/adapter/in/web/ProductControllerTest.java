@@ -96,6 +96,20 @@ class ProductControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("all=true면 size가 허용되지 않는 값이어도 200으로 응답하고 전체 건을 한 페이지로 반환한다")
+    void allTrue_returnsAllMatchingRowsInOnePage() throws Exception {
+        mockMvc.perform(get("/products")
+                        .param("keyword", "컨트롤러")
+                        .param("size", "7")
+                        .param("all", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.totalCount").value(1))
+                .andExpect(jsonPath("$.data.totalPages").value(1))
+                .andExpect(jsonPath("$.data.items.length()").value(1));
+    }
+
+    @Test
     @DisplayName("page가 음수면 400 + CMN0001을 반환한다")
     void rejectsNegativePage() throws Exception {
         mockMvc.perform(get("/products").param("page", "-1"))

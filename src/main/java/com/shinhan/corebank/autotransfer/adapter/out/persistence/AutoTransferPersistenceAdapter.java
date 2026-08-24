@@ -58,13 +58,14 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
     @Override
     public Page<AutoTransfer> search(Long customerId, Long withdrawalAccountId, AutoTransferStatus status, Pageable pageable) {
         Predicate[] conditions = conditions(customerId, withdrawalAccountId, status);
-        List<AutoTransferJpaEntity> content = queryFactory
+        var query = queryFactory
                 .selectFrom(autoTransferJpaEntity)
                 .where(conditions)
-                .orderBy(autoTransferJpaEntity.registeredAt.desc(), autoTransferJpaEntity.autoTransferId.desc())
-                .offset(pageable.getOffset())
-                .limit(pageable.getPageSize())
-                .fetch();
+                .orderBy(autoTransferJpaEntity.registeredAt.desc(), autoTransferJpaEntity.autoTransferId.desc());
+        if (pageable.isPaged()) {
+            query.offset(pageable.getOffset()).limit(pageable.getPageSize());
+        }
+        List<AutoTransferJpaEntity> content = query.fetch();
         Long total = queryFactory
                 .select(autoTransferJpaEntity.count())
                 .from(autoTransferJpaEntity)
@@ -110,7 +111,7 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
     public Page<AutoTransferExecutionHistoryRow> search(Long customerId, Long withdrawalAccountId,
                                                         LocalDate fromDate, LocalDate toDate, Pageable pageable) {
         Predicate[] conditions = executionHistoryConditions(customerId, withdrawalAccountId, fromDate, toDate);
-        List<AutoTransferExecutionHistoryRow> content = queryFactory
+        var query = queryFactory
                 .select(Projections.constructor(AutoTransferExecutionHistoryRow.class,
                         autoTransferExecutionJpaEntity.executionId,
                         autoTransferExecutionJpaEntity.status,
@@ -125,10 +126,11 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
                 .from(autoTransferExecutionJpaEntity)
                 .join(autoTransferExecutionJpaEntity.autoTransfer, autoTransferJpaEntity)
                 .where(conditions)
-                .orderBy(autoTransferExecutionJpaEntity.executionDate.desc(),autoTransferExecutionJpaEntity.executedAt.desc(),autoTransferExecutionJpaEntity.executionId.desc())
-                .offset(pageable.getOffset())
-                .limit(pageable.getPageSize())
-                .fetch();
+                .orderBy(autoTransferExecutionJpaEntity.executionDate.desc(),autoTransferExecutionJpaEntity.executedAt.desc(),autoTransferExecutionJpaEntity.executionId.desc());
+        if (pageable.isPaged()) {
+            query.offset(pageable.getOffset()).limit(pageable.getPageSize());
+        }
+        List<AutoTransferExecutionHistoryRow> content = query.fetch();
 
         Long total = queryFactory
                 .select(autoTransferExecutionJpaEntity.count())
