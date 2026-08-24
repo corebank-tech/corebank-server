@@ -285,7 +285,7 @@ class ScheduledTransferCommandServiceTest {
                     100L, arg.getCustomerId(), arg.getWithdrawalAccountId(), arg.getPayeeBankCode(), arg.getPayeeAccountNumber(),
                     arg.getPayeeName(), arg.getAmount(), arg.getScheduledDate(), arg.getMyPassbookMemo(), arg.getRecipientPassbookMemo(),
                     arg.getStatus(), arg.getTransactionNumber(), arg.getRegisteredAt(), arg.getExecutedAt(), arg.getCanceledAt(),
-                    arg.getFailureReason());
+                    arg.getFailureReason(), null);
         });
 
         scheduledTransferCommandService.register(validCommandBuilder().build());
