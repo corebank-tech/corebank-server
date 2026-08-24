@@ -28,6 +28,7 @@ import java.util.Set;
 public class AutoTransferExecutionHistoryQueryService implements AutoTransferExecutionHistoryQueryUseCase {
     private static final Set<Integer> ALLOWED_PAGE_SIZE = Set.of(5, 10, 20, 30, 50);
     private static final int DEFAULT_PERIOD_MONTHS = 1;
+    private static final int MAX_RANGE_DAYS = 365;
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
     private final AutoTransferExecutionHistoryQueryPort autoTransferExecutionHistoryQueryPort;
@@ -46,6 +47,9 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
         LocalDate resolvedFromDate = fromDate != null ? fromDate : resolvedToDate.minusMonths(DEFAULT_PERIOD_MONTHS);
         if (resolvedFromDate.isAfter(resolvedToDate)) {
             throw new BusinessException(CommonErrorCode.INVALID_DATE_RANGE);
+        }
+        if (resolvedFromDate.plusDays(MAX_RANGE_DAYS).isBefore(resolvedToDate)) {
+            throw new BusinessException(CommonErrorCode.DATE_RANGE_EXCEEDED);
         }
 
         Page<AutoTransferExecutionHistoryRow> rows = autoTransferExecutionHistoryQueryPort.search(

@@ -115,6 +115,31 @@ class AutoTransferExecutionHistoryQueryServiceTest {
     }
 
     @Test
+    @DisplayName("조회기간이 365일을 초과하면 DATE_RANGE_EXCEEDED를 던진다")
+    void search_rangeExceeds365Days_throwsDateRangeExceeded() {
+        LocalDate fromDate = LocalDate.of(2026, 1, 1);
+        LocalDate toDate = fromDate.plusDays(366);
+
+        assertThatThrownBy(() -> service.search(1L, 2L, fromDate, toDate, 0, 10, false))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.DATE_RANGE_EXCEEDED));
+    }
+
+    @Test
+    @DisplayName("조회기간이 정확히 365일이면 통과한다 (경계값)")
+    void search_rangeExactly365Days_succeeds() {
+        LocalDate fromDate = LocalDate.of(2026, 1, 1);
+        LocalDate toDate = fromDate.plusDays(365);
+        Pageable pageable = PageRequest.of(0, 10);
+        when(autoTransferExecutionHistoryQueryPort.search(eq(1L), eq(2L), eq(fromDate), eq(toDate), any()))
+                .thenReturn(Page.empty(pageable));
+        when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(fromDate), eq(toDate)))
+                .thenReturn(AutoTransferExecutionHistoryAggregate.empty());
+
+        service.search(1L, 2L, fromDate, toDate, 0, 10, false);
+    }
+
+    @Test
     @DisplayName("customerId가 없으면 REQUIRED_FIELD_MISSING을 던진다")
     void search_missingCustomerId_throwsRequiredFieldMissing() {
         assertThatThrownBy(() -> service.search(null, 2L, null, null, 0, 10, false))
