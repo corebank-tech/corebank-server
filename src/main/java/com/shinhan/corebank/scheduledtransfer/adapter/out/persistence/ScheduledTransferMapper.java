@@ -22,7 +22,8 @@ final class ScheduledTransferMapper {
                 entity.getRegisteredAt(),
                 entity.getExecutedAt(),
                 entity.getCanceledAt(),
-                entity.getFailureReason()
+                entity.getFailureReason(),
+                entity.getVersion()
         );
     }
 
@@ -44,6 +45,7 @@ final class ScheduledTransferMapper {
                 .executedAt(domain.getExecutedAt())
                 .canceledAt(domain.getCanceledAt())
                 .failureReason(domain.getFailureReason())
+                .version(domain.getVersion())
                 .build();
     }
 }

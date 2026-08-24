@@ -64,4 +64,8 @@ public class ScheduledTransferJpaEntity {
 
     @Column(name = "failure_reason", length = 200)
     private String failureReason;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 }

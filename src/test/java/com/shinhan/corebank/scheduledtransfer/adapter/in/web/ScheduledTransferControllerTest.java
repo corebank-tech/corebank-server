@@ -6,6 +6,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.verify;
@@ -516,7 +517,10 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelItemResponse']"
                         + "['properties']['failureCode']['type']").value(hasItem("null")))
                 .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelItemResponse']"
-                        + "['properties']['failureReason']['type']").value(hasItem("null")));
+                        + "['properties']['failureReason']['type']").value(hasItem("null")))
+                // 저장 단계 동시 변경은 낙관적 락에 걸려 CMN0303으로 나간다 (PR #335 리뷰 R2)
+                .andExpect(jsonPath("$['paths']['/scheduled-transfers/cancel']['post']"
+                        + "['responses']['409']['description']").value(containsString("CMN0303")));
     }
 
     private String cancelRequestJson(Long... scheduledTransferIds) throws Exception {

@@ -113,7 +113,7 @@ class ScheduledTransferCommandServiceTest {
                     100L, arg.getCustomerId(), arg.getWithdrawalAccountId(), arg.getPayeeBankCode(), arg.getPayeeAccountNumber(),
                     arg.getPayeeName(), arg.getAmount(), arg.getScheduledDate(), arg.getMyPassbookMemo(), arg.getRecipientPassbookMemo(),
                     arg.getStatus(), arg.getTransactionNumber(), arg.getRegisteredAt(), arg.getExecutedAt(), arg.getCanceledAt(),
-                    arg.getFailureReason());
+                    arg.getFailureReason(), null);
         });
 
         ScheduledTransfer result = scheduledTransferCommandService.register(validCommandBuilder().build());
@@ -320,7 +320,7 @@ class ScheduledTransferCommandServiceTest {
                     100L, arg.getCustomerId(), arg.getWithdrawalAccountId(), arg.getPayeeBankCode(), arg.getPayeeAccountNumber(),
                     arg.getPayeeName(), arg.getAmount(), arg.getScheduledDate(), arg.getMyPassbookMemo(), arg.getRecipientPassbookMemo(),
                     arg.getStatus(), arg.getTransactionNumber(), arg.getRegisteredAt(), arg.getExecutedAt(), arg.getCanceledAt(),
-                    arg.getFailureReason());
+                    arg.getFailureReason(), null);
         });
 
         // 1회한도(transferLimitPort.findOneTimeLimit)만 호출되고, 잔액·1일한도를 확인하는 별도 포트는
@@ -339,7 +339,7 @@ class ScheduledTransferCommandServiceTest {
         return ScheduledTransfer.reconstitute(
                 scheduledTransferId, 1L, withdrawalAccountId, "088", "110987654321", "홍길동",
                 10_000L, scheduledDate, "내메모", "받는메모", status,
-                null, java.time.LocalDateTime.now(), null, null, null);
+                null, java.time.LocalDateTime.now(), null, null, null, null);
     }
 
     private ScheduledTransferCancelCommand.ScheduledTransferCancelCommandBuilder validCancelCommandBuilder() {

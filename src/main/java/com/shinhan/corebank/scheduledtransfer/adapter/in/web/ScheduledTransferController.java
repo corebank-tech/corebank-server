@@ -91,8 +91,8 @@ public class ScheduledTransferController {
             `scheduledTransferIds`에 이 요청과 같은 배열(오름차순 정렬·중복 제거)을 담아야 한다. \
             취소 불가 사유가 있는 건은 요청 전체를 실패시키지 않고 `items`에 건별 실패(`status: ERROR`)로 담아 반환한다. \
             이미 취소된 건은 재요청해도 실패가 아니라 `SUCCESS`로 반환한다. \
-            건별 실패는 사전검증 단계에서만 판정된다 — 상태 변경(저장) 단계에서 예외가 발생하면 한 트랜잭션이므로 \
-            그 요청의 어떤 건도 반영되지 않으며, 이때 OTP 토큰은 이미 소비된 상태라 재인증이 필요하다. \
+            건별 실패는 사전검증 단계에서만 판정된다 — 상태 변경(저장) 단계에서 다른 요청·배치의 동시 변경이 감지되면 \
+            한 트랜잭션이므로 그 요청의 어떤 건도 반영되지 않고 `CMN0303`이 반환되며, 이때 OTP 토큰은 이미 소비된 상태라 재인증이 필요하다. \
             계좌비밀번호 인증 토큰은 계좌 하나에 묶여 발급되므로 취소 대상은 모두 같은 출금계좌여야 한다. \
             동일한 Idempotency-Key와 동일한 요청 내용으로 재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
     @ApiResponses({
@@ -110,7 +110,7 @@ public class ScheduledTransferController {
                     description = "`OTP0101` OTP 인증 토큰 무효 · `OTP0102` 인증한 ID 조합과 요청 ID 조합 불일치",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
-                    description = "`CMN0301`/`CMN0302` 멱등키 충돌",
+                    description = "`CMN0301`/`CMN0302` 멱등키 충돌 · `CMN0303` 저장 단계에서 동시 변경 감지(전건 미반영)",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<ApiResponse<ScheduledTransferCancelResponse>> cancel(

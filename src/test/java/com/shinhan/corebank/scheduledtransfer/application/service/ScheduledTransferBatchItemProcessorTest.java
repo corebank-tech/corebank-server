@@ -112,7 +112,7 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
                 entity.getPayeeBankCode(), entity.getPayeeAccountNumber(), entity.getPayeeName(), entity.getAmount(),
                 entity.getScheduledDate(), entity.getMyPassbookMemo(), entity.getRecipientPassbookMemo(),
                 entity.getStatus(), entity.getTransactionNumber(), entity.getRegisteredAt(), entity.getExecutedAt(),
-                entity.getCanceledAt(), entity.getFailureReason());
+                entity.getCanceledAt(), entity.getFailureReason(), entity.getVersion());
     }
 
     @Test
