@@ -80,8 +80,8 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
 
     @Override
     public ScheduledTransferExecutionResultPage searchExecutionResults(Long customerId, Long withdrawalAccountId,
-                                                                        LocalDate fromDate, LocalDate toDate,
-                                                                        ScheduledTransferExecutionResultSort sort, int page, int size, boolean all) {
+                                                                       LocalDate fromDate, LocalDate toDate,
+                                                                       ScheduledTransferExecutionResultSort sort, int page, int size, boolean all) {
         if (customerId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
@@ -128,6 +128,7 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
                 && scheduledTransfer.getScheduledDate().isAfter(today);
         return new ScheduledTransferListItem(
                 scheduledTransfer.getScheduledTransferId(),
+                scheduledTransfer.getWithdrawalAccountId(),
                 scheduledTransfer.getScheduledDate(),
                 withdrawalAccountNumber,
                 fromAlias,

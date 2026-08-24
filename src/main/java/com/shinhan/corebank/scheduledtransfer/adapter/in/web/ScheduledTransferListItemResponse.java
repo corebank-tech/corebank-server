@@ -12,6 +12,8 @@ import java.time.LocalDateTime;
 public record ScheduledTransferListItemResponse(
         @Schema(description = "예약이체 ID")
         Long scheduledTransferId,
+        @Schema(description = "출금계좌 ID")
+        Long withdrawalAccountId,
         @Schema(description = "예약 실행일")
         LocalDate scheduledDate,
         @Schema(description = "출금계좌번호 (마스킹, 예: 110******877)")
@@ -41,6 +43,7 @@ public record ScheduledTransferListItemResponse(
     public static ScheduledTransferListItemResponse from(ScheduledTransferListItem item) {
         return new ScheduledTransferListItemResponse(
                 item.scheduledTransferId(),
+                item.withdrawalAccountId(),
                 item.scheduledDate(),
                 MaskingUtil.maskAccountNumber(item.withdrawalAccountNumber()),
                 item.fromAlias(),
