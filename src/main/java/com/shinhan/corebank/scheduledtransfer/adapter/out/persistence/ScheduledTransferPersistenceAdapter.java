@@ -104,13 +104,14 @@ public class ScheduledTransferPersistenceAdapter implements ScheduledTransferPer
     public Page<ScheduledTransfer> search(Long customerId, ScheduledTransferStatus status, Long withdrawalAccountId,
                                           LocalDate fromDate, LocalDate toDate, Pageable pageable) {
         Predicate[] conditions = conditions(customerId, status, withdrawalAccountId, fromDate, toDate);
-        List<ScheduledTransferJpaEntity> content = queryFactory
+        var query = queryFactory
                 .selectFrom(scheduledTransferJpaEntity)
                 .where(conditions)
-                .orderBy(scheduledTransferJpaEntity.scheduledDate.asc(), scheduledTransferJpaEntity.scheduledTransferId.asc())
-                .offset(pageable.getOffset())
-                .limit(pageable.getPageSize())
-                .fetch();
+                .orderBy(scheduledTransferJpaEntity.scheduledDate.asc(), scheduledTransferJpaEntity.scheduledTransferId.asc());
+        if (pageable.isPaged()) {
+            query.offset(pageable.getOffset()).limit(pageable.getPageSize());
+        }
+        List<ScheduledTransferJpaEntity> content = query.fetch();
         Long total = queryFactory
                 .select(scheduledTransferJpaEntity.count())
                 .from(scheduledTransferJpaEntity)
@@ -125,13 +126,14 @@ public class ScheduledTransferPersistenceAdapter implements ScheduledTransferPer
                                                           LocalDate fromDate, LocalDate toDate,
                                                           ScheduledTransferExecutionResultSort sort, Pageable pageable) {
         Predicate[] conditions = executionResultConditions(customerId, withdrawalAccountId, fromDate, toDate);
-        List<ScheduledTransferJpaEntity> content = queryFactory
+        var query = queryFactory
                 .selectFrom(scheduledTransferJpaEntity)
                 .where(conditions)
-                .orderBy(effectiveDateSortOrder(sort))
-                .offset(pageable.getOffset())
-                .limit(pageable.getPageSize())
-                .fetch();
+                .orderBy(effectiveDateSortOrder(sort));
+        if (pageable.isPaged()) {
+            query.offset(pageable.getOffset()).limit(pageable.getPageSize());
+        }
+        List<ScheduledTransferJpaEntity> content = query.fetch();
         Long total = queryFactory
                 .select(scheduledTransferJpaEntity.count())
                 .from(scheduledTransferJpaEntity)

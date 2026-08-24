@@ -39,6 +39,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -251,8 +253,8 @@ class ScheduledTransferCommandServiceTest {
     }
 
     @Test
-    @DisplayName("입금계좌 유형이 입출금계좌가 아니면 UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE을 던진다")
-    void register_unsupportedDepositAccountType_throws() {
+    @DisplayName("입금계좌가 정기예금(TIME_DEPOSIT)이면 UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE을 던진다")
+    void register_timeDepositAccount_throwsUnsupportedDepositAccountType() {
         stubClock();
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
@@ -263,6 +265,32 @@ class ScheduledTransferCommandServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ScheduledTransferErrorCode.UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = AccountType.class, names = {"DEMAND_DEPOSIT", "INSTALLMENT_SAVINGS"})
+    @DisplayName("입금계좌가 입출금·정기적금이면 등록이 허용된다 (REQ-SCD-006, #317)")
+    void register_allowedDepositAccountTypes_succeeds(AccountType allowedType) {
+        stubClock();
+        when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
+        when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
+        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(allowedType));
+        when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
+        when(scheduledTransferPersistencePort.existsActiveDuplicate(eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
+                .thenReturn(false);
+        when(scheduledTransferPersistencePort.save(any(ScheduledTransfer.class))).thenAnswer(invocation -> {
+            ScheduledTransfer arg = invocation.getArgument(0);
+            return ScheduledTransfer.reconstitute(
+                    100L, arg.getCustomerId(), arg.getWithdrawalAccountId(), arg.getPayeeBankCode(), arg.getPayeeAccountNumber(),
+                    arg.getPayeeName(), arg.getAmount(), arg.getScheduledDate(), arg.getMyPassbookMemo(), arg.getRecipientPassbookMemo(),
+                    arg.getStatus(), arg.getTransactionNumber(), arg.getRegisteredAt(), arg.getExecutedAt(), arg.getCanceledAt(),
+                    arg.getFailureReason());
+        });
+
+        scheduledTransferCommandService.register(validCommandBuilder().build());
+
+        verify(scheduledTransferPersistencePort).save(any(ScheduledTransfer.class));
     }
 
     @Test

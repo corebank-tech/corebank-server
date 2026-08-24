@@ -99,6 +99,25 @@ class LedgerHistoryQueryPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("all=true면 page/size 무관하게 조건에 맞는 전체 건이 반환된다")
+    void findEntries_all_returnsAllMatchingRows() {
+        LedgerHistoryQuery query = LedgerHistoryQuery.builder()
+                .accountId(ACCOUNT_ID)
+                .fromDate(LocalDate.of(2026, 7, 1))
+                .toDate(LocalDate.of(2026, 7, 31))
+                .direction(LedgerHistoryDirection.ALL)
+                .sort(LedgerHistorySort.LATEST)
+                .page(0)
+                .size(0)
+                .all(true)
+                .build();
+
+        List<LedgerEntry> entries = adapter.findEntries(query);
+
+        assertThat(entries).hasSize(2);
+    }
+
+    @Test
     @DisplayName("페이지 크기 1로 조회하면 1건만 반환되지만 전체 건수는 여전히 2건이다")
     void countEntries_ignoresPaging() {
         LedgerHistoryQuery pagedQuery = julyQuery(LedgerHistoryDirection.ALL, null, LedgerHistorySort.LATEST, 0, 1);

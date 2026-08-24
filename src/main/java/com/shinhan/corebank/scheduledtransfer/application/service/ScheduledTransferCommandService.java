@@ -76,10 +76,12 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
             throw new BusinessException(ScheduledTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE);
         }
 
-        // 입금계좌 실존 여부·유형 검증
+        // 입금계좌 실존 여부·유형 검증. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을 묶어두는 상품이라 이체로 추가 입금할 수 없다.
+        // 정기적금(INSTALLMENT_SAVINGS)은 매달 나눠 넣는 게 상품 목적이라 허용한다
+        // (REQ-SCD-006 → REQ-TRSF-030 — TransferExecutionService·AutoTransferCommandService와 동일 정책, #317)
         AccountType payeeAccountType = accountStatusPort.findAccountTypeByNumber(command.depositAccountNumber())
                 .orElseThrow(() -> new BusinessException(ScheduledTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
-        if (payeeAccountType != AccountType.DEMAND_DEPOSIT) {
+        if (payeeAccountType == AccountType.TIME_DEPOSIT) {
             throw new BusinessException(ScheduledTransferErrorCode.UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE);
         }
 

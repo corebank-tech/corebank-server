@@ -154,7 +154,8 @@ public class ScheduledTransferController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "`CMN0001` status 값이 올바르지 않음 · `CMN0003` 조회 시작일이 종료일보다 늦음 · " +
-                            "`CMN0004` 조회기간이 최대 1년(365일) 초과 · `CMN0005` 지원하지 않는 페이지 크기(5/10/20/30/50 중 하나여야 함)",
+                            "`CMN0004` 조회기간이 최대 1년(365일) 초과 · `CMN0005` 지원하지 않는 페이지 크기(5/10/20/30/50 중 하나여야 함) · " +
+                            "`CMN0006` 전체조회(all=true) 결과가 상한(100건) 초과",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
@@ -169,13 +170,15 @@ public class ScheduledTransferController {
             @RequestParam(required = false) LocalDate fromDate,
             @Parameter(description = "조회기간 종료일. fromDate/toDate 둘 다 미전달 시 기간 제한 없이 조회(기본값 없음)", example = "2026-08-20")
             @RequestParam(required = false) LocalDate toDate,
-            @Parameter(description = "페이지 번호(0부터 시작)", example = "0")
+            @Parameter(description = "페이지 번호(0부터 시작). all=true면 무시됨", example = "0")
             @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "페이지 크기. 5/10/20/30/50 중 하나만 허용", example = "10")
-            @RequestParam(defaultValue = "10") int size) {
+            @Parameter(description = "페이지 크기. 5/10/20/30/50 중 하나만 허용. all=true면 무시됨", example = "10")
+            @RequestParam(defaultValue = "10") int size,
+            @Parameter(description = "true면 페이지 구분 없이 조건에 맞는 전체 건을 반환", example = "false")
+            @RequestParam(defaultValue = "false") boolean all) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         Page<ScheduledTransferListItem> result = scheduledTransferQueryUseCase.search(
-                customerId, parseStatus(status), withdrawalAccountId, fromDate, toDate, page, size);
+                customerId, parseStatus(status), withdrawalAccountId, fromDate, toDate, page, size, all);
         return ApiResponse.success(PageResponse.from(result, ScheduledTransferListItemResponse::from));
     }
 
@@ -203,13 +206,15 @@ public class ScheduledTransferController {
             @RequestParam(required = false) LocalDate toDate,
             @Parameter(description = "정렬 순서. LATEST(최신순, 기본값)/OLDEST(오래된순)", example = "LATEST")
             @RequestParam(defaultValue = "LATEST") ScheduledTransferExecutionResultSort sort,
-            @Parameter(description = "페이지 번호(0부터 시작)", example = "0")
+            @Parameter(description = "페이지 번호(0부터 시작). all=true면 무시됨", example = "0")
             @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "페이지 크기. 5/10/20/30/50 중 하나만 허용", example = "10")
-            @RequestParam(defaultValue = "10") int size) {
+            @Parameter(description = "페이지 크기. 5/10/20/30/50 중 하나만 허용. all=true면 무시됨", example = "10")
+            @RequestParam(defaultValue = "10") int size,
+            @Parameter(description = "true면 페이지 구분 없이 조건에 맞는 전체 건을 반환", example = "false")
+            @RequestParam(defaultValue = "false") boolean all) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         ScheduledTransferExecutionResultPage result = scheduledTransferQueryUseCase.searchExecutionResults(
-                customerId, withdrawalAccountId, fromDate, toDate, sort, page, size);
+                customerId, withdrawalAccountId, fromDate, toDate, sort, page, size, all);
         return ApiResponse.success(ScheduledTransferExecutionResultPageResponse.from(result));
     }
 

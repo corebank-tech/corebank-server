@@ -155,6 +155,25 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("Pageable.unpaged()로 조회하면 offset/limit 없이 조건에 맞는 전체 건을 한 번에 반환한다 (#297)")
+    void search_unpaged_returnsAllMatchingRowsInOnePage() {
+        repository.save(autoTransfer(accountA, "110000000010", AutoTransferStatus.NORMAL, 10));
+        repository.save(autoTransfer(accountA, "110000000011", AutoTransferStatus.NORMAL, 11));
+        repository.save(autoTransfer(accountA, "110000000012", AutoTransferStatus.NORMAL, 12));
+        entityManager.flush();
+        entityManager.clear();
+
+        Page<AutoTransfer> result = adapter.search(customerId, accountA, null, org.springframework.data.domain.Pageable.unpaged());
+
+        assertThat(result.getTotalElements()).isEqualTo(3);
+        assertThat(result.getContent()).hasSize(3);
+        assertThat(result.getTotalPages()).isEqualTo(1);
+        // PageResponse.from()이 이 값들을 그대로 응답에 싣는다 - #297 요청 형식(size=totalCount, page=0) 검증
+        assertThat(result.getNumber()).isEqualTo(0);
+        assertThat(result.getSize()).isEqualTo(3);
+    }
+
+    @Test
     @DisplayName("status를 지정하면 해당 상태만 조회된다")
     void search_filterByStatus() {
         repository.save(autoTransfer(accountA, "110000000007", AutoTransferStatus.NORMAL, 10));
@@ -256,6 +275,24 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
                 .filteredOn(row -> row.status() == ProcessResultStatus.ERROR)
                 .extracting(AutoTransferExecutionHistoryRow::failureReason)
                 .containsExactly("잔액부족");
+    }
+
+    @Test
+    @DisplayName("처리결과 조회도 Pageable.unpaged()면 offset/limit 없이 조건에 맞는 전체 건을 반환한다 (#297)")
+    void search_executionHistory_unpaged_returnsAllMatchingRows() {
+        AutoTransferJpaEntity autoTransfer = repository.save(autoTransfer(accountA, "110000000046", AutoTransferStatus.NORMAL, 10));
+        entityManager.flush();
+        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 5), ProcessResultStatus.SUCCESS, 10000L, "TXN0010", null));
+        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 10), ProcessResultStatus.SUCCESS, 10000L, "TXN0011", null));
+        entityManager.flush();
+        entityManager.clear();
+
+        Page<AutoTransferExecutionHistoryRow> result = adapter.search(customerId, accountA,
+                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), org.springframework.data.domain.Pageable.unpaged());
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalPages()).isEqualTo(1);
     }
 
     @Test

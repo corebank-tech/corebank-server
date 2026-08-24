@@ -69,7 +69,7 @@ class AutoTransferExecutionHistoryQueryServiceTest {
         when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
                 .thenReturn(new AutoTransferExecutionHistoryAggregate(1L, 10_000L, 0L, 0L));
 
-        AutoTransferExecutionHistoryResult result = service.search(1L, 2L, null, null, 0, 10);
+        AutoTransferExecutionHistoryResult result = service.search(1L, 2L, null, null, 0, 10, false);
 
         assertThat(result.page().getContent()).hasSize(1);
         assertThat(result.page().getTotalElements()).isEqualTo(1);
@@ -86,7 +86,7 @@ class AutoTransferExecutionHistoryQueryServiceTest {
         when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
                 .thenReturn(AutoTransferExecutionHistoryAggregate.empty());
 
-        service.search(1L, 2L, null, null, 0, 10);
+        service.search(1L, 2L, null, null, 0, 10, false);
 
         // Mockito eq()가 위 stub에서 이미 정확한 날짜 조합만 매칭시키므로, 예외 없이 통과하면 기본값 계산이 맞다는 뜻
     }
@@ -102,22 +102,47 @@ class AutoTransferExecutionHistoryQueryServiceTest {
         when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(fromDate), eq(toDate)))
                 .thenReturn(AutoTransferExecutionHistoryAggregate.empty());
 
-        service.search(1L, 2L, fromDate, toDate, 0, 10);
+        service.search(1L, 2L, fromDate, toDate, 0, 10, false);
     }
 
     @Test
     @DisplayName("조회 시작일이 종료일보다 늦으면 INVALID_DATE_RANGE를 던진다")
     void search_fromDateAfterToDate_throwsInvalidDateRange() {
         assertThatThrownBy(() -> service.search(1L, 2L,
-                LocalDate.of(2026, 3, 20), LocalDate.of(2026, 3, 10), 0, 10))
+                LocalDate.of(2026, 3, 20), LocalDate.of(2026, 3, 10), 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_DATE_RANGE));
     }
 
     @Test
+    @DisplayName("조회기간이 365일을 초과하면 DATE_RANGE_EXCEEDED를 던진다")
+    void search_rangeExceeds365Days_throwsDateRangeExceeded() {
+        LocalDate fromDate = LocalDate.of(2026, 1, 1);
+        LocalDate toDate = fromDate.plusDays(366);
+
+        assertThatThrownBy(() -> service.search(1L, 2L, fromDate, toDate, 0, 10, false))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.DATE_RANGE_EXCEEDED));
+    }
+
+    @Test
+    @DisplayName("조회기간이 정확히 365일이면 통과한다 (경계값)")
+    void search_rangeExactly365Days_succeeds() {
+        LocalDate fromDate = LocalDate.of(2026, 1, 1);
+        LocalDate toDate = fromDate.plusDays(365);
+        Pageable pageable = PageRequest.of(0, 10);
+        when(autoTransferExecutionHistoryQueryPort.search(eq(1L), eq(2L), eq(fromDate), eq(toDate), any()))
+                .thenReturn(Page.empty(pageable));
+        when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(fromDate), eq(toDate)))
+                .thenReturn(AutoTransferExecutionHistoryAggregate.empty());
+
+        service.search(1L, 2L, fromDate, toDate, 0, 10, false);
+    }
+
+    @Test
     @DisplayName("customerId가 없으면 REQUIRED_FIELD_MISSING을 던진다")
     void search_missingCustomerId_throwsRequiredFieldMissing() {
-        assertThatThrownBy(() -> service.search(null, 2L, null, null, 0, 10))
+        assertThatThrownBy(() -> service.search(null, 2L, null, null, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining(CommonErrorCode.REQUIRED_FIELD_MISSING.getMessage());
     }
@@ -125,7 +150,7 @@ class AutoTransferExecutionHistoryQueryServiceTest {
     @Test
     @DisplayName("withdrawalAccountId가 없으면 REQUIRED_FIELD_MISSING을 던진다")
     void search_missingWithdrawalAccountId_throwsRequiredFieldMissing() {
-        assertThatThrownBy(() -> service.search(1L, null, null, null, 0, 10))
+        assertThatThrownBy(() -> service.search(1L, null, null, null, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining(CommonErrorCode.REQUIRED_FIELD_MISSING.getMessage());
     }
@@ -133,15 +158,28 @@ class AutoTransferExecutionHistoryQueryServiceTest {
     @Test
     @DisplayName("허용되지 않은 page size는 INVALID_PAGE_SIZE를 던진다")
     void search_disallowedPageSize_throwsInvalidPageSize() {
-        assertThatThrownBy(() -> service.search(1L, 2L, null, null, 0, 7))
+        assertThatThrownBy(() -> service.search(1L, 2L, null, null, 0, 7, false))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining(CommonErrorCode.INVALID_PAGE_SIZE.getMessage());
     }
 
     @Test
+    @DisplayName("all=true면 size가 허용값이 아니어도 예외 없이 unpaged로 조회한다")
+    void search_allTrue_skipsPageSizeValidation_usesUnpaged() {
+        when(autoTransferExecutionHistoryQueryPort.search(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY), eq(Pageable.unpaged())))
+                .thenReturn(new PageImpl<>(List.of(sampleRow()), Pageable.unpaged(), 1));
+        when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
+                .thenReturn(new AutoTransferExecutionHistoryAggregate(1L, 10_000L, 0L, 0L));
+
+        AutoTransferExecutionHistoryResult result = service.search(1L, 2L, null, null, 0, 7, true);
+
+        assertThat(result.page().getContent()).hasSize(1);
+    }
+
+    @Test
     @DisplayName("page가 음수면 INVALID_INPUT을 던진다")
     void search_negativePage_throwsInvalidInput() {
-        assertThatThrownBy(() -> service.search(1L, 2L, null, null, -1, 10))
+        assertThatThrownBy(() -> service.search(1L, 2L, null, null, -1, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
     }
@@ -157,7 +195,7 @@ class AutoTransferExecutionHistoryQueryServiceTest {
                 .thenReturn(new AutoTransferExecutionHistoryAggregate(3L, 30_000L, 1L, 5_000L));
 
         AutoTransferExecutionHistoryResult result = service.search(1L, 2L,
-                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), 0, 10);
+                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), 0, 10, false);
 
         var item = result.page().getContent().get(0);
         assertThat(item.executionId()).isEqualTo(row.executionId());

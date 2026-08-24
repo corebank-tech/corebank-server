@@ -31,8 +31,9 @@ public class ProductController {
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "RATE") ProductSortType sort,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        Page<Product> result = productQueryUseCase.search(productGroup, keyword, sort, page, size);
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "false") boolean all) {
+        Page<Product> result = productQueryUseCase.search(productGroup, keyword, sort, page, size, all);
         return ApiResponse.success(PageResponse.from(result, ProductListItemResponse::from));
     }
 

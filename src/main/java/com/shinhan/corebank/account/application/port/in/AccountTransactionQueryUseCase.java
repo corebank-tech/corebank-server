@@ -17,6 +17,7 @@ public interface AccountTransactionQueryUseCase {
             String keyword,
             LedgerHistorySort sort,
             int page,
-            int size
+            int size,
+            boolean all
     );
 }

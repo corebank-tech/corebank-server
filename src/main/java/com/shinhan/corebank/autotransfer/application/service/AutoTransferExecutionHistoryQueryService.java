@@ -9,9 +9,9 @@ import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecut
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryRow;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.common.util.PageableResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +28,7 @@ import java.util.Set;
 public class AutoTransferExecutionHistoryQueryService implements AutoTransferExecutionHistoryQueryUseCase {
     private static final Set<Integer> ALLOWED_PAGE_SIZE = Set.of(5, 10, 20, 30, 50);
     private static final int DEFAULT_PERIOD_MONTHS = 1;
+    private static final int MAX_RANGE_DAYS = 365;
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
     private final AutoTransferExecutionHistoryQueryPort autoTransferExecutionHistoryQueryPort;
@@ -35,16 +36,11 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
 
     @Override
     public AutoTransferExecutionHistoryResult search(Long customerId, Long withdrawalAccountId,
-                                                     LocalDate fromDate, LocalDate toDate, int page, int size) {
+                                                     LocalDate fromDate, LocalDate toDate, int page, int size, boolean all) {
         if (customerId == null || withdrawalAccountId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
-        if (!ALLOWED_PAGE_SIZE.contains(size)) {
-            throw new BusinessException(CommonErrorCode.INVALID_PAGE_SIZE);
-        }
-        if (page < 0) {
-            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "page는 0 이상이어야 합니다.");
-        }
+        Pageable pageable = PageableResolver.resolve(page, size, all, ALLOWED_PAGE_SIZE);
         // REQ-AUTO-018: 조회기간 기본값은 1개월 — toDate 없으면 오늘, fromDate 없으면 toDate-1개월
         LocalDate today = LocalDate.now(clock.withZone(SEOUL));
         LocalDate resolvedToDate = toDate != null ? toDate : today;
@@ -52,8 +48,10 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
         if (resolvedFromDate.isAfter(resolvedToDate)) {
             throw new BusinessException(CommonErrorCode.INVALID_DATE_RANGE);
         }
+        if (resolvedFromDate.plusDays(MAX_RANGE_DAYS).isBefore(resolvedToDate)) {
+            throw new BusinessException(CommonErrorCode.DATE_RANGE_EXCEEDED);
+        }
 
-        Pageable pageable = PageRequest.of(page, size);
         Page<AutoTransferExecutionHistoryRow> rows = autoTransferExecutionHistoryQueryPort.search(
                 customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, pageable);
         AutoTransferExecutionHistoryAggregate aggregate = autoTransferExecutionHistoryQueryPort.summarize(

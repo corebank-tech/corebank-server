@@ -159,6 +159,18 @@ class TransferHistoryQueryPersistenceAdapterTest extends IntegrationTestSupport 
     }
 
     @Test
+    @DisplayName("Pageable.unpaged()로 조회하면 조건에 맞는 전체 건을 한 페이지로 반환한다")
+    void search_unpaged_returnsAllMatchingRows() {
+        Page<Transfer> result = adapter.search(WITHDRAWAL_ACCOUNT_ID, null,
+                LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), TransferHistorySort.LATEST, org.springframework.data.domain.Pageable.unpaged());
+
+        assertThat(result.getContent()).hasSize(3);
+        assertThat(result.getTotalElements()).isEqualTo(3);
+        assertThat(result.getTotalPages()).isEqualTo(1);
+        assertThat(result.getNumber()).isZero();
+    }
+
+    @Test
     @DisplayName("집계는 SUCCESS/ERROR 건수·금액만 잡고 PROCESSING은 제외한다")
     void summarize_excludesProcessing() {
         TransferHistoryAggregate aggregate = adapter.summarize(WITHDRAWAL_ACCOUNT_ID, null,
