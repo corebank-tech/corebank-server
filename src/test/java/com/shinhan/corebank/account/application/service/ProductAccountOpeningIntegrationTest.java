@@ -4,6 +4,7 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.application.port.in.AccountOpeningResult;
 import com.shinhan.corebank.account.application.port.in.ProductAccountOpeningCommand;
 import com.shinhan.corebank.account.application.port.in.ProductAccountOpeningUseCase;
+import com.shinhan.corebank.account.domain.AccountNumberPolicy;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture;
@@ -98,7 +99,12 @@ class ProductAccountOpeningIntegrationTest
         assertThat(result.accountId()).isNotNull();
 
         assertThat(result.accountNumber())
-                .isEqualTo("088200000001");
+                .isEqualTo(
+                        AccountNumberPolicy.BANK_CODE
+                                + AccountNumberSequenceTestFixture
+                                        .TIME_DEPOSIT_PREFIX
+                                + "0000001"
+                );
 
         AccountRow row = jdbcTemplate.queryForObject(
                 """

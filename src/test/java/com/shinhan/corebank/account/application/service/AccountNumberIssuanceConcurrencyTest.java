@@ -122,10 +122,14 @@ class AccountNumberIssuanceConcurrencyTest
                         )
                 );
 
+        String prefix =
+                AccountNumberPolicy.BANK_CODE
+                        + DEMAND_DEPOSIT_PREFIX;
+
         assertThat(accountNumbers)
                 .contains(
-                        "088100000001",
-                        "088100000100"
+                        prefix + "0000001",
+                        prefix + "0000100"
                 );
 
         assertThat(
