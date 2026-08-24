@@ -29,6 +29,10 @@ public class LoginService implements LoginUseCase {
     private static final Logger log =
             LoggerFactory.getLogger(LoginService.class);
 
+    // 존재하지 않는 아이디에서도 BCrypt 비교 시간을 맞추기 위한 더미 해시 (REQ-AUTH-023, 실제 자격증명 아님)
+    private static final String DUMMY_PASSWORD_HASH =
+            "$2a$10$TKFDPDX3R71KXVXhzHGIfuD5TTj2R8Z0uSnVgFKgO5B5p3vpqI1CG";
+
     private final LoginCustomerPort loginCustomerPort;
     private final PasswordHashVerifierPort passwordHashVerifierPort;
     private final LoginAttemptProcessor loginAttemptProcessor;
@@ -42,7 +46,10 @@ public class LoginService implements LoginUseCase {
 
         LoginCustomer loginCustomer = loginCustomerPort
                 .findByUserId(command.userId())
-                .orElseThrow(() -> customerNotFound(command.requestIp()));
+                .orElseThrow(() -> customerNotFound(
+                        command.password(),
+                        command.requestIp()
+                ));
 
         if (loginCustomer.isAccountLocked()) {
             recordFailureAudit(
@@ -85,8 +92,14 @@ public class LoginService implements LoginUseCase {
         );
     }
 
-    // 존재하지 않는 아이디도 최초 실패처럼 보이는 값으로 계정 존재 여부 노출을 방지 (REQ-AUTH-023)
-    private LoginFailedException customerNotFound(String requestIp) {
+    // 존재하지 않는 아이디도 최초 실패처럼 보이는 값과 시간으로 계정 존재 여부 노출을 방지 (REQ-AUTH-023)
+    private LoginFailedException customerNotFound(
+            String rawPassword,
+            String requestIp
+    ) {
+        // BCrypt 비교를 생략하면 응답 시간 차이로 계정 존재 여부가 드러나 더미 해시로 시간을 맞춘다
+        passwordHashVerifierPort.matches(rawPassword, DUMMY_PASSWORD_HASH);
+
         recordFailureAudit(
                 null,
                 requestIp,

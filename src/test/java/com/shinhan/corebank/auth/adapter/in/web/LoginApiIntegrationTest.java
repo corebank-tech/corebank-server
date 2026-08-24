@@ -187,21 +187,28 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("존재하지 않는 아이디는 비밀번호 불일치와 동일한 형태의 데이터를 반환한다 (REQ-AUTH-023)")
+    @DisplayName("존재하지 않는 아이디는 비밀번호 불일치와 동일한 데이터를 반환한다 (REQ-AUTH-023)")
     void returnsSameFailureShapeForNonexistentUserId() throws Exception {
-        HttpResponse<String> response = httpClient.send(
+        HttpResponse<String> nonexistentUserResponse = httpClient.send(
                 loginRequest("nonexistent-user-id", WRONG_PASSWORD),
                 HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
         );
+        HttpResponse<String> wrongPasswordResponse = httpClient.send(
+                loginRequest(WRONG_PASSWORD),
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
+        );
 
-        JsonNode body = objectMapper.readTree(response.body());
+        JsonNode nonexistentUserBody =
+                objectMapper.readTree(nonexistentUserResponse.body());
+        JsonNode wrongPasswordBody =
+                objectMapper.readTree(wrongPasswordResponse.body());
 
-        assertThat(response.statusCode()).isEqualTo(401);
-        assertThat(body.get("code").asText()).isEqualTo("ATH0101");
-        assertThat(body.get("data").get("errorCount").asInt())
-                .isEqualTo(1);
-        assertThat(body.get("data").get("remainingAttempts").asInt())
-                .isEqualTo(4);
+        assertThat(nonexistentUserResponse.statusCode()).isEqualTo(401);
+        assertThat(wrongPasswordResponse.statusCode()).isEqualTo(401);
+        assertThat(nonexistentUserBody.get("code").asText())
+                .isEqualTo(wrongPasswordBody.get("code").asText());
+        assertThat(nonexistentUserBody.get("data"))
+                .isEqualTo(wrongPasswordBody.get("data"));
     }
 
     @Test
