@@ -27,6 +27,7 @@ logging:
 app:
   demo-data:
     continue-on-error: true
+    validate-after-load: false
   security:
     cors:
       allowed-origins:

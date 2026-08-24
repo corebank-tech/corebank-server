@@ -2,3 +2,4 @@ app:
   demo-data:
     # 일부 시드만 반영된 채 배포가 성공하지 않도록 첫 SQL 오류를 전파한다.
     continue-on-error: false
+    validate-after-load: true
