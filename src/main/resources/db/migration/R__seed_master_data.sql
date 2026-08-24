@@ -117,6 +117,51 @@ ON DUPLICATE KEY UPDATE
   sale_end_date = VALUES(sale_end_date), new_flag = VALUES(new_flag),
   single_account_limit = VALUES(single_account_limit), updated_at = VALUES(updated_at);
 
+-- ====================================================================
+-- 계좌번호 채번 기준 데이터
+-- 상품마다 채번 행이 반드시 1건 있어야 한다. 없으면 가입 시 ACC9001 이 난다.
+-- prefix 는 2x = 예금 / 3x = 적금, 10 = 입출금으로 고정한다.
+-- 재실행 대비: last_sequence 는 ON DUPLICATE KEY UPDATE 에서 절대 건드리지 않는다
+-- (이미 발급된 번호를 다시 발급해 account_number 가 충돌하는 것을 막는다).
+-- ====================================================================
+INSERT INTO account_number_sequence
+  (bank_code, account_type, product_id, product_prefix, last_sequence, created_at, updated_at)
+VALUES
+  ('088', 'DEMAND_DEPOSIT', NULL, '10', 0,
+   '2026-08-01 00:00:00.000000', '2026-08-01 00:00:00.000000')
+ON DUPLICATE KEY UPDATE updated_at = VALUES(updated_at);
+
+-- account_type 매핑은 ProductSubscriptionExecuteService.toAccountType() 과 같아야 한다.
+-- product_id 는 환경마다 auto_increment 값이 달라 product_code 조인으로 얻는다.
+INSERT INTO account_number_sequence
+  (bank_code, account_type, product_id, product_prefix, last_sequence, created_at, updated_at)
+SELECT '088',
+       CASE p.product_group
+            WHEN 'DEPOSIT' THEN 'TIME_DEPOSIT'
+            ELSE 'INSTALLMENT_SAVINGS'
+       END,
+       p.product_id,
+       s.product_prefix,
+       0,
+       '2026-08-01 00:00:00.000000',
+       '2026-08-01 00:00:00.000000'
+FROM product p
+JOIN (
+  SELECT 'PRD_BASIC_DEP'     AS product_code, '20' AS product_prefix
+  UNION ALL SELECT 'PRD_CORE_DEP',     '21'
+  UNION ALL SELECT 'PRD_LARGE_DEP',    '22'
+  UNION ALL SELECT 'PRD_SHORT_DEP',    '23'
+  UNION ALL SELECT 'PRD_SENIOR_DEP',   '24'
+  UNION ALL SELECT 'PRD_PRIME_DEP',    '25'
+  UNION ALL SELECT 'PRD_YOUTH_SAVE',   '30'
+  UNION ALL SELECT 'PRD_FREE_SAVE',    '31'
+  UNION ALL SELECT 'PRD_REGULAR_SAVE', '32'
+  UNION ALL SELECT 'PRD_GOAL_SAVE',    '33'
+  UNION ALL SELECT 'PRD_HOUSING_SAVE', '34'
+  UNION ALL SELECT 'PRD_SALARY_SAVE',  '35'
+) s ON s.product_code = p.product_code
+ON DUPLICATE KEY UPDATE updated_at = VALUES(updated_at);
+
 -- 상품 기간별 금리 (product_id + term_months 가 PK)
 -- 각 상품의 최소 가입기간 구간 rate 가 product.base_rate 와 같아야 한다.
 INSERT INTO product_rate_tier (product_id, term_months, rate)
