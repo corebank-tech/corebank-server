@@ -157,6 +157,7 @@ public class AccountOverviewQueryService
                 account.getOpenedDate().toLocalDate(),
                 account.getLastTransactionAt(),
                 account.getMaturityDate(),
+                account.isWithdrawalRegistered(),
                 isTransferEnabled(account)
         );
     }

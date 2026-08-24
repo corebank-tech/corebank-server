@@ -291,8 +291,8 @@ class AccountOverviewQueryServiceTest {
     }
 
     @Test
-    @DisplayName("활성 상태의 출금계좌로 등록된 입출금계좌만 이체가 가능하다")
-    void enablesTransferOnlyForEligibleDemandDepositAccount() {
+    @DisplayName("출금계좌 등록 여부와 실제 이체 가능 여부를 구분해 반환한다")
+    void distinguishesWithdrawalRegistrationFromTransferAvailability() {
         // given
         Account enabled = createAccount(
                 101L,
@@ -360,11 +360,22 @@ class AccountOverviewQueryServiceTest {
                         .orElseThrow()
                         .accounts();
 
+        assertThat(demandAccounts.get(0).withdrawalRegistered())
+                .isTrue();
+
         assertThat(demandAccounts.get(0).transferEnabled())
                 .isTrue();
 
+
+        assertThat(demandAccounts.get(1).withdrawalRegistered())
+                .isFalse();
+
         assertThat(demandAccounts.get(1).transferEnabled())
                 .isFalse();
+
+
+        assertThat(demandAccounts.get(2).withdrawalRegistered())
+                .isTrue();
 
         assertThat(demandAccounts.get(2).transferEnabled())
                 .isFalse();
@@ -377,6 +388,9 @@ class AccountOverviewQueryServiceTest {
                         .findFirst()
                         .orElseThrow()
                         .accounts();
+
+        assertThat(savingsAccounts.get(0).withdrawalRegistered())
+                .isFalse();
 
         assertThat(savingsAccounts.get(0).transferEnabled())
                 .isFalse();

@@ -302,7 +302,8 @@ const rows = rateTiers.map(t => ({
 - [x] 상품 시드 12건 확충 — #176
 - [x] `ProductDetailResponse`에 `summary`·`minTermMonths`·`maxTermMonths`·`interestPayType` 추가 (§5-3)
 - [x] `terms[]` 약관 메타 병합 — #57 / PR #205(`terms` 모듈 신설) + PR #192(상품 상세 배선). 이 브랜치 작업이 아닙니다 (§5-4)
-- [ ] `openapi.yaml`을 레포에 반영 — FE `orval.config.ts`가 이 파일을 단일 계약 출처로 보고 있고, 없으면 `pnpm codegen`이 의도적으로 실패합니다. `GET /v3/api-docs.yaml`이 현재 401이라 `SecurityConfig`의 permitAll 패턴(`/v3/api-docs/**`)이 `.yaml` 경로를 못 잡는 것부터 고쳐야 합니다
+- [x] `openapi.yaml` 레포 반영 — **불필요해졌습니다.** FE가 `orval.config.ts`에서 파일 대신 원격 스펙(`OPENAPI_SPEC_URL`, 기본값 `https://api.corebank.cloud/api/v1/v3/api-docs`)을 단일 계약 출처로 읽도록 바꿨습니다(FE `028784c`). 해당 JSON 경로는 `SecurityConfig`의 `/v3/api-docs/**`에 이미 매칭돼 세션 없이 200으로 열려 있습니다
+- [x] `GET /v3/api-docs.yaml` 401 해소 — `/**`가 확장자 붙은 형제 경로를 못 잡아 이 경로만 막혀 있었습니다. permitAll 목록에 `/v3/api-docs.yaml`을 추가하고 `SwaggerUiAccessIntegrationTest.permitsApiDocsYamlWithoutSession`으로 고정했습니다
 - [x] `MockTermsQueryPort` 제거 — PR #205가 `TermsPersistenceAdapter`로 대체하며 삭제 (#178 무의미해짐)
 
 ---
