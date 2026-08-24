@@ -290,7 +290,7 @@ public class AutoTransferController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "`CMN0002` 필수값 누락 · `CMN0005` 지원하지 않는 페이지 크기(5/10/20/30/50 중 하나여야 함) · " +
-                            "`CMN0003` 조회 시작일이 종료일보다 늦음",
+                            "`CMN0003` 조회 시작일이 종료일보다 늦음 · `CMN0004` 조회기간이 최대 1년(365일) 초과",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
