@@ -93,6 +93,7 @@ class LoginStatusQueryServiceTest {
         return Customer.restore(
                 customerId,
                 "user" + customerId,
+                null,
                 "passwordHash",
                 "홍길동",
                 LocalDate.of(1990, 1, 1),

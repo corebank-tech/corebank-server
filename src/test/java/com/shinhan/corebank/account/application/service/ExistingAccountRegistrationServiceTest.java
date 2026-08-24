@@ -3,6 +3,8 @@ package com.shinhan.corebank.account.application.service;
 import com.shinhan.corebank.account.api.RegisterExistingAccountsCommand;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
+import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
+import com.shinhan.corebank.common.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -13,6 +15,10 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -55,6 +61,32 @@ class ExistingAccountRegistrationServiceTest {
                     assertThat(account.getProductId()).isNull();
                     assertThat(account.getMaturityDate()).isNull();
                 });
+    }
+
+    @Test
+    void rejectsAlreadyRegisteredAccountNumberWithBusinessError() {
+        ExistingAccountRegistrationService service =
+                new ExistingAccountRegistrationService(
+                        accountPersistencePort
+                );
+        given(accountPersistencePort.existsByAccountNumber("110123456789"))
+                .willReturn(true);
+
+        assertThatThrownBy(() -> service.registerAll(
+                new RegisterExistingAccountsCommand(
+                        101L,
+                        List.of(account(
+                                "110123456789",
+                                1_000_000L,
+                                LocalDate.of(2024, 1, 10)
+                        ))
+                )
+        )).isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(
+                        ((BusinessException) exception).getErrorCode()
+                ).isEqualTo(AccountErrorCode.DUPLICATE_EXISTING_ACCOUNT));
+
+        verify(accountPersistencePort, never()).save(any());
     }
 
     private RegisterExistingAccountsCommand.AccountData account(

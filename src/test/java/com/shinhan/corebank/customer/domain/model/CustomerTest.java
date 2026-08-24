@@ -144,6 +144,7 @@ class CustomerTest {
         return Customer.restore(
                 1L,
                 "user01",
+                null,
                 "passwordHash",
                 "홍길동",
                 LocalDate.of(1990, 1, 1),

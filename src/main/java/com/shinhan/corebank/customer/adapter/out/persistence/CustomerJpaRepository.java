@@ -20,6 +20,8 @@ public interface CustomerJpaRepository
 
     boolean existsByEmail(String email);
 
+    boolean existsByExistingBankCustomerId(String existingBankCustomerId);
+
     // 로그인 상태 변경 중 같은 고객의 동시 수정을 직렬화
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""

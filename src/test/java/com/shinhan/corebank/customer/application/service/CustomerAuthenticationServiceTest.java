@@ -242,6 +242,7 @@ class CustomerAuthenticationServiceTest {
         return Customer.restore(
                 customerId,
                 "user01",
+                null,
                 "passwordHash",
                 "홍길동",
                 LocalDate.of(1990, 1, 1),

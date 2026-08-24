@@ -106,6 +106,13 @@ public class SignupCompletionService implements CompleteSignupUseCase {
     }
 
     private void validateAvailability(TempSignupTokenPayload payload) {
+        if (availabilityPort.isExistingBankCustomerRegistered(
+                payload.existingBankCustomerId()
+        )) {
+            throw new BusinessException(
+                    SignupErrorCode.DUPLICATE_EXISTING_BANK_CUSTOMER
+            );
+        }
         if (availabilityPort.isUserIdTaken(payload.userId())) {
             throw new BusinessException(SignupErrorCode.DUPLICATE_USER_ID);
         }

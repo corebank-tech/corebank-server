@@ -64,7 +64,7 @@ public class SignupCompletionController {
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "409",
-                    description = "ATH0301·ATH0302 중복 또는 CMN0301·CMN0302 멱등성 충돌",
+                    description = "ATH0301·ATH0302·ATH0303 중복, ACC0304 계좌 중복 또는 CMN0301·CMN0302 멱등성 충돌",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })

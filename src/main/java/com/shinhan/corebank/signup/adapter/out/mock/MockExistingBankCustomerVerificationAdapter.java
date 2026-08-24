@@ -37,12 +37,20 @@ public class MockExistingBankCustomerVerificationAdapter
             "$2y$10$1NOtaTsHuD0rdffA3ReFKO5S0J4bHlVES6okQMYubUd0OuVFfMZXa";
 
     private final PasswordEncoder passwordEncoder;
+    // 재가입 차단이 사람 단위로 동작하는지(ATH0303) 확인하려면 "막히는 고객"과
+    // "그래도 가입되는 다른 고객"이 함께 있어야 하므로 원장 고객을 2명 둔다.
     private final Map<String, MockExistingBankCustomer> customersById = Map.of(
             "BANK_CUSTOMER_001",
             new MockExistingBankCustomer(
                     "BANK_CUSTOMER_001",
                     "홍길동",
                     LocalDate.of(1990, 1, 1)
+            ),
+            "BANK_CUSTOMER_002",
+            new MockExistingBankCustomer(
+                    "BANK_CUSTOMER_002",
+                    "김영희",
+                    LocalDate.of(1985, 5, 5)
             )
     );
     private final Map<String, MockExistingBankAccount> accountsByNumber = Map.of(
@@ -70,6 +78,19 @@ public class MockExistingBankCustomerVerificationAdapter
                     "ACTIVE",
                     MOCK_ACCOUNT_PASSWORD_HASH,
                     LocalDate.of(2025, 3, 20),
+                    null
+            ),
+            "110555666777",
+            new MockExistingBankAccount(
+                    "BANK_ACCOUNT_003",
+                    "BANK_CUSTOMER_002",
+                    "110555666777",
+                    "DEMAND_DEPOSIT",
+                    null,
+                    300_000L,
+                    "ACTIVE",
+                    MOCK_ACCOUNT_PASSWORD_HASH,
+                    LocalDate.of(2023, 7, 1),
                     null
             )
     );

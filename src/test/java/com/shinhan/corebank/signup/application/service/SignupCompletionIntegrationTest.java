@@ -6,9 +6,13 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.signup.application.port.in.CompleteSignupCommand;
+import com.shinhan.corebank.signup.application.port.out.ExistingBankCustomerAccountsPort;
+import com.shinhan.corebank.signup.application.port.out.ExistingBankCustomerProfilePort;
 import com.shinhan.corebank.signup.adapter.out.redis.TempSignupTokenRedisAdapter;
 import com.shinhan.corebank.signup.adapter.in.web.dto.CompleteSignupResponse;
+import com.shinhan.corebank.signup.domain.exception.SignupErrorCode;
 import com.shinhan.corebank.signup.domain.model.AgreedTerm;
+import com.shinhan.corebank.signup.domain.model.SignupCompletionSnapshot;
 import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.Map;
@@ -34,6 +39,9 @@ class SignupCompletionIntegrationTest extends IntegrationTestSupport {
             "$2y$10$1NOtaTsHuD0rdffA3ReFKO5S0J4bHlVES6okQMYubUd0OuVFfMZXa";
 
     @Autowired SignupCompletionService completionService;
+    @Autowired SignupCompletionTransactionService transactionService;
+    @Autowired ExistingBankCustomerProfilePort profilePort;
+    @Autowired ExistingBankCustomerAccountsPort accountsPort;
     @Autowired TempSignupTokenRedisAdapter tempTokenAdapter;
     @Autowired IdempotentRequestExecutor idempotentRequestExecutor;
     @Autowired JdbcTemplate jdbcTemplate;
@@ -93,7 +101,7 @@ class SignupCompletionIntegrationTest extends IntegrationTestSupport {
         String key = UUID.randomUUID().toString();
         tempTokenAdapter.save(
                 token,
-                payload(userId, token),
+                payload(userId, "BANK_CUSTOMER_001", "BANK_ACCOUNT_001"),
                 Duration.ofMinutes(30)
         );
         AtomicInteger executions = new AtomicInteger();
@@ -126,6 +134,91 @@ class SignupCompletionIntegrationTest extends IntegrationTestSupport {
                         ((BusinessException) exception).getErrorCode()
                 ).isEqualTo(
                         CommonErrorCode.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST
+                ));
+    }
+
+    @Test
+    void rejectsResignupOfAlreadyRegisteredExistingBankCustomer() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        completionService.complete(new CompleteSignupCommand(savedToken(
+                "first" + suffix,
+                "BANK_CUSTOMER_001",
+                "BANK_ACCOUNT_001"
+        )));
+
+        // 같은 원장 고객이 아이디·이메일만 바꿔 다시 가입을 시도한다.
+        String retryToken = savedToken(
+                "again" + suffix,
+                "BANK_CUSTOMER_001",
+                "BANK_ACCOUNT_001"
+        );
+
+        assertThatThrownBy(() -> completionService.complete(
+                new CompleteSignupCommand(retryToken)
+        )).isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(
+                        ((BusinessException) exception).getErrorCode()
+                ).isEqualTo(
+                        SignupErrorCode.DUPLICATE_EXISTING_BANK_CUSTOMER
+                ));
+    }
+
+    @Test
+    void registersDifferentExistingBankCustomerAfterAnotherIsRegistered() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        completionService.complete(new CompleteSignupCommand(savedToken(
+                "hong" + suffix,
+                "BANK_CUSTOMER_001",
+                "BANK_ACCOUNT_001"
+        )));
+
+        var result = completionService.complete(new CompleteSignupCommand(
+                savedToken(
+                        "kim" + suffix,
+                        "BANK_CUSTOMER_002",
+                        "BANK_ACCOUNT_003"
+                )
+        ));
+
+        assertThat(count(
+                "select count(*) from customer where existing_bank_customer_id = ?",
+                "BANK_CUSTOMER_002"
+        )).isEqualTo(1);
+        assertThat(count(
+                "select count(*) from account where customer_id = ?",
+                result.customerId()
+        )).isEqualTo(1);
+    }
+
+    @Test
+    void convertsExistingBankCustomerUniqueKeyRaceToAth0303() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        completionService.complete(new CompleteSignupCommand(savedToken(
+                "race" + suffix,
+                "BANK_CUSTOMER_001",
+                "BANK_ACCOUNT_001"
+        )));
+
+        // 선검증을 통과한 직후 같은 원장 고객이 먼저 저장된 상황을 재현한다.
+        // 트랜잭션 서비스를 직접 호출해야 선검증을 건너뛴 경합 구간이 된다.
+        SignupCompletionSnapshot snapshot = new SignupCompletionSnapshot(
+                payload(
+                        "late" + suffix,
+                        "BANK_CUSTOMER_001",
+                        "BANK_ACCOUNT_001"
+                ),
+                profilePort.findByCustomerId("BANK_CUSTOMER_001").orElseThrow(),
+                accountsPort.findAllByCustomerId("BANK_CUSTOMER_001")
+        );
+
+        assertThatThrownBy(() -> transactionService.register(
+                snapshot,
+                LocalDateTime.of(2026, 8, 24, 10, 0)
+        )).isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(
+                        ((BusinessException) exception).getErrorCode()
+                ).isEqualTo(
+                        SignupErrorCode.DUPLICATE_EXISTING_BANK_CUSTOMER
                 ));
     }
 
@@ -167,17 +260,36 @@ class SignupCompletionIntegrationTest extends IntegrationTestSupport {
         );
     }
 
-    private TempSignupTokenPayload payload(String userId, String token) {
+    private TempSignupTokenPayload payload(
+            String userId,
+            String existingBankCustomerId,
+            String verifiedBankAccountId
+    ) {
         return new TempSignupTokenPayload(
                 signupTerms(),
-                "BANK_CUSTOMER_001",
-                "BANK_ACCOUNT_001",
+                existingBankCustomerId,
+                verifiedBankAccountId,
                 userId,
                 PASSWORD_HASH,
                 userId + "@example.com",
                 "01012345678",
                 Instant.now()
         );
+    }
+
+    // 같은 회원가입 흐름을 여러 번 재현하기 위해 토큰 저장까지 묶는다.
+    private String savedToken(
+            String userId,
+            String existingBankCustomerId,
+            String verifiedBankAccountId
+    ) {
+        String token = "TEMP_SIGNUP_" + UUID.randomUUID();
+        tempTokenAdapter.save(
+                token,
+                payload(userId, existingBankCustomerId, verifiedBankAccountId),
+                Duration.ofMinutes(30)
+        );
+        return token;
     }
 
     private List<AgreedTerm> signupTerms() {

@@ -22,4 +22,13 @@ public class SignupCustomerAvailabilityAdapter
     public boolean isEmailTaken(String email) {
         return customerRegistrationQuery.existsByEmail(email);
     }
+
+    @Override
+    public boolean isExistingBankCustomerRegistered(
+            String existingBankCustomerId
+    ) {
+        return customerRegistrationQuery.existsByExistingBankCustomerId(
+                existingBankCustomerId
+        );
+    }
 }

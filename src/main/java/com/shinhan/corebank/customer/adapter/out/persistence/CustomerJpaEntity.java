@@ -33,6 +33,14 @@ public class CustomerJpaEntity extends BaseEntity {
     @Column(name = "user_id", nullable = false, unique = true, length = 20)
     private String userId;
 
+    // 기존 은행 원장의 고객 식별자. 원장 인증 없이 만들어진 고객은 NULL 이다.
+    @Column(
+            name = "existing_bank_customer_id",
+            unique = true,
+            length = 100
+    )
+    private String existingBankCustomerId;
+
     @Column(
             name = "password_hash",
             nullable = false,

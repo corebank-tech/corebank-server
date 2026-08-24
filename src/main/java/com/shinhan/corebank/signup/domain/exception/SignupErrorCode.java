@@ -93,6 +93,12 @@ public enum SignupErrorCode implements ErrorCode {
             "ATH0302",
             409,
             "이미 가입된 이메일입니다."
+    ),
+
+    DUPLICATE_EXISTING_BANK_CUSTOMER(
+            "ATH0303",
+            409,
+            "이미 가입된 고객입니다. 아이디 찾기를 이용해 주세요."
     );
 
     private final String code;

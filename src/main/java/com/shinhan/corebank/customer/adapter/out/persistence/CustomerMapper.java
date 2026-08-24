@@ -19,6 +19,7 @@ public class CustomerMapper {
         return Customer.restore(
                 entity.getCustomerId(),
                 entity.getUserId(),
+                entity.getExistingBankCustomerId(),
                 entity.getPasswordHash(),
                 entity.getUserName(),
                 entity.getBirthDate(),
@@ -46,6 +47,7 @@ public class CustomerMapper {
         return CustomerJpaEntity.builder()
                 .customerId(customer.getCustomerId())
                 .userId(customer.getUserId())
+                .existingBankCustomerId(customer.getExistingBankCustomerId())
                 .passwordHash(customer.getPasswordHash())
                 .userName(customer.getUserName())
                 .birthDate(customer.getBirthDate())

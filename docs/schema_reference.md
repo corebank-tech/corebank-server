@@ -26,7 +26,7 @@
 
 | # | 테이블 | 설명 | 담당 | 컬럼 |
 | --- | --- | --- | --- |----|
-| 1 | `customer` | 고객 | P6 | 16 |
+| 1 | `customer` | 고객 | P6 | 17 |
 | 2 | `terms` | 약관 | P6 | 10 |
 | 3 | `customer_terms_agreement` | 회원가입 약관 동의 | P6 | 4  |
 | 4 | `verification_request` | 인증 요청 | P6 | 13 |
@@ -68,6 +68,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `customer_id` | `BIGINT` | **PK** | X |  | 고객 내부 식별자. 명세의 `customerId`. 클라이언트에 노출되는 유일한 고객 키 |
 | `user_id` | `VARCHAR(20)` | **UK** | X |  | 고객이 직접 정한 로그인 아이디. 내부 PK인 `customer_id`와 다른 화면 입력값이다 |
+| `existing_bank_customer_id` | `VARCHAR(100)` | **UK** | O |  | 실명계좌 인증으로 확인한 기존 은행 원장의 고객 식별자. 재가입 판정 기준(ATH0303). 실서비스의 CI 대리 키이며, 원장 인증 없이 만들어진 기존 행은 NULL |
 | `password_hash` | `CHAR(60)` |  | X |  | 로그인 비밀번호의 BCrypt 해시. 평문·복호화 가능 암호화 금지 |
 | `user_name` | `VARCHAR(50)` |  | X |  | 고객 실명. 응답 시 이름 길이별 마스킹 적용 (2자 `이*` / 3자 `홍*동` / 4자 이상 `남**수`) |
 | `birth_date` | `DATE` |  | X |  | 생년월일. 실명계좌 인증·아이디 찾기의 대조값. 로그 평문 기록 금지 |
@@ -89,6 +90,7 @@
 | --- | --- | --- |
 | UNIQUE | `uk_customer_user_id` | `user_id` |
 | UNIQUE | `uk_customer_email` | `email` |
+| UNIQUE | `uk_customer_existing_bank_customer_id` | `existing_bank_customer_id` |
 
 ---
 

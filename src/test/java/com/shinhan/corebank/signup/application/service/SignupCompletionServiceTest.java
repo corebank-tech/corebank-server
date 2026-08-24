@@ -117,6 +117,27 @@ class SignupCompletionServiceTest {
     }
 
     @Test
+    void rejectsAlreadyRegisteredExistingBankCustomerAndRestoresToken() {
+        given(tokenClaimPort.claim(eq(TOKEN), any()))
+                .willReturn(Optional.of(payload()));
+        given(availabilityPort.isExistingBankCustomerRegistered(
+                "BANK_CUSTOMER_001"
+        )).willReturn(true);
+
+        assertThatThrownBy(() -> service.complete(
+                new CompleteSignupCommand(TOKEN)
+        )).isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(
+                        ((BusinessException) exception).getErrorCode()
+                ).isEqualTo(
+                        SignupErrorCode.DUPLICATE_EXISTING_BANK_CUSTOMER
+                ));
+
+        verify(tokenClaimPort).release(eq(TOKEN), any());
+        verify(transactionService, never()).register(any(), any());
+    }
+
+    @Test
     void rejectsDuplicateUserIdAndRestoresToken() {
         given(tokenClaimPort.claim(eq(TOKEN), any()))
                 .willReturn(Optional.of(payload()));

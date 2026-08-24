@@ -48,6 +48,7 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
         Customer customer = Customer.restore(
                 null,
                 "login-test-user",
+                null,
                 PASSWORD_HASH,
                 "홍길동",
                 LocalDate.of(1990, 1, 1),
@@ -260,6 +261,29 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
         )).isFalse();
     }
 
+    @Test
+    @DisplayName("원장 고객 식별자로 이미 가입한 고객이 있는지 조회한다")
+    void checksExistingBankCustomerDuplicate() {
+        customerPersistencePort.save(Customer.register(
+                "bank-user",
+                "BANK_CUSTOMER_001",
+                PASSWORD_HASH,
+                "홍길동",
+                LocalDate.of(1990, 1, 1),
+                "bank-user@example.com",
+                "01012345678",
+                LocalDateTime.of(2026, 1, 1, 9, 0)
+        ));
+        entityManager.flush();
+
+        assertThat(customerPersistencePort.existsByExistingBankCustomerId(
+                "BANK_CUSTOMER_001"
+        )).isTrue();
+        assertThat(customerPersistencePort.existsByExistingBankCustomerId(
+                "BANK_CUSTOMER_002"
+        )).isFalse();
+    }
+
     private Customer createCustomer() {
         LocalDateTime joinedAt =
                 LocalDateTime.of(2026, 1, 1, 9, 0);
@@ -267,6 +291,7 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
         return Customer.restore(
                 null,
                 "adapter-user",
+                null,
                 PASSWORD_HASH,
                 "홍길동",
                 LocalDate.of(1990, 1, 1),
