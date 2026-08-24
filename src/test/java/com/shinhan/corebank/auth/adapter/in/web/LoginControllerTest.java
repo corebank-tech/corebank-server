@@ -115,17 +115,21 @@ class LoginControllerTest {
     }
 
     @Test
-    @DisplayName("존재하지 않는 아이디는 ATH0101과 빈 데이터를 반환한다")
-    void returnsLoginFailureWithoutAttemptData() throws Exception {
+    @DisplayName("존재하지 않는 아이디도 비밀번호 불일치와 동일한 형태의 데이터를 반환한다 (REQ-AUTH-023)")
+    void returnsLoginFailureWithDecoyAttemptDataForNonexistentUser()
+            throws Exception {
         given(clientIpResolver.resolve(any(HttpServletRequest.class)))
                 .willReturn("203.0.113.10");
         given(loginUseCase.login(any(LoginCommand.class)))
-                .willThrow(LoginFailedException.customerNotFound());
+                .willThrow(LoginFailedException.invalidCredentials(
+                        new LoginAttemptResult(1, 4)
+                ));
 
         performLogin()
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("ATH0101"))
-                .andExpect(jsonPath("$.data").doesNotExist());
+                .andExpect(jsonPath("$.data.errorCount").value(1))
+                .andExpect(jsonPath("$.data.remainingAttempts").value(4));
 
         verify(sessionLoginManager, never()).establishSession(
                 any(LoginResult.class),
