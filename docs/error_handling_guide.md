@@ -114,6 +114,7 @@ public enum CommonErrorCode implements ErrorCode {
     INVALID_DATE_RANGE("CMN0003", 400, "조회 시작일이 종료일보다 늦습니다."),
     DATE_RANGE_EXCEEDED("CMN0004", 400, "조회기간이 최대 1년을 초과했습니다."),
     INVALID_PAGE_SIZE("CMN0005", 400, "지원하지 않는 페이지 크기입니다."),
+    ALL_QUERY_TOO_LARGE("CMN0006", 400, "전체조회 결과가 너무 많습니다. 조회기간을 좁혀 주세요."),
 
     UNAUTHORIZED("CMN0101", 401, "인증정보가 없거나 세션이 만료되었습니다."),
     FORBIDDEN("CMN0102", 403, "해당 자원에 접근할 권한이 없습니다."),
@@ -320,6 +321,7 @@ public enum ProductErrorCode implements ErrorCode {
 | 조회 시작일 > 종료일 | `INVALID_DATE_RANGE` |
 | 조회기간 1년 초과 | `DATE_RANGE_EXCEEDED` |
 | 지원하지 않는 페이지 크기 | `INVALID_PAGE_SIZE` |
+| `all=true` 전체조회 결과가 도메인별 상한 초과 | `ALL_QUERY_TOO_LARGE` |
 | 세션 없음·만료 (401) | `UNAUTHORIZED` |
 | 타 고객 자원 접근 (403) | `FORBIDDEN` |
 | 존재하지 않는 엔드포인트·지원하지 않는 메서드 (404) | 던지지 않아도 자동으로 `INVALID_ENDPOINT` |

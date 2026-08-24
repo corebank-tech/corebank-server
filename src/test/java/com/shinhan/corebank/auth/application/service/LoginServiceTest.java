@@ -28,6 +28,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -78,13 +79,16 @@ class LoginServiceTest {
         );
     }
 
-    // 존재하지 않는 아이디는 실패 횟수 없이 동일한 인증 오류를 반환
+    // 존재하지 않는 아이디도 위장 BCrypt 비교와 위장 시도 결과로 계정 존재 여부를 감춘다 (REQ-AUTH-023)
     @Test
-    @DisplayName("고객이 없으면 비밀번호를 검증하지 않고 ATH0101을 반환한다")
+    @DisplayName("고객이 없으면 위장 BCrypt 비교로 시간을 맞추고 위장 시도 결과로 ATH0101을 반환한다")
     void customerNotFound() {
         LoginCommand command = loginCommand();
+        LoginAttemptResult decoyResult = new LoginAttemptResult(1, 4);
         given(loginCustomerPort.findByUserId(command.userId()))
                 .willReturn(Optional.empty());
+        given(loginAttemptProcessor.process(1))
+                .willReturn(decoyResult);
 
         LoginFailedException exception = catchThrowableOfType(
                 () -> service.login(command),
@@ -93,9 +97,10 @@ class LoginServiceTest {
 
         assertThat(exception.getErrorCode())
                 .isEqualTo(AuthErrorCode.LOGIN_FAILED);
-        assertThat(exception.getAttemptResult()).isEmpty();
-        verify(passwordHashVerifierPort, never())
-                .matches(anyString(), anyString());
+        assertThat(exception.getAttemptResult())
+                .contains(decoyResult);
+        verify(passwordHashVerifierPort)
+                .matches(eq(RAW_PASSWORD), anyString());
         verify(loginCustomerPort, never())
                 .recordLoginFailure(1L);
         verify(recordLoginAuditPort).record(

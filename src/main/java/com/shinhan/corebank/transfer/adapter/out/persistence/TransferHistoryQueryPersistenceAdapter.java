@@ -35,13 +35,14 @@ public class TransferHistoryQueryPersistenceAdapter implements TransferHistoryQu
     public Page<Transfer> search(Long withdrawalAccountId, ProcessResultStatus status, LocalDate fromDate, LocalDate toDate,
                                  TransferHistorySort sort, Pageable pageable) {
         Predicate[] conditions = conditions(withdrawalAccountId, status, fromDate, toDate);
-        List<TransferJpaEntity> content = queryFactory
+        var query = queryFactory
                 .selectFrom(transferJpaEntity)
                 .where(conditions)
-                .orderBy(sortOrder(sort))
-                .offset(pageable.getOffset())
-                .limit(pageable.getPageSize())
-                .fetch();
+                .orderBy(sortOrder(sort));
+        if (pageable.isPaged()) {
+            query.offset(pageable.getOffset()).limit(pageable.getPageSize());
+        }
+        List<TransferJpaEntity> content = query.fetch();
         Long total = queryFactory
                 .select(transferJpaEntity.count())
                 .from(transferJpaEntity)

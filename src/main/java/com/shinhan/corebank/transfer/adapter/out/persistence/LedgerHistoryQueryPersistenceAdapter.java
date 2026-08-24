@@ -31,13 +31,15 @@ public class LedgerHistoryQueryPersistenceAdapter implements LedgerHistoryQueryP
 
     @Override
     public List<LedgerEntry> findEntries(LedgerHistoryQuery query) {
-        return queryFactory
+        var fetchQuery = queryFactory
                 .selectFrom(ledgerEntryJpaEntity)
                 .where(conditions(query))
-                .orderBy(sortOrder(query.sort()))
-                // query.page()는 0-based (LedgerHistoryQuery 계약: P2가 외부 1-based를 변환해 전달)
-                .offset((long) query.page() * query.size())
-                .limit(query.size())
+                .orderBy(sortOrder(query.sort()));
+        if (!query.all()) {
+            // query.page()는 0-based (LedgerHistoryQuery 계약: P2가 외부 1-based를 변환해 전달)
+            fetchQuery.offset((long) query.page() * query.size()).limit(query.size());
+        }
+        return fetchQuery
                 .fetch()
                 .stream()
                 .map(LedgerEntryMapper::toDomain)

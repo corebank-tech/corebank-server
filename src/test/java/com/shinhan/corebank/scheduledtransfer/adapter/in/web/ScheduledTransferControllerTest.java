@@ -243,6 +243,41 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("all=true면 size가 허용되지 않는 값이어도 200으로 응답하고 전체 건을 한 페이지로 반환한다")
+    void search_allTrue_returnsAllMatchingRowsInOnePage() throws Exception {
+        scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now().plusDays(5)));
+        scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now().plusDays(50)));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/scheduled-transfers")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("size", "7")
+                        .param("all", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.totalCount").value(2))
+                .andExpect(jsonPath("$.data.totalPages").value(1))
+                .andExpect(jsonPath("$.data.items.length()").value(2));
+    }
+
+    @Test
+    @DisplayName("all=true인데 결과가 100건을 초과하면 400 + CMN0006을 반환한다")
+    void search_allTrue_exceedsMaxAllQuerySize_returnsCmn0006() throws Exception {
+        for (int i = 0; i < 101; i++) {
+            scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now().plusDays(i + 1)));
+        }
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/scheduled-transfers")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("all", "true"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0006"));
+    }
+
+    @Test
     @DisplayName("인증 없이 조회를 요청하면 401을 반환한다")
     void search_withoutAuthentication_returnsUnauthorized() throws Exception {
         mockMvc.perform(get("/scheduled-transfers"))
@@ -328,6 +363,29 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                         .param("size", "7"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0005"));
+    }
+
+    @Test
+    @DisplayName("all=true면 size가 허용되지 않는 값이어도 200으로 응답하고 전체 처리결과를 한 페이지로 반환한다")
+    void searchExecutionResults_allTrue_returnsAllMatchingRowsInOnePage() throws Exception {
+        scheduledTransferJpaRepository.save(terminalScheduledTransfer(accountId, ScheduledTransferStatus.SUCCESS,
+                LocalDate.now().minusDays(5), 10_000L, "20260805BT0000000010", null));
+        scheduledTransferJpaRepository.save(terminalScheduledTransfer(accountId, ScheduledTransferStatus.FAILED,
+                LocalDate.now().minusDays(3), 20_000L, null, "잔액 부족"));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/scheduled-transfers/executions")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("fromDate", LocalDate.now().minusDays(10).toString())
+                        .param("toDate", LocalDate.now().toString())
+                        .param("size", "7")
+                        .param("all", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.totalCount").value(2))
+                .andExpect(jsonPath("$.data.totalPages").value(1))
+                .andExpect(jsonPath("$.data.items.length()").value(2));
     }
 
     @Test

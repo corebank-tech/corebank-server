@@ -25,7 +25,7 @@ import java.util.Set;
 public class AccountTransactionQueryService
         implements AccountTransactionQueryUseCase {
 
-    private static final Set<Integer> ALLOWED_PAGE_SIZES =
+    private static final Set<Integer> ALLOWED_PAGE_SIZE =
             Set.of(5, 10, 20, 30, 50);
 
     private static final ZoneId KOREA_ZONE =
@@ -45,7 +45,8 @@ public class AccountTransactionQueryService
             String keyword,
             LedgerHistorySort sort,
             int page,
-            int size
+            int size,
+            boolean all
     ) {
         validateRequired(customerId, accountId);
 
@@ -83,7 +84,8 @@ public class AccountTransactionQueryService
 
         validatePagination(
                 page,
-                size
+                size,
+                all
         );
 
         LedgerHistoryQuery query =
@@ -94,8 +96,9 @@ public class AccountTransactionQueryService
                         .direction(resolvedDirection)
                         .keyword(normalizeKeyword(keyword))
                         .sort(resolvedSort)
-                        .page(page - 1)
-                        .size(size)
+                        .page(all ? 0 : page - 1)
+                        .size(all ? 0 : size)
+                        .all(all)
                         .build();
 
         return ledgerHistoryQueryUseCase.query(query);
@@ -151,15 +154,20 @@ public class AccountTransactionQueryService
 
     private void validatePagination(
             int page,
-            int size
+            int size,
+            boolean all
     ) {
+        if (all) {
+            return;
+        }
+
         if (page < 1) {
             throw new BusinessException(
                     CommonErrorCode.INVALID_INPUT
             );
         }
 
-        if (!ALLOWED_PAGE_SIZES.contains(size)) {
+        if (!ALLOWED_PAGE_SIZE.contains(size)) {
             throw new BusinessException(
                     CommonErrorCode.INVALID_PAGE_SIZE
             );

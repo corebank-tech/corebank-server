@@ -75,7 +75,7 @@ class TransferHistoryQueryServiceTest {
     @DisplayName("customerId가 없으면 CMN0002를 던지고 포트는 호출하지 않는다")
     void search_rejectsMissingCustomerId() {
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                null, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 10))
+                null, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -87,7 +87,7 @@ class TransferHistoryQueryServiceTest {
     @DisplayName("withdrawalAccountId가 없으면 CMN0002를 던지고 포트는 호출하지 않는다")
     void search_rejectsMissingWithdrawalAccountId() {
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                CUSTOMER_ID, null, null, null, null, TransferHistorySort.LATEST, 0, 10))
+                CUSTOMER_ID, null, null, null, null, TransferHistorySort.LATEST, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -99,7 +99,7 @@ class TransferHistoryQueryServiceTest {
     @DisplayName("허용되지 않은 size면 CMN0005를 던지고 포트는 호출하지 않는다")
     void search_rejectsInvalidPageSize() {
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 7))
+                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 7, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_PAGE_SIZE));
@@ -108,10 +108,28 @@ class TransferHistoryQueryServiceTest {
     }
 
     @Test
+    @DisplayName("all=true면 size가 허용 목록에 없어도 통과하고 Pageable.unpaged()로 조회한다")
+    void search_allTrue_skipsPageSizeValidation_usesUnpaged() {
+        stubClock();
+        stubOwnership(CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID);
+        LocalDate fromDate = LocalDate.of(2026, 8, 1);
+        LocalDate toDate = LocalDate.of(2026, 8, 20);
+        when(transferHistoryQueryPort.search(WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, Pageable.unpaged()))
+                .thenReturn(new PageImpl<>(java.util.List.of()));
+        when(transferHistoryQueryPort.summarize(WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate))
+                .thenReturn(TransferHistoryAggregate.empty());
+
+        TransferHistoryPage result = transferHistoryQueryService.search(
+                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, 0, 7, true);
+
+        assertThat(result.page().getContent()).isEmpty();
+    }
+
+    @Test
     @DisplayName("page가 음수면 CMN0001을 던지고 포트는 호출하지 않는다")
     void search_rejectsNegativePage() {
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, -1, 10))
+                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, -1, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_INPUT));
@@ -126,7 +144,7 @@ class TransferHistoryQueryServiceTest {
                 .thenReturn(Optional.of(new WithdrawalAccountDetail(WITHDRAWAL_ACCOUNT_ID, 999L, true)));
 
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 10))
+                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
@@ -148,7 +166,7 @@ class TransferHistoryQueryServiceTest {
                 .thenReturn(TransferHistoryAggregate.empty());
 
         TransferHistoryPage result = transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, 0, 10);
+                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, 0, 10, false);
 
         assertThat(result.page().getContent()).isEmpty();
     }
@@ -159,7 +177,7 @@ class TransferHistoryQueryServiceTest {
         when(accountLockPort.findWithdrawalAccountDetail(WITHDRAWAL_ACCOUNT_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 10))
+                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
@@ -179,7 +197,7 @@ class TransferHistoryQueryServiceTest {
                 .thenReturn(TransferHistoryAggregate.empty());
 
         TransferHistoryPage result = transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 10);
+                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 10, false);
 
         assertThat(result.page().getContent()).isEmpty();
     }
@@ -193,7 +211,7 @@ class TransferHistoryQueryServiceTest {
         LocalDate toDate = LocalDate.of(2026, 6, 1);
 
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, 0, 10))
+                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_DATE_RANGE));
@@ -208,7 +226,7 @@ class TransferHistoryQueryServiceTest {
         LocalDate toDate = fromDate.plusDays(366);
 
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, 0, 10))
+                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.DATE_RANGE_EXCEEDED));
@@ -227,7 +245,7 @@ class TransferHistoryQueryServiceTest {
                 .thenReturn(TransferHistoryAggregate.empty());
 
         TransferHistoryPage result = transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, 0, 10);
+                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, 0, 10, false);
 
         assertThat(result.page().getContent()).isEmpty();
     }
@@ -252,7 +270,7 @@ class TransferHistoryQueryServiceTest {
                 .thenReturn(new TransferHistoryAggregate(1L, 10_000L, 0L, 0L));
 
         TransferHistoryPage result = transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, 0, 10);
+                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, 0, 10, false);
 
         assertThat(result.page().getContent()).hasSize(1);
         assertThat(result.page().getContent().get(0).transactionNumber()).isEqualTo("20260810IT0000000001");

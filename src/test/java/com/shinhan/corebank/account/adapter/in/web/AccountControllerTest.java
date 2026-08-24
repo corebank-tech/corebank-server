@@ -757,6 +757,66 @@ class AccountControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("계좌 거래내역 조회: all=true면 size가 허용되지 않는 값이어도 200으로 응답하고 전체 건을 한 페이지로 반환한다")
+    void getAccountTransactions_allTrue_returnsAllMatchingRowsInOnePage() throws Exception {
+        Long customerId = 1L;
+        Long accountId = 101L;
+
+        LedgerHistoryResult result =
+                LedgerHistoryResult.builder()
+                        .summary(LedgerHistorySummary.empty())
+                        .page(0)
+                        .size(1)
+                        .totalCount(1L)
+                        .totalPages(1)
+                        .items(
+                                List.of(
+                                        LedgerHistoryItem.builder()
+                                                .ledgerEntryId(1002L)
+                                                .transactionNumber("20260820WB0000000002")
+                                                .occurredAt(LocalDateTime.of(2026, 8, 20, 13, 20))
+                                                .transactionType("IMMEDIATE_TRANSFER")
+                                                .direction(LedgerDirection.DEPOSIT)
+                                                .amount(5_000L)
+                                                .transactionContent("용돈")
+                                                .balanceAfter(985_000L)
+                                                .channel(TransferChannel.WB)
+                                                .reversed(false)
+                                                .build()
+                                )
+                        )
+                        .build();
+
+        given(
+                accountTransactionQueryUseCase
+                        .getTransactions(
+                                eq(customerId),
+                                eq(accountId),
+                                any(),
+                                any(),
+                                any(),
+                                any(),
+                                any(),
+                                eq(1),
+                                eq(7),
+                                eq(true)
+                        )
+        ).willReturn(result);
+
+        mockMvc.perform(
+                        get("/accounts/{accountId}/transactions", accountId)
+                                .with(authentication(authenticationOf(customerId)))
+                                .param("size", "7")
+                                .param("all", "true")
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.totalCount").value(1))
+                .andExpect(jsonPath("$.data.totalPages").value(1))
+                .andExpect(jsonPath("$.data.items.length()").value(1));
+    }
+
+    @Test
     @DisplayName("계좌별명이 공백뿐이면 CMN0002를 반환한다")
     void rejectBlankAlias()
             throws Exception {
@@ -867,7 +927,8 @@ class AccountControllerTest extends IntegrationTestSupport {
                                 any(),
                                 any(),
                                 eq(1),
-                                eq(10)
+                                eq(10),
+                                eq(false)
                         )
         ).willReturn(result);
 
@@ -1012,7 +1073,8 @@ class AccountControllerTest extends IntegrationTestSupport {
                                 isNull(),
                                 isNull(),
                                 eq(1),
-                                eq(10)
+                                eq(10),
+                                eq(false)
                         )
         ).willReturn(result);
 
@@ -1107,7 +1169,8 @@ class AccountControllerTest extends IntegrationTestSupport {
                 any(),
                 any(),
                 anyInt(),
-                anyInt()
+                anyInt(),
+                anyBoolean()
         );
     }
 
@@ -1151,7 +1214,8 @@ class AccountControllerTest extends IntegrationTestSupport {
                 any(),
                 any(),
                 anyInt(),
-                anyInt()
+                anyInt(),
+                anyBoolean()
         );
     }
 
@@ -1195,7 +1259,8 @@ class AccountControllerTest extends IntegrationTestSupport {
                 any(),
                 any(),
                 anyInt(),
-                anyInt()
+                anyInt(),
+                anyBoolean()
         );
     }
 
@@ -1239,7 +1304,8 @@ class AccountControllerTest extends IntegrationTestSupport {
                 any(),
                 any(),
                 anyInt(),
-                anyInt()
+                anyInt(),
+                anyBoolean()
         );
     }
 
@@ -1262,7 +1328,8 @@ class AccountControllerTest extends IntegrationTestSupport {
                                 isNull(),
                                 isNull(),
                                 eq(1),
-                                eq(10)
+                                eq(10),
+                                eq(false)
                         )
         ).willThrow(
                 new BusinessException(
@@ -1316,7 +1383,8 @@ class AccountControllerTest extends IntegrationTestSupport {
                 any(),
                 any(),
                 anyInt(),
-                anyInt()
+                anyInt(),
+                anyBoolean()
         );
     }
 

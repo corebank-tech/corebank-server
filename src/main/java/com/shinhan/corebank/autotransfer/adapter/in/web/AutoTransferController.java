@@ -181,10 +181,12 @@ public class AutoTransferController {
             @RequestParam(required = false) String status,
             @Parameter(description = "페이지 번호(0부터 시작)", example = "0")
             @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "페이지 크기. 5/10/20/30/50 중 하나만 허용", example = "10")
-            @RequestParam(defaultValue =  "10") int size) {
+            @Parameter(description = "페이지 크기. 5/10/20/30/50 중 하나만 허용. all=true면 무시됨", example = "10")
+            @RequestParam(defaultValue =  "10") int size,
+            @Parameter(description = "true면 페이지 구분 없이 조건에 맞는 전체 건을 반환", example = "false")
+            @RequestParam(defaultValue = "false") boolean all) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
-        Page<AutoTransferListItem> result = autoTransferQueryUseCase.search(customerId, withdrawalAccountId, parseStatus(status), page, size);
+        Page<AutoTransferListItem> result = autoTransferQueryUseCase.search(customerId, withdrawalAccountId, parseStatus(status), page, size, all);
         return ApiResponse.success(PageResponse.from(result, AutoTransferListItemResponse::from));
     }
 
@@ -288,7 +290,7 @@ public class AutoTransferController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
                     description = "`CMN0002` 필수값 누락 · `CMN0005` 지원하지 않는 페이지 크기(5/10/20/30/50 중 하나여야 함) · " +
-                            "`CMN0003` 조회 시작일이 종료일보다 늦음",
+                            "`CMN0003` 조회 시작일이 종료일보다 늦음 · `CMN0004` 조회기간이 최대 1년(365일) 초과",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
@@ -301,13 +303,15 @@ public class AutoTransferController {
             @RequestParam(required = false) LocalDate fromDate,
             @Parameter(description = "조회기간 종료일. 미전달 시 오늘", example = "2026-08-20")
             @RequestParam(required = false) LocalDate toDate,
-            @Parameter(description = "페이지 번호(0부터 시작)", example = "0")
+            @Parameter(description = "페이지 번호(0부터 시작). all=true면 무시됨", example = "0")
             @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "페이지 크기. 5/10/20/30/50 중 하나만 허용", example = "10")
-            @RequestParam(defaultValue = "10") int size) {
+            @Parameter(description = "페이지 크기. 5/10/20/30/50 중 하나만 허용. all=true면 무시됨", example = "10")
+            @RequestParam(defaultValue = "10") int size,
+            @Parameter(description = "true면 페이지 구분 없이 조건에 맞는 전체 건을 반환", example = "false")
+            @RequestParam(defaultValue = "false") boolean all) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         AutoTransferExecutionHistoryResult result = autoTransferExecutionHistoryQueryUseCase.search(
-                customerId, withdrawalAccountId, fromDate, toDate, page, size);
+                customerId, withdrawalAccountId, fromDate, toDate, page, size, all);
         return ApiResponse.success(AutoTransferExecutionHistoryPageResponse.from(result));
     }
 

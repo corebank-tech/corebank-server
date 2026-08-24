@@ -54,7 +54,7 @@ class ProductQueryServiceTest {
     @Test
     @DisplayName("허용되지 않은 size면 CMN0005를 던지고 포트는 호출하지 않는다")
     void rejectsInvalidPageSize() {
-        assertThatThrownBy(() -> productQueryService.search(null, null, ProductSortType.RATE, 0, 7))
+        assertThatThrownBy(() -> productQueryService.search(null, null, ProductSortType.RATE, 0, 7, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_PAGE_SIZE));
@@ -65,12 +65,24 @@ class ProductQueryServiceTest {
     @Test
     @DisplayName("page가 음수면 CMN0001을 던지고 포트는 호출하지 않는다")
     void rejectsNegativePage() {
-        assertThatThrownBy(() -> productQueryService.search(null, null, ProductSortType.RATE, -1, 10))
+        assertThatThrownBy(() -> productQueryService.search(null, null, ProductSortType.RATE, -1, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_INPUT));
 
         verify(productQueryPort, never()).search(any(), any(), any(), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("all=true면 size가 허용 목록에 없어도 통과하고 Pageable.unpaged()로 조회한다")
+    void search_allTrue_skipsPageSizeValidation_usesUnpaged() {
+        Page<Product> expected = new PageImpl<>(List.of());
+        when(productQueryPort.search(ProductGroup.DEPOSIT, "적금", ProductSortType.NAME, Pageable.unpaged()))
+                .thenReturn(expected);
+
+        Page<Product> result = productQueryService.search(ProductGroup.DEPOSIT, "적금", ProductSortType.NAME, 0, 7, true);
+
+        assertThat(result).isSameAs(expected);
     }
 
     @Test
@@ -80,7 +92,7 @@ class ProductQueryServiceTest {
         when(productQueryPort.search(ProductGroup.DEPOSIT, "적금", ProductSortType.NAME, PageRequest.of(1, 10)))
                 .thenReturn(expected);
 
-        Page<Product> result = productQueryService.search(ProductGroup.DEPOSIT, "적금", ProductSortType.NAME, 1, 10);
+        Page<Product> result = productQueryService.search(ProductGroup.DEPOSIT, "적금", ProductSortType.NAME, 1, 10, false);
 
         assertThat(result).isSameAs(expected);
     }

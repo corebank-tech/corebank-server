@@ -12,10 +12,11 @@ import com.shinhan.corebank.product.domain.ProductTerms;
 import com.shinhan.corebank.product.domain.ProductTermsDetail;
 import com.shinhan.corebank.terms.api.TermsQueryPort;
 import com.shinhan.corebank.terms.api.TermsSummary;
+import com.shinhan.corebank.common.util.PageableResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,22 +31,17 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ProductQueryService implements ProductQueryUseCase {
-    private static final Set<Integer> ALLOWED_PAGE_SIZES = Set.of(5, 10, 20, 30, 50);
+    // 상수명 통일(ALLOWED_PAGE_SIZES -> ALLOWED_PAGE_SIZE) - 다른 도메인 서비스들과 동일하게 맞춤(#297 리뷰)
+    private static final Set<Integer> ALLOWED_PAGE_SIZE = Set.of(5, 10, 20, 30, 50);
 
     private final ProductQueryPort productQueryPort;
     private final TermsQueryPort termsQueryPort;
 
     @Override
-    public Page<Product> search(ProductGroup productGroup, String keyword, ProductSortType sort, int page, int size) {
-        if (!ALLOWED_PAGE_SIZES.contains(size)) {
-            throw new BusinessException(CommonErrorCode.INVALID_PAGE_SIZE);
-        }
-        if (page < 0) {
-            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "page는 0 이상이어야 합니다.");
-        }
-        // TODO: 페이지 크기 검증 추출해야함
+    public Page<Product> search(ProductGroup productGroup, String keyword, ProductSortType sort, int page, int size, boolean all) {
+        Pageable pageable = PageableResolver.resolve(page, size, all, ALLOWED_PAGE_SIZE);
 
-        return productQueryPort.search(productGroup, keyword, sort, PageRequest.of(page, size));
+        return productQueryPort.search(productGroup, keyword, sort, pageable);
     }
 
     @Override

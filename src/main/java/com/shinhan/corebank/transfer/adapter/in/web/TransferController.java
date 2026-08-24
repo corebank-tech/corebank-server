@@ -114,12 +114,16 @@ public class TransferController {
             @Parameter(description = "조회 종료일(미지정 시 오늘)", example = "2026-08-31")
             @RequestParam(required = false) LocalDate toDate,
             @RequestParam(defaultValue = "LATEST") TransferHistorySort sort,
+            @Parameter(description = "페이지 번호(0부터 시작). all=true면 무시됨", example = "0")
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @Parameter(description = "페이지 크기. 5/10/20/30/50 중 하나만 허용. all=true면 무시됨", example = "10")
+            @RequestParam(defaultValue = "10") int size,
+            @Parameter(description = "true면 페이지 구분 없이 조건에 맞는 전체 건을 반환", example = "false")
+            @RequestParam(defaultValue = "false") boolean all) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         return ApiResponse.success(TransferHistoryPageResponse.from(
                 transferHistoryQueryUseCase.search(
-                        customerId, withdrawalAccountId, parseStatus(status), fromDate, toDate, sort, page, size)));
+                        customerId, withdrawalAccountId, parseStatus(status), fromDate, toDate, sort, page, size, all)));
     }
 
     @GetMapping("/{transactionNumber}")
