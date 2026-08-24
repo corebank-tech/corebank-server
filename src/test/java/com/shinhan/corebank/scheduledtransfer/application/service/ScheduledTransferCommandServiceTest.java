@@ -439,6 +439,28 @@ class ScheduledTransferCommandServiceTest {
     }
 
     @Test
+    @DisplayName("이미 취소된 건이 다른 출금계좌여도 CMN0001을 던진다 — 계좌 혼합 검사는 취소 대상이 아니라 소유 확인된 전체 기준")
+    void cancel_alreadyCanceledOnOtherAccount_throwsInvalidInput() {
+        stubClock();
+        LocalDate scheduledDate = LocalDate.now(clock).plusDays(10);
+        ScheduledTransfer cancelableOnAccountTwo = existingScheduledTransfer(10L, 2L, ScheduledTransferStatus.WAITING, scheduledDate);
+        ScheduledTransfer alreadyCanceledOnAccountThree = existingScheduledTransfer(11L, 3L, ScheduledTransferStatus.CANCELED, scheduledDate);
+        when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(cancelableOnAccountTwo));
+        when(scheduledTransferPersistencePort.findById(11L)).thenReturn(Optional.of(alreadyCanceledOnAccountThree));
+
+        ScheduledTransferCancelCommand command = validCancelCommandBuilder().scheduledTransferIds(List.of(10L, 11L)).build();
+
+        assertThatThrownBy(() -> scheduledTransferCommandService.cancel(command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+
+        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(scheduledTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+        verify(scheduledTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
     @DisplayName("대상 예약이체가 없으면 건별 실패(SCD0201)로 반환한다")
     void cancel_notFound_returnsItemFailure() {
         stubClock();

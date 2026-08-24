@@ -12,11 +12,11 @@ public record AutoTransferCancelItemResponse(
         Long autoTransferId,
         @Schema(description = "건별 처리결과. SUCCESS(해지됨)/ERROR(해지 불가)")
         ProcessResultStatus status,
-        @Schema(description = "해지 시각. 실패 건은 null")
+        @Schema(description = "해지 시각. 실패 건은 null", nullable = true)
         LocalDateTime terminatedAt,
-        @Schema(description = "실패 오류코드(`AUT0201`·`AUT0302`·`AUT0303`). 성공 건은 null")
+        @Schema(description = "실패 오류코드(`AUT0201`·`AUT0302`·`AUT0303`). 성공 건은 null", nullable = true)
         String failureCode,
-        @Schema(description = "실패 사유. 성공 건은 null")
+        @Schema(description = "실패 사유. 성공 건은 null", nullable = true)
         String failureReason) {
 
     public static AutoTransferCancelItemResponse from(AutoTransferCancelResult result) {

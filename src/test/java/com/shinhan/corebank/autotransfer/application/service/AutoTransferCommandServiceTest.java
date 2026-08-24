@@ -522,7 +522,7 @@ class AutoTransferCommandServiceTest {
         AutoTransfer expired = AutoTransfer.reconstitute(
                 11L, 1L, 2L, "110987654321", "홍길동",
                 10_000L, 1, 15,
-                LocalDate.now().minusMonths(12), LocalDate.now().minusDays(1), null,
+                LocalDate.now().minusMonths(12), LocalDate.now().minusDays(1), LocalDate.now().minusDays(1),
                 "내메모", "받는메모", AutoTransferStatus.EXPIRED,
                 LocalDateTime.now(), null, LocalDateTime.now(), 0L);
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(cancelable));
@@ -558,6 +558,32 @@ class AutoTransferCommandServiceTest {
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_INPUT));
 
+        verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("이미 해지된 건이 다른 출금계좌여도 CMN0001을 던진다 — 계좌 혼합 검사는 해지 대상이 아니라 소유 확인된 전체 기준")
+    void cancel_alreadyTerminatedOnOtherAccount_throwsInvalidInput() {
+        AutoTransfer cancelableOnAccountTwo = existingAutoTransfer(10L, 2L);
+        AutoTransfer alreadyTerminatedOnAccountThree = AutoTransfer.reconstitute(
+                11L, 1L, 3L, "110987654321", "홍길동",
+                10_000L, 1, 15,
+                LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), LocalDate.now().plusDays(10),
+                "내메모", "받는메모", AutoTransferStatus.TERMINATED,
+                LocalDateTime.now(), LocalDateTime.now(), LocalDateTime.now(), 0L);
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(cancelableOnAccountTwo));
+        when(autoTransferPersistencePort.findById(11L)).thenReturn(Optional.of(alreadyTerminatedOnAccountThree));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+
+        AutoTransferCancelCommand command = validCancelCommandBuilder().autoTransferIds(List.of(10L, 11L)).build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.cancel(command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+
+        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
         verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
     }
@@ -638,7 +664,7 @@ class AutoTransferCommandServiceTest {
         AutoTransfer terminated = AutoTransfer.reconstitute(
                 10L, 1L, 2L, "110987654321", "홍길동",
                 10_000L, 1, 15,
-                LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), null,
+                LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), LocalDate.now().plusDays(10),
                 "내메모", "받는메모", AutoTransferStatus.TERMINATED,
                 LocalDateTime.now(), LocalDateTime.now(), LocalDateTime.now(), 0L);
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(terminated));
@@ -661,7 +687,7 @@ class AutoTransferCommandServiceTest {
         AutoTransfer expired = AutoTransfer.reconstitute(
                 10L, 1L, 2L, "110987654321", "홍길동",
                 10_000L, 1, 15,
-                LocalDate.now().minusMonths(12), LocalDate.now().minusDays(1), null,
+                LocalDate.now().minusMonths(12), LocalDate.now().minusDays(1), LocalDate.now().minusDays(1),
                 "내메모", "받는메모", AutoTransferStatus.EXPIRED,
                 LocalDateTime.now(), null, LocalDateTime.now(), 0L);
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(expired));

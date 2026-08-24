@@ -60,6 +60,18 @@ class AutoTransferCancelCommandTest {
     }
 
     @Test
+    @DisplayName("정확히 50건이면 정상 생성된다 — 경계 바로 아래를 함께 고정해야 한도가 잠긴다")
+    void exactlyMaxIds_isAccepted() {
+        List<Long> ids = LongStream.rangeClosed(1, AutoTransferCancelCommand.MAX_CANCEL_COUNT)
+                .boxed()
+                .toList();
+
+        AutoTransferCancelCommand command = validBuilder().autoTransferIds(ids).build();
+
+        assertThat(command.autoTransferIds()).hasSize(AutoTransferCancelCommand.MAX_CANCEL_COUNT);
+    }
+
+    @Test
     @DisplayName("중복을 제거한 뒤 50건을 넘으면 CMN0001을 던진다")
     void tooManyIds_throwsInvalidInput() {
         List<Long> ids = LongStream.rangeClosed(1, AutoTransferCancelCommand.MAX_CANCEL_COUNT + 1)

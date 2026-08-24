@@ -6,6 +6,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -780,8 +781,10 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data.summary.successCount").value(1))
                 .andExpect(jsonPath("$.data.summary.failureCount").value(1))
-                // items는 요청한 ID의 오름차순이고, 두 건은 같은 순서로 저장돼 normal이 먼저다
+                // items는 요청한 ID의 오름차순이다 — 순서 전제가 깨졌을 때 원인을 바로 알 수 있게 ID까지 단언한다
+                .andExpect(jsonPath("$.data.items[0].autoTransferId").value(normal.getAutoTransferId()))
                 .andExpect(jsonPath("$.data.items[0].status").value(ProcessResultStatus.SUCCESS.name()))
+                .andExpect(jsonPath("$.data.items[1].autoTransferId").value(expired.getAutoTransferId()))
                 .andExpect(jsonPath("$.data.items[1].status").value(ProcessResultStatus.ERROR.name()))
                 .andExpect(jsonPath("$.data.items[1].failureCode").value("AUT0302"));
 
@@ -930,7 +933,21 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                         .value("cancelAutoTransfers"))
                 .andExpect(jsonPath("$['paths']['/auto-transfers/{autoTransferId}']['delete']").doesNotExist())
                 .andExpect(jsonPath("$['components']['schemas']['AutoTransferCancelRequest']"
-                        + "['properties']['autoTransferIds']['type']").value("array"));
+                        + "['properties']['autoTransferIds']['type']").value("array"))
+                // 배열 제약과 필수 여부가 스키마에 드러나야 FE codegen이 그대로 쓸 수 있다
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferCancelRequest']"
+                        + "['properties']['autoTransferIds']['minItems']").value(1))
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferCancelRequest']"
+                        + "['properties']['autoTransferIds']['maxItems']").value(50))
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferCancelRequest']['required']")
+                        .value(hasItem("autoTransferIds")))
+                // 성공 건의 failureCode·실패 건의 terminatedAt은 null로 내려가므로 스키마도 null을 허용해야 한다
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferCancelItemResponse']"
+                        + "['properties']['terminatedAt']['type']").value(hasItem("null")))
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferCancelItemResponse']"
+                        + "['properties']['failureCode']['type']").value(hasItem("null")))
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferCancelItemResponse']"
+                        + "['properties']['failureReason']['type']").value(hasItem("null")));
     }
 
     private String cancelRequestJson(Long... autoTransferIds) throws Exception {

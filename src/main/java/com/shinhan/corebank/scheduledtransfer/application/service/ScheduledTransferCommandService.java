@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -118,6 +119,7 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
         // 건별 사전검증 — OTP는 성공 시 즉시 소비되므로 취소 가능 여부를 먼저 전부 가린다(otp_integration_guide.md §9).
         // 여기서 걸러진 건은 예외가 아니라 건별 실패 결과로 남고, 나머지 건의 취소를 막지 않는다.
         Map<Long, ScheduledTransferCancelResult> results = new HashMap<>();
+        List<ScheduledTransfer> owned = new ArrayList<>();
         List<ScheduledTransfer> cancelable = new ArrayList<>();
         for (Long scheduledTransferId : command.scheduledTransferIds()) {
             Optional<ScheduledTransfer> found = scheduledTransferPersistencePort.findById(scheduledTransferId);
@@ -128,6 +130,7 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
                 continue;
             }
             ScheduledTransfer scheduledTransfer = found.get();
+            owned.add(scheduledTransfer);
             // 이미 취소된 건 재요청은 멱등 성공 처리
             if (scheduledTransfer.getStatus() == ScheduledTransferStatus.CANCELED) {
                 results.put(scheduledTransferId, ScheduledTransferCancelResult.success(scheduledTransfer));
@@ -147,13 +150,18 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
             cancelable.add(scheduledTransfer);
         }
 
+        // 출금계좌 혼합 여부는 상태와 무관한 요청 단위 계약이므로 소유가 확인된 전체를 기준으로 먼저 막는다.
+        // cancelable만 검사하면 "이미 취소된 건이 다른 계좌"인 조합이 계약을 빠져나간다.
+        requireSingleWithdrawalAccount(owned);
+
         // 실제로 취소할 건이 하나도 없으면 인증 토큰을 소비하지 않는다 — 고객이 OTP를 다시 발급받지 않아도 되도록
         if (cancelable.isEmpty()) {
             return orderedResults(command.scheduledTransferIds(), results);
         }
 
+        // 위에서 단일 계좌임을 확인했으므로 어느 건의 출금계좌를 써도 같다
         authTokenVerificationPort.verify(command.accountPasswordAuthToken(),
-                requireSingleWithdrawalAccount(cancelable), "SCHEDULED_TRANSFER_CANCEL");
+                cancelable.getFirst().getWithdrawalAccountId(), "SCHEDULED_TRANSFER_CANCEL");
         // OTP 토큰에는 요청한 id 조합 전체가 묶여 있다 — 취소 가능한 건만 추려서 넘기면
         // 발급 시점 거래정보와 어긋나 OTP0102가 난다
         scheduledTransferOtpVerificationPort.verifyCancelAndConsume(command.otpAuthToken(), command.customerId(),
@@ -172,20 +180,22 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
 
     // accountPasswordAuthToken은 계좌 하나에 묶여 발급된다(api_conventions.md §6-3).
     // 출금계좌가 섞인 조합은 토큰 하나로 인증할 수 없으므로 건별 실패가 아니라 요청 자체를 거부한다.
-    private Long requireSingleWithdrawalAccount(List<ScheduledTransfer> cancelable) {
-        List<Long> withdrawalAccountIds = cancelable.stream()
+    private void requireSingleWithdrawalAccount(List<ScheduledTransfer> owned) {
+        long distinctWithdrawalAccounts = owned.stream()
                 .map(ScheduledTransfer::getWithdrawalAccountId)
                 .distinct()
-                .toList();
-        if (withdrawalAccountIds.size() > 1) {
+                .count();
+        if (distinctWithdrawalAccounts > 1) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT, "다건 취소는 같은 출금계좌의 예약이체만 함께 요청할 수 있습니다.");
         }
-        return withdrawalAccountIds.getFirst();
     }
 
     // 요청한 id 순서 그대로 건별 결과를 정렬해 돌려준다 — 화면이 선택 목록과 결과를 짝지을 수 있도록
     private List<ScheduledTransferCancelResult> orderedResults(List<Long> scheduledTransferIds,
                                                                Map<Long, ScheduledTransferCancelResult> results) {
-        return scheduledTransferIds.stream().map(results::get).toList();
+        return scheduledTransferIds.stream()
+                .map(scheduledTransferId -> Objects.requireNonNull(results.get(scheduledTransferId),
+                        () -> "건별 결과가 누락됐습니다: scheduledTransferId=" + scheduledTransferId))
+                .toList();
     }
 }

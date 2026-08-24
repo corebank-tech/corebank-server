@@ -6,6 +6,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -396,8 +397,10 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.summary.successCount").value(1))
                 .andExpect(jsonPath("$.data.summary.failureCount").value(1))
-                // items는 요청한 ID의 오름차순이고, 두 건은 저장 순서대로 채번되므로 cancelable이 먼저다
+                // items는 요청한 ID의 오름차순이다 — 순서 전제가 깨졌을 때 원인을 바로 알 수 있게 ID까지 단언한다
+                .andExpect(jsonPath("$.data.items[0].scheduledTransferId").value(cancelable.getScheduledTransferId()))
                 .andExpect(jsonPath("$.data.items[0].status").value(ProcessResultStatus.SUCCESS.name()))
+                .andExpect(jsonPath("$.data.items[1].scheduledTransferId").value(onExecutionDate.getScheduledTransferId()))
                 .andExpect(jsonPath("$.data.items[1].status").value(ProcessResultStatus.ERROR.name()))
                 .andExpect(jsonPath("$.data.items[1].failureCode").value("SCD0303"));
 
@@ -499,7 +502,21 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                         .value("cancelScheduledTransfers"))
                 .andExpect(jsonPath("$['paths']['/scheduled-transfers/{scheduledTransferId}/cancel']").doesNotExist())
                 .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelRequest']"
-                        + "['properties']['scheduledTransferIds']['type']").value("array"));
+                        + "['properties']['scheduledTransferIds']['type']").value("array"))
+                // 배열 제약과 필수 여부가 스키마에 드러나야 FE codegen이 그대로 쓸 수 있다
+                .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelRequest']"
+                        + "['properties']['scheduledTransferIds']['minItems']").value(1))
+                .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelRequest']"
+                        + "['properties']['scheduledTransferIds']['maxItems']").value(50))
+                .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelRequest']['required']")
+                        .value(hasItem("scheduledTransferIds")))
+                // 성공 건의 failureCode·실패 건의 canceledAt은 null로 내려가므로 스키마도 null을 허용해야 한다
+                .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelItemResponse']"
+                        + "['properties']['canceledAt']['type']").value(hasItem("null")))
+                .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelItemResponse']"
+                        + "['properties']['failureCode']['type']").value(hasItem("null")))
+                .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelItemResponse']"
+                        + "['properties']['failureReason']['type']").value(hasItem("null")));
     }
 
     private String cancelRequestJson(Long... scheduledTransferIds) throws Exception {

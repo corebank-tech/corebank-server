@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -134,6 +135,7 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
         // 실패할 수 있는 검증을 OTP 소비 앞으로 당긴다(otp_integration_guide.md §9).
         // 여기서 걸러진 건은 예외가 아니라 건별 실패 결과로 남고, 나머지 건의 해지를 막지 않는다.
         Map<Long, AutoTransferCancelResult> results = new HashMap<>();
+        List<AutoTransfer> owned = new ArrayList<>();
         List<AutoTransfer> cancelable = new ArrayList<>();
         for (Long autoTransferId : command.autoTransferIds()) {
             Optional<AutoTransfer> found = autoTransferPersistencePort.findById(autoTransferId);
@@ -143,6 +145,7 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
                 continue;
             }
             AutoTransfer autoTransfer = found.get();
+            owned.add(autoTransfer);
             // 이미 해지된 건 재요청은 멱등 성공 처리(예약이체의 CANCELED 재요청과 같은 규칙).
             // 기간 만료로 시스템이 종료시킨 EXPIRED는 고객이 해지한 적이 없으므로 아래에서 AUT0302로 남긴다.
             if (autoTransfer.getStatus() == AutoTransferStatus.TERMINATED) {
@@ -162,13 +165,18 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
             cancelable.add(autoTransfer);
         }
 
+        // 출금계좌 혼합 여부는 상태와 무관한 요청 단위 계약이므로 소유가 확인된 전체를 기준으로 먼저 막는다.
+        // cancelable만 검사하면 "이미 해지된 건이 다른 계좌"인 조합이 계약을 빠져나간다.
+        requireSingleWithdrawalAccount(owned);
+
         // 실제로 해지할 건이 하나도 없으면 인증 토큰을 소비하지 않는다 — 고객이 OTP를 다시 발급받지 않아도 되도록
         if (cancelable.isEmpty()) {
             return orderedResults(command.autoTransferIds(), results);
         }
 
+        // 위에서 단일 계좌임을 확인했으므로 어느 건의 출금계좌를 써도 같다
         authTokenVerificationPort.verify(command.accountPasswordAuthToken(),
-                requireSingleWithdrawalAccount(cancelable), "AUTO_TRANSFER_CANCEL");
+                cancelable.getFirst().getWithdrawalAccountId(), "AUTO_TRANSFER_CANCEL");
         // OTP 토큰에는 요청한 id 조합 전체가 묶여 있다 — 해지 가능한 건만 추려서 넘기면
         // 발급 시점 거래정보와 어긋나 OTP0102가 난다
         autoTransferOtpVerificationPort.verifyCancelAndConsume(command.otpAuthToken(), command.customerId(),
@@ -187,21 +195,23 @@ public class AutoTransferCommandService implements AutoTransferRegisterUseCase, 
 
     // accountPasswordAuthToken은 계좌 하나에 묶여 발급된다(api_conventions.md §6-3).
     // 출금계좌가 섞인 조합은 토큰 하나로 인증할 수 없으므로 건별 실패가 아니라 요청 자체를 거부한다.
-    private Long requireSingleWithdrawalAccount(List<AutoTransfer> cancelable) {
-        List<Long> withdrawalAccountIds = cancelable.stream()
+    private void requireSingleWithdrawalAccount(List<AutoTransfer> owned) {
+        long distinctWithdrawalAccounts = owned.stream()
                 .map(AutoTransfer::getWithdrawalAccountId)
                 .distinct()
-                .toList();
-        if (withdrawalAccountIds.size() > 1) {
+                .count();
+        if (distinctWithdrawalAccounts > 1) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT, "다건 해지는 같은 출금계좌의 자동이체만 함께 요청할 수 있습니다.");
         }
-        return withdrawalAccountIds.getFirst();
     }
 
     // 요청한 id 순서 그대로 건별 결과를 정렬해 돌려준다 — 화면이 선택 목록과 결과를 짝지을 수 있도록
     private List<AutoTransferCancelResult> orderedResults(List<Long> autoTransferIds,
                                                           Map<Long, AutoTransferCancelResult> results) {
-        return autoTransferIds.stream().map(results::get).toList();
+        return autoTransferIds.stream()
+                .map(autoTransferId -> Objects.requireNonNull(results.get(autoTransferId),
+                        () -> "건별 결과가 누락됐습니다: autoTransferId=" + autoTransferId))
+                .toList();
     }
 
     // change()/cancel() 둘 다 findById() 이후 소유자 확인이 필요하다
