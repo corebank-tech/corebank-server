@@ -254,6 +254,30 @@ class ScheduledTransferQueryServiceTest {
         verify(scheduledTransferQueryPort).search(1L, null, null, null, null, Pageable.unpaged());
     }
 
+    @Test
+    @DisplayName("all=true인데 결과가 100건을 초과하면 CMN0006을 던진다")
+    void allTrue_exceedsMaxAllQuerySize_throwsAllQueryTooLarge() {
+        when(scheduledTransferQueryPort.search(1L, null, null, null, null, Pageable.unpaged()))
+                .thenReturn(new PageImpl<>(List.of(), Pageable.unpaged(), 101));
+
+        assertThatThrownBy(() -> scheduledTransferQueryService.search(1L, null, null, null, null, 0, 7, true))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.ALL_QUERY_TOO_LARGE));
+    }
+
+    @Test
+    @DisplayName("all=true이고 결과가 정확히 100건이면 통과한다 (경계값)")
+    void allTrue_exactlyMaxAllQuerySize_succeeds() {
+        stubClock();
+        when(scheduledTransferQueryPort.search(1L, null, null, null, null, Pageable.unpaged()))
+                .thenReturn(new PageImpl<>(List.of(), Pageable.unpaged(), 100));
+
+        Page<ScheduledTransferListItem> result = scheduledTransferQueryService.search(1L, null, null, null, null, 0, 7, true);
+
+        assertThat(result.getTotalElements()).isEqualTo(100);
+    }
+
     private void verifyPortNeverCalled() {
         org.mockito.Mockito.verify(scheduledTransferQueryPort, never())
                 .search(any(), any(), any(), any(), any(), any(Pageable.class));

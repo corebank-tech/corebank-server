@@ -32,6 +32,7 @@ import java.util.Set;
 public class ScheduledTransferQueryService implements ScheduledTransferQueryUseCase {
     private static final Set<Integer> ALLOWED_PAGE_SIZE = Set.of(5, 10, 20, 30, 50);
     private static final int MAX_RANGE_DAYS = 365;
+    private static final int MAX_ALL_QUERY_SIZE = 100;
     private static final int DEFAULT_PERIOD_MONTHS = 1;
 
     private final ScheduledTransferQueryPort scheduledTransferQueryPort;
@@ -58,6 +59,12 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
 
         Page<ScheduledTransfer> result = scheduledTransferQueryPort.search(customerId, status, withdrawalAccountId,
                 fromDate, toDate, pageable);
+
+        // all=true는 REQ-SCD-007상 조회기간이 선택값이라 기간 상한을 강제할 수 없다 — 대신 결과 건수로
+        // 상한을 두고, 조용히 자르지 않고 명시적으로 거부한다(#297 리뷰, danhandev)
+        if (all && result.getTotalElements() > MAX_ALL_QUERY_SIZE) {
+            throw new BusinessException(CommonErrorCode.ALL_QUERY_TOO_LARGE);
+        }
 
         // 페이지 내 출금계좌번호·별칭을 한 번에 조회 — 원소마다 개별 조회하면 size만큼 N+1이 발생한다
         List<Long> withdrawalAccountIds = result.getContent().stream()
