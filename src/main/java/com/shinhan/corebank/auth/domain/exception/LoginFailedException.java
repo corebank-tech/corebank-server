@@ -19,14 +19,6 @@ public final class LoginFailedException extends BusinessException {
         this.attemptResult = attemptResult;
     }
 
-    // 존재하지 않는 아이디의 로그인 실패를 생성
-    public static LoginFailedException customerNotFound() {
-        return new LoginFailedException(
-                AuthErrorCode.LOGIN_FAILED,
-                null
-        );
-    }
-
     // 잠금 전 비밀번호 불일치 결과를 생성
     public static LoginFailedException invalidCredentials(
             LoginAttemptResult attemptResult

@@ -126,6 +126,12 @@ public record AccountOverviewResponse(
             LocalDate maturityDate,
 
             @Schema(
+                    description = "출금계좌 등록 여부",
+                    example = "true"
+            )
+            boolean withdrawalRegistered,
+
+            @Schema(
                     description = "이체 가능 여부",
                     example = "true"
             )
@@ -145,6 +151,7 @@ public record AccountOverviewResponse(
                     account.openedDate(),
                     account.lastTransactionAt(),
                     account.maturityDate(),
+                    account.withdrawalRegistered(),
                     account.transferEnabled()
             );
         }
