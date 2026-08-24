@@ -250,8 +250,8 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
-    @DisplayName("입금계좌 유형이 입출금계좌가 아니면 UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE을 던진다")
-    void register_unsupportedDepositAccountType_throws() {
+    @DisplayName("입금계좌가 정기예금(TIME_DEPOSIT)이면 UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE을 던진다")
+    void register_timeDepositAccount_throwsUnsupportedDepositAccountType() {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
@@ -261,6 +261,30 @@ class AutoTransferCommandServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(AutoTransferErrorCode.UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE));
+    }
+
+    @Test
+    @DisplayName("입금계좌가 정기적금(INSTALLMENT_SAVINGS)이면 등록이 허용된다 (REQ-PRDT-012, #317)")
+    void register_installmentSavingsDepositAccount_succeeds() {
+        when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
+        when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
+        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.INSTALLMENT_SAVINGS));
+        when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
+        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15)).thenReturn(false);
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> {
+            AutoTransfer arg = invocation.getArgument(0);
+            return AutoTransfer.reconstitute(
+                    100L, arg.getCustomerId(), arg.getWithdrawalAccountId(), arg.getDepositAccountNumber(), arg.getPayeeName(),
+                    arg.getAmount(), arg.getCycleMonths(), arg.getTransferDay(), arg.getStartDate(), arg.getEndDate(), arg.getNextExecutionDate(),
+                    arg.getMyPassbookMemo(), arg.getRecipientPassbookMemo(), arg.getStatus(), arg.getRegisteredAt(), arg.getTerminatedAt(), arg.getUpdatedAt(), arg.getVersion());
+        });
+
+        AutoTransfer result = autoTransferCommandService.register(validCommandBuilder().build());
+
+        assertThat(result.getWithdrawalAccountId()).isEqualTo(2L);
+        verify(autoTransferPersistencePort).save(any(AutoTransfer.class));
     }
 
     @Test
