@@ -13,6 +13,20 @@ public class AccountNumberSequenceTestFixture {
     public static final String TIME_DEPOSIT_PREFIX = "91";
     public static final String INSTALLMENT_SAVINGS_PREFIX = "92";
 
+    // 계좌번호 = 은행코드(3) + prefix(2) + 일련번호(7). 포맷이 바뀌어도 테스트가
+    // 한 곳만 따라가도록 조합을 여기로 모은다.
+    public static String accountNumberOf(
+            String productPrefix,
+            long sequence
+    ) {
+        return AccountNumberPolicy.BANK_CODE
+                + productPrefix
+                + String.format(
+                        "%0" + AccountNumberPolicy.SEQUENCE_LENGTH + "d",
+                        sequence
+                );
+    }
+
     private final JdbcTemplate jdbcTemplate;
 
     public AccountNumberSequenceTestFixture(
