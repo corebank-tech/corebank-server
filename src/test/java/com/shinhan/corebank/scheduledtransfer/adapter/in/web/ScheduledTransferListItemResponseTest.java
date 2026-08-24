@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferListItem;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -13,7 +15,7 @@ class ScheduledTransferListItemResponseTest {
 
     private ScheduledTransferListItem item(ScheduledTransferStatus status, boolean cancelable) {
         return new ScheduledTransferListItem(
-                7001L, LocalDate.of(2026, 8, 5), "110123456789", "우리집", "088",
+                7001L, 101L, LocalDate.of(2026, 8, 5), "110123456789", "우리집", "088",
                 "110987654321", "홍길동", 300_000L, "생활비", status, cancelable,
                 LocalDateTime.of(2026, 8, 1, 10, 0));
     }
@@ -68,12 +70,23 @@ class ScheduledTransferListItemResponseTest {
     @DisplayName("fromAlias가 없으면(미설정 계좌) null이 그대로 내려간다")
     void fromAliasNull_whenNotSet() {
         ScheduledTransferListItem item = new ScheduledTransferListItem(
-                7001L, LocalDate.of(2026, 8, 5), "110123456789", null, "088",
+                7001L, 101L, LocalDate.of(2026, 8, 5), "110123456789", null, "088",
                 "110987654321", "홍길동", 300_000L, "생활비", ScheduledTransferStatus.WAITING, true,
                 LocalDateTime.of(2026, 8, 1, 10, 0));
 
         ScheduledTransferListItemResponse response = ScheduledTransferListItemResponse.from(item);
 
         assertThat(response.fromAlias()).isNull();
+    }
+
+    @Test
+    @DisplayName("출금계좌 ID가 그대로 전달된다")
+    void passesThroughWithdrawalAccountId() {
+        ScheduledTransferListItemResponse response =
+                ScheduledTransferListItemResponse.from(
+                        item(ScheduledTransferStatus.WAITING, true)
+                );
+
+        assertThat(response.withdrawalAccountId()).isEqualTo(101L);
     }
 }

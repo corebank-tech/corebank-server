@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 public record ScheduledTransferListItem(Long scheduledTransferId,
+                                        Long withdrawalAccountId,
                                         LocalDate scheduledDate,
                                         String withdrawalAccountNumber,
                                         String fromAlias,
