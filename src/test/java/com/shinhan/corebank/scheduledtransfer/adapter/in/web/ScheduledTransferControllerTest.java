@@ -262,6 +262,22 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("all=true인데 결과가 100건을 초과하면 400 + CMN0006을 반환한다")
+    void search_allTrue_exceedsMaxAllQuerySize_returnsCmn0006() throws Exception {
+        for (int i = 0; i < 101; i++) {
+            scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now().plusDays(i + 1)));
+        }
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/scheduled-transfers")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("all", "true"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0006"));
+    }
+
+    @Test
     @DisplayName("인증 없이 조회를 요청하면 401을 반환한다")
     void search_withoutAuthentication_returnsUnauthorized() throws Exception {
         mockMvc.perform(get("/scheduled-transfers"))
