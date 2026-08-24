@@ -28,7 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = SecurityTestController.class)
 @TestPropertySource(properties =
-        "app.security.cors.allowed-origins=http://localhost:5173")
+        "app.security.cors.allowed-origins=http://localhost:5173,https://www.corebank.cloud")
 @Import({
         SecurityTestController.class,
         SecurityConfig.class,
@@ -67,6 +67,38 @@ class SecurityConfigTest {
                 .andExpect(result -> assertThat(result.getResponse().getHeader(
                         HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS
                 )).containsIgnoringCase("X-XSRF-TOKEN"));
+    }
+
+    @Test
+    @DisplayName("운영 프론트 Origin에서 거래 인증 헤더의 preflight 요청을 허용한다")
+    void permitsTransferAuthenticationHeadersFromProductionOrigin() throws Exception {
+        mockMvc.perform(options("/api/v1/transfers")
+                        .contextPath("/api/v1")
+                        .header(HttpHeaders.ORIGIN, "https://www.corebank.cloud")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                        .header(
+                                HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
+                                "content-type,x-xsrf-token,idempotency-key,"
+                                        + "account-password-auth-token,otp-auth-token"
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(header().string(
+                        HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN,
+                        "https://www.corebank.cloud"
+                ))
+                .andExpect(header().string(
+                        HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS,
+                        "true"
+                ))
+                .andExpect(result -> {
+                    String allowedHeaders = result.getResponse().getHeader(
+                            HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS
+                    );
+                    assertThat(allowedHeaders).containsIgnoringCase("X-XSRF-TOKEN");
+                    assertThat(allowedHeaders).containsIgnoringCase("Idempotency-Key");
+                    assertThat(allowedHeaders).containsIgnoringCase("Account-Password-Auth-Token");
+                    assertThat(allowedHeaders).containsIgnoringCase("Otp-Auth-Token");
+                });
     }
 
     @Test
