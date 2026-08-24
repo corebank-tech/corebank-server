@@ -15,17 +15,21 @@ class LoginExceptionHandlerTest {
             new LoginExceptionHandler();
 
     @Test
-    @DisplayName("존재하지 않는 아이디는 ATH0101과 빈 데이터를 반환한다")
-    void handlesCustomerNotFound() {
+    @DisplayName("존재하지 않는 아이디도 비밀번호 불일치와 동일한 형태의 데이터를 반환한다 (REQ-AUTH-023)")
+    void handlesCustomerNotFoundWithDecoyAttemptData() {
         ResponseEntity<ErrorResponse> response =
                 handler.handleLoginFailure(
-                        LoginFailedException.customerNotFound()
+                        LoginFailedException.invalidCredentials(
+                                new LoginAttemptResult(1, 4)
+                        )
                 );
 
         assertThat(response.getStatusCode().value()).isEqualTo(401);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().code()).isEqualTo("ATH0101");
-        assertThat(response.getBody().data()).isNull();
+        assertThat(response.getBody().data()).isEqualTo(
+                new LoginFailureData(1, 4)
+        );
     }
 
     @Test

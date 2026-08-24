@@ -187,6 +187,24 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("존재하지 않는 아이디는 비밀번호 불일치와 동일한 형태의 데이터를 반환한다 (REQ-AUTH-023)")
+    void returnsSameFailureShapeForNonexistentUserId() throws Exception {
+        HttpResponse<String> response = httpClient.send(
+                loginRequest("nonexistent-user-id", WRONG_PASSWORD),
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
+        );
+
+        JsonNode body = objectMapper.readTree(response.body());
+
+        assertThat(response.statusCode()).isEqualTo(401);
+        assertThat(body.get("code").asText()).isEqualTo("ATH0101");
+        assertThat(body.get("data").get("errorCount").asInt())
+                .isEqualTo(1);
+        assertThat(body.get("data").get("remainingAttempts").asInt())
+                .isEqualTo(4);
+    }
+
+    @Test
     @DisplayName("로그아웃 후 세션과 CSRF 토큰을 폐기하고 재로그인 시 모두 재발급한다")
     void invalidatesSessionAndAuthenticationOnLogout() throws Exception {
         HttpResponse<String> loginResponse = httpClient.send(
@@ -251,12 +269,16 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
     }
 
     private HttpRequest loginRequest(String password) {
+        return loginRequest(USER_ID, password);
+    }
+
+    private HttpRequest loginRequest(String userId, String password) {
         String requestBody = """
                 {
                   "userId": "%s",
                   "password": "%s"
                 }
-                """.formatted(USER_ID, password);
+                """.formatted(userId, password);
 
         return HttpRequest.newBuilder(uri("/auth/login"))
                 .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)

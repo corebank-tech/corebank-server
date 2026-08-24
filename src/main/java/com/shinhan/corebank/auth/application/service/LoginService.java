@@ -85,7 +85,7 @@ public class LoginService implements LoginUseCase {
         );
     }
 
-    // 존재하지 않는 아이디는 횟수 없이 동일한 자격증명 실패로 처리
+    // 존재하지 않는 아이디도 최초 실패처럼 보이는 값으로 계정 존재 여부 노출을 방지 (REQ-AUTH-023)
     private LoginFailedException customerNotFound(String requestIp) {
         recordFailureAudit(
                 null,
@@ -93,7 +93,9 @@ public class LoginService implements LoginUseCase {
                 LoginAuditReason.INVALID_CREDENTIALS
         );
 
-        return LoginFailedException.customerNotFound();
+        return LoginFailedException.invalidCredentials(
+                loginAttemptProcessor.process(1)
+        );
     }
 
     // 저장된 최신 실패 상태를 기준으로 오류와 노출 데이터를 결정
