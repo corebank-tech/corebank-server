@@ -5,6 +5,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -17,11 +18,13 @@ import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.otp.api.OtpTransactionType;
 import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledTransferJpaEntity;
 import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledTransferJpaRepository;
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -335,6 +338,174 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     void searchExecutionResults_withoutAuthentication_returnsUnauthorized() throws Exception {
         mockMvc.perform(get("/scheduled-transfers/executions"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("정상 취소 요청은 200 + 건별 결과로 응답하고 상태가 CANCELED로 바뀐다")
+    void cancel_success() throws Exception {
+        ScheduledTransferJpaEntity saved = scheduledTransferJpaRepository.save(
+                scheduledTransfer(accountId, LocalDate.now().plusDays(10)));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(post("/scheduled-transfers/cancel")
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .header("Account-Password-Auth-Token", "cancel-token-1")
+                        .header("Otp-Auth-Token", "otp-cancel-token-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(saved.getScheduledTransferId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.summary.successCount").value(1))
+                .andExpect(jsonPath("$.data.summary.failureCount").value(0))
+                .andExpect(jsonPath("$.data.items[0].scheduledTransferId").value(saved.getScheduledTransferId()))
+                .andExpect(jsonPath("$.data.items[0].status").value(ProcessResultStatus.SUCCESS.name()))
+                .andExpect(jsonPath("$.data.items[0].canceledAt").exists());
+
+        // OTP 거래정보는 단수 id가 아니라 id 배열로 검증돼야 한다
+        verify(otpAuthTokenVerifier).verifyAndConsume(argThat(verification ->
+                verification.transactionType() == OtpTransactionType.SCHEDULED_TRANSFER
+                        && List.of(saved.getScheduledTransferId()).equals(verification.transactionData().get("scheduledTransferIds"))));
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(scheduledTransferJpaRepository.findById(saved.getScheduledTransferId()).orElseThrow().getStatus())
+                .isEqualTo(ScheduledTransferStatus.CANCELED);
+    }
+
+    @Test
+    @DisplayName("취소 가능한 건과 예정일 당일 건을 함께 요청하면 200으로 응답하고 건별 결과를 돌려준다")
+    void cancel_partialFailure_returnsPerItemResults() throws Exception {
+        ScheduledTransferJpaEntity cancelable = scheduledTransferJpaRepository.save(
+                scheduledTransfer(accountId, LocalDate.now().plusDays(10)));
+        ScheduledTransferJpaEntity onExecutionDate = scheduledTransferJpaRepository.save(
+                scheduledTransfer(accountId, LocalDate.now()));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(post("/scheduled-transfers/cancel")
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .header("Account-Password-Auth-Token", "cancel-token-partial")
+                        .header("Otp-Auth-Token", "otp-cancel-token-partial")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(cancelable.getScheduledTransferId(), onExecutionDate.getScheduledTransferId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.summary.successCount").value(1))
+                .andExpect(jsonPath("$.data.summary.failureCount").value(1))
+                // items는 요청한 ID의 오름차순이고, 두 건은 저장 순서대로 채번되므로 cancelable이 먼저다
+                .andExpect(jsonPath("$.data.items[0].status").value(ProcessResultStatus.SUCCESS.name()))
+                .andExpect(jsonPath("$.data.items[1].status").value(ProcessResultStatus.ERROR.name()))
+                .andExpect(jsonPath("$.data.items[1].failureCode").value("SCD0303"));
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(scheduledTransferJpaRepository.findById(onExecutionDate.getScheduledTransferId()).orElseThrow().getStatus())
+                .isEqualTo(ScheduledTransferStatus.WAITING);
+    }
+
+    @Test
+    @DisplayName("출금계좌가 서로 다른 건을 함께 취소하려 하면 400 + CMN0001을 반환한다 (계좌비밀번호 토큰은 계좌 하나에 묶임)")
+    void cancel_mixedWithdrawalAccounts_returnsCmn0001() throws Exception {
+        Long otherAccountId = insertAccount(customerId);
+        ScheduledTransferJpaEntity first = scheduledTransferJpaRepository.save(
+                scheduledTransfer(accountId, LocalDate.now().plusDays(10)));
+        ScheduledTransferJpaEntity second = scheduledTransferJpaRepository.save(
+                scheduledTransfer(otherAccountId, LocalDate.now().plusDays(10)));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(post("/scheduled-transfers/cancel")
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .header("Account-Password-Auth-Token", "cancel-token-mixed")
+                        .header("Otp-Auth-Token", "otp-cancel-token-mixed")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(first.getScheduledTransferId(), second.getScheduledTransferId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
+    }
+
+    @Test
+    @DisplayName("다른 고객이 남의 예약이체를 취소하려 하면 200 + 건별 실패(SCD0201)를 반환한다 (IDOR 차단)")
+    void cancel_otherCustomersScheduledTransfer_returnsItemFailureScd0201() throws Exception {
+        ScheduledTransferJpaEntity saved = scheduledTransferJpaRepository.save(
+                scheduledTransfer(accountId, LocalDate.now().plusDays(10)));
+        entityManager.flush();
+        entityManager.clear();
+
+        Long attackerCustomerId = insertCustomer();
+
+        mockMvc.perform(post("/scheduled-transfers/cancel")
+                        .with(authentication(authenticationOf(attackerCustomerId)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .header("Account-Password-Auth-Token", "attacker-token")
+                        .header("Otp-Auth-Token", "otp-attacker-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(saved.getScheduledTransferId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].failureCode").value("SCD0201"));
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(scheduledTransferJpaRepository.findById(saved.getScheduledTransferId()).orElseThrow().getStatus())
+                .isEqualTo(ScheduledTransferStatus.WAITING);
+    }
+
+    @Test
+    @DisplayName("취소할 ID 목록이 비어 있으면 400 + CMN0002를 반환한다")
+    void cancel_emptyIds_returnsCmn0002() throws Exception {
+        mockMvc.perform(post("/scheduled-transfers/cancel")
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .header("Account-Password-Auth-Token", "cancel-token-empty")
+                        .header("Otp-Auth-Token", "otp-cancel-token-empty")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0002"));
+    }
+
+    @Test
+    @DisplayName("인증 없이 취소를 요청하면 401을 반환한다")
+    void cancel_withoutAuthentication_returnsUnauthorized() throws Exception {
+        ScheduledTransferJpaEntity saved = scheduledTransferJpaRepository.save(
+                scheduledTransfer(accountId, LocalDate.now().plusDays(10)));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(post("/scheduled-transfers/cancel")
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .header("Account-Password-Auth-Token", "no-auth-token")
+                        .header("Otp-Auth-Token", "otp-no-auth-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(saved.getScheduledTransferId())))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("API 문서에 다건 취소 엔드포인트가 노출되고, 대체된 단건 취소 경로는 사라진다 (api_conventions.md §6-7)")
+    void apiDocs_exposesMultiCancelEndpointOnly() throws Exception {
+        mockMvc.perform(get("/api/v1/v3/api-docs").contextPath("/api/v1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$['paths']['/scheduled-transfers/cancel']['post']['operationId']")
+                        .value("cancelScheduledTransfers"))
+                .andExpect(jsonPath("$['paths']['/scheduled-transfers/{scheduledTransferId}/cancel']").doesNotExist())
+                .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelRequest']"
+                        + "['properties']['scheduledTransferIds']['type']").value("array"));
+    }
+
+    private String cancelRequestJson(Long... scheduledTransferIds) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("scheduledTransferIds", List.of(scheduledTransferIds));
+        return OBJECT_MAPPER.writeValueAsString(body);
     }
 
     private UsernamePasswordAuthenticationToken authenticationOf(Long customerId) {

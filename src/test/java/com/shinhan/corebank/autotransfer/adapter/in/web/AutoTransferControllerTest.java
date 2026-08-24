@@ -3,7 +3,6 @@ package com.shinhan.corebank.autotransfer.adapter.in.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -25,6 +24,7 @@ import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -735,14 +735,21 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+        mockMvc.perform(post("/auto-transfers/cancel")
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .header("Account-Password-Auth-Token", "cancel-token-1")
-                        .header("Otp-Auth-Token", "otp-cancel-token-1"))
+                        .header("Otp-Auth-Token", "otp-cancel-token-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(saved.getAutoTransferId())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("0000"));
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.summary.successCount").value(1))
+                .andExpect(jsonPath("$.data.summary.failureCount").value(0))
+                .andExpect(jsonPath("$.data.items[0].autoTransferId").value(saved.getAutoTransferId()))
+                .andExpect(jsonPath("$.data.items[0].status").value(ProcessResultStatus.SUCCESS.name()))
+                .andExpect(jsonPath("$.data.items[0].failureCode").value(nullValue()));
 
         entityManager.flush();
         entityManager.clear();
@@ -751,16 +758,68 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("존재하지 않는 자동이체를 해지하려 하면 404 + AUT0201을 반환한다")
-    void cancel_notFound_returnsAut0201() throws Exception {
-        mockMvc.perform(delete("/auto-transfers/{id}", 999_999L)
+    @DisplayName("해지 가능한 건과 불가능한 건을 함께 요청하면 200으로 응답하고 건별 결과를 돌려준다")
+    void cancel_partialFailure_returnsPerItemResults() throws Exception {
+        AutoTransferJpaEntity normal = autoTransferJpaRepository.save(
+                autoTransfer(accountId, "110000000021", AutoTransferStatus.NORMAL, 21));
+        // 기간 만료로 종료된 건은 고객이 해지한 적이 없으므로 멱등 성공이 아니라 AUT0302 실패다
+        AutoTransferJpaEntity expired = autoTransferJpaRepository.save(
+                autoTransfer(accountId, "110000000022", AutoTransferStatus.EXPIRED, 22));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(post("/auto-transfers/cancel")
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .header("Account-Password-Auth-Token", "cancel-token-partial")
+                        .header("Otp-Auth-Token", "otp-cancel-token-partial")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(normal.getAutoTransferId(), expired.getAutoTransferId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.summary.successCount").value(1))
+                .andExpect(jsonPath("$.data.summary.failureCount").value(1))
+                // items는 요청한 ID의 오름차순이고, 두 건은 같은 순서로 저장돼 normal이 먼저다
+                .andExpect(jsonPath("$.data.items[0].status").value(ProcessResultStatus.SUCCESS.name()))
+                .andExpect(jsonPath("$.data.items[1].status").value(ProcessResultStatus.ERROR.name()))
+                .andExpect(jsonPath("$.data.items[1].failureCode").value("AUT0302"));
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(autoTransferJpaRepository.findById(normal.getAutoTransferId()).orElseThrow().getStatus())
+                .isEqualTo(AutoTransferStatus.TERMINATED);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 자동이체를 해지하려 하면 200 + 건별 실패(AUT0201)로 반환한다")
+    void cancel_notFound_returnsItemFailureAut0201() throws Exception {
+        mockMvc.perform(post("/auto-transfers/cancel")
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .header("Account-Password-Auth-Token", "cancel-token-2")
-                        .header("Otp-Auth-Token", "otp-cancel-token-2"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("AUT0201"));
+                        .header("Otp-Auth-Token", "otp-cancel-token-2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(999_999L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.summary.failureCount").value(1))
+                .andExpect(jsonPath("$.data.items[0].failureCode").value("AUT0201"));
+    }
+
+    @Test
+    @DisplayName("해지할 ID 목록이 비어 있으면 400 + CMN0002를 반환한다")
+    void cancel_emptyIds_returnsCmn0002() throws Exception {
+        mockMvc.perform(post("/auto-transfers/cancel")
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .header("Account-Password-Auth-Token", "cancel-token-empty")
+                        .header("Otp-Auth-Token", "otp-cancel-token-empty")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0002"));
     }
 
     @Test
@@ -771,11 +830,13 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+        mockMvc.perform(post("/auto-transfers/cancel")
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .header("Account-Password-Auth-Token", "cancel-token-3")
-                        .header("Otp-Auth-Token", "otp-cancel-token-3"))
+                        .header("Otp-Auth-Token", "otp-cancel-token-3")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(saved.getAutoTransferId())))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0002"));
     }
@@ -789,30 +850,35 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.clear();
         String idempotencyKey = UUID.randomUUID().toString();
 
-        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+        mockMvc.perform(post("/auto-transfers/cancel")
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .header("Account-Password-Auth-Token", "cancel-token-4")
-                        .header("Otp-Auth-Token", "otp-cancel-token-4"))
+                        .header("Otp-Auth-Token", "otp-cancel-token-4")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(saved.getAutoTransferId())))
                 .andExpect(status().isOk());
 
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+        mockMvc.perform(post("/auto-transfers/cancel")
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .header("Account-Password-Auth-Token", "cancel-token-4")
-                        .header("Otp-Auth-Token", "otp-cancel-token-4"))
+                        .header("Otp-Auth-Token", "otp-cancel-token-4")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(saved.getAutoTransferId())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("0000"));
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.summary.successCount").value(1));
     }
 
     @Test
-    @DisplayName("다른 고객이 로그인한 상태로 남의 자동이체를 해지하려 하면 404 + AUT0201을 반환한다 (IDOR 차단)")
-    void cancel_otherCustomersAutoTransfer_returnsAut0201() throws Exception {
+    @DisplayName("다른 고객이 로그인한 상태로 남의 자동이체를 해지하려 하면 200 + 건별 실패(AUT0201)를 반환한다 (IDOR 차단)")
+    void cancel_otherCustomersAutoTransfer_returnsItemFailureAut0201() throws Exception {
         AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
                 autoTransfer(accountId, "110000000017", AutoTransferStatus.NORMAL, 28));
         entityManager.flush();
@@ -820,14 +886,21 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
 
         Long attackerCustomerId = insertCustomer();
 
-        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+        mockMvc.perform(post("/auto-transfers/cancel")
                         .with(authentication(authenticationOf(attackerCustomerId)))
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .header("Account-Password-Auth-Token", "attacker-token")
-                        .header("Otp-Auth-Token", "otp-attacker-token"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("AUT0201"));
+                        .header("Otp-Auth-Token", "otp-attacker-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(saved.getAutoTransferId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].failureCode").value("AUT0201"));
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(autoTransferJpaRepository.findById(saved.getAutoTransferId()).orElseThrow().getStatus())
+                .isEqualTo(AutoTransferStatus.NORMAL);
     }
 
     @Test
@@ -838,12 +911,32 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+        mockMvc.perform(post("/auto-transfers/cancel")
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .header("Account-Password-Auth-Token", "no-auth-token")
-                        .header("Otp-Auth-Token", "otp-no-auth-token"))
+                        .header("Otp-Auth-Token", "otp-no-auth-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(saved.getAutoTransferId())))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("API 문서에 다건 해지 엔드포인트가 노출되고, 대체된 단건 해지 경로의 DELETE는 사라진다 (api_conventions.md §6-7)")
+    void apiDocs_exposesMultiCancelEndpointOnly() throws Exception {
+        mockMvc.perform(get("/api/v1/v3/api-docs").contextPath("/api/v1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$['paths']['/auto-transfers/cancel']['post']['operationId']")
+                        .value("cancelAutoTransfers"))
+                .andExpect(jsonPath("$['paths']['/auto-transfers/{autoTransferId}']['delete']").doesNotExist())
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferCancelRequest']"
+                        + "['properties']['autoTransferIds']['type']").value("array"));
+    }
+
+    private String cancelRequestJson(Long... autoTransferIds) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("autoTransferIds", List.of(autoTransferIds));
+        return OBJECT_MAPPER.writeValueAsString(body);
     }
 
     private UsernamePasswordAuthenticationToken authenticationOf(Long customerId) {

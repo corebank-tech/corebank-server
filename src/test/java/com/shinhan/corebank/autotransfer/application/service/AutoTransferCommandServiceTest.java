@@ -15,8 +15,10 @@ import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferCancelCommand;
+import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferCancelResult;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferChangeCommand;
 import com.shinhan.corebank.common.audit.AuditEventType;
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterCommand;
 import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AuthTokenVerificationPort;
@@ -36,6 +38,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -95,9 +98,19 @@ class AutoTransferCommandServiceTest {
                 .requestIp("127.0.0.1");
     }
 
+    private AutoTransfer existingAutoTransfer(Long autoTransferId, Long withdrawalAccountId) {
+        return AutoTransfer.reconstitute(
+                autoTransferId, 1L, withdrawalAccountId, "110987654321", "홍길동",
+                10_000L, 1, 15,
+                LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), LocalDate.now().plusDays(10).plusDays(4),
+                "내메모", "받는메모", AutoTransferStatus.NORMAL,
+                LocalDateTime.now(), null, LocalDateTime.now(), 0L);
+    }
+
     private AutoTransferCancelCommand.AutoTransferCancelCommandBuilder validCancelCommandBuilder() {
         return AutoTransferCancelCommand.builder()
                 .customerId(1L)
+                .autoTransferIds(List.of(10L))
                 .accountPasswordAuthToken("valid-token")
                 .otpAuthToken("valid-otp-token")
                 .requestIp("127.0.0.1");
@@ -487,40 +500,97 @@ class AutoTransferCommandServiceTest {
         when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(clock.withZone(any())).thenReturn(Clock.systemUTC());
 
-        autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build());
+        List<AutoTransferCancelResult> results = autoTransferCommandService.cancel(validCancelCommandBuilder().build());
 
+        assertThat(results).singleElement().satisfies(result -> {
+            assertThat(result.autoTransferId()).isEqualTo(10L);
+            assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(result.terminatedAt()).isNotNull();
+        });
         assertThat(existing.getStatus()).isEqualTo(AutoTransferStatus.TERMINATED);
+        verify(autoTransferOtpVerificationPort).verifyCancelAndConsume(eq("valid-otp-token"), eq(1L), eq(List.of(10L)));
         verify(autoTransferPersistencePort).save(any(AutoTransfer.class));
         verify(auditLogService).record(eq(1L), isNull(), eq(AuditEventType.AUTO_TRANSFER_INFO_CHANGE),
                 eq("127.0.0.1"), eq(true), any());
     }
 
     @Test
-    @DisplayName("대상 자동이체가 없으면 NOT_FOUND를 던진다")
-    void cancel_notFound_throws() {
-        when(autoTransferPersistencePort.findById(999L)).thenReturn(Optional.empty());
+    @DisplayName("해지 가능한 건과 불가능한 건이 섞이면 가능한 건만 해지하고 나머지는 건별 실패로 반환한다")
+    void cancel_partialFailure_terminatesOnlyCancelableOnes() {
+        AutoTransfer cancelable = existingAutoTransfer(10L, 2L);
+        // 기간 만료로 종료된 건은 고객이 해지한 적이 없으므로 멱등 성공이 아니라 AUT0302 실패다
+        AutoTransfer expired = AutoTransfer.reconstitute(
+                11L, 1L, 2L, "110987654321", "홍길동",
+                10_000L, 1, 15,
+                LocalDate.now().minusMonths(12), LocalDate.now().minusDays(1), null,
+                "내메모", "받는메모", AutoTransferStatus.EXPIRED,
+                LocalDateTime.now(), null, LocalDateTime.now(), 0L);
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(cancelable));
+        when(autoTransferPersistencePort.findById(11L)).thenReturn(Optional.of(expired));
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
 
-        assertThatThrownBy(() -> autoTransferCommandService.cancel(999L, validCancelCommandBuilder().build()))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(AutoTransferErrorCode.NOT_FOUND));
+        List<AutoTransferCancelResult> results = autoTransferCommandService.cancel(
+                validCancelCommandBuilder().autoTransferIds(List.of(10L, 11L)).build());
 
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        assertThat(results).extracting(AutoTransferCancelResult::autoTransferId,
+                        AutoTransferCancelResult::status, AutoTransferCancelResult::failureCode)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(10L, ProcessResultStatus.SUCCESS, null),
+                        org.assertj.core.groups.Tuple.tuple(11L, ProcessResultStatus.ERROR,
+                                AutoTransferErrorCode.NOT_IN_NORMAL_STATUS.getCode()));
+        // OTP 토큰에는 요청한 조합 전체가 묶여 있으므로 해지 가능한 건만 추려서 넘기면 안 된다
+        verify(autoTransferOtpVerificationPort).verifyCancelAndConsume(eq("valid-otp-token"), eq(1L), eq(List.of(10L, 11L)));
+        verify(autoTransferPersistencePort).save(any(AutoTransfer.class));
     }
 
     @Test
-    @DisplayName("소유자가 아니면(customerId 불일치) 존재를 숨기고 NOT_FOUND를 던진다")
-    void cancel_customerIdMismatch_throwsNotFound() {
-        AutoTransfer existing = existingAutoTransfer();
-        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+    @DisplayName("해지 대상의 출금계좌가 서로 다르면 CMN0001을 던지고 OTP를 소비하지 않는다 (api_conventions.md §6-3)")
+    void cancel_mixedWithdrawalAccounts_throwsInvalidInput() {
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existingAutoTransfer(10L, 2L)));
+        when(autoTransferPersistencePort.findById(11L)).thenReturn(Optional.of(existingAutoTransfer(11L, 3L)));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
 
-        AutoTransferCancelCommand command = validCancelCommandBuilder().customerId(999L).build();
+        AutoTransferCancelCommand command = validCancelCommandBuilder().autoTransferIds(List.of(10L, 11L)).build();
 
-        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, command))
+        assertThatThrownBy(() -> autoTransferCommandService.cancel(command))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(AutoTransferErrorCode.NOT_FOUND));
+                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
 
+        verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("대상 자동이체가 없으면 건별 실패(AUT0201)로 반환한다")
+    void cancel_notFound_returnsItemFailure() {
+        when(autoTransferPersistencePort.findById(999L)).thenReturn(Optional.empty());
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+
+        List<AutoTransferCancelResult> results = autoTransferCommandService.cancel(
+                validCancelCommandBuilder().autoTransferIds(List.of(999L)).build());
+
+        assertThat(results).singleElement()
+                .extracting(AutoTransferCancelResult::failureCode)
+                .isEqualTo(AutoTransferErrorCode.NOT_FOUND.getCode());
+        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("소유자가 아니면(customerId 불일치) 존재를 숨기고 미존재와 같은 AUT0201로 반환한다")
+    void cancel_customerIdMismatch_returnsNotFoundItemFailure() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+
+        List<AutoTransferCancelResult> results = autoTransferCommandService.cancel(
+                validCancelCommandBuilder().customerId(999L).build());
+
+        assertThat(results).singleElement()
+                .extracting(AutoTransferCancelResult::failureCode)
+                .isEqualTo(AutoTransferErrorCode.NOT_FOUND.getCode());
         verify(authTokenVerificationPort, never()).verify(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
     }
@@ -534,7 +604,9 @@ class AutoTransferCommandServiceTest {
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
 
-        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
+        AutoTransferCancelCommand command = validCancelCommandBuilder().build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.cancel(command))
                 .isInstanceOf(BusinessException.class);
 
         verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
@@ -551,7 +623,9 @@ class AutoTransferCommandServiceTest {
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(autoTransferOtpVerificationPort).verifyCancelAndConsume(any(), any(), any());
 
-        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
+        AutoTransferCancelCommand command = validCancelCommandBuilder().build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.cancel(command))
                 .isInstanceOf(BusinessException.class);
 
         verify(autoTransferPersistencePort, never()).save(any());
@@ -559,8 +633,8 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
-    @DisplayName("정상 상태가 아닌 건은 해지 요청도 OTP를 소비하지 않고 AUT0302를 던진다")
-    void cancel_notModifiableStatus_throwsNotInNormalStatus_withoutConsumingOtp() {
+    @DisplayName("이미 해지(TERMINATED)된 건은 재검증·저장 없이 그대로 멱등 성공으로 반환한다")
+    void cancel_alreadyTerminated_returnsIdempotentSuccess() {
         AutoTransfer terminated = AutoTransfer.reconstitute(
                 10L, 1L, 2L, "110987654321", "홍길동",
                 10_000L, 1, 15,
@@ -570,19 +644,42 @@ class AutoTransferCommandServiceTest {
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(terminated));
         when(clock.withZone(any())).thenReturn(Clock.systemUTC());
 
-        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS));
+        List<AutoTransferCancelResult> results = autoTransferCommandService.cancel(validCancelCommandBuilder().build());
 
+        assertThat(results).singleElement().satisfies(result -> {
+            assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(result.failureCode()).isNull();
+        });
         verify(authTokenVerificationPort, never()).verify(any(), any(), any());
         verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
     }
 
     @Test
-    @DisplayName("다음 실행 예정일 당일 해지 요청은 OTP를 소비하지 않고 AUT0303을 던진다")
-    void cancel_onExecutionDate_throwsCannotTerminateOnExecutionDate_withoutConsumingOtp() {
+    @DisplayName("기간 만료로 종료(EXPIRED)된 건은 OTP를 소비하지 않고 건별 실패(AUT0302)로 반환한다")
+    void cancel_expiredStatus_returnsItemFailure_withoutConsumingOtp() {
+        AutoTransfer expired = AutoTransfer.reconstitute(
+                10L, 1L, 2L, "110987654321", "홍길동",
+                10_000L, 1, 15,
+                LocalDate.now().minusMonths(12), LocalDate.now().minusDays(1), null,
+                "내메모", "받는메모", AutoTransferStatus.EXPIRED,
+                LocalDateTime.now(), null, LocalDateTime.now(), 0L);
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(expired));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+
+        List<AutoTransferCancelResult> results = autoTransferCommandService.cancel(validCancelCommandBuilder().build());
+
+        assertThat(results).singleElement()
+                .extracting(AutoTransferCancelResult::failureCode)
+                .isEqualTo(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS.getCode());
+        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("다음 실행 예정일 당일 해지 요청은 OTP를 소비하지 않고 건별 실패(AUT0303)로 반환한다")
+    void cancel_onExecutionDate_returnsItemFailure_withoutConsumingOtp() {
         // 서비스가 clock.withZone(SEOUL) 기준으로 오늘 날짜를 판정하므로, 픽스처의
         // nextExecutionDate도 LocalDate.now()(JVM 기본 시간대)가 아니라 같은 고정 Clock에서
         // 뽑아야 시간대에 따라 날짜가 어긋나 flaky해지지 않는다.
@@ -597,11 +694,11 @@ class AutoTransferCommandServiceTest {
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(dueToday));
         when(clock.withZone(any())).thenReturn(fixedClock);
 
-        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(AutoTransferErrorCode.CANNOT_TERMINATE_ON_EXECUTION_DATE));
+        List<AutoTransferCancelResult> results = autoTransferCommandService.cancel(validCancelCommandBuilder().build());
 
+        assertThat(results).singleElement()
+                .extracting(AutoTransferCancelResult::failureCode)
+                .isEqualTo(AutoTransferErrorCode.CANNOT_TERMINATE_ON_EXECUTION_DATE.getCode());
         verify(authTokenVerificationPort, never()).verify(any(), any(), any());
         verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());

@@ -117,49 +117,57 @@ public class AutoTransferController {
                         autoTransferChangeUseCase.change(autoTransferId, request.toCommand(requestIp, customerId)))));
     }
 
-    // 삭제
-    @DeleteMapping("/{autoTransferId}")
-    @Operation(operationId = "cancelAutoTransfer", summary = "자동이체 해지", description = """
-            등록된 자동이체를 해지한다. 다음 실행 예정일 당일에는 해지할 수 없다. 동일한 Idempotency-Key와 동일한 \
-            요청 내용으로 재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
+    // 해지(다건)
+    @PostMapping("/cancel")
+    @Operation(operationId = "cancelAutoTransfers", summary = "자동이체 해지", description = """
+            등록된 자동이체를 최대 50건까지 한 번에 해지한다. 다음 실행 예정일 당일에는 해지할 수 없다. \
+            OTP 인증 토큰 하나가 요청한 ID 조합 전체를 덮고 1회만 소비되므로, OTP 발급 시 거래정보의 \
+            `autoTransferIds`에 이 요청과 같은 배열(오름차순 정렬·중복 제거)을 담아야 한다. \
+            해지 불가 사유가 있는 건은 요청 전체를 실패시키지 않고 `items`에 건별 실패(`status: ERROR`)로 담아 반환한다. \
+            이미 해지(TERMINATED)된 건은 재요청해도 실패가 아니라 `SUCCESS`로 반환하며, 기간 만료로 종료(EXPIRED)된 건은 `AUT0302` 실패다. \
+            계좌비밀번호 인증 토큰은 계좌 하나에 묶여 발급되므로 해지 대상은 모두 같은 출금계좌여야 한다. \
+            동일한 Idempotency-Key와 동일한 요청 내용으로 재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "해지 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = """
+                            처리 완료. 건별 성공·실패는 `items`에 담기며, 해지 가능한 건이 하나도 없으면 \
+                            OTP 토큰을 소비하지 않고 전건 실패 결과만 반환한다"""),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "`CMN0002` 해지할 ID 목록 누락 · `CMN0001` 50건 초과 또는 출금계좌가 서로 다른 건 혼합",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "`AUT0201` 자동이체 등록 건을 찾을 수 없음(본인 소유가 아닌 경우도 동일)",
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "`OTP0101` OTP 인증 토큰 무효 · `OTP0102` 인증한 ID 조합과 요청 ID 조합 불일치",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
-                    description = "`AUT0302` 정상 상태가 아닌 자동이체 · `AUT0303` 실행 예정일 당일 해지 시도 · `CMN0301`/`CMN0302` 멱등키 충돌",
+                    description = "`CMN0301`/`CMN0302` 멱등키 충돌",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    public ResponseEntity<ApiResponse<Void>> cancel(
-            @Parameter(description = "해지할 자동이체 ID", required = true, example = "1")
-            @PathVariable Long autoTransferId,
+    public ResponseEntity<ApiResponse<AutoTransferCancelResponse>> cancel(
             @Parameter(description = "멱등키. 동일 키로 재요청 시 재처리 없이 저장된 응답을 반환", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Parameter(description = "계좌 비밀번호 인증 완료 후 발급되는 1회성 인증 토큰", required = true)
             @RequestHeader("Account-Password-Auth-Token") String accountPasswordAuthToken,
             @Parameter(description = "OTP 인증 완료 후 발급되는 1회성 인증 토큰", required = true)
-            @RequestHeader("Otp-Auth-Token") String otpAuthToken, HttpServletRequest httpRequest) {
+            @RequestHeader("Otp-Auth-Token") String otpAuthToken,
+            @RequestBody AutoTransferCancelRequest request,
+            HttpServletRequest httpRequest) {
 
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         String requestIp = httpRequest.getRemoteAddr();
-        String endpoint = "DELETE /auto-transfers/" + autoTransferId;
         AutoTransferCancelCommand command = AutoTransferCancelCommand.builder()
                 .customerId(customerId)
+                .autoTransferIds(request.autoTransferIds())
                 .accountPasswordAuthToken(accountPasswordAuthToken)
                 .otpAuthToken(otpAuthToken)
                 .requestIp(requestIp)
                 .build();
 
-        return withIdempotency(idempotencyKey, customerId, endpoint, fingerprint(command),
+        return withIdempotency(idempotencyKey, customerId, "POST /auto-transfers/cancel", fingerprint(command),
                 new TypeReference<>() {},
-                () -> {
-                    autoTransferCancelUseCase.cancel(autoTransferId, command);
-                    return ApiResponse.success();
-                });
+                () -> ApiResponse.success(AutoTransferCancelResponse.from(autoTransferCancelUseCase.cancel(command))));
     }
 
     // 조회
@@ -255,9 +263,11 @@ public class AutoTransferController {
         return fingerprint;
     }
 
+    // 해지 대상 ID 목록은 반드시 포함한다 — 빠지면 같은 키로 다른 ID 조합을 보내도 이전 응답이 그대로 재생된다
     private Map<String, Object> fingerprint(AutoTransferCancelCommand command) {
         Map<String, Object> fingerprint = new LinkedHashMap<>();
         fingerprint.put("customerId", command.customerId());
+        fingerprint.put("autoTransferIds", command.autoTransferIds());
         return fingerprint;
     }
 
