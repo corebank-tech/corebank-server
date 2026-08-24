@@ -84,7 +84,7 @@ class AccountNumberSequenceJpaRepositoryTest
         fixture.resetProductAccountSequence(
                 productId,
                 AccountType.TIME_DEPOSIT,
-                "20",
+                TIME_DEPOSIT_PREFIX,
                 3L
         );
 
