@@ -65,6 +65,19 @@ public class CustomerPersistenceAdapter
         return customerJpaRepository.existsByEmail(email);
     }
 
+    @Override
+    public boolean existsByExistingBankCustomerId(
+            String existingBankCustomerId
+    ) {
+        Objects.requireNonNull(
+                existingBankCustomerId,
+                "existingBankCustomerId must not be null"
+        );
+        return customerJpaRepository.existsByExistingBankCustomerId(
+                existingBankCustomerId
+        );
+    }
+
     // 로그인 실패 횟수와 계정 잠금 상태만 저장
     @Override
     public void updateLoginFailureState(Customer customer) {

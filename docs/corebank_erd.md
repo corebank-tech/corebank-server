@@ -16,6 +16,7 @@ erDiagram
     customer {
         bigint customer_id PK
         varchar user_id UK "로그인 아이디"
+        varchar existing_bank_customer_id UK "원장 고객 식별자, NULL 허용 (ATH0303)"
         char password_hash "BCrypt"
         varchar user_name "VARCHAR(50)"
         date birth_date

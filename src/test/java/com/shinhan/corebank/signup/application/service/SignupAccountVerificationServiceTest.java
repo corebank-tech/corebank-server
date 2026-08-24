@@ -1,5 +1,6 @@
 package com.shinhan.corebank.signup.application.service;
 
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.signup.application.port.in.VerifySignupAccountCommand;
 import com.shinhan.corebank.signup.application.port.in.VerifySignupAccountResult;
 import com.shinhan.corebank.signup.application.port.out.AccountAuthTokenPort;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -48,6 +50,7 @@ class SignupAccountVerificationServiceTest {
             );
 
     @Mock ExistingBankCustomerVerificationPort verificationPort;
+    @Mock RegisteredExistingBankCustomerChecker registrationChecker;
     @Mock AccountAuthTokenPort accountAuthTokenPort;
     @Mock AuthTokenGeneratorPort authTokenGeneratorPort;
 
@@ -57,6 +60,7 @@ class SignupAccountVerificationServiceTest {
     void setUp() {
         service = new SignupAccountVerificationService(
                 verificationPort,
+                registrationChecker,
                 accountAuthTokenPort,
                 authTokenGeneratorPort,
                 new SignupTokenProperties(
@@ -97,6 +101,29 @@ class SignupAccountVerificationServiceTest {
         assertThat(payload.getValue().verifiedBankAccountId())
                 .isEqualTo("BANK_ACCOUNT_001");
         assertThat(payload.getValue().verifiedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    @DisplayName("이미 가입한 원장 고객이면 토큰 발급 없이 ATH0303이다")
+    void rejectsAlreadyRegisteredExistingBankCustomer() {
+        givenVerification(ExistingBankAccountVerification.verified(
+                "BANK_CUSTOMER_001",
+                "BANK_ACCOUNT_001"
+        ));
+        doThrow(new BusinessException(
+                SignupErrorCode.DUPLICATE_EXISTING_BANK_CUSTOMER
+        )).when(registrationChecker).rejectIfRegistered("BANK_CUSTOMER_001");
+
+        assertThatThrownBy(() -> service.verify(COMMAND))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(
+                        ((BusinessException) exception).getErrorCode()
+                ).isEqualTo(
+                        SignupErrorCode.DUPLICATE_EXISTING_BANK_CUSTOMER
+                ));
+
+        verify(authTokenGeneratorPort, never()).generateAccountAuthToken();
+        verify(accountAuthTokenPort, never()).save(any(), any(), any());
     }
 
     @Test

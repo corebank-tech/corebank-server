@@ -53,6 +53,11 @@ public class SignupAccountVerificationController {
                     responseCode = "403",
                     description = "`ATH0102` 계좌비밀번호 오류 횟수 초과로 계좌 잠금",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "`ATH0303` 인증된 원장 고객이 이미 인터넷뱅킹에 가입됨",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
     @PostMapping("/verify-account")

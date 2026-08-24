@@ -22,4 +22,13 @@ public class CustomerRegistrationQueryService
     public boolean existsByEmail(String email) {
         return customerPersistencePort.existsByEmail(email);
     }
+
+    @Override
+    public boolean existsByExistingBankCustomerId(
+            String existingBankCustomerId
+    ) {
+        return customerPersistencePort.existsByExistingBankCustomerId(
+                existingBankCustomerId
+        );
+    }
 }

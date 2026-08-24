@@ -1,12 +1,15 @@
 package com.shinhan.corebank.signup.adapter.in.web;
 
+import com.shinhan.corebank.adapter.in.web.exception.ApiExceptionHandler;
 import com.shinhan.corebank.auth.adapter.in.security.SecurityConfig;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.auth.adapter.in.security.SessionAccessDeniedHandler;
 import com.shinhan.corebank.auth.adapter.in.security.SessionAuthenticationEntryPoint;
 import com.shinhan.corebank.auth.adapter.in.security.SessionLogoutSuccessHandler;
 import com.shinhan.corebank.signup.application.port.in.VerifySignupAccountResult;
 import com.shinhan.corebank.signup.application.port.in.VerifySignupAccountUseCase;
 import com.shinhan.corebank.signup.domain.exception.AccountVerificationFailedException;
+import com.shinhan.corebank.signup.domain.exception.SignupErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,7 +37,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         SessionAuthenticationEntryPoint.class,
         SessionAccessDeniedHandler.class,
         SessionLogoutSuccessHandler.class,
-        SignupAccountVerificationExceptionHandler.class
+        SignupAccountVerificationExceptionHandler.class,
+        ApiExceptionHandler.class
 })
 class SignupAccountVerificationControllerTest {
 
@@ -109,6 +113,19 @@ class SignupAccountVerificationControllerTest {
                   "accountPassword":"12345"
                 }
                 """);
+    }
+
+    @Test
+    @DisplayName("이미 가입된 원장 고객은 409 ATH0303을 반환한다")
+    void alreadyRegisteredExistingBankCustomerReturnsConflict()
+            throws Exception {
+        given(useCase.verify(any())).willThrow(new BusinessException(
+                SignupErrorCode.DUPLICATE_EXISTING_BANK_CUSTOMER
+        ));
+
+        mockMvc.perform(validRequest())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ATH0303"));
     }
 
     @Test

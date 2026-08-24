@@ -19,6 +19,7 @@ public class Customer {
 
     private final Long customerId;
     private final String userId;
+    private final String existingBankCustomerId;
     private String passwordHash;
     private String userName;
     private final LocalDate birthDate;
@@ -37,6 +38,7 @@ public class Customer {
     // 검증된 회원가입 정보로 신규 인터넷뱅킹 고객을 생성한다.
     public static Customer register(
             String userId,
+            String existingBankCustomerId,
             String passwordHash,
             String userName,
             LocalDate birthDate,
@@ -45,8 +47,8 @@ public class Customer {
             LocalDateTime joinedAt
     ) {
         return new Customer(
-                null, userId, passwordHash, userName, birthDate, email,
-                phoneNumber, 0, false, null, null,
+                null, userId, existingBankCustomerId, passwordHash, userName,
+                birthDate, email, phoneNumber, 0, false, null, null,
                 null, joinedAt, joinedAt, null, null
         );
     }
@@ -55,6 +57,7 @@ public class Customer {
     public static Customer restore(
             Long customerId,
             String userId,
+            String existingBankCustomerId,
             String passwordHash,
             String userName,
             LocalDate birthDate,
@@ -75,6 +78,7 @@ public class Customer {
         return new Customer(
                 customerId,
                 userId,
+                existingBankCustomerId,
                 passwordHash,
                 userName,
                 birthDate,

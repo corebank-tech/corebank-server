@@ -208,6 +208,7 @@ class CustomerInfoUpdateServiceTest {
         return Customer.restore(
                 CUSTOMER_ID,
                 "honggildong",
+                null,
                 "password-hash",
                 "홍길동",
                 LocalDate.of(1995, 3, 10),
@@ -230,6 +231,7 @@ class CustomerInfoUpdateServiceTest {
         return Customer.restore(
                 customer.getCustomerId(),
                 customer.getUserId(),
+                customer.getExistingBankCustomerId(),
                 customer.getPasswordHash(),
                 customer.getUserName(),
                 customer.getBirthDate(),

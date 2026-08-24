@@ -46,6 +46,7 @@ class SignupCompletionServiceTest {
     @Mock SignupCustomerAvailabilityPort availabilityPort;
     @Mock ExistingBankCustomerProfilePort profilePort;
     @Mock ExistingBankCustomerAccountsPort accountsPort;
+    @Mock RegisteredExistingBankCustomerChecker registrationChecker;
     @Mock SignupCompletionTransactionService transactionService;
 
     SignupCompletionService service;
@@ -55,6 +56,7 @@ class SignupCompletionServiceTest {
         service = new SignupCompletionService(
                 tokenClaimPort,
                 availabilityPort,
+                registrationChecker,
                 profilePort,
                 accountsPort,
                 transactionService,
@@ -114,6 +116,27 @@ class SignupCompletionServiceTest {
 
         verify(tokenClaimPort).release(eq(TOKEN), any());
         verify(tokenClaimPort, never()).complete(eq(TOKEN), any());
+    }
+
+    @Test
+    void rejectsAlreadyRegisteredExistingBankCustomerAndRestoresToken() {
+        given(tokenClaimPort.claim(eq(TOKEN), any()))
+                .willReturn(Optional.of(payload()));
+        doThrow(new BusinessException(
+                SignupErrorCode.DUPLICATE_EXISTING_BANK_CUSTOMER
+        )).when(registrationChecker).rejectIfRegistered("BANK_CUSTOMER_001");
+
+        assertThatThrownBy(() -> service.complete(
+                new CompleteSignupCommand(TOKEN)
+        )).isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(
+                        ((BusinessException) exception).getErrorCode()
+                ).isEqualTo(
+                        SignupErrorCode.DUPLICATE_EXISTING_BANK_CUSTOMER
+                ));
+
+        verify(tokenClaimPort).release(eq(TOKEN), any());
+        verify(transactionService, never()).register(any(), any());
     }
 
     @Test

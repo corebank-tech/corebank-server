@@ -3,10 +3,13 @@ package com.shinhan.corebank.limit.application.service;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.ExistingAccountRegistration;
 import com.shinhan.corebank.limit.api.TransferLimitRegistration;
+import com.shinhan.corebank.signup.adapter.out.mock.MockExistingBankCustomerVerificationAdapter;
 import com.shinhan.corebank.signup.adapter.out.redis.TempSignupTokenRedisAdapter;
 import com.shinhan.corebank.signup.application.port.in.CompleteSignupCommand;
 import com.shinhan.corebank.signup.application.service.SignupCompletionService;
 import com.shinhan.corebank.signup.domain.model.AgreedTerm;
+import com.shinhan.corebank.signup.domain.model.ExistingBankAccountSnapshot;
+import com.shinhan.corebank.signup.domain.model.ExistingBankCustomerProfile;
 import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
 
 import org.junit.jupiter.api.Test;
@@ -18,13 +21,16 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willReturn;
 import static org.mockito.BDDMockito.willThrow;
 
 // 회원가입 트랜잭션이 이체한도 기본값까지 함께 만들고 함께 롤백하는지 검증한다(REQ-TRSF-029).
@@ -41,6 +47,9 @@ class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
     @Autowired JdbcTemplate jdbcTemplate;
 
     @MockitoBean ExistingAccountRegistration accountRegistration;
+    // 원장 어댑터는 조회·프로필·계좌 세 포트를 한 빈으로 구현한다. @MockitoBean 으로
+    // 포트 하나만 대체하면 나머지 포트 주입이 깨지므로 구현체를 스파이로 감싼다.
+    @MockitoSpyBean MockExistingBankCustomerVerificationAdapter ledgerAdapter;
     @MockitoSpyBean TransferLimitRegistration transferLimitRegistration;
 
     @Test
@@ -115,11 +124,32 @@ class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
                 .isZero();
     }
 
+    // 이 클래스는 커밋 여부가 검증 대상이라 롤백되지 않으므로, 앞선 테스트가 커밋한
+    // existing_bank_customer_id 를 뒤 테스트가 다시 쓰면 ATH0303 에 걸린다. 원장 조회를
+    // 목으로 끊고 테스트마다 다른 원장 고객을 만들어 실행 순서와 무관하게 만든다.
     private String saveTempToken(String userId) {
+        String bankCustomerId = "BANK_CUSTOMER_" + suffix();
+        willReturn(Optional.of(new ExistingBankCustomerProfile(
+                bankCustomerId,
+                "홍길동",
+                LocalDate.of(1990, 1, 1)
+        ))).given(ledgerAdapter).findByCustomerId(bankCustomerId);
+        willReturn(List.of(new ExistingBankAccountSnapshot(
+                "BANK_ACCOUNT_" + suffix(),
+                "110" + suffix(),
+                "DEMAND_DEPOSIT",
+                null,
+                1_000_000L,
+                "ACTIVE",
+                PASSWORD_HASH,
+                LocalDate.of(2024, 1, 10),
+                null
+        ))).given(ledgerAdapter).findAllByCustomerId(bankCustomerId);
+
         String token = "TEMP_SIGNUP_" + UUID.randomUUID();
         tempTokenAdapter.save(token, new TempSignupTokenPayload(
                 signupTerms(),
-                "BANK_CUSTOMER_001",
+                bankCustomerId,
                 "BANK_ACCOUNT_001",
                 userId,
                 PASSWORD_HASH,

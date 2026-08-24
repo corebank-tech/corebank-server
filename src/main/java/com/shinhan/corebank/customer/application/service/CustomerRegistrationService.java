@@ -22,7 +22,8 @@ public class CustomerRegistrationService implements CustomerRegistration {
     @Override
     public RegisteredCustomer register(RegisterCustomerCommand command) {
         Customer saved = customerPersistencePort.save(Customer.register(
-                command.userId(), command.passwordHash(), command.userName(),
+                command.userId(), command.existingBankCustomerId(),
+                command.passwordHash(), command.userName(),
                 command.birthDate(), command.email(), command.phoneNumber(),
                 command.joinedAt()
         ));

@@ -21,6 +21,7 @@ public class SignupAccountVerificationService
         implements VerifySignupAccountUseCase {
 
     private final ExistingBankCustomerVerificationPort verificationPort;
+    private final RegisteredExistingBankCustomerChecker registrationChecker;
     private final AccountAuthTokenPort accountAuthTokenPort;
     private final AuthTokenGeneratorPort authTokenGeneratorPort;
     private final SignupTokenProperties tokenProperties;
@@ -28,12 +29,14 @@ public class SignupAccountVerificationService
 
     public SignupAccountVerificationService(
             ExistingBankCustomerVerificationPort verificationPort,
+            RegisteredExistingBankCustomerChecker registrationChecker,
             AccountAuthTokenPort accountAuthTokenPort,
             AuthTokenGeneratorPort authTokenGeneratorPort,
             SignupTokenProperties tokenProperties,
             Clock clock
     ) {
         this.verificationPort = verificationPort;
+        this.registrationChecker = registrationChecker;
         this.accountAuthTokenPort = accountAuthTokenPort;
         this.authTokenGeneratorPort = authTokenGeneratorPort;
         this.tokenProperties = tokenProperties;
@@ -67,7 +70,14 @@ public class SignupAccountVerificationService
                             verification.errorCount(),
                             verification.remainingAttempts()
                     );
-            case VERIFIED -> issueToken(verification);
+            // 본인 확인이 끝난 직후에 재가입을 막는다. 여기서 걸러야 약관 동의·
+            // 이메일 인증·정보 입력을 모두 마친 뒤 가입 완료 단계에서 터지지 않는다.
+            case VERIFIED -> {
+                registrationChecker.rejectIfRegistered(
+                        verification.existingBankCustomerId()
+                );
+                yield issueToken(verification);
+            }
         };
     }
 

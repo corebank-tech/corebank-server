@@ -86,6 +86,33 @@ class MockExistingBankCustomerVerificationAdapterTest {
     }
 
     @Test
+    @DisplayName("두 번째 Mock 고객은 자기 계좌로만 인증되고 자기 계좌만 반환한다")
+    void verifiesSecondMockCustomerIndependently() {
+        ExistingBankAccountVerification result = adapter.verify(
+                "김영희",
+                "850505",
+                "110555666777",
+                CORRECT_PASSWORD
+        );
+
+        assertThat(result.status())
+                .isEqualTo(ExistingBankAccountVerificationStatus.VERIFIED);
+        assertThat(result.existingBankCustomerId())
+                .isEqualTo("BANK_CUSTOMER_002");
+        assertThat(adapter.findAllByCustomerId("BANK_CUSTOMER_002"))
+                .extracting(account -> account.accountNumber())
+                .containsExactly("110555666777");
+
+        // 다른 고객의 계좌번호로는 실명이 일치해도 인증되지 않는다.
+        assertInformationMismatch(adapter.verify(
+                "김영희",
+                "850505",
+                ACCOUNT_NUMBER,
+                CORRECT_PASSWORD
+        ));
+    }
+
+    @Test
     @DisplayName("비밀번호 4회 실패 후 성공하면 연속 실패 횟수가 초기화된다")
     void resetsConsecutiveFailuresAfterSuccess() {
         for (int errorCount = 1; errorCount <= 4; errorCount++) {

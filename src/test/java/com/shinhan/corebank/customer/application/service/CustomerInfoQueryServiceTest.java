@@ -77,6 +77,7 @@ class CustomerInfoQueryServiceTest {
         return Customer.restore(
                 1L,
                 "honggildong",
+                null,
                 "password-hash",
                 "홍길동",
                 LocalDate.of(1995, 3, 10),
