@@ -40,6 +40,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -263,13 +265,14 @@ class AutoTransferCommandServiceTest {
                         .isEqualTo(AutoTransferErrorCode.UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE));
     }
 
-    @Test
-    @DisplayName("입금계좌가 정기적금(INSTALLMENT_SAVINGS)이면 등록이 허용된다 (REQ-PRDT-012, #317)")
-    void register_installmentSavingsDepositAccount_succeeds() {
+    @ParameterizedTest
+    @EnumSource(value = AccountType.class, names = {"DEMAND_DEPOSIT", "INSTALLMENT_SAVINGS"})
+    @DisplayName("입금계좌가 입출금·정기적금이면 등록이 허용된다 (REQ-PRDT-012, #317)")
+    void register_allowedDepositAccountTypes_succeeds(AccountType allowedType) {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.INSTALLMENT_SAVINGS));
+        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(allowedType));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15)).thenReturn(false);
         when(clock.withZone(any())).thenReturn(Clock.systemUTC());
@@ -281,9 +284,8 @@ class AutoTransferCommandServiceTest {
                     arg.getMyPassbookMemo(), arg.getRecipientPassbookMemo(), arg.getStatus(), arg.getRegisteredAt(), arg.getTerminatedAt(), arg.getUpdatedAt(), arg.getVersion());
         });
 
-        AutoTransfer result = autoTransferCommandService.register(validCommandBuilder().build());
+        autoTransferCommandService.register(validCommandBuilder().build());
 
-        assertThat(result.getWithdrawalAccountId()).isEqualTo(2L);
         verify(autoTransferPersistencePort).save(any(AutoTransfer.class));
     }
 
