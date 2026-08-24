@@ -25,7 +25,7 @@ import java.util.Set;
 public class AccountTransactionQueryService
         implements AccountTransactionQueryUseCase {
 
-    private static final Set<Integer> ALLOWED_PAGE_SIZES =
+    private static final Set<Integer> ALLOWED_PAGE_SIZE =
             Set.of(5, 10, 20, 30, 50);
 
     private static final ZoneId KOREA_ZONE =
@@ -167,7 +167,7 @@ public class AccountTransactionQueryService
             );
         }
 
-        if (!ALLOWED_PAGE_SIZES.contains(size)) {
+        if (!ALLOWED_PAGE_SIZE.contains(size)) {
             throw new BusinessException(
                     CommonErrorCode.INVALID_PAGE_SIZE
             );
