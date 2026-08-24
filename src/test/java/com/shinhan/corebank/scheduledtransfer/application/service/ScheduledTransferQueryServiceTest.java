@@ -186,6 +186,7 @@ class ScheduledTransferQueryServiceTest {
         assertThat(result.getContent()).hasSize(2);
         ScheduledTransferListItem first = result.getContent().get(0);
         assertThat(first.scheduledTransferId()).isEqualTo(101L);
+        assertThat(first.withdrawalAccountId()).isEqualTo(2L);
         assertThat(first.withdrawalAccountNumber()).isEqualTo("110123456789");
         assertThat(first.fromAlias()).isEqualTo("우리집");
         assertThat(first.myPassbookMemo()).isEqualTo("생활비");

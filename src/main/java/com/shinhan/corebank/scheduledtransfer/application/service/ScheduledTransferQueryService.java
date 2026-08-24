@@ -128,7 +128,7 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
                 && scheduledTransfer.getScheduledDate().isAfter(today);
         return new ScheduledTransferListItem(
                 scheduledTransfer.getScheduledTransferId(),
-                scheduledTransfer.getScheduledTransferId(),
+                scheduledTransfer.getWithdrawalAccountId(),
                 scheduledTransfer.getScheduledDate(),
                 withdrawalAccountNumber,
                 fromAlias,
