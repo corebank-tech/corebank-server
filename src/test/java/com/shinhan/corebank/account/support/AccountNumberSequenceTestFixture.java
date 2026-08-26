@@ -6,10 +6,26 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 public class AccountNumberSequenceTestFixture {
 
-    //prefix 테스트 상수 추가
-    public static final String DEMAND_DEPOSIT_PREFIX = "10";
-    public static final String TIME_DEPOSIT_PREFIX = "20";
-    public static final String INSTALLMENT_SAVINGS_PREFIX = "30";
+    // 운영 시드(R__seed_master_data.sql)가 10(입출금) / 2x(예금) / 3x(적금) 를 선점하고 있다.
+    // 테스트가 임의로 만든 상품에 그 prefix 를 쓰면 uk_account_number_sequence_prefix 에
+    // 걸리므로, 테스트 전용으로 9x 대역을 쓴다.
+    public static final String DEMAND_DEPOSIT_PREFIX = "90";
+    public static final String TIME_DEPOSIT_PREFIX = "91";
+    public static final String INSTALLMENT_SAVINGS_PREFIX = "92";
+
+    // 계좌번호 = 은행코드(3) + prefix(2) + 일련번호(7). 포맷이 바뀌어도 테스트가
+    // 한 곳만 따라가도록 조합을 여기로 모은다.
+    public static String accountNumberOf(
+            String productPrefix,
+            long sequence
+    ) {
+        return AccountNumberPolicy.BANK_CODE
+                + productPrefix
+                + String.format(
+                        "%0" + AccountNumberPolicy.SEQUENCE_LENGTH + "d",
+                        sequence
+                );
+    }
 
     private final JdbcTemplate jdbcTemplate;
 

@@ -124,8 +124,10 @@ class AccountNumberIssuanceConcurrencyTest
 
         assertThat(accountNumbers)
                 .contains(
-                        "088100000001",
-                        "088100000100"
+                        AccountNumberSequenceTestFixture.accountNumberOf(
+                                DEMAND_DEPOSIT_PREFIX, 1L),
+                        AccountNumberSequenceTestFixture.accountNumberOf(
+                                DEMAND_DEPOSIT_PREFIX, REQUEST_COUNT)
                 );
 
         assertThat(
