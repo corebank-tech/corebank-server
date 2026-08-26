@@ -38,7 +38,7 @@ class ScheduledTransferBatchServiceTest {
     private ScheduledTransfer scheduledTransfer(Long id, ScheduledTransferStatus status) {
         return ScheduledTransfer.reconstitute(
                 id, 1L, 2L, "088", "110987654321", "홍길동", 10_000L, DATE,
-                "메모", "받는메모", status, null, LocalDateTime.of(2026, 1, 1, 0, 0), null, null, null);
+                "메모", "받는메모", status, null, LocalDateTime.of(2026, 1, 1, 0, 0), null, null, null, null);
     }
 
     @Test

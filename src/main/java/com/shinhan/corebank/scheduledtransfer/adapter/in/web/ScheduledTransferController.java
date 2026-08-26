@@ -83,53 +83,67 @@ public class ScheduledTransferController {
                         scheduledTransferRegisterUseCase.register(request.toCommand(requestIp, customerId)))));
     }
 
-    // 취소
-    @PostMapping("/{scheduledTransferId}/cancel")
-    @Operation(operationId = "cancelScheduledTransfer", summary = "예약이체 취소", description = """
-            대기(WAITING) 상태의 예약이체를 취소한다. 실행 예정일 당일에는 취소할 수 없다. 동일한 Idempotency-Key와 \
-            동일한 요청 내용으로 재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
+    // 취소(다건)
+    @PostMapping("/cancel")
+    @Operation(operationId = "cancelScheduledTransfers", summary = "예약이체 취소", description = """
+            대기(WAITING) 상태의 예약이체를 최대 50건까지 한 번에 취소한다. 실행 예정일 당일에는 취소할 수 없다. \
+            OTP 인증 토큰 하나가 요청한 ID 조합 전체를 덮고 1회만 소비되므로, OTP 발급 시 거래정보의 \
+            `scheduledTransferIds`에 이 요청과 같은 배열(오름차순 정렬·중복 제거)을 담아야 한다. \
+            취소 불가 사유가 있는 건은 요청 전체를 실패시키지 않고 `items`에 건별 실패(`status: ERROR`)로 담아 반환한다. \
+            이미 취소된 건은 재요청해도 실패가 아니라 `SUCCESS`로 반환한다. \
+            건별 실패는 사전검증 단계에서만 판정된다 — 상태 변경(저장) 단계에서 다른 요청·배치의 동시 변경이 감지되면 \
+            한 트랜잭션이므로 그 요청의 어떤 건도 반영되지 않고 `CMN0303`이 반환되며, 이때 OTP 토큰은 이미 소비된 상태라 재인증이 필요하다. \
+            계좌비밀번호 인증 토큰은 계좌 하나에 묶여 발급되므로 취소 대상은 모두 같은 출금계좌여야 한다. \
+            동일한 Idempotency-Key와 동일한 요청 내용으로 재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "취소 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = """
+                            처리 완료. 건별 성공·실패는 `items`에 담기며, 취소 가능한 건이 하나도 없으면 \
+                            OTP 토큰을 소비하지 않고 전건 실패 결과만 반환한다"""),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "`CMN0002` 취소할 ID 목록 누락 · `CMN0001` 50건 초과 또는 출금계좌가 서로 다른 건 혼합",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401",
                     description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "`SCD0201` 예약이체를 찾을 수 없음(본인 소유가 아닌 경우도 동일)",
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403",
+                    description = "`OTP0101` OTP 인증 토큰 무효 · `OTP0102` 인증한 ID 조합과 요청 ID 조합 불일치",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
-                    description = "`SCD0302` 대기 상태가 아닌 예약이체 · `SCD0303` 실행 예정일 당일 취소 시도 · `CMN0301`/`CMN0302` 멱등키 충돌",
+                    description = "`CMN0301`/`CMN0302` 멱등키 충돌 · `CMN0303` 저장 단계에서 동시 변경 감지(전건 미반영)",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<ApiResponse<ScheduledTransferCancelResponse>> cancel(
-            @Parameter(description = "취소할 예약이체 ID", required = true, example = "1")
-            @PathVariable Long scheduledTransferId,
             @Parameter(description = "멱등키. 동일 키로 재요청 시 재처리 없이 저장된 응답을 반환", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Parameter(description = "계좌 비밀번호 인증 완료 후 발급되는 1회성 인증 토큰", required = true)
             @RequestHeader("Account-Password-Auth-Token") String accountPasswordAuthToken,
             @Parameter(description = "OTP 인증 완료 후 발급되는 1회성 인증 토큰", required = true)
             @RequestHeader("Otp-Auth-Token") String otpAuthToken,
+            @RequestBody ScheduledTransferCancelRequest request,
             HttpServletRequest httpRequest) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         String requestIp = httpRequest.getRemoteAddr();
-        String endpoint = "POST /scheduled-transfers/" + scheduledTransferId + "/cancel";
         ScheduledTransferCancelCommand command = ScheduledTransferCancelCommand.builder()
                 .customerId(customerId)
+                .scheduledTransferIds(request.scheduledTransferIds())
                 .accountPasswordAuthToken(accountPasswordAuthToken)
                 .otpAuthToken(otpAuthToken)
                 .requestIp(requestIp)
                 .build();
 
-        return withIdempotency(idempotencyKey, customerId, endpoint, fingerprint(command),
+        return withIdempotency(idempotencyKey, customerId, "POST /scheduled-transfers/cancel", fingerprint(command),
                 new TypeReference<>() {},
                 () -> ApiResponse.success(ScheduledTransferCancelResponse.from(
-                        scheduledTransferCancelUseCase.cancel(scheduledTransferId, command))));
+                        scheduledTransferCancelUseCase.cancel(command))));
     }
 
-    // 멱등키 해시는 인증 토큰을 제외한 지문으로 계산 (AutoTransferController.cancel()과 동일 패턴)
+    // 멱등키 해시는 인증 토큰을 제외한 지문으로 계산 (AutoTransferController.cancel()과 동일 패턴).
+    // 취소 대상 ID 목록은 반드시 포함한다 — 빠지면 같은 키로 다른 ID 조합을 보내도 이전 응답이 그대로 재생된다.
     private Map<String, Object> fingerprint(ScheduledTransferCancelCommand command) {
         Map<String, Object> fingerprint = new LinkedHashMap<>();
         fingerprint.put("customerId", command.customerId());
+        fingerprint.put("scheduledTransferIds", command.scheduledTransferIds());
         return fingerprint;
     }
 

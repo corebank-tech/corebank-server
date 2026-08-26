@@ -250,6 +250,7 @@ erDiagram
         datetime executed_at "DATETIME(6)"
         datetime canceled_at "DATETIME(6)"
         varchar failure_reason "VARCHAR(200)"
+        bigint version "낙관적 락"
         varchar active_dup_key UK "VARCHAR(80)"
     }
 

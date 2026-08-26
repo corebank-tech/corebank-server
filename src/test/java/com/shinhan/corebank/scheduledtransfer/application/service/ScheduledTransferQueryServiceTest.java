@@ -167,11 +167,11 @@ class ScheduledTransferQueryServiceTest {
         ScheduledTransfer waiting = ScheduledTransfer.reconstitute(
                 101L, 1L, 2L, "088", "110987654321", "홍길동", 300_000L,
                 LocalDate.of(2026, 9, 1), "생활비", null, ScheduledTransferStatus.WAITING,
-                null, LocalDateTime.of(2026, 8, 1, 10, 0), null, null, null);
+                null, LocalDateTime.of(2026, 8, 1, 10, 0), null, null, null, null);
         ScheduledTransfer success = ScheduledTransfer.reconstitute(
                 102L, 1L, 2L, "088", "110111111111", "김철수", 50_000L,
                 LocalDate.of(2026, 8, 10), null, null, ScheduledTransferStatus.SUCCESS,
-                "TXN1", LocalDateTime.of(2026, 8, 1, 10, 0), LocalDateTime.of(2026, 8, 10, 9, 0), null, null);
+                "TXN1", LocalDateTime.of(2026, 8, 1, 10, 0), LocalDateTime.of(2026, 8, 10, 9, 0), null, null, null);
 
         when(scheduledTransferQueryPort.search(1L, ScheduledTransferStatus.WAITING, 2L, null, null, PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(List.of(waiting, success)));
@@ -205,7 +205,7 @@ class ScheduledTransferQueryServiceTest {
         ScheduledTransfer waiting = ScheduledTransfer.reconstitute(
                 101L, 1L, 2L, "088", "110987654321", "홍길동", 300_000L,
                 LocalDate.of(2026, 9, 1), null, null, ScheduledTransferStatus.WAITING,
-                null, LocalDateTime.of(2026, 8, 1, 10, 0), null, null, null);
+                null, LocalDateTime.of(2026, 8, 1, 10, 0), null, null, null, null);
 
         when(scheduledTransferQueryPort.search(1L, null, null, null, null, PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(List.of(waiting)));
@@ -227,7 +227,7 @@ class ScheduledTransferQueryServiceTest {
         ScheduledTransfer waitingToday = ScheduledTransfer.reconstitute(
                 101L, 1L, 2L, "088", "110987654321", "홍길동", 300_000L,
                 TODAY, null, null, ScheduledTransferStatus.WAITING,
-                null, LocalDateTime.of(2026, 8, 1, 10, 0), null, null, null);
+                null, LocalDateTime.of(2026, 8, 1, 10, 0), null, null, null, null);
 
         when(scheduledTransferQueryPort.search(1L, null, null, null, null, PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(List.of(waitingToday)));
@@ -412,7 +412,7 @@ class ScheduledTransferQueryServiceTest {
         ScheduledTransfer success = ScheduledTransfer.reconstitute(
                 201L, 1L, 2L, "088", "110987654321", "홍길동", 100_000L,
                 LocalDate.of(2026, 8, 10), null, null, ScheduledTransferStatus.SUCCESS,
-                "TXN100", LocalDateTime.of(2026, 8, 1, 10, 0), LocalDateTime.of(2026, 8, 10, 9, 0), null, null);
+                "TXN100", LocalDateTime.of(2026, 8, 1, 10, 0), LocalDateTime.of(2026, 8, 10, 9, 0), null, null, null);
         LocalDate fromDate = LocalDate.of(2026, 8, 1);
         LocalDate toDate = LocalDate.of(2026, 8, 15);
         when(scheduledTransferQueryPort.searchExecutionResults(1L, 2L, fromDate, toDate, ScheduledTransferExecutionResultSort.LATEST, PageRequest.of(0, 10)))

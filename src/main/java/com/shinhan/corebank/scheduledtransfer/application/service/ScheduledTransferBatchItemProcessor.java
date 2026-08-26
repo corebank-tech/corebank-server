@@ -77,7 +77,14 @@ public class ScheduledTransferBatchItemProcessor {
             log.warn("예약이체 실행 실패 - scheduledTransferId={}, date={}, errorCode={}, errorMessage={}",
                     scheduledTransfer.getScheduledTransferId(), date, result.errorCode(), result.errorMessage());
         }
-        scheduledTransferPersistencePort.save(scheduledTransfer);
+        // claim()이 version을 올리므로 선점 전에 읽어둔 이 객체는 JPA로 저장할 수 없다.
+        // reconcileStuckExecution()과 같은 조건부 UPDATE로 확정한다.
+        boolean confirmed = scheduledTransferPersistencePort.saveIfStillProcessing(scheduledTransfer);
+        if (!confirmed) {
+            log.warn("확정 시점에 PROCESSING이 아님(재확정 배치와 경합) - scheduledTransferId={}, date={}",
+                    scheduledTransfer.getScheduledTransferId(), date);
+            return;
+        }
 
         recordAudit(scheduledTransfer, date, result.status() == ProcessResultStatus.SUCCESS, result.errorCode());
     }
