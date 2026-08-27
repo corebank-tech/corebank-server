@@ -66,7 +66,7 @@ src/main/java/com/shinhan/corebank/
 같은 구조를 갖추는 대로 확대합니다.
 
 아직 구조를 다 갖추지 않은 도메인도 있습니다. `terms`는 `api/`와 `adapter/out/`만
-있고, `subscription`은 `application/`이 비어 있으며, `batch`는 `domain/`이 없습니다.
+있고, `batch`는 `domain/` 없이 `application/`과 `adapter/`로만 구성됩니다.
 
 상세: [헥사고날 아키텍처 가이드](docs/hexagonal_architecture_guide.md)
 
