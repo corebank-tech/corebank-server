@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 27개 테이블(25개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 28개 테이블(26개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -9,7 +9,7 @@
 erDiagram
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 27개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
+    %% MySQL 8.4 / 28개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -93,6 +93,17 @@ erDiagram
         datetime closed_date
         datetime last_transaction_at "DATETIME(6)"
         bigint version "낙관적 락"
+    }
+
+    account_number_sequence {
+        bigint sequence_id PK
+        char bank_code "계좌번호 앞 3자리 은행코드"
+        varchar account_type "DEMAND_DEPOSIT / TIME_DEPOSIT / INSTALLMENT_SAVINGS"
+        bigint product_id FK "입출금계좌는 NULL"
+        char product_prefix "상품별 Prefix 2자리"
+        bigint last_sequence "마지막 발급 7자리 일련번호"
+        datetime created_at "DATETIME(6)"
+        datetime updated_at "DATETIME(6)"
     }
 
     %% ---------- P4 ----------
@@ -331,6 +342,8 @@ erDiagram
     terms ||--o{ product_terms : "약관연결"
     customer ||--o{ account : "보유"
     product ||--o{ account : "상품계좌"
+    account_number_sequence ||..o{ account : "계좌번호 채번"
+    product ||--o{ account_number_sequence : "예·적금 채번 규칙"
     account ||--o{ transfer : "출금"
     customer ||--o{ favorite_account : "등록"
     customer ||--o| transfer_limit : "한도보유"
