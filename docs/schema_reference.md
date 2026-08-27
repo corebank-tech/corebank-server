@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 25개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 259개 컬럼
+**대상**: 26개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 268개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -36,23 +36,24 @@
 | 8 | `product_preferential_rate` | 상품 우대금리 | P3 | 4  |
 | 9 | `product_terms` | 상품-약관 연결 | P3 | 2  |
 | 10 | `account` | 계좌 | P2 | 21 |
-| 11 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4  |
-| 12 | `transfer` | 이체 거래 | P4 | 21 |
-| 13 | `ledger_entry` | 원장 | P4 | 13 |
-| 14 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1  |
-| 15 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6  |
-| 16 | `transfer_limit` | 이체한도 | P1 | 5  |
-| 17 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 5  |
-| 18 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 6  |
-| 19 | `product_subscription` | 상품가입 | P3 | 18 |
-| 20 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5  |
-| 21 | `scheduled_transfer` | 예약이체 | P3 | 17 |
-| 22 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
-| 23 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8  |
-| 24 | `idempotency_key` | 멱등키 | P5 | 9  |
-| 25 | `audit_log` | 감사 로그 | P5 | 8  |
-| 26 | `common_code` | 공통코드 | P5 | 8  |
-| 27 | `batch_execution_lock` | 배치 중복 트리거 방지 락 | P5 | 3  |
+| 11 | `account_number_sequence` | 계좌번호 채번 규칙 | P2 | 8  |
+| 12 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4  |
+| 13 | `transfer` | 이체 거래 | P4 | 21 |
+| 14 | `ledger_entry` | 원장 | P4 | 13 |
+| 15 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1  |
+| 16 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6  |
+| 17 | `transfer_limit` | 이체한도 | P1 | 5  |
+| 18 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 5  |
+| 19 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 6  |
+| 20 | `product_subscription` | 상품가입 | P3 | 18 |
+| 21 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5  |
+| 22 | `scheduled_transfer` | 예약이체 | P3 | 17 |
+| 23 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
+| 24 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8  |
+| 25 | `idempotency_key` | 멱등키 | P5 | 9  |
+| 26 | `audit_log` | 감사 로그 | P5 | 8  |
+| 27 | `common_code` | 공통코드 | P5 | 8  |
+| 28 | `batch_execution_lock` | 배치 중복 트리거 방지 락 | P5 | 3  |
 
 ---
 
