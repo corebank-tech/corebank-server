@@ -1,9 +1,9 @@
 # Corebank Server
 
 계정계 코어뱅킹 서버. 고객·계좌·원장·이체·상품/상품가입·한도 도메인을
-**헥사고날 아키텍처**로 구성하고, 레이어 의존 방향을 ArchUnit으로 자동 검증합니다.
+**헥사고날 아키텍처**로 구성하고, 레이어 의존 방향을 ArchUnit으로 검증합니다.
 
-신한DS 금융SW 풀스택 개발자 양성 과정 7기 팀 프로젝트 · 7인
+신한DS 금융SW 풀스택 개발자 양성 과정 7기 팀 프로젝트 · 6인
 
 ---
 
@@ -12,7 +12,7 @@
 | 구분 | 사용 기술 |
 |---|---|
 | Language | Java 21 |
-| Framework | Spring Boot 4.0.7, Spring Web MVC, Validation |
+| Framework | Spring Boot 4.0.7, Spring Web MVC, Spring Security, Validation |
 | Persistence | Spring Data JPA, Querydsl, MySQL, Flyway |
 | Cache / Infra | Redis, Docker Compose |
 | Test | JUnit 5, Testcontainers(MySQL), ArchUnit |
@@ -21,7 +21,7 @@
 
 ## Architecture
 
-도메인별로 `api → application → domain ← adapter` 4계층을 두고,
+도메인별로 `adapter(in) → application → domain ← adapter(out)` 계층을 두고,
 **domain은 어떤 바깥 계층도 참조하지 않습니다.**
 
 ```
@@ -39,21 +39,35 @@ src/main/java/com/shinhan/corebank/
 ├── signup/            가입
 ├── limit/             한도
 ├── batch/             배치
-├── adapter/           외부 연동 어댑터
+├── adapter/           공통 예외 핸들러 등 전역 어댑터
 └── common/            공통(응답 규격 · 오류코드 · 설정)
 ```
 
-각 도메인은 아래 구조를 따릅니다.
+각 도메인은 대체로 아래 구조를 따릅니다.
 
 ```
 <domain>/
-├── api/           컨트롤러 · 요청/응답 DTO
-├── application/   유스케이스 · 포트 인터페이스
-├── domain/        도메인 모델 (외부 의존 없음)
-└── adapter/       JPA 엔티티 · Repository 구현 · 외부 어댑터
+├── adapter/in/web/  컨트롤러 · 요청/응답 DTO
+├── application/     유스케이스(service) · 포트 인터페이스(port)
+├── domain/          도메인 모델 (외부 의존 없음)
+├── adapter/out/     JPA 엔티티 · Repository 구현 · 외부 어댑터
+└── api/             다른 도메인에 공개하는 계약 (포트 인터페이스 · Command · DTO)
 ```
 
-의존 방향 위반은 ArchUnit 테스트가 CI에서 잡습니다.
+`api/`는 컨트롤러 자리가 아니라 **도메인 간 계약** 패키지입니다. 다른 도메인은
+`limit.api.TransferLimitProvider`처럼 이 패키지를 통해서만 접근하고, 상대 도메인의
+`application`·`domain`·`adapter`를 직접 참조하지 않습니다. 그래서 `api/`는 바깥에서
+호출할 일이 있는 도메인에만 있습니다 — `customer` `account` `limit` `otp` `terms`
+`auth` `signup` 일곱 개입니다. 배경은
+[ADR 0002](docs/adr/0002-cross-domain-account-read-mechanism.md)를 참고하세요.
+
+의존 방향은 ArchUnit 테스트로 검증합니다. 현재 `product`·`subscription`에 계층 방향
+규칙이, `terms`에 "외부는 `terms.api`로만 접근" 규칙이 걸려 있고, 나머지 도메인이
+같은 구조를 갖추는 대로 확대합니다.
+
+아직 구조를 다 갖추지 않은 도메인도 있습니다. `terms`는 `api/`와 `adapter/out/`만
+있고, `subscription`은 `application/`이 비어 있으며, `batch`는 `domain/`이 없습니다.
+
 상세: [헥사고날 아키텍처 가이드](docs/hexagonal_architecture_guide.md)
 
 ## Getting Started
@@ -67,11 +81,14 @@ src/main/java/com/shinhan/corebank/
 
 ```bash
 # 1. 인프라 기동 (MySQL, Redis)
-docker compose up -d
+docker compose up -d minicore-mysql minicore-redis
 
 # 2. 스키마 마이그레이션 + 애플리케이션 실행
 ./gradlew bootRun
 ```
+
+`docker-compose.yml`에는 배포용 `corebank-server` 서비스도 함께 정의되어 있습니다.
+로컬에서는 위처럼 인프라 두 개만 지정해 띄웁니다.
 
 ### Test
 
@@ -79,13 +96,15 @@ docker compose up -d
 ./gradlew test          # 단위 · 통합(Testcontainers) · ArchUnit 전체
 ```
 
-API 문서는 기동 후 `/swagger-ui/index.html`에서 확인합니다.
-([Swagger UI 가이드](docs/swagger_ui_guide.md))
+API 문서는 기동 후 `http://localhost:8080/api/v1/swagger-ui/index.html`에서
+확인합니다. ([Swagger UI 가이드](docs/swagger_ui_guide.md))
 
 ## Database
 
 Flyway로 스키마를 버전 관리합니다. 마이그레이션 파일은
-`src/main/resources/db/migration`에 있고, 도메인 단위로 분리했습니다.
+`src/main/resources/db/migration`에 있습니다.
+
+초기 스키마는 도메인 단위로 나눠 두었습니다.
 
 | 파일 | 내용 |
 |---|---|
@@ -96,9 +115,13 @@ Flyway로 스키마를 버전 관리합니다. 마이그레이션 파일은
 | `V...create_transfer_ext.sql` | 이체 |
 | `V...create_limit.sql` | 한도 |
 | `V...create_subscription.sql` | 상품가입 |
+| `V...create_commoncode.sql` | 공통코드 |
 | `V...create_infra.sql` | 인프라 공통 |
 | `V...partition_maintenance.sql` | 파티션 관리 |
 | `R__seed_master_data.sql` | 마스터 시드 데이터 (반복 실행) |
+
+이후 스키마 변경은 `add_*` · `alter_*` · `drop_*` 형태의 증분 파일로 쌓입니다.
+파일명 규칙과 `V__`/`R__` 구분은 아래 문서를 따릅니다.
 
 - [ERD](docs/corebank_erd.md) · [스키마 레퍼런스](docs/schema_reference.md)
 - [Flyway 작성 규칙](docs/flyway_guide.md) · [파일 역할 구분](docs/flyway_file_role_guide.md)
@@ -125,11 +148,12 @@ Flyway로 스키마를 버전 관리합니다. 마이그레이션 파일은
 - [0001. 상품가입 생성 검증](docs/adr/0001-product-subscription-creation-validation.md)
 - [0002. 도메인 간 계좌 조회 방식](docs/adr/0002-cross-domain-account-read-mechanism.md)
 
-## CI
+## CI / CD
 
 | 워크플로 | 역할 |
 |---|---|
-| [`corebank.yml`](.github/workflows/corebank.yml) | 빌드 · 테스트(ArchUnit 포함) |
+| [`corebank.yml`](.github/workflows/corebank.yml) | PR · push 시 빌드 · 테스트 / `main` push 시 EC2 배포 |
 | [`pr_agent.yml`](.github/workflows/pr_agent.yml) | PR 자동 리뷰 ([가이드](docs/pr_agent_guide.md)) |
 
-기본 브랜치는 `dev`입니다.
+기본 브랜치는 `dev`이고 평소 PR은 `dev`로 보냅니다. `main`에 머지되면
+`corebank.yml`이 Docker 이미지를 빌드해 EC2에 배포하므로, `main` 머지는 곧 배포입니다.
