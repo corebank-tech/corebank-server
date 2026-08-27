@@ -91,7 +91,7 @@ class ScheduledTransferTest {
             return ScheduledTransfer.reconstitute(
                     100L, 1L, 2L, PAYEE_BANK_CODE, "110987654321", "홍길동", 10_000L,
                     LocalDate.of(2025, 6, 2), "내메모", "받는메모", ScheduledTransferStatus.PROCESSING,
-                    null, NOW, null, null, null);
+                    null, NOW, null, null, null, null);
         }
 
         @Test
@@ -142,7 +142,7 @@ class ScheduledTransferTest {
             return ScheduledTransfer.reconstitute(
                     1L, 1L, 2L, PAYEE_BANK_CODE, "110987654321", "홍길동",
                     10_000L, scheduledDate, "내메모", "받는메모", status,
-                    null, NOW, null, null, null);
+                    null, NOW, null, null, null, null);
         }
 
         @Test

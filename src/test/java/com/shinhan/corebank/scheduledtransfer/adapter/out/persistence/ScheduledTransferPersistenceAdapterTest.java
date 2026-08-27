@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
@@ -195,12 +196,12 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
         ScheduledTransfer executedLate = adapter.save(ScheduledTransfer.reconstitute(
                 null, customerId, withdrawalAccountId, "088", "110987654321", "홍길동", 10_000L,
                 scheduledOutsideRange, "메모", "메모", ScheduledTransferStatus.SUCCESS, "TXN0010",
-                LocalDateTime.now().minusDays(30), executedInsideRange.atTime(9, 0), null, null));
+                LocalDateTime.now().minusDays(30), executedInsideRange.atTime(9, 0), null, null, null));
         // 예정일은 조회기간 안이지만, 실제 처리(executedAt)는 조회기간 밖 - 제외돼야 함
         ScheduledTransfer executedTooEarly = adapter.save(ScheduledTransfer.reconstitute(
                 null, customerId, withdrawalAccountId, "088", "110987654321", "홍길동", 20_000L,
                 LocalDate.now().minusDays(3), "메모", "메모", ScheduledTransferStatus.SUCCESS, "TXN0011",
-                LocalDateTime.now().minusDays(30), LocalDate.now().minusDays(20).atTime(9, 0), null, null));
+                LocalDateTime.now().minusDays(30), LocalDate.now().minusDays(20).atTime(9, 0), null, null, null));
         entityManager.flush();
 
         Page<ScheduledTransfer> result = adapter.searchExecutionResults(customerId, null,
@@ -250,7 +251,7 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
         ScheduledTransfer domain = ScheduledTransfer.reconstitute(
                 null, customerId, withdrawalAccountId, "088", "110987654321", "홍길동", amount, effectiveDate,
                 "메모", "메모", status, transactionNumber, LocalDateTime.now().minusDays(30), executedAt,
-                canceledAt, failureReason);
+                canceledAt, failureReason, null);
         return adapter.save(domain);
     }
 
@@ -344,7 +345,7 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
         ScheduledTransfer toConfirm = ScheduledTransfer.reconstitute(
                 saved.getScheduledTransferId(), customerId, withdrawalAccountId, "088", "110111111111", "홍길동",
                 10_000L, LocalDate.now().plusDays(10), "메모", "메모", ScheduledTransferStatus.SUCCESS,
-                "20260315BT0000000010", saved.getRegisteredAt(), LocalDateTime.now(), null, null);
+                "20260315BT0000000010", saved.getRegisteredAt(), LocalDateTime.now(), null, null, null);
 
         boolean confirmed = adapter.saveIfStillProcessing(toConfirm);
         entityManager.clear();
@@ -369,7 +370,7 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
         ScheduledTransfer firstConfirm = ScheduledTransfer.reconstitute(
                 saved.getScheduledTransferId(), customerId, withdrawalAccountId, "088", "110111111111", "홍길동",
                 10_000L, LocalDate.now().plusDays(10), "메모", "메모", ScheduledTransferStatus.SUCCESS,
-                "20260315BT0000000011", saved.getRegisteredAt(), LocalDateTime.now(), null, null);
+                "20260315BT0000000011", saved.getRegisteredAt(), LocalDateTime.now(), null, null, null);
         adapter.saveIfStillProcessing(firstConfirm);
         entityManager.clear();
 
@@ -377,7 +378,7 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
         ScheduledTransfer secondConfirm = ScheduledTransfer.reconstitute(
                 saved.getScheduledTransferId(), customerId, withdrawalAccountId, "088", "110111111111", "홍길동",
                 10_000L, LocalDate.now().plusDays(10), "메모", "메모", ScheduledTransferStatus.FAILED,
-                null, saved.getRegisteredAt(), LocalDateTime.now(), null, "잔액 부족");
+                null, saved.getRegisteredAt(), LocalDateTime.now(), null, "잔액 부족", null);
 
         boolean confirmed = adapter.saveIfStillProcessing(secondConfirm);
         entityManager.clear();
@@ -386,6 +387,51 @@ class ScheduledTransferPersistenceAdapterTest extends IntegrationTestSupport {
         ScheduledTransfer after = adapter.findById(saved.getScheduledTransferId()).orElseThrow();
         assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.SUCCESS);
         assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000011");
+    }
+
+    @Test
+    @DisplayName("배치가 선점(claim)한 뒤 선점 이전에 읽어둔 건을 저장하면 낙관적 락 충돌이 난다 " +
+            "- 취소가 PROCESSING을 CANCELED로 조용히 덮어쓰던 문제 (PR #335 리뷰 R2)")
+    void save_staleVersionAfterClaim_throwsOptimisticLockingFailure() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+        ScheduledTransfer saved = adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110111111111", "홍길동", 10_000L, LocalDate.now().plusDays(10), "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+        entityManager.clear();
+
+        // 취소 요청이 WAITING 상태로 읽어둔 시점
+        ScheduledTransfer readByCancel = adapter.findById(saved.getScheduledTransferId()).orElseThrow();
+        // 그 사이 배치가 선점해 version이 올라간다
+        adapter.claimForProcessing(saved.getScheduledTransferId());
+        entityManager.clear();
+
+        readByCancel.cancel(LocalDateTime.now());
+
+        assertThatThrownBy(() -> {
+            adapter.save(readByCancel);
+            entityManager.flush();
+        }).isInstanceOf(OptimisticLockingFailureException.class);
+    }
+
+    @Test
+    @DisplayName("선점이 없었으면 취소 저장은 낙관적 락에 걸리지 않고 그대로 반영된다")
+    void save_noConcurrentClaim_cancelSucceeds() {
+        Long customerId = insertCustomer();
+        Long withdrawalAccountId = insertAccount(customerId);
+        ScheduledTransfer saved = adapter.save(ScheduledTransfer.register(customerId, withdrawalAccountId,
+                "088", "110111111111", "홍길동", 10_000L, LocalDate.now().plusDays(10), "메모", "메모", LocalDateTime.now()));
+        entityManager.flush();
+        entityManager.clear();
+
+        ScheduledTransfer readByCancel = adapter.findById(saved.getScheduledTransferId()).orElseThrow();
+        readByCancel.cancel(LocalDateTime.now());
+        adapter.save(readByCancel);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(adapter.findById(saved.getScheduledTransferId()).orElseThrow().getStatus())
+                .isEqualTo(ScheduledTransferStatus.CANCELED);
     }
 
     private Long insertCustomer() {

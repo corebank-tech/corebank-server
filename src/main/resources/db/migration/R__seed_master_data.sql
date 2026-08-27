@@ -121,6 +121,9 @@ ON DUPLICATE KEY UPDATE
 -- 계좌번호 채번 기준 데이터
 -- 상품마다 채번 행이 반드시 1건 있어야 한다. 없으면 가입 시 ACC9001 이 난다.
 -- prefix 는 2x = 예금 / 3x = 적금, 10 = 입출금으로 고정한다.
+-- 9x(90~99) 는 테스트 전용 예약 대역이다(AccountNumberSequenceTestFixture).
+-- 운영 상품에 9x 를 쓰면 테스트가 만든 채번 행과 uk_account_number_sequence_prefix
+-- 가 충돌하므로 쓰지 않는다.
 -- 재실행 대비: last_sequence 는 ON DUPLICATE KEY UPDATE 에서 절대 건드리지 않는다
 -- (이미 발급된 번호를 다시 발급해 account_number 가 충돌하는 것을 막는다).
 -- ====================================================================

@@ -98,7 +98,13 @@ class ProductAccountOpeningIntegrationTest
         assertThat(result.accountId()).isNotNull();
 
         assertThat(result.accountNumber())
-                .isEqualTo("088200000001");
+                .isEqualTo(
+                        AccountNumberSequenceTestFixture.accountNumberOf(
+                                AccountNumberSequenceTestFixture
+                                        .TIME_DEPOSIT_PREFIX,
+                                1L
+                        )
+                );
 
         AccountRow row = jdbcTemplate.queryForObject(
                 """

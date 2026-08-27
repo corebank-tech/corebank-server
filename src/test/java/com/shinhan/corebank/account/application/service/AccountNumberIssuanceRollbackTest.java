@@ -64,7 +64,13 @@ class AccountNumberIssuanceRollbackTest
                 );
 
                 assertThat(accountNumber)
-                    .isEqualTo("088100000101");
+                    .isEqualTo(
+                        AccountNumberSequenceTestFixture.accountNumberOf(
+                            AccountNumberSequenceTestFixture
+                                .DEMAND_DEPOSIT_PREFIX,
+                            INITIAL_SEQUENCE + 1
+                        )
+                    );
 
                 throw new ForcedRollbackException();
             })

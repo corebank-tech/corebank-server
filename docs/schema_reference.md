@@ -681,6 +681,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | `executed_at` | `DATETIME(6)` |  | O |  | 배치 실행 일시. 미실행이면 NULL |
 | `canceled_at` | `DATETIME(6)` |  | O |  | 취소 일시. 미취소면 NULL |
 | `failure_reason` | `VARCHAR(200)` |  | O |  | 실행 실패 사유 |
+| `version` | `BIGINT` |  | X | `0` | 낙관적 락 버전. 다건 취소가 읽어둔 건을 배치가 `PROCESSING`으로 선점하면 취소 저장이 CMN0303으로 걸린다 |
 | `active_dup_key` | `VARCHAR(80)` *GEN* | **UK** | O |  | **생성 컬럼.** `WAITING`일 때만 값이 생겨 중복 예약을 막는다 (SCD0301) |
 
 **인덱스**
