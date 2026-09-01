@@ -6,9 +6,5 @@ import com.shinhan.corebank.signup.domain.model.ExistingBankAccountVerification;
 public interface ExistingBankCustomerVerificationPort {
 
     ExistingBankAccountVerification verify(
-            String userName,
-            String birthDate,
-            String accountNumber,
-            String accountPassword
-    );
+            String userName, String birthDate, String accountNumber, String accountPassword);
 }

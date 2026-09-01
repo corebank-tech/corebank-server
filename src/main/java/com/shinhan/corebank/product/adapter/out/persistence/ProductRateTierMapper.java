@@ -5,8 +5,7 @@ import com.shinhan.corebank.product.domain.ProductRateTierId;
 
 final class ProductRateTierMapper {
 
-    private ProductRateTierMapper() {
-    }
+    private ProductRateTierMapper() {}
 
     static ProductRateTier toDomain(ProductRateTierJpaEntity entity) {
         return ProductRateTier.builder()

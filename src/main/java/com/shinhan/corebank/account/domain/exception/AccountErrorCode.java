@@ -3,7 +3,6 @@ package com.shinhan.corebank.account.domain.exception;
 import com.shinhan.corebank.common.exception.ErrorCode;
 
 public enum AccountErrorCode implements ErrorCode {
-
     INVALID_ACCOUNT_ALIAS("ACC0001", 400, "계좌별명 길이 제한을 초과했습니다."),
     INVALID_DISPLAY_ORDER("ACC0002", 400, "표시 순서 정보가 올바르지 않습니다."),
     INVALID_WITHDRAWAL_ACCOUNT_TYPE("ACC0003", 400, "입출금계좌만 출금계좌로 등록할 수 있습니다."),
@@ -24,7 +23,18 @@ public enum AccountErrorCode implements ErrorCode {
         this.message = message;
     }
 
-    @Override public String getCode()    { return code; }
-    @Override public int    getStatus()  { return status; }
-    @Override public String getMessage() { return message; }
+    @Override
+    public String getCode() {
+        return code;
+    }
+
+    @Override
+    public int getStatus() {
+        return status;
+    }
+
+    @Override
+    public String getMessage() {
+        return message;
+    }
 }

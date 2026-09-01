@@ -13,20 +13,21 @@ public class CustomerRegistrationService implements CustomerRegistration {
 
     private final CustomerPersistencePort customerPersistencePort;
 
-    public CustomerRegistrationService(
-            CustomerPersistencePort customerPersistencePort
-    ) {
+    public CustomerRegistrationService(CustomerPersistencePort customerPersistencePort) {
         this.customerPersistencePort = customerPersistencePort;
     }
 
     @Override
     public RegisteredCustomer register(RegisterCustomerCommand command) {
         Customer saved = customerPersistencePort.save(Customer.register(
-                command.userId(), command.existingBankCustomerId(),
-                command.passwordHash(), command.userName(),
-                command.birthDate(), command.email(), command.phoneNumber(),
-                command.joinedAt()
-        ));
+                command.userId(),
+                command.existingBankCustomerId(),
+                command.passwordHash(),
+                command.userName(),
+                command.birthDate(),
+                command.email(),
+                command.phoneNumber(),
+                command.joinedAt()));
         return new RegisteredCustomer(saved.getCustomerId(), saved.getUserId());
     }
 }

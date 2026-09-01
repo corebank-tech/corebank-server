@@ -23,8 +23,7 @@ final class ScheduledTransferMapper {
                 entity.getExecutedAt(),
                 entity.getCanceledAt(),
                 entity.getFailureReason(),
-                entity.getVersion()
-        );
+                entity.getVersion());
     }
 
     static ScheduledTransferJpaEntity toEntity(ScheduledTransfer domain) {

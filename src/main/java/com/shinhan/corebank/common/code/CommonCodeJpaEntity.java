@@ -24,23 +24,23 @@ public class CommonCodeJpaEntity extends BaseEntity {
 
     @Id
     @Column(name = "code_group", length = 50)
-    private String codeGroup;                       // 예: AUTO_TRANSFER_STATUS
+    private String codeGroup; // 예: AUTO_TRANSFER_STATUS
 
     @Id
     @Column(name = "code", length = 50)
-    private String code;                            // 예: NORMAL
+    private String code; // 예: NORMAL
 
     @Column(name = "code_name", nullable = false, length = 100)
-    private String codeName;                        // 예: 정상
+    private String codeName; // 예: 정상
 
     @Column(name = "sort_order", nullable = false)
-    private Integer sortOrder;                      // 드롭다운 표시 순서
+    private Integer sortOrder; // 드롭다운 표시 순서
 
     @Column(name = "use_yn", nullable = false, columnDefinition = "CHAR(1)")
-    private String useYn;                           // Y / N. 물리 삭제 대신 사용
+    private String useYn; // Y / N. 물리 삭제 대신 사용
 
     @Column(name = "description", length = 200)
-    private String description;                     // 관리자용 설명
+    private String description; // 관리자용 설명
 
     public boolean isActive() {
         return "Y".equals(this.useYn);

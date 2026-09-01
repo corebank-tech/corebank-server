@@ -23,11 +23,8 @@ public class DemoDataLoader implements ApplicationRunner {
 
     public DemoDataLoader(
             DataSource dataSource,
-            @Value("${app.demo-data.continue-on-error:false}")
-            boolean continueOnError,
-            @Value("${app.demo-data.validate-after-load:false}")
-            boolean validateAfterLoad
-    ) {
+            @Value("${app.demo-data.continue-on-error:false}") boolean continueOnError,
+            @Value("${app.demo-data.validate-after-load:false}") boolean validateAfterLoad) {
         this.dataSource = dataSource;
         this.continueOnError = continueOnError;
         this.validateAfterLoad = validateAfterLoad;
@@ -51,7 +48,9 @@ public class DemoDataLoader implements ApplicationRunner {
     }
 
     private void validateQaSeedOwnership() {
-        Integer accountCount = new JdbcTemplate(dataSource).queryForObject("""
+        Integer accountCount = new JdbcTemplate(dataSource)
+                .queryForObject(
+                        """
                 SELECT COUNT(*)
                 FROM account a
                 JOIN customer c ON c.customer_id = a.customer_id
@@ -67,7 +66,8 @@ public class DemoDataLoader implements ApplicationRunner {
                    OR (c.user_id = 'leeseojun'
                          AND c.email = 'leeseojun@example.com'
                          AND a.account_number = '088100000009')
-                """, Integer.class);
+                """,
+                        Integer.class);
         if (accountCount == null || accountCount != 11) {
             throw new IllegalStateException("QA demo data ownership validation failed");
         }

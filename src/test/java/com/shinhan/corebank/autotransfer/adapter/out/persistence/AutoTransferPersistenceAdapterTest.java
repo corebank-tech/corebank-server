@@ -56,10 +56,18 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
     @DisplayName("신규 도메인 객체를 저장하면 ID가 채번되어 반환된다")
     void save_newAutoTransfer_assignsId() {
         AutoTransfer newAutoTransfer = AutoTransfer.register(
-                customerId, accountA, "110987654321", "홍길동",
-                10000L, 1, 15,
-                LocalDate.now().plusDays(1), LocalDate.now().plusYears(1),
-                "내메모", "받는메모", LocalDateTime.now());
+                customerId,
+                accountA,
+                "110987654321",
+                "홍길동",
+                10000L,
+                1,
+                15,
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusYears(1),
+                "내메모",
+                "받는메모",
+                LocalDateTime.now());
 
         AutoTransfer saved = adapter.save(newAutoTransfer);
 
@@ -70,7 +78,8 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("조회 후 변경한 도메인 객체를 저장하면 변경 내용이 DB에 반영된다")
     void save_changedAutoTransfer_updatesRow() {
-        AutoTransferJpaEntity entity = repository.save(autoTransfer(accountA, "110000000001", AutoTransferStatus.NORMAL, 15));
+        AutoTransferJpaEntity entity =
+                repository.save(autoTransfer(accountA, "110000000001", AutoTransferStatus.NORMAL, 15));
         entityManager.flush();
         entityManager.clear();
 
@@ -80,7 +89,8 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        AutoTransferJpaEntity updated = repository.findById(entity.getAutoTransferId()).orElseThrow();
+        AutoTransferJpaEntity updated =
+                repository.findById(entity.getAutoTransferId()).orElseThrow();
         assertThat(updated.getAmount()).isEqualTo(20000L);
         assertThat(updated.getCycleMonths()).isEqualTo(3);
         assertThat(updated.getMyPassbookMemo()).isEqualTo("새메모");
@@ -137,9 +147,12 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
     @DisplayName("registeredAt이 동률이면 autoTransferId 내림차순으로 정렬돼 페이지가 뒤섞이지 않는다")
     void search_tiedRegisteredAt_ordersByAutoTransferIdDescForDeterministicPaging() {
         // autoTransfer() 픽스처는 registeredAt이 전부 고정값이라 동률 상황을 자연히 재현한다
-        AutoTransferJpaEntity e1 = repository.save(autoTransfer(accountA, "110000000020", AutoTransferStatus.NORMAL, 10));
-        AutoTransferJpaEntity e2 = repository.save(autoTransfer(accountA, "110000000021", AutoTransferStatus.NORMAL, 11));
-        AutoTransferJpaEntity e3 = repository.save(autoTransfer(accountA, "110000000022", AutoTransferStatus.NORMAL, 12));
+        AutoTransferJpaEntity e1 =
+                repository.save(autoTransfer(accountA, "110000000020", AutoTransferStatus.NORMAL, 10));
+        AutoTransferJpaEntity e2 =
+                repository.save(autoTransfer(accountA, "110000000021", AutoTransferStatus.NORMAL, 11));
+        AutoTransferJpaEntity e3 =
+                repository.save(autoTransfer(accountA, "110000000022", AutoTransferStatus.NORMAL, 12));
         entityManager.flush();
         entityManager.clear();
 
@@ -163,7 +176,8 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        Page<AutoTransfer> result = adapter.search(customerId, accountA, null, org.springframework.data.domain.Pageable.unpaged());
+        Page<AutoTransfer> result =
+                adapter.search(customerId, accountA, null, org.springframework.data.domain.Pageable.unpaged());
 
         assertThat(result.getTotalElements()).isEqualTo(3);
         assertThat(result.getContent()).hasSize(3);
@@ -181,7 +195,8 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        Page<AutoTransfer> result = adapter.search(customerId, accountA, AutoTransferStatus.NORMAL, PageRequest.of(0, 10));
+        Page<AutoTransfer> result =
+                adapter.search(customerId, accountA, AutoTransferStatus.NORMAL, PageRequest.of(0, 10));
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).getStatus()).isEqualTo(AutoTransferStatus.NORMAL);
@@ -213,9 +228,7 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
 
         var result = adapter.findDueForExecution(today);
 
-        assertThat(result)
-                .extracting(AutoTransfer::getDepositAccountNumber)
-                .containsExactly("110000000030");
+        assertThat(result).extracting(AutoTransfer::getDepositAccountNumber).containsExactly("110000000030");
     }
 
     @Test
@@ -228,19 +241,17 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
 
         var result = adapter.findDueForExecution(today);
 
-        assertThat(result)
-                .extracting(AutoTransfer::getDepositAccountNumber)
-                .containsExactly("110000000035");
+        assertThat(result).extracting(AutoTransfer::getDepositAccountNumber).containsExactly("110000000035");
     }
 
     @Test
     @DisplayName("조회 결과는 registeredAt 오름차순으로 정렬된다 (POL-037)")
     void findDueForExecution_ordersByRegisteredAtAscending() {
         LocalDate today = LocalDate.of(2026, 3, 15);
-        AutoTransferJpaEntity later = repository.save(autoTransferDueWithRegisteredAt(
-                accountA, "110000000033", today, LocalDateTime.of(2026, 1, 2, 0, 0)));
-        AutoTransferJpaEntity earlier = repository.save(autoTransferDueWithRegisteredAt(
-                accountA, "110000000034", today, LocalDateTime.of(2026, 1, 1, 0, 0)));
+        AutoTransferJpaEntity later = repository.save(
+                autoTransferDueWithRegisteredAt(accountA, "110000000033", today, LocalDateTime.of(2026, 1, 2, 0, 0)));
+        AutoTransferJpaEntity earlier = repository.save(
+                autoTransferDueWithRegisteredAt(accountA, "110000000034", today, LocalDateTime.of(2026, 1, 1, 0, 0)));
         entityManager.flush();
         entityManager.clear();
 
@@ -254,18 +265,28 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("조회기간 내 정상/오류 회차만 조회되고, 기간 밖·PROCESSING 회차는 제외된다")
     void search_executionHistory_filtersByPeriodAndExcludesProcessing() {
-        AutoTransferJpaEntity autoTransfer = repository.save(autoTransfer(accountA, "110000000040", AutoTransferStatus.NORMAL, 10));
+        AutoTransferJpaEntity autoTransfer =
+                repository.save(autoTransfer(accountA, "110000000040", AutoTransferStatus.NORMAL, 10));
         entityManager.flush();
 
-        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 10), ProcessResultStatus.SUCCESS, 10000L, "TXN0001", null));
-        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 20), ProcessResultStatus.ERROR, 5000L, null, "잔액부족"));
-        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 2, 1), ProcessResultStatus.SUCCESS, 10000L, "TXN0002", null)); // 기간 밖
-        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 15), ProcessResultStatus.PROCESSING, 10000L, null, null)); // 아직 확정 안 됨
+        executionRepository.save(execution(
+                autoTransfer, LocalDate.of(2026, 3, 10), ProcessResultStatus.SUCCESS, 10000L, "TXN0001", null));
+        executionRepository.save(
+                execution(autoTransfer, LocalDate.of(2026, 3, 20), ProcessResultStatus.ERROR, 5000L, null, "잔액부족"));
+        executionRepository.save(execution(
+                autoTransfer, LocalDate.of(2026, 2, 1), ProcessResultStatus.SUCCESS, 10000L, "TXN0002", null)); // 기간 밖
+        executionRepository.save(execution(
+                autoTransfer,
+                LocalDate.of(2026, 3, 15),
+                ProcessResultStatus.PROCESSING,
+                10000L,
+                null,
+                null)); // 아직 확정 안 됨
         entityManager.flush();
         entityManager.clear();
 
-        Page<AutoTransferExecutionHistoryRow> result = adapter.search(customerId, accountA,
-                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), PageRequest.of(0, 10));
+        Page<AutoTransferExecutionHistoryRow> result = adapter.search(
+                customerId, accountA, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), PageRequest.of(0, 10));
 
         assertThat(result.getTotalElements()).isEqualTo(2);
         assertThat(result.getContent())
@@ -280,15 +301,22 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("처리결과 조회도 Pageable.unpaged()면 offset/limit 없이 조건에 맞는 전체 건을 반환한다 (#297)")
     void search_executionHistory_unpaged_returnsAllMatchingRows() {
-        AutoTransferJpaEntity autoTransfer = repository.save(autoTransfer(accountA, "110000000046", AutoTransferStatus.NORMAL, 10));
+        AutoTransferJpaEntity autoTransfer =
+                repository.save(autoTransfer(accountA, "110000000046", AutoTransferStatus.NORMAL, 10));
         entityManager.flush();
-        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 5), ProcessResultStatus.SUCCESS, 10000L, "TXN0010", null));
-        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 10), ProcessResultStatus.SUCCESS, 10000L, "TXN0011", null));
+        executionRepository.save(execution(
+                autoTransfer, LocalDate.of(2026, 3, 5), ProcessResultStatus.SUCCESS, 10000L, "TXN0010", null));
+        executionRepository.save(execution(
+                autoTransfer, LocalDate.of(2026, 3, 10), ProcessResultStatus.SUCCESS, 10000L, "TXN0011", null));
         entityManager.flush();
         entityManager.clear();
 
-        Page<AutoTransferExecutionHistoryRow> result = adapter.search(customerId, accountA,
-                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), org.springframework.data.domain.Pageable.unpaged());
+        Page<AutoTransferExecutionHistoryRow> result = adapter.search(
+                customerId,
+                accountA,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 3, 31),
+                org.springframework.data.domain.Pageable.unpaged());
 
         assertThat(result.getTotalElements()).isEqualTo(2);
         assertThat(result.getContent()).hasSize(2);
@@ -298,16 +326,18 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("customerId가 다르면 withdrawalAccountId가 같아도 조회되지 않는다 (타 고객 접근 차단)")
     void search_executionHistory_customerIdMismatch_returnsEmpty() {
-        AutoTransferJpaEntity autoTransfer = repository.save(autoTransfer(accountA, "110000000041", AutoTransferStatus.NORMAL, 10));
+        AutoTransferJpaEntity autoTransfer =
+                repository.save(autoTransfer(accountA, "110000000041", AutoTransferStatus.NORMAL, 10));
         entityManager.flush();
-        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 10), ProcessResultStatus.SUCCESS, 10000L, "TXN0003", null));
+        executionRepository.save(execution(
+                autoTransfer, LocalDate.of(2026, 3, 10), ProcessResultStatus.SUCCESS, 10000L, "TXN0003", null));
         entityManager.flush();
         entityManager.clear();
 
         Long otherCustomerId = insertCustomer();
 
-        Page<AutoTransferExecutionHistoryRow> result = adapter.search(otherCustomerId, accountA,
-                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), PageRequest.of(0, 10));
+        Page<AutoTransferExecutionHistoryRow> result = adapter.search(
+                otherCustomerId, accountA, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), PageRequest.of(0, 10));
 
         assertThat(result.getTotalElements()).isZero();
     }
@@ -315,21 +345,34 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("정렬은 실행일자(executionDate) 내림차순이 우선이다 — executedAt이 같아도 executionDate가 늦은 쪽이 먼저 나온다")
     void search_executionHistory_ordersByExecutionDateDescFirst() {
-        AutoTransferJpaEntity autoTransfer = repository.save(autoTransfer(accountA, "110000000043", AutoTransferStatus.NORMAL, 10));
+        AutoTransferJpaEntity autoTransfer =
+                repository.save(autoTransfer(accountA, "110000000043", AutoTransferStatus.NORMAL, 10));
         entityManager.flush();
 
         // uk_ate_dup(auto_transfer_id, execution_date) 제약 때문에 executionDate는 다르게 하고,
         // executedAt은 같은 값으로 맞춰서 "executionDate만 다른" 상황을 재현한다.
         LocalDateTime tiedExecutedAt = LocalDateTime.of(2026, 3, 10, 9, 0);
-        AutoTransferExecutionJpaEntity e1 = executionRepository.save(
-                executionWithExecutedAt(autoTransfer, LocalDate.of(2026, 3, 10), tiedExecutedAt, ProcessResultStatus.SUCCESS, 10000L, "TXN0006", null));
-        AutoTransferExecutionJpaEntity e2 = executionRepository.save(
-                executionWithExecutedAt(autoTransfer, LocalDate.of(2026, 3, 11), tiedExecutedAt, ProcessResultStatus.SUCCESS, 10000L, "TXN0007", null));
+        AutoTransferExecutionJpaEntity e1 = executionRepository.save(executionWithExecutedAt(
+                autoTransfer,
+                LocalDate.of(2026, 3, 10),
+                tiedExecutedAt,
+                ProcessResultStatus.SUCCESS,
+                10000L,
+                "TXN0006",
+                null));
+        AutoTransferExecutionJpaEntity e2 = executionRepository.save(executionWithExecutedAt(
+                autoTransfer,
+                LocalDate.of(2026, 3, 11),
+                tiedExecutedAt,
+                ProcessResultStatus.SUCCESS,
+                10000L,
+                "TXN0007",
+                null));
         entityManager.flush();
         entityManager.clear();
 
-        Page<AutoTransferExecutionHistoryRow> result = adapter.search(customerId, accountA,
-                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), PageRequest.of(0, 10));
+        Page<AutoTransferExecutionHistoryRow> result = adapter.search(
+                customerId, accountA, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(AutoTransferExecutionHistoryRow::executionId)
@@ -340,20 +383,22 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
     @DisplayName("executionDate가 같으면 executedAt 내림차순으로, 그것도 같으면 executionId 내림차순으로 정렬된다")
     void search_executionHistory_sameExecutionDate_ordersByExecutedAtThenExecutionId() {
         // 같은 출금계좌 아래 서로 다른 자동이체 두 건이 같은 날 실행됐지만 실행시각이 다른 상황
-        AutoTransferJpaEntity autoTransferA = repository.save(autoTransfer(accountA, "110000000044", AutoTransferStatus.NORMAL, 12));
-        AutoTransferJpaEntity autoTransferB = repository.save(autoTransfer(accountA, "110000000045", AutoTransferStatus.NORMAL, 13));
+        AutoTransferJpaEntity autoTransferA =
+                repository.save(autoTransfer(accountA, "110000000044", AutoTransferStatus.NORMAL, 12));
+        AutoTransferJpaEntity autoTransferB =
+                repository.save(autoTransfer(accountA, "110000000045", AutoTransferStatus.NORMAL, 13));
         entityManager.flush();
 
         LocalDate sameDate = LocalDate.of(2026, 3, 12);
-        AutoTransferExecutionJpaEntity earlier = executionRepository.save(
-                executionWithExecutedAt(autoTransferA, sameDate, sameDate.atTime(9, 0), ProcessResultStatus.SUCCESS, 10000L, "TXN0008", null));
-        AutoTransferExecutionJpaEntity later = executionRepository.save(
-                executionWithExecutedAt(autoTransferB, sameDate, sameDate.atTime(15, 0), ProcessResultStatus.SUCCESS, 10000L, "TXN0009", null));
+        AutoTransferExecutionJpaEntity earlier = executionRepository.save(executionWithExecutedAt(
+                autoTransferA, sameDate, sameDate.atTime(9, 0), ProcessResultStatus.SUCCESS, 10000L, "TXN0008", null));
+        AutoTransferExecutionJpaEntity later = executionRepository.save(executionWithExecutedAt(
+                autoTransferB, sameDate, sameDate.atTime(15, 0), ProcessResultStatus.SUCCESS, 10000L, "TXN0009", null));
         entityManager.flush();
         entityManager.clear();
 
-        Page<AutoTransferExecutionHistoryRow> result = adapter.search(customerId, accountA,
-                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), PageRequest.of(0, 10));
+        Page<AutoTransferExecutionHistoryRow> result = adapter.search(
+                customerId, accountA, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(AutoTransferExecutionHistoryRow::executionId)
@@ -363,18 +408,23 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("정상/오류 처리 건수·금액을 정확히 집계하고 PROCESSING은 집계에서 제외한다")
     void summarize_aggregatesSuccessAndErrorExcludingProcessing() {
-        AutoTransferJpaEntity autoTransfer = repository.save(autoTransfer(accountA, "110000000042", AutoTransferStatus.NORMAL, 10));
+        AutoTransferJpaEntity autoTransfer =
+                repository.save(autoTransfer(accountA, "110000000042", AutoTransferStatus.NORMAL, 10));
         entityManager.flush();
 
-        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 5), ProcessResultStatus.SUCCESS, 10000L, "TXN0004", null));
-        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 10), ProcessResultStatus.SUCCESS, 20000L, "TXN0005", null));
-        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 15), ProcessResultStatus.ERROR, 5000L, null, "잔액부족"));
-        executionRepository.save(execution(autoTransfer, LocalDate.of(2026, 3, 20), ProcessResultStatus.PROCESSING, 7000L, null, null));
+        executionRepository.save(execution(
+                autoTransfer, LocalDate.of(2026, 3, 5), ProcessResultStatus.SUCCESS, 10000L, "TXN0004", null));
+        executionRepository.save(execution(
+                autoTransfer, LocalDate.of(2026, 3, 10), ProcessResultStatus.SUCCESS, 20000L, "TXN0005", null));
+        executionRepository.save(
+                execution(autoTransfer, LocalDate.of(2026, 3, 15), ProcessResultStatus.ERROR, 5000L, null, "잔액부족"));
+        executionRepository.save(
+                execution(autoTransfer, LocalDate.of(2026, 3, 20), ProcessResultStatus.PROCESSING, 7000L, null, null));
         entityManager.flush();
         entityManager.clear();
 
-        AutoTransferExecutionHistoryAggregate result = adapter.summarize(customerId, accountA,
-                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31));
+        AutoTransferExecutionHistoryAggregate result =
+                adapter.summarize(customerId, accountA, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31));
 
         assertThat(result.successCount()).isEqualTo(2);
         assertThat(result.successAmount()).isEqualTo(30000L);
@@ -385,8 +435,8 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("일치하는 회차가 없으면 집계는 전부 0이다")
     void summarize_noMatches_returnsZeros() {
-        AutoTransferExecutionHistoryAggregate result = adapter.summarize(customerId, accountA,
-                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31));
+        AutoTransferExecutionHistoryAggregate result =
+                adapter.summarize(customerId, accountA, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31));
 
         assertThat(result.successCount()).isZero();
         assertThat(result.successAmount()).isZero();
@@ -394,13 +444,31 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(result.errorAmount()).isZero();
     }
 
-    private AutoTransferExecutionJpaEntity execution(AutoTransferJpaEntity autoTransfer, LocalDate executionDate,
-            ProcessResultStatus status, Long amount, String transactionNumber, String failureReason) {
-        return executionWithExecutedAt(autoTransfer, executionDate, executionDate.atStartOfDay(), status, amount, transactionNumber, failureReason);
+    private AutoTransferExecutionJpaEntity execution(
+            AutoTransferJpaEntity autoTransfer,
+            LocalDate executionDate,
+            ProcessResultStatus status,
+            Long amount,
+            String transactionNumber,
+            String failureReason) {
+        return executionWithExecutedAt(
+                autoTransfer,
+                executionDate,
+                executionDate.atStartOfDay(),
+                status,
+                amount,
+                transactionNumber,
+                failureReason);
     }
 
-    private AutoTransferExecutionJpaEntity executionWithExecutedAt(AutoTransferJpaEntity autoTransfer, LocalDate executionDate,
-            LocalDateTime executedAt, ProcessResultStatus status, Long amount, String transactionNumber, String failureReason) {
+    private AutoTransferExecutionJpaEntity executionWithExecutedAt(
+            AutoTransferJpaEntity autoTransfer,
+            LocalDate executionDate,
+            LocalDateTime executedAt,
+            ProcessResultStatus status,
+            Long amount,
+            String transactionNumber,
+            String failureReason) {
         return AutoTransferExecutionJpaEntity.builder()
                 .autoTransfer(autoTransfer)
                 .executionDate(executionDate)
@@ -412,15 +480,34 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
                 .build();
     }
 
-    private AutoTransferJpaEntity autoTransferDue(Long withdrawalAccountId, String depositAccountNumber, AutoTransferStatus status, LocalDate nextExecutionDate) {
-        return autoTransferDueWithRegisteredAt(withdrawalAccountId, depositAccountNumber, status, nextExecutionDate, LocalDateTime.of(2026, 1, 1, 0, 0));
+    private AutoTransferJpaEntity autoTransferDue(
+            Long withdrawalAccountId,
+            String depositAccountNumber,
+            AutoTransferStatus status,
+            LocalDate nextExecutionDate) {
+        return autoTransferDueWithRegisteredAt(
+                withdrawalAccountId,
+                depositAccountNumber,
+                status,
+                nextExecutionDate,
+                LocalDateTime.of(2026, 1, 1, 0, 0));
     }
 
-    private AutoTransferJpaEntity autoTransferDueWithRegisteredAt(Long withdrawalAccountId, String depositAccountNumber, LocalDate nextExecutionDate, LocalDateTime registeredAt) {
-        return autoTransferDueWithRegisteredAt(withdrawalAccountId, depositAccountNumber, AutoTransferStatus.NORMAL, nextExecutionDate, registeredAt);
+    private AutoTransferJpaEntity autoTransferDueWithRegisteredAt(
+            Long withdrawalAccountId,
+            String depositAccountNumber,
+            LocalDate nextExecutionDate,
+            LocalDateTime registeredAt) {
+        return autoTransferDueWithRegisteredAt(
+                withdrawalAccountId, depositAccountNumber, AutoTransferStatus.NORMAL, nextExecutionDate, registeredAt);
     }
 
-    private AutoTransferJpaEntity autoTransferDueWithRegisteredAt(Long withdrawalAccountId, String depositAccountNumber, AutoTransferStatus status, LocalDate nextExecutionDate, LocalDateTime registeredAt) {
+    private AutoTransferJpaEntity autoTransferDueWithRegisteredAt(
+            Long withdrawalAccountId,
+            String depositAccountNumber,
+            AutoTransferStatus status,
+            LocalDate nextExecutionDate,
+            LocalDateTime registeredAt) {
         return AutoTransferJpaEntity.builder()
                 .customerId(customerId)
                 .withdrawalAccountId(withdrawalAccountId)
@@ -440,7 +527,8 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
                 .build();
     }
 
-    private AutoTransferJpaEntity autoTransfer(Long withdrawalAccountId, String depositAccountNumber, AutoTransferStatus status, int transferDay) {
+    private AutoTransferJpaEntity autoTransfer(
+            Long withdrawalAccountId, String depositAccountNumber, AutoTransferStatus status, int transferDay) {
         return AutoTransferJpaEntity.builder()
                 .customerId(customerId)
                 .withdrawalAccountId(withdrawalAccountId)
@@ -466,29 +554,38 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
         // customer.created_at/updated_at은 V202608041310 마이그레이션에서 DEFAULT CURRENT_TIMESTAMP가
         // 제거됐고(JPA Auditing 정책 전환), Customer용 JPA 엔티티가 아직 없어 Auditing도 안 붙어있다.
         // 그래서 네이티브 INSERT에서 두 값을 직접 채워야 한다.
-        // 한 테스트 안에서 두 번째 고객을 만들 때 System.nanoTime()이 짧은 간격에선 값이 겹칠 수 있어 카운터로 유일성을 보장한다(user_id는 VARCHAR(20), email은 UNIQUE)
+        // 한 테스트 안에서 두 번째 고객을 만들 때 System.nanoTime()이 짧은 간격에선 값이 겹칠 수 있어 카운터로 유일성을 보장한다.
+        // (user_id는 VARCHAR(20), email은 UNIQUE)
         long seq = CUSTOMER_SEQ.incrementAndGet();
         String userId = "u" + seq;
         String email = "test" + seq + "@test.com";
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO customer (user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at) "
                                 + "VALUES (:userId, 'x', '홍길동', '1990-01-01', :email, '01012345678', NOW(), NOW(), NOW())")
                 .setParameter("userId", userId)
                 .setParameter("email", email)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
     private Long insertAccount(Long customerId) {
         // account.created_at/updated_at도 V202608031651 마이그레이션에서 DEFAULT가 제거됐다.
         // System.nanoTime() 기반 생성은 짧은 간격의 연속 호출에서 겹칠 수 있어 카운터로 유일성을 보장한다(uk_account_number)
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, opened_date, created_at, updated_at) "
                                 + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', NOW(), NOW(), NOW())")
                 .setParameter("accountNumber", accountNumber)
                 .setParameter("customerId", customerId)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 }

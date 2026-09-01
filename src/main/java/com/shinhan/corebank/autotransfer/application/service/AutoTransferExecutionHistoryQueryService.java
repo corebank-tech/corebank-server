@@ -10,16 +10,15 @@ import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecut
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.util.PageableResolver;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.util.Set;
 
 // UseCase 구현체 — 검증 + 기간 기본값 적용 + Row/Aggregate를 Item/Summary로 변환
 @Service
@@ -35,8 +34,14 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
     private final Clock clock;
 
     @Override
-    public AutoTransferExecutionHistoryResult search(Long customerId, Long withdrawalAccountId,
-                                                     LocalDate fromDate, LocalDate toDate, int page, int size, boolean all) {
+    public AutoTransferExecutionHistoryResult search(
+            Long customerId,
+            Long withdrawalAccountId,
+            LocalDate fromDate,
+            LocalDate toDate,
+            int page,
+            int size,
+            boolean all) {
         if (customerId == null || withdrawalAccountId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
@@ -63,14 +68,22 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
 
     // 어댑터가 준 Row(out) → Controller가 쓸 Item(in)으로 변환
     private AutoTransferExecutionHistoryItem toItem(AutoTransferExecutionHistoryRow row) {
-        return new AutoTransferExecutionHistoryItem(row.executionId(), row.status(), row.executedAt(),
-                row.withdrawalAccountId(), row.depositAccountNumber(), row.payeeName(), row.amount(),
-                row.cycleMonths(), row.myPassbookMemo(), row.failureReason());
+        return new AutoTransferExecutionHistoryItem(
+                row.executionId(),
+                row.status(),
+                row.executedAt(),
+                row.withdrawalAccountId(),
+                row.depositAccountNumber(),
+                row.payeeName(),
+                row.amount(),
+                row.cycleMonths(),
+                row.myPassbookMemo(),
+                row.failureReason());
     }
 
     // 어댑터가 준 Aggregate(out) → Controller가 쓸 Summary(in)으로 변환
     private AutoTransferExecutionHistorySummary toSummary(AutoTransferExecutionHistoryAggregate aggregate) {
-        return new AutoTransferExecutionHistorySummary(aggregate.successCount(), aggregate.successAmount(),
-                aggregate.errorCount(), aggregate.errorAmount());
+        return new AutoTransferExecutionHistorySummary(
+                aggregate.successCount(), aggregate.successAmount(), aggregate.errorCount(), aggregate.errorAmount());
     }
 }

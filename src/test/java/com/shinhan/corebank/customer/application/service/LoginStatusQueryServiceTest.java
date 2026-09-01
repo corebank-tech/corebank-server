@@ -1,5 +1,9 @@
 package com.shinhan.corebank.customer.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
+
 import com.shinhan.corebank.account.application.port.in.AccountGroupCode;
 import com.shinhan.corebank.account.application.port.in.AccountOverviewQueryUseCase;
 import com.shinhan.corebank.account.application.port.in.AccountOverviewResult;
@@ -8,22 +12,17 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.customer.application.port.in.LoginStatusResult;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class LoginStatusQueryServiceTest {
@@ -43,10 +42,11 @@ class LoginStatusQueryServiceTest {
         LocalDateTime previousLoginAt = LocalDateTime.of(2026, 3, 5, 10, 0);
         when(customerPersistencePort.findById(1L))
                 .thenReturn(Optional.of(customerWith(1L, previousLoginAt, "203.245.11.87")));
-        when(accountOverviewQueryUseCase.getOverview(1L)).thenReturn(overviewWithTransactionDates(
-                LocalDateTime.of(2026, 3, 10, 9, 0),
-                LocalDateTime.of(2026, 3, 12, 15, 0), // 가장 최근
-                LocalDateTime.of(2026, 3, 1, 8, 0)));
+        when(accountOverviewQueryUseCase.getOverview(1L))
+                .thenReturn(overviewWithTransactionDates(
+                        LocalDateTime.of(2026, 3, 10, 9, 0),
+                        LocalDateTime.of(2026, 3, 12, 15, 0), // 가장 최근
+                        LocalDateTime.of(2026, 3, 1, 8, 0)));
 
         LoginStatusResult result = service.getLoginStatus(1L);
 
@@ -58,8 +58,7 @@ class LoginStatusQueryServiceTest {
     @Test
     @DisplayName("직전 접속 기록이 없으면(첫 로그인) previousLoginAt은 null이다")
     void getLoginStatus_noPreviousLogin_previousLoginAtIsNull() {
-        when(customerPersistencePort.findById(2L))
-                .thenReturn(Optional.of(customerWith(2L, null, "1.1.1.1")));
+        when(customerPersistencePort.findById(2L)).thenReturn(Optional.of(customerWith(2L, null, "1.1.1.1")));
         when(accountOverviewQueryUseCase.getOverview(2L)).thenReturn(overviewWithTransactionDates());
 
         LoginStatusResult result = service.getLoginStatus(2L);
@@ -70,9 +69,9 @@ class LoginStatusQueryServiceTest {
     @Test
     @DisplayName("보유 계좌가 없거나 전부 거래 이력이 없으면 lastTransactionAt은 null이다")
     void getLoginStatus_noTransactions_lastTransactionAtIsNull() {
-        when(customerPersistencePort.findById(3L))
-                .thenReturn(Optional.of(customerWith(3L, null, "1.1.1.1")));
-        when(accountOverviewQueryUseCase.getOverview(3L)).thenReturn(overviewWithTransactionDates((LocalDateTime) null));
+        when(customerPersistencePort.findById(3L)).thenReturn(Optional.of(customerWith(3L, null, "1.1.1.1")));
+        when(accountOverviewQueryUseCase.getOverview(3L))
+                .thenReturn(overviewWithTransactionDates((LocalDateTime) null));
 
         LoginStatusResult result = service.getLoginStatus(3L);
 
@@ -84,8 +83,7 @@ class LoginStatusQueryServiceTest {
     void getLoginStatus_customerNotFound_throwsIllegalStateException() {
         when(customerPersistencePort.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getLoginStatus(999L))
-                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> service.getLoginStatus(999L)).isInstanceOf(IllegalStateException.class);
     }
 
     private Customer customerWith(Long customerId, LocalDateTime previousLoginAt, String lastLoginIp) {
@@ -107,19 +105,27 @@ class LoginStatusQueryServiceTest {
                 joinedAt,
                 joinedAt,
                 joinedAt,
-                joinedAt
-        );
+                joinedAt);
     }
 
     private AccountOverviewResult overviewWithTransactionDates(LocalDateTime... transactionDates) {
         // List.of()는 null 원소를 못 담아서(거래 이력 없는 계좌 테스트용) Arrays.asList()를 쓴다
         List<AccountOverviewResult.AccountItem> accounts = java.util.Arrays.asList(transactionDates).stream()
                 .map(date -> new AccountOverviewResult.AccountItem(
-                        1L, "계좌", "110000000001", AccountType.DEMAND_DEPOSIT, 10_000L,
-                        AccountStatus.ACTIVE, LocalDate.of(2026, 1, 1), date, null, true, true))
+                        1L,
+                        "계좌",
+                        "110000000001",
+                        AccountType.DEMAND_DEPOSIT,
+                        10_000L,
+                        AccountStatus.ACTIVE,
+                        LocalDate.of(2026, 1, 1),
+                        date,
+                        null,
+                        true,
+                        true))
                 .toList();
-        AccountOverviewResult.Group group = new AccountOverviewResult.Group(
-                AccountGroupCode.DEMAND_DEPOSIT, "입출금계좌", 10_000L, accounts);
+        AccountOverviewResult.Group group =
+                new AccountOverviewResult.Group(AccountGroupCode.DEMAND_DEPOSIT, "입출금계좌", 10_000L, accounts);
         return new AccountOverviewResult(OffsetDateTime.now(), 10_000L, List.of(group));
     }
 }

@@ -1,21 +1,20 @@
 package com.shinhan.corebank.transfer.domain;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.domain.exception.FavoriteAccountErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AliasLengthValidatorTest {
 
     @Test
     @DisplayName("한글 12자(weight 24)는 통과한다")
     void validate_korean12Chars_passes() {
-        assertThatCode(() -> AliasLengthValidator.validate("가".repeat(12)))
-                .doesNotThrowAnyException();
+        assertThatCode(() -> AliasLengthValidator.validate("가".repeat(12))).doesNotThrowAnyException();
     }
 
     @Test
@@ -39,8 +38,7 @@ class AliasLengthValidatorTest {
     @Test
     @DisplayName("영문/숫자 25자(weight 25)는 FAV0001을 던진다")
     void validate_alphanumeric25Chars_throwsAliasLengthExceeded() {
-        assertThatThrownBy(() -> AliasLengthValidator.validate("a".repeat(25)))
-                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> AliasLengthValidator.validate("a".repeat(25))).isInstanceOf(BusinessException.class);
     }
 
     @Test

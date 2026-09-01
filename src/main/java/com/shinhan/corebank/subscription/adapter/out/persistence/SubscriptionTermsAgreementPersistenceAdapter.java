@@ -2,10 +2,9 @@ package com.shinhan.corebank.subscription.adapter.out.persistence;
 
 import com.shinhan.corebank.subscription.application.port.out.SaveTermsAgreementPort;
 import com.shinhan.corebank.subscription.domain.SubscriptionTermsAgreement;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-
-import java.util.List;
 
 @Component
 @RequiredArgsConstructor

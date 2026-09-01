@@ -4,8 +4,7 @@ import com.shinhan.corebank.product.domain.Product;
 
 final class ProductMapper {
 
-    private ProductMapper() {
-    }
+    private ProductMapper() {}
 
     static Product toDomain(ProductJpaEntity entity) {
         return Product.builder()

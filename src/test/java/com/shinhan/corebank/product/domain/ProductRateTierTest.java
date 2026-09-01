@@ -14,9 +14,8 @@ class ProductRateTierTest {
     @Test
     @DisplayName("id 없이 생성하면 CMN0002를 던진다")
     void rejectsNullId() {
-        assertThatThrownBy(() -> ProductRateTier.builder()
-                .rate(new BigDecimal("2.80"))
-                .build())
+        assertThatThrownBy(() ->
+                        ProductRateTier.builder().rate(new BigDecimal("2.80")).build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -26,8 +25,8 @@ class ProductRateTierTest {
     @DisplayName("rate 없이 생성하면 CMN0002를 던진다")
     void rejectsNullRate() {
         assertThatThrownBy(() -> ProductRateTier.builder()
-                .id(new ProductRateTierId(1L, (short) 12))
-                .build())
+                        .id(new ProductRateTierId(1L, (short) 12))
+                        .build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));

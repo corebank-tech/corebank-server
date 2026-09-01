@@ -13,19 +13,13 @@ public class LoginAttemptProcessor {
     public LoginAttemptResult process(int persistedErrorCount) {
         validateErrorCount(persistedErrorCount);
 
-        return new LoginAttemptResult(
-                persistedErrorCount,
-                MAX_LOGIN_FAILURE_COUNT - persistedErrorCount
-        );
+        return new LoginAttemptResult(persistedErrorCount, MAX_LOGIN_FAILURE_COUNT - persistedErrorCount);
     }
 
     // 실패 횟수 데이터가 노출되는 1회 이상 4회 이하만 허용
     private void validateErrorCount(int persistedErrorCount) {
-        if (persistedErrorCount < 1
-                || persistedErrorCount >= MAX_LOGIN_FAILURE_COUNT) {
-            throw new IllegalArgumentException(
-                    "로그인 실패 횟수는 1회 이상 4회 이하여야 합니다."
-            );
+        if (persistedErrorCount < 1 || persistedErrorCount >= MAX_LOGIN_FAILURE_COUNT) {
+            throw new IllegalArgumentException("로그인 실패 횟수는 1회 이상 4회 이하여야 합니다.");
         }
     }
 }

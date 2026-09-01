@@ -1,5 +1,9 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
+import com.shinhan.corebank.transfer.domain.TransferChannel;
+import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -7,12 +11,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
-
-import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
-import com.shinhan.corebank.transfer.domain.TransferChannel;
-import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.TransientDataAccessException;
@@ -44,14 +42,10 @@ public class SequenceGenerator implements TransferSequencePort {
     private final TransactionTemplate requiresNewTransactionTemplate;
 
     public SequenceGenerator(
-            TransactionSequenceJpaRepository repository,
-            PlatformTransactionManager transactionManager
-    ) {
+            TransactionSequenceJpaRepository repository, PlatformTransactionManager transactionManager) {
         this.repository = repository;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
-        this.requiresNewTransactionTemplate.setPropagationBehavior(
-                TransactionDefinition.PROPAGATION_REQUIRES_NEW
-        );
+        this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Override
@@ -100,8 +94,7 @@ public class SequenceGenerator implements TransferSequencePort {
     }
 
     private long doIncrement(LocalDate seqDate, String channel) {
-        Optional<TransactionSequenceJpaEntity> found =
-                repository.findBySeqDateAndChannelForUpdate(seqDate, channel);
+        Optional<TransactionSequenceJpaEntity> found = repository.findBySeqDateAndChannelForUpdate(seqDate, channel);
 
         if (found.isPresent()) {
             TransactionSequenceJpaEntity entity = found.get();
@@ -111,14 +104,12 @@ public class SequenceGenerator implements TransferSequencePort {
             return entity.incrementAndGet();
         }
 
-        repository.saveAndFlush(
-                TransactionSequenceJpaEntity.builder()
-                        .seqDate(seqDate)
-                        .channel(channel)
-                        .lastSeq(INITIAL_SEQUENCE)
-                        .updatedAt(LocalDateTime.now(KST))
-                        .build()
-        );
+        repository.saveAndFlush(TransactionSequenceJpaEntity.builder()
+                .seqDate(seqDate)
+                .channel(channel)
+                .lastSeq(INITIAL_SEQUENCE)
+                .updatedAt(LocalDateTime.now(KST))
+                .build());
         return INITIAL_SEQUENCE;
     }
 

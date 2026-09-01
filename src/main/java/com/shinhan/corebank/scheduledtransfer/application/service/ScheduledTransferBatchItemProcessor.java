@@ -13,6 +13,10 @@ import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCas
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,11 +24,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.Map;
-import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
@@ -74,15 +73,21 @@ public class ScheduledTransferBatchItemProcessor {
             scheduledTransfer.markSuccess(result.transactionNumber(), executedAt);
         } else {
             scheduledTransfer.markFailed(result.errorMessage(), result.transactionNumber(), executedAt);
-            log.warn("예약이체 실행 실패 - scheduledTransferId={}, date={}, errorCode={}, errorMessage={}",
-                    scheduledTransfer.getScheduledTransferId(), date, result.errorCode(), result.errorMessage());
+            log.warn(
+                    "예약이체 실행 실패 - scheduledTransferId={}, date={}, errorCode={}, errorMessage={}",
+                    scheduledTransfer.getScheduledTransferId(),
+                    date,
+                    result.errorCode(),
+                    result.errorMessage());
         }
         // claim()이 version을 올리므로 선점 전에 읽어둔 이 객체는 JPA로 저장할 수 없다.
         // reconcileStuckExecution()과 같은 조건부 UPDATE로 확정한다.
         boolean confirmed = scheduledTransferPersistencePort.saveIfStillProcessing(scheduledTransfer);
         if (!confirmed) {
-            log.warn("확정 시점에 PROCESSING이 아님(재확정 배치와 경합) - scheduledTransferId={}, date={}",
-                    scheduledTransfer.getScheduledTransferId(), date);
+            log.warn(
+                    "확정 시점에 PROCESSING이 아님(재확정 배치와 경합) - scheduledTransferId={}, date={}",
+                    scheduledTransfer.getScheduledTransferId(),
+                    date);
             return;
         }
 
@@ -101,10 +106,13 @@ public class ScheduledTransferBatchItemProcessor {
         } else if (lookup.get().status() == ProcessResultStatus.SUCCESS) {
             scheduledTransfer.markSuccess(lookup.get().transactionNumber(), now);
         } else if (lookup.get().status() == ProcessResultStatus.ERROR) {
-            scheduledTransfer.markFailed(lookup.get().errorMessage(), lookup.get().transactionNumber(), now);
+            scheduledTransfer.markFailed(
+                    lookup.get().errorMessage(), lookup.get().transactionNumber(), now);
         } else {
-            log.warn("재확정 배치가 예상치 못한 transfer 상태를 조회함 - scheduledTransferId={}, status={}",
-                    scheduledTransfer.getScheduledTransferId(), lookup.get().status());
+            log.warn(
+                    "재확정 배치가 예상치 못한 transfer 상태를 조회함 - scheduledTransferId={}, status={}",
+                    scheduledTransfer.getScheduledTransferId(),
+                    lookup.get().status());
             scheduledTransfer.markFailed("실행 중 확인 불가로 재확정 배치가 오류 처리함", null, now);
         }
 
@@ -112,13 +120,17 @@ public class ScheduledTransferBatchItemProcessor {
         // 동시에 두 번 돌면 이 저장 시점에 가드가 필요하다. 0건이면 이미 다른 실행이 먼저 확정한 것.
         boolean confirmed = scheduledTransferPersistencePort.saveIfStillProcessing(scheduledTransfer);
         if (!confirmed) {
-            log.info("이미 다른 재확정 실행이 먼저 확정함(중복 재확정 방어) - scheduledTransferId={}",
+            log.info(
+                    "이미 다른 재확정 실행이 먼저 확정함(중복 재확정 방어) - scheduledTransferId={}",
                     scheduledTransfer.getScheduledTransferId());
             return;
         }
 
-        recordAudit(scheduledTransfer, scheduledTransfer.getScheduledDate(),
-                scheduledTransfer.getStatus() == ScheduledTransferStatus.SUCCESS, null);
+        recordAudit(
+                scheduledTransfer,
+                scheduledTransfer.getScheduledDate(),
+                scheduledTransfer.getStatus() == ScheduledTransferStatus.SUCCESS,
+                null);
     }
 
     private void recordAudit(ScheduledTransfer scheduledTransfer, LocalDate date, boolean succeeded, String errorCode) {
@@ -128,9 +140,24 @@ public class ScheduledTransferBatchItemProcessor {
         Map<String, Object> detail = succeeded
                 ? Map.of("scheduledTransferId", scheduledTransfer.getScheduledTransferId(), "executionDate", date)
                 : errorCode != null
-                    ? Map.of("scheduledTransferId", scheduledTransfer.getScheduledTransferId(), "executionDate", date, "errorCode", errorCode)
-                    : Map.of("scheduledTransferId", scheduledTransfer.getScheduledTransferId(), "executionDate", date);
-        auditLogService.record(scheduledTransfer.getCustomerId(), scheduledTransfer.getTransactionNumber(),
-                AuditEventType.SCHEDULED_TRANSFER, SYSTEM_REQUEST_IP, succeeded, detail);
+                        ? Map.of(
+                                "scheduledTransferId",
+                                scheduledTransfer.getScheduledTransferId(),
+                                "executionDate",
+                                date,
+                                "errorCode",
+                                errorCode)
+                        : Map.of(
+                                "scheduledTransferId",
+                                scheduledTransfer.getScheduledTransferId(),
+                                "executionDate",
+                                date);
+        auditLogService.record(
+                scheduledTransfer.getCustomerId(),
+                scheduledTransfer.getTransactionNumber(),
+                AuditEventType.SCHEDULED_TRANSFER,
+                SYSTEM_REQUEST_IP,
+                succeeded,
+                detail);
     }
 }

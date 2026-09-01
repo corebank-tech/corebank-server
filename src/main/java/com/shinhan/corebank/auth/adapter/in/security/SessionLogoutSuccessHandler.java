@@ -23,46 +23,30 @@ public class SessionLogoutSuccessHandler implements LogoutSuccessHandler {
     private final SessionAuthenticationEntryPoint authenticationEntryPoint;
 
     public SessionLogoutSuccessHandler(
-            ObjectMapper objectMapper,
-            SessionAuthenticationEntryPoint authenticationEntryPoint
-    ) {
+            ObjectMapper objectMapper, SessionAuthenticationEntryPoint authenticationEntryPoint) {
         this.objectMapper = objectMapper;
         this.authenticationEntryPoint = authenticationEntryPoint;
     }
 
     @Override
-    public void onLogoutSuccess(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            Authentication authentication
-    ) throws IOException, ServletException {
+    public void onLogoutSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication)
+            throws IOException, ServletException {
         preventCaching(response);
 
         if (authentication == null) {
             authenticationEntryPoint.commence(
-                    request,
-                    response,
-                    new InsufficientAuthenticationException(
-                            "로그아웃할 인증 세션이 존재하지 않습니다."
-                    )
-            );
+                    request, response, new InsufficientAuthenticationException("로그아웃할 인증 세션이 존재하지 않습니다."));
             return;
         }
 
         response.setStatus(HttpServletResponse.SC_OK);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        objectMapper.writeValue(
-                response.getOutputStream(),
-                ApiResponse.<Void>success(null, LOGOUT_SUCCESS_MESSAGE)
-        );
+        objectMapper.writeValue(response.getOutputStream(), ApiResponse.<Void>success(null, LOGOUT_SUCCESS_MESSAGE));
     }
 
     private void preventCaching(HttpServletResponse response) {
-        response.setHeader(
-                "Cache-Control",
-                "no-store, no-cache, must-revalidate, max-age=0"
-        );
+        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
         response.setHeader("Pragma", "no-cache");
         response.setDateHeader("Expires", 0);
     }

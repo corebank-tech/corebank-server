@@ -1,12 +1,11 @@
 package com.shinhan.corebank.subscription.adapter.out.persistence;
 
 import jakarta.persistence.LockModeType;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.Optional;
 
 public interface ProductLockJpaRepository extends JpaRepository<ProductLockJpaEntity, Long> {
 
@@ -15,7 +14,8 @@ public interface ProductLockJpaRepository extends JpaRepository<ProductLockJpaEn
     // gap lock과 달리 레코드 락은 다른 트랜잭션과 서로 배타적이라, 같은 product_id로 동시에 들어온
     // 다른 트랜잭션은 이 트랜잭션이 커밋/롤백할 때까지 진짜로 블로킹된다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
+    @Query(
+            """
             SELECT p
             FROM ProductLockJpaEntity p
             WHERE p.productId = :productId

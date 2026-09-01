@@ -1,18 +1,9 @@
 package com.shinhan.corebank.account.adapter.out.transferusage;
 
+import java.util.Collection;
 import org.springframework.data.repository.Repository;
 
-import java.util.Collection;
+interface ScheduledTransferUsageJpaRepository extends Repository<ScheduledTransferUsageJpaEntity, Long> {
 
-interface ScheduledTransferUsageJpaRepository
-        extends Repository<
-        ScheduledTransferUsageJpaEntity,
-        Long
-        > {
-
-    boolean existsByWithdrawalAccountIdAndStatusIn(
-            Long withdrawalAccountId,
-            Collection<String> statuses
-    );
+    boolean existsByWithdrawalAccountIdAndStatusIn(Long withdrawalAccountId, Collection<String> statuses);
 }
-

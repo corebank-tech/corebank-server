@@ -5,7 +5,6 @@ import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.subscription.domain.ProductSubscription;
 import com.shinhan.corebank.subscription.domain.ProductSubscriptionResult;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -26,8 +25,7 @@ public record ProductSubscriptionResultResponse(
         String status,
         String transactionNumber,
         LocalDateTime subscribedAt,
-        AutoTransferPrefill autoTransferPrefill
-) {
+        AutoTransferPrefill autoTransferPrefill) {
     public static ProductSubscriptionResultResponse from(ProductSubscriptionResult result) {
         ProductSubscription s = result.getSubscription();
 
@@ -52,8 +50,7 @@ public record ProductSubscriptionResultResponse(
                 s.getStatus().name(),
                 s.getTransactionNumber(),
                 s.getSubscribedAt(),
-                canCreateAutoTransfer ? AutoTransferPrefill.from(s, result.getAccountNumber()) : null
-        );
+                canCreateAutoTransfer ? AutoTransferPrefill.from(s, result.getAccountNumber()) : null);
     }
 
     public record AutoTransferPrefill(
@@ -61,8 +58,7 @@ public record ProductSubscriptionResultResponse(
             String depositAccountNumber,
             Long amount,
             Integer cycleMonths,
-            LocalDate endDate
-    ) {
+            LocalDate endDate) {
         static AutoTransferPrefill from(ProductSubscription s, String rawAccountNumber) {
             return new AutoTransferPrefill(
                     s.getWithdrawalAccountId(),

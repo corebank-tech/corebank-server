@@ -1,26 +1,28 @@
 package com.shinhan.corebank.otp.adapter.out.redis;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.otp.domain.model.OtpAuthTokenPayload;
+import java.time.Duration;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
-import java.time.Duration;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
 // otpAuthToken의 고객·요청 페이로드와 300초 TTL 및 조건부 소비를 검증한다.
 class OtpAuthTokenRedisAdapterTest extends IntegrationTestSupport {
 
     private static final String KEY_PREFIX = "otp:auth:";
 
-    @Autowired OtpAuthTokenRedisAdapter adapter;
-    @Autowired StringRedisTemplate redisTemplate;
+    @Autowired
+    OtpAuthTokenRedisAdapter adapter;
+
+    @Autowired
+    StringRedisTemplate redisTemplate;
 
     private String token;
 
@@ -54,8 +56,10 @@ class OtpAuthTokenRedisAdapterTest extends IntegrationTestSupport {
         OtpAuthTokenPayload original = payload("OTP_REQ_original", 1L);
         adapter.save(token, original, Duration.ofMinutes(5));
 
-        assertThat(adapter.consumeIfMatches(token, payload("OTP_REQ_other", 1L))).isFalse();
-        assertThat(adapter.consumeIfMatches(token, payload("OTP_REQ_original", 2L))).isFalse();
+        assertThat(adapter.consumeIfMatches(token, payload("OTP_REQ_other", 1L)))
+                .isFalse();
+        assertThat(adapter.consumeIfMatches(token, payload("OTP_REQ_original", 2L)))
+                .isFalse();
         assertThat(adapter.find(token)).contains(original);
     }
 

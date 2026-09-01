@@ -1,19 +1,18 @@
 package com.shinhan.corebank.auth.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.shinhan.corebank.auth.domain.model.LoginAttemptResult;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 @DisplayName("로그인 시도 결과 계산기 단위 테스트")
 class LoginAttemptProcessorTest {
 
-    private final LoginAttemptProcessor processor =
-            new LoginAttemptProcessor();
+    private final LoginAttemptProcessor processor = new LoginAttemptProcessor();
 
     // 첫 번째 실패는 남은 시도 횟수 4회를 반환
     @Test

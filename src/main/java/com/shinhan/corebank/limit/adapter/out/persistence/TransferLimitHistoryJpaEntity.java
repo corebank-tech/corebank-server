@@ -2,7 +2,6 @@ package com.shinhan.corebank.limit.adapter.out.persistence;
 
 import com.shinhan.corebank.common.entity.BaseEntity;
 import com.shinhan.corebank.limit.domain.TransferLimitHistory;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;

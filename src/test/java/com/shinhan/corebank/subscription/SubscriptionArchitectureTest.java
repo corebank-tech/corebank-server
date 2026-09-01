@@ -1,11 +1,11 @@
 package com.shinhan.corebank.subscription;
 
+import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
+
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
-
-import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 
 /**
  * "의존 방향 adapter → application → domain" 규칙을 자동 검증한다.
@@ -19,12 +19,18 @@ class SubscriptionArchitectureTest {
     static final ArchRule layerDependenciesAreRespected = layeredArchitecture()
             .consideringOnlyDependenciesInAnyPackage("..subscription..")
             .withOptionalLayers(true)
-            .layer("Domain").definedBy("..subscription.domain..")
-            .layer("Application").definedBy("..subscription.application..")
-            .layer("Adapter").definedBy("..subscription.adapter..")
-
-            .whereLayer("Domain").mayNotAccessAnyLayer()
-            .whereLayer("Application").mayOnlyAccessLayers("Domain")
-            .whereLayer("Application").mayOnlyBeAccessedByLayers("Adapter")
-            .whereLayer("Adapter").mayOnlyAccessLayers("Application", "Domain");
+            .layer("Domain")
+            .definedBy("..subscription.domain..")
+            .layer("Application")
+            .definedBy("..subscription.application..")
+            .layer("Adapter")
+            .definedBy("..subscription.adapter..")
+            .whereLayer("Domain")
+            .mayNotAccessAnyLayer()
+            .whereLayer("Application")
+            .mayOnlyAccessLayers("Domain")
+            .whereLayer("Application")
+            .mayOnlyBeAccessedByLayers("Adapter")
+            .whereLayer("Adapter")
+            .mayOnlyAccessLayers("Application", "Domain");
 }

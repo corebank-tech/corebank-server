@@ -8,8 +8,7 @@ import org.springframework.stereotype.Service;
 // 고객 저장소를 외부에 노출하지 않고 가입 중복조회 기능만 제공한다.
 @Service
 @RequiredArgsConstructor
-public class CustomerRegistrationQueryService
-        implements CustomerRegistrationQuery {
+public class CustomerRegistrationQueryService implements CustomerRegistrationQuery {
 
     private final CustomerPersistencePort customerPersistencePort;
 
@@ -24,11 +23,7 @@ public class CustomerRegistrationQueryService
     }
 
     @Override
-    public boolean existsByExistingBankCustomerId(
-            String existingBankCustomerId
-    ) {
-        return customerPersistencePort.existsByExistingBankCustomerId(
-                existingBankCustomerId
-        );
+    public boolean existsByExistingBankCustomerId(String existingBankCustomerId) {
+        return customerPersistencePort.existsByExistingBankCustomerId(existingBankCustomerId);
     }
 }

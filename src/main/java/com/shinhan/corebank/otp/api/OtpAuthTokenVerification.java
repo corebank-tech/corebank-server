@@ -7,6 +7,4 @@ public record OtpAuthTokenVerification(
         String otpAuthToken,
         Long customerId,
         OtpTransactionType transactionType,
-        Map<String, Object> transactionData
-) {
-}
+        Map<String, Object> transactionData) {}

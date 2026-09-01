@@ -50,20 +50,19 @@ class BatchExecutionLockPersistenceAdapterConcurrencyTest extends IntegrationTes
     @BeforeEach
     void setUp() {
         jobName = "CONCURRENCY_TEST_JOB";
-        transactionTemplate().executeWithoutResult(status ->
-                entityManager.createNativeQuery(
-                                "INSERT INTO batch_execution_lock (job_name, currently_running, updated_at) "
-                                        + "VALUES (:jobName, FALSE, NOW())")
-                        .setParameter("jobName", jobName)
-                        .executeUpdate());
+        transactionTemplate().executeWithoutResult(status -> entityManager
+                .createNativeQuery("INSERT INTO batch_execution_lock (job_name, currently_running, updated_at) "
+                        + "VALUES (:jobName, FALSE, NOW())")
+                .setParameter("jobName", jobName)
+                .executeUpdate());
     }
 
     @AfterEach
     void cleanUp() {
-        transactionTemplate().executeWithoutResult(status ->
-                entityManager.createNativeQuery("DELETE FROM batch_execution_lock WHERE job_name = :jobName")
-                        .setParameter("jobName", jobName)
-                        .executeUpdate());
+        transactionTemplate().executeWithoutResult(status -> entityManager
+                .createNativeQuery("DELETE FROM batch_execution_lock WHERE job_name = :jobName")
+                .setParameter("jobName", jobName)
+                .executeUpdate());
     }
 
     @Test
@@ -87,7 +86,8 @@ class BatchExecutionLockPersistenceAdapterConcurrencyTest extends IntegrationTes
             long succeeded = results.stream().filter(Boolean::booleanValue).count();
             assertThat(succeeded).isEqualTo(1);
 
-            BatchExecutionLockJpaEntity persisted = batchExecutionLockJpaRepository.findById(jobName).orElseThrow();
+            BatchExecutionLockJpaEntity persisted =
+                    batchExecutionLockJpaRepository.findById(jobName).orElseThrow();
             assertThat(persisted.isCurrentlyRunning()).isTrue();
         } finally {
             pool.shutdownNow();

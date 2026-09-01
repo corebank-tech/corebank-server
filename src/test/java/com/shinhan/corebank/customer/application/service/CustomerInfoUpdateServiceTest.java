@@ -44,41 +44,25 @@ class CustomerInfoUpdateServiceTest {
 
     @BeforeEach
     void setUp() {
-        Clock clock = Clock.fixed(
-                Instant.parse("2026-08-21T07:20:00Z"),
-                ZoneId.of("Asia/Seoul")
-        );
+        Clock clock = Clock.fixed(Instant.parse("2026-08-21T07:20:00Z"), ZoneId.of("Asia/Seoul"));
         service = new CustomerInfoUpdateService(
-                customerPersistencePort,
-                emailChangeVerificationPort,
-                new CustomerInfoMasker(),
-                clock
-        );
+                customerPersistencePort, emailChangeVerificationPort, new CustomerInfoMasker(), clock);
     }
 
     @Test
     @DisplayName("휴대폰 번호와 인증된 이메일을 함께 변경한다")
     void updatesPhoneNumberAndVerifiedEmail() {
         givenCustomer();
-        given(customerPersistencePort.existsByEmail("newmail@corebank.com"))
-                .willReturn(false);
+        given(customerPersistencePort.existsByEmail("newmail@corebank.com")).willReturn(false);
         givenPersistedCustomer();
 
-        UpdateCustomerInfoResult result = service.update(command(
-                "01087654321",
-                "NewMail@CoreBank.com",
-                EMAIL_TOKEN
-        ));
+        UpdateCustomerInfoResult result = service.update(command("01087654321", "NewMail@CoreBank.com", EMAIL_TOKEN));
 
         assertThat(result.customerId()).isEqualTo(CUSTOMER_ID);
         assertThat(result.phoneNumber()).isEqualTo("010****4321");
         assertThat(result.email()).isEqualTo("newm***@corebank.com");
-        assertThat(result.updatedAt().toString())
-                .isEqualTo("2026-08-21T16:20+09:00");
-        verify(emailChangeVerificationPort).verifyAndConsume(
-                EMAIL_TOKEN,
-                "newmail@corebank.com"
-        );
+        assertThat(result.updatedAt().toString()).isEqualTo("2026-08-21T16:20+09:00");
+        verify(emailChangeVerificationPort).verifyAndConsume(EMAIL_TOKEN, "newmail@corebank.com");
     }
 
     @Test
@@ -87,50 +71,33 @@ class CustomerInfoUpdateServiceTest {
         givenCustomer();
         givenPersistedCustomer();
 
-        UpdateCustomerInfoResult result = service.update(command(
-                "01087654321",
-                null,
-                null
-        ));
+        UpdateCustomerInfoResult result = service.update(command("01087654321", null, null));
 
         assertThat(result.phoneNumber()).isEqualTo("010****4321");
         assertThat(result.email()).isEqualTo("curr***@corebank.com");
-        verify(emailChangeVerificationPort, never())
-                .verifyAndConsume(any(), any());
+        verify(emailChangeVerificationPort, never()).verifyAndConsume(any(), any());
     }
 
     @Test
     @DisplayName("변경 항목이 없거나 저장값과 같으면 CMN0001이다")
     void rejectsMissingOrUnchangedFields() {
-        assertError(
-                command(null, null, null),
-                CommonErrorCode.INVALID_INPUT
-        );
+        assertError(command(null, null, null), CommonErrorCode.INVALID_INPUT);
 
         givenCustomer();
-        assertError(
-                command("01012345678", "current@corebank.com", null),
-                CommonErrorCode.INVALID_INPUT
-        );
+        assertError(command("01012345678", "current@corebank.com", null), CommonErrorCode.INVALID_INPUT);
     }
 
     @Test
     @DisplayName("휴대폰 번호가 숫자 11자리가 아니면 MYP0001이다")
     void rejectsInvalidPhoneNumber() {
-        assertError(
-                command("010-8765-4321", null, null),
-                CustomerErrorCode.INVALID_PHONE_NUMBER
-        );
+        assertError(command("010-8765-4321", null, null), CustomerErrorCode.INVALID_PHONE_NUMBER);
         verify(customerPersistencePort, never()).findByIdForUpdate(any());
     }
 
     @Test
     @DisplayName("이메일 형식이 잘못되면 CMN0001이다")
     void rejectsInvalidEmail() {
-        assertError(
-                command(null, "invalid-email", EMAIL_TOKEN),
-                CommonErrorCode.INVALID_INPUT
-        );
+        assertError(command(null, "invalid-email", EMAIL_TOKEN), CommonErrorCode.INVALID_INPUT);
         verify(customerPersistencePort, never()).findByIdForUpdate(any());
     }
 
@@ -139,10 +106,7 @@ class CustomerInfoUpdateServiceTest {
     void requiresVerificationTokenForEmailChange() {
         givenCustomer();
 
-        assertError(
-                command(null, "newmail@corebank.com", null),
-                CommonErrorCode.REQUIRED_FIELD_MISSING
-        );
+        assertError(command(null, "newmail@corebank.com", null), CommonErrorCode.REQUIRED_FIELD_MISSING);
         verify(customerPersistencePort, never()).updateContactInfo(any());
     }
 
@@ -150,55 +114,32 @@ class CustomerInfoUpdateServiceTest {
     @DisplayName("이미 가입된 이메일로 변경하면 ATH0302이다")
     void rejectsDuplicateEmail() {
         givenCustomer();
-        given(customerPersistencePort.existsByEmail("used@corebank.com"))
-                .willReturn(true);
+        given(customerPersistencePort.existsByEmail("used@corebank.com")).willReturn(true);
 
-        assertError(
-                command(null, "used@corebank.com", EMAIL_TOKEN),
-                CustomerErrorCode.DUPLICATE_EMAIL
-        );
-        verify(emailChangeVerificationPort, never())
-                .verifyAndConsume(any(), any());
+        assertError(command(null, "used@corebank.com", EMAIL_TOKEN), CustomerErrorCode.DUPLICATE_EMAIL);
+        verify(emailChangeVerificationPort, never()).verifyAndConsume(any(), any());
         verify(customerPersistencePort, never()).updateContactInfo(any());
     }
 
     // 공통 테스트 고객 조회와 저장 응답을 준비한다.
     private void givenCustomer() {
-        given(customerPersistencePort.findByIdForUpdate(CUSTOMER_ID))
-                .willReturn(Optional.of(customer()));
+        given(customerPersistencePort.findByIdForUpdate(CUSTOMER_ID)).willReturn(Optional.of(customer()));
     }
 
     // Auditing이 반영된 영속화 결과를 반환해 입력 객체 echo로 인한 착시를 방지한다.
     private void givenPersistedCustomer() {
         given(customerPersistencePort.updateContactInfo(any()))
-                .willAnswer(invocation -> persistedCustomer(
-                        invocation.getArgument(0)
-                ));
+                .willAnswer(invocation -> persistedCustomer(invocation.getArgument(0)));
     }
 
     // 테스트 입력값으로 고객정보 변경 command를 생성한다.
-    private UpdateCustomerInfoCommand command(
-            String phoneNumber,
-            String email,
-            String token
-    ) {
-        return new UpdateCustomerInfoCommand(
-                CUSTOMER_ID,
-                phoneNumber,
-                email,
-                token
-        );
+    private UpdateCustomerInfoCommand command(String phoneNumber, String email, String token) {
+        return new UpdateCustomerInfoCommand(CUSTOMER_ID, phoneNumber, email, token);
     }
 
     // 기대 오류코드와 실제 BusinessException을 비교한다.
-    private void assertError(
-            UpdateCustomerInfoCommand command,
-            Object expectedErrorCode
-    ) {
-        BusinessException exception = catchThrowableOfType(
-                () -> service.update(command),
-                BusinessException.class
-        );
+    private void assertError(UpdateCustomerInfoCommand command, Object expectedErrorCode) {
+        BusinessException exception = catchThrowableOfType(() -> service.update(command), BusinessException.class);
         assertThat(exception.getErrorCode()).isEqualTo(expectedErrorCode);
     }
 
@@ -222,8 +163,7 @@ class CustomerInfoUpdateServiceTest {
                 null,
                 joinedAt,
                 joinedAt,
-                joinedAt
-        );
+                joinedAt);
     }
 
     // 저장 시점의 updatedAt을 포함한 고객 객체로 실제 persistence 반환값을 모사한다.
@@ -245,7 +185,6 @@ class CustomerInfoUpdateServiceTest {
                 customer.getPasswordChangedAt(),
                 customer.getJoinedAt(),
                 customer.getCreatedAt(),
-                LocalDateTime.of(2026, 8, 21, 16, 20)
-        );
+                LocalDateTime.of(2026, 8, 21, 16, 20));
     }
 }

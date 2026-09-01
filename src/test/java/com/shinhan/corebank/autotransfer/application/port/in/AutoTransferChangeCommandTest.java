@@ -108,7 +108,8 @@ class AutoTransferChangeCommandTest {
     @Test
     @DisplayName("recipientPassbookMemo가 10자를 초과하면 AUT0009를 던진다")
     void recipientPassbookMemoTooLong_throwsMemoLengthExceeded() {
-        assertThatThrownBy(() -> validBuilder().recipientPassbookMemo("12345678901").build())
+        assertThatThrownBy(() ->
+                        validBuilder().recipientPassbookMemo("12345678901").build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(AutoTransferErrorCode.MEMO_LENGTH_EXCEEDED));
@@ -117,10 +118,8 @@ class AutoTransferChangeCommandTest {
     @Test
     @DisplayName("myPassbookMemo/recipientPassbookMemo는 없어도 정상 생성된다")
     void optionalMemosCanBeNull() {
-        AutoTransferChangeCommand command = validBuilder()
-                .myPassbookMemo(null)
-                .recipientPassbookMemo(null)
-                .build();
+        AutoTransferChangeCommand command =
+                validBuilder().myPassbookMemo(null).recipientPassbookMemo(null).build();
 
         assertThat(command.myPassbookMemo()).isNull();
     }
@@ -152,7 +151,8 @@ class AutoTransferChangeCommandTest {
     @Test
     @DisplayName("depositAccountNumber를 보내면 AUT0003을 던진다")
     void depositAccountNumberPresent_throwsUnmodifiableField() {
-        assertThatThrownBy(() -> validBuilder().depositAccountNumber("110987654321").build())
+        assertThatThrownBy(() ->
+                        validBuilder().depositAccountNumber("110987654321").build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(AutoTransferErrorCode.UNMODIFIABLE_FIELD));

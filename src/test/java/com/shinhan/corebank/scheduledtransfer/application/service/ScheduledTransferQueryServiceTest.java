@@ -20,7 +20,6 @@ import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTran
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -77,7 +76,8 @@ class ScheduledTransferQueryServiceTest {
         when(scheduledTransferQueryPort.search(1L, null, null, null, null, PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(List.of()));
 
-        Page<ScheduledTransferListItem> result = scheduledTransferQueryService.search(1L, null, null, null, null, 0, 10, false);
+        Page<ScheduledTransferListItem> result =
+                scheduledTransferQueryService.search(1L, null, null, null, null, 0, 10, false);
 
         assertThat(result.getContent()).isEmpty();
     }
@@ -98,8 +98,8 @@ class ScheduledTransferQueryServiceTest {
     void rejectsNegativePage() {
         assertThatThrownBy(() -> scheduledTransferQueryService.search(1L, null, null, null, null, -1, 10, false))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
 
         verifyPortNeverCalled();
     }
@@ -112,7 +112,8 @@ class ScheduledTransferQueryServiceTest {
         when(scheduledTransferQueryPort.search(1L, null, null, fromDate, null, PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(List.of()));
 
-        Page<ScheduledTransferListItem> result = scheduledTransferQueryService.search(1L, null, null, fromDate, null, 0, 10, false);
+        Page<ScheduledTransferListItem> result =
+                scheduledTransferQueryService.search(1L, null, null, fromDate, null, 0, 10, false);
 
         assertThat(result.getContent()).isEmpty();
     }
@@ -154,7 +155,8 @@ class ScheduledTransferQueryServiceTest {
         when(scheduledTransferQueryPort.search(1L, null, null, fromDate, toDate, PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(List.of()));
 
-        Page<ScheduledTransferListItem> result = scheduledTransferQueryService.search(1L, null, null, fromDate, toDate, 0, 10, false);
+        Page<ScheduledTransferListItem> result =
+                scheduledTransferQueryService.search(1L, null, null, fromDate, toDate, 0, 10, false);
 
         assertThat(result.getContent()).isEmpty();
     }
@@ -165,23 +167,50 @@ class ScheduledTransferQueryServiceTest {
     void delegatesToPortAndMapsWithBulkAccountLookup() {
         stubClock();
         ScheduledTransfer waiting = ScheduledTransfer.reconstitute(
-                101L, 1L, 2L, "088", "110987654321", "홍길동", 300_000L,
-                LocalDate.of(2026, 9, 1), "생활비", null, ScheduledTransferStatus.WAITING,
-                null, LocalDateTime.of(2026, 8, 1, 10, 0), null, null, null, null);
+                101L,
+                1L,
+                2L,
+                "088",
+                "110987654321",
+                "홍길동",
+                300_000L,
+                LocalDate.of(2026, 9, 1),
+                "생활비",
+                null,
+                ScheduledTransferStatus.WAITING,
+                null,
+                LocalDateTime.of(2026, 8, 1, 10, 0),
+                null,
+                null,
+                null,
+                null);
         ScheduledTransfer success = ScheduledTransfer.reconstitute(
-                102L, 1L, 2L, "088", "110111111111", "김철수", 50_000L,
-                LocalDate.of(2026, 8, 10), null, null, ScheduledTransferStatus.SUCCESS,
-                "TXN1", LocalDateTime.of(2026, 8, 1, 10, 0), LocalDateTime.of(2026, 8, 10, 9, 0), null, null, null);
+                102L,
+                1L,
+                2L,
+                "088",
+                "110111111111",
+                "김철수",
+                50_000L,
+                LocalDate.of(2026, 8, 10),
+                null,
+                null,
+                ScheduledTransferStatus.SUCCESS,
+                "TXN1",
+                LocalDateTime.of(2026, 8, 1, 10, 0),
+                LocalDateTime.of(2026, 8, 10, 9, 0),
+                null,
+                null,
+                null);
 
-        when(scheduledTransferQueryPort.search(1L, ScheduledTransferStatus.WAITING, 2L, null, null, PageRequest.of(0, 10)))
+        when(scheduledTransferQueryPort.search(
+                        1L, ScheduledTransferStatus.WAITING, 2L, null, null, PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(List.of(waiting, success)));
-        when(accountStatusPort.findAccountNumbersByIds(List.of(2L)))
-                .thenReturn(Map.of(2L, "110123456789"));
-        when(accountStatusPort.findAccountAliasesByIds(List.of(2L)))
-                .thenReturn(Map.of(2L, "우리집"));
+        when(accountStatusPort.findAccountNumbersByIds(List.of(2L))).thenReturn(Map.of(2L, "110123456789"));
+        when(accountStatusPort.findAccountAliasesByIds(List.of(2L))).thenReturn(Map.of(2L, "우리집"));
 
-        Page<ScheduledTransferListItem> result = scheduledTransferQueryService.search(
-                1L, ScheduledTransferStatus.WAITING, 2L, null, null, 0, 10, false);
+        Page<ScheduledTransferListItem> result =
+                scheduledTransferQueryService.search(1L, ScheduledTransferStatus.WAITING, 2L, null, null, 0, 10, false);
 
         assertThat(result.getContent()).hasSize(2);
         ScheduledTransferListItem first = result.getContent().get(0);
@@ -203,19 +232,31 @@ class ScheduledTransferQueryServiceTest {
     void mapsFromAliasNull_whenAliasNotSet() {
         stubClock();
         ScheduledTransfer waiting = ScheduledTransfer.reconstitute(
-                101L, 1L, 2L, "088", "110987654321", "홍길동", 300_000L,
-                LocalDate.of(2026, 9, 1), null, null, ScheduledTransferStatus.WAITING,
-                null, LocalDateTime.of(2026, 8, 1, 10, 0), null, null, null, null);
+                101L,
+                1L,
+                2L,
+                "088",
+                "110987654321",
+                "홍길동",
+                300_000L,
+                LocalDate.of(2026, 9, 1),
+                null,
+                null,
+                ScheduledTransferStatus.WAITING,
+                null,
+                LocalDateTime.of(2026, 8, 1, 10, 0),
+                null,
+                null,
+                null,
+                null);
 
         when(scheduledTransferQueryPort.search(1L, null, null, null, null, PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(List.of(waiting)));
-        when(accountStatusPort.findAccountNumbersByIds(List.of(2L)))
-                .thenReturn(Map.of(2L, "110123456789"));
-        when(accountStatusPort.findAccountAliasesByIds(List.of(2L)))
-                .thenReturn(Map.of());
+        when(accountStatusPort.findAccountNumbersByIds(List.of(2L))).thenReturn(Map.of(2L, "110123456789"));
+        when(accountStatusPort.findAccountAliasesByIds(List.of(2L))).thenReturn(Map.of());
 
-        Page<ScheduledTransferListItem> result = scheduledTransferQueryService.search(
-                1L, null, null, null, null, 0, 10, false);
+        Page<ScheduledTransferListItem> result =
+                scheduledTransferQueryService.search(1L, null, null, null, null, 0, 10, false);
 
         assertThat(result.getContent().get(0).fromAlias()).isNull();
     }
@@ -225,19 +266,31 @@ class ScheduledTransferQueryServiceTest {
     void cancelableIsFalse_whenWaitingButScheduledForToday() {
         stubClock();
         ScheduledTransfer waitingToday = ScheduledTransfer.reconstitute(
-                101L, 1L, 2L, "088", "110987654321", "홍길동", 300_000L,
-                TODAY, null, null, ScheduledTransferStatus.WAITING,
-                null, LocalDateTime.of(2026, 8, 1, 10, 0), null, null, null, null);
+                101L,
+                1L,
+                2L,
+                "088",
+                "110987654321",
+                "홍길동",
+                300_000L,
+                TODAY,
+                null,
+                null,
+                ScheduledTransferStatus.WAITING,
+                null,
+                LocalDateTime.of(2026, 8, 1, 10, 0),
+                null,
+                null,
+                null,
+                null);
 
         when(scheduledTransferQueryPort.search(1L, null, null, null, null, PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(List.of(waitingToday)));
-        when(accountStatusPort.findAccountNumbersByIds(List.of(2L)))
-                .thenReturn(Map.of(2L, "110123456789"));
-        when(accountStatusPort.findAccountAliasesByIds(List.of(2L)))
-                .thenReturn(Map.of());
+        when(accountStatusPort.findAccountNumbersByIds(List.of(2L))).thenReturn(Map.of(2L, "110123456789"));
+        when(accountStatusPort.findAccountAliasesByIds(List.of(2L))).thenReturn(Map.of());
 
-        Page<ScheduledTransferListItem> result = scheduledTransferQueryService.search(
-                1L, null, null, null, null, 0, 10, false);
+        Page<ScheduledTransferListItem> result =
+                scheduledTransferQueryService.search(1L, null, null, null, null, 0, 10, false);
 
         assertThat(result.getContent().get(0).cancelable()).isFalse();
     }
@@ -249,7 +302,8 @@ class ScheduledTransferQueryServiceTest {
         when(scheduledTransferQueryPort.search(1L, null, null, null, null, Pageable.unpaged()))
                 .thenReturn(new PageImpl<>(List.of(), Pageable.unpaged(), 0));
 
-        Page<ScheduledTransferListItem> result = scheduledTransferQueryService.search(1L, null, null, null, null, 0, 7, true);
+        Page<ScheduledTransferListItem> result =
+                scheduledTransferQueryService.search(1L, null, null, null, null, 0, 7, true);
 
         assertThat(result.getContent()).isEmpty();
         verify(scheduledTransferQueryPort).search(1L, null, null, null, null, Pageable.unpaged());
@@ -274,7 +328,8 @@ class ScheduledTransferQueryServiceTest {
         when(scheduledTransferQueryPort.search(1L, null, null, null, null, Pageable.unpaged()))
                 .thenReturn(new PageImpl<>(List.of(), Pageable.unpaged(), 100));
 
-        Page<ScheduledTransferListItem> result = scheduledTransferQueryService.search(1L, null, null, null, null, 0, 7, true);
+        Page<ScheduledTransferListItem> result =
+                scheduledTransferQueryService.search(1L, null, null, null, null, 0, 7, true);
 
         assertThat(result.getTotalElements()).isEqualTo(100);
     }
@@ -287,7 +342,8 @@ class ScheduledTransferQueryServiceTest {
     @Test
     @DisplayName("처리결과 조회: customerId가 없으면 CMN0002를 던지고 포트는 호출하지 않는다")
     void searchExecutionResults_rejectsMissingCustomerId() {
-        assertThatThrownBy(() -> scheduledTransferQueryService.searchExecutionResults(null, null, null, null, ScheduledTransferExecutionResultSort.LATEST, 0, 10, false))
+        assertThatThrownBy(() -> scheduledTransferQueryService.searchExecutionResults(
+                        null, null, null, null, ScheduledTransferExecutionResultSort.LATEST, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -299,7 +355,8 @@ class ScheduledTransferQueryServiceTest {
     @Test
     @DisplayName("처리결과 조회: 허용되지 않은 size면 CMN0005를 던진다")
     void searchExecutionResults_rejectsInvalidPageSize() {
-        assertThatThrownBy(() -> scheduledTransferQueryService.searchExecutionResults(1L, null, null, null, ScheduledTransferExecutionResultSort.LATEST, 0, 7, false))
+        assertThatThrownBy(() -> scheduledTransferQueryService.searchExecutionResults(
+                        1L, null, null, null, ScheduledTransferExecutionResultSort.LATEST, 0, 7, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_PAGE_SIZE));
@@ -308,10 +365,11 @@ class ScheduledTransferQueryServiceTest {
     @Test
     @DisplayName("처리결과 조회: page가 음수면 CMN0001을 던진다")
     void searchExecutionResults_rejectsNegativePage() {
-        assertThatThrownBy(() -> scheduledTransferQueryService.searchExecutionResults(1L, null, null, null, ScheduledTransferExecutionResultSort.LATEST, -1, 10, false))
+        assertThatThrownBy(() -> scheduledTransferQueryService.searchExecutionResults(
+                        1L, null, null, null, ScheduledTransferExecutionResultSort.LATEST, -1, 10, false))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
     }
 
     @Test
@@ -319,7 +377,8 @@ class ScheduledTransferQueryServiceTest {
     void searchExecutionResults_allTrue_skipsPageSizeValidation_usesUnpaged() {
         stubClock();
         LocalDate expectedFrom = TODAY.minusMonths(1);
-        when(scheduledTransferQueryPort.searchExecutionResults(1L, null, expectedFrom, TODAY, ScheduledTransferExecutionResultSort.LATEST, Pageable.unpaged()))
+        when(scheduledTransferQueryPort.searchExecutionResults(
+                        1L, null, expectedFrom, TODAY, ScheduledTransferExecutionResultSort.LATEST, Pageable.unpaged()))
                 .thenReturn(new PageImpl<>(List.of(), Pageable.unpaged(), 0));
         when(scheduledTransferQueryPort.summarizeExecutionResults(1L, null, expectedFrom, TODAY))
                 .thenReturn(ScheduledTransferExecutionResultAggregate.empty());
@@ -328,7 +387,9 @@ class ScheduledTransferQueryServiceTest {
                 1L, null, null, null, ScheduledTransferExecutionResultSort.LATEST, 0, 7, true);
 
         assertThat(result.page().getContent()).isEmpty();
-        verify(scheduledTransferQueryPort).searchExecutionResults(1L, null, expectedFrom, TODAY, ScheduledTransferExecutionResultSort.LATEST, Pageable.unpaged());
+        verify(scheduledTransferQueryPort)
+                .searchExecutionResults(
+                        1L, null, expectedFrom, TODAY, ScheduledTransferExecutionResultSort.LATEST, Pageable.unpaged());
     }
 
     @Test
@@ -336,16 +397,29 @@ class ScheduledTransferQueryServiceTest {
     void searchExecutionResults_appliesDefaultOneMonthPeriod() {
         stubClock();
         LocalDate expectedFrom = TODAY.minusMonths(1);
-        when(scheduledTransferQueryPort.searchExecutionResults(1L, null, expectedFrom, TODAY, ScheduledTransferExecutionResultSort.LATEST, PageRequest.of(0, 10)))
+        when(scheduledTransferQueryPort.searchExecutionResults(
+                        1L,
+                        null,
+                        expectedFrom,
+                        TODAY,
+                        ScheduledTransferExecutionResultSort.LATEST,
+                        PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(List.of()));
         when(scheduledTransferQueryPort.summarizeExecutionResults(1L, null, expectedFrom, TODAY))
                 .thenReturn(ScheduledTransferExecutionResultAggregate.empty());
 
-        ScheduledTransferExecutionResultPage result =
-                scheduledTransferQueryService.searchExecutionResults(1L, null, null, null, ScheduledTransferExecutionResultSort.LATEST, 0, 10, false);
+        ScheduledTransferExecutionResultPage result = scheduledTransferQueryService.searchExecutionResults(
+                1L, null, null, null, ScheduledTransferExecutionResultSort.LATEST, 0, 10, false);
 
         assertThat(result.page().getContent()).isEmpty();
-        verify(scheduledTransferQueryPort).searchExecutionResults(1L, null, expectedFrom, TODAY, ScheduledTransferExecutionResultSort.LATEST, PageRequest.of(0, 10));
+        verify(scheduledTransferQueryPort)
+                .searchExecutionResults(
+                        1L,
+                        null,
+                        expectedFrom,
+                        TODAY,
+                        ScheduledTransferExecutionResultSort.LATEST,
+                        PageRequest.of(0, 10));
     }
 
     @Test
@@ -354,14 +428,28 @@ class ScheduledTransferQueryServiceTest {
         stubClock();
         LocalDate toDate = LocalDate.of(2026, 6, 15);
         LocalDate expectedFrom = LocalDate.of(2026, 5, 15);
-        when(scheduledTransferQueryPort.searchExecutionResults(1L, null, expectedFrom, toDate, ScheduledTransferExecutionResultSort.LATEST, PageRequest.of(0, 10)))
+        when(scheduledTransferQueryPort.searchExecutionResults(
+                        1L,
+                        null,
+                        expectedFrom,
+                        toDate,
+                        ScheduledTransferExecutionResultSort.LATEST,
+                        PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(List.of()));
         when(scheduledTransferQueryPort.summarizeExecutionResults(1L, null, expectedFrom, toDate))
                 .thenReturn(ScheduledTransferExecutionResultAggregate.empty());
 
-        scheduledTransferQueryService.searchExecutionResults(1L, null, null, toDate, ScheduledTransferExecutionResultSort.LATEST, 0, 10, false);
+        scheduledTransferQueryService.searchExecutionResults(
+                1L, null, null, toDate, ScheduledTransferExecutionResultSort.LATEST, 0, 10, false);
 
-        verify(scheduledTransferQueryPort).searchExecutionResults(1L, null, expectedFrom, toDate, ScheduledTransferExecutionResultSort.LATEST, PageRequest.of(0, 10));
+        verify(scheduledTransferQueryPort)
+                .searchExecutionResults(
+                        1L,
+                        null,
+                        expectedFrom,
+                        toDate,
+                        ScheduledTransferExecutionResultSort.LATEST,
+                        PageRequest.of(0, 10));
     }
 
     @Test
@@ -369,14 +457,18 @@ class ScheduledTransferQueryServiceTest {
     void searchExecutionResults_onlyFromDate_toDateDefaultsToToday() {
         stubClock();
         LocalDate fromDate = LocalDate.of(2026, 8, 1);
-        when(scheduledTransferQueryPort.searchExecutionResults(1L, null, fromDate, TODAY, ScheduledTransferExecutionResultSort.LATEST, PageRequest.of(0, 10)))
+        when(scheduledTransferQueryPort.searchExecutionResults(
+                        1L, null, fromDate, TODAY, ScheduledTransferExecutionResultSort.LATEST, PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(List.of()));
         when(scheduledTransferQueryPort.summarizeExecutionResults(1L, null, fromDate, TODAY))
                 .thenReturn(ScheduledTransferExecutionResultAggregate.empty());
 
-        scheduledTransferQueryService.searchExecutionResults(1L, null, fromDate, null, ScheduledTransferExecutionResultSort.LATEST, 0, 10, false);
+        scheduledTransferQueryService.searchExecutionResults(
+                1L, null, fromDate, null, ScheduledTransferExecutionResultSort.LATEST, 0, 10, false);
 
-        verify(scheduledTransferQueryPort).searchExecutionResults(1L, null, fromDate, TODAY, ScheduledTransferExecutionResultSort.LATEST, PageRequest.of(0, 10));
+        verify(scheduledTransferQueryPort)
+                .searchExecutionResults(
+                        1L, null, fromDate, TODAY, ScheduledTransferExecutionResultSort.LATEST, PageRequest.of(0, 10));
     }
 
     @Test
@@ -386,7 +478,8 @@ class ScheduledTransferQueryServiceTest {
         LocalDate fromDate = LocalDate.of(2026, 6, 2);
         LocalDate toDate = LocalDate.of(2026, 6, 1);
 
-        assertThatThrownBy(() -> scheduledTransferQueryService.searchExecutionResults(1L, null, fromDate, toDate, ScheduledTransferExecutionResultSort.LATEST, 0, 10, false))
+        assertThatThrownBy(() -> scheduledTransferQueryService.searchExecutionResults(
+                        1L, null, fromDate, toDate, ScheduledTransferExecutionResultSort.LATEST, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_DATE_RANGE));
@@ -399,7 +492,8 @@ class ScheduledTransferQueryServiceTest {
         LocalDate fromDate = LocalDate.of(2026, 1, 1);
         LocalDate toDate = fromDate.plusDays(366);
 
-        assertThatThrownBy(() -> scheduledTransferQueryService.searchExecutionResults(1L, null, fromDate, toDate, ScheduledTransferExecutionResultSort.LATEST, 0, 10, false))
+        assertThatThrownBy(() -> scheduledTransferQueryService.searchExecutionResults(
+                        1L, null, fromDate, toDate, ScheduledTransferExecutionResultSort.LATEST, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.DATE_RANGE_EXCEEDED));
@@ -410,22 +504,36 @@ class ScheduledTransferQueryServiceTest {
     void searchExecutionResults_mapsItemsAndSummary() {
         stubClock();
         ScheduledTransfer success = ScheduledTransfer.reconstitute(
-                201L, 1L, 2L, "088", "110987654321", "홍길동", 100_000L,
-                LocalDate.of(2026, 8, 10), null, null, ScheduledTransferStatus.SUCCESS,
-                "TXN100", LocalDateTime.of(2026, 8, 1, 10, 0), LocalDateTime.of(2026, 8, 10, 9, 0), null, null, null);
+                201L,
+                1L,
+                2L,
+                "088",
+                "110987654321",
+                "홍길동",
+                100_000L,
+                LocalDate.of(2026, 8, 10),
+                null,
+                null,
+                ScheduledTransferStatus.SUCCESS,
+                "TXN100",
+                LocalDateTime.of(2026, 8, 1, 10, 0),
+                LocalDateTime.of(2026, 8, 10, 9, 0),
+                null,
+                null,
+                null);
         LocalDate fromDate = LocalDate.of(2026, 8, 1);
         LocalDate toDate = LocalDate.of(2026, 8, 15);
-        when(scheduledTransferQueryPort.searchExecutionResults(1L, 2L, fromDate, toDate, ScheduledTransferExecutionResultSort.LATEST, PageRequest.of(0, 10)))
+        when(scheduledTransferQueryPort.searchExecutionResults(
+                        1L, 2L, fromDate, toDate, ScheduledTransferExecutionResultSort.LATEST, PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(List.of(success)));
-        when(accountStatusPort.findAccountNumbersByIds(List.of(2L)))
-                .thenReturn(Map.of(2L, "110123456789"));
+        when(accountStatusPort.findAccountNumbersByIds(List.of(2L))).thenReturn(Map.of(2L, "110123456789"));
         ScheduledTransferExecutionResultAggregate aggregate =
                 new ScheduledTransferExecutionResultAggregate(1L, 100_000L, 2L, 30_000L, 1L, 50_000L);
         when(scheduledTransferQueryPort.summarizeExecutionResults(1L, 2L, fromDate, toDate))
                 .thenReturn(aggregate);
 
-        ScheduledTransferExecutionResultPage result =
-                scheduledTransferQueryService.searchExecutionResults(1L, 2L, fromDate, toDate, ScheduledTransferExecutionResultSort.LATEST, 0, 10, false);
+        ScheduledTransferExecutionResultPage result = scheduledTransferQueryService.searchExecutionResults(
+                1L, 2L, fromDate, toDate, ScheduledTransferExecutionResultSort.LATEST, 0, 10, false);
 
         assertThat(result.page().getContent()).hasSize(1);
         ScheduledTransferExecutionResultItem item = result.page().getContent().get(0);

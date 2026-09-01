@@ -3,13 +3,12 @@ package com.shinhan.corebank.scheduledtransfer.application.service;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferBatchUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferBatchQueryPort;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
+import java.time.LocalDate;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-
-import java.time.LocalDate;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -41,21 +40,29 @@ public class ScheduledTransferBatchService implements ScheduledTransferBatchUseC
         try {
             claimed = scheduledTransferBatchItemProcessor.claim(scheduledTransfer.getScheduledTransferId());
         } catch (Exception e) {
-            log.error("PROCESSING 선점 실패 - scheduledTransferId={}, date={}",
-                    scheduledTransfer.getScheduledTransferId(), date, e);
+            log.error(
+                    "PROCESSING 선점 실패 - scheduledTransferId={}, date={}",
+                    scheduledTransfer.getScheduledTransferId(),
+                    date,
+                    e);
             return;
         }
         if (!claimed) {
-            log.info("이미 다른 배치 실행이 선점함(중복 수행 방어) - scheduledTransferId={}, date={}",
-                    scheduledTransfer.getScheduledTransferId(), date);
+            log.info(
+                    "이미 다른 배치 실행이 선점함(중복 수행 방어) - scheduledTransferId={}, date={}",
+                    scheduledTransfer.getScheduledTransferId(),
+                    date);
             return;
         }
 
         try {
             scheduledTransferBatchItemProcessor.completeProcessing(scheduledTransfer, date);
         } catch (Exception e) {
-            log.error("예약이체 배치 처리 실패 - scheduledTransferId={}, date={}",
-                    scheduledTransfer.getScheduledTransferId(), date, e);
+            log.error(
+                    "예약이체 배치 처리 실패 - scheduledTransferId={}, date={}",
+                    scheduledTransfer.getScheduledTransferId(),
+                    date,
+                    e);
         }
     }
 
@@ -64,8 +71,11 @@ public class ScheduledTransferBatchService implements ScheduledTransferBatchUseC
         try {
             scheduledTransferBatchItemProcessor.reconcileStuckExecution(scheduledTransfer);
         } catch (Exception e) {
-            log.error("재확정 배치 처리 실패 - scheduledTransferId={}, date={}",
-                    scheduledTransfer.getScheduledTransferId(), date, e);
+            log.error(
+                    "재확정 배치 처리 실패 - scheduledTransferId={}, date={}",
+                    scheduledTransfer.getScheduledTransferId(),
+                    date,
+                    e);
         }
     }
 }

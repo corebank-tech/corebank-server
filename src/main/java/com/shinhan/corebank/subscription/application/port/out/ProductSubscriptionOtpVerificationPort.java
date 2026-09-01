@@ -8,6 +8,5 @@ public interface ProductSubscriptionOtpVerificationPort {
             Long productId,
             Long subscriptionAmount,
             Integer termMonths,
-            Long withdrawalAccountId
-    );
+            Long withdrawalAccountId);
 }

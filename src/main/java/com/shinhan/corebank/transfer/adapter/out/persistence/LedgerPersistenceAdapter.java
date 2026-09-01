@@ -3,7 +3,6 @@ package com.shinhan.corebank.transfer.adapter.out.persistence;
 import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
 import com.shinhan.corebank.transfer.domain.LedgerEntry;
 import com.shinhan.corebank.transfer.domain.LedgerPair;
-
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,9 +13,7 @@ public class LedgerPersistenceAdapter implements LedgerSavePort {
     private final LedgerEntryIdGenerator ledgerEntryIdGenerator;
 
     public LedgerPersistenceAdapter(
-            LedgerEntryJpaRepository repository,
-            LedgerEntryIdGenerator ledgerEntryIdGenerator
-    ) {
+            LedgerEntryJpaRepository repository, LedgerEntryIdGenerator ledgerEntryIdGenerator) {
         this.repository = repository;
         this.ledgerEntryIdGenerator = ledgerEntryIdGenerator;
     }
@@ -30,8 +27,7 @@ public class LedgerPersistenceAdapter implements LedgerSavePort {
     }
 
     private void saveEntry(LedgerEntry entry) {
-        LedgerEntryJpaEntity entity = LedgerEntryMapper.toEntity(entry)
-                .toBuilder()
+        LedgerEntryJpaEntity entity = LedgerEntryMapper.toEntity(entry).toBuilder()
                 .ledgerEntryId(ledgerEntryIdGenerator.nextId())
                 .build();
         repository.save(entity);

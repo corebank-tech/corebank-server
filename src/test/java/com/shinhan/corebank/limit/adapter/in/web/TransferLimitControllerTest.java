@@ -11,18 +11,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
-
 import jakarta.persistence.EntityManager;
-import java.util.List;
-import java.util.UUID;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.MediaType;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -55,8 +54,7 @@ class TransferLimitControllerTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(get("/transfer-limits")
-                        .with(authentication(authenticationOf(customerId))))
+        mockMvc.perform(get("/transfer-limits").with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data.oneTimeLimit").value(2_000_000L))
@@ -72,8 +70,7 @@ class TransferLimitControllerTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(get("/transfer-limits")
-                        .with(authentication(authenticationOf(customerId))))
+        mockMvc.perform(get("/transfer-limits").with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.oneTimeLimit").value(1_000_000L))
                 .andExpect(jsonPath("$.data.dailyLimit").value(5_000_000L))
@@ -84,8 +81,7 @@ class TransferLimitControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("인증 없이 요청하면 401을 반환한다")
     void getTransferLimit_withoutAuthentication_returnsUnauthorized() throws Exception {
-        mockMvc.perform(get("/transfer-limits"))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/transfer-limits")).andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -165,22 +161,23 @@ class TransferLimitControllerTest extends IntegrationTestSupport {
         return """
                 {"oneTimeLimit": %d, "dailyLimit": %d,
                  "accountPasswordAuthToken": "ACC_PWD_TEST", "otpAuthToken": "OTP_AUTH_TEST"}
-                """.formatted(oneTimeLimit, dailyLimit);
+                """
+                .formatted(oneTimeLimit, dailyLimit);
     }
 
     private List<Long> savedLimits(Long customerId) {
-        Object[] row = (Object[]) entityManager.createNativeQuery(
-                        "SELECT one_time_limit, daily_limit FROM transfer_limit "
-                                + "WHERE customer_id = :customerId")
+        Object[] row = (Object[]) entityManager
+                .createNativeQuery(
+                        "SELECT one_time_limit, daily_limit FROM transfer_limit " + "WHERE customer_id = :customerId")
                 .setParameter("customerId", customerId)
                 .getSingleResult();
         return List.of(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
     }
 
     private List<Long> historyBeforeValues(Long customerId) {
-        Object[] row = (Object[]) entityManager.createNativeQuery(
-                        "SELECT before_one_time_limit, before_daily_limit FROM transfer_limit_history "
-                                + "WHERE customer_id = :customerId")
+        Object[] row = (Object[]) entityManager
+                .createNativeQuery("SELECT before_one_time_limit, before_daily_limit FROM transfer_limit_history "
+                        + "WHERE customer_id = :customerId")
                 .setParameter("customerId", customerId)
                 .getSingleResult();
         return List.of(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
@@ -194,7 +191,8 @@ class TransferLimitControllerTest extends IntegrationTestSupport {
 
     private Long insertCustomer() {
         long seq = CUSTOMER_SEQ.incrementAndGet();
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO customer (user_id, password_hash, user_name, birth_date, email, phone_number, "
                                 + "joined_at, created_at, updated_at) "
                                 + "VALUES (:userId, 'x', '홍길동', '1990-01-01', :email, '01012345678', "
@@ -202,14 +200,17 @@ class TransferLimitControllerTest extends IntegrationTestSupport {
                 .setParameter("userId", "lmt" + seq)
                 .setParameter("email", "lmt" + seq + "@test.com")
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
     private void insertTransferLimit(Long customerId, long oneTimeLimit, long dailyLimit) {
-        entityManager.createNativeQuery(
-                        "INSERT INTO transfer_limit (customer_id, one_time_limit, daily_limit, "
-                                + "created_at, updated_at) "
-                                + "VALUES (:customerId, :oneTimeLimit, :dailyLimit, NOW(), NOW())")
+        entityManager
+                .createNativeQuery("INSERT INTO transfer_limit (customer_id, one_time_limit, daily_limit, "
+                        + "created_at, updated_at) "
+                        + "VALUES (:customerId, :oneTimeLimit, :dailyLimit, NOW(), NOW())")
                 .setParameter("customerId", customerId)
                 .setParameter("oneTimeLimit", oneTimeLimit)
                 .setParameter("dailyLimit", dailyLimit)
@@ -217,10 +218,10 @@ class TransferLimitControllerTest extends IntegrationTestSupport {
     }
 
     private void insertDailyUsage(Long customerId, LocalDate usageDate, long usedAmount) {
-        entityManager.createNativeQuery(
-                        "INSERT INTO transfer_limit_daily_usage (customer_id, usage_date, used_amount, "
-                                + "created_at, updated_at) "
-                                + "VALUES (:customerId, :usageDate, :usedAmount, NOW(), NOW())")
+        entityManager
+                .createNativeQuery("INSERT INTO transfer_limit_daily_usage (customer_id, usage_date, used_amount, "
+                        + "created_at, updated_at) "
+                        + "VALUES (:customerId, :usageDate, :usedAmount, NOW(), NOW())")
                 .setParameter("customerId", customerId)
                 .setParameter("usageDate", usageDate)
                 .setParameter("usedAmount", usedAmount)

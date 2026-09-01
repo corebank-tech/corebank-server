@@ -31,22 +31,14 @@ class CustomerInfoQueryServiceTest {
 
     @BeforeEach
     void setUp() {
-        Clock clock = Clock.fixed(
-                Instant.parse("2026-08-21T00:00:00Z"),
-                ZoneId.of("Asia/Seoul")
-        );
-        service = new CustomerInfoQueryService(
-                customerPersistencePort,
-                new CustomerInfoMasker(),
-                clock
-        );
+        Clock clock = Clock.fixed(Instant.parse("2026-08-21T00:00:00Z"), ZoneId.of("Asia/Seoul"));
+        service = new CustomerInfoQueryService(customerPersistencePort, new CustomerInfoMasker(), clock);
     }
 
     @Test
     @DisplayName("고객정보를 조회해 마스킹된 결과로 반환한다")
     void returnsMaskedCustomerInformation() {
-        given(customerPersistencePort.findById(1L))
-                .willReturn(Optional.of(customer()));
+        given(customerPersistencePort.findById(1L)).willReturn(Optional.of(customer()));
 
         CustomerInfoResult result = service.getCustomerInfo(1L);
 
@@ -56,15 +48,13 @@ class CustomerInfoQueryServiceTest {
         assertThat(result.birthDate()).isEqualTo("1995-**-**");
         assertThat(result.phoneNumber()).isEqualTo("010****5678");
         assertThat(result.email()).isEqualTo("newm***@corebank.com");
-        assertThat(result.joinedAt().getOffset())
-                .isEqualTo(ZoneOffset.ofHours(9));
+        assertThat(result.joinedAt().getOffset()).isEqualTo(ZoneOffset.ofHours(9));
     }
 
     @Test
     @DisplayName("세션 고객이 DB에 없으면 내부 정합성 예외가 발생한다")
     void throwsWhenAuthenticatedCustomerDoesNotExist() {
-        given(customerPersistencePort.findById(1L))
-                .willReturn(Optional.empty());
+        given(customerPersistencePort.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getCustomerInfo(1L))
                 .isInstanceOf(IllegalStateException.class)
@@ -91,7 +81,6 @@ class CustomerInfoQueryServiceTest {
                 null,
                 joinedAt,
                 joinedAt,
-                joinedAt
-        );
+                joinedAt);
     }
 }

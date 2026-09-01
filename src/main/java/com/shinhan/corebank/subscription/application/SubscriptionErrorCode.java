@@ -19,9 +19,17 @@ public enum SubscriptionErrorCode implements ErrorCode {
     }
 
     @Override
-    public String getCode() { return code; }
+    public String getCode() {
+        return code;
+    }
+
     @Override
-    public int getStatus() { return status; }
+    public int getStatus() {
+        return status;
+    }
+
     @Override
-    public String getMessage() { return message; }
+    public String getMessage() {
+        return message;
+    }
 }

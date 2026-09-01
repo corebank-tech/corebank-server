@@ -6,5 +6,4 @@ package com.shinhan.corebank.transfer.application.port.out;
  * accountNumber는 락 획득 전 계좌번호 조회 결과가 락 획득 시점까지 유효한지
  * 재검증하는 용도로 쓰인다.
  */
-public record LockedAccount(Long accountId, String accountNumber, long balance, LockedAccountStatus status) {
-}
+public record LockedAccount(Long accountId, String accountNumber, long balance, LockedAccountStatus status) {}

@@ -7,12 +7,11 @@ import com.shinhan.corebank.subscription.application.port.out.ExistingSubscripti
 import com.shinhan.corebank.subscription.application.port.out.ProductSubscriptionQueryPort;
 import com.shinhan.corebank.subscription.application.port.out.SaveProductSubscriptionPort;
 import com.shinhan.corebank.subscription.domain.ProductSubscription;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
@@ -23,7 +22,8 @@ public class ProductSubscriptionPersistenceAdapter
 
     @Override
     public Optional<ProductSubscription> findByIdAndCustomerId(Long subscriptionId, Long customerId) {
-        return productSubscriptionJpaRepository.findBySubscriptionIdAndCustomerId(subscriptionId, customerId)
+        return productSubscriptionJpaRepository
+                .findBySubscriptionIdAndCustomerId(subscriptionId, customerId)
                 .map(ProductSubscriptionMapper::toDomain);
     }
 
@@ -44,11 +44,10 @@ public class ProductSubscriptionPersistenceAdapter
         //    (= 동시성 보호가 조용히 사라지므로) 반환값을 버리지 않고 여기서 끊는다.
         // 2) 뒤이은 조회도 반드시 잠금 조회로 한다 — 평범한 SELECT는 REPEATABLE READ 스냅샷에 묶여
         //    상대가 그 사이 커밋한 행을 못 본다(ProductSubscriptionJpaRepository 주석 참고).
-        productLockJpaRepository.findByIdForUpdate(productId)
+        productLockJpaRepository
+                .findByIdForUpdate(productId)
                 .orElseThrow(() -> new BusinessException(SubscriptionErrorCode.PRODUCT_LOCK_TARGET_NOT_FOUND));
-        return productSubscriptionJpaRepository
-                .findAllByCustomerIdAndProductIdForUpdate(customerId, productId)
-                .stream()
+        return productSubscriptionJpaRepository.findAllByCustomerIdAndProductIdForUpdate(customerId, productId).stream()
                 .anyMatch(entity -> entity.getStatus() == ProcessResultStatus.SUCCESS);
     }
 }

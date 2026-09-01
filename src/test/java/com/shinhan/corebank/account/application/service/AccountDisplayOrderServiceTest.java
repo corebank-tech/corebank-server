@@ -1,5 +1,11 @@
 package com.shinhan.corebank.account.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.shinhan.corebank.account.application.port.in.AccountDisplayOrderCommand;
 import com.shinhan.corebank.account.application.port.in.AccountDisplayOrderResult;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
@@ -8,6 +14,8 @@ import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,22 +23,12 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDateTime;
-import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowableOfType;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 @ExtendWith(MockitoExtension.class)
 class AccountDisplayOrderServiceTest {
 
     private static final Long CUSTOMER_ID = 1L;
 
-    private static final String PASSWORD_HASH =
-            "$2y$10$1NOtaTsHuD0rdffA3ReFKO5S0J4bHlVES6okQMYubUd0OuVFfMZXa";
+    private static final String PASSWORD_HASH = "$2y$10$1NOtaTsHuD0rdffA3ReFKO5S0J4bHlVES6okQMYubUd0OuVFfMZXa";
 
     @Mock
     private AccountPersistencePort accountPersistencePort;
@@ -42,636 +40,221 @@ class AccountDisplayOrderServiceTest {
     @DisplayName("요청된 계좌 순서대로 표시순서를 저장한다")
     void saveDisplayOrder() {
         // given
-        Account account101 = createAccount(
-                101L,
-                "088100000101",
-                LocalDateTime.of(
-                        2026, 8, 1, 10, 0
-                ),
-                null
-        );
+        Account account101 = createAccount(101L, "088100000101", LocalDateTime.of(2026, 8, 1, 10, 0), null);
 
-        Account account102 = createAccount(
-                102L,
-                "088100000102",
-                LocalDateTime.of(
-                        2026, 8, 2, 10, 0
-                ),
-                null
-        );
+        Account account102 = createAccount(102L, "088100000102", LocalDateTime.of(2026, 8, 2, 10, 0), null);
 
-        Account account103 = createAccount(
-                103L,
-                "088100000103",
-                LocalDateTime.of(
-                        2026, 8, 3, 10, 0
-                ),
-                null
-        );
+        Account account103 = createAccount(103L, "088100000103", LocalDateTime.of(2026, 8, 3, 10, 0), null);
 
-        when(
-                accountPersistencePort.findAllByCustomerId(
-                        CUSTOMER_ID
-                )
-        ).thenReturn(
-                List.of(
-                        account101,
-                        account102,
-                        account103
-                )
-        );
+        when(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
+                .thenReturn(List.of(account101, account102, account103));
 
-        AccountDisplayOrderCommand command =
-                new AccountDisplayOrderCommand(
-                        CUSTOMER_ID,
-                        List.of(
-                                103L,
-                                101L,
-                                102L
-                        )
-                );
+        AccountDisplayOrderCommand command = new AccountDisplayOrderCommand(CUSTOMER_ID, List.of(103L, 101L, 102L));
 
         // when
-        AccountDisplayOrderResult result =
-                accountDisplayOrderService
-                        .saveDisplayOrder(command);
+        AccountDisplayOrderResult result = accountDisplayOrderService.saveDisplayOrder(command);
 
         // then
-        assertThat(account103.getDisplayOrder())
-                .isEqualTo(1);
+        assertThat(account103.getDisplayOrder()).isEqualTo(1);
 
-        assertThat(account101.getDisplayOrder())
-                .isEqualTo(2);
+        assertThat(account101.getDisplayOrder()).isEqualTo(2);
 
-        assertThat(account102.getDisplayOrder())
-                .isEqualTo(3);
+        assertThat(account102.getDisplayOrder()).isEqualTo(3);
 
-        assertThat(result.accountIds())
-                .containsExactly(
-                        103L,
-                        101L,
-                        102L
-                );
+        assertThat(result.accountIds()).containsExactly(103L, 101L, 102L);
 
-        verify(accountPersistencePort)
-                .save(account101);
+        verify(accountPersistencePort).save(account101);
 
-        verify(accountPersistencePort)
-                .save(account102);
+        verify(accountPersistencePort).save(account102);
 
-        verify(accountPersistencePort)
-                .save(account103);
+        verify(accountPersistencePort).save(account103);
     }
 
     @Test
     @DisplayName("계좌 ID가 중복되면 ACC0002를 발생시킨다")
     void rejectDuplicateAccountIds() {
         // given
-        Account account101 =
-                createAccount(
-                        101L,
-                        "088100000101",
-                        LocalDateTime.of(
-                                2026, 8, 1, 10, 0
-                        ),
-                        null
-                );
+        Account account101 = createAccount(101L, "088100000101", LocalDateTime.of(2026, 8, 1, 10, 0), null);
 
-        Account account102 =
-                createAccount(
-                        102L,
-                        "088100000102",
-                        LocalDateTime.of(
-                                2026, 8, 2, 10, 0
-                        ),
-                        null
-                );
+        Account account102 = createAccount(102L, "088100000102", LocalDateTime.of(2026, 8, 2, 10, 0), null);
 
-        when(
-                accountPersistencePort.findAllByCustomerId(
-                        CUSTOMER_ID
-                )
-        ).thenReturn(
-                List.of(
-                        account101,
-                        account102
-                )
-        );
+        when(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID)).thenReturn(List.of(account101, account102));
 
-        AccountDisplayOrderCommand command =
-                new AccountDisplayOrderCommand(
-                        CUSTOMER_ID,
-                        List.of(
-                                101L,
-                                101L
-                        )
-                );
+        AccountDisplayOrderCommand command = new AccountDisplayOrderCommand(CUSTOMER_ID, List.of(101L, 101L));
 
         // when
-        BusinessException exception =
-                catchThrowableOfType(
-                        BusinessException.class,
-                        () ->
-                                accountDisplayOrderService
-                                        .saveDisplayOrder(
-                                                command
-                                        )
-                );
+        BusinessException exception = catchThrowableOfType(
+                BusinessException.class, () -> accountDisplayOrderService.saveDisplayOrder(command));
 
         // then
-        assertThat(exception.getErrorCode())
-                .isEqualTo(
-                        AccountErrorCode.INVALID_DISPLAY_ORDER
-                );
+        assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.INVALID_DISPLAY_ORDER);
 
-        verify(
-                accountPersistencePort,
-                never()
-        ).save(
-                org.mockito.ArgumentMatchers.any()
-        );
+        verify(accountPersistencePort, never()).save(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
     @DisplayName("본인 소유가 아닌 계좌가 포함되면 ACC0201을 발생시킨다")
     void rejectUnknownAccount() {
         // given
-        Account account101 =
-                createAccount(
-                        101L,
-                        "088100000101",
-                        LocalDateTime.of(
-                                2026, 8, 1, 10, 0
-                        ),
-                        null
-                );
+        Account account101 = createAccount(101L, "088100000101", LocalDateTime.of(2026, 8, 1, 10, 0), null);
 
-        Account account102 =
-                createAccount(
-                        102L,
-                        "088100000102",
-                        LocalDateTime.of(
-                                2026, 8, 2, 10, 0
-                        ),
-                        null
-                );
+        Account account102 = createAccount(102L, "088100000102", LocalDateTime.of(2026, 8, 2, 10, 0), null);
 
-        when(
-                accountPersistencePort.findAllByCustomerId(
-                        CUSTOMER_ID
-                )
-        ).thenReturn(
-                List.of(
-                        account101,
-                        account102
-                )
-        );
+        when(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID)).thenReturn(List.of(account101, account102));
 
-        AccountDisplayOrderCommand command =
-                new AccountDisplayOrderCommand(
-                        CUSTOMER_ID,
-                        List.of(
-                                101L,
-                                999L
-                        )
-                );
+        AccountDisplayOrderCommand command = new AccountDisplayOrderCommand(CUSTOMER_ID, List.of(101L, 999L));
 
         // when
-        BusinessException exception =
-                catchThrowableOfType(
-                        BusinessException.class,
-                        () ->
-                                accountDisplayOrderService
-                                        .saveDisplayOrder(
-                                                command
-                                        )
-                );
+        BusinessException exception = catchThrowableOfType(
+                BusinessException.class, () -> accountDisplayOrderService.saveDisplayOrder(command));
 
         // then
-        assertThat(exception.getErrorCode())
-                .isEqualTo(
-                        AccountErrorCode
-                                .ACCOUNT_NOT_FOUND_OR_FORBIDDEN
-                );
+        assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.ACCOUNT_NOT_FOUND_OR_FORBIDDEN);
 
-        verify(
-                accountPersistencePort,
-                never()
-        ).save(
-                org.mockito.ArgumentMatchers.any()
-        );
+        verify(accountPersistencePort, never()).save(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
     @DisplayName("표시 대상 계좌가 누락되면 ACC0002를 발생시킨다")
     void rejectMissingDisplayableAccount() {
         // given
-        Account account101 =
-                createAccount(
-                        101L,
-                        "088100000101",
-                        LocalDateTime.of(
-                                2026, 8, 1, 10, 0
-                        ),
-                        null
-                );
+        Account account101 = createAccount(101L, "088100000101", LocalDateTime.of(2026, 8, 1, 10, 0), null);
 
-        Account account102 =
-                createAccount(
-                        102L,
-                        "088100000102",
-                        LocalDateTime.of(
-                                2026, 8, 2, 10, 0
-                        ),
-                        null
-                );
+        Account account102 = createAccount(102L, "088100000102", LocalDateTime.of(2026, 8, 2, 10, 0), null);
 
-        Account account103 =
-                createAccount(
-                        103L,
-                        "088100000103",
-                        LocalDateTime.of(
-                                2026, 8, 3, 10, 0
-                        ),
-                        null
-                );
+        Account account103 = createAccount(103L, "088100000103", LocalDateTime.of(2026, 8, 3, 10, 0), null);
 
-        when(
-                accountPersistencePort.findAllByCustomerId(
-                        CUSTOMER_ID
-                )
-        ).thenReturn(
-                List.of(
-                        account101,
-                        account102,
-                        account103
-                )
-        );
+        when(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
+                .thenReturn(List.of(account101, account102, account103));
 
-        AccountDisplayOrderCommand command =
-                new AccountDisplayOrderCommand(
-                        CUSTOMER_ID,
-                        List.of(
-                                101L,
-                                102L
-                        )
-                );
+        AccountDisplayOrderCommand command = new AccountDisplayOrderCommand(CUSTOMER_ID, List.of(101L, 102L));
 
         // when
-        BusinessException exception =
-                catchThrowableOfType(
-                        BusinessException.class,
-                        () ->
-                                accountDisplayOrderService
-                                        .saveDisplayOrder(
-                                                command
-                                        )
-                );
+        BusinessException exception = catchThrowableOfType(
+                BusinessException.class, () -> accountDisplayOrderService.saveDisplayOrder(command));
 
         // then
-        assertThat(exception.getErrorCode())
-                .isEqualTo(
-                        AccountErrorCode.INVALID_DISPLAY_ORDER
-                );
+        assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.INVALID_DISPLAY_ORDER);
 
-        verify(
-                accountPersistencePort,
-                never()
-        ).save(
-                org.mockito.ArgumentMatchers.any()
-        );
+        verify(accountPersistencePort, never()).save(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
     @DisplayName("표시순서를 초기화하면 기본순서로 계좌 ID를 반환한다")
     void resetDisplayOrder() {
         // given
-        Account account103 =
-                createAccount(
-                        103L,
-                        "088100000103",
-                        LocalDateTime.of(
-                                2026, 8, 2, 9, 0
-                        ),
-                        1
-                );
+        Account account103 = createAccount(103L, "088100000103", LocalDateTime.of(2026, 8, 2, 9, 0), 1);
 
-        Account account102 =
-                createAccount(
-                        102L,
-                        "088100000102",
-                        LocalDateTime.of(
-                                2026, 8, 1, 15, 0
-                        ),
-                        2
-                );
+        Account account102 = createAccount(102L, "088100000102", LocalDateTime.of(2026, 8, 1, 15, 0), 2);
 
-        Account account101 =
-                createAccount(
-                        101L,
-                        "088100000101",
-                        LocalDateTime.of(
-                                2026, 8, 1, 10, 0
-                        ),
-                        3
-                );
+        Account account101 = createAccount(101L, "088100000101", LocalDateTime.of(2026, 8, 1, 10, 0), 3);
 
-        when(
-                accountPersistencePort.findAllByCustomerId(
-                        CUSTOMER_ID
-                )
-        ).thenReturn(
-                List.of(
-                        account103,
-                        account102,
-                        account101
-                )
-        );
+        when(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
+                .thenReturn(List.of(account103, account102, account101));
 
         // when
-        AccountDisplayOrderResult result =
-                accountDisplayOrderService
-                        .resetDisplayOrder(
-                                CUSTOMER_ID
-                        );
+        AccountDisplayOrderResult result = accountDisplayOrderService.resetDisplayOrder(CUSTOMER_ID);
 
         // then
-        assertThat(account101.getDisplayOrder())
-                .isNull();
+        assertThat(account101.getDisplayOrder()).isNull();
 
-        assertThat(account102.getDisplayOrder())
-                .isNull();
+        assertThat(account102.getDisplayOrder()).isNull();
 
-        assertThat(account103.getDisplayOrder())
-                .isNull();
+        assertThat(account103.getDisplayOrder()).isNull();
 
-        assertThat(result.accountIds())
-                .containsExactly(
-                        101L,
-                        102L,
-                        103L
-                );
+        assertThat(result.accountIds()).containsExactly(101L, 102L, 103L);
 
-        verify(accountPersistencePort)
-                .save(account101);
+        verify(accountPersistencePort).save(account101);
 
-        verify(accountPersistencePort)
-                .save(account102);
+        verify(accountPersistencePort).save(account102);
 
-        verify(accountPersistencePort)
-                .save(account103);
+        verify(accountPersistencePort).save(account103);
     }
 
     @Test
     @DisplayName("이미 표시순서가 초기화된 계좌는 다시 저장하지 않는다")
     void doesNotSaveAlreadyResetAccount() {
         // given
-        Account alreadyResetAccount =
-                createAccount(
-                        101L,
-                        "088100000101",
-                        LocalDateTime.of(
-                                2026, 8, 1, 10, 0
-                        ),
-                        null
-                );
+        Account alreadyResetAccount = createAccount(101L, "088100000101", LocalDateTime.of(2026, 8, 1, 10, 0), null);
 
-        Account customOrderedAccount =
-                createAccount(
-                        102L,
-                        "088100000102",
-                        LocalDateTime.of(
-                                2026, 8, 2, 10, 0
-                        ),
-                        1
-                );
+        Account customOrderedAccount = createAccount(102L, "088100000102", LocalDateTime.of(2026, 8, 2, 10, 0), 1);
 
-        when(
-                accountPersistencePort.findAllByCustomerId(
-                        CUSTOMER_ID
-                )
-        ).thenReturn(
-                List.of(
-                        alreadyResetAccount,
-                        customOrderedAccount
-                )
-        );
+        when(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
+                .thenReturn(List.of(alreadyResetAccount, customOrderedAccount));
 
         // when
-        AccountDisplayOrderResult result =
-                accountDisplayOrderService
-                        .resetDisplayOrder(
-                                CUSTOMER_ID
-                        );
+        AccountDisplayOrderResult result = accountDisplayOrderService.resetDisplayOrder(CUSTOMER_ID);
 
         // then
-        assertThat(
-                alreadyResetAccount.getDisplayOrder()
-        ).isNull();
+        assertThat(alreadyResetAccount.getDisplayOrder()).isNull();
 
-        assertThat(
-                customOrderedAccount.getDisplayOrder()
-        ).isNull();
+        assertThat(customOrderedAccount.getDisplayOrder()).isNull();
 
-        assertThat(result.accountIds())
-                .containsExactly(
-                        101L,
-                        102L
-                );
+        assertThat(result.accountIds()).containsExactly(101L, 102L);
 
-        verify(
-                accountPersistencePort,
-                never()
-        ).save(
-                alreadyResetAccount
-        );
+        verify(accountPersistencePort, never()).save(alreadyResetAccount);
 
-        verify(
-                accountPersistencePort
-        ).save(
-                customOrderedAccount
-        );
+        verify(accountPersistencePort).save(customOrderedAccount);
     }
 
     @Test
     @DisplayName("해지 계좌는 표시순서 저장 대상에서 제외한다")
     void excludeClosedAccountFromDisplayOrder() {
         // given
-        Account activeAccount =
-                createAccount(
-                        101L,
-                        "088100000101",
-                        LocalDateTime.of(
-                                2026, 8, 1, 10, 0
-                        ),
-                        null
-                );
+        Account activeAccount = createAccount(101L, "088100000101", LocalDateTime.of(2026, 8, 1, 10, 0), null);
 
-        Account suspendedAccount =
-                createAccount(
-                        102L,
-                        "088100000102",
-                        LocalDateTime.of(
-                                2026, 8, 2, 10, 0
-                        ),
-                        null,
-                        AccountStatus.SUSPENDED,
-                        null
-                );
+        Account suspendedAccount = createAccount(
+                102L, "088100000102", LocalDateTime.of(2026, 8, 2, 10, 0), null, AccountStatus.SUSPENDED, null);
 
-        Account closedAccount =
-                createClosedAccount(
-                        103L,
-                        "088100000103",
-                        LocalDateTime.of(
-                                2026, 8, 3, 10, 0
-                        ),
-                        3
-                );
+        Account closedAccount = createClosedAccount(103L, "088100000103", LocalDateTime.of(2026, 8, 3, 10, 0), 3);
 
-        when(
-                accountPersistencePort
-                        .findAllByCustomerId(
-                                CUSTOMER_ID
-                        )
-        ).thenReturn(
-                List.of(
-                        activeAccount,
-                        suspendedAccount,
-                        closedAccount
-                )
-        );
+        when(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
+                .thenReturn(List.of(activeAccount, suspendedAccount, closedAccount));
 
-        AccountDisplayOrderCommand command =
-                new AccountDisplayOrderCommand(
-                        CUSTOMER_ID,
-                        List.of(
-                                102L,
-                                101L
-                        )
-                );
+        AccountDisplayOrderCommand command = new AccountDisplayOrderCommand(CUSTOMER_ID, List.of(102L, 101L));
 
         // when
-        AccountDisplayOrderResult result =
-                accountDisplayOrderService
-                        .saveDisplayOrder(
-                                command
-                        );
+        AccountDisplayOrderResult result = accountDisplayOrderService.saveDisplayOrder(command);
 
         // then
-        assertThat(
-                suspendedAccount.getDisplayOrder()
-        ).isEqualTo(1);
+        assertThat(suspendedAccount.getDisplayOrder()).isEqualTo(1);
 
-        assertThat(
-                activeAccount.getDisplayOrder()
-        ).isEqualTo(2);
+        assertThat(activeAccount.getDisplayOrder()).isEqualTo(2);
 
-        assertThat(result.accountIds())
-                .containsExactly(
-                        102L,
-                        101L
-                );
+        assertThat(result.accountIds()).containsExactly(102L, 101L);
 
-        verify(accountPersistencePort)
-                .save(suspendedAccount);
+        verify(accountPersistencePort).save(suspendedAccount);
 
-        verify(accountPersistencePort)
-                .save(activeAccount);
+        verify(accountPersistencePort).save(activeAccount);
 
-        verify(
-                accountPersistencePort,
-                never()
-        ).save(
-                closedAccount
-        );
+        verify(accountPersistencePort, never()).save(closedAccount);
     }
 
     @Test
     @DisplayName("해지 계좌가 표시순서 요청에 포함되면 ACC0002를 발생시킨다")
     void rejectClosedAccountInDisplayOrderRequest() {
         // given
-        Account activeAccount =
-                createAccount(
-                        101L,
-                        "088100000101",
-                        LocalDateTime.of(
-                                2026, 8, 1, 10, 0
-                        ),
-                        null
-                );
+        Account activeAccount = createAccount(101L, "088100000101", LocalDateTime.of(2026, 8, 1, 10, 0), null);
 
-        Account closedAccount =
-                createClosedAccount(
-                        102L,
-                        "088100000102",
-                        LocalDateTime.of(
-                                2026, 8, 2, 10, 0
-                        ),
-                        null
-                );
+        Account closedAccount = createClosedAccount(102L, "088100000102", LocalDateTime.of(2026, 8, 2, 10, 0), null);
 
-        when(
-                accountPersistencePort
-                        .findAllByCustomerId(
-                                CUSTOMER_ID
-                        )
-        ).thenReturn(
-                List.of(
-                        activeAccount,
-                        closedAccount
-                )
-        );
+        when(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID)).thenReturn(List.of(activeAccount, closedAccount));
 
-        AccountDisplayOrderCommand command =
-                new AccountDisplayOrderCommand(
-                        CUSTOMER_ID,
-                        List.of(
-                                101L,
-                                102L
-                        )
-                );
+        AccountDisplayOrderCommand command = new AccountDisplayOrderCommand(CUSTOMER_ID, List.of(101L, 102L));
 
         // when
-        BusinessException exception =
-                catchThrowableOfType(
-                        BusinessException.class,
-                        () ->
-                                accountDisplayOrderService
-                                        .saveDisplayOrder(
-                                                command
-                                        )
-                );
+        BusinessException exception = catchThrowableOfType(
+                BusinessException.class, () -> accountDisplayOrderService.saveDisplayOrder(command));
 
         // then
-        assertThat(exception.getErrorCode())
-                .isEqualTo(
-                        AccountErrorCode
-                                .INVALID_DISPLAY_ORDER
-                );
+        assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.INVALID_DISPLAY_ORDER);
 
-        verify(
-                accountPersistencePort,
-                never()
-        ).save(
-                org.mockito.ArgumentMatchers.any()
-        );
+        verify(accountPersistencePort, never()).save(org.mockito.ArgumentMatchers.any());
     }
 
     private Account createAccount(
-            Long accountId,
-            String accountNumber,
-            LocalDateTime openedDate,
-            Integer displayOrder
-    ) {
-        return createAccount(
-                accountId,
-                accountNumber,
-                openedDate,
-                displayOrder,
-                AccountStatus.ACTIVE,
-                null
-        );
+            Long accountId, String accountNumber, LocalDateTime openedDate, Integer displayOrder) {
+        return createAccount(accountId, accountNumber, openedDate, displayOrder, AccountStatus.ACTIVE, null);
     }
 
     private Account createAccount(
@@ -680,8 +263,7 @@ class AccountDisplayOrderServiceTest {
             LocalDateTime openedDate,
             Integer displayOrder,
             AccountStatus status,
-            LocalDateTime closedDate
-    ) {
+            LocalDateTime closedDate) {
         return Account.reconstitute(
                 accountId,
                 accountNumber,
@@ -703,23 +285,12 @@ class AccountDisplayOrderServiceTest {
                 null,
                 0L,
                 openedDate,
-                openedDate
-        );
+                openedDate);
     }
 
     private Account createClosedAccount(
-            Long accountId,
-            String accountNumber,
-            LocalDateTime openedDate,
-            Integer displayOrder
-    ) {
+            Long accountId, String accountNumber, LocalDateTime openedDate, Integer displayOrder) {
         return createAccount(
-                accountId,
-                accountNumber,
-                openedDate,
-                displayOrder,
-                AccountStatus.CLOSED,
-                openedDate.plusDays(1)
-        );
+                accountId, accountNumber, openedDate, displayOrder, AccountStatus.CLOSED, openedDate.plusDays(1));
     }
 }

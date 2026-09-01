@@ -1,10 +1,8 @@
 package com.shinhan.corebank.transfer.domain;
 
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-
-import com.shinhan.corebank.common.exception.CommonErrorCode;
-
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -34,15 +32,23 @@ public class LedgerPair {
             String myPassbookMemo,
             String recipientPassbookMemo,
             TransferChannel channel,
-            LocalDateTime occurredAt
-    ) {
+            LocalDateTime occurredAt) {
         TransferValidations.requireNonNull(transferId, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requireNonBlank(transactionType, CommonErrorCode.REQUIRED_FIELD_MISSING);
 
         return create(
-                transferId, transactionNumber, withdrawalAccountId, withdrawalBalanceAfter,
-                depositAccountId, depositBalanceAfter, amount, transactionType,
-                myPassbookMemo, recipientPassbookMemo, channel, occurredAt);
+                transferId,
+                transactionNumber,
+                withdrawalAccountId,
+                withdrawalBalanceAfter,
+                depositAccountId,
+                depositBalanceAfter,
+                amount,
+                transactionType,
+                myPassbookMemo,
+                recipientPassbookMemo,
+                channel,
+                occurredAt);
     }
 
     /**
@@ -61,12 +67,20 @@ public class LedgerPair {
             String myPassbookMemo,
             String recipientPassbookMemo,
             TransferChannel channel,
-            LocalDateTime occurredAt
-    ) {
+            LocalDateTime occurredAt) {
         return create(
-                null, transactionNumber, withdrawalAccountId, withdrawalBalanceAfter,
-                depositAccountId, depositBalanceAfter, amount, PRODUCT_SUBSCRIPTION_TYPE,
-                myPassbookMemo, recipientPassbookMemo, channel, occurredAt);
+                null,
+                transactionNumber,
+                withdrawalAccountId,
+                withdrawalBalanceAfter,
+                depositAccountId,
+                depositBalanceAfter,
+                amount,
+                PRODUCT_SUBSCRIPTION_TYPE,
+                myPassbookMemo,
+                recipientPassbookMemo,
+                channel,
+                occurredAt);
     }
 
     // transferId·transactionType만 다르고 나머지 검증·조립은 두 팩토리가 완전히 같다.
@@ -82,8 +96,7 @@ public class LedgerPair {
             String myPassbookMemo,
             String recipientPassbookMemo,
             TransferChannel channel,
-            LocalDateTime occurredAt
-    ) {
+            LocalDateTime occurredAt) {
         TransferValidations.requireAccountIdsPresent(withdrawalAccountId, depositAccountId);
         TransferValidations.requireNonNull(occurredAt, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requireNonBlank(transactionNumber, CommonErrorCode.REQUIRED_FIELD_MISSING);

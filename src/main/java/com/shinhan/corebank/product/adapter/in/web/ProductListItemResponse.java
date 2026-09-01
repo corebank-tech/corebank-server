@@ -2,7 +2,6 @@ package com.shinhan.corebank.product.adapter.in.web;
 
 import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductGroup;
-
 import java.math.BigDecimal;
 
 public record ProductListItemResponse(
@@ -17,8 +16,7 @@ public record ProductListItemResponse(
         int maxTermMonths,
         Long minAmount,
         Long maxAmount,
-        Boolean newProduct
-) {
+        Boolean newProduct) {
     public static ProductListItemResponse from(Product product) {
         return new ProductListItemResponse(
                 product.getProductId(),
@@ -32,7 +30,6 @@ public record ProductListItemResponse(
                 product.getMaxTermMonths(),
                 product.getMinAmount(),
                 product.getMaxAmount(),
-                product.getNewFlag()
-        );
+                product.getNewFlag());
     }
 }

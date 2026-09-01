@@ -36,8 +36,7 @@ public class SignupTermsJpaEntity extends BaseEntity {
     @Column(name = "view_required", nullable = false)
     private boolean viewRequired;
 
-    protected SignupTermsJpaEntity() {
-    }
+    protected SignupTermsJpaEntity() {}
 
     public Long getTermsId() {
         return termsId;

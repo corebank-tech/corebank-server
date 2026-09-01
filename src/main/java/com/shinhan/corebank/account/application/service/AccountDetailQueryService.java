@@ -9,49 +9,34 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 // 로그인 고객의 소유권을 확인한 뒤 계좌상세 정보를 조회한다.
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
-public class AccountDetailQueryService
-        implements AccountDetailQueryUseCase {
+public class AccountDetailQueryService implements AccountDetailQueryUseCase {
 
-    private static final ZoneId KOREA_ZONE =
-            ZoneId.of("Asia/Seoul");
-    private static final String DEFAULT_DEMAND_DEPOSIT_NAME =
-            "입출금통장";
+    private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
+    private static final String DEFAULT_DEMAND_DEPOSIT_NAME = "입출금통장";
 
     private final AccountPersistencePort accountPersistencePort;
     private final ProductQueryUseCase productQueryUseCase;
     private final Clock clock;
 
     @Override
-    public AccountDetailResult getDetail(
-            Long customerId,
-            Long accountId
-    ) {
+    public AccountDetailResult getDetail(Long customerId, Long accountId) {
         Account account = accountPersistencePort
-                .findByAccountIdAndCustomerId(
-                        accountId,
-                        customerId
-                )
-                .orElseThrow(() -> new BusinessException(
-                        AccountErrorCode.ACCOUNT_NOT_FOUND_OR_FORBIDDEN
-                ));
+                .findByAccountIdAndCustomerId(accountId, customerId)
+                .orElseThrow(() -> new BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND_OR_FORBIDDEN));
 
         return new AccountDetailResult(
-                OffsetDateTime.ofInstant(
-                        clock.instant(),
-                        KOREA_ZONE
-                ),
+                OffsetDateTime.ofInstant(clock.instant(), KOREA_ZONE),
                 account.getAccountId(),
                 resolveAccountName(account),
                 account.getAccountNumber(),
@@ -60,19 +45,16 @@ public class AccountDetailQueryService
                 account.getOpenedDate().toLocalDate(),
                 account.getStatus(),
                 account.getPasswordFailureCount(),
-                account.isPasswordLocked()
-        );
+                account.isPasswordLocked());
     }
 
     // 별명이 없으면 입출금 기본명 또는 연결된 상품명을 사용한다.
     private String resolveAccountName(Account account) {
-        if (account.getAlias() != null
-                && !account.getAlias().isBlank()) {
+        if (account.getAlias() != null && !account.getAlias().isBlank()) {
             return account.getAlias();
         }
 
-        if (account.getAccountType()
-                == AccountType.DEMAND_DEPOSIT) {
+        if (account.getAccountType() == AccountType.DEMAND_DEPOSIT) {
             return DEFAULT_DEMAND_DEPOSIT_NAME;
         }
 
@@ -84,12 +66,8 @@ public class AccountDetailQueryService
 
     // 거래정지·해지·비밀번호 잠금 계좌의 출금 가능 잔액을 0으로 반환한다.
     private long resolveAvailableBalance(Account account) {
-        boolean withdrawalRestricted =
-                account.getStatus() != AccountStatus.ACTIVE
-                        || account.isPasswordLocked();
+        boolean withdrawalRestricted = account.getStatus() != AccountStatus.ACTIVE || account.isPasswordLocked();
 
-        return withdrawalRestricted
-                ? 0L
-                : account.getBalance();
+        return withdrawalRestricted ? 0L : account.getBalance();
     }
 }

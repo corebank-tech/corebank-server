@@ -22,15 +22,14 @@ class CommonCodeJpaRepositoryTest extends IntegrationTestSupport {
     @Test
     @DisplayName("codeGroup + useYn 으로 조회하면 sortOrder 오름차순으로 반환된다")
     void findByCodeGroupAndUseYn_orderedBySortOrder() {
-        List<CommonCodeJpaEntity> result =
-                repository.findByCodeGroupAndUseYnOrderBySortOrderAsc("ACCOUNT_STATUS", "Y");
+        List<CommonCodeJpaEntity> result = repository.findByCodeGroupAndUseYnOrderBySortOrderAsc("ACCOUNT_STATUS", "Y");
 
         assertThat(result)
-                .extracting(CommonCodeJpaEntity::getCode, CommonCodeJpaEntity::getCodeName, CommonCodeJpaEntity::getSortOrder)
-                .containsExactly(
-                        tuple("ACTIVE", "정상", 1),
-                        tuple("SUSPENDED", "거래정지", 2),
-                        tuple("CLOSED", "해지", 3));
+                .extracting(
+                        CommonCodeJpaEntity::getCode,
+                        CommonCodeJpaEntity::getCodeName,
+                        CommonCodeJpaEntity::getSortOrder)
+                .containsExactly(tuple("ACTIVE", "정상", 1), tuple("SUSPENDED", "거래정지", 2), tuple("CLOSED", "해지", 3));
     }
 
     @Test
@@ -58,9 +57,7 @@ class CommonCodeJpaRepositoryTest extends IntegrationTestSupport {
 
         assertThat(result).isNotEmpty();
         assertThat(result).allSatisfy(c -> assertThat(c.isActive()).isTrue());
-        assertThat(result)
-                .extracting(CommonCodeJpaEntity::getCodeGroup)
-                .isSorted();
+        assertThat(result).extracting(CommonCodeJpaEntity::getCodeGroup).isSorted();
     }
 
     @Test
@@ -80,8 +77,7 @@ class CommonCodeJpaRepositoryTest extends IntegrationTestSupport {
     @Test
     @DisplayName("CommonCodeId 를 직접 생성해 findById 로 조회할 수 있다")
     void findById_withManuallyConstructedId() {
-        Optional<CommonCodeJpaEntity> found =
-                repository.findById(new CommonCodeId("ACCOUNT_STATUS", "ACTIVE"));
+        Optional<CommonCodeJpaEntity> found = repository.findById(new CommonCodeId("ACCOUNT_STATUS", "ACTIVE"));
 
         assertThat(found).isPresent();
         assertThat(found.get().getCodeName()).isEqualTo("정상");

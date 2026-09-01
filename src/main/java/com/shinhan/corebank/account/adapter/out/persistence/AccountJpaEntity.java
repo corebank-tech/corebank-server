@@ -5,14 +5,13 @@ import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.common.entity.BaseEntity;
 import jakarta.persistence.*;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "account")
@@ -27,12 +26,7 @@ public class AccountJpaEntity extends BaseEntity {
     @Column(name = "account_id")
     private Long accountId;
 
-    @Column(
-            name = "account_number",
-            nullable = false,
-            unique = true,
-            columnDefinition = "CHAR(12)"
-    )
+    @Column(name = "account_number", nullable = false, unique = true, columnDefinition = "CHAR(12)")
     private String accountNumber;
 
     @Column(name = "customer_id", nullable = false)
@@ -52,11 +46,7 @@ public class AccountJpaEntity extends BaseEntity {
     @Column(name = "status", nullable = false, length = 12)
     private AccountStatus status;
 
-    @Column(
-            name = "password_hash",
-            nullable = false,
-            columnDefinition = "CHAR(60)"
-    )
+    @Column(name = "password_hash", nullable = false, columnDefinition = "CHAR(60)")
     private String passwordHash;
 
     @Column(name = "password_failure_count", nullable = false)
@@ -74,32 +64,19 @@ public class AccountJpaEntity extends BaseEntity {
     @Column(name = "withdrawal_registered", nullable = false)
     private boolean withdrawalRegistered;
 
-    @Column(
-            name = "withdrawal_registered_at",
-            columnDefinition = "DATETIME(6)"
-    )
+    @Column(name = "withdrawal_registered_at", columnDefinition = "DATETIME(6)")
     private LocalDateTime withdrawalRegisteredAt;
 
-    @Column(
-            name = "opened_date",
-            nullable = false,
-            columnDefinition = "DATETIME(6)"
-    )
+    @Column(name = "opened_date", nullable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime openedDate;
 
     @Column(name = "maturity_date")
     private LocalDate maturityDate;
 
-    @Column(
-            name = "closed_date",
-            columnDefinition = "DATETIME(6)"
-    )
+    @Column(name = "closed_date", columnDefinition = "DATETIME(6)")
     private LocalDateTime closedDate;
 
-    @Column(
-            name = "last_transaction_at",
-            columnDefinition = "DATETIME(6)"
-    )
+    @Column(name = "last_transaction_at", columnDefinition = "DATETIME(6)")
     private LocalDateTime lastTransactionAt;
 
     @Version
@@ -110,24 +87,20 @@ public class AccountJpaEntity extends BaseEntity {
         this.balance = account.getBalance();
         this.status = account.getStatus();
         this.passwordHash = account.getPasswordHash();
-        this.passwordFailureCount =
-                (byte) account.getPasswordFailureCount();
+        this.passwordFailureCount = (byte) account.getPasswordFailureCount();
         this.passwordLocked = account.isPasswordLocked();
         this.alias = account.getAlias();
         this.displayOrder = account.getDisplayOrder();
         this.withdrawalRegistered = account.isWithdrawalRegistered();
-        this.withdrawalRegisteredAt =
-                account.getWithdrawalRegisteredAt();
+        this.withdrawalRegisteredAt = account.getWithdrawalRegisteredAt();
         this.closedDate = account.getClosedDate();
-        this.lastTransactionAt =
-                account.getLastTransactionAt();
+        this.lastTransactionAt = account.getLastTransactionAt();
     }
 
     // 계좌비밀번호 해시와 실패 횟수 및 잠금 상태를 반영한다.
     public void updatePasswordState(Account account) {
         this.passwordHash = account.getPasswordHash();
-        this.passwordFailureCount =
-                (byte) account.getPasswordFailureCount();
+        this.passwordFailureCount = (byte) account.getPasswordFailureCount();
         this.passwordLocked = account.isPasswordLocked();
     }
 }

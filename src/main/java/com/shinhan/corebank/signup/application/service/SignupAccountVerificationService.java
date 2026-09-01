@@ -10,15 +10,13 @@ import com.shinhan.corebank.signup.config.SignupTokenProperties;
 import com.shinhan.corebank.signup.domain.exception.AccountVerificationFailedException;
 import com.shinhan.corebank.signup.domain.model.AccountAuthTokenPayload;
 import com.shinhan.corebank.signup.domain.model.ExistingBankAccountVerification;
-import org.springframework.stereotype.Service;
-
 import java.time.Clock;
 import java.time.Instant;
+import org.springframework.stereotype.Service;
 
 // 기존 은행 계좌를 검증하고 accountAuthToken을 발급한다.
 @Service
-public class SignupAccountVerificationService
-        implements VerifySignupAccountUseCase {
+public class SignupAccountVerificationService implements VerifySignupAccountUseCase {
 
     private final ExistingBankCustomerVerificationPort verificationPort;
     private final RegisteredExistingBankCustomerChecker registrationChecker;
@@ -33,8 +31,7 @@ public class SignupAccountVerificationService
             AccountAuthTokenPort accountAuthTokenPort,
             AuthTokenGeneratorPort authTokenGeneratorPort,
             SignupTokenProperties tokenProperties,
-            Clock clock
-    ) {
+            Clock clock) {
         this.verificationPort = verificationPort;
         this.registrationChecker = registrationChecker;
         this.accountAuthTokenPort = accountAuthTokenPort;
@@ -44,60 +41,38 @@ public class SignupAccountVerificationService
     }
 
     @Override
-    public VerifySignupAccountResult verify(
-            VerifySignupAccountCommand command
-    ) {
-        ExistingBankAccountVerification verification =
-                verificationPort.verify(
-                        command.userName(),
-                        command.birthDate(),
-                        command.accountNumber(),
-                        command.accountPassword()
-                );
+    public VerifySignupAccountResult verify(VerifySignupAccountCommand command) {
+        ExistingBankAccountVerification verification = verificationPort.verify(
+                command.userName(), command.birthDate(), command.accountNumber(), command.accountPassword());
 
         return switch (verification.status()) {
-            case INFORMATION_MISMATCH ->
-                    throw AccountVerificationFailedException
-                            .informationMismatch();
+            case INFORMATION_MISMATCH -> throw AccountVerificationFailedException.informationMismatch();
             case PASSWORD_MISMATCH ->
-                    throw AccountVerificationFailedException
-                            .passwordMismatch(
-                                    verification.errorCount(),
-                                    verification.remainingAttempts()
-                            );
+                throw AccountVerificationFailedException.passwordMismatch(
+                        verification.errorCount(), verification.remainingAttempts());
             case LOCKED ->
-                    throw AccountVerificationFailedException.locked(
-                            verification.errorCount(),
-                            verification.remainingAttempts()
-                    );
+                throw AccountVerificationFailedException.locked(
+                        verification.errorCount(), verification.remainingAttempts());
             // 본인 확인이 끝난 직후에 재가입을 막는다. 여기서 걸러야 약관 동의·
             // 이메일 인증·정보 입력을 모두 마친 뒤 가입 완료 단계에서 터지지 않는다.
             case VERIFIED -> {
-                registrationChecker.rejectIfRegistered(
-                        verification.existingBankCustomerId()
-                );
+                registrationChecker.rejectIfRegistered(verification.existingBankCustomerId());
                 yield issueToken(verification);
             }
         };
     }
 
-    private VerifySignupAccountResult issueToken(
-            ExistingBankAccountVerification verification
-    ) {
+    private VerifySignupAccountResult issueToken(ExistingBankAccountVerification verification) {
         String token = authTokenGeneratorPort.generateAccountAuthToken();
         accountAuthTokenPort.save(
                 token,
                 new AccountAuthTokenPayload(
                         verification.existingBankCustomerId(),
                         verification.existingBankAccountId(),
-                        Instant.now(clock)
-                ),
-                tokenProperties.accountAuthTtl()
-        );
+                        Instant.now(clock)),
+                tokenProperties.accountAuthTtl());
 
         return new VerifySignupAccountResult(
-                token,
-                tokenProperties.accountAuthTtl().toSeconds()
-        );
+                token, tokenProperties.accountAuthTtl().toSeconds());
     }
 }

@@ -7,14 +7,13 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import jakarta.servlet.http.Cookie;
 import java.nio.charset.StandardCharsets;
-import org.springframework.mock.web.MockHttpSession;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -23,18 +22,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = SecurityTestController.class)
-@TestPropertySource(properties =
-        "app.security.cors.allowed-origins=http://localhost:5173,https://www.corebank.cloud")
+@TestPropertySource(properties = "app.security.cors.allowed-origins=http://localhost:5173,https://www.corebank.cloud")
 @Import({
-        SecurityTestController.class,
-        SecurityConfig.class,
-        SessionAuthenticationEntryPoint.class,
-        SessionAccessDeniedHandler.class,
-        SessionLogoutSuccessHandler.class
+    SecurityTestController.class,
+    SecurityConfig.class,
+    SessionAuthenticationEntryPoint.class,
+    SessionAccessDeniedHandler.class,
+    SessionLogoutSuccessHandler.class
 })
 class SecurityConfigTest {
 
@@ -47,26 +46,14 @@ class SecurityConfigTest {
         mockMvc.perform(options("/api/v1/auth/login")
                         .contextPath("/api/v1")
                         .header(HttpHeaders.ORIGIN, "http://localhost:5173")
-                        .header(
-                                HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD,
-                                "POST"
-                        )
-                        .header(
-                                HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
-                                "content-type,x-xsrf-token"
-                        ))
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "content-type,x-xsrf-token"))
                 .andExpect(status().isOk())
-                .andExpect(header().string(
-                        HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN,
-                        "http://localhost:5173"
-                ))
-                .andExpect(header().string(
-                        HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS,
-                        "true"
-                ))
-                .andExpect(result -> assertThat(result.getResponse().getHeader(
-                        HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS
-                )).containsIgnoringCase("X-XSRF-TOKEN"));
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:5173"))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
+                .andExpect(
+                        result -> assertThat(result.getResponse().getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS))
+                                .containsIgnoringCase("X-XSRF-TOKEN"));
     }
 
     @Test
@@ -79,21 +66,12 @@ class SecurityConfigTest {
                         .header(
                                 HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
                                 "content-type,x-xsrf-token,idempotency-key,"
-                                        + "account-password-auth-token,otp-auth-token"
-                        ))
+                                        + "account-password-auth-token,otp-auth-token"))
                 .andExpect(status().isOk())
-                .andExpect(header().string(
-                        HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN,
-                        "https://www.corebank.cloud"
-                ))
-                .andExpect(header().string(
-                        HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS,
-                        "true"
-                ))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://www.corebank.cloud"))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
                 .andExpect(result -> {
-                    String allowedHeaders = result.getResponse().getHeader(
-                            HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS
-                    );
+                    String allowedHeaders = result.getResponse().getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS);
                     assertThat(allowedHeaders).containsIgnoringCase("X-XSRF-TOKEN");
                     assertThat(allowedHeaders).containsIgnoringCase("Idempotency-Key");
                     assertThat(allowedHeaders).containsIgnoringCase("Account-Password-Auth-Token");
@@ -107,14 +85,9 @@ class SecurityConfigTest {
         mockMvc.perform(options("/api/v1/auth/login")
                         .contextPath("/api/v1")
                         .header(HttpHeaders.ORIGIN, "https://evil.example")
-                        .header(
-                                HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD,
-                                "POST"
-                        ))
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST"))
                 .andExpect(status().isForbidden())
-                .andExpect(header().doesNotExist(
-                        HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN
-                ));
+                .andExpect(header().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
     }
 
     @Test
@@ -137,17 +110,17 @@ class SecurityConfigTest {
     }
 
     @ParameterizedTest(name = "{0}은 인증과 CSRF 토큰 없이 접근할 수 있다")
-    @ValueSource(strings = {
-            "/auth/terms/check",
-            "/auth/verify-account",
-            "/auth/check-id",
-            "/auth/signup/validate",
-            "/auth/signup/complete",
-            "/auth/email-verifications",
-            "/auth/email-verifications/email-verification-id/verify"
-    })
-    void permitsSignupApiWithoutSessionAndCsrfToken(String path)
-            throws Exception {
+    @ValueSource(
+            strings = {
+                "/auth/terms/check",
+                "/auth/verify-account",
+                "/auth/check-id",
+                "/auth/signup/validate",
+                "/auth/signup/complete",
+                "/auth/email-verifications",
+                "/auth/email-verifications/email-verification-id/verify"
+            })
+    void permitsSignupApiWithoutSessionAndCsrfToken(String path) throws Exception {
         mockMvc.perform(post("/api/v1" + path)
                         .contextPath("/api/v1")
                         .contentType(APPLICATION_JSON)
@@ -164,8 +137,7 @@ class SecurityConfigTest {
                 .andExpect(content().contentTypeCompatibleWith(APPLICATION_JSON))
                 .andExpect(content().encoding(StandardCharsets.UTF_8))
                 .andExpect(jsonPath("$.code").value("CMN0101"))
-                .andExpect(jsonPath("$.message")
-                        .value("인증정보가 없거나 세션이 만료되었습니다."))
+                .andExpect(jsonPath("$.message").value("인증정보가 없거나 세션이 만료되었습니다."))
                 .andExpect(jsonPath("$.data").value((Object) null));
     }
 
@@ -187,8 +159,7 @@ class SecurityConfigTest {
 
     @Test
     @DisplayName("CSRF 쿠키와 헤더가 모두 없으면 403 CMN0102를 반환한다")
-    void rejectsStateChangingRequestWithoutCsrfCookieAndHeader()
-            throws Exception {
+    void rejectsStateChangingRequestWithoutCsrfCookieAndHeader() throws Exception {
         MockHttpSession session = new MockHttpSession();
 
         mockMvc.perform(post("/api/v1/customers/me")
@@ -199,15 +170,13 @@ class SecurityConfigTest {
                 .andExpect(content().contentTypeCompatibleWith(APPLICATION_JSON))
                 .andExpect(content().encoding(StandardCharsets.UTF_8))
                 .andExpect(jsonPath("$.code").value("CMN0102"))
-                .andExpect(jsonPath("$.message")
-                        .value("해당 자원에 접근할 권한이 없습니다."))
+                .andExpect(jsonPath("$.message").value("해당 자원에 접근할 권한이 없습니다."))
                 .andExpect(jsonPath("$.data").value((Object) null));
     }
 
     @Test
     @DisplayName("CSRF 쿠키만 있고 헤더가 없으면 403 CMN0102를 반환한다")
-    void rejectsStateChangingRequestWithCsrfCookieOnly()
-            throws Exception {
+    void rejectsStateChangingRequestWithCsrfCookieOnly() throws Exception {
         mockMvc.perform(post("/api/v1/customers/me")
                         .contextPath("/api/v1")
                         .cookie(new Cookie("XSRF-TOKEN", "cookie-token"))
@@ -215,15 +184,13 @@ class SecurityConfigTest {
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentTypeCompatibleWith(APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value("CMN0102"))
-                .andExpect(jsonPath("$.message")
-                        .value("해당 자원에 접근할 권한이 없습니다."))
+                .andExpect(jsonPath("$.message").value("해당 자원에 접근할 권한이 없습니다."))
                 .andExpect(jsonPath("$.data").value((Object) null));
     }
 
     @Test
     @DisplayName("CSRF 쿠키와 헤더 값이 다르면 403 CMN0102를 반환한다")
-    void rejectsStateChangingRequestWithMismatchedCsrfToken()
-            throws Exception {
+    void rejectsStateChangingRequestWithMismatchedCsrfToken() throws Exception {
         mockMvc.perform(post("/api/v1/customers/me")
                         .contextPath("/api/v1")
                         .cookie(new Cookie("XSRF-TOKEN", "expected-token"))
@@ -232,15 +199,13 @@ class SecurityConfigTest {
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentTypeCompatibleWith(APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value("CMN0102"))
-                .andExpect(jsonPath("$.message")
-                        .value("해당 자원에 접근할 권한이 없습니다."))
+                .andExpect(jsonPath("$.message").value("해당 자원에 접근할 권한이 없습니다."))
                 .andExpect(jsonPath("$.data").value((Object) null));
     }
 
     @Test
     @DisplayName("동일한 CSRF 쿠키와 헤더가 있는 상태 변경 요청은 통과한다")
-    void permitsStateChangingRequestWithMatchingCsrfCookieAndHeader()
-            throws Exception {
+    void permitsStateChangingRequestWithMatchingCsrfCookieAndHeader() throws Exception {
         MockHttpSession session = new MockHttpSession();
 
         mockMvc.perform(post("/api/v1/customers/me")
@@ -261,27 +226,23 @@ class SecurityConfigTest {
                         .session(session)
                         .cookie(new Cookie("XSRF-TOKEN", "issued-token"))
                         .with(csrf().asHeader())
-                        .with(user("customer").roles("CUSTOMER"))
-                )
+                        .with(user("customer").roles("CUSTOMER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.message").value("로그아웃되었습니다."))
                 .andExpect(jsonPath("$.data").value((Object) null))
+                .andExpect(result ->
+                        assertThat(result.getResponse().getCookie("JSESSIONID")).isNotNull())
                 .andExpect(result -> assertThat(
-                        result.getResponse().getCookie("JSESSIONID")
-                ).isNotNull())
-                .andExpect(result -> assertThat(
-                        result.getResponse().getCookie("JSESSIONID").getMaxAge()
-                ).isZero())
-                .andExpect(result -> assertThat(
-                        result.getResponse().getHeaders(HttpHeaders.SET_COOKIE)
-                ).anySatisfy(cookie -> assertThat(cookie)
-                        .contains("XSRF-TOKEN=")
-                        .contains("Max-Age=0")
-                        .contains("Path=/")))
-                .andExpect(result -> assertThat(
-                        result.getResponse().getHeader("Cache-Control")
-                ).contains("no-store"));
+                                result.getResponse().getCookie("JSESSIONID").getMaxAge())
+                        .isZero())
+                .andExpect(result -> assertThat(result.getResponse().getHeaders(HttpHeaders.SET_COOKIE))
+                        .anySatisfy(cookie -> assertThat(cookie)
+                                .contains("XSRF-TOKEN=")
+                                .contains("Max-Age=0")
+                                .contains("Path=/")))
+                .andExpect(result -> assertThat(result.getResponse().getHeader("Cache-Control"))
+                        .contains("no-store"));
 
         assertThat(session.isInvalid()).isTrue();
     }
@@ -299,12 +260,9 @@ class SecurityConfigTest {
     @Test
     @DisplayName("인증 세션이 없으면 로그아웃 요청에 401 CMN0101을 반환한다")
     void rejectsLogoutWithoutSession() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/logout")
-                        .contextPath("/api/v1")
-                        .with(csrf()))
+        mockMvc.perform(post("/api/v1/auth/logout").contextPath("/api/v1").with(csrf()))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("CMN0101"))
                 .andExpect(jsonPath("$.data").value((Object) null));
     }
-
 }

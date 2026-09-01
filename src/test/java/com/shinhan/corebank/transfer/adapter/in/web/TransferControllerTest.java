@@ -7,15 +7,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.util.UUID;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
-
 import jakarta.persistence.EntityManager;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -62,16 +60,16 @@ class TransferControllerTest extends IntegrationTestSupport {
     void cleanUpCommittedData() {
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202)");
         jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id = 101");
-        jdbcTemplate.update("DELETE FROM transfer WHERE transaction_number IN " +
-                "('20260810IT0000000010','20260810IT0000000011','20260810IT0000000012')");
+        jdbcTemplate.update("DELETE FROM transfer WHERE transaction_number IN "
+                + "('20260810IT0000000010','20260810IT0000000011','20260810IT0000000012')");
         jdbcTemplate.update("UPDATE account SET balance = 100000, status = 'ACTIVE' WHERE account_id IN (101, 202)");
     }
 
     @Test
     @DisplayName("정상 이체 요청은 200 + ApiResponse 봉투로 SUCCESS 결과를 반환한다")
     void execute_success() throws Exception {
-        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
-                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
 
         mockMvc.perform(post("/transfers")
                         .with(authentication(authenticationOf(1L)))
@@ -90,8 +88,8 @@ class TransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("출금계좌와 입금계좌가 같으면 200 + ApiResponse 봉투로 TRF0002 ERROR 결과를 반환한다")
     void execute_withSameWithdrawalAndDepositAccount_returnsErrorResult() throws Exception {
-        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
-                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
 
         mockMvc.perform(post("/transfers")
                         .with(authentication(authenticationOf(1L)))
@@ -123,8 +121,8 @@ class TransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("존재하는 계좌번호로 예금주를 조회하면 200 + 예금주명을 반환한다")
     void inquirePayee_success() throws Exception {
-        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
-                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
 
         mockMvc.perform(get("/transfers/payee")
                         .with(authentication(authenticationOf(1L)))
@@ -150,13 +148,16 @@ class TransferControllerTest extends IntegrationTestSupport {
     void searchHistory_success() throws Exception {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             TransferTestFixtures.seedCustomerAndAccounts(entityManager);
-            entityManager.createNativeQuery("""
+            entityManager
+                    .createNativeQuery(
+                            """
                 INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id, deposit_account_number,
                     payee_name, amount, fee, transfer_type, channel, status, transferred_at, created_at)
                 VALUES ('20260810IT0000000010', 101, 202, '110222222222', '성춘향', 10000, 0, 'IMMEDIATE', 'BT', 'SUCCESS',
                     '2026-08-10 09:00:00', NOW(6))
                 ON DUPLICATE KEY UPDATE transaction_number = transaction_number
-            """).executeUpdate();
+            """)
+                    .executeUpdate();
         });
 
         mockMvc.perform(get("/transfers")
@@ -178,13 +179,16 @@ class TransferControllerTest extends IntegrationTestSupport {
     void searchHistory_allTrue_returnsAllMatchingRowsInOnePage() throws Exception {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             TransferTestFixtures.seedCustomerAndAccounts(entityManager);
-            entityManager.createNativeQuery("""
+            entityManager
+                    .createNativeQuery(
+                            """
                 INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id, deposit_account_number,
                     payee_name, amount, fee, transfer_type, channel, status, transferred_at, created_at)
                 VALUES ('20260810IT0000000012', 101, 202, '110222222222', '성춘향', 10000, 0, 'IMMEDIATE', 'BT', 'SUCCESS',
                     '2026-08-10 09:00:00', NOW(6))
                 ON DUPLICATE KEY UPDATE transaction_number = transaction_number
-            """).executeUpdate();
+            """)
+                    .executeUpdate();
         });
 
         mockMvc.perform(get("/transfers")
@@ -204,8 +208,8 @@ class TransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("이체결과 목록 조회: 남의 출금계좌면 400 + TRF0001을 반환한다")
     void searchHistory_notOwned_returnsTrf0001() throws Exception {
-        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
-                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
 
         mockMvc.perform(get("/transfers")
                         .with(authentication(authenticationOf(2L)))
@@ -219,17 +223,19 @@ class TransferControllerTest extends IntegrationTestSupport {
     void getHistoryDetail_success() throws Exception {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             TransferTestFixtures.seedCustomerAndAccounts(entityManager);
-            entityManager.createNativeQuery("""
+            entityManager
+                    .createNativeQuery(
+                            """
                 INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id, deposit_account_number,
                     payee_name, amount, fee, transfer_type, channel, status, transferred_at, created_at)
                 VALUES ('20260810IT0000000011', 101, 202, '110222222222', '성춘향', 20000, 0, 'IMMEDIATE', 'BT', 'SUCCESS',
                     '2026-08-10 09:00:00', NOW(6))
                 ON DUPLICATE KEY UPDATE transaction_number = transaction_number
-            """).executeUpdate();
+            """)
+                    .executeUpdate();
         });
 
-        mockMvc.perform(get("/transfers/20260810IT0000000011")
-                        .with(authentication(authenticationOf(1L))))
+        mockMvc.perform(get("/transfers/20260810IT0000000011").with(authentication(authenticationOf(1L))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data.transactionNumber").value("20260810IT0000000011"))
@@ -241,8 +247,7 @@ class TransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("이체결과 상세 조회: 존재하지 않는 거래번호면 404 + TRF0202를 반환한다")
     void getHistoryDetail_notFound_returnsTrf0202() throws Exception {
-        mockMvc.perform(get("/transfers/NOT-EXIST")
-                        .with(authentication(authenticationOf(1L))))
+        mockMvc.perform(get("/transfers/NOT-EXIST").with(authentication(authenticationOf(1L))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("TRF0202"));
     }
@@ -252,17 +257,19 @@ class TransferControllerTest extends IntegrationTestSupport {
     void getHistoryDetail_notOwned_returnsTrf0202() throws Exception {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             TransferTestFixtures.seedCustomerAndAccounts(entityManager);
-            entityManager.createNativeQuery("""
+            entityManager
+                    .createNativeQuery(
+                            """
                 INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id, deposit_account_number,
                     payee_name, amount, fee, transfer_type, channel, status, transferred_at, created_at)
                 VALUES ('20260810IT0000000012', 101, 202, '110222222222', '성춘향', 30000, 0, 'IMMEDIATE', 'BT', 'SUCCESS',
                     '2026-08-10 09:00:00', NOW(6))
                 ON DUPLICATE KEY UPDATE transaction_number = transaction_number
-            """).executeUpdate();
+            """)
+                    .executeUpdate();
         });
 
-        mockMvc.perform(get("/transfers/20260810IT0000000012")
-                        .with(authentication(authenticationOf(2L))))
+        mockMvc.perform(get("/transfers/20260810IT0000000012").with(authentication(authenticationOf(2L))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("TRF0202"));
     }
@@ -273,8 +280,10 @@ class TransferControllerTest extends IntegrationTestSupport {
                 customer, null, AuthorityUtils.createAuthorityList("ROLE_CUSTOMER"));
     }
 
-    private String transferRequestJson(Long withdrawalAccountId, String depositAccountNumber, long amount) throws Exception {
-        TransferRequest request = new TransferRequest(withdrawalAccountId, depositAccountNumber, amount, "출금메모", "입금메모");
+    private String transferRequestJson(Long withdrawalAccountId, String depositAccountNumber, long amount)
+            throws Exception {
+        TransferRequest request =
+                new TransferRequest(withdrawalAccountId, depositAccountNumber, amount, "출금메모", "입금메모");
         return OBJECT_MAPPER.writeValueAsString(request);
     }
 }

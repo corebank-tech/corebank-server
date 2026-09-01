@@ -49,10 +49,9 @@ public class ExceptionHandlerTestController {
         throw new IllegalStateException("boom");
     }
 
-    @GetMapping("/test/errors/optimistic-lock") public ApiResponse<Void> optimisticLock() {
-        throw new OptimisticLockingFailureException(
-                "동시 수정 충돌"
-        );
+    @GetMapping("/test/errors/optimistic-lock")
+    public ApiResponse<Void> optimisticLock() {
+        throw new OptimisticLockingFailureException("동시 수정 충돌");
     }
 
     @GetMapping("/test/errors/ok")
@@ -60,6 +59,5 @@ public class ExceptionHandlerTestController {
         return ApiResponse.success("hello");
     }
 
-    record TestRequest(@NotBlank String name) {
-    }
+    record TestRequest(@NotBlank String name) {}
 }

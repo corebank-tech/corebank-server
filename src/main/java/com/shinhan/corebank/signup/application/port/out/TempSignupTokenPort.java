@@ -1,7 +1,6 @@
 package com.shinhan.corebank.signup.application.port.out;
 
 import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
-
 import java.time.Duration;
 import java.util.Optional;
 

@@ -15,22 +15,19 @@ import com.shinhan.corebank.signup.domain.model.ExistingBankAccountSnapshot;
 import com.shinhan.corebank.signup.domain.model.ExistingBankCustomerProfile;
 import com.shinhan.corebank.signup.domain.model.SignupCompletionSnapshot;
 import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
-import org.springframework.stereotype.Service;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
 // tempSignupToken을 선점해 고객·약관·전체 계좌 등록을 완료한다.
 @Service
 public class SignupCompletionService implements CompleteSignupUseCase {
 
-    private static final Logger log = LoggerFactory.getLogger(
-            SignupCompletionService.class
-    );
+    private static final Logger log = LoggerFactory.getLogger(SignupCompletionService.class);
 
     private final TempSignupTokenClaimPort tokenClaimPort;
     private final SignupCustomerAvailabilityPort availabilityPort;
@@ -47,8 +44,7 @@ public class SignupCompletionService implements CompleteSignupUseCase {
             ExistingBankCustomerProfilePort profilePort,
             ExistingBankCustomerAccountsPort accountsPort,
             SignupCompletionTransactionService transactionService,
-            Clock clock
-    ) {
+            Clock clock) {
         this.tokenClaimPort = tokenClaimPort;
         this.availabilityPort = availabilityPort;
         this.registrationChecker = registrationChecker;
@@ -61,12 +57,9 @@ public class SignupCompletionService implements CompleteSignupUseCase {
     @Override
     public CompleteSignupResult complete(CompleteSignupCommand command) {
         String claimId = UUID.randomUUID().toString();
-        TempSignupTokenPayload payload = tokenClaimPort.claim(
-                command.tempSignupToken(),
-                claimId
-        ).orElseThrow(() -> new BusinessException(
-                CommonErrorCode.INVALID_INPUT
-        ));
+        TempSignupTokenPayload payload = tokenClaimPort
+                .claim(command.tempSignupToken(), claimId)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.INVALID_INPUT));
 
         RegisteredCustomer customer;
         LocalDateTime joinedAt = LocalDateTime.now(clock);
@@ -74,21 +67,14 @@ public class SignupCompletionService implements CompleteSignupUseCase {
             validateAvailability(payload);
             ExistingBankCustomerProfile profile = profilePort
                     .findByCustomerId(payload.existingBankCustomerId())
-                    .orElseThrow(() -> new IllegalStateException(
-                            "Mock 기존 은행 고객을 찾을 수 없습니다."
-                    ));
-            List<ExistingBankAccountSnapshot> accounts = accountsPort
-                    .findAllByCustomerId(payload.existingBankCustomerId());
+                    .orElseThrow(() -> new IllegalStateException("Mock 기존 은행 고객을 찾을 수 없습니다."));
+            List<ExistingBankAccountSnapshot> accounts =
+                    accountsPort.findAllByCustomerId(payload.existingBankCustomerId());
             if (accounts.isEmpty()) {
-                throw new IllegalStateException(
-                        "등록할 기존 은행 계좌가 없습니다."
-                );
+                throw new IllegalStateException("등록할 기존 은행 계좌가 없습니다.");
             }
 
-            customer = transactionService.register(
-                    new SignupCompletionSnapshot(payload, profile, accounts),
-                    joinedAt
-            );
+            customer = transactionService.register(new SignupCompletionSnapshot(payload, profile, accounts), joinedAt);
         } catch (RuntimeException exception) {
             restoreToken(command.tempSignupToken(), claimId, exception);
             throw exception;
@@ -104,14 +90,11 @@ public class SignupCompletionService implements CompleteSignupUseCase {
         return new CompleteSignupResult(
                 customer.customerId(),
                 customer.userId(),
-                joinedAt.atZone(clock.getZone()).toOffsetDateTime()
-        );
+                joinedAt.atZone(clock.getZone()).toOffsetDateTime());
     }
 
     private void validateAvailability(TempSignupTokenPayload payload) {
-        registrationChecker.rejectIfRegistered(
-                payload.existingBankCustomerId()
-        );
+        registrationChecker.rejectIfRegistered(payload.existingBankCustomerId());
         if (availabilityPort.isUserIdTaken(payload.userId())) {
             throw new BusinessException(SignupErrorCode.DUPLICATE_USER_ID);
         }
@@ -120,11 +103,7 @@ public class SignupCompletionService implements CompleteSignupUseCase {
         }
     }
 
-    private void restoreToken(
-            String token,
-            String claimId,
-            RuntimeException original
-    ) {
+    private void restoreToken(String token, String claimId, RuntimeException original) {
         try {
             tokenClaimPort.release(token, claimId);
         } catch (RuntimeException releaseFailure) {

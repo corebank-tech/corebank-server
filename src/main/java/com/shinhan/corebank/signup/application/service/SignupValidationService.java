@@ -21,27 +21,22 @@ import com.shinhan.corebank.signup.domain.model.EmailVerificationTokenPayload;
 import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
 import com.shinhan.corebank.signup.domain.model.TermsAuthTokenPayload;
 import com.shinhan.corebank.signup.domain.model.UserIdCheckTokenPayload;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.regex.Pattern;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
 
 // 회원가입 입력과 단계별 인증 토큰을 검증하고 tempSignupToken을 발급·회전한다.
 @Service
 public class SignupValidationService implements ValidateSignupUseCase {
 
-    private static final Pattern PASSWORD_PATTERN = Pattern.compile(
-            "^(?=.*[A-Za-z])(?=.*\\d)(?=.*[^A-Za-z\\d\\s])\\S+$"
-    );
-    private static final Pattern USER_ID_PATTERN =
-            Pattern.compile("^[a-z][a-z0-9]{5,15}$");
-    private static final Pattern EMAIL_PATTERN = Pattern.compile(
-            "^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+"
-                    + "@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+$"
-    );
+    private static final Pattern PASSWORD_PATTERN =
+            Pattern.compile("^(?=.*[A-Za-z])(?=.*\\d)(?=.*[^A-Za-z\\d\\s])\\S+$");
+    private static final Pattern USER_ID_PATTERN = Pattern.compile("^[a-z][a-z0-9]{5,15}$");
+    private static final Pattern EMAIL_PATTERN =
+            Pattern.compile("^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+" + "@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+$");
     private static final Pattern PHONE_PATTERN = Pattern.compile("^\\d{11}$");
 
     private final TermsAuthTokenPort termsTokenPort;
@@ -67,8 +62,7 @@ public class SignupValidationService implements ValidateSignupUseCase {
             AuthTokenGeneratorPort tokenGeneratorPort,
             PasswordEncoder passwordEncoder,
             SignupTokenProperties tokenProperties,
-            Clock clock
-    ) {
+            Clock clock) {
         this.termsTokenPort = termsTokenPort;
         this.accountTokenPort = accountTokenPort;
         this.userIdTokenPort = userIdTokenPort;
@@ -90,9 +84,7 @@ public class SignupValidationService implements ValidateSignupUseCase {
         validateUserIdFormat(command.userId());
         validateEmailFormat(command.email());
 
-        String normalizedEmail = command.email()
-                .trim()
-                .toLowerCase(Locale.ROOT);
+        String normalizedEmail = command.email().trim().toLowerCase(Locale.ROOT);
 
         if (command.isEditRequest()) {
             return validateEditedInput(command, normalizedEmail);
@@ -100,16 +92,11 @@ public class SignupValidationService implements ValidateSignupUseCase {
         return validateInitialInput(command, normalizedEmail);
     }
 
-    private ValidateSignupResult validateInitialInput(
-            ValidateSignupCommand command,
-            String normalizedEmail
-    ) {
+    private ValidateSignupResult validateInitialInput(ValidateSignupCommand command, String normalizedEmail) {
         TermsAuthTokenPayload terms = findTerms(command.termsAuthToken());
         AccountAuthTokenPayload account = findAccount(command.accountAuthToken());
         UserIdCheckTokenPayload userIdProof = findUserId(command.userIdCheckToken());
-        EmailVerificationTokenPayload emailProof = findEmail(
-                command.emailVerificationToken()
-        );
+        EmailVerificationTokenPayload emailProof = findEmail(command.emailVerificationToken());
 
         validateUserIdProof(command.userId(), userIdProof);
         validateEmailProof(normalizedEmail, emailProof);
@@ -123,8 +110,7 @@ public class SignupValidationService implements ValidateSignupUseCase {
                 passwordEncoder.encode(command.userPassword()),
                 normalizedEmail,
                 command.phoneNumber(),
-                Instant.now(clock)
-        );
+                Instant.now(clock));
         String newToken = tokenGeneratorPort.generateTempSignupToken();
 
         boolean transitioned = transitionPort.replaceInitialTokensWithTemp(
@@ -134,19 +120,14 @@ public class SignupValidationService implements ValidateSignupUseCase {
                 command.emailVerificationToken(),
                 newToken,
                 payload,
-                tokenProperties.tempSignupTtl()
-        );
+                tokenProperties.tempSignupTtl());
         ensureTransitioned(transitioned);
         return result(newToken);
     }
 
-    private ValidateSignupResult validateEditedInput(
-            ValidateSignupCommand command,
-            String normalizedEmail
-    ) {
-        TempSignupTokenPayload current = tempTokenPort
-                .find(command.tempSignupToken())
-                .orElseThrow(this::invalidInput);
+    private ValidateSignupResult validateEditedInput(ValidateSignupCommand command, String normalizedEmail) {
+        TempSignupTokenPayload current =
+                tempTokenPort.find(command.tempSignupToken()).orElseThrow(this::invalidInput);
 
         boolean userIdChanged = !current.userId().equals(command.userId());
         boolean emailChanged = !current.email().equals(normalizedEmail);
@@ -160,9 +141,7 @@ public class SignupValidationService implements ValidateSignupUseCase {
 
         String emailTokenToConsume = null;
         if (emailChanged) {
-            EmailVerificationTokenPayload proof = findEmail(
-                    command.emailVerificationToken()
-            );
+            EmailVerificationTokenPayload proof = findEmail(command.emailVerificationToken());
             validateEmailProof(normalizedEmail, proof);
             emailTokenToConsume = command.emailVerificationToken();
         }
@@ -177,8 +156,7 @@ public class SignupValidationService implements ValidateSignupUseCase {
                 passwordEncoder.encode(command.userPassword()),
                 normalizedEmail,
                 command.phoneNumber(),
-                Instant.now(clock)
-        );
+                Instant.now(clock));
         String newToken = tokenGeneratorPort.generateTempSignupToken();
 
         boolean transitioned = transitionPort.rotateTempToken(
@@ -187,8 +165,7 @@ public class SignupValidationService implements ValidateSignupUseCase {
                 emailTokenToConsume,
                 newToken,
                 updated,
-                tokenProperties.tempSignupTtl()
-        );
+                tokenProperties.tempSignupTtl());
         ensureTransitioned(transitioned);
         return result(newToken);
     }
@@ -197,40 +174,36 @@ public class SignupValidationService implements ValidateSignupUseCase {
         if (!hasText(token)) {
             throw new BusinessException(SignupErrorCode.INVALID_TERMS_AUTH_TOKEN);
         }
-        return termsTokenPort.find(token).orElseThrow(() ->
-                new BusinessException(SignupErrorCode.INVALID_TERMS_AUTH_TOKEN)
-        );
+        return termsTokenPort
+                .find(token)
+                .orElseThrow(() -> new BusinessException(SignupErrorCode.INVALID_TERMS_AUTH_TOKEN));
     }
 
     private AccountAuthTokenPayload findAccount(String token) {
         if (!hasText(token)) {
             throw new BusinessException(SignupErrorCode.INVALID_ACCOUNT_AUTH_TOKEN);
         }
-        return accountTokenPort.find(token).orElseThrow(() ->
-                new BusinessException(SignupErrorCode.INVALID_ACCOUNT_AUTH_TOKEN)
-        );
+        return accountTokenPort
+                .find(token)
+                .orElseThrow(() -> new BusinessException(SignupErrorCode.INVALID_ACCOUNT_AUTH_TOKEN));
     }
 
     private UserIdCheckTokenPayload findUserId(String token) {
         if (!hasText(token)) {
             throw new BusinessException(SignupErrorCode.USER_ID_CHECK_REQUIRED);
         }
-        return userIdTokenPort.find(token).orElseThrow(() ->
-                new BusinessException(SignupErrorCode.USER_ID_CHECK_REQUIRED)
-        );
+        return userIdTokenPort
+                .find(token)
+                .orElseThrow(() -> new BusinessException(SignupErrorCode.USER_ID_CHECK_REQUIRED));
     }
 
     private EmailVerificationTokenPayload findEmail(String token) {
         if (!hasText(token)) {
-            throw new BusinessException(
-                    SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN
-            );
+            throw new BusinessException(SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN);
         }
-        return emailTokenPort.find(token).orElseThrow(() ->
-                new BusinessException(
-                        SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN
-                )
-        );
+        return emailTokenPort
+                .find(token)
+                .orElseThrow(() -> new BusinessException(SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN));
     }
 
     private void validatePassword(String password, String confirmation) {
@@ -238,9 +211,7 @@ public class SignupValidationService implements ValidateSignupUseCase {
             throw invalidInput();
         }
         if (!password.equals(confirmation)) {
-            throw new BusinessException(
-                    SignupErrorCode.PASSWORD_CONFIRMATION_MISMATCH
-            );
+            throw new BusinessException(SignupErrorCode.PASSWORD_CONFIRMATION_MISMATCH);
         }
         if (!PASSWORD_PATTERN.matcher(password).matches()) {
             throw new BusinessException(SignupErrorCode.INVALID_PASSWORD_FORMAT);
@@ -248,8 +219,7 @@ public class SignupValidationService implements ValidateSignupUseCase {
     }
 
     private void validatePhoneNumber(String phoneNumber) {
-        if (phoneNumber == null
-                || !PHONE_PATTERN.matcher(phoneNumber).matches()) {
+        if (phoneNumber == null || !PHONE_PATTERN.matcher(phoneNumber).matches()) {
             throw invalidInput();
         }
     }
@@ -274,24 +244,16 @@ public class SignupValidationService implements ValidateSignupUseCase {
         }
     }
 
-    private void validateUserIdProof(
-            String requestedUserId,
-            UserIdCheckTokenPayload proof
-    ) {
+    private void validateUserIdProof(String requestedUserId, UserIdCheckTokenPayload proof) {
         if (!proof.userId().equals(requestedUserId)) {
             throw new BusinessException(SignupErrorCode.USER_ID_CHECK_REQUIRED);
         }
     }
 
-    private void validateEmailProof(
-            String requestedEmail,
-            EmailVerificationTokenPayload proof
-    ) {
+    private void validateEmailProof(String requestedEmail, EmailVerificationTokenPayload proof) {
         if (proof.purpose() != EmailVerificationPurpose.SIGN_UP
                 || !proof.email().equalsIgnoreCase(requestedEmail)) {
-            throw new BusinessException(
-                    SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN
-            );
+            throw new BusinessException(SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN);
         }
     }
 
@@ -311,10 +273,7 @@ public class SignupValidationService implements ValidateSignupUseCase {
     }
 
     private ValidateSignupResult result(String token) {
-        return new ValidateSignupResult(
-                token,
-                tokenProperties.tempSignupTtl().toSeconds()
-        );
+        return new ValidateSignupResult(token, tokenProperties.tempSignupTtl().toSeconds());
     }
 
     private BusinessException invalidInput() {

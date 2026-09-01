@@ -1,12 +1,11 @@
 package com.shinhan.corebank.subscription.domain;
 
 import com.shinhan.corebank.product.domain.ProductGroup;
-import lombok.Builder;
-import lombok.Getter;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import lombok.Builder;
+import lombok.Getter;
 
 @Getter
 @Builder

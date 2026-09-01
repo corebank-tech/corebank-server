@@ -35,7 +35,8 @@ class DailyTransferBatchServiceTest {
     BatchExecutionLockPort batchExecutionLockPort;
 
     private DailyTransferBatchService service() {
-        return new DailyTransferBatchService(autoTransferBatchUseCase, scheduledTransferBatchUseCase, batchExecutionLockPort);
+        return new DailyTransferBatchService(
+                autoTransferBatchUseCase, scheduledTransferBatchUseCase, batchExecutionLockPort);
     }
 
     @Test
@@ -72,7 +73,9 @@ class DailyTransferBatchServiceTest {
     @DisplayName("자동이체 단계에서 예외가 나도 예약이체 단계는 계속 진행되고 락은 반납된다 (도메인별 실패 격리, PR #272 리뷰)")
     void run_autoTransferStepFails_scheduledTransferStepStillRuns_andLockReleased() {
         when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
-        doThrow(new IllegalStateException("boom")).when(autoTransferBatchUseCase).executeDaily(DATE);
+        doThrow(new IllegalStateException("boom"))
+                .when(autoTransferBatchUseCase)
+                .executeDaily(DATE);
 
         service().run(DATE);
 
@@ -87,7 +90,9 @@ class DailyTransferBatchServiceTest {
     @DisplayName("예약이체 단계에서 예외가 나도 락은 반납된다")
     void run_scheduledTransferStepFails_lockStillReleased() {
         when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
-        doThrow(new IllegalStateException("boom")).when(scheduledTransferBatchUseCase).executeDaily(DATE);
+        doThrow(new IllegalStateException("boom"))
+                .when(scheduledTransferBatchUseCase)
+                .executeDaily(DATE);
 
         service().run(DATE);
 

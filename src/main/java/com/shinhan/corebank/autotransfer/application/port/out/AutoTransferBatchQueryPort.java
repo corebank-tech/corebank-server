@@ -1,7 +1,6 @@
 package com.shinhan.corebank.autotransfer.application.port.out;
 
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
-
 import java.time.LocalDate;
 import java.util.List;
 

@@ -15,8 +15,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 class SecurityContextCurrentCustomerProviderTest {
 
-    private final SecurityContextCurrentCustomerProvider provider =
-            new SecurityContextCurrentCustomerProvider();
+    private final SecurityContextCurrentCustomerProvider provider = new SecurityContextCurrentCustomerProvider();
 
     @AfterEach
     void clearSecurityContext() {
@@ -26,14 +25,9 @@ class SecurityContextCurrentCustomerProviderTest {
     @Test
     @DisplayName("인증된 요청에서 현재 고객과 customerId를 조회한다")
     void returnsAuthenticatedCustomer() {
-        AuthenticatedCustomer customer =
-                new AuthenticatedCustomer(1L, "honggildong", "홍길동");
-        UsernamePasswordAuthenticationToken authentication =
-                UsernamePasswordAuthenticationToken.authenticated(
-                        customer,
-                        null,
-                        AuthorityUtils.createAuthorityList("ROLE_CUSTOMER")
-                );
+        AuthenticatedCustomer customer = new AuthenticatedCustomer(1L, "honggildong", "홍길동");
+        UsernamePasswordAuthenticationToken authentication = UsernamePasswordAuthenticationToken.authenticated(
+                customer, null, AuthorityUtils.createAuthorityList("ROLE_CUSTOMER"));
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
         assertThat(provider.getCurrentCustomer()).isEqualTo(customer);
@@ -50,11 +44,7 @@ class SecurityContextCurrentCustomerProviderTest {
     @DisplayName("principal이 인증 고객 타입이 아니면 CMN0101 예외를 발생시킨다")
     void rejectsUnexpectedPrincipalType() {
         UsernamePasswordAuthenticationToken authentication =
-                UsernamePasswordAuthenticationToken.authenticated(
-                        "anonymousUser",
-                        null,
-                        AuthorityUtils.NO_AUTHORITIES
-                );
+                UsernamePasswordAuthenticationToken.authenticated("anonymousUser", null, AuthorityUtils.NO_AUTHORITIES);
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
         assertUnauthorized(provider::getCurrentCustomer);
@@ -62,8 +52,7 @@ class SecurityContextCurrentCustomerProviderTest {
 
     private void assertUnauthorized(Runnable invocation) {
         assertThatThrownBy(invocation::run)
-                .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.getErrorCode())
-                                .isEqualTo(CommonErrorCode.UNAUTHORIZED));
+                .isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(CommonErrorCode.UNAUTHORIZED));
     }
 }

@@ -1,8 +1,6 @@
 package com.shinhan.corebank.autotransfer.application.port.out;
 
-
 import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
-
 import java.util.List;
 
 public interface AutoTransferExecutionPersistencePort {

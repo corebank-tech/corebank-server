@@ -36,16 +36,14 @@ class SwaggerUiAccessIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("API 문서(/v3/api-docs)는 세션 없이 접근할 수 있다")
     void permitsApiDocsWithoutSession() throws Exception {
-        mockMvc.perform(get("/api/v1/v3/api-docs").contextPath("/api/v1"))
-                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/v3/api-docs").contextPath("/api/v1")).andExpect(status().isOk());
     }
 
     // "/v3/api-docs/**"는 확장자가 붙은 형제 경로를 잡지 못해 이 경로만 401이던 이력이 있다.
     @Test
     @DisplayName("YAML 형식 API 문서(/v3/api-docs.yaml)도 세션 없이 접근할 수 있다")
     void permitsApiDocsYamlWithoutSession() throws Exception {
-        mockMvc.perform(get("/api/v1/v3/api-docs.yaml").contextPath("/api/v1"))
-                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/v3/api-docs.yaml").contextPath("/api/v1")).andExpect(status().isOk());
     }
 
     @Test
@@ -64,11 +62,7 @@ class SwaggerUiAccessIntegrationTest extends IntegrationTestSupport {
                 .andExpect(summary("/auth/verify-account", "post", "회원가입 실명·계좌 인증"))
                 .andExpect(summary("/auth/check-id", "post", "회원가입 아이디 중복확인"))
                 .andExpect(summary("/auth/email-verifications", "post", "이메일 인증번호 발급"))
-                .andExpect(summary(
-                        "/auth/email-verifications/{emailVerificationId}/verify",
-                        "post",
-                        "이메일 인증번호 검증"
-                ))
+                .andExpect(summary("/auth/email-verifications/{emailVerificationId}/verify", "post", "이메일 인증번호 검증"))
                 .andExpect(summary("/auth/signup/validate", "post", "회원가입 입력정보 검증"))
                 .andExpect(summary("/auth/signup/confirm-info", "get", "회원가입 확인정보 조회"))
                 .andExpect(summary("/auth/signup/complete", "post", "회원가입 완료"));
@@ -79,37 +73,28 @@ class SwaggerUiAccessIntegrationTest extends IntegrationTestSupport {
     void documentsSensitiveInputsAndIdempotencyHeaders() throws Exception {
         mockMvc.perform(get("/api/v1/v3/api-docs").contextPath("/api/v1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath(
-                        "$['components']['schemas']['LoginRequest']['properties']['password']['writeOnly']"
-                ).value(true))
-                .andExpect(jsonPath(
-                        "$['components']['schemas']['VerifyOtpRequest']['properties']['otpCode']['writeOnly']"
-                ).value(true))
-                .andExpect(jsonPath(
-                        "$['paths']['/customers/me']['patch']['parameters'][0]['name']"
-                ).value("Idempotency-Key"))
-                .andExpect(jsonPath(
-                        "$['paths']['/customers/me']['patch']['parameters'][0]['required']"
-                ).value(true))
-                .andExpect(jsonPath(
-                        "$['paths']['/auth/signup/complete']['post']['parameters'][0]['name']"
-                ).value("Idempotency-Key"));
+                .andExpect(jsonPath("$['components']['schemas']['LoginRequest']['properties']['password']['writeOnly']")
+                        .value(true))
+                .andExpect(
+                        jsonPath("$['components']['schemas']['VerifyOtpRequest']['properties']['otpCode']['writeOnly']")
+                                .value(true))
+                .andExpect(jsonPath("$['paths']['/customers/me']['patch']['parameters'][0]['name']")
+                        .value("Idempotency-Key"))
+                .andExpect(jsonPath("$['paths']['/customers/me']['patch']['parameters'][0]['required']")
+                        .value(true))
+                .andExpect(jsonPath("$['paths']['/auth/signup/complete']['post']['parameters'][0]['name']")
+                        .value("Idempotency-Key"));
     }
 
     @Test
     @DisplayName("보호 API는 여전히 세션 없이 접근할 수 없다")
     void stillRejectsProtectedApiWithoutSession() throws Exception {
-        mockMvc.perform(get("/api/v1/customers/me").contextPath("/api/v1"))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/customers/me").contextPath("/api/v1")).andExpect(status().isUnauthorized());
     }
 
     private static org.springframework.test.web.servlet.ResultMatcher summary(
-            String path,
-            String method,
-            String expectedSummary
-    ) {
-        return jsonPath(
-                "$['paths']['" + path + "']['" + method + "']['summary']"
-        ).value(expectedSummary);
+            String path, String method, String expectedSummary) {
+        return jsonPath("$['paths']['" + path + "']['" + method + "']['summary']")
+                .value(expectedSummary);
     }
 }

@@ -1,10 +1,8 @@
 package com.shinhan.corebank.limit.domain;
 
-import java.time.LocalDate;
-
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-
+import java.time.LocalDate;
 import lombok.Getter;
 
 /**

@@ -1,10 +1,9 @@
 package com.shinhan.corebank.otp.adapter.out.security;
 
 import com.shinhan.corebank.otp.application.port.out.OtpTokenGeneratorPort;
-import org.springframework.stereotype.Component;
-
 import java.security.SecureRandom;
 import java.util.Base64;
+import org.springframework.stereotype.Component;
 
 // OTP 요청 ID와 최소 256bit 인증 완료 토큰을 예측 불가능하게 생성한다.
 @Component

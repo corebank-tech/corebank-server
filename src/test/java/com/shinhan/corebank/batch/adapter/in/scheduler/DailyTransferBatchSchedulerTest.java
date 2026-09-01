@@ -22,7 +22,8 @@ class DailyTransferBatchSchedulerTest {
     @DisplayName("Asia/Seoul 기준 오늘 날짜로 유스케이스를 호출한다")
     void runDailyBatch_delegatesToUseCase_withTodayInSeoul() {
         LocalDate fixedDate = LocalDate.of(2026, 3, 15);
-        Clock clock = Clock.fixed(fixedDate.atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul"));
+        Clock clock =
+                Clock.fixed(fixedDate.atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul"));
 
         new DailyTransferBatchScheduler(dailyTransferBatchUseCase, clock).runDailyBatch();
 

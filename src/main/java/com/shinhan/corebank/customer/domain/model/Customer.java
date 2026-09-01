@@ -4,7 +4,6 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -44,13 +43,25 @@ public class Customer {
             LocalDate birthDate,
             String email,
             String phoneNumber,
-            LocalDateTime joinedAt
-    ) {
+            LocalDateTime joinedAt) {
         return new Customer(
-                null, userId, existingBankCustomerId, passwordHash, userName,
-                birthDate, email, phoneNumber, 0, false, null, null,
-                null, joinedAt, joinedAt, null, null
-        );
+                null,
+                userId,
+                existingBankCustomerId,
+                passwordHash,
+                userName,
+                birthDate,
+                email,
+                phoneNumber,
+                0,
+                false,
+                null,
+                null,
+                null,
+                joinedAt,
+                joinedAt,
+                null,
+                null);
     }
 
     // 영속 상태를 불변식 검증 후 도메인 모델로 복원
@@ -71,8 +82,7 @@ public class Customer {
             LocalDateTime passwordChangedAt,
             LocalDateTime joinedAt,
             LocalDateTime createdAt,
-            LocalDateTime updatedAt
-    ) {
+            LocalDateTime updatedAt) {
         validateLoginState(loginFailureCount, accountLocked);
 
         return new Customer(
@@ -92,28 +102,21 @@ public class Customer {
                 passwordChangedAt,
                 joinedAt,
                 createdAt,
-                updatedAt
-        );
+                updatedAt);
     }
 
     // 로그인 실패 횟수를 1회 증가시키고 최대 허용 횟수 도달 시 계정을 잠금
     public void recordLoginFailure() {
         if (accountLocked) {
-            throw new IllegalStateException(
-                    "잠긴 계정의 로그인 실패 상태는 변경할 수 없습니다."
-            );
+            throw new IllegalStateException("잠긴 계정의 로그인 실패 상태는 변경할 수 없습니다.");
         }
 
         this.loginFailureCount++;
-        this.accountLocked =
-                this.loginFailureCount == MAX_LOGIN_FAILURE_COUNT;
+        this.accountLocked = this.loginFailureCount == MAX_LOGIN_FAILURE_COUNT;
     }
 
     // 로그인 성공 시 실패 횟수를 초기화하고 접속정보를 갱신
-    public void recordLoginSuccess(
-            LocalDateTime loginAt,
-            String loginIp
-    ) {
+    public void recordLoginSuccess(LocalDateTime loginAt, String loginIp) {
         if (accountLocked) {
             throw new IllegalStateException("잠긴 계정은 로그인 성공 처리할 수 없습니다.");
         }
@@ -137,10 +140,7 @@ public class Customer {
     }
 
     // 검증이 끝난 휴대폰 번호와 이메일을 새 값으로 변경한다.
-    public void changeContactInfo(
-            String phoneNumber,
-            String email
-    ) {
+    public void changeContactInfo(String phoneNumber, String email) {
         if (phoneNumber == null || phoneNumber.isBlank()) {
             throw new IllegalArgumentException("휴대폰 번호는 필수입니다.");
         }
@@ -152,8 +152,7 @@ public class Customer {
     }
 
     private static boolean isValidIpAddress(String loginIp) {
-        return isValidIpv4Address(loginIp)
-                || isValidIpv6Address(loginIp);
+        return isValidIpv4Address(loginIp) || isValidIpv6Address(loginIp);
     }
 
     private static boolean isValidIpv4Address(String loginIp) {
@@ -191,9 +190,7 @@ public class Customer {
 
         for (int index = 0; index < loginIp.length(); index++) {
             char character = loginIp.charAt(index);
-            boolean ipv6Character = Character.digit(character, 16) >= 0
-                    || character == ':'
-                    || character == '.';
+            boolean ipv6Character = Character.digit(character, 16) >= 0 || character == ':' || character == '.';
             if (!ipv6Character) {
                 return false;
             }
@@ -208,24 +205,13 @@ public class Customer {
         }
     }
 
-    private static void validateLoginState(
-            int loginFailureCount,
-            boolean accountLocked
-    ) {
-        if (loginFailureCount < 0
-                || loginFailureCount > MAX_LOGIN_FAILURE_COUNT) {
-            throw new IllegalArgumentException(
-                    "로그인 실패 횟수는 0회 이상 %d회 이하여야 합니다."
-                            .formatted(MAX_LOGIN_FAILURE_COUNT)
-            );
+    private static void validateLoginState(int loginFailureCount, boolean accountLocked) {
+        if (loginFailureCount < 0 || loginFailureCount > MAX_LOGIN_FAILURE_COUNT) {
+            throw new IllegalArgumentException("로그인 실패 횟수는 0회 이상 %d회 이하여야 합니다.".formatted(MAX_LOGIN_FAILURE_COUNT));
         }
 
-        if (accountLocked
-                != (loginFailureCount == MAX_LOGIN_FAILURE_COUNT)) {
-            throw new IllegalArgumentException(
-                    "로그인 실패 횟수와 계정 잠금 상태가 일치하지 않습니다."
-            );
+        if (accountLocked != (loginFailureCount == MAX_LOGIN_FAILURE_COUNT)) {
+            throw new IllegalArgumentException("로그인 실패 횟수와 계정 잠금 상태가 일치하지 않습니다.");
         }
     }
-
 }

@@ -2,10 +2,9 @@ package com.shinhan.corebank.subscription.domain;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Getter;
-
-import java.time.LocalDateTime;
 
 @Getter
 public class SubscriptionTermsAgreement {
@@ -15,7 +14,8 @@ public class SubscriptionTermsAgreement {
     private final LocalDateTime agreedAt;
 
     @Builder
-    public SubscriptionTermsAgreement(SubscriptionTermsAgreementId id, String termsVersion, LocalDateTime readAt, LocalDateTime agreedAt) {
+    public SubscriptionTermsAgreement(
+            SubscriptionTermsAgreementId id, String termsVersion, LocalDateTime readAt, LocalDateTime agreedAt) {
         if (id == null || termsVersion == null || agreedAt == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }

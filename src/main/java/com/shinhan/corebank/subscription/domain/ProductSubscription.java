@@ -1,13 +1,12 @@
 package com.shinhan.corebank.subscription.domain;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
 
 @Getter
 @AllArgsConstructor

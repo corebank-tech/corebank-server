@@ -1,9 +1,8 @@
 package com.shinhan.corebank.customer.adapter.out.persistence;
 
 import com.shinhan.corebank.customer.domain.model.Customer;
-import org.springframework.stereotype.Component;
-
 import java.util.Objects;
+import org.springframework.stereotype.Component;
 
 // Customer 도메인 모델과 JPA Entity 사이의 변환 담당
 @Component
@@ -11,10 +10,7 @@ public class CustomerMapper {
 
     // JPA Entity를 Customer 도메인 모델로 변환
     public Customer toDomain(CustomerJpaEntity entity) {
-        Objects.requireNonNull(
-                entity,
-                "entity must not be null"
-        );
+        Objects.requireNonNull(entity, "entity must not be null");
 
         return Customer.restore(
                 entity.getCustomerId(),
@@ -33,16 +29,12 @@ public class CustomerMapper {
                 entity.getPasswordChangedAt(),
                 entity.getJoinedAt(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt()
-        );
+                entity.getUpdatedAt());
     }
 
     // 신규 Customer 도메인 모델을 JPA Entity로 변환
     public CustomerJpaEntity toEntity(Customer customer) {
-        Objects.requireNonNull(
-                customer,
-                "customer must not be null"
-        );
+        Objects.requireNonNull(customer, "customer must not be null");
 
         return CustomerJpaEntity.builder()
                 .customerId(customer.getCustomerId())

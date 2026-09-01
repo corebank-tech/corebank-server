@@ -11,8 +11,7 @@ public record ValidateSignupCommand(
         String userPassword,
         String userPasswordConfirm,
         String email,
-        String phoneNumber
-) {
+        String phoneNumber) {
 
     public boolean isEditRequest() {
         return tempSignupToken != null && !tempSignupToken.isBlank();

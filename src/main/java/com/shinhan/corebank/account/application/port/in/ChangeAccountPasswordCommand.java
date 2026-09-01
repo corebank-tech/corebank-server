@@ -8,6 +8,4 @@ public record ChangeAccountPasswordCommand(
         String accountPasswordAuthToken,
         String newAccountPassword,
         String newAccountPasswordConfirm,
-        String requestIp
-) {
-}
+        String requestIp) {}

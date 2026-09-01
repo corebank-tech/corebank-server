@@ -1,5 +1,11 @@
 package com.shinhan.corebank.customer.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
 import com.shinhan.corebank.customer.api.CustomerAuthenticationData;
 import com.shinhan.corebank.customer.api.LoginFailureState;
 import com.shinhan.corebank.customer.api.LoginSuccessState;
@@ -7,22 +13,15 @@ import com.shinhan.corebank.customer.api.RecordLoginFailureCommand;
 import com.shinhan.corebank.customer.api.RecordLoginSuccessCommand;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("고객 인증정보 서비스 단위 테스트")
@@ -40,11 +39,9 @@ class CustomerAuthenticationServiceTest {
     void findByUserId() {
         Customer customer = createCustomer(1L, 2, false);
 
-        given(customerPersistencePort.findByUserId("user01"))
-                .willReturn(Optional.of(customer));
+        given(customerPersistencePort.findByUserId("user01")).willReturn(Optional.of(customer));
 
-        Optional<CustomerAuthenticationData> result =
-                service.findByUserId("user01");
+        Optional<CustomerAuthenticationData> result = service.findByUserId("user01");
 
         assertThat(result).isPresent();
         assertThat(result.get().getCustomerId()).isEqualTo(1L);
@@ -59,11 +56,9 @@ class CustomerAuthenticationServiceTest {
     @Test
     @DisplayName("존재하지 않는 로그인 아이디면 빈 결과를 반환한다")
     void findByUserIdNotFound() {
-        given(customerPersistencePort.findByUserId("unknown"))
-                .willReturn(Optional.empty());
+        given(customerPersistencePort.findByUserId("unknown")).willReturn(Optional.empty());
 
-        Optional<CustomerAuthenticationData> result =
-                service.findByUserId("unknown");
+        Optional<CustomerAuthenticationData> result = service.findByUserId("unknown");
 
         assertThat(result).isEmpty();
     }
@@ -74,15 +69,11 @@ class CustomerAuthenticationServiceTest {
     void updateLoginFailureState() {
         Customer customer = createCustomer(1L, 4, false);
 
-        given(customerPersistencePort.findByIdForUpdate(1L))
-                .willReturn(Optional.of(customer));
+        given(customerPersistencePort.findByIdForUpdate(1L)).willReturn(Optional.of(customer));
 
-        LoginFailureState result = service.updateLoginFailureState(
-                new RecordLoginFailureCommand(1L)
-        );
+        LoginFailureState result = service.updateLoginFailureState(new RecordLoginFailureCommand(1L));
 
-        verify(customerPersistencePort)
-                .updateLoginFailureState(customer);
+        verify(customerPersistencePort).updateLoginFailureState(customer);
         assertThat(result.loginFailureCount()).isEqualTo(5);
         assertThat(result.accountLocked()).isTrue();
     }
@@ -93,15 +84,11 @@ class CustomerAuthenticationServiceTest {
     void incrementLoginFailureCount() {
         Customer customer = createCustomer(1L, 3, false);
 
-        given(customerPersistencePort.findByIdForUpdate(1L))
-                .willReturn(Optional.of(customer));
+        given(customerPersistencePort.findByIdForUpdate(1L)).willReturn(Optional.of(customer));
 
-        LoginFailureState result = service.updateLoginFailureState(
-                new RecordLoginFailureCommand(1L)
-        );
+        LoginFailureState result = service.updateLoginFailureState(new RecordLoginFailureCommand(1L));
 
-        verify(customerPersistencePort)
-                .updateLoginFailureState(customer);
+        verify(customerPersistencePort).updateLoginFailureState(customer);
         assertThat(result.loginFailureCount()).isEqualTo(4);
         assertThat(result.accountLocked()).isFalse();
     }
@@ -112,63 +99,40 @@ class CustomerAuthenticationServiceTest {
     void returnLockedStateForLockedCustomer() {
         Customer customer = createCustomer(1L, 5, true);
 
-        given(customerPersistencePort.findByIdForUpdate(1L))
-                .willReturn(Optional.of(customer));
+        given(customerPersistencePort.findByIdForUpdate(1L)).willReturn(Optional.of(customer));
 
-        LoginFailureState result = service.updateLoginFailureState(
-                new RecordLoginFailureCommand(1L)
-        );
+        LoginFailureState result = service.updateLoginFailureState(new RecordLoginFailureCommand(1L));
 
         assertThat(result.loginFailureCount()).isEqualTo(5);
         assertThat(result.accountLocked()).isTrue();
         assertThat(customer.getLoginFailureCount()).isEqualTo(5);
         assertThat(customer.isAccountLocked()).isTrue();
-        verify(customerPersistencePort, never())
-                .updateLoginFailureState(customer);
+        verify(customerPersistencePort, never()).updateLoginFailureState(customer);
     }
 
     // 로그인 성공 시 실패 횟수를 초기화하고 접속 이력을 이동
     @Test
     @DisplayName("로그인 성공 시 실패 횟수와 최근 접속정보를 갱신한다")
     void updateLoginSuccessState() {
-        LocalDateTime previousLastLoginAt =
-                LocalDateTime.of(2026, 8, 10, 9, 0);
+        LocalDateTime previousLastLoginAt = LocalDateTime.of(2026, 8, 10, 9, 0);
 
-        LocalDateTime newLoginAt =
-                LocalDateTime.of(2026, 8, 12, 10, 0);
+        LocalDateTime newLoginAt = LocalDateTime.of(2026, 8, 12, 10, 0);
 
-        Customer customer = createCustomer(
-                1L,
-                3,
-                false,
-                previousLastLoginAt,
-                "127.0.0.1",
-                null
-        );
+        Customer customer = createCustomer(1L, 3, false, previousLastLoginAt, "127.0.0.1", null);
 
-        given(customerPersistencePort.findByIdForUpdate(1L))
-                .willReturn(Optional.of(customer));
+        given(customerPersistencePort.findByIdForUpdate(1L)).willReturn(Optional.of(customer));
 
-        LoginSuccessState result = service.updateLoginSuccessState(
-                new RecordLoginSuccessCommand(
-                        1L,
-                        newLoginAt,
-                        "192.168.0.10"
-                )
-        );
+        LoginSuccessState result =
+                service.updateLoginSuccessState(new RecordLoginSuccessCommand(1L, newLoginAt, "192.168.0.10"));
 
-        verify(customerPersistencePort)
-                .updateLoginSuccessState(customer);
+        verify(customerPersistencePort).updateLoginSuccessState(customer);
 
         assertThat(result).isEqualTo(LoginSuccessState.COMPLETED);
         assertThat(customer.getLoginFailureCount()).isZero();
         assertThat(customer.isAccountLocked()).isFalse();
-        assertThat(customer.getPreviousLoginAt())
-                .isEqualTo(previousLastLoginAt);
-        assertThat(customer.getLastLoginAt())
-                .isEqualTo(newLoginAt);
-        assertThat(customer.getLastLoginIp())
-                .isEqualTo("192.168.0.10");
+        assertThat(customer.getPreviousLoginAt()).isEqualTo(previousLastLoginAt);
+        assertThat(customer.getLastLoginAt()).isEqualTo(newLoginAt);
+        assertThat(customer.getLastLoginIp()).isEqualTo("192.168.0.10");
     }
 
     // 성공 처리 전에 잠긴 고객은 접속정보와 실패 횟수를 변경하지 않음
@@ -177,54 +141,31 @@ class CustomerAuthenticationServiceTest {
     void returnLockedStateWhenAccountLocksBeforeLoginSuccess() {
         Customer customer = createCustomer(1L, 5, true);
 
-        given(customerPersistencePort.findByIdForUpdate(1L))
-                .willReturn(Optional.of(customer));
+        given(customerPersistencePort.findByIdForUpdate(1L)).willReturn(Optional.of(customer));
 
         LoginSuccessState result = service.updateLoginSuccessState(
-                new RecordLoginSuccessCommand(
-                        1L,
-                        LocalDateTime.of(2026, 8, 12, 10, 0),
-                        "192.168.0.10"
-                )
-        );
+                new RecordLoginSuccessCommand(1L, LocalDateTime.of(2026, 8, 12, 10, 0), "192.168.0.10"));
 
         assertThat(result).isEqualTo(LoginSuccessState.ACCOUNT_LOCKED);
         assertThat(customer.getLoginFailureCount()).isEqualTo(5);
         assertThat(customer.isAccountLocked()).isTrue();
-        verify(customerPersistencePort, never())
-                .updateLoginSuccessState(customer);
+        verify(customerPersistencePort, never()).updateLoginSuccessState(customer);
     }
 
     // 상태 변경 대상 고객이 없으면 내부 정합성 예외 발생
     @Test
     @DisplayName("상태를 변경할 고객이 없으면 예외가 발생한다")
     void updateLoginFailureStateCustomerNotFound() {
-        given(customerPersistencePort.findByIdForUpdate(99L))
-                .willReturn(Optional.empty());
+        given(customerPersistencePort.findByIdForUpdate(99L)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() ->
-                service.updateLoginFailureState(
-                        new RecordLoginFailureCommand(99L)
-                )
-        )
+        assertThatThrownBy(() -> service.updateLoginFailureState(new RecordLoginFailureCommand(99L)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("로그인 상태를 변경할 고객이 존재하지 않습니다.");
     }
 
     // 테스트용 고객 도메인 모델 생성
-    private Customer createCustomer(
-            Long customerId,
-            int loginFailureCount,
-            boolean accountLocked
-    ) {
-        return createCustomer(
-                customerId,
-                loginFailureCount,
-                accountLocked,
-                null,
-                null,
-                null
-        );
+    private Customer createCustomer(Long customerId, int loginFailureCount, boolean accountLocked) {
+        return createCustomer(customerId, loginFailureCount, accountLocked, null, null, null);
     }
 
     // 접속 이력을 포함한 테스트용 고객 도메인 모델 생성
@@ -234,10 +175,8 @@ class CustomerAuthenticationServiceTest {
             boolean accountLocked,
             LocalDateTime lastLoginAt,
             String lastLoginIp,
-            LocalDateTime previousLoginAt
-    ) {
-        LocalDateTime joinedAt =
-                LocalDateTime.of(2026, 1, 1, 9, 0);
+            LocalDateTime previousLoginAt) {
+        LocalDateTime joinedAt = LocalDateTime.of(2026, 1, 1, 9, 0);
 
         return Customer.restore(
                 customerId,
@@ -256,7 +195,6 @@ class CustomerAuthenticationServiceTest {
                 joinedAt,
                 joinedAt,
                 joinedAt,
-                joinedAt
-        );
+                joinedAt);
     }
 }

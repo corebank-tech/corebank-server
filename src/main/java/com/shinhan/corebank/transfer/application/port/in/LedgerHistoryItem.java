@@ -1,10 +1,8 @@
 package com.shinhan.corebank.transfer.application.port.in;
 
-import java.time.LocalDateTime;
-
 import com.shinhan.corebank.transfer.domain.LedgerDirection;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
-
+import java.time.LocalDateTime;
 import lombok.Builder;
 
 // transactionTypeName은 담지 않는다 — P2가 공통코드로 매핑하기로 확정됐다(P4 회신 5절).
@@ -20,6 +18,4 @@ public record LedgerHistoryItem(
         long balanceAfter,
         TransferChannel channel,
         boolean reversed,
-        Long reversalId
-) {
-}
+        Long reversalId) {}

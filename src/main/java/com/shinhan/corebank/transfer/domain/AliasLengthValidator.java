@@ -9,8 +9,7 @@ public final class AliasLengthValidator {
     private static final int KOREAN_WEIGHT = 2;
     private static final int OTHER_WEIGHT = 1;
 
-    private AliasLengthValidator() {
-    }
+    private AliasLengthValidator() {}
 
     public static void validate(String alias) {
         int weight = alias.codePoints()

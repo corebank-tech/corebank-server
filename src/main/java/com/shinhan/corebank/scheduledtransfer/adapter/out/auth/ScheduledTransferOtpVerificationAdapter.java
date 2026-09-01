@@ -4,12 +4,11 @@ import com.shinhan.corebank.otp.api.OtpAuthTokenVerification;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.otp.api.OtpTransactionType;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferOtpVerificationPort;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
-
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
@@ -18,17 +17,22 @@ public class ScheduledTransferOtpVerificationAdapter implements ScheduledTransfe
     private final OtpAuthTokenVerifier otpAuthTokenVerifier;
 
     @Override
-    public void verifyRegisterAndConsume(String otpAuthToken, Long customerId, Long withdrawalAccountId,
-                                          String depositAccountNumber, Long amount, LocalDate scheduledDate) {
+    public void verifyRegisterAndConsume(
+            String otpAuthToken,
+            Long customerId,
+            Long withdrawalAccountId,
+            String depositAccountNumber,
+            Long amount,
+            LocalDate scheduledDate) {
         otpAuthTokenVerifier.verifyAndConsume(new OtpAuthTokenVerification(
-                otpAuthToken, customerId, OtpTransactionType.SCHEDULED_TRANSFER,
+                otpAuthToken,
+                customerId,
+                OtpTransactionType.SCHEDULED_TRANSFER,
                 Map.of(
                         "withdrawalAccountId", withdrawalAccountId,
                         "depositAccountNumber", depositAccountNumber,
                         "amount", amount,
-                        "scheduledDate", scheduledDate.toString()
-                )
-        ));
+                        "scheduledDate", scheduledDate.toString())));
     }
 
     // 거래정보를 단수 scheduledTransferId가 아니라 복수 scheduledTransferIds 배열로 담는다 —
@@ -36,8 +40,9 @@ public class ScheduledTransferOtpVerificationAdapter implements ScheduledTransfe
     @Override
     public void verifyCancelAndConsume(String otpAuthToken, Long customerId, List<Long> scheduledTransferIds) {
         otpAuthTokenVerifier.verifyAndConsume(new OtpAuthTokenVerification(
-                otpAuthToken, customerId, OtpTransactionType.SCHEDULED_TRANSFER,
-                Map.of("scheduledTransferIds", scheduledTransferIds)
-        ));
+                otpAuthToken,
+                customerId,
+                OtpTransactionType.SCHEDULED_TRANSFER,
+                Map.of("scheduledTransferIds", scheduledTransferIds)));
     }
 }

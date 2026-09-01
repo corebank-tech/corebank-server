@@ -21,10 +21,7 @@ class AutoTransferTest {
 
     private AutoTransfer register() {
         return AutoTransfer.register(
-                1L, 1L, "110987654321", "홍길동",
-                10000L, 1, TRANSFER_DAY,
-                START, END,
-                "내메모", "받는메모", NOW);
+                1L, 1L, "110987654321", "홍길동", 10000L, 1, TRANSFER_DAY, START, END, "내메모", "받는메모", NOW);
     }
 
     @Nested
@@ -49,10 +46,7 @@ class AutoTransferTest {
             LocalDate startDate = LocalDate.of(2026, 8, 6);
 
             AutoTransfer e = AutoTransfer.register(
-                    1L, 1L, "110987654321", "홍길동",
-                    10000L, 1, 5,
-                    startDate, startDate.plusMonths(6),
-                    null, null, now);
+                    1L, 1L, "110987654321", "홍길동", 10000L, 1, 5, startDate, startDate.plusMonths(6), null, null, now);
 
             assertThat(e.getNextExecutionDate()).isEqualTo(LocalDate.of(2026, 9, 5));
         }
@@ -66,10 +60,7 @@ class AutoTransferTest {
             LocalDate startDate = LocalDate.of(2026, 1, 31);
 
             AutoTransfer e = AutoTransfer.register(
-                    1L, 1L, "110987654321", "홍길동",
-                    10000L, 1, 30,
-                    startDate, startDate.plusMonths(6),
-                    null, null, now);
+                    1L, 1L, "110987654321", "홍길동", 10000L, 1, 30, startDate, startDate.plusMonths(6), null, null, now);
 
             assertThat(e.getNextExecutionDate()).isEqualTo(LocalDate.of(2026, 2, 28));
         }
@@ -81,10 +72,7 @@ class AutoTransferTest {
             LocalDate startDate = LocalDate.of(2025, 6, 15);
 
             AutoTransfer e = AutoTransfer.register(
-                    1L, 1L, "110987654321", "홍길동",
-                    10000L, 1, 15,
-                    startDate, startDate.plusMonths(6),
-                    null, null, now);
+                    1L, 1L, "110987654321", "홍길동", 10000L, 1, 15, startDate, startDate.plusMonths(6), null, null, now);
 
             assertThat(e.getNextExecutionDate()).isEqualTo(startDate);
         }
@@ -96,10 +84,7 @@ class AutoTransferTest {
             LocalDate startDate = LocalDate.of(2026, 2, 1);
 
             AutoTransfer e = AutoTransfer.register(
-                    1L, 1L, "110987654321", "홍길동",
-                    10000L, 1, 31,
-                    startDate, startDate.plusMonths(6),
-                    null, null, now);
+                    1L, 1L, "110987654321", "홍길동", 10000L, 1, 31, startDate, startDate.plusMonths(6), null, null, now);
 
             assertThat(e.getNextExecutionDate()).isEqualTo(LocalDate.of(2026, 2, 28));
         }
@@ -111,10 +96,7 @@ class AutoTransferTest {
             LocalDate startDate = LocalDate.of(2028, 2, 1);
 
             AutoTransfer e = AutoTransfer.register(
-                    1L, 1L, "110987654321", "홍길동",
-                    10000L, 1, 29,
-                    startDate, startDate.plusMonths(6),
-                    null, null, now);
+                    1L, 1L, "110987654321", "홍길동", 10000L, 1, 29, startDate, startDate.plusMonths(6), null, null, now);
 
             assertThat(e.getNextExecutionDate()).isEqualTo(LocalDate.of(2028, 2, 29));
         }
@@ -123,9 +105,7 @@ class AutoTransferTest {
         @DisplayName("이체지정일이 1~31 범위 밖이면 AUT0001")
         void invalidTransferDay() {
             assertThatThrownBy(() -> AutoTransfer.register(
-                    1L, 1L, "110987654321", "홍길동",
-                    10000L, 1, 32,
-                    START, END, null, null, NOW))
+                            1L, 1L, "110987654321", "홍길동", 10000L, 1, 32, START, END, null, null, NOW))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(AutoTransferErrorCode.INVALID_TRANSFER_DAY));
@@ -136,9 +116,7 @@ class AutoTransferTest {
         void startDateToday() {
             LocalDate today = NOW.toLocalDate();
             assertThatThrownBy(() -> AutoTransfer.register(
-                    1L, 1L, "110987654321", "홍길동",
-                    10000L, 1, TRANSFER_DAY,
-                    today, END, null, null, NOW))
+                            1L, 1L, "110987654321", "홍길동", 10000L, 1, TRANSFER_DAY, today, END, null, null, NOW))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(AutoTransferErrorCode.INVALID_TRANSFER_PERIOD));
@@ -149,9 +127,18 @@ class AutoTransferTest {
         void startDateTooFar() {
             LocalDate tooFar = NOW.toLocalDate().plusDays(366);
             assertThatThrownBy(() -> AutoTransfer.register(
-                    1L, 1L, "110987654321", "홍길동",
-                    10000L, 1, TRANSFER_DAY,
-                    tooFar, tooFar.plusMonths(1), null, null, NOW))
+                            1L,
+                            1L,
+                            "110987654321",
+                            "홍길동",
+                            10000L,
+                            1,
+                            TRANSFER_DAY,
+                            tooFar,
+                            tooFar.plusMonths(1),
+                            null,
+                            null,
+                            NOW))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(AutoTransferErrorCode.INVALID_TRANSFER_PERIOD));
@@ -161,9 +148,18 @@ class AutoTransferTest {
         @DisplayName("종료일이 시작일보다 빠르면 AUT0002")
         void endDateBeforeStart() {
             assertThatThrownBy(() -> AutoTransfer.register(
-                    1L, 1L, "110987654321", "홍길동",
-                    10000L, 1, TRANSFER_DAY,
-                    START, START.minusDays(1), null, null, NOW))
+                            1L,
+                            1L,
+                            "110987654321",
+                            "홍길동",
+                            10000L,
+                            1,
+                            TRANSFER_DAY,
+                            START,
+                            START.minusDays(1),
+                            null,
+                            null,
+                            NOW))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(AutoTransferErrorCode.INVALID_TRANSFER_PERIOD));
@@ -174,9 +170,18 @@ class AutoTransferTest {
         void endDateTooFar() {
             LocalDate over60Months = START.plusMonths(60).plusDays(1);
             assertThatThrownBy(() -> AutoTransfer.register(
-                    1L, 1L, "110987654321", "홍길동",
-                    10000L, 1, TRANSFER_DAY,
-                    START, over60Months, null, null, NOW))
+                            1L,
+                            1L,
+                            "110987654321",
+                            "홍길동",
+                            10000L,
+                            1,
+                            TRANSFER_DAY,
+                            START,
+                            over60Months,
+                            null,
+                            null,
+                            NOW))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(AutoTransferErrorCode.INVALID_TRANSFER_PERIOD));
@@ -188,9 +193,7 @@ class AutoTransferTest {
             // START(6/2) 이후 첫 transferDay(15일)는 6/15 인데, 종료일을 그보다 앞당겨서 실행 불가능하게 만든다
             LocalDate shortEnd = START.plusDays(1);
             assertThatThrownBy(() -> AutoTransfer.register(
-                    1L, 1L, "110987654321", "홍길동",
-                    10000L, 1, TRANSFER_DAY,
-                    START, shortEnd, null, null, NOW))
+                            1L, 1L, "110987654321", "홍길동", 10000L, 1, TRANSFER_DAY, START, shortEnd, null, null, NOW))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(AutoTransferErrorCode.NO_EXECUTION_WITHIN_PERIOD));
@@ -200,9 +203,7 @@ class AutoTransferTest {
         @DisplayName("지원하지 않는 이체주기면 AUT0007")
         void invalidCycle() {
             assertThatThrownBy(() -> AutoTransfer.register(
-                    1L, 1L, "110987654321", "홍길동",
-                    10000L, 2, TRANSFER_DAY,
-                    START, END, null, null, NOW))
+                            1L, 1L, "110987654321", "홍길동", 10000L, 2, TRANSFER_DAY, START, END, null, null, NOW))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(AutoTransferErrorCode.INVALID_CYCLE_MONTHS));
@@ -212,9 +213,7 @@ class AutoTransferTest {
         @DisplayName("금액이 0 이하면 AUT0008 (Command 우회 방어)")
         void invalidAmount() {
             assertThatThrownBy(() -> AutoTransfer.register(
-                    1L, 1L, "110987654321", "홍길동",
-                    0L, 1, TRANSFER_DAY,
-                    START, END, null, null, NOW))
+                            1L, 1L, "110987654321", "홍길동", 0L, 1, TRANSFER_DAY, START, END, null, null, NOW))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                             .isEqualTo(AutoTransferErrorCode.INVALID_AMOUNT));
@@ -271,10 +270,7 @@ class AutoTransferTest {
             LocalDateTime now = LocalDateTime.of(2026, 1, 1, 0, 0);
             LocalDate startDate = LocalDate.of(2026, 1, 2);
             AutoTransfer e = AutoTransfer.register(
-                    1L, 1L, "110987654321", "홍길동",
-                    10000L, 1, 31,
-                    startDate, startDate.plusMonths(6),
-                    null, null, now);
+                    1L, 1L, "110987654321", "홍길동", 10000L, 1, 31, startDate, startDate.plusMonths(6), null, null, now);
             assertThat(e.getNextExecutionDate()).isEqualTo(LocalDate.of(2026, 1, 31));
 
             e.advanceNextExecutionDate();
@@ -420,8 +416,8 @@ class AutoTransferTest {
         @DisplayName("addExecution()으로 추가한 회차가 조회된다")
         void addedExecutionIsVisible() {
             AutoTransfer e = register();
-            AutoTransferExecution execution = AutoTransferExecution.processing(
-                    NEXT_EXECUTION, 10000L, NEXT_EXECUTION.atStartOfDay());
+            AutoTransferExecution execution =
+                    AutoTransferExecution.processing(NEXT_EXECUTION, 10000L, NEXT_EXECUTION.atStartOfDay());
 
             e.addExecution(execution);
 
@@ -432,11 +428,9 @@ class AutoTransferTest {
         @DisplayName("불변 뷰라 외부에서 remove()/clear()로 지울 수 없다")
         void executionsViewIsUnmodifiable() {
             AutoTransfer e = register();
-            e.addExecution(AutoTransferExecution.processing(
-                    NEXT_EXECUTION, 10000L, NEXT_EXECUTION.atStartOfDay()));
+            e.addExecution(AutoTransferExecution.processing(NEXT_EXECUTION, 10000L, NEXT_EXECUTION.atStartOfDay()));
 
-            assertThatThrownBy(() -> e.getExecutions().clear())
-                    .isInstanceOf(UnsupportedOperationException.class);
+            assertThatThrownBy(() -> e.getExecutions().clear()).isInstanceOf(UnsupportedOperationException.class);
             assertThat(e.getExecutions()).hasSize(1);
         }
     }

@@ -1,16 +1,15 @@
 package com.shinhan.corebank.batch.adapter.out.persistence;
 
 import com.shinhan.corebank.batch.application.port.out.BatchExecutionLockPort;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.time.Duration;
-import java.time.LocalDateTime;
 
 @Component
 @RequiredArgsConstructor
@@ -24,7 +23,8 @@ public class BatchExecutionLockPersistenceAdapter implements BatchExecutionLockP
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean tryAcquire(String jobName) {
-        BatchExecutionLockJpaEntity lock = batchExecutionLockJpaRepository.findByJobNameForUpdate(jobName)
+        BatchExecutionLockJpaEntity lock = batchExecutionLockJpaRepository
+                .findByJobNameForUpdate(jobName)
                 .orElseThrow(() -> new IllegalStateException("배치 락 행이 없습니다 - jobName = " + jobName));
 
         LocalDateTime now = LocalDateTime.now(clock);
@@ -32,8 +32,11 @@ public class BatchExecutionLockPersistenceAdapter implements BatchExecutionLockP
             if (!lock.isStale(now, STALE_THRESHOLD)) {
                 return false;
             }
-            log.warn("이전 배치가 {} 넘게 실행 중으로 남아있어(크래시로 release() 누락 추정) 강제로 재획득함 - jobName={}, lastUpdatedAt={}",
-                    STALE_THRESHOLD, jobName, lock.getUpdatedAt());
+            log.warn(
+                    "이전 배치가 {} 넘게 실행 중으로 남아있어(크래시로 release() 누락 추정) 강제로 재획득함 - jobName={}, lastUpdatedAt={}",
+                    STALE_THRESHOLD,
+                    jobName,
+                    lock.getUpdatedAt());
         }
         lock.markRunning(now);
         return true;
@@ -42,7 +45,8 @@ public class BatchExecutionLockPersistenceAdapter implements BatchExecutionLockP
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void release(String jobName) {
-        batchExecutionLockJpaRepository.findByJobNameForUpdate(jobName)
+        batchExecutionLockJpaRepository
+                .findByJobNameForUpdate(jobName)
                 .ifPresent(lock -> lock.markIdle(LocalDateTime.now(clock)));
     }
 }

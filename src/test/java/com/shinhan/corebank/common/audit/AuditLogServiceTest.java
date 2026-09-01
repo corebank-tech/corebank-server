@@ -41,8 +41,7 @@ class AuditLogServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("앰비언트 트랜잭션 없이 직접 호출해도 즉시 저장된다")
     void record_withoutAmbientTransaction_savesImmediately() {
-        auditLogService.record(1L, null, AuditEventType.LOGIN, "127.0.0.1", true,
-                Map.of("device", "web"));
+        auditLogService.record(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, Map.of("device", "web"));
 
         assertThat(auditLogJpaRepository.findAll())
                 .extracting(AuditLogJpaEntity::getResult)
@@ -55,8 +54,7 @@ class AuditLogServiceTest extends IntegrationTestSupport {
         TransactionTemplate outerTx = new TransactionTemplate(transactionManager);
 
         outerTx.executeWithoutResult(status ->
-                auditLogService.record(1L, null, AuditEventType.LOGIN, "127.0.0.1", true,
-                        Map.of("device", "web")));
+                auditLogService.record(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, Map.of("device", "web")));
 
         assertThat(auditLogJpaRepository.findAll())
                 .extracting(AuditLogJpaEntity::getResult)
@@ -69,10 +67,10 @@ class AuditLogServiceTest extends IntegrationTestSupport {
         TransactionTemplate outerTx = new TransactionTemplate(transactionManager);
 
         assertThatThrownBy(() -> outerTx.executeWithoutResult(status -> {
-            auditLogService.record(1L, null, AuditEventType.LOGIN, "127.0.0.1", true,
-                    Map.of("device", "web"));
-            throw new RuntimeException("호출자 쪽 업무 로직 실패");
-        })).isInstanceOf(RuntimeException.class);
+                    auditLogService.record(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, Map.of("device", "web"));
+                    throw new RuntimeException("호출자 쪽 업무 로직 실패");
+                }))
+                .isInstanceOf(RuntimeException.class);
 
         assertThat(auditLogJpaRepository.findAll()).isEmpty();
     }
@@ -81,8 +79,8 @@ class AuditLogServiceTest extends IntegrationTestSupport {
     @DisplayName("감사 로그 저장 자체가 실패하면(검증 오류) 예외가 호출자에게 그대로 전파된다 - 더 이상 조용히 삼키지 않음")
     void record_saveFails_propagatesExceptionToCaller() {
         // LOGIN은 원장 비변경 이벤트라 transactionNumber가 있으면 AuditLogJpaEntity.of()에서 검증 실패한다
-        assertThatThrownBy(() -> auditLogService.record(1L, "20260101WB0000000001", AuditEventType.LOGIN,
-                "127.0.0.1", true, Map.of("device", "web")))
+        assertThatThrownBy(() -> auditLogService.record(
+                        1L, "20260101WB0000000001", AuditEventType.LOGIN, "127.0.0.1", true, Map.of("device", "web")))
                 .isInstanceOf(IllegalArgumentException.class);
 
         assertThat(auditLogJpaRepository.findAll()).isEmpty();
@@ -94,13 +92,24 @@ class AuditLogServiceTest extends IntegrationTestSupport {
         TransactionTemplate outerTx = new TransactionTemplate(transactionManager);
 
         assertThatThrownBy(() -> outerTx.executeWithoutResult(status -> {
-            // 1) 정상적인 저장 시도(원장 비변경 이벤트, transactionNumber 없음 - 검증 통과)
-            auditLogService.record(1L, null, AuditEventType.AUTO_TRANSFER_INFO_CHANGE, "127.0.0.1", true,
-                    Map.of("action", "register"));
-            // 2) 같은 트랜잭션 안에서 검증 실패를 유발하는 두 번째 호출
-            auditLogService.record(1L, "20260101WB0000000001", AuditEventType.LOGIN, "127.0.0.1", true,
-                    Map.of("device", "web"));
-        })).isInstanceOf(IllegalArgumentException.class);
+                    // 1) 정상적인 저장 시도(원장 비변경 이벤트, transactionNumber 없음 - 검증 통과)
+                    auditLogService.record(
+                            1L,
+                            null,
+                            AuditEventType.AUTO_TRANSFER_INFO_CHANGE,
+                            "127.0.0.1",
+                            true,
+                            Map.of("action", "register"));
+                    // 2) 같은 트랜잭션 안에서 검증 실패를 유발하는 두 번째 호출
+                    auditLogService.record(
+                            1L,
+                            "20260101WB0000000001",
+                            AuditEventType.LOGIN,
+                            "127.0.0.1",
+                            true,
+                            Map.of("device", "web"));
+                }))
+                .isInstanceOf(IllegalArgumentException.class);
 
         // 트랜잭션 전체가 롤백됐으므로, 먼저 시도했던 정상 저장 건도 남아있으면 안 된다 -
         // "감사 기록 실패가 이 트랜잭션에서 이미 한 다른 일까지 되돌린다"는 게 이번 재설계의 핵심
@@ -110,8 +119,7 @@ class AuditLogServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("실패 로그(success=false)는 앰비언트 트랜잭션 없이 직접 호출해도 즉시 저장된다")
     void record_failureLog_withoutAmbientTransaction_savesImmediately() {
-        auditLogService.record(1L, null, AuditEventType.LOGIN, "127.0.0.1", false,
-                Map.of("reason", "wrong-password"));
+        auditLogService.record(1L, null, AuditEventType.LOGIN, "127.0.0.1", false, Map.of("reason", "wrong-password"));
 
         assertThat(auditLogJpaRepository.findAll())
                 .extracting(AuditLogJpaEntity::getResult)
@@ -124,10 +132,11 @@ class AuditLogServiceTest extends IntegrationTestSupport {
         TransactionTemplate outerTx = new TransactionTemplate(transactionManager);
 
         assertThatThrownBy(() -> outerTx.executeWithoutResult(status -> {
-            auditLogService.record(1L, null, AuditEventType.LOGIN, "127.0.0.1", false,
-                    Map.of("reason", "wrong-password"));
-            throw new RuntimeException("호출자 쪽 업무 로직 실패");
-        })).isInstanceOf(RuntimeException.class);
+                    auditLogService.record(
+                            1L, null, AuditEventType.LOGIN, "127.0.0.1", false, Map.of("reason", "wrong-password"));
+                    throw new RuntimeException("호출자 쪽 업무 로직 실패");
+                }))
+                .isInstanceOf(RuntimeException.class);
 
         // success=true였다면 이 실패 로그도 같이 사라졌겠지만, success=false는 REQUIRES_NEW로
         // 별도 트랜잭션에 이미 커밋되어 있어서 바깥 트랜잭션의 롤백과 무관하게 남는다
@@ -139,15 +148,21 @@ class AuditLogServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("실패 로그(success=false)도 저장 자체가 실패하면(검증 오류) 예외가 호출자에게 그대로 전파된다")
     void record_failureLog_saveFails_propagatesExceptionToCaller() {
-        assertThatThrownBy(() -> auditLogService.record(1L, "20260101WB0000000001", AuditEventType.LOGIN,
-                "127.0.0.1", false, Map.of("reason", "wrong-password")))
+        assertThatThrownBy(() -> auditLogService.record(
+                        1L,
+                        "20260101WB0000000001",
+                        AuditEventType.LOGIN,
+                        "127.0.0.1",
+                        false,
+                        Map.of("reason", "wrong-password")))
                 .isInstanceOf(IllegalArgumentException.class);
 
         assertThat(auditLogJpaRepository.findAll()).isEmpty();
     }
 
     @Test
-    @DisplayName("실제 DB 제약 위반(request_ip NOT NULL)이 발생하면 DataIntegrityViolationException이 호출자에게 전파되고, 같은 트랜잭션에서 먼저 저장한 로그도 함께 롤백된다")
+    @DisplayName(
+            "실제 DB 제약 위반(request_ip NOT NULL)이 발생하면 DataIntegrityViolationException이 호출자에게 전파되고, 같은 트랜잭션에서 먼저 저장한 로그도 함께 롤백된다")
     void record_saveFails_realDbConstraintViolation_propagatesAndRollsBackCallerTransaction() {
         // requestIp=null은 AuditLogJpaEntity.of()의 도메인 검증을 통과한다 (검증 대상이 아님) -
         // 그래서 여기서는 IllegalArgumentException이 아니라 실제 DB INSERT 시점의
@@ -155,10 +170,16 @@ class AuditLogServiceTest extends IntegrationTestSupport {
         TransactionTemplate outerTx = new TransactionTemplate(transactionManager);
 
         assertThatThrownBy(() -> outerTx.executeWithoutResult(status -> {
-            auditLogService.record(1L, null, AuditEventType.AUTO_TRANSFER_INFO_CHANGE, "127.0.0.1", true,
-                    Map.of("action", "register"));
-            auditLogService.record(1L, null, AuditEventType.LOGIN, null, true, Map.of("device", "web"));
-        })).isInstanceOf(DataIntegrityViolationException.class);
+                    auditLogService.record(
+                            1L,
+                            null,
+                            AuditEventType.AUTO_TRANSFER_INFO_CHANGE,
+                            "127.0.0.1",
+                            true,
+                            Map.of("action", "register"));
+                    auditLogService.record(1L, null, AuditEventType.LOGIN, null, true, Map.of("device", "web"));
+                }))
+                .isInstanceOf(DataIntegrityViolationException.class);
 
         assertThat(auditLogJpaRepository.findAll()).isEmpty();
     }
@@ -166,8 +187,8 @@ class AuditLogServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("실패 로그(success=false)도 실제 DB 제약 위반 시 DataIntegrityViolationException이 호출자에게 전파된다")
     void record_failureLog_saveFails_realDbConstraintViolation_propagatesToCaller() {
-        assertThatThrownBy(() -> auditLogService.record(1L, null, AuditEventType.LOGIN, null, false,
-                Map.of("reason", "wrong-password")))
+        assertThatThrownBy(() -> auditLogService.record(
+                        1L, null, AuditEventType.LOGIN, null, false, Map.of("reason", "wrong-password")))
                 .isInstanceOf(DataIntegrityViolationException.class);
 
         assertThat(auditLogJpaRepository.findAll()).isEmpty();

@@ -1,17 +1,16 @@
 package com.shinhan.corebank.terms.adapter.out.persistence;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.terms.api.TermsDetail;
 import com.shinhan.corebank.terms.api.TermsSummary;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
-
-import java.util.List;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class TermsPersistenceAdapterTest extends IntegrationTestSupport {
 
@@ -48,13 +47,9 @@ class TermsPersistenceAdapterTest extends IntegrationTestSupport {
         Long depositTermsId = findTermsId("TERMS_DEPOSIT");
         Long savingsTermsId = findTermsId("TERMS_SAVINGS");
 
-        List<TermsSummary> result = adapter.findByIds(
-                List.of(depositTermsId, savingsTermsId)
-        );
+        List<TermsSummary> result = adapter.findByIds(List.of(depositTermsId, savingsTermsId));
 
-        assertThat(result)
-                .extracting(TermsSummary::termsId)
-                .containsExactlyInAnyOrder(depositTermsId, savingsTermsId);
+        assertThat(result).extracting(TermsSummary::termsId).containsExactlyInAnyOrder(depositTermsId, savingsTermsId);
     }
 
     @Test
@@ -64,10 +59,6 @@ class TermsPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     private Long findTermsId(String termsCode) {
-        return jdbcTemplate.queryForObject(
-                "SELECT terms_id FROM terms WHERE terms_code = ?",
-                Long.class,
-                termsCode
-        );
+        return jdbcTemplate.queryForObject("SELECT terms_id FROM terms WHERE terms_code = ?", Long.class, termsCode);
     }
 }

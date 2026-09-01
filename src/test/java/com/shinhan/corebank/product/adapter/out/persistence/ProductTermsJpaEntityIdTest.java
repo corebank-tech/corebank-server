@@ -15,11 +15,9 @@ import org.junit.jupiter.params.provider.CsvSource;
 class ProductTermsJpaEntityIdTest {
 
     @ParameterizedTest(name = "productId={0}, termsId={1}")
-    @CsvSource(nullValues = "null", value = {
-            "null, 2",
-            "1,    null",
-            "null, null"
-    })
+    @CsvSource(
+            nullValues = "null",
+            value = {"null, 2", "1,    null", "null, null"})
     @DisplayName("productId 또는 termsId가 null이면 CMN0002를 던진다")
     void rejectsNull(Long productId, Long termsId) {
         assertThatThrownBy(() -> new ProductTermsJpaEntityId(productId, termsId))

@@ -4,13 +4,12 @@ import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferOtpVer
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerification;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.otp.api.OtpTransactionType;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
-
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
@@ -19,9 +18,16 @@ public class AutoTransferOtpVerificationAdapter implements AutoTransferOtpVerifi
     private final OtpAuthTokenVerifier otpAuthTokenVerifier;
 
     @Override
-    public void verifyRegisterAndConsume(String otpAuthToken, Long customerId, Long withdrawalAccountId,
-                                          String depositAccountNumber, Long amount, Integer cycleMonths,
-                                          Integer transferDay, LocalDate startDate, LocalDate endDate) {
+    public void verifyRegisterAndConsume(
+            String otpAuthToken,
+            Long customerId,
+            Long withdrawalAccountId,
+            String depositAccountNumber,
+            Long amount,
+            Integer cycleMonths,
+            Integer transferDay,
+            LocalDate startDate,
+            LocalDate endDate) {
         Map<String, Object> transactionData = new LinkedHashMap<>();
         transactionData.put("withdrawalAccountId", withdrawalAccountId);
         transactionData.put("depositAccountNumber", depositAccountNumber);
@@ -34,8 +40,13 @@ public class AutoTransferOtpVerificationAdapter implements AutoTransferOtpVerifi
     }
 
     @Override
-    public void verifyChangeAndConsume(String otpAuthToken, Long customerId, Long autoTransferId,
-                                        Long amount, Integer cycleMonths, LocalDate endDate) {
+    public void verifyChangeAndConsume(
+            String otpAuthToken,
+            Long customerId,
+            Long autoTransferId,
+            Long amount,
+            Integer cycleMonths,
+            LocalDate endDate) {
         // null인 선택 필드는 넣지 않는다 — 발급 시점과 검증 시점의 거래정보가 정확히 일치해야 한다(otp_integration_guide.md)
         Map<String, Object> transactionData = new LinkedHashMap<>();
         transactionData.put("autoTransferId", autoTransferId);
@@ -59,7 +70,7 @@ public class AutoTransferOtpVerificationAdapter implements AutoTransferOtpVerifi
     }
 
     private void verify(String otpAuthToken, Long customerId, Map<String, Object> transactionData) {
-        otpAuthTokenVerifier.verifyAndConsume(
-                new OtpAuthTokenVerification(otpAuthToken, customerId, OtpTransactionType.AUTO_TRANSFER, transactionData));
+        otpAuthTokenVerifier.verifyAndConsume(new OtpAuthTokenVerification(
+                otpAuthToken, customerId, OtpTransactionType.AUTO_TRANSFER, transactionData));
     }
 }

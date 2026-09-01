@@ -5,7 +5,6 @@ package com.shinhan.corebank.subscription.domain;
  * BusinessException으로 던지는 값이 아니라 200 본문에 담기는 값이라 ErrorCode를 구현하지 않는다.
  */
 public enum SubscriptionViolationCode {
-
     PRODUCT_NOT_ON_SALE("PRD0007", "판매중인 상품이 아닙니다."),
     AMOUNT_OUT_OF_RANGE("PRD0001", "가입금액이 상품 한도 범위를 벗어났습니다."),
     AMOUNT_UNIT_MISMATCH("PRD0004", "가입금액이 상품의 입력 단위에 맞지 않습니다."),
@@ -23,7 +22,11 @@ public enum SubscriptionViolationCode {
         this.message = message;
     }
 
-    public String getCode() { return code; }
+    public String getCode() {
+        return code;
+    }
 
-    public String getMessage() { return message; }
+    public String getMessage() {
+        return message;
+    }
 }

@@ -1,15 +1,14 @@
 package com.shinhan.corebank.autotransfer.domain;
 
 import com.shinhan.corebank.common.exception.BusinessException;
-import lombok.AccessLevel;
-import lombok.Getter;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import lombok.AccessLevel;
+import lombok.Getter;
 
 @Getter
 public class AutoTransfer {
@@ -37,10 +36,18 @@ public class AutoTransfer {
 
     // 등록
     public static AutoTransfer register(
-            Long customerId, Long withdrawalAccountId, String depositAccountNumber, String payeeName,
-            Long amount, Integer cycleMonths, Integer transferDay,
-            LocalDate startDate, LocalDate endDate,
-            String myPassbookMemo, String recipientPassbookMemo, LocalDateTime now) {
+            Long customerId,
+            Long withdrawalAccountId,
+            String depositAccountNumber,
+            String payeeName,
+            Long amount,
+            Integer cycleMonths,
+            Integer transferDay,
+            LocalDate startDate,
+            LocalDate endDate,
+            String myPassbookMemo,
+            String recipientPassbookMemo,
+            LocalDateTime now) {
 
         TransferCycle.fromMonths(cycleMonths);
 
@@ -138,8 +145,8 @@ public class AutoTransfer {
     }
 
     // 금액, 주기, 종료일, 통장 표시 내용 변경 (null인 필드는 기존 값 유지)
-    public void change(Long amount, Integer cycleMonths, LocalDate endDate,
-                       String myPassbookMemo, String recipientPassbookMemo) {
+    public void change(
+            Long amount, Integer cycleMonths, LocalDate endDate, String myPassbookMemo, String recipientPassbookMemo) {
         if (!this.status.isModifiable()) {
             throw new BusinessException(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS);
         }
@@ -180,10 +187,24 @@ public class AutoTransfer {
     }
 
     public static AutoTransfer reconstitute(
-            Long autoTransferId, Long customerId, Long withdrawalAccountId, String depositAccountNumber, String payeeName,
-            Long amount, Integer cycleMonths, Integer transferDay, LocalDate startDate, LocalDate endDate, LocalDate nextExecutionDate,
-            String myPassbookMemo, String recipientPassbookMemo, AutoTransferStatus status, LocalDateTime registeredAt,
-            LocalDateTime terminatedAt, LocalDateTime updatedAt, Long version) {
+            Long autoTransferId,
+            Long customerId,
+            Long withdrawalAccountId,
+            String depositAccountNumber,
+            String payeeName,
+            Long amount,
+            Integer cycleMonths,
+            Integer transferDay,
+            LocalDate startDate,
+            LocalDate endDate,
+            LocalDate nextExecutionDate,
+            String myPassbookMemo,
+            String recipientPassbookMemo,
+            AutoTransferStatus status,
+            LocalDateTime registeredAt,
+            LocalDateTime terminatedAt,
+            LocalDateTime updatedAt,
+            Long version) {
         AutoTransfer e = new AutoTransfer();
         e.autoTransferId = autoTransferId;
         e.customerId = customerId;
@@ -205,5 +226,4 @@ public class AutoTransfer {
         e.version = version;
         return e;
     }
-
 }

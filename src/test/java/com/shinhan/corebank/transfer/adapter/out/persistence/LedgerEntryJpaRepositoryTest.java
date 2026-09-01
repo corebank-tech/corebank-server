@@ -1,21 +1,19 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.transfer.domain.LedgerDirection;
 import com.shinhan.corebank.transfer.domain.LedgerPair;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
-
 import jakarta.persistence.EntityManager;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 @Transactional
 class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
@@ -67,25 +65,30 @@ class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("LedgerPair -> Mapper -> save 흐름에서 LedgerEntryIdGenerator로 채번한 ID를 채워 저장하면 findByLedgerEntryId로 각각 조회된다")
+    @DisplayName(
+            "LedgerPair -> Mapper -> save 흐름에서 LedgerEntryIdGenerator로 채번한 ID를 채워 저장하면 findByLedgerEntryId로 각각 조회된다")
     void ledgerPairPersistsWithDistinctGeneratedIds() {
         // given
         LedgerPair pair = LedgerPair.forTransfer(
                 500L,
                 "20260809WB0000000001",
-                101L, 90000L,
-                202L, 110000L,
+                101L,
+                90000L,
+                202L,
+                110000L,
                 10000L,
                 "IMMEDIATE_TRANSFER",
-                "이체출금", "이체입금",
+                "이체출금",
+                "이체입금",
                 TransferChannel.WB,
-                LocalDateTime.of(2026, 8, 9, 12, 0, 0)
-        );
+                LocalDateTime.of(2026, 8, 9, 12, 0, 0));
 
-        LedgerEntryJpaEntity withdrawalEntity = LedgerEntryMapper.toEntity(pair.getWithdrawalEntry())
-                .toBuilder().ledgerEntryId(ledgerEntryIdGenerator.nextId()).build();
-        LedgerEntryJpaEntity depositEntity = LedgerEntryMapper.toEntity(pair.getDepositEntry())
-                .toBuilder().ledgerEntryId(ledgerEntryIdGenerator.nextId()).build();
+        LedgerEntryJpaEntity withdrawalEntity = LedgerEntryMapper.toEntity(pair.getWithdrawalEntry()).toBuilder()
+                .ledgerEntryId(ledgerEntryIdGenerator.nextId())
+                .build();
+        LedgerEntryJpaEntity depositEntity = LedgerEntryMapper.toEntity(pair.getDepositEntry()).toBuilder()
+                .ledgerEntryId(ledgerEntryIdGenerator.nextId())
+                .build();
 
         // when
         LedgerEntryJpaEntity savedWithdrawal = ledgerEntryJpaRepository.save(withdrawalEntity);
@@ -98,7 +101,9 @@ class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
         assertThat(savedDeposit.getLedgerEntryId()).isNotNull();
         assertThat(savedWithdrawal.getLedgerEntryId()).isNotEqualTo(savedDeposit.getLedgerEntryId());
 
-        LedgerEntryJpaEntity foundWithdrawal = ledgerEntryJpaRepository.findByLedgerEntryId(savedWithdrawal.getLedgerEntryId()).orElseThrow();
+        LedgerEntryJpaEntity foundWithdrawal = ledgerEntryJpaRepository
+                .findByLedgerEntryId(savedWithdrawal.getLedgerEntryId())
+                .orElseThrow();
         assertThat(foundWithdrawal.getDirection()).isEqualTo(LedgerDirection.WITHDRAWAL);
         assertThat(foundWithdrawal.getTransferId()).isEqualTo(500L);
     }
@@ -133,8 +138,11 @@ class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
         entityManager.clear();
 
         // then
-        LedgerEntryJpaEntity found = ledgerEntryJpaRepository.findByLedgerEntryId(saved.getLedgerEntryId()).orElseThrow();
+        LedgerEntryJpaEntity found = ledgerEntryJpaRepository
+                .findByLedgerEntryId(saved.getLedgerEntryId())
+                .orElseThrow();
         assertThat(found.getOccurredAt()).isNotEqualTo(nanoTime);
-        assertThat(Duration.between(nanoTime, found.getOccurredAt()).abs()).isLessThanOrEqualTo(Duration.of(1, ChronoUnit.MICROS));
+        assertThat(Duration.between(nanoTime, found.getOccurredAt()).abs())
+                .isLessThanOrEqualTo(Duration.of(1, ChronoUnit.MICROS));
     }
 }

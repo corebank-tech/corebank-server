@@ -53,7 +53,9 @@ class ProductPreferentialRateJpaRepositoryTest extends IntegrationTestSupport {
     @Test
     @DisplayName("productId로 조회하면 다른 상품 것은 제외하고 conditionName 오름차순으로 반환한다")
     void findAllByProductId_returnsOwnRatesSortedByConditionName() {
-        Long otherProductId = productRepository.save(ProductTestFixtures.productWithCode("SVN-902")).getProductId();
+        Long otherProductId = productRepository
+                .save(ProductTestFixtures.productWithCode("SVN-902"))
+                .getProductId();
         repository.save(preferentialRate(productId, "LONG_TERM", "Long term bonus", new BigDecimal("0.30")));
         repository.save(preferentialRate(productId, "AUTO_TRANSFER", "Auto transfer bonus", new BigDecimal("0.20")));
         repository.save(preferentialRate(otherProductId, "OTHER", "Other product bonus", new BigDecimal("0.10")));
@@ -62,11 +64,13 @@ class ProductPreferentialRateJpaRepositoryTest extends IntegrationTestSupport {
 
         List<ProductPreferentialRateJpaEntity> result = repository.findAllByProductId(productId);
 
-        assertThat(result).extracting(ProductPreferentialRateJpaEntity::getConditionName)
+        assertThat(result)
+                .extracting(ProductPreferentialRateJpaEntity::getConditionName)
                 .containsExactly("Auto transfer bonus", "Long term bonus");
     }
 
-    private ProductPreferentialRateJpaEntity preferentialRate(Long productId, String conditionCode, String conditionName, BigDecimal rate) {
+    private ProductPreferentialRateJpaEntity preferentialRate(
+            Long productId, String conditionCode, String conditionName, BigDecimal rate) {
         return ProductPreferentialRateJpaEntity.builder()
                 .productPreferentialRateId(new ProductPreferentialRateJpaEntityId(productId, conditionCode))
                 .conditionName(conditionName)

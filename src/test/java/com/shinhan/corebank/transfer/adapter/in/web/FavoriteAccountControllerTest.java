@@ -7,14 +7,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.util.UUID;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
-
 import jakarta.persistence.EntityManager;
+import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -121,8 +119,7 @@ class FavoriteAccountControllerTest extends IntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.alias").value("엄마"));
 
-        mockMvc.perform(get("/transfers/favorite-accounts")
-                        .with(authentication(authenticationOf(1L))))
+        mockMvc.perform(get("/transfers/favorite-accounts").with(authentication(authenticationOf(1L))))
                 .andExpect(jsonPath("$.data.length()").value(1));
     }
 
@@ -167,8 +164,7 @@ class FavoriteAccountControllerTest extends IntegrationTestSupport {
                         .content(registerRequestJson("110222222222", "엄마")))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/transfers/favorite-accounts")
-                        .with(authentication(authenticationOf(1L))))
+        mockMvc.perform(get("/transfers/favorite-accounts").with(authentication(authenticationOf(1L))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data[0].alias").value("엄마"));

@@ -21,9 +21,7 @@ public class RegisteredExistingBankCustomerChecker {
 
     public void rejectIfRegistered(String existingBankCustomerId) {
         if (isRegistered(existingBankCustomerId)) {
-            throw new BusinessException(
-                    SignupErrorCode.DUPLICATE_EXISTING_BANK_CUSTOMER
-            );
+            throw new BusinessException(SignupErrorCode.DUPLICATE_EXISTING_BANK_CUSTOMER);
         }
     }
 
@@ -32,14 +30,11 @@ public class RegisteredExistingBankCustomerChecker {
     // 그 행을 백필하려면 계좌번호로 원장을 조회해야 하는데 원장이 외부라 SQL 로는
     // 불가능하므로, 그 사람의 계좌가 이미 등록돼 있는지로 대신 판정한다.
     private boolean isRegistered(String existingBankCustomerId) {
-        if (availabilityPort.isExistingBankCustomerRegistered(
-                existingBankCustomerId
-        )) {
+        if (availabilityPort.isExistingBankCustomerRegistered(existingBankCustomerId)) {
             return true;
         }
 
-        return accountsPort.findAllByCustomerId(existingBankCustomerId)
-                .stream()
+        return accountsPort.findAllByCustomerId(existingBankCustomerId).stream()
                 .map(ExistingBankAccountSnapshot::accountNumber)
                 .anyMatch(registeredAccountPort::isRegistered);
     }

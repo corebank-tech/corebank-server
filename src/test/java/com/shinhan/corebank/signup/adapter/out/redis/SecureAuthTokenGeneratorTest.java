@@ -1,20 +1,18 @@
 package com.shinhan.corebank.signup.adapter.out.redis;
 
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 
 class SecureAuthTokenGeneratorTest {
 
     private static final String PREFIX = "TERMS_AUTH_";
 
-    private final SecureAuthTokenGenerator generator =
-            new SecureAuthTokenGenerator();
+    private final SecureAuthTokenGenerator generator = new SecureAuthTokenGenerator();
 
     @Test
     @DisplayName("약관 인증 토큰은 계약된 접두어와 URL-safe 문자열로 생성된다")
@@ -22,8 +20,7 @@ class SecureAuthTokenGeneratorTest {
         String token = generator.generateTermsAuthToken();
 
         assertThat(token).startsWith(PREFIX);
-        assertThat(token.substring(PREFIX.length()))
-                .matches("[A-Za-z0-9_-]+");
+        assertThat(token.substring(PREFIX.length())).matches("[A-Za-z0-9_-]+");
     }
 
     @Test
@@ -31,8 +28,7 @@ class SecureAuthTokenGeneratorTest {
     void generatesTwoHundredFiftySixBitRandomValue() {
         String token = generator.generateTermsAuthToken();
 
-        byte[] randomBytes = Base64.getUrlDecoder()
-                .decode(token.substring(PREFIX.length()));
+        byte[] randomBytes = Base64.getUrlDecoder().decode(token.substring(PREFIX.length()));
 
         assertThat(randomBytes).hasSize(32);
     }
@@ -52,28 +48,15 @@ class SecureAuthTokenGeneratorTest {
     @Test
     @DisplayName("아이디·이메일·계좌·임시가입 토큰도 256비트 난수로 생성한다")
     void generatesOtherSignupTokens() {
-        assertToken(
-                generator.generateUserIdCheckToken(),
-                "USER_ID_CHECK_"
-        );
-        assertToken(
-                generator.generateEmailVerificationToken(),
-                "EMAIL_VERIFICATION_"
-        );
-        assertToken(
-                generator.generateAccountAuthToken(),
-                "ACCOUNT_AUTH_"
-        );
-        assertToken(
-                generator.generateTempSignupToken(),
-                "TEMP_SIGNUP_"
-        );
+        assertToken(generator.generateUserIdCheckToken(), "USER_ID_CHECK_");
+        assertToken(generator.generateEmailVerificationToken(), "EMAIL_VERIFICATION_");
+        assertToken(generator.generateAccountAuthToken(), "ACCOUNT_AUTH_");
+        assertToken(generator.generateTempSignupToken(), "TEMP_SIGNUP_");
     }
 
     private void assertToken(String token, String prefix) {
         assertThat(token).startsWith(prefix);
-        assertThat(Base64.getUrlDecoder().decode(
-                token.substring(prefix.length())
-        )).hasSize(32);
+        assertThat(Base64.getUrlDecoder().decode(token.substring(prefix.length())))
+                .hasSize(32);
     }
 }

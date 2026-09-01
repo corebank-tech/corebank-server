@@ -4,10 +4,9 @@ import com.shinhan.corebank.otp.api.OtpAuthTokenVerification;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.otp.api.OtpTransactionType;
 import com.shinhan.corebank.subscription.application.port.out.ProductSubscriptionOtpVerificationPort;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-
-import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -22,20 +21,15 @@ public class ProductSubscriptionOtpVerificationAdapter implements ProductSubscri
             Long productId,
             Long subscriptionAmount,
             Integer termMonths,
-            Long withdrawalAccountId
-    ) {
-        otpAuthTokenVerifier.verifyAndConsume(
-                new OtpAuthTokenVerification(
-                        otpAuthToken,
-                        customerId,
-                        OtpTransactionType.PRODUCT_SUBSCRIPTION,
-                        Map.of(
-                                "productId", productId,
-                                "subscriptionAmount", subscriptionAmount,
-                                "termMonths", termMonths,
-                                "withdrawalAccountId", withdrawalAccountId
-                        )
-                )
-        );
+            Long withdrawalAccountId) {
+        otpAuthTokenVerifier.verifyAndConsume(new OtpAuthTokenVerification(
+                otpAuthToken,
+                customerId,
+                OtpTransactionType.PRODUCT_SUBSCRIPTION,
+                Map.of(
+                        "productId", productId,
+                        "subscriptionAmount", subscriptionAmount,
+                        "termMonths", termMonths,
+                        "withdrawalAccountId", withdrawalAccountId)));
     }
 }

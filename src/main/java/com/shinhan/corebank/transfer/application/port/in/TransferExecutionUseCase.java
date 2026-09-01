@@ -1,6 +1,5 @@
 package com.shinhan.corebank.transfer.application.port.in;
 
-
 public interface TransferExecutionUseCase {
 
     /**

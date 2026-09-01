@@ -1,5 +1,7 @@
 package com.shinhan.corebank.account.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.application.port.in.AccountOpeningResult;
 import com.shinhan.corebank.account.application.port.in.ProductAccountOpeningCommand;
@@ -9,6 +11,8 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import jakarta.persistence.EntityManager;
+import java.time.Clock;
+import java.time.LocalDate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,24 +20,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Clock;
-import java.time.LocalDate;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
 @Transactional
-class ProductAccountOpeningIntegrationTest
-        extends IntegrationTestSupport {
+class ProductAccountOpeningIntegrationTest extends IntegrationTestSupport {
 
-    private static final String PRODUCT_CODE =
-            "PRD_BASIC_DEP";
+    private static final String PRODUCT_CODE = "PRD_BASIC_DEP";
 
-    private static final String PASSWORD_HASH =
-            "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq";
+    private static final String PASSWORD_HASH = "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq";
 
     @Autowired
-    private ProductAccountOpeningUseCase
-            productAccountOpeningUseCase;
+    private ProductAccountOpeningUseCase productAccountOpeningUseCase;
 
     @Autowired
     private CustomerTestFixture customerTestFixture;
@@ -51,46 +46,27 @@ class ProductAccountOpeningIntegrationTest
 
     @BeforeEach
     void setUp() {
-        sequenceFixture =
-                new AccountNumberSequenceTestFixture(
-                        jdbcTemplate
-                );
+        sequenceFixture = new AccountNumberSequenceTestFixture(jdbcTemplate);
     }
 
     @Test
     @DisplayName("정기예금 상품 계좌를 개설하면 채번된 계좌가 DB에 저장된다")
     void openTimeDepositAccount() {
         // given
-        Long customerId =
-                customerTestFixture.createCustomer();
+        Long customerId = customerTestFixture.createCustomer();
 
-        Long productId =
-                sequenceFixture.findProductId(
-                        PRODUCT_CODE
-                );
+        Long productId = sequenceFixture.findProductId(PRODUCT_CODE);
 
         sequenceFixture.resetProductAccountSequence(
-                productId,
-                AccountType.TIME_DEPOSIT,
-                AccountNumberSequenceTestFixture.TIME_DEPOSIT_PREFIX,
-                0L
-        );
+                productId, AccountType.TIME_DEPOSIT, AccountNumberSequenceTestFixture.TIME_DEPOSIT_PREFIX, 0L);
 
-        LocalDate maturityDate =
-                LocalDate.now(clock).plusYears(1);
+        LocalDate maturityDate = LocalDate.now(clock).plusYears(1);
 
-        ProductAccountOpeningCommand command =
-                new ProductAccountOpeningCommand(
-                        customerId,
-                        productId,
-                        AccountType.TIME_DEPOSIT,
-                        PASSWORD_HASH,
-                        maturityDate
-                );
+        ProductAccountOpeningCommand command = new ProductAccountOpeningCommand(
+                customerId, productId, AccountType.TIME_DEPOSIT, PASSWORD_HASH, maturityDate);
 
         // when
-        AccountOpeningResult result =
-                productAccountOpeningUseCase.open(command);
+        AccountOpeningResult result = productAccountOpeningUseCase.open(command);
 
         entityManager.flush();
 
@@ -98,13 +74,8 @@ class ProductAccountOpeningIntegrationTest
         assertThat(result.accountId()).isNotNull();
 
         assertThat(result.accountNumber())
-                .isEqualTo(
-                        AccountNumberSequenceTestFixture.accountNumberOf(
-                                AccountNumberSequenceTestFixture
-                                        .TIME_DEPOSIT_PREFIX,
-                                1L
-                        )
-                );
+                .isEqualTo(AccountNumberSequenceTestFixture.accountNumberOf(
+                        AccountNumberSequenceTestFixture.TIME_DEPOSIT_PREFIX, 1L));
 
         AccountRow row = jdbcTemplate.queryForObject(
                 """
@@ -128,42 +99,26 @@ class ProductAccountOpeningIntegrationTest
                         rs.getString("account_type"),
                         rs.getLong("balance"),
                         rs.getString("status"),
-                        rs.getObject(
-                                "maturity_date",
-                                LocalDate.class
-                        )
-                ),
-                result.accountId()
-        );
+                        rs.getObject("maturity_date", LocalDate.class)),
+                result.accountId());
 
         assertThat(row).isNotNull();
 
-        assertThat(row.accountId())
-                .isEqualTo(result.accountId());
+        assertThat(row.accountId()).isEqualTo(result.accountId());
 
-        assertThat(row.accountNumber())
-                .isEqualTo(result.accountNumber());
+        assertThat(row.accountNumber()).isEqualTo(result.accountNumber());
 
-        assertThat(row.customerId())
-                .isEqualTo(customerId);
+        assertThat(row.customerId()).isEqualTo(customerId);
 
-        assertThat(row.productId())
-                .isEqualTo(productId);
+        assertThat(row.productId()).isEqualTo(productId);
 
-        assertThat(row.accountType())
-                .isEqualTo(
-                        AccountType.TIME_DEPOSIT.name()
-                );
+        assertThat(row.accountType()).isEqualTo(AccountType.TIME_DEPOSIT.name());
 
         assertThat(row.balance()).isZero();
 
-        assertThat(row.status())
-                .isEqualTo(
-                        AccountStatus.ACTIVE.name()
-                );
+        assertThat(row.status()).isEqualTo(AccountStatus.ACTIVE.name());
 
-        assertThat(row.maturityDate())
-                .isEqualTo(maturityDate);
+        assertThat(row.maturityDate()).isEqualTo(maturityDate);
     }
 
     private record AccountRow(
@@ -174,7 +129,5 @@ class ProductAccountOpeningIntegrationTest
             String accountType,
             long balance,
             String status,
-            LocalDate maturityDate
-    ) {
-    }
+            LocalDate maturityDate) {}
 }

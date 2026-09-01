@@ -47,7 +47,8 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
     void seedProducts() {
         repository.save(product("SVN-101", "정기예금 A", ProductGroup.DEPOSIT, new BigDecimal("3.00"), SaleStatus.ON_SALE));
         repository.save(product("SVN-102", "청년적금", ProductGroup.SAVINGS, new BigDecimal("4.50"), SaleStatus.ON_SALE));
-        repository.save(product("SVN-103", "정기예금 B(판매중지)", ProductGroup.DEPOSIT, new BigDecimal("5.00"), SaleStatus.SUSPENDED));
+        repository.save(
+                product("SVN-103", "정기예금 B(판매중지)", ProductGroup.DEPOSIT, new BigDecimal("5.00"), SaleStatus.SUSPENDED));
         repository.save(product("SVN-104", "특판예금", ProductGroup.DEPOSIT, new BigDecimal("2.00"), SaleStatus.ON_SALE));
         entityManager.flush();
         entityManager.clear();
@@ -93,7 +94,8 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
                 .filter(p -> p.getSaleStatus() == SaleStatus.ON_SALE)
                 .count();
 
-        Page<Product> result = adapter.search(null, null, ProductSortType.NAME, org.springframework.data.domain.Pageable.unpaged());
+        Page<Product> result =
+                adapter.search(null, null, ProductSortType.NAME, org.springframework.data.domain.Pageable.unpaged());
 
         assertThat(result.getTotalElements()).isEqualTo(expectedTotal);
         assertThat(result.getContent()).hasSize((int) expectedTotal);
@@ -104,8 +106,10 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("정렬 기준(RATE)이 동률이면 productCode 오름차순으로 보조 정렬해 순서가 항상 고정된다")
     void tieBreaksByProductCode() {
-        repository.save(product("SVN-202", "동률 상품 B", ProductGroup.DEPOSIT, new BigDecimal("3.30"), SaleStatus.ON_SALE));
-        repository.save(product("SVN-201", "동률 상품 A", ProductGroup.DEPOSIT, new BigDecimal("3.30"), SaleStatus.ON_SALE));
+        repository.save(
+                product("SVN-202", "동률 상품 B", ProductGroup.DEPOSIT, new BigDecimal("3.30"), SaleStatus.ON_SALE));
+        repository.save(
+                product("SVN-201", "동률 상품 A", ProductGroup.DEPOSIT, new BigDecimal("3.30"), SaleStatus.ON_SALE));
         entityManager.flush();
         entityManager.clear();
 
@@ -130,8 +134,20 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("NEW 정렬은 판매 시작일 최신순으로 정렬한다")
     void sortByNew() {
-        repository.save(product("SVN-401", "신상품 A", ProductGroup.DEPOSIT, new BigDecimal("3.00"), SaleStatus.ON_SALE, LocalDate.of(2026, 1, 1)));
-        repository.save(product("SVN-402", "신상품 B", ProductGroup.DEPOSIT, new BigDecimal("3.00"), SaleStatus.ON_SALE, LocalDate.of(2026, 6, 1)));
+        repository.save(product(
+                "SVN-401",
+                "신상품 A",
+                ProductGroup.DEPOSIT,
+                new BigDecimal("3.00"),
+                SaleStatus.ON_SALE,
+                LocalDate.of(2026, 1, 1)));
+        repository.save(product(
+                "SVN-402",
+                "신상품 B",
+                ProductGroup.DEPOSIT,
+                new BigDecimal("3.00"),
+                SaleStatus.ON_SALE,
+                LocalDate.of(2026, 6, 1)));
         entityManager.flush();
         entityManager.clear();
 
@@ -143,7 +159,8 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("존재하는 productId로 상세조회하면 product와 연관 데이터를 모두 채워서 반환한다")
     void findDetailByProductId_found() {
-        ProductJpaEntity saved = repository.save(product("SVN-501", "상세조회 대상", ProductGroup.DEPOSIT, new BigDecimal("3.00"), SaleStatus.ON_SALE));
+        ProductJpaEntity saved = repository.save(
+                product("SVN-501", "상세조회 대상", ProductGroup.DEPOSIT, new BigDecimal("3.00"), SaleStatus.ON_SALE));
         Long productId = saved.getProductId();
         Long termsId = jdbcTemplate.queryForObject(
                 "SELECT terms_id FROM terms WHERE terms_code = ?", Long.class, "TERMS_SERVICE");
@@ -169,15 +186,20 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(result).isPresent();
         ProductDetail detail = result.get();
         assertThat(detail.getProduct().getProductCode()).isEqualTo("SVN-501");
-        assertThat(detail.getRateTiers()).extracting(t -> t.getId().getTermMonths()).containsExactly((short) 12);
-        assertThat(detail.getPreferentialRates()).extracting(ProductPreferentialRate::getConditionName).containsExactly("자동이체 우대");
+        assertThat(detail.getRateTiers())
+                .extracting(t -> t.getId().getTermMonths())
+                .containsExactly((short) 12);
+        assertThat(detail.getPreferentialRates())
+                .extracting(ProductPreferentialRate::getConditionName)
+                .containsExactly("자동이체 우대");
         assertThat(detail.getTerms()).extracting(t -> t.getId().getTermsId()).containsExactly(termsId);
     }
 
     @Test
     @DisplayName("연관 데이터가 없는 상품도 빈 목록으로 채워서 반환한다")
     void findDetailByProductId_foundWithoutChildren() {
-        ProductJpaEntity saved = repository.save(product("SVN-502", "연관데이터 없음", ProductGroup.DEPOSIT, new BigDecimal("3.00"), SaleStatus.ON_SALE));
+        ProductJpaEntity saved = repository.save(
+                product("SVN-502", "연관데이터 없음", ProductGroup.DEPOSIT, new BigDecimal("3.00"), SaleStatus.ON_SALE));
         entityManager.flush();
         entityManager.clear();
 
@@ -200,7 +222,8 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("판매중지 상품도 상세조회는 조회된다")
     void findDetailByProductId_suspendedStillReturned() {
-        ProductJpaEntity saved = repository.save(product("SVN-503", "판매중지 상품", ProductGroup.DEPOSIT, new BigDecimal("2.00"), SaleStatus.SUSPENDED));
+        ProductJpaEntity saved = repository.save(
+                product("SVN-503", "판매중지 상품", ProductGroup.DEPOSIT, new BigDecimal("2.00"), SaleStatus.SUSPENDED));
         entityManager.flush();
         entityManager.clear();
 
@@ -213,8 +236,8 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("존재하는 productId면 existsProduct가 true를 반환한다")
     void existsProduct_true() {
-        ProductJpaEntity saved = repository.save(product("EXS-101", "존재 확인용", ProductGroup.DEPOSIT,
-                new BigDecimal("2.00"), SaleStatus.ON_SALE));
+        ProductJpaEntity saved = repository.save(
+                product("EXS-101", "존재 확인용", ProductGroup.DEPOSIT, new BigDecimal("2.00"), SaleStatus.ON_SALE));
         entityManager.flush();
         entityManager.clear();
 
@@ -230,8 +253,8 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("product_terms 연결이 있으면 existsProductTerms가 true를 반환한다")
     void existsProductTerms_true() {
-        ProductJpaEntity saved = repository.save(product("EXS-102", "약관 연결 확인용", ProductGroup.DEPOSIT,
-                new BigDecimal("2.00"), SaleStatus.ON_SALE));
+        ProductJpaEntity saved = repository.save(
+                product("EXS-102", "약관 연결 확인용", ProductGroup.DEPOSIT, new BigDecimal("2.00"), SaleStatus.ON_SALE));
         Long termsId = jdbcTemplate.queryForObject(
                 "SELECT terms_id FROM terms WHERE terms_code = ?", Long.class, "TERMS_DEPOSIT");
         termsRepository.save(ProductTermsJpaEntity.builder()
@@ -247,8 +270,8 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("product_terms 연결이 없으면 existsProductTerms가 false를 반환한다")
     void existsProductTerms_false() {
-        ProductJpaEntity saved = repository.save(product("EXS-103", "약관 미연결", ProductGroup.DEPOSIT,
-                new BigDecimal("2.00"), SaleStatus.ON_SALE));
+        ProductJpaEntity saved = repository.save(
+                product("EXS-103", "약관 미연결", ProductGroup.DEPOSIT, new BigDecimal("2.00"), SaleStatus.ON_SALE));
 
         assertThat(adapter.existsProductTerms(saved.getProductId(), 999_999L)).isFalse();
     }
@@ -264,11 +287,18 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
                 .toList();
     }
 
-    private ProductJpaEntity product(String code, String name, ProductGroup group, BigDecimal maxRate, SaleStatus status) {
+    private ProductJpaEntity product(
+            String code, String name, ProductGroup group, BigDecimal maxRate, SaleStatus status) {
         return product(code, name, group, maxRate, status, LocalDate.of(2026, 1, 1));
     }
 
-    private ProductJpaEntity product(String code, String name, ProductGroup group, BigDecimal maxRate, SaleStatus status, LocalDate saleStartDate) {
+    private ProductJpaEntity product(
+            String code,
+            String name,
+            ProductGroup group,
+            BigDecimal maxRate,
+            SaleStatus status,
+            LocalDate saleStartDate) {
         return ProductJpaEntity.builder()
                 .productCode(code)
                 .productName(name)
