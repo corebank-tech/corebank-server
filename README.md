@@ -74,7 +74,7 @@ src/main/java/com/shinhan/corebank/
 
 ### Prerequisites
 
-- Java 21+
+- Java 21 (Gradle 데몬이 `gradle/gradle-daemon-jvm.properties`로 21에 고정됩니다)
 - Docker / Docker Compose (MySQL · Redis)
 
 ### Run
@@ -140,6 +140,25 @@ Flyway로 스키마를 버전 관리합니다. 마이그레이션 파일은
 | [team_db_architecture_guide.md](docs/team_db_architecture_guide.md) | DB 아키텍처 |
 | [redis_setup_guide.md](docs/redis_setup_guide.md) | Redis 세팅 |
 | [otp_integration_guide.md](docs/otp_integration_guide.md) | OTP 연동 |
+
+### 코드 포맷
+
+[Spotless](https://github.com/diffplug/spotless) + Palantir Java Format으로 서식을 자동 통일합니다.
+들여쓰기 공백 4칸, 최대 120자입니다. 커밋 전에 실행해 주세요.
+
+```bash
+./gradlew spotlessApply
+```
+
+CI에서 `spotlessCheck`가 실패하면 위 명령을 실행하고 다시 커밋하면 됩니다.
+IDE는 `.editorconfig`를 자동으로 따르므로 별도 설정이 필요 없습니다.
+정렬을 유지해야 하는 구간은 `// spotless:off` ~ `// spotless:on`으로 감싸세요.
+
+일괄 포맷 커밋이 `git blame`을 가리지 않도록 최초 1회 설정합니다.
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
 
 ### ADR
 
