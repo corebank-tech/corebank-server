@@ -14,11 +14,9 @@ import org.junit.jupiter.params.provider.ValueSource;
 class ProductPreferentialRateIdTest {
 
     @ParameterizedTest(name = "productId={0}, conditionCode={1}")
-    @CsvSource(nullValues = "null", value = {
-            "null, LONG_TERM",
-            "1,    null",
-            "null, null"
-    })
+    @CsvSource(
+            nullValues = "null",
+            value = {"null, LONG_TERM", "1,    null", "null, null"})
     @DisplayName("productId 또는 conditionCode가 null이면 CMN0002를 던진다")
     void rejectsNull(Long productId, String conditionCode) {
         assertThatThrownBy(() -> new ProductPreferentialRateId(productId, conditionCode))

@@ -1,13 +1,12 @@
 package com.shinhan.corebank.transfer.domain;
 
-import java.time.LocalDateTime;
-
-import com.shinhan.corebank.common.exception.BusinessException;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.shinhan.corebank.common.exception.BusinessException;
+import java.time.LocalDateTime;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 
 class FavoriteAccountTest {
 

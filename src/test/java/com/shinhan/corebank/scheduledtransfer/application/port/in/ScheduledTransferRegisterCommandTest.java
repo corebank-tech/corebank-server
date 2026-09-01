@@ -94,8 +94,8 @@ class ScheduledTransferRegisterCommandTest {
     void invalidAccountNumberFormat_throwsInvalidInput() {
         assertThatThrownBy(() -> validBuilder().depositAccountNumber("abc").build())
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
     }
 
     @Test
@@ -128,7 +128,8 @@ class ScheduledTransferRegisterCommandTest {
     @Test
     @DisplayName("recipientPassbookMemo가 10자를 초과하면 SCD0006을 던진다")
     void recipientPassbookMemoTooLong_throwsMemoLengthExceeded() {
-        assertThatThrownBy(() -> validBuilder().recipientPassbookMemo("12345678901").build())
+        assertThatThrownBy(() ->
+                        validBuilder().recipientPassbookMemo("12345678901").build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ScheduledTransferErrorCode.MEMO_LENGTH_EXCEEDED));
@@ -137,10 +138,8 @@ class ScheduledTransferRegisterCommandTest {
     @Test
     @DisplayName("myPassbookMemo/recipientPassbookMemo는 없어도 정상 생성된다")
     void optionalMemosCanBeNull() {
-        ScheduledTransferRegisterCommand command = validBuilder()
-                .myPassbookMemo(null)
-                .recipientPassbookMemo(null)
-                .build();
+        ScheduledTransferRegisterCommand command =
+                validBuilder().myPassbookMemo(null).recipientPassbookMemo(null).build();
 
         assertThat(command.myPassbookMemo()).isNull();
     }

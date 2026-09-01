@@ -6,5 +6,5 @@ package com.shinhan.corebank.transfer.application.port.out;
  * accountType, 그리고 예금주 조회 API의 미존재(TRF0201)/정지·해지(TRF0301) 구분에 쓰는
  * status를 담는다.
  */
-public record ResolvedPayee(Long accountId, String payeeName, LockedAccountType accountType, LockedAccountStatus status) {
-}
+public record ResolvedPayee(
+        Long accountId, String payeeName, LockedAccountType accountType, LockedAccountStatus status) {}

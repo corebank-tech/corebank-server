@@ -1,7 +1,6 @@
 package com.shinhan.corebank.customer.application.port.out;
 
 import com.shinhan.corebank.customer.domain.model.Customer;
-
 import java.util.Optional;
 
 // customer 도메인과 영속성 어댑터 사이의 저장소 계약

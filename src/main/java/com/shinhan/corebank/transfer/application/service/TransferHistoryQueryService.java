@@ -1,13 +1,9 @@
 package com.shinhan.corebank.transfer.application.service;
 
-import java.time.Clock;
-import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.util.Set;
-
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.common.util.PageableResolver;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryDetail;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryItem;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryPage;
@@ -20,8 +16,10 @@ import com.shinhan.corebank.transfer.application.port.out.TransferHistoryQueryPo
 import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-import com.shinhan.corebank.common.util.PageableResolver;
-
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -44,8 +42,7 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
             TransferHistoryQueryPort transferHistoryQueryPort,
             TransferLookupPort transferLookupPort,
             AccountLockPort accountLockPort,
-            Clock clock
-    ) {
+            Clock clock) {
         this.transferHistoryQueryPort = transferHistoryQueryPort;
         this.transferLookupPort = transferLookupPort;
         this.accountLockPort = accountLockPort;
@@ -53,8 +50,16 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
     }
 
     @Override
-    public TransferHistoryPage search(Long customerId, Long withdrawalAccountId, ProcessResultStatus status,
-                                       LocalDate fromDate, LocalDate toDate, TransferHistorySort sort, int page, int size, boolean all) {
+    public TransferHistoryPage search(
+            Long customerId,
+            Long withdrawalAccountId,
+            ProcessResultStatus status,
+            LocalDate fromDate,
+            LocalDate toDate,
+            TransferHistorySort sort,
+            int page,
+            int size,
+            boolean all) {
         if (customerId == null || withdrawalAccountId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
@@ -74,8 +79,8 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
         TransferHistorySort resolvedSort = sort != null ? sort : TransferHistorySort.LATEST;
         Page<Transfer> result = transferHistoryQueryPort.search(
                 withdrawalAccountId, status, resolvedFromDate, resolvedToDate, resolvedSort, pageable);
-        TransferHistoryAggregate aggregate = transferHistoryQueryPort.summarize(
-                withdrawalAccountId, status, resolvedFromDate, resolvedToDate);
+        TransferHistoryAggregate aggregate =
+                transferHistoryQueryPort.summarize(withdrawalAccountId, status, resolvedFromDate, resolvedToDate);
         OffsetDateTime asOf = OffsetDateTime.ofInstant(clock.instant(), clock.getZone());
 
         return new TransferHistoryPage(asOf, result.map(this::toItem), toSummary(aggregate));
@@ -87,7 +92,8 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
 
-        Transfer transfer = transferLookupPort.findByTransactionNumber(transactionNumber)
+        Transfer transfer = transferLookupPort
+                .findByTransactionNumber(transactionNumber)
                 .filter(t -> isOwnedBy(customerId, t.getWithdrawalAccountId()))
                 .orElseThrow(() -> new BusinessException(TransferErrorCode.TRANSACTION_NOT_FOUND));
 
@@ -104,7 +110,8 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
     // 계좌 소유자를 확인한다. TransferExecutionService의 1차 검증과 달리 withdrawalRegistered()는
     // 보지 않는다 — 출금계좌 등록을 해지한 뒤에도 과거 이체 이력은 계속 조회할 수 있어야 한다.
     private boolean isOwnedBy(Long customerId, Long withdrawalAccountId) {
-        return accountLockPort.findWithdrawalAccountDetail(withdrawalAccountId)
+        return accountLockPort
+                .findWithdrawalAccountDetail(withdrawalAccountId)
                 .filter(detail -> detail.customerId().equals(customerId))
                 .isPresent();
     }
@@ -121,8 +128,7 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
                 transfer.getTransferType(),
                 transfer.getChannel(),
                 transfer.getErrorCode(),
-                transfer.getErrorMessage()
-        );
+                transfer.getErrorMessage());
     }
 
     private TransferHistoryDetail toDetail(Transfer transfer) {
@@ -142,8 +148,7 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
                 transfer.getWithdrawalBalanceAfter(),
                 transfer.getErrorCode(),
                 transfer.getErrorMessage(),
-                transfer.getTransferredAt()
-        );
+                transfer.getTransferredAt());
     }
 
     private TransferHistorySummary toSummary(TransferHistoryAggregate aggregate) {

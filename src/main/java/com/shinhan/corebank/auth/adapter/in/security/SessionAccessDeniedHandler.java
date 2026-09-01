@@ -25,18 +25,14 @@ public class SessionAccessDeniedHandler implements AccessDeniedHandler {
 
     @Override
     public void handle(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            AccessDeniedException accessDeniedException
-    ) throws IOException, ServletException {
+            HttpServletRequest request, HttpServletResponse response, AccessDeniedException accessDeniedException)
+            throws IOException, ServletException {
         CommonErrorCode errorCode = CommonErrorCode.FORBIDDEN;
 
         response.setStatus(errorCode.getStatus());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         objectMapper.writeValue(
-                response.getOutputStream(),
-                new ErrorResponse(errorCode.getCode(), errorCode.getMessage(), null)
-        );
+                response.getOutputStream(), new ErrorResponse(errorCode.getCode(), errorCode.getMessage(), null));
     }
 }

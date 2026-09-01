@@ -1,25 +1,22 @@
 package com.shinhan.corebank.account.adapter.out.redis;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.domain.AccountPasswordAuthTokenPayload;
+import java.time.Duration;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
-import java.time.Duration;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
 // accountPasswordAuthToken의 300초 TTL과 고객·계좌 조건부 소비를 검증한다.
-class AccountPasswordAuthTokenRedisAdapterTest
-        extends IntegrationTestSupport {
+class AccountPasswordAuthTokenRedisAdapterTest extends IntegrationTestSupport {
 
-    private static final String KEY_PREFIX =
-            "account:password:auth:";
+    private static final String KEY_PREFIX = "account:password:auth:";
 
     @Autowired
     private AccountPasswordAuthTokenRedisAdapter adapter;
@@ -58,10 +55,8 @@ class AccountPasswordAuthTokenRedisAdapterTest
         AccountPasswordAuthTokenPayload original = payload(1L, 101L);
         adapter.save(token, original, Duration.ofMinutes(5));
 
-        assertThat(adapter.consumeIfMatches(token, payload(2L, 101L)))
-                .isFalse();
-        assertThat(adapter.consumeIfMatches(token, payload(1L, 102L)))
-                .isFalse();
+        assertThat(adapter.consumeIfMatches(token, payload(2L, 101L))).isFalse();
+        assertThat(adapter.consumeIfMatches(token, payload(1L, 102L))).isFalse();
         assertThat(redisTemplate.hasKey(KEY_PREFIX + token)).isTrue();
     }
 
@@ -76,10 +71,7 @@ class AccountPasswordAuthTokenRedisAdapterTest
         assertThat(adapter.consumeIfMatches(token, payload)).isFalse();
     }
 
-    private AccountPasswordAuthTokenPayload payload(
-            Long customerId,
-            Long accountId
-    ) {
+    private AccountPasswordAuthTokenPayload payload(Long customerId, Long accountId) {
         return new AccountPasswordAuthTokenPayload(customerId, accountId);
     }
 }

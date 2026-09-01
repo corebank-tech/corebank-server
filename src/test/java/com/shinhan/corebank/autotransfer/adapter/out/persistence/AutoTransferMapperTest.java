@@ -58,10 +58,18 @@ class AutoTransferMapperTest {
     @DisplayName("도메인 객체를 JPA 엔티티로 변환하면 모든 필드가 보존된다")
     void toEntity_preservesAllFields() {
         AutoTransfer domain = AutoTransfer.register(
-                2L, 3L, "110987654321", "홍길동",
-                10000L, 1, 15,
-                LocalDate.of(2025, 6, 2), LocalDate.of(2027, 6, 2),
-                "내메모", "받는메모", LocalDateTime.of(2025, 6, 1, 0, 0));
+                2L,
+                3L,
+                "110987654321",
+                "홍길동",
+                10000L,
+                1,
+                15,
+                LocalDate.of(2025, 6, 2),
+                LocalDate.of(2027, 6, 2),
+                "내메모",
+                "받는메모",
+                LocalDateTime.of(2025, 6, 1, 0, 0));
 
         AutoTransferJpaEntity entity = AutoTransferMapper.toEntity(domain);
 

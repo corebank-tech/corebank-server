@@ -1,9 +1,8 @@
 package com.shinhan.corebank.product.domain;
 
-import lombok.RequiredArgsConstructor;
-import lombok.Getter;
-
 import java.util.List;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 
 // 상품 상세조회 결과. 상품 상세에 terms 모듈의 약관 정보를 더한 모델이다.
 @RequiredArgsConstructor

@@ -1,26 +1,26 @@
 package com.shinhan.corebank.scheduledtransfer.adapter.in.web;
 
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.nullValue;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.otp.api.OtpTransactionType;
 import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledTransferJpaEntity;
 import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledTransferJpaRepository;
-import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
@@ -87,9 +87,10 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.withdrawalAccountId").value(accountId))
                 .andExpect(jsonPath("$.data.status").value("WAITING"));
 
-        verify(otpAuthTokenVerifier).verifyAndConsume(argThat(verification ->
-                verification.transactionType() == OtpTransactionType.SCHEDULED_TRANSFER
-                        && verification.customerId().equals(customerId)));
+        verify(otpAuthTokenVerifier)
+                .verifyAndConsume(
+                        argThat(verification -> verification.transactionType() == OtpTransactionType.SCHEDULED_TRANSFER
+                                && verification.customerId().equals(customerId)));
     }
 
     @Test
@@ -118,8 +119,10 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("fromDate/toDate 쿼리 파라미터로 조회기간을 필터링한다")
     void search_filtersByFromDateAndToDate() throws Exception {
-        scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now().plusDays(5)));
-        scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now().plusDays(50)));
+        scheduledTransferJpaRepository.save(
+                scheduledTransfer(accountId, LocalDate.now().plusDays(5)));
+        scheduledTransferJpaRepository.save(
+                scheduledTransfer(accountId, LocalDate.now().plusDays(50)));
         entityManager.flush();
         entityManager.clear();
 
@@ -135,12 +138,12 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("응답 항목은 accountNumber 필드로 상대방 계좌번호를 마스킹해서 내려준다 (payeeAccountNumber 아님)")
     void search_responseUsesAccountNumberField() throws Exception {
-        scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now().plusDays(5)));
+        scheduledTransferJpaRepository.save(
+                scheduledTransfer(accountId, LocalDate.now().plusDays(5)));
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(get("/scheduled-transfers")
-                        .with(authentication(authenticationOf(customerId))))
+        mockMvc.perform(get("/scheduled-transfers").with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].accountNumber").value("110******321"))
                 .andExpect(jsonPath("$.data.items[0].payeeAccountNumber").doesNotExist())
@@ -151,17 +154,18 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("응답 항목은 출금계좌 별칭(fromAlias)·통장 표시내용(myPassbookMemo)·등록일시(registeredAt)를 내려준다")
     void search_includesFromAliasMemoAndRegisteredAt() throws Exception {
-        entityManager.createNativeQuery("UPDATE account SET alias = :alias WHERE account_id = :accountId")
+        entityManager
+                .createNativeQuery("UPDATE account SET alias = :alias WHERE account_id = :accountId")
                 .setParameter("alias", "우리집")
                 .setParameter("accountId", accountId)
                 .executeUpdate();
-        ScheduledTransferJpaEntity entity = scheduledTransfer(accountId, LocalDate.now().plusDays(5));
+        ScheduledTransferJpaEntity entity =
+                scheduledTransfer(accountId, LocalDate.now().plusDays(5));
         scheduledTransferJpaRepository.save(entity);
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(get("/scheduled-transfers")
-                        .with(authentication(authenticationOf(customerId))))
+        mockMvc.perform(get("/scheduled-transfers").with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].fromAlias").value("우리집"))
                 .andExpect(jsonPath("$.data.items[0].registeredAt").exists());
@@ -170,12 +174,12 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("출금계좌에 별칭이 없으면 fromAlias는 응답에서 null이다")
     void search_fromAliasNull_whenAccountAliasNotSet() throws Exception {
-        scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now().plusDays(5)));
+        scheduledTransferJpaRepository.save(
+                scheduledTransfer(accountId, LocalDate.now().plusDays(5)));
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(get("/scheduled-transfers")
-                        .with(authentication(authenticationOf(customerId))))
+        mockMvc.perform(get("/scheduled-transfers").with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].fromAlias").value(nullValue()));
     }
@@ -183,7 +187,8 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("status로 필터링하면 해당 상태만 조회된다")
     void search_filtersByStatus() throws Exception {
-        ScheduledTransferJpaEntity waiting = scheduledTransfer(accountId, LocalDate.now().plusDays(5));
+        ScheduledTransferJpaEntity waiting =
+                scheduledTransfer(accountId, LocalDate.now().plusDays(5));
         ScheduledTransferJpaEntity canceled = ScheduledTransferJpaEntity.builder()
                 .customerId(customerId)
                 .withdrawalAccountId(accountId)
@@ -230,8 +235,7 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(get("/scheduled-transfers")
-                        .with(authentication(authenticationOf(customerId))))
+        mockMvc.perform(get("/scheduled-transfers").with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalCount").value(0))
                 .andExpect(jsonPath("$.data.items.length()").value(0));
@@ -250,8 +254,10 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("all=true면 size가 허용되지 않는 값이어도 200으로 응답하고 전체 건을 한 페이지로 반환한다")
     void search_allTrue_returnsAllMatchingRowsInOnePage() throws Exception {
-        scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now().plusDays(5)));
-        scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now().plusDays(50)));
+        scheduledTransferJpaRepository.save(
+                scheduledTransfer(accountId, LocalDate.now().plusDays(5)));
+        scheduledTransferJpaRepository.save(
+                scheduledTransfer(accountId, LocalDate.now().plusDays(50)));
         entityManager.flush();
         entityManager.clear();
 
@@ -270,7 +276,8 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     @DisplayName("all=true인데 결과가 100건을 초과하면 400 + CMN0006을 반환한다")
     void search_allTrue_exceedsMaxAllQuerySize_returnsCmn0006() throws Exception {
         for (int i = 0; i < 101; i++) {
-            scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now().plusDays(i + 1)));
+            scheduledTransferJpaRepository.save(
+                    scheduledTransfer(accountId, LocalDate.now().plusDays(i + 1)));
         }
         entityManager.flush();
         entityManager.clear();
@@ -285,18 +292,23 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("인증 없이 조회를 요청하면 401을 반환한다")
     void search_withoutAuthentication_returnsUnauthorized() throws Exception {
-        mockMvc.perform(get("/scheduled-transfers"))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/scheduled-transfers")).andExpect(status().isUnauthorized());
     }
 
     @Test
     @DisplayName("처리결과 조회는 WAITING을 제외하고 SUCCESS/FAILED/CANCELED만 반환하며, 상단에 집계를 포함한다")
     void searchExecutionResults_excludesWaitingAndIncludesSummary() throws Exception {
-        scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now().plusDays(5)));
-        scheduledTransferJpaRepository.save(terminalScheduledTransfer(accountId, ScheduledTransferStatus.SUCCESS,
-                LocalDate.now().minusDays(5), 10_000L, "20260805BT0000000001", null));
-        scheduledTransferJpaRepository.save(terminalScheduledTransfer(accountId, ScheduledTransferStatus.FAILED,
-                LocalDate.now().minusDays(3), 20_000L, null, "잔액 부족"));
+        scheduledTransferJpaRepository.save(
+                scheduledTransfer(accountId, LocalDate.now().plusDays(5)));
+        scheduledTransferJpaRepository.save(terminalScheduledTransfer(
+                accountId,
+                ScheduledTransferStatus.SUCCESS,
+                LocalDate.now().minusDays(5),
+                10_000L,
+                "20260805BT0000000001",
+                null));
+        scheduledTransferJpaRepository.save(terminalScheduledTransfer(
+                accountId, ScheduledTransferStatus.FAILED, LocalDate.now().minusDays(3), 20_000L, null, "잔액 부족"));
         entityManager.flush();
         entityManager.clear();
 
@@ -316,13 +328,17 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("처리결과 조회 응답도 accountNumber 필드로 마스킹된 상대방 계좌번호를 내려준다")
     void searchExecutionResults_responseUsesAccountNumberField() throws Exception {
-        scheduledTransferJpaRepository.save(terminalScheduledTransfer(accountId, ScheduledTransferStatus.SUCCESS,
-                LocalDate.now().minusDays(1), 10_000L, "20260805BT0000000002", null));
+        scheduledTransferJpaRepository.save(terminalScheduledTransfer(
+                accountId,
+                ScheduledTransferStatus.SUCCESS,
+                LocalDate.now().minusDays(1),
+                10_000L,
+                "20260805BT0000000002",
+                null));
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(get("/scheduled-transfers/executions")
-                        .with(authentication(authenticationOf(customerId))))
+        mockMvc.perform(get("/scheduled-transfers/executions").with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].accountNumber").value("110******321"))
                 .andExpect(jsonPath("$.data.items[0].transactionNumber").value("20260805BT0000000002"))
@@ -353,8 +369,7 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(get("/scheduled-transfers/executions")
-                        .with(authentication(authenticationOf(customerId))))
+        mockMvc.perform(get("/scheduled-transfers/executions").with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalCount").value(0))
                 .andExpect(jsonPath("$.data.items.length()").value(0));
@@ -373,10 +388,15 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("all=true면 size가 허용되지 않는 값이어도 200으로 응답하고 전체 처리결과를 한 페이지로 반환한다")
     void searchExecutionResults_allTrue_returnsAllMatchingRowsInOnePage() throws Exception {
-        scheduledTransferJpaRepository.save(terminalScheduledTransfer(accountId, ScheduledTransferStatus.SUCCESS,
-                LocalDate.now().minusDays(5), 10_000L, "20260805BT0000000010", null));
-        scheduledTransferJpaRepository.save(terminalScheduledTransfer(accountId, ScheduledTransferStatus.FAILED,
-                LocalDate.now().minusDays(3), 20_000L, null, "잔액 부족"));
+        scheduledTransferJpaRepository.save(terminalScheduledTransfer(
+                accountId,
+                ScheduledTransferStatus.SUCCESS,
+                LocalDate.now().minusDays(5),
+                10_000L,
+                "20260805BT0000000010",
+                null));
+        scheduledTransferJpaRepository.save(terminalScheduledTransfer(
+                accountId, ScheduledTransferStatus.FAILED, LocalDate.now().minusDays(3), 20_000L, null, "잔액 부족"));
         entityManager.flush();
         entityManager.clear();
 
@@ -396,8 +416,7 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("인증 없이 처리결과 조회를 요청하면 401을 반환한다")
     void searchExecutionResults_withoutAuthentication_returnsUnauthorized() throws Exception {
-        mockMvc.perform(get("/scheduled-transfers/executions"))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/scheduled-transfers/executions")).andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -425,13 +444,18 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.items[0].canceledAt").exists());
 
         // OTP 거래정보는 단수 id가 아니라 id 배열로 검증돼야 한다
-        verify(otpAuthTokenVerifier).verifyAndConsume(argThat(verification ->
-                verification.transactionType() == OtpTransactionType.SCHEDULED_TRANSFER
-                        && List.of(saved.getScheduledTransferId()).equals(verification.transactionData().get("scheduledTransferIds"))));
+        verify(otpAuthTokenVerifier)
+                .verifyAndConsume(
+                        argThat(verification -> verification.transactionType() == OtpTransactionType.SCHEDULED_TRANSFER
+                                && List.of(saved.getScheduledTransferId())
+                                        .equals(verification.transactionData().get("scheduledTransferIds"))));
 
         entityManager.flush();
         entityManager.clear();
-        assertThat(scheduledTransferJpaRepository.findById(saved.getScheduledTransferId()).orElseThrow().getStatus())
+        assertThat(scheduledTransferJpaRepository
+                        .findById(saved.getScheduledTransferId())
+                        .orElseThrow()
+                        .getStatus())
                 .isEqualTo(ScheduledTransferStatus.CANCELED);
     }
 
@@ -440,8 +464,8 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     void cancel_partialFailure_returnsPerItemResults() throws Exception {
         ScheduledTransferJpaEntity cancelable = scheduledTransferJpaRepository.save(
                 scheduledTransfer(accountId, LocalDate.now().plusDays(10)));
-        ScheduledTransferJpaEntity onExecutionDate = scheduledTransferJpaRepository.save(
-                scheduledTransfer(accountId, LocalDate.now()));
+        ScheduledTransferJpaEntity onExecutionDate =
+                scheduledTransferJpaRepository.save(scheduledTransfer(accountId, LocalDate.now()));
         entityManager.flush();
         entityManager.clear();
 
@@ -452,20 +476,25 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                         .header("Account-Password-Auth-Token", "cancel-token-partial")
                         .header("Otp-Auth-Token", "otp-cancel-token-partial")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(cancelRequestJson(cancelable.getScheduledTransferId(), onExecutionDate.getScheduledTransferId())))
+                        .content(cancelRequestJson(
+                                cancelable.getScheduledTransferId(), onExecutionDate.getScheduledTransferId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.summary.successCount").value(1))
                 .andExpect(jsonPath("$.data.summary.failureCount").value(1))
                 // items는 요청한 ID의 오름차순이다 — 순서 전제가 깨졌을 때 원인을 바로 알 수 있게 ID까지 단언한다
                 .andExpect(jsonPath("$.data.items[0].scheduledTransferId").value(cancelable.getScheduledTransferId()))
                 .andExpect(jsonPath("$.data.items[0].status").value(ProcessResultStatus.SUCCESS.name()))
-                .andExpect(jsonPath("$.data.items[1].scheduledTransferId").value(onExecutionDate.getScheduledTransferId()))
+                .andExpect(
+                        jsonPath("$.data.items[1].scheduledTransferId").value(onExecutionDate.getScheduledTransferId()))
                 .andExpect(jsonPath("$.data.items[1].status").value(ProcessResultStatus.ERROR.name()))
                 .andExpect(jsonPath("$.data.items[1].failureCode").value("SCD0303"));
 
         entityManager.flush();
         entityManager.clear();
-        assertThat(scheduledTransferJpaRepository.findById(onExecutionDate.getScheduledTransferId()).orElseThrow().getStatus())
+        assertThat(scheduledTransferJpaRepository
+                        .findById(onExecutionDate.getScheduledTransferId())
+                        .orElseThrow()
+                        .getStatus())
                 .isEqualTo(ScheduledTransferStatus.WAITING);
     }
 
@@ -515,7 +544,10 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
 
         entityManager.flush();
         entityManager.clear();
-        assertThat(scheduledTransferJpaRepository.findById(saved.getScheduledTransferId()).orElseThrow().getStatus())
+        assertThat(scheduledTransferJpaRepository
+                        .findById(saved.getScheduledTransferId())
+                        .orElseThrow()
+                        .getStatus())
                 .isEqualTo(ScheduledTransferStatus.WAITING);
     }
 
@@ -559,26 +591,34 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$['paths']['/scheduled-transfers/cancel']['post']['operationId']")
                         .value("cancelScheduledTransfers"))
-                .andExpect(jsonPath("$['paths']['/scheduled-transfers/{scheduledTransferId}/cancel']").doesNotExist())
+                .andExpect(jsonPath("$['paths']['/scheduled-transfers/{scheduledTransferId}/cancel']")
+                        .doesNotExist())
                 .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelRequest']"
-                        + "['properties']['scheduledTransferIds']['type']").value("array"))
+                                + "['properties']['scheduledTransferIds']['type']")
+                        .value("array"))
                 // 배열 제약과 필수 여부가 스키마에 드러나야 FE codegen이 그대로 쓸 수 있다
                 .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelRequest']"
-                        + "['properties']['scheduledTransferIds']['minItems']").value(1))
+                                + "['properties']['scheduledTransferIds']['minItems']")
+                        .value(1))
                 .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelRequest']"
-                        + "['properties']['scheduledTransferIds']['maxItems']").value(50))
+                                + "['properties']['scheduledTransferIds']['maxItems']")
+                        .value(50))
                 .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelRequest']['required']")
                         .value(hasItem("scheduledTransferIds")))
                 // 성공 건의 failureCode·실패 건의 canceledAt은 null로 내려가므로 스키마도 null을 허용해야 한다
                 .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelItemResponse']"
-                        + "['properties']['canceledAt']['type']").value(hasItem("null")))
+                                + "['properties']['canceledAt']['type']")
+                        .value(hasItem("null")))
                 .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelItemResponse']"
-                        + "['properties']['failureCode']['type']").value(hasItem("null")))
+                                + "['properties']['failureCode']['type']")
+                        .value(hasItem("null")))
                 .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferCancelItemResponse']"
-                        + "['properties']['failureReason']['type']").value(hasItem("null")))
+                                + "['properties']['failureReason']['type']")
+                        .value(hasItem("null")))
                 // 저장 단계 동시 변경은 낙관적 락에 걸려 CMN0303으로 나간다 (PR #335 리뷰 R2)
                 .andExpect(jsonPath("$['paths']['/scheduled-transfers/cancel']['post']"
-                        + "['responses']['409']['description']").value(containsString("CMN0303")));
+                                + "['responses']['409']['description']")
+                        .value(containsString("CMN0303")));
     }
 
     private String cancelRequestJson(Long... scheduledTransferIds) throws Exception {
@@ -621,8 +661,13 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                 .build();
     }
 
-    private ScheduledTransferJpaEntity terminalScheduledTransfer(Long withdrawalAccountId, ScheduledTransferStatus status,
-            LocalDate scheduledDate, Long amount, String transactionNumber, String failureReason) {
+    private ScheduledTransferJpaEntity terminalScheduledTransfer(
+            Long withdrawalAccountId,
+            ScheduledTransferStatus status,
+            LocalDate scheduledDate,
+            Long amount,
+            String transactionNumber,
+            String failureReason) {
         return ScheduledTransferJpaEntity.builder()
                 .customerId(customerId)
                 .withdrawalAccountId(withdrawalAccountId)
@@ -641,24 +686,32 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
 
     private Long insertCustomer() {
         long seq = CUSTOMER_SEQ.incrementAndGet();
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO customer (user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at) "
                                 + "VALUES (:userId, 'x', '홍길동', '1990-01-01', :email, '01012345678', NOW(), NOW(), NOW())")
                 .setParameter("userId", "u" + seq)
                 .setParameter("email", "test" + seq + "@test.com")
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
     private Long insertAccount(Long customerId) {
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, "
                                 + "withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at) "
                                 + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', TRUE, NOW(), NOW(), NOW(), NOW())")
                 .setParameter("accountNumber", accountNumber)
                 .setParameter("customerId", customerId)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 }

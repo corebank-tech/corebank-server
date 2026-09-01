@@ -160,7 +160,8 @@ class AccountStatusAdapterTest extends IntegrationTestSupport {
         Long customerId = insertCustomer();
         Long withAliasId = insertAccount(customerId, nextAccountNumber(), "ACTIVE", true);
         Long withoutAliasId = insertAccount(customerId, nextAccountNumber(), "ACTIVE", true);
-        entityManager.createNativeQuery("UPDATE account SET alias = :alias WHERE account_id = :accountId")
+        entityManager
+                .createNativeQuery("UPDATE account SET alias = :alias WHERE account_id = :accountId")
                 .setParameter("alias", "월세계좌")
                 .setParameter("accountId", withAliasId)
                 .executeUpdate();
@@ -182,13 +183,17 @@ class AccountStatusAdapterTest extends IntegrationTestSupport {
 
     private Long insertCustomer() {
         long seq = CUSTOMER_SEQ.incrementAndGet();
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO customer (user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at) "
                                 + "VALUES (:userId, 'x', '홍길동', '1990-01-01', :email, '01012345678', NOW(), NOW(), NOW())")
                 .setParameter("userId", "u" + seq)
                 .setParameter("email", "test" + seq + "@test.com")
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
     private Long insertAccount(Long customerId, String accountNumber, String status) {
@@ -196,7 +201,8 @@ class AccountStatusAdapterTest extends IntegrationTestSupport {
     }
 
     private Long insertAccount(Long customerId, String accountNumber, String status, boolean withdrawalRegistered) {
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, "
                                 + "withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at) "
                                 + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', :status, 'x', :withdrawalRegistered, "
@@ -206,6 +212,9 @@ class AccountStatusAdapterTest extends IntegrationTestSupport {
                 .setParameter("status", status)
                 .setParameter("withdrawalRegistered", withdrawalRegistered)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 }

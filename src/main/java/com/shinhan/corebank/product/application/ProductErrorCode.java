@@ -3,7 +3,6 @@ package com.shinhan.corebank.product.application;
 import com.shinhan.corebank.common.exception.ErrorCode;
 
 public enum ProductErrorCode implements ErrorCode {
-
     PRODUCT_NOT_FOUND("PRD0201", 404, "상품을 찾을 수 없습니다."),
     TERMS_NOT_FOUND("PRD0202", 404, "약관을 찾을 수 없습니다."),
 
@@ -21,9 +20,17 @@ public enum ProductErrorCode implements ErrorCode {
     }
 
     @Override
-    public String getCode() { return code; }
+    public String getCode() {
+        return code;
+    }
+
     @Override
-    public int getStatus() { return status; }
+    public int getStatus() {
+        return status;
+    }
+
     @Override
-    public String getMessage() { return message; }
+    public String getMessage() {
+        return message;
+    }
 }

@@ -12,8 +12,7 @@ public record TempSignupTokenPayload(
         String passwordHash,
         String email,
         String phoneNumber,
-        Instant validatedAt
-) {
+        Instant validatedAt) {
 
     public TempSignupTokenPayload {
         agreedTerms = List.copyOf(agreedTerms);

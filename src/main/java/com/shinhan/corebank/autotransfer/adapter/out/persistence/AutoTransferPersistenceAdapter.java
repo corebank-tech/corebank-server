@@ -1,5 +1,8 @@
 package com.shinhan.corebank.autotransfer.adapter.out.persistence;
 
+import static com.shinhan.corebank.autotransfer.adapter.out.persistence.QAutoTransferExecutionJpaEntity.autoTransferExecutionJpaEntity;
+import static com.shinhan.corebank.autotransfer.adapter.out.persistence.QAutoTransferJpaEntity.autoTransferJpaEntity;
+
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.Projections;
@@ -14,6 +17,9 @@ import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferQueryP
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -21,21 +27,16 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Optional;
-
-import static com.shinhan.corebank.autotransfer.adapter.out.persistence.QAutoTransferExecutionJpaEntity.autoTransferExecutionJpaEntity;
-import static com.shinhan.corebank.autotransfer.adapter.out.persistence.QAutoTransferJpaEntity.autoTransferJpaEntity;
-
 @Repository
 @RequiredArgsConstructor
 // 이 파일은 DB에 직접 접근하게 해주는 파일
-public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePort, AutoTransferQueryPort, AutoTransferBatchQueryPort,
-        AutoTransferExecutionHistoryQueryPort {
+public class AutoTransferPersistenceAdapter
+        implements AutoTransferPersistencePort,
+                AutoTransferQueryPort,
+                AutoTransferBatchQueryPort,
+                AutoTransferExecutionHistoryQueryPort {
     private final AutoTransferJpaRepository autoTransferJpaRepository;
     private final JPAQueryFactory queryFactory;
-
 
     @Override
     public AutoTransfer save(AutoTransfer autoTransfer) {
@@ -45,8 +46,7 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
 
     @Override
     public Optional<AutoTransfer> findById(Long autoTransferId) {
-        return autoTransferJpaRepository.findById(autoTransferId)
-                .map(AutoTransferMapper::toDomain);
+        return autoTransferJpaRepository.findById(autoTransferId).map(AutoTransferMapper::toDomain);
     }
 
     @Override
@@ -56,7 +56,8 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
     }
 
     @Override
-    public Page<AutoTransfer> search(Long customerId, Long withdrawalAccountId, AutoTransferStatus status, Pageable pageable) {
+    public Page<AutoTransfer> search(
+            Long customerId, Long withdrawalAccountId, AutoTransferStatus status, Pageable pageable) {
         Predicate[] conditions = conditions(customerId, withdrawalAccountId, status);
         var query = queryFactory
                 .selectFrom(autoTransferJpaEntity)
@@ -71,7 +72,8 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
                 .from(autoTransferJpaEntity)
                 .where(conditions)
                 .fetchOne();
-        List<AutoTransfer> domainContent = content.stream().map(AutoTransferMapper::toDomain).toList();
+        List<AutoTransfer> domainContent =
+                content.stream().map(AutoTransferMapper::toDomain).toList();
         return new PageImpl<>(domainContent, pageable, total == null ? 0 : total);
     }
 
@@ -81,24 +83,29 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
     @Override
     @Transactional(readOnly = true)
     public List<AutoTransfer> findDueForExecution(LocalDate date) {
-        return queryFactory.selectFrom(autoTransferJpaEntity).where(dueForExecutionConditions(date))
-                .orderBy(autoTransferJpaEntity.registeredAt.asc()).fetch().stream().map(AutoTransferMapper::toDomain)
+        return queryFactory
+                .selectFrom(autoTransferJpaEntity)
+                .where(dueForExecutionConditions(date))
+                .orderBy(autoTransferJpaEntity.registeredAt.asc())
+                .fetch()
+                .stream()
+                .map(AutoTransferMapper::toDomain)
                 .toList();
-
     }
 
     private Predicate[] conditions(Long customerId, Long withdrawalAccountId, AutoTransferStatus status) {
-        return new Predicate[]{
-                // customerId까지 함께 걸어야 withdrawalAccountId만으로 타 고객 자동이체가 조회되는 것을 막을 수 있다(REQ-AUTO-009)
-                autoTransferJpaEntity.customerId.eq(customerId),
-                autoTransferJpaEntity.withdrawalAccountId.eq(withdrawalAccountId), statusEq(status)
+        return new Predicate[] {
+            // customerId까지 함께 걸어야 withdrawalAccountId만으로 타 고객 자동이체가 조회되는 것을 막을 수 있다(REQ-AUTO-009)
+            autoTransferJpaEntity.customerId.eq(customerId),
+            autoTransferJpaEntity.withdrawalAccountId.eq(withdrawalAccountId),
+            statusEq(status)
         };
     }
 
     private Predicate[] dueForExecutionConditions(LocalDate date) {
-        return new Predicate[]{
-                autoTransferJpaEntity.status.eq(AutoTransferStatus.NORMAL),
-                autoTransferJpaEntity.nextExecutionDate.loe(date)
+        return new Predicate[] {
+            autoTransferJpaEntity.status.eq(AutoTransferStatus.NORMAL),
+            autoTransferJpaEntity.nextExecutionDate.loe(date)
         };
     }
 
@@ -108,11 +115,12 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
 
     @Override
     // 회차 목록 한 페이지 조회
-    public Page<AutoTransferExecutionHistoryRow> search(Long customerId, Long withdrawalAccountId,
-                                                        LocalDate fromDate, LocalDate toDate, Pageable pageable) {
+    public Page<AutoTransferExecutionHistoryRow> search(
+            Long customerId, Long withdrawalAccountId, LocalDate fromDate, LocalDate toDate, Pageable pageable) {
         Predicate[] conditions = executionHistoryConditions(customerId, withdrawalAccountId, fromDate, toDate);
         var query = queryFactory
-                .select(Projections.constructor(AutoTransferExecutionHistoryRow.class,
+                .select(Projections.constructor(
+                        AutoTransferExecutionHistoryRow.class,
                         autoTransferExecutionJpaEntity.executionId,
                         autoTransferExecutionJpaEntity.status,
                         autoTransferExecutionJpaEntity.executedAt,
@@ -126,7 +134,10 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
                 .from(autoTransferExecutionJpaEntity)
                 .join(autoTransferExecutionJpaEntity.autoTransfer, autoTransferJpaEntity)
                 .where(conditions)
-                .orderBy(autoTransferExecutionJpaEntity.executionDate.desc(),autoTransferExecutionJpaEntity.executedAt.desc(),autoTransferExecutionJpaEntity.executionId.desc());
+                .orderBy(
+                        autoTransferExecutionJpaEntity.executionDate.desc(),
+                        autoTransferExecutionJpaEntity.executedAt.desc(),
+                        autoTransferExecutionJpaEntity.executionId.desc());
         if (pageable.isPaged()) {
             query.offset(pageable.getOffset()).limit(pageable.getPageSize());
         }
@@ -144,11 +155,13 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
 
     @Override
     // 정상/오류 처리 : 건수·금액 집계
-    public AutoTransferExecutionHistoryAggregate summarize(Long customerId, Long withdrawalAccountId,
-                                                           LocalDate fromDate, LocalDate toDate) {
+    public AutoTransferExecutionHistoryAggregate summarize(
+            Long customerId, Long withdrawalAccountId, LocalDate fromDate, LocalDate toDate) {
         Predicate[] conditions = executionHistoryConditions(customerId, withdrawalAccountId, fromDate, toDate);
         List<Tuple> rows = queryFactory
-                .select(autoTransferExecutionJpaEntity.status, autoTransferExecutionJpaEntity.count(),
+                .select(
+                        autoTransferExecutionJpaEntity.status,
+                        autoTransferExecutionJpaEntity.count(),
                         autoTransferExecutionJpaEntity.amount.sumLong())
                 .from(autoTransferExecutionJpaEntity)
                 .join(autoTransferExecutionJpaEntity.autoTransfer, autoTransferJpaEntity)
@@ -174,16 +187,16 @@ public class AutoTransferPersistenceAdapter implements AutoTransferPersistencePo
     }
 
     // search()·summarize() 공통 조건: 소유자 확인 + 조회기간 + PROCESSING 제외
-    private Predicate[] executionHistoryConditions(Long customerId, Long withdrawalAccountId, LocalDate fromDate, LocalDate toDate) {
+    private Predicate[] executionHistoryConditions(
+            Long customerId, Long withdrawalAccountId, LocalDate fromDate, LocalDate toDate) {
         return new Predicate[] {
-                // customerId까지 함께 걸어야 withdrawalAccountId만으로 타 고객 자동이체가 조회되는 것을 막을 수 있다(REQ-AUTO-018)
-                autoTransferJpaEntity.customerId.eq(customerId),
-                autoTransferJpaEntity.withdrawalAccountId.eq(withdrawalAccountId),
-                autoTransferExecutionJpaEntity.executionDate.goe(fromDate),
-                autoTransferExecutionJpaEntity.executionDate.loe(toDate),
-                // PROCESSING은 아직 확정 안 된 상태라 "결과"가 아님 — REQ-AUTO-018은 정상/오류만 결과로 규정
-                autoTransferExecutionJpaEntity.status.in(ProcessResultStatus.SUCCESS, ProcessResultStatus.ERROR)
+            // customerId까지 함께 걸어야 withdrawalAccountId만으로 타 고객 자동이체가 조회되는 것을 막을 수 있다(REQ-AUTO-018)
+            autoTransferJpaEntity.customerId.eq(customerId),
+            autoTransferJpaEntity.withdrawalAccountId.eq(withdrawalAccountId),
+            autoTransferExecutionJpaEntity.executionDate.goe(fromDate),
+            autoTransferExecutionJpaEntity.executionDate.loe(toDate),
+            // PROCESSING은 아직 확정 안 된 상태라 "결과"가 아님 — REQ-AUTO-018은 정상/오류만 결과로 규정
+            autoTransferExecutionJpaEntity.status.in(ProcessResultStatus.SUCCESS, ProcessResultStatus.ERROR)
         };
     }
-
 }

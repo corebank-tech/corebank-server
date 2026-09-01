@@ -59,8 +59,7 @@ class AutoTransferExecutionTest {
             AutoTransferExecution e = processing();
             e.markSuccess("TXN0000000000000001");
 
-            assertThatThrownBy(() -> e.markSuccess("TXN0000000000000002"))
-                    .isInstanceOf(IllegalStateException.class);
+            assertThatThrownBy(() -> e.markSuccess("TXN0000000000000002")).isInstanceOf(IllegalStateException.class);
         }
 
         @Test
@@ -68,8 +67,7 @@ class AutoTransferExecutionTest {
         void rejectsNullTransactionNumber() {
             AutoTransferExecution e = processing();
 
-            assertThatThrownBy(() -> e.markSuccess(null))
-                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> e.markSuccess(null)).isInstanceOf(IllegalArgumentException.class);
 
             assertThat(e.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
             assertThat(e.getTransactionNumber()).isNull();
@@ -80,10 +78,8 @@ class AutoTransferExecutionTest {
         void rejectsBlankTransactionNumber() {
             AutoTransferExecution e = processing();
 
-            assertThatThrownBy(() -> e.markSuccess(""))
-                    .isInstanceOf(IllegalArgumentException.class);
-            assertThatThrownBy(() -> e.markSuccess("   "))
-                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> e.markSuccess("")).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> e.markSuccess("   ")).isInstanceOf(IllegalArgumentException.class);
 
             assertThat(e.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
             assertThat(e.getTransactionNumber()).isNull();
@@ -124,8 +120,7 @@ class AutoTransferExecutionTest {
             AutoTransferExecution e = processing();
             e.markSuccess("TXN0000000000000001");
 
-            assertThatThrownBy(() -> e.markError("잔액 부족", null))
-                    .isInstanceOf(IllegalStateException.class);
+            assertThatThrownBy(() -> e.markError("잔액 부족", null)).isInstanceOf(IllegalStateException.class);
         }
 
         @Test
@@ -133,8 +128,7 @@ class AutoTransferExecutionTest {
         void rejectsNullFailureReason() {
             AutoTransferExecution e = processing();
 
-            assertThatThrownBy(() -> e.markError(null, null))
-                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> e.markError(null, null)).isInstanceOf(IllegalArgumentException.class);
 
             assertThat(e.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
             assertThat(e.getFailureReason()).isNull();
@@ -145,10 +139,8 @@ class AutoTransferExecutionTest {
         void rejectsBlankFailureReason() {
             AutoTransferExecution e = processing();
 
-            assertThatThrownBy(() -> e.markError("", null))
-                    .isInstanceOf(IllegalArgumentException.class);
-            assertThatThrownBy(() -> e.markError("   ", null))
-                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> e.markError("", null)).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> e.markError("   ", null)).isInstanceOf(IllegalArgumentException.class);
 
             assertThat(e.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
             assertThat(e.getFailureReason()).isNull();

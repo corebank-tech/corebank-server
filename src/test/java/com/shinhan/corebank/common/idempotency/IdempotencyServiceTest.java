@@ -18,9 +18,9 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
@@ -38,8 +38,8 @@ class IdempotencyServiceTest {
     void begin_invalidKeyFormat_throwsInvalidInput() {
         assertThatThrownBy(() -> idempotencyService.begin("not-a-uuid", 1L, "POST /auto-transfers", "{}"))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
 
         verify(repository, never()).findById(org.mockito.ArgumentMatchers.any());
     }
@@ -49,8 +49,8 @@ class IdempotencyServiceTest {
     void begin_blankKey_throwsInvalidInput() {
         assertThatThrownBy(() -> idempotencyService.begin("", 1L, "POST /auto-transfers", "{}"))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
     }
 
     @Test
@@ -86,15 +86,10 @@ class IdempotencyServiceTest {
         String key = "550e8400-e29b-41d4-a716-446655440000";
         when(repository.findById(key)).thenReturn(Optional.empty());
 
-        IdempotencyResult result = idempotencyService.beginAnonymous(
-                key,
-                "POST /auth/signup/complete",
-                "{}"
-        );
+        IdempotencyResult result = idempotencyService.beginAnonymous(key, "POST /auth/signup/complete", "{}");
 
         assertThat(result.replay()).isFalse();
-        ArgumentCaptor<IdempotencyKeyJpaEntity> captor =
-                ArgumentCaptor.forClass(IdempotencyKeyJpaEntity.class);
+        ArgumentCaptor<IdempotencyKeyJpaEntity> captor = ArgumentCaptor.forClass(IdempotencyKeyJpaEntity.class);
         verify(repository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getCustomerId()).isNull();
     }
@@ -107,12 +102,13 @@ class IdempotencyServiceTest {
         RuntimeException fkRootCause = new RuntimeException(
                 "Cannot add or update a child row: a foreign key constraint fails "
                         + "(`corebank`.`idempotency_key`, CONSTRAINT `fk_idem_customer` FOREIGN KEY (`customer_id`) REFERENCES `customer` (`customer_id`))");
-        when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("insert failed", fkRootCause));
+        when(repository.saveAndFlush(any()))
+                .thenThrow(new DataIntegrityViolationException("insert failed", fkRootCause));
 
         assertThatThrownBy(() -> idempotencyService.begin(key, 999_999_999L, "POST /auto-transfers", "{}"))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
     }
 
     @Test
@@ -121,24 +117,13 @@ class IdempotencyServiceTest {
         String key = "550e8400-e29b-41d4-a716-446655440000";
         String endpoint = "POST /auth/signup/complete";
         IdempotencyKeyJpaEntity existing = IdempotencyKeyJpaEntity.start(
-                key,
-                null,
-                endpoint,
-                sha256("{\"tempSignupToken\":\"TOKEN_A\"}"),
-                LocalDateTime.now()
-        );
+                key, null, endpoint, sha256("{\"tempSignupToken\":\"TOKEN_A\"}"), LocalDateTime.now());
         when(repository.findById(key)).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> idempotencyService.beginAnonymous(
-                key,
-                endpoint,
-                "{\"tempSignupToken\":\"TOKEN_B\"}"
-        )).isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(
-                        ((BusinessException) e).getErrorCode()
-                ).isEqualTo(
-                        CommonErrorCode.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST
-                ));
+        assertThatThrownBy(() -> idempotencyService.beginAnonymous(key, endpoint, "{\"tempSignupToken\":\"TOKEN_B\"}"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST));
     }
 
     @Test
@@ -147,49 +132,32 @@ class IdempotencyServiceTest {
         String key = "550e8400-e29b-41d4-a716-446655440000";
         String endpoint = "POST /auth/signup/complete";
         String request = "{\"tempSignupToken\":\"TOKEN_A\"}";
-        IdempotencyKeyJpaEntity existing = IdempotencyKeyJpaEntity.start(
-                key,
-                null,
-                endpoint,
-                sha256(request),
-                LocalDateTime.now()
-        );
+        IdempotencyKeyJpaEntity existing =
+                IdempotencyKeyJpaEntity.start(key, null, endpoint, sha256(request), LocalDateTime.now());
         when(repository.findById(key)).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> idempotencyService.beginAnonymous(
-                key,
-                endpoint,
-                request
-        )).isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(
-                        ((BusinessException) e).getErrorCode()
-                ).isEqualTo(CommonErrorCode.DUPLICATE_REQUEST_IN_PROGRESS));
+        assertThatThrownBy(() -> idempotencyService.beginAnonymous(key, endpoint, request))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.DUPLICATE_REQUEST_IN_PROGRESS));
     }
 
     @Test
     @DisplayName("익명 멱등 완료는 생성된 고객 ID와 응답을 함께 저장한다")
     void completeAnonymous_linksCreatedCustomer() {
         String key = "550e8400-e29b-41d4-a716-446655440000";
-        when(repository.completeAnonymousIfProcessing(
-                key, 101L, (short) 200, "{\"code\":\"0000\"}"
-        )).thenReturn(1);
+        when(repository.completeAnonymousIfProcessing(key, 101L, (short) 200, "{\"code\":\"0000\"}"))
+                .thenReturn(1);
 
-        idempotencyService.completeAnonymous(
-                key, 101L, (short) 200, "{\"code\":\"0000\"}"
-        );
+        idempotencyService.completeAnonymous(key, 101L, (short) 200, "{\"code\":\"0000\"}");
 
-        verify(repository).completeAnonymousIfProcessing(
-                key, 101L, (short) 200, "{\"code\":\"0000\"}"
-        );
+        verify(repository).completeAnonymousIfProcessing(key, 101L, (short) 200, "{\"code\":\"0000\"}");
     }
 
     private String sha256(String value) {
         try {
-            return HexFormat.of().formatHex(
-                    MessageDigest.getInstance("SHA-256").digest(
-                            value.getBytes(StandardCharsets.UTF_8)
-                    )
-            );
+            return HexFormat.of()
+                    .formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException exception) {
             throw new AssertionError(exception);
         }

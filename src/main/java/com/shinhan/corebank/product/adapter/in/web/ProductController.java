@@ -47,8 +47,7 @@ public class ProductController {
     @GetMapping("/{productId}/terms/{termsId}")
     @Operation(operationId = "getProductTerms")
     public ApiResponse<ProductTermsViewResponse> getProductTerms(
-            @PathVariable Long productId,
-            @PathVariable Long termsId) {
+            @PathVariable Long productId, @PathVariable Long termsId) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         ProductTermsView view = termsViewUseCase.view(productId, termsId, customerId);
         return ApiResponse.success(ProductTermsViewResponse.from(view));

@@ -1,25 +1,22 @@
 package com.shinhan.corebank.subscription.application;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
+
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.product.application.ProductErrorCode;
-import com.shinhan.corebank.product.application.port.in.TermsViewUseCase;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
-import com.shinhan.corebank.terms.api.TermsQueryPort;
-import com.shinhan.corebank.terms.api.TermsSummary;
+import com.shinhan.corebank.product.application.port.in.TermsViewUseCase;
 import com.shinhan.corebank.product.domain.*;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionValidationCommand;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionValidationCommand.AgreedTerms;
 import com.shinhan.corebank.subscription.application.port.out.AccountLookupPort;
 import com.shinhan.corebank.subscription.application.port.out.WithdrawableAccount;
 import com.shinhan.corebank.subscription.domain.SubscriptionValidation;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
+import com.shinhan.corebank.terms.api.TermsQueryPort;
+import com.shinhan.corebank.terms.api.TermsSummary;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -27,20 +24,25 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.when;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class ProductSubscriptionValidationServiceTest {
 
     @Mock
     ProductQueryUseCase productQueryUseCase;
+
     @Mock
     AccountLookupPort accountLookupPort;
+
     @Mock
     TermsQueryPort termsQueryPort;
+
     @Mock
     TermsViewUseCase termsViewUseCase;
 
@@ -48,13 +50,11 @@ class ProductSubscriptionValidationServiceTest {
     // Clock을 주입하지 않으면 이 경계를 재현할 수 없어 만기일 KST 계산을 검증할 수 없다.
     // "오늘"과 겹치지 않는 시각을 고른 이유: 겹치면 Clock을 안 쓰는 코드(LocalDate.now())도
     // 우연히 같은 날짜를 내놓아서, 회귀가 생겨도 테스트가 통과해 버린다.
-    private static final Clock FIXED_CLOCK =
-            Clock.fixed(Instant.parse("2027-03-14T15:30:00Z"), ZoneOffset.UTC);
+    private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2027-03-14T15:30:00Z"), ZoneOffset.UTC);
 
     // 2027-01-30T15:00:00Z == 2027-01-31 00:00 KST. 만기일 말일 보정을 재현하려면 가입일이
     // 반드시 31일이어야 해서 FIXED_CLOCK(3-15)과 별개의 시각이 필요하다.
-    private static final Clock JANUARY_END_CLOCK =
-            Clock.fixed(Instant.parse("2027-01-30T15:00:00Z"), ZoneOffset.UTC);
+    private static final Clock JANUARY_END_CLOCK = Clock.fixed(Instant.parse("2027-01-30T15:00:00Z"), ZoneOffset.UTC);
 
     ProductSubscriptionValidationService service;
 
@@ -84,8 +84,7 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("출금계좌가 본인 소유·등록 계좌가 아니면 ACC0201을 던진다")
     void validate_accountNotFound() {
-        when(productQueryUseCase.getDetail(PRODUCT_ID))
-                .thenReturn(depositDetail(12, "3.20"));
+        when(productQueryUseCase.getDetail(PRODUCT_ID)).thenReturn(depositDetail(12, "3.20"));
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.validate(command(500_000L, 12, List.of(), List.of())))
@@ -97,8 +96,7 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("가입금액이 상품 한도를 벗어나면 valid=false + violations에 담긴다")
     void validate_amountOutOfRange() {
-        when(productQueryUseCase.getDetail(PRODUCT_ID))
-                .thenReturn(depositDetail(12, "3.20"));
+        when(productQueryUseCase.getDetail(PRODUCT_ID)).thenReturn(depositDetail(12, "3.20"));
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 100_000_000L)));
 
@@ -114,8 +112,7 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("가입금액이 amountUnit의 배수가 아니면 violations에 담긴다")
     void validate_amountNotUnitMultiple() {
-        when(productQueryUseCase.getDetail(PRODUCT_ID))
-                .thenReturn(depositDetail(12, "3.20"));
+        when(productQueryUseCase.getDetail(PRODUCT_ID)).thenReturn(depositDetail(12, "3.20"));
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 100_000_000L)));
 
@@ -129,8 +126,7 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("rate tier에 없는 termMonths를 요청하면 violations에 담긴다")
     void validate_termMonthsNotInTiers() {
-        when(productQueryUseCase.getDetail(PRODUCT_ID))
-                .thenReturn(depositDetail(12, "3.20")); // 12개월 tier만 존재
+        when(productQueryUseCase.getDetail(PRODUCT_ID)).thenReturn(depositDetail(12, "3.20")); // 12개월 tier만 존재
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 100_000_000L)));
 
@@ -144,8 +140,7 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("정기예금은 출금가능금액이 부족하면 violations에 담기고 잔액을 응답에 채운다")
     void validate_deposit_insufficientBalance() {
-        when(productQueryUseCase.getDetail(PRODUCT_ID))
-                .thenReturn(depositDetail(12, "3.20"));
+        when(productQueryUseCase.getDetail(PRODUCT_ID)).thenReturn(depositDetail(12, "3.20"));
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 300_000L)));
 
@@ -175,8 +170,7 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("정상 케이스면 valid=true와 함께 만기금액·적용금리를 계산해서 반환한다")
     void validate_success() {
-        when(productQueryUseCase.getDetail(PRODUCT_ID))
-                .thenReturn(depositDetail(12, "3.20"));
+        when(productQueryUseCase.getDetail(PRODUCT_ID)).thenReturn(depositDetail(12, "3.20"));
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
 
@@ -195,8 +189,7 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("판매중지 상품이면 violations에 담긴다")
     void validate_productNotOnSale() {
-        when(productQueryUseCase.getDetail(PRODUCT_ID))
-                .thenReturn(suspendedDepositDetail());
+        when(productQueryUseCase.getDetail(PRODUCT_ID)).thenReturn(suspendedDepositDetail());
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
 
@@ -212,8 +205,7 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("필수 약관에 동의하지 않았으면 violations에 담긴다")
     void validate_missingRequiredTermsAgreement() {
-        when(productQueryUseCase.getDetail(PRODUCT_ID))
-                .thenReturn(depositDetailWithRequiredTerms());
+        when(productQueryUseCase.getDetail(PRODUCT_ID)).thenReturn(depositDetailWithRequiredTerms());
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
         when(termsQueryPort.findByIds(List.of(TERMS_ID)))
@@ -233,16 +225,15 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("동의한 약관 버전이 현재 버전과 다르면 violations에 담긴다")
     void validate_termsVersionMismatch() {
-        when(productQueryUseCase.getDetail(PRODUCT_ID))
-                .thenReturn(depositDetailWithRequiredTerms());
+        when(productQueryUseCase.getDetail(PRODUCT_ID)).thenReturn(depositDetailWithRequiredTerms());
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
         // viewRequired=false로 둬서 버전 불일치만 단독으로 확인
         when(termsQueryPort.findByIds(List.of(TERMS_ID)))
                 .thenReturn(List.of(new TermsSummary(TERMS_ID, "예금거래기본약관", "v1.2", true, false)));
 
-        SubscriptionValidation result = service.validate(
-                command(6_000_000L, 12, List.of(new AgreedTerms(TERMS_ID, "v1.1")), List.of()));
+        SubscriptionValidation result =
+                service.validate(command(6_000_000L, 12, List.of(new AgreedTerms(TERMS_ID, "v1.1")), List.of()));
 
         assertThat(result.isValid()).isFalse();
         assertThat(result.getViolations()).anySatisfy(v -> assertThat(v.code()).isEqualTo("PRD0006"));
@@ -251,16 +242,15 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("열람이 필요한 약관인데 열람 이력이 없으면 violations에 담긴다")
     void validate_termsViewRequiredNotViewed() {
-        when(productQueryUseCase.getDetail(PRODUCT_ID))
-                .thenReturn(depositDetailWithRequiredTerms());
+        when(productQueryUseCase.getDetail(PRODUCT_ID)).thenReturn(depositDetailWithRequiredTerms());
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
         when(termsQueryPort.findByIds(List.of(TERMS_ID)))
                 .thenReturn(List.of(new TermsSummary(TERMS_ID, "예금거래기본약관", "v1.2", true, true)));
         when(termsViewUseCase.isViewed(CUSTOMER_ID, TERMS_ID)).thenReturn(false);
 
-        SubscriptionValidation result = service.validate(
-                command(6_000_000L, 12, List.of(new AgreedTerms(TERMS_ID, "v1.2")), List.of()));
+        SubscriptionValidation result =
+                service.validate(command(6_000_000L, 12, List.of(new AgreedTerms(TERMS_ID, "v1.2")), List.of()));
 
         assertThat(result.isValid()).isFalse();
         assertThat(result.getViolations()).anySatisfy(v -> assertThat(v.code()).isEqualTo("PRD0005"));
@@ -274,8 +264,7 @@ class ProductSubscriptionValidationServiceTest {
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
 
-        SubscriptionValidation result = service.validate(
-                command(6_000_000L, 12, List.of(), List.of("AUTO_TRANSFER")));
+        SubscriptionValidation result = service.validate(command(6_000_000L, 12, List.of(), List.of("AUTO_TRANSFER")));
 
         assertThat(result.isValid()).isTrue();
         assertThat(result.getPreferentialRate()).isEqualByComparingTo("0.50");
@@ -290,8 +279,8 @@ class ProductSubscriptionValidationServiceTest {
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
 
-        SubscriptionValidation result = service.validate(
-                command(6_000_000L, 12, List.of(), List.of("SALARY_TRANSFER")));
+        SubscriptionValidation result =
+                service.validate(command(6_000_000L, 12, List.of(), List.of("SALARY_TRANSFER")));
 
         assertThat(result.isValid()).isTrue();
         assertThat(result.getPreferentialRate()).isEqualByComparingTo("0.00");
@@ -301,8 +290,7 @@ class ProductSubscriptionValidationServiceTest {
     @Test
     @DisplayName("UTC 날짜와 KST 날짜가 갈리는 시각에도 만기일은 KST 기준으로 계산된다")
     void validate_maturityDateUsesKst() {
-        when(productQueryUseCase.getDetail(PRODUCT_ID))
-                .thenReturn(depositDetail(12, "3.20"));
+        when(productQueryUseCase.getDetail(PRODUCT_ID)).thenReturn(depositDetail(12, "3.20"));
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
 
@@ -320,13 +308,11 @@ class ProductSubscriptionValidationServiceTest {
     void validate_maturityDateClampsToEndOfMonth() {
         ProductSubscriptionValidationService januaryEndService = new ProductSubscriptionValidationService(
                 productQueryUseCase, accountLookupPort, termsQueryPort, termsViewUseCase, JANUARY_END_CLOCK);
-        when(productQueryUseCase.getDetail(PRODUCT_ID))
-                .thenReturn(depositDetail(1, "3.20"));
+        when(productQueryUseCase.getDetail(PRODUCT_ID)).thenReturn(depositDetail(1, "3.20"));
         when(accountLookupPort.findWithdrawable(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
 
-        SubscriptionValidation result =
-                januaryEndService.validate(command(6_000_000L, 1, List.of(), List.of()));
+        SubscriptionValidation result = januaryEndService.validate(command(6_000_000L, 1, List.of(), List.of()));
 
         assertThat(result.getMaturityDate()).isEqualTo(LocalDate.of(2027, 2, 28));
     }
@@ -340,10 +326,10 @@ class ProductSubscriptionValidationServiceTest {
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
 
         assertThatThrownBy(() -> service.validate(
-                command(6_000_000L, 12, List.of(new AgreedTerms(999_999L, "v1.0")), List.of())))
+                        command(6_000_000L, 12, List.of(new AgreedTerms(999_999L, "v1.0")), List.of())))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ProductErrorCode.TERMS_NOT_FOUND));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ProductErrorCode.TERMS_NOT_FOUND));
     }
 
     @Test
@@ -355,10 +341,10 @@ class ProductSubscriptionValidationServiceTest {
                 .thenReturn(Optional.of(new WithdrawableAccount(ACCOUNT_ID, "110000000877", 10_000_000L)));
 
         assertThatThrownBy(() -> service.validate(
-                command(6_000_000L, 12, List.of(new AgreedTerms(999_999L, "v1.0")), List.of())))
+                        command(6_000_000L, 12, List.of(new AgreedTerms(999_999L, "v1.0")), List.of())))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ProductErrorCode.TERMS_NOT_FOUND));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ProductErrorCode.TERMS_NOT_FOUND));
     }
 
     @Test

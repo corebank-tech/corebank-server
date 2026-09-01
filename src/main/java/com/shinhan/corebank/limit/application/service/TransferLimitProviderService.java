@@ -3,7 +3,6 @@ package com.shinhan.corebank.limit.application.service;
 import com.shinhan.corebank.limit.api.TransferLimitProvider;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,7 +27,8 @@ public class TransferLimitProviderService implements TransferLimitProvider {
      */
     @Override
     public long findOneTimeLimit(Long customerId) {
-        return transferLimitQueryPort.findByCustomerId(customerId)
+        return transferLimitQueryPort
+                .findByCustomerId(customerId)
                 .map(TransferLimit::getOneTimeLimit)
                 .orElseGet(() -> {
                     // 가입 연계(REQ-TRSF-029)가 붙은 뒤로 이 로그는 데이터 결함 신호다.

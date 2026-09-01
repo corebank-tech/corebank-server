@@ -10,10 +10,19 @@ import org.junit.jupiter.api.Test;
 
 class ScheduledTransferExecutionResultItemResponseTest {
 
-    private ScheduledTransferExecutionResultItem item(ScheduledTransferStatus status, String transactionNumber, String failureReason) {
+    private ScheduledTransferExecutionResultItem item(
+            ScheduledTransferStatus status, String transactionNumber, String failureReason) {
         return new ScheduledTransferExecutionResultItem(
-                7001L, status, LocalDateTime.of(2026, 8, 5, 9, 0), null, "110123456789", "110987654321", "홍길동",
-                300_000L, transactionNumber, failureReason);
+                7001L,
+                status,
+                LocalDateTime.of(2026, 8, 5, 9, 0),
+                null,
+                "110123456789",
+                "110987654321",
+                "홍길동",
+                300_000L,
+                transactionNumber,
+                failureReason);
     }
 
     @Test
@@ -32,8 +41,8 @@ class ScheduledTransferExecutionResultItemResponseTest {
     void passesThroughTransactionNumberAndFailureReason() {
         ScheduledTransferExecutionResultItemResponse success = ScheduledTransferExecutionResultItemResponse.from(
                 item(ScheduledTransferStatus.SUCCESS, "20260805BT0000000001", null));
-        ScheduledTransferExecutionResultItemResponse failed = ScheduledTransferExecutionResultItemResponse.from(
-                item(ScheduledTransferStatus.FAILED, null, "잔액 부족"));
+        ScheduledTransferExecutionResultItemResponse failed =
+                ScheduledTransferExecutionResultItemResponse.from(item(ScheduledTransferStatus.FAILED, null, "잔액 부족"));
 
         assertThat(success.transactionNumber()).isEqualTo("20260805BT0000000001");
         assertThat(success.failureReason()).isNull();
@@ -44,8 +53,8 @@ class ScheduledTransferExecutionResultItemResponseTest {
     @Test
     @DisplayName("status는 변형 없이 그대로 전달된다")
     void passesThroughStatus() {
-        ScheduledTransferExecutionResultItemResponse canceled = ScheduledTransferExecutionResultItemResponse.from(
-                item(ScheduledTransferStatus.CANCELED, null, null));
+        ScheduledTransferExecutionResultItemResponse canceled =
+                ScheduledTransferExecutionResultItemResponse.from(item(ScheduledTransferStatus.CANCELED, null, null));
 
         assertThat(canceled.status()).isEqualTo(ScheduledTransferStatus.CANCELED);
     }
@@ -54,10 +63,19 @@ class ScheduledTransferExecutionResultItemResponseTest {
     @DisplayName("CANCELED 건은 executedAt은 null, canceledAt은 채워져서 전달된다")
     void canceledItem_hasCanceledAtNotExecutedAt() {
         ScheduledTransferExecutionResultItem canceledItem = new ScheduledTransferExecutionResultItem(
-                7002L, ScheduledTransferStatus.CANCELED, null, LocalDateTime.of(2026, 8, 4, 15, 0),
-                "110123456789", "110987654321", "홍길동", 300_000L, null, null);
+                7002L,
+                ScheduledTransferStatus.CANCELED,
+                null,
+                LocalDateTime.of(2026, 8, 4, 15, 0),
+                "110123456789",
+                "110987654321",
+                "홍길동",
+                300_000L,
+                null,
+                null);
 
-        ScheduledTransferExecutionResultItemResponse response = ScheduledTransferExecutionResultItemResponse.from(canceledItem);
+        ScheduledTransferExecutionResultItemResponse response =
+                ScheduledTransferExecutionResultItemResponse.from(canceledItem);
 
         assertThat(response.executedAt()).isNull();
         assertThat(response.canceledAt()).isEqualTo(LocalDateTime.of(2026, 8, 4, 15, 0));

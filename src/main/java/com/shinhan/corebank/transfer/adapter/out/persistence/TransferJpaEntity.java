@@ -1,17 +1,15 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
+import jakarta.persistence.*;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
-
-import jakarta.persistence.*;
-import lombok.*;
 
 @Entity
 @Table(name = "transfer")

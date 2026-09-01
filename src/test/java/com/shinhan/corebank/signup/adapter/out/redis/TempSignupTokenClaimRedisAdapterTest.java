@@ -1,26 +1,28 @@
 package com.shinhan.corebank.signup.adapter.out.redis;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.signup.domain.model.AgreedTerm;
 import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 // tempSignupToken의 Redis 선점·완료·실패 복구와 일회성을 검증한다.
 class TempSignupTokenClaimRedisAdapterTest extends IntegrationTestSupport {
 
-    @Autowired TempSignupTokenRedisAdapter tempTokenAdapter;
-    @Autowired TempSignupTokenClaimRedisAdapter claimAdapter;
+    @Autowired
+    TempSignupTokenRedisAdapter tempTokenAdapter;
+
+    @Autowired
+    TempSignupTokenClaimRedisAdapter claimAdapter;
 
     @Test
     void claimsOnlyOnceAndCompletesPermanently() {
@@ -51,10 +53,8 @@ class TempSignupTokenClaimRedisAdapterTest extends IntegrationTestSupport {
     void concurrentClaimsAllowOnlyOneOwner() throws Exception {
         String token = token();
         tempTokenAdapter.save(token, payload(), Duration.ofMinutes(30));
-        List<Callable<Optional<TempSignupTokenPayload>>> attempts = List.of(
-                () -> claimAdapter.claim(token, "claim-1"),
-                () -> claimAdapter.claim(token, "claim-2")
-        );
+        List<Callable<Optional<TempSignupTokenPayload>>> attempts =
+                List.of(() -> claimAdapter.claim(token, "claim-1"), () -> claimAdapter.claim(token, "claim-2"));
 
         List<Optional<TempSignupTokenPayload>> results;
         try (var executor = Executors.newFixedThreadPool(2)) {
@@ -85,7 +85,6 @@ class TempSignupTokenClaimRedisAdapterTest extends IntegrationTestSupport {
                 "$2y$10$hash",
                 "hong@corebank.example.com",
                 "01012345678",
-                Instant.parse("2026-08-20T01:00:00Z")
-        );
+                Instant.parse("2026-08-20T01:00:00Z"));
     }
 }

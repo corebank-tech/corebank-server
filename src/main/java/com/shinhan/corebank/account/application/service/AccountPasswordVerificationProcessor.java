@@ -19,36 +19,22 @@ public class AccountPasswordVerificationProcessor {
     private final PasswordEncoder passwordEncoder;
 
     @Transactional
-    public AccountPasswordAttemptResult verify(
-            Long customerId,
-            Long accountId,
-            String accountPassword
-    ) {
+    public AccountPasswordAttemptResult verify(Long customerId, Long accountId, String accountPassword) {
         Account account = accountPersistencePort
-                .findByAccountIdAndCustomerIdForUpdate(
-                        accountId,
-                        customerId
-                )
-                .orElseThrow(() -> new BusinessException(
-                        AccountErrorCode.ACCOUNT_NOT_FOUND_OR_FORBIDDEN
-                ));
+                .findByAccountIdAndCustomerIdForUpdate(accountId, customerId)
+                .orElseThrow(() -> new BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND_OR_FORBIDDEN));
 
         if (account.isPasswordLocked()) {
             return account.currentPasswordAttemptResult();
         }
 
-        if (!passwordEncoder.matches(
-                accountPassword,
-                account.getPasswordHash()
-        )) {
-            AccountPasswordAttemptResult result =
-                    account.recordPasswordFailure();
+        if (!passwordEncoder.matches(accountPassword, account.getPasswordHash())) {
+            AccountPasswordAttemptResult result = account.recordPasswordFailure();
             accountPersistencePort.updatePasswordState(account);
             return result;
         }
 
-        AccountPasswordAttemptResult result =
-                account.recordPasswordSuccess();
+        AccountPasswordAttemptResult result = account.recordPasswordSuccess();
         accountPersistencePort.updatePasswordState(account);
         return result;
     }

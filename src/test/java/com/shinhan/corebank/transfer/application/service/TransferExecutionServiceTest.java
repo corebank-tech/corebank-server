@@ -1,15 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
-import java.time.Clock;
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
@@ -30,8 +21,17 @@ import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-
 import jakarta.persistence.EntityManager;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,8 +40,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 클래스 레벨 @Transactional을 두지 않는다. 픽스처 커밋과 서비스 호출을 테스트 관리
@@ -107,8 +105,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     @DisplayName("정상 이체는 원장 2행을 기표하고 양쪽 계좌 잔액을 반영한 SUCCESS 결과를 반환한다")
     void execute_completesTransfer_withLedgerPairAndBalanceUpdate() {
         // given: 픽스처는 별도 트랜잭션에서 커밋한다.
-        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
-                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
 
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
@@ -132,10 +130,10 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         assertThat(result.withdrawalBalanceAfter()).isEqualTo(70000L);
 
         // then: 계좌 잔액 반영 (커밋된 값을 새 커넥션으로 조회)
-        Long withdrawalBalance = jdbcTemplate.queryForObject(
-                "SELECT balance FROM account WHERE account_id = 101", Long.class);
-        Long depositBalance = jdbcTemplate.queryForObject(
-                "SELECT balance FROM account WHERE account_id = 202", Long.class);
+        Long withdrawalBalance =
+                jdbcTemplate.queryForObject("SELECT balance FROM account WHERE account_id = 101", Long.class);
+        Long depositBalance =
+                jdbcTemplate.queryForObject("SELECT balance FROM account WHERE account_id = 202", Long.class);
         assertThat(withdrawalBalance).isEqualTo(70000L);
         assertThat(depositBalance).isEqualTo(130000L);
 
@@ -146,7 +144,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 result.transactionNumber());
         assertThat(transferRow.get("status")).isEqualTo("SUCCESS");
         assertThat(transferRow.get("payee_name")).isEqualTo("테스터");
-        assertThat(((Number) transferRow.get("withdrawal_account_id")).longValue()).isEqualTo(101L);
+        assertThat(((Number) transferRow.get("withdrawal_account_id")).longValue())
+                .isEqualTo(101L);
         assertThat(((Number) transferRow.get("deposit_account_id")).longValue()).isEqualTo(202L);
         assertThat(((Number) transferRow.get("amount")).longValue()).isEqualTo(30000L);
         assertThat(((Number) transferRow.get("fee")).longValue()).isEqualTo(0L);
@@ -176,8 +175,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     @DisplayName("동일 sourceId+executionDate로 execute()를 두 번 호출해도 실제 이체는 1회만 발생하고 동일 결과가 반환된다")
     void execute_sameSourceAndExecutionDate_isIdempotent() {
         // given
-        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
-                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
 
         LocalDate executionDate = LocalDate.of(2026, 8, 20);
         TransferCommand command = TransferCommand.builder()
@@ -204,8 +203,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         assertThat(second.withdrawalBalanceAfter()).isEqualTo(first.withdrawalBalanceAfter());
 
         // then: 잔액은 1회만 차감되고, transfer 행도 1건만 존재한다
-        Long withdrawalBalance = jdbcTemplate.queryForObject(
-                "SELECT balance FROM account WHERE account_id = 101", Long.class);
+        Long withdrawalBalance =
+                jdbcTemplate.queryForObject("SELECT balance FROM account WHERE account_id = 101", Long.class);
         assertThat(withdrawalBalance).isEqualTo(70000L);
 
         Integer transferRowCount = jdbcTemplate.queryForObject(
@@ -217,8 +216,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     @DisplayName("동일 sourceId+executionDate로 execute()를 동시에 두 번 호출해도 실제 이체는 1회만 발생하고 동일 결과가 반환된다")
     void execute_concurrentSameSourceAndExecutionDate_appliesTransferOnlyOnce() throws Exception {
         // given
-        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
-                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
 
         LocalDate executionDate = LocalDate.of(2026, 8, 20);
         TransferCommand command = TransferCommand.builder()
@@ -260,8 +259,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         assertThat(second.withdrawalBalanceAfter()).isEqualTo(first.withdrawalBalanceAfter());
 
         // then: 잔액은 1회만 차감되고, transfer/원장 행도 1건씩만 존재한다
-        Long withdrawalBalance = jdbcTemplate.queryForObject(
-                "SELECT balance FROM account WHERE account_id = 101", Long.class);
+        Long withdrawalBalance =
+                jdbcTemplate.queryForObject("SELECT balance FROM account WHERE account_id = 101", Long.class);
         assertThat(withdrawalBalance).isEqualTo(70000L);
 
         Integer transferRowCount = jdbcTemplate.queryForObject(
@@ -270,7 +269,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
 
         Long ledgerRowCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM ledger_entry WHERE transaction_number = ?",
-                Long.class, first.transactionNumber());
+                Long.class,
+                first.transactionNumber());
         assertThat(ledgerRowCount).isEqualTo(2L);
     }
 
@@ -285,8 +285,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     @DisplayName("동일 sourceId+executionDate로 둘 다 실패하는 execute()를 동시에 호출해도 예외 없이 동일 ERROR 결과가 반환된다")
     void execute_concurrentSameSourceAndExecutionDateBothFail_returnsSameErrorResultWithoutThrowing() throws Exception {
         // given: 잔액(100,000)보다 큰 금액이라 두 호출 모두 BusinessException(INSUFFICIENT_BALANCE)으로 실패한다.
-        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
-                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
 
         LocalDate executionDate = LocalDate.of(2026, 8, 20);
         TransferCommand command = TransferCommand.builder()
@@ -319,8 +319,7 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 new PreCheckBarrierTransferLookupPort(transferLookupPort, bothPreChecksEmpty),
                 ledgerSavePort,
                 clock,
-                transactionManager
-        );
+                transactionManager);
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         TransferResult first;
@@ -367,7 +366,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
             boolean isPreCheck = !preCheckSeen.get();
             preCheckSeen.set(true);
 
-            Optional<TransferResult> result = delegate.findBySourceAndExecutionDate(sourceType, sourceId, executionDate);
+            Optional<TransferResult> result =
+                    delegate.findBySourceAndExecutionDate(sourceType, sourceId, executionDate);
             if (isPreCheck) {
                 bothPreChecksEmpty.countDown();
                 try {
@@ -389,8 +389,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     @DisplayName("출금계좌 잔액보다 큰 금액을 이체하면 transfer는 ERROR로 커밋되고 원장은 0행, 계좌 잔액은 그대로다")
     void execute_withInsufficientBalance_recordsErrorTransfer_withoutLedgerRows() {
         // given: 픽스처는 별도 트랜잭션에서 커밋한다. (출금계좌 101 잔액 100,000)
-        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
-                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
 
         TransferCommand command = TransferCommand.builder()
                 .customerId(1L)
@@ -414,24 +414,24 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
 
         // then: transfer 행이 ERROR로 커밋된다 (커밋된 값을 새 커넥션으로 조회)
         Map<String, Object> transferRow = jdbcTemplate.queryForMap(
-                "SELECT status, error_code FROM transfer WHERE transaction_number = ?",
-                result.transactionNumber());
+                "SELECT status, error_code FROM transfer WHERE transaction_number = ?", result.transactionNumber());
         assertThat(transferRow.get("status")).isEqualTo("ERROR");
         assertThat(transferRow.get("error_code")).isEqualTo(TransferErrorCode.INSUFFICIENT_BALANCE.getCode());
 
         // then: 원장 0행
         Long ledgerCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM ledger_entry WHERE transaction_number = ?",
-                Long.class, result.transactionNumber());
+                Long.class,
+                result.transactionNumber());
         assertThat(ledgerCount).isZero();
 
         // then: 계좌 잔액은 그대로다
-        Long withdrawalBalance = jdbcTemplate.queryForObject(
-                "SELECT balance FROM account WHERE account_id = 101", Long.class);
+        Long withdrawalBalance =
+                jdbcTemplate.queryForObject("SELECT balance FROM account WHERE account_id = 101", Long.class);
         assertThat(withdrawalBalance).isEqualTo(100000L);
 
-        Long depositBalance = jdbcTemplate.queryForObject(
-                "SELECT balance FROM account WHERE account_id = 202", Long.class);
+        Long depositBalance =
+                jdbcTemplate.queryForObject("SELECT balance FROM account WHERE account_id = 202", Long.class);
         assertThat(depositBalance).isEqualTo(100000L);
     }
 
@@ -442,7 +442,9 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         // 정기적금은 입금계좌로 지정할 수 있다. product_id는 NOT NULL FK라 최소 상품 행(702)도 함께 시드한다.
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             TransferTestFixtures.seedCustomerAndAccounts(entityManager);
-            entityManager.createNativeQuery("""
+            entityManager
+                    .createNativeQuery(
+                            """
                 INSERT INTO product (product_id, product_code, product_name, product_group, deposit_type,
                     base_rate, max_rate, min_amount, max_amount, amount_unit, min_term_months, max_term_months,
                     interest_pay_type, sale_status, created_at, updated_at)
@@ -450,12 +452,16 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                     2.50, 3.00, 100000, 100000000, 10000, 6, 36,
                     'SIMPLE', 'ON_SALE', NOW(6), NOW(6))
                 ON DUPLICATE KEY UPDATE product_id = product_id
-                """).executeUpdate();
-            entityManager.createNativeQuery("""
+                """)
+                    .executeUpdate();
+            entityManager
+                    .createNativeQuery(
+                            """
                 INSERT INTO account (account_id, account_number, customer_id, product_id, account_type, balance, status, password_hash, opened_date, maturity_date, created_at, updated_at)
                 VALUES (602, '110666666602', 1, 702, 'INSTALLMENT_SAVINGS', 0, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '2026-08-01', '2027-08-01', NOW(6), NOW(6))
                 ON DUPLICATE KEY UPDATE account_type = VALUES(account_type)
-                """).executeUpdate();
+                """)
+                    .executeUpdate();
         });
 
         TransferCommand command = TransferCommand.builder()

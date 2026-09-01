@@ -13,7 +13,8 @@ public interface IdempotencyKeyJpaRepository extends JpaRepository<IdempotencyKe
      * 호출부는 레코드를 다시 읽어 저장된 응답을 재생하거나 처리 중 응답을 반환해야 한다.
      */
     @Modifying
-    @Query("""
+    @Query(
+            """
         UPDATE IdempotencyKeyJpaEntity e
            SET e.state = com.shinhan.corebank.common.idempotency.IdempotencyState.COMPLETED,
                e.httpStatus = :httpStatus,
@@ -21,12 +22,14 @@ public interface IdempotencyKeyJpaRepository extends JpaRepository<IdempotencyKe
          WHERE e.idempotencyKey = :key
            AND e.state = com.shinhan.corebank.common.idempotency.IdempotencyState.PROCESSING
         """)
-    int completeIfProcessing(@Param("key") String key,
-                              @Param("httpStatus") short httpStatus,
-                              @Param("responseSnapshot") String responseSnapshot);
+    int completeIfProcessing(
+            @Param("key") String key,
+            @Param("httpStatus") short httpStatus,
+            @Param("responseSnapshot") String responseSnapshot);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("""
+    @Query(
+            """
         UPDATE IdempotencyKeyJpaEntity e
            SET e.customerId = :customerId,
                e.state = com.shinhan.corebank.common.idempotency.IdempotencyState.COMPLETED,
@@ -40,6 +43,5 @@ public interface IdempotencyKeyJpaRepository extends JpaRepository<IdempotencyKe
             @Param("key") String key,
             @Param("customerId") Long customerId,
             @Param("httpStatus") short httpStatus,
-            @Param("responseSnapshot") String responseSnapshot
-    );
+            @Param("responseSnapshot") String responseSnapshot);
 }

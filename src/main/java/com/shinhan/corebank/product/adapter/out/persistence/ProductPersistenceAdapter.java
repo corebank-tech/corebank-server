@@ -1,5 +1,7 @@
 package com.shinhan.corebank.product.adapter.out.persistence;
 
+import static com.shinhan.corebank.product.adapter.out.persistence.QProductJpaEntity.productJpaEntity;
+
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.dsl.BooleanExpression;
@@ -10,16 +12,13 @@ import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductDetail;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.SaleStatus;
+import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
-
-import java.util.List;
-import java.util.Optional;
-
-import static com.shinhan.corebank.product.adapter.out.persistence.QProductJpaEntity.productJpaEntity;
 
 @Repository
 @RequiredArgsConstructor
@@ -50,32 +49,30 @@ public class ProductPersistenceAdapter implements ProductQueryPort {
                 .where(conditions)
                 .fetchOne();
 
-        List<Product> domainContent = content.stream().map(ProductMapper::toDomain).toList();
+        List<Product> domainContent =
+                content.stream().map(ProductMapper::toDomain).toList();
         return new PageImpl<>(domainContent, pageable, total == null ? 0 : total);
     }
 
     @Override
     public Optional<ProductDetail> findDetailByProductId(Long productId) {
-        return productJpaRepository.findById(productId)
-                .map(entity -> ProductDetail.builder()
-                        .product(ProductMapper.toDomain(entity))
-                        .rateTiers(productRateTierJpaRepository.findAllByProductId(productId).stream()
-                                .map(ProductRateTierMapper::toDomain)
-                                .toList())
-                        .preferentialRates(productPreferentialRateJpaRepository.findAllByProductId(productId).stream()
-                                .map(ProductPreferentialRateMapper::toDomain)
-                                .toList())
-                        .terms(productTermsJpaRepository.findAllByProductId(productId).stream()
-                                .map(ProductTermsMapper::toDomain)
-                                .toList())
-                        .build());
+        return productJpaRepository.findById(productId).map(entity -> ProductDetail.builder()
+                .product(ProductMapper.toDomain(entity))
+                .rateTiers(productRateTierJpaRepository.findAllByProductId(productId).stream()
+                        .map(ProductRateTierMapper::toDomain)
+                        .toList())
+                .preferentialRates(productPreferentialRateJpaRepository.findAllByProductId(productId).stream()
+                        .map(ProductPreferentialRateMapper::toDomain)
+                        .toList())
+                .terms(productTermsJpaRepository.findAllByProductId(productId).stream()
+                        .map(ProductTermsMapper::toDomain)
+                        .toList())
+                .build());
     }
 
     private Predicate[] conditions(ProductGroup productGroup, String keyword) {
         return new Predicate[] {
-                productJpaEntity.saleStatus.eq(SaleStatus.ON_SALE),
-                productGroupEq(productGroup),
-                keywordContains(keyword)
+            productJpaEntity.saleStatus.eq(SaleStatus.ON_SALE), productGroupEq(productGroup), keywordContains(keyword)
         };
     }
 

@@ -16,6 +16,8 @@ public class LedgerEntryIdGenerator {
     private final LedgerEntryIdSequenceJpaRepository ledgerEntryIdSequenceJpaRepository;
 
     public Long nextId() {
-        return ledgerEntryIdSequenceJpaRepository.save(new LedgerEntryIdSequenceJpaEntity()).getSequenceId();
+        return ledgerEntryIdSequenceJpaRepository
+                .save(new LedgerEntryIdSequenceJpaEntity())
+                .getSequenceId();
     }
 }

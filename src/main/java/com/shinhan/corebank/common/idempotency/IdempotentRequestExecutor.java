@@ -1,10 +1,8 @@
 package com.shinhan.corebank.common.idempotency;
 
+import com.shinhan.corebank.common.response.ApiResponse;
 import java.util.function.Supplier;
 import java.util.function.ToLongFunction;
-
-import com.shinhan.corebank.common.response.ApiResponse;
-
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,9 +21,14 @@ public class IdempotentRequestExecutor {
     private final ObjectMapper objectMapper;
 
     public <T> ResponseEntity<ApiResponse<T>> execute(
-            String idempotencyKey, Long customerId, String endpoint, Object fingerprint,
-            TypeReference<ApiResponse<T>> responseType, Supplier<ApiResponse<T>> action) {
-        IdempotencyResult idempotencyResult = idempotencyService.begin(idempotencyKey, customerId, endpoint, toJson(fingerprint));
+            String idempotencyKey,
+            Long customerId,
+            String endpoint,
+            Object fingerprint,
+            TypeReference<ApiResponse<T>> responseType,
+            Supplier<ApiResponse<T>> action) {
+        IdempotencyResult idempotencyResult =
+                idempotencyService.begin(idempotencyKey, customerId, endpoint, toJson(fingerprint));
         if (idempotencyResult.replay()) {
             return ResponseEntity.status(idempotencyResult.httpStatus())
                     .body(fromJson(idempotencyResult.responseSnapshot(), responseType));
@@ -50,16 +53,10 @@ public class IdempotentRequestExecutor {
             Object fingerprint,
             TypeReference<ApiResponse<T>> responseType,
             ToLongFunction<T> customerIdExtractor,
-            Supplier<ApiResponse<T>> action
-    ) {
-        IdempotencyResult result = idempotencyService.beginAnonymous(
-                idempotencyKey,
-                endpoint,
-                toJson(fingerprint)
-        );
+            Supplier<ApiResponse<T>> action) {
+        IdempotencyResult result = idempotencyService.beginAnonymous(idempotencyKey, endpoint, toJson(fingerprint));
         if (result.replay()) {
-            return ResponseEntity.status(result.httpStatus())
-                    .body(fromJson(result.responseSnapshot(), responseType));
+            return ResponseEntity.status(result.httpStatus()).body(fromJson(result.responseSnapshot(), responseType));
         }
 
         ApiResponse<T> response;
@@ -73,8 +70,7 @@ public class IdempotentRequestExecutor {
                 idempotencyKey,
                 customerIdExtractor.applyAsLong(response.data()),
                 (short) HttpStatus.OK.value(),
-                toJson(response)
-        );
+                toJson(response));
         return ResponseEntity.ok(response);
     }
 

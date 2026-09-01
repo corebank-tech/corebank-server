@@ -15,9 +15,9 @@ class ProductPreferentialRateTest {
     @DisplayName("productPreferentialRateId 없이 생성하면 CMN0002를 던진다")
     void rejectsNullId() {
         assertThatThrownBy(() -> ProductPreferentialRate.builder()
-                .conditionName("장기거래 우대")
-                .rate(new BigDecimal("0.30"))
-                .build())
+                        .conditionName("장기거래 우대")
+                        .rate(new BigDecimal("0.30"))
+                        .build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -27,10 +27,10 @@ class ProductPreferentialRateTest {
     @DisplayName("conditionName이 공백이면 CMN0002를 던진다")
     void rejectsBlankConditionName() {
         assertThatThrownBy(() -> ProductPreferentialRate.builder()
-                .productPreferentialRateId(new ProductPreferentialRateId(1L, "LONG_TERM"))
-                .conditionName("   ")
-                .rate(new BigDecimal("0.30"))
-                .build())
+                        .productPreferentialRateId(new ProductPreferentialRateId(1L, "LONG_TERM"))
+                        .conditionName("   ")
+                        .rate(new BigDecimal("0.30"))
+                        .build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -40,9 +40,9 @@ class ProductPreferentialRateTest {
     @DisplayName("rate 없이 생성하면 CMN0002를 던진다")
     void rejectsNullRate() {
         assertThatThrownBy(() -> ProductPreferentialRate.builder()
-                .productPreferentialRateId(new ProductPreferentialRateId(1L, "LONG_TERM"))
-                .conditionName("장기거래 우대")
-                .build())
+                        .productPreferentialRateId(new ProductPreferentialRateId(1L, "LONG_TERM"))
+                        .conditionName("장기거래 우대")
+                        .build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));

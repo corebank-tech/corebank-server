@@ -4,8 +4,7 @@ import com.shinhan.corebank.account.domain.Account;
 
 public final class AccountMapper {
 
-    private AccountMapper() {
-    }
+    private AccountMapper() {}
 
     public static AccountJpaEntity toEntity(Account domain) {
         return AccountJpaEntity.builder()
@@ -17,7 +16,7 @@ public final class AccountMapper {
                 .balance(domain.getBalance())
                 .status(domain.getStatus())
                 .passwordHash(domain.getPasswordHash())
-                .passwordFailureCount((byte)domain.getPasswordFailureCount())
+                .passwordFailureCount((byte) domain.getPasswordFailureCount())
                 .passwordLocked(domain.isPasswordLocked())
                 .alias(domain.getAlias())
                 .displayOrder(domain.getDisplayOrder())
@@ -53,7 +52,6 @@ public final class AccountMapper {
                 entity.getLastTransactionAt(),
                 entity.getVersion(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt()
-        );
+                entity.getUpdatedAt());
     }
 }

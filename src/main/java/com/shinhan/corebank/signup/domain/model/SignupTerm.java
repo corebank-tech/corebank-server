@@ -8,6 +8,4 @@ public record SignupTerm(
         String title,
         String content,
         boolean required,
-        boolean viewRequired
-) {
-}
+        boolean viewRequired) {}

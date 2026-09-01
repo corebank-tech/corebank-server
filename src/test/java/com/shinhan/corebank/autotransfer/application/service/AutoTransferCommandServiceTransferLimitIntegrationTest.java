@@ -89,7 +89,8 @@ class AutoTransferCommandServiceTransferLimitIntegrationTest extends Integration
     }
 
     private void insertTransferLimit(Long customerId, long oneTimeLimit) {
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO transfer_limit (customer_id, one_time_limit, daily_limit, created_at, updated_at) "
                                 + "VALUES (:customerId, :oneTimeLimit, :dailyLimit, NOW(), NOW())")
                 .setParameter("customerId", customerId)
@@ -99,31 +100,40 @@ class AutoTransferCommandServiceTransferLimitIntegrationTest extends Integration
     }
 
     private String accountNumberOf(Long accountId) {
-        return (String) entityManager.createNativeQuery("SELECT account_number FROM account WHERE account_id = :id")
+        return (String) entityManager
+                .createNativeQuery("SELECT account_number FROM account WHERE account_id = :id")
                 .setParameter("id", accountId)
                 .getSingleResult();
     }
 
     private Long insertCustomer() {
         long seq = CUSTOMER_SEQ.incrementAndGet();
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO customer (user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at) "
                                 + "VALUES (:userId, 'x', '홍길동', '1990-01-01', :email, '01012345678', NOW(), NOW(), NOW())")
                 .setParameter("userId", "u" + seq)
                 .setParameter("email", "test" + seq + "@test.com")
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
     private Long insertAccount(Long customerId) {
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, "
                                 + "withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at) "
                                 + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', TRUE, NOW(), NOW(), NOW(), NOW())")
                 .setParameter("accountNumber", accountNumber)
                 .setParameter("customerId", customerId)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 }

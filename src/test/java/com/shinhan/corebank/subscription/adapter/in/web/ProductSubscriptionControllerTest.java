@@ -1,5 +1,15 @@
 package com.shinhan.corebank.subscription.adapter.in.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shinhan.corebank.IntegrationTestSupport;
@@ -32,6 +42,10 @@ import com.shinhan.corebank.product.domain.SaleStatus;
 import com.shinhan.corebank.subscription.adapter.out.persistence.ProductSubscriptionJpaRepository;
 import com.shinhan.corebank.subscription.adapter.out.persistence.SubscriptionTestFixtures;
 import jakarta.persistence.EntityManager;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,44 +58,37 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
 @AutoConfigureMockMvc
 @Transactional
 class ProductSubscriptionControllerTest extends IntegrationTestSupport {
 
-
     @Autowired
     MockMvc mockMvc;
+
     @Autowired
     ProductJpaRepository productJpaRepository;
+
     @Autowired
     ProductRateTierJpaRepository rateTierRepository;
+
     @Autowired
     ProductPreferentialRateJpaRepository preferentialRateRepository;
+
     @Autowired
     ProductTermsJpaRepository termsRepository;
+
     @Autowired
     AccountJpaRepository accountJpaRepository;
+
     @Autowired
     JdbcTemplate jdbcTemplate;
+
     @Autowired
     CustomerTestFixture customerTestFixture;
+
     @Autowired
     ProductSubscriptionJpaRepository subscriptionJpaRepository;
+
     @Autowired
     EntityManager entityManager;
 
@@ -103,8 +110,9 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
 
     @Test
     void validate_success_deposit() throws Exception {
-        Long productId = productJpaRepository.save(
-                ProductTestFixtures.productWithCode("VAL-101")).getProductId();
+        Long productId = productJpaRepository
+                .save(ProductTestFixtures.productWithCode("VAL-101"))
+                .getProductId();
         rateTierRepository.save(ProductRateTierJpaEntity.builder()
                 .id(new ProductRateTierJpaEntityId(productId, (short) 12))
                 .rate(new BigDecimal("3.20"))
@@ -115,7 +123,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .contentType("application/json")
-                        .content("""
+                        .content(
+                                """
                                 {
                                   "productId": %d,
                                   "subscriptionAmount": 6000000,
@@ -123,7 +132,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                                   "withdrawalAccountId": %d,
                                   "agreedTerms": []
                                 }
-                                """.formatted(productId, accountId)))
+                                """
+                                        .formatted(productId, accountId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data.valid").value(true))
@@ -140,17 +150,20 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .contentType("application/json")
-                        .content("""
+                        .content(
+                                """
                                 {"productId": 999999, "subscriptionAmount": 500000, "termMonths": 12, "withdrawalAccountId": %d, "agreedTerms": []}
-                                """.formatted(accountId)))
+                                """
+                                        .formatted(accountId)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PRD0201"));
     }
 
     @Test
     void validate_accountNotOwnedByCustomer() throws Exception {
-        Long productId = productJpaRepository.save(
-                ProductTestFixtures.productWithCode("VAL-102")).getProductId();
+        Long productId = productJpaRepository
+                .save(ProductTestFixtures.productWithCode("VAL-102"))
+                .getProductId();
         rateTierRepository.save(ProductRateTierJpaEntity.builder()
                 .id(new ProductRateTierJpaEntityId(productId, (short) 12))
                 .rate(new BigDecimal("3.20"))
@@ -162,17 +175,20 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .contentType("application/json")
-                        .content("""
+                        .content(
+                                """
                                 {"productId": %d, "subscriptionAmount": 500000, "termMonths": 12, "withdrawalAccountId": %d, "agreedTerms": []}
-                                """.formatted(productId, otherCustomersAccountId)))
+                                """
+                                        .formatted(productId, otherCustomersAccountId)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ACC0201"));
     }
 
     @Test
     void validate_missingRequiredTermsAgreement() throws Exception {
-        Long productId = productJpaRepository.save(
-                ProductTestFixtures.productWithCode("VAL-103")).getProductId();
+        Long productId = productJpaRepository
+                .save(ProductTestFixtures.productWithCode("VAL-103"))
+                .getProductId();
         rateTierRepository.save(ProductRateTierJpaEntity.builder()
                 .id(new ProductRateTierJpaEntityId(productId, (short) 12))
                 .rate(new BigDecimal("3.20"))
@@ -189,9 +205,11 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .contentType("application/json")
-                        .content("""
+                        .content(
+                                """
                                 {"productId": %d, "subscriptionAmount": 6000000, "termMonths": 12, "withdrawalAccountId": %d, "agreedTerms": []}
-                                """.formatted(productId, accountId)))
+                                """
+                                        .formatted(productId, accountId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.valid").value(false))
                 .andExpect(jsonPath("$.data.violations[0].field").value("agreedTerms"))
@@ -201,13 +219,16 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("정기예금 가입 결과를 전체 필드 보존한 채 200으로 응답하고 autoTransferPrefill은 없다")
     void getSubscriptionResult_deposit() throws Exception {
-        Long productId = productJpaRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
+        Long productId =
+                productJpaRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
         Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_ctl_dep");
-        Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000010", customerId, null);
+        Long withdrawalAccountId =
+                SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000010", customerId, null);
         Long accountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000011", customerId, productId);
-        Long subscriptionId = subscriptionJpaRepository.save(
-                SubscriptionTestFixtures.defaultSubscription(customerId, productId, withdrawalAccountId, accountId)
-        ).getSubscriptionId();
+        Long subscriptionId = subscriptionJpaRepository
+                .save(SubscriptionTestFixtures.defaultSubscription(
+                        customerId, productId, withdrawalAccountId, accountId))
+                .getSubscriptionId();
 
         mockMvc.perform(get("/product-subscriptions/{subscriptionId}", subscriptionId)
                         .with(authentication(authenticationOf(customerId))))
@@ -253,20 +274,23 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                 .singleAccountLimit(false)
                 .build());
         Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_ctl_sav");
-        Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000020", customerId, null);
+        Long withdrawalAccountId =
+                SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000020", customerId, null);
         Long accountId = SubscriptionTestFixtures.insertAccount(
                 jdbcTemplate, "110000000021", customerId, savingsProduct.getProductId());
-        Long subscriptionId = subscriptionJpaRepository.save(
-                SubscriptionTestFixtures.defaultSubscription(
-                        customerId, savingsProduct.getProductId(), withdrawalAccountId, accountId)
-        ).getSubscriptionId();
+        Long subscriptionId = subscriptionJpaRepository
+                .save(SubscriptionTestFixtures.defaultSubscription(
+                        customerId, savingsProduct.getProductId(), withdrawalAccountId, accountId))
+                .getSubscriptionId();
 
         mockMvc.perform(get("/product-subscriptions/{subscriptionId}", subscriptionId)
                         .with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.productGroup").value("SAVINGS"))
-                .andExpect(jsonPath("$.data.autoTransferPrefill.withdrawalAccountId").value(withdrawalAccountId))
-                .andExpect(jsonPath("$.data.autoTransferPrefill.depositAccountNumber").value("110000000021"))
+                .andExpect(jsonPath("$.data.autoTransferPrefill.withdrawalAccountId")
+                        .value(withdrawalAccountId))
+                .andExpect(jsonPath("$.data.autoTransferPrefill.depositAccountNumber")
+                        .value("110000000021"))
                 .andExpect(jsonPath("$.data.autoTransferPrefill.amount").value(1_000_000))
                 .andExpect(jsonPath("$.data.autoTransferPrefill.cycleMonths").value(1))
                 .andExpect(jsonPath("$.data.autoTransferPrefill.endDate").value("2027-08-01"));
@@ -294,10 +318,12 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                 .singleAccountLimit(false)
                 .build());
         Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_ctl_sav_noacc");
-        Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000050", customerId, null);
-        Long subscriptionId = subscriptionJpaRepository.save(
-                SubscriptionTestFixtures.defaultSubscription(customerId, savingsProduct.getProductId(), withdrawalAccountId)
-        ).getSubscriptionId();
+        Long withdrawalAccountId =
+                SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000050", customerId, null);
+        Long subscriptionId = subscriptionJpaRepository
+                .save(SubscriptionTestFixtures.defaultSubscription(
+                        customerId, savingsProduct.getProductId(), withdrawalAccountId))
+                .getSubscriptionId();
 
         mockMvc.perform(get("/product-subscriptions/{subscriptionId}", subscriptionId)
                         .with(authentication(authenticationOf(customerId))))
@@ -310,12 +336,14 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("계좌 개설 전(가입 실패) 건은 accountId/accountNumber가 null로 응답한다")
     void getSubscriptionResult_withoutAccount_returnsNullAccountFields() throws Exception {
-        Long productId = productJpaRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
+        Long productId =
+                productJpaRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
         Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_ctl_noacc");
-        Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000030", customerId, null);
-        Long subscriptionId = subscriptionJpaRepository.save(
-                SubscriptionTestFixtures.defaultSubscription(customerId, productId, withdrawalAccountId)
-        ).getSubscriptionId();
+        Long withdrawalAccountId =
+                SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000030", customerId, null);
+        Long subscriptionId = subscriptionJpaRepository
+                .save(SubscriptionTestFixtures.defaultSubscription(customerId, productId, withdrawalAccountId))
+                .getSubscriptionId();
 
         mockMvc.perform(get("/product-subscriptions/{subscriptionId}", subscriptionId)
                         .with(authentication(authenticationOf(customerId))))
@@ -327,16 +355,18 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("가입 건에 연결된 계좌가 타 고객 소유면 PRD9003을 반환한다")
     void getSubscriptionResult_accountOwnedByOtherCustomer_returnsAccountNotFound() throws Exception {
-        Long productId = productJpaRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
+        Long productId =
+                productJpaRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
         Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_ctl_owner");
         Long otherCustomerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_ctl_other");
-        Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000031", customerId, null);
+        Long withdrawalAccountId =
+                SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000031", customerId, null);
         Long otherCustomerAccountId =
                 SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000032", otherCustomerId, productId);
-        Long subscriptionId = subscriptionJpaRepository.save(
-                SubscriptionTestFixtures.defaultSubscription(
-                        customerId, productId, withdrawalAccountId, otherCustomerAccountId)
-        ).getSubscriptionId();
+        Long subscriptionId = subscriptionJpaRepository
+                .save(SubscriptionTestFixtures.defaultSubscription(
+                        customerId, productId, withdrawalAccountId, otherCustomerAccountId))
+                .getSubscriptionId();
 
         mockMvc.perform(get("/product-subscriptions/{subscriptionId}", subscriptionId)
                         .with(authentication(authenticationOf(customerId))))
@@ -356,12 +386,14 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("타인 소유 가입건이면 404 + PRD0203을 반환한다(존재 여부 비노출)")
     void getSubscriptionResult_otherCustomer_returnsNotFound() throws Exception {
-        Long productId = productJpaRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
+        Long productId =
+                productJpaRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
         Long ownerCustomerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_ctl_owner");
-        Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000040", ownerCustomerId, null);
-        Long subscriptionId = subscriptionJpaRepository.save(
-                SubscriptionTestFixtures.defaultSubscription(ownerCustomerId, productId, withdrawalAccountId)
-        ).getSubscriptionId();
+        Long withdrawalAccountId =
+                SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000040", ownerCustomerId, null);
+        Long subscriptionId = subscriptionJpaRepository
+                .save(SubscriptionTestFixtures.defaultSubscription(ownerCustomerId, productId, withdrawalAccountId))
+                .getSubscriptionId();
 
         mockMvc.perform(get("/product-subscriptions/{subscriptionId}", subscriptionId)
                         .with(authentication(authenticationOf(999_888L))))
@@ -372,15 +404,13 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("인증 없이 요청하면 401을 반환한다")
     void getSubscriptionResult_unauthenticated() throws Exception {
-        mockMvc.perform(get("/product-subscriptions/{subscriptionId}", 1L))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/product-subscriptions/{subscriptionId}", 1L)).andExpect(status().isUnauthorized());
     }
 
     @Test
     @DisplayName("subscriptionId가 0이면 400 + CMN0001을 반환한다")
     void getSubscriptionResult_zeroId_returnsBadRequest() throws Exception {
-        mockMvc.perform(get("/product-subscriptions/{subscriptionId}", 0L)
-                        .with(authentication(authenticationOf(1L))))
+        mockMvc.perform(get("/product-subscriptions/{subscriptionId}", 0L).with(authentication(authenticationOf(1L))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0001"));
     }
@@ -388,8 +418,7 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("subscriptionId가 음수면 400 + CMN0001을 반환한다")
     void getSubscriptionResult_negativeId_returnsBadRequest() throws Exception {
-        mockMvc.perform(get("/product-subscriptions/{subscriptionId}", -1L)
-                        .with(authentication(authenticationOf(1L))))
+        mockMvc.perform(get("/product-subscriptions/{subscriptionId}", -1L).with(authentication(authenticationOf(1L))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0001"));
     }
@@ -413,12 +442,15 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.transactionNumber").doesNotExist())
                 .andExpect(jsonPath("$.data.accountNumber").isNotEmpty())
                 .andExpect(jsonPath("$.data.appliedRate").value(3.20))
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
 
         // REQ-PRDT-012 인수기준: "적금 가입 직후 신규 계좌 잔액이 0원이고 출금계좌 잔액이 변동하지
         // 않는다". transactionNumber 부재만으로는 기표가 없었다는 것만 알 뿐, 잔액이 실제로 그대로인지는
         // 확인되지 않는다 — 두 잔액을 직접 읽어 단언한다.
-        Long newAccountId = jackson.readTree(response).get("data").get("accountId").asLong();
+        Long newAccountId =
+                jackson.readTree(response).get("data").get("accountId").asLong();
         assertThat(balanceOf(newAccountId)).isZero();
         assertThat(balanceOf(withdrawalAccountId)).isEqualTo(withdrawalBalanceBefore);
     }
@@ -438,7 +470,9 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                         .contentType("application/json")
                         .content(requestJson))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
 
         // 같은 테스트 트랜잭션 안에서 순차 호출하면 idempotency_key 행이 1차 호출 때 로드된 채로
         // 영속성 컨텍스트에 남아있어, complete()의 벌크 UPDATE(@Modifying) 결과가 반영 안 된 stale
@@ -453,14 +487,17 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                         .contentType("application/json")
                         .content(requestJson))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
 
         // MySQL의 JSON 컬럼(idempotency_key.response_snapshot)은 저장 시 숫자를 정규화해서
         // 소수 끝자리 0을 지울 수 있다("3.20" -> "3.2") — 바이트 단위 비교 대신 JsonNode로
         // 구조적으로 비교한다.
         assertThat(jackson.readTree(second)).isEqualTo(jackson.readTree(first));
 
-        Long subscriptionId = jackson.readTree(first).get("data").get("subscriptionId").asLong();
+        Long subscriptionId =
+                jackson.readTree(first).get("data").get("subscriptionId").asLong();
         assertThat(subscriptionJpaRepository.count()).isEqualTo(1);
         assertThat(subscriptionJpaRepository.findById(subscriptionId)).isPresent();
     }
@@ -481,7 +518,9 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.status").value("SUCCESS"))
                 .andExpect(jsonPath("$.data.productGroup").value("DEPOSIT"))
                 .andExpect(jsonPath("$.data.transactionNumber").isNotEmpty())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
 
         JsonNode data = jackson.readTree(response).get("data");
         Long newAccountId = data.get("accountId").asLong();
@@ -496,13 +535,13 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
         assertThat(balanceOf(newAccountId)).isEqualTo(500_000L);
 
         assertThat(jdbcTemplate.queryForList(
-                """
+                        """
                 SELECT account_id, direction, amount, balance_after, transaction_type, transfer_id
                   FROM ledger_entry
                  WHERE transaction_number = ?
                  ORDER BY direction
                 """,
-                transactionNumber))
+                        transactionNumber))
                 .hasSize(2)
                 .allSatisfy(row -> {
                     assertThat(row.get("transaction_type")).isEqualTo("PRODUCT_SUBSCRIPTION");
@@ -520,8 +559,11 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                     assertThat(row.get("balance_after")).isEqualTo(9_500_000L);
                 });
 
-        assertThat(subscriptionJpaRepository.findById(data.get("subscriptionId").asLong())
-                .orElseThrow().getTransactionNumber()).isEqualTo(transactionNumber);
+        assertThat(subscriptionJpaRepository
+                        .findById(data.get("subscriptionId").asLong())
+                        .orElseThrow()
+                        .getTransactionNumber())
+                .isEqualTo(transactionNumber);
     }
 
     @Test
@@ -544,7 +586,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
 
         assertThat(balanceOf(withdrawalAccountId)).isEqualTo(100_000L);
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM account WHERE product_id = ?", Long.class, productId)).isZero();
+                        "SELECT COUNT(*) FROM account WHERE product_id = ?", Long.class, productId))
+                .isZero();
         assertThat(subscriptionJpaRepository.count()).isZero();
     }
 
@@ -577,7 +620,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .contentType("application/json")
-                        .content("""
+                        .content(
+                                """
                                 {
                                   "productId": %d,
                                   "subscriptionAmount": 500000,
@@ -589,7 +633,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                                   "otpAuthToken": "OTP_AUTH_test",
                                   "agreedTerms": []
                                 }
-                                """.formatted(productId, withdrawalAccountId)))
+                                """
+                                        .formatted(productId, withdrawalAccountId)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("APW0002"));
     }
@@ -626,7 +671,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
         Long productId = seedSavingsProduct("EXE-110", false);
         Long withdrawalAccountId = seedAccount("110000009010", customerId, 10_000_000L);
 
-        String requestJson = """
+        String requestJson =
+                """
                 {
                   "productId": %d,
                   "subscriptionAmount": 500000,
@@ -638,7 +684,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                   "otpAuthToken": "OTP_AUTH_test",
                   "agreedTerms": [{"termsId": 999999999, "version": "v1.0"}]
                 }
-                """.formatted(productId, withdrawalAccountId);
+                """
+                        .formatted(productId, withdrawalAccountId);
 
         long accountCountBefore = accountJpaRepository.count();
 
@@ -670,7 +717,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                 .rate(new BigDecimal("0.50"))
                 .build());
 
-        String requestJson = """
+        String requestJson =
+                """
                 {
                   "productId": %d,
                   "subscriptionAmount": 500000,
@@ -683,7 +731,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                   "agreedTerms": [],
                   "satisfiedConditionCodes": ["AUTO_TRANSFER"]
                 }
-                """.formatted(productId, withdrawalAccountId);
+                """
+                        .formatted(productId, withdrawalAccountId);
 
         mockMvc.perform(post("/product-subscriptions")
                         .header("Idempotency-Key", UUID.randomUUID().toString())
@@ -718,7 +767,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        String differentPasswordJson = """
+        String differentPasswordJson =
+                """
                 {
                   "productId": %d,
                   "subscriptionAmount": 500000,
@@ -730,7 +780,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                   "otpAuthToken": "OTP_AUTH_test",
                   "agreedTerms": []
                 }
-                """.formatted(productId, withdrawalAccountId);
+                """
+                        .formatted(productId, withdrawalAccountId);
 
         mockMvc.perform(post("/product-subscriptions")
                         .header("Idempotency-Key", idempotencyKey)
@@ -758,7 +809,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
         Long productId = seedSavingsProduct("EXE-112", false);
         Long withdrawalAccountId = seedAccount("110000009012", customerId, 10_000_000L);
         doThrow(new BusinessException(OtpErrorCode.INVALID_AUTH_TOKEN))
-                .when(otpAuthTokenVerifier).verifyAndConsume(any());
+                .when(otpAuthTokenVerifier)
+                .verifyAndConsume(any());
 
         long accountCountBefore = accountJpaRepository.count();
         long subscriptionCountBefore = subscriptionJpaRepository.count();
@@ -823,13 +875,18 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                         .contentType("application/json")
                         .content(executeRequestJsonWithTerms(productId, withdrawalAccountId, termsId)))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
 
-        Long subscriptionId = jackson.readTree(response).get("data").get("subscriptionId").asLong();
+        Long subscriptionId =
+                jackson.readTree(response).get("data").get("subscriptionId").asLong();
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT terms_version FROM subscription_terms_agreement"
-                        + " WHERE subscription_id = ? AND terms_id = ?",
-                String.class, subscriptionId, termsId))
+                        "SELECT terms_version FROM subscription_terms_agreement"
+                                + " WHERE subscription_id = ? AND terms_id = ?",
+                        String.class,
+                        subscriptionId,
+                        termsId))
                 .isEqualTo("v1.0");
     }
 
@@ -857,57 +914,63 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                   "otpAuthToken": "OTP_AUTH_test",
                   "agreedTerms": [{"termsId": %d, "version": "v1.0"}]
                 }
-                """.formatted(productId, withdrawalAccountId, termsId);
+                """
+                .formatted(productId, withdrawalAccountId, termsId);
     }
 
     private Long seedSavingsProduct(String productCode, boolean singleAccountLimit) {
-        Long productId = productJpaRepository.save(ProductJpaEntity.builder()
-                .productCode(productCode)
-                .productName("청년 희망 적금")
-                .productGroup(ProductGroup.SAVINGS)
-                .depositType(DepositType.INSTALLMENT)
-                .summary("테스트용 적금")
-                .description("테스트용 적금 설명")
-                .baseRate(new BigDecimal("2.50"))
-                .maxRate(new BigDecimal("3.20"))
-                .minAmount(100_000L)
-                .maxAmount(10_000_000L)
-                .amountUnit(10_000L)
-                .minTermMonths((short) 6)
-                .maxTermMonths((short) 36)
-                .interestPayType(InterestPayType.SIMPLE)
-                .saleStatus(SaleStatus.ON_SALE)
-                .saleStartDate(LocalDate.of(2026, 1, 1))
-                .saleEndDate(LocalDate.of(2026, 12, 31))
-                .newFlag(false)
-                .singleAccountLimit(singleAccountLimit)
-                .build()).getProductId();
+        Long productId = productJpaRepository
+                .save(ProductJpaEntity.builder()
+                        .productCode(productCode)
+                        .productName("청년 희망 적금")
+                        .productGroup(ProductGroup.SAVINGS)
+                        .depositType(DepositType.INSTALLMENT)
+                        .summary("테스트용 적금")
+                        .description("테스트용 적금 설명")
+                        .baseRate(new BigDecimal("2.50"))
+                        .maxRate(new BigDecimal("3.20"))
+                        .minAmount(100_000L)
+                        .maxAmount(10_000_000L)
+                        .amountUnit(10_000L)
+                        .minTermMonths((short) 6)
+                        .maxTermMonths((short) 36)
+                        .interestPayType(InterestPayType.SIMPLE)
+                        .saleStatus(SaleStatus.ON_SALE)
+                        .saleStartDate(LocalDate.of(2026, 1, 1))
+                        .saleEndDate(LocalDate.of(2026, 12, 31))
+                        .newFlag(false)
+                        .singleAccountLimit(singleAccountLimit)
+                        .build())
+                .getProductId();
         rateTierRepository.save(ProductRateTierJpaEntity.builder()
                 .id(new ProductRateTierJpaEntityId(productId, (short) 12))
                 .rate(new BigDecimal("3.20"))
                 .build());
-        new AccountNumberSequenceTestFixture(jdbcTemplate).resetProductAccountSequence(
-                productId, AccountType.INSTALLMENT_SAVINGS,
-                AccountNumberSequenceTestFixture.INSTALLMENT_SAVINGS_PREFIX, 0L);
+        new AccountNumberSequenceTestFixture(jdbcTemplate)
+                .resetProductAccountSequence(
+                        productId,
+                        AccountType.INSTALLMENT_SAVINGS,
+                        AccountNumberSequenceTestFixture.INSTALLMENT_SAVINGS_PREFIX,
+                        0L);
         return productId;
     }
 
     private Long seedDepositProduct(String productCode) {
-        Long productId = productJpaRepository.save(
-                ProductTestFixtures.productWithCode(productCode)).getProductId();
+        Long productId = productJpaRepository
+                .save(ProductTestFixtures.productWithCode(productCode))
+                .getProductId();
         rateTierRepository.save(ProductRateTierJpaEntity.builder()
                 .id(new ProductRateTierJpaEntityId(productId, (short) 12))
                 .rate(new BigDecimal("3.20"))
                 .build());
-        new AccountNumberSequenceTestFixture(jdbcTemplate).resetProductAccountSequence(
-                productId, AccountType.TIME_DEPOSIT,
-                AccountNumberSequenceTestFixture.TIME_DEPOSIT_PREFIX, 0L);
+        new AccountNumberSequenceTestFixture(jdbcTemplate)
+                .resetProductAccountSequence(
+                        productId, AccountType.TIME_DEPOSIT, AccountNumberSequenceTestFixture.TIME_DEPOSIT_PREFIX, 0L);
         return productId;
     }
 
     private long balanceOf(Long accountId) {
-        return jdbcTemplate.queryForObject(
-                "SELECT balance FROM account WHERE account_id = ?", Long.class, accountId);
+        return jdbcTemplate.queryForObject("SELECT balance FROM account WHERE account_id = ?", Long.class, accountId);
     }
 
     private String executeRequestJson(Long productId, Long withdrawalAccountId, Long amount, int termMonths) {
@@ -923,21 +986,24 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                   "otpAuthToken": "OTP_AUTH_test",
                   "agreedTerms": []
                 }
-                """.formatted(productId, amount, termMonths, withdrawalAccountId);
+                """
+                .formatted(productId, amount, termMonths, withdrawalAccountId);
     }
 
     private Long seedAccount(String accountNumber, Long customerId, long balance) {
-        return accountJpaRepository.save(AccountJpaEntity.builder()
-                .accountNumber(accountNumber)
-                .customerId(customerId)
-                .accountType(AccountType.DEMAND_DEPOSIT)
-                .balance(balance)
-                .status(AccountStatus.ACTIVE)
-                .passwordHash("x".repeat(60))
-                .withdrawalRegistered(true)
-                .withdrawalRegisteredAt(LocalDateTime.now())
-                .openedDate(LocalDateTime.now())
-                .build()).getAccountId();
+        return accountJpaRepository
+                .save(AccountJpaEntity.builder()
+                        .accountNumber(accountNumber)
+                        .customerId(customerId)
+                        .accountType(AccountType.DEMAND_DEPOSIT)
+                        .balance(balance)
+                        .status(AccountStatus.ACTIVE)
+                        .passwordHash("x".repeat(60))
+                        .withdrawalRegistered(true)
+                        .withdrawalRegisteredAt(LocalDateTime.now())
+                        .openedDate(LocalDateTime.now())
+                        .build())
+                .getAccountId();
     }
 
     private UsernamePasswordAuthenticationToken authenticationOf(Long customerId) {

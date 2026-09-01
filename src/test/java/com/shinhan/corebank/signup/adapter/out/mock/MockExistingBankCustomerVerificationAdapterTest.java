@@ -1,20 +1,19 @@
 package com.shinhan.corebank.signup.adapter.out.mock;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.shinhan.corebank.signup.domain.model.ExistingBankAccountVerification;
 import com.shinhan.corebank.signup.domain.model.ExistingBankAccountVerificationStatus;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 // Mock 은행 원장의 정보 검증과 연속 실패 거래정지를 검증한다.
 class MockExistingBankCustomerVerificationAdapterTest {
@@ -29,9 +28,7 @@ class MockExistingBankCustomerVerificationAdapterTest {
 
     @BeforeEach
     void setUp() {
-        adapter = new MockExistingBankCustomerVerificationAdapter(
-                new BCryptPasswordEncoder()
-        );
+        adapter = new MockExistingBankCustomerVerificationAdapter(new BCryptPasswordEncoder());
     }
 
     @Test
@@ -39,35 +36,17 @@ class MockExistingBankCustomerVerificationAdapterTest {
     void verifiesMockCustomer() {
         ExistingBankAccountVerification result = verify(CORRECT_PASSWORD);
 
-        assertThat(result.status())
-                .isEqualTo(ExistingBankAccountVerificationStatus.VERIFIED);
-        assertThat(result.existingBankCustomerId())
-                .isEqualTo("BANK_CUSTOMER_001");
-        assertThat(result.existingBankAccountId())
-                .isEqualTo("BANK_ACCOUNT_001");
+        assertThat(result.status()).isEqualTo(ExistingBankAccountVerificationStatus.VERIFIED);
+        assertThat(result.existingBankCustomerId()).isEqualTo("BANK_CUSTOMER_001");
+        assertThat(result.existingBankAccountId()).isEqualTo("BANK_ACCOUNT_001");
     }
 
     @Test
     @DisplayName("없는 계좌와 잘못된 성명·생년월일은 정보 불일치다")
     void rejectsInformationMismatch() {
-        assertInformationMismatch(adapter.verify(
-                USER_NAME,
-                BIRTH_DATE,
-                "110000000000",
-                CORRECT_PASSWORD
-        ));
-        assertInformationMismatch(adapter.verify(
-                "김철수",
-                BIRTH_DATE,
-                ACCOUNT_NUMBER,
-                CORRECT_PASSWORD
-        ));
-        assertInformationMismatch(adapter.verify(
-                USER_NAME,
-                "910101",
-                ACCOUNT_NUMBER,
-                CORRECT_PASSWORD
-        ));
+        assertInformationMismatch(adapter.verify(USER_NAME, BIRTH_DATE, "110000000000", CORRECT_PASSWORD));
+        assertInformationMismatch(adapter.verify("김철수", BIRTH_DATE, ACCOUNT_NUMBER, CORRECT_PASSWORD));
+        assertInformationMismatch(adapter.verify(USER_NAME, "910101", ACCOUNT_NUMBER, CORRECT_PASSWORD));
     }
 
     @Test
@@ -76,40 +55,26 @@ class MockExistingBankCustomerVerificationAdapterTest {
         assertThat(adapter.findAllByCustomerId("BANK_CUSTOMER_001"))
                 .extracting(account -> account.accountNumber())
                 .containsExactly("110123456789", "110987654321");
-        assertThat(adapter.findAllByCustomerId("BANK_CUSTOMER_001"))
-                .allSatisfy(account -> {
-                    assertThat(account.accountType())
-                            .isEqualTo("DEMAND_DEPOSIT");
-                    assertThat(account.productId()).isNull();
-                    assertThat(account.maturityDate()).isNull();
-                });
+        assertThat(adapter.findAllByCustomerId("BANK_CUSTOMER_001")).allSatisfy(account -> {
+            assertThat(account.accountType()).isEqualTo("DEMAND_DEPOSIT");
+            assertThat(account.productId()).isNull();
+            assertThat(account.maturityDate()).isNull();
+        });
     }
 
     @Test
     @DisplayName("두 번째 Mock 고객은 자기 계좌로만 인증되고 자기 계좌만 반환한다")
     void verifiesSecondMockCustomerIndependently() {
-        ExistingBankAccountVerification result = adapter.verify(
-                "김영희",
-                "850505",
-                "110555666777",
-                CORRECT_PASSWORD
-        );
+        ExistingBankAccountVerification result = adapter.verify("김영희", "850505", "110555666777", CORRECT_PASSWORD);
 
-        assertThat(result.status())
-                .isEqualTo(ExistingBankAccountVerificationStatus.VERIFIED);
-        assertThat(result.existingBankCustomerId())
-                .isEqualTo("BANK_CUSTOMER_002");
+        assertThat(result.status()).isEqualTo(ExistingBankAccountVerificationStatus.VERIFIED);
+        assertThat(result.existingBankCustomerId()).isEqualTo("BANK_CUSTOMER_002");
         assertThat(adapter.findAllByCustomerId("BANK_CUSTOMER_002"))
                 .extracting(account -> account.accountNumber())
                 .containsExactly("110555666777");
 
         // 다른 고객의 계좌번호로는 실명이 일치해도 인증되지 않는다.
-        assertInformationMismatch(adapter.verify(
-                "김영희",
-                "850505",
-                ACCOUNT_NUMBER,
-                CORRECT_PASSWORD
-        ));
+        assertInformationMismatch(adapter.verify("김영희", "850505", ACCOUNT_NUMBER, CORRECT_PASSWORD));
     }
 
     @Test
@@ -117,16 +82,12 @@ class MockExistingBankCustomerVerificationAdapterTest {
     void resetsConsecutiveFailuresAfterSuccess() {
         for (int errorCount = 1; errorCount <= 4; errorCount++) {
             ExistingBankAccountVerification failure = verify(WRONG_PASSWORD);
-            assertThat(failure.status()).isEqualTo(
-                    ExistingBankAccountVerificationStatus.PASSWORD_MISMATCH
-            );
+            assertThat(failure.status()).isEqualTo(ExistingBankAccountVerificationStatus.PASSWORD_MISMATCH);
             assertThat(failure.errorCount()).isEqualTo(errorCount);
-            assertThat(failure.remainingAttempts())
-                    .isEqualTo(5 - errorCount);
+            assertThat(failure.remainingAttempts()).isEqualTo(5 - errorCount);
         }
 
-        assertThat(verify(CORRECT_PASSWORD).status())
-                .isEqualTo(ExistingBankAccountVerificationStatus.VERIFIED);
+        assertThat(verify(CORRECT_PASSWORD).status()).isEqualTo(ExistingBankAccountVerificationStatus.VERIFIED);
 
         ExistingBankAccountVerification nextFailure = verify(WRONG_PASSWORD);
         assertThat(nextFailure.errorCount()).isEqualTo(1);
@@ -137,19 +98,16 @@ class MockExistingBankCustomerVerificationAdapterTest {
     @DisplayName("비밀번호 5회 연속 실패 시 거래정지되고 올바른 비밀번호도 거부된다")
     void locksAfterFiveConsecutiveFailures() {
         for (int attempt = 1; attempt <= 4; attempt++) {
-            assertThat(verify(WRONG_PASSWORD).status()).isEqualTo(
-                    ExistingBankAccountVerificationStatus.PASSWORD_MISMATCH
-            );
+            assertThat(verify(WRONG_PASSWORD).status())
+                    .isEqualTo(ExistingBankAccountVerificationStatus.PASSWORD_MISMATCH);
         }
 
         ExistingBankAccountVerification fifth = verify(WRONG_PASSWORD);
-        assertThat(fifth.status())
-                .isEqualTo(ExistingBankAccountVerificationStatus.LOCKED);
+        assertThat(fifth.status()).isEqualTo(ExistingBankAccountVerificationStatus.LOCKED);
         assertThat(fifth.errorCount()).isEqualTo(5);
         assertThat(fifth.remainingAttempts()).isZero();
 
-        assertThat(verify(CORRECT_PASSWORD).status())
-                .isEqualTo(ExistingBankAccountVerificationStatus.LOCKED);
+        assertThat(verify(CORRECT_PASSWORD).status()).isEqualTo(ExistingBankAccountVerificationStatus.LOCKED);
     }
 
     @Test
@@ -159,8 +117,7 @@ class MockExistingBankCustomerVerificationAdapterTest {
         ExecutorService executor = Executors.newFixedThreadPool(requestCount);
         CountDownLatch ready = new CountDownLatch(requestCount);
         CountDownLatch start = new CountDownLatch(1);
-        List<Future<ExistingBankAccountVerification>> futures =
-                new ArrayList<>();
+        List<Future<ExistingBankAccountVerification>> futures = new ArrayList<>();
 
         try {
             for (int index = 0; index < requestCount; index++) {
@@ -179,36 +136,22 @@ class MockExistingBankCustomerVerificationAdapterTest {
                 results.add(future.get());
             }
 
-            assertThat(results).allSatisfy(result ->
-                    assertThat(result.errorCount()).isBetween(1, 5)
-            );
-            assertThat(results).anySatisfy(result ->
-                    assertThat(result.status()).isEqualTo(
-                            ExistingBankAccountVerificationStatus.LOCKED
-                    )
-            );
-            assertThat(verify(CORRECT_PASSWORD).status())
-                    .isEqualTo(ExistingBankAccountVerificationStatus.LOCKED);
+            assertThat(results)
+                    .allSatisfy(result -> assertThat(result.errorCount()).isBetween(1, 5));
+            assertThat(results).anySatisfy(result -> assertThat(result.status())
+                    .isEqualTo(ExistingBankAccountVerificationStatus.LOCKED));
+            assertThat(verify(CORRECT_PASSWORD).status()).isEqualTo(ExistingBankAccountVerificationStatus.LOCKED);
         } finally {
             executor.shutdownNow();
         }
     }
 
     private ExistingBankAccountVerification verify(String password) {
-        return adapter.verify(
-                USER_NAME,
-                BIRTH_DATE,
-                ACCOUNT_NUMBER,
-                password
-        );
+        return adapter.verify(USER_NAME, BIRTH_DATE, ACCOUNT_NUMBER, password);
     }
 
-    private void assertInformationMismatch(
-            ExistingBankAccountVerification result
-    ) {
-        assertThat(result.status()).isEqualTo(
-                ExistingBankAccountVerificationStatus.INFORMATION_MISMATCH
-        );
+    private void assertInformationMismatch(ExistingBankAccountVerification result) {
+        assertThat(result.status()).isEqualTo(ExistingBankAccountVerificationStatus.INFORMATION_MISMATCH);
         assertThat(result.errorCount()).isZero();
         assertThat(result.remainingAttempts()).isZero();
     }

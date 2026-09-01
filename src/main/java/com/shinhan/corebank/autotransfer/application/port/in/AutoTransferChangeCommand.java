@@ -3,15 +3,23 @@ package com.shinhan.corebank.autotransfer.application.port.in;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import java.time.LocalDate;
 import lombok.Builder;
 
-import java.time.LocalDate;
-
 @Builder
-public record AutoTransferChangeCommand(Long customerId, Long amount, Integer cycleMonths, LocalDate endDate,
-                                        String myPassbookMemo, String recipientPassbookMemo,
-                                        Long withdrawalAccountId, String depositAccountNumber, Integer transferDay,
-                                        String accountPasswordAuthToken, String otpAuthToken, String requestIp) {
+public record AutoTransferChangeCommand(
+        Long customerId,
+        Long amount,
+        Integer cycleMonths,
+        LocalDate endDate,
+        String myPassbookMemo,
+        String recipientPassbookMemo,
+        Long withdrawalAccountId,
+        String depositAccountNumber,
+        Integer transferDay,
+        String accountPasswordAuthToken,
+        String otpAuthToken,
+        String requestIp) {
     public AutoTransferChangeCommand {
         if (customerId == null || accountPasswordAuthToken == null || otpAuthToken == null || requestIp == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -31,7 +39,7 @@ public record AutoTransferChangeCommand(Long customerId, Long amount, Integer cy
         if (recipientPassbookMemo != null && recipientPassbookMemo.length() > 10) {
             throw new BusinessException(AutoTransferErrorCode.MEMO_LENGTH_EXCEEDED);
         }
-        //공백 문자열 검증
+        // 공백 문자열 검증
         if (accountPasswordAuthToken.isBlank() || otpAuthToken.isBlank() || requestIp.isBlank()) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }

@@ -18,10 +18,6 @@ import com.shinhan.corebank.subscription.domain.SubscriptionViolation;
 import com.shinhan.corebank.subscription.domain.SubscriptionViolationCode;
 import com.shinhan.corebank.terms.api.TermsQueryPort;
 import com.shinhan.corebank.terms.api.TermsSummary;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -29,6 +25,9 @@ import java.time.ZoneId;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -63,34 +62,32 @@ public class ProductSubscriptionValidationService implements ProductSubscription
         List<SubscriptionViolation> violations = new ArrayList<>();
 
         if (product.getSaleStatus() != SaleStatus.ON_SALE) {
-            violations.add(SubscriptionViolation.of(
-                    "productId", SubscriptionViolationCode.PRODUCT_NOT_ON_SALE));
+            violations.add(SubscriptionViolation.of("productId", SubscriptionViolationCode.PRODUCT_NOT_ON_SALE));
         }
         if (subscriptionAmount < product.getMinAmount() || subscriptionAmount > product.getMaxAmount()) {
-            violations.add(SubscriptionViolation.of(
-                    "subscriptionAmount", SubscriptionViolationCode.AMOUNT_OUT_OF_RANGE));
+            violations.add(
+                    SubscriptionViolation.of("subscriptionAmount", SubscriptionViolationCode.AMOUNT_OUT_OF_RANGE));
         }
         // amountUnit이 0이면 나머지 연산에서 ArithmeticException이 나므로 단축 평가로 먼저 걸러낸다.
         // DB 제약(ck_product_amount_unit)이 막아 주지만, 마스터데이터 오류로 사전 검증 전체가
         // 500이 되는 것보다 단위 검증만 생략하는 편이 낫다.
         Long amountUnit = product.getAmountUnit();
         if (amountUnit != null && amountUnit > 0 && subscriptionAmount % amountUnit != 0) {
-            violations.add(SubscriptionViolation.of(
-                    "subscriptionAmount", SubscriptionViolationCode.AMOUNT_UNIT_MISMATCH));
+            violations.add(
+                    SubscriptionViolation.of("subscriptionAmount", SubscriptionViolationCode.AMOUNT_UNIT_MISMATCH));
         }
 
         Optional<ProductRateTier> rateTier = detail.getRateTiers().stream()
                 .filter(tier -> tier.getId().getTermMonths().intValue() == termMonths)
                 .findFirst();
         if (rateTier.isEmpty()) {
-            violations.add(SubscriptionViolation.of(
-                    "termMonths", SubscriptionViolationCode.TERM_NOT_ALLOWED));
+            violations.add(SubscriptionViolation.of("termMonths", SubscriptionViolationCode.TERM_NOT_ALLOWED));
         }
 
         boolean checkBalance = product.getProductGroup() == ProductGroup.DEPOSIT;
         if (checkBalance && account.balance() < subscriptionAmount) {
-            violations.add(SubscriptionViolation.of(
-                    "withdrawalAccountId", SubscriptionViolationCode.INSUFFICIENT_BALANCE));
+            violations.add(
+                    SubscriptionViolation.of("withdrawalAccountId", SubscriptionViolationCode.INSUFFICIENT_BALANCE));
         }
 
         violations.addAll(validateTerms(detail.getTerms(), command.agreedTerms(), command.customerId()));
@@ -109,8 +106,8 @@ public class ProductSubscriptionValidationService implements ProductSubscription
         }
 
         BigDecimal baseRate = rateTier.get().getRate();
-        BigDecimal preferentialRate = calculatePreferentialRate(
-                detail.getPreferentialRates(), command.satisfiedConditionCodes());
+        BigDecimal preferentialRate =
+                calculatePreferentialRate(detail.getPreferentialRates(), command.satisfiedConditionCodes());
         BigDecimal appliedRate = baseRate.add(preferentialRate);
 
         SubscriptionMaturityCalculator.MaturityCalculation calculation = SubscriptionMaturityCalculator.calculate(
@@ -134,8 +131,11 @@ public class ProductSubscriptionValidationService implements ProductSubscription
 
     // PRD0003(필수 약관 미동의) / PRD0005(전문 미열람) / PRD0006(버전 불일치). §3-4 참고.
     private List<SubscriptionViolation> validateTerms(
-            List<ProductTerms> productTerms, List<ProductSubscriptionValidationCommand.AgreedTerms> agreedTerms, Long customerId) {
-        List<Long> termsIds = productTerms.stream().map(pt -> pt.getId().getTermsId()).toList();
+            List<ProductTerms> productTerms,
+            List<ProductSubscriptionValidationCommand.AgreedTerms> agreedTerms,
+            Long customerId) {
+        List<Long> termsIds =
+                productTerms.stream().map(pt -> pt.getId().getTermsId()).toList();
         Set<Long> termsIdSet = new HashSet<>(termsIds);
         // 클라이언트가 이 상품에 연결되지 않은(또는 존재하지 않는) termsId로 동의를 보내면
         // 여기서 즉시 걸러야 한다 — 그냥 통과시키면 이후 SubscriptionTermsAgreement 저장 시점의
@@ -152,8 +152,8 @@ public class ProductSubscriptionValidationService implements ProductSubscription
 
         Map<Long, TermsSummary> summaryByTermsId = termsQueryPort.findByIds(termsIds).stream()
                 .collect(Collectors.toMap(TermsSummary::termsId, Function.identity()));
-        Map<Long, String> agreedVersionByTermsId = agreedTerms.stream()
-                .collect(Collectors.toMap(AgreedTerms::termsId, AgreedTerms::version, (a, b) -> b));
+        Map<Long, String> agreedVersionByTermsId =
+                agreedTerms.stream().collect(Collectors.toMap(AgreedTerms::termsId, AgreedTerms::version, (a, b) -> b));
 
         List<SubscriptionViolation> violations = new ArrayList<>();
         for (Long termsId : termsIds) {
@@ -163,17 +163,17 @@ public class ProductSubscriptionValidationService implements ProductSubscription
             }
             String agreedVersion = agreedVersionByTermsId.get(termsId);
             if (agreedVersion == null) {
-                violations.add(SubscriptionViolation.of("agreedTerms",
-                        SubscriptionViolationCode.REQUIRED_TERMS_NOT_AGREED, "termsId=" + termsId));
+                violations.add(SubscriptionViolation.of(
+                        "agreedTerms", SubscriptionViolationCode.REQUIRED_TERMS_NOT_AGREED, "termsId=" + termsId));
                 continue;
             }
             if (summary.viewRequired() && !termsViewUseCase.isViewed(customerId, termsId)) {
-                violations.add(SubscriptionViolation.of("agreedTerms",
-                        SubscriptionViolationCode.TERMS_NOT_VIEWED, "termsId=" + termsId));
+                violations.add(SubscriptionViolation.of(
+                        "agreedTerms", SubscriptionViolationCode.TERMS_NOT_VIEWED, "termsId=" + termsId));
             }
             if (!agreedVersion.equals(summary.version())) {
-                violations.add(SubscriptionViolation.of("agreedTerms",
-                        SubscriptionViolationCode.TERMS_VERSION_MISMATCH, "termsId=" + termsId));
+                violations.add(SubscriptionViolation.of(
+                        "agreedTerms", SubscriptionViolationCode.TERMS_VERSION_MISMATCH, "termsId=" + termsId));
             }
         }
         return violations;
@@ -188,7 +188,8 @@ public class ProductSubscriptionValidationService implements ProductSubscription
             List<ProductPreferentialRate> preferentialRates, List<String> satisfiedConditionCodes) {
         Set<String> satisfied = new HashSet<>(satisfiedConditionCodes);
         return preferentialRates.stream()
-                .filter(pr -> satisfied.contains(pr.getProductPreferentialRateId().getConditionCode()))
+                .filter(pr ->
+                        satisfied.contains(pr.getProductPreferentialRateId().getConditionCode()))
                 .map(ProductPreferentialRate::getRate)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }

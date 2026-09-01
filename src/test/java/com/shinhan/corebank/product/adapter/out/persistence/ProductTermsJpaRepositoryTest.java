@@ -29,15 +29,14 @@ class ProductTermsJpaRepositoryTest extends IntegrationTestSupport {
     @Test
     @DisplayName("ProductTerms를 저장하면 복합키로 조회된다")
     void saveAndFindById() {
-        Long productId = productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
+        Long productId =
+                productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
         Long termsId = jdbcTemplate.queryForObject(
                 "SELECT terms_id FROM terms WHERE terms_code = ?", Long.class, "TERMS_SERVICE");
 
         ProductTermsJpaEntityId id = new ProductTermsJpaEntityId(productId, termsId);
-        ProductTermsJpaEntity productTerms = ProductTermsJpaEntity.builder()
-                .id(id)
-                .displayOrder((short) 1)
-                .build();
+        ProductTermsJpaEntity productTerms =
+                ProductTermsJpaEntity.builder().id(id).displayOrder((short) 1).build();
 
         repository.save(productTerms);
         entityManager.flush();
@@ -50,8 +49,11 @@ class ProductTermsJpaRepositoryTest extends IntegrationTestSupport {
     @Test
     @DisplayName("productId로 조회하면 다른 상품 것은 제외하고 displayOrder 오름차순으로 반환한다")
     void findAllByProductId_returnsOwnTermsSortedByDisplayOrder() {
-        Long productId = productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
-        Long otherProductId = productRepository.save(ProductTestFixtures.productWithCode("SVN-903")).getProductId();
+        Long productId =
+                productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
+        Long otherProductId = productRepository
+                .save(ProductTestFixtures.productWithCode("SVN-903"))
+                .getProductId();
         Long serviceTermsId = jdbcTemplate.queryForObject(
                 "SELECT terms_id FROM terms WHERE terms_code = ?", Long.class, "TERMS_SERVICE");
         Long privacyTermsId = jdbcTemplate.queryForObject(
@@ -65,8 +67,7 @@ class ProductTermsJpaRepositoryTest extends IntegrationTestSupport {
 
         List<ProductTermsJpaEntity> result = repository.findAllByProductId(productId);
 
-        assertThat(result).extracting(e -> e.getId().getTermsId())
-                .containsExactly(serviceTermsId, privacyTermsId);
+        assertThat(result).extracting(e -> e.getId().getTermsId()).containsExactly(serviceTermsId, privacyTermsId);
     }
 
     private ProductTermsJpaEntity productTerms(Long productId, Long termsId, short displayOrder) {

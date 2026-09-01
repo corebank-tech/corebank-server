@@ -13,7 +13,6 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum LimitErrorCode implements ErrorCode {
-
     INSUFFICIENT_WITHDRAWABLE_AMOUNT("LMT0001", 400, "출금가능금액이 부족합니다."),
     ONE_TIME_LIMIT_EXCEEDED("LMT0002", 400, "1회 이체한도를 초과했습니다."),
     DAILY_LIMIT_EXCEEDED("LMT0003", 400, "1일 이체한도를 초과했습니다.");

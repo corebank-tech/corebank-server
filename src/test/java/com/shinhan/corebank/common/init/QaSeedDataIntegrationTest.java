@@ -27,7 +27,8 @@ class QaSeedDataIntegrationTest extends IntegrationTestSupport {
     void loadsQaSeedIdempotently() {
         assertThat(demoDataLoader).isNotNull();
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
-        jdbc.update("""
+        jdbc.update(
+                """
                 UPDATE customer
                 SET password_hash = 'qa-changed-password-hash',
                     user_name = 'QA 변경 이름',
@@ -35,7 +36,8 @@ class QaSeedDataIntegrationTest extends IntegrationTestSupport {
                     account_locked = TRUE
                 WHERE user_id = 'honggildong'
                 """);
-        jdbc.update("""
+        jdbc.update(
+                """
                 UPDATE account
                 SET balance = 1,
                     password_failure_count = 5,
@@ -44,33 +46,46 @@ class QaSeedDataIntegrationTest extends IntegrationTestSupport {
                 WHERE account_number = '088100000001'
                 """);
 
-        ResourceDatabasePopulator populator = new ResourceDatabasePopulator(
-                new ClassPathResource("db/seed/local-demo-data.sql")
-        );
+        ResourceDatabasePopulator populator =
+                new ResourceDatabasePopulator(new ClassPathResource("db/seed/local-demo-data.sql"));
         populator.setContinueOnError(false);
         populator.execute(dataSource);
 
         assertThat(count(jdbc, "SELECT COUNT(*) FROM customer WHERE user_id IN ('honggildong','kimminji','leeseojun')"))
                 .isEqualTo(3);
-        assertThat(count(jdbc, "SELECT COUNT(*) FROM account WHERE account_number BETWEEN '088100000001' AND '088100000009' OR account_number IN ('088200000001','088300000001')"))
+        assertThat(
+                        count(
+                                jdbc,
+                                "SELECT COUNT(*) FROM account WHERE account_number BETWEEN '088100000001' AND '088100000009' OR account_number IN ('088200000001','088300000001')"))
                 .isEqualTo(11);
-        assertThat(count(jdbc, "SELECT COUNT(*) FROM account WHERE status = 'SUSPENDED' AND account_number IN ('088100000005','088100000007')"))
+        assertThat(
+                        count(
+                                jdbc,
+                                "SELECT COUNT(*) FROM account WHERE status = 'SUSPENDED' AND account_number IN ('088100000005','088100000007')"))
                 .isEqualTo(2);
-        assertThat(count(jdbc, "SELECT COUNT(*) FROM account WHERE status = 'CLOSED' AND account_number = '088100000008'"))
+        assertThat(count(
+                        jdbc,
+                        "SELECT COUNT(*) FROM account WHERE status = 'CLOSED' AND account_number = '088100000008'"))
                 .isEqualTo(1);
-        assertThat(count(jdbc, "SELECT COUNT(*) FROM account WHERE withdrawal_registered = FALSE AND account_number = '088100000003'"))
+        assertThat(
+                        count(
+                                jdbc,
+                                "SELECT COUNT(*) FROM account WHERE withdrawal_registered = FALSE AND account_number = '088100000003'"))
                 .isEqualTo(1);
         assertThat(jdbc.queryForObject(
-                "SELECT password_hash FROM customer WHERE user_id = 'honggildong'",
-                String.class
-        )).isEqualTo("qa-changed-password-hash");
-        assertThat(jdbc.queryForObject(
-                "SELECT user_name FROM customer WHERE user_id = 'honggildong'",
-                String.class
-        )).isEqualTo("QA 변경 이름");
-        assertThat(count(jdbc, "SELECT COUNT(*) FROM customer WHERE user_id = 'honggildong' AND login_failure_count = 0 AND account_locked = FALSE"))
+                        "SELECT password_hash FROM customer WHERE user_id = 'honggildong'", String.class))
+                .isEqualTo("qa-changed-password-hash");
+        assertThat(jdbc.queryForObject("SELECT user_name FROM customer WHERE user_id = 'honggildong'", String.class))
+                .isEqualTo("QA 변경 이름");
+        assertThat(
+                        count(
+                                jdbc,
+                                "SELECT COUNT(*) FROM customer WHERE user_id = 'honggildong' AND login_failure_count = 0 AND account_locked = FALSE"))
                 .isEqualTo(1);
-        assertThat(count(jdbc, "SELECT COUNT(*) FROM account WHERE account_number = '088100000001' AND balance = 100000 AND password_failure_count = 0 AND password_locked = FALSE AND alias = '주거래 통장'"))
+        assertThat(
+                        count(
+                                jdbc,
+                                "SELECT COUNT(*) FROM account WHERE account_number = '088100000001' AND balance = 100000 AND password_failure_count = 0 AND password_locked = FALSE AND alias = '주거래 통장'"))
                 .isEqualTo(1);
     }
 

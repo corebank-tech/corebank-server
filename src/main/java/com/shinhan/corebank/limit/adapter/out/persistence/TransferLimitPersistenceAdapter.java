@@ -1,15 +1,13 @@
 package com.shinhan.corebank.limit.adapter.out.persistence;
 
-import java.time.Clock;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.Optional;
-
 import com.shinhan.corebank.limit.application.port.out.TransferLimitCommandPort;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
 import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
-
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -29,7 +27,8 @@ public class TransferLimitPersistenceAdapter implements TransferLimitQueryPort, 
 
     @Override
     public Optional<TransferLimitDailyUsage> findUsage(Long customerId, LocalDate usageDate) {
-        return usageRepository.findById(new TransferLimitDailyUsageId(customerId, usageDate))
+        return usageRepository
+                .findById(new TransferLimitDailyUsageId(customerId, usageDate))
                 .map(TransferLimitDailyUsageJpaEntity::toDomain);
     }
 
@@ -46,15 +45,15 @@ public class TransferLimitPersistenceAdapter implements TransferLimitQueryPort, 
     /** 호출자가 findForUpdateByCustomerId 로 잠근 행에만 쓴다. 그래서 없는 행을 만들지 않는다. */
     @Override
     public TransferLimit update(TransferLimit limit) {
-        limitRepository.updateLimit(limit.getCustomerId(), limit.getOneTimeLimit(),
-                limit.getDailyLimit(), LocalDateTime.now(clock));
+        limitRepository.updateLimit(
+                limit.getCustomerId(), limit.getOneTimeLimit(), limit.getDailyLimit(), LocalDateTime.now(clock));
         return limit;
     }
 
     @Override
     public void saveIfAbsent(TransferLimit limit) {
-        limitRepository.insertIfAbsent(limit.getCustomerId(), limit.getOneTimeLimit(),
-                limit.getDailyLimit(), LocalDateTime.now(clock));
+        limitRepository.insertIfAbsent(
+                limit.getCustomerId(), limit.getOneTimeLimit(), limit.getDailyLimit(), LocalDateTime.now(clock));
     }
 
     /**
@@ -65,7 +64,8 @@ public class TransferLimitPersistenceAdapter implements TransferLimitQueryPort, 
     public TransferLimitDailyUsage lockDailyUsage(Long customerId, LocalDate usageDate) {
         usageRepository.insertIfAbsent(customerId, usageDate, LocalDateTime.now(clock));
         // 바로 위에서 행을 보장했으므로 비어 있을 수 없다. Optional 을 푸는 것뿐이다.
-        return usageRepository.findForUpdate(customerId, usageDate)
+        return usageRepository
+                .findForUpdate(customerId, usageDate)
                 .map(TransferLimitDailyUsageJpaEntity::toDomain)
                 .orElseThrow();
     }

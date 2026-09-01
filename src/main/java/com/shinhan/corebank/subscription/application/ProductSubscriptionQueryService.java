@@ -33,9 +33,7 @@ public class ProductSubscriptionQueryService implements ProductSubscriptionQuery
         if (subscription.getAccountId() != null) {
             accountNumber = accountNumberQueryPort
                     .findAccountNumber(subscription.getAccountId(), requestingCustomerId)
-                    .orElseThrow(() -> new BusinessException(
-                            SubscriptionErrorCode.SUBSCRIPTION_ACCOUNT_NOT_FOUND
-                    ));
+                    .orElseThrow(() -> new BusinessException(SubscriptionErrorCode.SUBSCRIPTION_ACCOUNT_NOT_FOUND));
         }
 
         return ProductSubscriptionResult.builder()
@@ -45,5 +43,4 @@ public class ProductSubscriptionQueryService implements ProductSubscriptionQuery
                 .accountNumber(accountNumber)
                 .build();
     }
-
 }

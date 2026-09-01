@@ -1,5 +1,10 @@
 package com.shinhan.corebank.product.adapter.in.web;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaEntity;
@@ -32,11 +37,6 @@ import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
 @AutoConfigureMockMvc
 @Transactional
 class ProductControllerTest extends IntegrationTestSupport {
@@ -67,9 +67,7 @@ class ProductControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("상품 목록을 200 + ApiResponse 봉투로 반환한다")
     void searchProducts() throws Exception {
-        mockMvc.perform(get("/products")
-                        .param("keyword", "컨트롤러")
-                        .param("sort", "NAME"))
+        mockMvc.perform(get("/products").param("keyword", "컨트롤러").param("sort", "NAME"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data.page").value(0))
@@ -153,8 +151,7 @@ class ProductControllerTest extends IntegrationTestSupport {
                 .build());
         Long productId = saved.getProductId();
         Long termsId = jdbcTemplate.queryForObject(
-                "SELECT terms_id FROM terms WHERE terms_code = ? AND version = ?",
-                Long.class, "TERMS_SAVINGS", "v1.0");
+                "SELECT terms_id FROM terms WHERE terms_code = ? AND version = ?", Long.class, "TERMS_SAVINGS", "v1.0");
 
         rateTierRepository.save(ProductRateTierJpaEntity.builder()
                 .id(new ProductRateTierJpaEntityId(productId, (short) 12))
@@ -236,7 +233,8 @@ class ProductControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("판매중지 상품도 상세조회는 200으로 응답하고 saleStatus로 구분된다")
     void getProductDetail_suspendedStillReturns200() throws Exception {
-        ProductJpaEntity saved = productJpaRepository.save(ProductTestFixtures.productWithCode("DTL-102", SaleStatus.SUSPENDED));
+        ProductJpaEntity saved =
+                productJpaRepository.save(ProductTestFixtures.productWithCode("DTL-102", SaleStatus.SUSPENDED));
 
         mockMvc.perform(get("/products/{productId}", saved.getProductId()))
                 .andExpect(status().isOk())
@@ -247,7 +245,9 @@ class ProductControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("약관 본문 조회 성공 시 200 + 본문/열람이력을 반환한다")
     void getProductTerms_success() throws Exception {
-        Long productId = productJpaRepository.save(ProductTestFixtures.productWithCode("TRM-101")).getProductId();
+        Long productId = productJpaRepository
+                .save(ProductTestFixtures.productWithCode("TRM-101"))
+                .getProductId();
         Long termsId = jdbcTemplate.queryForObject(
                 "SELECT terms_id FROM terms WHERE terms_code = ?", Long.class, "TERMS_DEPOSIT");
         termsRepository.save(ProductTermsJpaEntity.builder()
@@ -271,7 +271,9 @@ class ProductControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("인증 없이 요청하면 401 + CMN0101을 반환한다")
     void getProductTerms_unauthenticated() throws Exception {
-        Long productId = productJpaRepository.save(ProductTestFixtures.productWithCode("TRM-102")).getProductId();
+        Long productId = productJpaRepository
+                .save(ProductTestFixtures.productWithCode("TRM-102"))
+                .getProductId();
 
         mockMvc.perform(get("/products/{productId}/terms/{termsId}", productId, 1L))
                 .andExpect(status().isUnauthorized())
@@ -290,7 +292,9 @@ class ProductControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("상품에 연결되지 않은 termsId면 404 + PRD0202를 반환한다")
     void getProductTerms_termsNotLinked() throws Exception {
-        Long productId = productJpaRepository.save(ProductTestFixtures.productWithCode("TRM-103")).getProductId();
+        Long productId = productJpaRepository
+                .save(ProductTestFixtures.productWithCode("TRM-103"))
+                .getProductId();
 
         mockMvc.perform(get("/products/{productId}/terms/{termsId}", productId, 999_999L)
                         .with(authentication(authenticationOf(1L))))

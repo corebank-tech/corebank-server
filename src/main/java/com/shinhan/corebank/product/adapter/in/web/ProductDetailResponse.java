@@ -1,7 +1,6 @@
 package com.shinhan.corebank.product.adapter.in.web;
 
 import com.shinhan.corebank.product.domain.*;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -29,13 +28,11 @@ public record ProductDetailResponse(
         List<String> notices,
         SaleStatus saleStatus,
         LocalDate saleEndDate,
-        List<TermsItem> terms
-) {
+        List<TermsItem> terms) {
     public static ProductDetailResponse from(ProductDetailView detail) {
         Product product = detail.getProduct();
-        List<RateTierItem> rateTierItems = detail.getRateTiers().stream()
-                .map(RateTierItem::from)
-                .toList();
+        List<RateTierItem> rateTierItems =
+                detail.getRateTiers().stream().map(RateTierItem::from).toList();
 
         return new ProductDetailResponse(
                 product.getProductId(),
@@ -54,14 +51,15 @@ public record ProductDetailResponse(
                 product.getInterestPayType(),
                 termOptions(rateTierItems),
                 rateTierItems,
-                detail.getPreferentialRates().stream().map(PreferentialRateItem::from).toList(),
+                detail.getPreferentialRates().stream()
+                        .map(PreferentialRateItem::from)
+                        .toList(),
                 product.getEligibility(),
                 product.getSubscriptionRestrictions(),
                 product.getNotices(),
                 product.getSaleStatus(),
                 product.getSaleEndDate(),
-                detail.getTerms().stream().map(TermsItem::from).toList()
-        );
+                detail.getTerms().stream().map(TermsItem::from).toList());
     }
 
     private static List<Integer> termOptions(List<RateTierItem> rateTierItems) {
@@ -81,20 +79,12 @@ public record ProductDetailResponse(
     public record PreferentialRateItem(String conditionCode, String conditionName, BigDecimal rate) {
         static PreferentialRateItem from(ProductPreferentialRate rate) {
             return new PreferentialRateItem(
-                    rate.getProductPreferentialRateId().getConditionCode(),
-                    rate.getConditionName(),
-                    rate.getRate());
+                    rate.getProductPreferentialRateId().getConditionCode(), rate.getConditionName(), rate.getRate());
         }
     }
 
     public record TermsItem(
-            Long termsId,
-            String termsName,
-            String version,
-            boolean required,
-            boolean viewRequired,
-            int displayOrder
-    ) {
+            Long termsId, String termsName, String version, boolean required, boolean viewRequired, int displayOrder) {
         static TermsItem from(ProductTermsDetail terms) {
             return new TermsItem(
                     terms.getTermsId(),

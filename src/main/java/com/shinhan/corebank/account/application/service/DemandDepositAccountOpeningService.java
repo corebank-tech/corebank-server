@@ -9,14 +9,13 @@ import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Clock;
-import java.time.LocalDateTime;
-
-@Service 
+@Service
 @RequiredArgsConstructor
 public class DemandDepositAccountOpeningService implements DemandDepositAccountOpeningUseCase {
 
@@ -26,23 +25,14 @@ public class DemandDepositAccountOpeningService implements DemandDepositAccountO
 
     @Override
     @Transactional
-    public AccountOpeningResult open(
-            DemandDepositAccountOpeningCommand command
-    ) {
+    public AccountOpeningResult open(DemandDepositAccountOpeningCommand command) {
         if (command == null) {
-            throw new BusinessException(
-                    CommonErrorCode.REQUIRED_FIELD_MISSING
-            );
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
 
-        String accountNumber =
-                issueAccountNumberUseCase.issue(
-                        AccountType.DEMAND_DEPOSIT,
-                        null
-                );
+        String accountNumber = issueAccountNumberUseCase.issue(AccountType.DEMAND_DEPOSIT, null);
 
-        LocalDateTime openedDate =
-                LocalDateTime.now(clock);
+        LocalDateTime openedDate = LocalDateTime.now(clock);
 
         Account account = Account.open(
                 accountNumber,
@@ -51,15 +41,10 @@ public class DemandDepositAccountOpeningService implements DemandDepositAccountO
                 AccountType.DEMAND_DEPOSIT,
                 command.newAccountPasswordHash(),
                 openedDate,
-                null
-        );
+                null);
 
-        Account savedAccount =
-                accountPersistencePort.save(account);
+        Account savedAccount = accountPersistencePort.save(account);
 
-        return new AccountOpeningResult(
-                savedAccount.getAccountId(),
-                savedAccount.getAccountNumber()
-        );
+        return new AccountOpeningResult(savedAccount.getAccountId(), savedAccount.getAccountNumber());
     }
 }

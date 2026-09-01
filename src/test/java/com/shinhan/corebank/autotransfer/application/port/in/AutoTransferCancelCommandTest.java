@@ -43,7 +43,8 @@ class AutoTransferCancelCommandTest {
     @Test
     @DisplayName("ID 목록에 null 원소가 섞이면 CMN0002를 던진다")
     void idsContainingNull_throwsRequiredFieldMissing() {
-        assertThatThrownBy(() -> validBuilder().autoTransferIds(Arrays.asList(20L, null)).build())
+        assertThatThrownBy(() ->
+                        validBuilder().autoTransferIds(Arrays.asList(20L, null)).build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -52,9 +53,8 @@ class AutoTransferCancelCommandTest {
     @Test
     @DisplayName("ID 목록은 오름차순 정렬·중복 제거된다 — OTP 거래정보의 배열 순서를 발급 시점과 맞추기 위한 계약")
     void ids_areSortedAndDeduplicated() {
-        AutoTransferCancelCommand command = validBuilder()
-                .autoTransferIds(List.of(30L, 10L, 20L, 10L))
-                .build();
+        AutoTransferCancelCommand command =
+                validBuilder().autoTransferIds(List.of(30L, 10L, 20L, 10L)).build();
 
         assertThat(command.autoTransferIds()).containsExactly(10L, 20L, 30L);
     }
@@ -80,8 +80,8 @@ class AutoTransferCancelCommandTest {
 
         assertThatThrownBy(() -> validBuilder().autoTransferIds(ids).build())
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
     }
 
     @Test

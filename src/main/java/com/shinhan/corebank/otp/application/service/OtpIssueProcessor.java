@@ -9,12 +9,11 @@ import com.shinhan.corebank.otp.application.port.out.OtpTransactionDataCanonical
 import com.shinhan.corebank.otp.application.port.out.OtpVerificationRequestPort;
 import com.shinhan.corebank.otp.config.OtpProperties;
 import com.shinhan.corebank.otp.domain.model.OtpVerificationRequest;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.time.LocalDateTime;
 
 // 잠금을 획득한 고객의 기존 OTP 만료와 신규 OTP 저장을 한 트랜잭션으로 처리한다.
 @Service
@@ -45,8 +44,7 @@ public class OtpIssueProcessor {
                 canonicalTransactionData,
                 codeHashPort.hash(otpCode),
                 now.plus(properties.codeTtl()),
-                now
-        ));
+                now));
 
         // Phase 1 Mock에서는 실제 전송 대신 발급 번호를 응답에 포함한다.
         return new IssueOtpResult(otpRequestId, otpCode, properties.codeTtl().toSeconds());

@@ -37,8 +37,23 @@ class ScheduledTransferBatchServiceTest {
 
     private ScheduledTransfer scheduledTransfer(Long id, ScheduledTransferStatus status) {
         return ScheduledTransfer.reconstitute(
-                id, 1L, 2L, "088", "110987654321", "홍길동", 10_000L, DATE,
-                "메모", "받는메모", status, null, LocalDateTime.of(2026, 1, 1, 0, 0), null, null, null, null);
+                id,
+                1L,
+                2L,
+                "088",
+                "110987654321",
+                "홍길동",
+                10_000L,
+                DATE,
+                "메모",
+                "받는메모",
+                status,
+                null,
+                LocalDateTime.of(2026, 1, 1, 0, 0),
+                null,
+                null,
+                null,
+                null);
     }
 
     @Test
@@ -73,7 +88,9 @@ class ScheduledTransferBatchServiceTest {
         ScheduledTransfer failing = scheduledTransfer(10L, ScheduledTransferStatus.WAITING);
         ScheduledTransfer succeeding = scheduledTransfer(11L, ScheduledTransferStatus.WAITING);
         when(scheduledTransferBatchQueryPort.findDueForExecution(DATE)).thenReturn(List.of(failing, succeeding));
-        doThrow(new RuntimeException("DB 연결 장애")).when(scheduledTransferBatchItemProcessor).claim(10L);
+        doThrow(new RuntimeException("DB 연결 장애"))
+                .when(scheduledTransferBatchItemProcessor)
+                .claim(10L);
         when(scheduledTransferBatchItemProcessor.claim(11L)).thenReturn(true);
 
         scheduledTransferBatchService.executeDaily(DATE);
@@ -91,7 +108,8 @@ class ScheduledTransferBatchServiceTest {
         when(scheduledTransferBatchItemProcessor.claim(10L)).thenReturn(true);
         when(scheduledTransferBatchItemProcessor.claim(11L)).thenReturn(true);
         doThrow(new RuntimeException("이체 실행 중 장애"))
-                .when(scheduledTransferBatchItemProcessor).completeProcessing(failing, DATE);
+                .when(scheduledTransferBatchItemProcessor)
+                .completeProcessing(failing, DATE);
 
         scheduledTransferBatchService.executeDaily(DATE);
 
@@ -127,7 +145,8 @@ class ScheduledTransferBatchServiceTest {
         ScheduledTransfer succeeding = scheduledTransfer(21L, ScheduledTransferStatus.PROCESSING);
         when(scheduledTransferBatchQueryPort.findAllProcessing()).thenReturn(List.of(failing, succeeding));
         doThrow(new RuntimeException("조회 장애"))
-                .when(scheduledTransferBatchItemProcessor).reconcileStuckExecution(failing);
+                .when(scheduledTransferBatchItemProcessor)
+                .reconcileStuckExecution(failing);
 
         scheduledTransferBatchService.reconcileStuckExecutions(DATE);
 

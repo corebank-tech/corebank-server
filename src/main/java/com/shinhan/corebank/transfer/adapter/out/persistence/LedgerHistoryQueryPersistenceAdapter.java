@@ -1,7 +1,6 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import java.time.LocalDateTime;
-import java.util.List;
+import static com.shinhan.corebank.transfer.adapter.out.persistence.QLedgerEntryJpaEntity.ledgerEntryJpaEntity;
 
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.OrderSpecifier;
@@ -15,10 +14,9 @@ import com.shinhan.corebank.transfer.application.port.out.LedgerHistoryAggregate
 import com.shinhan.corebank.transfer.application.port.out.LedgerHistoryQueryPort;
 import com.shinhan.corebank.transfer.domain.LedgerDirection;
 import com.shinhan.corebank.transfer.domain.LedgerEntry;
-
+import java.time.LocalDateTime;
+import java.util.List;
 import org.springframework.stereotype.Repository;
-
-import static com.shinhan.corebank.transfer.adapter.out.persistence.QLedgerEntryJpaEntity.ledgerEntryJpaEntity;
 
 @Repository
 public class LedgerHistoryQueryPersistenceAdapter implements LedgerHistoryQueryPort {
@@ -39,11 +37,7 @@ public class LedgerHistoryQueryPersistenceAdapter implements LedgerHistoryQueryP
             // query.page()는 0-based (LedgerHistoryQuery 계약: P2가 외부 1-based를 변환해 전달)
             fetchQuery.offset((long) query.page() * query.size()).limit(query.size());
         }
-        return fetchQuery
-                .fetch()
-                .stream()
-                .map(LedgerEntryMapper::toDomain)
-                .toList();
+        return fetchQuery.fetch().stream().map(LedgerEntryMapper::toDomain).toList();
     }
 
     @Override
@@ -59,7 +53,10 @@ public class LedgerHistoryQueryPersistenceAdapter implements LedgerHistoryQueryP
     @Override
     public LedgerHistoryAggregate summarize(LedgerHistoryQuery query) {
         List<Tuple> rows = queryFactory
-                .select(ledgerEntryJpaEntity.direction, ledgerEntryJpaEntity.count(), ledgerEntryJpaEntity.amount.sumLong())
+                .select(
+                        ledgerEntryJpaEntity.direction,
+                        ledgerEntryJpaEntity.count(),
+                        ledgerEntryJpaEntity.amount.sumLong())
                 .from(ledgerEntryJpaEntity)
                 .where(conditions(query))
                 .where(excludeReversed())
@@ -95,11 +92,11 @@ public class LedgerHistoryQueryPersistenceAdapter implements LedgerHistoryQueryP
         LocalDateTime toExclusive = query.toDate().plusDays(1).atStartOfDay();
 
         return new Predicate[] {
-                ledgerEntryJpaEntity.accountId.eq(query.accountId()),
-                ledgerEntryJpaEntity.occurredAt.goe(from),
-                ledgerEntryJpaEntity.occurredAt.lt(toExclusive),
-                directionEq(query.direction()),
-                keywordContains(query.keyword())
+            ledgerEntryJpaEntity.accountId.eq(query.accountId()),
+            ledgerEntryJpaEntity.occurredAt.goe(from),
+            ledgerEntryJpaEntity.occurredAt.lt(toExclusive),
+            directionEq(query.direction()),
+            keywordContains(query.keyword())
         };
     }
 
@@ -125,8 +122,12 @@ public class LedgerHistoryQueryPersistenceAdapter implements LedgerHistoryQueryP
 
     private OrderSpecifier<?>[] sortOrder(LedgerHistorySort sort) {
         if (sort == LedgerHistorySort.OLDEST) {
-            return new OrderSpecifier<?>[] { ledgerEntryJpaEntity.occurredAt.asc(), ledgerEntryJpaEntity.ledgerEntryId.asc() };
+            return new OrderSpecifier<?>[] {
+                ledgerEntryJpaEntity.occurredAt.asc(), ledgerEntryJpaEntity.ledgerEntryId.asc()
+            };
         }
-        return new OrderSpecifier<?>[] { ledgerEntryJpaEntity.occurredAt.desc(), ledgerEntryJpaEntity.ledgerEntryId.desc() };
+        return new OrderSpecifier<?>[] {
+            ledgerEntryJpaEntity.occurredAt.desc(), ledgerEntryJpaEntity.ledgerEntryId.desc()
+        };
     }
 }

@@ -16,11 +16,9 @@ import org.junit.jupiter.params.provider.ValueSource;
 class CommonCodeIdTest {
 
     @ParameterizedTest(name = "codeGroup={0}, code={1}")
-    @CsvSource(nullValues = "null", value = {
-            "null, ACTIVE",
-            "ACCOUNT_STATUS, null",
-            "null, null"
-    })
+    @CsvSource(
+            nullValues = "null",
+            value = {"null, ACTIVE", "ACCOUNT_STATUS, null", "null, null"})
     @DisplayName("codeGroup 또는 code가 null이면 CMN0002를 던진다")
     void rejectsNull(String codeGroup, String code) {
         assertThatThrownBy(() -> new CommonCodeId(codeGroup, code))
@@ -33,10 +31,8 @@ class CommonCodeIdTest {
     @ValueSource(strings = {"", " ", "\t"})
     @DisplayName("codeGroup 또는 code가 공백이면 CMN0002를 던진다")
     void rejectsBlank(String blank) {
-        assertThatThrownBy(() -> new CommonCodeId(blank, "ACTIVE"))
-                .isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> new CommonCodeId("ACCOUNT_STATUS", blank))
-                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> new CommonCodeId(blank, "ACTIVE")).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> new CommonCodeId("ACCOUNT_STATUS", blank)).isInstanceOf(BusinessException.class);
     }
 
     @Test

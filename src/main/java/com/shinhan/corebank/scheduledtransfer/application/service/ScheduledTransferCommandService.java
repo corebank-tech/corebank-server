@@ -19,10 +19,6 @@ import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLimit
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import com.shinhan.corebank.scheduledtransfer.domain.exception.ScheduledTransferErrorCode;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -32,11 +28,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class ScheduledTransferCommandService implements ScheduledTransferRegisterUseCase, ScheduledTransferCancelUseCase {
+public class ScheduledTransferCommandService
+        implements ScheduledTransferRegisterUseCase, ScheduledTransferCancelUseCase {
 
     // 1차는 당행 전용 상수. 별도 은행 테이블 없음(scheduled_transfer.payee_bank_code 스키마 주석 참고)
     private static final String PAYEE_BANK_CODE = "088";
@@ -55,8 +55,8 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
 
         // 예정일자 범위 검증 — 외부 조회 없이 입력값만으로 판단 가능하므로 인증(1회성 토큰 소비)보다 먼저 수행한다
         LocalDate today = LocalDate.now(clock);
-        if (!command.scheduledDate().isAfter(today) ||
-                command.scheduledDate().isAfter(today.plusDays(MAX_SCHEDULED_DAYS))) {
+        if (!command.scheduledDate().isAfter(today)
+                || command.scheduledDate().isAfter(today.plusDays(MAX_SCHEDULED_DAYS))) {
             throw new BusinessException(ScheduledTransferErrorCode.INVALID_SCHEDULED_DATE);
         }
 
@@ -79,7 +79,8 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
         // 입금계좌 실존 여부·유형 검증. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을 묶어두는 상품이라 이체로 추가 입금할 수 없다.
         // 정기적금(INSTALLMENT_SAVINGS)은 매달 나눠 넣는 게 상품 목적이라 허용한다
         // (REQ-SCD-006 → REQ-TRSF-030 — TransferExecutionService·AutoTransferCommandService와 동일 정책, #317)
-        AccountType payeeAccountType = accountStatusPort.findAccountTypeByNumber(command.depositAccountNumber())
+        AccountType payeeAccountType = accountStatusPort
+                .findAccountTypeByNumber(command.depositAccountNumber())
                 .orElseThrow(() -> new BusinessException(ScheduledTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
         if (payeeAccountType == AccountType.TIME_DEPOSIT) {
             throw new BusinessException(ScheduledTransferErrorCode.UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE);
@@ -92,24 +93,47 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
         }
 
         // 중복 등록 제한
-        if (scheduledTransferPersistencePort.existsActiveDuplicate(command.customerId(), command.withdrawalAccountId(),
-                command.depositAccountNumber(), command.amount(), command.scheduledDate())) {
+        if (scheduledTransferPersistencePort.existsActiveDuplicate(
+                command.customerId(),
+                command.withdrawalAccountId(),
+                command.depositAccountNumber(),
+                command.amount(),
+                command.scheduledDate())) {
             throw new BusinessException(ScheduledTransferErrorCode.DUPLICATE_REGISTRATION);
         }
 
         // 인증 완료 토큰 — 계좌비밀번호는 P6 실구현 전까지 Mock, OTP는 실제 otp 도메인과 연동한다.
         // OTP는 성공 시 즉시 소비되므로 위 선행 검증을 모두 통과한 뒤 상태 변경 직전에 검증한다(otp_integration_guide.md §9)
-        authTokenVerificationPort.verify(command.accountPasswordAuthToken(), command.withdrawalAccountId(), "SCHEDULED_TRANSFER_REGISTER");
-        scheduledTransferOtpVerificationPort.verifyRegisterAndConsume(command.otpAuthToken(), command.customerId(),
-                command.withdrawalAccountId(), command.depositAccountNumber(), command.amount(), command.scheduledDate());
+        authTokenVerificationPort.verify(
+                command.accountPasswordAuthToken(), command.withdrawalAccountId(), "SCHEDULED_TRANSFER_REGISTER");
+        scheduledTransferOtpVerificationPort.verifyRegisterAndConsume(
+                command.otpAuthToken(),
+                command.customerId(),
+                command.withdrawalAccountId(),
+                command.depositAccountNumber(),
+                command.amount(),
+                command.scheduledDate());
 
-        ScheduledTransfer scheduledTransfer = ScheduledTransfer.register(command.customerId(), command.withdrawalAccountId(),
-                PAYEE_BANK_CODE, command.depositAccountNumber(), command.payeeName(), command.amount(), command.scheduledDate(),
-                command.myPassbookMemo(), command.recipientPassbookMemo(), LocalDateTime.now(clock));
+        ScheduledTransfer scheduledTransfer = ScheduledTransfer.register(
+                command.customerId(),
+                command.withdrawalAccountId(),
+                PAYEE_BANK_CODE,
+                command.depositAccountNumber(),
+                command.payeeName(),
+                command.amount(),
+                command.scheduledDate(),
+                command.myPassbookMemo(),
+                command.recipientPassbookMemo(),
+                LocalDateTime.now(clock));
 
         ScheduledTransfer saved = scheduledTransferPersistencePort.save(scheduledTransfer);
-        auditLogService.record(saved.getCustomerId(), null, AuditEventType.SCHEDULED_TRANSFER_INFO_CHANGE,
-                command.requestIp(), true, Map.of("scheduledTransferId", saved.getScheduledTransferId(), "action", "register"));
+        auditLogService.record(
+                saved.getCustomerId(),
+                null,
+                AuditEventType.SCHEDULED_TRANSFER_INFO_CHANGE,
+                command.requestIp(),
+                true,
+                Map.of("scheduledTransferId", saved.getScheduledTransferId(), "action", "register"));
 
         return saved;
     }
@@ -127,8 +151,10 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
             Optional<ScheduledTransfer> found = scheduledTransferPersistencePort.findById(scheduledTransferId);
             // 미존재와 타인 소유를 구분하지 않는다 — scheduledTransferId도 순차 증가 PK라 스캐닝 위험이 있다(api_conventions.md §8-3)
             if (found.isEmpty() || !found.get().getCustomerId().equals(command.customerId())) {
-                results.put(scheduledTransferId,
-                        ScheduledTransferCancelResult.failure(scheduledTransferId, ScheduledTransferErrorCode.NOT_FOUND));
+                results.put(
+                        scheduledTransferId,
+                        ScheduledTransferCancelResult.failure(
+                                scheduledTransferId, ScheduledTransferErrorCode.NOT_FOUND));
                 continue;
             }
             ScheduledTransfer scheduledTransfer = found.get();
@@ -139,14 +165,18 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
                 continue;
             }
             if (!scheduledTransfer.getStatus().isCancelable()) {
-                results.put(scheduledTransferId, ScheduledTransferCancelResult.failure(
-                        scheduledTransferId, ScheduledTransferErrorCode.NOT_IN_WAITING_STATUS));
+                results.put(
+                        scheduledTransferId,
+                        ScheduledTransferCancelResult.failure(
+                                scheduledTransferId, ScheduledTransferErrorCode.NOT_IN_WAITING_STATUS));
                 continue;
             }
             // 예정일 당일 여부
             if (!scheduledTransfer.getScheduledDate().isAfter(today)) {
-                results.put(scheduledTransferId, ScheduledTransferCancelResult.failure(
-                        scheduledTransferId, ScheduledTransferErrorCode.CANNOT_CANCEL_ON_EXECUTION_DATE));
+                results.put(
+                        scheduledTransferId,
+                        ScheduledTransferCancelResult.failure(
+                                scheduledTransferId, ScheduledTransferErrorCode.CANNOT_CANCEL_ON_EXECUTION_DATE));
                 continue;
             }
             cancelable.add(scheduledTransfer);
@@ -162,18 +192,25 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
         }
 
         // 위에서 단일 계좌임을 확인했으므로 어느 건의 출금계좌를 써도 같다
-        authTokenVerificationPort.verify(command.accountPasswordAuthToken(),
-                cancelable.getFirst().getWithdrawalAccountId(), "SCHEDULED_TRANSFER_CANCEL");
+        authTokenVerificationPort.verify(
+                command.accountPasswordAuthToken(),
+                cancelable.getFirst().getWithdrawalAccountId(),
+                "SCHEDULED_TRANSFER_CANCEL");
         // OTP 토큰에는 요청한 id 조합 전체가 묶여 있다 — 취소 가능한 건만 추려서 넘기면
         // 발급 시점 거래정보와 어긋나 OTP0102가 난다
-        scheduledTransferOtpVerificationPort.verifyCancelAndConsume(command.otpAuthToken(), command.customerId(),
-                command.scheduledTransferIds());
+        scheduledTransferOtpVerificationPort.verifyCancelAndConsume(
+                command.otpAuthToken(), command.customerId(), command.scheduledTransferIds());
 
         for (ScheduledTransfer scheduledTransfer : cancelable) {
             scheduledTransfer.cancel(LocalDateTime.now(clock));
             ScheduledTransfer saved = scheduledTransferPersistencePort.save(scheduledTransfer);
-            auditLogService.record(saved.getCustomerId(), null, AuditEventType.SCHEDULED_TRANSFER_INFO_CHANGE,
-                    command.requestIp(), true, Map.of("scheduledTransferId", saved.getScheduledTransferId(), "action", "cancel"));
+            auditLogService.record(
+                    saved.getCustomerId(),
+                    null,
+                    AuditEventType.SCHEDULED_TRANSFER_INFO_CHANGE,
+                    command.requestIp(),
+                    true,
+                    Map.of("scheduledTransferId", saved.getScheduledTransferId(), "action", "cancel"));
             results.put(saved.getScheduledTransferId(), ScheduledTransferCancelResult.success(saved));
         }
 
@@ -193,10 +230,11 @@ public class ScheduledTransferCommandService implements ScheduledTransferRegiste
     }
 
     // 요청한 id 순서 그대로 건별 결과를 정렬해 돌려준다 — 화면이 선택 목록과 결과를 짝지을 수 있도록
-    private List<ScheduledTransferCancelResult> orderedResults(List<Long> scheduledTransferIds,
-                                                               Map<Long, ScheduledTransferCancelResult> results) {
+    private List<ScheduledTransferCancelResult> orderedResults(
+            List<Long> scheduledTransferIds, Map<Long, ScheduledTransferCancelResult> results) {
         return scheduledTransferIds.stream()
-                .map(scheduledTransferId -> Objects.requireNonNull(results.get(scheduledTransferId),
+                .map(scheduledTransferId -> Objects.requireNonNull(
+                        results.get(scheduledTransferId),
                         () -> "건별 결과가 누락됐습니다: scheduledTransferId=" + scheduledTransferId))
                 .toList();
     }

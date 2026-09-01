@@ -38,12 +38,9 @@ class QuerydslSmokeTest extends IntegrationTestSupport {
                 .selectFrom(productJpaEntity)
                 .where(
                         productJpaEntity.productGroup.eq(ProductGroup.DEPOSIT),
-                        productJpaEntity.saleStatus.eq(SaleStatus.ON_SALE)
-                )
+                        productJpaEntity.saleStatus.eq(SaleStatus.ON_SALE))
                 .fetch();
 
-        assertThat(result)
-                .extracting(ProductJpaEntity::getProductId)
-                .contains(saved.getProductId());
+        assertThat(result).extracting(ProductJpaEntity::getProductId).contains(saved.getProductId());
     }
 }

@@ -9,11 +9,7 @@ public final class AuthenticatedCustomer {
     private final String userId;
     private final String userName;
 
-    public AuthenticatedCustomer(
-            Long customerId,
-            String userId,
-            String userName
-    ) {
+    public AuthenticatedCustomer(Long customerId, String userId, String userName) {
         this.customerId = Objects.requireNonNull(customerId, "customerId must not be null");
         this.userId = userId;
         this.userName = userName;
@@ -31,7 +27,6 @@ public final class AuthenticatedCustomer {
         return userName;
     }
 
-
     // 세 필드의 값이 모두 같은 인증 고객 객체인지 비교
     @Override
     public boolean equals(Object o) {
@@ -46,19 +41,15 @@ public final class AuthenticatedCustomer {
                 && Objects.equals(userName, other.userName);
     }
 
-
     // equals()와 동일한 필드를 사용해 객체의 해시값을 생성
     @Override
     public int hashCode() {
         return Objects.hash(customerId, userId, userName);
     }
 
-
-    //로그 출력 시 개인정보를 제외하고 내부 고객 PK만 표시
+    // 로그 출력 시 개인정보를 제외하고 내부 고객 PK만 표시
     @Override
     public String toString() {
-        return "AuthenticatedCustomer{" +
-                "customerId=" + customerId +
-                '}';
+        return "AuthenticatedCustomer{" + "customerId=" + customerId + '}';
     }
 }

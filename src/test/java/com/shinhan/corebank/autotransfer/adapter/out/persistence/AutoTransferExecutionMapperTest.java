@@ -42,9 +42,8 @@ class AutoTransferExecutionMapperTest {
                 LocalDate.of(2025, 6, 15), 10000L, LocalDateTime.of(2025, 6, 15, 9, 0));
         domain.markSuccess("TXN0001");
 
-        AutoTransferJpaEntity parent = AutoTransferJpaEntity.builder()
-                .autoTransferId(99L)
-                .build();
+        AutoTransferJpaEntity parent =
+                AutoTransferJpaEntity.builder().autoTransferId(99L).build();
 
         AutoTransferExecutionJpaEntity entity = AutoTransferExecutionMapper.toEntity(domain, parent);
 

@@ -7,7 +7,6 @@ import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountStatus;
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,7 +22,8 @@ public class PayeeInquiryService implements PayeeInquiryUseCase {
 
     @Override
     public PayeeInquiryResult inquire(String depositAccountNumber) {
-        ResolvedPayee payee = accountLockPort.resolvePayeeByAccountNumber(depositAccountNumber)
+        ResolvedPayee payee = accountLockPort
+                .resolvePayeeByAccountNumber(depositAccountNumber)
                 .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
 
         if (payee.status() != LockedAccountStatus.ACTIVE) {

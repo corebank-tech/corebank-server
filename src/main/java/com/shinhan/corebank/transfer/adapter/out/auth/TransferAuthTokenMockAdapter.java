@@ -1,7 +1,6 @@
 package com.shinhan.corebank.transfer.adapter.out.auth;
 
 import com.shinhan.corebank.transfer.application.port.out.TransferAuthTokenVerificationPort;
-
 import org.springframework.stereotype.Component;
 
 /**

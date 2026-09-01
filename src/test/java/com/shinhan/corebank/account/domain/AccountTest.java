@@ -1,34 +1,29 @@
 package com.shinhan.corebank.account.domain;
 
+import static org.assertj.core.api.Assertions.*;
+
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-
-import static org.assertj.core.api.Assertions.*;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 
 class AccountTest {
 
     private static final String ACCOUNT_NUMBER = "088100000001";
     private static final Long CUSTOMER_ID = 1L;
-    private static final String PASSWORD_HASH =
-            "$2y$10$1NOtaTsHuD0rdffA3ReFKO5S0J4bHlVES6okQMYubUd0OuVFfMZXa";
+    private static final String PASSWORD_HASH = "$2y$10$1NOtaTsHuD0rdffA3ReFKO5S0J4bHlVES6okQMYubUd0OuVFfMZXa";
 
-    private static final LocalDateTime OPENED_DATE =
-            LocalDateTime.of(2026, 8, 10, 10, 0);
+    private static final LocalDateTime OPENED_DATE = LocalDateTime.of(2026, 8, 10, 10, 0);
 
     private static final Long ACCOUNT_ID = 1L;
     private static final Long VERSION = 0L;
 
-    private static final LocalDateTime CREATED_AT =
-            LocalDateTime.of(2026, 8, 10, 10, 0);
+    private static final LocalDateTime CREATED_AT = LocalDateTime.of(2026, 8, 10, 10, 0);
 
-    private static final LocalDateTime UPDATED_AT =
-            LocalDateTime.of(2026, 8, 10, 11, 0);
+    private static final LocalDateTime UPDATED_AT = LocalDateTime.of(2026, 8, 10, 11, 0);
 
     @Test
     @DisplayName("입출금계좌를 생성하면 신규 계좌의 초기 상태로 생성된다")
@@ -37,14 +32,7 @@ class AccountTest {
 
         // when
         Account account = Account.open(
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                OPENED_DATE,
-                null
-        );
+                ACCOUNT_NUMBER, CUSTOMER_ID, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, OPENED_DATE, null);
 
         // then
         assertThat(account.getAccountId()).isNull();
@@ -91,8 +79,7 @@ class AccountTest {
                 AccountType.TIME_DEPOSIT,
                 PASSWORD_HASH,
                 OPENED_DATE,
-                maturityDate
-        );
+                maturityDate);
 
         // then
         assertThat(account.getProductId()).isEqualTo(productId);
@@ -117,13 +104,11 @@ class AccountTest {
                 AccountType.INSTALLMENT_SAVINGS,
                 PASSWORD_HASH,
                 OPENED_DATE,
-                maturityDate
-        );
+                maturityDate);
 
         // then
         assertThat(account.getProductId()).isEqualTo(productId);
-        assertThat(account.getAccountType())
-                .isEqualTo(AccountType.INSTALLMENT_SAVINGS);
+        assertThat(account.getAccountType()).isEqualTo(AccountType.INSTALLMENT_SAVINGS);
         assertThat(account.getMaturityDate()).isEqualTo(maturityDate);
         assertThat(account.getStatus()).isEqualTo(AccountStatus.ACTIVE);
         assertThat(account.getBalance()).isZero();
@@ -137,14 +122,13 @@ class AccountTest {
 
         // when & then
         assertThatThrownBy(() -> Account.open(
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                productId,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                OPENED_DATE,
-                null
-        ))
+                        ACCOUNT_NUMBER,
+                        CUSTOMER_ID,
+                        productId,
+                        AccountType.DEMAND_DEPOSIT,
+                        PASSWORD_HASH,
+                        OPENED_DATE,
+                        null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("입출금계좌는 상품 ID를 가질 수 없습니다.");
     }
@@ -157,14 +141,13 @@ class AccountTest {
 
         // when & then
         assertThatThrownBy(() -> Account.open(
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                OPENED_DATE,
-                maturityDate
-        ))
+                        ACCOUNT_NUMBER,
+                        CUSTOMER_ID,
+                        null,
+                        AccountType.DEMAND_DEPOSIT,
+                        PASSWORD_HASH,
+                        OPENED_DATE,
+                        maturityDate))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("입출금계좌는 만기일을 가질 수 없습니다.");
     }
@@ -177,14 +160,13 @@ class AccountTest {
 
         // when & then
         assertThatThrownBy(() -> Account.open(
-                "088200000001",
-                CUSTOMER_ID,
-                null,
-                AccountType.TIME_DEPOSIT,
-                PASSWORD_HASH,
-                OPENED_DATE,
-                maturityDate
-        ))
+                        "088200000001",
+                        CUSTOMER_ID,
+                        null,
+                        AccountType.TIME_DEPOSIT,
+                        PASSWORD_HASH,
+                        OPENED_DATE,
+                        maturityDate))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("예금·적금 계좌는 유효한 상품 ID가 필요합니다.");
     }
@@ -197,14 +179,13 @@ class AccountTest {
 
         // when & then
         assertThatThrownBy(() -> Account.open(
-                "088300000001",
-                CUSTOMER_ID,
-                productId,
-                AccountType.INSTALLMENT_SAVINGS,
-                PASSWORD_HASH,
-                OPENED_DATE,
-                null
-        ))
+                        "088300000001",
+                        CUSTOMER_ID,
+                        productId,
+                        AccountType.INSTALLMENT_SAVINGS,
+                        PASSWORD_HASH,
+                        OPENED_DATE,
+                        null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("예금·적금 계좌는 만기일이 필요합니다.");
     }
@@ -213,8 +194,7 @@ class AccountTest {
     @DisplayName("저장된 입출금계좌 상태를 정상적으로 복원한다")
     void reconstituteDemandDepositAccount() {
         // given
-        LocalDateTime openedDate =
-                LocalDateTime.of(2026, 8, 10, 10, 0);
+        LocalDateTime openedDate = LocalDateTime.of(2026, 8, 10, 10, 0);
 
         // when
         Account account = Account.reconstitute(
@@ -238,8 +218,7 @@ class AccountTest {
                 openedDate,
                 VERSION,
                 CREATED_AT,
-                UPDATED_AT
-        );
+                UPDATED_AT);
 
         // then
         assertThat(account.getAccountId()).isEqualTo(ACCOUNT_ID);
@@ -258,11 +237,9 @@ class AccountTest {
     @DisplayName("해지 시각이 있는 해지 계좌를 정상적으로 복원한다")
     void reconstituteClosedAccount() {
         // given
-        LocalDateTime openedDate =
-                LocalDateTime.of(2026, 8, 1, 10, 0);
+        LocalDateTime openedDate = LocalDateTime.of(2026, 8, 1, 10, 0);
 
-        LocalDateTime closedDate =
-                LocalDateTime.of(2026, 8, 10, 10, 0);
+        LocalDateTime closedDate = LocalDateTime.of(2026, 8, 10, 10, 0);
 
         // when
         Account account = Account.reconstitute(
@@ -286,48 +263,43 @@ class AccountTest {
                 null,
                 VERSION,
                 CREATED_AT,
-                UPDATED_AT
-        );
+                UPDATED_AT);
 
         // then
-        assertThat(account.getStatus())
-                .isEqualTo(AccountStatus.CLOSED);
+        assertThat(account.getStatus()).isEqualTo(AccountStatus.CLOSED);
 
-        assertThat(account.getClosedDate())
-                .isEqualTo(closedDate);
+        assertThat(account.getClosedDate()).isEqualTo(closedDate);
     }
 
     @Test
     @DisplayName("해지 계좌에 해지 시각이 없으면 복원할 수 없다")
     void failToReconstituteClosedAccountWithoutClosedDate() {
         // given
-        LocalDateTime openedDate =
-                LocalDateTime.of(2026, 8, 1, 10, 0);
+        LocalDateTime openedDate = LocalDateTime.of(2026, 8, 1, 10, 0);
 
         // when & then
         assertThatThrownBy(() -> Account.reconstitute(
-                ACCOUNT_ID,
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                0L,
-                AccountStatus.CLOSED,
-                PASSWORD_HASH,
-                0,
-                false,
-                null,
-                null,
-                false,
-                null,
-                openedDate,
-                null,
-                null,
-                null,
-                VERSION,
-                CREATED_AT,
-                UPDATED_AT
-        ))
+                        ACCOUNT_ID,
+                        ACCOUNT_NUMBER,
+                        CUSTOMER_ID,
+                        null,
+                        AccountType.DEMAND_DEPOSIT,
+                        0L,
+                        AccountStatus.CLOSED,
+                        PASSWORD_HASH,
+                        0,
+                        false,
+                        null,
+                        null,
+                        false,
+                        null,
+                        openedDate,
+                        null,
+                        null,
+                        null,
+                        VERSION,
+                        CREATED_AT,
+                        UPDATED_AT))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("해지 계좌는 해지 시각이 필요합니다.");
     }
@@ -336,36 +308,33 @@ class AccountTest {
     @DisplayName("해지 시각이 개설 시각보다 이전이면 복원할 수 없다")
     void failToReconstituteAccountWhenClosedDateIsBeforeOpenedDate() {
         // given
-        LocalDateTime openedDate =
-                LocalDateTime.of(2026, 8, 10, 10, 0);
+        LocalDateTime openedDate = LocalDateTime.of(2026, 8, 10, 10, 0);
 
-        LocalDateTime closedDate =
-                LocalDateTime.of(2026, 8, 9, 10, 0);
+        LocalDateTime closedDate = LocalDateTime.of(2026, 8, 9, 10, 0);
 
         // when & then
         assertThatThrownBy(() -> Account.reconstitute(
-                ACCOUNT_ID,
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                0L,
-                AccountStatus.CLOSED,
-                PASSWORD_HASH,
-                0,
-                false,
-                null,
-                null,
-                false,
-                null,
-                openedDate,
-                null,
-                closedDate,
-                null,
-                VERSION,
-                CREATED_AT,
-                UPDATED_AT
-        ))
+                        ACCOUNT_ID,
+                        ACCOUNT_NUMBER,
+                        CUSTOMER_ID,
+                        null,
+                        AccountType.DEMAND_DEPOSIT,
+                        0L,
+                        AccountStatus.CLOSED,
+                        PASSWORD_HASH,
+                        0,
+                        false,
+                        null,
+                        null,
+                        false,
+                        null,
+                        openedDate,
+                        null,
+                        closedDate,
+                        null,
+                        VERSION,
+                        CREATED_AT,
+                        UPDATED_AT))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("해지 시각은 개설 시각보다 이전일 수 없습니다.");
     }
@@ -374,8 +343,7 @@ class AccountTest {
     @DisplayName("비밀번호 실패 횟수가 5회이고 잠금 상태이면 정상적으로 복원한다")
     void reconstituteLockedAccount() {
         // given
-        LocalDateTime openedDate =
-                LocalDateTime.of(2026, 8, 10, 10, 0);
+        LocalDateTime openedDate = LocalDateTime.of(2026, 8, 10, 10, 0);
 
         // when
         Account account = Account.reconstitute(
@@ -399,8 +367,7 @@ class AccountTest {
                 null,
                 VERSION,
                 CREATED_AT,
-                UPDATED_AT
-        );
+                UPDATED_AT);
 
         // then
         assertThat(account.getPasswordFailureCount()).isEqualTo(5);
@@ -411,33 +378,31 @@ class AccountTest {
     @DisplayName("비밀번호 실패 횟수가 5회인데 잠금 상태가 아니면 복원할 수 없다")
     void failToReconstituteAccountWhenPasswordLockStateIsInvalid() {
         // given
-        LocalDateTime openedDate =
-                LocalDateTime.of(2026, 8, 10, 10, 0);
+        LocalDateTime openedDate = LocalDateTime.of(2026, 8, 10, 10, 0);
 
         // when & then
         assertThatThrownBy(() -> Account.reconstitute(
-                ACCOUNT_ID,
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                0L,
-                AccountStatus.ACTIVE,
-                PASSWORD_HASH,
-                5,
-                false,
-                null,
-                null,
-                false,
-                null,
-                openedDate,
-                null,
-                null,
-                null,
-                VERSION,
-                CREATED_AT,
-                UPDATED_AT
-        ))
+                        ACCOUNT_ID,
+                        ACCOUNT_NUMBER,
+                        CUSTOMER_ID,
+                        null,
+                        AccountType.DEMAND_DEPOSIT,
+                        0L,
+                        AccountStatus.ACTIVE,
+                        PASSWORD_HASH,
+                        5,
+                        false,
+                        null,
+                        null,
+                        false,
+                        null,
+                        openedDate,
+                        null,
+                        null,
+                        null,
+                        VERSION,
+                        CREATED_AT,
+                        UPDATED_AT))
                 .isInstanceOf(IllegalStateException.class);
     }
 
@@ -447,33 +412,31 @@ class AccountTest {
         // given
         String invalidAccountNumber = "08810000001A";
 
-        LocalDateTime openedDate =
-                LocalDateTime.of(2026, 8, 10, 10, 0);
+        LocalDateTime openedDate = LocalDateTime.of(2026, 8, 10, 10, 0);
 
         // when & then
         assertThatThrownBy(() -> Account.reconstitute(
-                ACCOUNT_ID,
-                invalidAccountNumber,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                0L,
-                AccountStatus.ACTIVE,
-                PASSWORD_HASH,
-                0,
-                false,
-                null,
-                null,
-                false,
-                null,
-                openedDate,
-                null,
-                null,
-                null,
-                VERSION,
-                CREATED_AT,
-                UPDATED_AT
-        ))
+                        ACCOUNT_ID,
+                        invalidAccountNumber,
+                        CUSTOMER_ID,
+                        null,
+                        AccountType.DEMAND_DEPOSIT,
+                        0L,
+                        AccountStatus.ACTIVE,
+                        PASSWORD_HASH,
+                        0,
+                        false,
+                        null,
+                        null,
+                        false,
+                        null,
+                        openedDate,
+                        null,
+                        null,
+                        null,
+                        VERSION,
+                        CREATED_AT,
+                        UPDATED_AT))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("계좌번호는 숫자 12자리여야 합니다.");
     }
@@ -482,36 +445,33 @@ class AccountTest {
     @DisplayName("만기일이 개설일과 같아도 개설 시각이 자정 이후이면 계좌 복원에 실패한다")
     void failToReconstituteAccountWhenMaturityDateIsSameDateButBeforeOpenedTime() {
         // given
-        LocalDateTime openedDate =
-                LocalDateTime.of(2026, 8, 10, 10, 0);
+        LocalDateTime openedDate = LocalDateTime.of(2026, 8, 10, 10, 0);
 
-        LocalDate maturityDate =
-                LocalDate.of(2026, 8, 10);
+        LocalDate maturityDate = LocalDate.of(2026, 8, 10);
 
         // when & then
         assertThatThrownBy(() -> Account.reconstitute(
-                ACCOUNT_ID,
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                1L,
-                AccountType.TIME_DEPOSIT,
-                0L,
-                AccountStatus.ACTIVE,
-                PASSWORD_HASH,
-                0,
-                false,
-                null,
-                null,
-                false,
-                null,
-                openedDate,
-                maturityDate,
-                null,
-                null,
-                VERSION,
-                CREATED_AT,
-                UPDATED_AT
-        ))
+                        ACCOUNT_ID,
+                        ACCOUNT_NUMBER,
+                        CUSTOMER_ID,
+                        1L,
+                        AccountType.TIME_DEPOSIT,
+                        0L,
+                        AccountStatus.ACTIVE,
+                        PASSWORD_HASH,
+                        0,
+                        false,
+                        null,
+                        null,
+                        false,
+                        null,
+                        openedDate,
+                        maturityDate,
+                        null,
+                        null,
+                        VERSION,
+                        CREATED_AT,
+                        UPDATED_AT))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("만기일은 개설일보다 이전일 수 없습니다.");
     }
@@ -521,21 +481,13 @@ class AccountTest {
     void changeAlias() {
         // given
         Account account = Account.open(
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                OPENED_DATE,
-                null
-        );
+                ACCOUNT_NUMBER, CUSTOMER_ID, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, OPENED_DATE, null);
 
         // when
         account.changeAlias("생활비통장");
 
         // then
-        assertThat(account.getAlias())
-                .isEqualTo("생활비통장");
+        assertThat(account.getAlias()).isEqualTo("생활비통장");
     }
 
     @Test
@@ -543,14 +495,7 @@ class AccountTest {
     void changeExistingAlias() {
         // given
         Account account = Account.open(
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                OPENED_DATE,
-                null
-        );
+                ACCOUNT_NUMBER, CUSTOMER_ID, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, OPENED_DATE, null);
 
         account.changeAlias("생활비");
 
@@ -558,8 +503,7 @@ class AccountTest {
         account.changeAlias("급여통장");
 
         // then
-        assertThat(account.getAlias())
-                .isEqualTo("급여통장");
+        assertThat(account.getAlias()).isEqualTo("급여통장");
     }
 
     @Test
@@ -567,21 +511,13 @@ class AccountTest {
     void trimAlias() {
         // given
         Account account = Account.open(
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                OPENED_DATE,
-                null
-        );
+                ACCOUNT_NUMBER, CUSTOMER_ID, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, OPENED_DATE, null);
 
         // when
         account.changeAlias("  생활비통장  ");
 
         // then
-        assertThat(account.getAlias())
-                .isEqualTo("생활비통장");
+        assertThat(account.getAlias()).isEqualTo("생활비통장");
     }
 
     @Test
@@ -589,14 +525,7 @@ class AccountTest {
     void removeAlias() {
         // given
         Account account = Account.open(
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                OPENED_DATE,
-                null
-        );
+                ACCOUNT_NUMBER, CUSTOMER_ID, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, OPENED_DATE, null);
 
         account.changeAlias("생활비통장");
 
@@ -612,14 +541,7 @@ class AccountTest {
     void allowTwelveKoreanCharacters() {
         // given
         Account account = Account.open(
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                OPENED_DATE,
-                null
-        );
+                ACCOUNT_NUMBER, CUSTOMER_ID, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, OPENED_DATE, null);
 
         String alias = "가나다라마바사아자차카타";
 
@@ -627,8 +549,7 @@ class AccountTest {
         account.changeAlias(alias);
 
         // then
-        assertThat(account.getAlias())
-                .isEqualTo(alias);
+        assertThat(account.getAlias()).isEqualTo(alias);
     }
 
     @Test
@@ -636,29 +557,15 @@ class AccountTest {
     void rejectMoreThanTwelveKoreanCharacters() {
         // given
         Account account = Account.open(
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                OPENED_DATE,
-                null
-        );
+                ACCOUNT_NUMBER, CUSTOMER_ID, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, OPENED_DATE, null);
 
         String alias = "가나다라마바사아자차카타파";
 
         // when
-        BusinessException exception =
-                catchThrowableOfType(
-                        () -> account.changeAlias(alias),
-                        BusinessException.class
-                );
+        BusinessException exception = catchThrowableOfType(() -> account.changeAlias(alias), BusinessException.class);
 
         // then
-        assertThat(exception.getErrorCode())
-                .isEqualTo(
-                        AccountErrorCode.INVALID_ACCOUNT_ALIAS
-                );
+        assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.INVALID_ACCOUNT_ALIAS);
     }
 
     @Test
@@ -666,14 +573,7 @@ class AccountTest {
     void allowTwentyFourAlphaNumericCharacters() {
         // given
         Account account = Account.open(
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                OPENED_DATE,
-                null
-        );
+                ACCOUNT_NUMBER, CUSTOMER_ID, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, OPENED_DATE, null);
 
         String alias = "abcdefghijklmnopqrstuvwx";
 
@@ -681,8 +581,7 @@ class AccountTest {
         account.changeAlias(alias);
 
         // then
-        assertThat(account.getAlias())
-                .isEqualTo(alias);
+        assertThat(account.getAlias()).isEqualTo(alias);
     }
 
     @Test
@@ -690,29 +589,15 @@ class AccountTest {
     void rejectMoreThanTwentyFourCharacters() {
         // given
         Account account = Account.open(
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                OPENED_DATE,
-                null
-        );
+                ACCOUNT_NUMBER, CUSTOMER_ID, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, OPENED_DATE, null);
 
         String alias = "abcdefghijklmnopqrstuvwxy";
 
         // when
-        BusinessException exception =
-                catchThrowableOfType(
-                        () -> account.changeAlias(alias),
-                        BusinessException.class
-                );
+        BusinessException exception = catchThrowableOfType(() -> account.changeAlias(alias), BusinessException.class);
 
         // then
-        assertThat(exception.getErrorCode())
-                .isEqualTo(
-                        AccountErrorCode.INVALID_ACCOUNT_ALIAS
-                );
+        assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.INVALID_ACCOUNT_ALIAS);
     }
 
     @Test
@@ -720,27 +605,13 @@ class AccountTest {
     void rejectBlankAlias() {
         // given
         Account account = Account.open(
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                OPENED_DATE,
-                null
-        );
+                ACCOUNT_NUMBER, CUSTOMER_ID, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, OPENED_DATE, null);
 
         // when
-        BusinessException exception =
-                catchThrowableOfType(
-                        () -> account.changeAlias("   "),
-                        BusinessException.class
-                );
+        BusinessException exception = catchThrowableOfType(() -> account.changeAlias("   "), BusinessException.class);
 
         // then
-        assertThat(exception.getErrorCode())
-                .isEqualTo(
-                        CommonErrorCode.REQUIRED_FIELD_MISSING
-                );
+        assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
     }
 
     @Test
@@ -748,26 +619,12 @@ class AccountTest {
     void rejectNullAlias() {
         // given
         Account account = Account.open(
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                OPENED_DATE,
-                null
-        );
+                ACCOUNT_NUMBER, CUSTOMER_ID, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, OPENED_DATE, null);
 
         // when
-        BusinessException exception =
-                catchThrowableOfType(
-                        () -> account.changeAlias(null),
-                        BusinessException.class
-                );
+        BusinessException exception = catchThrowableOfType(() -> account.changeAlias(null), BusinessException.class);
 
         // then
-        assertThat(exception.getErrorCode())
-                .isEqualTo(
-                        CommonErrorCode.REQUIRED_FIELD_MISSING
-                );
+        assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
     }
 }

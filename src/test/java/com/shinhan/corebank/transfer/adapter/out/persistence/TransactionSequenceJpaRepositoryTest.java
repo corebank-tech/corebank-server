@@ -1,17 +1,15 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
-
 import jakarta.persistence.EntityManager;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 @Transactional
 class TransactionSequenceJpaRepositoryTest extends IntegrationTestSupport {
@@ -40,9 +38,8 @@ class TransactionSequenceJpaRepositoryTest extends IntegrationTestSupport {
         entityManager.clear();
 
         // when
-        TransactionSequenceJpaEntity found = repository
-                .findBySeqDateAndChannelForUpdate(seqDate, channel)
-                .orElseThrow();
+        TransactionSequenceJpaEntity found =
+                repository.findBySeqDateAndChannelForUpdate(seqDate, channel).orElseThrow();
 
         // then
         assertThat(found.getSeqDate()).isEqualTo(seqDate);

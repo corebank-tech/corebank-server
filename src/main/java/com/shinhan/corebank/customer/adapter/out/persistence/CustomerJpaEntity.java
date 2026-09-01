@@ -7,14 +7,13 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "customer")
@@ -34,18 +33,10 @@ public class CustomerJpaEntity extends BaseEntity {
     private String userId;
 
     // 기존 은행 원장의 고객 식별자. 원장 인증 없이 만들어진 고객은 NULL 이다.
-    @Column(
-            name = "existing_bank_customer_id",
-            unique = true,
-            length = 100
-    )
+    @Column(name = "existing_bank_customer_id", unique = true, length = 100)
     private String existingBankCustomerId;
 
-    @Column(
-            name = "password_hash",
-            nullable = false,
-            columnDefinition = "CHAR(60)"
-    )
+    @Column(name = "password_hash", nullable = false, columnDefinition = "CHAR(60)")
     private String passwordHash;
 
     @Column(name = "user_name", nullable = false, length = 50)
@@ -60,11 +51,7 @@ public class CustomerJpaEntity extends BaseEntity {
     @Column(name = "phone_number", nullable = false, length = 11)
     private String phoneNumber;
 
-    @Column(
-            name = "login_failure_count",
-            nullable = false,
-            columnDefinition = "TINYINT"
-    )
+    @Column(name = "login_failure_count", nullable = false, columnDefinition = "TINYINT")
     private int loginFailureCount;
 
     @Column(name = "account_locked", nullable = false)
@@ -82,29 +69,18 @@ public class CustomerJpaEntity extends BaseEntity {
     @Column(name = "password_changed_at", columnDefinition = "DATETIME(6)")
     private LocalDateTime passwordChangedAt;
 
-    @Column(
-            name = "joined_at",
-            nullable = false,
-            columnDefinition = "DATETIME(6)"
-    )
+    @Column(name = "joined_at", nullable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime joinedAt;
 
     // 로그인 실패 횟수와 계정 잠금 상태만 갱신
-    public void updateLoginFailureState(
-            int loginFailureCount,
-            boolean accountLocked
-    ) {
+    public void updateLoginFailureState(int loginFailureCount, boolean accountLocked) {
         this.loginFailureCount = loginFailureCount;
         this.accountLocked = accountLocked;
     }
 
     // 로그인 성공 시각과 접속 IP 및 실패 횟수만 갱신
     public void updateLoginSuccessState(
-            LocalDateTime previousLoginAt,
-            LocalDateTime lastLoginAt,
-            String lastLoginIp,
-            int loginFailureCount
-    ) {
+            LocalDateTime previousLoginAt, LocalDateTime lastLoginAt, String lastLoginIp, int loginFailureCount) {
         this.previousLoginAt = previousLoginAt;
         this.lastLoginAt = lastLoginAt;
         this.lastLoginIp = lastLoginIp;

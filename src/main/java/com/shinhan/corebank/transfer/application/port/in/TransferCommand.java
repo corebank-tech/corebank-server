@@ -1,44 +1,45 @@
 package com.shinhan.corebank.transfer.application.port.in;
 
-import java.time.LocalDate;
-import java.util.regex.Pattern;
-
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-
+import java.time.LocalDate;
+import java.util.regex.Pattern;
 import lombok.Builder;
 
 @Builder
 public record TransferCommand(
-    Long customerId, // 출금계좌 소유권·한도 검증 대상 고객
-    Long withdrawalAccountId,
-    String depositAccountNumber,
-    long amount,
-    TransferType transferType,
-    TransferChannel channel,
-    String myPassbookMemo,
-    String recipientPassbookMemo,
-    Long sourceId, // 이체를 발생시킨 원본 거래 역추적 목적으로 사용
-    // sourceId와 함께 멱등키를 구성하는 실행일자. SCHEDULED/AUTO 전용.
-    // 배치가 실제로 execute()를 호출한 날짜가 아니라 그 회차의 논리적 실행일자를 넣어야 한다
-    // — AUTO는 auto_transfer_execution.execution_date, SCHEDULED는 scheduled_transfer.scheduled_date
-    // (#184 구현 시에도 동일). 그래야 크래시 후 재시도가 실제 호출 날짜와 무관하게 같은 회차로
-    // 식별되어 멱등성 사전조회에 걸린다.
-    LocalDate executionDate,
-    String authToken, // Account-Password-Auth-Token. IMMEDIATE만 필수(REQ-TRSF-009) — SCHEDULED/AUTO는 시스템 트리거라 세션이 없음
-    String otpAuthToken // Otp-Auth-Token. authToken과 동일하게 IMMEDIATE만 필수 — SCHEDULED/AUTO는 등록 시점에 이미 검증됨(otp_integration_guide.md)
-) {
+        Long customerId, // 출금계좌 소유권·한도 검증 대상 고객
+        Long withdrawalAccountId,
+        String depositAccountNumber,
+        long amount,
+        TransferType transferType,
+        TransferChannel channel,
+        String myPassbookMemo,
+        String recipientPassbookMemo,
+        Long sourceId, // 이체를 발생시킨 원본 거래 역추적 목적으로 사용
+        // sourceId와 함께 멱등키를 구성하는 실행일자. SCHEDULED/AUTO 전용.
+        // 배치가 실제로 execute()를 호출한 날짜가 아니라 그 회차의 논리적 실행일자를 넣어야 한다
+        // — AUTO는 auto_transfer_execution.execution_date, SCHEDULED는 scheduled_transfer.scheduled_date
+        // (#184 구현 시에도 동일). 그래야 크래시 후 재시도가 실제 호출 날짜와 무관하게 같은 회차로
+        // 식별되어 멱등성 사전조회에 걸린다.
+        LocalDate executionDate,
+        String authToken, // Account-Password-Auth-Token. IMMEDIATE만 필수(REQ-TRSF-009) — SCHEDULED/AUTO는 시스템 트리거라 세션이 없음
+        String otpAuthToken // Otp-Auth-Token. IMMEDIATE만 필수 — SCHEDULED/AUTO는 등록 시점에 검증됨(otp_integration_guide.md)
+        ) {
 
     private static final Pattern ACCOUNT_NUMBER_PATTERN = Pattern.compile("^[0-9]{12}$");
 
     public TransferCommand {
 
         // 필수값 검증
-        if (customerId == null || withdrawalAccountId == null || depositAccountNumber == null ||
-                transferType == null || channel == null) {
+        if (customerId == null
+                || withdrawalAccountId == null
+                || depositAccountNumber == null
+                || transferType == null
+                || channel == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
 
@@ -62,8 +63,7 @@ public record TransferCommand(
         if (transferType == TransferType.IMMEDIATE && sourceId != null) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
-        if ((transferType == TransferType.SCHEDULED || transferType == TransferType.AUTO)
-                && sourceId == null) {
+        if ((transferType == TransferType.SCHEDULED || transferType == TransferType.AUTO) && sourceId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
 
@@ -71,8 +71,7 @@ public record TransferCommand(
         if (transferType == TransferType.IMMEDIATE && executionDate != null) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
-        if ((transferType == TransferType.SCHEDULED || transferType == TransferType.AUTO)
-                && executionDate == null) {
+        if ((transferType == TransferType.SCHEDULED || transferType == TransferType.AUTO) && executionDate == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
 

@@ -9,9 +9,7 @@ public class OtpVerificationFailedException extends BusinessException {
     private final OtpAttemptResult attemptResult;
 
     public OtpVerificationFailedException(OtpAttemptResult attemptResult) {
-        super(attemptResult.locked()
-                ? OtpErrorCode.ATTEMPTS_EXCEEDED
-                : OtpErrorCode.OTP_CODE_MISMATCH);
+        super(attemptResult.locked() ? OtpErrorCode.ATTEMPTS_EXCEEDED : OtpErrorCode.OTP_CODE_MISMATCH);
         this.attemptResult = attemptResult;
     }
 

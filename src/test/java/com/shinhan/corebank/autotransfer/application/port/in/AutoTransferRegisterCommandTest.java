@@ -115,17 +115,18 @@ class AutoTransferRegisterCommandTest {
     void invalidAccountNumberFormat_throwsInvalidInput() {
         assertThatThrownBy(() -> validBuilder().depositAccountNumber("abc").build())
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
     }
 
     @Test
     @DisplayName("계좌번호가 11자리면 CMN0001을 던진다")
     void shortAccountNumber_throwsInvalidInput() {
-        assertThatThrownBy(() -> validBuilder().depositAccountNumber("1109876543").build())
+        assertThatThrownBy(
+                        () -> validBuilder().depositAccountNumber("1109876543").build())
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
     }
 
     @Test
@@ -158,7 +159,8 @@ class AutoTransferRegisterCommandTest {
     @Test
     @DisplayName("recipientPassbookMemo가 10자를 초과하면 AUT0009를 던진다")
     void recipientPassbookMemoTooLong_throwsMemoLengthExceeded() {
-        assertThatThrownBy(() -> validBuilder().recipientPassbookMemo("12345678901").build())
+        assertThatThrownBy(() ->
+                        validBuilder().recipientPassbookMemo("12345678901").build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(AutoTransferErrorCode.MEMO_LENGTH_EXCEEDED));
@@ -167,10 +169,8 @@ class AutoTransferRegisterCommandTest {
     @Test
     @DisplayName("myPassbookMemo/recipientPassbookMemo는 없어도 정상 생성된다")
     void optionalMemosCanBeNull() {
-        AutoTransferRegisterCommand command = validBuilder()
-                .myPassbookMemo(null)
-                .recipientPassbookMemo(null)
-                .build();
+        AutoTransferRegisterCommand command =
+                validBuilder().myPassbookMemo(null).recipientPassbookMemo(null).build();
 
         assertThat(command.myPassbookMemo()).isNull();
     }

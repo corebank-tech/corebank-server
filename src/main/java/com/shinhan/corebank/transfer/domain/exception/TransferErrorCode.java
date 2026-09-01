@@ -7,7 +7,6 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum TransferErrorCode implements ErrorCode {
-    
     WITHDRAWAL_ACCOUNT_NOT_REGISTERED("TRF0001", 400, "등록되지 않은 출금계좌입니다."),
     SAME_ACCOUNT_TRANSFER("TRF0002", 400, "출금계좌와 입금계좌가 동일합니다."),
     INVALID_AMOUNT("TRF0003", 400, "이체금액은 1원 이상의 정수여야 합니다."),

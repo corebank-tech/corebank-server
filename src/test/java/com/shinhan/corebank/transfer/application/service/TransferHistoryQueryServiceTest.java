@@ -7,12 +7,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.time.Clock;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.Optional;
-
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
@@ -28,7 +22,11 @@ import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -62,7 +60,8 @@ class TransferHistoryQueryServiceTest {
     private static final Long WITHDRAWAL_ACCOUNT_ID = 101L;
 
     private void stubClock() {
-        when(clock.instant()).thenReturn(TODAY.atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant());
+        when(clock.instant())
+                .thenReturn(TODAY.atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant());
         when(clock.getZone()).thenReturn(ZoneId.of("Asia/Seoul"));
     }
 
@@ -75,7 +74,7 @@ class TransferHistoryQueryServiceTest {
     @DisplayName("customerId가 없으면 CMN0002를 던지고 포트는 호출하지 않는다")
     void search_rejectsMissingCustomerId() {
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                null, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 10, false))
+                        null, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -87,7 +86,7 @@ class TransferHistoryQueryServiceTest {
     @DisplayName("withdrawalAccountId가 없으면 CMN0002를 던지고 포트는 호출하지 않는다")
     void search_rejectsMissingWithdrawalAccountId() {
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                CUSTOMER_ID, null, null, null, null, TransferHistorySort.LATEST, 0, 10, false))
+                        CUSTOMER_ID, null, null, null, null, TransferHistorySort.LATEST, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -99,7 +98,7 @@ class TransferHistoryQueryServiceTest {
     @DisplayName("허용되지 않은 size면 CMN0005를 던지고 포트는 호출하지 않는다")
     void search_rejectsInvalidPageSize() {
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 7, false))
+                        CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 7, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_PAGE_SIZE));
@@ -114,7 +113,8 @@ class TransferHistoryQueryServiceTest {
         stubOwnership(CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID);
         LocalDate fromDate = LocalDate.of(2026, 8, 1);
         LocalDate toDate = LocalDate.of(2026, 8, 20);
-        when(transferHistoryQueryPort.search(WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, Pageable.unpaged()))
+        when(transferHistoryQueryPort.search(
+                        WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, Pageable.unpaged()))
                 .thenReturn(new PageImpl<>(java.util.List.of()));
         when(transferHistoryQueryPort.summarize(WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate))
                 .thenReturn(TransferHistoryAggregate.empty());
@@ -129,10 +129,18 @@ class TransferHistoryQueryServiceTest {
     @DisplayName("page가 음수면 CMN0001을 던지고 포트는 호출하지 않는다")
     void search_rejectsNegativePage() {
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, -1, 10, false))
+                        CUSTOMER_ID,
+                        WITHDRAWAL_ACCOUNT_ID,
+                        null,
+                        null,
+                        null,
+                        TransferHistorySort.LATEST,
+                        -1,
+                        10,
+                        false))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
 
         verifySearchPortNeverCalled();
     }
@@ -144,7 +152,7 @@ class TransferHistoryQueryServiceTest {
                 .thenReturn(Optional.of(new WithdrawalAccountDetail(WITHDRAWAL_ACCOUNT_ID, 999L, true)));
 
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 10, false))
+                        CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
@@ -160,7 +168,13 @@ class TransferHistoryQueryServiceTest {
                 .thenReturn(Optional.of(new WithdrawalAccountDetail(WITHDRAWAL_ACCOUNT_ID, CUSTOMER_ID, false)));
         LocalDate fromDate = LocalDate.of(2026, 8, 1);
         LocalDate toDate = LocalDate.of(2026, 8, 20);
-        when(transferHistoryQueryPort.search(WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, PageRequest.of(0, 10)))
+        when(transferHistoryQueryPort.search(
+                        WITHDRAWAL_ACCOUNT_ID,
+                        null,
+                        fromDate,
+                        toDate,
+                        TransferHistorySort.LATEST,
+                        PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(java.util.List.of()));
         when(transferHistoryQueryPort.summarize(WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate))
                 .thenReturn(TransferHistoryAggregate.empty());
@@ -177,7 +191,7 @@ class TransferHistoryQueryServiceTest {
         when(accountLockPort.findWithdrawalAccountDetail(WITHDRAWAL_ACCOUNT_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 10, false))
+                        CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, null, null, TransferHistorySort.LATEST, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
@@ -191,7 +205,13 @@ class TransferHistoryQueryServiceTest {
         stubClock();
         stubOwnership(CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID);
         LocalDate expectedFrom = TODAY.minusMonths(1);
-        when(transferHistoryQueryPort.search(WITHDRAWAL_ACCOUNT_ID, null, expectedFrom, TODAY, TransferHistorySort.LATEST, PageRequest.of(0, 10)))
+        when(transferHistoryQueryPort.search(
+                        WITHDRAWAL_ACCOUNT_ID,
+                        null,
+                        expectedFrom,
+                        TODAY,
+                        TransferHistorySort.LATEST,
+                        PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(java.util.List.of()));
         when(transferHistoryQueryPort.summarize(WITHDRAWAL_ACCOUNT_ID, null, expectedFrom, TODAY))
                 .thenReturn(TransferHistoryAggregate.empty());
@@ -211,7 +231,15 @@ class TransferHistoryQueryServiceTest {
         LocalDate toDate = LocalDate.of(2026, 6, 1);
 
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, 0, 10, false))
+                        CUSTOMER_ID,
+                        WITHDRAWAL_ACCOUNT_ID,
+                        null,
+                        fromDate,
+                        toDate,
+                        TransferHistorySort.LATEST,
+                        0,
+                        10,
+                        false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.INVALID_DATE_RANGE));
@@ -226,7 +254,15 @@ class TransferHistoryQueryServiceTest {
         LocalDate toDate = fromDate.plusDays(366);
 
         assertThatThrownBy(() -> transferHistoryQueryService.search(
-                CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, 0, 10, false))
+                        CUSTOMER_ID,
+                        WITHDRAWAL_ACCOUNT_ID,
+                        null,
+                        fromDate,
+                        toDate,
+                        TransferHistorySort.LATEST,
+                        0,
+                        10,
+                        false))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.DATE_RANGE_EXCEEDED));
@@ -239,7 +275,13 @@ class TransferHistoryQueryServiceTest {
         stubOwnership(CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID);
         LocalDate fromDate = LocalDate.of(2026, 1, 1);
         LocalDate toDate = fromDate.plusDays(365);
-        when(transferHistoryQueryPort.search(WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, PageRequest.of(0, 10)))
+        when(transferHistoryQueryPort.search(
+                        WITHDRAWAL_ACCOUNT_ID,
+                        null,
+                        fromDate,
+                        toDate,
+                        TransferHistorySort.LATEST,
+                        PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(java.util.List.of()));
         when(transferHistoryQueryPort.summarize(WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate))
                 .thenReturn(TransferHistoryAggregate.empty());
@@ -259,12 +301,30 @@ class TransferHistoryQueryServiceTest {
         LocalDate toDate = LocalDate.of(2026, 8, 20);
 
         Transfer transfer = Transfer.create(
-                "20260810IT0000000001", WITHDRAWAL_ACCOUNT_ID, 202L, "110222222222", "성춘향",
-                10_000L, 0L, TransferType.IMMEDIATE, TransferChannel.BT,
-                null, null, null, "출금메모", "입금메모", LocalDateTime.of(2026, 8, 10, 9, 0));
+                "20260810IT0000000001",
+                WITHDRAWAL_ACCOUNT_ID,
+                202L,
+                "110222222222",
+                "성춘향",
+                10_000L,
+                0L,
+                TransferType.IMMEDIATE,
+                TransferChannel.BT,
+                null,
+                null,
+                null,
+                "출금메모",
+                "입금메모",
+                LocalDateTime.of(2026, 8, 10, 9, 0));
         transfer.complete(90_000L, LocalDateTime.of(2026, 8, 10, 9, 0));
 
-        when(transferHistoryQueryPort.search(WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate, TransferHistorySort.LATEST, PageRequest.of(0, 10)))
+        when(transferHistoryQueryPort.search(
+                        WITHDRAWAL_ACCOUNT_ID,
+                        null,
+                        fromDate,
+                        toDate,
+                        TransferHistorySort.LATEST,
+                        PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(java.util.List.of(transfer)));
         when(transferHistoryQueryPort.summarize(WITHDRAWAL_ACCOUNT_ID, null, fromDate, toDate))
                 .thenReturn(new TransferHistoryAggregate(1L, 10_000L, 0L, 0L));
@@ -303,9 +363,21 @@ class TransferHistoryQueryServiceTest {
     @DisplayName("상세조회: 타인 소유 거래면 TRF0202를 던진다 (존재 스캐닝 방지를 위해 404로 통일)")
     void getDetail_rejectsWhenNotOwned() {
         Transfer transfer = Transfer.create(
-                "20260810IT0000000001", WITHDRAWAL_ACCOUNT_ID, 202L, "110222222222", "성춘향",
-                10_000L, 0L, TransferType.IMMEDIATE, TransferChannel.BT,
-                null, null, null, "출금메모", "입금메모", LocalDateTime.of(2026, 8, 10, 9, 0));
+                "20260810IT0000000001",
+                WITHDRAWAL_ACCOUNT_ID,
+                202L,
+                "110222222222",
+                "성춘향",
+                10_000L,
+                0L,
+                TransferType.IMMEDIATE,
+                TransferChannel.BT,
+                null,
+                null,
+                null,
+                "출금메모",
+                "입금메모",
+                LocalDateTime.of(2026, 8, 10, 9, 0));
         transfer.complete(90_000L, LocalDateTime.of(2026, 8, 10, 9, 0));
         when(transferLookupPort.findByTransactionNumber("20260810IT0000000001")).thenReturn(Optional.of(transfer));
         when(accountLockPort.findWithdrawalAccountDetail(WITHDRAWAL_ACCOUNT_ID))
@@ -321,9 +393,21 @@ class TransferHistoryQueryServiceTest {
     @DisplayName("상세조회: 본인 소유 거래면 상세 정보를 반환한다")
     void getDetail_returnsDetail_whenOwned() {
         Transfer transfer = Transfer.create(
-                "20260810IT0000000001", WITHDRAWAL_ACCOUNT_ID, 202L, "110222222222", "성춘향",
-                10_000L, 100L, TransferType.IMMEDIATE, TransferChannel.BT,
-                null, null, null, "출금메모", "입금메모", LocalDateTime.of(2026, 8, 10, 9, 0));
+                "20260810IT0000000001",
+                WITHDRAWAL_ACCOUNT_ID,
+                202L,
+                "110222222222",
+                "성춘향",
+                10_000L,
+                100L,
+                TransferType.IMMEDIATE,
+                TransferChannel.BT,
+                null,
+                null,
+                null,
+                "출금메모",
+                "입금메모",
+                LocalDateTime.of(2026, 8, 10, 9, 0));
         transfer.complete(90_000L, LocalDateTime.of(2026, 8, 10, 9, 0));
         when(transferLookupPort.findByTransactionNumber("20260810IT0000000001")).thenReturn(Optional.of(transfer));
         stubOwnership(CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID);
@@ -340,9 +424,7 @@ class TransferHistoryQueryServiceTest {
     }
 
     private void verifySearchPortNeverCalled() {
-        verify(transferHistoryQueryPort, never())
-                .search(any(), any(), any(), any(), any(), any(Pageable.class));
-        verify(transferHistoryQueryPort, never())
-                .summarize(any(), any(), any(), any());
+        verify(transferHistoryQueryPort, never()).search(any(), any(), any(), any(), any(), any(Pageable.class));
+        verify(transferHistoryQueryPort, never()).summarize(any(), any(), any(), any());
     }
 }

@@ -106,13 +106,26 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
     }
 
     private ScheduledTransfer reloadAsDomain() {
-        ScheduledTransferJpaEntity entity = scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
+        ScheduledTransferJpaEntity entity =
+                scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
         return ScheduledTransfer.reconstitute(
-                entity.getScheduledTransferId(), entity.getCustomerId(), entity.getWithdrawalAccountId(),
-                entity.getPayeeBankCode(), entity.getPayeeAccountNumber(), entity.getPayeeName(), entity.getAmount(),
-                entity.getScheduledDate(), entity.getMyPassbookMemo(), entity.getRecipientPassbookMemo(),
-                entity.getStatus(), entity.getTransactionNumber(), entity.getRegisteredAt(), entity.getExecutedAt(),
-                entity.getCanceledAt(), entity.getFailureReason(), entity.getVersion());
+                entity.getScheduledTransferId(),
+                entity.getCustomerId(),
+                entity.getWithdrawalAccountId(),
+                entity.getPayeeBankCode(),
+                entity.getPayeeAccountNumber(),
+                entity.getPayeeName(),
+                entity.getAmount(),
+                entity.getScheduledDate(),
+                entity.getMyPassbookMemo(),
+                entity.getRecipientPassbookMemo(),
+                entity.getStatus(),
+                entity.getTransactionNumber(),
+                entity.getRegisteredAt(),
+                entity.getExecutedAt(),
+                entity.getCanceledAt(),
+                entity.getFailureReason(),
+                entity.getVersion());
     }
 
     @Test
@@ -121,7 +134,10 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
         boolean claimed = itemProcessor.claim(scheduledTransferId);
 
         assertThat(claimed).isTrue();
-        assertThat(scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow().getStatus())
+        assertThat(scheduledTransferJpaRepository
+                        .findById(scheduledTransferId)
+                        .orElseThrow()
+                        .getStatus())
                 .isEqualTo(ScheduledTransferStatus.PROCESSING);
     }
 
@@ -136,14 +152,15 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("동일 예약건에 배치가 중복 수행돼도(executeDaily 두 번 호출) claim 경쟁으로 이체는 1회만 발생한다 " +
-            "- 실제 서비스/영속성을 그대로 쓰고 TransferExecutionUseCase만 mock으로 둔다 (#184 DoD)")
+    @DisplayName("동일 예약건에 배치가 중복 수행돼도(executeDaily 두 번 호출) claim 경쟁으로 이체는 1회만 발생한다 "
+            + "- 실제 서비스/영속성을 그대로 쓰고 TransferExecutionUseCase만 mock으로 둔다 (#184 DoD)")
     void executeDaily_duplicateBatchRun_executesTransferOnlyOnce() {
-        when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
-                .status(ProcessResultStatus.SUCCESS)
-                .transactionNumber("20260315BT0000000005")
-                .transferredAt(LocalDateTime.now())
-                .build());
+        when(transferExecutionUseCase.execute(any()))
+                .thenReturn(TransferResult.builder()
+                        .status(ProcessResultStatus.SUCCESS)
+                        .transactionNumber("20260315BT0000000005")
+                        .transferredAt(LocalDateTime.now())
+                        .build());
 
         // 같은 예약건을 대상으로 executeDaily()를 두 번 호출해 "중복 배치 실행"을 재현한다.
         // 두 번째 호출의 findDueForExecution()은 여전히 이 건을 WAITING이 아닌 걸로 보지 않고 그대로 대상에 포함시킬 수 있지만
@@ -152,21 +169,23 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
         scheduledTransferBatchUseCase.executeDaily(SCHEDULED_DATE);
 
         verify(transferExecutionUseCase, times(1)).execute(any());
-        ScheduledTransferJpaEntity after = scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
+        ScheduledTransferJpaEntity after =
+                scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
         assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.SUCCESS);
         assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000005");
     }
 
     @Test
-    @DisplayName("두 배치 실행이 findDueForExecution()으로 같은 WAITING 스냅샷을 각자 읽고 claim 경쟁을 해도 " +
-            "(executeDaily 두 번 호출로는 위 테스트가 이미 재현하지만, 첫 실행이 완전히 끝나버리면 두 번째는 조회 조건에서 " +
-            "걸러질 뿐 claim 자체가 경합하지 않을 수 있다 - 이 테스트는 claim() 경합 자체를 직접 재현) 이체는 1회만 발생한다")
+    @DisplayName("두 배치 실행이 findDueForExecution()으로 같은 WAITING 스냅샷을 각자 읽고 claim 경쟁을 해도 "
+            + "(executeDaily 두 번 호출로는 위 테스트가 이미 재현하지만, 첫 실행이 완전히 끝나버리면 두 번째는 조회 조건에서 "
+            + "걸러질 뿐 claim 자체가 경합하지 않을 수 있다 - 이 테스트는 claim() 경합 자체를 직접 재현) 이체는 1회만 발생한다")
     void claim_concurrentDuplicateRun_executesTransferOnlyOnce() {
-        when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
-                .status(ProcessResultStatus.SUCCESS)
-                .transactionNumber("20260315BT0000000006")
-                .transferredAt(LocalDateTime.now())
-                .build());
+        when(transferExecutionUseCase.execute(any()))
+                .thenReturn(TransferResult.builder()
+                        .status(ProcessResultStatus.SUCCESS)
+                        .transactionNumber("20260315BT0000000006")
+                        .transferredAt(LocalDateTime.now())
+                        .build());
 
         // 두 실행이 저장 전에 각자 findDueForExecution()으로 같은 WAITING 스냅샷을 읽었다고 가정하고,
         // 실제 배치 오케스트레이션(processOne)과 동일하게 claim() -> 성공했을 때만 completeProcessing()을 따른다.
@@ -184,7 +203,8 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
         assertThat(firstClaimed).isTrue();
         assertThat(secondClaimed).isFalse();
         verify(transferExecutionUseCase, times(1)).execute(any());
-        ScheduledTransferJpaEntity after = scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
+        ScheduledTransferJpaEntity after =
+                scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
         assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.SUCCESS);
         assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000006");
     }
@@ -198,7 +218,10 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
         assertThatThrownBy(() -> itemProcessor.completeProcessing(reloadAsDomain(), SCHEDULED_DATE))
                 .isInstanceOf(RuntimeException.class);
 
-        assertThat(scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow().getStatus())
+        assertThat(scheduledTransferJpaRepository
+                        .findById(scheduledTransferId)
+                        .orElseThrow()
+                        .getStatus())
                 .isEqualTo(ScheduledTransferStatus.PROCESSING);
     }
 
@@ -206,14 +229,16 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @DisplayName("이체 결과가 PROCESSING(응답 유실·타임아웃)이면 성공/실패로 단정하지 않고 예외를 던져 롤백시킨다")
     void completeProcessing_transferResultProcessing_throwsAndRollsBack() {
         itemProcessor.claim(scheduledTransferId);
-        when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
-                .status(ProcessResultStatus.PROCESSING)
-                .build());
+        when(transferExecutionUseCase.execute(any()))
+                .thenReturn(TransferResult.builder()
+                        .status(ProcessResultStatus.PROCESSING)
+                        .build());
 
         assertThatThrownBy(() -> itemProcessor.completeProcessing(reloadAsDomain(), SCHEDULED_DATE))
                 .isInstanceOf(IllegalStateException.class);
 
-        ScheduledTransferJpaEntity after = scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
+        ScheduledTransferJpaEntity after =
+                scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
         assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.PROCESSING);
         assertThat(after.getTransactionNumber()).isNull();
         assertThat(auditLogJpaRepository.findAll()).isEmpty();
@@ -223,15 +248,17 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @DisplayName("이체 성공 시: SUCCESS로 확정되고 감사로그가 남는다")
     void completeProcessing_success() {
         itemProcessor.claim(scheduledTransferId);
-        when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
-                .status(ProcessResultStatus.SUCCESS)
-                .transactionNumber("20260315BT0000000001")
-                .transferredAt(LocalDateTime.now())
-                .build());
+        when(transferExecutionUseCase.execute(any()))
+                .thenReturn(TransferResult.builder()
+                        .status(ProcessResultStatus.SUCCESS)
+                        .transactionNumber("20260315BT0000000001")
+                        .transferredAt(LocalDateTime.now())
+                        .build());
 
         itemProcessor.completeProcessing(reloadAsDomain(), SCHEDULED_DATE);
 
-        ScheduledTransferJpaEntity after = scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
+        ScheduledTransferJpaEntity after =
+                scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
         assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.SUCCESS);
         assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000001");
         assertThat(auditLogJpaRepository.findAll()).hasSize(1);
@@ -241,15 +268,17 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @DisplayName("채번 이전 실패 시: FAILED로 확정되지만 거래번호가 없어 감사로그는 안 남는다 (재시도 없음)")
     void completeProcessing_failureBeforeSequencing_noAuditLogAndNoRetry() {
         itemProcessor.claim(scheduledTransferId);
-        when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
-                .status(ProcessResultStatus.ERROR)
-                .errorCode("TRF0001")
-                .errorMessage("출금계좌가 등록되지 않았습니다.")
-                .build());
+        when(transferExecutionUseCase.execute(any()))
+                .thenReturn(TransferResult.builder()
+                        .status(ProcessResultStatus.ERROR)
+                        .errorCode("TRF0001")
+                        .errorMessage("출금계좌가 등록되지 않았습니다.")
+                        .build());
 
         itemProcessor.completeProcessing(reloadAsDomain(), SCHEDULED_DATE);
 
-        ScheduledTransferJpaEntity after = scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
+        ScheduledTransferJpaEntity after =
+                scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
         assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.FAILED);
         assertThat(after.getFailureReason()).isEqualTo("출금계좌가 등록되지 않았습니다.");
         assertThat(after.getTransactionNumber()).isNull();
@@ -260,16 +289,18 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @DisplayName("채번 이후 실패(한도초과·잔액부족 등) 시: 거래번호가 함께 남고 실패 감사로그도 남는다")
     void completeProcessing_failureAfterSequencing_savesTransactionNumberAndAuditLog() {
         itemProcessor.claim(scheduledTransferId);
-        when(transferExecutionUseCase.execute(any())).thenReturn(TransferResult.builder()
-                .status(ProcessResultStatus.ERROR)
-                .transactionNumber("20260315BT0000000002")
-                .errorCode("TRF0002")
-                .errorMessage("잔액 부족")
-                .build());
+        when(transferExecutionUseCase.execute(any()))
+                .thenReturn(TransferResult.builder()
+                        .status(ProcessResultStatus.ERROR)
+                        .transactionNumber("20260315BT0000000002")
+                        .errorCode("TRF0002")
+                        .errorMessage("잔액 부족")
+                        .build());
 
         itemProcessor.completeProcessing(reloadAsDomain(), SCHEDULED_DATE);
 
-        ScheduledTransferJpaEntity after = scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
+        ScheduledTransferJpaEntity after =
+                scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
         assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.FAILED);
         assertThat(after.getFailureReason()).isEqualTo("잔액 부족");
         assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000002");
@@ -280,11 +311,13 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @DisplayName("재확정: transfer 테이블에 실제 거래가 없으면 FAILED로 확정한다")
     void reconcileStuckExecution_noLookupResult_marksFailed() {
         itemProcessor.claim(scheduledTransferId);
-        when(transferLookupPort.findBySourceAndDate(scheduledTransferId, SCHEDULED_DATE)).thenReturn(Optional.empty());
+        when(transferLookupPort.findBySourceAndDate(scheduledTransferId, SCHEDULED_DATE))
+                .thenReturn(Optional.empty());
 
         itemProcessor.reconcileStuckExecution(reloadAsDomain());
 
-        ScheduledTransferJpaEntity after = scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
+        ScheduledTransferJpaEntity after =
+                scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
         assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.FAILED);
         assertThat(after.getFailureReason()).isEqualTo("실행 중 확인 불가로 재확정 배치가 오류 처리함");
     }
@@ -294,11 +327,13 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
     void reconcileStuckExecution_successLookupResult_marksSuccess() {
         itemProcessor.claim(scheduledTransferId);
         when(transferLookupPort.findBySourceAndDate(scheduledTransferId, SCHEDULED_DATE))
-                .thenReturn(Optional.of(new TransferLookupResult("20260315BT0000000003", ProcessResultStatus.SUCCESS, null)));
+                .thenReturn(Optional.of(
+                        new TransferLookupResult("20260315BT0000000003", ProcessResultStatus.SUCCESS, null)));
 
         itemProcessor.reconcileStuckExecution(reloadAsDomain());
 
-        ScheduledTransferJpaEntity after = scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
+        ScheduledTransferJpaEntity after =
+                scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
         assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.SUCCESS);
         assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000003");
         assertThat(auditLogJpaRepository.findAll()).hasSize(1);
@@ -309,11 +344,13 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
     void reconcileStuckExecution_errorLookupResult_marksFailedWithReason() {
         itemProcessor.claim(scheduledTransferId);
         when(transferLookupPort.findBySourceAndDate(scheduledTransferId, SCHEDULED_DATE))
-                .thenReturn(Optional.of(new TransferLookupResult("20260315BT0000000004", ProcessResultStatus.ERROR, "잔액 부족")));
+                .thenReturn(Optional.of(
+                        new TransferLookupResult("20260315BT0000000004", ProcessResultStatus.ERROR, "잔액 부족")));
 
         itemProcessor.reconcileStuckExecution(reloadAsDomain());
 
-        ScheduledTransferJpaEntity after = scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
+        ScheduledTransferJpaEntity after =
+                scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
         assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.FAILED);
         assertThat(after.getFailureReason()).isEqualTo("잔액 부족");
         assertThat(after.getTransactionNumber()).isEqualTo("20260315BT0000000004");
@@ -324,7 +361,8 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
     void reconcileStuckExecution_concurrentDuplicateRun_recordsAuditLogOnlyOnce() {
         itemProcessor.claim(scheduledTransferId);
         when(transferLookupPort.findBySourceAndDate(scheduledTransferId, SCHEDULED_DATE))
-                .thenReturn(Optional.of(new TransferLookupResult("20260315BT0000000099", ProcessResultStatus.SUCCESS, null)));
+                .thenReturn(Optional.of(
+                        new TransferLookupResult("20260315BT0000000099", ProcessResultStatus.SUCCESS, null)));
         // 두 재확정 실행이 저장 전에 각자 findAllProcessing()으로 같은 PROCESSING 스냅샷을 읽었다고 가정
         ScheduledTransfer firstSnapshot = reloadAsDomain();
         ScheduledTransfer secondSnapshot = reloadAsDomain();
@@ -332,30 +370,39 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
         itemProcessor.reconcileStuckExecution(firstSnapshot);
         itemProcessor.reconcileStuckExecution(secondSnapshot);
 
-        ScheduledTransferJpaEntity after = scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
+        ScheduledTransferJpaEntity after =
+                scheduledTransferJpaRepository.findById(scheduledTransferId).orElseThrow();
         assertThat(after.getStatus()).isEqualTo(ScheduledTransferStatus.SUCCESS);
         assertThat(auditLogJpaRepository.findAll()).hasSize(1);
     }
 
     private Long insertCustomer() {
         long seq = CUSTOMER_SEQ.incrementAndGet();
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO customer (user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at) "
                                 + "VALUES (:userId, 'x', '홍길동', '1990-01-01', :email, '01012345678', NOW(), NOW(), NOW())")
                 .setParameter("userId", "u" + seq)
                 .setParameter("email", "test" + seq + "@test.com")
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
     private Long insertAccount(Long customerId) {
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, opened_date, created_at, updated_at) "
                                 + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', NOW(), NOW(), NOW())")
                 .setParameter("accountNumber", accountNumber)
                 .setParameter("customerId", customerId)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 }

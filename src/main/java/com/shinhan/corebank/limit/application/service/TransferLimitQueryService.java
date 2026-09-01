@@ -1,14 +1,12 @@
 package com.shinhan.corebank.limit.application.service;
 
-import java.time.Clock;
-import java.time.LocalDate;
-
 import com.shinhan.corebank.limit.application.port.in.TransferLimitQueryUseCase;
 import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitResult;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
 import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
-
+import java.time.Clock;
+import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -33,7 +31,8 @@ public class TransferLimitQueryService implements TransferLimitQueryUseCase {
      */
     @Override
     public TransferLimitResult get(Long customerId) {
-        TransferLimit limit = transferLimitQueryPort.findByCustomerId(customerId)
+        TransferLimit limit = transferLimitQueryPort
+                .findByCustomerId(customerId)
                 .orElseGet(() -> {
                     // 가입 연계(REQ-TRSF-029)가 붙은 뒤로 이 로그는 데이터 결함 신호다.
                     // 가입 흐름을 거치지 않고 만들어진 고객이라는 뜻이다.
@@ -42,7 +41,8 @@ public class TransferLimitQueryService implements TransferLimitQueryUseCase {
                 });
 
         LocalDate today = LocalDate.now(clock);
-        TransferLimitDailyUsage usage = transferLimitQueryPort.findUsage(customerId, today)
+        TransferLimitDailyUsage usage = transferLimitQueryPort
+                .findUsage(customerId, today)
                 .orElseGet(() -> TransferLimitDailyUsage.create(customerId, today));
 
         return TransferLimitResult.from(limit, usage);

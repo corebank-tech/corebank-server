@@ -101,22 +101,39 @@ class AutoTransferBatchItemProcessorRealExecuteTest extends IntegrationTestSuppo
             executionRepository.deleteAll();
             autoTransferJpaRepository.deleteAll();
             // account가 customer를 FK로 참조하므로 account를 먼저 지운다
-            entityManager.createNativeQuery("DELETE FROM account WHERE customer_id = :id")
-                    .setParameter("id", customerId).executeUpdate();
-            entityManager.createNativeQuery("DELETE FROM customer WHERE customer_id = :id")
-                    .setParameter("id", customerId).executeUpdate();
+            entityManager
+                    .createNativeQuery("DELETE FROM account WHERE customer_id = :id")
+                    .setParameter("id", customerId)
+                    .executeUpdate();
+            entityManager
+                    .createNativeQuery("DELETE FROM customer WHERE customer_id = :id")
+                    .setParameter("id", customerId)
+                    .executeUpdate();
         });
     }
 
     private AutoTransfer autoTransfer() {
-        AutoTransferJpaEntity e = autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
+        AutoTransferJpaEntity e =
+                autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
         return AutoTransfer.reconstitute(
-                autoTransferId, customerId, e.getWithdrawalAccountId(),
-                e.getDepositAccountNumber(), "홍길동",
-                10000L, 1, 15,
-                LocalDate.of(2026, 1, 1), LocalDate.of(2027, 1, 1), today,
-                "메모", "받는메모", AutoTransferStatus.NORMAL,
-                LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0), 0L);
+                autoTransferId,
+                customerId,
+                e.getWithdrawalAccountId(),
+                e.getDepositAccountNumber(),
+                "홍길동",
+                10000L,
+                1,
+                15,
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2027, 1, 1),
+                today,
+                "메모",
+                "받는메모",
+                AutoTransferStatus.NORMAL,
+                LocalDateTime.of(2026, 1, 1, 0, 0),
+                null,
+                LocalDateTime.of(2026, 1, 1, 0, 0),
+                0L);
     }
 
     @Test
@@ -124,19 +141,21 @@ class AutoTransferBatchItemProcessorRealExecuteTest extends IntegrationTestSuppo
     void injectedBeanIsRealImplementation() {
         // getClass() 대신 AopUtils.getTargetClass()를 쓴다 - AOP 프록시로 감싸져도(나중에
         // @Transactional 등이 붙어도) 실제 타깃 클래스를 정확히 가리켜서 이 단정이 안 깨진다.
-        assertThat(AopUtils.getTargetClass(transferExecutionUseCase).getSimpleName()).isEqualTo("TransferExecutionService");
+        assertThat(AopUtils.getTargetClass(transferExecutionUseCase).getSimpleName())
+                .isEqualTo("TransferExecutionService");
     }
 
     @Test
-    @DisplayName("real TransferExecutionUseCase로 completeProcessing()을 돌리면, " +
-            "출금계좌 등록 플로우(#100) 부재로 채번 이전 단계에서 TRF0001로 안전하게 ERROR 확정된다 - " +
-            "성공 케이스(원장 실제 기표) 자체는 #100 해결 전까지 여전히 재현 불가")
+    @DisplayName("real TransferExecutionUseCase로 completeProcessing()을 돌리면, "
+            + "출금계좌 등록 플로우(#100) 부재로 채번 이전 단계에서 TRF0001로 안전하게 ERROR 확정된다 - "
+            + "성공 케이스(원장 실제 기표) 자체는 #100 해결 전까지 여전히 재현 불가")
     void completeProcessing_withRealExecute_currentlyAlwaysFailsAtWithdrawalRegistration() {
         AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
 
         itemProcessor.completeProcessing(autoTransfer(), saved, today);
 
-        var executionAfter = executionRepository.findById(saved.getExecutionId()).orElseThrow();
+        var executionAfter =
+                executionRepository.findById(saved.getExecutionId()).orElseThrow();
         assertThat(executionAfter.getStatus()).isEqualTo(ProcessResultStatus.ERROR);
         assertThat(executionAfter.getFailureReason()).isEqualTo("등록되지 않은 출금계좌입니다.");
         // 채번(TransferSequencePort.nextTransactionNumber) 이전 실패라 거래번호가 없고,
@@ -149,23 +168,31 @@ class AutoTransferBatchItemProcessorRealExecuteTest extends IntegrationTestSuppo
         long seq = CUSTOMER_SEQ.incrementAndGet();
         String userId = "u" + seq;
         String email = "test" + seq + "@test.com";
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO customer (user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at) "
                                 + "VALUES (:userId, 'x', '홍길동', '1990-01-01', :email, '01012345678', NOW(), NOW(), NOW())")
                 .setParameter("userId", userId)
                 .setParameter("email", email)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
     private Long insertAccount(Long customerId) {
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, opened_date, created_at, updated_at) "
                                 + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', NOW(), NOW(), NOW())")
                 .setParameter("accountNumber", accountNumber)
                 .setParameter("customerId", customerId)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 }

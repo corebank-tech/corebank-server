@@ -8,8 +8,7 @@ import org.springframework.stereotype.Component;
 // signup의 중복조회 포트를 customer 공개 API에 연결한다.
 @Component
 @RequiredArgsConstructor
-public class SignupCustomerAvailabilityAdapter
-        implements SignupCustomerAvailabilityPort {
+public class SignupCustomerAvailabilityAdapter implements SignupCustomerAvailabilityPort {
 
     private final CustomerRegistrationQuery customerRegistrationQuery;
 
@@ -24,11 +23,7 @@ public class SignupCustomerAvailabilityAdapter
     }
 
     @Override
-    public boolean isExistingBankCustomerRegistered(
-            String existingBankCustomerId
-    ) {
-        return customerRegistrationQuery.existsByExistingBankCustomerId(
-                existingBankCustomerId
-        );
+    public boolean isExistingBankCustomerRegistered(String existingBankCustomerId) {
+        return customerRegistrationQuery.existsByExistingBankCustomerId(existingBankCustomerId);
     }
 }

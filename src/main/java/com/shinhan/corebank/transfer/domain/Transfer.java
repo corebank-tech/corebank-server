@@ -1,13 +1,11 @@
 package com.shinhan.corebank.transfer.domain;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -37,7 +35,6 @@ public class Transfer {
     private LocalDateTime transferredAt;
     private LocalDateTime createdAt;
 
-
     /**
      * 신규 이체 도메인 생성 팩토리
      */
@@ -56,8 +53,7 @@ public class Transfer {
             LocalDate executionDate,
             String myPassbookMemo,
             String recipientPassbookMemo,
-            LocalDateTime now
-    ) {
+            LocalDateTime now) {
         TransferValidations.requireAccountIdsPresent(withdrawalAccountId, depositAccountId);
         TransferValidations.requireNonBlank(transactionNumber, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requireNonBlank(depositAccountNumber, CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -113,5 +109,4 @@ public class Transfer {
             throw new BusinessException(TransferErrorCode.INVALID_STATUS_TRANSITION);
         }
     }
-
 }

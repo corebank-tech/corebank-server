@@ -1,5 +1,7 @@
 package com.shinhan.corebank.subscription.application;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.adapter.out.persistence.AccountJpaEntity;
 import com.shinhan.corebank.account.adapter.out.persistence.AccountJpaRepository;
@@ -21,15 +23,6 @@ import com.shinhan.corebank.product.domain.SaleStatus;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionExecuteUseCase;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionExecuteUseCase.ProductSubscriptionExecuteCommand;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionExecuteUseCase.ProductSubscriptionExecuteResult;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-
-import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -41,8 +34,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import javax.sql.DataSource;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 // #256: 1인1계좌 제한 판정(existsActiveSubscription)이 락 없는 SELECT라 동시 가입 요청 시
 // 두 트랜잭션 모두 통과할 수 있었다(TOCTOU). ProductLockJpaRepository의 product 행
@@ -55,16 +54,22 @@ class ProductSubscriptionExecuteConcurrencyIntegrationTest extends IntegrationTe
 
     @Autowired
     private ProductSubscriptionExecuteUseCase productSubscriptionExecuteUseCase;
+
     @Autowired
     private ProductJpaRepository productJpaRepository;
+
     @Autowired
     private ProductRateTierJpaRepository rateTierRepository;
+
     @Autowired
     private AccountJpaRepository accountJpaRepository;
+
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
     @Autowired
     private CustomerTestFixture customerTestFixture;
+
     @Autowired
     private DataSource dataSource;
 
@@ -113,8 +118,8 @@ class ProductSubscriptionExecuteConcurrencyIntegrationTest extends IntegrationTe
 
         try (Connection blocker = dataSource.getConnection()) {
             blocker.setAutoCommit(false);
-            try (PreparedStatement lockProduct = blocker.prepareStatement(
-                    "SELECT product_id FROM product WHERE product_id = ? FOR UPDATE")) {
+            try (PreparedStatement lockProduct =
+                    blocker.prepareStatement("SELECT product_id FROM product WHERE product_id = ? FOR UPDATE")) {
                 lockProduct.setLong(1, productId);
                 lockProduct.executeQuery();
             }
@@ -128,13 +133,13 @@ class ProductSubscriptionExecuteConcurrencyIntegrationTest extends IntegrationTe
 
             blocker.rollback();
 
-            outcomes = List.of(
-                    first.get(30, TimeUnit.SECONDS),
-                    second.get(30, TimeUnit.SECONDS));
+            outcomes = List.of(first.get(30, TimeUnit.SECONDS), second.get(30, TimeUnit.SECONDS));
         }
 
-        long successCount = outcomes.stream().filter(outcome -> outcome.result() != null).count();
-        long rejectedCount = outcomes.stream().filter(outcome -> outcome.exception() != null).count();
+        long successCount =
+                outcomes.stream().filter(outcome -> outcome.result() != null).count();
+        long rejectedCount =
+                outcomes.stream().filter(outcome -> outcome.exception() != null).count();
 
         assertThat(successCount).isEqualTo(1);
         assertThat(rejectedCount).isEqualTo(1);
@@ -148,21 +153,24 @@ class ProductSubscriptionExecuteConcurrencyIntegrationTest extends IntegrationTe
 
         Long subscriptionCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM product_subscription WHERE product_id = ? AND customer_id = ?",
-                Long.class, productId, customerId);
+                Long.class,
+                productId,
+                customerId);
         assertThat(subscriptionCount).isEqualTo(1L);
 
         // 패자 스레드가 판정에서 막혀 계좌개설까지 진행하지 못했는지 확인(락이 계좌개설보다 앞서 걸림)
         Long openedAccountCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM account WHERE customer_id = ? AND account_id != ?",
-                Long.class, customerId, withdrawalAccountId);
+                Long.class,
+                customerId,
+                withdrawalAccountId);
         assertThat(openedAccountCount).isEqualTo(1L);
     }
 
     private Future<ExecutionOutcome> submitExecute(CountDownLatch anyFinished) {
         return executor.submit(() -> {
             try {
-                ProductSubscriptionExecuteResult result =
-                        productSubscriptionExecuteUseCase.execute(buildCommand());
+                ProductSubscriptionExecuteResult result = productSubscriptionExecuteUseCase.execute(buildCommand());
                 return new ExecutionOutcome(result, null);
             } catch (BusinessException exception) {
                 return new ExecutionOutcome(null, exception);
@@ -174,57 +182,70 @@ class ProductSubscriptionExecuteConcurrencyIntegrationTest extends IntegrationTe
 
     private ProductSubscriptionExecuteCommand buildCommand() {
         return new ProductSubscriptionExecuteCommand(
-                customerId, productId, 500_000L, 12, withdrawalAccountId,
-                "1234", "1234", "ACC_PWD_test", "OTP_AUTH_test",
+                customerId,
+                productId,
+                500_000L,
+                12,
+                withdrawalAccountId,
+                "1234",
+                "1234",
+                "ACC_PWD_test",
+                "OTP_AUTH_test",
                 List.of());
     }
 
     private Long seedSingleAccountLimitProduct() {
-        Long id = productJpaRepository.save(ProductJpaEntity.builder()
-                .productCode(PRODUCT_CODE)
-                .productName("1인1계좌 제한 테스트 적금")
-                .productGroup(ProductGroup.SAVINGS)
-                .depositType(DepositType.INSTALLMENT)
-                .summary("동시성 테스트용 적금")
-                .description("동시성 테스트용 적금 설명")
-                .baseRate(new BigDecimal("2.50"))
-                .maxRate(new BigDecimal("3.20"))
-                .minAmount(100_000L)
-                .maxAmount(10_000_000L)
-                .amountUnit(10_000L)
-                .minTermMonths((short) 6)
-                .maxTermMonths((short) 36)
-                .interestPayType(InterestPayType.SIMPLE)
-                .saleStatus(SaleStatus.ON_SALE)
-                .saleStartDate(LocalDate.of(2026, 1, 1))
-                .saleEndDate(LocalDate.of(2026, 12, 31))
-                .newFlag(false)
-                .singleAccountLimit(true)
-                .build()).getProductId();
+        Long id = productJpaRepository
+                .save(ProductJpaEntity.builder()
+                        .productCode(PRODUCT_CODE)
+                        .productName("1인1계좌 제한 테스트 적금")
+                        .productGroup(ProductGroup.SAVINGS)
+                        .depositType(DepositType.INSTALLMENT)
+                        .summary("동시성 테스트용 적금")
+                        .description("동시성 테스트용 적금 설명")
+                        .baseRate(new BigDecimal("2.50"))
+                        .maxRate(new BigDecimal("3.20"))
+                        .minAmount(100_000L)
+                        .maxAmount(10_000_000L)
+                        .amountUnit(10_000L)
+                        .minTermMonths((short) 6)
+                        .maxTermMonths((short) 36)
+                        .interestPayType(InterestPayType.SIMPLE)
+                        .saleStatus(SaleStatus.ON_SALE)
+                        .saleStartDate(LocalDate.of(2026, 1, 1))
+                        .saleEndDate(LocalDate.of(2026, 12, 31))
+                        .newFlag(false)
+                        .singleAccountLimit(true)
+                        .build())
+                .getProductId();
         rateTierRepository.save(ProductRateTierJpaEntity.builder()
                 .id(new ProductRateTierJpaEntityId(id, (short) 12))
                 .rate(new BigDecimal("3.20"))
                 .build());
-        new AccountNumberSequenceTestFixture(jdbcTemplate).resetProductAccountSequence(
-                id, AccountType.INSTALLMENT_SAVINGS,
-                AccountNumberSequenceTestFixture.INSTALLMENT_SAVINGS_PREFIX, 0L);
+        new AccountNumberSequenceTestFixture(jdbcTemplate)
+                .resetProductAccountSequence(
+                        id,
+                        AccountType.INSTALLMENT_SAVINGS,
+                        AccountNumberSequenceTestFixture.INSTALLMENT_SAVINGS_PREFIX,
+                        0L);
         return id;
     }
 
     private Long seedWithdrawalAccount() {
-        return accountJpaRepository.save(AccountJpaEntity.builder()
-                .accountNumber("110000009901")
-                .customerId(customerId)
-                .accountType(AccountType.DEMAND_DEPOSIT)
-                .balance(10_000_000L)
-                .status(AccountStatus.ACTIVE)
-                .passwordHash("x".repeat(60))
-                .withdrawalRegistered(true)
-                .withdrawalRegisteredAt(LocalDateTime.now())
-                .openedDate(LocalDateTime.now())
-                .build()).getAccountId();
+        return accountJpaRepository
+                .save(AccountJpaEntity.builder()
+                        .accountNumber("110000009901")
+                        .customerId(customerId)
+                        .accountType(AccountType.DEMAND_DEPOSIT)
+                        .balance(10_000_000L)
+                        .status(AccountStatus.ACTIVE)
+                        .passwordHash("x".repeat(60))
+                        .withdrawalRegistered(true)
+                        .withdrawalRegisteredAt(LocalDateTime.now())
+                        .openedDate(LocalDateTime.now())
+                        .build())
+                .getAccountId();
     }
 
-    private record ExecutionOutcome(ProductSubscriptionExecuteResult result, BusinessException exception) {
-    }
+    private record ExecutionOutcome(ProductSubscriptionExecuteResult result, BusinessException exception) {}
 }

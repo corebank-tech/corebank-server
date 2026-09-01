@@ -12,6 +12,4 @@ public record RegisterCustomerCommand(
         LocalDate birthDate,
         String email,
         String phoneNumber,
-        LocalDateTime joinedAt
-) {
-}
+        LocalDateTime joinedAt) {}

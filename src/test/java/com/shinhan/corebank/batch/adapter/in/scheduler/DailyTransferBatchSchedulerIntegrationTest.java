@@ -55,10 +55,10 @@ class DailyTransferBatchSchedulerIntegrationTest extends IntegrationTestSupport 
     @BeforeEach
     void setUp() {
         // 이전 테스트 실행이 크래시로 락을 TRUE로 남겼을 가능성에 대비해 매 테스트마다 강제 초기화
-        transactionTemplate().executeWithoutResult(status ->
-                entityManager.createNativeQuery(
-                                "UPDATE batch_execution_lock SET currently_running = FALSE WHERE job_name = 'DAILY_TRANSFER_BATCH'")
-                        .executeUpdate());
+        transactionTemplate().executeWithoutResult(status -> entityManager
+                .createNativeQuery(
+                        "UPDATE batch_execution_lock SET currently_running = FALSE WHERE job_name = 'DAILY_TRANSFER_BATCH'")
+                .executeUpdate());
 
         LocalDate today = LocalDate.now(SEOUL);
 
@@ -71,78 +71,108 @@ class DailyTransferBatchSchedulerIntegrationTest extends IntegrationTestSupport 
             String depositAccountNumber = accountNumberOf(depositAccountId);
 
             autoTransferId = insertAutoTransfer(withdrawalCustomerId, withdrawalAccountId, depositAccountNumber, today);
-            scheduledTransferId = insertScheduledTransfer(withdrawalCustomerId, withdrawalAccountId, depositAccountNumber, today);
+            scheduledTransferId =
+                    insertScheduledTransfer(withdrawalCustomerId, withdrawalAccountId, depositAccountNumber, today);
         });
     }
 
     @AfterEach
     void cleanUp() {
         transactionTemplate().executeWithoutResult(status -> {
-            entityManager.createNativeQuery("DELETE FROM ledger_entry WHERE account_id IN (:w, :d)")
-                    .setParameter("w", withdrawalAccountId).setParameter("d", depositAccountId).executeUpdate();
-            entityManager.createNativeQuery("DELETE FROM transfer WHERE withdrawal_account_id = :w")
-                    .setParameter("w", withdrawalAccountId).executeUpdate();
-            entityManager.createNativeQuery("DELETE FROM auto_transfer_execution WHERE auto_transfer_id = :id")
-                    .setParameter("id", autoTransferId).executeUpdate();
-            entityManager.createNativeQuery("DELETE FROM auto_transfer WHERE auto_transfer_id = :id")
-                    .setParameter("id", autoTransferId).executeUpdate();
-            entityManager.createNativeQuery("DELETE FROM scheduled_transfer WHERE scheduled_transfer_id = :id")
-                    .setParameter("id", scheduledTransferId).executeUpdate();
-            entityManager.createNativeQuery("DELETE FROM account WHERE account_id IN (:w, :d)")
-                    .setParameter("w", withdrawalAccountId).setParameter("d", depositAccountId).executeUpdate();
-            entityManager.createNativeQuery("DELETE FROM audit_log WHERE customer_id IN (:w, :d)")
-                    .setParameter("w", withdrawalCustomerId).setParameter("d", depositCustomerId).executeUpdate();
-            entityManager.createNativeQuery("DELETE FROM customer WHERE customer_id IN (:w, :d)")
-                    .setParameter("w", withdrawalCustomerId).setParameter("d", depositCustomerId).executeUpdate();
+            entityManager
+                    .createNativeQuery("DELETE FROM ledger_entry WHERE account_id IN (:w, :d)")
+                    .setParameter("w", withdrawalAccountId)
+                    .setParameter("d", depositAccountId)
+                    .executeUpdate();
+            entityManager
+                    .createNativeQuery("DELETE FROM transfer WHERE withdrawal_account_id = :w")
+                    .setParameter("w", withdrawalAccountId)
+                    .executeUpdate();
+            entityManager
+                    .createNativeQuery("DELETE FROM auto_transfer_execution WHERE auto_transfer_id = :id")
+                    .setParameter("id", autoTransferId)
+                    .executeUpdate();
+            entityManager
+                    .createNativeQuery("DELETE FROM auto_transfer WHERE auto_transfer_id = :id")
+                    .setParameter("id", autoTransferId)
+                    .executeUpdate();
+            entityManager
+                    .createNativeQuery("DELETE FROM scheduled_transfer WHERE scheduled_transfer_id = :id")
+                    .setParameter("id", scheduledTransferId)
+                    .executeUpdate();
+            entityManager
+                    .createNativeQuery("DELETE FROM account WHERE account_id IN (:w, :d)")
+                    .setParameter("w", withdrawalAccountId)
+                    .setParameter("d", depositAccountId)
+                    .executeUpdate();
+            entityManager
+                    .createNativeQuery("DELETE FROM audit_log WHERE customer_id IN (:w, :d)")
+                    .setParameter("w", withdrawalCustomerId)
+                    .setParameter("d", depositCustomerId)
+                    .executeUpdate();
+            entityManager
+                    .createNativeQuery("DELETE FROM customer WHERE customer_id IN (:w, :d)")
+                    .setParameter("w", withdrawalCustomerId)
+                    .setParameter("d", depositCustomerId)
+                    .executeUpdate();
         });
     }
 
     @Test
-    @DisplayName("같은 출금계좌에 자동이체·예약이체가 같은 날 겹치고 잔액이 둘 다 감당 못 하면, " +
-            "자동이체가 먼저 성공해 잔액을 소진하고 예약이체는 잔액부족으로 오류 확정된다 (POL-037)")
+    @DisplayName(
+            "같은 출금계좌에 자동이체·예약이체가 같은 날 겹치고 잔액이 둘 다 감당 못 하면, " + "자동이체가 먼저 성공해 잔액을 소진하고 예약이체는 잔액부족으로 오류 확정된다 (POL-037)")
     void runDailyBatch_sameAccountBothDue_autoTransferWinsPriority() {
         dailyTransferBatchScheduler.runDailyBatch();
 
-        Object[] execution = (Object[]) entityManager.createNativeQuery(
+        Object[] execution = (Object[]) entityManager
+                .createNativeQuery(
                         "SELECT status, failure_reason FROM auto_transfer_execution WHERE auto_transfer_id = :id")
                 .setParameter("id", autoTransferId)
                 .getSingleResult();
         assertThat(execution[0]).isEqualTo("SUCCESS");
 
-        Object[] scheduled = (Object[]) entityManager.createNativeQuery(
+        Object[] scheduled = (Object[]) entityManager
+                .createNativeQuery(
                         "SELECT status, failure_reason FROM scheduled_transfer WHERE scheduled_transfer_id = :id")
                 .setParameter("id", scheduledTransferId)
                 .getSingleResult();
         assertThat(scheduled[0]).isEqualTo("FAILED");
         assertThat((String) scheduled[1]).contains("잔액이 부족");
 
-        long balanceAfter = ((Number) entityManager.createNativeQuery(
-                        "SELECT balance FROM account WHERE account_id = :id")
-                .setParameter("id", withdrawalAccountId)
-                .getSingleResult()).longValue();
+        long balanceAfter = ((Number) entityManager
+                        .createNativeQuery("SELECT balance FROM account WHERE account_id = :id")
+                        .setParameter("id", withdrawalAccountId)
+                        .getSingleResult())
+                .longValue();
         assertThat(balanceAfter).isEqualTo(WITHDRAWAL_INITIAL_BALANCE - EACH_TRANSFER_AMOUNT);
     }
 
     private String accountNumberOf(Long accountId) {
-        return (String) entityManager.createNativeQuery("SELECT account_number FROM account WHERE account_id = :id")
+        return (String) entityManager
+                .createNativeQuery("SELECT account_number FROM account WHERE account_id = :id")
                 .setParameter("id", accountId)
                 .getSingleResult();
     }
 
     private Long insertCustomer() {
         long seq = CUSTOMER_SEQ.incrementAndGet();
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO customer (user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at) "
                                 + "VALUES (:userId, 'x', '홍길동', '1990-01-01', :email, '01012345678', NOW(), NOW(), NOW())")
                 .setParameter("userId", "u" + seq)
                 .setParameter("email", "test" + seq + "@test.com")
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
     private Long insertAccount(Long customerId, long balance, boolean withdrawalRegistered) {
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, balance, password_hash, "
                                 + "withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at) "
                                 + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', :balance, 'x', "
@@ -152,11 +182,16 @@ class DailyTransferBatchSchedulerIntegrationTest extends IntegrationTestSupport 
                 .setParameter("balance", balance)
                 .setParameter("withdrawalRegistered", withdrawalRegistered)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
-    private Long insertAutoTransfer(Long customerId, Long withdrawalAccountId, String depositAccountNumber, LocalDate today) {
-        entityManager.createNativeQuery(
+    private Long insertAutoTransfer(
+            Long customerId, Long withdrawalAccountId, String depositAccountNumber, LocalDate today) {
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO auto_transfer (customer_id, withdrawal_account_id, deposit_account_number, payee_name, amount, "
                                 + "cycle_months, transfer_day, start_date, end_date, next_execution_date, status, registered_at, updated_at) "
                                 + "VALUES (:customerId, :withdrawalAccountId, :depositAccountNumber, '홍길동', :amount, "
@@ -169,11 +204,16 @@ class DailyTransferBatchSchedulerIntegrationTest extends IntegrationTestSupport 
                 .setParameter("endDate", today.plusMonths(6))
                 .setParameter("nextExecutionDate", today)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
-    private Long insertScheduledTransfer(Long customerId, Long withdrawalAccountId, String payeeAccountNumber, LocalDate today) {
-        entityManager.createNativeQuery(
+    private Long insertScheduledTransfer(
+            Long customerId, Long withdrawalAccountId, String payeeAccountNumber, LocalDate today) {
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO scheduled_transfer (customer_id, withdrawal_account_id, payee_bank_code, payee_account_number, "
                                 + "payee_name, amount, scheduled_date, status, registered_at) "
                                 + "VALUES (:customerId, :withdrawalAccountId, '088', :payeeAccountNumber, '김철수', :amount, "
@@ -184,6 +224,9 @@ class DailyTransferBatchSchedulerIntegrationTest extends IntegrationTestSupport 
                 .setParameter("amount", EACH_TRANSFER_AMOUNT)
                 .setParameter("scheduledDate", today)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 }

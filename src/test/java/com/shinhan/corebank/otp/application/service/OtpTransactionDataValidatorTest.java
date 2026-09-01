@@ -1,13 +1,12 @@
 package com.shinhan.corebank.otp.application.service;
 
-import com.shinhan.corebank.common.exception.BusinessException;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.shinhan.corebank.common.exception.BusinessException;
 import java.util.HashMap;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 
 // OTP 거래정보의 빈 객체·민감 필드·날짜 형식 금지 규칙을 검증한다.
 class OtpTransactionDataValidatorTest {
@@ -17,24 +16,21 @@ class OtpTransactionDataValidatorTest {
     @Test
     @DisplayName("비어 있는 transactionData를 거부한다")
     void rejectsEmptyData() {
-        assertThatThrownBy(() -> validator.validate(Map.of()))
-                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> validator.validate(Map.of())).isInstanceOf(BusinessException.class);
     }
 
     @Test
     @DisplayName("중첩된 AuthToken 필드도 거부한다")
     void rejectsNestedAuthToken() {
-        assertThatThrownBy(() -> validator.validate(Map.of(
-                "nested", Map.of("otpAuthToken", "secret")
-        ))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> validator.validate(Map.of("nested", Map.of("otpAuthToken", "secret"))))
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
     @DisplayName("날짜 필드는 YYYY-MM-DD 형식만 허용한다")
     void rejectsInvalidDate() {
-        assertThatThrownBy(() -> validator.validate(Map.of(
-                "scheduledDate", "2026/08/25"
-        ))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> validator.validate(Map.of("scheduledDate", "2026/08/25")))
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
@@ -43,7 +39,6 @@ class OtpTransactionDataValidatorTest {
         Map<String, Object> data = new HashMap<>();
         data.put("payeeName", null);
 
-        assertThatThrownBy(() -> validator.validate(data))
-                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> validator.validate(data)).isInstanceOf(BusinessException.class);
     }
 }

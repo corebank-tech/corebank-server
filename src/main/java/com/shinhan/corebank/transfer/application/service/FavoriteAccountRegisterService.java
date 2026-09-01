@@ -1,8 +1,5 @@
 package com.shinhan.corebank.transfer.application.service;
 
-import java.time.Clock;
-import java.time.LocalDateTime;
-
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.application.port.in.FavoriteAccountRegisterCommand;
 import com.shinhan.corebank.transfer.application.port.in.FavoriteAccountRegisterUseCase;
@@ -14,7 +11,8 @@ import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.domain.FavoriteAccount;
 import com.shinhan.corebank.transfer.domain.exception.FavoriteAccountErrorCode;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-
+import java.time.Clock;
+import java.time.LocalDateTime;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,7 +27,8 @@ public class FavoriteAccountRegisterService implements FavoriteAccountRegisterUs
     private final FavoriteAccountPersistencePort persistencePort;
     private final Clock clock;
 
-    public FavoriteAccountRegisterService(AccountLockPort accountLockPort, FavoriteAccountPersistencePort persistencePort, Clock clock) {
+    public FavoriteAccountRegisterService(
+            AccountLockPort accountLockPort, FavoriteAccountPersistencePort persistencePort, Clock clock) {
         this.accountLockPort = accountLockPort;
         this.persistencePort = persistencePort;
         this.clock = clock;
@@ -37,7 +36,8 @@ public class FavoriteAccountRegisterService implements FavoriteAccountRegisterUs
 
     @Override
     public FavoriteAccountResult register(FavoriteAccountRegisterCommand command) {
-        ResolvedPayee payee = accountLockPort.resolvePayeeByAccountNumber(command.depositAccountNumber())
+        ResolvedPayee payee = accountLockPort
+                .resolvePayeeByAccountNumber(command.depositAccountNumber())
                 .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
 
         if (persistencePort.countByCustomerId(command.customerId()) >= MAX_FAVORITE_ACCOUNTS) {
@@ -45,8 +45,11 @@ public class FavoriteAccountRegisterService implements FavoriteAccountRegisterUs
         }
 
         FavoriteAccount favoriteAccount = FavoriteAccount.register(
-                command.customerId(), command.depositAccountNumber(), payee.payeeName(),
-                command.alias(), LocalDateTime.now(clock));
+                command.customerId(),
+                command.depositAccountNumber(),
+                payee.payeeName(),
+                command.alias(),
+                LocalDateTime.now(clock));
 
         try {
             FavoriteAccount saved = persistencePort.save(favoriteAccount);

@@ -1,11 +1,10 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import java.time.LocalDateTime;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("AccountLockJpaEntity 잔액 연산 오버플로우 단위 테스트")
 class AccountLockJpaEntityTest {
@@ -19,8 +18,7 @@ class AccountLockJpaEntityTest {
                 .status("ACTIVE")
                 .build();
 
-        assertThatThrownBy(() -> entity.credit(1L, LocalDateTime.now()))
-                .isInstanceOf(ArithmeticException.class);
+        assertThatThrownBy(() -> entity.credit(1L, LocalDateTime.now())).isInstanceOf(ArithmeticException.class);
     }
 
     @Test
@@ -32,8 +30,7 @@ class AccountLockJpaEntityTest {
                 .status("ACTIVE")
                 .build();
 
-        assertThatThrownBy(() -> entity.debit(1L, LocalDateTime.now()))
-                .isInstanceOf(ArithmeticException.class);
+        assertThatThrownBy(() -> entity.debit(1L, LocalDateTime.now())).isInstanceOf(ArithmeticException.class);
     }
 
     @Test
@@ -45,8 +42,7 @@ class AccountLockJpaEntityTest {
                 .status("ACTIVE")
                 .build();
 
-        assertThatThrownBy(() -> entity.credit(1L, null))
-                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> entity.credit(1L, null)).isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -58,7 +54,6 @@ class AccountLockJpaEntityTest {
                 .status("ACTIVE")
                 .build();
 
-        assertThatThrownBy(() -> entity.debit(1L, null))
-                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> entity.debit(1L, null)).isInstanceOf(NullPointerException.class);
     }
 }

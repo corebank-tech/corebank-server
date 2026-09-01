@@ -2,6 +2,11 @@ package com.shinhan.corebank.autotransfer.adapter.out.persistence;
 
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import jakarta.persistence.*;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,12 +14,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 @Entity
 @Table(name = "auto_transfer")
@@ -92,5 +91,4 @@ public class AutoTransferJpaEntity {
     public List<AutoTransferExecutionJpaEntity> getExecutions() {
         return Collections.unmodifiableList(executions);
     }
-
 }

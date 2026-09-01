@@ -97,7 +97,8 @@ class AccountStatusAdapterTest extends IntegrationTestSupport {
     void findAccountAlias_set_returnsAlias() {
         Long customerId = insertCustomer();
         Long accountId = insertAccount(customerId, nextAccountNumber(), "ACTIVE");
-        entityManager.createNativeQuery("UPDATE account SET alias = :alias WHERE account_id = :accountId")
+        entityManager
+                .createNativeQuery("UPDATE account SET alias = :alias WHERE account_id = :accountId")
                 .setParameter("alias", "월세계좌")
                 .setParameter("accountId", accountId)
                 .executeUpdate();
@@ -126,23 +127,31 @@ class AccountStatusAdapterTest extends IntegrationTestSupport {
 
     private Long insertCustomer() {
         long seq = CUSTOMER_SEQ.incrementAndGet();
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO customer (user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at) "
                                 + "VALUES (:userId, 'x', '홍길동', '1990-01-01', :email, '01012345678', NOW(), NOW(), NOW())")
                 .setParameter("userId", "u" + seq)
                 .setParameter("email", "test" + seq + "@test.com")
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
     private Long insertAccount(Long customerId, String accountNumber, String status) {
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, opened_date, created_at, updated_at) "
                                 + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', :status, 'x', NOW(), NOW(), NOW())")
                 .setParameter("accountNumber", accountNumber)
                 .setParameter("customerId", customerId)
                 .setParameter("status", status)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 }

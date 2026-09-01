@@ -1,9 +1,5 @@
 package com.shinhan.corebank.transfer.application.service;
 
-import java.time.Clock;
-import java.time.LocalDateTime;
-import java.util.Optional;
-
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
@@ -16,19 +12,21 @@ import com.shinhan.corebank.transfer.application.port.out.LockedAccountStatus;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountType;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
-import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
 import com.shinhan.corebank.transfer.application.port.out.TransferAuthTokenVerificationPort;
-import com.shinhan.corebank.transfer.application.port.out.TransferOtpVerificationPort;
-import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
+import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
 import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferOtpVerificationPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.LedgerPair;
 import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.util.Optional;
 import org.springframework.context.annotation.Primary;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -79,8 +77,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             TransferLookupPort transferLookupPort,
             LedgerSavePort ledgerSavePort,
             Clock clock,
-            PlatformTransactionManager transactionManager
-    ) {
+            PlatformTransactionManager transactionManager) {
         this.accountLockPort = accountLockPort;
         this.transferLimitPort = transferLimitPort;
         this.transferAuthTokenVerificationPort = transferAuthTokenVerificationPort;
@@ -117,11 +114,13 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             // 1차 검증(락 이전) ①: 출금계좌 소유·등록 여부. 존재하지 않는 계좌도 "내 소유가 아님"과
             // 구분하지 않고 같은 TRF0001로 묶는다 — 계좌ID가 이제 HTTP 요청 바디로 들어오므로
             // 계좌 존재 여부를 스캐닝하는 데 악용되지 않도록 한다.
-            accountLockPort.findWithdrawalAccountDetail(command.withdrawalAccountId())
+            accountLockPort
+                    .findWithdrawalAccountDetail(command.withdrawalAccountId())
                     .filter(detail -> detail.customerId().equals(command.customerId()) && detail.withdrawalRegistered())
                     .orElseThrow(() -> new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
 
-            ResolvedPayee payee = accountLockPort.resolvePayeeByAccountNumber(command.depositAccountNumber())
+            ResolvedPayee payee = accountLockPort
+                    .resolvePayeeByAccountNumber(command.depositAccountNumber())
                     .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
 
             // 1차 검증(락 이전) ②: 동일계좌 이체 거부. 한도 예약(checkAndReserve) 전에 걸러야
@@ -165,8 +164,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     command.executionDate(),
                     command.myPassbookMemo(),
                     command.recipientPassbookMemo(),
-                    requestedAt
-            );
+                    requestedAt);
             // 람다가 캡처하려면 effectively-final이어야 하는데 created는 재대입되므로 복사본을 둔다.
             Transfer createdTransfer = created;
 
@@ -177,7 +175,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             // 그 사이 상태가 바뀌면 아래에서 다시 걸린다. created 확정 이후에 두는 이유: 여기서
             // 실패해도 다른 락 안쪽 실패와 동일하게 failTransfer()로 ERROR 행을 남겨야 한다.
             if (command.otpAuthToken() != null) {
-                accountLockPort.findWithdrawalAccountPreCheckSnapshot(command.withdrawalAccountId())
+                accountLockPort
+                        .findWithdrawalAccountPreCheckSnapshot(command.withdrawalAccountId())
                         .ifPresent(snapshot -> {
                             if (snapshot.status() != LockedAccountStatus.ACTIVE) {
                                 throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
@@ -195,8 +194,11 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             // 뒤, 채번 직후·계좌 락 획득 직전에 소비한다(otp_integration_guide.md §9).
             if (command.otpAuthToken() != null) {
                 transferOtpVerificationPort.verifyAndConsume(
-                        command.otpAuthToken(), command.customerId(), command.withdrawalAccountId(),
-                        command.depositAccountNumber(), command.amount());
+                        command.otpAuthToken(),
+                        command.customerId(),
+                        command.withdrawalAccountId(),
+                        command.depositAccountNumber(),
+                        command.amount());
             }
 
             Transfer completed = requiresNewTransactionTemplate.execute(status -> {
@@ -249,8 +251,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                         command.myPassbookMemo(),
                         command.recipientPassbookMemo(),
                         command.channel(),
-                        executedAt
-                );
+                        executedAt);
                 ledgerSavePort.save(pair);
 
                 transfer.complete(balances.withdrawalBalanceAfter(), executedAt);
@@ -289,12 +290,22 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             // 일반 RuntimeException과 동일하게 ERROR로 확정 기록하되 예외는 그대로 전파해 호출자가
             // 이를 정상적인 이체 실패로 오인하지 않게 한다.
             if (created != null) {
-                failTransfer(command, created, CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.getMessage(), e);
+                failTransfer(
+                        command,
+                        created,
+                        CommonErrorCode.INTERNAL_ERROR.getCode(),
+                        CommonErrorCode.INTERNAL_ERROR.getMessage(),
+                        e);
             }
             throw e;
         } catch (RuntimeException e) {
             if (created != null) {
-                failTransfer(command, created, CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.getMessage(), e);
+                failTransfer(
+                        command,
+                        created,
+                        CommonErrorCode.INTERNAL_ERROR.getCode(),
+                        CommonErrorCode.INTERNAL_ERROR.getMessage(),
+                        e);
             }
             throw e;
         }
@@ -306,9 +317,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         if (command.sourceId() == null) {
             return Optional.empty();
         }
-        return requiresNewTransactionTemplate.execute(status ->
-                transferLookupPort.findBySourceAndExecutionDate(
-                        resolveSourceType(command.transferType()), command.sourceId(), command.executionDate()));
+        return requiresNewTransactionTemplate.execute(status -> transferLookupPort.findBySourceAndExecutionDate(
+                resolveSourceType(command.transferType()), command.sourceId(), command.executionDate()));
     }
 
     /**

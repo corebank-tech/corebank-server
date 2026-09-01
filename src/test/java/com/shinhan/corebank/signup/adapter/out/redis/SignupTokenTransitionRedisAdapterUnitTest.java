@@ -32,31 +32,18 @@ class SignupTokenTransitionRedisAdapterUnitTest {
 
     @BeforeEach
     void setUp() {
-        adapter = new SignupTokenTransitionRedisAdapter(
-                redisTemplate,
-                objectMapper
-        );
+        adapter = new SignupTokenTransitionRedisAdapter(redisTemplate, objectMapper);
     }
 
     @Test
     @DisplayName("Lua 실행 결과가 null이면 정상적인 토큰 부재와 구분해 내부 오류로 처리한다")
     void rejectsNullScriptResult() throws Exception {
         given(objectMapper.writeValueAsString(any())).willReturn("{}");
-        given(redisTemplate.execute(
-                org.mockito.ArgumentMatchers.<RedisScript<Long>>any(),
-                anyList(),
-                any(),
-                any()
-        )).willReturn(null);
+        given(redisTemplate.execute(org.mockito.ArgumentMatchers.<RedisScript<Long>>any(), anyList(), any(), any()))
+                .willReturn(null);
 
         assertThatThrownBy(() -> adapter.rotateTempToken(
-                "TEMP_SIGNUP_old",
-                null,
-                null,
-                "TEMP_SIGNUP_new",
-                payload(),
-                Duration.ofMinutes(30)
-        ))
+                        "TEMP_SIGNUP_old", null, null, "TEMP_SIGNUP_new", payload(), Duration.ofMinutes(30)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Redis 토큰 전환 결과를 확인할 수 없습니다.");
     }
@@ -70,7 +57,6 @@ class SignupTokenTransitionRedisAdapterUnitTest {
                 "bcrypt-hash",
                 "hong@corebank.example.com",
                 "01012345678",
-                Instant.parse("2026-08-20T01:00:00Z")
-        );
+                Instant.parse("2026-08-20T01:00:00Z"));
     }
 }

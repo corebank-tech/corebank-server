@@ -1,9 +1,7 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import java.time.temporal.ChronoUnit;
-
 import com.shinhan.corebank.transfer.domain.LedgerEntry;
-
+import java.time.temporal.ChronoUnit;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 
@@ -17,7 +15,8 @@ public class LedgerEntryMapper {
 
         return LedgerEntryJpaEntity.builder()
                 .ledgerEntryId(domain.getLedgerEntryId())
-                .occurredAt(domain.getOccurredAt() != null ? domain.getOccurredAt().truncatedTo(ChronoUnit.MICROS) : null)
+                .occurredAt(
+                        domain.getOccurredAt() != null ? domain.getOccurredAt().truncatedTo(ChronoUnit.MICROS) : null)
                 .accountId(domain.getAccountId())
                 .transferId(domain.getTransferId())
                 .transactionNumber(domain.getTransactionNumber())
@@ -39,7 +38,8 @@ public class LedgerEntryMapper {
 
         return LedgerEntry.builder()
                 .ledgerEntryId(entity.getLedgerEntryId())
-                .occurredAt(entity.getOccurredAt() != null ? entity.getOccurredAt().truncatedTo(ChronoUnit.MICROS) : null)
+                .occurredAt(
+                        entity.getOccurredAt() != null ? entity.getOccurredAt().truncatedTo(ChronoUnit.MICROS) : null)
                 .accountId(entity.getAccountId())
                 .transferId(entity.getTransferId())
                 .transactionNumber(entity.getTransactionNumber())

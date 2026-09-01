@@ -1,20 +1,18 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import java.time.LocalDateTime;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
-
 import jakarta.persistence.EntityManager;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 @Transactional
 class TransferJpaRepositoryTest extends IntegrationTestSupport {
@@ -59,7 +57,8 @@ class TransferJpaRepositoryTest extends IntegrationTestSupport {
         // then
         assertThat(saved.getTransferId()).isNotNull();
 
-        TransferJpaEntity found = transferJpaRepository.findByTransactionNumber(txNo).orElseThrow();
+        TransferJpaEntity found =
+                transferJpaRepository.findByTransactionNumber(txNo).orElseThrow();
         assertThat(found.getWithdrawalAccountId()).isEqualTo(101L);
         assertThat(found.getDepositAccountId()).isEqualTo(202L);
         assertThat(found.getAmount()).isEqualTo(10000L);

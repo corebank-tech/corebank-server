@@ -18,8 +18,7 @@ class ScheduledTransferTest {
 
     private ScheduledTransfer register(LocalDate scheduledDate) {
         return ScheduledTransfer.register(
-                1L, 2L, PAYEE_BANK_CODE, "110987654321", "홍길동",
-                10_000L, scheduledDate, "내메모", "받는메모", NOW);
+                1L, 2L, PAYEE_BANK_CODE, "110987654321", "홍길동", 10_000L, scheduledDate, "내메모", "받는메모", NOW);
     }
 
     @Nested
@@ -75,8 +74,16 @@ class ScheduledTransferTest {
         @DisplayName("금액이 0 이하면 SCD0005 (Command 우회 방어)")
         void invalidAmount_throwsInvalidAmount() {
             assertThatThrownBy(() -> ScheduledTransfer.register(
-                    1L, 2L, PAYEE_BANK_CODE, "110987654321", "홍길동",
-                    0L, LocalDate.of(2025, 6, 2), "내메모", "받는메모", NOW))
+                            1L,
+                            2L,
+                            PAYEE_BANK_CODE,
+                            "110987654321",
+                            "홍길동",
+                            0L,
+                            LocalDate.of(2025, 6, 2),
+                            "내메모",
+                            "받는메모",
+                            NOW))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ScheduledTransferErrorCode.INVALID_AMOUNT));
@@ -89,9 +96,23 @@ class ScheduledTransferTest {
 
         private ScheduledTransfer processing() {
             return ScheduledTransfer.reconstitute(
-                    100L, 1L, 2L, PAYEE_BANK_CODE, "110987654321", "홍길동", 10_000L,
-                    LocalDate.of(2025, 6, 2), "내메모", "받는메모", ScheduledTransferStatus.PROCESSING,
-                    null, NOW, null, null, null, null);
+                    100L,
+                    1L,
+                    2L,
+                    PAYEE_BANK_CODE,
+                    "110987654321",
+                    "홍길동",
+                    10_000L,
+                    LocalDate.of(2025, 6, 2),
+                    "내메모",
+                    "받는메모",
+                    ScheduledTransferStatus.PROCESSING,
+                    null,
+                    NOW,
+                    null,
+                    null,
+                    null,
+                    null);
         }
 
         @Test
@@ -140,9 +161,23 @@ class ScheduledTransferTest {
 
         private ScheduledTransfer withStatus(ScheduledTransferStatus status, LocalDate scheduledDate) {
             return ScheduledTransfer.reconstitute(
-                    1L, 1L, 2L, PAYEE_BANK_CODE, "110987654321", "홍길동",
-                    10_000L, scheduledDate, "내메모", "받는메모", status,
-                    null, NOW, null, null, null, null);
+                    1L,
+                    1L,
+                    2L,
+                    PAYEE_BANK_CODE,
+                    "110987654321",
+                    "홍길동",
+                    10_000L,
+                    scheduledDate,
+                    "내메모",
+                    "받는메모",
+                    status,
+                    null,
+                    NOW,
+                    null,
+                    null,
+                    null,
+                    null);
         }
 
         @Test

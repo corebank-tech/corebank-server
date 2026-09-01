@@ -9,8 +9,6 @@ public record ProductSubscriptionValidationCommand(
         Integer termMonths,
         Long withdrawalAccountId,
         List<AgreedTerms> agreedTerms,
-        List<String> satisfiedConditionCodes
-) {
-    public record AgreedTerms(Long termsId, String version) {
-    }
+        List<String> satisfiedConditionCodes) {
+    public record AgreedTerms(Long termsId, String version) {}
 }

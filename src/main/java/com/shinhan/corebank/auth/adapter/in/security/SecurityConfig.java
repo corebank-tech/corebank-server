@@ -12,6 +12,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
@@ -19,18 +21,13 @@ import org.springframework.security.web.context.HttpSessionSecurityContextReposi
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({
-        CorsProperties.class,
-        CsrfProperties.class
-})
+@EnableConfigurationProperties({CorsProperties.class, CsrfProperties.class})
 public class SecurityConfig {
 
     // 로그인 비밀번호 해시 검증에 사용할 BCrypt Encoder
@@ -52,19 +49,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public CorsConfigurationSource corsConfigurationSource(
-            CorsProperties corsProperties
-    ) {
+    public CorsConfigurationSource corsConfigurationSource(CorsProperties corsProperties) {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(corsProperties.allowedOrigins());
-        configuration.setAllowedMethods(List.of(
-                "GET",
-                "POST",
-                "PUT",
-                "PATCH",
-                "DELETE",
-                "OPTIONS"
-        ));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of(
                 "Accept",
                 "Content-Type",
@@ -73,32 +61,23 @@ public class SecurityConfig {
                 "Idempotency-Key",
                 // 브라우저가 거래용 일회성 인증 토큰을 헤더로 전송할 수 있도록 preflight에서 허용한다.
                 "Account-Password-Auth-Token",
-                "Otp-Auth-Token"
-        ));
+                "Otp-Auth-Token"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
     }
 
     @Bean
     public CookieCsrfTokenRepository csrfTokenRepository(
-            @Value("${server.servlet.session.cookie.secure:false}")
-            boolean secure,
-            CsrfProperties csrfProperties
-    ) {
-        CookieCsrfTokenRepository repository =
-                CookieCsrfTokenRepository.withHttpOnlyFalse();
+            @Value("${server.servlet.session.cookie.secure:false}") boolean secure, CsrfProperties csrfProperties) {
+        CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
         repository.setCookieName("XSRF-TOKEN");
         repository.setHeaderName("X-XSRF-TOKEN");
         repository.setCookieCustomizer(cookie -> {
-            cookie.path("/")
-                    .httpOnly(false)
-                    .secure(secure)
-                    .sameSite("Lax");
+            cookie.path("/").httpOnly(false).secure(secure).sameSite("Lax");
 
             // 운영 FE와 API 서브도메인이 CSRF 쿠키를 공유할 때만 Domain을 지정한다.
             if (csrfProperties.cookieDomain() != null) {
@@ -122,51 +101,58 @@ public class SecurityConfig {
             SessionLogoutSuccessHandler logoutSuccessHandler,
             CorsConfigurationSource corsConfigurationSource,
             CookieCsrfTokenRepository csrfTokenRepository,
-            CsrfTokenRequestAttributeHandler csrfTokenRequestHandler
-    ) throws Exception {
-        http
-                .cors(cors -> cors
-                        .configurationSource(corsConfigurationSource)
-                )
+            CsrfTokenRequestAttributeHandler csrfTokenRequestHandler)
+            throws Exception {
+        http.cors(cors -> cors.configurationSource(corsConfigurationSource))
                 // 기본 CSRF 보호를 유지하고 로그인과 회원가입, ALB 헬스체크만 검사에서 제외
                 .csrf(csrf -> {
                     csrf.csrfTokenRepository(csrfTokenRepository);
                     csrf.csrfTokenRequestHandler(csrfTokenRequestHandler);
                     csrf.ignoringRequestMatchers(
-                                pathPattern(HttpMethod.POST, "/auth/login"),
-                                pathPattern(HttpMethod.POST, "/auth/terms/check"),
-                                pathPattern(HttpMethod.POST, "/auth/verify-account"),
-                                pathPattern(HttpMethod.POST, "/auth/check-id"),
-                                pathPattern(HttpMethod.POST, "/auth/signup/validate"),
-                                pathPattern(HttpMethod.POST, "/auth/signup/complete"),
-                                pathPattern(HttpMethod.POST, "/auth/email-verifications"),
-                                pathPattern(HttpMethod.POST, "/auth/email-verifications/{emailVerificationId}/verify"),
-                                pathPattern(HttpMethod.GET, "/actuator/health")
-                    );
+                            pathPattern(HttpMethod.POST, "/auth/login"),
+                            pathPattern(HttpMethod.POST, "/auth/terms/check"),
+                            pathPattern(HttpMethod.POST, "/auth/verify-account"),
+                            pathPattern(HttpMethod.POST, "/auth/check-id"),
+                            pathPattern(HttpMethod.POST, "/auth/signup/validate"),
+                            pathPattern(HttpMethod.POST, "/auth/signup/complete"),
+                            pathPattern(HttpMethod.POST, "/auth/email-verifications"),
+                            pathPattern(HttpMethod.POST, "/auth/email-verifications/{emailVerificationId}/verify"),
+                            pathPattern(HttpMethod.GET, "/actuator/health"));
                 })
                 .authorizeHttpRequests(authorize -> authorize
 
                         // 로그인 없이 조회할 수 있도록 공개
-                        .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/health")
+                        .permitAll()
                         // 목록/상세는 공개, 약관 열람은 이력 기록(누가 봤는지)이 필요해 인증을 요구한다.
                         // /products/**(다단계 와일드카드) 대신 세그먼트를 명시해 두 규칙이 겹치지 않게 해서,
                         // 아래 순서가 바뀌어도 약관 열람 경로가 실수로 permitAll에 흡수되지 않는다.
-                        .requestMatchers(HttpMethod.GET, "/products").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/products/*").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/products/*/terms/*").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/auth/terms").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/terms/check").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/verify-account").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/check-id").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/signup/validate").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/auth/signup/confirm-info").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/signup/complete").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/email-verifications").permitAll()
-                        .requestMatchers(
-                                HttpMethod.POST,
-                                "/auth/email-verifications/{emailVerificationId}/verify"
-                        ).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/products")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.GET, "/products/*")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.GET, "/products/*/terms/*")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.POST, "/auth/login")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.GET, "/auth/terms")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/terms/check")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/verify-account")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/check-id")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/signup/validate")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.GET, "/auth/signup/confirm-info")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/signup/complete")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/email-verifications")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/email-verifications/{emailVerificationId}/verify")
+                        .permitAll()
 
                         // Swagger-UI/API 문서는 인증 없이 접근 가능하도록 공개
                         // "/swagger-ui.html"은 springdoc 기본 진입 경로(SwaggerWelcomeWebMvc)로,
@@ -175,32 +161,24 @@ public class SecurityConfig {
                         // "/**"는 슬래시로 구분된 하위 경로만 받고 확장자가 붙은 형제 경로는 못 잡는다
                         .requestMatchers(
                                 "/swagger-ui.html", "/swagger-ui/**",
-                                "/v3/api-docs/**", "/v3/api-docs.yaml"
-                        ).permitAll()
+                                "/v3/api-docs/**", "/v3/api-docs.yaml")
+                        .permitAll()
 
                         // 인증된 사용자만 접근 가능
-                        .anyRequest().authenticated()
-                )
+                        .anyRequest()
+                        .authenticated())
                 // Spring Security 필터 단계에서 발생한 인증/인가 예외의 응답 처리기를 연결
-                .exceptionHandling(exception -> exception
-                        .authenticationEntryPoint(entryPoint)
-                        .accessDeniedHandler(deniedHandler)
-                )
+                .exceptionHandling(exception ->
+                        exception.authenticationEntryPoint(entryPoint).accessDeniedHandler(deniedHandler))
                 // HttpSession 생성 방식, 세션 고정 공격 방지 정책을 설정
-                .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
-                        .sessionFixation(fixation -> fixation.changeSessionId())
-                )
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+                        .sessionFixation(fixation -> fixation.changeSessionId()))
                 // CSRF 검사를 유지하고 CsrfLogoutHandler가 XSRF-TOKEN을 Path=/로 폐기한다.
-                .logout(logout -> logout
-                        .logoutRequestMatcher(
-                                pathPattern(HttpMethod.POST, "/auth/logout")
-                        )
+                .logout(logout -> logout.logoutRequestMatcher(pathPattern(HttpMethod.POST, "/auth/logout"))
                         .invalidateHttpSession(true)
                         .clearAuthentication(true)
                         .deleteCookies("JSESSIONID")
-                        .logoutSuccessHandler(logoutSuccessHandler)
-                )
+                        .logoutSuccessHandler(logoutSuccessHandler))
                 .requestCache(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable);

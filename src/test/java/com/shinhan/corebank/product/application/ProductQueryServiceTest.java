@@ -1,11 +1,20 @@
 package com.shinhan.corebank.product.application;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.product.application.port.out.ProductQueryPort;
 import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductDetail;
 import com.shinhan.corebank.product.domain.ProductDetailView;
+import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.ProductPreferentialRate;
 import com.shinhan.corebank.product.domain.ProductPreferentialRateId;
 import com.shinhan.corebank.product.domain.ProductRateTier;
@@ -15,7 +24,9 @@ import com.shinhan.corebank.product.domain.ProductTermsDetail;
 import com.shinhan.corebank.product.domain.ProductTermsId;
 import com.shinhan.corebank.terms.api.TermsQueryPort;
 import com.shinhan.corebank.terms.api.TermsSummary;
-import com.shinhan.corebank.product.domain.ProductGroup;
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,18 +37,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-
-import java.math.BigDecimal;
-import java.util.List;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ProductQueryServiceTest {
@@ -67,8 +66,8 @@ class ProductQueryServiceTest {
     void rejectsNegativePage() {
         assertThatThrownBy(() -> productQueryService.search(null, null, ProductSortType.RATE, -1, 10, false))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
 
         verify(productQueryPort, never()).search(any(), any(), any(), any(Pageable.class));
     }
@@ -92,7 +91,8 @@ class ProductQueryServiceTest {
         when(productQueryPort.search(ProductGroup.DEPOSIT, "적금", ProductSortType.NAME, PageRequest.of(1, 10)))
                 .thenReturn(expected);
 
-        Page<Product> result = productQueryService.search(ProductGroup.DEPOSIT, "적금", ProductSortType.NAME, 1, 10, false);
+        Page<Product> result =
+                productQueryService.search(ProductGroup.DEPOSIT, "적금", ProductSortType.NAME, 1, 10, false);
 
         assertThat(result).isSameAs(expected);
     }
@@ -116,7 +116,8 @@ class ProductQueryServiceTest {
     @Test
     @DisplayName("getDetailWithTerms는 상품 포트 결과를 그대로 옮겨 담는다")
     void getDetailWithTerms_copiesProductFields() {
-        Product product = Product.builder().productId(1L).productName("청년 희망 적금").build();
+        Product product =
+                Product.builder().productId(1L).productName("청년 희망 적금").build();
         List<ProductRateTier> rateTiers = List.of(ProductRateTier.builder()
                 .id(new ProductRateTierId(1L, (short) 12))
                 .rate(new BigDecimal("3.20"))
@@ -159,7 +160,8 @@ class ProductQueryServiceTest {
                         new TermsSummary(20L, "마케팅 정보 수신 동의", "v1.1", false, false),
                         new TermsSummary(10L, "예금거래 기본약관", "v1.0", true, true)));
 
-        List<ProductTermsDetail> terms = productQueryService.getDetailWithTerms(1L).getTerms();
+        List<ProductTermsDetail> terms =
+                productQueryService.getDetailWithTerms(1L).getTerms();
 
         assertThat(terms).extracting(ProductTermsDetail::getTermsId).containsExactly(10L, 20L);
         assertThat(terms.get(0).getTermsName()).isEqualTo("예금거래 기본약관");

@@ -1,14 +1,13 @@
 package com.shinhan.corebank.otp.adapter.out.security;
 
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import tools.jackson.databind.ObjectMapper;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 
 // JSON Key 순서와 정수 Java 타입 차이가 거래내용 비교에 영향을 주지 않는지 검증한다.
 class JacksonOtpTransactionDataCanonicalizerTest {
@@ -27,8 +26,7 @@ class JacksonOtpTransactionDataCanonicalizerTest {
         second.put("amount", 100_000L);
         second.put("withdrawalAccountId", 101L);
 
-        assertThat(canonicalizer.canonicalize(first))
-                .isEqualTo(canonicalizer.canonicalize(second));
+        assertThat(canonicalizer.canonicalize(first)).isEqualTo(canonicalizer.canonicalize(second));
     }
 
     @Test

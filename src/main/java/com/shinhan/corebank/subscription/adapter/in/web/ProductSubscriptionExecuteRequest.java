@@ -7,7 +7,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
-
 import java.util.List;
 
 public record ProductSubscriptionExecuteRequest(
@@ -26,17 +25,23 @@ public record ProductSubscriptionExecuteRequest(
         // 그대로 신뢰하면 안 된다(PR #147 합의, ProductSubscriptionValidationService
         // .calculatePreferentialRate() 주석 참고). 서버가 실제로 재검증할 근거가 아직 없어
         // 실행 시점엔 우대금리를 적용하지 않는다(코드리뷰 반영, #256 계열 후속과 별개로 처리).
-) {
+        ) {
     public ProductSubscriptionExecuteCommand toCommand(Long customerId) {
         List<AgreedTerms> agreed = agreedTerms.stream()
                 .map(item -> new AgreedTerms(item.termsId(), item.version()))
                 .toList();
         return new ProductSubscriptionExecuteCommand(
-                customerId, productId, subscriptionAmount, termMonths, withdrawalAccountId,
-                newAccountPassword, newAccountPasswordConfirm, accountPasswordAuthToken, otpAuthToken,
+                customerId,
+                productId,
+                subscriptionAmount,
+                termMonths,
+                withdrawalAccountId,
+                newAccountPassword,
+                newAccountPasswordConfirm,
+                accountPasswordAuthToken,
+                otpAuthToken,
                 agreed);
     }
 
-    public record AgreedTermsItem(@NotNull Long termsId, @NotNull String version) {
-    }
+    public record AgreedTermsItem(@NotNull Long termsId, @NotNull String version) {}
 }

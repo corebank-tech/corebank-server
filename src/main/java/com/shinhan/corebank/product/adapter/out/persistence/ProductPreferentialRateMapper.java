@@ -5,8 +5,7 @@ import com.shinhan.corebank.product.domain.ProductPreferentialRateId;
 
 final class ProductPreferentialRateMapper {
 
-    private ProductPreferentialRateMapper() {
-    }
+    private ProductPreferentialRateMapper() {}
 
     static ProductPreferentialRate toDomain(ProductPreferentialRateJpaEntity entity) {
         return ProductPreferentialRate.builder()

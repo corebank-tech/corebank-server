@@ -1,5 +1,12 @@
 package com.shinhan.corebank.signup.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.signup.application.port.in.IssueEmailVerificationCommand;
@@ -18,6 +25,12 @@ import com.shinhan.corebank.signup.domain.exception.SignupErrorCode;
 import com.shinhan.corebank.signup.domain.model.EmailVerificationPurpose;
 import com.shinhan.corebank.signup.domain.model.EmailVerificationRequest;
 import com.shinhan.corebank.signup.domain.model.EmailVerificationTokenPayload;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,20 +41,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowableOfType;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-
 @ExtendWith(MockitoExtension.class)
 class EmailVerificationServiceTest {
 
@@ -51,12 +50,23 @@ class EmailVerificationServiceTest {
     private static final Duration CODE_TTL = Duration.ofMinutes(3);
     private static final Duration TOKEN_TTL = Duration.ofMinutes(30);
 
-    @Mock SignupCustomerAvailabilityPort customerAvailabilityPort;
-    @Mock EmailVerificationRequestPort requestPort;
-    @Mock EmailVerificationTokenPort tokenPort;
-    @Mock VerificationRequestIdGeneratorPort requestIdGeneratorPort;
-    @Mock EmailVerificationCodeGeneratorPort codeGeneratorPort;
-    @Mock AuthTokenGeneratorPort authTokenGeneratorPort;
+    @Mock
+    SignupCustomerAvailabilityPort customerAvailabilityPort;
+
+    @Mock
+    EmailVerificationRequestPort requestPort;
+
+    @Mock
+    EmailVerificationTokenPort tokenPort;
+
+    @Mock
+    VerificationRequestIdGeneratorPort requestIdGeneratorPort;
+
+    @Mock
+    EmailVerificationCodeGeneratorPort codeGeneratorPort;
+
+    @Mock
+    AuthTokenGeneratorPort authTokenGeneratorPort;
 
     PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     Clock clock;
@@ -64,10 +74,7 @@ class EmailVerificationServiceTest {
 
     @BeforeEach
     void setUp() {
-        clock = Clock.fixed(
-                Instant.parse("2026-08-19T01:00:00Z"),
-                ZoneId.of("Asia/Seoul")
-        );
+        clock = Clock.fixed(Instant.parse("2026-08-19T01:00:00Z"), ZoneId.of("Asia/Seoul"));
         service = new EmailVerificationService(
                 customerAvailabilityPort,
                 requestPort,
@@ -82,40 +89,28 @@ class EmailVerificationServiceTest {
                         Duration.ofMinutes(3),
                         TOKEN_TTL,
                         Duration.ofMinutes(10),
-                        Duration.ofMinutes(30)
-                ),
-                clock
-        );
+                        Duration.ofMinutes(30)),
+                clock);
     }
 
     @Test
     @DisplayName("인증번호를 180초 동안 발급하고 DB에는 BCrypt 해시만 저장한다")
     void issuesHashedVerificationCode() {
-        given(requestIdGeneratorPort.generateEmailVerificationId())
-                .willReturn(REQUEST_ID);
+        given(requestIdGeneratorPort.generateEmailVerificationId()).willReturn(REQUEST_ID);
         given(codeGeneratorPort.generate()).willReturn(CODE);
 
-        IssueEmailVerificationResult result = service.issue(
-                new IssueEmailVerificationCommand(
-                        "User@Example.com",
-                        EmailVerificationPurpose.SIGN_UP
-                )
-        );
+        IssueEmailVerificationResult result =
+                service.issue(new IssueEmailVerificationCommand("User@Example.com", EmailVerificationPurpose.SIGN_UP));
 
         assertThat(result.emailVerificationId()).isEqualTo(REQUEST_ID);
         assertThat(result.verificationCode()).isEqualTo(CODE);
         assertThat(result.expiresIn()).isEqualTo(180L);
-        verify(requestPort).invalidateActive(
-                "user@example.com",
-                EmailVerificationPurpose.SIGN_UP
-        );
+        verify(requestPort).invalidateActive("user@example.com", EmailVerificationPurpose.SIGN_UP);
 
-        ArgumentCaptor<EmailVerificationRequest> request =
-                ArgumentCaptor.forClass(EmailVerificationRequest.class);
+        ArgumentCaptor<EmailVerificationRequest> request = ArgumentCaptor.forClass(EmailVerificationRequest.class);
         verify(requestPort).save(request.capture());
         assertThat(request.getValue().codeHash()).isNotEqualTo(CODE);
-        assertThat(passwordEncoder.matches(CODE, request.getValue().codeHash()))
-                .isTrue();
+        assertThat(passwordEncoder.matches(CODE, request.getValue().codeHash())).isTrue();
         assertThat(request.getValue().expiresAt())
                 .isEqualTo(LocalDateTime.now(clock).plusMinutes(3));
     }
@@ -123,19 +118,14 @@ class EmailVerificationServiceTest {
     @Test
     @DisplayName("이미 가입된 이메일이면 ATH0302를 반환한다")
     void rejectsDuplicateEmail() {
-        given(customerAvailabilityPort.isEmailTaken("user@example.com"))
-                .willReturn(true);
+        given(customerAvailabilityPort.isEmailTaken("user@example.com")).willReturn(true);
 
         BusinessException exception = catchThrowableOfType(
-                () -> service.issue(new IssueEmailVerificationCommand(
-                        "user@example.com",
-                        EmailVerificationPurpose.SIGN_UP
-                )),
-                BusinessException.class
-        );
+                () -> service.issue(
+                        new IssueEmailVerificationCommand("user@example.com", EmailVerificationPurpose.SIGN_UP)),
+                BusinessException.class);
 
-        assertThat(exception.getErrorCode())
-                .isEqualTo(SignupErrorCode.DUPLICATE_EMAIL);
+        assertThat(exception.getErrorCode()).isEqualTo(SignupErrorCode.DUPLICATE_EMAIL);
         verify(requestPort, never()).save(any());
     }
 
@@ -143,15 +133,10 @@ class EmailVerificationServiceTest {
     @DisplayName("이메일 형식이 잘못되면 CMN0001을 반환한다")
     void rejectsInvalidEmailFormat() {
         BusinessException exception = catchThrowableOfType(
-                () -> service.issue(new IssueEmailVerificationCommand(
-                        "not-email",
-                        EmailVerificationPurpose.SIGN_UP
-                )),
-                BusinessException.class
-        );
+                () -> service.issue(new IssueEmailVerificationCommand("not-email", EmailVerificationPurpose.SIGN_UP)),
+                BusinessException.class);
 
-        assertThat(exception.getErrorCode())
-                .isEqualTo(CommonErrorCode.INVALID_INPUT);
+        assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT);
         verify(requestPort, never()).save(any());
     }
 
@@ -159,94 +144,65 @@ class EmailVerificationServiceTest {
     @DisplayName("올바른 인증번호면 요청을 사용 처리하고 1800초 토큰을 발급한다")
     void verifiesCodeAndIssuesToken() {
         EmailVerificationRequest request = activeRequest(CODE, 3);
-        given(requestPort.findByIdForUpdate(REQUEST_ID))
-                .willReturn(Optional.of(request));
-        given(authTokenGeneratorPort.generateEmailVerificationToken())
-                .willReturn(TOKEN);
+        given(requestPort.findByIdForUpdate(REQUEST_ID)).willReturn(Optional.of(request));
+        given(authTokenGeneratorPort.generateEmailVerificationToken()).willReturn(TOKEN);
 
-        VerifyEmailResult result = service.verify(
-                new VerifyEmailCommand(REQUEST_ID, CODE)
-        );
+        VerifyEmailResult result = service.verify(new VerifyEmailCommand(REQUEST_ID, CODE));
 
         assertThat(request.used()).isTrue();
         assertThat(request.verifiedAt()).isEqualTo(LocalDateTime.now(clock));
         assertThat(result.emailVerificationToken()).isEqualTo(TOKEN);
-        assertThat(result.verifiedAt().getOffset().getTotalSeconds())
-                .isEqualTo(9 * 60 * 60);
+        assertThat(result.verifiedAt().getOffset().getTotalSeconds()).isEqualTo(9 * 60 * 60);
 
         ArgumentCaptor<EmailVerificationTokenPayload> payload =
                 ArgumentCaptor.forClass(EmailVerificationTokenPayload.class);
-        verify(tokenPort).save(
-                org.mockito.ArgumentMatchers.eq(TOKEN),
-                payload.capture(),
-                org.mockito.ArgumentMatchers.eq(TOKEN_TTL)
-        );
+        verify(tokenPort)
+                .save(
+                        org.mockito.ArgumentMatchers.eq(TOKEN),
+                        payload.capture(),
+                        org.mockito.ArgumentMatchers.eq(TOKEN_TTL));
         assertThat(payload.getValue().email()).isEqualTo("user@example.com");
     }
 
     @Test
     @DisplayName("없는 요청과 이미 사용한 요청은 ATH0202를 반환한다")
     void rejectsMissingOrUsedRequest() {
-        given(requestPort.findByIdForUpdate("missing"))
-                .willReturn(Optional.empty());
-        assertError(
-                new VerifyEmailCommand("missing", CODE),
-                SignupErrorCode.EMAIL_VERIFICATION_REQUEST_NOT_FOUND
-        );
+        given(requestPort.findByIdForUpdate("missing")).willReturn(Optional.empty());
+        assertError(new VerifyEmailCommand("missing", CODE), SignupErrorCode.EMAIL_VERIFICATION_REQUEST_NOT_FOUND);
 
         EmailVerificationRequest used = activeRequest(CODE, 3);
         used.verify(LocalDateTime.now(clock));
-        given(requestPort.findByIdForUpdate(REQUEST_ID))
-                .willReturn(Optional.of(used));
-        assertError(
-                new VerifyEmailCommand(REQUEST_ID, CODE),
-                SignupErrorCode.EMAIL_VERIFICATION_REQUEST_NOT_FOUND
-        );
+        given(requestPort.findByIdForUpdate(REQUEST_ID)).willReturn(Optional.of(used));
+        assertError(new VerifyEmailCommand(REQUEST_ID, CODE), SignupErrorCode.EMAIL_VERIFICATION_REQUEST_NOT_FOUND);
     }
 
     @Test
     @DisplayName("만료된 인증번호는 ATH0008을 반환한다")
     void rejectsExpiredCode() {
-        given(requestPort.findByIdForUpdate(REQUEST_ID))
-                .willReturn(Optional.of(activeRequest(CODE, 0)));
+        given(requestPort.findByIdForUpdate(REQUEST_ID)).willReturn(Optional.of(activeRequest(CODE, 0)));
 
-        assertError(
-                new VerifyEmailCommand(REQUEST_ID, CODE),
-                SignupErrorCode.EMAIL_VERIFICATION_EXPIRED
-        );
+        assertError(new VerifyEmailCommand(REQUEST_ID, CODE), SignupErrorCode.EMAIL_VERIFICATION_EXPIRED);
     }
 
     @Test
     @DisplayName("인증번호 형식 오류와 불일치는 ATH0007을 반환한다")
     void rejectsMalformedOrMismatchedCode() {
-        given(requestPort.findByIdForUpdate(REQUEST_ID))
-                .willReturn(Optional.of(activeRequest(CODE, 3)));
-        assertError(
-                new VerifyEmailCommand(REQUEST_ID, "12345"),
-                SignupErrorCode.EMAIL_VERIFICATION_CODE_MISMATCH
-        );
+        given(requestPort.findByIdForUpdate(REQUEST_ID)).willReturn(Optional.of(activeRequest(CODE, 3)));
+        assertError(new VerifyEmailCommand(REQUEST_ID, "12345"), SignupErrorCode.EMAIL_VERIFICATION_CODE_MISMATCH);
 
-        given(requestPort.findByIdForUpdate(REQUEST_ID))
-                .willReturn(Optional.of(activeRequest(CODE, 3)));
-        assertError(
-                new VerifyEmailCommand(REQUEST_ID, "999999"),
-                SignupErrorCode.EMAIL_VERIFICATION_CODE_MISMATCH
-        );
+        given(requestPort.findByIdForUpdate(REQUEST_ID)).willReturn(Optional.of(activeRequest(CODE, 3)));
+        assertError(new VerifyEmailCommand(REQUEST_ID, "999999"), SignupErrorCode.EMAIL_VERIFICATION_CODE_MISMATCH);
         verify(tokenPort, never()).save(any(), any(), any());
     }
 
     @Test
     @DisplayName("EMAIL_CHANGE 목적과 이메일이 일치하면 인증 토큰을 소비한다")
     void consumesMatchingEmailChangeToken() {
-        EmailVerificationTokenPayload payload =
-                emailChangePayload("newmail@corebank.com");
+        EmailVerificationTokenPayload payload = emailChangePayload("newmail@corebank.com");
         given(tokenPort.find(TOKEN)).willReturn(Optional.of(payload));
         given(tokenPort.consume(TOKEN)).willReturn(Optional.of(payload));
 
-        service.verifyAndConsumeForEmailChange(
-                TOKEN,
-                "newmail@corebank.com"
-        );
+        service.verifyAndConsumeForEmailChange(TOKEN, "newmail@corebank.com");
 
         verify(tokenPort).consume(TOKEN);
     }
@@ -254,46 +210,26 @@ class EmailVerificationServiceTest {
     @Test
     @DisplayName("이메일 또는 목적이 다르면 토큰을 소비하지 않고 ATH0103이다")
     void rejectsMismatchedEmailChangeTokenWithoutConsumption() {
-        given(tokenPort.find(TOKEN)).willReturn(Optional.of(
-                emailChangePayload("other@corebank.com")
-        ));
+        given(tokenPort.find(TOKEN)).willReturn(Optional.of(emailChangePayload("other@corebank.com")));
 
         BusinessException emailMismatch = catchThrowableOfType(
-                () -> service.verifyAndConsumeForEmailChange(
-                        TOKEN,
-                        "newmail@corebank.com"
-                ),
-                BusinessException.class
-        );
+                () -> service.verifyAndConsumeForEmailChange(TOKEN, "newmail@corebank.com"), BusinessException.class);
 
-        assertThat(emailMismatch.getErrorCode()).isEqualTo(
-                SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN
-        );
+        assertThat(emailMismatch.getErrorCode()).isEqualTo(SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN);
         verify(tokenPort, never()).consume(any());
     }
 
     @Test
     @DisplayName("SIGN_UP 목적 토큰은 이메일이 같아도 소비하지 않고 ATH0103이다")
     void rejectsSignUpTokenForEmailChange() {
-        given(tokenPort.find(TOKEN)).willReturn(Optional.of(
-                new EmailVerificationTokenPayload(
-                        "newmail@corebank.com",
-                        EmailVerificationPurpose.SIGN_UP,
-                        LocalDateTime.now(clock)
-                )
-        ));
+        given(tokenPort.find(TOKEN))
+                .willReturn(Optional.of(new EmailVerificationTokenPayload(
+                        "newmail@corebank.com", EmailVerificationPurpose.SIGN_UP, LocalDateTime.now(clock))));
 
         BusinessException exception = catchThrowableOfType(
-                () -> service.verifyAndConsumeForEmailChange(
-                        TOKEN,
-                        "newmail@corebank.com"
-                ),
-                BusinessException.class
-        );
+                () -> service.verifyAndConsumeForEmailChange(TOKEN, "newmail@corebank.com"), BusinessException.class);
 
-        assertThat(exception.getErrorCode()).isEqualTo(
-                SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN
-        );
+        assertThat(exception.getErrorCode()).isEqualTo(SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN);
         verify(tokenPort, never()).consume(any());
     }
 
@@ -303,23 +239,13 @@ class EmailVerificationServiceTest {
         given(tokenPort.find(TOKEN)).willReturn(Optional.empty());
 
         BusinessException exception = catchThrowableOfType(
-                () -> service.verifyAndConsumeForEmailChange(
-                        TOKEN,
-                        "newmail@corebank.com"
-                ),
-                BusinessException.class
-        );
+                () -> service.verifyAndConsumeForEmailChange(TOKEN, "newmail@corebank.com"), BusinessException.class);
 
-        assertThat(exception.getErrorCode()).isEqualTo(
-                SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN
-        );
+        assertThat(exception.getErrorCode()).isEqualTo(SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN);
         verify(tokenPort, never()).consume(any());
     }
 
-    private EmailVerificationRequest activeRequest(
-            String code,
-            long remainingMinutes
-    ) {
+    private EmailVerificationRequest activeRequest(String code, long remainingMinutes) {
         LocalDateTime now = LocalDateTime.now(clock);
         return EmailVerificationRequest.issue(
                 REQUEST_ID,
@@ -327,27 +253,17 @@ class EmailVerificationServiceTest {
                 "user@example.com",
                 passwordEncoder.encode(code),
                 now.plusMinutes(remainingMinutes),
-                now.minusMinutes(1)
-        );
+                now.minusMinutes(1));
     }
 
     // 이메일 변경 토큰 검증에 사용할 Redis payload를 생성한다.
     private EmailVerificationTokenPayload emailChangePayload(String email) {
         return new EmailVerificationTokenPayload(
-                email,
-                EmailVerificationPurpose.EMAIL_CHANGE,
-                LocalDateTime.now(clock)
-        );
+                email, EmailVerificationPurpose.EMAIL_CHANGE, LocalDateTime.now(clock));
     }
 
-    private void assertError(
-            VerifyEmailCommand command,
-            SignupErrorCode expected
-    ) {
-        BusinessException exception = catchThrowableOfType(
-                () -> service.verify(command),
-                BusinessException.class
-        );
+    private void assertError(VerifyEmailCommand command, SignupErrorCode expected) {
+        BusinessException exception = catchThrowableOfType(() -> service.verify(command), BusinessException.class);
         assertThat(exception.getErrorCode()).isEqualTo(expected);
     }
 }

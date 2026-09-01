@@ -12,14 +12,11 @@ import org.springframework.stereotype.Service;
 
 // 기존 은행 원장의 계좌를 검증해 신규 고객 계좌로 등록한다.
 @Service
-public class ExistingAccountRegistrationService
-        implements ExistingAccountRegistration {
+public class ExistingAccountRegistrationService implements ExistingAccountRegistration {
 
     private final AccountPersistencePort accountPersistencePort;
 
-    public ExistingAccountRegistrationService(
-            AccountPersistencePort accountPersistencePort
-    ) {
+    public ExistingAccountRegistrationService(AccountPersistencePort accountPersistencePort) {
         this.accountPersistencePort = accountPersistencePort;
     }
 
@@ -32,21 +29,22 @@ public class ExistingAccountRegistrationService
             throw new IllegalArgumentException("등록할 기존 계좌가 없습니다.");
         }
 
-        for (RegisterExistingAccountsCommand.AccountData data
-                : command.accounts()) {
+        for (RegisterExistingAccountsCommand.AccountData data : command.accounts()) {
             // account_number UK 의 마지막 정합성 방어. 받아주는 핸들러가 없는 raw
             // 예외를 던지면 CMN9999(500)로 새어나가므로 업무 오류로 변환한다.
             if (accountPersistencePort.existsByAccountNumber(data.accountNumber())) {
-                throw new BusinessException(
-                        AccountErrorCode.DUPLICATE_EXISTING_ACCOUNT
-                );
+                throw new BusinessException(AccountErrorCode.DUPLICATE_EXISTING_ACCOUNT);
             }
             accountPersistencePort.save(Account.importExisting(
-                    data.accountNumber(), command.customerId(), data.productId(),
-                    AccountType.valueOf(data.accountType()), data.balance(),
-                    AccountStatus.valueOf(data.status()), data.passwordHash(),
-                    data.openedDate().atStartOfDay(), data.maturityDate()
-            ));
+                    data.accountNumber(),
+                    command.customerId(),
+                    data.productId(),
+                    AccountType.valueOf(data.accountType()),
+                    data.balance(),
+                    AccountStatus.valueOf(data.status()),
+                    data.passwordHash(),
+                    data.openedDate().atStartOfDay(),
+                    data.maturityDate()));
         }
     }
 }

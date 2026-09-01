@@ -4,12 +4,11 @@ import com.shinhan.corebank.customer.application.port.in.CustomerInfoQueryUseCas
 import com.shinhan.corebank.customer.application.port.in.CustomerInfoResult;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import java.time.Clock;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.util.Objects;
 
 // 로그인 고객의 기본정보를 조회하고 마스킹된 결과로 변환한다.
 @Service
@@ -25,10 +24,9 @@ public class CustomerInfoQueryService implements CustomerInfoQueryUseCase {
     public CustomerInfoResult getCustomerInfo(Long customerId) {
         Objects.requireNonNull(customerId, "customerId must not be null");
 
-        Customer customer = customerPersistencePort.findById(customerId)
-                .orElseThrow(() -> new IllegalStateException(
-                        "로그인 고객의 기본정보를 찾을 수 없습니다."
-                ));
+        Customer customer = customerPersistencePort
+                .findById(customerId)
+                .orElseThrow(() -> new IllegalStateException("로그인 고객의 기본정보를 찾을 수 없습니다."));
 
         return new CustomerInfoResult(
                 customer.getCustomerId(),
@@ -37,9 +35,6 @@ public class CustomerInfoQueryService implements CustomerInfoQueryUseCase {
                 customerInfoMasker.maskBirthDate(customer.getBirthDate()),
                 customerInfoMasker.maskPhoneNumber(customer.getPhoneNumber()),
                 customerInfoMasker.maskEmail(customer.getEmail()),
-                customer.getJoinedAt()
-                        .atZone(clock.getZone())
-                        .toOffsetDateTime()
-        );
+                customer.getJoinedAt().atZone(clock.getZone()).toOffsetDateTime());
     }
 }

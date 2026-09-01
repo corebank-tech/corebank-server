@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -24,8 +23,7 @@ class TransferLimitTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(CommonErrorCode.INVALID_INPUT);
-        assertThatThrownBy(() -> limit.update(0L, 5_000_000L))
-                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> limit.update(0L, 5_000_000L)).isInstanceOf(BusinessException.class);
 
         assertThat(limit.getOneTimeLimit()).isEqualTo(1_000_000L);
         assertThat(limit.getDailyLimit()).isEqualTo(5_000_000L);
@@ -38,9 +36,7 @@ class TransferLimitTest {
         TransferLimit limit = TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L);
 
         // when & then
-        assertThatThrownBy(() -> limit.update(1_000_000L, -1L))
-                .isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> limit.update(1_000_000L, 0L))
-                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> limit.update(1_000_000L, -1L)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> limit.update(1_000_000L, 0L)).isInstanceOf(BusinessException.class);
     }
 }

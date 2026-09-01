@@ -29,16 +29,15 @@ import com.shinhan.corebank.subscription.domain.SubscriptionValidation;
 import com.shinhan.corebank.subscription.domain.SubscriptionViolation;
 import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase;
 import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase.ProductSubscriptionDepositCommand;
-import lombok.RequiredArgsConstructor;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -79,10 +78,14 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
         // satisfiedConditionCodes는 항상 빈 리스트로 넘긴다 — 클라이언트가 신고한 우대조건을
         // 그대로 믿고 실제 가입에 반영하면 안 된다(PR #147 합의). 서버가 자동이체 등록 이력 등으로
         // 직접 재검증할 수 있게 되기 전까지 실행 시점엔 우대금리를 적용하지 않는다(코드리뷰 반영).
-        SubscriptionValidation validation = productSubscriptionValidationUseCase.validate(
-                new ProductSubscriptionValidationCommand(
-                        command.customerId(), command.productId(), command.subscriptionAmount(), command.termMonths(),
-                        command.withdrawalAccountId(), toValidationAgreedTerms(command.agreedTerms()),
+        SubscriptionValidation validation =
+                productSubscriptionValidationUseCase.validate(new ProductSubscriptionValidationCommand(
+                        command.customerId(),
+                        command.productId(),
+                        command.subscriptionAmount(),
+                        command.termMonths(),
+                        command.withdrawalAccountId(),
+                        toValidationAgreedTerms(command.agreedTerms()),
                         List.of()));
 
         if (!validation.isValid()) {
@@ -92,20 +95,27 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
         passwordVerificationPort.verifyAccountPasswordToken(
                 command.accountPasswordAuthToken(), command.customerId(), command.withdrawalAccountId());
         otpVerificationPort.verifyAndConsume(
-                command.otpAuthToken(), command.customerId(), command.productId(),
-                command.subscriptionAmount(), command.termMonths(), command.withdrawalAccountId());
+                command.otpAuthToken(),
+                command.customerId(),
+                command.productId(),
+                command.subscriptionAmount(),
+                command.termMonths(),
+                command.withdrawalAccountId());
 
         AccountOpeningResult accountOpeningResult = productAccountOpeningUseCase.open(new ProductAccountOpeningCommand(
-                command.customerId(), command.productId(), toAccountType(product.getProductGroup()),
-                passwordEncoder.encode(command.newAccountPassword()), validation.getMaturityDate()));
+                command.customerId(),
+                command.productId(),
+                toAccountType(product.getProductGroup()),
+                passwordEncoder.encode(command.newAccountPassword()),
+                validation.getMaturityDate()));
 
         // 정기예금(DEPOSIT)은 가입 시점에 목돈을 한 번에 넣는 거치식이라 초입금 기표가 필요하다.
         // 정기적금(SAVINGS)은 다음 회차부터 자동이체로 납입하므로 가입 시점에 옮길 자금이 없어
         // 거래번호도 계속 null이다.
         String transactionNumber = null;
         if (product.getProductGroup() == ProductGroup.DEPOSIT) {
-            transactionNumber = productSubscriptionDepositUseCase.deposit(
-                    new ProductSubscriptionDepositCommand(
+            transactionNumber = productSubscriptionDepositUseCase
+                    .deposit(new ProductSubscriptionDepositCommand(
                             command.withdrawalAccountId(),
                             accountOpeningResult.accountId(),
                             command.subscriptionAmount()))
@@ -152,9 +162,7 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
     }
 
     private AccountType toAccountType(ProductGroup productGroup) {
-        return productGroup == ProductGroup.DEPOSIT
-                ? AccountType.TIME_DEPOSIT
-                : AccountType.INSTALLMENT_SAVINGS;
+        return productGroup == ProductGroup.DEPOSIT ? AccountType.TIME_DEPOSIT : AccountType.INSTALLMENT_SAVINGS;
     }
 
     private List<AgreedTerms> toValidationAgreedTerms(List<ProductSubscriptionExecuteCommand.AgreedTerms> agreedTerms) {
@@ -183,8 +191,19 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
     }
 
     private record ViolationErrorCode(String code, String message) implements ErrorCode {
-        @Override public String getCode() { return code; }
-        @Override public int getStatus() { return 400; }
-        @Override public String getMessage() { return message; }
+        @Override
+        public String getCode() {
+            return code;
+        }
+
+        @Override
+        public int getStatus() {
+            return 400;
+        }
+
+        @Override
+        public String getMessage() {
+            return message;
+        }
     }
 }

@@ -1,7 +1,6 @@
 package com.shinhan.corebank.common.exception;
 
 public enum CommonErrorCode implements ErrorCode {
-
     INVALID_INPUT("CMN0001", 400, "입력값이 올바르지 않습니다."),
     REQUIRED_FIELD_MISSING("CMN0002", 400, "필수 입력값이 누락되었습니다."),
     INVALID_DATE_RANGE("CMN0003", 400, "조회 시작일이 종료일보다 늦습니다."),

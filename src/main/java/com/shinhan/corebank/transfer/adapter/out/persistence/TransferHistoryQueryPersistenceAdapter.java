@@ -1,8 +1,6 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.List;
+import static com.shinhan.corebank.transfer.adapter.out.persistence.QTransferJpaEntity.transferJpaEntity;
 
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.OrderSpecifier;
@@ -14,13 +12,13 @@ import com.shinhan.corebank.transfer.application.port.in.TransferHistorySort;
 import com.shinhan.corebank.transfer.application.port.out.TransferHistoryAggregate;
 import com.shinhan.corebank.transfer.application.port.out.TransferHistoryQueryPort;
 import com.shinhan.corebank.transfer.domain.Transfer;
-
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
-
-import static com.shinhan.corebank.transfer.adapter.out.persistence.QTransferJpaEntity.transferJpaEntity;
 
 @Repository
 public class TransferHistoryQueryPersistenceAdapter implements TransferHistoryQueryPort {
@@ -32,13 +30,15 @@ public class TransferHistoryQueryPersistenceAdapter implements TransferHistoryQu
     }
 
     @Override
-    public Page<Transfer> search(Long withdrawalAccountId, ProcessResultStatus status, LocalDate fromDate, LocalDate toDate,
-                                 TransferHistorySort sort, Pageable pageable) {
+    public Page<Transfer> search(
+            Long withdrawalAccountId,
+            ProcessResultStatus status,
+            LocalDate fromDate,
+            LocalDate toDate,
+            TransferHistorySort sort,
+            Pageable pageable) {
         Predicate[] conditions = conditions(withdrawalAccountId, status, fromDate, toDate);
-        var query = queryFactory
-                .selectFrom(transferJpaEntity)
-                .where(conditions)
-                .orderBy(sortOrder(sort));
+        var query = queryFactory.selectFrom(transferJpaEntity).where(conditions).orderBy(sortOrder(sort));
         if (pageable.isPaged()) {
             query.offset(pageable.getOffset()).limit(pageable.getPageSize());
         }
@@ -48,12 +48,14 @@ public class TransferHistoryQueryPersistenceAdapter implements TransferHistoryQu
                 .from(transferJpaEntity)
                 .where(conditions)
                 .fetchOne();
-        List<Transfer> domainContent = content.stream().map(TransferMapper::toDomain).toList();
+        List<Transfer> domainContent =
+                content.stream().map(TransferMapper::toDomain).toList();
         return new PageImpl<>(domainContent, pageable, total == null ? 0 : total);
     }
 
     @Override
-    public TransferHistoryAggregate summarize(Long withdrawalAccountId, ProcessResultStatus status, LocalDate fromDate, LocalDate toDate) {
+    public TransferHistoryAggregate summarize(
+            Long withdrawalAccountId, ProcessResultStatus status, LocalDate fromDate, LocalDate toDate) {
         Predicate[] conditions = conditions(withdrawalAccountId, status, fromDate, toDate);
         List<Tuple> rows = queryFactory
                 .select(transferJpaEntity.status, transferJpaEntity.count(), transferJpaEntity.amount.sumLong())
@@ -80,15 +82,16 @@ public class TransferHistoryQueryPersistenceAdapter implements TransferHistoryQu
     }
 
     // toDate는 포함(inclusive)이라 다음날 자정 미만으로 반개구간을 만든다(LedgerHistoryQueryPersistenceAdapter와 동일 관행)
-    private Predicate[] conditions(Long withdrawalAccountId, ProcessResultStatus status, LocalDate fromDate, LocalDate toDate) {
+    private Predicate[] conditions(
+            Long withdrawalAccountId, ProcessResultStatus status, LocalDate fromDate, LocalDate toDate) {
         LocalDateTime from = fromDate.atStartOfDay();
         LocalDateTime toExclusive = toDate.plusDays(1).atStartOfDay();
 
         return new Predicate[] {
-                transferJpaEntity.withdrawalAccountId.eq(withdrawalAccountId),
-                transferJpaEntity.transferredAt.goe(from),
-                transferJpaEntity.transferredAt.lt(toExclusive),
-                statusEq(status)
+            transferJpaEntity.withdrawalAccountId.eq(withdrawalAccountId),
+            transferJpaEntity.transferredAt.goe(from),
+            transferJpaEntity.transferredAt.lt(toExclusive),
+            statusEq(status)
         };
     }
 
@@ -98,8 +101,8 @@ public class TransferHistoryQueryPersistenceAdapter implements TransferHistoryQu
 
     private OrderSpecifier<?>[] sortOrder(TransferHistorySort sort) {
         if (sort == TransferHistorySort.OLDEST) {
-            return new OrderSpecifier<?>[] { transferJpaEntity.transferredAt.asc(), transferJpaEntity.transferId.asc() };
+            return new OrderSpecifier<?>[] {transferJpaEntity.transferredAt.asc(), transferJpaEntity.transferId.asc()};
         }
-        return new OrderSpecifier<?>[] { transferJpaEntity.transferredAt.desc(), transferJpaEntity.transferId.desc() };
+        return new OrderSpecifier<?>[] {transferJpaEntity.transferredAt.desc(), transferJpaEntity.transferId.desc()};
     }
 }

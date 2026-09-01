@@ -2,10 +2,9 @@ package com.shinhan.corebank.scheduledtransfer.adapter.out.persistence;
 
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import jakarta.persistence.*;
-import lombok.*;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import lombok.*;
 
 @Entity
 @Table(name = "scheduled_transfer")

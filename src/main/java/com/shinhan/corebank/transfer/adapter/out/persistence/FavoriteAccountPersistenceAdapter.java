@@ -1,10 +1,8 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import java.util.List;
-
 import com.shinhan.corebank.transfer.application.port.out.FavoriteAccountPersistencePort;
 import com.shinhan.corebank.transfer.domain.FavoriteAccount;
-
+import java.util.List;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -46,7 +44,12 @@ public class FavoriteAccountPersistenceAdapter implements FavoriteAccountPersist
     }
 
     private FavoriteAccount toDomain(FavoriteAccountJpaEntity entity) {
-        return FavoriteAccount.of(entity.getFavoriteAccountId(), entity.getCustomerId(),
-                entity.getDepositAccountNumber(), entity.getPayeeName(), entity.getAlias(), entity.getRegisteredAt());
+        return FavoriteAccount.of(
+                entity.getFavoriteAccountId(),
+                entity.getCustomerId(),
+                entity.getDepositAccountNumber(),
+                entity.getPayeeName(),
+                entity.getAlias(),
+                entity.getRegisteredAt());
     }
 }

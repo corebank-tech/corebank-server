@@ -27,7 +27,8 @@ public class TermsViewService implements TermsViewUseCase {
         if (!productQueryPort.existsProductTerms(productId, termsId)) {
             throw new BusinessException(ProductErrorCode.TERMS_NOT_FOUND);
         }
-        TermsDetail detail = termsQueryPort.findDetailById(termsId)
+        TermsDetail detail = termsQueryPort
+                .findDetailById(termsId)
                 .orElseThrow(() -> new BusinessException(ProductErrorCode.TERMS_NOT_FOUND));
 
         TermsView view = termsViewHistoryPort.record(customerId, termsId);

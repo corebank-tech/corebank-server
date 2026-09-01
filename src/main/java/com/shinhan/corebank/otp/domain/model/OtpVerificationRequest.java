@@ -1,7 +1,6 @@
 package com.shinhan.corebank.otp.domain.model;
 
 import com.shinhan.corebank.otp.api.OtpTransactionType;
-
 import java.time.LocalDateTime;
 import java.util.Objects;
 
@@ -33,8 +32,7 @@ public class OtpVerificationRequest {
             boolean used,
             LocalDateTime verifiedAt,
             LocalDateTime expiresAt,
-            LocalDateTime createdAt
-    ) {
+            LocalDateTime createdAt) {
         this.verificationRequestId = Objects.requireNonNull(verificationRequestId);
         this.customerId = Objects.requireNonNull(customerId);
         this.transactionType = Objects.requireNonNull(transactionType);
@@ -57,8 +55,7 @@ public class OtpVerificationRequest {
             String canonicalTransactionData,
             String codeHash,
             LocalDateTime expiresAt,
-            LocalDateTime createdAt
-    ) {
+            LocalDateTime createdAt) {
         return new OtpVerificationRequest(
                 requestId,
                 customerId,
@@ -70,8 +67,7 @@ public class OtpVerificationRequest {
                 false,
                 null,
                 expiresAt,
-                createdAt
-        );
+                createdAt);
     }
 
     // 요청이 현재 로그인 고객의 요청인지 확인한다.
@@ -96,11 +92,7 @@ public class OtpVerificationRequest {
 
     // 현재 누적 오류 횟수와 남은 횟수를 응답용 결과로 반환한다.
     public OtpAttemptResult currentAttemptResult() {
-        return new OtpAttemptResult(
-                errorCount,
-                MAX_ATTEMPTS - errorCount,
-                locked
-        );
+        return new OtpAttemptResult(errorCount, MAX_ATTEMPTS - errorCount, locked);
     }
 
     // OTP 검증 성공 상태와 검증 완료 시각을 기록한다.
@@ -124,15 +116,47 @@ public class OtpVerificationRequest {
         }
     }
 
-    public String verificationRequestId() { return verificationRequestId; }
-    public Long customerId() { return customerId; }
-    public OtpTransactionType transactionType() { return transactionType; }
-    public String canonicalTransactionData() { return canonicalTransactionData; }
-    public String codeHash() { return codeHash; }
-    public int errorCount() { return errorCount; }
-    public boolean locked() { return locked; }
-    public boolean used() { return used; }
-    public LocalDateTime verifiedAt() { return verifiedAt; }
-    public LocalDateTime expiresAt() { return expiresAt; }
-    public LocalDateTime createdAt() { return createdAt; }
+    public String verificationRequestId() {
+        return verificationRequestId;
+    }
+
+    public Long customerId() {
+        return customerId;
+    }
+
+    public OtpTransactionType transactionType() {
+        return transactionType;
+    }
+
+    public String canonicalTransactionData() {
+        return canonicalTransactionData;
+    }
+
+    public String codeHash() {
+        return codeHash;
+    }
+
+    public int errorCount() {
+        return errorCount;
+    }
+
+    public boolean locked() {
+        return locked;
+    }
+
+    public boolean used() {
+        return used;
+    }
+
+    public LocalDateTime verifiedAt() {
+        return verifiedAt;
+    }
+
+    public LocalDateTime expiresAt() {
+        return expiresAt;
+    }
+
+    public LocalDateTime createdAt() {
+        return createdAt;
+    }
 }

@@ -1,10 +1,9 @@
 package com.shinhan.corebank.limit.adapter.out.persistence;
 
+import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
-
-import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -30,23 +29,28 @@ public interface TransferLimitDailyUsageJpaRepository
      * 네이티브 INSERT 는 JPA Auditing 을 타지 않아 created_at·updated_at 을 직접 채운다.
      */
     @Modifying
-    @Query(value = """
+    @Query(
+            value =
+                    """
         INSERT INTO transfer_limit_daily_usage
                (customer_id, usage_date, used_amount, created_at, updated_at)
         VALUES (:customerId, :usageDate, 0, :now, :now)
         ON DUPLICATE KEY UPDATE customer_id = customer_id
-        """, nativeQuery = true)
-    void insertIfAbsent(@Param("customerId") Long customerId,
-                        @Param("usageDate") LocalDate usageDate,
-                        @Param("now") LocalDateTime now);
+        """,
+            nativeQuery = true)
+    void insertIfAbsent(
+            @Param("customerId") Long customerId,
+            @Param("usageDate") LocalDate usageDate,
+            @Param("now") LocalDateTime now);
 
     /** 사용액을 증가시키기 전에 X-Lock 을 잡고 읽는다. insertIfAbsent 로 행을 보장한 뒤 호출한다. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
+    @Query(
+            """
         SELECT u
         FROM TransferLimitDailyUsageJpaEntity u
         WHERE u.customerId = :customerId AND u.usageDate = :usageDate
         """)
-    Optional<TransferLimitDailyUsageJpaEntity> findForUpdate(@Param("customerId") Long customerId,
-                                                             @Param("usageDate") LocalDate usageDate);
+    Optional<TransferLimitDailyUsageJpaEntity> findForUpdate(
+            @Param("customerId") Long customerId, @Param("usageDate") LocalDate usageDate);
 }

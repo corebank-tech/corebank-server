@@ -1,13 +1,12 @@
 package com.shinhan.corebank.product.adapter.out.persistence;
 
 import jakarta.persistence.Embeddable;
-import lombok.AllArgsConstructor;
+import java.io.Serializable;
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.io.Serializable;
 
 @Embeddable
 @Getter

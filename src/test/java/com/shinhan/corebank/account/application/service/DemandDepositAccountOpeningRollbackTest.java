@@ -1,5 +1,10 @@
 package com.shinhan.corebank.account.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.application.port.in.DemandDepositAccountOpeningCommand;
 import com.shinhan.corebank.account.application.port.in.DemandDepositAccountOpeningUseCase;
@@ -16,20 +21,12 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowable;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
+class DemandDepositAccountOpeningRollbackTest extends IntegrationTestSupport {
 
-class DemandDepositAccountOpeningRollbackTest
-        extends IntegrationTestSupport {
-
-    private static final String PASSWORD_HASH =
-            "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq";
+    private static final String PASSWORD_HASH = "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq";
 
     @Autowired
-    private DemandDepositAccountOpeningUseCase
-            demandDepositAccountOpeningUseCase;
+    private DemandDepositAccountOpeningUseCase demandDepositAccountOpeningUseCase;
 
     @Autowired
     private CustomerTestFixture customerTestFixture;
@@ -46,10 +43,7 @@ class DemandDepositAccountOpeningRollbackTest
 
     @BeforeEach
     void setUp() {
-        sequenceFixture =
-                new AccountNumberSequenceTestFixture(
-                        jdbcTemplate
-                );
+        sequenceFixture = new AccountNumberSequenceTestFixture(jdbcTemplate);
     }
 
     @AfterEach
@@ -65,60 +59,36 @@ class DemandDepositAccountOpeningRollbackTest
     @DisplayName("입출금계좌 저장에 실패하면 계좌번호 채번도 롤백된다")
     void rollbackSequenceWhenAccountSaveFails() {
         // given
-        customerId =
-                customerTestFixture.createCustomer();
+        customerId = customerTestFixture.createCustomer();
 
-        sequenceFixture.resetDemandDepositSequence(
-                100L
-        );
+        sequenceFixture.resetDemandDepositSequence(100L);
 
-        DemandDepositAccountOpeningCommand command =
-                new DemandDepositAccountOpeningCommand(
-                        customerId,
-                        PASSWORD_HASH
-                );
+        DemandDepositAccountOpeningCommand command = new DemandDepositAccountOpeningCommand(customerId, PASSWORD_HASH);
 
         when(accountPersistencePort.save(any(Account.class)))
-                .thenThrow(
-                        new DataIntegrityViolationException(
-                                "forced account save failure"
-                        )
-                );
+                .thenThrow(new DataIntegrityViolationException("forced account save failure"));
 
         // when
-        Throwable thrown = catchThrowable(
-                () -> demandDepositAccountOpeningUseCase.open(
-                        command
-                )
-        );
+        Throwable thrown = catchThrowable(() -> demandDepositAccountOpeningUseCase.open(command));
 
         // then
         assertThat(thrown)
-                .isInstanceOf(
-                        DataIntegrityViolationException.class
-                )
-                .hasMessageContaining(
-                        "forced account save failure"
-                );
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("forced account save failure");
 
-        Long lastSequence =
-                sequenceFixture.findDemandDepositLastSequence();
+        Long lastSequence = sequenceFixture.findDemandDepositLastSequence();
 
-        assertThat(lastSequence)
-                .isEqualTo(100L);
+        assertThat(lastSequence).isEqualTo(100L);
 
-        Integer accountCount =
-                jdbcTemplate.queryForObject(
-                        """
+        Integer accountCount = jdbcTemplate.queryForObject(
+                """
                         SELECT COUNT(*)
                         FROM account
                         WHERE customer_id = ?
                         """,
-                        Integer.class,
-                        customerId
-                );
+                Integer.class,
+                customerId);
 
-        assertThat(accountCount)
-                .isZero();
+        assertThat(accountCount).isZero();
     }
 }

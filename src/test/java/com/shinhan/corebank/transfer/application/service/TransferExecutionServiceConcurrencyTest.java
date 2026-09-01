@@ -1,5 +1,14 @@
 package com.shinhan.corebank.transfer.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
+import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
+import com.shinhan.corebank.transfer.application.port.in.TransferResult;
+import com.shinhan.corebank.transfer.domain.TransferChannel;
+import com.shinhan.corebank.transfer.domain.TransferType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -10,23 +19,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
-import com.shinhan.corebank.IntegrationTestSupport;
-import com.shinhan.corebank.common.domain.ProcessResultStatus;
-import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
-import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
-import com.shinhan.corebank.transfer.application.port.in.TransferResult;
-import com.shinhan.corebank.transfer.domain.TransferChannel;
-import com.shinhan.corebank.transfer.domain.TransferType;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * REQ-TRSF-015 서비스 레벨 재현: AccountLockDeadlockAvoidanceTest가 락 획득만(어댑터 레벨)
@@ -92,9 +90,8 @@ class TransferExecutionServiceConcurrencyTest extends IntegrationTestSupport {
             assertThat(results).allSatisfy(r -> assertThat(r.status()).isEqualTo(ProcessResultStatus.SUCCESS));
 
             // then: 동시 채번에도 거래번호 중복이 없다
-            Set<String> transactionNumbers = results.stream()
-                    .map(TransferResult::transactionNumber)
-                    .collect(Collectors.toSet());
+            Set<String> transactionNumbers =
+                    results.stream().map(TransferResult::transactionNumber).collect(Collectors.toSet());
             assertThat(transactionNumbers).hasSize(totalTransfers);
 
             // then: 양방향 건수·금액이 같으므로 최종 잔액은 시작 잔액과 같다
@@ -103,22 +100,26 @@ class TransferExecutionServiceConcurrencyTest extends IntegrationTestSupport {
 
             // then: 원장은 이체 1건당 2행, 입금합 == 출금합(복식부기 정합성)
             Long ledgerRowCount = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM ledger_entry WHERE account_id IN (?, ?)",
-                    Long.class, ACCOUNT_A, ACCOUNT_B);
+                    "SELECT COUNT(*) FROM ledger_entry WHERE account_id IN (?, ?)", Long.class, ACCOUNT_A, ACCOUNT_B);
             assertThat(ledgerRowCount).isEqualTo(totalTransfers * 2L);
 
             Long depositSum = jdbcTemplate.queryForObject(
                     "SELECT COALESCE(SUM(amount), 0) FROM ledger_entry WHERE account_id IN (?, ?) AND direction = 'DEPOSIT'",
-                    Long.class, ACCOUNT_A, ACCOUNT_B);
+                    Long.class,
+                    ACCOUNT_A,
+                    ACCOUNT_B);
             Long withdrawalSum = jdbcTemplate.queryForObject(
                     "SELECT COALESCE(SUM(amount), 0) FROM ledger_entry WHERE account_id IN (?, ?) AND direction = 'WITHDRAWAL'",
-                    Long.class, ACCOUNT_A, ACCOUNT_B);
+                    Long.class,
+                    ACCOUNT_A,
+                    ACCOUNT_B);
             assertThat(depositSum).isEqualTo(withdrawalSum);
 
             // then: 거래번호별로도 DEPOSIT 1행 + WITHDRAWAL 1행이 정확히 존재한다.
             // (합계만 비교하면 한 이체의 출금 행이 유실되고 다른 이체의 입금 행이 중복돼도
             // 총합은 우연히 같아질 수 있어, 건별 짝을 직접 확인한다.)
-            Long unbalancedTransactionCount = jdbcTemplate.queryForObject("""
+            Long unbalancedTransactionCount = jdbcTemplate.queryForObject(
+                    """
                     SELECT COUNT(*) FROM (
                         SELECT transaction_number
                         FROM ledger_entry
@@ -126,7 +127,10 @@ class TransferExecutionServiceConcurrencyTest extends IntegrationTestSupport {
                         GROUP BY transaction_number
                         HAVING SUM(direction = 'DEPOSIT') <> 1 OR SUM(direction = 'WITHDRAWAL') <> 1
                     ) unbalanced
-                    """, Long.class, ACCOUNT_A, ACCOUNT_B);
+                    """,
+                    Long.class,
+                    ACCOUNT_A,
+                    ACCOUNT_B);
             assertThat(unbalancedTransactionCount).isZero();
         } finally {
             pool.shutdownNow();
@@ -134,7 +138,8 @@ class TransferExecutionServiceConcurrencyTest extends IntegrationTestSupport {
         }
     }
 
-    private Callable<TransferResult> callable(CountDownLatch start, long withdrawalAccountId, String depositAccountNumber, long amount) {
+    private Callable<TransferResult> callable(
+            CountDownLatch start, long withdrawalAccountId, String depositAccountNumber, long amount) {
         return () -> {
             await(start);
             TransferCommand command = TransferCommand.builder()
@@ -154,18 +159,26 @@ class TransferExecutionServiceConcurrencyTest extends IntegrationTestSupport {
     }
 
     private void seedAccounts() {
-        jdbcTemplate.update("""
+        jdbcTemplate.update(
+                """
             INSERT INTO customer (customer_id, user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at)
             VALUES (1, 'user1', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '테스터', '1990-01-01', 'test@test.com', '01012345678', NOW(6), NOW(6), NOW(6))
             ON DUPLICATE KEY UPDATE customer_id = customer_id
             """);
 
-        jdbcTemplate.update("""
+        jdbcTemplate.update(
+                """
             INSERT INTO account (account_id, account_number, customer_id, product_id, account_type, balance, status, password_hash, withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at)
             VALUES (?, ?, 1, NULL, 'DEMAND_DEPOSIT', ?, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', TRUE, NOW(6), '2026-08-01', NOW(6), NOW(6)),
                    (?, ?, 1, NULL, 'DEMAND_DEPOSIT', ?, 'ACTIVE', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', TRUE, NOW(6), '2026-08-01', NOW(6), NOW(6))
             ON DUPLICATE KEY UPDATE balance = VALUES(balance)
-            """, ACCOUNT_A, ACCOUNT_A_NUMBER, STARTING_BALANCE, ACCOUNT_B, ACCOUNT_B_NUMBER, STARTING_BALANCE);
+            """,
+                ACCOUNT_A,
+                ACCOUNT_A_NUMBER,
+                STARTING_BALANCE,
+                ACCOUNT_B,
+                ACCOUNT_B_NUMBER,
+                STARTING_BALANCE);
     }
 
     private long balanceOf(long accountId) {

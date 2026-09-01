@@ -13,9 +13,9 @@ final class AutoTransferExecutionMapper {
                 entity.getStatus(),
                 entity.getTransactionNumber(),
                 entity.getFailureReason(),
-                entity.getExecutedAt()
-        );
+                entity.getExecutedAt());
     }
+
     static AutoTransferExecutionJpaEntity toEntity(AutoTransferExecution domain, AutoTransferJpaEntity autoTransfer) {
         return AutoTransferExecutionJpaEntity.builder()
                 .executionId(domain.getExecutionId())
@@ -28,5 +28,4 @@ final class AutoTransferExecutionMapper {
                 .executedAt(domain.getExecutedAt())
                 .build();
     }
-
 }

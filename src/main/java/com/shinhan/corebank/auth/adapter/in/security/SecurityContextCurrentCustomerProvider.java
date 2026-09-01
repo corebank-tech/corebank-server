@@ -9,21 +9,18 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 @Component
-public class SecurityContextCurrentCustomerProvider
-        implements CurrentCustomerProvider {
+public class SecurityContextCurrentCustomerProvider implements CurrentCustomerProvider {
 
     // 현재 로그인 고객을 조회
     @Override
     public AuthenticatedCustomer getCurrentCustomer() {
         // SecurityContext에서 인증 객체를 가져옴
-        Authentication authentication =
-                SecurityContextHolder.getContext().getAuthentication();
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
         // 인증정보가 없거나 인증되지 않았거나 principal이 고객 타입이 아니면 401 예외 처리
         if (authentication == null
                 || !authentication.isAuthenticated()
-                || !(authentication.getPrincipal()
-                instanceof AuthenticatedCustomer customer)) {
+                || !(authentication.getPrincipal() instanceof AuthenticatedCustomer customer)) {
             throw new BusinessException(CommonErrorCode.UNAUTHORIZED);
         }
         return customer;
