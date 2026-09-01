@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '4.0.7'
     id 'io.spring.dependency-management' version '1.1.7'
+    id 'com.diffplug.spotless' version '7.0.2'
 }
 
 group = 'com.shinhan'
@@ -76,4 +77,24 @@ tasks.named('test') {
 
 tasks.named('jar') {
     enabled = false
+}
+
+// 코드 포맷 자동화 (#352)
+// 들여쓰기 4칸·최대 120자 — 기존 코드 스타일과 가장 가까워 변경 폭이 작다.
+spotless {
+    java {
+        target 'src/**/*.java'
+        targetExclude '**/build/**', '**/generated/**' // QueryDSL Q타입은 생성물이라 제외
+        palantirJavaFormat('2.68.0')
+        removeUnusedImports()
+        trimTrailingWhitespace()
+        endWithNewline()
+        toggleOffOn() // 정렬을 유지할 구간은 spotless:off ~ spotless:on 으로 감싼다
+    }
+    // 마크다운은 후행 공백 2칸이 줄바꿈 문법이라 대상에서 뺀다.
+    format 'misc', {
+        target '*.gradle', '.gitignore'
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
 }
