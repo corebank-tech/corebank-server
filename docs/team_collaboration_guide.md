@@ -51,24 +51,28 @@ DB·API 관련 기술 문서는 `docs/team_db_setup_guide.md`, `docs/api_convent
 
 - PR 리뷰 수행, Approve 시 👍 표시.
 
-### Pn 룰
+### Rn 룰
 
 리뷰어가 코멘트를 강조하는 정도를 표현하는 규칙이다.
 
 | 등급 | 의미 | GitHub 액션 |
 | --- | --- | --- |
-| P1 | 꼭 반영해주세요 | Request changes |
-| P2 | 적극적으로 고려해주세요 | Request changes |
-| P3 | 웬만하면 반영해주세요 | Comment |
-| P4 | 반영해도 좋고 넘어가도 좋습니다 | Approve |
-| P5 | 그냥 사소한 의견입니다 | Approve |
+| R1 | 꼭 반영해주세요 | Request changes |
+| R2 | 적극적으로 고려해주세요 | Request changes |
+| R3 | 웬만하면 반영해주세요 | Comment |
+| R4 | 반영해도 좋고 넘어가도 좋습니다 | Approve |
+| R5 | 그냥 사소한 의견입니다 | Approve |
 | just ask | 궁금한 점을 물어볼 때 | — |
 
 예시:
-> p4;
+> r4;
 > 해당 코드에서는 `for` 문 대신 `forEach`를 사용하는 것이 더 좋을 것 같아요.
 
-위는 `p4` 등급 리뷰로, 반영해도 좋고 넘어가도 좋다는 의미다. **P4, P5 등급의 리뷰는 Approve를 하되 추가 의견을 남기는 것**이며, **P1, P2 등급은 Request changes**, **P3 등급은 Comment**를 남긴다.
+위는 `r4` 등급 리뷰로, 반영해도 좋고 넘어가도 좋다는 의미다. **R4, R5 등급의 리뷰는 Approve를 하되 추가 의견을 남기는 것**이며, **R1, R2 등급은 Request changes**, **R3 등급은 Comment**를 남긴다.
+
+> 처음에는 `Pn`으로 시작했으나, `docs/api_conventions.md`가 `P1`~`P6`을 **파트 배정**(오류코드 접두어 담당)으로
+> 쓰고 있어 같은 기호가 두 뜻으로 읽혔다. 리뷰 등급만 `Rn`(review)으로 분리한다.
+> 아래 로테이션의 `P1`~`P6`은 **파트 번호**이므로 그대로 둔다. 과거 PR 코멘트의 `pn` 표기는 소급하지 않는다.
 
 ### PR 태그 달기
 
@@ -89,19 +93,31 @@ DB·API 관련 기술 문서는 `docs/team_db_setup_guide.md`, `docs/api_convent
 
 ### 6-1. 브랜치 전략 (Gitflow 기반)
 
-배포용과 개발용 브랜치를 분리하여 관리하며, 개별 작업은 도메인과 기능명을 명시하여 브랜치를 생성한다.
+배포용과 개발용 브랜치를 분리하여 관리하며, 개별 작업은 **어느 이슈의 작업인지**를 브랜치명에 드러낸다.
 
 - `main`: 실제 서비스 배포용 브랜치
 - `dev`: 다음 출시 버전을 대비하여 개발하는 통합 브랜치
-- `feat` (기능 개발): `feat/(도메인명)-(기능명)` — 예: `feat/account-create`
-- `fix` (버그 수정): `fix/(도메인명)-(기능명)` — 예: `fix/transfer-ui`
+- 작업 브랜치: `타입/{이슈번호}-{설명}` — 타입은 6-3의 커밋 태그와 같다.
+  - `feat/338-scheduled-transfer-withdrawal-account-id`
+  - `fix/342-account-number-sequence-test-prefix`
+  - `chore/352-spotless-format`
+- 이슈 없이 진행하는 작업은 번호를 빼고 설명만 쓴다 — `docs/readme-overhaul`
 - 모든 PR은 `main`이 아니라 **`dev`를 base로** 연다. `main`은 배포 시점에 `dev`를 병합해서만 갱신한다.
 
 ### 6-2. PR 및 Issue 제목 규칙
 
-작업 목적을 한눈에 파악할 수 있도록 말머리(태그)를 사용한다.
+작업 목적과 **어느 도메인인지**를 한눈에 파악할 수 있도록 말머리(태그)를 사용한다.
 
-- 형식: `[대문자 태그] 작업 내용` — 예: `[FEAT] 자동 이체 결과 조회 페이지 구현`
+- 형식: `[타입/도메인] 작업 내용` — 타입은 아래 6-3의 커밋 태그와 같은 소문자를 쓴다.
+- 예시:
+  - `[feat/scheduled-transfer] 예약이체 목록 응답에 출금계좌 ID 추가`
+  - `[fix/account] 상품 채번 행 누락으로 10개 상품 가입이 ACC9001(500) (#342)`
+  - `[test/product] REQ-PRDT 인수기준 미커버 6건 테스트 보강`
+- 도메인이 없는 전역 변경은 타입만 쓴다 — `[docs] README에 문서 색인 추가`
+- `dev → main` 릴리스 PR은 `[RELEASE] dev → main 릴리스 배포`
+- 관련 이슈가 있으면 제목 끝에 `(#이슈번호)`를 붙인다.
+
+> GitHub 라벨도 같은 형식(`feat/product`, `fix/account`)으로 붙인다. 라벨이 없으면 새로 만든다.
 
 ### 6-3. 커밋 컨벤션
 
