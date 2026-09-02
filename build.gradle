@@ -3,6 +3,7 @@ plugins {
     id 'org.springframework.boot' version '4.0.7'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'com.diffplug.spotless' version '7.0.2'
+    id 'net.ltgt.errorprone' version '4.4.0'
 }
 
 group = 'com.shinhan'
@@ -69,6 +70,23 @@ dependencies {
 
     //세션·인증 필터
     implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // 박싱 동일성 검사 (#358)
+    errorprone 'com.google.errorprone:error_prone_core:2.49.0'
+}
+
+// 박싱 동일성 검사 (#358)
+// 금액 필드를 wrapper 로 통일하면 Long 끼리의 == 를 타입이 막지 못한다.
+// Long 은 -128~127 만 캐시되므로 128원부터 == 가 조용히 false 가 된다.
+// 기존 코드에 경고가 쏟아지면 결국 꺼버리게 되므로, 전체를 끄고 이 둘만 오류로 켠다.
+tasks.withType(JavaCompile).configureEach {
+    options.errorprone {
+        disableAllChecks = true
+        check('BoxedPrimitiveEquality', net.ltgt.gradle.errorprone.CheckSeverity.ERROR)
+        check('ReferenceEquality', net.ltgt.gradle.errorprone.CheckSeverity.ERROR)
+        disableWarningsInGeneratedCode = true
+        excludedPaths = '.*/build/generated/.*' // QueryDSL Q타입은 생성물이라 제외
+    }
 }
 
 tasks.named('test') {
