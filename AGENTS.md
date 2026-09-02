@@ -51,11 +51,14 @@ docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·R
    실패 경로가 둘 이상이면 응답 본문뿐 아니라 **연산량과 응답 시간까지** 같은지 본다.
    근거 [error_handling_guide.md](docs/error_handling_guide.md), REQ-NFR-017 · 사고 PR #329 · 센서: 없음
 
-5. **금액·잔액은 원 단위 정수 `long`, 금리는 `BigDecimal`.**
-   DB도 금액은 `BIGINT`다. `double`·`float`으로 금액을 계산하지 않는다.
-   `BigDecimal`은 `appliedRate`·`baseRate`·`preferentialRate` 같은 **금리 전용**이다.
-   금액을 `BigDecimal`로 바꾸지 마라 — 현행 설계가 정수 원 단위다.
-   근거 [corebank_erd.md](docs/corebank_erd.md), `Account.balance`·`Transfer.amount` · 센서: 없음
+5. **금액·잔액은 원 단위 정수, 금리는 `BigDecimal`.**
+   DB는 금액이 전부 `BIGINT`다. `double`·`float`으로 금액을 계산하지 않는다.
+   원화는 소수 자리가 없는 통화라 정수 원 단위가 정본이다. **금액을 `BigDecimal`로 바꾸지 마라.**
+   금리 계산은 `BigDecimal`로 하되 `RoundingMode`를 명시하고 원 단위로 떨어뜨린다
+   (`SubscriptionMaturityCalculator` 참고). `BigDecimal`은 `appliedRate`·`baseRate` 같은 금리 전용이다.
+   **NOT NULL 컬럼은 `long`, NULL 허용 컬럼은 `Long`** — 타입이 DB 제약을 그대로 표현한다.
+   `Long`끼리 `==`로 비교하지 않는다. 128원부터 조용히 어긋난다. `equals`나 `longValue()`를 쓴다.
+   근거 [corebank_erd.md](docs/corebank_erd.md) · 센서: 없음 (도메인별 편차 정리는 #358)
 
 6. **스키마 변경은 세 곳을 함께 갱신한다** — Flyway 증분 파일 + [schema_reference.md](docs/schema_reference.md) + [corebank_erd.md](docs/corebank_erd.md).
    `local`·`test`·`prod` 프로필은 `ddl-auto: validate`라서 Flyway 없이 엔티티만 고치면 기동이 깨진다.
