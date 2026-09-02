@@ -32,13 +32,17 @@ docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·R
 1. **`domain` 패키지는 `application`·`adapter`를 참조하지 않고, JPA 애노테이션(`@Entity`·`@Table`)을 갖지 않는다.**
    영속성은 `adapter/out`의 JPA 엔티티가 맡고 Mapper로 변환한다.
    근거 [hexagonal_architecture_guide.md](docs/hexagonal_architecture_guide.md) · 위반 사례 PR #37
-   센서: `product`·`subscription`만 (`ProductArchitectureTest`·`SubscriptionArchitectureTest`)
+   센서: `product`·`subscription`만 (`ProductArchitectureTest`·`SubscriptionArchitectureTest`) — 전 도메인 확대는 #349
 
-2. **다른 도메인은 `<domain>.api` 패키지를 통해서만 호출한다.**
-   상대 도메인의 `application`·`domain`·`adapter`를 직접 참조하지 않는다.
-   `api/`는 컨트롤러 자리가 아니라 도메인 간 계약이다(예: `limit.api.TransferLimitProvider`).
+2. **다른 도메인은 소유 도메인의 공개 계약을 통해서만 호출한다.**
+   계약면은 `<domain>.api`와 `<domain>.application.port.in`의 공개 UseCase 둘 다 통용된다
+   (예: `limit.api.TransferLimitProvider`, `account.application.port.in.WithdrawableAccountQueryUseCase`).
+   **어느 쪽 하나로 단일화할지는 #359에서 정한다 — 그때까지 둘 다 정상이다.**
+   상대 도메인의 `adapter`와 도메인 모델·서비스 구현을 직접 참조하지 않는다.
+   승인된 예외는 `transfer`의 `AccountLockJpaEntity` 부분 매핑 **하나뿐**이고, 새 예외는
+   ADR과 소유 도메인 합의가 있어야 한다. 공유 enum·에러코드 참조의 처리도 #359 대상이다.
    근거 [ADR-0002](docs/adr/0002-cross-domain-account-read-mechanism.md)
-   센서: `terms`만 (`TermsArchitectureTest`)
+   센서: `terms`만 (`TermsArchitectureTest`) — 전 도메인 확대는 #349·#359
 
 3. **성공 응답은 항상 HTTP `200` + `code="0000"`. `201`·`204`를 쓰지 않는다.**
    `data`에 성공/실패를 다시 담지 않는다(`data.result = "SUCCESS"` 패턴 폐기).
