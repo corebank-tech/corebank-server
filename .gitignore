@@ -39,16 +39,12 @@ out/
 ### macOS ###
 .DS_Store
 
-### Claude Code (로컬 전용, 팀 합의 전까지 비공유) ###
-/CLAUDE.md
+### Claude Code (개인 설정 · 로컬 전용) ###
 .claude/
 .superpowers/
 /docs/personal/requirements_overview.md
 /docs/personal/api_endpoint_reference.md
 /docs/personal/api_spec_conflict_report.md
-
-### CODEX ###
-/AGENTS.md
 
 ### 개인 메모 (개인 작업용, 비공유) ###
 /docs/personal/
