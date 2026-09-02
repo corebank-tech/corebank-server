@@ -33,7 +33,7 @@ public class TransferLimitDailyUsageJpaEntity extends BaseEntity {
     private LocalDate usageDate;
 
     @Column(name = "used_amount", nullable = false)
-    private long usedAmount;
+    private Long usedAmount;
 
     TransferLimitDailyUsage toDomain() {
         return TransferLimitDailyUsage.restore(customerId, usageDate, usedAmount);
