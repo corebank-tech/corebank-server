@@ -56,9 +56,11 @@ docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·R
    원화는 소수 자리가 없는 통화라 정수 원 단위가 정본이다. **금액을 `BigDecimal`로 바꾸지 마라.**
    금리 계산은 `BigDecimal`로 하되 `RoundingMode`를 명시하고 원 단위로 떨어뜨린다
    (`SubscriptionMaturityCalculator` 참고). `BigDecimal`은 `appliedRate`·`baseRate` 같은 금리 전용이다.
-   **NOT NULL 컬럼은 `long`, NULL 허용 컬럼은 `Long`** — 타입이 DB 제약을 그대로 표현한다.
+   **JPA 엔티티의 숫자 필드는 NOT NULL 컬럼이어도 wrapper(`Long`)를 쓴다.**
+   `@Version`·`@EmbeddedId`·채번 카운터만 primitive를 유지한다.
+   순수 도메인 객체는 불변식을 표현하도록 primitive를 쓴다 — 잔액·금액은 항상 존재한다.
    `Long`끼리 `==`로 비교하지 않는다. 128원부터 조용히 어긋난다. `equals`나 `longValue()`를 쓴다.
-   근거 [corebank_erd.md](docs/corebank_erd.md) · 센서: 없음 (도메인별 편차 정리는 #358)
+   근거 [corebank_erd.md](docs/corebank_erd.md), #358 · 센서: ErrorProne `BoxedPrimitiveEquality`
 
 6. **스키마 변경은 세 곳을 함께 갱신한다** — Flyway 증분 파일 + [schema_reference.md](docs/schema_reference.md) + [corebank_erd.md](docs/corebank_erd.md).
    `local`·`test`·`prod` 프로필은 `ddl-auto: validate`라서 Flyway 없이 엔티티만 고치면 기동이 깨진다.
