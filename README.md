@@ -63,8 +63,9 @@ src/main/java/com/shinhan/corebank/
 
 의존 방향은 ArchUnit 테스트로 검증합니다. 계층 방향 규칙(`LayerArchitectureTest`)이
 13개 도메인 전체에 걸려 있고, `api/`·`config/`는 다른 계층을 참조하지 않는 leaf 계층으로
-검증합니다 — 계약 패키지가 도메인 내부를 끌어오면 실패합니다. `terms`에는 "외부는
-`terms.api`로만 접근" 규칙(`TermsArchitectureTest`)이 추가로 걸려 있습니다.
+검증합니다 — 같은 도메인 안에서 계약 패키지가 내부를 끌어오면 실패합니다. 도메인 간
+참조는 아직 이 규칙 밖입니다(#359). `terms`에는 "외부는 `terms.api`로만 접근"
+규칙(`TermsArchitectureTest`)이 추가로 걸려 있습니다.
 
 아직 구조를 다 갖추지 않은 도메인도 있습니다. `terms`는 `api/`와 `adapter/out/`만
 있고, `batch`는 `domain/` 없이 `application/`과 `adapter/`로만 구성됩니다.
