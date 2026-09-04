@@ -76,6 +76,23 @@ src/main/java/com/shinhan/corebank/
 
 - Java 21 (Gradle 데몬이 `gradle/gradle-daemon-jvm.properties`로 21에 고정됩니다)
 - Docker / Docker Compose (MySQL · Redis)
+- [gitleaks](https://github.com/gitleaks/gitleaks) (커밋 전 자격증명 검사용, pre-commit 훅에서 사용)
+
+  ```bash
+  # macOS
+  brew install gitleaks
+
+  # Windows
+  winget install Gitleaks.Gitleaks
+  ```
+
+### Git Hooks
+
+clone 후 한 번만 실행합니다. `core.hooksPath`를 `.githooks`로 설정해 pre-commit 검사를 활성화합니다.
+
+```bash
+./scripts/install-hooks.sh
+```
 
 ### Run
 
