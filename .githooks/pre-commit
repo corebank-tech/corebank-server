@@ -6,6 +6,18 @@ if ! command -v gitleaks >/dev/null 2>&1; then
     exit 1
 fi
 
+gitleaks_bin=$(command -v gitleaks)
+gitleaks_version=$(gitleaks version 2>/dev/null)
+case "$gitleaks_version" in
+    [0-9]*.[0-9]*.[0-9]*) ;;
+    *)
+        echo "[pre-commit] 의심스러운 gitleaks 바이너리입니다: $gitleaks_bin ($gitleaks_version)"
+        echo "[pre-commit] PATH에서 공식 gitleaks가 먼저 잡히는지 확인하세요."
+        exit 1
+        ;;
+esac
+echo "[pre-commit] gitleaks 사용: $gitleaks_bin ($gitleaks_version)"
+
 if ! gitleaks git --staged --redact --verbose --no-banner; then
     echo ""
     echo "[pre-commit] 민감 정보가 감지되었습니다. 커밋이 차단됩니다."
