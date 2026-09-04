@@ -1,7 +1,7 @@
 # AGENTS.md
 
 이 파일은 **코딩 에이전트를 위한 진입점**이다. 사람용 개요는 [README.md](README.md)를 본다.
-상세 규약은 여기 옮겨 적지 않고 §5 색인에서 링크로 끌어간다. **150줄을 넘기지 않는다.**
+상세 규약 전문은 여기 옮겨 적지 않고 §5 색인에서 링크로 끌어간다. **150줄을 넘기지 않는다.**
 
 ## 1. 정본 우선순위
 
@@ -59,7 +59,7 @@ docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·R
    **JPA 엔티티의 숫자 필드는 NOT NULL 컬럼이어도 wrapper(`Long`)를 쓴다.**
    `@Version`·`@EmbeddedId`·채번 카운터만 primitive를 유지한다.
    순수 도메인 객체는 불변식을 표현하도록 primitive를 쓴다 — 잔액·금액은 항상 존재한다.
-   `Long`끼리 `==`로 비교하지 않는다. 128원부터 조용히 어긋난다. `equals`나 `longValue()`를 쓴다.
+   `Long`끼리 `==`로 비교하지 않는다. -128~127 밖은 참조 동일성이 보장되지 않는다. `equals`나 `longValue()`를 쓴다.
    근거 [corebank_erd.md](docs/corebank_erd.md), #358 · 센서: ErrorProne `BoxedPrimitiveEquality`
 
 6. **스키마 변경은 세 곳을 함께 갱신한다** — Flyway 증분 파일 + [schema_reference.md](docs/schema_reference.md) + [corebank_erd.md](docs/corebank_erd.md).
@@ -122,5 +122,5 @@ docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·R
 - 브랜치: `type/{이슈번호}-{설명}` — 예 `feat/338-scheduled-transfer-withdrawal-account-id`
 - 커밋: `type(도메인): 작업 내용` — 예 `feat(account): 출금계좌 등록 여부 추가`
 - PR 제목: `[type/도메인] 작업 내용` — 예 `[fix/account] 상품 채번 행 누락으로 가입 실패 (#342)`
-- **PR base는 항상 `dev`.** `main` 머지는 곧 EC2 배포다.
+- **작업 PR base는 `dev`.** `dev → main` 릴리스 PR만 예외로 `main`을 base로 한다. `main` 머지는 곧 EC2 배포다.
 - 리뷰 등급 `R1`~`R5`와 로테이션은 [team_collaboration_guide.md](docs/team_collaboration_guide.md) §5.

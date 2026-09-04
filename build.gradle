@@ -77,7 +77,7 @@ dependencies {
 
 // 박싱 동일성 검사 (#358)
 // 금액 필드를 wrapper 로 통일하면 Long 끼리의 == 를 타입이 막지 못한다.
-// Long 은 -128~127 만 캐시되므로 128원부터 == 가 조용히 false 가 된다.
+// Long.valueOf(long)은 -128~127 값을 항상 캐시하지만, 그 밖의 값은 참조 동일성을 보장하지 않는다.
 // 기존 코드에 경고가 쏟아지면 결국 꺼버리게 되므로, 전체를 끄고 이 둘만 오류로 켠다.
 tasks.withType(JavaCompile).configureEach {
     options.errorprone {

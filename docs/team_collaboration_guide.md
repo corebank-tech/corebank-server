@@ -102,7 +102,8 @@ DB·API 관련 기술 문서는 `docs/team_db_setup_guide.md`, `docs/api_convent
   - `fix/342-account-number-sequence-test-prefix`
   - `chore/352-spotless-format`
 - 이슈 없이 진행하는 작업은 번호를 빼고 설명만 쓴다 — `docs/readme-overhaul`
-- 모든 PR은 `main`이 아니라 **`dev`를 base로** 연다. `main`은 배포 시점에 `dev`를 병합해서만 갱신한다.
+- 일반 작업 PR은 **`dev`를 base로** 연다. `main`은 배포 시점에 `dev`를 병합해서만 갱신한다.
+- `dev → main` 릴리스 PR은 `main`을 base로 연다.
 
 ### 6-2. PR 및 Issue 제목 규칙
 
