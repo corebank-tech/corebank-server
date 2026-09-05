@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class TransferAuthTokenMockAdapter implements TransferAuthTokenVerificationPort {
     @Override
-    public void verify(String authToken, Long accountId, String purpose) {
+    public void verify(String authToken, Long customerId, Long accountId) {
         // 항상 통과 -> P6 실제 구현 전까지 임시 대체
     }
 }
