@@ -41,10 +41,10 @@ public class TransferJpaEntity {
     private String payeeName;
 
     @Column(name = "amount", nullable = false)
-    private long amount;
+    private Long amount;
 
     @Column(name = "fee", nullable = false)
-    private long fee;
+    private Long fee;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "transfer_type", length = 12, nullable = false)
