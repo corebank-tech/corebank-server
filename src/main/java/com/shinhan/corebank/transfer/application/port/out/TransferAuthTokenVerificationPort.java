@@ -7,5 +7,5 @@ package com.shinhan.corebank.transfer.application.port.out;
  * 토큰만 받아 여기서 검증한다(REQ-TRSF-009).
  */
 public interface TransferAuthTokenVerificationPort {
-    void verify(String authToken, Long accountId, String purpose);
+    void verify(String authToken, Long customerId, Long accountId);
 }

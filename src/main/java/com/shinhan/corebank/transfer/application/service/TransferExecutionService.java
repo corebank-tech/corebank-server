@@ -141,7 +141,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             // 재검증하지 않는다).
             if (command.authToken() != null) {
                 transferAuthTokenVerificationPort.verify(
-                        command.authToken(), command.withdrawalAccountId(), "TRANSFER_EXECUTE");
+                        command.authToken(), command.customerId(), command.withdrawalAccountId());
             }
 
             String transactionNumber =
