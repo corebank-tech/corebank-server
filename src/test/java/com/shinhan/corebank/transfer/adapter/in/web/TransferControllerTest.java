@@ -274,6 +274,60 @@ class TransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.code").value("TRF0202"));
     }
 
+    @Test
+    @DisplayName("월별 통계: 본인 계좌면 200 + 해당 연월 성공/실패 건수·금액을 반환한다")
+    void monthlyStatistics_success() throws Exception {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+            entityManager
+                    .createNativeQuery(
+                            """
+                INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id, deposit_account_number,
+                    payee_name, amount, fee, transfer_type, channel, status, transferred_at, created_at)
+                VALUES ('20260810IT0000000020', 101, 202, '110222222222', '성춘향', 10000, 0, 'IMMEDIATE', 'BT', 'SUCCESS',
+                    '2026-08-10 09:00:00', NOW(6))
+                ON DUPLICATE KEY UPDATE transaction_number = transaction_number
+            """)
+                    .executeUpdate();
+        });
+
+        mockMvc.perform(get("/transfers/monthly-statistics")
+                        .with(authentication(authenticationOf(1L)))
+                        .param("withdrawalAccountId", "101")
+                        .param("yearMonth", "2026-08"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.yearMonth").value("2026-08"))
+                .andExpect(jsonPath("$.data.successCount").value(1))
+                .andExpect(jsonPath("$.data.successAmount").value(10000))
+                .andExpect(jsonPath("$.data.failureCount").value(0));
+    }
+
+    @Test
+    @DisplayName("월별 통계: 남의 출금계좌면 400 + TRF0001을 반환한다")
+    void monthlyStatistics_notOwned_returnsTrf0001() throws Exception {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        mockMvc.perform(get("/transfers/monthly-statistics")
+                        .with(authentication(authenticationOf(2L)))
+                        .param("withdrawalAccountId", "101")
+                        .param("yearMonth", "2026-08"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TRF0001"));
+    }
+
+    @Test
+    @DisplayName("월별 통계: yearMonth 형식이 올바르지 않으면 400 + CMN0001을 반환한다")
+    void monthlyStatistics_invalidYearMonth_returnsInvalidInput() throws Exception {
+        mockMvc.perform(get("/transfers/monthly-statistics")
+                        .with(authentication(authenticationOf(1L)))
+                        .param("withdrawalAccountId", "101")
+                        .param("yearMonth", "2026-13"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
+    }
+
     private UsernamePasswordAuthenticationToken authenticationOf(Long customerId) {
         AuthenticatedCustomer customer = new AuthenticatedCustomer(customerId, "user" + customerId, "테스터");
         return UsernamePasswordAuthenticationToken.authenticated(
