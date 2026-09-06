@@ -2,7 +2,9 @@ package com.shinhan.corebank.transfer.adapter.in.web;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -168,6 +170,116 @@ class FavoriteAccountControllerTest extends IntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data[0].alias").value("엄마"));
+    }
+
+    @Test
+    @DisplayName("본인 소유 항목의 별칭을 수정하면 200 + 변경된 별칭을 반환한다")
+    void update_success() throws Exception {
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+        Long favoriteAccountId = registerFavoriteAccount("엄마");
+
+        mockMvc.perform(patch("/transfers/favorite-accounts/" + favoriteAccountId)
+                        .with(authentication(authenticationOf(1L)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateRequestJson("우리엄마")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.alias").value("우리엄마"));
+    }
+
+    @Test
+    @DisplayName("타인 소유 항목을 수정하려 하면 404 + FAV0201을 반환한다")
+    void update_whenNotOwner_returnsNotFound() throws Exception {
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        TransferTestFixtures.seedAnotherCustomer(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+        Long favoriteAccountId = registerFavoriteAccount("엄마");
+
+        mockMvc.perform(patch("/transfers/favorite-accounts/" + favoriteAccountId)
+                        .with(authentication(authenticationOf(2L)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateRequestJson("우리엄마")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("FAV0201"));
+    }
+
+    @Test
+    @DisplayName("Idempotency-Key 헤더 없이 수정 요청하면 400 + CMN0002를 반환한다")
+    void update_withoutIdempotencyKey_returnsRequiredFieldMissing() throws Exception {
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+        Long favoriteAccountId = registerFavoriteAccount("엄마");
+
+        mockMvc.perform(patch("/transfers/favorite-accounts/" + favoriteAccountId)
+                        .with(authentication(authenticationOf(1L)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateRequestJson("우리엄마")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0002"));
+    }
+
+    @Test
+    @DisplayName("본인 소유 항목을 삭제하면 200을 반환하고 목록에서 사라진다")
+    void delete_success() throws Exception {
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+        Long favoriteAccountId = registerFavoriteAccount("엄마");
+
+        mockMvc.perform(delete("/transfers/favorite-accounts/" + favoriteAccountId)
+                        .with(authentication(authenticationOf(1L)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"));
+
+        mockMvc.perform(get("/transfers/favorite-accounts").with(authentication(authenticationOf(1L))))
+                .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 항목을 삭제하려 하면 404 + FAV0201을 반환한다")
+    void delete_whenNotFound_returnsNotFound() throws Exception {
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(delete("/transfers/favorite-accounts/999999")
+                        .with(authentication(authenticationOf(1L)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("FAV0201"));
+    }
+
+    private Long registerFavoriteAccount(String alias) throws Exception {
+        String response = mockMvc.perform(post("/transfers/favorite-accounts")
+                        .with(authentication(authenticationOf(1L)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerRequestJson("110222222222", alias)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        return OBJECT_MAPPER
+                .readTree(response)
+                .path("data")
+                .path("favoriteAccountId")
+                .asLong();
+    }
+
+    private String updateRequestJson(String alias) throws Exception {
+        return OBJECT_MAPPER.writeValueAsString(new FavoriteAccountUpdateRequest(alias));
     }
 
     private UsernamePasswordAuthenticationToken authenticationOf(Long customerId) {
