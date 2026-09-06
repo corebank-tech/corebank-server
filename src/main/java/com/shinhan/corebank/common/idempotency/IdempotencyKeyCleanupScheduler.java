@@ -1,13 +1,12 @@
 package com.shinhan.corebank.common.idempotency;
 
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
 
 @Component
 @RequiredArgsConstructor
@@ -19,9 +18,8 @@ public class IdempotencyKeyCleanupScheduler {
     @Transactional
     public void cleanupExpired() {
         int deleted = idempotencyKeyJpaRepository.deleteAllByExpiresAtBefore(LocalDateTime.now());
-        if(deleted > 0) {
+        if (deleted > 0) {
             log.info("만료된 멱등키 정리 완료 - deletedCount={}", deleted);
         }
     }
-
 }

@@ -66,8 +66,8 @@ class IdempotencyKeyCleanupSchedulerTest extends IntegrationTestSupport {
     void cleanupExpired_nothingExpired_deletesNothing() {
         String freshKey = "33333333-3333-4333-8333-333333333333";
         transactionTemplate()
-                .executeWithoutResult(status -> repository.save(
-                        IdempotencyKeyJpaEntity.start(freshKey, null, "POST /test", "c".repeat(64), LocalDateTime.now())));
+                .executeWithoutResult(status -> repository.save(IdempotencyKeyJpaEntity.start(
+                        freshKey, null, "POST /test", "c".repeat(64), LocalDateTime.now())));
 
         scheduler.cleanupExpired();
 
