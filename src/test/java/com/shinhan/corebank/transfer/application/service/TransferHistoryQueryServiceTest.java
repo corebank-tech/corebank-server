@@ -13,6 +13,7 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryDetail;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryPage;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistorySort;
+import com.shinhan.corebank.transfer.application.port.in.TransferMonthlyStatistics;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferHistoryAggregate;
 import com.shinhan.corebank.transfer.application.port.out.TransferHistoryQueryPort;
@@ -25,6 +26,7 @@ import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -421,6 +423,89 @@ class TransferHistoryQueryServiceTest {
         assertThat(detail.withdrawalBalanceAfter()).isEqualTo(90_000L);
         assertThat(detail.depositAccountNumber()).isEqualTo("110222222222");
         assertThat(detail.payeeName()).isEqualTo("성춘향");
+    }
+
+    @Test
+    @DisplayName("월별통계: customerId/withdrawalAccountId/yearMonth가 없으면 CMN0002를 던진다")
+    void getMonthlyStatistics_rejectsMissingArgs() {
+        assertThatThrownBy(() -> transferHistoryQueryService.getMonthlyStatistics(
+                        null, WITHDRAWAL_ACCOUNT_ID, YearMonth.of(2026, 8)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
+    }
+
+    @Test
+    @DisplayName("월별통계: 출금계좌 소유자가 아니면 TRF0001을 던지고 포트는 호출하지 않는다")
+    void getMonthlyStatistics_rejectsOwnershipMismatch() {
+        when(accountLockPort.findWithdrawalAccountDetail(WITHDRAWAL_ACCOUNT_ID))
+                .thenReturn(Optional.of(new WithdrawalAccountDetail(WITHDRAWAL_ACCOUNT_ID, 999L, true)));
+
+        assertThatThrownBy(() -> transferHistoryQueryService.getMonthlyStatistics(
+                        CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, YearMonth.of(2026, 8)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
+
+        verify(transferHistoryQueryPort, never()).summarize(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("월별통계: 해당 연월의 월초~월말 기간, status=null로 summarize를 호출해 매핑한다")
+    void getMonthlyStatistics_mapsAggregateForMonth() {
+        stubOwnership(CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID);
+        YearMonth yearMonth = YearMonth.of(2026, 8);
+        LocalDate monthStart = LocalDate.of(2026, 8, 1);
+        LocalDate monthEnd = LocalDate.of(2026, 8, 31);
+        when(transferHistoryQueryPort.summarize(WITHDRAWAL_ACCOUNT_ID, null, monthStart, monthEnd))
+                .thenReturn(new TransferHistoryAggregate(3L, 30_000L, 1L, 5_000L));
+
+        TransferMonthlyStatistics result =
+                transferHistoryQueryService.getMonthlyStatistics(CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, yearMonth);
+
+        assertThat(result.yearMonth()).isEqualTo(yearMonth);
+        assertThat(result.successCount()).isEqualTo(3L);
+        assertThat(result.successAmount()).isEqualTo(30_000L);
+        assertThat(result.errorCount()).isEqualTo(1L);
+        assertThat(result.errorAmount()).isEqualTo(5_000L);
+    }
+
+    @Test
+    @DisplayName("월별통계: 같은 기간을 search()로 조회했을 때의 집계와 일치한다 (동일 summarize 재사용)")
+    void getMonthlyStatistics_matchesSearchSummaryForSamePeriod() {
+        stubClock();
+        stubOwnership(CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID);
+        YearMonth yearMonth = YearMonth.of(2026, 8);
+        LocalDate monthStart = LocalDate.of(2026, 8, 1);
+        LocalDate monthEnd = LocalDate.of(2026, 8, 31);
+        when(transferHistoryQueryPort.summarize(WITHDRAWAL_ACCOUNT_ID, null, monthStart, monthEnd))
+                .thenReturn(new TransferHistoryAggregate(3L, 30_000L, 1L, 5_000L));
+        when(transferHistoryQueryPort.search(
+                        WITHDRAWAL_ACCOUNT_ID,
+                        null,
+                        monthStart,
+                        monthEnd,
+                        TransferHistorySort.LATEST,
+                        PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(java.util.List.of()));
+
+        TransferMonthlyStatistics monthly =
+                transferHistoryQueryService.getMonthlyStatistics(CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID, yearMonth);
+        TransferHistoryPage listResult = transferHistoryQueryService.search(
+                CUSTOMER_ID,
+                WITHDRAWAL_ACCOUNT_ID,
+                null,
+                monthStart,
+                monthEnd,
+                TransferHistorySort.LATEST,
+                0,
+                10,
+                false);
+
+        assertThat(monthly.successCount()).isEqualTo(listResult.summary().successCount());
+        assertThat(monthly.successAmount()).isEqualTo(listResult.summary().successAmount());
+        assertThat(monthly.errorCount()).isEqualTo(listResult.summary().errorCount());
+        assertThat(monthly.errorAmount()).isEqualTo(listResult.summary().errorAmount());
     }
 
     private void verifySearchPortNeverCalled() {
