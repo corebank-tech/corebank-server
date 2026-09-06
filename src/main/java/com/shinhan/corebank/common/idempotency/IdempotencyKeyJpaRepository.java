@@ -5,6 +5,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
+
 public interface IdempotencyKeyJpaRepository extends JpaRepository<IdempotencyKeyJpaEntity, String> {
 
     /**
@@ -44,4 +46,9 @@ public interface IdempotencyKeyJpaRepository extends JpaRepository<IdempotencyKe
             @Param("customerId") Long customerId,
             @Param("httpStatus") short httpStatus,
             @Param("responseSnapshot") String responseSnapshot);
+
+    // 만료 시각이 지난 행을 한번에 지움
+    @Modifying
+    @Query("DELETE FROM IdempotencyKeyJpaEntity e WHERE e.expiresAt < :now")
+    int deleteAllByExpiresAtBefore(@Param("now") LocalDateTime now);
 }
