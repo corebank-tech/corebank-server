@@ -18,7 +18,7 @@ class TransferAuthTokenVerificationAdapterTest {
     @Test
     @DisplayName("계좌비밀번호 인증 토큰을 고객과 출금계좌에 묶어 검증한다")
     void verifiesAccountPasswordToken() {
-        adapter.verify("password-token", 1L, 101L);
+        adapter.verifyAndConsume("password-token", 1L, 101L);
 
         verify(passwordVerifier).verifyAndConsume(new AccountPasswordAuthTokenVerification("password-token", 1L, 101L));
     }
