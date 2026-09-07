@@ -3,6 +3,7 @@ package com.shinhan.corebank.autotransfer.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -172,6 +173,23 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
         assertThatThrownBy(() -> itemProcessor.saveProcessing(autoTransfer()))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("배치가 이미 PROCESSING으로 선점된 회차를 재실행해도 이체는 중복 실행되지 않는다 (REQ-AUTO-017)")
+    void executeDaily_alreadyProcessing_doesNotDuplicateTransfer() {
+        // given: 전날 배치가 saveProcessing()까지는 성공했지만 completeProcessing() 전에 멈췄다고 가정한다
+        // (nextExecutionDate가 아직 today에 그대로 있어 findDueForExecution(today)이 다시 이 건을 찾아낸다)
+        itemProcessor.saveProcessing(autoTransfer());
+
+        // when: 배치가 같은 날짜로 다시 실행된다
+        autoTransferBatchUseCase.executeDaily(today);
+
+        // then: saveProcessing()이 uk_ate_dup 유니크 제약에 막혀 completeProcessing()이 아예 호출되지 않고,
+        // 그래서 execute()도 다시 불리지 않는다 - 이체는 1건도 추가로 발생하지 않는다
+        verify(transferExecutionUseCase, never()).execute(any());
+        assertThat(executionRepository.findAll()).hasSize(1);
+        assertThat(executionRepository.findAll().get(0).getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
     }
 
     @Test
