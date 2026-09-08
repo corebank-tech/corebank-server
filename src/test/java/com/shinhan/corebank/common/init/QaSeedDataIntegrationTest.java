@@ -3,6 +3,7 @@ package com.shinhan.corebank.common.init;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import java.nio.charset.StandardCharsets;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -48,6 +49,7 @@ class QaSeedDataIntegrationTest extends IntegrationTestSupport {
 
         ResourceDatabasePopulator populator =
                 new ResourceDatabasePopulator(new ClassPathResource("db/seed/local-demo-data.sql"));
+        populator.setSqlScriptEncoding(StandardCharsets.UTF_8.name());
         populator.setContinueOnError(false);
         populator.execute(dataSource);
 
