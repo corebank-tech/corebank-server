@@ -19,6 +19,7 @@ class SecurityTestController {
 
     @PostMapping({
         "/auth/terms/check",
+        "/auth/find-id",
         "/auth/verify-account",
         "/auth/check-id",
         "/auth/signup/validate",

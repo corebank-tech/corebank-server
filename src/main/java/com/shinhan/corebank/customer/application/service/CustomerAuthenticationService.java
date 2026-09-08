@@ -8,6 +8,8 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.LocalDate;
+import java.util.List;
 
 // 고객 인증정보 조회와 로그인 상태 변경을 처리하는 application service
 @Service
@@ -23,6 +25,17 @@ public class CustomerAuthenticationService implements CustomerAuthenticationFaca
         Objects.requireNonNull(userId, "userId must not be null");
 
         return customerPersistencePort.findByUserId(userId).map(this::toAuthenticationData);
+    }
+
+    // 성명과 생년월일이 일치하는 아이디 찾기 후보를 반환한다.
+    @Override
+    public List<CustomerIdentityData> findAllByIdentity(String customerName, LocalDate birthDate) {
+        Objects.requireNonNull(customerName, "customerName must not be null");
+        Objects.requireNonNull(birthDate, "birthDate must not be null");
+
+        return customerPersistencePort.findAllByUserNameAndBirthDate(customerName, birthDate).stream()
+                .map(customer -> new CustomerIdentityData(customer.getCustomerId(), customer.getUserId()))
+                .toList();
     }
 
     // 로그인 실패 횟수와 계정 잠금 상태 저장
