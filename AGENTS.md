@@ -123,8 +123,11 @@ docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·R
 
 ## 6. 브랜치 · 커밋 · PR
 
-- 브랜치: `type/{이슈번호}-{설명}` — 예 `feat/338-scheduled-transfer-withdrawal-account-id`
+- 이슈가 있는 작업 브랜치: `type/{이슈번호}-{설명}` — 예 `feat/338-scheduled-transfer-withdrawal-account-id`
+- 이슈가 없는 작업 브랜치: 번호 생략, `type/설명` — 예 `docs/readme-overhaul`
 - 커밋: `type(도메인): 작업 내용` — 예 `feat(account): 출금계좌 등록 여부 추가`
-- PR 제목: `[type/도메인] 작업 내용` — 예 `[fix/account] 상품 채번 행 누락으로 가입 실패 (#342)`
-- **PR base는 항상 `dev`.** `main` 머지는 곧 EC2 배포다.
+- 일반 PR 제목: `[type/도메인] 작업 내용` — 예 `[fix/account] 상품 채번 행 누락으로 가입 실패 (#342)`
+- 전역 변경 PR 제목: `[type] 작업 내용` — 예 `[docs] README에 문서 색인 추가`
+- 릴리스 PR 제목: `[RELEASE] dev → main 릴리스 배포`
+- **PR base는 기본적으로 `dev`.** `dev → main` 릴리스 PR만 예외로 `main`을 base로 한다. `main` 머지는 곧 EC2 배포다.
 - 리뷰 등급 `R1`~`R5`와 로테이션은 [team_collaboration_guide.md](docs/team_collaboration_guide.md) §5.
