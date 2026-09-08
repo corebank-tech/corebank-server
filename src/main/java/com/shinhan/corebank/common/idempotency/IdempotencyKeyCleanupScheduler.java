@@ -1,6 +1,6 @@
 package com.shinhan.corebank.common.idempotency;
 
-import com.shinhan.corebank.batch.application.port.out.BatchExecutionLockPort;
+import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;

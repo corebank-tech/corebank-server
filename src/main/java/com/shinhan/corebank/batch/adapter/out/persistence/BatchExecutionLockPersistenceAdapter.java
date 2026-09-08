@@ -1,6 +1,6 @@
 package com.shinhan.corebank.batch.adapter.out.persistence;
 
-import com.shinhan.corebank.batch.application.port.out.BatchExecutionLockPort;
+import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;

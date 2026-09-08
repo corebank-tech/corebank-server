@@ -1,4 +1,4 @@
-package com.shinhan.corebank.batch.application.port.out;
+package com.shinhan.corebank.batch.api;
 
 public interface BatchExecutionLockPort {
     // 이미 실행 중 - false, 아니면 currently_running을 true로 바꾸고 true 반환

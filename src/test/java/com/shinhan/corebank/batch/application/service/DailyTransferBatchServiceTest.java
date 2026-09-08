@@ -9,7 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferBatchUseCase;
-import com.shinhan.corebank.batch.application.port.out.BatchExecutionLockPort;
+import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferBatchUseCase;
 import java.time.LocalDate;
 import org.junit.jupiter.api.DisplayName;
