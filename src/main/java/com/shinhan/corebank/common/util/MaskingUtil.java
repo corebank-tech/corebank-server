@@ -25,5 +25,22 @@ public class MaskingUtil {
         return name.charAt(0) + "*".repeat(name.length() - 2) + name.charAt(name.length() - 1);
     }
 
+    // "abcdef@test.com" -> "abcd**@test.com", 로컬파트 4자 이하는 마지막 1자만 마스킹
+    public static String maskEmail(String email) {
+        if (email == null) {
+            throw new IllegalArgumentException("이메일이 비어있습니다.");
+        }
+        int atIndex = email.indexOf('@');
+        if (atIndex <= 0 || atIndex == email.length() - 1) {
+            throw new IllegalArgumentException("이메일 형식이 올바르지 않습니다.");
+        }
+
+        String localPart = email.substring(0, atIndex);
+        String domainPart = email.substring(atIndex);
+        int visibleLength = localPart.length() <= 4 ? localPart.length() - 1 : 4;
+
+        return localPart.substring(0, visibleLength) + "*".repeat(localPart.length() - visibleLength) + domainPart;
+    }
+
     private MaskingUtil() {} // new 만드는거 방지
 }
