@@ -228,6 +228,66 @@ class FavoriteAccountControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("같은 Idempotency-Key로 같은 수정 요청을 두 번 보내면 재처리 없이 동일한 응답을 재생한다")
+    void update_sameIdempotencyKeyTwice_repliesWithSameResponse() throws Exception {
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+        Long favoriteAccountId = registerFavoriteAccount("엄마");
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        mockMvc.perform(patch("/transfers/favorite-accounts/" + favoriteAccountId)
+                        .with(authentication(authenticationOf(1L)))
+                        .with(csrf())
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateRequestJson("우리엄마")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.alias").value("우리엄마"));
+
+        // completeIfProcessing()은 JPQL 벌크 UPDATE라 1차 캐시에 이미 로드된 엔티티는 자동 갱신 안 됨.
+        // 두 HTTP 호출이 테스트 트랜잭션 하나로 묶여 있어서 생기는 문제라 clear()로 캐시를 비운다(운영 환경은 요청마다 별도 세션).
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(patch("/transfers/favorite-accounts/" + favoriteAccountId)
+                        .with(authentication(authenticationOf(1L)))
+                        .with(csrf())
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateRequestJson("우리엄마")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.alias").value("우리엄마"));
+    }
+
+    @Test
+    @DisplayName("같은 Idempotency-Key인데 수정 요청 내용(별칭)이 다르면 409 + CMN0302를 반환한다")
+    void update_sameIdempotencyKeyDifferentBody_returnsIdempotencyKeyReused() throws Exception {
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+        Long favoriteAccountId = registerFavoriteAccount("엄마");
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        mockMvc.perform(patch("/transfers/favorite-accounts/" + favoriteAccountId)
+                        .with(authentication(authenticationOf(1L)))
+                        .with(csrf())
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateRequestJson("우리엄마")))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(patch("/transfers/favorite-accounts/" + favoriteAccountId)
+                        .with(authentication(authenticationOf(1L)))
+                        .with(csrf())
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateRequestJson("울엄마")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CMN0302"));
+    }
+
+    @Test
     @DisplayName("본인 소유 항목을 삭제하면 200을 반환하고 목록에서 사라진다")
     void delete_success() throws Exception {
         TransferTestFixtures.seedCustomerAndAccounts(entityManager);
@@ -261,13 +321,70 @@ class FavoriteAccountControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.code").value("FAV0201"));
     }
 
+    @Test
+    @DisplayName("같은 Idempotency-Key로 같은 삭제 요청을 두 번 보내면 재처리 없이 동일한 응답을 재생한다")
+    void delete_sameIdempotencyKeyTwice_repliesWithSameResponse() throws Exception {
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+        Long favoriteAccountId = registerFavoriteAccount("엄마");
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        mockMvc.perform(delete("/transfers/favorite-accounts/" + favoriteAccountId)
+                        .with(authentication(authenticationOf(1L)))
+                        .with(csrf())
+                        .header("Idempotency-Key", idempotencyKey))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"));
+
+        // completeIfProcessing()은 JPQL 벌크 UPDATE라 1차 캐시에 이미 로드된 엔티티는 자동 갱신 안 됨.
+        // 두 HTTP 호출이 테스트 트랜잭션 하나로 묶여 있어서 생기는 문제라 clear()로 캐시를 비운다(운영 환경은 요청마다 별도 세션).
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(delete("/transfers/favorite-accounts/" + favoriteAccountId)
+                        .with(authentication(authenticationOf(1L)))
+                        .with(csrf())
+                        .header("Idempotency-Key", idempotencyKey))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"));
+    }
+
+    @Test
+    @DisplayName("같은 Idempotency-Key인데 삭제 대상이 다르면 409 + CMN0302를 반환한다")
+    void delete_sameIdempotencyKeyDifferentTarget_returnsIdempotencyKeyReused() throws Exception {
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+        Long firstFavoriteAccountId = registerFavoriteAccount("110222222222", "엄마");
+        Long secondFavoriteAccountId = registerFavoriteAccount("110111111111", "아빠");
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        mockMvc.perform(delete("/transfers/favorite-accounts/" + firstFavoriteAccountId)
+                        .with(authentication(authenticationOf(1L)))
+                        .with(csrf())
+                        .header("Idempotency-Key", idempotencyKey))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/transfers/favorite-accounts/" + secondFavoriteAccountId)
+                        .with(authentication(authenticationOf(1L)))
+                        .with(csrf())
+                        .header("Idempotency-Key", idempotencyKey))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CMN0302"));
+    }
+
     private Long registerFavoriteAccount(String alias) throws Exception {
+        return registerFavoriteAccount("110222222222", alias);
+    }
+
+    private Long registerFavoriteAccount(String depositAccountNumber, String alias) throws Exception {
         String response = mockMvc.perform(post("/transfers/favorite-accounts")
                         .with(authentication(authenticationOf(1L)))
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(registerRequestJson("110222222222", alias)))
+                        .content(registerRequestJson(depositAccountNumber, alias)))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
