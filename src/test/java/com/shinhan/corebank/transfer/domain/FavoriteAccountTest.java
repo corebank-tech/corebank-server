@@ -75,4 +75,47 @@ class FavoriteAccountTest {
         assertThat(favoriteAccount.getFavoriteAccountId()).isEqualTo(1L);
         assertThat(favoriteAccount.getAlias()).isEqualTo("가".repeat(13));
     }
+
+    @Test
+    @DisplayName("changeAlias()로 별칭을 바꾸면 새 별칭이 반영된 새 인스턴스를 반환한다")
+    void changeAlias_withNewAlias_updatesAlias() {
+        FavoriteAccount favoriteAccount = FavoriteAccount.of(1L, 1L, "110222222222", "홍길동", "엄마", NOW);
+
+        FavoriteAccount changed = favoriteAccount.changeAlias("우리엄마");
+
+        assertThat(changed.getAlias()).isEqualTo("우리엄마");
+        assertThat(changed.getFavoriteAccountId()).isEqualTo(1L);
+        assertThat(changed.getCustomerId()).isEqualTo(1L);
+        assertThat(changed.getDepositAccountNumber()).isEqualTo("110222222222");
+        assertThat(changed.getPayeeName()).isEqualTo("홍길동");
+        assertThat(changed.getRegisteredAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    @DisplayName("changeAlias()에 null을 주면 예금주명으로 되돌아간다")
+    void changeAlias_withNullAlias_defaultsToPayeeName() {
+        FavoriteAccount favoriteAccount = FavoriteAccount.of(1L, 1L, "110222222222", "홍길동", "엄마", NOW);
+
+        FavoriteAccount changed = favoriteAccount.changeAlias(null);
+
+        assertThat(changed.getAlias()).isEqualTo("홍길동");
+    }
+
+    @Test
+    @DisplayName("changeAlias()에 공백을 주면 예금주명으로 되돌아간다")
+    void changeAlias_withBlankAlias_defaultsToPayeeName() {
+        FavoriteAccount favoriteAccount = FavoriteAccount.of(1L, 1L, "110222222222", "홍길동", "엄마", NOW);
+
+        FavoriteAccount changed = favoriteAccount.changeAlias("   ");
+
+        assertThat(changed.getAlias()).isEqualTo("홍길동");
+    }
+
+    @Test
+    @DisplayName("changeAlias()로 길이 제한을 초과하면 예외가 발생한다")
+    void changeAlias_withTooLongAlias_throwsException() {
+        FavoriteAccount favoriteAccount = FavoriteAccount.of(1L, 1L, "110222222222", "홍길동", "엄마", NOW);
+
+        assertThatThrownBy(() -> favoriteAccount.changeAlias("가".repeat(13))).isInstanceOf(BusinessException.class);
+    }
 }
