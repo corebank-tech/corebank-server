@@ -46,8 +46,9 @@ public interface IdempotencyKeyJpaRepository extends JpaRepository<IdempotencyKe
             @Param("httpStatus") short httpStatus,
             @Param("responseSnapshot") String responseSnapshot);
 
-    // 만료 시각이 지난 행을 한번에 지움
+    // 만료 시각이 지난 행을 최대 limit까지만 지움
+    // 오래 밀렸을 때 한 번에 다 지우면 긴 트랜잭션이 되어 테이블을 오래 잠글 수 있어 나눠서 지움
     @Modifying
-    @Query("DELETE FROM IdempotencyKeyJpaEntity e WHERE e.expiresAt < :now")
-    int deleteAllByExpiresAtBefore(@Param("now") LocalDateTime now);
+    @Query(value = "DELETE FROM idempotency_key  WHERE expires_at < :now LIMIT :limit", nativeQuery = true )
+    int deleteExpiredBatch(@Param("now") LocalDateTime now, @Param("limit") int limit);
 }
