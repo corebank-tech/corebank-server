@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 public interface IdempotencyKeyJpaRepository extends JpaRepository<IdempotencyKeyJpaEntity, String> {
 
@@ -49,6 +50,7 @@ public interface IdempotencyKeyJpaRepository extends JpaRepository<IdempotencyKe
     // 만료 시각이 지난 행을 최대 limit까지만 지움
     // 오래 밀렸을 때 한 번에 다 지우면 긴 트랜잭션이 되어 테이블을 오래 잠글 수 있어 나눠서 지움
     @Modifying
+    @Transactional
     @Query(value = "DELETE FROM idempotency_key  WHERE expires_at < :now LIMIT :limit", nativeQuery = true)
     int deleteExpiredBatch(@Param("now") LocalDateTime now, @Param("limit") int limit);
 }
