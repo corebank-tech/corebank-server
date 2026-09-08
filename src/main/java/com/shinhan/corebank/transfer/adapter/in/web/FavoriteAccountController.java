@@ -112,8 +112,8 @@ public class FavoriteAccountController {
             summary = "자주 쓰는 계좌 별칭 수정",
             description =
                     """
-            등록된 자주 쓰는 계좌의 별칭을 수정한다. 동일한 Idempotency-Key와 동일한 요청 내용으로 재요청하면 \
-            새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
+            등록된 자주 쓰는 계좌의 별칭을 수정한다. 별칭을 비우거나 공백만 보내면 예금주명으로 대체된다. \
+            동일한 Idempotency-Key와 동일한 요청 내용으로 재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "수정 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
