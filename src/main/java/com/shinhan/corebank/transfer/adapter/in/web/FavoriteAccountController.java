@@ -39,7 +39,7 @@ import tools.jackson.databind.ObjectMapper;
 @RestController
 @RequestMapping("/transfers/favorite-accounts")
 @RequiredArgsConstructor
-@Tag(name = "자주 쓰는 계좌", description = "즐겨찾기 계좌 등록 및 목록조회 API")
+@Tag(name = "자주 쓰는 계좌", description = "즐겨찾기 계좌 등록, 목록 조회, 별칭 수정 및 삭제 API")
 public class FavoriteAccountController {
 
     private final FavoriteAccountRegisterUseCase registerUseCase;
