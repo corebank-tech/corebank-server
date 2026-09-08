@@ -1,6 +1,10 @@
 package com.shinhan.corebank.common.util;
 
+import java.util.regex.Pattern;
+
 public class MaskingUtil {
+    private static final Pattern PHONE_PATTERN = Pattern.compile("^\\d{11}$");
+
     public static String maskAccountNumber(String accountNumber) {
         if (accountNumber == null
                 || !AccountNumberPolicy.ACCOUNT_NUMBER_PATTERN
@@ -40,6 +44,14 @@ public class MaskingUtil {
         int visibleLength = localPart.length() <= 4 ? localPart.length() - 1 : 4;
 
         return localPart.substring(0, visibleLength) + "*".repeat(localPart.length() - visibleLength) + domainPart;
+    }
+
+    // "01012345678" -> "010****5678"
+    public static String maskPhoneNumber(String phoneNumber) {
+        if (phoneNumber == null || !PHONE_PATTERN.matcher(phoneNumber).matches()) {
+            throw new IllegalArgumentException("휴대폰 번호 형식이 올바르지 않습니다.");
+        }
+        return phoneNumber.substring(0, 3) + "****" + phoneNumber.substring(7);
     }
 
     private MaskingUtil() {} // new 만드는거 방지

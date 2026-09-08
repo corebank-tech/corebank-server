@@ -93,4 +93,36 @@ class MaskingUtilTest {
                 .isThrownBy(() -> MaskingUtil.maskEmail(raw))
                 .withMessageNotContaining(raw);
     }
+
+    @Test
+    @DisplayName("정상 휴대폰번호는 앞 3자리·뒤 4자리만 남기고 중간 4자리가 마스킹된다")
+    void validPhoneNumber_masked() {
+        assertThat(MaskingUtil.maskPhoneNumber("01012345678")).isEqualTo("010****5678");
+    }
+
+    @Test
+    @DisplayName("null 휴대폰번호는 예외를 던진다")
+    void nullPhoneNumber_throws() {
+        assertThatIllegalArgumentException().isThrownBy(() -> MaskingUtil.maskPhoneNumber(null));
+    }
+
+    @Test
+    @DisplayName("하이픈이 포함된 휴대폰번호는 예외 메시지에 원문이 포함되지 않는다")
+    void phoneNumberWithHyphen_exceptionMessage_doesNotContainRawInput() {
+        String raw = "010-1234-5678";
+
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> MaskingUtil.maskPhoneNumber(raw))
+                .withMessageNotContaining(raw);
+    }
+
+    @Test
+    @DisplayName("길이가 맞지 않는 휴대폰번호는 예외 메시지에 원문이 포함되지 않는다")
+    void wrongLengthPhoneNumber_exceptionMessage_doesNotContainRawInput() {
+        String raw = "0101234567";
+
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> MaskingUtil.maskPhoneNumber(raw))
+                .withMessageNotContaining(raw);
+    }
 }
