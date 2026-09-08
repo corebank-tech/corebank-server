@@ -3,7 +3,6 @@ package com.shinhan.corebank.account.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -103,6 +102,20 @@ class AccountOverviewQueryServiceTest {
         given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
                 .willReturn(List.of(demandDeposit, timeDeposit, savings));
 
+        ProductDetail timeDepositDetail = mock(ProductDetail.class);
+        Product timeDepositProduct = mock(Product.class);
+
+        ProductDetail savingsDetail = mock(ProductDetail.class);
+        Product savingsProduct = mock(Product.class);
+
+        given(productQueryUseCase.getDetail(20L)).willReturn(timeDepositDetail);
+        given(timeDepositDetail.getProduct()).willReturn(timeDepositProduct);
+        given(timeDepositProduct.getProductName()).willReturn("신한 정기예금");
+
+        given(productQueryUseCase.getDetail(30L)).willReturn(savingsDetail);
+        given(savingsDetail.getProduct()).willReturn(savingsProduct);
+        given(savingsProduct.getProductName()).willReturn("신한 적금");
+
         // when
         AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
 
@@ -145,17 +158,22 @@ class AccountOverviewQueryServiceTest {
         AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
 
         // then
-        assertThat(result.items().get(0).accounts().get(0).accountName()).isEqualTo("입출금통장");
+        AccountOverviewResult.AccountItem item =
+                result.items().get(0).accounts().get(0);
+
+        assertThat(item.accountName()).isEqualTo("입출금통장");
+        assertThat(item.alias()).isNull();
+        assertThat(item.baseAccountName()).isEqualTo("입출금통장");
 
         verifyNoInteractions(productQueryUseCase);
     }
 
     @Test
-    @DisplayName("별명이 있는 계좌는 상품명보다 별명을 우선한다")
-    void usesAliasBeforeProductName() {
+    @DisplayName("별명이 공백이면 미등록으로 취급하고 기본 계좌명을 표시한다")
+    void treatsBlankAliasAsMissing() {
         // given
         Account account = createAccount(
-                102L, "088200000001", 20L, AccountType.TIME_DEPOSIT, 1_000_000L, AccountStatus.ACTIVE, "내 목돈", false);
+                101L, "088100000001", null, AccountType.DEMAND_DEPOSIT, 100_000L, AccountStatus.ACTIVE, "   ", false);
 
         given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID)).willReturn(List.of(account));
 
@@ -163,9 +181,44 @@ class AccountOverviewQueryServiceTest {
         AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
 
         // then
-        assertThat(result.items().get(0).accounts().get(0).accountName()).isEqualTo("내 목돈");
+        AccountOverviewResult.AccountItem item =
+                result.items().get(0).accounts().get(0);
 
-        verify(productQueryUseCase, never()).getDetail(20L);
+        assertThat(item.accountName()).isEqualTo("입출금통장");
+        assertThat(item.alias()).isNull();
+        assertThat(item.baseAccountName()).isEqualTo("입출금통장");
+
+        verifyNoInteractions(productQueryUseCase);
+    }
+
+    @Test
+    @DisplayName("별명이 있는 계좌는 별명을 표시하고 기본 계좌명으로 상품명을 반환한다")
+    void usesAliasBeforeProductName() {
+        // given
+        Account account = createAccount(
+                102L, "088200000001", 20L, AccountType.TIME_DEPOSIT, 1_000_000L, AccountStatus.ACTIVE, "내 목돈", false);
+
+        ProductDetail productDetail = mock(ProductDetail.class);
+        Product product = mock(Product.class);
+
+        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID)).willReturn(List.of(account));
+
+        given(productQueryUseCase.getDetail(20L)).willReturn(productDetail);
+        given(productDetail.getProduct()).willReturn(product);
+        given(product.getProductName()).willReturn("신한 정기예금");
+
+        // when
+        AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
+
+        // then
+        AccountOverviewResult.AccountItem item =
+                result.items().get(0).accounts().get(0);
+
+        assertThat(item.accountName()).isEqualTo("내 목돈");
+        assertThat(item.alias()).isEqualTo("내 목돈");
+        assertThat(item.baseAccountName()).isEqualTo("신한 정기예금");
+
+        verify(productQueryUseCase, times(1)).getDetail(20L);
     }
 
     @Test
@@ -198,7 +251,12 @@ class AccountOverviewQueryServiceTest {
         AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
 
         // then
-        assertThat(result.items().get(0).accounts().get(0).accountName()).isEqualTo("청년 희망 적금");
+        AccountOverviewResult.AccountItem item =
+                result.items().get(0).accounts().get(0);
+
+        assertThat(item.accountName()).isEqualTo("청년 희망 적금");
+        assertThat(item.alias()).isNull();
+        assertThat(item.baseAccountName()).isEqualTo("청년 희망 적금");
     }
 
     @Test
@@ -219,6 +277,13 @@ class AccountOverviewQueryServiceTest {
 
         given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
                 .willReturn(List.of(enabled, notRegistered, suspended, timeDeposit));
+
+        ProductDetail productDetail = mock(ProductDetail.class);
+        Product product = mock(Product.class);
+
+        given(productQueryUseCase.getDetail(20L)).willReturn(productDetail);
+        given(productDetail.getProduct()).willReturn(product);
+        given(product.getProductName()).willReturn("신한 정기예금");
 
         // when
         AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
