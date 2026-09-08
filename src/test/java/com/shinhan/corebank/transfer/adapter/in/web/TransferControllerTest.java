@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
@@ -55,6 +56,11 @@ class TransferControllerTest extends IntegrationTestSupport {
     // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
     @MockitoBean
     private OtpAuthTokenVerifier otpAuthTokenVerifier;
+
+    // 계좌비밀번호 인증도 동일하게 account.api 경계만 검증한다 — 토큰 자체의 발급/소비 로직은
+    // account 도메인 테스트가 담당한다.
+    @MockitoBean
+    private AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
 
     @AfterEach
     void cleanUpCommittedData() {
