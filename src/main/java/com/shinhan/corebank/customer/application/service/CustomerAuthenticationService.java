@@ -3,13 +3,13 @@ package com.shinhan.corebank.customer.application.service;
 import com.shinhan.corebank.customer.api.*;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.time.LocalDate;
-import java.util.List;
 
 // 고객 인증정보 조회와 로그인 상태 변경을 처리하는 application service
 @Service

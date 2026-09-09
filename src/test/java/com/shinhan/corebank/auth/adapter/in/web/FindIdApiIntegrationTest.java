@@ -1,5 +1,11 @@
 package com.shinhan.corebank.auth.adapter.in.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,12 +17,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.http.MediaType.APPLICATION_JSON;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 // MySQL에서 고객·계좌 조회와 계좌비밀번호 실패 잠금까지 아이디 찾기 전체 흐름을 검증한다.
 @SpringBootTest
@@ -70,36 +70,33 @@ class FindIdApiIntegrationTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.code").value("ATH0102"));
 
         Integer failureCount = jdbcTemplate.queryForObject(
-                "SELECT password_failure_count FROM account WHERE account_number = ?",
-                Integer.class,
-                ACCOUNT_NUMBER
-        );
+                "SELECT password_failure_count FROM account WHERE account_number = ?", Integer.class, ACCOUNT_NUMBER);
         Boolean locked = jdbcTemplate.queryForObject(
-                "SELECT password_locked FROM account WHERE account_number = ?",
-                Boolean.class,
-                ACCOUNT_NUMBER
-        );
+                "SELECT password_locked FROM account WHERE account_number = ?", Boolean.class, ACCOUNT_NUMBER);
         assertThat(failureCount).isEqualTo(5);
         assertThat(locked).isTrue();
     }
 
-    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
-    findIdRequest(String accountPassword) {
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder findIdRequest(
+            String accountPassword) {
         return post("/api/v1/auth/find-id")
                 .contextPath("/api/v1")
                 .contentType(APPLICATION_JSON)
-                .content("""
+                .content(
+                        """
                         {
                           "customerName": "아이디찾기고객",
                           "birthDate": "1999-01-01",
                           "accountNumber": "%s",
                           "accountPassword": "%s"
                         }
-                        """.formatted(ACCOUNT_NUMBER, accountPassword));
+                        """
+                                .formatted(ACCOUNT_NUMBER, accountPassword));
     }
 
     private Long insertCustomer() {
-        jdbcTemplate.update("""
+        jdbcTemplate.update(
+                """
                 INSERT INTO customer (
                     user_id, password_hash, user_name, birth_date,
                     email, phone_number, joined_at, created_at, updated_at
@@ -110,17 +107,13 @@ class FindIdApiIntegrationTest extends IntegrationTestSupport {
                 "아이디찾기고객",
                 "1999-01-01",
                 "find-id-user@example.com",
-                "01098765432"
-        );
-        return jdbcTemplate.queryForObject(
-                "SELECT customer_id FROM customer WHERE user_id = ?",
-                Long.class,
-                USER_ID
-        );
+                "01098765432");
+        return jdbcTemplate.queryForObject("SELECT customer_id FROM customer WHERE user_id = ?", Long.class, USER_ID);
     }
 
     private void insertAccount(Long customerId) {
-        jdbcTemplate.update("""
+        jdbcTemplate.update(
+                """
                 INSERT INTO account (
                     account_number, customer_id, account_type, balance,
                     status, password_hash, opened_date, created_at, updated_at
@@ -129,18 +122,11 @@ class FindIdApiIntegrationTest extends IntegrationTestSupport {
                 """,
                 ACCOUNT_NUMBER,
                 customerId,
-                passwordEncoder.encode("1234")
-        );
+                passwordEncoder.encode("1234"));
     }
 
     private void deleteTestData() {
-        jdbcTemplate.update(
-                "DELETE FROM account WHERE account_number = ?",
-                ACCOUNT_NUMBER
-        );
-        jdbcTemplate.update(
-                "DELETE FROM customer WHERE user_id = ?",
-                USER_ID
-        );
+        jdbcTemplate.update("DELETE FROM account WHERE account_number = ?", ACCOUNT_NUMBER);
+        jdbcTemplate.update("DELETE FROM customer WHERE user_id = ?", USER_ID);
     }
 }

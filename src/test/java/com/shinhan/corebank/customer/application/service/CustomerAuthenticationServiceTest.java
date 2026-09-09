@@ -69,8 +69,7 @@ class CustomerAuthenticationServiceTest {
     @DisplayName("성명과 생년월일이 일치하는 아이디 찾기 후보를 반환한다")
     void findsIdentityCandidates() {
         Customer customer = createCustomer(1L, 0, false);
-        given(customerPersistencePort.findAllByUserNameAndBirthDate(
-                        "홍길동", LocalDate.of(1990, 1, 1)))
+        given(customerPersistencePort.findAllByUserNameAndBirthDate("홍길동", LocalDate.of(1990, 1, 1)))
                 .willReturn(List.of(customer));
 
         var result = service.findAllByIdentity("홍길동", LocalDate.of(1990, 1, 1));

@@ -11,10 +11,7 @@ public interface CustomerAuthenticationFacade {
     Optional<CustomerAuthenticationData> findByUserId(String userId);
 
     // 성명과 생년월일이 일치하는 아이디 찾기 후보 고객을 조회한다.
-    List<CustomerIdentityData> findAllByIdentity(
-            String customerName,
-            LocalDate birthDate
-    );
+    List<CustomerIdentityData> findAllByIdentity(String customerName, LocalDate birthDate);
 
     // 로그인 실패 결과를 고객 상태에 반영하도록 요청
     LoginFailureState updateLoginFailureState(RecordLoginFailureCommand command);

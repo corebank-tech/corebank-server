@@ -6,8 +6,5 @@ import java.util.Set;
 public interface FindIdAccountVerificationPort {
 
     FindIdAccountVerificationResult verify(
-            Set<Long> candidateCustomerIds,
-            String accountNumber,
-            String accountPassword
-    );
+            Set<Long> candidateCustomerIds, String accountNumber, String accountPassword);
 }
