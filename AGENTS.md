@@ -40,7 +40,9 @@ docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·R
    **어느 쪽 하나로 단일화할지는 #359에서 정한다 — 그때까지 둘 다 정상이다.**
    상대 도메인의 `adapter`와 도메인 모델·서비스 구현을 직접 참조하지 않는다.
    승인된 예외는 `transfer`의 `AccountLockJpaEntity` 부분 매핑 **하나뿐**이고, 새 예외는
-   ADR과 소유 도메인 합의가 있어야 한다. 공유 enum·에러코드 참조의 처리도 #359 대상이다.
+   ADR과 소유 도메인 합의가 있어야 한다. **공유 enum·에러코드(예: `account.domain.AccountType`)는
+   이 금지 대상이 아니다 — #359 결정 전까지 기존 참조를 그대로 허용하고, 에이전트가
+   선제적으로 정리하지 않는다.** 단일화 방향은 #359에서 정한다.
    근거 [ADR-0002](docs/adr/0002-cross-domain-account-read-mechanism.md)
    센서: `terms`만 (`TermsArchitectureTest`) — 전 도메인 확대는 #349·#359
 
