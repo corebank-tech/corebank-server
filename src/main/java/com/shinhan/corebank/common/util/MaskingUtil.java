@@ -31,6 +31,7 @@ public class MaskingUtil {
     }
 
     // "abcdef@test.com" -> "abcd**@test.com", 로컬파트 4자 이하는 마지막 1자만 마스킹
+    // 형식 검증은 호출자(각 도메인)가 저장/사용 전에 이미 했다는 전제. 여기선 @ 위치만 방어적으로 확인함
     public static String maskEmail(String email) {
         if (email == null) {
             throw new IllegalArgumentException("이메일이 비어있습니다.");
