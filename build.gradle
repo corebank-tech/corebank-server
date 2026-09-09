@@ -3,6 +3,7 @@ plugins {
     id 'org.springframework.boot' version '4.0.7'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'com.diffplug.spotless' version '7.0.2'
+    id 'jacoco'
 }
 
 group = 'com.shinhan'
@@ -78,6 +79,48 @@ tasks.named('test') {
     forkEvery = 0
     systemProperty 'junit.jupiter.execution.parallel.enabled', 'false'
     systemProperty 'spring.test.context.cache.maxSize', '4'
+    finalizedBy tasks.named('jacocoTestReport')
+}
+
+def coveredClasses = files(sourceSets.main.output.classesDirs).asFileTree.matching {
+    exclude '**/Q*.class'
+    exclude '**/*JpaEntity.class'
+    exclude '**/*JpaEntity$*.class'
+    exclude '**/config/**'
+    exclude '**/CorebankApplication.class'
+}
+
+// 커버리지 리포트(REQ-NFR-015).
+tasks.named('jacocoTestReport') {
+    reports {
+        html.required = true
+        xml.required = true
+    }
+    classDirectories.setFrom(coveredClasses)
+}
+
+// 커버리지 검증(REQ-NFR-015) - 원장 변경 도메인은 서비스 계층 커버리지 80% 이상을 유지
+tasks.named('jacocoTestCoverageVerification') {
+    classDirectories.setFrom(coveredClasses)
+    violationRules {
+        rule {
+            element = 'PACKAGE'
+            includes = [
+                'com.shinhan.corebank.transfer.application.service',     // 이체
+                'com.shinhan.corebank.limit.application.service',        // 이체한도
+                'com.shinhan.corebank.account.application.service',      // 계좌
+                'com.shinhan.corebank.subscription.application'          // 상품가입
+            ]
+            limit {
+                counter = 'LINE'
+                minimum = 0.80
+            }
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('jacocoTestCoverageVerification')
 }
 
 tasks.named('jar') {
