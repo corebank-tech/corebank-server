@@ -106,20 +106,8 @@ tasks.named('jacocoTestCoverageVerification') {
         rule {
             element = 'PACKAGE'
             includes = [
-                // 원장 변경 도메인 (REQ-NFR-015)
-                'com.shinhan.corebank.transfer.application.service',          // 이체
-                'com.shinhan.corebank.limit.application.service',             // 이체한도
-                'com.shinhan.corebank.account.application.service',           // 계좌
-                'com.shinhan.corebank.subscription.application',              // 상품가입
-                // 그 외 서비스 계층
-                'com.shinhan.corebank.autotransfer.application.service',      // 자동이체
-                'com.shinhan.corebank.scheduledtransfer.application.service', // 예약이체
-                'com.shinhan.corebank.batch.application.service',             // 배치
-                'com.shinhan.corebank.signup.application.service',            // 회원가입
-                'com.shinhan.corebank.auth.application.service',              // 인증
-                'com.shinhan.corebank.otp.application.service',               // OTP
-                'com.shinhan.corebank.customer.application.service',          // 고객
-                'com.shinhan.corebank.product.application'                    // 상품 - subscription 과 같이 service 하위가 없다
+                'com.shinhan.corebank.*.application.service',
+                'com.shinhan.corebank.*.application'   // subscription · product 는 service 하위가 없다
             ]
             limit {
                 counter = 'LINE'
