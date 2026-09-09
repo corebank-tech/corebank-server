@@ -39,7 +39,8 @@ Spring Security 기본 설정(`anyRequest().authenticated()`)을 그대로 두�
 2. 조회 API는 로그인 세션 쿠키가 자동으로 전달되므로 바로 실행한다.
 3. 상태 변경 API는 `application.yml`의 `springdoc.swagger-ui.csrf.enabled=true` 설정에 따라 Swagger UI가 `XSRF-TOKEN` 쿠키 값을 `X-XSRF-TOKEN` 헤더로 전달한다.
 
-회원가입처럼 `SecurityConfig`에서 CSRF 검사를 제외한 공개 API는 로그인 없이 실행할 수 있다. 인증 API를 테스트할 때는 세션 쿠키의 origin이 일치해야 하므로 로컬 Swagger UI에서는 로컬 API를, 배포 Swagger UI에서는 배포 API를 사용한다.
+회원가입과 아이디 찾기처럼 `SecurityConfig`에서 CSRF 검사를 제외한 공개 API는 로그인 없이 실행할 수 있다. `POST /auth/find-id`는 Swagger UI에서 성명·생년월일·계좌번호·계좌비밀번호를 입력해 바로 호출할 수 있으며, 계좌비밀번호는 OpenAPI 스키마에서 `writeOnly`로 표시된다.
+인증 API를 테스트할 때는 세션 쿠키의 origin이 일치해야 하므로 로컬 Swagger UI에서는 로컬 API를, 배포 Swagger UI에서는 배포 API를 사용한다.
 
 ## 4. 관련 문서
 
