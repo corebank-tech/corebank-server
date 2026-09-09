@@ -33,4 +33,16 @@ public final class TransferTestFixtures {
         """)
                 .executeUpdate();
     }
+
+    /** customer_id=2를 시드한다(계좌 없음). 타인 소유 리소스 접근 거부 테스트에서 요청자로 사용한다. */
+    public static void seedAnotherCustomer(EntityManager entityManager) {
+        entityManager
+                .createNativeQuery(
+                        """
+            INSERT INTO customer (customer_id, user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at)
+            VALUES (2, 'user2', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '테스터2', '1990-01-01', 'test2@test.com', '01012345679', NOW(6), NOW(6), NOW(6))
+            ON DUPLICATE KEY UPDATE customer_id = customer_id
+        """)
+                .executeUpdate();
+    }
 }

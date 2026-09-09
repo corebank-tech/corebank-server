@@ -10,6 +10,7 @@ import com.shinhan.corebank.transfer.application.port.in.TransferHistoryPage;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryQueryUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistorySort;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistorySummary;
+import com.shinhan.corebank.transfer.application.port.in.TransferMonthlyStatistics;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferHistoryAggregate;
 import com.shinhan.corebank.transfer.application.port.out.TransferHistoryQueryPort;
@@ -19,6 +20,7 @@ import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.YearMonth;
 import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -98,6 +100,24 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
                 .orElseThrow(() -> new BusinessException(TransferErrorCode.TRANSACTION_NOT_FOUND));
 
         return toDetail(transfer);
+    }
+
+    @Override
+    public TransferMonthlyStatistics getMonthlyStatistics(
+            Long customerId, Long withdrawalAccountId, YearMonth yearMonth) {
+        if (customerId == null || withdrawalAccountId == null || yearMonth == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+        requireOwnership(customerId, withdrawalAccountId);
+
+        TransferHistoryAggregate aggregate = transferHistoryQueryPort.summarize(
+                withdrawalAccountId, null, yearMonth.atDay(1), yearMonth.atEndOfMonth());
+        return new TransferMonthlyStatistics(
+                yearMonth,
+                aggregate.successCount(),
+                aggregate.successAmount(),
+                aggregate.errorCount(),
+                aggregate.errorAmount());
     }
 
     private void requireOwnership(Long customerId, Long withdrawalAccountId) {
