@@ -69,6 +69,8 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
     @Autowired
     private EntityManager entityManager;
 
+    // 컨트롤러가 계좌비밀번호 변경 전 이 포트를 올바른 인자로 호출하는지만 검증한다 — 이 포트가
+    // 위임하는 계좌비밀번호·OTP 토큰의 검증/소비 로직 자체는 각 도메인 테스트가 담당한다.
     @MockitoBean
     private AccountPasswordChangeAuthVerificationPort changeAuthVerificationPort;
 

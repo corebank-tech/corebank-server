@@ -58,6 +58,8 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @Autowired
     PlatformTransactionManager transactionManager;
 
+    // itemProcessor의 성공/실패/예외 분기와 REQUIRES_NEW 커밋 처리를 테스트마다 결정론적으로
+    // 재현해야 해서 모킹한다 — 실제 이체 실행 결과는 무작위 타이밍에 좌우돼 강제할 수 없다.
     @MockitoBean
     TransferExecutionUseCase transferExecutionUseCase;
 

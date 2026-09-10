@@ -45,6 +45,9 @@ class CustomerInfoControllerTest extends IntegrationTestSupport {
     @Autowired
     EntityManager entityManager;
 
+    // 고객정보 변경의 실제 검증·저장 로직은 CustomerInfoUpdateServiceTest·
+    // CustomerInfoUpdateIntegrationTest가 담당한다. 여기서는 컨트롤러가 응답을 올바르게
+    // 매핑하고 멱등키·인증·CSRF를 올바르게 처리하는지만 본다.
     @MockitoBean
     UpdateCustomerInfoUseCase updateCustomerInfoUseCase;
 

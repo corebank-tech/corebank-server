@@ -31,8 +31,8 @@ class AutoTransferCommandServiceTransferLimitIntegrationTest extends Integration
     @Autowired
     EntityManager entityManager;
 
-    // 실제 OtpAuthTokenVerifier(Redis 기반)를 태우지 않기 위해 Mock으로 대체한다 —
-    // AutoTransferControllerTest와 동일한 패턴(otp_integration_guide.md 연동 전 관례).
+    // 이 테스트는 이체한도 검증만 대상으로 한다 — OTP 자체의 발급/소비 로직은
+    // otp 도메인 테스트가 담당한다. AutoTransferControllerTest와 동일한 경계 테스트 패턴.
     @MockitoBean
     OtpAuthTokenVerifier otpAuthTokenVerifier;
 
