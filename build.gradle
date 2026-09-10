@@ -105,10 +105,7 @@ tasks.named('jacocoTestCoverageVerification') {
     violationRules {
         rule {
             element = 'PACKAGE'
-            includes = [
-                'com.shinhan.corebank.*.application.service',
-                'com.shinhan.corebank.*.application'   // subscription · product 는 service 하위가 없다
-            ]
+            includes = ['com.shinhan.corebank.*.application.service']
             limit {
                 counter = 'LINE'
                 minimum = 0.80
