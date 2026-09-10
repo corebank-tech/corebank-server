@@ -99,9 +99,12 @@ DB·API 관련 기술 문서는 `docs/team_db_setup_guide.md`, `docs/api_convent
 
 ### 6-2. PR 및 Issue 제목 규칙
 
-작업 목적을 한눈에 파악할 수 있도록 말머리(태그)를 사용한다.
+작업 목적과 대상 도메인을 한눈에 파악할 수 있도록 말머리(태그)를 사용한다.
 
-- 형식: `[대문자 태그] 작업 내용` — 예: `[FEAT] 자동 이체 결과 조회 페이지 구현`
+- 형식: `[태그/도메인] 작업 내용` — 예: `[feat/transfer] 즉시이체 처리 결과 알림 연동`
+- 태그는 커밋 컨벤션(6-3)과 같은 목록을 소문자로 쓴다 — `feat` `fix` `refactor` `docs` `test` `chore`
+- 도메인은 브랜치명(6-1)의 도메인명과 맞춘다 — `transfer`, `account`, `limit`, `common` 등
+- 이슈 템플릿이 이 형식을 제목 기본값으로 채워 준다(6-4). 라벨도 같은 축을 쓴다 — `feat/transfer`, `chore/common`
 
 ### 6-3. 커밋 컨벤션
 
