@@ -3,6 +3,7 @@ package com.shinhan.corebank.transfer.adapter.out.persistence;
 import com.shinhan.corebank.transfer.application.port.out.FavoriteAccountPersistencePort;
 import com.shinhan.corebank.transfer.domain.FavoriteAccount;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -30,6 +31,16 @@ public class FavoriteAccountPersistenceAdapter implements FavoriteAccountPersist
         return repository.findAllByCustomerIdOrderByRegisteredAtDesc(customerId).stream()
                 .map(this::toDomain)
                 .toList();
+    }
+
+    @Override
+    public Optional<FavoriteAccount> findById(Long favoriteAccountId) {
+        return repository.findById(favoriteAccountId).map(this::toDomain);
+    }
+
+    @Override
+    public void deleteById(Long favoriteAccountId) {
+        repository.deleteById(favoriteAccountId);
     }
 
     private FavoriteAccountJpaEntity toEntity(FavoriteAccount favoriteAccount) {

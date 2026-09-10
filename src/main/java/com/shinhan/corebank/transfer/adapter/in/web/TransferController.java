@@ -18,6 +18,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -150,6 +152,29 @@ public class TransferController {
                 customerId, withdrawalAccountId, parseStatus(status), fromDate, toDate, sort, page, size, all)));
     }
 
+    @GetMapping("/monthly-statistics")
+    @Operation(
+            operationId = "getTransferMonthlyStatistics",
+            summary = "이체 월별 통계 조회",
+            description = "출금계좌·연월 기준으로 성공/실패 건수·금액을 집계한다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "`TRF0001` 등록되지 않은/타인 소유 출금계좌 · `CMN0001` yearMonth 형식 오류",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ApiResponse<TransferMonthlyStatisticsResponse> getMonthlyStatistics(
+            @Parameter(description = "조회할 출금계좌 ID", required = true, example = "101") @RequestParam
+                    Long withdrawalAccountId,
+            @Parameter(description = "조회할 연월(yyyy-MM)", required = true, example = "2026-08") @RequestParam
+                    String yearMonth) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
+        return ApiResponse.success(
+                TransferMonthlyStatisticsResponse.from(transferHistoryQueryUseCase.getMonthlyStatistics(
+                        customerId, withdrawalAccountId, parseYearMonth(yearMonth))));
+    }
+
     @GetMapping("/{transactionNumber}")
     @Operation(operationId = "getTransferDetail", summary = "이체결과 상세 조회", description = "거래번호로 이체결과 상세를 조회한다.")
     @ApiResponses({
@@ -165,6 +190,14 @@ public class TransferController {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         return ApiResponse.success(TransferHistoryDetailResponse.from(
                 transferHistoryQueryUseCase.getDetail(customerId, transactionNumber)));
+    }
+
+    private YearMonth parseYearMonth(String yearMonth) {
+        try {
+            return YearMonth.parse(yearMonth);
+        } catch (DateTimeParseException e) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "yearMonth 값이 올바르지 않습니다.");
+        }
     }
 
     // ALL은 도메인 Enum에 없는 "조회 조건 전용" 값 — ALL과 미전달 둘 다 "조건 없음"으로 동일하게 처리한다

@@ -140,8 +140,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             // SCHEDULED/AUTO는 건너뛴다(예약/자동이체는 등록 시점에 이미 검증됐고 배치 실행 시
             // 재검증하지 않는다).
             if (command.authToken() != null) {
-                transferAuthTokenVerificationPort.verify(
-                        command.authToken(), command.withdrawalAccountId(), "TRANSFER_EXECUTE");
+                transferAuthTokenVerificationPort.verifyAndConsume(
+                        command.authToken(), command.customerId(), command.withdrawalAccountId());
             }
 
             String transactionNumber =
