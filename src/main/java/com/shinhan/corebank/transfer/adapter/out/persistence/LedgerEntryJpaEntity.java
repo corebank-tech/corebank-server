@@ -46,9 +46,11 @@ public class LedgerEntryJpaEntity {
     private LedgerDirection direction;
 
     @Column(name = "amount", nullable = false)
+    @NonNull
     private Long amount;
 
     @Column(name = "balance_after", nullable = false)
+    @NonNull
     private Long balanceAfter;
 
     @Column(name = "transaction_type", length = 32, nullable = false)
