@@ -32,13 +32,19 @@ docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·R
 1. **`domain` 패키지는 `application`·`adapter`를 참조하지 않고, JPA 애노테이션(`@Entity`·`@Table`)을 갖지 않는다.**
    영속성은 `adapter/out`의 JPA 엔티티가 맡고 Mapper로 변환한다.
    근거 [hexagonal_architecture_guide.md](docs/hexagonal_architecture_guide.md) · 위반 사례 PR #37
-   센서: `product`·`subscription`만 (`ProductArchitectureTest`·`SubscriptionArchitectureTest`)
+   센서: 전 도메인 (`LayerArchitectureTest`, #349에서 확대 완료)
 
-2. **다른 도메인은 `<domain>.api` 패키지를 통해서만 호출한다.**
-   상대 도메인의 `application`·`domain`·`adapter`를 직접 참조하지 않는다.
-   `api/`는 컨트롤러 자리가 아니라 도메인 간 계약이다(예: `limit.api.TransferLimitProvider`).
+2. **다른 도메인은 소유 도메인의 공개 계약을 통해서만 호출한다.**
+   계약면은 `<domain>.api`와 `<domain>.application.port.in`의 공개 UseCase 둘 다 통용된다
+   (예: `limit.api.TransferLimitProvider`, `account.application.port.in.WithdrawableAccountQueryUseCase`).
+   **어느 쪽 하나로 단일화할지는 #359에서 정한다 — 그때까지 둘 다 정상이다.**
+   상대 도메인의 `adapter`와 도메인 모델·서비스 구현을 직접 참조하지 않는다.
+   승인된 예외는 `transfer`의 `AccountLockJpaEntity` 부분 매핑 **하나뿐**이고, 새 예외는
+   ADR과 소유 도메인 합의가 있어야 한다. **공유 enum·에러코드(예: `account.domain.AccountType`)는
+   이 금지 대상이 아니다 — #359 결정 전까지 기존 참조를 그대로 허용하고, 에이전트가
+   선제적으로 정리하지 않는다.** 단일화 방향은 #359에서 정한다.
    근거 [ADR-0002](docs/adr/0002-cross-domain-account-read-mechanism.md)
-   센서: `terms`만 (`TermsArchitectureTest`)
+   센서: `terms`만 (`TermsArchitectureTest`) — 전 도메인 확대는 #359
 
 3. **성공 응답은 항상 HTTP `200` + `code="0000"`. `201`·`204`를 쓰지 않는다.**
    `data`에 성공/실패를 다시 담지 않는다(`data.result = "SUCCESS"` 패턴 폐기).
@@ -119,8 +125,11 @@ docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·R
 
 ## 6. 브랜치 · 커밋 · PR
 
-- 브랜치: `type/{이슈번호}-{설명}` — 예 `feat/338-scheduled-transfer-withdrawal-account-id`
+- 이슈가 있는 작업 브랜치: `type/{이슈번호}-{설명}` — 예 `feat/338-scheduled-transfer-withdrawal-account-id`
+- 이슈가 없는 작업 브랜치: 번호 생략, `type/설명` — 예 `docs/readme-overhaul`
 - 커밋: `type(도메인): 작업 내용` — 예 `feat(account): 출금계좌 등록 여부 추가`
-- PR 제목: `[type/도메인] 작업 내용` — 예 `[fix/account] 상품 채번 행 누락으로 가입 실패 (#342)`
-- **작업 PR base는 `dev`.** `dev → main` 릴리스 PR만 예외로 `main`을 base로 한다. `main` 머지는 곧 EC2 배포다.
+- 일반 PR 제목: `[type/도메인] 작업 내용` — 예 `[fix/account] 상품 채번 행 누락으로 가입 실패 (#342)`
+- 전역 변경 PR 제목: `[type] 작업 내용` — 예 `[docs] README에 문서 색인 추가`
+- 릴리스 PR 제목: `[RELEASE] dev → main 릴리스 배포`
+- **PR base는 기본적으로 `dev`.** `dev → main` 릴리스 PR만 예외로 `main`을 base로 한다. `main` 머지는 곧 EC2 배포다.
 - 리뷰 등급 `R1`~`R5`와 로테이션은 [team_collaboration_guide.md](docs/team_collaboration_guide.md) §5.

@@ -65,10 +65,10 @@ DB·API 관련 기술 문서는 `docs/team_db_setup_guide.md`, `docs/api_convent
 | just ask | 궁금한 점을 물어볼 때 | — |
 
 예시:
-> r4;
+> R4;
 > 해당 코드에서는 `for` 문 대신 `forEach`를 사용하는 것이 더 좋을 것 같아요.
 
-위는 `r4` 등급 리뷰로, 반영해도 좋고 넘어가도 좋다는 의미다. **R4, R5 등급의 리뷰는 Approve를 하되 추가 의견을 남기는 것**이며, **R1, R2 등급은 Request changes**, **R3 등급은 Comment**를 남긴다.
+위는 `R4` 등급 리뷰로, 반영해도 좋고 넘어가도 좋다는 의미다. **R4, R5 등급의 리뷰는 Approve를 하되 추가 의견을 남기는 것**이며, **R1, R2 등급은 Request changes**, **R3 등급은 Comment**를 남긴다.
 
 > 처음에는 `Pn`으로 시작했으나, `docs/api_conventions.md`가 `P1`~`P6`을 **파트 배정**(오류코드 접두어 담당)으로
 > 쓰고 있어 같은 기호가 두 뜻으로 읽혔다. 리뷰 등급만 `Rn`(review)으로 분리한다.

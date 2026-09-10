@@ -48,6 +48,12 @@ public class FavoriteAccount {
         return new FavoriteAccount(favoriteAccountId, customerId, depositAccountNumber, payeeName, alias, registeredAt);
     }
 
+    public FavoriteAccount changeAlias(String rawAlias) {
+        String alias = (rawAlias == null || rawAlias.isBlank()) ? payeeName : rawAlias;
+        AliasLengthValidator.validate(alias);
+        return new FavoriteAccount(favoriteAccountId, customerId, depositAccountNumber, payeeName, alias, registeredAt);
+    }
+
     public Long getFavoriteAccountId() {
         return favoriteAccountId;
     }

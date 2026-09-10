@@ -1,8 +1,9 @@
-package com.shinhan.corebank.subscription.application;
+package com.shinhan.corebank.subscription.application.service;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import com.shinhan.corebank.product.domain.ProductDetail;
+import com.shinhan.corebank.subscription.application.SubscriptionErrorCode;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionQueryUseCase;
 import com.shinhan.corebank.subscription.application.port.out.AccountNumberQueryPort;
 import com.shinhan.corebank.subscription.application.port.out.ProductSubscriptionQueryPort;

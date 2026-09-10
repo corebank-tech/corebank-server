@@ -2,9 +2,15 @@ package com.shinhan.corebank.transfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerification;
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
+import com.shinhan.corebank.account.domain.exception.AccountPasswordErrorCode;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
@@ -49,6 +55,11 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
     @MockitoBean
     private OtpAuthTokenVerifier otpAuthTokenVerifier;
 
+    // 계좌비밀번호 인증도 동일하게 account.api 경계만 검증한다 — 토큰 자체의 발급/소비 로직은
+    // account 도메인 테스트가 담당한다.
+    @MockitoBean
+    private AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
+
     @AfterEach
     void cleanUpCommittedData() {
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202, 501, 502, 601)");
@@ -56,6 +67,46 @@ class TransferExecutionServiceFailureTest extends IntegrationTestSupport {
         jdbcTemplate.update("DELETE FROM account WHERE account_id IN (501, 502, 601)");
         jdbcTemplate.update("DELETE FROM product WHERE product_id = 701");
         jdbcTemplate.update("UPDATE account SET balance = 100000, status = 'ACTIVE' WHERE account_id IN (101, 202)");
+    }
+
+    @Test
+    @DisplayName("계좌비밀번호 인증 토큰이 유효하지 않으면(만료·불일치·이미 소비 포함) transfer 행을 만들지 않고 ERROR 결과를 반환한다")
+    void execute_withInvalidAuthToken_returnsErrorResultWithoutCreatingTransferRow() {
+        // given: account.api 경계 너머(만료·불일치·이미 소비된 토큰)는 모두 같은 APW0102로
+        // 거부된다(AccountPasswordAuthTokenService.invalidToken()). transfer는 그 경계만
+        // 검증하면 되므로 대표로 하나만 stubbing한다.
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        doThrow(new BusinessException(AccountPasswordErrorCode.INVALID_AUTH_TOKEN))
+                .when(accountPasswordAuthTokenVerifier)
+                .verifyAndConsume(any(AccountPasswordAuthTokenVerification.class));
+
+        TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .authToken("invalid-auth-token")
+                .otpAuthToken("dummy-otp-token")
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(30000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build();
+
+        // when: 채번 전(계좌비밀번호 인증은 1차 검증 ④번)에 실패하므로 남길 transfer 행이 없다.
+        TransferResult result = transferExecutionService.execute(command);
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(AccountPasswordErrorCode.INVALID_AUTH_TOKEN.getCode());
+
+        Long transferCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 101", Long.class);
+        assertThat(transferCount).isZero();
+
+        Long withdrawalBalance =
+                jdbcTemplate.queryForObject("SELECT balance FROM account WHERE account_id = 101", Long.class);
+        assertThat(withdrawalBalance).isEqualTo(100000L);
     }
 
     @Test
