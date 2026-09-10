@@ -123,6 +123,9 @@ DB·API 관련 기술 문서는 `docs/team_db_setup_guide.md`, `docs/api_convent
 | `test` | 테스트 코드 작성 및 수정 |
 | `chore` | 자잘한 업무, 빌드 설정, 패키지 매니저 설정, `git init` 등 |
 
+### 6-4. PR·이슈 본문 템플릿
+
+PR·이슈 본문은 `.github/PULL_REQUEST_TEMPLATE.md`, `.github/ISSUE_TEMPLATE/`의 템플릿을 따른다.
 
 - 로컬 브랜치 작업 전 꼭 원격과 동기화(`git pull`)한다.
 - 컨벤션은 Spring Boot 기본 스타일에 레이어드(Controller-Service-Repository) 구조를 준수하며, 도메인형 구조(DDD) + 헥사고날 아키텍처를 지향한다.
