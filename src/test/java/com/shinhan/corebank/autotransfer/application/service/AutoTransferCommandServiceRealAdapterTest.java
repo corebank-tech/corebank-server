@@ -17,7 +17,7 @@ import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferOtpVer
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
 import com.shinhan.corebank.autotransfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
-import com.shinhan.corebank.autotransfer.domain.AutoTransferErrorCode;
+import com.shinhan.corebank.autotransfer.domain.exception.AutoTransferErrorCode;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
 import jakarta.persistence.EntityManager;

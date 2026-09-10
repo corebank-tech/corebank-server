@@ -1,9 +1,9 @@
 package com.shinhan.corebank.product.application.port.out;
 
-import com.shinhan.corebank.product.application.ProductSortType;
 import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductDetail;
 import com.shinhan.corebank.product.domain.ProductGroup;
+import com.shinhan.corebank.product.domain.ProductSortType;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;

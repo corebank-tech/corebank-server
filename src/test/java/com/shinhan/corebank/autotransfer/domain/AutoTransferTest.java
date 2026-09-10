@@ -3,6 +3,7 @@ package com.shinhan.corebank.autotransfer.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.shinhan.corebank.autotransfer.domain.exception.AutoTransferErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;

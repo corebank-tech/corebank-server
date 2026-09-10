@@ -5,11 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.product.application.ProductErrorCode;
 import com.shinhan.corebank.product.application.port.out.ProductQueryPort;
 import com.shinhan.corebank.product.application.port.out.TermsView;
 import com.shinhan.corebank.product.application.port.out.TermsViewHistoryPort;
 import com.shinhan.corebank.product.domain.ProductTermsView;
+import com.shinhan.corebank.product.domain.exception.ProductErrorCode;
 import com.shinhan.corebank.terms.api.TermsDetail;
 import com.shinhan.corebank.terms.api.TermsQueryPort;
 import java.time.LocalDateTime;

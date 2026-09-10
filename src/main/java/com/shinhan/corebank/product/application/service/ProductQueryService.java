@@ -2,16 +2,16 @@ package com.shinhan.corebank.product.application.service;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.util.PageableResolver;
-import com.shinhan.corebank.product.application.ProductErrorCode;
-import com.shinhan.corebank.product.application.ProductSortType;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import com.shinhan.corebank.product.application.port.out.ProductQueryPort;
 import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductDetail;
 import com.shinhan.corebank.product.domain.ProductDetailView;
 import com.shinhan.corebank.product.domain.ProductGroup;
+import com.shinhan.corebank.product.domain.ProductSortType;
 import com.shinhan.corebank.product.domain.ProductTerms;
 import com.shinhan.corebank.product.domain.ProductTermsDetail;
+import com.shinhan.corebank.product.domain.exception.ProductErrorCode;
 import com.shinhan.corebank.terms.api.TermsQueryPort;
 import com.shinhan.corebank.terms.api.TermsSummary;
 import java.util.List;

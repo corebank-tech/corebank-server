@@ -1,4 +1,4 @@
-package com.shinhan.corebank.autotransfer.domain;
+package com.shinhan.corebank.autotransfer.domain.exception;
 
 import com.shinhan.corebank.common.exception.ErrorCode;
 import lombok.Getter;

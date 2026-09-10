@@ -1,4 +1,4 @@
-package com.shinhan.corebank.product.application;
+package com.shinhan.corebank.product.domain;
 
 public enum ProductSortType {
     RATE,

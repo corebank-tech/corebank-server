@@ -3,8 +3,8 @@ package com.shinhan.corebank.product.adapter.out.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
-import com.shinhan.corebank.product.application.ProductSortType;
 import com.shinhan.corebank.product.domain.*;
+import com.shinhan.corebank.product.domain.ProductSortType;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.LocalDate;

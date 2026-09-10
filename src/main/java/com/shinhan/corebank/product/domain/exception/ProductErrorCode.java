@@ -1,4 +1,4 @@
-package com.shinhan.corebank.product.application;
+package com.shinhan.corebank.product.domain.exception;
 
 import com.shinhan.corebank.common.exception.ErrorCode;
 
