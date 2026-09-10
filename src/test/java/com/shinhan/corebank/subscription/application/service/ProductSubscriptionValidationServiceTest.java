@@ -1,4 +1,4 @@
-package com.shinhan.corebank.subscription.application;
+package com.shinhan.corebank.subscription.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

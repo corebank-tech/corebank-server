@@ -1,4 +1,4 @@
-package com.shinhan.corebank.subscription.application;
+package com.shinhan.corebank.subscription.application.service;
 
 import com.shinhan.corebank.account.application.port.in.AccountOpeningResult;
 import com.shinhan.corebank.account.application.port.in.ProductAccountOpeningCommand;
@@ -12,6 +12,7 @@ import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductGroup;
+import com.shinhan.corebank.subscription.application.SubscriptionErrorCode;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionExecuteUseCase;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionValidationCommand;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionValidationCommand.AgreedTerms;
