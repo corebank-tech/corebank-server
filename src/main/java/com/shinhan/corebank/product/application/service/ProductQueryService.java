@@ -1,7 +1,9 @@
-package com.shinhan.corebank.product.application;
+package com.shinhan.corebank.product.application.service;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.util.PageableResolver;
+import com.shinhan.corebank.product.application.ProductErrorCode;
+import com.shinhan.corebank.product.application.ProductSortType;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import com.shinhan.corebank.product.application.port.out.ProductQueryPort;
 import com.shinhan.corebank.product.domain.Product;

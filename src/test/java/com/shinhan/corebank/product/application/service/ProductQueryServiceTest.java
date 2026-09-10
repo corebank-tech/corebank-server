@@ -1,4 +1,4 @@
-package com.shinhan.corebank.product.application;
+package com.shinhan.corebank.product.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.product.application.ProductErrorCode;
+import com.shinhan.corebank.product.application.ProductSortType;
 import com.shinhan.corebank.product.application.port.out.ProductQueryPort;
 import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductDetail;
