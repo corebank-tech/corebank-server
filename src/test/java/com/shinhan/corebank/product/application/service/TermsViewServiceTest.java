@@ -1,4 +1,4 @@
-package com.shinhan.corebank.product.application;
+package com.shinhan.corebank.product.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -9,6 +9,7 @@ import com.shinhan.corebank.product.application.port.out.ProductQueryPort;
 import com.shinhan.corebank.product.application.port.out.TermsView;
 import com.shinhan.corebank.product.application.port.out.TermsViewHistoryPort;
 import com.shinhan.corebank.product.domain.ProductTermsView;
+import com.shinhan.corebank.product.domain.exception.ProductErrorCode;
 import com.shinhan.corebank.terms.api.TermsDetail;
 import com.shinhan.corebank.terms.api.TermsQueryPort;
 import java.time.LocalDateTime;

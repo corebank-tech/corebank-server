@@ -1,4 +1,4 @@
-package com.shinhan.corebank.product.application;
+package com.shinhan.corebank.product.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
@@ -19,9 +19,11 @@ import com.shinhan.corebank.product.domain.ProductPreferentialRate;
 import com.shinhan.corebank.product.domain.ProductPreferentialRateId;
 import com.shinhan.corebank.product.domain.ProductRateTier;
 import com.shinhan.corebank.product.domain.ProductRateTierId;
+import com.shinhan.corebank.product.domain.ProductSortType;
 import com.shinhan.corebank.product.domain.ProductTerms;
 import com.shinhan.corebank.product.domain.ProductTermsDetail;
 import com.shinhan.corebank.product.domain.ProductTermsId;
+import com.shinhan.corebank.product.domain.exception.ProductErrorCode;
 import com.shinhan.corebank.terms.api.TermsQueryPort;
 import com.shinhan.corebank.terms.api.TermsSummary;
 import java.math.BigDecimal;

@@ -1,4 +1,4 @@
-package com.shinhan.corebank.subscription.application;
+package com.shinhan.corebank.subscription.application.service;
 
 import com.shinhan.corebank.account.application.port.in.AccountOpeningResult;
 import com.shinhan.corebank.account.application.port.in.ProductAccountOpeningCommand;
@@ -27,6 +27,7 @@ import com.shinhan.corebank.subscription.domain.SubscriptionTermsAgreement;
 import com.shinhan.corebank.subscription.domain.SubscriptionTermsAgreementId;
 import com.shinhan.corebank.subscription.domain.SubscriptionValidation;
 import com.shinhan.corebank.subscription.domain.SubscriptionViolation;
+import com.shinhan.corebank.subscription.domain.exception.SubscriptionErrorCode;
 import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase;
 import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase.ProductSubscriptionDepositCommand;
 import java.time.Clock;

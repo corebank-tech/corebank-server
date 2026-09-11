@@ -1,8 +1,8 @@
 package com.shinhan.corebank.batch.application.service;
 
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferBatchUseCase;
+import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import com.shinhan.corebank.batch.application.port.in.DailyTransferBatchUseCase;
-import com.shinhan.corebank.batch.application.port.out.BatchExecutionLockPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferBatchUseCase;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;

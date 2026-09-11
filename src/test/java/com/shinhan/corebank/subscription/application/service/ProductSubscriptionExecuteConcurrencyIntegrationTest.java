@@ -1,4 +1,4 @@
-package com.shinhan.corebank.subscription.application;
+package com.shinhan.corebank.subscription.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -23,6 +23,7 @@ import com.shinhan.corebank.product.domain.SaleStatus;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionExecuteUseCase;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionExecuteUseCase.ProductSubscriptionExecuteCommand;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionExecuteUseCase.ProductSubscriptionExecuteResult;
+import com.shinhan.corebank.subscription.domain.exception.SubscriptionErrorCode;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;

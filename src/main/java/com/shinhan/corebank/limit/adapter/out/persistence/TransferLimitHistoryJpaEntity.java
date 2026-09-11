@@ -28,10 +28,10 @@ public class TransferLimitHistoryJpaEntity extends BaseEntity {
 
     /** 변경 직전 값. 변경 후 값은 다음 이력의 이 컬럼, 마지막이면 transfer_limit 의 현재값이다. */
     @Column(name = "before_one_time_limit", nullable = false)
-    private long beforeOneTimeLimit;
+    private Long beforeOneTimeLimit;
 
     @Column(name = "before_daily_limit", nullable = false)
-    private long beforeDailyLimit;
+    private Long beforeDailyLimit;
 
     private TransferLimitHistoryJpaEntity(TransferLimitHistory history) {
         this.transferLimitHistoryId = history.getTransferLimitHistoryId();

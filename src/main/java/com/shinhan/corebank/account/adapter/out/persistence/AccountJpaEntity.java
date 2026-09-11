@@ -40,7 +40,7 @@ public class AccountJpaEntity extends BaseEntity {
     private AccountType accountType;
 
     @Column(name = "balance", nullable = false)
-    private long balance;
+    private Long balance;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 12)

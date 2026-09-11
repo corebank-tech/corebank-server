@@ -1,4 +1,4 @@
-package com.shinhan.corebank.subscription.application;
+package com.shinhan.corebank.subscription.application.service;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
@@ -8,6 +8,7 @@ import com.shinhan.corebank.subscription.application.port.out.AccountNumberQuery
 import com.shinhan.corebank.subscription.application.port.out.ProductSubscriptionQueryPort;
 import com.shinhan.corebank.subscription.domain.ProductSubscription;
 import com.shinhan.corebank.subscription.domain.ProductSubscriptionResult;
+import com.shinhan.corebank.subscription.domain.exception.SubscriptionErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

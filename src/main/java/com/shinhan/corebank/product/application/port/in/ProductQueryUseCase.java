@@ -1,10 +1,10 @@
 package com.shinhan.corebank.product.application.port.in;
 
-import com.shinhan.corebank.product.application.ProductSortType;
 import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductDetail;
 import com.shinhan.corebank.product.domain.ProductDetailView;
 import com.shinhan.corebank.product.domain.ProductGroup;
+import com.shinhan.corebank.product.domain.ProductSortType;
 import org.springframework.data.domain.Page;
 
 public interface ProductQueryUseCase {

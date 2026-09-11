@@ -3,6 +3,8 @@ plugins {
     id 'org.springframework.boot' version '4.0.7'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'com.diffplug.spotless' version '7.0.2'
+    id 'jacoco'
+    id 'net.ltgt.errorprone' version '4.4.0'
 }
 
 group = 'com.shinhan'
@@ -69,6 +71,22 @@ dependencies {
 
     //세션·인증 필터
     implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // 박싱 동일성 검사 (#358)
+    errorprone 'com.google.errorprone:error_prone_core:2.49.0'
+}
+
+// 박싱 동일성 검사 (#358)
+// 금액 필드를 wrapper 로 통일하면 Long 끼리의 == 를 타입이 막지 못한다.
+// Long.valueOf(long)은 -128~127 값을 항상 캐시하지만, 그 밖의 값은 참조 동일성을 보장하지 않는다.
+// 기존 코드에 경고가 쏟아지면 결국 꺼버리게 되므로, 전체를 끄고 이것만 오류로 켠다.
+tasks.withType(JavaCompile).configureEach {
+    options.errorprone {
+        disableAllChecks = true
+        check('BoxedPrimitiveEquality', net.ltgt.gradle.errorprone.CheckSeverity.ERROR)
+        disableWarningsInGeneratedCode = true
+        excludedPaths = '.*/build/generated/.*' // QueryDSL Q타입은 생성물이라 제외
+    }
 }
 
 tasks.named('test') {
@@ -78,6 +96,43 @@ tasks.named('test') {
     forkEvery = 0
     systemProperty 'junit.jupiter.execution.parallel.enabled', 'false'
     systemProperty 'spring.test.context.cache.maxSize', '4'
+    finalizedBy tasks.named('jacocoTestReport')
+}
+
+def coveredClasses = files(sourceSets.main.output.classesDirs).asFileTree.matching {
+    exclude '**/Q*.class'
+    exclude '**/*JpaEntity.class'
+    exclude '**/*JpaEntity$*.class'
+    exclude '**/config/**'
+    exclude '**/CorebankApplication.class'
+}
+
+// 커버리지 리포트(REQ-NFR-015).
+tasks.named('jacocoTestReport') {
+    reports {
+        html.required = true
+        xml.required = true
+    }
+    classDirectories.setFrom(coveredClasses)
+}
+
+// 커버리지 검증(REQ-NFR-015) - 원장 변경 도메인은 서비스 계층 커버리지 80% 이상을 유지.
+tasks.named('jacocoTestCoverageVerification') {
+    classDirectories.setFrom(coveredClasses)
+    violationRules {
+        rule {
+            element = 'PACKAGE'
+            includes = ['com.shinhan.corebank.*.application.service']
+            limit {
+                counter = 'LINE'
+                minimum = 0.80
+            }
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('jacocoTestCoverageVerification')
 }
 
 tasks.named('jar') {
