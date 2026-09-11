@@ -2,11 +2,11 @@ package com.shinhan.corebank.subscription.adapter.out.persistence;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.subscription.application.SubscriptionErrorCode;
 import com.shinhan.corebank.subscription.application.port.out.ExistingSubscriptionPort;
 import com.shinhan.corebank.subscription.application.port.out.ProductSubscriptionQueryPort;
 import com.shinhan.corebank.subscription.application.port.out.SaveProductSubscriptionPort;
 import com.shinhan.corebank.subscription.domain.ProductSubscription;
+import com.shinhan.corebank.subscription.domain.exception.SubscriptionErrorCode;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;

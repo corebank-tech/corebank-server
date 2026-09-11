@@ -1,4 +1,4 @@
-package com.shinhan.corebank.subscription.application;
+package com.shinhan.corebank.subscription.domain.exception;
 
 import com.shinhan.corebank.common.exception.ErrorCode;
 

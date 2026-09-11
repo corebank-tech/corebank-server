@@ -6,10 +6,10 @@ import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.product.application.ProductErrorCode;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import com.shinhan.corebank.product.application.port.in.TermsViewUseCase;
 import com.shinhan.corebank.product.domain.*;
+import com.shinhan.corebank.product.domain.exception.ProductErrorCode;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionValidationCommand;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionValidationCommand.AgreedTerms;
 import com.shinhan.corebank.subscription.application.port.out.AccountLookupPort;

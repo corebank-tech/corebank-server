@@ -3,6 +3,7 @@ package com.shinhan.corebank;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 
+import com.shinhan.corebank.common.exception.ErrorCode;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -82,6 +83,25 @@ class LayerArchitectureTest {
             .should()
             .resideInAPackage("..application.service..")
             .because("도메인 서비스는 application/service/ 밑에 둔다");
+
+    /**
+     * 도메인 {@code ErrorCode}는 {@code domain/exception/} 밑에 둔다. 이 규칙이 없으면 {@code ErrorCode}를
+     * {@code application/}이나 {@code domain/} 루트에 만들어도 CI가 통과한다(#416이 그렇게 생겼다).
+     *
+     * <p>{@code areTopLevelClasses()}가 필요한 이유: {@code ProductSubscriptionExecuteService}의 private 중첩
+     * record {@code ViolationErrorCode implements ErrorCode}까지 이 규칙이 잡으면 오탐이다.
+     */
+    @ArchTest
+    static final ArchRule errorCodeLocation = classes()
+            .that()
+            .implement(ErrorCode.class)
+            .and()
+            .areTopLevelClasses()
+            .and()
+            .resideOutsideOfPackage("com.shinhan.corebank.common..")
+            .should()
+            .resideInAPackage("..domain.exception..")
+            .because("도메인 ErrorCode는 domain/exception/ 밑에 둔다");
 
     /**
      * 비어 있어도 되는 계층은 optionalLayers로 명시한다. 기본을 withOptionalLayers(false)로 두는 이유는, 전 계층을 optional로

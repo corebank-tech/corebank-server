@@ -1,6 +1,6 @@
 package com.shinhan.corebank.autotransfer.application.port.in;
 
-import com.shinhan.corebank.autotransfer.domain.AutoTransferErrorCode;
+import com.shinhan.corebank.autotransfer.domain.exception.AutoTransferErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import java.time.LocalDate;
