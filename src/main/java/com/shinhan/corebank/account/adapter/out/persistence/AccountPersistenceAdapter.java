@@ -30,6 +30,12 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
         return accountJpaRepository.existsByAccountNumber(accountNumber);
     }
 
+    // 아이디 찾기용 계좌 조회 결과를 도메인 모델로 변환해 JPA Entity 노출을 막는다.
+    @Override
+    public Optional<Account> findByAccountNumber(String accountNumber) {
+        return accountJpaRepository.findByAccountNumber(accountNumber).map(AccountMapper::toDomain);
+    }
+
     @Override
     public List<Account> findAllByCustomerId(Long customerId) {
         return accountJpaRepository.findAllByCustomerId(customerId).stream()

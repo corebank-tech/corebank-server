@@ -2,6 +2,8 @@ package com.shinhan.corebank.customer.adapter.out.persistence;
 
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +23,14 @@ public class CustomerPersistenceAdapter implements CustomerPersistencePort {
         Objects.requireNonNull(userId, "userId must not be null");
 
         return customerJpaRepository.findByUserId(userId).map(customerMapper::toDomain);
+    }
+
+    // 아이디 찾기 후보 조회 결과를 도메인 모델로 변환해 JPA Entity 노출을 막는다.
+    @Override
+    public List<Customer> findAllByUserNameAndBirthDate(String userName, LocalDate birthDate) {
+        return customerJpaRepository.findAllByUserNameAndBirthDate(userName, birthDate).stream()
+                .map(customerMapper::toDomain)
+                .toList();
     }
 
     // 고객 PK로 고객을 조회하고 도메인 모델로 변환

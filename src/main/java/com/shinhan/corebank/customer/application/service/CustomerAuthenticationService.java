@@ -3,6 +3,8 @@ package com.shinhan.corebank.customer.application.service;
 import com.shinhan.corebank.customer.api.*;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,17 @@ public class CustomerAuthenticationService implements CustomerAuthenticationFaca
         Objects.requireNonNull(userId, "userId must not be null");
 
         return customerPersistencePort.findByUserId(userId).map(this::toAuthenticationData);
+    }
+
+    // 성명과 생년월일이 일치하는 아이디 찾기 후보를 반환한다.
+    @Override
+    public List<CustomerIdentityData> findAllByIdentity(String customerName, LocalDate birthDate) {
+        Objects.requireNonNull(customerName, "customerName must not be null");
+        Objects.requireNonNull(birthDate, "birthDate must not be null");
+
+        return customerPersistencePort.findAllByUserNameAndBirthDate(customerName, birthDate).stream()
+                .map(customer -> new CustomerIdentityData(customer.getCustomerId(), customer.getUserId()))
+                .toList();
     }
 
     // 로그인 실패 횟수와 계정 잠금 상태 저장

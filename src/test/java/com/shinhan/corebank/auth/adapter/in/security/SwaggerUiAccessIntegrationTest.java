@@ -52,6 +52,7 @@ class SwaggerUiAccessIntegrationTest extends IntegrationTestSupport {
         mockMvc.perform(get("/api/v1/v3/api-docs").contextPath("/api/v1"))
                 .andExpect(status().isOk())
                 .andExpect(summary("/auth/login", "post", "로그인"))
+                .andExpect(summary("/auth/find-id", "post", "아이디 찾기"))
                 .andExpect(summary("/customers/me", "get", "내 고객정보 조회"))
                 .andExpect(summary("/customers/me", "patch", "내 고객정보 변경"))
                 .andExpect(summary("/dashboard/login-status", "get", "로그인 상태 조회"))
@@ -74,6 +75,14 @@ class SwaggerUiAccessIntegrationTest extends IntegrationTestSupport {
         mockMvc.perform(get("/api/v1/v3/api-docs").contextPath("/api/v1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$['components']['schemas']['LoginRequest']['properties']['password']['writeOnly']")
+                        .value(true))
+                .andExpect(jsonPath(
+                                "$['components']['schemas']['FindIdRequest']['properties']['accountPassword']['writeOnly']")
+                        .value(true))
+                .andExpect(jsonPath("$['components']['schemas']['FindIdRequest']['required']")
+                        .value(org.hamcrest.Matchers.hasItems(
+                                "customerName", "birthDate", "accountNumber", "accountPassword")))
+                .andExpect(jsonPath("$['paths']['/auth/find-id']['post']['requestBody']['required']")
                         .value(true))
                 .andExpect(
                         jsonPath("$['components']['schemas']['VerifyOtpRequest']['properties']['otpCode']['writeOnly']")

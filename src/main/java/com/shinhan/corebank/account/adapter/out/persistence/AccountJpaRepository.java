@@ -11,6 +11,9 @@ import org.springframework.data.repository.query.Param;
 public interface AccountJpaRepository extends JpaRepository<AccountJpaEntity, Long> {
     boolean existsByAccountNumber(String accountNumber);
 
+    // 아이디 찾기의 계좌 소유권 확인에 필요한 계좌를 번호로 조회한다.
+    Optional<AccountJpaEntity> findByAccountNumber(String accountNumber);
+
     List<AccountJpaEntity> findAllByCustomerId(Long customerId);
 
     Optional<AccountJpaEntity> findByAccountIdAndCustomerId(Long accountId, Long customerId);
