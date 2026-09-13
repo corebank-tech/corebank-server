@@ -542,4 +542,39 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE transaction_number = ?", result.transactionNumber());
         jdbcTemplate.update("DELETE FROM transfer WHERE transaction_number = ?", result.transactionNumber());
     }
+
+    // #377 계약의 센서. 커밋 경로가 성공·실패 둘뿐이라는 전제가 깨지면(예: 기표 트랜잭션 분리)
+    // 여기서 먼저 걸린다 — 응답 스키마·목록 필터 설명이 이 전제 위에 서 있다.
+    @Test
+    @DisplayName("성공이든 실패든 transfer 행이 PROCESSING으로 커밋되지 않는다 (#377)")
+    void execute_neverCommitsProcessingRow() {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        TransferResult success = transferExecutionService.execute(transferCommand(30000L));
+        TransferResult failure = transferExecutionService.execute(transferCommand(150000L)); // 잔액(70,000) 초과
+
+        assertThat(success.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(failure.status()).isEqualTo(ProcessResultStatus.ERROR);
+
+        Long processingCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 101 AND status = 'PROCESSING'",
+                Long.class);
+        assertThat(processingCount).isZero();
+    }
+
+    private TransferCommand transferCommand(long amount) {
+        return TransferCommand.builder()
+                .customerId(1L)
+                .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(amount)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build();
+    }
 }
