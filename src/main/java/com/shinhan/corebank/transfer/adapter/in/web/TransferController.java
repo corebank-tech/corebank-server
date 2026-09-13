@@ -131,7 +131,7 @@ public class TransferController {
     public ApiResponse<TransferHistoryPageResponse> search(
             @Parameter(description = "조회할 출금계좌 ID", required = true, example = "101") @RequestParam
                     Long withdrawalAccountId,
-            @Parameter(description = "처리상태 필터. SUCCESS/ERROR/PROCESSING, 미지정 또는 ALL이면 전체", example = "SUCCESS")
+            @Parameter(description = "처리상태 필터. SUCCESS/ERROR, 미지정 또는 ALL이면 전체", example = "SUCCESS")
                     @RequestParam(required = false)
                     String status,
             @Parameter(description = "조회 시작일(미지정 시 종료일-1개월)", example = "2026-08-01") @RequestParam(required = false)
