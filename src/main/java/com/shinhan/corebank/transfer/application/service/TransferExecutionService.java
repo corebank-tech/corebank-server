@@ -27,7 +27,6 @@ import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Optional;
-import org.springframework.context.annotation.Primary;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -46,12 +45,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 자신의 트랜잭션에서 하는 후속 작업(실행 이력 갱신 등)이 실패해도 그 자금 이동은 롤백되지
  * 않는다 — 호출자는 이를 "재시도 가능한 실패"가 아니라 "후속 처리 실패, 수동 정합화 필요"로
  * 다뤄야 한다.
- * @Primary: MockTransferExecutionPort와 test/local 프로필에서 같이 뜨는 동안, 타입 기반으로
- * TransferExecutionUseCase를 주입받는 소비자(AutoTransferBatchItemProcessor 등)가 두 빈 중
- * 무엇을 받을지 모호해지는 것을 막는다. 실제 구현체가 나온 이상 기본 후보는 이쪽이어야 한다.
  */
 @Service
-@Primary
 public class TransferExecutionService implements TransferExecutionUseCase {
 
     private static final long FEE = 0L; // 당행 이체 수수료 0 고정 (POL-028)
