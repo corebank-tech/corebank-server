@@ -111,6 +111,11 @@ class DailyTransferBatchSchedulerIntegrationTest extends IntegrationTestSupport 
                     .setParameter("d", depositCustomerId)
                     .executeUpdate();
             entityManager
+                    .createNativeQuery("DELETE FROM transfer_limit_daily_usage WHERE customer_id IN (:w, :d)")
+                    .setParameter("w", withdrawalCustomerId)
+                    .setParameter("d", depositCustomerId)
+                    .executeUpdate();
+            entityManager
                     .createNativeQuery("DELETE FROM customer WHERE customer_id IN (:w, :d)")
                     .setParameter("w", withdrawalCustomerId)
                     .setParameter("d", depositCustomerId)
