@@ -11,7 +11,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.auth.adapter.in.security.SecurityConfig;
+import com.shinhan.corebank.auth.adapter.in.security.SecurityContextCurrentCustomerProvider;
+import com.shinhan.corebank.auth.adapter.in.security.SessionAccessDeniedHandler;
+import com.shinhan.corebank.auth.adapter.in.security.SessionAuthenticationEntryPoint;
+import com.shinhan.corebank.auth.adapter.in.security.SessionLogoutSuccessHandler;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.otp.application.port.in.IssueOtpResult;
 import com.shinhan.corebank.otp.application.port.in.IssueOtpUseCase;
@@ -23,15 +27,24 @@ import com.shinhan.corebank.otp.domain.model.OtpAttemptResult;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-// OTP 발급·검증 JSON 계약과 세션·CSRF 보호 및 오류 횟수 응답을 검증한다.
-@AutoConfigureMockMvc
-class OtpControllerTest extends IntegrationTestSupport {
+// OTP 발급·검증 JSON 계약과 세션·CSRF 보호 및 오류 횟수 응답을 검증한다. 유스케이스를 전부
+// 모킹하므로 실DB·Testcontainers가 필요 없어 슬라이스로 내린다(#363).
+@WebMvcTest(controllers = OtpController.class)
+@Import({
+    SecurityConfig.class,
+    SessionAuthenticationEntryPoint.class,
+    SessionAccessDeniedHandler.class,
+    SessionLogoutSuccessHandler.class,
+    SecurityContextCurrentCustomerProvider.class
+})
+class OtpControllerTest {
 
     @Autowired
     MockMvc mockMvc;

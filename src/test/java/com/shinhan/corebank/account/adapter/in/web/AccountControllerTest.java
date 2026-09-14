@@ -55,6 +55,9 @@ class AccountControllerTest extends IntegrationTestSupport {
     @Autowired
     private CustomerTestFixture customerTestFixture;
 
+    // 거래내역 조회의 실제 쿼리·정렬·필터 로직은 AccountTransactionQueryServiceTest가 담당한다.
+    // 여기서는 컨트롤러의 파라미터 검증과 응답 매핑만 본다. 이 클래스의 다른 엔드포인트
+    // (계좌목록·별명 변경)는 실DB를 그대로 태운다.
     @MockitoBean
     private AccountTransactionQueryUseCase accountTransactionQueryUseCase;
 
