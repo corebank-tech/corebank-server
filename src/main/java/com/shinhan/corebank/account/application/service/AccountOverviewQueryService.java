@@ -11,11 +11,7 @@ import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -81,9 +77,16 @@ public class AccountOverviewQueryService implements AccountOverviewQueryUseCase 
     }
 
     private AccountOverviewResult.AccountItem toAccountItem(Account account, Map<Long, String> productNameCache) {
+
+        String alias = resolveAlias(account);
+        String baseAccountName = resolveBaseAccountName(account, productNameCache);
+        String accountName = alias != null ? alias : baseAccountName;
+
         return new AccountOverviewResult.AccountItem(
                 account.getAccountId(),
-                resolveAccountName(account, productNameCache),
+                accountName,
+                alias,
+                baseAccountName,
                 account.getAccountNumber(),
                 account.getAccountType(),
                 account.getBalance(),
@@ -95,10 +98,15 @@ public class AccountOverviewQueryService implements AccountOverviewQueryUseCase 
                 isTransferEnabled(account));
     }
 
-    private String resolveAccountName(Account account, Map<Long, String> productNameCache) {
-        if (account.getAlias() != null && !account.getAlias().isBlank()) {
-            return account.getAlias();
+    private String resolveAlias(Account account) {
+        if (account.getAlias() == null || account.getAlias().isBlank()) {
+            return null;
         }
+
+        return account.getAlias();
+    }
+
+    private String resolveBaseAccountName(Account account, Map<Long, String> productNameCache) {
 
         if (account.getAccountType() == AccountType.DEMAND_DEPOSIT) {
             return DEFAULT_DEMAND_DEPOSIT_NAME;
