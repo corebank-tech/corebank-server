@@ -6,9 +6,8 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * 이체한도 도메인 오류코드. 값은 docs/api_conventions.md §4-8 마스터를 따른다.
- * 한도 검증이 이체 실행 흐름 안에서 일어나는 동안에는 transfer 모듈의 임시
- * LimitErrorCode 가 같은 값을 던져 왔다. 그쪽 정리는 checkAndReserve 실구현
- * 시점에 함께 한다.
+ * LMT 코드는 전부 이 enum 하나가 소유한다 - transfer 모듈이 같은 값을 복제해
+ * 두고 있던 임시 LimitErrorCode 는 제거했다(#383).
  */
 @Getter
 @RequiredArgsConstructor
