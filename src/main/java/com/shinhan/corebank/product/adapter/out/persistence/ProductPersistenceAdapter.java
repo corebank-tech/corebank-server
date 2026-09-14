@@ -12,8 +12,11 @@ import com.shinhan.corebank.product.domain.ProductDetail;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.ProductSortType;
 import com.shinhan.corebank.product.domain.SaleStatus;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -52,6 +55,23 @@ public class ProductPersistenceAdapter implements ProductQueryPort {
         List<Product> domainContent =
                 content.stream().map(ProductMapper::toDomain).toList();
         return new PageImpl<>(domainContent, pageable, total == null ? 0 : total);
+    }
+
+    @Override
+    public Map<Long, String> findProductNames(Collection<Long> productIds) {
+        if (productIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return queryFactory
+                .select(productJpaEntity.productId, productJpaEntity.productName)
+                .from(productJpaEntity)
+                .where(productJpaEntity.productId.in(productIds))
+                .fetch()
+                .stream()
+                .collect(Collectors.toMap(
+                        tuple -> tuple.get(productJpaEntity.productId),
+                        tuple -> tuple.get(productJpaEntity.productName)));
     }
 
     @Override

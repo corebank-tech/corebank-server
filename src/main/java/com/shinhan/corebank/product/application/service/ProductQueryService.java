@@ -14,6 +14,7 @@ import com.shinhan.corebank.product.domain.ProductTermsDetail;
 import com.shinhan.corebank.product.domain.exception.ProductErrorCode;
 import com.shinhan.corebank.terms.api.TermsQueryPort;
 import com.shinhan.corebank.terms.api.TermsSummary;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,6 +44,11 @@ public class ProductQueryService implements ProductQueryUseCase {
         Pageable pageable = PageableResolver.resolve(page, size, all, ALLOWED_PAGE_SIZE);
 
         return productQueryPort.search(productGroup, keyword, sort, pageable);
+    }
+
+    @Override
+    public Map<Long, String> findProductNames(Collection<Long> productIds) {
+        return productQueryPort.findProductNames(productIds);
     }
 
     @Override

@@ -4,12 +4,17 @@ import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductDetail;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.ProductSortType;
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface ProductQueryPort {
     Page<Product> search(ProductGroup productGroup, String keyword, ProductSortType sort, Pageable pageable);
+
+    Map<Long, String> findProductNames(Collection<Long> productIds);
+
     // ProductDetail.terms는 product_terms.display_order 오름차순으로 채워진다.
     Optional<ProductDetail> findDetailByProductId(Long productId);
 

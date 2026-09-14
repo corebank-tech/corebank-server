@@ -9,7 +9,9 @@ import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -274,6 +276,33 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
                 product("EXS-103", "약관 미연결", ProductGroup.DEPOSIT, new BigDecimal("2.00"), SaleStatus.ON_SALE));
 
         assertThat(adapter.existsProductTerms(saved.getProductId(), 999_999L)).isFalse();
+    }
+
+    @Test
+    @DisplayName("여러 상품 ID의 상품명을 한 번에 조회한다")
+    void findProductNames_returnsNamesForMultipleIds() {
+        ProductJpaEntity first = repository.save(
+                product("NAM-101", "상품명 조회 예금", ProductGroup.DEPOSIT, new BigDecimal("3.00"), SaleStatus.ON_SALE));
+
+        ProductJpaEntity second = repository.save(
+                product("NAM-102", "상품명 조회 적금", ProductGroup.SAVINGS, new BigDecimal("4.00"), SaleStatus.ON_SALE));
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Map<Long, String> result = adapter.findProductNames(Set.of(first.getProductId(), second.getProductId()));
+
+        assertThat(result)
+                .containsEntry(first.getProductId(), "상품명 조회 예금")
+                .containsEntry(second.getProductId(), "상품명 조회 적금");
+    }
+
+    @Test
+    @DisplayName("상품 ID 목록이 비어 있으면 빈 Map을 반환한다")
+    void findProductNames_emptyIds_returnsEmptyMap() {
+        Map<Long, String> result = adapter.findProductNames(Set.of());
+
+        assertThat(result).isEmpty();
     }
 
     private static List<String> myCodesInOrder(Page<Product> page) {
