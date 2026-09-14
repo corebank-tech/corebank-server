@@ -88,15 +88,9 @@ public class TransferExecutionService implements TransferExecutionUseCase {
 
     @Override
     public TransferResult execute(TransferCommand command) {
-        // 멱등성 사전조회: SCHEDULED/AUTO는 sourceId+executionDate가 이미 처리된 회차인지
-        // 먼저 확인한다. 배치의 당일 안전장치(재확정)가 크래시 등으로 못 돌아 다음날 같은
-        // 회차가 다시 execute()로 들어와도, 여기서 걸러 재처리 없이 기존 결과를 그대로 돌려준다.
-        if (command.sourceId() != null) {
-            var existing = transferLookupPort.findBySourceAndExecutionDate(
-                    resolveSourceType(command.transferType()), command.sourceId(), command.executionDate());
-            if (existing.isPresent()) {
-                return existing.get();
-            }
+        Optional<TransferResult> alreadyProcessed = findAlreadyProcessedResult(command);
+        if (alreadyProcessed.isPresent()) {
+            return alreadyProcessed.get();
         }
 
         // 계좌 락 획득 전 시각이므로 채번(영업일자)에만 쓴다. 락 대기로 실제 처리가 지연될 수
@@ -106,152 +100,19 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         // 사전 검증도 이 try 안에 넣어 항상 TransferResult를 반환한다 — 호출자는 예외를 안 던진다고 가정한다.
         Transfer created = null;
         try {
-            // 1차 검증(락 이전) ①: 출금계좌 소유·등록 여부. 존재하지 않는 계좌도 "내 소유가 아님"과
-            // 구분하지 않고 같은 TRF0001로 묶는다 — 계좌ID가 이제 HTTP 요청 바디로 들어오므로
-            // 계좌 존재 여부를 스캐닝하는 데 악용되지 않도록 한다.
-            accountLockPort
-                    .findWithdrawalAccountDetail(command.withdrawalAccountId())
-                    .filter(detail -> detail.customerId().equals(command.customerId()) && detail.withdrawalRegistered())
-                    .orElseThrow(() -> new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
-
-            ResolvedPayee payee = accountLockPort
-                    .resolvePayeeByAccountNumber(command.depositAccountNumber())
-                    .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
-
-            // 1차 검증(락 이전) ②: 동일계좌 이체 거부. 한도 예약(checkAndReserve) 전에 걸러야
-            // 동일계좌 요청이 한도부터 소모하고 나서 거부되는 걸 막을 수 있다.
-            if (command.withdrawalAccountId().equals(payee.accountId())) {
-                throw new BusinessException(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
-            }
-
-            // 1차 검증(락 이전) ③: 입금계좌 상품유형. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을
-            // 묶어두는 상품이라 이체로 추가 입금할 수 없다. 정기적금(INSTALLMENT_SAVINGS)은 매달
-            // 나눠 넣는 게 상품 목적이라 허용한다(REQ-TRSF-030).
-            if (payee.accountType() == LockedAccountType.TIME_DEPOSIT) {
-                throw new BusinessException(TransferErrorCode.UNSUPPORTED_ACCOUNT_TYPE);
-            }
-
-            // 1차 검증(락 이전) ④: 계좌비밀번호 인증 토큰. IMMEDIATE만 authToken이 있으므로
-            // SCHEDULED/AUTO는 건너뛴다(예약/자동이체는 등록 시점에 이미 검증됐고 배치 실행 시
-            // 재검증하지 않는다).
-            if (command.authToken() != null) {
-                transferAuthTokenVerificationPort.verifyAndConsume(
-                        command.authToken(), command.customerId(), command.withdrawalAccountId());
-            }
+            ResolvedPayee payee = verifyBeforeLock(command);
 
             String transactionNumber =
                     transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), command.channel());
 
             // 실패해도 ERROR로 남길 수 있도록, DB에 아직 저장되지 않은(transferId=null) 상태로
             // 들고 있는다. 아래 트랜잭션이 실패해 롤백되더라도 이 자바 객체 자체는 영향받지 않는다.
-            created = Transfer.create(
-                    transactionNumber,
-                    command.withdrawalAccountId(),
-                    payee.accountId(),
-                    command.depositAccountNumber(),
-                    payee.payeeName(),
-                    command.amount(),
-                    FEE,
-                    command.transferType(),
-                    command.channel(),
-                    resolveSourceType(command.transferType()),
-                    command.sourceId(),
-                    command.executionDate(),
-                    command.myPassbookMemo(),
-                    command.recipientPassbookMemo(),
-                    requestedAt);
-            // 람다가 캡처하려면 effectively-final이어야 하는데 created는 재대입되므로 복사본을 둔다.
-            Transfer createdTransfer = created;
+            created = newTransfer(command, payee, transactionNumber, requestedAt);
 
-            // 1차 검증(락 이전) ⑤: 잔액·계좌상태 사전 체크(락 없음, 비authoritative). OTP는
-            // 성공 시 즉시 소비되는 자원이라, 통과 못 할 게 뻔한 요청이 OTP부터 태우지 않도록
-            // 락 획득 전에 미리 걸러낸다. 락이 없어 최종 판정은 아니며, 락 획득 후 재검증(아래
-            // requiresNewTransactionTemplate 안)이 최종 권위를 갖는다 — 이 사전 체크를 통과했어도
-            // 그 사이 상태가 바뀌면 아래에서 다시 걸린다. created 확정 이후에 두는 이유: 여기서
-            // 실패해도 다른 락 안쪽 실패와 동일하게 failTransfer()로 ERROR 행을 남겨야 한다.
-            if (command.otpAuthToken() != null) {
-                accountLockPort
-                        .findWithdrawalAccountPreCheckSnapshot(command.withdrawalAccountId())
-                        .ifPresent(snapshot -> {
-                            if (snapshot.status() != LockedAccountStatus.ACTIVE) {
-                                throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
-                            }
-                            if (snapshot.balance() < command.amount()) {
-                                throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
-                            }
-                        });
-                if (payee.status() != LockedAccountStatus.ACTIVE) {
-                    throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
-                }
-            }
+            preCheckWithoutLock(command, payee);
+            consumeOtpAuthToken(command);
 
-            // 1차 검증(락 이전) ⑥: 인증 완료 토큰(OTP). 위 무관한 검증과 사전 체크를 모두 통과한
-            // 뒤, 채번 직후·계좌 락 획득 직전에 소비한다(otp_integration_guide.md §9).
-            if (command.otpAuthToken() != null) {
-                transferOtpVerificationPort.verifyAndConsume(
-                        command.otpAuthToken(),
-                        command.customerId(),
-                        command.withdrawalAccountId(),
-                        command.depositAccountNumber(),
-                        command.amount());
-            }
-
-            Transfer completed = requiresNewTransactionTemplate.execute(status -> {
-                // 한도 락을 계좌 락보다 먼저 획득한다(P1-P4 합의: 한도 → 계좌 순서). 위반 시
-                // LMT0002/LMT0003을 던진다 — 여기서 예외가 나면 아래 계좌 락은 아예 시도되지 않는다.
-                transferLimitPort.checkAndReserve(command.customerId(), command.amount());
-
-                // 계좌 락을 transfer 행 INSERT보다 먼저 잡는다. INSERT는 withdrawal_account_id·
-                // deposit_account_id에 FK가 걸려 있어 대상 계좌 행에 공유락을 요구하는데, 그 순서가
-                // lockForTransfer의 오름차순 규칙을 따르지 않는다(선언 순서=출금→입금). INSERT를
-                // 먼저 하면 두 스레드가 서로 다른 순서로 공유락을 쥔 채 배타락으로 승격하려다
-                // 데드락이 난다 — 락을 먼저 잡아두면 그 시점엔 이미 우리가 배타락을 쥐고 있어
-                // FK의 공유락 요구가 자기 자신과 충돌하지 않는다.
-                LockedAccountsForTransfer locked =
-                        accountLockPort.lockForTransfer(command.withdrawalAccountId(), payee.accountId());
-
-                // 계좌번호 조회(락 없음)와 락 획득 사이에 입금계좌 매핑이 바뀌지 않았는지 재확인한다.
-                if (!command.depositAccountNumber().equals(locked.deposit().accountNumber())) {
-                    throw new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND);
-                }
-
-                // 계좌번호 사전 조회 시점 이후 락을 얻기까지 사이에 계좌가 정지/해지됐을 수 있으므로,
-                // 락으로 얻은 최신 상태를 기준으로 재검증한다.
-                if (locked.withdrawal().status() != LockedAccountStatus.ACTIVE) {
-                    throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
-                }
-                if (locked.deposit().status() != LockedAccountStatus.ACTIVE) {
-                    throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
-                }
-
-                if (locked.withdrawal().balance() < command.amount()) {
-                    throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
-                }
-
-                Transfer transfer = transferSavePort.save(createdTransfer);
-
-                LocalDateTime executedAt = LocalDateTime.now(clock);
-
-                TransferBalances balances = accountLockPort.applyTransfer(locked, command.amount(), executedAt);
-
-                LedgerPair pair = LedgerPair.forTransfer(
-                        transfer.getTransferId(),
-                        transactionNumber,
-                        command.withdrawalAccountId(),
-                        balances.withdrawalBalanceAfter(),
-                        payee.accountId(),
-                        balances.depositBalanceAfter(),
-                        command.amount(),
-                        resolveTransactionType(command.transferType()),
-                        command.myPassbookMemo(),
-                        command.recipientPassbookMemo(),
-                        command.channel(),
-                        executedAt);
-                ledgerSavePort.save(pair);
-
-                transfer.complete(balances.withdrawalBalanceAfter(), executedAt);
-                return transferSavePort.save(transfer);
-            });
+            Transfer completed = postLedger(command, payee, created, transactionNumber);
 
             return TransferResult.builder()
                     .status(completed.getStatus())
@@ -284,26 +145,194 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             // 재조회가 비었다는 건 이 unique 충돌이 멱등성 제약이 아니었다는 뜻이다(FK/CHECK 등) -
             // 일반 RuntimeException과 동일하게 ERROR로 확정 기록하되 예외는 그대로 전파해 호출자가
             // 이를 정상적인 이체 실패로 오인하지 않게 한다.
-            if (created != null) {
-                failTransfer(
-                        command,
-                        created,
-                        CommonErrorCode.INTERNAL_ERROR.getCode(),
-                        CommonErrorCode.INTERNAL_ERROR.getMessage(),
-                        e);
-            }
+            recordInternalError(command, created, e);
             throw e;
         } catch (RuntimeException e) {
-            if (created != null) {
-                failTransfer(
-                        command,
-                        created,
-                        CommonErrorCode.INTERNAL_ERROR.getCode(),
-                        CommonErrorCode.INTERNAL_ERROR.getMessage(),
-                        e);
-            }
+            recordInternalError(command, created, e);
             throw e;
         }
+    }
+
+    // 멱등성 사전조회: SCHEDULED/AUTO는 sourceId+executionDate가 이미 처리된 회차인지
+    // 먼저 확인한다. 배치의 당일 안전장치(재확정)가 크래시 등으로 못 돌아 다음날 같은
+    // 회차가 다시 execute()로 들어와도, 여기서 걸러 재처리 없이 기존 결과를 그대로 돌려준다.
+    private Optional<TransferResult> findAlreadyProcessedResult(TransferCommand command) {
+        if (command.sourceId() == null) {
+            return Optional.empty();
+        }
+        return transferLookupPort.findBySourceAndExecutionDate(
+                resolveSourceType(command.transferType()), command.sourceId(), command.executionDate());
+    }
+
+    // 1차 검증(락 이전) ①~④. 넷 다 계좌 락도 한도 예약도 건드리지 않으므로 여기서 먼저 끝낸다.
+    private ResolvedPayee verifyBeforeLock(TransferCommand command) {
+        // 1차 검증(락 이전) ①: 출금계좌 소유·등록 여부. 존재하지 않는 계좌도 "내 소유가 아님"과
+        // 구분하지 않고 같은 TRF0001로 묶는다 — 계좌ID가 이제 HTTP 요청 바디로 들어오므로
+        // 계좌 존재 여부를 스캐닝하는 데 악용되지 않도록 한다.
+        accountLockPort
+                .findWithdrawalAccountDetail(command.withdrawalAccountId())
+                .filter(detail -> detail.customerId().equals(command.customerId()) && detail.withdrawalRegistered())
+                .orElseThrow(() -> new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
+
+        ResolvedPayee payee = accountLockPort
+                .resolvePayeeByAccountNumber(command.depositAccountNumber())
+                .orElseThrow(() -> new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND));
+
+        // 1차 검증(락 이전) ②: 동일계좌 이체 거부. 한도 예약(checkAndReserve) 전에 걸러야
+        // 동일계좌 요청이 한도부터 소모하고 나서 거부되는 걸 막을 수 있다.
+        if (command.withdrawalAccountId().equals(payee.accountId())) {
+            throw new BusinessException(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
+        }
+
+        // 1차 검증(락 이전) ③: 입금계좌 상품유형. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을
+        // 묶어두는 상품이라 이체로 추가 입금할 수 없다. 정기적금(INSTALLMENT_SAVINGS)은 매달
+        // 나눠 넣는 게 상품 목적이라 허용한다(REQ-TRSF-030).
+        if (payee.accountType() == LockedAccountType.TIME_DEPOSIT) {
+            throw new BusinessException(TransferErrorCode.UNSUPPORTED_ACCOUNT_TYPE);
+        }
+
+        // 1차 검증(락 이전) ④: 계좌비밀번호 인증 토큰. IMMEDIATE만 authToken이 있으므로
+        // SCHEDULED/AUTO는 건너뛴다(예약/자동이체는 등록 시점에 이미 검증됐고 배치 실행 시
+        // 재검증하지 않는다).
+        if (command.authToken() != null) {
+            transferAuthTokenVerificationPort.verifyAndConsume(
+                    command.authToken(), command.customerId(), command.withdrawalAccountId());
+        }
+
+        return payee;
+    }
+
+    private Transfer newTransfer(
+            TransferCommand command, ResolvedPayee payee, String transactionNumber, LocalDateTime requestedAt) {
+        return Transfer.create(
+                transactionNumber,
+                command.withdrawalAccountId(),
+                payee.accountId(),
+                command.depositAccountNumber(),
+                payee.payeeName(),
+                command.amount(),
+                FEE,
+                command.transferType(),
+                command.channel(),
+                resolveSourceType(command.transferType()),
+                command.sourceId(),
+                command.executionDate(),
+                command.myPassbookMemo(),
+                command.recipientPassbookMemo(),
+                requestedAt);
+    }
+
+    // 1차 검증(락 이전) ⑤: 잔액·계좌상태 사전 체크(락 없음, 비authoritative). OTP는
+    // 성공 시 즉시 소비되는 자원이라, 통과 못 할 게 뻔한 요청이 OTP부터 태우지 않도록
+    // 락 획득 전에 미리 걸러낸다. 락이 없어 최종 판정은 아니며, 락 획득 후 재검증(postLedger
+    // 안)이 최종 권위를 갖는다 — 이 사전 체크를 통과했어도 그 사이 상태가 바뀌면 거기서 다시
+    // 걸린다. created 확정 이후에 호출하는 이유: 여기서 실패해도 다른 락 안쪽 실패와 동일하게
+    // failTransfer()로 ERROR 행을 남겨야 한다.
+    private void preCheckWithoutLock(TransferCommand command, ResolvedPayee payee) {
+        if (command.otpAuthToken() == null) {
+            return;
+        }
+        accountLockPort
+                .findWithdrawalAccountPreCheckSnapshot(command.withdrawalAccountId())
+                .ifPresent(snapshot -> {
+                    if (snapshot.status() != LockedAccountStatus.ACTIVE) {
+                        throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
+                    }
+                    if (snapshot.balance() < command.amount()) {
+                        throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
+                    }
+                });
+        if (payee.status() != LockedAccountStatus.ACTIVE) {
+            throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
+        }
+    }
+
+    // 1차 검증(락 이전) ⑥: 인증 완료 토큰(OTP). 위 무관한 검증과 사전 체크를 모두 통과한
+    // 뒤, 채번 직후·계좌 락 획득 직전에 소비한다(otp_integration_guide.md §9).
+    private void consumeOtpAuthToken(TransferCommand command) {
+        if (command.otpAuthToken() == null) {
+            return;
+        }
+        transferOtpVerificationPort.verifyAndConsume(
+                command.otpAuthToken(),
+                command.customerId(),
+                command.withdrawalAccountId(),
+                command.depositAccountNumber(),
+                command.amount());
+    }
+
+    // 기표 트랜잭션. 한도 예약부터 원장 2행·완료 기록까지가 한 단위로 커밋된다.
+    private Transfer postLedger(
+            TransferCommand command, ResolvedPayee payee, Transfer createdTransfer, String transactionNumber) {
+        return requiresNewTransactionTemplate.execute(status -> {
+            // 한도 락을 계좌 락보다 먼저 획득한다(P1-P4 합의: 한도 → 계좌 순서). 위반 시
+            // LMT0002/LMT0003을 던진다 — 여기서 예외가 나면 아래 계좌 락은 아예 시도되지 않는다.
+            transferLimitPort.checkAndReserve(command.customerId(), command.amount());
+
+            // 계좌 락을 transfer 행 INSERT보다 먼저 잡는다. INSERT는 withdrawal_account_id·
+            // deposit_account_id에 FK가 걸려 있어 대상 계좌 행에 공유락을 요구하는데, 그 순서가
+            // lockForTransfer의 오름차순 규칙을 따르지 않는다(선언 순서=출금→입금). INSERT를
+            // 먼저 하면 두 스레드가 서로 다른 순서로 공유락을 쥔 채 배타락으로 승격하려다
+            // 데드락이 난다 — 락을 먼저 잡아두면 그 시점엔 이미 우리가 배타락을 쥐고 있어
+            // FK의 공유락 요구가 자기 자신과 충돌하지 않는다.
+            LockedAccountsForTransfer locked =
+                    accountLockPort.lockForTransfer(command.withdrawalAccountId(), payee.accountId());
+
+            // 계좌번호 조회(락 없음)와 락 획득 사이에 입금계좌 매핑이 바뀌지 않았는지 재확인한다.
+            if (!command.depositAccountNumber().equals(locked.deposit().accountNumber())) {
+                throw new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND);
+            }
+
+            // 계좌번호 사전 조회 시점 이후 락을 얻기까지 사이에 계좌가 정지/해지됐을 수 있으므로,
+            // 락으로 얻은 최신 상태를 기준으로 재검증한다.
+            if (locked.withdrawal().status() != LockedAccountStatus.ACTIVE) {
+                throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
+            }
+            if (locked.deposit().status() != LockedAccountStatus.ACTIVE) {
+                throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
+            }
+
+            if (locked.withdrawal().balance() < command.amount()) {
+                throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
+            }
+
+            Transfer transfer = transferSavePort.save(createdTransfer);
+
+            LocalDateTime executedAt = LocalDateTime.now(clock);
+
+            TransferBalances balances = accountLockPort.applyTransfer(locked, command.amount(), executedAt);
+
+            LedgerPair pair = LedgerPair.forTransfer(
+                    transfer.getTransferId(),
+                    transactionNumber,
+                    command.withdrawalAccountId(),
+                    balances.withdrawalBalanceAfter(),
+                    payee.accountId(),
+                    balances.depositBalanceAfter(),
+                    command.amount(),
+                    resolveTransactionType(command.transferType()),
+                    command.myPassbookMemo(),
+                    command.recipientPassbookMemo(),
+                    command.channel(),
+                    executedAt);
+            ledgerSavePort.save(pair);
+
+            transfer.complete(balances.withdrawalBalanceAfter(), executedAt);
+            return transferSavePort.save(transfer);
+        });
+    }
+
+    // 채번 전에 터졌으면(created == null) 남길 행 자체가 없다.
+    private void recordInternalError(TransferCommand command, Transfer created, RuntimeException cause) {
+        if (created == null) {
+            return;
+        }
+        failTransfer(
+                command,
+                created,
+                CommonErrorCode.INTERNAL_ERROR.getCode(),
+                CommonErrorCode.INTERNAL_ERROR.getMessage(),
+                cause);
     }
 
     // execute()가 REQUIRES_NEW로 새 스냅샷을 떠야 상대가 이미 커밋한 sourceId+executionDate
