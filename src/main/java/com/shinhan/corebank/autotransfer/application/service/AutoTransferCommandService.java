@@ -73,10 +73,7 @@ public class AutoTransferCommandService
         }
 
         // 입금계좌 만기일 검증
-        Optional<LocalDate> maturityDate = Optional.ofNullable(depositAccountInfo.maturityDate());
-        if (maturityDate.isPresent() && command.endDate().isAfter(maturityDate.get())) {
-            throw new BusinessException(AutoTransferErrorCode.END_DATE_AFTER_MATURITY_DATE);
-        }
+        validateEndDateWithinMaturity(depositAccountInfo.maturityDate(), command.endDate());
 
         // 1회 이체한도 검증
         long oneTimeLimit = transferLimitPort.findOneTimeLimit(command.customerId());
@@ -142,14 +139,12 @@ public class AutoTransferCommandService
         if (!autoTransfer.getStatus().isModifiable()) {
             throw new BusinessException(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS);
         }
-        // 입금계좌 만기일 검증
+        // 입금계좌 만기일 검증 — register()와 달리 종료일을 바꾸는 요청일 때만 확인(null=미변경)
         if (command.endDate() != null) {
-            Optional<LocalDate> maturityDate = accountStatusPort
+            DepositAccountInfo depositAccountInfo = accountStatusPort
                     .findDepositAccountInfo(autoTransfer.getDepositAccountNumber())
-                    .map(DepositAccountInfo::maturityDate);
-            if (maturityDate.isPresent() && command.endDate().isAfter(maturityDate.get())) {
-                throw new BusinessException(AutoTransferErrorCode.END_DATE_AFTER_MATURITY_DATE);
-            }
+                    .orElseThrow(() -> new BusinessException(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
+            validateEndDateWithinMaturity(depositAccountInfo.maturityDate(), command.endDate());
         }
         // 이체한도 재검증
         if (command.amount() != null) {
@@ -299,6 +294,13 @@ public class AutoTransferCommandService
     private void requireOwned(AutoTransfer autoTransfer, Long customerId) {
         if (!autoTransfer.getCustomerId().equals(customerId)) {
             throw new BusinessException(AutoTransferErrorCode.NOT_FOUND);
+        }
+    }
+
+    // 입금계좌 만기일 검증 — 정기적금 등 만기일이 있는 계좌만 대상, 입출금계좌처럼 만기일이 없으면(null) 통과
+    private void validateEndDateWithinMaturity(LocalDate maturityDate, LocalDate endDate) {
+        if (maturityDate != null && endDate.isAfter(maturityDate)) {
+            throw new BusinessException(AutoTransferErrorCode.END_DATE_AFTER_MATURITY_DATE);
         }
     }
 }

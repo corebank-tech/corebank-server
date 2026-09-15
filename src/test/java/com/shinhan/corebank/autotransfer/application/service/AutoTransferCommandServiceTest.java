@@ -509,6 +509,8 @@ class AutoTransferCommandServiceTest {
     void change_success() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.save(any(AutoTransfer.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -559,6 +561,8 @@ class AutoTransferCommandServiceTest {
     void change_amountExceedsOneTimeLimit_throws() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(5_000L);
 
         AutoTransferChangeCommand command =
@@ -711,6 +715,8 @@ class AutoTransferCommandServiceTest {
     void change_invalidAuthToken_propagatesException() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(authTokenVerificationPort)
@@ -731,6 +737,8 @@ class AutoTransferCommandServiceTest {
     void change_invalidOtpAuthToken_propagatesException() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(autoTransferOtpVerificationPort)
@@ -753,6 +761,8 @@ class AutoTransferCommandServiceTest {
         // (CONCURRENT_MODIFICATION 응답)은 ApiExceptionHandler의 공용 핸들러가 이미 담당한다.
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.save(any(AutoTransfer.class)))
                 .thenThrow(new OptimisticLockingFailureException("다른 요청이 먼저 이 자동이체를 변경했습니다"));
