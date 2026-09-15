@@ -290,11 +290,13 @@ class ProductPersistenceAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        Map<Long, String> result = adapter.findProductNames(Set.of(first.getProductId(), second.getProductId()));
+        Map<Long, String> result =
+                adapter.findProductNames(Set.of(first.getProductId(), second.getProductId(), 999_999L));
 
         assertThat(result)
                 .containsEntry(first.getProductId(), "상품명 조회 예금")
-                .containsEntry(second.getProductId(), "상품명 조회 적금");
+                .containsEntry(second.getProductId(), "상품명 조회 적금")
+                .doesNotContainKey(999_999L);
     }
 
     @Test

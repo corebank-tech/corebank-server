@@ -13,6 +13,7 @@ import org.springframework.data.domain.Pageable;
 public interface ProductQueryPort {
     Page<Product> search(ProductGroup productGroup, String keyword, ProductSortType sort, Pageable pageable);
 
+    // 상품명만 필요한 호출자용 배치 조회. 존재하지 않는 productId는 결과 Map에 담기지 않는다.
     Map<Long, String> findProductNames(Collection<Long> productIds);
 
     // ProductDetail.terms는 product_terms.display_order 오름차순으로 채워진다.

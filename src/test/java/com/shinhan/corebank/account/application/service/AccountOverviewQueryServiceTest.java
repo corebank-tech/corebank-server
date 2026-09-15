@@ -1,6 +1,7 @@
 package com.shinhan.corebank.account.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -12,7 +13,9 @@ import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
+import com.shinhan.corebank.product.domain.exception.ProductErrorCode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -311,6 +314,24 @@ class AccountOverviewQueryServiceTest {
                 .containsExactly("신한 정기예금", "신한 정기예금");
 
         verify(productQueryUseCase, times(1)).findProductNames(Set.of(20L));
+    }
+
+    @Test
+    @DisplayName("예적금 상품명이 조회되지 않으면 PRODUCT_NOT_FOUND를 던진다")
+    void throwsProductNotFoundWhenProductNameIsMissing() {
+        // given
+        Account account = createAccount(
+                102L, "088200000001", 20L, AccountType.TIME_DEPOSIT, 1_000_000L, AccountStatus.ACTIVE, null, false);
+
+        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID)).willReturn(List.of(account));
+
+        given(productQueryUseCase.findProductNames(Set.of(20L))).willReturn(Map.of());
+
+        // when & then
+        assertThatThrownBy(() -> service.getOverview(CUSTOMER_ID))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ProductErrorCode.PRODUCT_NOT_FOUND));
     }
 
     @Test

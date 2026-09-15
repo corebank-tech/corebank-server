@@ -7,7 +7,9 @@ import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
+import com.shinhan.corebank.product.domain.exception.ProductErrorCode;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -126,7 +128,13 @@ public class AccountOverviewQueryService implements AccountOverviewQueryUseCase 
             return DEFAULT_DEMAND_DEPOSIT_NAME;
         }
 
-        return productNames.get(account.getProductId());
+        String productName = productNames.get(account.getProductId());
+
+        if (productName == null) {
+            throw new BusinessException(ProductErrorCode.PRODUCT_NOT_FOUND);
+        }
+
+        return productName;
     }
 
     private boolean isTransferEnabled(Account account) {
