@@ -1,18 +1,18 @@
 package com.shinhan.corebank.limit.application.service;
 
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.limit.application.port.in.TransferLimitQueryUseCase;
 import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitResult;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
 import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import java.time.Clock;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -33,12 +33,9 @@ public class TransferLimitQueryService implements TransferLimitQueryUseCase {
     public TransferLimitResult get(Long customerId) {
         TransferLimit limit = transferLimitQueryPort
                 .findByCustomerId(customerId)
-                .orElseGet(() -> {
-                    // 가입 연계(REQ-TRSF-029)가 붙은 뒤로 이 로그는 데이터 결함 신호다.
-                    // 가입 흐름을 거치지 않고 만들어진 고객이라는 뜻이다.
-                    log.warn("이체한도 행이 없어 정책 기본값으로 응답합니다 - customerId={}", customerId);
-                    return TransferLimit.create(customerId);
-                });
+                // 가입 연계(REQ-TRSF-029)와 백필이 모든 고객의 한도 행을 보장한다.
+                // 그래도 없다면 사용자 잘못이 아니라 데이터 결함이므로 기본값으로 덮지 않고 드러낸다.
+                .orElseThrow(() -> new BusinessException(LmtErrorCode.TRANSFER_LIMIT_NOT_FOUND));
 
         LocalDate today = LocalDate.now(clock);
         TransferLimitDailyUsage usage = transferLimitQueryPort
