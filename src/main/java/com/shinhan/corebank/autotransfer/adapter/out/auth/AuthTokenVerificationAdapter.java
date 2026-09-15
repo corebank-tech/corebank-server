@@ -6,7 +6,9 @@ import com.shinhan.corebank.autotransfer.application.port.out.AuthTokenVerificat
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-@Component
+// 빈 이름 명시: scheduledtransfer.adapter.out.auth.AuthTokenVerificationAdapter와 클래스 단순이름이 같아
+// 기본 빈 이름(authTokenVerificationAdapter)이 충돌한다.
+@Component("autoTransferAuthTokenVerificationAdapter")
 @RequiredArgsConstructor
 public class AuthTokenVerificationAdapter implements AuthTokenVerificationPort {
 
