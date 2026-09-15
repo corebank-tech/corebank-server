@@ -5,6 +5,7 @@ import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Profile;
+import org.springframework.security.core.parameters.P;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -28,6 +29,12 @@ public class AccountStatusAdapter implements AccountStatusPort {
         return accountLookupJpaRepository
                 .findByAccountNumber(accountNumber)
                 .map(entity -> AccountType.valueOf(entity.getAccountType()));
+    }
+
+    @Override
+    public Optional<java.time.LocalDate> findMaturityDate(String accountNumber) {
+        return accountLookupJpaRepository.findByAccountNumber(accountNumber).map(AccountLookupJpaEntity::getMaturityDate);
+
     }
 
     @Override

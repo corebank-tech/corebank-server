@@ -15,4 +15,6 @@ public interface AccountStatusPort {
 
     // 별칭 미설정 계좌는 Optional.empty() - scheduledtransfer의 findAccountAliasesByIds()와 동일하게 alias는 nullable
     Optional<String> findAccountAlias(Long accountId);
+
+    Optional<java.time.LocalDate> findMaturityDate(String accountNumber);
 }

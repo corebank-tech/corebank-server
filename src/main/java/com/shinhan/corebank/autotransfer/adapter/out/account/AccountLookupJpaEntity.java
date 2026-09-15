@@ -36,4 +36,7 @@ public class AccountLookupJpaEntity {
 
     @Column(name = "withdrawal_registered", nullable = false, insertable = false, updatable = false)
     private boolean withdrawalRegistered;
+
+    @Column(name = "maturity_date", insertable = false, updatable = false)
+    private java.time.LocalDate maturityDate;
 }

@@ -27,6 +27,11 @@ public class MockAccountStatusPort implements AccountStatusPort {
     }
 
     @Override
+    public Optional<java.time.LocalDate> findMaturityDate(String accountNumber) {
+        return Optional.empty();
+    }
+
+    @Override
     public boolean belongsToCustomer(Long accountId, Long customerId) {
         Number count = (Number) entityManager
                 .createNativeQuery(
