@@ -113,6 +113,7 @@ class LoginStatusQueryServiceTest {
         List<AccountOverviewResult.AccountItem> accounts = java.util.Arrays.asList(transactionDates).stream()
                 .map(date -> new AccountOverviewResult.AccountItem(
                         1L,
+                        1,
                         "계좌",
                         null,
                         "계좌",

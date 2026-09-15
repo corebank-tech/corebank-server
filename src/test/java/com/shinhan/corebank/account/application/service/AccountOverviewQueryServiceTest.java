@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -397,6 +398,80 @@ class AccountOverviewQueryServiceTest {
         assertThat(groupTotalBalance).isEqualTo(30_000L);
     }
 
+    @Test
+    @DisplayName("서로 다른 계좌 그룹에도 현재 전역 표시순서를 반환한다")
+    void returnsGlobalDisplayOrderAcrossGroups() {
+        // given
+        Account demandDeposit = createAccountWithDisplayOrder(
+                101L, "088100000101", null, AccountType.DEMAND_DEPOSIT, LocalDateTime.of(2026, 8, 1, 10, 0), 2);
+
+        Account timeDeposit = createAccountWithDisplayOrder(
+                201L, "088200000201", 20L, AccountType.TIME_DEPOSIT, LocalDateTime.of(2026, 8, 2, 10, 0), 1);
+
+        Account savings = createAccountWithDisplayOrder(
+                202L, "088300000202", 30L, AccountType.INSTALLMENT_SAVINGS, LocalDateTime.of(2026, 8, 3, 10, 0), 3);
+
+        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
+                .willReturn(List.of(demandDeposit, timeDeposit, savings));
+
+        given(productQueryUseCase.findProductNames(Set.of(20L, 30L)))
+                .willReturn(Map.of(
+                        20L, "신한 정기예금",
+                        30L, "신한 적금"));
+
+        // when
+        AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
+
+        // then
+        List<AccountOverviewResult.AccountItem> accounts = result.items().stream()
+                .flatMap(group -> group.accounts().stream())
+                .toList();
+
+        assertThat(accounts)
+                .extracting(AccountOverviewResult.AccountItem::displayOrder)
+                .containsExactlyInAnyOrder(1, 2, 3);
+
+        assertThat(accounts.stream()
+                        .sorted(Comparator.comparingInt(AccountOverviewResult.AccountItem::displayOrder))
+                        .map(AccountOverviewResult.AccountItem::accountId)
+                        .toList())
+                .containsExactly(201L, 101L, 202L);
+    }
+
+    @Test
+    @DisplayName("사용자 지정 순서가 없으면 개설일시와 계좌 ID 기준으로 전역 순서를 계산한다")
+    void returnsDefaultGlobalDisplayOrderWhenCustomOrderDoesNotExist() {
+        // given
+        Account laterDemandDeposit = createAccountWithDisplayOrder(
+                101L, "088100000101", null, AccountType.DEMAND_DEPOSIT, LocalDateTime.of(2026, 8, 1, 15, 0), null);
+
+        Account earlierTimeDeposit = createAccountWithDisplayOrder(
+                201L, "088200000201", 20L, AccountType.TIME_DEPOSIT, LocalDateTime.of(2026, 8, 1, 9, 0), null);
+
+        Account savings = createAccountWithDisplayOrder(
+                202L, "088300000202", 30L, AccountType.INSTALLMENT_SAVINGS, LocalDateTime.of(2026, 8, 2, 10, 0), null);
+
+        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
+                .willReturn(List.of(laterDemandDeposit, earlierTimeDeposit, savings));
+
+        given(productQueryUseCase.findProductNames(Set.of(20L, 30L)))
+                .willReturn(Map.of(
+                        20L, "신한 정기예금",
+                        30L, "신한 적금"));
+
+        // when
+        AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
+
+        // then
+        List<Long> accountIdsByDisplayOrder = result.items().stream()
+                .flatMap(group -> group.accounts().stream())
+                .sorted(Comparator.comparingInt(AccountOverviewResult.AccountItem::displayOrder))
+                .map(AccountOverviewResult.AccountItem::accountId)
+                .toList();
+
+        assertThat(accountIdsByDisplayOrder).containsExactly(201L, 101L, 202L);
+    }
+
     private Account createAccount(
             Long accountId,
             String accountNumber,
@@ -464,6 +539,42 @@ class AccountOverviewQueryServiceTest {
                 openedDate,
                 null,
                 closedDate,
+                null,
+                0L,
+                openedDate,
+                openedDate);
+    }
+
+    private Account createAccountWithDisplayOrder(
+            Long accountId,
+            String accountNumber,
+            Long productId,
+            AccountType accountType,
+            LocalDateTime openedDate,
+            Integer displayOrder) {
+
+        LocalDate maturityDate = accountType == AccountType.DEMAND_DEPOSIT
+                ? null
+                : openedDate.toLocalDate().plusYears(1);
+
+        return Account.reconstitute(
+                accountId,
+                accountNumber,
+                CUSTOMER_ID,
+                productId,
+                accountType,
+                100_000L,
+                AccountStatus.ACTIVE,
+                PASSWORD_HASH,
+                0,
+                false,
+                null,
+                displayOrder,
+                false,
+                null,
+                openedDate,
+                maturityDate,
+                null,
                 null,
                 0L,
                 openedDate,

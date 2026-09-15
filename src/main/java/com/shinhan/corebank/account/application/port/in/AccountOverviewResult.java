@@ -14,6 +14,7 @@ public record AccountOverviewResult(OffsetDateTime asOf, long totalAssets, List<
 
     public record AccountItem(
             Long accountId,
+            int displayOrder,
             String accountName,
             String alias,
             String baseAccountName,

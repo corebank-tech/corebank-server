@@ -91,6 +91,7 @@ class AccountControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.items[0].groupName").value("입출금계좌"))
                 .andExpect(jsonPath("$.data.items[0].groupTotalBalance").value(1_500_000L))
                 .andExpect(jsonPath("$.data.items[0].accounts.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].accounts[0].displayOrder").value(1))
                 .andExpect(jsonPath("$.data.items[0].accounts[0].accountName").value("입출금통장"))
                 .andExpect(jsonPath("$.data.items[0].accounts[0].accountNumber").value("088100000011"))
                 .andExpect(jsonPath("$.data.items[0].accounts[0].accountType").value("DEMAND_DEPOSIT"))
