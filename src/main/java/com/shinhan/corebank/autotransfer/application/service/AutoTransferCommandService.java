@@ -6,6 +6,7 @@ import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AuthTokenVerificationPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferOtpVerificationPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
+import com.shinhan.corebank.autotransfer.application.port.out.DepositAccountInfo;
 import com.shinhan.corebank.autotransfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
@@ -16,6 +17,7 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -63,12 +65,15 @@ public class AutoTransferCommandService
 
         // 입금계좌 실존 여부·유형 검증. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을 묶어두는 상품이라 이체로 추가 입금할 수 없다.
         // 정기적금(INSTALLMENT_SAVINGS)은 매달 나눠 넣는 게 상품 목적이라 허용한다(REQ-PRDT-012, REQ-TRSF-030)
-        AccountType depositAccountType = accountStatusPort
-                .findAccountTypeByNumber(command.depositAccountNumber())
+        DepositAccountInfo depositAccountInfo = accountStatusPort
+                .findDepositAccountInfo(command.depositAccountNumber())
                 .orElseThrow(() -> new BusinessException(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
-        if (depositAccountType == AccountType.TIME_DEPOSIT) {
+        if (depositAccountInfo.accountType() == AccountType.TIME_DEPOSIT) {
             throw new BusinessException(AutoTransferErrorCode.UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE);
         }
+
+        // 입금계좌 만기일 검증
+        validateEndDateWithinMaturity(depositAccountInfo.maturityDate(), command.endDate());
 
         // 1회 이체한도 검증
         long oneTimeLimit = transferLimitPort.findOneTimeLimit(command.customerId());
@@ -133,6 +138,13 @@ public class AutoTransferCommandService
         // — 정상 상태가 아닌 건을 한도 초과 금액으로 바꾸면 진짜 원인(AUT0302)이 아니라 LMT0002으로 잘못 응답하게 된다
         if (!autoTransfer.getStatus().isModifiable()) {
             throw new BusinessException(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS);
+        }
+        // 입금계좌 만기일 검증 — register()와 달리 종료일을 바꾸는 요청일 때만 확인(null=미변경)
+        if (command.endDate() != null) {
+            DepositAccountInfo depositAccountInfo = accountStatusPort
+                    .findDepositAccountInfo(autoTransfer.getDepositAccountNumber())
+                    .orElseThrow(() -> new BusinessException(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
+            validateEndDateWithinMaturity(depositAccountInfo.maturityDate(), command.endDate());
         }
         // 이체한도 재검증
         if (command.amount() != null) {
@@ -282,6 +294,13 @@ public class AutoTransferCommandService
     private void requireOwned(AutoTransfer autoTransfer, Long customerId) {
         if (!autoTransfer.getCustomerId().equals(customerId)) {
             throw new BusinessException(AutoTransferErrorCode.NOT_FOUND);
+        }
+    }
+
+    // 입금계좌 만기일 검증 — 정기적금 등 만기일이 있는 계좌만 대상, 입출금계좌처럼 만기일이 없으면(null) 통과
+    private void validateEndDateWithinMaturity(LocalDate maturityDate, LocalDate endDate) {
+        if (maturityDate != null && endDate.isAfter(maturityDate)) {
+            throw new BusinessException(AutoTransferErrorCode.END_DATE_AFTER_MATURITY_DATE);
         }
     }
 }
