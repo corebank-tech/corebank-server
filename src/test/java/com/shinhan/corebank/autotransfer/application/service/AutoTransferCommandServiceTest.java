@@ -240,7 +240,7 @@ class AutoTransferCommandServiceTest {
                 .thenReturn(false);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(authTokenVerificationPort)
-                .verify(anyString(), any(), anyString());
+                .verifyAndConsume(anyString(), any(), any());
 
         assertThatThrownBy(() -> autoTransferCommandService.register(
                         validCommandBuilder().build()))
@@ -569,7 +569,7 @@ class AutoTransferCommandServiceTest {
                 .satisfies(e ->
                         assertThat(((BusinessException) e).getErrorCode()).isEqualTo(AutoTransferErrorCode.NOT_FOUND));
 
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
     }
 
     @Test
@@ -586,7 +586,7 @@ class AutoTransferCommandServiceTest {
                 .satisfies(e ->
                         assertThat(((BusinessException) e).getErrorCode()).isEqualTo(AutoTransferErrorCode.NOT_FOUND));
 
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
     }
 
@@ -598,7 +598,7 @@ class AutoTransferCommandServiceTest {
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(authTokenVerificationPort)
-                .verify(anyString(), any(), anyString());
+                .verifyAndConsume(anyString(), any(), any());
 
         assertThatThrownBy(() -> autoTransferCommandService.change(
                         10L, validChangeCommandBuilder().build()))
@@ -778,7 +778,7 @@ class AutoTransferCommandServiceTest {
                 .satisfies(e ->
                         assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
 
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
     }
@@ -796,7 +796,7 @@ class AutoTransferCommandServiceTest {
                 .singleElement()
                 .extracting(AutoTransferCancelResult::failureCode)
                 .isEqualTo(AutoTransferErrorCode.NOT_FOUND.getCode());
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
     }
 
@@ -814,7 +814,7 @@ class AutoTransferCommandServiceTest {
                 .singleElement()
                 .extracting(AutoTransferCancelResult::failureCode)
                 .isEqualTo(AutoTransferErrorCode.NOT_FOUND.getCode());
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
     }
 
@@ -826,7 +826,7 @@ class AutoTransferCommandServiceTest {
         when(clock.withZone(any())).thenReturn(Clock.systemUTC());
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(authTokenVerificationPort)
-                .verify(anyString(), any(), anyString());
+                .verifyAndConsume(anyString(), any(), any());
 
         AutoTransferCancelCommand command = validCancelCommandBuilder().build();
 
@@ -887,7 +887,7 @@ class AutoTransferCommandServiceTest {
             assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
             assertThat(result.failureCode()).isNull();
         });
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
     }
@@ -924,7 +924,7 @@ class AutoTransferCommandServiceTest {
                 .singleElement()
                 .extracting(AutoTransferCancelResult::failureCode)
                 .isEqualTo(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS.getCode());
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
     }
@@ -966,7 +966,7 @@ class AutoTransferCommandServiceTest {
                 .singleElement()
                 .extracting(AutoTransferCancelResult::failureCode)
                 .isEqualTo(AutoTransferErrorCode.CANNOT_TERMINATE_ON_EXECUTION_DATE.getCode());
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
     }
