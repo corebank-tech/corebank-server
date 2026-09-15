@@ -6,6 +6,7 @@ import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AuthTokenVerificationPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferOtpVerificationPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
+import com.shinhan.corebank.autotransfer.application.port.out.DepositAccountInfo;
 import com.shinhan.corebank.autotransfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
@@ -64,15 +65,15 @@ public class AutoTransferCommandService
 
         // 입금계좌 실존 여부·유형 검증. 정기예금(TIME_DEPOSIT)은 만기까지 목돈을 묶어두는 상품이라 이체로 추가 입금할 수 없다.
         // 정기적금(INSTALLMENT_SAVINGS)은 매달 나눠 넣는 게 상품 목적이라 허용한다(REQ-PRDT-012, REQ-TRSF-030)
-        AccountType depositAccountType = accountStatusPort
-                .findAccountTypeByNumber(command.depositAccountNumber())
+        DepositAccountInfo depositAccountInfo = accountStatusPort
+                .findDepositAccountInfo(command.depositAccountNumber())
                 .orElseThrow(() -> new BusinessException(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
-        if (depositAccountType == AccountType.TIME_DEPOSIT) {
+        if (depositAccountInfo.accountType() == AccountType.TIME_DEPOSIT) {
             throw new BusinessException(AutoTransferErrorCode.UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE);
         }
 
         // 입금계좌 만기일 검증
-        Optional<LocalDate> maturityDate = accountStatusPort.findMaturityDate(command.depositAccountNumber());
+        Optional<LocalDate> maturityDate = Optional.ofNullable(depositAccountInfo.maturityDate());
         if (maturityDate.isPresent() && command.endDate().isAfter(maturityDate.get())) {
             throw new BusinessException(AutoTransferErrorCode.END_DATE_AFTER_MATURITY_DATE);
         }
@@ -143,8 +144,9 @@ public class AutoTransferCommandService
         }
         // 입금계좌 만기일 검증
         if (command.endDate() != null) {
-            Optional<LocalDate> maturityDate =
-                    accountStatusPort.findMaturityDate(autoTransfer.getDepositAccountNumber());
+            Optional<LocalDate> maturityDate = accountStatusPort
+                    .findDepositAccountInfo(autoTransfer.getDepositAccountNumber())
+                    .map(DepositAccountInfo::maturityDate);
             if (maturityDate.isPresent() && command.endDate().isAfter(maturityDate.get())) {
                 throw new BusinessException(AutoTransferErrorCode.END_DATE_AFTER_MATURITY_DATE);
             }

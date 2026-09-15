@@ -1,14 +1,10 @@
 package com.shinhan.corebank.autotransfer.application.port.out;
 
-import com.shinhan.corebank.account.domain.AccountType;
-import java.time.LocalDate;
 import java.util.Optional;
 
 // 정상계좌인지, 입금받는 계좌가 있는지 확인하는 인터페이스
 public interface AccountStatusPort {
     boolean isActiveAccount(Long accountId);
-
-    Optional<AccountType> findAccountTypeByNumber(String accountNumber);
 
     boolean belongsToCustomer(Long accountId, Long customerId);
 
@@ -17,5 +13,6 @@ public interface AccountStatusPort {
     // 별칭 미설정 계좌는 Optional.empty() - scheduledtransfer의 findAccountAliasesByIds()와 동일하게 alias는 nullable
     Optional<String> findAccountAlias(Long accountId);
 
-    Optional<LocalDate> findMaturityDate(String accountNumber);
+    // 계좌유형 + 만기일 한번의 조회로 같이 반환
+    Optional<DepositAccountInfo> findDepositAccountInfo(String accountNumber);
 }

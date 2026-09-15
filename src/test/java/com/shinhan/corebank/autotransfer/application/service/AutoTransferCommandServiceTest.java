@@ -22,6 +22,7 @@ import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AuthTokenVerificationPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferOtpVerificationPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
+import com.shinhan.corebank.autotransfer.application.port.out.DepositAccountInfo;
 import com.shinhan.corebank.autotransfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
@@ -168,8 +169,8 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
-                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
                 .thenReturn(false);
@@ -233,8 +234,8 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
-                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
                 .thenReturn(false);
@@ -257,8 +258,8 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
-                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
                 .thenReturn(false);
@@ -315,7 +316,7 @@ class AutoTransferCommandServiceTest {
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
 
-        verify(accountStatusPort, never()).findAccountTypeByNumber(any());
+        verify(accountStatusPort, never()).findDepositAccountInfo(any());
         verify(autoTransferPersistencePort, never()).existsActiveDuplicate(any(), any(), anyInt());
     }
 
@@ -325,7 +326,7 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.empty());
+        when(accountStatusPort.findDepositAccountInfo("110987654321")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> autoTransferCommandService.register(
                         validCommandBuilder().build()))
@@ -340,8 +341,9 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
-                .thenReturn(Optional.of(AccountType.TIME_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(
+                        AccountType.TIME_DEPOSIT, LocalDate.now().plusMonths(6))));
 
         assertThatThrownBy(() -> autoTransferCommandService.register(
                         validCommandBuilder().build()))
@@ -359,7 +361,8 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(allowedType));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(allowedType, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
                 .thenReturn(false);
@@ -398,8 +401,8 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
-                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(5_000L);
 
         assertThatThrownBy(() -> autoTransferCommandService.register(
@@ -417,8 +420,8 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
-                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
                 .thenReturn(true);
@@ -438,10 +441,9 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
-                .thenReturn(Optional.of(AccountType.INSTALLMENT_SAVINGS));
-        when(accountStatusPort.findMaturityDate("110987654321"))
-                .thenReturn(Optional.of(LocalDate.now().plusMonths(6)));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(
+                        AccountType.INSTALLMENT_SAVINGS, LocalDate.now().plusMonths(6))));
 
         AutoTransferRegisterCommand command =
                 validCommandBuilder().endDate(LocalDate.now().plusMonths(12)).build();
@@ -461,10 +463,9 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
-                .thenReturn(Optional.of(AccountType.INSTALLMENT_SAVINGS));
         LocalDate maturityDate = LocalDate.now().plusMonths(12);
-        when(accountStatusPort.findMaturityDate("110987654321")).thenReturn(Optional.of(maturityDate));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.INSTALLMENT_SAVINGS, maturityDate)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
                 .thenReturn(false);
@@ -634,8 +635,9 @@ class AutoTransferCommandServiceTest {
     void change_endDateAfterMaturityDate_throws() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
-        when(accountStatusPort.findMaturityDate("110987654321"))
-                .thenReturn(Optional.of(LocalDate.now().plusMonths(6)));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(
+                        AccountType.INSTALLMENT_SAVINGS, LocalDate.now().plusMonths(6))));
 
         AutoTransferChangeCommand command = validChangeCommandBuilder()
                 .endDate(LocalDate.now().plusMonths(12))
@@ -669,7 +671,7 @@ class AutoTransferCommandServiceTest {
 
         autoTransferCommandService.change(10L, command);
 
-        verify(accountStatusPort, never()).findMaturityDate(any());
+        verify(accountStatusPort, never()).findDepositAccountInfo(any());
     }
 
     @Test

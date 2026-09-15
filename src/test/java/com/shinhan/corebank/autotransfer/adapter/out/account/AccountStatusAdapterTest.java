@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.autotransfer.application.port.out.DepositAccountInfo;
 import jakarta.persistence.EntityManager;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,19 +59,21 @@ class AccountStatusAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("존재하는 계좌번호는 계좌 유형을 반환한다")
-    void findAccountTypeByNumber_found_returnsType() {
+    @DisplayName("존재하는 계좌번호는 계좌유형과 만기일을 함께 반환한다")
+    void findDepositAccountInfo_found_returnsAccountTypeAndMaturityDate() {
         Long customerId = insertCustomer();
         String accountNumber = nextAccountNumber();
         insertAccount(customerId, accountNumber, "ACTIVE");
 
-        assertThat(adapter.findAccountTypeByNumber(accountNumber)).contains(AccountType.DEMAND_DEPOSIT);
+        // 입출금계좌(DEMAND_DEPOSIT)는 ck_account_maturity 제약상 maturity_date가 항상 NULL이다
+        assertThat(adapter.findDepositAccountInfo(accountNumber))
+                .contains(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null));
     }
 
     @Test
     @DisplayName("존재하지 않는 계좌번호는 빈 값을 반환한다")
-    void findAccountTypeByNumber_notFound_returnsEmpty() {
-        assertThat(adapter.findAccountTypeByNumber("999999999999")).isEmpty();
+    void findDepositAccountInfo_notFound_returnsEmpty() {
+        assertThat(adapter.findDepositAccountInfo("999999999999")).isEmpty();
     }
 
     @Test

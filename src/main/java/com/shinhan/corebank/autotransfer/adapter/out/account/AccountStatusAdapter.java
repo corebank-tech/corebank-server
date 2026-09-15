@@ -2,7 +2,7 @@ package com.shinhan.corebank.autotransfer.adapter.out.account;
 
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
-import java.time.LocalDate;
+import com.shinhan.corebank.autotransfer.application.port.out.DepositAccountInfo;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Profile;
@@ -25,17 +25,11 @@ public class AccountStatusAdapter implements AccountStatusPort {
     }
 
     @Override
-    public Optional<AccountType> findAccountTypeByNumber(String accountNumber) {
+    public Optional<DepositAccountInfo> findDepositAccountInfo(String accountNumber) {
         return accountLookupJpaRepository
                 .findByAccountNumber(accountNumber)
-                .map(entity -> AccountType.valueOf(entity.getAccountType()));
-    }
-
-    @Override
-    public Optional<LocalDate> findMaturityDate(String accountNumber) {
-        return accountLookupJpaRepository
-                .findByAccountNumber(accountNumber)
-                .map(AccountLookupJpaEntity::getMaturityDate);
+                .map(entity ->
+                        new DepositAccountInfo(AccountType.valueOf(entity.getAccountType()), entity.getMaturityDate()));
     }
 
     @Override
