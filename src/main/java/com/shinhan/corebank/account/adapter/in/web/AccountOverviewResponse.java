@@ -39,6 +39,11 @@ public record AccountOverviewResponse(
 
     public record AccountItemResponse(
             @Schema(description = "계좌 내부 식별자", example = "101") Long accountId,
+            @Schema(
+                            description = "현재 적용되는 전역 계좌 표시순서. 1부터 시작하며, 사용자 지정 순서가 없으면 기본 순서를 반영한다.",
+                            example = "1",
+                            minimum = "1")
+                    int displayOrder,
             @Schema(description = "화면에 표시할 계좌명. alias가 있으면 alias, 없으면 baseAccountName", example = "생활비통장")
                     String accountName,
             @Schema(description = "실제 등록된 계좌 별명. 별명이 없으면 null", example = "생활비통장", nullable = true) String alias,
@@ -58,6 +63,7 @@ public record AccountOverviewResponse(
         private static AccountItemResponse from(AccountOverviewResult.AccountItem account) {
             return new AccountItemResponse(
                     account.accountId(),
+                    account.displayOrder(),
                     account.accountName(),
                     account.alias(),
                     account.baseAccountName(),

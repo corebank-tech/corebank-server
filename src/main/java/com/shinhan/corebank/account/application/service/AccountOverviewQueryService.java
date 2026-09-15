@@ -48,8 +48,10 @@ public class AccountOverviewQueryService implements AccountOverviewQueryUseCase 
 
         Map<Long, String> productNames = loadProductNames(accounts);
 
+        Map<Long, Integer> effectiveDisplayOrders = buildEffectiveDisplayOrders(accounts);
+
         List<AccountOverviewResult.Group> items = Arrays.stream(AccountGroupCode.values())
-                .map(groupCode -> createGroup(groupCode, accounts, productNames))
+                .map(groupCode -> createGroup(groupCode, accounts, productNames, effectiveDisplayOrders))
                 .filter(group -> !group.accounts().isEmpty())
                 .toList();
 
@@ -69,12 +71,30 @@ public class AccountOverviewQueryService implements AccountOverviewQueryUseCase 
         return productQueryUseCase.findProductNames(productIds);
     }
 
+    private Map<Long, Integer> buildEffectiveDisplayOrders(List<Account> accounts) {
+
+        List<Account> orderedAccounts =
+                accounts.stream().sorted(accountDisplayOrderComparator()).toList();
+
+        Map<Long, Integer> effectiveDisplayOrders = new HashMap<>();
+
+        for (int index = 0; index < orderedAccounts.size(); index++) {
+            effectiveDisplayOrders.put(orderedAccounts.get(index).getAccountId(), index + 1);
+        }
+
+        return effectiveDisplayOrders;
+    }
+
     private AccountOverviewResult.Group createGroup(
-            AccountGroupCode groupCode, List<Account> accounts, Map<Long, String> productNames) {
+            AccountGroupCode groupCode,
+            List<Account> accounts,
+            Map<Long, String> productNames,
+            Map<Long, Integer> effectiveDisplayOrders) {
         List<AccountOverviewResult.AccountItem> accountItems = accounts.stream()
                 .filter(account -> resolveGroupCode(account.getAccountType()) == groupCode)
                 .sorted(accountDisplayOrderComparator())
-                .map(account -> toAccountItem(account, productNames))
+                .map(account ->
+                        toAccountItem(account, productNames, effectiveDisplayOrders.get(account.getAccountId())))
                 .toList();
 
         long groupTotalBalance = accountItems.stream()
@@ -92,7 +112,8 @@ public class AccountOverviewQueryService implements AccountOverviewQueryUseCase 
         };
     }
 
-    private AccountOverviewResult.AccountItem toAccountItem(Account account, Map<Long, String> productNames) {
+    private AccountOverviewResult.AccountItem toAccountItem(
+            Account account, Map<Long, String> productNames, int displayOrder) {
 
         String alias = resolveAlias(account);
         String baseAccountName = resolveBaseAccountName(account, productNames);
@@ -100,6 +121,7 @@ public class AccountOverviewQueryService implements AccountOverviewQueryUseCase 
 
         return new AccountOverviewResult.AccountItem(
                 account.getAccountId(),
+                displayOrder,
                 accountName,
                 alias,
                 baseAccountName,
