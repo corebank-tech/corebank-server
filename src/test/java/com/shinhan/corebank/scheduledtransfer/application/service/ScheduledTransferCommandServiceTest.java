@@ -141,7 +141,7 @@ class ScheduledTransferCommandServiceTest {
         assertThat(result.getAmount()).isEqualTo(10_000L);
         assertThat(result.getStatus()).isEqualTo(ScheduledTransferStatus.WAITING);
         verify(scheduledTransferPersistencePort).save(any(ScheduledTransfer.class));
-        verify(authTokenVerificationPort).verify(eq("valid-token"), eq(2L), anyString());
+        verify(authTokenVerificationPort).verifyAndConsume(eq("valid-token"), eq(1L), eq(2L));
         verify(scheduledTransferOtpVerificationPort)
                 .verifyRegisterAndConsume(
                         eq("valid-otp-token"), eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any());
@@ -168,7 +168,7 @@ class ScheduledTransferCommandServiceTest {
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ScheduledTransferErrorCode.INVALID_SCHEDULED_DATE));
 
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(scheduledTransferOtpVerificationPort, never())
                 .verifyRegisterAndConsume(any(), any(), any(), any(), any(), any());
     }
@@ -190,7 +190,7 @@ class ScheduledTransferCommandServiceTest {
                 .thenReturn(false);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(authTokenVerificationPort)
-                .verify(anyString(), any(), anyString());
+                .verifyAndConsume(anyString(), any(), any());
 
         assertThatThrownBy(() -> scheduledTransferCommandService.register(
                         validCommandBuilder().build()))
@@ -492,7 +492,7 @@ class ScheduledTransferCommandServiceTest {
             assertThat(result.canceledAt()).isNotNull();
         });
         assertThat(existing.getStatus()).isEqualTo(ScheduledTransferStatus.CANCELED);
-        verify(authTokenVerificationPort).verify(eq("valid-token"), eq(2L), anyString());
+        verify(authTokenVerificationPort).verifyAndConsume(eq("valid-token"), eq(1L), eq(2L));
         verify(scheduledTransferOtpVerificationPort)
                 .verifyCancelAndConsume(eq("valid-otp-token"), eq(1L), eq(List.of(10L)));
         verify(scheduledTransferPersistencePort).save(any(ScheduledTransfer.class));
@@ -556,7 +556,7 @@ class ScheduledTransferCommandServiceTest {
                 .singleElement()
                 .extracting(ScheduledTransferCancelResult::status)
                 .isEqualTo(ProcessResultStatus.ERROR);
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(scheduledTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
         verify(scheduledTransferPersistencePort, never()).save(any());
     }
@@ -608,7 +608,7 @@ class ScheduledTransferCommandServiceTest {
                 .satisfies(e ->
                         assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
 
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(scheduledTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
         verify(scheduledTransferPersistencePort, never()).save(any());
     }
@@ -626,7 +626,7 @@ class ScheduledTransferCommandServiceTest {
                 .singleElement()
                 .extracting(ScheduledTransferCancelResult::failureCode)
                 .isEqualTo(ScheduledTransferErrorCode.NOT_FOUND.getCode());
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
     }
 
     @Test
@@ -644,7 +644,7 @@ class ScheduledTransferCommandServiceTest {
                 .singleElement()
                 .extracting(ScheduledTransferCancelResult::failureCode)
                 .isEqualTo(ScheduledTransferErrorCode.NOT_FOUND.getCode());
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(scheduledTransferPersistencePort, never()).save(any());
     }
 
@@ -663,7 +663,7 @@ class ScheduledTransferCommandServiceTest {
                 .singleElement()
                 .extracting(ScheduledTransferCancelResult::status)
                 .isEqualTo(ProcessResultStatus.SUCCESS);
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(scheduledTransferPersistencePort, never()).save(any());
     }
 
@@ -682,7 +682,7 @@ class ScheduledTransferCommandServiceTest {
                 .singleElement()
                 .extracting(ScheduledTransferCancelResult::failureCode)
                 .isEqualTo(ScheduledTransferErrorCode.NOT_IN_WAITING_STATUS.getCode());
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
     }
 
     @Test
@@ -699,7 +699,7 @@ class ScheduledTransferCommandServiceTest {
                 .singleElement()
                 .extracting(ScheduledTransferCancelResult::failureCode)
                 .isEqualTo(ScheduledTransferErrorCode.CANNOT_CANCEL_ON_EXECUTION_DATE.getCode());
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
     }
 
     @Test
@@ -711,7 +711,7 @@ class ScheduledTransferCommandServiceTest {
         when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(authTokenVerificationPort)
-                .verify(anyString(), any(), anyString());
+                .verifyAndConsume(anyString(), any(), any());
 
         ScheduledTransferCancelCommand command = validCancelCommandBuilder().build();
 

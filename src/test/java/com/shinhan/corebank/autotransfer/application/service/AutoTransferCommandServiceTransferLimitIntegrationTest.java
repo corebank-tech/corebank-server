@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterCommand;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
@@ -35,6 +36,10 @@ class AutoTransferCommandServiceTransferLimitIntegrationTest extends Integration
     // otp 도메인 테스트가 담당한다. AutoTransferControllerTest와 동일한 경계 테스트 패턴.
     @MockitoBean
     OtpAuthTokenVerifier otpAuthTokenVerifier;
+
+    // 계좌비밀번호 인증도 같은 이유로 Mock — 이체한도 검증 경계 밖이다.
+    @MockitoBean
+    AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
 
     private static final AtomicLong CUSTOMER_SEQ = new AtomicLong();
     private static final AtomicLong ACCOUNT_SEQ = new AtomicLong();
