@@ -7,11 +7,14 @@ import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
+import com.shinhan.corebank.product.domain.exception.ProductErrorCode;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.*;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,22 +46,35 @@ public class AccountOverviewQueryService implements AccountOverviewQueryUseCase 
 
         long totalAssets = accounts.stream().mapToLong(Account::getBalance).sum();
 
-        Map<Long, String> productNameCache = new HashMap<>();
+        Map<Long, String> productNames = loadProductNames(accounts);
 
         List<AccountOverviewResult.Group> items = Arrays.stream(AccountGroupCode.values())
-                .map(groupCode -> createGroup(groupCode, accounts, productNameCache))
+                .map(groupCode -> createGroup(groupCode, accounts, productNames))
                 .filter(group -> !group.accounts().isEmpty())
                 .toList();
 
         return new AccountOverviewResult(asOf, totalAssets, items);
     }
 
+    private Map<Long, String> loadProductNames(List<Account> accounts) {
+        Set<Long> productIds = accounts.stream()
+                .filter(account -> account.getAccountType() != AccountType.DEMAND_DEPOSIT)
+                .map(Account::getProductId)
+                .collect(Collectors.toSet());
+
+        if (productIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return productQueryUseCase.findProductNames(productIds);
+    }
+
     private AccountOverviewResult.Group createGroup(
-            AccountGroupCode groupCode, List<Account> accounts, Map<Long, String> productNameCache) {
+            AccountGroupCode groupCode, List<Account> accounts, Map<Long, String> productNames) {
         List<AccountOverviewResult.AccountItem> accountItems = accounts.stream()
                 .filter(account -> resolveGroupCode(account.getAccountType()) == groupCode)
                 .sorted(accountDisplayOrderComparator())
-                .map(account -> toAccountItem(account, productNameCache))
+                .map(account -> toAccountItem(account, productNames))
                 .toList();
 
         long groupTotalBalance = accountItems.stream()
@@ -76,10 +92,10 @@ public class AccountOverviewQueryService implements AccountOverviewQueryUseCase 
         };
     }
 
-    private AccountOverviewResult.AccountItem toAccountItem(Account account, Map<Long, String> productNameCache) {
+    private AccountOverviewResult.AccountItem toAccountItem(Account account, Map<Long, String> productNames) {
 
         String alias = resolveAlias(account);
-        String baseAccountName = resolveBaseAccountName(account, productNameCache);
+        String baseAccountName = resolveBaseAccountName(account, productNames);
         String accountName = alias != null ? alias : baseAccountName;
 
         return new AccountOverviewResult.AccountItem(
@@ -106,17 +122,19 @@ public class AccountOverviewQueryService implements AccountOverviewQueryUseCase 
         return account.getAlias();
     }
 
-    private String resolveBaseAccountName(Account account, Map<Long, String> productNameCache) {
+    private String resolveBaseAccountName(Account account, Map<Long, String> productNames) {
 
         if (account.getAccountType() == AccountType.DEMAND_DEPOSIT) {
             return DEFAULT_DEMAND_DEPOSIT_NAME;
         }
 
-        return productNameCache.computeIfAbsent(account.getProductId(), this::getProductName);
-    }
+        String productName = productNames.get(account.getProductId());
 
-    private String getProductName(Long productId) {
-        return productQueryUseCase.getDetail(productId).getProduct().getProductName();
+        if (productName == null) {
+            throw new BusinessException(ProductErrorCode.PRODUCT_NOT_FOUND);
+        }
+
+        return productName;
     }
 
     private boolean isTransferEnabled(Account account) {
