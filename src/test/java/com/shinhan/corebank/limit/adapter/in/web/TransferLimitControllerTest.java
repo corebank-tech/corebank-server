@@ -64,18 +64,16 @@ class TransferLimitControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("한도 행이 없는 고객은 정책 기본값과 사용액 0으로 응답한다")
-    void getTransferLimit_noRows_returnsPolicyDefaults() throws Exception {
+    @DisplayName("한도 행이 없는 고객은 정책 기본값 대신 500 + LMT9001 로 거부한다")
+    void getTransferLimit_noRows_rejectsWithLmt9001() throws Exception {
+        // 가입 연계(REQ-TRSF-029)와 백필이 보장하므로, 행이 없다면 사용자 잘못이 아니라 데이터 결함이다.
         Long customerId = insertCustomer();
         entityManager.flush();
         entityManager.clear();
 
         mockMvc.perform(get("/transfer-limits").with(authentication(authenticationOf(customerId))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.oneTimeLimit").value(1_000_000L))
-                .andExpect(jsonPath("$.data.dailyLimit").value(5_000_000L))
-                .andExpect(jsonPath("$.data.dailyUsedAmount").value(0L))
-                .andExpect(jsonPath("$.data.dailyRemainingAmount").value(5_000_000L));
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("LMT9001"));
     }
 
     @Test
