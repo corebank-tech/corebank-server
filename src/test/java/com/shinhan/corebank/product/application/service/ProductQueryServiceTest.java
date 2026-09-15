@@ -28,7 +28,9 @@ import com.shinhan.corebank.terms.api.TermsQueryPort;
 import com.shinhan.corebank.terms.api.TermsSummary;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -97,6 +99,24 @@ class ProductQueryServiceTest {
                 productQueryService.search(ProductGroup.DEPOSIT, "적금", ProductSortType.NAME, 1, 10, false);
 
         assertThat(result).isSameAs(expected);
+    }
+
+    @Test
+    @DisplayName("상품 ID 목록으로 상품명을 배치 조회한다")
+    void findProductNames_delegatesToPort() {
+        Set<Long> productIds = Set.of(1L, 2L);
+
+        Map<Long, String> expected = Map.of(
+                1L, "신한 정기예금",
+                2L, "청년 희망 적금");
+
+        when(productQueryPort.findProductNames(productIds)).thenReturn(expected);
+
+        Map<Long, String> result = productQueryService.findProductNames(productIds);
+
+        assertThat(result).isEqualTo(expected);
+
+        verify(productQueryPort).findProductNames(productIds);
     }
 
     @Test

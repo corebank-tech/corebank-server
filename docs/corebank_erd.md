@@ -123,7 +123,7 @@ erDiagram
         bigint fee "당행 0 고정 (POL-028)"
         varchar transfer_type "IMMEDIATE / SCHEDULED / AUTO"
         char channel "WB / BT"
-        varchar status "SUCCESS / ERROR / PROCESSING"
+        varchar status "SUCCESS / ERROR (PROCESSING은 커밋되지 않음, #377)"
         varchar source_type "SCHEDULED / AUTO"
         bigint source_id
         date execution_date "source_id와 함께 멱등키. SCHEDULED/AUTO 전용"

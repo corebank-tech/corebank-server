@@ -2,11 +2,11 @@ package com.shinhan.corebank.transfer.application.port.in;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.common.util.AccountNumberPolicy;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.LocalDate;
-import java.util.regex.Pattern;
 import lombok.Builder;
 
 @Builder
@@ -30,8 +30,6 @@ public record TransferCommand(
         String otpAuthToken // Otp-Auth-Token. IMMEDIATE만 필수 — SCHEDULED/AUTO는 등록 시점에 검증됨(otp_integration_guide.md)
         ) {
 
-    private static final Pattern ACCOUNT_NUMBER_PATTERN = Pattern.compile("^[0-9]{12}$");
-
     public TransferCommand {
 
         // 필수값 검증
@@ -44,7 +42,9 @@ public record TransferCommand(
         }
 
         // 계좌번호 형식 검증
-        if (!ACCOUNT_NUMBER_PATTERN.matcher(depositAccountNumber).matches()) {
+        if (!AccountNumberPolicy.ACCOUNT_NUMBER_PATTERN
+                .matcher(depositAccountNumber)
+                .matches()) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
 

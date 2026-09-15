@@ -1,6 +1,7 @@
 package com.shinhan.corebank.transfer.application.service;
 
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
@@ -10,7 +11,6 @@ import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.LedgerPair;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
-import com.shinhan.corebank.transfer.domain.exception.LimitErrorCode;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -60,7 +60,7 @@ public class ProductSubscriptionDepositService implements ProductSubscriptionDep
             throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
         }
         if (locked.withdrawal().balance() < command.amount()) {
-            throw new BusinessException(LimitErrorCode.INSUFFICIENT_WITHDRAWABLE_AMOUNT);
+            throw new BusinessException(LmtErrorCode.INSUFFICIENT_WITHDRAWABLE_AMOUNT);
         }
 
         TransferBalances balances = accountLockPort.applyTransfer(locked, command.amount(), occurredAt);

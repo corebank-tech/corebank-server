@@ -464,6 +464,8 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 **사용 도메인**: 즉시이체 · 자동이체 회차 실행결과 · 상품가입 결과 · 예약이체 취소/자동이체 해지 **다건 응답의 건별 결과**(#330 — `items[].status`)
 
+> `PROCESSING`을 실제로 관측할 수 있는 곳은 **회차 테이블**(`auto_transfer_execution`·`scheduled_transfer_execution`)입니다. `transfer` 행은 INSERT부터 확정까지가 한 트랜잭션이라 `SUCCESS`/`ERROR`로만 커밋되므로, 이체 응답과 이체결과 목록에는 `PROCESSING`이 나오지 않습니다. (#377)
+
 > 상품가입이 쓰던 `SUCCESS`/`FAILED`/`PROCESSING`은 이 Enum으로 통일합니다. (REQ-TRSF-017)
 
 ### 5-5. 이체 — P4

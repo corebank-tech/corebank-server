@@ -167,15 +167,41 @@ public class LedgerEntryIdGenerator {
 
 ## 5. 파티션 유지보수
 
-`ledger_entry`는 2026-07 ~ 2026-12 파티션과 `pmax`를 갖고 시작합니다. 2027년 이후 데이터는 전부 `pmax`로 들어가 **프루닝 효과가 사라집니다.**
+`ledger_entry`는 `occurred_at` 기준 월별 RANGE 파티션입니다. 범위를 넘어선 데이터는 전부 `pmax` 한 칸으로 들어가 **프루닝 효과가 사라집니다.**
 
-`V202608010980__partition_maintenance.sql`이 프로시저를 만들어 둡니다.
+**현재 범위: 2026-07 ~ 2027-12 + `pmax`** (최초 `V202608010930`, 2027-12까지 확장 `V202609132350` — #379)
+
+### 5-1. 고갈 시점 확인
 
 ```sql
-CALL add_ledger_partition('2027-01-01');
+-- 실 파티션이 어디까지 있는가
+SELECT PARTITION_NAME, PARTITION_DESCRIPTION
+  FROM information_schema.PARTITIONS
+ WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ledger_entry'
+ ORDER BY PARTITION_ORDINAL_POSITION;
+
+-- pmax에 이미 행이 쌓이기 시작했는가 (0이 아니면 이미 늦었다)
+SELECT COUNT(*) FROM ledger_entry PARTITION (pmax);
 ```
 
-매월 1일 배치로 **2개월 뒤 파티션**을 미리 만드십시오. 이미 있으면 아무 일도 하지 않습니다.
+### 5-2. 누가·언제·무엇을
+
+**늦어도 2027-09까지**(고갈 3개월 전) 원장 담당(P4)이 다음 12개월치를 선반영하는 `V__` 파일을 추가합니다. `V202609132350__extend_ledger_partitions_to_2027_12.sql`을 그대로 복사해 날짜만 바꾸면 됩니다.
+
+```sql
+CALL add_ledger_partition('2028-01-01');
+-- ... 12개월치
+```
+
+`add_ledger_partition`(`V202608010980`)은 같은 이름의 파티션이 이미 있으면 아무 일도 하지 않으므로 수동으로 만들어 둔 환경에서도 안전합니다.
+
+**`pmax`가 비어 있을 때 미리 하십시오.** `REORGANIZE PARTITION`은 `pmax`에 든 데이터를 새 칸으로 옮기는 작업이라, 데이터가 쌓인 뒤에 하면 훨씬 비쌉니다.
+
+### 5-3. 왜 스케줄러로 자동화하지 않는가 (#379 결정)
+
+월 1회 스케줄러가 프로시저를 호출하게 하면 **애플리케이션이 운영 DB에 DDL을 실행**하게 되어, 그 권한을 상시로 주고 실패 시 알림까지 설계해야 합니다. 반면 `pmax`가 비어 있는 동안의 선반영은 사실상 무비용이라, 12개월 단위 수동 갱신이 비용 대비 합리적이라고 판단했습니다. 운영 기간이 길어지면 재검토합니다.
+
+**센서**: `FlywayMigrationTest`가 `information_schema.PARTITIONS`로 2027-12까지의 파티션 존재를 검증합니다. 범위를 늘릴 때 이 테스트의 기대값도 함께 올리십시오.
 
 ---
 

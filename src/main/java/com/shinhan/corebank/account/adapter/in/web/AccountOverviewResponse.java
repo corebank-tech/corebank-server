@@ -39,7 +39,11 @@ public record AccountOverviewResponse(
 
     public record AccountItemResponse(
             @Schema(description = "계좌 내부 식별자", example = "101") Long accountId,
-            @Schema(description = "화면에 표시할 계좌명", example = "생활비통장") String accountName,
+            @Schema(description = "화면에 표시할 계좌명. alias가 있으면 alias, 없으면 baseAccountName", example = "생활비통장")
+                    String accountName,
+            @Schema(description = "실제 등록된 계좌 별명. 별명이 없으면 null", example = "생활비통장", nullable = true) String alias,
+            @Schema(description = "별명이 없을 때 사용할 기본 계좌명. 입출금계좌는 입출금통장, 예적금계좌는 상품명", example = "입출금통장")
+                    String baseAccountName,
             @Schema(description = "계좌번호", example = "088010000001") String accountNumber,
             @Schema(description = "계좌 유형", example = "DEMAND_DEPOSIT") AccountType accountType,
             @Schema(description = "계좌 잔액(원)", example = "2500000") long balance,
@@ -55,6 +59,8 @@ public record AccountOverviewResponse(
             return new AccountItemResponse(
                     account.accountId(),
                     account.accountName(),
+                    account.alias(),
+                    account.baseAccountName(),
                     account.accountNumber(),
                     account.accountType(),
                     account.balance(),

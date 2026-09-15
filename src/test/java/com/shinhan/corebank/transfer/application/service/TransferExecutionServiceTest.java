@@ -105,6 +105,7 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202)");
         jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id = 101 AND deposit_account_id = 202");
         jdbcTemplate.update("UPDATE account SET balance = 100000, status = 'ACTIVE' WHERE account_id IN (101, 202)");
+        jdbcTemplate.update("DELETE FROM transfer_limit_daily_usage WHERE customer_id = 1");
     }
 
     @Test
@@ -175,6 +176,51 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         assertThat(((Number) withdrawalEntry.get("account_id")).longValue()).isEqualTo(101L);
         assertThat(((Number) withdrawalEntry.get("amount")).longValue()).isEqualTo(30000L);
         assertThat(((Number) withdrawalEntry.get("balance_after")).longValue()).isEqualTo(70000L);
+    }
+
+    @Test
+    @DisplayName("정상 이체가 완료되면 limit 도메인의 당일 사용액에 이체금액이 적립된다")
+    void execute_completesTransfer_accumulatesDailyUsageInLimitDomain() {
+        // given: 픽스처는 별도 트랜잭션에서 커밋한다.
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        TransferCommand firstCommand = TransferCommand.builder()
+                .customerId(1L)
+                .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(30000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build();
+
+        // when: 같은 날 두 번 이체한다 - 두 번째 호출이 첫 번째가 쌓은 사용액 위에 누적되는지까지 봐야
+        // real 어댑터가 실제로 DB에 연결됐다는 증거가 된다(Mock은 아무 것도 안 해도 통과한다).
+        transferExecutionService.execute(firstCommand);
+        TransferResult second = transferExecutionService.execute(TransferCommand.builder()
+                .customerId(1L)
+                .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(20000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build());
+
+        assertThat(second.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+
+        Long usedAmount = jdbcTemplate.queryForObject(
+                "SELECT used_amount FROM transfer_limit_daily_usage WHERE customer_id = 1 AND usage_date = ?",
+                Long.class,
+                LocalDate.now(clock));
+        assertThat(usedAmount).isEqualTo(50000L);
     }
 
     @Test
@@ -495,5 +541,40 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
 
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE transaction_number = ?", result.transactionNumber());
         jdbcTemplate.update("DELETE FROM transfer WHERE transaction_number = ?", result.transactionNumber());
+    }
+
+    // #377 계약의 센서. 커밋 경로가 성공·실패 둘뿐이라는 전제가 깨지면(예: 기표 트랜잭션 분리)
+    // 여기서 먼저 걸린다 — 응답 스키마·목록 필터 설명이 이 전제 위에 서 있다.
+    @Test
+    @DisplayName("성공이든 실패든 transfer 행이 PROCESSING으로 커밋되지 않는다 (#377)")
+    void execute_neverCommitsProcessingRow() {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        TransferResult success = transferExecutionService.execute(transferCommand(30000L));
+        TransferResult failure = transferExecutionService.execute(transferCommand(150000L)); // 잔액(70,000) 초과
+
+        assertThat(success.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(failure.status()).isEqualTo(ProcessResultStatus.ERROR);
+
+        Long processingCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 101 AND status = 'PROCESSING'",
+                Long.class);
+        assertThat(processingCount).isZero();
+    }
+
+    private TransferCommand transferCommand(long amount) {
+        return TransferCommand.builder()
+                .customerId(1L)
+                .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(amount)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build();
     }
 }

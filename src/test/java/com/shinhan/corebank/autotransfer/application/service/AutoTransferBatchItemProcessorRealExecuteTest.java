@@ -11,7 +11,6 @@ import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.audit.AuditLogJpaRepository;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
-import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -20,15 +19,14 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * r1b_execute_safety_verification.md 작업 4번: transfer 팀 실구현(feat/124, PR #132) merge 후,
- * TransferExecutionUseCase를 @MockitoBean으로 대체하지 않고 real TransferExecutionService
- * (@Primary)를 그대로 주입받아 completeProcessing()을 돌려서 실제로 안전한지 확인한다.
+ * TransferExecutionUseCase를 @MockitoBean으로 대체하지 않고 real TransferExecutionService를
+ * 그대로 주입받아 completeProcessing()을 돌려서 실제로 안전한지 확인한다.
  *
  * <p>클래스 레벨 @Transactional을 안 쓰는 이유는 AutoTransferBatchItemProcessorTest와 동일 —
  * saveProcessing()/completeProcessing()이 REQUIRES_NEW로 진짜 독립 커밋되는지 봐야 한다.
@@ -37,9 +35,6 @@ class AutoTransferBatchItemProcessorRealExecuteTest extends IntegrationTestSuppo
 
     @Autowired
     AutoTransferBatchItemProcessor itemProcessor;
-
-    @Autowired
-    TransferExecutionUseCase transferExecutionUseCase;
 
     @Autowired
     AutoTransferExecutionJpaRepository executionRepository;
@@ -134,15 +129,6 @@ class AutoTransferBatchItemProcessorRealExecuteTest extends IntegrationTestSuppo
                 null,
                 LocalDateTime.of(2026, 1, 1, 0, 0),
                 0L);
-    }
-
-    @Test
-    @DisplayName("주입된 TransferExecutionUseCase가 real 구현(TransferExecutionService)이다 - Mock이 여전히 @Primary를 못 이긴다는 전제 확인")
-    void injectedBeanIsRealImplementation() {
-        // getClass() 대신 AopUtils.getTargetClass()를 쓴다 - AOP 프록시로 감싸져도(나중에
-        // @Transactional 등이 붙어도) 실제 타깃 클래스를 정확히 가리켜서 이 단정이 안 깨진다.
-        assertThat(AopUtils.getTargetClass(transferExecutionUseCase).getSimpleName())
-                .isEqualTo("TransferExecutionService");
     }
 
     @Test

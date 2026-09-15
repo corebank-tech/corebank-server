@@ -114,6 +114,8 @@ class LoginStatusQueryServiceTest {
                 .map(date -> new AccountOverviewResult.AccountItem(
                         1L,
                         "계좌",
+                        null,
+                        "계좌",
                         "110000000001",
                         AccountType.DEMAND_DEPOSIT,
                         10_000L,
