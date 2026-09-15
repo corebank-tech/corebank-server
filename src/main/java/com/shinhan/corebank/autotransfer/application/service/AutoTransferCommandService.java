@@ -70,6 +70,12 @@ public class AutoTransferCommandService
             throw new BusinessException(AutoTransferErrorCode.UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE);
         }
 
+        // 입금계좌 만기일 검증
+        Optional<java.time.LocalDate> maturityDate = accountStatusPort.findMaturityDate(command.depositAccountNumber());
+        if (maturityDate.isPresent() && command.endDate().isAfter(maturityDate.get())) {
+            throw new BusinessException(AutoTransferErrorCode.END_DATE_AFTER_MATURITY_DATE);
+        }
+
         // 1회 이체한도 검증
         long oneTimeLimit = transferLimitPort.findOneTimeLimit(command.customerId());
         if (command.amount() > oneTimeLimit) {
