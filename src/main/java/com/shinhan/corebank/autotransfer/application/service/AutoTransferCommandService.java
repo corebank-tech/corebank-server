@@ -16,6 +16,7 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -71,7 +72,7 @@ public class AutoTransferCommandService
         }
 
         // 입금계좌 만기일 검증
-        Optional<java.time.LocalDate> maturityDate = accountStatusPort.findMaturityDate(command.depositAccountNumber());
+        Optional<LocalDate> maturityDate = accountStatusPort.findMaturityDate(command.depositAccountNumber());
         if (maturityDate.isPresent() && command.endDate().isAfter(maturityDate.get())) {
             throw new BusinessException(AutoTransferErrorCode.END_DATE_AFTER_MATURITY_DATE);
         }
@@ -139,6 +140,14 @@ public class AutoTransferCommandService
         // — 정상 상태가 아닌 건을 한도 초과 금액으로 바꾸면 진짜 원인(AUT0302)이 아니라 LMT0002으로 잘못 응답하게 된다
         if (!autoTransfer.getStatus().isModifiable()) {
             throw new BusinessException(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS);
+        }
+        // 입금계좌 만기일 검증
+        if (command.endDate() != null) {
+            Optional<LocalDate> maturityDate =
+                    accountStatusPort.findMaturityDate(autoTransfer.getDepositAccountNumber());
+            if (maturityDate.isPresent() && command.endDate().isAfter(maturityDate.get())) {
+                throw new BusinessException(AutoTransferErrorCode.END_DATE_AFTER_MATURITY_DATE);
+            }
         }
         // 이체한도 재검증
         if (command.amount() != null) {

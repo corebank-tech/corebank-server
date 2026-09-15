@@ -2,10 +2,10 @@ package com.shinhan.corebank.autotransfer.adapter.out.account;
 
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
+import java.time.LocalDate;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Profile;
-import org.springframework.security.core.parameters.P;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -32,9 +32,10 @@ public class AccountStatusAdapter implements AccountStatusPort {
     }
 
     @Override
-    public Optional<java.time.LocalDate> findMaturityDate(String accountNumber) {
-        return accountLookupJpaRepository.findByAccountNumber(accountNumber).map(AccountLookupJpaEntity::getMaturityDate);
-
+    public Optional<LocalDate> findMaturityDate(String accountNumber) {
+        return accountLookupJpaRepository
+                .findByAccountNumber(accountNumber)
+                .map(AccountLookupJpaEntity::getMaturityDate);
     }
 
     @Override

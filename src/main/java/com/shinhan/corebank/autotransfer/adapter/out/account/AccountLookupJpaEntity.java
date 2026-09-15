@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.LocalDate;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -38,5 +39,5 @@ public class AccountLookupJpaEntity {
     private boolean withdrawalRegistered;
 
     @Column(name = "maturity_date", insertable = false, updatable = false)
-    private java.time.LocalDate maturityDate;
+    private LocalDate maturityDate;
 }

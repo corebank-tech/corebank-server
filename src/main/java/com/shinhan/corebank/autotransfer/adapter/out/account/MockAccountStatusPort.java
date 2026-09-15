@@ -3,6 +3,7 @@ package com.shinhan.corebank.autotransfer.adapter.out.account;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
 import jakarta.persistence.EntityManager;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +28,7 @@ public class MockAccountStatusPort implements AccountStatusPort {
     }
 
     @Override
-    public Optional<java.time.LocalDate> findMaturityDate(String accountNumber) {
+    public Optional<LocalDate> findMaturityDate(String accountNumber) {
         return Optional.empty();
     }
 

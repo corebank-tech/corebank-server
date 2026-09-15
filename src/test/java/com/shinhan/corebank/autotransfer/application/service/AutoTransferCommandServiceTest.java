@@ -433,6 +433,77 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
+    @DisplayName("정기적금 입금계좌의 만기일보다 종료일이 늦으면 END_DATE_AFTER_MATURITY_DATE를 던진다 (#418)")
+    void register_endDateAfterMaturityDate_throws() {
+        when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
+        when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
+        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
+                .thenReturn(Optional.of(AccountType.INSTALLMENT_SAVINGS));
+        when(accountStatusPort.findMaturityDate("110987654321"))
+                .thenReturn(Optional.of(LocalDate.now().plusMonths(6)));
+
+        AutoTransferRegisterCommand command =
+                validCommandBuilder().endDate(LocalDate.now().plusMonths(12)).build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.register(command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.END_DATE_AFTER_MATURITY_DATE));
+
+        verify(autoTransferPersistencePort, never()).existsActiveDuplicate(any(), any(), anyInt());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("종료일이 입금계좌 만기일과 같거나 그 이전이면 등록이 허용된다 (#418, 경계값)")
+    void register_endDateOnMaturityDate_succeeds() {
+        when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
+        when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
+        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
+                .thenReturn(Optional.of(AccountType.INSTALLMENT_SAVINGS));
+        LocalDate maturityDate = LocalDate.now().plusMonths(12);
+        when(accountStatusPort.findMaturityDate("110987654321")).thenReturn(Optional.of(maturityDate));
+        when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
+        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
+                .thenReturn(false);
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+        // save()는 실제로는 INSERT 후 채번된 ID로 재조립해서 돌려준다 — audit 로그가 autoTransferId를
+        // 필요로 하므로(Map.of는 null 값을 허용하지 않는다) 그대로 돌려주면 NPE가 난다
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> {
+            AutoTransfer arg = invocation.getArgument(0);
+            return AutoTransfer.reconstitute(
+                    100L,
+                    arg.getCustomerId(),
+                    arg.getWithdrawalAccountId(),
+                    arg.getDepositAccountNumber(),
+                    arg.getPayeeName(),
+                    arg.getAmount(),
+                    arg.getCycleMonths(),
+                    arg.getTransferDay(),
+                    arg.getStartDate(),
+                    arg.getEndDate(),
+                    arg.getNextExecutionDate(),
+                    arg.getMyPassbookMemo(),
+                    arg.getRecipientPassbookMemo(),
+                    arg.getStatus(),
+                    arg.getRegisteredAt(),
+                    arg.getTerminatedAt(),
+                    arg.getUpdatedAt(),
+                    arg.getVersion());
+        });
+
+        // endDate == maturityDate(경계값 그 자체) — isAfter는 false라 통과해야 한다
+        AutoTransferRegisterCommand command =
+                validCommandBuilder().endDate(maturityDate).build();
+
+        autoTransferCommandService.register(command);
+
+        verify(autoTransferPersistencePort).save(any(AutoTransfer.class));
+    }
+
+    @Test
     @DisplayName("정상적으로 변경하면 저장하고 감사로그를 남긴다")
     void change_success() {
         AutoTransfer existing = existingAutoTransfer();
@@ -556,6 +627,49 @@ class AutoTransferCommandServiceTest {
         autoTransferCommandService.change(10L, command);
 
         verify(transferLimitPort, never()).findOneTimeLimit(any());
+    }
+
+    @Test
+    @DisplayName("변경 요청의 종료일이 입금계좌 만기일보다 늦으면 END_DATE_AFTER_MATURITY_DATE를 던지고 저장하지 않는다 (#418)")
+    void change_endDateAfterMaturityDate_throws() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findMaturityDate("110987654321"))
+                .thenReturn(Optional.of(LocalDate.now().plusMonths(6)));
+
+        AutoTransferChangeCommand command = validChangeCommandBuilder()
+                .endDate(LocalDate.now().plusMonths(12))
+                .build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.change(10L, command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.END_DATE_AFTER_MATURITY_DATE));
+
+        // 만기일 검증이 한도 검증보다 먼저 실행돼야 하므로, 한도 조회 자체가 일어나면 안 된다
+        verify(transferLimitPort, never()).findOneTimeLimit(any());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("종료일을 안 바꾸면 만기일 검증을 하지 않는다 (#418)")
+    void change_endDateNotProvided_skipsMaturityCheck() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        AutoTransferChangeCommand command = AutoTransferChangeCommand.builder()
+                .customerId(1L)
+                .cycleMonths(3)
+                .accountPasswordAuthToken("valid-token")
+                .otpAuthToken("valid-otp-token")
+                .requestIp("127.0.0.1")
+                .build();
+
+        autoTransferCommandService.change(10L, command);
+
+        verify(accountStatusPort, never()).findMaturityDate(any());
     }
 
     @Test
