@@ -658,6 +658,27 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
+    @DisplayName("변경 시 입금계좌를 찾을 수 없으면 ACCOUNT_NOT_ACCESSIBLE을 던지고 저장하지 않는다 (#418 리뷰 반영)")
+    void change_depositAccountNotFound_throwsAccountNotAccessible() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321")).thenReturn(Optional.empty());
+
+        AutoTransferChangeCommand command = validChangeCommandBuilder()
+                .endDate(LocalDate.now().plusMonths(6))
+                .build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.change(10L, command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
+
+        // 만기일 검증이 한도 검증보다 먼저 실행돼야 하므로, 한도 조회 자체가 일어나면 안 된다
+        verify(transferLimitPort, never()).findOneTimeLimit(any());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
     @DisplayName("종료일을 안 바꾸면 만기일 검증을 하지 않는다 (#418)")
     void change_endDateNotProvided_skipsMaturityCheck() {
         AutoTransfer existing = existingAutoTransfer();
