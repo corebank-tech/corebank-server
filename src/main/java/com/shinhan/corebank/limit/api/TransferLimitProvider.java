@@ -9,6 +9,6 @@ package com.shinhan.corebank.limit.api;
  */
 public interface TransferLimitProvider {
 
-    /** 고객의 1회 이체한도. 한도 행이 없으면 정책 기본값(POL-013)을 돌려준다. 락을 걸지 않는다. */
+    /** 고객의 1회 이체한도. 한도 행이 없으면 LMT9001 로 거부한다. 락을 걸지 않는다. */
     long findOneTimeLimit(Long customerId);
 }
