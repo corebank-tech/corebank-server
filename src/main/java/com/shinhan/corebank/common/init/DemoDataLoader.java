@@ -58,7 +58,7 @@ public class DemoDataLoader implements ApplicationRunner {
                 JOIN customer c ON c.customer_id = a.customer_id
                 WHERE (c.user_id = 'honggildong'
                          AND c.email = 'honggildong@example.com'
-                         AND a.account_number BETWEEN '088100000001' AND '088100000005')
+                         AND a.account_number BETWEEN '088100000010' AND '088100000014')
                    OR (c.user_id = 'kimminji'
                          AND c.email = 'kimminji@example.com'
                          AND a.account_number IN (
