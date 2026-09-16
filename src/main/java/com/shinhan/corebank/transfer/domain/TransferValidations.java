@@ -12,8 +12,7 @@ import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
  */
 final class TransferValidations {
 
-    private TransferValidations() {
-    }
+    private TransferValidations() {}
 
     static void requireNonNull(Object value, ErrorCode errorCode) {
         if (value == null) {

@@ -3,7 +3,6 @@ package com.shinhan.corebank.subscription.adapter.in.web;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.subscription.domain.SubscriptionValidation;
 import com.shinhan.corebank.subscription.domain.SubscriptionViolation;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -20,8 +19,7 @@ public record ProductSubscriptionValidationResponse(
         Long expectedInterest,
         Long expectedMaturityAmount,
         String withdrawalAccountNumber,
-        Long withdrawalAccountBalance
-) {
+        Long withdrawalAccountBalance) {
     public static ProductSubscriptionValidationResponse from(SubscriptionValidation validation) {
         return new ProductSubscriptionValidationResponse(
                 validation.isValid(),

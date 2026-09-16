@@ -17,28 +17,19 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class AccountPasswordExceptionHandler {
 
-    private static final Logger log = LoggerFactory.getLogger(
-            AccountPasswordExceptionHandler.class
-    );
+    private static final Logger log = LoggerFactory.getLogger(AccountPasswordExceptionHandler.class);
 
-    @ExceptionHandler(
-            AccountPasswordVerificationFailedException.class
-    )
+    @ExceptionHandler(AccountPasswordVerificationFailedException.class)
     public ResponseEntity<ErrorResponse> handleVerificationFailure(
-            AccountPasswordVerificationFailedException exception
-    ) {
+            AccountPasswordVerificationFailedException exception) {
         ErrorCode errorCode = exception.getErrorCode();
 
         log.warn("[{}] {}", errorCode.getCode(), errorCode.getMessage());
 
-        return ResponseEntity
-                .status(HttpStatus.valueOf(errorCode.getStatus()))
+        return ResponseEntity.status(HttpStatus.valueOf(errorCode.getStatus()))
                 .body(new ErrorResponse(
                         errorCode.getCode(),
                         errorCode.getMessage(),
-                        AccountPasswordFailureData.from(
-                                exception.getAttemptResult()
-                        )
-                ));
+                        AccountPasswordFailureData.from(exception.getAttemptResult())));
     }
 }

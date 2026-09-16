@@ -17,12 +17,11 @@ import com.shinhan.corebank.limit.application.port.out.AuthTokenVerificationPort
 import com.shinhan.corebank.limit.application.port.out.TransferLimitCommandPort;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitHistoryPort;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
-import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
-import com.shinhan.corebank.otp.domain.exception.OtpErrorCode;
 import com.shinhan.corebank.limit.domain.TransferLimit;
 import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
 import com.shinhan.corebank.limit.domain.TransferLimitHistory;
-
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
+import com.shinhan.corebank.otp.domain.exception.OtpErrorCode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -44,10 +43,13 @@ class TransferLimitCommandServiceTest {
 
     @Mock
     TransferLimitCommandPort transferLimitCommandPort;
+
     @Mock
     TransferLimitQueryPort transferLimitQueryPort;
+
     @Mock
     TransferLimitHistoryPort transferLimitHistoryPort;
+
     @Mock
     AuthTokenVerificationPort authTokenVerificationPort;
 
@@ -57,8 +59,7 @@ class TransferLimitCommandServiceTest {
         // given
         when(transferLimitCommandPort.findForUpdateByCustomerId(CUSTOMER_ID))
                 .thenReturn(Optional.of(TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L)));
-        when(transferLimitCommandPort.update(any()))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(transferLimitCommandPort.update(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY))
                 .thenReturn(Optional.of(TransferLimitDailyUsage.restore(CUSTOMER_ID, TODAY, 300_000L)));
 
@@ -78,8 +79,7 @@ class TransferLimitCommandServiceTest {
         // given
         when(transferLimitCommandPort.findForUpdateByCustomerId(CUSTOMER_ID))
                 .thenReturn(Optional.of(TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L)));
-        when(transferLimitCommandPort.update(any()))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(transferLimitCommandPort.update(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY)).thenReturn(Optional.empty());
 
         // when
@@ -102,8 +102,7 @@ class TransferLimitCommandServiceTest {
                         .isEqualTo(LmtErrorCode.ONE_TIME_LIMIT_OVER_DAILY));
 
         // 입력 실수로 토큰이 소모되면 사용자가 OTP를 다시 받아야 한다. 소모 전에 걸러야 한다.
-        verify(authTokenVerificationPort, never())
-                .verifyAndConsumeOtp(any(), any(), anyLong(), anyLong());
+        verify(authTokenVerificationPort, never()).verifyAndConsumeOtp(any(), any(), anyLong(), anyLong());
         // 인증 전에 X락을 잡으면 실패할 요청이 남의 이체를 대기시킨다.
         verify(transferLimitCommandPort, never()).findForUpdateByCustomerId(any());
         verify(transferLimitCommandPort, never()).update(any());
@@ -132,8 +131,7 @@ class TransferLimitCommandServiceTest {
         // given
         when(transferLimitCommandPort.findForUpdateByCustomerId(CUSTOMER_ID))
                 .thenReturn(Optional.of(TransferLimit.restore(CUSTOMER_ID, 1_000_000L, 5_000_000L)));
-        when(transferLimitCommandPort.update(any()))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(transferLimitCommandPort.update(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY)).thenReturn(Optional.empty());
 
         // when
@@ -179,7 +177,10 @@ class TransferLimitCommandServiceTest {
     private TransferLimitCommandService service() {
         Clock clock = Clock.fixed(TODAY.atTime(14, 0).atZone(SEOUL).toInstant(), SEOUL);
         return new TransferLimitCommandService(
-                transferLimitCommandPort, transferLimitQueryPort, transferLimitHistoryPort,
-                authTokenVerificationPort, clock);
+                transferLimitCommandPort,
+                transferLimitQueryPort,
+                transferLimitHistoryPort,
+                authTokenVerificationPort,
+                clock);
     }
 }

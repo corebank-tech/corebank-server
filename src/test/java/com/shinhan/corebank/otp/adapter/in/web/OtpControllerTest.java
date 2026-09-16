@@ -1,23 +1,5 @@
 package com.shinhan.corebank.otp.adapter.in.web;
 
-import com.shinhan.corebank.IntegrationTestSupport;
-import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
-import com.shinhan.corebank.otp.application.port.in.IssueOtpResult;
-import com.shinhan.corebank.otp.application.port.in.IssueOtpUseCase;
-import com.shinhan.corebank.otp.application.port.in.VerifyOtpResult;
-import com.shinhan.corebank.otp.application.port.in.VerifyOtpUseCase;
-import com.shinhan.corebank.otp.config.OtpProperties;
-import com.shinhan.corebank.otp.domain.exception.OtpVerificationFailedException;
-import com.shinhan.corebank.otp.domain.model.OtpAttemptResult;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.AuthorityUtils;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -29,23 +11,58 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// OTP 발급·검증 JSON 계약과 세션·CSRF 보호 및 오류 횟수 응답을 검증한다.
-@AutoConfigureMockMvc
-class OtpControllerTest extends IntegrationTestSupport {
+import com.shinhan.corebank.auth.adapter.in.security.SecurityConfig;
+import com.shinhan.corebank.auth.adapter.in.security.SecurityContextCurrentCustomerProvider;
+import com.shinhan.corebank.auth.adapter.in.security.SessionAccessDeniedHandler;
+import com.shinhan.corebank.auth.adapter.in.security.SessionAuthenticationEntryPoint;
+import com.shinhan.corebank.auth.adapter.in.security.SessionLogoutSuccessHandler;
+import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.otp.application.port.in.IssueOtpResult;
+import com.shinhan.corebank.otp.application.port.in.IssueOtpUseCase;
+import com.shinhan.corebank.otp.application.port.in.VerifyOtpResult;
+import com.shinhan.corebank.otp.application.port.in.VerifyOtpUseCase;
+import com.shinhan.corebank.otp.config.OtpProperties;
+import com.shinhan.corebank.otp.domain.exception.OtpVerificationFailedException;
+import com.shinhan.corebank.otp.domain.model.OtpAttemptResult;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
 
-    @Autowired MockMvc mockMvc;
+// OTP 발급·검증 JSON 계약과 세션·CSRF 보호 및 오류 횟수 응답을 검증한다. 유스케이스를 전부
+// 모킹하므로 실DB·Testcontainers가 필요 없어 슬라이스로 내린다(#363).
+@WebMvcTest(controllers = OtpController.class)
+@Import({
+    SecurityConfig.class,
+    SessionAuthenticationEntryPoint.class,
+    SessionAccessDeniedHandler.class,
+    SessionLogoutSuccessHandler.class,
+    SecurityContextCurrentCustomerProvider.class
+})
+class OtpControllerTest {
 
-    @MockitoBean IssueOtpUseCase issueOtpUseCase;
-    @MockitoBean VerifyOtpUseCase verifyOtpUseCase;
-    @MockitoBean OtpProperties otpProperties;
+    @Autowired
+    MockMvc mockMvc;
+
+    @MockitoBean
+    IssueOtpUseCase issueOtpUseCase;
+
+    @MockitoBean
+    VerifyOtpUseCase verifyOtpUseCase;
+
+    @MockitoBean
+    OtpProperties otpProperties;
 
     @Test
     @DisplayName("OTP 발급 성공 응답에 요청 ID와 6자리 번호 및 180초를 반환한다")
     void issuesOtpSuccessfully() throws Exception {
         given(otpProperties.exposeCode()).willReturn(true);
-        given(issueOtpUseCase.issue(any())).willReturn(
-                new IssueOtpResult("OTP_REQ_test", "012345", 180)
-        );
+        given(issueOtpUseCase.issue(any())).willReturn(new IssueOtpResult("OTP_REQ_test", "012345", 180));
 
         mockMvc.perform(post("/otp/issue")
                         .with(authentication(authenticationOf(1L)))
@@ -64,9 +81,7 @@ class OtpControllerTest extends IntegrationTestSupport {
     @DisplayName("OTP 번호 노출이 꺼지면 발급 성공 응답에서 평문 번호를 제외한다")
     void omitsOtpCodeWhenExposureIsDisabled() throws Exception {
         given(otpProperties.exposeCode()).willReturn(false);
-        given(issueOtpUseCase.issue(any())).willReturn(
-                new IssueOtpResult("OTP_REQ_test", "012345", 180)
-        );
+        given(issueOtpUseCase.issue(any())).willReturn(new IssueOtpResult("OTP_REQ_test", "012345", 180));
 
         mockMvc.perform(post("/otp/issue")
                         .with(authentication(authenticationOf(1L)))
@@ -82,9 +97,7 @@ class OtpControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("OTP 검증 성공 응답에 인증 토큰과 null 오류 횟수를 반환한다")
     void verifiesOtpSuccessfully() throws Exception {
-        given(verifyOtpUseCase.verify(any())).willReturn(
-                new VerifyOtpResult("OTP_AUTH_test")
-        );
+        given(verifyOtpUseCase.verify(any())).willReturn(new VerifyOtpResult("OTP_AUTH_test"));
 
         performVerify("123456")
                 .andExpect(status().isOk())
@@ -108,9 +121,8 @@ class OtpControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("OTP 오답은 OTP0001과 현재 오류 횟수 및 잔여 횟수를 반환한다")
     void returnsMismatchAttemptData() throws Exception {
-        given(verifyOtpUseCase.verify(any())).willThrow(
-                new OtpVerificationFailedException(new OtpAttemptResult(1, 4, false))
-        );
+        given(verifyOtpUseCase.verify(any()))
+                .willThrow(new OtpVerificationFailedException(new OtpAttemptResult(1, 4, false)));
 
         performVerify("000000")
                 .andExpect(status().isBadRequest())
@@ -123,9 +135,8 @@ class OtpControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("다섯 번째 OTP 오답은 OTP0103과 5/0을 반환한다")
     void returnsLockedAttemptData() throws Exception {
-        given(verifyOtpUseCase.verify(any())).willThrow(
-                new OtpVerificationFailedException(new OtpAttemptResult(5, 0, true))
-        );
+        given(verifyOtpUseCase.verify(any()))
+                .willThrow(new OtpVerificationFailedException(new OtpAttemptResult(5, 0, true)));
 
         performVerify("000000")
                 .andExpect(status().isForbidden())
@@ -160,18 +171,19 @@ class OtpControllerTest extends IntegrationTestSupport {
         verify(issueOtpUseCase, never()).issue(any());
     }
 
-    private org.springframework.test.web.servlet.ResultActions performVerify(String otpCode)
-            throws Exception {
+    private org.springframework.test.web.servlet.ResultActions performVerify(String otpCode) throws Exception {
         return mockMvc.perform(post("/otp/verify")
                 .with(authentication(authenticationOf(1L)))
                 .with(csrf())
                 .contentType(APPLICATION_JSON)
-                .content("""
+                .content(
+                        """
                         {
                           "otpRequestId": "OTP_REQ_test",
                           "otpCode": "%s"
                         }
-                        """.formatted(otpCode)));
+                        """
+                                .formatted(otpCode)));
     }
 
     private String issueBody() {
@@ -188,15 +200,8 @@ class OtpControllerTest extends IntegrationTestSupport {
     }
 
     private UsernamePasswordAuthenticationToken authenticationOf(Long customerId) {
-        AuthenticatedCustomer customer = new AuthenticatedCustomer(
-                customerId,
-                "user" + customerId,
-                "테스터"
-        );
+        AuthenticatedCustomer customer = new AuthenticatedCustomer(customerId, "user" + customerId, "테스터");
         return UsernamePasswordAuthenticationToken.authenticated(
-                customer,
-                null,
-                AuthorityUtils.createAuthorityList("ROLE_CUSTOMER")
-        );
+                customer, null, AuthorityUtils.createAuthorityList("ROLE_CUSTOMER"));
     }
 }

@@ -3,24 +3,20 @@ package com.shinhan.corebank.transfer.application.port.in;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
-import java.time.LocalDate;
-
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
+import java.time.LocalDate;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 
 class TransferCommandTest {
 
     @Test
     @DisplayName("필수값이 누락되면 REQUIRED_FIELD_MISSING 에러가 발생한다.")
     void missingRequiredFields_ThrowsException() {
-        assertThatThrownBy(() -> TransferCommand.builder()
-                .amount(10000L)
-                .build())
+        assertThatThrownBy(() -> TransferCommand.builder().amount(10000L).build())
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining(CommonErrorCode.REQUIRED_FIELD_MISSING.getMessage());
     }
@@ -29,13 +25,13 @@ class TransferCommandTest {
     @DisplayName("계좌번호가 12자리 숫자가 아니면 INVALID_INPUT 에러가 발생한다.")
     void invalidAccountNumberFormat_ThrowsException() {
         assertThatThrownBy(() -> TransferCommand.builder()
-                .customerId(1L)
-                .withdrawalAccountId(1L)
-                .depositAccountNumber("12345678901") // 11자리
-                .amount(10000L)
-                .transferType(TransferType.IMMEDIATE)
-                .channel(TransferChannel.WB)
-                .build())
+                        .customerId(1L)
+                        .withdrawalAccountId(1L)
+                        .depositAccountNumber("12345678901") // 11자리
+                        .amount(10000L)
+                        .transferType(TransferType.IMMEDIATE)
+                        .channel(TransferChannel.WB)
+                        .build())
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining(CommonErrorCode.INVALID_INPUT.getMessage());
     }
@@ -44,14 +40,14 @@ class TransferCommandTest {
     @DisplayName("즉시 이체인데 원본 식별자(sourceId)가 있으면 INVALID_INPUT 에러가 발생한다.")
     void immediateTransferWithSourceId_ThrowsException() {
         assertThatThrownBy(() -> TransferCommand.builder()
-                .customerId(1L)
-                .withdrawalAccountId(1L)
-                .depositAccountNumber("123456789012")
-                .amount(10000L)
-                .transferType(TransferType.IMMEDIATE)
-                .channel(TransferChannel.WB)
-                .sourceId(100L) // 즉시 이체인데 sourceId 존재
-                .build())
+                        .customerId(1L)
+                        .withdrawalAccountId(1L)
+                        .depositAccountNumber("123456789012")
+                        .amount(10000L)
+                        .transferType(TransferType.IMMEDIATE)
+                        .channel(TransferChannel.WB)
+                        .sourceId(100L) // 즉시 이체인데 sourceId 존재
+                        .build())
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining(CommonErrorCode.INVALID_INPUT.getMessage());
     }
@@ -60,14 +56,14 @@ class TransferCommandTest {
     @DisplayName("예약/자동 이체인데 원본 식별자(sourceId)가 없으면 REQUIRED_FIELD_MISSING 에러가 발생한다.")
     void scheduledTransferWithoutSourceId_ThrowsException() {
         assertThatThrownBy(() -> TransferCommand.builder()
-                .customerId(1L)
-                .withdrawalAccountId(1L)
-                .depositAccountNumber("123456789012")
-                .amount(10000L)
-                .transferType(TransferType.SCHEDULED)
-                .channel(TransferChannel.WB)
-                // sourceId 누락
-                .build())
+                        .customerId(1L)
+                        .withdrawalAccountId(1L)
+                        .depositAccountNumber("123456789012")
+                        .amount(10000L)
+                        .transferType(TransferType.SCHEDULED)
+                        .channel(TransferChannel.WB)
+                        // sourceId 누락
+                        .build())
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining(CommonErrorCode.REQUIRED_FIELD_MISSING.getMessage());
     }
@@ -76,15 +72,15 @@ class TransferCommandTest {
     @DisplayName("즉시 이체인데 실행일자(executionDate)가 있으면 INVALID_INPUT 에러가 발생한다.")
     void immediateTransferWithExecutionDate_ThrowsException() {
         assertThatThrownBy(() -> TransferCommand.builder()
-                .customerId(1L)
-                .withdrawalAccountId(1L)
-                .depositAccountNumber("123456789012")
-                .amount(10000L)
-                .transferType(TransferType.IMMEDIATE)
-                .channel(TransferChannel.WB)
-                .authToken("dummy-auth-token")
-                .executionDate(LocalDate.now()) // 즉시 이체인데 executionDate 존재
-                .build())
+                        .customerId(1L)
+                        .withdrawalAccountId(1L)
+                        .depositAccountNumber("123456789012")
+                        .amount(10000L)
+                        .transferType(TransferType.IMMEDIATE)
+                        .channel(TransferChannel.WB)
+                        .authToken("dummy-auth-token")
+                        .executionDate(LocalDate.now()) // 즉시 이체인데 executionDate 존재
+                        .build())
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining(CommonErrorCode.INVALID_INPUT.getMessage());
     }
@@ -93,15 +89,15 @@ class TransferCommandTest {
     @DisplayName("예약/자동 이체인데 실행일자(executionDate)가 없으면 REQUIRED_FIELD_MISSING 에러가 발생한다.")
     void scheduledTransferWithoutExecutionDate_ThrowsException() {
         assertThatThrownBy(() -> TransferCommand.builder()
-                .customerId(1L)
-                .withdrawalAccountId(1L)
-                .depositAccountNumber("123456789012")
-                .amount(10000L)
-                .transferType(TransferType.SCHEDULED)
-                .channel(TransferChannel.WB)
-                .sourceId(100L)
-                // executionDate 누락
-                .build())
+                        .customerId(1L)
+                        .withdrawalAccountId(1L)
+                        .depositAccountNumber("123456789012")
+                        .amount(10000L)
+                        .transferType(TransferType.SCHEDULED)
+                        .channel(TransferChannel.WB)
+                        .sourceId(100L)
+                        // executionDate 누락
+                        .build())
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining(CommonErrorCode.REQUIRED_FIELD_MISSING.getMessage());
     }
@@ -110,13 +106,13 @@ class TransferCommandTest {
     @DisplayName("customerId가 없으면 REQUIRED_FIELD_MISSING 에러가 발생한다.")
     void missingCustomerId_ThrowsException() {
         assertThatThrownBy(() -> TransferCommand.builder()
-                .withdrawalAccountId(1L)
-                .depositAccountNumber("123456789012")
-                .amount(10000L)
-                .transferType(TransferType.IMMEDIATE)
-                .channel(TransferChannel.WB)
-                // customerId 누락
-                .build())
+                        .withdrawalAccountId(1L)
+                        .depositAccountNumber("123456789012")
+                        .amount(10000L)
+                        .transferType(TransferType.IMMEDIATE)
+                        .channel(TransferChannel.WB)
+                        // customerId 누락
+                        .build())
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining(CommonErrorCode.REQUIRED_FIELD_MISSING.getMessage());
     }
@@ -125,15 +121,15 @@ class TransferCommandTest {
     @DisplayName("즉시 이체인데 계좌비밀번호 인증 토큰이 없으면 REQUIRED_FIELD_MISSING 에러가 발생한다.")
     void immediateTransferWithoutAuthToken_ThrowsException() {
         assertThatThrownBy(() -> TransferCommand.builder()
-                .customerId(1L)
-                .withdrawalAccountId(1L)
-                .depositAccountNumber("123456789012")
-                .amount(10000L)
-                .transferType(TransferType.IMMEDIATE)
-                .channel(TransferChannel.WB)
-                .otpAuthToken("dummy-otp-token")
-                // authToken 누락
-                .build())
+                        .customerId(1L)
+                        .withdrawalAccountId(1L)
+                        .depositAccountNumber("123456789012")
+                        .amount(10000L)
+                        .transferType(TransferType.IMMEDIATE)
+                        .channel(TransferChannel.WB)
+                        .otpAuthToken("dummy-otp-token")
+                        // authToken 누락
+                        .build())
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining(CommonErrorCode.REQUIRED_FIELD_MISSING.getMessage());
     }
@@ -142,15 +138,15 @@ class TransferCommandTest {
     @DisplayName("즉시 이체인데 OTP 인증 토큰이 없으면 REQUIRED_FIELD_MISSING 에러가 발생한다.")
     void immediateTransferWithoutOtpAuthToken_ThrowsException() {
         assertThatThrownBy(() -> TransferCommand.builder()
-                .customerId(1L)
-                .withdrawalAccountId(1L)
-                .depositAccountNumber("123456789012")
-                .amount(10000L)
-                .transferType(TransferType.IMMEDIATE)
-                .channel(TransferChannel.WB)
-                .authToken("dummy-auth-token")
-                // otpAuthToken 누락
-                .build())
+                        .customerId(1L)
+                        .withdrawalAccountId(1L)
+                        .depositAccountNumber("123456789012")
+                        .amount(10000L)
+                        .transferType(TransferType.IMMEDIATE)
+                        .channel(TransferChannel.WB)
+                        .authToken("dummy-auth-token")
+                        // otpAuthToken 누락
+                        .build())
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining(CommonErrorCode.REQUIRED_FIELD_MISSING.getMessage());
     }

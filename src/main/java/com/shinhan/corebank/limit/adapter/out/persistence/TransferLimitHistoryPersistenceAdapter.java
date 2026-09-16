@@ -2,7 +2,6 @@ package com.shinhan.corebank.limit.adapter.out.persistence;
 
 import com.shinhan.corebank.limit.application.port.out.TransferLimitHistoryPort;
 import com.shinhan.corebank.limit.domain.TransferLimitHistory;
-
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

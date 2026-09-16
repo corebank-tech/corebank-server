@@ -10,8 +10,5 @@ public interface WithdrawableAccountQueryUseCase {
      * 그 외(미존재·타인 계좌·정지·해지·미등록)는 사유를 구분하지 않고 전부 빈 Optional이며,
      * 어떤 오류로 응답할지는 호출 도메인이 정한다.
      */
-    Optional<WithdrawableAccountResult> findWithdrawable(
-            Long accountId,
-            Long customerId
-    );
+    Optional<WithdrawableAccountResult> findWithdrawable(Long accountId, Long customerId);
 }

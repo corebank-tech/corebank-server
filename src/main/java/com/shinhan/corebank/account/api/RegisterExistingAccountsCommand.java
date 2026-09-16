@@ -4,10 +4,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 // 기존 은행 원장의 전체 계좌를 신규 고객에게 등록하도록 전달한다.
-public record RegisterExistingAccountsCommand(
-        Long customerId,
-        List<AccountData> accounts
-) {
+public record RegisterExistingAccountsCommand(Long customerId, List<AccountData> accounts) {
     public RegisterExistingAccountsCommand {
         accounts = List.copyOf(accounts);
     }
@@ -21,7 +18,5 @@ public record RegisterExistingAccountsCommand(
             String status,
             String passwordHash,
             LocalDate openedDate,
-            LocalDate maturityDate
-    ) {
-    }
+            LocalDate maturityDate) {}
 }

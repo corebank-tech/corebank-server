@@ -6,14 +6,13 @@ import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecut
 import com.shinhan.corebank.autotransfer.application.port.out.StuckExecution;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
+import java.time.LocalDate;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-
-import java.time.LocalDate;
-import java.util.List;
 
 // 반복문 각 건이 AutoTransferBatchItemProcessor의 REQUIRES_NEW로 독립적으로 처리된다.
 // 여기에 트랜잭션을 걸면 배치가 도는 내내 커넥션 하나를 붙잡고 있게 되어 커넥션 풀을 고갈시킬 수 잇다.
@@ -73,8 +72,12 @@ public class AutoTransferBatchService implements AutoTransferBatchUseCase {
         try {
             autoTransferBatchItemProcessor.reconcileStuckExecution(stuckExecution);
         } catch (Exception e) {
-            log.error("재확정 배치 처리 실패 - autoTransferId={}, executionId={}, date={}", autoTransferId,
-                    stuckExecution.execution().getExecutionId(), date, e);
+            log.error(
+                    "재확정 배치 처리 실패 - autoTransferId={}, executionId={}, date={}",
+                    autoTransferId,
+                    stuckExecution.execution().getExecutionId(),
+                    date,
+                    e);
         }
     }
 }

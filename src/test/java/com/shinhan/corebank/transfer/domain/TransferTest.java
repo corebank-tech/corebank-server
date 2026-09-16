@@ -1,13 +1,14 @@
 package com.shinhan.corebank.transfer.domain;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -15,19 +16,26 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 @DisplayName("Transfer 도메인 단위 테스트")
 class TransferTest {
 
     private static Transfer newProcessingTransfer() {
         return Transfer.create(
                 "20260809WB0000000001",
-                101L, 202L, "110222222222", "성춘향",
-                10000L, 0L, TransferType.IMMEDIATE, TransferChannel.WB,
-                null, null, null, "출금메모", "입금메모", LocalDateTime.of(2026, 8, 9, 12, 0, 0)
-        );
+                101L,
+                202L,
+                "110222222222",
+                "성춘향",
+                10000L,
+                0L,
+                TransferType.IMMEDIATE,
+                TransferChannel.WB,
+                null,
+                null,
+                null,
+                "출금메모",
+                "입금메모",
+                LocalDateTime.of(2026, 8, 9, 12, 0, 0));
     }
 
     @Nested
@@ -60,11 +68,12 @@ class TransferTest {
                     fee,
                     transferType,
                     channel,
-                    null, null, null,
+                    null,
+                    null,
+                    null,
                     "출금메모",
                     "입금메모",
-                    now
-            );
+                    now);
 
             // then
             assertThat(transfer).isNotNull();
@@ -87,11 +96,20 @@ class TransferTest {
             // when
             Transfer transfer = Transfer.create(
                     "20260820AT0000000001",
-                    101L, 202L, "110222222222", "성춘향",
-                    10000L, 0L, TransferType.AUTO, TransferChannel.BT,
-                    TransferSourceType.AUTO, 55L, executionDate,
-                    "출금메모", "입금메모", now
-            );
+                    101L,
+                    202L,
+                    "110222222222",
+                    "성춘향",
+                    10000L,
+                    0L,
+                    TransferType.AUTO,
+                    TransferChannel.BT,
+                    TransferSourceType.AUTO,
+                    55L,
+                    executionDate,
+                    "출금메모",
+                    "입금메모",
+                    now);
 
             // then
             assertThat(transfer.getExecutionDate()).isEqualTo(executionDate);
@@ -106,19 +124,21 @@ class TransferTest {
 
             // when & then
             assertThatThrownBy(() -> Transfer.create(
-                    "20260809WB0000000001",
-                    101L,
-                    202L,
-                    "110222222222",
-                    "성춘향",
-                    invalidAmount,
-                    0L,
-                    TransferType.IMMEDIATE,
-                    TransferChannel.WB,
-                    null, null, null,
-                    "출금메모", "입금메모",
-                    now
-            ))
+                            "20260809WB0000000001",
+                            101L,
+                            202L,
+                            "110222222222",
+                            "성춘향",
+                            invalidAmount,
+                            0L,
+                            TransferType.IMMEDIATE,
+                            TransferChannel.WB,
+                            null,
+                            null,
+                            null,
+                            "출금메모",
+                            "입금메모",
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(TransferErrorCode.INVALID_AMOUNT);
@@ -133,19 +153,21 @@ class TransferTest {
 
             // when & then
             assertThatThrownBy(() -> Transfer.create(
-                    "20260809WB0000000001",
-                    101L,
-                    202L,
-                    "110222222222",
-                    "성춘향",
-                    10000L,
-                    invalidFee,
-                    TransferType.IMMEDIATE,
-                    TransferChannel.WB,
-                    null, null, null,
-                    "출금메모", "입금메모",
-                    now
-            ))
+                            "20260809WB0000000001",
+                            101L,
+                            202L,
+                            "110222222222",
+                            "성춘향",
+                            10000L,
+                            invalidFee,
+                            TransferType.IMMEDIATE,
+                            TransferChannel.WB,
+                            null,
+                            null,
+                            null,
+                            "출금메모",
+                            "입금메모",
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.INVALID_INPUT);
@@ -159,19 +181,21 @@ class TransferTest {
 
             // when & then
             assertThatThrownBy(() -> Transfer.create(
-                    "20260809WB0000000001",
-                    null,
-                    202L,
-                    "110222222222",
-                    "성춘향",
-                    10000L,
-                    0L,
-                    TransferType.IMMEDIATE,
-                    TransferChannel.WB,
-                    null, null, null,
-                    "출금메모", "입금메모",
-                    now
-            ))
+                            "20260809WB0000000001",
+                            null,
+                            202L,
+                            "110222222222",
+                            "성춘향",
+                            10000L,
+                            0L,
+                            TransferType.IMMEDIATE,
+                            TransferChannel.WB,
+                            null,
+                            null,
+                            null,
+                            "출금메모",
+                            "입금메모",
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -185,19 +209,21 @@ class TransferTest {
 
             // when & then
             assertThatThrownBy(() -> Transfer.create(
-                    "20260809WB0000000001",
-                    101L,
-                    null,
-                    "110222222222",
-                    "성춘향",
-                    10000L,
-                    0L,
-                    TransferType.IMMEDIATE,
-                    TransferChannel.WB,
-                    null, null, null,
-                    "출금메모", "입금메모",
-                    now
-            ))
+                            "20260809WB0000000001",
+                            101L,
+                            null,
+                            "110222222222",
+                            "성춘향",
+                            10000L,
+                            0L,
+                            TransferType.IMMEDIATE,
+                            TransferChannel.WB,
+                            null,
+                            null,
+                            null,
+                            "출금메모",
+                            "입금메모",
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -211,19 +237,21 @@ class TransferTest {
 
             // when & then
             assertThatThrownBy(() -> Transfer.create(
-                    "20260809WB0000000001",
-                    101L,
-                    101L,
-                    "110111111111",
-                    "홍길동",
-                    10000L,
-                    0L,
-                    TransferType.IMMEDIATE,
-                    TransferChannel.WB,
-                    null, null, null,
-                    "출금메모", "입금메모",
-                    now
-            ))
+                            "20260809WB0000000001",
+                            101L,
+                            101L,
+                            "110111111111",
+                            "홍길동",
+                            10000L,
+                            0L,
+                            TransferType.IMMEDIATE,
+                            TransferChannel.WB,
+                            null,
+                            null,
+                            null,
+                            "출금메모",
+                            "입금메모",
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
@@ -239,11 +267,21 @@ class TransferTest {
 
             // when & then
             assertThatThrownBy(() -> Transfer.create(
-                    invalidTxNo,
-                    101L, 202L, "110222222222", "성춘향",
-                    10000L, 0L, TransferType.IMMEDIATE, TransferChannel.WB,
-                    null, null, null, "출금메모", "입금메모", now
-            ))
+                            invalidTxNo,
+                            101L,
+                            202L,
+                            "110222222222",
+                            "성춘향",
+                            10000L,
+                            0L,
+                            TransferType.IMMEDIATE,
+                            TransferChannel.WB,
+                            null,
+                            null,
+                            null,
+                            "출금메모",
+                            "입금메모",
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -259,11 +297,21 @@ class TransferTest {
 
             // when & then
             assertThatThrownBy(() -> Transfer.create(
-                    "20260809WB0000000001",
-                    101L, 202L, invalidAccountNumber, "성춘향",
-                    10000L, 0L, TransferType.IMMEDIATE, TransferChannel.WB,
-                    null, null, null, "출금메모", "입금메모", now
-            ))
+                            "20260809WB0000000001",
+                            101L,
+                            202L,
+                            invalidAccountNumber,
+                            "성춘향",
+                            10000L,
+                            0L,
+                            TransferType.IMMEDIATE,
+                            TransferChannel.WB,
+                            null,
+                            null,
+                            null,
+                            "출금메모",
+                            "입금메모",
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -279,11 +327,21 @@ class TransferTest {
 
             // when & then
             assertThatThrownBy(() -> Transfer.create(
-                    "20260809WB0000000001",
-                    101L, 202L, "110222222222", invalidPayeeName,
-                    10000L, 0L, TransferType.IMMEDIATE, TransferChannel.WB,
-                    null, null, null, "출금메모", "입금메모", now
-            ))
+                            "20260809WB0000000001",
+                            101L,
+                            202L,
+                            "110222222222",
+                            invalidPayeeName,
+                            10000L,
+                            0L,
+                            TransferType.IMMEDIATE,
+                            TransferChannel.WB,
+                            null,
+                            null,
+                            null,
+                            "출금메모",
+                            "입금메모",
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -297,11 +355,21 @@ class TransferTest {
 
             // when & then
             assertThatThrownBy(() -> Transfer.create(
-                    "20260809WB0000000001",
-                    101L, 202L, "110222222222", "성춘향",
-                    10000L, 0L, null, TransferChannel.WB,
-                    null, null, null, "출금메모", "입금메모", now
-            ))
+                            "20260809WB0000000001",
+                            101L,
+                            202L,
+                            "110222222222",
+                            "성춘향",
+                            10000L,
+                            0L,
+                            null,
+                            TransferChannel.WB,
+                            null,
+                            null,
+                            null,
+                            "출금메모",
+                            "입금메모",
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -315,10 +383,21 @@ class TransferTest {
 
             // when & then
             assertThatThrownBy(() -> Transfer.create(
-                    "20260809WB0000000001",
-                    101L, 202L, "110222222222", "성춘향",
-                    10000L, 0L, TransferType.IMMEDIATE, null, null, null, null, "출금메모", "입금메모", now
-            ))
+                            "20260809WB0000000001",
+                            101L,
+                            202L,
+                            "110222222222",
+                            "성춘향",
+                            10000L,
+                            0L,
+                            TransferType.IMMEDIATE,
+                            null,
+                            null,
+                            null,
+                            null,
+                            "출금메모",
+                            "입금메모",
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -329,11 +408,21 @@ class TransferTest {
         void throwsExceptionWhenNowIsNull() {
             // when & then
             assertThatThrownBy(() -> Transfer.create(
-                    "20260809WB0000000001",
-                    101L, 202L, "110222222222", "성춘향",
-                    10000L, 0L, TransferType.IMMEDIATE, TransferChannel.WB,
-                    null, null, null, "출금메모", "입금메모", null
-            ))
+                            "20260809WB0000000001",
+                            101L,
+                            202L,
+                            "110222222222",
+                            "성춘향",
+                            10000L,
+                            0L,
+                            TransferType.IMMEDIATE,
+                            TransferChannel.WB,
+                            null,
+                            null,
+                            null,
+                            "출금메모",
+                            "입금메모",
+                            null))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -351,10 +440,20 @@ class TransferTest {
             LocalDateTime createdAt = LocalDateTime.of(2026, 8, 9, 12, 0, 0);
             Transfer transfer = Transfer.create(
                     "20260809WB0000000001",
-                    101L, 202L, "110222222222", "성춘향",
-                    10000L, 0L, TransferType.IMMEDIATE, TransferChannel.WB,
-                    null, null, null, "출금메모", "입금메모", createdAt
-            );
+                    101L,
+                    202L,
+                    "110222222222",
+                    "성춘향",
+                    10000L,
+                    0L,
+                    TransferType.IMMEDIATE,
+                    TransferChannel.WB,
+                    null,
+                    null,
+                    null,
+                    "출금메모",
+                    "입금메모",
+                    createdAt);
 
             LocalDateTime completedAt = createdAt.plusSeconds(5);
 

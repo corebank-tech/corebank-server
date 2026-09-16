@@ -4,8 +4,7 @@ import com.shinhan.corebank.subscription.domain.SubscriptionTermsAgreement;
 import com.shinhan.corebank.subscription.domain.SubscriptionTermsAgreementId;
 
 final class SubscriptionTermsAgreementMapper {
-    private SubscriptionTermsAgreementMapper() {
-    }
+    private SubscriptionTermsAgreementMapper() {}
 
     static SubscriptionTermsAgreement toDomain(SubscriptionTermsAgreementJpaEntity entity) {
         return SubscriptionTermsAgreement.builder()

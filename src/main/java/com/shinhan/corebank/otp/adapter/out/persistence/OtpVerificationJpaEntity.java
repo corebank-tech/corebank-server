@@ -4,15 +4,14 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.LocalDateTime;
+import java.util.Map;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
-
-import java.time.LocalDateTime;
-import java.util.Map;
 
 // 기존 verification_request 테이블의 OTP 관련 컬럼을 매핑한다.
 @Entity
@@ -51,23 +50,12 @@ public class OtpVerificationJpaEntity {
     @Column(name = "used", nullable = false)
     private boolean used;
 
-    @Column(
-            name = "verified_at",
-            columnDefinition = "DATETIME(6)"
-    )
+    @Column(name = "verified_at", columnDefinition = "DATETIME(6)")
     private LocalDateTime verifiedAt;
 
-    @Column(
-            name = "expires_at",
-            nullable = false,
-            columnDefinition = "DATETIME(6)"
-    )
+    @Column(name = "expires_at", nullable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime expiresAt;
 
-    @Column(
-            name = "created_at",
-            nullable = false,
-            columnDefinition = "DATETIME(6)"
-    )
+    @Column(name = "created_at", nullable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime createdAt;
 }

@@ -282,13 +282,17 @@ OtpTransactionType.SCHEDULED_TRANSFER
 }
 ```
 
-취소에도 OTP가 필요하다면 권장 거래정보:
+취소는 다건(최대 50건)이므로 거래정보에 ID 배열을 담습니다(corebank-server#330).
 
 ```json
 {
-  "scheduledTransferId": 15
+  "scheduledTransferIds": [12, 15, 18]
 }
 ```
+
+배열은 **오름차순 정렬 + 중복 제거**한 값이어야 합니다. `JacksonOtpTransactionDataCanonicalizer.normalize()`가 Map의 key는 정렬하지만 List 원소는 정렬하지 않아, 발급 시점과 검증 시점의 배열 순서가 다르면 `OTP0102`가 납니다. 서버는 요청받은 ID를 같은 규칙으로 정규화한 뒤 검증하므로, 발급 요청(`POST /otp/issue`)에서도 같은 규칙을 적용해야 합니다.
+
+토큰 하나가 그 ID 조합 전체를 덮고 1회만 소비됩니다. 취소 불가 사유가 있는 건이 섞여 있어도 토큰은 요청한 조합 전체로 검증하며, 건별 성공·실패는 응답의 `items`로 돌려줍니다.
 
 현재 예약이체는 이미 다음을 받고 있습니다.
 
@@ -326,7 +330,7 @@ public interface ScheduledTransferOtpVerificationPort {
     void verifyCancelAndConsume(
             String otpAuthToken,
             Long customerId,
-            Long scheduledTransferId
+            List<Long> scheduledTransferIds
     );
 }
 ```
@@ -374,11 +378,19 @@ OTP가 필요한 사용자 동작에는 다음 작업이 필요합니다.
 - 기존 `AuthTokenVerificationPort`는 계좌비밀번호 전용으로 유지
 - 등록·변경·해지 중 상세명세상 OTP가 필요한 동작에서 호출
 
-변경·해지의 권장 최소 데이터:
+변경의 권장 최소 데이터:
 
 ```json
 {
   "autoTransferId": 20
+}
+```
+
+해지는 다건(최대 50건)이므로 예약이체 취소와 같은 규칙으로 ID 배열을 담습니다(corebank-server#330). 오름차순 정렬 + 중복 제거한 배열이어야 하며, 토큰 하나가 그 조합 전체를 덮고 1회만 소비됩니다.
+
+```json
+{
+  "autoTransferIds": [20, 21]
 }
 ```
 

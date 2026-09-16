@@ -1,21 +1,20 @@
 package com.shinhan.corebank.signup.adapter.out.redis;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.signup.domain.model.AgreedTerm;
 import com.shinhan.corebank.signup.domain.model.TermsAuthTokenPayload;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 class TermsAuthTokenRedisAdapterTest extends IntegrationTestSupport {
 
@@ -35,10 +34,7 @@ class TermsAuthTokenRedisAdapterTest extends IntegrationTestSupport {
 
         adapter.save(token, payload(), TERMS_AUTH_TTL);
 
-        Long ttlSeconds = redisTemplate.getExpire(
-                KEY_PREFIX + token,
-                TimeUnit.SECONDS
-        );
+        Long ttlSeconds = redisTemplate.getExpire(KEY_PREFIX + token, TimeUnit.SECONDS);
 
         assertThat(ttlSeconds).isBetween(1795L, 1800L);
     }
@@ -82,11 +78,7 @@ class TermsAuthTokenRedisAdapterTest extends IntegrationTestSupport {
 
     private TermsAuthTokenPayload payload() {
         return new TermsAuthTokenPayload(
-                List.of(
-                        new AgreedTerm("1", "v1.0"),
-                        new AgreedTerm("2", "v1.0")
-                ),
-                Instant.parse("2026-08-19T00:00:00Z")
-        );
+                List.of(new AgreedTerm("1", "v1.0"), new AgreedTerm("2", "v1.0")),
+                Instant.parse("2026-08-19T00:00:00Z"));
     }
 }

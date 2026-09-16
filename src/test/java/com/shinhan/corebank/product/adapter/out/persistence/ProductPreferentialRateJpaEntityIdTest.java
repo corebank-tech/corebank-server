@@ -46,7 +46,8 @@ class ProductPreferentialRateJpaEntityIdTest {
     @Test
     @DisplayName("무인자 생성자는 Hibernate 전용이므로 protected 로 제한한다")
     void restrictsNoArgConstructorToProtected() throws NoSuchMethodException {
-        Constructor<ProductPreferentialRateJpaEntityId> constructor = ProductPreferentialRateJpaEntityId.class.getDeclaredConstructor();
+        Constructor<ProductPreferentialRateJpaEntityId> constructor =
+                ProductPreferentialRateJpaEntityId.class.getDeclaredConstructor();
 
         assertThat(Modifier.isProtected(constructor.getModifiers())).isTrue();
     }

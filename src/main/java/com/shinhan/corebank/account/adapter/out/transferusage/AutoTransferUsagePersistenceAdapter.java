@@ -7,22 +7,14 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class AutoTransferUsagePersistenceAdapter
-        implements AutoTransferUsageQueryPort {
+public class AutoTransferUsagePersistenceAdapter implements AutoTransferUsageQueryPort {
 
-    private static final String BLOCKING_STATUS =
-        AutoTransferStatus.NORMAL.name();
+    private static final String BLOCKING_STATUS = AutoTransferStatus.NORMAL.name();
 
     private final AutoTransferUsageJpaRepository repository;
 
     @Override
-    public boolean existsUsingWithdrawalAccount(
-            Long withdrawalAccountId
-    ) {
-        return repository
-                .existsByWithdrawalAccountIdAndStatus(
-                        withdrawalAccountId,
-                        BLOCKING_STATUS
-                );
+    public boolean existsUsingWithdrawalAccount(Long withdrawalAccountId) {
+        return repository.existsByWithdrawalAccountIdAndStatus(withdrawalAccountId, BLOCKING_STATUS);
     }
 }

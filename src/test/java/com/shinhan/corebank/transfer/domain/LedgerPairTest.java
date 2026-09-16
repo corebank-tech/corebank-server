@@ -1,21 +1,19 @@
 package com.shinhan.corebank.transfer.domain;
 
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("LedgerPair 도메인 단위 테스트")
 class LedgerPairTest {
@@ -54,8 +52,7 @@ class LedgerPairTest {
                     myMemo,
                     recipientMemo,
                     channel,
-                    occurredAt
-            );
+                    occurredAt);
 
             // then
             assertThat(pair).isNotNull();
@@ -95,14 +92,16 @@ class LedgerPairTest {
             LedgerPair pair = LedgerPair.forTransfer(
                     500L,
                     "20260809WB0000000001",
-                    101L, 90000L,
-                    202L, 110000L,
+                    101L,
+                    90000L,
+                    202L,
+                    110000L,
                     10000L,
                     "IMMEDIATE_TRANSFER",
-                    "메모", "메모",
+                    "메모",
+                    "메모",
                     TransferChannel.WB,
-                    nanoTime
-            );
+                    nanoTime);
 
             // then
             LocalDateTime expectedMicroTime = nanoTime.truncatedTo(ChronoUnit.MICROS);
@@ -119,15 +118,18 @@ class LedgerPairTest {
 
             // when & then
             assertThatThrownBy(() -> LedgerPair.forTransfer(
-                    500L,
-                    "20260809WB0000000001",
-                    101L, 90000L,
-                    202L, 110000L,
-                    invalidAmount,
-                    "IMMEDIATE_TRANSFER",
-                    "메모", "메모",
-                    TransferChannel.WB, now
-            ))
+                            500L,
+                            "20260809WB0000000001",
+                            101L,
+                            90000L,
+                            202L,
+                            110000L,
+                            invalidAmount,
+                            "IMMEDIATE_TRANSFER",
+                            "메모",
+                            "메모",
+                            TransferChannel.WB,
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(TransferErrorCode.INVALID_AMOUNT);
@@ -141,15 +143,18 @@ class LedgerPairTest {
 
             // when & then
             assertThatThrownBy(() -> LedgerPair.forTransfer(
-                    500L,
-                    "20260809WB0000000001",
-                    101L, 90000L,
-                    101L, 110000L,
-                    10000L,
-                    "IMMEDIATE_TRANSFER",
-                    "메모", "메모",
-                    TransferChannel.WB, now
-            ))
+                            500L,
+                            "20260809WB0000000001",
+                            101L,
+                            90000L,
+                            101L,
+                            110000L,
+                            10000L,
+                            "IMMEDIATE_TRANSFER",
+                            "메모",
+                            "메모",
+                            TransferChannel.WB,
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
@@ -163,15 +168,18 @@ class LedgerPairTest {
 
             // when & then
             assertThatThrownBy(() -> LedgerPair.forTransfer(
-                    null,
-                    "20260809WB0000000001",
-                    101L, 90000L,
-                    202L, 110000L,
-                    10000L,
-                    "IMMEDIATE_TRANSFER",
-                    "메모", "메모",
-                    TransferChannel.WB, now
-            ))
+                            null,
+                            "20260809WB0000000001",
+                            101L,
+                            90000L,
+                            202L,
+                            110000L,
+                            10000L,
+                            "IMMEDIATE_TRANSFER",
+                            "메모",
+                            "메모",
+                            TransferChannel.WB,
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -185,15 +193,18 @@ class LedgerPairTest {
 
             // when & then
             assertThatThrownBy(() -> LedgerPair.forTransfer(
-                    500L,
-                    "20260809WB0000000001",
-                    null, 90000L,
-                    202L, 110000L,
-                    10000L,
-                    "IMMEDIATE_TRANSFER",
-                    "메모", "메모",
-                    TransferChannel.WB, now
-            ))
+                            500L,
+                            "20260809WB0000000001",
+                            null,
+                            90000L,
+                            202L,
+                            110000L,
+                            10000L,
+                            "IMMEDIATE_TRANSFER",
+                            "메모",
+                            "메모",
+                            TransferChannel.WB,
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -204,16 +215,18 @@ class LedgerPairTest {
         void throwsExceptionWhenOccurredAtIsNull() {
             // given & when & then
             assertThatThrownBy(() -> LedgerPair.forTransfer(
-                    500L,
-                    "20260809WB0000000001",
-                    101L, 90000L,
-                    202L, 110000L,
-                    10000L,
-                    "IMMEDIATE_TRANSFER",
-                    "메모", "메모",
-                    TransferChannel.WB,
-                    null
-            ))
+                            500L,
+                            "20260809WB0000000001",
+                            101L,
+                            90000L,
+                            202L,
+                            110000L,
+                            10000L,
+                            "IMMEDIATE_TRANSFER",
+                            "메모",
+                            "메모",
+                            TransferChannel.WB,
+                            null))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -229,15 +242,18 @@ class LedgerPairTest {
 
             // when & then
             assertThatThrownBy(() -> LedgerPair.forTransfer(
-                    500L,
-                    invalidTxNo,
-                    101L, 90000L,
-                    202L, 110000L,
-                    10000L,
-                    "IMMEDIATE_TRANSFER",
-                    "메모", "메모",
-                    TransferChannel.WB, now
-            ))
+                            500L,
+                            invalidTxNo,
+                            101L,
+                            90000L,
+                            202L,
+                            110000L,
+                            10000L,
+                            "IMMEDIATE_TRANSFER",
+                            "메모",
+                            "메모",
+                            TransferChannel.WB,
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -253,15 +269,18 @@ class LedgerPairTest {
 
             // when & then
             assertThatThrownBy(() -> LedgerPair.forTransfer(
-                    500L,
-                    "20260809WB0000000001",
-                    101L, 90000L,
-                    202L, 110000L,
-                    10000L,
-                    invalidTxType,
-                    "메모", "메모",
-                    TransferChannel.WB, now
-            ))
+                            500L,
+                            "20260809WB0000000001",
+                            101L,
+                            90000L,
+                            202L,
+                            110000L,
+                            10000L,
+                            invalidTxType,
+                            "메모",
+                            "메모",
+                            TransferChannel.WB,
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -275,15 +294,18 @@ class LedgerPairTest {
 
             // when & then
             assertThatThrownBy(() -> LedgerPair.forTransfer(
-                    500L,
-                    "20260809WB0000000001",
-                    101L, 90000L,
-                    202L, 110000L,
-                    10000L,
-                    "IMMEDIATE_TRANSFER",
-                    "메모", "메모",
-                    null, now
-            ))
+                            500L,
+                            "20260809WB0000000001",
+                            101L,
+                            90000L,
+                            202L,
+                            110000L,
+                            10000L,
+                            "IMMEDIATE_TRANSFER",
+                            "메모",
+                            "메모",
+                            null,
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -306,11 +328,15 @@ class LedgerPairTest {
             // when
             LedgerPair pair = LedgerPair.forProductSubscription(
                     txNo,
-                    withdrawalAccountId, 9_500_000L,
-                    depositAccountId, 500_000L,
+                    withdrawalAccountId,
+                    9_500_000L,
+                    depositAccountId,
                     500_000L,
-                    "상품가입", "상품가입",
-                    TransferChannel.WB, occurredAt);
+                    500_000L,
+                    "상품가입",
+                    "상품가입",
+                    TransferChannel.WB,
+                    occurredAt);
 
             // then
             LedgerEntry withdrawal = pair.getWithdrawalEntry();
@@ -340,12 +366,16 @@ class LedgerPairTest {
 
             // when & then
             assertThatThrownBy(() -> LedgerPair.forProductSubscription(
-                    "20260821WB0000000001",
-                    101L, 9_500_000L,
-                    202L, 500_000L,
-                    invalidAmount,
-                    "상품가입", "상품가입",
-                    TransferChannel.WB, now))
+                            "20260821WB0000000001",
+                            101L,
+                            9_500_000L,
+                            202L,
+                            500_000L,
+                            invalidAmount,
+                            "상품가입",
+                            "상품가입",
+                            TransferChannel.WB,
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(TransferErrorCode.INVALID_AMOUNT);
@@ -361,12 +391,16 @@ class LedgerPairTest {
 
             // when & then
             assertThatThrownBy(() -> LedgerPair.forProductSubscription(
-                    invalidTxNo,
-                    101L, 9_500_000L,
-                    202L, 500_000L,
-                    500_000L,
-                    "상품가입", "상품가입",
-                    TransferChannel.WB, now))
+                            invalidTxNo,
+                            101L,
+                            9_500_000L,
+                            202L,
+                            500_000L,
+                            500_000L,
+                            "상품가입",
+                            "상품가입",
+                            TransferChannel.WB,
+                            now))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);

@@ -15,10 +15,12 @@ import static org.mockito.Mockito.when;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelCommand;
+import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelResult;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferRegisterCommand;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.AuthTokenVerificationPort;
@@ -32,6 +34,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -101,31 +104,55 @@ class ScheduledTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
+                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
-        when(scheduledTransferPersistencePort.existsActiveDuplicate(eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
+        when(scheduledTransferPersistencePort.existsActiveDuplicate(
+                        eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
                 .thenReturn(false);
         stubClock();
-        when(scheduledTransferPersistencePort.save(any(ScheduledTransfer.class))).thenAnswer(invocation -> {
-            ScheduledTransfer arg = invocation.getArgument(0);
-            return ScheduledTransfer.reconstitute(
-                    100L, arg.getCustomerId(), arg.getWithdrawalAccountId(), arg.getPayeeBankCode(), arg.getPayeeAccountNumber(),
-                    arg.getPayeeName(), arg.getAmount(), arg.getScheduledDate(), arg.getMyPassbookMemo(), arg.getRecipientPassbookMemo(),
-                    arg.getStatus(), arg.getTransactionNumber(), arg.getRegisteredAt(), arg.getExecutedAt(), arg.getCanceledAt(),
-                    arg.getFailureReason());
-        });
+        when(scheduledTransferPersistencePort.save(any(ScheduledTransfer.class)))
+                .thenAnswer(invocation -> {
+                    ScheduledTransfer arg = invocation.getArgument(0);
+                    return ScheduledTransfer.reconstitute(
+                            100L,
+                            arg.getCustomerId(),
+                            arg.getWithdrawalAccountId(),
+                            arg.getPayeeBankCode(),
+                            arg.getPayeeAccountNumber(),
+                            arg.getPayeeName(),
+                            arg.getAmount(),
+                            arg.getScheduledDate(),
+                            arg.getMyPassbookMemo(),
+                            arg.getRecipientPassbookMemo(),
+                            arg.getStatus(),
+                            arg.getTransactionNumber(),
+                            arg.getRegisteredAt(),
+                            arg.getExecutedAt(),
+                            arg.getCanceledAt(),
+                            arg.getFailureReason(),
+                            null);
+                });
 
-        ScheduledTransfer result = scheduledTransferCommandService.register(validCommandBuilder().build());
+        ScheduledTransfer result =
+                scheduledTransferCommandService.register(validCommandBuilder().build());
 
         assertThat(result.getWithdrawalAccountId()).isEqualTo(2L);
         assertThat(result.getAmount()).isEqualTo(10_000L);
         assertThat(result.getStatus()).isEqualTo(ScheduledTransferStatus.WAITING);
         verify(scheduledTransferPersistencePort).save(any(ScheduledTransfer.class));
-        verify(authTokenVerificationPort).verify(eq("valid-token"), eq(2L), anyString());
-        verify(scheduledTransferOtpVerificationPort).verifyRegisterAndConsume(
-                eq("valid-otp-token"), eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any());
-        verify(auditLogService).record(eq(1L), isNull(), eq(AuditEventType.SCHEDULED_TRANSFER_INFO_CHANGE),
-                eq("127.0.0.1"), eq(true), any());
+        verify(authTokenVerificationPort).verifyAndConsume(eq("valid-token"), eq(1L), eq(2L));
+        verify(scheduledTransferOtpVerificationPort)
+                .verifyRegisterAndConsume(
+                        eq("valid-otp-token"), eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any());
+        verify(auditLogService)
+                .record(
+                        eq(1L),
+                        isNull(),
+                        eq(AuditEventType.SCHEDULED_TRANSFER_INFO_CHANGE),
+                        eq("127.0.0.1"),
+                        eq(true),
+                        any());
     }
 
     @Test
@@ -141,8 +168,9 @@ class ScheduledTransferCommandServiceTest {
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ScheduledTransferErrorCode.INVALID_SCHEDULED_DATE));
 
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
-        verify(scheduledTransferOtpVerificationPort, never()).verifyRegisterAndConsume(any(), any(), any(), any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
+        verify(scheduledTransferOtpVerificationPort, never())
+                .verifyRegisterAndConsume(any(), any(), any(), any(), any(), any());
     }
 
     // 계좌비밀번호/OTP 검증은 선행 업무 검증을 모두 통과한 뒤 상태 변경 직전에 수행하므로
@@ -154,17 +182,22 @@ class ScheduledTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
+                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
-        when(scheduledTransferPersistencePort.existsActiveDuplicate(eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
+        when(scheduledTransferPersistencePort.existsActiveDuplicate(
+                        eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
                 .thenReturn(false);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
-                .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
+                .when(authTokenVerificationPort)
+                .verifyAndConsume(anyString(), any(), any());
 
-        assertThatThrownBy(() -> scheduledTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> scheduledTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class);
 
-        verify(scheduledTransferOtpVerificationPort, never()).verifyRegisterAndConsume(any(), any(), any(), any(), any(), any());
+        verify(scheduledTransferOtpVerificationPort, never())
+                .verifyRegisterAndConsume(any(), any(), any(), any(), any(), any());
         verify(scheduledTransferPersistencePort, never()).save(any());
     }
 
@@ -175,15 +208,18 @@ class ScheduledTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
+                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
-        when(scheduledTransferPersistencePort.existsActiveDuplicate(eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
+        when(scheduledTransferPersistencePort.existsActiveDuplicate(
+                        eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
                 .thenReturn(false);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(scheduledTransferOtpVerificationPort)
                 .verifyRegisterAndConsume(anyString(), any(), any(), any(), any(), any());
 
-        assertThatThrownBy(() -> scheduledTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> scheduledTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class);
 
         verify(scheduledTransferPersistencePort, never()).save(any());
@@ -195,7 +231,8 @@ class ScheduledTransferCommandServiceTest {
         stubClock();
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(false);
 
-        assertThatThrownBy(() -> scheduledTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> scheduledTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ScheduledTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
@@ -210,7 +247,8 @@ class ScheduledTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(false);
 
-        assertThatThrownBy(() -> scheduledTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> scheduledTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ScheduledTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
@@ -226,7 +264,8 @@ class ScheduledTransferCommandServiceTest {
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(false);
 
-        assertThatThrownBy(() -> scheduledTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> scheduledTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ScheduledTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
@@ -243,7 +282,8 @@ class ScheduledTransferCommandServiceTest {
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> scheduledTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> scheduledTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ScheduledTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
@@ -256,16 +296,20 @@ class ScheduledTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.TIME_DEPOSIT));
+        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
+                .thenReturn(Optional.of(AccountType.TIME_DEPOSIT));
 
-        assertThatThrownBy(() -> scheduledTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> scheduledTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ScheduledTransferErrorCode.UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE));
     }
 
     @ParameterizedTest
-    @EnumSource(value = AccountType.class, names = {"DEMAND_DEPOSIT", "INSTALLMENT_SAVINGS"})
+    @EnumSource(
+            value = AccountType.class,
+            names = {"DEMAND_DEPOSIT", "INSTALLMENT_SAVINGS"})
     @DisplayName("입금계좌가 입출금·정기적금이면 등록이 허용된다 (REQ-SCD-006, #317)")
     void register_allowedDepositAccountTypes_succeeds(AccountType allowedType) {
         stubClock();
@@ -274,16 +318,31 @@ class ScheduledTransferCommandServiceTest {
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
         when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(allowedType));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
-        when(scheduledTransferPersistencePort.existsActiveDuplicate(eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
+        when(scheduledTransferPersistencePort.existsActiveDuplicate(
+                        eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
                 .thenReturn(false);
-        when(scheduledTransferPersistencePort.save(any(ScheduledTransfer.class))).thenAnswer(invocation -> {
-            ScheduledTransfer arg = invocation.getArgument(0);
-            return ScheduledTransfer.reconstitute(
-                    100L, arg.getCustomerId(), arg.getWithdrawalAccountId(), arg.getPayeeBankCode(), arg.getPayeeAccountNumber(),
-                    arg.getPayeeName(), arg.getAmount(), arg.getScheduledDate(), arg.getMyPassbookMemo(), arg.getRecipientPassbookMemo(),
-                    arg.getStatus(), arg.getTransactionNumber(), arg.getRegisteredAt(), arg.getExecutedAt(), arg.getCanceledAt(),
-                    arg.getFailureReason());
-        });
+        when(scheduledTransferPersistencePort.save(any(ScheduledTransfer.class)))
+                .thenAnswer(invocation -> {
+                    ScheduledTransfer arg = invocation.getArgument(0);
+                    return ScheduledTransfer.reconstitute(
+                            100L,
+                            arg.getCustomerId(),
+                            arg.getWithdrawalAccountId(),
+                            arg.getPayeeBankCode(),
+                            arg.getPayeeAccountNumber(),
+                            arg.getPayeeName(),
+                            arg.getAmount(),
+                            arg.getScheduledDate(),
+                            arg.getMyPassbookMemo(),
+                            arg.getRecipientPassbookMemo(),
+                            arg.getStatus(),
+                            arg.getTransactionNumber(),
+                            arg.getRegisteredAt(),
+                            arg.getExecutedAt(),
+                            arg.getCanceledAt(),
+                            arg.getFailureReason(),
+                            null);
+                });
 
         scheduledTransferCommandService.register(validCommandBuilder().build());
 
@@ -297,10 +356,12 @@ class ScheduledTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
+                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(5_000L);
 
-        assertThatThrownBy(() -> scheduledTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> scheduledTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(LmtErrorCode.ONE_TIME_LIMIT_EXCEEDED));
@@ -315,12 +376,15 @@ class ScheduledTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
+                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
-        when(scheduledTransferPersistencePort.existsActiveDuplicate(eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
+        when(scheduledTransferPersistencePort.existsActiveDuplicate(
+                        eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
                 .thenReturn(true);
 
-        assertThatThrownBy(() -> scheduledTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> scheduledTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ScheduledTransferErrorCode.DUPLICATE_REGISTRATION));
@@ -335,18 +399,34 @@ class ScheduledTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
+                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
-        when(scheduledTransferPersistencePort.existsActiveDuplicate(eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
+        when(scheduledTransferPersistencePort.existsActiveDuplicate(
+                        eq(1L), eq(2L), eq("110987654321"), eq(10_000L), any()))
                 .thenReturn(false);
-        when(scheduledTransferPersistencePort.save(any(ScheduledTransfer.class))).thenAnswer(invocation -> {
-            ScheduledTransfer arg = invocation.getArgument(0);
-            return ScheduledTransfer.reconstitute(
-                    100L, arg.getCustomerId(), arg.getWithdrawalAccountId(), arg.getPayeeBankCode(), arg.getPayeeAccountNumber(),
-                    arg.getPayeeName(), arg.getAmount(), arg.getScheduledDate(), arg.getMyPassbookMemo(), arg.getRecipientPassbookMemo(),
-                    arg.getStatus(), arg.getTransactionNumber(), arg.getRegisteredAt(), arg.getExecutedAt(), arg.getCanceledAt(),
-                    arg.getFailureReason());
-        });
+        when(scheduledTransferPersistencePort.save(any(ScheduledTransfer.class)))
+                .thenAnswer(invocation -> {
+                    ScheduledTransfer arg = invocation.getArgument(0);
+                    return ScheduledTransfer.reconstitute(
+                            100L,
+                            arg.getCustomerId(),
+                            arg.getWithdrawalAccountId(),
+                            arg.getPayeeBankCode(),
+                            arg.getPayeeAccountNumber(),
+                            arg.getPayeeName(),
+                            arg.getAmount(),
+                            arg.getScheduledDate(),
+                            arg.getMyPassbookMemo(),
+                            arg.getRecipientPassbookMemo(),
+                            arg.getStatus(),
+                            arg.getTransactionNumber(),
+                            arg.getRegisteredAt(),
+                            arg.getExecutedAt(),
+                            arg.getCanceledAt(),
+                            arg.getFailureReason(),
+                            null);
+                });
 
         // 1회한도(transferLimitPort.findOneTimeLimit)만 호출되고, 잔액·1일한도를 확인하는 별도 포트는
         // 이 서비스에 아예 주입되어 있지 않다 — 등록 시점에는 물리적으로 검증할 수 없는 구조임을 보증한다.
@@ -356,15 +436,38 @@ class ScheduledTransferCommandServiceTest {
     }
 
     private ScheduledTransfer existingScheduledTransfer(ScheduledTransferStatus status, LocalDate scheduledDate) {
+        return existingScheduledTransfer(10L, 2L, status, scheduledDate);
+    }
+
+    private ScheduledTransfer existingScheduledTransfer(
+            Long scheduledTransferId,
+            Long withdrawalAccountId,
+            ScheduledTransferStatus status,
+            LocalDate scheduledDate) {
         return ScheduledTransfer.reconstitute(
-                10L, 1L, 2L, "088", "110987654321", "홍길동",
-                10_000L, scheduledDate, "내메모", "받는메모", status,
-                null, java.time.LocalDateTime.now(), null, null, null);
+                scheduledTransferId,
+                1L,
+                withdrawalAccountId,
+                "088",
+                "110987654321",
+                "홍길동",
+                10_000L,
+                scheduledDate,
+                "내메모",
+                "받는메모",
+                status,
+                null,
+                java.time.LocalDateTime.now(),
+                null,
+                null,
+                null,
+                null);
     }
 
     private ScheduledTransferCancelCommand.ScheduledTransferCancelCommandBuilder validCancelCommandBuilder() {
         return ScheduledTransferCancelCommand.builder()
                 .customerId(1L)
+                .scheduledTransferIds(List.of(10L))
                 .accountPasswordAuthToken("valid-token")
                 .otpAuthToken("valid-otp-token")
                 .requestIp("127.0.0.1");
@@ -374,105 +477,245 @@ class ScheduledTransferCommandServiceTest {
     @DisplayName("WAITING 건을 정상적으로 취소하면 저장하고 감사로그를 남긴다")
     void cancel_success() {
         stubClock();
-        ScheduledTransfer existing = existingScheduledTransfer(ScheduledTransferStatus.WAITING, LocalDate.now(clock).plusDays(10));
+        ScheduledTransfer existing = existingScheduledTransfer(
+                ScheduledTransferStatus.WAITING, LocalDate.now(clock).plusDays(10));
         when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
-        when(scheduledTransferPersistencePort.save(any(ScheduledTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scheduledTransferPersistencePort.save(any(ScheduledTransfer.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
-        ScheduledTransfer result = scheduledTransferCommandService.cancel(10L, validCancelCommandBuilder().build());
+        List<ScheduledTransferCancelResult> results = scheduledTransferCommandService.cancel(
+                validCancelCommandBuilder().build());
 
-        assertThat(result.getStatus()).isEqualTo(ScheduledTransferStatus.CANCELED);
-        verify(authTokenVerificationPort).verify(eq("valid-token"), eq(2L), anyString());
-        verify(scheduledTransferOtpVerificationPort).verifyCancelAndConsume(eq("valid-otp-token"), eq(1L), eq(10L));
+        assertThat(results).singleElement().satisfies(result -> {
+            assertThat(result.scheduledTransferId()).isEqualTo(10L);
+            assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(result.canceledAt()).isNotNull();
+        });
+        assertThat(existing.getStatus()).isEqualTo(ScheduledTransferStatus.CANCELED);
+        verify(authTokenVerificationPort).verifyAndConsume(eq("valid-token"), eq(1L), eq(2L));
+        verify(scheduledTransferOtpVerificationPort)
+                .verifyCancelAndConsume(eq("valid-otp-token"), eq(1L), eq(List.of(10L)));
         verify(scheduledTransferPersistencePort).save(any(ScheduledTransfer.class));
-        verify(auditLogService).record(eq(1L), isNull(), eq(AuditEventType.SCHEDULED_TRANSFER_INFO_CHANGE),
-                eq("127.0.0.1"), eq(true), any());
+        verify(auditLogService)
+                .record(
+                        eq(1L),
+                        isNull(),
+                        eq(AuditEventType.SCHEDULED_TRANSFER_INFO_CHANGE),
+                        eq("127.0.0.1"),
+                        eq(true),
+                        any());
     }
 
     @Test
-    @DisplayName("대상 예약이체가 없으면 NOT_FOUND를 던진다")
-    void cancel_notFound_throws() {
+    @DisplayName("취소 가능한 건과 불가능한 건이 섞이면 가능한 건만 취소하고 나머지는 건별 실패로 반환한다")
+    void cancel_partialFailure_cancelsOnlyCancelableOnes() {
+        stubClock();
+        ScheduledTransfer cancelable = existingScheduledTransfer(
+                10L, 2L, ScheduledTransferStatus.WAITING, LocalDate.now(clock).plusDays(10));
+        // 예정일 당일이라 취소할 수 없는 건
+        ScheduledTransfer onExecutionDate =
+                existingScheduledTransfer(11L, 2L, ScheduledTransferStatus.WAITING, LocalDate.now(clock));
+        when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(cancelable));
+        when(scheduledTransferPersistencePort.findById(11L)).thenReturn(Optional.of(onExecutionDate));
+        when(scheduledTransferPersistencePort.save(any(ScheduledTransfer.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<ScheduledTransferCancelResult> results = scheduledTransferCommandService.cancel(validCancelCommandBuilder()
+                .scheduledTransferIds(List.of(10L, 11L))
+                .build());
+
+        assertThat(results)
+                .extracting(
+                        ScheduledTransferCancelResult::scheduledTransferId,
+                        ScheduledTransferCancelResult::status,
+                        ScheduledTransferCancelResult::failureCode)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(10L, ProcessResultStatus.SUCCESS, null),
+                        org.assertj.core.groups.Tuple.tuple(
+                                11L,
+                                ProcessResultStatus.ERROR,
+                                ScheduledTransferErrorCode.CANNOT_CANCEL_ON_EXECUTION_DATE.getCode()));
+        // OTP 토큰에는 요청한 조합 전체가 묶여 있으므로 취소 가능한 건만 추려서 넘기면 안 된다
+        verify(scheduledTransferOtpVerificationPort)
+                .verifyCancelAndConsume(eq("valid-otp-token"), eq(1L), eq(List.of(10L, 11L)));
+        verify(scheduledTransferPersistencePort).save(any(ScheduledTransfer.class));
+    }
+
+    @Test
+    @DisplayName("취소 가능한 건이 하나도 없으면 OTP 토큰을 소비하지 않는다")
+    void cancel_noCancelableTarget_doesNotConsumeOtpToken() {
+        stubClock();
+        ScheduledTransfer onExecutionDate =
+                existingScheduledTransfer(10L, 2L, ScheduledTransferStatus.WAITING, LocalDate.now(clock));
+        when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(onExecutionDate));
+
+        List<ScheduledTransferCancelResult> results = scheduledTransferCommandService.cancel(
+                validCancelCommandBuilder().build());
+
+        assertThat(results)
+                .singleElement()
+                .extracting(ScheduledTransferCancelResult::status)
+                .isEqualTo(ProcessResultStatus.ERROR);
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
+        verify(scheduledTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+        verify(scheduledTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("취소 대상의 출금계좌가 서로 다르면 CMN0001을 던지고 OTP를 소비하지 않는다 (api_conventions.md §6-3)")
+    void cancel_mixedWithdrawalAccounts_throwsInvalidInput() {
+        stubClock();
+        // 스텁 인자 안에서 clock을 다시 호출하면 Mockito가 stubbing 중 호출로 오인하므로 미리 값을 뽑아둔다
+        LocalDate scheduledDate = LocalDate.now(clock).plusDays(10);
+        ScheduledTransfer accountTwo =
+                existingScheduledTransfer(10L, 2L, ScheduledTransferStatus.WAITING, scheduledDate);
+        ScheduledTransfer accountThree =
+                existingScheduledTransfer(11L, 3L, ScheduledTransferStatus.WAITING, scheduledDate);
+        when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(accountTwo));
+        when(scheduledTransferPersistencePort.findById(11L)).thenReturn(Optional.of(accountThree));
+
+        ScheduledTransferCancelCommand command = validCancelCommandBuilder()
+                .scheduledTransferIds(List.of(10L, 11L))
+                .build();
+
+        assertThatThrownBy(() -> scheduledTransferCommandService.cancel(command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
+
+        verify(scheduledTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+        verify(scheduledTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("이미 취소된 건이 다른 출금계좌여도 CMN0001을 던진다 — 계좌 혼합 검사는 취소 대상이 아니라 소유 확인된 전체 기준")
+    void cancel_alreadyCanceledOnOtherAccount_throwsInvalidInput() {
+        stubClock();
+        LocalDate scheduledDate = LocalDate.now(clock).plusDays(10);
+        ScheduledTransfer cancelableOnAccountTwo =
+                existingScheduledTransfer(10L, 2L, ScheduledTransferStatus.WAITING, scheduledDate);
+        ScheduledTransfer alreadyCanceledOnAccountThree =
+                existingScheduledTransfer(11L, 3L, ScheduledTransferStatus.CANCELED, scheduledDate);
+        when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(cancelableOnAccountTwo));
+        when(scheduledTransferPersistencePort.findById(11L)).thenReturn(Optional.of(alreadyCanceledOnAccountThree));
+
+        ScheduledTransferCancelCommand command = validCancelCommandBuilder()
+                .scheduledTransferIds(List.of(10L, 11L))
+                .build();
+
+        assertThatThrownBy(() -> scheduledTransferCommandService.cancel(command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
+
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
+        verify(scheduledTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+        verify(scheduledTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("대상 예약이체가 없으면 건별 실패(SCD0201)로 반환한다")
+    void cancel_notFound_returnsItemFailure() {
+        stubClock();
         when(scheduledTransferPersistencePort.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> scheduledTransferCommandService.cancel(999L, validCancelCommandBuilder().build()))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ScheduledTransferErrorCode.NOT_FOUND));
+        List<ScheduledTransferCancelResult> results = scheduledTransferCommandService.cancel(
+                validCancelCommandBuilder().scheduledTransferIds(List.of(999L)).build());
 
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        assertThat(results)
+                .singleElement()
+                .extracting(ScheduledTransferCancelResult::failureCode)
+                .isEqualTo(ScheduledTransferErrorCode.NOT_FOUND.getCode());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
     }
 
     @Test
-    @DisplayName("소유자가 아니면 존재를 숨기기 위해 NOT_FOUND(404)를 던진다 (api_conventions.md §8-3)")
-    void cancel_customerIdMismatch_throwsNotFound() {
+    @DisplayName("소유자가 아니면 존재를 숨기기 위해 미존재와 같은 SCD0201로 반환한다 (api_conventions.md §8-3)")
+    void cancel_customerIdMismatch_returnsNotFoundItemFailure() {
         stubClock();
-        ScheduledTransfer existing = existingScheduledTransfer(ScheduledTransferStatus.WAITING, LocalDate.now(clock).plusDays(10));
+        ScheduledTransfer existing = existingScheduledTransfer(
+                ScheduledTransferStatus.WAITING, LocalDate.now(clock).plusDays(10));
         when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
 
-        ScheduledTransferCancelCommand command = validCancelCommandBuilder().customerId(999L).build();
+        List<ScheduledTransferCancelResult> results = scheduledTransferCommandService.cancel(
+                validCancelCommandBuilder().customerId(999L).build());
 
-        assertThatThrownBy(() -> scheduledTransferCommandService.cancel(10L, command))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ScheduledTransferErrorCode.NOT_FOUND));
-
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        assertThat(results)
+                .singleElement()
+                .extracting(ScheduledTransferCancelResult::failureCode)
+                .isEqualTo(ScheduledTransferErrorCode.NOT_FOUND.getCode());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(scheduledTransferPersistencePort, never()).save(any());
     }
 
     @Test
-    @DisplayName("이미 CANCELED면 재검증·저장 없이 그대로 멱등 성공 반환한다")
+    @DisplayName("이미 CANCELED면 재검증·저장 없이 그대로 멱등 성공으로 반환한다")
     void cancel_alreadyCanceled_returnsIdempotentSuccess() {
         stubClock();
-        ScheduledTransfer existing = existingScheduledTransfer(ScheduledTransferStatus.CANCELED, LocalDate.now(clock).plusDays(10));
+        ScheduledTransfer existing = existingScheduledTransfer(
+                ScheduledTransferStatus.CANCELED, LocalDate.now(clock).plusDays(10));
         when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
 
-        ScheduledTransfer result = scheduledTransferCommandService.cancel(10L, validCancelCommandBuilder().build());
+        List<ScheduledTransferCancelResult> results = scheduledTransferCommandService.cancel(
+                validCancelCommandBuilder().build());
 
-        assertThat(result.getStatus()).isEqualTo(ScheduledTransferStatus.CANCELED);
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        assertThat(results)
+                .singleElement()
+                .extracting(ScheduledTransferCancelResult::status)
+                .isEqualTo(ProcessResultStatus.SUCCESS);
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(scheduledTransferPersistencePort, never()).save(any());
     }
 
     @Test
-    @DisplayName("PROCESSING/SUCCESS/FAILED 상태면 NOT_IN_WAITING_STATUS(SCD0302)를 던진다")
-    void cancel_notWaitingStatus_throwsNotInWaitingStatus() {
+    @DisplayName("PROCESSING/SUCCESS/FAILED 상태면 건별 실패(SCD0302)로 반환한다")
+    void cancel_notWaitingStatus_returnsItemFailure() {
         stubClock();
-        ScheduledTransfer existing = existingScheduledTransfer(ScheduledTransferStatus.PROCESSING, LocalDate.now(clock).plusDays(10));
+        ScheduledTransfer existing = existingScheduledTransfer(
+                ScheduledTransferStatus.PROCESSING, LocalDate.now(clock).plusDays(10));
         when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> scheduledTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ScheduledTransferErrorCode.NOT_IN_WAITING_STATUS));
+        List<ScheduledTransferCancelResult> results = scheduledTransferCommandService.cancel(
+                validCancelCommandBuilder().build());
 
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        assertThat(results)
+                .singleElement()
+                .extracting(ScheduledTransferCancelResult::failureCode)
+                .isEqualTo(ScheduledTransferErrorCode.NOT_IN_WAITING_STATUS.getCode());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
     }
 
     @Test
-    @DisplayName("예정일 당일이면 인증 포트를 호출하지 않고 CANNOT_CANCEL_ON_EXECUTION_DATE(SCD0303)를 던진다")
+    @DisplayName("예정일 당일이면 인증 포트를 호출하지 않고 건별 실패(SCD0303)로 반환한다")
     void cancel_onScheduledDate_doesNotCallAuthTokenVerification() {
         stubClock();
         ScheduledTransfer existing = existingScheduledTransfer(ScheduledTransferStatus.WAITING, LocalDate.now(clock));
         when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> scheduledTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ScheduledTransferErrorCode.CANNOT_CANCEL_ON_EXECUTION_DATE));
+        List<ScheduledTransferCancelResult> results = scheduledTransferCommandService.cancel(
+                validCancelCommandBuilder().build());
 
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        assertThat(results)
+                .singleElement()
+                .extracting(ScheduledTransferCancelResult::failureCode)
+                .isEqualTo(ScheduledTransferErrorCode.CANNOT_CANCEL_ON_EXECUTION_DATE.getCode());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
     }
 
     @Test
     @DisplayName("계좌비밀번호 인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
     void cancel_invalidAuthToken_propagatesException() {
         stubClock();
-        ScheduledTransfer existing = existingScheduledTransfer(ScheduledTransferStatus.WAITING, LocalDate.now(clock).plusDays(10));
+        ScheduledTransfer existing = existingScheduledTransfer(
+                ScheduledTransferStatus.WAITING, LocalDate.now(clock).plusDays(10));
         when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
-                .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
+                .when(authTokenVerificationPort)
+                .verifyAndConsume(anyString(), any(), any());
 
-        assertThatThrownBy(() -> scheduledTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
+        ScheduledTransferCancelCommand command = validCancelCommandBuilder().build();
+
+        assertThatThrownBy(() -> scheduledTransferCommandService.cancel(command))
                 .isInstanceOf(BusinessException.class);
 
         verify(scheduledTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
@@ -483,12 +726,16 @@ class ScheduledTransferCommandServiceTest {
     @DisplayName("OTP 인증 토큰이 유효하지 않으면 예외가 전파되고 저장하지 않는다")
     void cancel_invalidOtpAuthToken_propagatesException() {
         stubClock();
-        ScheduledTransfer existing = existingScheduledTransfer(ScheduledTransferStatus.WAITING, LocalDate.now(clock).plusDays(10));
+        ScheduledTransfer existing = existingScheduledTransfer(
+                ScheduledTransferStatus.WAITING, LocalDate.now(clock).plusDays(10));
         when(scheduledTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
-                .when(scheduledTransferOtpVerificationPort).verifyCancelAndConsume(anyString(), any(), any());
+                .when(scheduledTransferOtpVerificationPort)
+                .verifyCancelAndConsume(anyString(), any(), any());
 
-        assertThatThrownBy(() -> scheduledTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
+        ScheduledTransferCancelCommand command = validCancelCommandBuilder().build();
+
+        assertThatThrownBy(() -> scheduledTransferCommandService.cancel(command))
                 .isInstanceOf(BusinessException.class);
 
         verify(scheduledTransferPersistencePort, never()).save(any());

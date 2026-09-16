@@ -16,8 +16,8 @@ public class TransferLimitHistory {
     private final long beforeOneTimeLimit;
     private final long beforeDailyLimit;
 
-    private TransferLimitHistory(Long transferLimitHistoryId, Long customerId,
-                                 long beforeOneTimeLimit, long beforeDailyLimit) {
+    private TransferLimitHistory(
+            Long transferLimitHistoryId, Long customerId, long beforeOneTimeLimit, long beforeDailyLimit) {
         this.transferLimitHistoryId = transferLimitHistoryId;
         this.customerId = customerId;
         this.beforeOneTimeLimit = beforeOneTimeLimit;
@@ -25,13 +25,12 @@ public class TransferLimitHistory {
     }
 
     /** 변경 직전 값으로 이력을 남긴다. */
-    public static TransferLimitHistory create(Long customerId,
-                                              long beforeOneTimeLimit, long beforeDailyLimit) {
+    public static TransferLimitHistory create(Long customerId, long beforeOneTimeLimit, long beforeDailyLimit) {
         return new TransferLimitHistory(null, customerId, beforeOneTimeLimit, beforeDailyLimit);
     }
 
-    public static TransferLimitHistory restore(Long transferLimitHistoryId, Long customerId,
-                                               long beforeOneTimeLimit, long beforeDailyLimit) {
+    public static TransferLimitHistory restore(
+            Long transferLimitHistoryId, Long customerId, long beforeOneTimeLimit, long beforeDailyLimit) {
         return new TransferLimitHistory(transferLimitHistoryId, customerId, beforeOneTimeLimit, beforeDailyLimit);
     }
 }

@@ -2,11 +2,10 @@ package com.shinhan.corebank.common.code;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import java.io.Serializable;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-
-import java.io.Serializable;
 
 /**
  * 공통코드 복합 PK.

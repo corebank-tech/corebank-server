@@ -33,22 +33,22 @@ public class OtpAuthTokenVerificationService implements OtpAuthTokenVerifier {
         }
         transactionDataValidator.validate(verification.transactionData());
 
-        OtpAuthTokenPayload payload = authTokenStorePort.find(verification.otpAuthToken())
+        OtpAuthTokenPayload payload = authTokenStorePort
+                .find(verification.otpAuthToken())
                 .orElseThrow(() -> new BusinessException(OtpErrorCode.INVALID_AUTH_TOKEN));
         if (!payload.customerId().equals(verification.customerId())) {
             throw new BusinessException(OtpErrorCode.INVALID_AUTH_TOKEN);
         }
 
-        OtpVerificationRequest request = requestPort.findVerifiedById(payload.otpRequestId())
+        OtpVerificationRequest request = requestPort
+                .findVerifiedById(payload.otpRequestId())
                 .orElseThrow(() -> new BusinessException(OtpErrorCode.INVALID_AUTH_TOKEN));
 
         if (!request.belongsTo(verification.customerId())) {
             throw new BusinessException(OtpErrorCode.INVALID_AUTH_TOKEN);
         }
 
-        String actualTransactionData = canonicalizerPort.canonicalize(
-                verification.transactionData()
-        );
+        String actualTransactionData = canonicalizerPort.canonicalize(verification.transactionData());
         if (request.transactionType() != verification.transactionType()
                 || !request.canonicalTransactionData().equals(actualTransactionData)) {
             // 거래정보 불일치는 정상 토큰을 소진하지 않고 OTP0102로 반환한다.

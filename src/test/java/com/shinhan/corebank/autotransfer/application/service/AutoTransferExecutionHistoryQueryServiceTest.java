@@ -39,6 +39,7 @@ class AutoTransferExecutionHistoryQueryServiceTest {
 
     @Mock
     AutoTransferExecutionHistoryQueryPort autoTransferExecutionHistoryQueryPort;
+
     @Mock
     Clock clock;
 
@@ -55,9 +56,17 @@ class AutoTransferExecutionHistoryQueryServiceTest {
     }
 
     private AutoTransferExecutionHistoryRow sampleRow() {
-        return new AutoTransferExecutionHistoryRow(1L, ProcessResultStatus.SUCCESS,
-                LocalDateTime.of(2026, 3, 10, 9, 0), 2L, "110987654321", "홍길동",
-                10_000L, 1, "내메모", null);
+        return new AutoTransferExecutionHistoryRow(
+                1L,
+                ProcessResultStatus.SUCCESS,
+                LocalDateTime.of(2026, 3, 10, 9, 0),
+                2L,
+                "110987654321",
+                "홍길동",
+                10_000L,
+                1,
+                "내메모",
+                null);
     }
 
     @Test
@@ -108,10 +117,11 @@ class AutoTransferExecutionHistoryQueryServiceTest {
     @Test
     @DisplayName("조회 시작일이 종료일보다 늦으면 INVALID_DATE_RANGE를 던진다")
     void search_fromDateAfterToDate_throwsInvalidDateRange() {
-        assertThatThrownBy(() -> service.search(1L, 2L,
-                LocalDate.of(2026, 3, 20), LocalDate.of(2026, 3, 10), 0, 10, false))
+        assertThatThrownBy(() ->
+                        service.search(1L, 2L, LocalDate.of(2026, 3, 20), LocalDate.of(2026, 3, 10), 0, 10, false))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_DATE_RANGE));
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.INVALID_DATE_RANGE));
     }
 
     @Test
@@ -122,7 +132,8 @@ class AutoTransferExecutionHistoryQueryServiceTest {
 
         assertThatThrownBy(() -> service.search(1L, 2L, fromDate, toDate, 0, 10, false))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.DATE_RANGE_EXCEEDED));
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(CommonErrorCode.DATE_RANGE_EXCEEDED));
     }
 
     @Test
@@ -166,7 +177,8 @@ class AutoTransferExecutionHistoryQueryServiceTest {
     @Test
     @DisplayName("all=true면 size가 허용값이 아니어도 예외 없이 unpaged로 조회한다")
     void search_allTrue_skipsPageSizeValidation_usesUnpaged() {
-        when(autoTransferExecutionHistoryQueryPort.search(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY), eq(Pageable.unpaged())))
+        when(autoTransferExecutionHistoryQueryPort.search(
+                        eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY), eq(Pageable.unpaged())))
                 .thenReturn(new PageImpl<>(List.of(sampleRow()), Pageable.unpaged(), 1));
         when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
                 .thenReturn(new AutoTransferExecutionHistoryAggregate(1L, 10_000L, 0L, 0L));
@@ -181,7 +193,8 @@ class AutoTransferExecutionHistoryQueryServiceTest {
     void search_negativePage_throwsInvalidInput() {
         assertThatThrownBy(() -> service.search(1L, 2L, null, null, -1, 10, false))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
     }
 
     @Test
@@ -194,8 +207,8 @@ class AutoTransferExecutionHistoryQueryServiceTest {
         when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), any(), any()))
                 .thenReturn(new AutoTransferExecutionHistoryAggregate(3L, 30_000L, 1L, 5_000L));
 
-        AutoTransferExecutionHistoryResult result = service.search(1L, 2L,
-                LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), 0, 10, false);
+        AutoTransferExecutionHistoryResult result =
+                service.search(1L, 2L, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31), 0, 10, false);
 
         var item = result.page().getContent().get(0);
         assertThat(item.executionId()).isEqualTo(row.executionId());

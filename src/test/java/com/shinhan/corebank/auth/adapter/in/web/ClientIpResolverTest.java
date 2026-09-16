@@ -1,11 +1,11 @@
 package com.shinhan.corebank.auth.adapter.in.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ClientIpResolverTest {
 
@@ -15,26 +15,18 @@ class ClientIpResolverTest {
     @DisplayName("X-Forwarded-For에서 ALB가 마지막에 추가한 접속 IP를 반환한다")
     void resolvesLastForwardedIpAddedByAlb() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader(
-                "X-Forwarded-For",
-                " 203.0.113.10, 10.0.1.20 "
-        );
+        request.addHeader("X-Forwarded-For", " 203.0.113.10, 10.0.1.20 ");
 
-        assertThat(resolver.resolve(request))
-                .isEqualTo("10.0.1.20");
+        assertThat(resolver.resolve(request)).isEqualTo("10.0.1.20");
     }
 
     @Test
     @DisplayName("클라이언트가 주입한 선행 X-Forwarded-For 값을 신뢰하지 않는다")
     void ignoresClientSuppliedForwardedIp() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader(
-                "X-Forwarded-For",
-                "9.9.9.9, 203.0.113.10"
-        );
+        request.addHeader("X-Forwarded-For", "9.9.9.9, 203.0.113.10");
 
-        assertThat(resolver.resolve(request))
-                .isEqualTo("203.0.113.10");
+        assertThat(resolver.resolve(request)).isEqualTo("203.0.113.10");
     }
 
     @Test
@@ -43,8 +35,7 @@ class ClientIpResolverTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRemoteAddr(" 192.0.2.10 ");
 
-        assertThat(resolver.resolve(request))
-                .isEqualTo("192.0.2.10");
+        assertThat(resolver.resolve(request)).isEqualTo("192.0.2.10");
     }
 
     @Test
@@ -54,8 +45,7 @@ class ClientIpResolverTest {
         request.addHeader("X-Forwarded-For", "   ");
         request.setRemoteAddr("192.0.2.20");
 
-        assertThat(resolver.resolve(request))
-                .isEqualTo("192.0.2.20");
+        assertThat(resolver.resolve(request)).isEqualTo("192.0.2.20");
     }
 
     @Test

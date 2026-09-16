@@ -6,12 +6,9 @@ import com.shinhan.corebank.signup.domain.model.EmailVerificationRequest;
 // 이메일 인증 도메인 모델과 JPA 엔티티를 상호 변환한다.
 final class EmailVerificationMapper {
 
-    private EmailVerificationMapper() {
-    }
+    private EmailVerificationMapper() {}
 
-    static EmailVerificationRequest toDomain(
-            EmailVerificationJpaEntity entity
-    ) {
+    static EmailVerificationRequest toDomain(EmailVerificationJpaEntity entity) {
         return new EmailVerificationRequest(
                 entity.getVerificationRequestId(),
                 EmailVerificationPurpose.valueOf(entity.getPurpose()),
@@ -22,13 +19,10 @@ final class EmailVerificationMapper {
                 entity.isUsed(),
                 entity.getVerifiedAt(),
                 entity.getExpiresAt(),
-                entity.getCreatedAt()
-        );
+                entity.getCreatedAt());
     }
 
-    static EmailVerificationJpaEntity toEntity(
-            EmailVerificationRequest request
-    ) {
+    static EmailVerificationJpaEntity toEntity(EmailVerificationRequest request) {
         return new EmailVerificationJpaEntity(
                 request.verificationRequestId(),
                 request.purpose().name(),
@@ -39,7 +33,6 @@ final class EmailVerificationMapper {
                 request.used(),
                 request.verifiedAt(),
                 request.expiresAt(),
-                request.createdAt()
-        );
+                request.createdAt());
     }
 }

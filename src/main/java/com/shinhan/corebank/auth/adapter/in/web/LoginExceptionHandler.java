@@ -17,27 +17,18 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class LoginExceptionHandler {
 
-    private static final Logger log =
-            LoggerFactory.getLogger(LoginExceptionHandler.class);
+    private static final Logger log = LoggerFactory.getLogger(LoginExceptionHandler.class);
 
     @ExceptionHandler(LoginFailedException.class)
-    public ResponseEntity<ErrorResponse> handleLoginFailure(
-            LoginFailedException exception
-    ) {
+    public ResponseEntity<ErrorResponse> handleLoginFailure(LoginFailedException exception) {
         ErrorCode errorCode = exception.getErrorCode();
 
-        LoginFailureData data = exception.getAttemptResult()
-                .map(LoginFailureData::from)
-                .orElse(null);
+        LoginFailureData data =
+                exception.getAttemptResult().map(LoginFailureData::from).orElse(null);
 
         log.warn("[{}] {}", errorCode.getCode(), exception.getMessage());
 
-        return ResponseEntity
-                .status(HttpStatus.valueOf(errorCode.getStatus()))
-                .body(new ErrorResponse(
-                        errorCode.getCode(),
-                        exception.getMessage(),
-                        data
-                ));
+        return ResponseEntity.status(HttpStatus.valueOf(errorCode.getStatus()))
+                .body(new ErrorResponse(errorCode.getCode(), exception.getMessage(), data));
     }
 }

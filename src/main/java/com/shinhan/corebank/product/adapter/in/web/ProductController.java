@@ -3,12 +3,12 @@ package com.shinhan.corebank.product.adapter.in.web;
 import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.common.response.PageResponse;
-import com.shinhan.corebank.product.application.ProductSortType;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import com.shinhan.corebank.product.application.port.in.TermsViewUseCase;
 import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductDetailView;
 import com.shinhan.corebank.product.domain.ProductGroup;
+import com.shinhan.corebank.product.domain.ProductSortType;
 import com.shinhan.corebank.product.domain.ProductTermsView;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
@@ -47,8 +47,7 @@ public class ProductController {
     @GetMapping("/{productId}/terms/{termsId}")
     @Operation(operationId = "getProductTerms")
     public ApiResponse<ProductTermsViewResponse> getProductTerms(
-            @PathVariable Long productId,
-            @PathVariable Long termsId) {
+            @PathVariable Long productId, @PathVariable Long termsId) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         ProductTermsView view = termsViewUseCase.view(productId, termsId, customerId);
         return ApiResponse.success(ProductTermsViewResponse.from(view));

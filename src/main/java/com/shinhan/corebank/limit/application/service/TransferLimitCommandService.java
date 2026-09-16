@@ -1,8 +1,5 @@
 package com.shinhan.corebank.limit.application.service;
 
-import java.time.Clock;
-import java.time.LocalDate;
-
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.limit.application.port.in.TransferLimitCommandUseCase;
 import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitCommand;
@@ -15,7 +12,8 @@ import com.shinhan.corebank.limit.domain.TransferLimit;
 import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
 import com.shinhan.corebank.limit.domain.TransferLimitHistory;
 import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
-
+import java.time.Clock;
+import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -54,7 +52,8 @@ public class TransferLimitCommandService implements TransferLimitCommandUseCase 
 
         // 없는 한도를 바꿀 수는 없다. 가입 연계(REQ-TRSF-029)와 백필이 모든 고객의 행을 보장하므로
         // 여기까지 오는 경로는 없고, 온다면 데이터 결함이라 500 으로 드러낸다.
-        TransferLimit limit = transferLimitCommandPort.findForUpdateByCustomerId(customerId)
+        TransferLimit limit = transferLimitCommandPort
+                .findForUpdateByCustomerId(customerId)
                 .orElseThrow(() -> {
                     log.error("이체한도 행이 없는 고객의 변경 요청 - customerId={}", customerId);
                     return new BusinessException(LmtErrorCode.TRANSFER_LIMIT_NOT_FOUND);
@@ -67,7 +66,8 @@ public class TransferLimitCommandService implements TransferLimitCommandUseCase 
         TransferLimit saved = transferLimitCommandPort.update(limit);
 
         LocalDate today = LocalDate.now(clock);
-        TransferLimitDailyUsage usage = transferLimitQueryPort.findUsage(customerId, today)
+        TransferLimitDailyUsage usage = transferLimitQueryPort
+                .findUsage(customerId, today)
                 .orElseGet(() -> TransferLimitDailyUsage.create(customerId, today));
 
         return TransferLimitResult.from(saved, usage);

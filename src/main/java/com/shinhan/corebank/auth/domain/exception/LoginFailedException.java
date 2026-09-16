@@ -2,7 +2,6 @@ package com.shinhan.corebank.auth.domain.exception;
 
 import com.shinhan.corebank.auth.domain.model.LoginAttemptResult;
 import com.shinhan.corebank.common.exception.BusinessException;
-
 import java.util.Objects;
 import java.util.Optional;
 
@@ -11,32 +10,21 @@ public final class LoginFailedException extends BusinessException {
 
     private final LoginAttemptResult attemptResult;
 
-    private LoginFailedException(
-            AuthErrorCode errorCode,
-            LoginAttemptResult attemptResult
-    ) {
+    private LoginFailedException(AuthErrorCode errorCode, LoginAttemptResult attemptResult) {
         super(errorCode);
         this.attemptResult = attemptResult;
     }
 
     // 잠금 전 비밀번호 불일치 결과를 생성
-    public static LoginFailedException invalidCredentials(
-            LoginAttemptResult attemptResult
-    ) {
+    public static LoginFailedException invalidCredentials(LoginAttemptResult attemptResult) {
         validateAttemptResult(attemptResult);
 
-        return new LoginFailedException(
-                AuthErrorCode.LOGIN_FAILED,
-                attemptResult
-        );
+        return new LoginFailedException(AuthErrorCode.LOGIN_FAILED, attemptResult);
     }
 
     // 실패 5회 도달 또는 이미 잠긴 계정 오류를 생성
     public static LoginFailedException accountLocked() {
-        return new LoginFailedException(
-                AuthErrorCode.ACCOUNT_LOCKED,
-                null
-        );
+        return new LoginFailedException(AuthErrorCode.ACCOUNT_LOCKED, null);
     }
 
     // 실패 응답에 포함할 로그인 시도 결과를 반환
@@ -45,12 +33,7 @@ public final class LoginFailedException extends BusinessException {
     }
 
     // 비밀번호 불일치 결과가 반드시 존재하는지 확인
-    private static void validateAttemptResult(
-            LoginAttemptResult attemptResult
-    ) {
-        Objects.requireNonNull(
-                attemptResult,
-                "attemptResult must not be null"
-        );
+    private static void validateAttemptResult(LoginAttemptResult attemptResult) {
+        Objects.requireNonNull(attemptResult, "attemptResult must not be null");
     }
 }

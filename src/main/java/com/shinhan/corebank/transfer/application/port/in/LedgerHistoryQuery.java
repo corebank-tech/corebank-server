@@ -1,10 +1,8 @@
 package com.shinhan.corebank.transfer.application.port.in;
 
-import java.time.LocalDate;
-
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-
+import java.time.LocalDate;
 import lombok.Builder;
 
 /**
@@ -22,12 +20,10 @@ public record LedgerHistoryQuery(
         LedgerHistorySort sort,
         int page,
         int size,
-        boolean all
-) {
+        boolean all) {
 
     public LedgerHistoryQuery {
-        if (accountId == null || fromDate == null || toDate == null
-                || direction == null || sort == null) {
+        if (accountId == null || fromDate == null || toDate == null || direction == null || sort == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
         // all=true면 page/size는 쓰이지 않으므로 검증하지 않는다.

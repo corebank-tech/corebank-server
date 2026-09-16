@@ -14,8 +14,7 @@ import java.time.LocalDate;
  */
 public final class ProductTestFixtures {
 
-    private ProductTestFixtures() {
-    }
+    private ProductTestFixtures() {}
 
     public static ProductJpaEntity defaultProduct() {
         return defaultProduct(null);
@@ -58,7 +57,8 @@ public final class ProductTestFixtures {
         return productWithCodeAndName(productCode, productName, SaleStatus.ON_SALE);
     }
 
-    private static ProductJpaEntity productWithCodeAndName(String productCode, String productName, SaleStatus saleStatus) {
+    private static ProductJpaEntity productWithCodeAndName(
+            String productCode, String productName, SaleStatus saleStatus) {
         return ProductJpaEntity.builder()
                 .productCode(productCode)
                 .productName(productName)

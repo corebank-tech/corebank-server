@@ -81,12 +81,15 @@ class AutoTransferExecutionPersistenceAdapterTest extends IntegrationTestSupport
     @DisplayName("같은 자동이체·같은 실행일로 두 번 저장하면 두 번째는 유니크 제약 위반으로 즉시 실패한다")
     void save_duplicateExecutionDate_throwsImmediately() {
         LocalDate executionDate = LocalDate.of(2026, 3, 15);
-        adapter.save(AutoTransferExecution.processing(executionDate, 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)), autoTransferId);
+        adapter.save(
+                AutoTransferExecution.processing(executionDate, 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)),
+                autoTransferId);
 
         // saveAndFlush가 아니라 지연 flush였다면 이 두 번째 save() 호출 시점엔 아직 예외가 안 나고
         // 트랜잭션 커밋 시점에야 터졌을 것 — 여기서 바로 예외가 나는 것 자체가 즉시 flush 증거
         assertThatThrownBy(() -> adapter.save(
-                AutoTransferExecution.processing(executionDate, 10000L, LocalDateTime.of(2026, 3, 15, 9, 1)), autoTransferId))
+                        AutoTransferExecution.processing(executionDate, 10000L, LocalDateTime.of(2026, 3, 15, 9, 1)),
+                        autoTransferId))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -94,11 +97,15 @@ class AutoTransferExecutionPersistenceAdapterTest extends IntegrationTestSupport
     @DisplayName("제약 위반을 같은 트랜잭션 안에서 catch해도, 그 트랜잭션에서의 다음 저장 시도는 여전히 실패한다 (R2: catch해도 트랜잭션은 안 살아남)")
     void save_afterConstraintViolationCaughtInSameTransaction_nextSaveStillFails() {
         LocalDate executionDate = LocalDate.of(2026, 3, 15);
-        adapter.save(AutoTransferExecution.processing(executionDate, 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)), autoTransferId);
+        adapter.save(
+                AutoTransferExecution.processing(executionDate, 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)),
+                autoTransferId);
 
         // 실제로 발생 가능한 시나리오: "이미 처리됨이니 건너뛰자"고 여기서 catch하고 넘어간다고 가정
         try {
-            adapter.save(AutoTransferExecution.processing(executionDate, 10000L, LocalDateTime.of(2026, 3, 15, 9, 1)), autoTransferId);
+            adapter.save(
+                    AutoTransferExecution.processing(executionDate, 10000L, LocalDateTime.of(2026, 3, 15, 9, 1)),
+                    autoTransferId);
         } catch (DataIntegrityViolationException expected) {
             // catch했으니 트랜잭션이 괜찮아졌다고 착각하기 쉽지만 아니다 - 아래에서 증명
         }
@@ -107,15 +114,19 @@ class AutoTransferExecutionPersistenceAdapterTest extends IntegrationTestSupport
         // 이게 실패한다는 것 자체가 "catch해도 트랜잭션은 이미 오염됐다"는 증거.
         // 실제로 Hibernate가 무슨 예외를 던질지는 버전에 따라 달라질 수 있어 타입은 느슨하게 확인한다.
         assertThatThrownBy(() -> adapter.save(
-                AutoTransferExecution.processing(LocalDate.of(2026, 3, 16), 10000L, LocalDateTime.of(2026, 3, 16, 9, 0)), autoTransferId))
+                        AutoTransferExecution.processing(
+                                LocalDate.of(2026, 3, 16), 10000L, LocalDateTime.of(2026, 3, 16, 9, 0)),
+                        autoTransferId))
                 .isInstanceOf(RuntimeException.class);
     }
 
     @Test
     @DisplayName("PROCESSING 상태 회차만 반환하고 SUCCESS/ERROR는 제외한다")
     void findAllProcessing_returnsOnlyProcessingExecutions() {
-        adapter.save(AutoTransferExecution.processing(
-                LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)), autoTransferId);
+        adapter.save(
+                AutoTransferExecution.processing(
+                        LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)),
+                autoTransferId);
 
         AutoTransferExecution success = AutoTransferExecution.processing(
                 LocalDate.of(2026, 3, 16), 10000L, LocalDateTime.of(2026, 3, 16, 9, 0));
@@ -172,47 +183,66 @@ class AutoTransferExecutionPersistenceAdapterTest extends IntegrationTestSupport
                 .build());
         Long otherAutoTransferId = otherEntity.getAutoTransferId();
 
-        adapter.save(AutoTransferExecution.processing(
-                LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)), autoTransferId);
-        adapter.save(AutoTransferExecution.processing(
-                LocalDate.of(2026, 3, 15), 20000L, LocalDateTime.of(2026, 3, 15, 9, 0)), otherAutoTransferId);
+        adapter.save(
+                AutoTransferExecution.processing(
+                        LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)),
+                autoTransferId);
+        adapter.save(
+                AutoTransferExecution.processing(
+                        LocalDate.of(2026, 3, 15), 20000L, LocalDateTime.of(2026, 3, 15, 9, 0)),
+                otherAutoTransferId);
 
         List<StuckExecution> result = adapter.findAllProcessing();
 
         assertThat(result).hasSize(2);
-        assertThat(result).extracting(r -> r.autoTransfer().getAutoTransferId())
+        assertThat(result)
+                .extracting(r -> r.autoTransfer().getAutoTransferId())
                 .containsExactlyInAnyOrder(autoTransferId, otherAutoTransferId);
     }
 
     @Test
     @DisplayName("findRecentByAutoTransferId()는 실행일 최신순으로 limit개만 반환한다")
     void findRecentByAutoTransferId_returnsMostRecentLimitedByCount() {
-        adapter.save(AutoTransferExecution.processing(
-                LocalDate.of(2026, 3, 12), 10000L, LocalDateTime.of(2026, 3, 12, 9, 0)), autoTransferId);
-        adapter.save(AutoTransferExecution.processing(
-                LocalDate.of(2026, 3, 13), 10000L, LocalDateTime.of(2026, 3, 13, 9, 0)), autoTransferId);
-        adapter.save(AutoTransferExecution.processing(
-                LocalDate.of(2026, 3, 14), 10000L, LocalDateTime.of(2026, 3, 14, 9, 0)), autoTransferId);
-        adapter.save(AutoTransferExecution.processing(
-                LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)), autoTransferId);
+        adapter.save(
+                AutoTransferExecution.processing(
+                        LocalDate.of(2026, 3, 12), 10000L, LocalDateTime.of(2026, 3, 12, 9, 0)),
+                autoTransferId);
+        adapter.save(
+                AutoTransferExecution.processing(
+                        LocalDate.of(2026, 3, 13), 10000L, LocalDateTime.of(2026, 3, 13, 9, 0)),
+                autoTransferId);
+        adapter.save(
+                AutoTransferExecution.processing(
+                        LocalDate.of(2026, 3, 14), 10000L, LocalDateTime.of(2026, 3, 14, 9, 0)),
+                autoTransferId);
+        adapter.save(
+                AutoTransferExecution.processing(
+                        LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)),
+                autoTransferId);
 
         List<AutoTransferExecution> result = adapter.findRecentByAutoTransferId(autoTransferId, 3);
 
         assertThat(result).hasSize(3);
-        assertThat(result).extracting(AutoTransferExecution::getExecutionDate)
-                .containsExactly(
-                        LocalDate.of(2026, 3, 15),
-                        LocalDate.of(2026, 3, 14),
-                        LocalDate.of(2026, 3, 13));
+        assertThat(result)
+                .extracting(AutoTransferExecution::getExecutionDate)
+                .containsExactly(LocalDate.of(2026, 3, 15), LocalDate.of(2026, 3, 14), LocalDate.of(2026, 3, 13));
     }
 
     @Test
     @DisplayName("saveIfStillProcessing()은 현재 PROCESSING이면 확정 저장하고 true를 반환한다")
     void saveIfStillProcessing_currentlyProcessing_savesAndReturnsTrue() {
-        AutoTransferExecution saved = adapter.save(AutoTransferExecution.processing(
-                LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)), autoTransferId);
-        AutoTransferExecution toFinalize = AutoTransferExecution.reconstitute(saved.getExecutionId(), saved.getExecutionDate(),
-                saved.getAmount(), saved.getStatus(), null, null, saved.getExecutedAt());
+        AutoTransferExecution saved = adapter.save(
+                AutoTransferExecution.processing(
+                        LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)),
+                autoTransferId);
+        AutoTransferExecution toFinalize = AutoTransferExecution.reconstitute(
+                saved.getExecutionId(),
+                saved.getExecutionDate(),
+                saved.getAmount(),
+                saved.getStatus(),
+                null,
+                null,
+                saved.getExecutedAt());
         toFinalize.markSuccess("20260315BT0000000001");
 
         boolean confirmed = adapter.saveIfStillProcessing(toFinalize);
@@ -228,17 +258,31 @@ class AutoTransferExecutionPersistenceAdapterTest extends IntegrationTestSupport
     @Test
     @DisplayName("saveIfStillProcessing()은 이미 PROCESSING이 아니면(다른 실행이 먼저 확정) 저장하지 않고 false를 반환한다")
     void saveIfStillProcessing_alreadyFinalized_doesNotOverwriteAndReturnsFalse() {
-        AutoTransferExecution saved = adapter.save(AutoTransferExecution.processing(
-                LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)), autoTransferId);
-        AutoTransferExecution firstFinalize = AutoTransferExecution.reconstitute(saved.getExecutionId(), saved.getExecutionDate(),
-                saved.getAmount(), saved.getStatus(), null, null, saved.getExecutedAt());
+        AutoTransferExecution saved = adapter.save(
+                AutoTransferExecution.processing(
+                        LocalDate.of(2026, 3, 15), 10000L, LocalDateTime.of(2026, 3, 15, 9, 0)),
+                autoTransferId);
+        AutoTransferExecution firstFinalize = AutoTransferExecution.reconstitute(
+                saved.getExecutionId(),
+                saved.getExecutionDate(),
+                saved.getAmount(),
+                saved.getStatus(),
+                null,
+                null,
+                saved.getExecutedAt());
         firstFinalize.markSuccess("20260315BT0000000001");
         adapter.saveIfStillProcessing(firstFinalize);
         entityManager.clear();
 
         // 두 번째 실행은 저장 전 스냅샷 기준으로 아직 PROCESSING이라고 믿고 ERROR로 확정 시도한다
-        AutoTransferExecution secondFinalize = AutoTransferExecution.reconstitute(saved.getExecutionId(), saved.getExecutionDate(),
-                saved.getAmount(), ProcessResultStatus.PROCESSING, null, null, saved.getExecutedAt());
+        AutoTransferExecution secondFinalize = AutoTransferExecution.reconstitute(
+                saved.getExecutionId(),
+                saved.getExecutionDate(),
+                saved.getAmount(),
+                ProcessResultStatus.PROCESSING,
+                null,
+                null,
+                saved.getExecutedAt());
         secondFinalize.markError("실행 중 확인 불가로 재확정 배치가 오류 처리함", null);
 
         boolean confirmed = adapter.saveIfStillProcessing(secondFinalize);
@@ -255,23 +299,31 @@ class AutoTransferExecutionPersistenceAdapterTest extends IntegrationTestSupport
         long seq = CUSTOMER_SEQ.incrementAndGet();
         String userId = "u" + seq;
         String email = "test" + seq + "@test.com";
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO customer (user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at) "
                                 + "VALUES (:userId, 'x', '홍길동', '1990-01-01', :email, '01012345678', NOW(), NOW(), NOW())")
                 .setParameter("userId", userId)
                 .setParameter("email", email)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
     private Long insertAccount(Long customerId) {
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, opened_date, created_at, updated_at) "
                                 + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', NOW(), NOW(), NOW())")
                 .setParameter("accountNumber", accountNumber)
                 .setParameter("customerId", customerId)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 }

@@ -12,14 +12,13 @@ import com.shinhan.corebank.subscription.domain.SubscriptionValidation;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import tools.jackson.core.type.TypeReference;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 @Validated
 @RestController
@@ -38,8 +37,7 @@ public class ProductSubscriptionController {
     public ApiResponse<ProductSubscriptionValidationResponse> validate(
             @RequestBody @Valid ProductSubscriptionValidationRequest request) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
-        SubscriptionValidation result =
-                productSubscriptionValidationUseCase.validate(request.toCommand(customerId));
+        SubscriptionValidation result = productSubscriptionValidationUseCase.validate(request.toCommand(customerId));
         return ApiResponse.success(ProductSubscriptionValidationResponse.from(result));
     }
 
@@ -60,13 +58,15 @@ public class ProductSubscriptionController {
             @RequestBody @Valid ProductSubscriptionExecuteRequest request) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         return idempotentRequestExecutor.execute(
-                idempotencyKey, customerId, "POST /product-subscriptions", fingerprint(request),
+                idempotencyKey,
+                customerId,
+                "POST /product-subscriptions",
+                fingerprint(request),
                 new TypeReference<>() {},
                 () -> {
                     ProductSubscriptionExecuteResult result =
                             productSubscriptionExecuteUseCase.execute(request.toCommand(customerId));
-                    return ApiResponse.success(
-                            ProductSubscriptionExecuteResponse.from(result), "상품 가입이 완료되었습니다.");
+                    return ApiResponse.success(ProductSubscriptionExecuteResponse.from(result), "상품 가입이 완료되었습니다.");
                 });
     }
 

@@ -5,6 +5,7 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -15,7 +16,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
-import org.springframework.dao.OptimisticLockingFailureException;
 
 // 모든 예외를 가로채 {code, message, data} 로 변환. 각 파트는 수정할 필요 없음
 // annotations = RestController.class 로 스코프를 제한하지 않는다: 404/405 처럼 핸들러 매칭 자체가
@@ -38,8 +38,7 @@ public class ApiExceptionHandler {
         log.warn(
                 "[{}] 요청 본문 검증 실패: {}개 필드 오류",
                 CommonErrorCode.INVALID_INPUT.getCode(),
-                e.getBindingResult().getFieldErrorCount()
-        );
+                e.getBindingResult().getFieldErrorCount());
         return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_INPUT);
     }
 
@@ -88,20 +87,12 @@ public class ApiExceptionHandler {
         return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_ENDPOINT);
     }
 
-    //낙관적 락 충돌 등 동시 수정 충돌
+    // 낙관적 락 충돌 등 동시 수정 충돌
     @ExceptionHandler(OptimisticLockingFailureException.class)
-    public ResponseEntity<ErrorResponse> handleOptimisticLock(
-            OptimisticLockingFailureException e
-    ) {
-        log.warn(
-                "[{}] {}",
-                CommonErrorCode.CONCURRENT_MODIFICATION.getCode(),
-                e.getMessage()
-        );
+    public ResponseEntity<ErrorResponse> handleOptimisticLock(OptimisticLockingFailureException e) {
+        log.warn("[{}] {}", CommonErrorCode.CONCURRENT_MODIFICATION.getCode(), e.getMessage());
 
-        return ErrorResponse.toResponseEntity(
-                CommonErrorCode.CONCURRENT_MODIFICATION
-        );
+        return ErrorResponse.toResponseEntity(CommonErrorCode.CONCURRENT_MODIFICATION);
     }
 
     // 그 외 모든 예외 (NPE, DB 오류 등) -> CMN9999. 스택트레이스는 로그에만 남김

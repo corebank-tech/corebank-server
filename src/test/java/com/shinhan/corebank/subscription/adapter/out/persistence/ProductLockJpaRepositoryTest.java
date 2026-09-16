@@ -22,7 +22,8 @@ class ProductLockJpaRepositoryTest extends IntegrationTestSupport {
     @Test
     @DisplayName("findByIdForUpdate는 존재하는 product_id에 대해 값을 반환한다")
     void findByIdForUpdate_existingProduct_returnsPresent() {
-        Long productId = productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
+        Long productId =
+                productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
 
         assertThat(repository.findByIdForUpdate(productId)).isPresent();
     }

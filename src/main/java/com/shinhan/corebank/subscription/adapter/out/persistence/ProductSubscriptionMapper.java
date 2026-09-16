@@ -3,8 +3,7 @@ package com.shinhan.corebank.subscription.adapter.out.persistence;
 import com.shinhan.corebank.subscription.domain.ProductSubscription;
 
 final class ProductSubscriptionMapper {
-    private ProductSubscriptionMapper() {
-    }
+    private ProductSubscriptionMapper() {}
 
     static ProductSubscription toDomain(ProductSubscriptionJpaEntity entity) {
         return ProductSubscription.builder()

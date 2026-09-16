@@ -1,11 +1,11 @@
 package com.shinhan.corebank.transfer.application.service;
 
-import java.time.Clock;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.Optional;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.application.port.in.FavoriteAccountRegisterCommand;
 import com.shinhan.corebank.transfer.application.port.in.FavoriteAccountResult;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
@@ -14,21 +14,19 @@ import com.shinhan.corebank.transfer.application.port.out.LockedAccountStatus;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountType;
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.domain.FavoriteAccount;
-import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.domain.exception.FavoriteAccountErrorCode;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class FavoriteAccountRegisterServiceTest {
@@ -50,17 +48,21 @@ class FavoriteAccountRegisterServiceTest {
         service = new FavoriteAccountRegisterService(accountLockPort, persistencePort, FIXED_CLOCK);
 
         when(accountLockPort.resolvePayeeByAccountNumber("110222222222"))
-                .thenReturn(Optional.of(new ResolvedPayee(202L, "홍길동", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE)));
+                .thenReturn(Optional.of(
+                        new ResolvedPayee(202L, "홍길동", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE)));
         when(persistencePort.countByCustomerId(1L)).thenReturn(0L);
-        when(persistencePort.save(any(FavoriteAccount.class)))
-                .thenAnswer(invocation -> {
-                    FavoriteAccount arg = invocation.getArgument(0);
-                    return FavoriteAccount.of(10L, arg.getCustomerId(), arg.getDepositAccountNumber(),
-                            arg.getPayeeName(), arg.getAlias(), arg.getRegisteredAt());
-                });
+        when(persistencePort.save(any(FavoriteAccount.class))).thenAnswer(invocation -> {
+            FavoriteAccount arg = invocation.getArgument(0);
+            return FavoriteAccount.of(
+                    10L,
+                    arg.getCustomerId(),
+                    arg.getDepositAccountNumber(),
+                    arg.getPayeeName(),
+                    arg.getAlias(),
+                    arg.getRegisteredAt());
+        });
 
-        FavoriteAccountResult result = service.register(
-                new FavoriteAccountRegisterCommand(1L, "110222222222", "엄마"));
+        FavoriteAccountResult result = service.register(new FavoriteAccountRegisterCommand(1L, "110222222222", "엄마"));
 
         assertThat(result.favoriteAccountId()).isEqualTo(10L);
         assertThat(result.alias()).isEqualTo("엄마");
@@ -88,7 +90,8 @@ class FavoriteAccountRegisterServiceTest {
         service = new FavoriteAccountRegisterService(accountLockPort, persistencePort, FIXED_CLOCK);
 
         when(accountLockPort.resolvePayeeByAccountNumber("110222222222"))
-                .thenReturn(Optional.of(new ResolvedPayee(202L, "홍길동", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE)));
+                .thenReturn(Optional.of(
+                        new ResolvedPayee(202L, "홍길동", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE)));
         when(persistencePort.countByCustomerId(1L)).thenReturn(20L);
 
         assertThatThrownBy(() -> service.register(new FavoriteAccountRegisterCommand(1L, "110222222222", null)))
@@ -103,10 +106,10 @@ class FavoriteAccountRegisterServiceTest {
         service = new FavoriteAccountRegisterService(accountLockPort, persistencePort, FIXED_CLOCK);
 
         when(accountLockPort.resolvePayeeByAccountNumber("110222222222"))
-                .thenReturn(Optional.of(new ResolvedPayee(202L, "홍길동", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE)));
+                .thenReturn(Optional.of(
+                        new ResolvedPayee(202L, "홍길동", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE)));
         when(persistencePort.countByCustomerId(1L)).thenReturn(0L);
-        when(persistencePort.save(any(FavoriteAccount.class)))
-                .thenThrow(new DataIntegrityViolationException("uk_fav"));
+        when(persistencePort.save(any(FavoriteAccount.class))).thenThrow(new DataIntegrityViolationException("uk_fav"));
 
         assertThatThrownBy(() -> service.register(new FavoriteAccountRegisterCommand(1L, "110222222222", null)))
                 .isInstanceOf(BusinessException.class)
@@ -120,14 +123,19 @@ class FavoriteAccountRegisterServiceTest {
         service = new FavoriteAccountRegisterService(accountLockPort, persistencePort, FIXED_CLOCK);
 
         when(accountLockPort.resolvePayeeByAccountNumber("110222222222"))
-                .thenReturn(Optional.of(new ResolvedPayee(202L, "홍길동", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE)));
+                .thenReturn(Optional.of(
+                        new ResolvedPayee(202L, "홍길동", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE)));
         when(persistencePort.countByCustomerId(1L)).thenReturn(0L);
-        when(persistencePort.save(any(FavoriteAccount.class)))
-                .thenAnswer(invocation -> {
-                    FavoriteAccount arg = invocation.getArgument(0);
-                    return FavoriteAccount.of(11L, arg.getCustomerId(), arg.getDepositAccountNumber(),
-                            arg.getPayeeName(), arg.getAlias(), arg.getRegisteredAt());
-                });
+        when(persistencePort.save(any(FavoriteAccount.class))).thenAnswer(invocation -> {
+            FavoriteAccount arg = invocation.getArgument(0);
+            return FavoriteAccount.of(
+                    11L,
+                    arg.getCustomerId(),
+                    arg.getDepositAccountNumber(),
+                    arg.getPayeeName(),
+                    arg.getAlias(),
+                    arg.getRegisteredAt());
+        });
 
         FavoriteAccountResult result = service.register(new FavoriteAccountRegisterCommand(1L, "110222222222", null));
 
@@ -140,7 +148,8 @@ class FavoriteAccountRegisterServiceTest {
         service = new FavoriteAccountRegisterService(accountLockPort, persistencePort, FIXED_CLOCK);
 
         when(accountLockPort.resolvePayeeByAccountNumber("110222222222"))
-                .thenReturn(Optional.of(new ResolvedPayee(202L, "홍길동", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE)));
+                .thenReturn(Optional.of(
+                        new ResolvedPayee(202L, "홍길동", LockedAccountType.DEMAND_DEPOSIT, LockedAccountStatus.ACTIVE)));
         when(persistencePort.countByCustomerId(1L)).thenReturn(0L);
         when(persistencePort.save(any(FavoriteAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
 

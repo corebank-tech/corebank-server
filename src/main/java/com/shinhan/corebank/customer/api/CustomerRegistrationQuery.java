@@ -6,4 +6,6 @@ public interface CustomerRegistrationQuery {
     boolean existsByUserId(String userId);
 
     boolean existsByEmail(String email);
+
+    boolean existsByExistingBankCustomerId(String existingBankCustomerId);
 }

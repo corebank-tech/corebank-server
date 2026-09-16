@@ -1,18 +1,19 @@
 package com.shinhan.corebank.autotransfer.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferExecutionJpaEntity;
 import com.shinhan.corebank.autotransfer.adapter.out.persistence.AutoTransferExecutionJpaRepository;
@@ -25,6 +26,7 @@ import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -60,6 +62,11 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
     @MockitoBean
     OtpAuthTokenVerifier otpAuthTokenVerifier;
+
+    // 계좌비밀번호 인증도 OTP와 같은 이유로 Mock — account.api 경계만 검증하고, 계좌비밀번호 자체의
+    // 발급/소비 로직은 account 도메인 테스트가 담당한다(transfer의 TransferControllerTest와 동일 패턴).
+    @MockitoBean
+    AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final AtomicLong CUSTOMER_SEQ = new AtomicLong();
@@ -372,7 +379,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("응답에 출금계좌 별칭(fromAlias)과 등록일시(registeredAt)가 포함된다")
     void search_includesFromAliasAndRegisteredAt() throws Exception {
-        entityManager.createNativeQuery("UPDATE account SET alias = :alias WHERE account_id = :accountId")
+        entityManager
+                .createNativeQuery("UPDATE account SET alias = :alias WHERE account_id = :accountId")
                 .setParameter("alias", "월세계좌")
                 .setParameter("accountId", accountId)
                 .executeUpdate();
@@ -451,7 +459,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     void search_otherCustomersWithdrawalAccount_returnsEmptyList() throws Exception {
         Long otherCustomerId = insertCustomer();
         Long otherAccountId = insertAccount(otherCustomerId);
-        autoTransferJpaRepository.save(autoTransfer(otherCustomerId, otherAccountId, "110000000012", AutoTransferStatus.NORMAL, 23));
+        autoTransferJpaRepository.save(
+                autoTransfer(otherCustomerId, otherAccountId, "110000000012", AutoTransferStatus.NORMAL, 23));
         entityManager.flush();
         entityManager.clear();
 
@@ -468,29 +477,29 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("withdrawalAccountId가 없으면 400을 반환한다")
     void search_missingWithdrawalAccountId_returnsBadRequest() throws Exception {
-        mockMvc.perform(get("/auto-transfers")
-                        .with(authentication(authenticationOf(customerId))))
+        mockMvc.perform(get("/auto-transfers").with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     @DisplayName("인증 없이 조회를 요청하면 401을 반환한다")
     void search_withoutAuthentication_returnsUnauthorized() throws Exception {
-        mockMvc.perform(get("/auto-transfers")
-                        .param("withdrawalAccountId", String.valueOf(accountId)))
+        mockMvc.perform(get("/auto-transfers").param("withdrawalAccountId", String.valueOf(accountId)))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
     @DisplayName("정상 결과조회 요청은 200으로 응답하고 정상/오류 이력과 집계가 함께 내려온다")
     void searchExecutionHistory_success() throws Exception {
-        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
-                autoTransfer(accountId, "110000000050", AutoTransferStatus.NORMAL, 10));
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000050", AutoTransferStatus.NORMAL, 10));
         entityManager.flush();
 
         LocalDate today = LocalDate.now();
-        autoTransferExecutionJpaRepository.save(execution(saved, today, ProcessResultStatus.SUCCESS, 10000L, "TXN0010", null));
-        autoTransferExecutionJpaRepository.save(execution(saved, today.minusDays(1), ProcessResultStatus.ERROR, 5000L, null, "잔액부족"));
+        autoTransferExecutionJpaRepository.save(
+                execution(saved, today, ProcessResultStatus.SUCCESS, 10000L, "TXN0010", null));
+        autoTransferExecutionJpaRepository.save(
+                execution(saved, today.minusDays(1), ProcessResultStatus.ERROR, 5000L, null, "잔액부족"));
         entityManager.flush();
         entityManager.clear();
 
@@ -512,13 +521,15 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("all=true면 size가 허용되지 않는 값이어도 200으로 응답하고 전체 이력을 한 페이지로 반환한다")
     void searchExecutionHistory_allTrue_returnsAllMatchingRowsInOnePage() throws Exception {
-        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
-                autoTransfer(accountId, "110000000051", AutoTransferStatus.NORMAL, 10));
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000051", AutoTransferStatus.NORMAL, 10));
         entityManager.flush();
 
         LocalDate today = LocalDate.now();
-        autoTransferExecutionJpaRepository.save(execution(saved, today, ProcessResultStatus.SUCCESS, 10000L, "TXN0011", null));
-        autoTransferExecutionJpaRepository.save(execution(saved, today.minusDays(1), ProcessResultStatus.ERROR, 5000L, null, "잔액부족"));
+        autoTransferExecutionJpaRepository.save(
+                execution(saved, today, ProcessResultStatus.SUCCESS, 10000L, "TXN0011", null));
+        autoTransferExecutionJpaRepository.save(
+                execution(saved, today.minusDays(1), ProcessResultStatus.ERROR, 5000L, null, "잔액부족"));
         entityManager.flush();
         entityManager.clear();
 
@@ -537,13 +548,15 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("조회기간 밖의 회차는 조회되지 않는다")
     void searchExecutionHistory_excludesExecutionsOutsidePeriod() throws Exception {
-        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
-                autoTransfer(accountId, "110000000052", AutoTransferStatus.NORMAL, 12));
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000052", AutoTransferStatus.NORMAL, 12));
         entityManager.flush();
         LocalDate inRange = LocalDate.now();
         LocalDate outOfRange = LocalDate.now().minusMonths(2);
-        autoTransferExecutionJpaRepository.save(execution(saved, inRange, ProcessResultStatus.SUCCESS, 10000L, "TXN0012", null));
-        autoTransferExecutionJpaRepository.save(execution(saved, outOfRange, ProcessResultStatus.SUCCESS, 20000L, "TXN0013", null));
+        autoTransferExecutionJpaRepository.save(
+                execution(saved, inRange, ProcessResultStatus.SUCCESS, 10000L, "TXN0012", null));
+        autoTransferExecutionJpaRepository.save(
+                execution(saved, outOfRange, ProcessResultStatus.SUCCESS, 20000L, "TXN0013", null));
         entityManager.flush();
         entityManager.clear();
 
@@ -565,7 +578,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         AutoTransferJpaEntity otherAutoTransfer = autoTransferJpaRepository.save(
                 autoTransfer(otherCustomerId, otherAccountId, "110000000051", AutoTransferStatus.NORMAL, 11));
         entityManager.flush();
-        autoTransferExecutionJpaRepository.save(execution(otherAutoTransfer, LocalDate.now(), ProcessResultStatus.SUCCESS, 10000L, "TXN0011", null));
+        autoTransferExecutionJpaRepository.save(
+                execution(otherAutoTransfer, LocalDate.now(), ProcessResultStatus.SUCCESS, 10000L, "TXN0011", null));
         entityManager.flush();
         entityManager.clear();
 
@@ -580,24 +594,22 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("withdrawalAccountId가 없으면 400을 반환한다")
     void searchExecutionHistory_missingWithdrawalAccountId_returnsBadRequest() throws Exception {
-        mockMvc.perform(get("/auto-transfers/executions")
-                        .with(authentication(authenticationOf(customerId))))
+        mockMvc.perform(get("/auto-transfers/executions").with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     @DisplayName("인증 없이 결과조회를 요청하면 401을 반환한다")
     void searchExecutionHistory_withoutAuthentication_returnsUnauthorized() throws Exception {
-        mockMvc.perform(get("/auto-transfers/executions")
-                        .param("withdrawalAccountId", String.valueOf(accountId)))
+        mockMvc.perform(get("/auto-transfers/executions").param("withdrawalAccountId", String.valueOf(accountId)))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
     @DisplayName("정상 변경 요청은 200으로 응답하고 변경된 값이 반영된다")
     void change_success() throws Exception {
-        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
-                autoTransfer(accountId, "110000000005", AutoTransferStatus.NORMAL, 15));
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000005", AutoTransferStatus.NORMAL, 15));
         entityManager.flush();
         entityManager.clear();
 
@@ -616,8 +628,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("같은 Idempotency-Key로 불변 필드(withdrawalAccountId)만 추가해서 재요청하면 재생 대신 409 + CMN0302를 반환한다")
     void change_sameKeyWithUnmodifiableFieldAdded_returnsCmn0302() throws Exception {
-        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
-                autoTransfer(accountId, "110000000016", AutoTransferStatus.NORMAL, 27));
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000016", AutoTransferStatus.NORMAL, 27));
         entityManager.flush();
         entityManager.clear();
         String idempotencyKey = UUID.randomUUID().toString();
@@ -656,8 +668,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("변경 금액이 1회 이체한도를 초과하면 400 + LMT0002를 반환한다")
     void change_amountExceedsOneTimeLimit_returnsLmt0002() throws Exception {
-        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
-                autoTransfer(accountId, "110000000013", AutoTransferStatus.NORMAL, 24));
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000013", AutoTransferStatus.NORMAL, 24));
         entityManager.flush();
         entityManager.clear();
 
@@ -692,8 +704,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("일부 필드만 보내면 나머지는 기존 값 그대로 유지된다")
     void change_partialFields_keepsRestUnchanged() throws Exception {
-        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
-                autoTransfer(accountId, "110000000010", AutoTransferStatus.NORMAL, 20));
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000010", AutoTransferStatus.NORMAL, 20));
         entityManager.flush();
         entityManager.clear();
 
@@ -716,8 +728,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("withdrawalAccountId 변경을 시도하면 400 + AUT0003을 반환한다")
     void change_withdrawalAccountId_returnsAut0003() throws Exception {
-        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
-                autoTransfer(accountId, "110000000011", AutoTransferStatus.NORMAL, 22));
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000011", AutoTransferStatus.NORMAL, 22));
         entityManager.flush();
         entityManager.clear();
 
@@ -739,8 +751,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("Idempotency-Key 헤더가 없으면 400 + CMN0002를 반환한다")
     void change_missingIdempotencyKey_returnsCmn0002() throws Exception {
-        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
-                autoTransfer(accountId, "110000000006", AutoTransferStatus.NORMAL, 16));
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000006", AutoTransferStatus.NORMAL, 16));
         entityManager.flush();
         entityManager.clear();
 
@@ -756,8 +768,8 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("다른 고객이 로그인한 상태로 남의 자동이체를 변경하려 하면 404 + AUT0201을 반환한다 (IDOR 차단)")
     void change_otherCustomersAutoTransfer_returnsAut0201() throws Exception {
-        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
-                autoTransfer(accountId, "110000000018", AutoTransferStatus.NORMAL, 29));
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000018", AutoTransferStatus.NORMAL, 29));
         entityManager.flush();
         entityManager.clear();
 
@@ -776,52 +788,119 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("정상 해지 요청은 200으로 응답하고 상태가 TERMINATED로 바뀐다")
     void cancel_success() throws Exception {
-        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
-                autoTransfer(accountId, "110000000007", AutoTransferStatus.NORMAL, 17));
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000007", AutoTransferStatus.NORMAL, 17));
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+        mockMvc.perform(post("/auto-transfers/cancel")
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .header("Account-Password-Auth-Token", "cancel-token-1")
-                        .header("Otp-Auth-Token", "otp-cancel-token-1"))
+                        .header("Otp-Auth-Token", "otp-cancel-token-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(saved.getAutoTransferId())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("0000"));
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.summary.successCount").value(1))
+                .andExpect(jsonPath("$.data.summary.failureCount").value(0))
+                .andExpect(jsonPath("$.data.items[0].autoTransferId").value(saved.getAutoTransferId()))
+                .andExpect(jsonPath("$.data.items[0].status").value(ProcessResultStatus.SUCCESS.name()))
+                .andExpect(jsonPath("$.data.items[0].failureCode").value(nullValue()));
 
         entityManager.flush();
         entityManager.clear();
-        AutoTransferJpaEntity found = autoTransferJpaRepository.findById(saved.getAutoTransferId()).orElseThrow();
+        AutoTransferJpaEntity found =
+                autoTransferJpaRepository.findById(saved.getAutoTransferId()).orElseThrow();
         assertThat(found.getStatus()).isEqualTo(AutoTransferStatus.TERMINATED);
     }
 
     @Test
-    @DisplayName("존재하지 않는 자동이체를 해지하려 하면 404 + AUT0201을 반환한다")
-    void cancel_notFound_returnsAut0201() throws Exception {
-        mockMvc.perform(delete("/auto-transfers/{id}", 999_999L)
+    @DisplayName("해지 가능한 건과 불가능한 건을 함께 요청하면 200으로 응답하고 건별 결과를 돌려준다")
+    void cancel_partialFailure_returnsPerItemResults() throws Exception {
+        AutoTransferJpaEntity normal =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000021", AutoTransferStatus.NORMAL, 21));
+        // 기간 만료로 종료된 건은 고객이 해지한 적이 없으므로 멱등 성공이 아니라 AUT0302 실패다
+        AutoTransferJpaEntity expired =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000022", AutoTransferStatus.EXPIRED, 22));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(post("/auto-transfers/cancel")
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .header("Account-Password-Auth-Token", "cancel-token-partial")
+                        .header("Otp-Auth-Token", "otp-cancel-token-partial")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(normal.getAutoTransferId(), expired.getAutoTransferId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.summary.successCount").value(1))
+                .andExpect(jsonPath("$.data.summary.failureCount").value(1))
+                // items는 요청한 ID의 오름차순이다 — 순서 전제가 깨졌을 때 원인을 바로 알 수 있게 ID까지 단언한다
+                .andExpect(jsonPath("$.data.items[0].autoTransferId").value(normal.getAutoTransferId()))
+                .andExpect(jsonPath("$.data.items[0].status").value(ProcessResultStatus.SUCCESS.name()))
+                .andExpect(jsonPath("$.data.items[1].autoTransferId").value(expired.getAutoTransferId()))
+                .andExpect(jsonPath("$.data.items[1].status").value(ProcessResultStatus.ERROR.name()))
+                .andExpect(jsonPath("$.data.items[1].failureCode").value("AUT0302"));
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(autoTransferJpaRepository
+                        .findById(normal.getAutoTransferId())
+                        .orElseThrow()
+                        .getStatus())
+                .isEqualTo(AutoTransferStatus.TERMINATED);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 자동이체를 해지하려 하면 200 + 건별 실패(AUT0201)로 반환한다")
+    void cancel_notFound_returnsItemFailureAut0201() throws Exception {
+        mockMvc.perform(post("/auto-transfers/cancel")
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .header("Account-Password-Auth-Token", "cancel-token-2")
-                        .header("Otp-Auth-Token", "otp-cancel-token-2"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("AUT0201"));
+                        .header("Otp-Auth-Token", "otp-cancel-token-2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(999_999L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.summary.failureCount").value(1))
+                .andExpect(jsonPath("$.data.items[0].failureCode").value("AUT0201"));
+    }
+
+    @Test
+    @DisplayName("해지할 ID 목록이 비어 있으면 400 + CMN0002를 반환한다")
+    void cancel_emptyIds_returnsCmn0002() throws Exception {
+        mockMvc.perform(post("/auto-transfers/cancel")
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .header("Account-Password-Auth-Token", "cancel-token-empty")
+                        .header("Otp-Auth-Token", "otp-cancel-token-empty")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0002"));
     }
 
     @Test
     @DisplayName("Idempotency-Key 헤더가 없으면 400 + CMN0002를 반환한다")
     void cancel_missingIdempotencyKey_returnsCmn0002() throws Exception {
-        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
-                autoTransfer(accountId, "110000000008", AutoTransferStatus.NORMAL, 18));
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000008", AutoTransferStatus.NORMAL, 18));
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+        mockMvc.perform(post("/auto-transfers/cancel")
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .header("Account-Password-Auth-Token", "cancel-token-3")
-                        .header("Otp-Auth-Token", "otp-cancel-token-3"))
+                        .header("Otp-Auth-Token", "otp-cancel-token-3")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(saved.getAutoTransferId())))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0002"));
     }
@@ -829,67 +908,123 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("같은 Idempotency-Key로 두 번 해지 요청을 보내면 재생되고 상태 변경은 1번만 일어난다")
     void cancel_sameIdempotencyKeyTwice_repliesWithoutReapplying() throws Exception {
-        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
-                autoTransfer(accountId, "110000000009", AutoTransferStatus.NORMAL, 19));
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000009", AutoTransferStatus.NORMAL, 19));
         entityManager.flush();
         entityManager.clear();
         String idempotencyKey = UUID.randomUUID().toString();
 
-        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+        mockMvc.perform(post("/auto-transfers/cancel")
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .header("Account-Password-Auth-Token", "cancel-token-4")
-                        .header("Otp-Auth-Token", "otp-cancel-token-4"))
+                        .header("Otp-Auth-Token", "otp-cancel-token-4")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(saved.getAutoTransferId())))
                 .andExpect(status().isOk());
 
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+        mockMvc.perform(post("/auto-transfers/cancel")
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
                         .header("Idempotency-Key", idempotencyKey)
                         .header("Account-Password-Auth-Token", "cancel-token-4")
-                        .header("Otp-Auth-Token", "otp-cancel-token-4"))
+                        .header("Otp-Auth-Token", "otp-cancel-token-4")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(saved.getAutoTransferId())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("0000"));
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.summary.successCount").value(1));
     }
 
     @Test
-    @DisplayName("다른 고객이 로그인한 상태로 남의 자동이체를 해지하려 하면 404 + AUT0201을 반환한다 (IDOR 차단)")
-    void cancel_otherCustomersAutoTransfer_returnsAut0201() throws Exception {
-        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
-                autoTransfer(accountId, "110000000017", AutoTransferStatus.NORMAL, 28));
+    @DisplayName("다른 고객이 로그인한 상태로 남의 자동이체를 해지하려 하면 200 + 건별 실패(AUT0201)를 반환한다 (IDOR 차단)")
+    void cancel_otherCustomersAutoTransfer_returnsItemFailureAut0201() throws Exception {
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000017", AutoTransferStatus.NORMAL, 28));
         entityManager.flush();
         entityManager.clear();
 
         Long attackerCustomerId = insertCustomer();
 
-        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+        mockMvc.perform(post("/auto-transfers/cancel")
                         .with(authentication(authenticationOf(attackerCustomerId)))
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .header("Account-Password-Auth-Token", "attacker-token")
-                        .header("Otp-Auth-Token", "otp-attacker-token"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("AUT0201"));
+                        .header("Otp-Auth-Token", "otp-attacker-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(saved.getAutoTransferId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].failureCode").value("AUT0201"));
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(autoTransferJpaRepository
+                        .findById(saved.getAutoTransferId())
+                        .orElseThrow()
+                        .getStatus())
+                .isEqualTo(AutoTransferStatus.NORMAL);
     }
 
     @Test
     @DisplayName("인증 없이 해지를 요청하면 401을 반환한다")
     void cancel_withoutAuthentication_returnsUnauthorized() throws Exception {
-        AutoTransferJpaEntity saved = autoTransferJpaRepository.save(
-                autoTransfer(accountId, "110000000019", AutoTransferStatus.NORMAL, 30));
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000019", AutoTransferStatus.NORMAL, 30));
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(delete("/auto-transfers/{id}", saved.getAutoTransferId())
+        mockMvc.perform(post("/auto-transfers/cancel")
                         .with(csrf())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .header("Account-Password-Auth-Token", "no-auth-token")
-                        .header("Otp-Auth-Token", "otp-no-auth-token"))
+                        .header("Otp-Auth-Token", "otp-no-auth-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cancelRequestJson(saved.getAutoTransferId())))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("API 문서에 다건 해지 엔드포인트가 노출되고, 대체된 단건 해지 경로의 DELETE는 사라진다 (api_conventions.md §6-7)")
+    void apiDocs_exposesMultiCancelEndpointOnly() throws Exception {
+        mockMvc.perform(get("/api/v1/v3/api-docs").contextPath("/api/v1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$['paths']['/auto-transfers/cancel']['post']['operationId']")
+                        .value("cancelAutoTransfers"))
+                .andExpect(jsonPath("$['paths']['/auto-transfers/{autoTransferId}']['delete']")
+                        .doesNotExist())
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferCancelRequest']"
+                                + "['properties']['autoTransferIds']['type']")
+                        .value("array"))
+                // 배열 제약과 필수 여부가 스키마에 드러나야 FE codegen이 그대로 쓸 수 있다
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferCancelRequest']"
+                                + "['properties']['autoTransferIds']['minItems']")
+                        .value(1))
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferCancelRequest']"
+                                + "['properties']['autoTransferIds']['maxItems']")
+                        .value(50))
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferCancelRequest']['required']")
+                        .value(hasItem("autoTransferIds")))
+                // 성공 건의 failureCode·실패 건의 terminatedAt은 null로 내려가므로 스키마도 null을 허용해야 한다
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferCancelItemResponse']"
+                                + "['properties']['terminatedAt']['type']")
+                        .value(hasItem("null")))
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferCancelItemResponse']"
+                                + "['properties']['failureCode']['type']")
+                        .value(hasItem("null")))
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferCancelItemResponse']"
+                                + "['properties']['failureReason']['type']")
+                        .value(hasItem("null")));
+    }
+
+    private String cancelRequestJson(Long... autoTransferIds) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("autoTransferIds", List.of(autoTransferIds));
+        return OBJECT_MAPPER.writeValueAsString(body);
     }
 
     private UsernamePasswordAuthenticationToken authenticationOf(Long customerId) {
@@ -910,11 +1045,17 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         return OBJECT_MAPPER.writeValueAsString(body);
     }
 
-    private AutoTransferJpaEntity autoTransfer(Long withdrawalAccountId, String depositAccountNumber, AutoTransferStatus status, int transferDay) {
+    private AutoTransferJpaEntity autoTransfer(
+            Long withdrawalAccountId, String depositAccountNumber, AutoTransferStatus status, int transferDay) {
         return autoTransfer(customerId, withdrawalAccountId, depositAccountNumber, status, transferDay);
     }
 
-    private AutoTransferJpaEntity autoTransfer(Long ownerCustomerId, Long withdrawalAccountId, String depositAccountNumber, AutoTransferStatus status, int transferDay) {
+    private AutoTransferJpaEntity autoTransfer(
+            Long ownerCustomerId,
+            Long withdrawalAccountId,
+            String depositAccountNumber,
+            AutoTransferStatus status,
+            int transferDay) {
         return AutoTransferJpaEntity.builder()
                 .customerId(ownerCustomerId)
                 .withdrawalAccountId(withdrawalAccountId)
@@ -933,8 +1074,13 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                 .build();
     }
 
-    private AutoTransferExecutionJpaEntity execution(AutoTransferJpaEntity autoTransfer, LocalDate executionDate,
-            ProcessResultStatus status, Long amount, String transactionNumber, String failureReason) {
+    private AutoTransferExecutionJpaEntity execution(
+            AutoTransferJpaEntity autoTransfer,
+            LocalDate executionDate,
+            ProcessResultStatus status,
+            Long amount,
+            String transactionNumber,
+            String failureReason) {
         return AutoTransferExecutionJpaEntity.builder()
                 .autoTransfer(autoTransfer)
                 .executionDate(executionDate)
@@ -964,17 +1110,22 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     }
 
     private Long insertCustomer() {
-        // 한 테스트 안에서 두 번째 고객을 만들 때 System.nanoTime()이 짧은 간격에선 값이 겹칠 수 있어 카운터로 유일성을 보장한다(user_id는 VARCHAR(20), email은 UNIQUE)
+        // 한 테스트 안에서 두 번째 고객을 만들 때 System.nanoTime()이 짧은 간격에선 값이 겹칠 수 있어 카운터로 유일성을 보장한다.
+        // (user_id는 VARCHAR(20), email은 UNIQUE)
         long seq = CUSTOMER_SEQ.incrementAndGet();
         String userId = "u" + seq;
         String email = "test" + seq + "@test.com";
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO customer (user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at) "
                                 + "VALUES (:userId, 'x', '홍길동', '1990-01-01', :email, '01012345678', NOW(), NOW(), NOW())")
                 .setParameter("userId", userId)
                 .setParameter("email", email)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
     // withdrawal_registered=TRUE로 채운다 - 등록 시 출금계좌 등록 여부 검증(#234)이 이 값을 확인하므로,
@@ -982,13 +1133,17 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     private Long insertAccount(Long customerId) {
         // System.nanoTime() 기반 생성은 짧은 간격의 연속 호출에서 겹칠 수 있어 카운터로 유일성을 보장한다(uk_account_number)
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, "
                                 + "withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at) "
                                 + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', TRUE, NOW(), NOW(), NOW(), NOW())")
                 .setParameter("accountNumber", accountNumber)
                 .setParameter("customerId", customerId)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 }

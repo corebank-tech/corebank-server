@@ -7,8 +7,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record CsrfProperties(String cookieDomain) {
 
     public CsrfProperties {
-        cookieDomain = cookieDomain == null || cookieDomain.isBlank()
-                ? null
-                : cookieDomain.trim();
+        cookieDomain = cookieDomain == null || cookieDomain.isBlank() ? null : cookieDomain.trim();
     }
 }

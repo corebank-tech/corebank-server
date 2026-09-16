@@ -1,20 +1,19 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import java.time.LocalDateTime;
-import java.util.List;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.transfer.domain.FavoriteAccount;
-
 import jakarta.persistence.EntityManager;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Transactional
 class FavoriteAccountPersistenceAdapterTest extends IntegrationTestSupport {
@@ -32,8 +31,8 @@ class FavoriteAccountPersistenceAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        FavoriteAccount favoriteAccount = FavoriteAccount.register(1L, "110222222222", "테스터", "엄마",
-                LocalDateTime.of(2026, 8, 18, 10, 0, 0));
+        FavoriteAccount favoriteAccount =
+                FavoriteAccount.register(1L, "110222222222", "테스터", "엄마", LocalDateTime.of(2026, 8, 18, 10, 0, 0));
 
         FavoriteAccount saved = adapter.save(favoriteAccount);
 
@@ -48,15 +47,16 @@ class FavoriteAccountPersistenceAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        adapter.save(FavoriteAccount.register(1L, "110222222222", "테스터", "엄마",
-                LocalDateTime.of(2026, 8, 18, 10, 0, 0)));
+        adapter.save(
+                FavoriteAccount.register(1L, "110222222222", "테스터", "엄마", LocalDateTime.of(2026, 8, 18, 10, 0, 0)));
         entityManager.flush();
 
         assertThatThrownBy(() -> {
-            adapter.save(FavoriteAccount.register(1L, "110222222222", "테스터", "우리엄마",
-                    LocalDateTime.of(2026, 8, 18, 10, 1, 0)));
-            entityManager.flush();
-        }).isInstanceOf(DataIntegrityViolationException.class);
+                    adapter.save(FavoriteAccount.register(
+                            1L, "110222222222", "테스터", "우리엄마", LocalDateTime.of(2026, 8, 18, 10, 1, 0)));
+                    entityManager.flush();
+                })
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
@@ -66,8 +66,8 @@ class FavoriteAccountPersistenceAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        adapter.save(FavoriteAccount.register(1L, "110222222222", "테스터", "엄마",
-                LocalDateTime.of(2026, 8, 18, 10, 0, 0)));
+        adapter.save(
+                FavoriteAccount.register(1L, "110222222222", "테스터", "엄마", LocalDateTime.of(2026, 8, 18, 10, 0, 0)));
         entityManager.flush();
 
         assertThat(adapter.countByCustomerId(1L)).isEqualTo(1L);
@@ -81,10 +81,10 @@ class FavoriteAccountPersistenceAdapterTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        adapter.save(FavoriteAccount.register(1L, "110111111111", "테스터", "내계좌",
-                LocalDateTime.of(2026, 8, 18, 9, 0, 0)));
-        adapter.save(FavoriteAccount.register(1L, "110222222222", "테스터", "엄마",
-                LocalDateTime.of(2026, 8, 18, 10, 0, 0)));
+        adapter.save(
+                FavoriteAccount.register(1L, "110111111111", "테스터", "내계좌", LocalDateTime.of(2026, 8, 18, 9, 0, 0)));
+        adapter.save(
+                FavoriteAccount.register(1L, "110222222222", "테스터", "엄마", LocalDateTime.of(2026, 8, 18, 10, 0, 0)));
         entityManager.flush();
         entityManager.clear();
 
@@ -93,5 +93,47 @@ class FavoriteAccountPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(result).hasSize(2);
         assertThat(result.get(0).getAlias()).isEqualTo("엄마");
         assertThat(result.get(1).getAlias()).isEqualTo("내계좌");
+    }
+
+    @Test
+    @DisplayName("ID로 조회하면 해당 FavoriteAccount를 반환한다")
+    void findById_returnsFavoriteAccount_whenExists() {
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        FavoriteAccount saved = adapter.save(
+                FavoriteAccount.register(1L, "110222222222", "테스터", "엄마", LocalDateTime.of(2026, 8, 18, 10, 0, 0)));
+        entityManager.flush();
+        entityManager.clear();
+
+        Optional<FavoriteAccount> found = adapter.findById(saved.getFavoriteAccountId());
+
+        assertThat(found).isPresent();
+        assertThat(found.get().getAlias()).isEqualTo("엄마");
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 ID로 조회하면 빈 Optional을 반환한다")
+    void findById_returnsEmpty_whenNotExists() {
+        assertThat(adapter.findById(999L)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("ID로 삭제하면 더 이상 조회되지 않는다")
+    void deleteById_removesFavoriteAccount() {
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        FavoriteAccount saved = adapter.save(
+                FavoriteAccount.register(1L, "110222222222", "테스터", "엄마", LocalDateTime.of(2026, 8, 18, 10, 0, 0)));
+        entityManager.flush();
+
+        adapter.deleteById(saved.getFavoriteAccountId());
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(adapter.findById(saved.getFavoriteAccountId())).isEmpty();
     }
 }

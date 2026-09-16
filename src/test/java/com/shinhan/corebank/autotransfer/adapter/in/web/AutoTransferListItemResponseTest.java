@@ -13,9 +13,19 @@ class AutoTransferListItemResponseTest {
 
     private AutoTransferListItem item(String fromAlias, boolean cancelable) {
         return new AutoTransferListItem(
-                1L, "110987654321", fromAlias, "홍길동", 100_000L,
-                LocalDate.of(2026, 8, 20), LocalDate.of(2027, 2, 20), 15, 1,
-                "내메모", AutoTransferStatus.NORMAL, cancelable, LocalDateTime.of(2026, 8, 1, 10, 0));
+                1L,
+                "110987654321",
+                fromAlias,
+                "홍길동",
+                100_000L,
+                LocalDate.of(2026, 8, 20),
+                LocalDate.of(2027, 2, 20),
+                15,
+                1,
+                "내메모",
+                AutoTransferStatus.NORMAL,
+                cancelable,
+                LocalDateTime.of(2026, 8, 1, 10, 0));
     }
 
     @Test

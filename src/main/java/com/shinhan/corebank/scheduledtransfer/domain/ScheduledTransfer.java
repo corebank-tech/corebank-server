@@ -2,10 +2,9 @@ package com.shinhan.corebank.scheduledtransfer.domain;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.scheduledtransfer.domain.exception.ScheduledTransferErrorCode;
-import lombok.Getter;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import lombok.Getter;
 
 @Getter
 public class ScheduledTransfer {
@@ -25,12 +24,20 @@ public class ScheduledTransfer {
     private LocalDateTime executedAt;
     private LocalDateTime canceledAt;
     private String failureReason;
+    private Long version;
 
     // 등록
     public static ScheduledTransfer register(
-            Long customerId, Long withdrawalAccountId, String payeeBankCode, String payeeAccountNumber,
-            String payeeName, Long amount, LocalDate scheduledDate,
-            String myPassbookMemo, String recipientPassbookMemo, LocalDateTime now) {
+            Long customerId,
+            Long withdrawalAccountId,
+            String payeeBankCode,
+            String payeeAccountNumber,
+            String payeeName,
+            Long amount,
+            LocalDate scheduledDate,
+            String myPassbookMemo,
+            String recipientPassbookMemo,
+            LocalDateTime now) {
 
         if (amount <= 0) {
             throw new BusinessException(ScheduledTransferErrorCode.INVALID_AMOUNT);
@@ -60,11 +67,23 @@ public class ScheduledTransfer {
     }
 
     public static ScheduledTransfer reconstitute(
-            Long scheduledTransferId, Long customerId, Long withdrawalAccountId, String payeeBankCode,
-            String payeeAccountNumber, String payeeName, Long amount, LocalDate scheduledDate,
-            String myPassbookMemo, String recipientPassbookMemo, ScheduledTransferStatus status,
-            String transactionNumber, LocalDateTime registeredAt, LocalDateTime executedAt,
-            LocalDateTime canceledAt, String failureReason) {
+            Long scheduledTransferId,
+            Long customerId,
+            Long withdrawalAccountId,
+            String payeeBankCode,
+            String payeeAccountNumber,
+            String payeeName,
+            Long amount,
+            LocalDate scheduledDate,
+            String myPassbookMemo,
+            String recipientPassbookMemo,
+            ScheduledTransferStatus status,
+            String transactionNumber,
+            LocalDateTime registeredAt,
+            LocalDateTime executedAt,
+            LocalDateTime canceledAt,
+            String failureReason,
+            Long version) {
         ScheduledTransfer s = new ScheduledTransfer();
         s.scheduledTransferId = scheduledTransferId;
         s.customerId = customerId;
@@ -82,6 +101,7 @@ public class ScheduledTransfer {
         s.executedAt = executedAt;
         s.canceledAt = canceledAt;
         s.failureReason = failureReason;
+        s.version = version;
         return s;
     }
 

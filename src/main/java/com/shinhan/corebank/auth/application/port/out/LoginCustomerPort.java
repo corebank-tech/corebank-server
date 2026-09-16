@@ -1,7 +1,6 @@
 package com.shinhan.corebank.auth.application.port.out;
 
 import com.shinhan.corebank.auth.domain.model.LoginCustomer;
-
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -15,9 +14,5 @@ public interface LoginCustomerPort {
     LoginFailureUpdateResult recordLoginFailure(Long customerId);
 
     // 로그인 성공 상태와 최근 접속 정보 저장
-    LoginSuccessUpdateResult recordLoginSuccess(
-            Long customerId,
-            LocalDateTime loginAt,
-            String loginIp
-    );
+    LoginSuccessUpdateResult recordLoginSuccess(Long customerId, LocalDateTime loginAt, String loginIp);
 }

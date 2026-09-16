@@ -1,14 +1,13 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import com.shinhan.corebank.IntegrationTestSupport;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import com.shinhan.corebank.IntegrationTestSupport;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 @Transactional
 class AccountLockJpaRepositoryTest extends IntegrationTestSupport {
@@ -28,9 +27,7 @@ class AccountLockJpaRepositoryTest extends IntegrationTestSupport {
         entityManager.clear();
 
         // when
-        AccountLockJpaEntity found = repository
-                .findByAccountIdForUpdate(101L)
-                .orElseThrow();
+        AccountLockJpaEntity found = repository.findByAccountIdForUpdate(101L).orElseThrow();
 
         // then
         assertThat(found.getAccountId()).isEqualTo(101L);

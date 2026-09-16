@@ -4,8 +4,5 @@ import java.util.Optional;
 
 public interface AccountNumberQueryUseCase {
 
-    Optional<String> findAccountNumber(
-            Long accountId,
-            Long customerId
-    );
+    Optional<String> findAccountNumber(Long accountId, Long customerId);
 }

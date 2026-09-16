@@ -10,9 +10,7 @@ class CsrfPropertiesTest {
     @Test
     @DisplayName("CSRF 쿠키 공유 도메인의 앞뒤 공백을 제거한다")
     void trimsCookieDomain() {
-        CsrfProperties properties = new CsrfProperties(
-                " corebank.cloud "
-        );
+        CsrfProperties properties = new CsrfProperties(" corebank.cloud ");
 
         assertThat(properties.cookieDomain()).isEqualTo("corebank.cloud");
     }

@@ -18,13 +18,13 @@ class SecurityTestController {
     }
 
     @PostMapping({
-            "/auth/terms/check",
-            "/auth/verify-account",
-            "/auth/check-id",
-            "/auth/signup/validate",
-            "/auth/signup/complete",
-            "/auth/email-verifications",
-            "/auth/email-verifications/{emailVerificationId}/verify"
+        "/auth/terms/check",
+        "/auth/verify-account",
+        "/auth/check-id",
+        "/auth/signup/validate",
+        "/auth/signup/complete",
+        "/auth/email-verifications",
+        "/auth/email-verifications/{emailVerificationId}/verify"
     })
     ApiResponse<Void> signup() {
         return ApiResponse.success();

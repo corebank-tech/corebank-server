@@ -1,11 +1,5 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import java.time.LocalDateTime;
-import java.util.Collection;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
-
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
@@ -18,7 +12,11 @@ import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
 import com.shinhan.corebank.transfer.application.port.out.WithdrawalAccountDetail;
 import com.shinhan.corebank.transfer.application.port.out.WithdrawalAccountPreCheckSnapshot;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-
+import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -32,7 +30,8 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
 
     @Override
     public Optional<ResolvedPayee> resolvePayeeByAccountNumber(String accountNumber) {
-        return repository.findPayeeByAccountNumber(accountNumber)
+        return repository
+                .findPayeeByAccountNumber(accountNumber)
                 .map(row -> new ResolvedPayee(
                         row.getAccountId(),
                         row.getPayeeName(),
@@ -62,7 +61,8 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
 
     @Override
     public Optional<WithdrawalAccountPreCheckSnapshot> findWithdrawalAccountPreCheckSnapshot(Long accountId) {
-        return repository.findWithdrawalAccountPreCheckByAccountId(accountId)
+        return repository
+                .findWithdrawalAccountPreCheckByAccountId(accountId)
                 .map(row -> new WithdrawalAccountPreCheckSnapshot(
                         LockedAccountStatus.valueOf(row.getStatus()), row.getBalance()));
     }
@@ -82,10 +82,8 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
         AccountLockJpaEntity first = findForUpdate(firstId);
         AccountLockJpaEntity second = findForUpdate(secondId);
 
-        AccountLockJpaEntity withdrawalEntity =
-                withdrawalAccountId.equals(firstId) ? first : second;
-        AccountLockJpaEntity depositEntity =
-                depositAccountId.equals(firstId) ? first : second;
+        AccountLockJpaEntity withdrawalEntity = withdrawalAccountId.equals(firstId) ? first : second;
+        AccountLockJpaEntity depositEntity = depositAccountId.equals(firstId) ? first : second;
 
         return new LockedAccountsForTransfer(toLockedAccount(withdrawalEntity), toLockedAccount(depositEntity));
     }
@@ -103,10 +101,8 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
         AccountLockJpaEntity first = findForUpdate(firstId);
         AccountLockJpaEntity second = findForUpdate(secondId);
 
-        AccountLockJpaEntity withdrawalEntity =
-                withdrawalAccountId.equals(firstId) ? first : second;
-        AccountLockJpaEntity depositEntity =
-                depositAccountId.equals(firstId) ? first : second;
+        AccountLockJpaEntity withdrawalEntity = withdrawalAccountId.equals(firstId) ? first : second;
+        AccountLockJpaEntity depositEntity = depositAccountId.equals(firstId) ? first : second;
 
         withdrawalEntity.debit(amount, executedAt);
         depositEntity.credit(amount, executedAt);
@@ -115,7 +111,8 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
     }
 
     private AccountLockJpaEntity findForUpdate(Long accountId) {
-        return repository.findByAccountIdForUpdate(accountId)
+        return repository
+                .findByAccountIdForUpdate(accountId)
                 .orElseThrow(() -> new BusinessException(TransferErrorCode.ACCOUNT_LOCK_TARGET_NOT_FOUND));
     }
 
@@ -124,7 +121,6 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
                 entity.getAccountId(),
                 entity.getAccountNumber(),
                 entity.getBalance(),
-                LockedAccountStatus.valueOf(entity.getStatus())
-        );
+                LockedAccountStatus.valueOf(entity.getStatus()));
     }
 }

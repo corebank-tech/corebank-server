@@ -3,15 +3,14 @@ package com.shinhan.corebank.subscription.adapter.out.persistence;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.subscription.domain.MaturityHandling;
 import jakarta.persistence.*;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "product_subscription")

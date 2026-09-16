@@ -10,6 +10,4 @@ public record CustomerInfoResult(
         String birthDate,
         String phoneNumber,
         String email,
-        OffsetDateTime joinedAt
-) {
-}
+        OffsetDateTime joinedAt) {}

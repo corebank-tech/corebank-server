@@ -8,9 +8,4 @@ import lombok.Builder;
  */
 @Builder
 public record TransferLimitCommand(
-        long oneTimeLimit,
-        long dailyLimit,
-        String accountPasswordAuthToken,
-        String otpAuthToken
-) {
-}
+        long oneTimeLimit, long dailyLimit, String accountPasswordAuthToken, String otpAuthToken) {}

@@ -1,7 +1,6 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import com.shinhan.corebank.transfer.domain.Transfer;
-
 import lombok.*;
 
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
@@ -34,8 +33,8 @@ public class TransferMapper {
                 .transferredAt(domain.getTransferredAt())
                 .createdAt(domain.getCreatedAt())
                 .build();
-
     }
+
     public static Transfer toDomain(TransferJpaEntity entity) {
         if (entity == null) {
             return null;

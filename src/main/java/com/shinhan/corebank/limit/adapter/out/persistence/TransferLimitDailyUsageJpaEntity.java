@@ -1,15 +1,13 @@
 package com.shinhan.corebank.limit.adapter.out.persistence;
 
-import java.time.LocalDate;
-
 import com.shinhan.corebank.common.entity.BaseEntity;
 import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.IdClass;
 import jakarta.persistence.Id;
+import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
+import java.time.LocalDate;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -35,7 +33,7 @@ public class TransferLimitDailyUsageJpaEntity extends BaseEntity {
     private LocalDate usageDate;
 
     @Column(name = "used_amount", nullable = false)
-    private long usedAmount;
+    private Long usedAmount;
 
     TransferLimitDailyUsage toDomain() {
         return TransferLimitDailyUsage.restore(customerId, usageDate, usedAmount);

@@ -1,13 +1,12 @@
 package com.shinhan.corebank.common.idempotency;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
-
-import java.time.LocalDateTime;
 
 /**
  * 멱등키 (common.md §7-2).
@@ -23,25 +22,25 @@ public class IdempotencyKeyJpaEntity {
 
     @Id
     @Column(name = "idempotency_key", columnDefinition = "CHAR(36)")
-    private String idempotencyKey;                  // UUID v4. 자동 생성 아님
+    private String idempotencyKey; // UUID v4. 자동 생성 아님
 
     @Column(name = "customer_id")
     private Long customerId;
 
     @Column(name = "endpoint", nullable = false, length = 120)
-    private String endpoint;                        // 같은 키의 타 API 재사용 차단
+    private String endpoint; // 같은 키의 타 API 재사용 차단
 
     @Column(name = "request_hash", nullable = false, columnDefinition = "CHAR(64)")
-    private String requestHash;                     // SHA-256
+    private String requestHash; // SHA-256
 
     @Enumerated(EnumType.STRING)
     @Column(name = "state", nullable = false, length = 12)
     private IdempotencyState state;
 
     @Column(name = "http_status")
-    private Short httpStatus;                       // SMALLINT
+    private Short httpStatus; // SMALLINT
 
-    @JdbcTypeCode(SqlTypes.JSON)                    // Hibernate 6+ 기본 지원
+    @JdbcTypeCode(SqlTypes.JSON) // Hibernate 6+ 기본 지원
     @Column(name = "response_snapshot")
     private String responseSnapshot;
 
@@ -49,7 +48,7 @@ public class IdempotencyKeyJpaEntity {
     private LocalDateTime createdAt;
 
     @Column(name = "expires_at", nullable = false)
-    private LocalDateTime expiresAt;                // 24시간 후 배치 삭제
+    private LocalDateTime expiresAt; // 24시간 후 배치 삭제
 
     public static IdempotencyKeyJpaEntity start(
             String key, Long customerId, String endpoint, String requestHash, LocalDateTime now) {
@@ -74,7 +73,6 @@ public class IdempotencyKeyJpaEntity {
     }
 
     public boolean matches(String endpoint, String requestHash) {
-        return this.endpoint.equals(endpoint) && this.requestHash.equals(requestHash);   // 불일치 → CMN0302
+        return this.endpoint.equals(endpoint) && this.requestHash.equals(requestHash); // 불일치 → CMN0302
     }
 }
-

@@ -1,9 +1,8 @@
 package com.shinhan.corebank.transfer.application.port.out;
 
-import java.util.List;
-
 import com.shinhan.corebank.transfer.application.port.in.LedgerHistoryQuery;
 import com.shinhan.corebank.transfer.domain.LedgerEntry;
+import java.util.List;
 
 public interface LedgerHistoryQueryPort {
 

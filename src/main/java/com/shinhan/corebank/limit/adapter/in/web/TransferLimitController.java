@@ -7,7 +7,6 @@ import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.limit.application.port.in.TransferLimitCommandUseCase;
 import com.shinhan.corebank.limit.application.port.in.TransferLimitQueryUseCase;
 import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitResult;
-
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -35,7 +34,8 @@ public class TransferLimitController implements TransferLimitControllerDocs {
      */
     @Override
     @GetMapping
-    public ApiResponse<TransferLimitResponse> getTransferLimit(@AuthenticationPrincipal AuthenticatedCustomer customer) {
+    public ApiResponse<TransferLimitResponse> getTransferLimit(
+            @AuthenticationPrincipal AuthenticatedCustomer customer) {
         TransferLimitResult result = limitQueryUseCase.get(customer.customerId());
 
         return ApiResponse.success(TransferLimitResponse.from(result));
@@ -51,7 +51,9 @@ public class TransferLimitController implements TransferLimitControllerDocs {
         Long customerId = customer.customerId();
 
         return idempotentRequestExecutor.execute(
-                idempotencyKey, customerId, "PUT /transfer-limits",
+                idempotencyKey,
+                customerId,
+                "PUT /transfer-limits",
                 IdempotencyFingerprint.of(customerId, request),
                 new TypeReference<>() {},
                 () -> ApiResponse.success(

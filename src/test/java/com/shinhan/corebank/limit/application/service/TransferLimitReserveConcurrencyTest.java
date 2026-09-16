@@ -2,6 +2,9 @@ package com.shinhan.corebank.limit.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -12,11 +15,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-
-import com.shinhan.corebank.IntegrationTestSupport;
-import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -84,7 +82,9 @@ class TransferLimitReserveConcurrencyTest extends IntegrationTestSupport {
 
         // then - 초과분이 하나라도 통과하면 한도가 무너진다
         assertThat(results).filteredOn("SUCCESS"::equals).hasSize((int) allowed);
-        assertThat(results).filteredOn(LmtErrorCode.DAILY_LIMIT_EXCEEDED::equals).hasSize(THREADS - (int) allowed);
+        assertThat(results)
+                .filteredOn(LmtErrorCode.DAILY_LIMIT_EXCEEDED::equals)
+                .hasSize(THREADS - (int) allowed);
         assertThat(usedAmount()).isEqualTo(100_000L);
     }
 
@@ -123,17 +123,23 @@ class TransferLimitReserveConcurrencyTest extends IntegrationTestSupport {
     }
 
     private void seedCustomerAndLimit(long oneTimeLimit, long dailyLimit) {
-        jdbcTemplate.update("""
+        jdbcTemplate.update(
+                """
             INSERT INTO customer (customer_id, user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at)
             VALUES (?, 'limit9101', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '한도테스터', '1990-01-01', 'limit9101@test.com', '01099999101', NOW(6), NOW(6), NOW(6))
             ON DUPLICATE KEY UPDATE customer_id = customer_id
-            """, CUSTOMER_ID);
+            """,
+                CUSTOMER_ID);
 
-        jdbcTemplate.update("""
+        jdbcTemplate.update(
+                """
             INSERT INTO transfer_limit (customer_id, one_time_limit, daily_limit, created_at, updated_at)
             VALUES (?, ?, ?, NOW(6), NOW(6))
             ON DUPLICATE KEY UPDATE one_time_limit = VALUES(one_time_limit), daily_limit = VALUES(daily_limit)
-            """, CUSTOMER_ID, oneTimeLimit, dailyLimit);
+            """,
+                CUSTOMER_ID,
+                oneTimeLimit,
+                dailyLimit);
     }
 
     private int usageRowCount() {
@@ -145,6 +151,8 @@ class TransferLimitReserveConcurrencyTest extends IntegrationTestSupport {
         LocalDate today = LocalDate.now(clock);
         return jdbcTemplate.queryForObject(
                 "SELECT used_amount FROM transfer_limit_daily_usage WHERE customer_id = ? AND usage_date = ?",
-                Long.class, CUSTOMER_ID, today);
+                Long.class,
+                CUSTOMER_ID,
+                today);
     }
 }

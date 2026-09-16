@@ -2,14 +2,12 @@ package com.shinhan.corebank.limit.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
-import java.util.Map;
-
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.limit.api.TransferLimitRegistration;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitCommandPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
-
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -57,25 +55,25 @@ class TransferLimitRegisterDefaultTest extends IntegrationTestSupport {
         });
 
         // when
-        transactionTemplate.executeWithoutResult(
-                status -> transferLimitRegistration.registerDefault(CUSTOMER_ID));
+        transactionTemplate.executeWithoutResult(status -> transferLimitRegistration.registerDefault(CUSTOMER_ID));
 
         // then - 덮어쓰는 연산을 쓰면 여기서 100만 / 500만으로 되돌아간다
         assertThat(savedLimits()).containsExactly(3_000_000L, 10_000_000L);
     }
 
     private void seedCustomerWithoutLimit() {
-        jdbcTemplate.update("""
+        jdbcTemplate.update(
+                """
             INSERT INTO customer (customer_id, user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at)
             VALUES (?, 'limit9301', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklm', '한도부여테스터', '1990-01-01', 'limit9301@test.com', '01099999301', NOW(6), NOW(6), NOW(6))
             ON DUPLICATE KEY UPDATE customer_id = customer_id
-            """, CUSTOMER_ID);
+            """,
+                CUSTOMER_ID);
     }
 
     private List<Long> savedLimits() {
         Map<String, Object> row = jdbcTemplate.queryForMap(
                 "SELECT one_time_limit, daily_limit FROM transfer_limit WHERE customer_id = ?", CUSTOMER_ID);
-        return List.of(((Number) row.get("one_time_limit")).longValue(),
-                ((Number) row.get("daily_limit")).longValue());
+        return List.of(((Number) row.get("one_time_limit")).longValue(), ((Number) row.get("daily_limit")).longValue());
     }
 }

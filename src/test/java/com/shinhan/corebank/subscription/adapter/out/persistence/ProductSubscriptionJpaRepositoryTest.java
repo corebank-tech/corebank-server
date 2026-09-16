@@ -31,9 +31,11 @@ class ProductSubscriptionJpaRepositoryTest extends IntegrationTestSupport {
     @Test
     @DisplayName("ProductSubscription을 저장하면 자동 채번된 subscriptionId로 전체 필드가 보존된 채 조회된다")
     void saveAndFindById() {
-        Long productId = productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
+        Long productId =
+                productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
         Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_test_user");
-        Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000001", customerId, null);
+        Long withdrawalAccountId =
+                SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000001", customerId, null);
 
         ProductSubscriptionJpaEntity subscription =
                 SubscriptionTestFixtures.defaultSubscription(customerId, productId, withdrawalAccountId);
@@ -65,25 +67,34 @@ class ProductSubscriptionJpaRepositoryTest extends IntegrationTestSupport {
     @Test
     @DisplayName("findBySubscriptionIdAndCustomerId는 소유자가 일치할 때만 값을 반환한다")
     void findBySubscriptionIdAndCustomerId_ownershipScoped() {
-        Long productId = productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
+        Long productId =
+                productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
         Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_own_test");
-        Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000003", customerId, null);
-        Long subscriptionId = repository.save(
-                SubscriptionTestFixtures.defaultSubscription(customerId, productId, withdrawalAccountId)
-        ).getSubscriptionId();
+        Long withdrawalAccountId =
+                SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000003", customerId, null);
+        Long subscriptionId = repository
+                .save(SubscriptionTestFixtures.defaultSubscription(customerId, productId, withdrawalAccountId))
+                .getSubscriptionId();
 
-        assertThat(repository.findBySubscriptionIdAndCustomerId(subscriptionId, customerId)).isPresent();
-        assertThat(repository.findBySubscriptionIdAndCustomerId(subscriptionId, 999_999L)).isEmpty();
-        assertThat(repository.findBySubscriptionIdAndCustomerId(999_999L, customerId)).isEmpty();
+        assertThat(repository.findBySubscriptionIdAndCustomerId(subscriptionId, customerId))
+                .isPresent();
+        assertThat(repository.findBySubscriptionIdAndCustomerId(subscriptionId, 999_999L))
+                .isEmpty();
+        assertThat(repository.findBySubscriptionIdAndCustomerId(999_999L, customerId))
+                .isEmpty();
     }
 
     @Test
     @DisplayName("findAllByCustomerIdAndProductIdForUpdate는 customerId+productId 조합이 일치하는 행만 반환한다")
     void findAllByCustomerIdAndProductIdForUpdate_returnsOnlyMatchingCombination() {
-        Long productId = productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
-        Long otherProductId = productRepository.save(ProductTestFixtures.productWithCode("SVN-002")).getProductId();
+        Long productId =
+                productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
+        Long otherProductId = productRepository
+                .save(ProductTestFixtures.productWithCode("SVN-002"))
+                .getProductId();
         Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sub_lock_test");
-        Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000005", customerId, null);
+        Long withdrawalAccountId =
+                SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000005", customerId, null);
 
         repository.save(SubscriptionTestFixtures.defaultSubscription(customerId, productId, withdrawalAccountId));
         repository.save(SubscriptionTestFixtures.defaultSubscription(customerId, otherProductId, withdrawalAccountId));

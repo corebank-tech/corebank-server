@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 27개 테이블(25개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 28개 테이블(26개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -9,13 +9,14 @@
 erDiagram
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 27개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
+    %% MySQL 8.4 / 28개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
     %% =================================================================
 
     %% ---------- P6 ----------
     customer {
         bigint customer_id PK
         varchar user_id UK "로그인 아이디"
+        varchar existing_bank_customer_id UK "원장 고객 식별자, NULL 허용 (ATH0303)"
         char password_hash "BCrypt"
         varchar user_name "VARCHAR(50)"
         date birth_date
@@ -94,6 +95,17 @@ erDiagram
         bigint version "낙관적 락"
     }
 
+    account_number_sequence {
+        bigint sequence_id PK
+        char bank_code "계좌번호 앞 3자리 은행코드"
+        varchar account_type "DEMAND_DEPOSIT / TIME_DEPOSIT / INSTALLMENT_SAVINGS"
+        bigint product_id FK "입출금계좌는 NULL"
+        char product_prefix "상품별 Prefix 2자리"
+        bigint last_sequence "마지막 발급 7자리 일련번호"
+        datetime created_at "DATETIME(6)"
+        datetime updated_at "DATETIME(6)"
+    }
+
     %% ---------- P4 ----------
     transaction_sequence {
         date seq_date PK "KST 기준 영업일"
@@ -111,7 +123,7 @@ erDiagram
         bigint fee "당행 0 고정 (POL-028)"
         varchar transfer_type "IMMEDIATE / SCHEDULED / AUTO"
         char channel "WB / BT"
-        varchar status "SUCCESS / ERROR / PROCESSING"
+        varchar status "SUCCESS / ERROR (PROCESSING은 커밋되지 않음, #377)"
         varchar source_type "SCHEDULED / AUTO"
         bigint source_id
         date execution_date "source_id와 함께 멱등키. SCHEDULED/AUTO 전용"
@@ -249,6 +261,7 @@ erDiagram
         datetime executed_at "DATETIME(6)"
         datetime canceled_at "DATETIME(6)"
         varchar failure_reason "VARCHAR(200)"
+        bigint version "낙관적 락"
         varchar active_dup_key UK "VARCHAR(80)"
     }
 
@@ -329,6 +342,8 @@ erDiagram
     terms ||--o{ product_terms : "약관연결"
     customer ||--o{ account : "보유"
     product ||--o{ account : "상품계좌"
+    account_number_sequence ||..o{ account : "계좌번호 채번"
+    product ||--o{ account_number_sequence : "예·적금 채번 규칙"
     account ||--o{ transfer : "출금"
     customer ||--o{ favorite_account : "등록"
     customer ||--o| transfer_limit : "한도보유"

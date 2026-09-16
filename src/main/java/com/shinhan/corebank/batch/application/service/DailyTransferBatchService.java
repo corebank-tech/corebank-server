@@ -1,15 +1,14 @@
 package com.shinhan.corebank.batch.application.service;
 
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferBatchUseCase;
+import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import com.shinhan.corebank.batch.application.port.in.DailyTransferBatchUseCase;
-import com.shinhan.corebank.batch.application.port.out.BatchExecutionLockPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferBatchUseCase;
+import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-
-import java.time.LocalDate;
 
 @Service
 @RequiredArgsConstructor
@@ -23,7 +22,7 @@ public class DailyTransferBatchService implements DailyTransferBatchUseCase {
 
     @Override
     public void run(LocalDate date) {
-        if(!batchExecutionLockPort.tryAcquire(JOB_NAME)) {
+        if (!batchExecutionLockPort.tryAcquire(JOB_NAME)) {
             log.warn("이미 실행 중인 배치가 있어 이번 트리거는 건너뜀 - jobName={}", JOB_NAME);
             return;
         }

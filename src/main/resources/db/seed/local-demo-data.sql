@@ -1,5 +1,4 @@
 -- 로컬 개발 및 시연용 더미 데이터
--- 테스트 로그인 비밀번호: honggildong=Hong1234!, kimminji=Minji1234!, leeseojun=Seojun1234!
 INSERT INTO customer (
   user_id,
   password_hash,
@@ -69,24 +68,21 @@ INSERT INTO customer (
     '2026-07-10 15:00:00.000000'
   )
 ON DUPLICATE KEY UPDATE
-  password_hash = VALUES(password_hash),
-  user_name = VALUES(user_name),
-  birth_date = VALUES(birth_date),
-  email = VALUES(email),
-  phone_number = VALUES(phone_number),
-  login_failure_count = VALUES(login_failure_count),
-  account_locked = VALUES(account_locked),
-  last_login_at = VALUES(last_login_at),
-  last_login_ip = VALUES(last_login_ip),
-  previous_login_at = VALUES(previous_login_at),
-  password_changed_at = VALUES(password_changed_at),
-  joined_at = VALUES(joined_at),
-  updated_at = VALUES(updated_at);
+  -- 실제 고객과 충돌하면 개인정보·비밀번호는 보존하고, 정확한 QA 시드 계정의 잠금만 복구한다.
+  login_failure_count = IF(
+      user_id = VALUES(user_id) AND email = VALUES(email),
+      VALUES(login_failure_count),
+      login_failure_count
+  ),
+  account_locked = IF(
+      user_id = VALUES(user_id) AND email = VALUES(email),
+      VALUES(account_locked),
+      account_locked
+  );
 
 -- ====================================================================
 -- P4 이체·원장 기능 테스트용 계좌 데이터
 --
--- 모든 계좌 테스트 비밀번호: 1234
 -- 계좌번호 규칙:
 --   은행코드 3자리 + 상품 Prefix 2자리 + 일련번호 7자리
 --
@@ -107,18 +103,21 @@ SET @hong_customer_id = (
     SELECT customer_id
     FROM customer
     WHERE user_id = 'honggildong'
+      AND email = 'honggildong@example.com'
 );
 
 SET @kim_customer_id = (
     SELECT customer_id
     FROM customer
     WHERE user_id = 'kimminji'
+      AND email = 'kimminji@example.com'
 );
 
 SET @lee_customer_id = (
     SELECT customer_id
     FROM customer
     WHERE user_id = 'leeseojun'
+      AND email = 'leeseojun@example.com'
 );
 
 SET @youth_savings_product_id = (
@@ -220,7 +219,7 @@ INSERT INTO account (
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
-        10000000,
+        100000,
         'ACTIVE',
         @account_password_hash,
         0,
@@ -244,7 +243,7 @@ INSERT INTO account (
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
-        1000000,
+        100000,
         'ACTIVE',
         @account_password_hash,
         0,
@@ -268,7 +267,7 @@ INSERT INTO account (
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
-        500000,
+        100000,
         'ACTIVE',
         @account_password_hash,
         0,
@@ -344,7 +343,7 @@ INSERT INTO account (
         @kim_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
-        2000000,
+        100000,
         'ACTIVE',
         @account_password_hash,
         0,
@@ -440,7 +439,7 @@ INSERT INTO account (
         @kim_customer_id,
         @basic_deposit_product_id,
         'TIME_DEPOSIT',
-        3000000,
+        100000,
         'ACTIVE',
         @account_password_hash,
         0,
@@ -470,7 +469,7 @@ INSERT INTO account (
         @lee_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
-        1000000,
+        100000,
         'ACTIVE',
         @account_password_hash,
         0,
@@ -488,7 +487,34 @@ INSERT INTO account (
         '2026-08-04 12:00:00.000000'
     )
 
--- 계좌 시드는 재실행 시 잔액·상태를 초기값으로 되돌리지 않는다.
--- 초기화가 필요하면 로컬 DB 볼륨을 삭제하고 전체 시드를 다시 실행한다.
+-- 같은 QA 시드 소유자의 계좌만 초기화하며, 계좌번호가 충돌한 타인 계좌는 변경하지 않는다.
 ON DUPLICATE KEY UPDATE
-    account_number = VALUES(account_number);
+    balance = IF(customer_id = VALUES(customer_id), VALUES(balance), balance),
+    status = IF(customer_id = VALUES(customer_id), VALUES(status), status),
+    password_hash = IF(customer_id = VALUES(customer_id), VALUES(password_hash), password_hash),
+    password_failure_count = IF(
+        customer_id = VALUES(customer_id),
+        VALUES(password_failure_count),
+        password_failure_count
+    ),
+    password_locked = IF(customer_id = VALUES(customer_id), VALUES(password_locked), password_locked),
+    alias = IF(customer_id = VALUES(customer_id), VALUES(alias), alias),
+    display_order = IF(customer_id = VALUES(customer_id), VALUES(display_order), display_order),
+    withdrawal_registered = IF(
+        customer_id = VALUES(customer_id),
+        VALUES(withdrawal_registered),
+        withdrawal_registered
+    ),
+    withdrawal_registered_at = IF(
+        customer_id = VALUES(customer_id),
+        VALUES(withdrawal_registered_at),
+        withdrawal_registered_at
+    ),
+    closed_date = IF(customer_id = VALUES(customer_id), VALUES(closed_date), closed_date),
+    last_transaction_at = IF(
+        customer_id = VALUES(customer_id),
+        VALUES(last_transaction_at),
+        last_transaction_at
+    ),
+    version = IF(customer_id = VALUES(customer_id), VALUES(version), version),
+    updated_at = IF(customer_id = VALUES(customer_id), VALUES(updated_at), updated_at);

@@ -9,14 +9,9 @@ class CorsPropertiesTest {
 
     @Test
     void normalizesAllowedOrigins() {
-        CorsProperties properties = new CorsProperties(List.of(
-                " http://localhost:5173 ",
-                "",
-                "http://localhost:5173"
-        ));
+        CorsProperties properties = new CorsProperties(List.of(" http://localhost:5173 ", "", "http://localhost:5173"));
 
-        assertThat(properties.allowedOrigins())
-                .containsExactly("http://localhost:5173");
+        assertThat(properties.allowedOrigins()).containsExactly("http://localhost:5173");
     }
 
     @Test

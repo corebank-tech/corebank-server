@@ -1,10 +1,9 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-
-import jakarta.persistence.*;
 import lombok.*;
 
 @Entity

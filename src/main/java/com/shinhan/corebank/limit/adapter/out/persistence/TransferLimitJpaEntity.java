@@ -2,7 +2,6 @@ package com.shinhan.corebank.limit.adapter.out.persistence;
 
 import com.shinhan.corebank.common.entity.BaseEntity;
 import com.shinhan.corebank.limit.domain.TransferLimit;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -22,10 +21,10 @@ public class TransferLimitJpaEntity extends BaseEntity {
     private Long customerId;
 
     @Column(name = "one_time_limit", nullable = false)
-    private long oneTimeLimit;
+    private Long oneTimeLimit;
 
     @Column(name = "daily_limit", nullable = false)
-    private long dailyLimit;
+    private Long dailyLimit;
 
     TransferLimit toDomain() {
         return TransferLimit.restore(customerId, oneTimeLimit, dailyLimit);

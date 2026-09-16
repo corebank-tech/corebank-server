@@ -24,8 +24,7 @@ final class AutoTransferMapper {
                 entity.getRegisteredAt(),
                 entity.getTerminatedAt(),
                 entity.getUpdatedAt(),
-                entity.getVersion()
-        );
+                entity.getVersion());
     }
 
     static AutoTransferJpaEntity toEntity(AutoTransfer domain) {

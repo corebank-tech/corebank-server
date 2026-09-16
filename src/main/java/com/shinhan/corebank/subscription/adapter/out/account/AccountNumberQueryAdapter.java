@@ -2,10 +2,9 @@ package com.shinhan.corebank.subscription.adapter.out.account;
 
 import com.shinhan.corebank.account.application.port.in.AccountNumberQueryUseCase;
 import com.shinhan.corebank.subscription.application.port.out.AccountNumberQueryPort;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-
-import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor

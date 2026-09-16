@@ -2,7 +2,6 @@ package com.shinhan.corebank.subscription.application.port.in;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.product.domain.ProductGroup;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -21,10 +20,8 @@ public interface ProductSubscriptionExecuteUseCase {
             String newAccountPasswordConfirm,
             String accountPasswordAuthToken,
             String otpAuthToken,
-            List<AgreedTerms> agreedTerms
-    ) {
-        public record AgreedTerms(Long termsId, String version) {
-        }
+            List<AgreedTerms> agreedTerms) {
+        public record AgreedTerms(Long termsId, String version) {}
     }
 
     record ProductSubscriptionExecuteResult(
@@ -41,7 +38,5 @@ public interface ProductSubscriptionExecuteUseCase {
             Long expectedMaturityAmount,
             ProcessResultStatus status,
             String transactionNumber,
-            LocalDateTime subscribedAt
-    ) {
-    }
+            LocalDateTime subscribedAt) {}
 }

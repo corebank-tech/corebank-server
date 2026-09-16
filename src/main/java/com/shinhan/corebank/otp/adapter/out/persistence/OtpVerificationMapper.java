@@ -28,8 +28,7 @@ public class OtpVerificationMapper {
                 entity.isUsed(),
                 entity.getVerifiedAt(),
                 entity.getExpiresAt(),
-                entity.getCreatedAt()
-        );
+                entity.getCreatedAt());
     }
 
     // 도메인의 canonical JSON을 MySQL JSON 컬럼용 Map으로 변환한다.
@@ -46,7 +45,6 @@ public class OtpVerificationMapper {
                 domain.used(),
                 domain.verifiedAt(),
                 domain.expiresAt(),
-                domain.createdAt()
-        );
+                domain.createdAt());
     }
 }

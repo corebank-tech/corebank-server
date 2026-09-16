@@ -1,23 +1,22 @@
 package com.shinhan.corebank.common.idempotency;
 
-import java.util.Map;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 // 지문 구성 규칙(api_conventions.md 7-2)이 코드로 강제되는지 검증한다.
 class IdempotencyFingerprintTest {
 
-    private record LimitUpdateLike(Long oneTimeLimit, Long dailyLimit,
-                                   String accountPasswordAuthToken, String otpAuthToken) {}
+    private record LimitUpdateLike(
+            Long oneTimeLimit, Long dailyLimit, String accountPasswordAuthToken, String otpAuthToken) {}
 
     @Test
     @DisplayName("*AuthToken 으로 끝나는 필드는 지문에서 빠진다")
     void excludesAuthTokenFields() {
-        Map<String, Object> fingerprint = IdempotencyFingerprint.of(
-                7L, new LimitUpdateLike(3_000_000L, 10_000_000L, "ACC_PWD_x", "OTP_AUTH_y"));
+        Map<String, Object> fingerprint =
+                IdempotencyFingerprint.of(7L, new LimitUpdateLike(3_000_000L, 10_000_000L, "ACC_PWD_x", "OTP_AUTH_y"));
 
         assertThat(fingerprint).containsOnlyKeys("customerId", "oneTimeLimit", "dailyLimit");
         assertThat(fingerprint).containsEntry("customerId", 7L);
@@ -38,8 +37,7 @@ class IdempotencyFingerprintTest {
     @Test
     @DisplayName("요청 본문의 customerId 가 세션 고객을 덮어쓰지 못한다")
     void sessionCustomerIdWinsOverRequestBody() {
-        Map<String, Object> fingerprint =
-                IdempotencyFingerprint.of(7L, new SpoofedRequest(999L, "내 계좌"));
+        Map<String, Object> fingerprint = IdempotencyFingerprint.of(7L, new SpoofedRequest(999L, "내 계좌"));
 
         assertThat(fingerprint).containsEntry("customerId", 7L);
     }
@@ -57,8 +55,7 @@ class IdempotencyFingerprintTest {
     @Test
     @DisplayName("본문이 없으면 path variable 만으로 지문을 만든다")
     void buildsFromPathVariablesWhenRequestIsNull() {
-        Map<String, Object> fingerprint =
-                IdempotencyFingerprint.of(7L, null, Map.of("accountId", 1001L));
+        Map<String, Object> fingerprint = IdempotencyFingerprint.of(7L, null, Map.of("accountId", 1001L));
 
         assertThat(fingerprint).containsOnlyKeys("customerId", "accountId");
         assertThat(fingerprint).containsEntry("accountId", 1001L);

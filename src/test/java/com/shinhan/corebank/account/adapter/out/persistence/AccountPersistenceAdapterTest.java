@@ -1,5 +1,8 @@
 package com.shinhan.corebank.account.adapter.out.persistence;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
@@ -9,6 +12,9 @@ import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import jakarta.persistence.EntityManager;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,20 +22,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowable;
-
 @Transactional
 class AccountPersistenceAdapterTest extends IntegrationTestSupport {
 
     private static final String ACCOUNT_NUMBER = "088100000001";
 
-    private static final String PASSWORD_HASH =
-            "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq";
+    private static final String PASSWORD_HASH = "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq";
 
     @Autowired
     private AccountPersistencePort accountPersistencePort;
@@ -54,18 +52,10 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
     @DisplayName("입출금계좌를 저장하면 Account가 DB에 정상적으로 저장된다")
     void saveDemandDepositAccount() {
         // given
-        LocalDateTime openedDate =
-                LocalDateTime.of(2026, 8, 10, 10, 0);
+        LocalDateTime openedDate = LocalDateTime.of(2026, 8, 10, 10, 0);
 
         Account account = Account.open(
-                ACCOUNT_NUMBER,
-                customerId,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                openedDate,
-                null
-        );
+                ACCOUNT_NUMBER, customerId, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, openedDate, null);
 
         // when
         Account savedAccount = accountPersistencePort.save(account);
@@ -73,24 +63,19 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
         // then
         assertThat(savedAccount.getAccountId()).isNotNull();
 
-        assertThat(savedAccount.getAccountNumber())
-                .isEqualTo(ACCOUNT_NUMBER);
+        assertThat(savedAccount.getAccountNumber()).isEqualTo(ACCOUNT_NUMBER);
 
-        assertThat(savedAccount.getCustomerId())
-                .isEqualTo(customerId);
+        assertThat(savedAccount.getCustomerId()).isEqualTo(customerId);
 
         assertThat(savedAccount.getProductId()).isNull();
 
-        assertThat(savedAccount.getAccountType())
-                .isEqualTo(AccountType.DEMAND_DEPOSIT);
+        assertThat(savedAccount.getAccountType()).isEqualTo(AccountType.DEMAND_DEPOSIT);
 
         assertThat(savedAccount.getBalance()).isZero();
 
-        assertThat(savedAccount.getStatus())
-                .isEqualTo(AccountStatus.ACTIVE);
+        assertThat(savedAccount.getStatus()).isEqualTo(AccountStatus.ACTIVE);
 
-        assertThat(savedAccount.getPasswordHash())
-                .isEqualTo(PASSWORD_HASH);
+        assertThat(savedAccount.getPasswordHash()).isEqualTo(PASSWORD_HASH);
 
         assertThat(savedAccount.getPasswordFailureCount()).isZero();
         assertThat(savedAccount.isPasswordLocked()).isFalse();
@@ -101,8 +86,7 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(savedAccount.isWithdrawalRegistered()).isFalse();
         assertThat(savedAccount.getWithdrawalRegisteredAt()).isNull();
 
-        assertThat(savedAccount.getOpenedDate())
-                .isEqualTo(openedDate);
+        assertThat(savedAccount.getOpenedDate()).isEqualTo(openedDate);
 
         assertThat(savedAccount.getMaturityDate()).isNull();
         assertThat(savedAccount.getClosedDate()).isNull();
@@ -118,18 +102,10 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
     @DisplayName("저장된 입출금계좌의 값이 account 테이블에 동일하게 저장된다")
     void saveDemandDepositAccountToDatabase() {
         // given
-        LocalDateTime openedDate =
-                LocalDateTime.of(2026, 8, 10, 10, 0);
+        LocalDateTime openedDate = LocalDateTime.of(2026, 8, 10, 10, 0);
 
         Account account = Account.open(
-                ACCOUNT_NUMBER,
-                customerId,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                openedDate,
-                null
-        );
+                ACCOUNT_NUMBER, customerId, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, openedDate, null);
 
         // when
         Account savedAccount = accountPersistencePort.save(account);
@@ -163,34 +139,26 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
                         rs.getString("password_hash"),
                         rs.getInt("password_failure_count"),
                         rs.getBoolean("password_locked"),
-                        rs.getBoolean("withdrawal_registered")
-                ),
-                savedAccount.getAccountId()
-        );
+                        rs.getBoolean("withdrawal_registered")),
+                savedAccount.getAccountId());
 
         assertThat(row).isNotNull();
 
-        assertThat(row.accountId())
-                .isEqualTo(savedAccount.getAccountId());
+        assertThat(row.accountId()).isEqualTo(savedAccount.getAccountId());
 
-        assertThat(row.accountNumber())
-                .isEqualTo(ACCOUNT_NUMBER);
+        assertThat(row.accountNumber()).isEqualTo(ACCOUNT_NUMBER);
 
-        assertThat(row.customerId())
-                .isEqualTo(customerId);
+        assertThat(row.customerId()).isEqualTo(customerId);
 
         assertThat(row.productId()).isNull();
 
-        assertThat(row.accountType())
-                .isEqualTo(AccountType.DEMAND_DEPOSIT.name());
+        assertThat(row.accountType()).isEqualTo(AccountType.DEMAND_DEPOSIT.name());
 
         assertThat(row.balance()).isZero();
 
-        assertThat(row.status())
-                .isEqualTo(AccountStatus.ACTIVE.name());
+        assertThat(row.status()).isEqualTo(AccountStatus.ACTIVE.name());
 
-        assertThat(row.passwordHash())
-                .isEqualTo(PASSWORD_HASH);
+        assertThat(row.passwordHash()).isEqualTo(PASSWORD_HASH);
 
         assertThat(row.passwordFailureCount()).isZero();
         assertThat(row.passwordLocked()).isFalse();
@@ -208,29 +176,18 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
             String passwordHash,
             int passwordFailureCount,
             boolean passwordLocked,
-            boolean withdrawalRegistered
-    ) {
-    }
+            boolean withdrawalRegistered) {}
 
     @Test
     @DisplayName("기존 계좌를 다시 저장해도 감사 시각이 유지된다")
     void preserveAuditTimestampsWhenSavingExistingAccount() {
         // given
-        LocalDateTime openedDate =
-                LocalDateTime.of(2026, 8, 10, 10, 0);
+        LocalDateTime openedDate = LocalDateTime.of(2026, 8, 10, 10, 0);
 
         Account account = Account.open(
-                ACCOUNT_NUMBER,
-                customerId,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                openedDate,
-                null
-        );
+                ACCOUNT_NUMBER, customerId, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, openedDate, null);
 
-        Account savedAccount =
-                accountPersistencePort.save(account);
+        Account savedAccount = accountPersistencePort.save(account);
 
         LocalDateTime createdAt = savedAccount.getCreatedAt();
 
@@ -238,39 +195,26 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(savedAccount.getUpdatedAt()).isNotNull();
 
         // when
-        Account resavedAccount =
-                accountPersistencePort.save(savedAccount);
+        Account resavedAccount = accountPersistencePort.save(savedAccount);
 
         // then
-        assertThat(resavedAccount.getAccountId())
-                .isEqualTo(savedAccount.getAccountId());
+        assertThat(resavedAccount.getAccountId()).isEqualTo(savedAccount.getAccountId());
 
-        assertThat(resavedAccount.getCreatedAt())
-                .isEqualTo(createdAt);
+        assertThat(resavedAccount.getCreatedAt()).isEqualTo(createdAt);
 
-        assertThat(resavedAccount.getUpdatedAt())
-                .isNotNull();
+        assertThat(resavedAccount.getUpdatedAt()).isNotNull();
     }
 
     @Test
     @DisplayName("기존 계좌의 version이 DB version과 다르면 동시 수정 예외가 발생한다")
     void throwExceptionWhenAccountVersionIsStale() {
         // given
-        LocalDateTime openedDate =
-                LocalDateTime.of(2026, 8, 10, 10, 0);
+        LocalDateTime openedDate = LocalDateTime.of(2026, 8, 10, 10, 0);
 
         Account account = Account.open(
-                ACCOUNT_NUMBER,
-                customerId,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                PASSWORD_HASH,
-                openedDate,
-                null
-        );
+                ACCOUNT_NUMBER, customerId, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, openedDate, null);
 
-        Account savedAccount =
-                accountPersistencePort.save(account);
+        Account savedAccount = accountPersistencePort.save(account);
 
         Long originalVersion = savedAccount.getVersion();
 
@@ -282,28 +226,19 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
                         SET version = version + 1
                         WHERE account_id = ?
                         """,
-                savedAccount.getAccountId()
-        );
+                savedAccount.getAccountId());
 
         entityManager.clear();
 
         // when
-        Throwable thrown = catchThrowable(
-                () -> accountPersistencePort.save(savedAccount)
-        );
+        Throwable thrown = catchThrowable(() -> accountPersistencePort.save(savedAccount));
 
         // then
-        assertThat(thrown)
-                .isInstanceOf(BusinessException.class)
-                .satisfies(exception -> {
-                    BusinessException businessException =
-                            (BusinessException) exception;
+        assertThat(thrown).isInstanceOf(BusinessException.class).satisfies(exception -> {
+            BusinessException businessException = (BusinessException) exception;
 
-                    assertThat(businessException.getErrorCode())
-                            .isEqualTo(
-                                    CommonErrorCode.CONCURRENT_MODIFICATION
-                            );
-                });
+            assertThat(businessException.getErrorCode()).isEqualTo(CommonErrorCode.CONCURRENT_MODIFICATION);
+        });
 
         Long currentVersion = jdbcTemplate.queryForObject(
                 """
@@ -312,19 +247,16 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
                         WHERE account_id = ?
                         """,
                 Long.class,
-                savedAccount.getAccountId()
-        );
+                savedAccount.getAccountId());
 
-        assertThat(currentVersion)
-                .isEqualTo(originalVersion + 1);
+        assertThat(currentVersion).isEqualTo(originalVersion + 1);
     }
 
     @Test
     @DisplayName("고객 ID로 계좌를 조회하면 해당 고객의 계좌만 반환한다")
     void findAllByCustomerIdReturnsOnlyOwnedAccounts() {
         // given
-        Long otherCustomerId =
-                customerTestFixture.createCustomer();
+        Long otherCustomerId = customerTestFixture.createCustomer();
 
         Account firstAccount = Account.open(
                 "088100000002",
@@ -333,8 +265,7 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
                 AccountType.DEMAND_DEPOSIT,
                 PASSWORD_HASH,
                 LocalDateTime.of(2026, 8, 10, 10, 0),
-                null
-        );
+                null);
 
         Account secondAccount = Account.open(
                 "088100000003",
@@ -343,8 +274,7 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
                 AccountType.DEMAND_DEPOSIT,
                 PASSWORD_HASH,
                 LocalDateTime.of(2026, 8, 10, 11, 0),
-                null
-        );
+                null);
 
         Account otherCustomerAccount = Account.open(
                 "088100000004",
@@ -353,101 +283,68 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
                 AccountType.DEMAND_DEPOSIT,
                 PASSWORD_HASH,
                 LocalDateTime.of(2026, 8, 10, 12, 0),
-                null
-        );
+                null);
 
         accountPersistencePort.save(firstAccount);
         accountPersistencePort.save(secondAccount);
         accountPersistencePort.save(otherCustomerAccount);
 
         // when
-        List<Account> result =
-                accountPersistencePort.findAllByCustomerId(customerId);
+        List<Account> result = accountPersistencePort.findAllByCustomerId(customerId);
 
         // then
         assertThat(result).hasSize(2);
 
         assertThat(result)
                 .extracting(Account::getAccountNumber)
-                .containsExactlyInAnyOrder(
-                        "088100000002",
-                        "088100000003"
-                );
+                .containsExactlyInAnyOrder("088100000002", "088100000003");
 
-        assertThat(result)
-                .allMatch(account ->
-                        account.getCustomerId().equals(customerId)
-                );
+        assertThat(result).allMatch(account -> account.getCustomerId().equals(customerId));
     }
 
     @Test
     @DisplayName("계좌 ID와 고객 ID로 본인 계좌를 조회한다")
     void findByAccountIdAndCustomerId() {
         // given
-        Account savedAccount =
-                accountPersistencePort.save(
-                        Account.open(
-                                "088100000021",
-                                customerId,
-                                null,
-                                AccountType.DEMAND_DEPOSIT,
-                                PASSWORD_HASH,
-                                LocalDateTime.of(
-                                        2026, 8, 10, 10, 0
-                                ),
-                                null
-                        )
-                );
+        Account savedAccount = accountPersistencePort.save(Account.open(
+                "088100000021",
+                customerId,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                LocalDateTime.of(2026, 8, 10, 10, 0),
+                null));
 
         // when
         Optional<Account> result =
-                accountPersistencePort
-                        .findByAccountIdAndCustomerId(
-                                savedAccount.getAccountId(),
-                                customerId
-                        );
+                accountPersistencePort.findByAccountIdAndCustomerId(savedAccount.getAccountId(), customerId);
 
         // then
         assertThat(result).isPresent();
 
-        assertThat(result.get().getAccountId())
-                .isEqualTo(
-                        savedAccount.getAccountId()
-                );
+        assertThat(result.get().getAccountId()).isEqualTo(savedAccount.getAccountId());
 
-        assertThat(result.get().getCustomerId())
-                .isEqualTo(customerId);
+        assertThat(result.get().getCustomerId()).isEqualTo(customerId);
     }
 
     @Test
     @DisplayName("다른 고객의 계좌는 계좌 ID로 조회해도 반환하지 않는다")
     void findByAccountIdAndDifferentCustomerIdReturnsEmpty() {
         // given
-        Long otherCustomerId =
-                customerTestFixture.createCustomer();
+        Long otherCustomerId = customerTestFixture.createCustomer();
 
-        Account savedAccount =
-                accountPersistencePort.save(
-                        Account.open(
-                                "088100000022",
-                                customerId,
-                                null,
-                                AccountType.DEMAND_DEPOSIT,
-                                PASSWORD_HASH,
-                                LocalDateTime.of(
-                                        2026, 8, 10, 10, 0
-                                ),
-                                null
-                        )
-                );
+        Account savedAccount = accountPersistencePort.save(Account.open(
+                "088100000022",
+                customerId,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                PASSWORD_HASH,
+                LocalDateTime.of(2026, 8, 10, 10, 0),
+                null));
 
         // when
         Optional<Account> result =
-                accountPersistencePort
-                        .findByAccountIdAndCustomerId(
-                                savedAccount.getAccountId(),
-                                otherCustomerId
-                        );
+                accountPersistencePort.findByAccountIdAndCustomerId(savedAccount.getAccountId(), otherCustomerId);
 
         // then
         assertThat(result).isEmpty();
@@ -457,12 +354,7 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
     @DisplayName("존재하지 않는 계좌 ID는 빈 결과를 반환한다")
     void findByNonExistingAccountIdReturnsEmpty() {
         // when
-        Optional<Account> result =
-                accountPersistencePort
-                        .findByAccountIdAndCustomerId(
-                                Long.MAX_VALUE,
-                                customerId
-                        );
+        Optional<Account> result = accountPersistencePort.findByAccountIdAndCustomerId(Long.MAX_VALUE, customerId);
 
         // then
         assertThat(result).isEmpty();

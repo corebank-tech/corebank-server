@@ -1,15 +1,13 @@
 package com.shinhan.corebank.limit.application.service;
 
-import java.time.Clock;
-import java.time.LocalDate;
-
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.limit.api.TransferLimitReserver;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitCommandPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
 import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
 import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
-
+import java.time.Clock;
+import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,7 +34,8 @@ public class TransferLimitReserveService implements TransferLimitReserver {
      */
     @Override
     public void checkAndReserve(Long customerId, long amount) {
-        TransferLimit limit = transferLimitCommandPort.findForShareByCustomerId(customerId)
+        TransferLimit limit = transferLimitCommandPort
+                .findForShareByCustomerId(customerId)
                 .orElseGet(() -> {
                     // 가입 시 기본값 부여(REQ-TRSF-029)가 회원가입 흐름에 연결되면 이 경로는 데이터 결함이 된다.
                     log.warn("이체한도 행이 없어 정책 기본값으로 검사합니다 - customerId={}", customerId);

@@ -1,21 +1,21 @@
 package com.shinhan.corebank.account.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+
 import com.shinhan.corebank.account.application.port.in.AccountGroupCode;
 import com.shinhan.corebank.account.application.port.in.AccountOverviewResult;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
-import com.shinhan.corebank.product.domain.Product;
-import com.shinhan.corebank.product.domain.ProductDetail;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
+import com.shinhan.corebank.product.domain.exception.ProductErrorCode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -23,15 +23,16 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.Comparator;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.times;
+import java.util.Map;
+import java.util.Set;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("전체 계좌 조회 서비스 단위 테스트")
@@ -39,14 +40,9 @@ class AccountOverviewQueryServiceTest {
 
     private static final Long CUSTOMER_ID = 1L;
 
-    private static final String PASSWORD_HASH =
-            "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq";
+    private static final String PASSWORD_HASH = "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq";
 
-    private static final Clock FIXED_CLOCK =
-            Clock.fixed(
-                    Instant.parse("2026-08-13T01:30:00Z"),
-                    ZoneOffset.UTC
-            );
+    private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-08-13T01:30:00Z"), ZoneOffset.UTC);
 
     @Mock
     private AccountPersistencePort accountPersistencePort;
@@ -58,35 +54,23 @@ class AccountOverviewQueryServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AccountOverviewQueryService(
-                accountPersistencePort,
-                productQueryUseCase,
-                FIXED_CLOCK
-        );
+        service = new AccountOverviewQueryService(accountPersistencePort, productQueryUseCase, FIXED_CLOCK);
     }
 
     @Test
     @DisplayName("보유 계좌가 없으면 전체 자산 0과 빈 목록을 반환한다")
     void returnsEmptyOverviewWhenCustomerHasNoAccounts() {
         // given
-        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
-                .willReturn(List.of());
+        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID)).willReturn(List.of());
 
         // when
-        AccountOverviewResult result =
-                service.getOverview(CUSTOMER_ID);
+        AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
 
         // then
         assertThat(result.totalAssets()).isZero();
         assertThat(result.items()).isEmpty();
 
-        assertThat(result.asOf())
-                .isEqualTo(
-                        OffsetDateTime.ofInstant(
-                                FIXED_CLOCK.instant(),
-                                ZoneId.of("Asia/Seoul")
-                        )
-                );
+        assertThat(result.asOf()).isEqualTo(OffsetDateTime.ofInstant(FIXED_CLOCK.instant(), ZoneId.of("Asia/Seoul")));
 
         verifyNoInteractions(productQueryUseCase);
     }
@@ -103,19 +87,10 @@ class AccountOverviewQueryServiceTest {
                 1_500_000L,
                 AccountStatus.ACTIVE,
                 "생활비 통장",
-                true
-        );
+                true);
 
         Account timeDeposit = createAccount(
-                102L,
-                "088200000001",
-                20L,
-                AccountType.TIME_DEPOSIT,
-                1_000_000L,
-                AccountStatus.ACTIVE,
-                "내 예금",
-                false
-        );
+                102L, "088200000001", 20L, AccountType.TIME_DEPOSIT, 1_000_000L, AccountStatus.ACTIVE, "내 예금", false);
 
         Account savings = createAccount(
                 103L,
@@ -125,53 +100,42 @@ class AccountOverviewQueryServiceTest {
                 1_000_000L,
                 AccountStatus.ACTIVE,
                 "내 적금",
-                false
-        );
+                false);
 
         given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
-                .willReturn(List.of(
-                        demandDeposit,
-                        timeDeposit,
-                        savings
-                ));
+                .willReturn(List.of(demandDeposit, timeDeposit, savings));
+
+        given(productQueryUseCase.findProductNames(Set.of(20L, 30L))).willReturn(Map.of(20L, "신한 정기예금", 30L, "신한 적금"));
 
         // when
-        AccountOverviewResult result =
-                service.getOverview(CUSTOMER_ID);
+        AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
 
         // then
-        assertThat(result.totalAssets())
-                .isEqualTo(3_500_000L);
+        assertThat(result.totalAssets()).isEqualTo(3_500_000L);
 
         assertThat(result.items()).hasSize(2);
 
-        AccountOverviewResult.Group demandGroup =
-                result.items().get(0);
+        AccountOverviewResult.Group demandGroup = result.items().get(0);
 
-        assertThat(demandGroup.groupCode())
-                .isEqualTo(AccountGroupCode.DEMAND_DEPOSIT);
+        assertThat(demandGroup.groupCode()).isEqualTo(AccountGroupCode.DEMAND_DEPOSIT);
 
-        assertThat(demandGroup.groupName())
-                .isEqualTo("입출금계좌");
+        assertThat(demandGroup.groupName()).isEqualTo("입출금계좌");
 
-        assertThat(demandGroup.groupTotalBalance())
-                .isEqualTo(1_500_000L);
+        assertThat(demandGroup.groupTotalBalance()).isEqualTo(1_500_000L);
 
         assertThat(demandGroup.accounts()).hasSize(1);
 
-        AccountOverviewResult.Group savingsGroup =
-                result.items().get(1);
+        AccountOverviewResult.Group savingsGroup = result.items().get(1);
 
-        assertThat(savingsGroup.groupCode())
-                .isEqualTo(AccountGroupCode.DEPOSIT_SAVINGS);
+        assertThat(savingsGroup.groupCode()).isEqualTo(AccountGroupCode.DEPOSIT_SAVINGS);
 
-        assertThat(savingsGroup.groupName())
-                .isEqualTo("예금·적금");
+        assertThat(savingsGroup.groupName()).isEqualTo("예금·적금");
 
-        assertThat(savingsGroup.groupTotalBalance())
-                .isEqualTo(2_000_000L);
+        assertThat(savingsGroup.groupTotalBalance()).isEqualTo(2_000_000L);
 
         assertThat(savingsGroup.accounts()).hasSize(2);
+
+        verify(productQueryUseCase, times(1)).findProductNames(Set.of(20L, 30L));
     }
 
     @Test
@@ -179,68 +143,70 @@ class AccountOverviewQueryServiceTest {
     void usesDefaultDemandDepositNameWhenAliasDoesNotExist() {
         // given
         Account account = createAccount(
-                101L,
-                "088100000001",
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                100_000L,
-                AccountStatus.ACTIVE,
-                null,
-                false
-        );
+                101L, "088100000001", null, AccountType.DEMAND_DEPOSIT, 100_000L, AccountStatus.ACTIVE, null, false);
 
-        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
-                .willReturn(List.of(account));
+        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID)).willReturn(List.of(account));
 
         // when
-        AccountOverviewResult result =
-                service.getOverview(CUSTOMER_ID);
+        AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
 
         // then
-        assertThat(
-                result.items()
-                        .get(0)
-                        .accounts()
-                        .get(0)
-                        .accountName()
-        ).isEqualTo("입출금통장");
+        AccountOverviewResult.AccountItem item =
+                result.items().get(0).accounts().get(0);
+
+        assertThat(item.accountName()).isEqualTo("입출금통장");
+        assertThat(item.alias()).isNull();
+        assertThat(item.baseAccountName()).isEqualTo("입출금통장");
 
         verifyNoInteractions(productQueryUseCase);
     }
 
     @Test
-    @DisplayName("별명이 있는 계좌는 상품명보다 별명을 우선한다")
+    @DisplayName("별명이 공백이면 미등록으로 취급하고 기본 계좌명을 표시한다")
+    void treatsBlankAliasAsMissing() {
+        // given
+        Account account = createAccount(
+                101L, "088100000001", null, AccountType.DEMAND_DEPOSIT, 100_000L, AccountStatus.ACTIVE, "   ", false);
+
+        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID)).willReturn(List.of(account));
+
+        // when
+        AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
+
+        // then
+        AccountOverviewResult.AccountItem item =
+                result.items().get(0).accounts().get(0);
+
+        assertThat(item.accountName()).isEqualTo("입출금통장");
+        assertThat(item.alias()).isNull();
+        assertThat(item.baseAccountName()).isEqualTo("입출금통장");
+
+        verifyNoInteractions(productQueryUseCase);
+    }
+
+    @Test
+    @DisplayName("별명이 있는 계좌는 별명을 표시하고 기본 계좌명으로 상품명을 반환한다")
     void usesAliasBeforeProductName() {
         // given
         Account account = createAccount(
-                102L,
-                "088200000001",
-                20L,
-                AccountType.TIME_DEPOSIT,
-                1_000_000L,
-                AccountStatus.ACTIVE,
-                "내 목돈",
-                false
-        );
+                102L, "088200000001", 20L, AccountType.TIME_DEPOSIT, 1_000_000L, AccountStatus.ACTIVE, "내 목돈", false);
 
-        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
-                .willReturn(List.of(account));
+        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID)).willReturn(List.of(account));
+
+        given(productQueryUseCase.findProductNames(Set.of(20L))).willReturn(Map.of(20L, "신한 정기예금"));
 
         // when
-        AccountOverviewResult result =
-                service.getOverview(CUSTOMER_ID);
+        AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
 
         // then
-        assertThat(
-                result.items()
-                        .get(0)
-                        .accounts()
-                        .get(0)
-                        .accountName()
-        ).isEqualTo("내 목돈");
+        AccountOverviewResult.AccountItem item =
+                result.items().get(0).accounts().get(0);
 
-        verify(productQueryUseCase, never())
-                .getDetail(20L);
+        assertThat(item.accountName()).isEqualTo("내 목돈");
+        assertThat(item.alias()).isEqualTo("내 목돈");
+        assertThat(item.baseAccountName()).isEqualTo("신한 정기예금");
+
+        verify(productQueryUseCase, times(1)).findProductNames(Set.of(20L));
     }
 
     @Test
@@ -255,39 +221,22 @@ class AccountOverviewQueryServiceTest {
                 1_000_000L,
                 AccountStatus.ACTIVE,
                 null,
-                false
-        );
+                false);
 
-        ProductDetail productDetail =
-                mock(ProductDetail.class);
+        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID)).willReturn(List.of(account));
 
-        Product product =
-                mock(Product.class);
-
-        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
-                .willReturn(List.of(account));
-
-        given(productQueryUseCase.getDetail(30L))
-                .willReturn(productDetail);
-
-        given(productDetail.getProduct())
-                .willReturn(product);
-
-        given(product.getProductName())
-                .willReturn("청년 희망 적금");
+        given(productQueryUseCase.findProductNames(Set.of(30L))).willReturn(Map.of(30L, "청년 희망 적금"));
 
         // when
-        AccountOverviewResult result =
-                service.getOverview(CUSTOMER_ID);
+        AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
 
         // then
-        assertThat(
-                result.items()
-                        .get(0)
-                        .accounts()
-                        .get(0)
-                        .accountName()
-        ).isEqualTo("청년 희망 적금");
+        AccountOverviewResult.AccountItem item =
+                result.items().get(0).accounts().get(0);
+
+        assertThat(item.accountName()).isEqualTo("청년 희망 적금");
+        assertThat(item.alias()).isNull();
+        assertThat(item.baseAccountName()).isEqualTo("청년 희망 적금");
     }
 
     @Test
@@ -295,265 +244,143 @@ class AccountOverviewQueryServiceTest {
     void distinguishesWithdrawalRegistrationFromTransferAvailability() {
         // given
         Account enabled = createAccount(
-                101L,
-                "088100000001",
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                100_000L,
-                AccountStatus.ACTIVE,
-                "계좌1",
-                true
-        );
+                101L, "088100000001", null, AccountType.DEMAND_DEPOSIT, 100_000L, AccountStatus.ACTIVE, "계좌1", true);
 
         Account notRegistered = createAccount(
-                102L,
-                "088100000002",
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                100_000L,
-                AccountStatus.ACTIVE,
-                "계좌2",
-                false
-        );
+                102L, "088100000002", null, AccountType.DEMAND_DEPOSIT, 100_000L, AccountStatus.ACTIVE, "계좌2", false);
 
         Account suspended = createAccount(
-                103L,
-                "088100000003",
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                100_000L,
-                AccountStatus.SUSPENDED,
-                "계좌3",
-                true
-        );
+                103L, "088100000003", null, AccountType.DEMAND_DEPOSIT, 100_000L, AccountStatus.SUSPENDED, "계좌3", true);
 
         Account timeDeposit = createAccount(
-                104L,
-                "088200000001",
-                20L,
-                AccountType.TIME_DEPOSIT,
-                100_000L,
-                AccountStatus.ACTIVE,
-                "예금",
-                false
-        );
+                104L, "088200000001", 20L, AccountType.TIME_DEPOSIT, 100_000L, AccountStatus.ACTIVE, "예금", false);
 
         given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
-                .willReturn(List.of(
-                        enabled,
-                        notRegistered,
-                        suspended,
-                        timeDeposit
-                ));
+                .willReturn(List.of(enabled, notRegistered, suspended, timeDeposit));
+
+        given(productQueryUseCase.findProductNames(Set.of(20L))).willReturn(Map.of(20L, "신한 정기예금"));
 
         // when
-        AccountOverviewResult result =
-                service.getOverview(CUSTOMER_ID);
+        AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
 
         // then
-        List<AccountOverviewResult.AccountItem> demandAccounts =
-                result.items().stream()
-                        .filter(group ->
-                                group.groupCode()
-                                        == AccountGroupCode.DEMAND_DEPOSIT)
-                        .findFirst()
-                        .orElseThrow()
-                        .accounts();
+        List<AccountOverviewResult.AccountItem> demandAccounts = result.items().stream()
+                .filter(group -> group.groupCode() == AccountGroupCode.DEMAND_DEPOSIT)
+                .findFirst()
+                .orElseThrow()
+                .accounts();
 
-        assertThat(demandAccounts.get(0).withdrawalRegistered())
-                .isTrue();
+        assertThat(demandAccounts.get(0).withdrawalRegistered()).isTrue();
 
-        assertThat(demandAccounts.get(0).transferEnabled())
-                .isTrue();
+        assertThat(demandAccounts.get(0).transferEnabled()).isTrue();
 
+        assertThat(demandAccounts.get(1).withdrawalRegistered()).isFalse();
 
-        assertThat(demandAccounts.get(1).withdrawalRegistered())
-                .isFalse();
+        assertThat(demandAccounts.get(1).transferEnabled()).isFalse();
 
-        assertThat(demandAccounts.get(1).transferEnabled())
-                .isFalse();
+        assertThat(demandAccounts.get(2).withdrawalRegistered()).isTrue();
 
+        assertThat(demandAccounts.get(2).transferEnabled()).isFalse();
 
-        assertThat(demandAccounts.get(2).withdrawalRegistered())
-                .isTrue();
+        List<AccountOverviewResult.AccountItem> savingsAccounts = result.items().stream()
+                .filter(group -> group.groupCode() == AccountGroupCode.DEPOSIT_SAVINGS)
+                .findFirst()
+                .orElseThrow()
+                .accounts();
 
-        assertThat(demandAccounts.get(2).transferEnabled())
-                .isFalse();
+        assertThat(savingsAccounts.get(0).withdrawalRegistered()).isFalse();
 
-        List<AccountOverviewResult.AccountItem> savingsAccounts =
-                result.items().stream()
-                        .filter(group ->
-                                group.groupCode()
-                                        == AccountGroupCode.DEPOSIT_SAVINGS)
-                        .findFirst()
-                        .orElseThrow()
-                        .accounts();
-
-        assertThat(savingsAccounts.get(0).withdrawalRegistered())
-                .isFalse();
-
-        assertThat(savingsAccounts.get(0).transferEnabled())
-                .isFalse();
+        assertThat(savingsAccounts.get(0).transferEnabled()).isFalse();
     }
 
     @Test
-    @DisplayName("동일 상품 계좌가 여러 개여도 상품명은 한 번만 조회한다")
-    void cachesProductNameWithinRequest() {
+    @DisplayName("동일 상품 계좌가 여러 개여도 상품 ID를 중복 없이 배치 조회한다")
+    void loadsDuplicateProductIdsOnce() {
         // given
         Account firstAccount = createAccount(
-                102L,
-                "088200000001",
-                20L,
-                AccountType.TIME_DEPOSIT,
-                1_000_000L,
-                AccountStatus.ACTIVE,
-                null,
-                false
-        );
+                102L, "088200000001", 20L, AccountType.TIME_DEPOSIT, 1_000_000L, AccountStatus.ACTIVE, null, false);
 
         Account secondAccount = createAccount(
-                103L,
-                "088200000002",
-                20L,
-                AccountType.TIME_DEPOSIT,
-                2_000_000L,
-                AccountStatus.ACTIVE,
-                null,
-                false
-        );
+                103L, "088200000002", 20L, AccountType.TIME_DEPOSIT, 2_000_000L, AccountStatus.ACTIVE, null, false);
 
-        ProductDetail productDetail =
-                mock(ProductDetail.class);
-
-        Product product =
-                mock(Product.class);
-
-        given(accountPersistencePort
-                .findAllByCustomerId(CUSTOMER_ID))
-                .willReturn(List.of(
-                        firstAccount,
-                        secondAccount
-                ));
-
-        given(productQueryUseCase.getDetail(20L))
-                .willReturn(productDetail);
-
-        given(productDetail.getProduct())
-                .willReturn(product);
-
-        given(product.getProductName())
-                .willReturn("신한 정기예금");
+        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID)).willReturn(List.of(firstAccount, secondAccount));
+        given(productQueryUseCase.findProductNames(Set.of(20L))).willReturn(Map.of(20L, "신한 정기예금"));
 
         // when
-        AccountOverviewResult result =
-                service.getOverview(CUSTOMER_ID);
+        AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
 
         // then
-        assertThat(
-                result.items()
-                        .get(0)
-                        .accounts()
-        )
-                .extracting(
-                        AccountOverviewResult
-                                .AccountItem::accountName
-                )
-                .containsExactly(
-                        "신한 정기예금",
-                        "신한 정기예금"
-                );
+        assertThat(result.items().get(0).accounts())
+                .extracting(AccountOverviewResult.AccountItem::accountName)
+                .containsExactly("신한 정기예금", "신한 정기예금");
 
-        verify(productQueryUseCase, times(1))
-                .getDetail(20L);
+        verify(productQueryUseCase, times(1)).findProductNames(Set.of(20L));
+    }
+
+    @Test
+    @DisplayName("예적금 상품명이 조회되지 않으면 PRODUCT_NOT_FOUND를 던진다")
+    void throwsProductNotFoundWhenProductNameIsMissing() {
+        // given
+        Account account = createAccount(
+                102L, "088200000001", 20L, AccountType.TIME_DEPOSIT, 1_000_000L, AccountStatus.ACTIVE, null, false);
+
+        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID)).willReturn(List.of(account));
+
+        given(productQueryUseCase.findProductNames(Set.of(20L))).willReturn(Map.of());
+
+        // when & then
+        assertThatThrownBy(() -> service.getOverview(CUSTOMER_ID))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ProductErrorCode.PRODUCT_NOT_FOUND));
     }
 
     @Test
     @DisplayName("해지 계좌는 전체 계좌 조회와 자산 합계에서 제외하고 정지 계좌는 포함한다")
     void excludeClosedAccountFromOverview() {
         // given
-        Account activeAccount =
-                createAccountWithStatus(
-                        101L,
-                        "088100000101",
-                        CUSTOMER_ID,
-                        10_000L,
-                        AccountStatus.ACTIVE,
-                        LocalDateTime.of(
-                                2026, 8, 1, 10, 0
-                        ),
-                        null
-                );
+        Account activeAccount = createAccountWithStatus(
+                101L,
+                "088100000101",
+                CUSTOMER_ID,
+                10_000L,
+                AccountStatus.ACTIVE,
+                LocalDateTime.of(2026, 8, 1, 10, 0),
+                null);
 
-        Account suspendedAccount =
-                createAccountWithStatus(
-                        102L,
-                        "088100000102",
-                        CUSTOMER_ID,
-                        20_000L,
-                        AccountStatus.SUSPENDED,
-                        LocalDateTime.of(
-                                2026, 8, 2, 10, 0
-                        ),
-                        null
-                );
+        Account suspendedAccount = createAccountWithStatus(
+                102L,
+                "088100000102",
+                CUSTOMER_ID,
+                20_000L,
+                AccountStatus.SUSPENDED,
+                LocalDateTime.of(2026, 8, 2, 10, 0),
+                null);
 
-        Account closedAccount =
-                createAccountWithStatus(
-                        103L,
-                        "088100000103",
-                        CUSTOMER_ID,
-                        30_000L,
-                        AccountStatus.CLOSED,
-                        LocalDateTime.of(
-                                2026, 8, 3, 10, 0
-                        ),
-                        LocalDateTime.of(
-                                2026, 8, 10, 10, 0
-                        )
-                );
+        Account closedAccount = createAccountWithStatus(
+                103L,
+                "088100000103",
+                CUSTOMER_ID,
+                30_000L,
+                AccountStatus.CLOSED,
+                LocalDateTime.of(2026, 8, 3, 10, 0),
+                LocalDateTime.of(2026, 8, 10, 10, 0));
 
-        given(
-                accountPersistencePort
-                        .findAllByCustomerId(
-                                CUSTOMER_ID
-                        )
-        ).willReturn(
-                List.of(
-                        activeAccount,
-                        suspendedAccount,
-                        closedAccount
-                )
-        );
+        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
+                .willReturn(List.of(activeAccount, suspendedAccount, closedAccount));
 
         // when
-        AccountOverviewResult result =
-                service.getOverview(
-                                CUSTOMER_ID
-                        );
+        AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
 
         // then
-        List<Long> accountIds =
-                result.items()
-                        .stream()
-                        .flatMap(group ->
-                                group.accounts()
-                                        .stream()
-                        )
-                        .map(account ->
-                                account.accountId()
-                        )
-                        .toList();
+        List<Long> accountIds = result.items().stream()
+                .flatMap(group -> group.accounts().stream())
+                .map(account -> account.accountId())
+                .toList();
 
-        assertThat(accountIds)
-                .containsExactlyInAnyOrder(
-                        101L,
-                        102L
-                );
+        assertThat(accountIds).containsExactlyInAnyOrder(101L, 102L);
 
-        assertThat(accountIds)
-                .doesNotContain(
-                        103L
-                );
+        assertThat(accountIds).doesNotContain(103L);
 
         /*
          * ACTIVE 10,000
@@ -562,25 +389,87 @@ class AccountOverviewQueryServiceTest {
          *
          * CLOSED 30,000은 제외한다.
          */
-        assertThat(
-                result.totalAssets()
-        ).isEqualTo(
-                30_000L
-        );
+        assertThat(result.totalAssets()).isEqualTo(30_000L);
 
-        long groupTotalBalance =
-                result.items()
-                        .stream()
-                        .mapToLong(group ->
-                                group.groupTotalBalance()
-                        )
-                        .sum();
+        long groupTotalBalance = result.items().stream()
+                .mapToLong(group -> group.groupTotalBalance())
+                .sum();
 
-        assertThat(
-                groupTotalBalance
-        ).isEqualTo(
-                30_000L
-        );
+        assertThat(groupTotalBalance).isEqualTo(30_000L);
+    }
+
+    @Test
+    @DisplayName("서로 다른 계좌 그룹에도 현재 전역 표시순서를 반환한다")
+    void returnsGlobalDisplayOrderAcrossGroups() {
+        // given
+        Account demandDeposit = createAccountWithDisplayOrder(
+                101L, "088100000101", null, AccountType.DEMAND_DEPOSIT, LocalDateTime.of(2026, 8, 1, 10, 0), 2);
+
+        Account timeDeposit = createAccountWithDisplayOrder(
+                201L, "088200000201", 20L, AccountType.TIME_DEPOSIT, LocalDateTime.of(2026, 8, 2, 10, 0), 1);
+
+        Account savings = createAccountWithDisplayOrder(
+                202L, "088300000202", 30L, AccountType.INSTALLMENT_SAVINGS, LocalDateTime.of(2026, 8, 3, 10, 0), 3);
+
+        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
+                .willReturn(List.of(demandDeposit, timeDeposit, savings));
+
+        given(productQueryUseCase.findProductNames(Set.of(20L, 30L)))
+                .willReturn(Map.of(
+                        20L, "신한 정기예금",
+                        30L, "신한 적금"));
+
+        // when
+        AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
+
+        // then
+        List<AccountOverviewResult.AccountItem> accounts = result.items().stream()
+                .flatMap(group -> group.accounts().stream())
+                .toList();
+
+        assertThat(accounts)
+                .extracting(AccountOverviewResult.AccountItem::displayOrder)
+                .containsExactlyInAnyOrder(1, 2, 3);
+
+        assertThat(accounts.stream()
+                        .sorted(Comparator.comparingInt(AccountOverviewResult.AccountItem::displayOrder))
+                        .map(AccountOverviewResult.AccountItem::accountId)
+                        .toList())
+                .containsExactly(201L, 101L, 202L);
+    }
+
+    @Test
+    @DisplayName("사용자 지정 순서가 없으면 개설일시와 계좌 ID 기준으로 전역 순서를 계산한다")
+    void returnsDefaultGlobalDisplayOrderWhenCustomOrderDoesNotExist() {
+        // given
+        Account laterDemandDeposit = createAccountWithDisplayOrder(
+                101L, "088100000101", null, AccountType.DEMAND_DEPOSIT, LocalDateTime.of(2026, 8, 1, 15, 0), null);
+
+        Account earlierTimeDeposit = createAccountWithDisplayOrder(
+                201L, "088200000201", 20L, AccountType.TIME_DEPOSIT, LocalDateTime.of(2026, 8, 1, 9, 0), null);
+
+        Account savings = createAccountWithDisplayOrder(
+                202L, "088300000202", 30L, AccountType.INSTALLMENT_SAVINGS, LocalDateTime.of(2026, 8, 2, 10, 0), null);
+
+        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID))
+                .willReturn(List.of(laterDemandDeposit, earlierTimeDeposit, savings));
+
+        given(productQueryUseCase.findProductNames(Set.of(20L, 30L)))
+                .willReturn(Map.of(
+                        20L, "신한 정기예금",
+                        30L, "신한 적금"));
+
+        // when
+        AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
+
+        // then
+        List<Long> accountIdsByDisplayOrder = result.items().stream()
+                .flatMap(group -> group.accounts().stream())
+                .sorted(Comparator.comparingInt(AccountOverviewResult.AccountItem::displayOrder))
+                .map(AccountOverviewResult.AccountItem::accountId)
+                .toList();
+
+        assertThat(accountIdsByDisplayOrder).containsExactly(201L, 101L, 202L);
     }
 
     private Account createAccount(
@@ -591,27 +480,14 @@ class AccountOverviewQueryServiceTest {
             long balance,
             AccountStatus status,
             String alias,
-            boolean withdrawalRegistered
-    ) {
-        LocalDateTime openedDate =
-                LocalDateTime.of(2026, 1, 1, 10, 0);
+            boolean withdrawalRegistered) {
+        LocalDateTime openedDate = LocalDateTime.of(2026, 1, 1, 10, 0);
 
-        LocalDate maturityDate =
-                accountType == AccountType.DEMAND_DEPOSIT
-                        ? null
-                        : LocalDate.of(2027, 1, 1);
+        LocalDate maturityDate = accountType == AccountType.DEMAND_DEPOSIT ? null : LocalDate.of(2027, 1, 1);
 
-        LocalDateTime closedDate =
-                status == AccountStatus.CLOSED
-                        ? LocalDateTime.of(
-                        2026, 8, 12, 10, 0
-                )
-                        : null;
+        LocalDateTime closedDate = status == AccountStatus.CLOSED ? LocalDateTime.of(2026, 8, 12, 10, 0) : null;
 
-        LocalDateTime withdrawalRegisteredAt =
-                withdrawalRegistered
-                        ? LocalDateTime.of(2026, 1, 2, 10, 0)
-                        : null;
+        LocalDateTime withdrawalRegisteredAt = withdrawalRegistered ? LocalDateTime.of(2026, 1, 2, 10, 0) : null;
 
         return Account.reconstitute(
                 accountId,
@@ -634,8 +510,7 @@ class AccountOverviewQueryServiceTest {
                 LocalDateTime.of(2026, 8, 10, 15, 0),
                 0L,
                 openedDate,
-                openedDate
-        );
+                openedDate);
     }
 
     private Account createAccountWithStatus(
@@ -645,8 +520,7 @@ class AccountOverviewQueryServiceTest {
             Long balance,
             AccountStatus status,
             LocalDateTime openedDate,
-            LocalDateTime closedDate
-    ) {
+            LocalDateTime closedDate) {
         return Account.reconstitute(
                 accountId,
                 accountNumber,
@@ -668,8 +542,42 @@ class AccountOverviewQueryServiceTest {
                 null,
                 0L,
                 openedDate,
-                openedDate
-        );
+                openedDate);
     }
 
+    private Account createAccountWithDisplayOrder(
+            Long accountId,
+            String accountNumber,
+            Long productId,
+            AccountType accountType,
+            LocalDateTime openedDate,
+            Integer displayOrder) {
+
+        LocalDate maturityDate = accountType == AccountType.DEMAND_DEPOSIT
+                ? null
+                : openedDate.toLocalDate().plusYears(1);
+
+        return Account.reconstitute(
+                accountId,
+                accountNumber,
+                CUSTOMER_ID,
+                productId,
+                accountType,
+                100_000L,
+                AccountStatus.ACTIVE,
+                PASSWORD_HASH,
+                0,
+                false,
+                null,
+                displayOrder,
+                false,
+                null,
+                openedDate,
+                maturityDate,
+                null,
+                null,
+                0L,
+                openedDate,
+                openedDate);
+    }
 }

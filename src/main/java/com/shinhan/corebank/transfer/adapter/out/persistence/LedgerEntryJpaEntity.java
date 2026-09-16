@@ -1,11 +1,9 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import java.time.LocalDateTime;
-
 import com.shinhan.corebank.transfer.domain.LedgerDirection;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
-
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.*;
 
 @Entity
@@ -48,10 +46,12 @@ public class LedgerEntryJpaEntity {
     private LedgerDirection direction;
 
     @Column(name = "amount", nullable = false)
-    private long amount;
+    @NonNull
+    private Long amount;
 
     @Column(name = "balance_after", nullable = false)
-    private long balanceAfter;
+    @NonNull
+    private Long balanceAfter;
 
     @Column(name = "transaction_type", length = 32, nullable = false)
     private String transactionType;

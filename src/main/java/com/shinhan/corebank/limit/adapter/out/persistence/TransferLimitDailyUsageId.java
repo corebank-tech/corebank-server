@@ -10,8 +10,7 @@ public class TransferLimitDailyUsageId implements Serializable {
     private Long customerId;
     private LocalDate usageDate;
 
-    protected TransferLimitDailyUsageId() {
-    }
+    protected TransferLimitDailyUsageId() {}
 
     public TransferLimitDailyUsageId(Long customerId, LocalDate usageDate) {
         this.customerId = customerId;

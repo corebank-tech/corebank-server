@@ -2,10 +2,9 @@ package com.shinhan.corebank.product.domain;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import java.math.BigDecimal;
 import lombok.Builder;
 import lombok.Getter;
-
-import java.math.BigDecimal;
 
 @Getter
 public class ProductRateTier {

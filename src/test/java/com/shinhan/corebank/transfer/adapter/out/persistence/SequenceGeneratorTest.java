@@ -1,5 +1,12 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.transfer.domain.TransferChannel;
+import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -15,19 +22,10 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-
-import com.shinhan.corebank.IntegrationTestSupport;
-import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.transfer.domain.TransferChannel;
-import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("거래번호 채번기(SequenceGenerator) 통합 테스트")
 class SequenceGeneratorTest extends IntegrationTestSupport {
@@ -91,14 +89,12 @@ class SequenceGeneratorTest extends IntegrationTestSupport {
     @DisplayName("일련번호가 10자리 상한(9999999999)을 초과하면 BusinessException(TRF9002)을 던진다")
     void nextTransactionNumber_throwsBusinessException_whenSequenceExceedsTenDigits() {
         // given: 이미 상한에 도달한 채번 행
-        repository.saveAndFlush(
-                TransactionSequenceJpaEntity.builder()
-                        .seqDate(SEQ_DATE)
-                        .channel(CHANNEL.name())
-                        .lastSeq(9_999_999_999L)
-                        .updatedAt(LocalDateTime.now(KST))
-                        .build()
-        );
+        repository.saveAndFlush(TransactionSequenceJpaEntity.builder()
+                .seqDate(SEQ_DATE)
+                .channel(CHANNEL.name())
+                .lastSeq(9_999_999_999L)
+                .updatedAt(LocalDateTime.now(KST))
+                .build());
 
         // when & then
         assertThatThrownBy(() -> sequenceGenerator.nextTransactionNumber(SEQ_DATE, CHANNEL))
@@ -155,17 +151,14 @@ class SequenceGeneratorTest extends IntegrationTestSupport {
             }
 
             // then
-            assertThat(transactionNumbers)
-                    .hasSize(requestCount)
-                    .doesNotHaveDuplicates();
+            assertThat(transactionNumbers).hasSize(requestCount).doesNotHaveDuplicates();
 
             String datePart = SEQ_DATE.format(DateTimeFormatter.BASIC_ISO_DATE);
             List<String> expectedNumbers = IntStream.rangeClosed(1, requestCount)
                     .mapToObj(seq -> datePart + "WB" + String.format("%010d", seq))
                     .collect(Collectors.toList());
 
-            assertThat(transactionNumbers)
-                    .containsExactlyInAnyOrderElementsOf(expectedNumbers);
+            assertThat(transactionNumbers).containsExactlyInAnyOrderElementsOf(expectedNumbers);
         } finally {
             executor.shutdownNow();
             assertThat(executor.awaitTermination(30, TimeUnit.SECONDS)).isTrue();

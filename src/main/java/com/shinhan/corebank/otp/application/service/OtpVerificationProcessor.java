@@ -12,12 +12,11 @@ import com.shinhan.corebank.otp.domain.exception.OtpErrorCode;
 import com.shinhan.corebank.otp.domain.model.OtpAttemptResult;
 import com.shinhan.corebank.otp.domain.model.OtpAuthTokenPayload;
 import com.shinhan.corebank.otp.domain.model.OtpVerificationRequest;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.time.LocalDateTime;
 
 // OTP 행 잠금부터 실패 횟수 또는 성공 토큰 저장까지 하나의 처리 트랜잭션으로 수행한다.
 @Service
@@ -33,7 +32,8 @@ public class OtpVerificationProcessor {
 
     @Transactional
     public OtpVerificationProcessResult process(VerifyOtpCommand command) {
-        OtpVerificationRequest request = requestPort.findByIdForUpdate(command.otpRequestId())
+        OtpVerificationRequest request = requestPort
+                .findByIdForUpdate(command.otpRequestId())
                 .orElseThrow(() -> new BusinessException(OtpErrorCode.OTP_REQUEST_NOT_FOUND));
 
         if (!request.belongsTo(command.customerId())) {
@@ -63,12 +63,8 @@ public class OtpVerificationProcessor {
         // Redis 저장 실패 시 검증 완료 DB 변경도 함께 롤백되도록 처리 트랜잭션 안에서 저장한다.
         authTokenStorePort.save(
                 otpAuthToken,
-                new OtpAuthTokenPayload(
-                        request.verificationRequestId(),
-                        request.customerId()
-                ),
-                properties.authTokenTtl()
-        );
+                new OtpAuthTokenPayload(request.verificationRequestId(), request.customerId()),
+                properties.authTokenTtl());
         return OtpVerificationProcessResult.success(otpAuthToken);
     }
 }

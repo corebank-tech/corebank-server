@@ -1,8 +1,7 @@
 package com.shinhan.corebank.transfer.application.service;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.List;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.transfer.application.port.in.LedgerHistoryDirection;
 import com.shinhan.corebank.transfer.application.port.in.LedgerHistoryItem;
@@ -14,15 +13,14 @@ import com.shinhan.corebank.transfer.application.port.out.LedgerHistoryQueryPort
 import com.shinhan.corebank.transfer.domain.LedgerDirection;
 import com.shinhan.corebank.transfer.domain.LedgerEntry;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
-
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class LedgerHistoryQueryServiceTest {
@@ -61,8 +59,7 @@ class LedgerHistoryQueryServiceTest {
 
         when(ledgerHistoryQueryPort.findEntries(query)).thenReturn(List.of(entry));
         when(ledgerHistoryQueryPort.countEntries(query)).thenReturn(25L);
-        when(ledgerHistoryQueryPort.summarize(query))
-                .thenReturn(new LedgerHistoryAggregate(1L, 20_000L, 0L, 0L));
+        when(ledgerHistoryQueryPort.summarize(query)).thenReturn(new LedgerHistoryAggregate(1L, 20_000L, 0L, 0L));
 
         LedgerHistoryResult result = service.query(query);
 
@@ -170,8 +167,7 @@ class LedgerHistoryQueryServiceTest {
 
         when(ledgerHistoryQueryPort.findEntries(query)).thenReturn(List.of(entry));
         when(ledgerHistoryQueryPort.countEntries(query)).thenReturn(1L);
-        when(ledgerHistoryQueryPort.summarize(query))
-                .thenReturn(new LedgerHistoryAggregate(1L, 20_000L, 0L, 0L));
+        when(ledgerHistoryQueryPort.summarize(query)).thenReturn(new LedgerHistoryAggregate(1L, 20_000L, 0L, 0L));
 
         LedgerHistoryResult result = service.query(query);
 

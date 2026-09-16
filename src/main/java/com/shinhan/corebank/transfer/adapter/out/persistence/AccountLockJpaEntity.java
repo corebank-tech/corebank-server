@@ -1,18 +1,18 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import java.time.LocalDateTime;
-import java.util.Objects;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import java.time.LocalDateTime;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.NonNull;
 
 /**
  * account 테이블을 겨냥한 transfer 도메인 전용 경량 매핑.
@@ -50,7 +50,8 @@ public class AccountLockJpaEntity {
     private Long customerId;
 
     @Column(name = "balance", nullable = false)
-    private long balance;
+    @NonNull
+    private Long balance;
 
     /** 상태는 조회 전용이다. 이 어댑터는 status를 변경하지 않으므로 UPDATE SET절에서 제외한다. */
     @Column(name = "status", nullable = false, length = 12, insertable = false, updatable = false)

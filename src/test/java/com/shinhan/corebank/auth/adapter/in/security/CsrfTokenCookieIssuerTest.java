@@ -1,8 +1,8 @@
 package com.shinhan.corebank.auth.adapter.in.security;
 
-import static org.mockito.BDDMockito.given;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -36,30 +36,17 @@ class CsrfTokenCookieIssuerTest {
 
     @Test
     void removesExistingTokenBeforeIssuingNewToken() {
-        given(csrfTokenRepository.generateToken(request))
-                .willReturn(csrfToken);
+        given(csrfTokenRepository.generateToken(request)).willReturn(csrfToken);
 
-        CsrfTokenCookieIssuer issuer =
-                new CsrfTokenCookieIssuer(
-                        csrfTokenRepository,
-                        csrfTokenRequestHandler
-                );
+        CsrfTokenCookieIssuer issuer = new CsrfTokenCookieIssuer(csrfTokenRepository, csrfTokenRequestHandler);
 
         issuer.rotate(request, response);
 
-        InOrder inOrder = inOrder(
-                csrfTokenRepository,
-                csrfTokenRequestHandler
-        );
-        inOrder.verify(csrfTokenRepository)
-                .saveToken(null, request, response);
+        InOrder inOrder = inOrder(csrfTokenRepository, csrfTokenRequestHandler);
+        inOrder.verify(csrfTokenRepository).saveToken(null, request, response);
         inOrder.verify(csrfTokenRepository).generateToken(request);
-        inOrder.verify(csrfTokenRepository)
-                .saveToken(csrfToken, request, response);
-        inOrder.verify(csrfTokenRequestHandler).handle(
-                eq(request),
-                eq(response),
-                argThat(tokenSupplier -> tokenSupplier.get() == csrfToken)
-        );
+        inOrder.verify(csrfTokenRepository).saveToken(csrfToken, request, response);
+        inOrder.verify(csrfTokenRequestHandler)
+                .handle(eq(request), eq(response), argThat(tokenSupplier -> tokenSupplier.get() == csrfToken));
     }
 }

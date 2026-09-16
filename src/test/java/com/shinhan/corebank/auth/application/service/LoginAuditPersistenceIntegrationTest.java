@@ -1,5 +1,8 @@
 package com.shinhan.corebank.auth.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.application.port.in.LoginCommand;
 import com.shinhan.corebank.auth.application.port.in.LoginResult;
@@ -14,12 +17,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowableOfType;
-
 @DisplayName("로그인 감사 로그 MySQL 통합 테스트")
-class LoginAuditPersistenceIntegrationTest
-        extends IntegrationTestSupport {
+class LoginAuditPersistenceIntegrationTest extends IntegrationTestSupport {
 
     private static final String USER_ID = "login-audit-user";
     private static final String EMAIL = "login-audit@example.com";
@@ -55,13 +54,7 @@ class LoginAuditPersistenceIntegrationTest
     @Test
     @DisplayName("로그인 성공은 민감정보 없이 LOGIN 성공 감사로 저장된다")
     void persistsSuccessfulLoginAudit() {
-        LoginResult result = loginUseCase.login(
-                new LoginCommand(
-                        USER_ID,
-                        RAW_PASSWORD,
-                        REQUEST_IP
-                )
-        );
+        LoginResult result = loginUseCase.login(new LoginCommand(USER_ID, RAW_PASSWORD, REQUEST_IP));
 
         assertThat(result.customerId()).isEqualTo(customerId);
 
@@ -78,18 +71,10 @@ class LoginAuditPersistenceIntegrationTest
     @DisplayName("로그인 실패는 민감정보 없이 LOGIN 실패 감사로 저장된다")
     void persistsFailedLoginAudit() {
         LoginFailedException exception = catchThrowableOfType(
-                () -> loginUseCase.login(
-                        new LoginCommand(
-                                USER_ID,
-                                WRONG_PASSWORD,
-                                REQUEST_IP
-                        )
-                ),
-                LoginFailedException.class
-        );
+                () -> loginUseCase.login(new LoginCommand(USER_ID, WRONG_PASSWORD, REQUEST_IP)),
+                LoginFailedException.class);
 
-        assertThat(exception.getErrorCode())
-                .isEqualTo(AuthErrorCode.LOGIN_FAILED);
+        assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);
 
         PersistedAudit audit = findLatestAudit();
 
@@ -100,7 +85,8 @@ class LoginAuditPersistenceIntegrationTest
     }
 
     private Long insertCustomer() {
-        jdbcTemplate.update("""
+        jdbcTemplate.update(
+                """
                 INSERT INTO customer (
                     user_id,
                     password_hash,
@@ -121,14 +107,9 @@ class LoginAuditPersistenceIntegrationTest
                 "감사테스트",
                 "1990-01-01",
                 EMAIL,
-                "01012345678"
-        );
+                "01012345678");
 
-        return jdbcTemplate.queryForObject(
-                "SELECT customer_id FROM customer WHERE user_id = ?",
-                Long.class,
-                USER_ID
-        );
+        return jdbcTemplate.queryForObject("SELECT customer_id FROM customer WHERE user_id = ?", Long.class, USER_ID);
     }
 
     private PersistedAudit findLatestAudit() {
@@ -148,10 +129,8 @@ class LoginAuditPersistenceIntegrationTest
                         resultSet.getString("event_type"),
                         resultSet.getString("result"),
                         resultSet.getString("reason"),
-                        resultSet.getString("detail")
-                ),
-                customerId
-        );
+                        resultSet.getString("detail")),
+                customerId);
     }
 
     private void assertSensitiveDataNotRecorded(String detail) {
@@ -176,20 +155,10 @@ class LoginAuditPersistenceIntegrationTest
                     WHERE user_id = ?
                 )
                 """,
-                USER_ID
-        );
-        jdbcTemplate.update(
-                "DELETE FROM customer WHERE user_id = ?",
-                USER_ID
-        );
+                USER_ID);
+        jdbcTemplate.update("DELETE FROM customer WHERE user_id = ?", USER_ID);
     }
 
     // 감사 로그의 보안 검증에 필요한 저장 결과
-    private record PersistedAudit(
-            String eventType,
-            String result,
-            String reason,
-            String detail
-    ) {
-    }
+    private record PersistedAudit(String eventType, String result, String reason, String detail) {}
 }

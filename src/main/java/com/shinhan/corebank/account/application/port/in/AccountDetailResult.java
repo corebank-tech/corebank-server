@@ -1,7 +1,6 @@
 package com.shinhan.corebank.account.application.port.in;
 
 import com.shinhan.corebank.account.domain.AccountStatus;
-
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
@@ -16,6 +15,4 @@ public record AccountDetailResult(
         LocalDate openedDate,
         AccountStatus status,
         int passwordFailureCount,
-        boolean passwordLocked
-) {
-}
+        boolean passwordLocked) {}

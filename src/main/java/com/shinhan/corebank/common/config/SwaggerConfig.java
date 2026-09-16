@@ -19,7 +19,6 @@ public class SwaggerConfig {
                         .version("v1.0.0"))
                 .servers(List.of(
                         new Server().url("https://api.corebank.cloud/api/v1").description("배포 서버"),
-                        new Server().url("http://localhost:8080/api/v1").description("로컬 서버")
-                ));
+                        new Server().url("http://localhost:8080/api/v1").description("로컬 서버")));
     }
 }

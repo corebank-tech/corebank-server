@@ -7,31 +7,26 @@ import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
+import com.shinhan.corebank.product.domain.exception.ProductErrorCode;
+import java.time.Clock;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.util.*;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Clock;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
-public class AccountOverviewQueryService
-        implements AccountOverviewQueryUseCase {
+public class AccountOverviewQueryService implements AccountOverviewQueryUseCase {
 
-    private static final String DEFAULT_DEMAND_DEPOSIT_NAME =
-            "입출금통장";
+    private static final String DEFAULT_DEMAND_DEPOSIT_NAME = "입출금통장";
 
-    private static final ZoneId KOREA_ZONE =
-            ZoneId.of("Asia/Seoul");
+    private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
 
     private final AccountPersistencePort accountPersistencePort;
     private final ProductQueryUseCase productQueryUseCase;
@@ -39,117 +34,97 @@ public class AccountOverviewQueryService
 
     @Override
     public AccountOverviewResult getOverview(Long customerId) {
-        List<Account> accounts =
-                accountPersistencePort.findAllByCustomerId(
-                                customerId
-                        )
-                        .stream()
-                        .filter(account ->
-                                account.getStatus()
-                                        != AccountStatus.CLOSED
-                        )
-                        .toList();
+        List<Account> accounts = accountPersistencePort.findAllByCustomerId(customerId).stream()
+                .filter(account -> account.getStatus() != AccountStatus.CLOSED)
+                .toList();
 
-        OffsetDateTime asOf =
-                OffsetDateTime.ofInstant(
-                        clock.instant(),
-                        KOREA_ZONE
-                );
+        OffsetDateTime asOf = OffsetDateTime.ofInstant(clock.instant(), KOREA_ZONE);
 
         if (accounts.isEmpty()) {
-            return new AccountOverviewResult(
-                    asOf,
-                    0L,
-                    List.of()
-            );
+            return new AccountOverviewResult(asOf, 0L, List.of());
         }
 
-        long totalAssets =
-                accounts.stream()
-                        .mapToLong(Account::getBalance)
-                        .sum();
+        long totalAssets = accounts.stream().mapToLong(Account::getBalance).sum();
 
-        Map<Long, String> productNameCache =
-                new HashMap<>();
+        Map<Long, String> productNames = loadProductNames(accounts);
 
-        List<AccountOverviewResult.Group> items =
-                Arrays.stream(AccountGroupCode.values())
-                        .map(groupCode ->
-                                createGroup(
-                                        groupCode,
-                                        accounts,
-                                        productNameCache
-                                )
-                        )
-                        .filter(group ->
-                                !group.accounts().isEmpty()
-                        )
-                        .toList();
+        Map<Long, Integer> effectiveDisplayOrders = buildEffectiveDisplayOrders(accounts);
 
-        return new AccountOverviewResult(
-                asOf,
-                totalAssets,
-                items
-        );
+        List<AccountOverviewResult.Group> items = Arrays.stream(AccountGroupCode.values())
+                .map(groupCode -> createGroup(groupCode, accounts, productNames, effectiveDisplayOrders))
+                .filter(group -> !group.accounts().isEmpty())
+                .toList();
+
+        return new AccountOverviewResult(asOf, totalAssets, items);
+    }
+
+    private Map<Long, String> loadProductNames(List<Account> accounts) {
+        Set<Long> productIds = accounts.stream()
+                .filter(account -> account.getAccountType() != AccountType.DEMAND_DEPOSIT)
+                .map(Account::getProductId)
+                .collect(Collectors.toSet());
+
+        if (productIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return productQueryUseCase.findProductNames(productIds);
+    }
+
+    private Map<Long, Integer> buildEffectiveDisplayOrders(List<Account> accounts) {
+
+        List<Account> orderedAccounts =
+                accounts.stream().sorted(accountDisplayOrderComparator()).toList();
+
+        Map<Long, Integer> effectiveDisplayOrders = new HashMap<>();
+
+        for (int index = 0; index < orderedAccounts.size(); index++) {
+            effectiveDisplayOrders.put(orderedAccounts.get(index).getAccountId(), index + 1);
+        }
+
+        return effectiveDisplayOrders;
     }
 
     private AccountOverviewResult.Group createGroup(
             AccountGroupCode groupCode,
             List<Account> accounts,
-            Map<Long, String> productNameCache
-    ) {
-        List<AccountOverviewResult.AccountItem> accountItems =
-                accounts.stream()
-                        .filter(account ->
-                                resolveGroupCode(
-                                        account.getAccountType()
-                                ) == groupCode
-                        )
-                        .sorted(accountDisplayOrderComparator())
-                        .map(account ->
-                                toAccountItem(
-                                        account,
-                                        productNameCache
-                                )
-                        )
-                        .toList();
+            Map<Long, String> productNames,
+            Map<Long, Integer> effectiveDisplayOrders) {
+        List<AccountOverviewResult.AccountItem> accountItems = accounts.stream()
+                .filter(account -> resolveGroupCode(account.getAccountType()) == groupCode)
+                .sorted(accountDisplayOrderComparator())
+                .map(account ->
+                        toAccountItem(account, productNames, effectiveDisplayOrders.get(account.getAccountId())))
+                .toList();
 
-        long groupTotalBalance =
-                accountItems.stream()
-                        .mapToLong(
-                                AccountOverviewResult.AccountItem::balance
-                        )
-                        .sum();
+        long groupTotalBalance = accountItems.stream()
+                .mapToLong(AccountOverviewResult.AccountItem::balance)
+                .sum();
 
-        return new AccountOverviewResult.Group(
-                groupCode,
-                groupCode.getGroupName(),
-                groupTotalBalance,
-                accountItems
-        );
+        return new AccountOverviewResult.Group(groupCode, groupCode.getGroupName(), groupTotalBalance, accountItems);
     }
 
-    private AccountGroupCode resolveGroupCode(
-            AccountType accountType
-    ) {
+    private AccountGroupCode resolveGroupCode(AccountType accountType) {
         return switch (accountType) {
             case DEMAND_DEPOSIT -> AccountGroupCode.DEMAND_DEPOSIT;
 
-            case TIME_DEPOSIT,
-                 INSTALLMENT_SAVINGS -> AccountGroupCode.DEPOSIT_SAVINGS;
+            case TIME_DEPOSIT, INSTALLMENT_SAVINGS -> AccountGroupCode.DEPOSIT_SAVINGS;
         };
     }
 
     private AccountOverviewResult.AccountItem toAccountItem(
-            Account account,
-            Map<Long, String> productNameCache
-    ) {
+            Account account, Map<Long, String> productNames, int displayOrder) {
+
+        String alias = resolveAlias(account);
+        String baseAccountName = resolveBaseAccountName(account, productNames);
+        String accountName = alias != null ? alias : baseAccountName;
+
         return new AccountOverviewResult.AccountItem(
                 account.getAccountId(),
-                resolveAccountName(
-                        account,
-                        productNameCache
-                ),
+                displayOrder,
+                accountName,
+                alias,
+                baseAccountName,
                 account.getAccountNumber(),
                 account.getAccountType(),
                 account.getBalance(),
@@ -158,53 +133,40 @@ public class AccountOverviewQueryService
                 account.getLastTransactionAt(),
                 account.getMaturityDate(),
                 account.isWithdrawalRegistered(),
-                isTransferEnabled(account)
-        );
+                isTransferEnabled(account));
     }
 
-    private String resolveAccountName(
-            Account account,
-            Map<Long, String> productNameCache
-    ) {
-        if (account.getAlias() != null
-                && !account.getAlias().isBlank()) {
-            return account.getAlias();
+    private String resolveAlias(Account account) {
+        if (account.getAlias() == null || account.getAlias().isBlank()) {
+            return null;
         }
 
-        if (account.getAccountType()
-                == AccountType.DEMAND_DEPOSIT) {
+        return account.getAlias();
+    }
+
+    private String resolveBaseAccountName(Account account, Map<Long, String> productNames) {
+
+        if (account.getAccountType() == AccountType.DEMAND_DEPOSIT) {
             return DEFAULT_DEMAND_DEPOSIT_NAME;
         }
 
-        return productNameCache.computeIfAbsent(
-                account.getProductId(),
-                this::getProductName
-        );
-    }
+        String productName = productNames.get(account.getProductId());
 
-    private String getProductName(Long productId) {
-        return productQueryUseCase
-                .getDetail(productId)
-                .getProduct()
-                .getProductName();
+        if (productName == null) {
+            throw new BusinessException(ProductErrorCode.PRODUCT_NOT_FOUND);
+        }
+
+        return productName;
     }
 
     private boolean isTransferEnabled(Account account) {
-        return account.getAccountType()
-                == AccountType.DEMAND_DEPOSIT
-                && account.getStatus()
-                == AccountStatus.ACTIVE
+        return account.getAccountType() == AccountType.DEMAND_DEPOSIT
+                && account.getStatus() == AccountStatus.ACTIVE
                 && account.isWithdrawalRegistered();
     }
 
     private Comparator<Account> accountDisplayOrderComparator() {
-        return Comparator
-                .comparing(
-                        Account::getDisplayOrder,
-                        Comparator.nullsLast(
-                                Integer::compareTo
-                        )
-                )
+        return Comparator.comparing(Account::getDisplayOrder, Comparator.nullsLast(Integer::compareTo))
                 .thenComparing(Account::getOpenedDate)
                 .thenComparing(Account::getAccountId);
     }

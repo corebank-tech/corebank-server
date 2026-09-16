@@ -2,13 +2,12 @@ package com.shinhan.corebank.product.adapter.out.redis;
 
 import com.shinhan.corebank.product.application.port.out.TermsView;
 import com.shinhan.corebank.product.application.port.out.TermsViewHistoryPort;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Component;
 
 @Component
 public class TermsViewHistoryRedisAdapter implements TermsViewHistoryPort {

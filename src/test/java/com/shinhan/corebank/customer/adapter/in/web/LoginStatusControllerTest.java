@@ -42,8 +42,7 @@ class LoginStatusControllerTest extends IntegrationTestSupport {
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(get("/dashboard/login-status")
-                        .with(authentication(authenticationOf(customerId))))
+        mockMvc.perform(get("/dashboard/login-status").with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data.previousLoginAt").value("2026-03-05T10:00:00"))
@@ -56,8 +55,7 @@ class LoginStatusControllerTest extends IntegrationTestSupport {
     void getLoginStatus_noPreviousLoginNoTransactions_omitsNullFields() throws Exception {
         Long customerId = insertCustomer(null, "1.1.1.1");
 
-        mockMvc.perform(get("/dashboard/login-status")
-                        .with(authentication(authenticationOf(customerId))))
+        mockMvc.perform(get("/dashboard/login-status").with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data.previousLoginAt").doesNotExist())
@@ -68,8 +66,7 @@ class LoginStatusControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("인증 없이 요청하면 401을 반환한다")
     void getLoginStatus_withoutAuthentication_returnsUnauthorized() throws Exception {
-        mockMvc.perform(get("/dashboard/login-status"))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/dashboard/login-status")).andExpect(status().isUnauthorized());
     }
 
     private UsernamePasswordAuthenticationToken authenticationOf(Long customerId) {
@@ -82,7 +79,8 @@ class LoginStatusControllerTest extends IntegrationTestSupport {
         long seq = CUSTOMER_SEQ.incrementAndGet();
         String userId = "u" + seq;
         String email = "test" + seq + "@test.com";
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO customer (user_id, password_hash, user_name, birth_date, email, phone_number, "
                                 + "last_login_ip, previous_login_at, joined_at, created_at, updated_at) "
                                 + "VALUES (:userId, 'x', '홍길동', '1990-01-01', :email, '01012345678', "
@@ -92,12 +90,16 @@ class LoginStatusControllerTest extends IntegrationTestSupport {
                 .setParameter("lastLoginIp", lastLoginIp)
                 .setParameter("previousLoginAt", previousLoginAt)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
     private void insertAccount(Long customerId, LocalDateTime lastTransactionAt) {
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, "
                                 + "opened_date, last_transaction_at, created_at, updated_at) "
                                 + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', NOW(), "

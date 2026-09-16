@@ -1,7 +1,6 @@
 package com.shinhan.corebank.customer.application.port.out;
 
 import com.shinhan.corebank.customer.domain.model.Customer;
-
 import java.util.Optional;
 
 // customer 도메인과 영속성 어댑터 사이의 저장소 계약
@@ -20,6 +19,9 @@ public interface CustomerPersistencePort {
     boolean existsByUserId(String userId);
 
     boolean existsByEmail(String email);
+
+    // 원장 고객 기준으로 이미 가입한 고객이 있는지 조회한다 (ATH0303).
+    boolean existsByExistingBankCustomerId(String existingBankCustomerId);
 
     // 로그인 실패 관련 필드만 갱신
     void updateLoginFailureState(Customer customer);

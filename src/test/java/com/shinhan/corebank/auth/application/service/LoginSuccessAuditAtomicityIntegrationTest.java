@@ -1,10 +1,15 @@
 package com.shinhan.corebank.auth.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.application.port.in.LoginCommand;
 import com.shinhan.corebank.auth.application.port.in.LoginUseCase;
 import com.shinhan.corebank.auth.application.port.out.RecordLoginAuditPort;
 import com.shinhan.corebank.auth.domain.model.LoginAuditReason;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -14,22 +19,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-import java.time.LocalDateTime;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.doThrow;
-
 @DisplayName("로그인 성공 상태와 감사 로그 원자성 통합 테스트")
-class LoginSuccessAuditAtomicityIntegrationTest
-        extends IntegrationTestSupport {
+class LoginSuccessAuditAtomicityIntegrationTest extends IntegrationTestSupport {
 
     private static final String USER_ID = "login-atomic-user";
     private static final String EMAIL = "login-atomic@example.com";
     private static final String RAW_PASSWORD = "CorrectPassword1!";
     private static final String REQUEST_IP = "192.168.0.10";
-    private static final LocalDateTime ORIGINAL_LOGIN_AT =
-            LocalDateTime.of(2026, 8, 10, 9, 0);
+    private static final LocalDateTime ORIGINAL_LOGIN_AT = LocalDateTime.of(2026, 8, 10, 9, 0);
     private static final String ORIGINAL_LOGIN_IP = "127.0.0.1";
 
     @Autowired
@@ -63,30 +60,17 @@ class LoginSuccessAuditAtomicityIntegrationTest
     void rollsBackLoginStateWhenSuccessAuditFails() {
         doThrow(new IllegalStateException("audit unavailable"))
                 .when(recordLoginAuditPort)
-                .record(
-                        customerId,
-                        REQUEST_IP,
-                        true,
-                        LoginAuditReason.SUCCESS
-                );
+                .record(customerId, REQUEST_IP, true, LoginAuditReason.SUCCESS);
 
-        assertThatThrownBy(() -> loginUseCase.login(
-                new LoginCommand(
-                        USER_ID,
-                        RAW_PASSWORD,
-                        REQUEST_IP
-                )
-        ))
+        assertThatThrownBy(() -> loginUseCase.login(new LoginCommand(USER_ID, RAW_PASSWORD, REQUEST_IP)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("audit unavailable");
 
         PersistedLoginState persistedState = findPersistedLoginState();
 
         assertThat(persistedState.loginFailureCount()).isEqualTo(3);
-        assertThat(persistedState.lastLoginAt())
-                .isEqualTo(ORIGINAL_LOGIN_AT);
-        assertThat(persistedState.lastLoginIp())
-                .isEqualTo(ORIGINAL_LOGIN_IP);
+        assertThat(persistedState.lastLoginAt()).isEqualTo(ORIGINAL_LOGIN_AT);
+        assertThat(persistedState.lastLoginIp()).isEqualTo(ORIGINAL_LOGIN_IP);
         assertThat(persistedState.previousLoginAt()).isNull();
         assertThat(countLoginAudits()).isZero();
     }
@@ -94,7 +78,8 @@ class LoginSuccessAuditAtomicityIntegrationTest
     private Long insertCustomer() {
         String passwordHash = passwordEncoder.encode(RAW_PASSWORD);
 
-        jdbcTemplate.update("""
+        jdbcTemplate.update(
+                """
                 INSERT INTO customer (
                     user_id,
                     password_hash,
@@ -121,14 +106,9 @@ class LoginSuccessAuditAtomicityIntegrationTest
                 EMAIL,
                 "01012345678",
                 ORIGINAL_LOGIN_AT,
-                ORIGINAL_LOGIN_IP
-        );
+                ORIGINAL_LOGIN_IP);
 
-        return jdbcTemplate.queryForObject(
-                "SELECT customer_id FROM customer WHERE user_id = ?",
-                Long.class,
-                USER_ID
-        );
+        return jdbcTemplate.queryForObject("SELECT customer_id FROM customer WHERE user_id = ?", Long.class, USER_ID);
     }
 
     private PersistedLoginState findPersistedLoginState() {
@@ -144,18 +124,10 @@ class LoginSuccessAuditAtomicityIntegrationTest
                 """,
                 (resultSet, rowNumber) -> new PersistedLoginState(
                         resultSet.getInt("login_failure_count"),
-                        resultSet.getObject(
-                                "last_login_at",
-                                LocalDateTime.class
-                        ),
+                        resultSet.getObject("last_login_at", LocalDateTime.class),
                         resultSet.getString("last_login_ip"),
-                        resultSet.getObject(
-                                "previous_login_at",
-                                LocalDateTime.class
-                        )
-                ),
-                customerId
-        );
+                        resultSet.getObject("previous_login_at", LocalDateTime.class)),
+                customerId);
     }
 
     private int countLoginAudits() {
@@ -167,8 +139,7 @@ class LoginSuccessAuditAtomicityIntegrationTest
                   AND event_type = 'LOGIN'
                 """,
                 Integer.class,
-                customerId
-        );
+                customerId);
 
         return count == null ? 0 : count;
     }
@@ -183,20 +154,11 @@ class LoginSuccessAuditAtomicityIntegrationTest
                     WHERE user_id = ?
                 )
                 """,
-                USER_ID
-        );
-        jdbcTemplate.update(
-                "DELETE FROM customer WHERE user_id = ?",
-                USER_ID
-        );
+                USER_ID);
+        jdbcTemplate.update("DELETE FROM customer WHERE user_id = ?", USER_ID);
     }
 
     // 로그인 성공 처리 전후의 고객 상태 비교 결과
     private record PersistedLoginState(
-            int loginFailureCount,
-            LocalDateTime lastLoginAt,
-            String lastLoginIp,
-            LocalDateTime previousLoginAt
-    ) {
-    }
+            int loginFailureCount, LocalDateTime lastLoginAt, String lastLoginIp, LocalDateTime previousLoginAt) {}
 }

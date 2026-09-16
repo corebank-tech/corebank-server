@@ -14,8 +14,7 @@ import tools.jackson.databind.ObjectMapper;
 class SessionLogoutSuccessHandlerTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final SessionAuthenticationEntryPoint entryPoint =
-            new SessionAuthenticationEntryPoint(objectMapper);
+    private final SessionAuthenticationEntryPoint entryPoint = new SessionAuthenticationEntryPoint(objectMapper);
     private final SessionLogoutSuccessHandler logoutSuccessHandler =
             new SessionLogoutSuccessHandler(objectMapper, entryPoint);
 
@@ -27,18 +26,12 @@ class SessionLogoutSuccessHandlerTest {
         logoutSuccessHandler.onLogoutSuccess(
                 new MockHttpServletRequest(),
                 response,
-                UsernamePasswordAuthenticationToken.authenticated(
-                        "customer",
-                        null,
-                        java.util.List.of()
-                )
-        );
+                UsernamePasswordAuthenticationToken.authenticated("customer", null, java.util.List.of()));
 
         JsonNode body = objectMapper.readTree(response.getContentAsByteArray());
 
         assertThat(response.getStatus()).isEqualTo(200);
-        assertThat(response.getCharacterEncoding())
-                .isEqualTo(StandardCharsets.UTF_8.name());
+        assertThat(response.getCharacterEncoding()).isEqualTo(StandardCharsets.UTF_8.name());
         assertThat(body.get("code").asText()).isEqualTo("0000");
         assertThat(body.get("message").asText()).isEqualTo("로그아웃되었습니다.");
         assertThat(body.get("data").isNull()).isTrue();
@@ -50,11 +43,7 @@ class SessionLogoutSuccessHandlerTest {
     void rejectsLogoutWithoutAuthentication() throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        logoutSuccessHandler.onLogoutSuccess(
-                new MockHttpServletRequest(),
-                response,
-                null
-        );
+        logoutSuccessHandler.onLogoutSuccess(new MockHttpServletRequest(), response, null);
 
         JsonNode body = objectMapper.readTree(response.getContentAsByteArray());
 
@@ -64,11 +53,8 @@ class SessionLogoutSuccessHandlerTest {
         assertCachePreventionHeaders(response);
     }
 
-    private void assertCachePreventionHeaders(
-            MockHttpServletResponse response
-    ) {
-        assertThat(response.getHeader("Cache-Control"))
-                .isEqualTo("no-store, no-cache, must-revalidate, max-age=0");
+    private void assertCachePreventionHeaders(MockHttpServletResponse response) {
+        assertThat(response.getHeader("Cache-Control")).isEqualTo("no-store, no-cache, must-revalidate, max-age=0");
         assertThat(response.getHeader("Pragma")).isEqualTo("no-cache");
         assertThat(response.getDateHeader("Expires")).isEqualTo(0);
     }

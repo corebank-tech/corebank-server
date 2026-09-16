@@ -21,17 +21,8 @@ public interface ProductSubscriptionDepositUseCase {
      * @param depositAccountId    상품가입으로 방금 개설된 신규 계좌
      * @param amount              초입금액(= 가입금액)
      */
-    record ProductSubscriptionDepositCommand(
-            Long withdrawalAccountId,
-            Long depositAccountId,
-            long amount
-    ) {
-    }
+    record ProductSubscriptionDepositCommand(Long withdrawalAccountId, Long depositAccountId, long amount) {}
 
     record ProductSubscriptionDepositResult(
-            String transactionNumber,
-            long withdrawalBalanceAfter,
-            long depositBalanceAfter
-    ) {
-    }
+            String transactionNumber, long withdrawalBalanceAfter, long depositBalanceAfter) {}
 }

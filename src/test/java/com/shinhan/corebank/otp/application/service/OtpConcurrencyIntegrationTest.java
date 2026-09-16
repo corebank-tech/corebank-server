@@ -1,5 +1,7 @@
 package com.shinhan.corebank.otp.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.common.exception.BusinessException;
@@ -11,13 +13,6 @@ import com.shinhan.corebank.otp.application.port.in.VerifyOtpCommand;
 import com.shinhan.corebank.otp.application.port.in.VerifyOtpResult;
 import com.shinhan.corebank.otp.application.port.in.VerifyOtpUseCase;
 import com.shinhan.corebank.otp.domain.exception.OtpVerificationFailedException;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.jdbc.core.JdbcTemplate;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -28,19 +23,32 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 // 동시 OTP 발급·성공 검증·오답 검증에서 활성 요청과 횟수의 원자성을 검증한다.
 class OtpConcurrencyIntegrationTest extends IntegrationTestSupport {
 
     private static final String REDIS_PREFIX = "otp:auth:";
 
-    @Autowired CustomerTestFixture customerFixture;
-    @Autowired IssueOtpUseCase issueOtpUseCase;
-    @Autowired VerifyOtpUseCase verifyOtpUseCase;
-    @Autowired JdbcTemplate jdbcTemplate;
-    @Autowired StringRedisTemplate redisTemplate;
+    @Autowired
+    CustomerTestFixture customerFixture;
+
+    @Autowired
+    IssueOtpUseCase issueOtpUseCase;
+
+    @Autowired
+    VerifyOtpUseCase verifyOtpUseCase;
+
+    @Autowired
+    JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    StringRedisTemplate redisTemplate;
 
     private Long customerId;
     private final List<String> authTokens = new CopyOnWriteArrayList<>();
@@ -49,10 +57,7 @@ class OtpConcurrencyIntegrationTest extends IntegrationTestSupport {
     void cleanUp() {
         authTokens.forEach(token -> redisTemplate.delete(REDIS_PREFIX + token));
         if (customerId != null) {
-            jdbcTemplate.update(
-                    "DELETE FROM verification_request WHERE customer_id = ?",
-                    customerId
-            );
+            jdbcTemplate.update("DELETE FROM verification_request WHERE customer_id = ?", customerId);
             customerFixture.deleteCustomer(customerId);
         }
     }
@@ -63,10 +68,7 @@ class OtpConcurrencyIntegrationTest extends IntegrationTestSupport {
         customerId = customerFixture.createCustomer();
         IssueOtpCommand command = issueCommand(customerId);
 
-        List<Invocation<IssueOtpResult>> invocations = invokeConcurrently(
-                2,
-                () -> issueOtpUseCase.issue(command)
-        );
+        List<Invocation<IssueOtpResult>> invocations = invokeConcurrently(2, () -> issueOtpUseCase.issue(command));
 
         assertThat(invocations).allMatch(Invocation::succeeded);
         assertThat(activeRequestCount(customerId)).isOne();
@@ -77,16 +79,9 @@ class OtpConcurrencyIntegrationTest extends IntegrationTestSupport {
     void concurrentCorrectVerificationSucceedsOnce() throws Exception {
         customerId = customerFixture.createCustomer();
         IssueOtpResult issued = issueOtpUseCase.issue(issueCommand(customerId));
-        VerifyOtpCommand command = new VerifyOtpCommand(
-                customerId,
-                issued.otpRequestId(),
-                issued.otpCode()
-        );
+        VerifyOtpCommand command = new VerifyOtpCommand(customerId, issued.otpRequestId(), issued.otpCode());
 
-        List<Invocation<VerifyOtpResult>> invocations = invokeConcurrently(
-                2,
-                () -> verifyOtpUseCase.verify(command)
-        );
+        List<Invocation<VerifyOtpResult>> invocations = invokeConcurrently(2, () -> verifyOtpUseCase.verify(command));
         invocations.stream()
                 .filter(Invocation::succeeded)
                 .map(Invocation::value)
@@ -94,19 +89,21 @@ class OtpConcurrencyIntegrationTest extends IntegrationTestSupport {
                 .forEach(authTokens::add);
 
         assertThat(invocations.stream().filter(Invocation::succeeded).count()).isOne();
-        assertThat(invocations.stream().filter(invocation -> !invocation.succeeded()).count())
+        assertThat(invocations.stream()
+                        .filter(invocation -> !invocation.succeeded())
+                        .count())
                 .isOne();
         assertThat(invocations.stream()
-                .filter(invocation -> !invocation.succeeded())
-                .map(Invocation::failure)
-                .allMatch(failure -> failure instanceof BusinessException exception
-                        && exception.getErrorCode().getCode().equals("OTP0201")))
+                        .filter(invocation -> !invocation.succeeded())
+                        .map(Invocation::failure)
+                        .allMatch(failure -> failure instanceof BusinessException exception
+                                && exception.getErrorCode().getCode().equals("OTP0201")))
                 .isTrue();
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT used FROM verification_request WHERE verification_request_id = ?",
-                Boolean.class,
-                issued.otpRequestId()
-        )).isTrue();
+                        "SELECT used FROM verification_request WHERE verification_request_id = ?",
+                        Boolean.class,
+                        issued.otpRequestId()))
+                .isTrue();
     }
 
     @Test
@@ -115,28 +112,18 @@ class OtpConcurrencyIntegrationTest extends IntegrationTestSupport {
         customerId = customerFixture.createCustomer();
         IssueOtpResult issued = issueOtpUseCase.issue(issueCommand(customerId));
         String wrongCode = issued.otpCode().equals("000000") ? "999999" : "000000";
-        VerifyOtpCommand command = new VerifyOtpCommand(
-                customerId,
-                issued.otpRequestId(),
-                wrongCode
-        );
+        VerifyOtpCommand command = new VerifyOtpCommand(customerId, issued.otpRequestId(), wrongCode);
 
-        List<Invocation<VerifyOtpResult>> invocations = invokeConcurrently(
-                5,
-                () -> verifyOtpUseCase.verify(command)
-        );
+        List<Invocation<VerifyOtpResult>> invocations = invokeConcurrently(5, () -> verifyOtpUseCase.verify(command));
 
-        assertThat(invocations).allMatch(invocation ->
-                invocation.failure() instanceof OtpVerificationFailedException
-        );
+        assertThat(invocations).allMatch(invocation -> invocation.failure() instanceof OtpVerificationFailedException);
         Map<String, Object> state = jdbcTemplate.queryForMap(
                 """
                 SELECT error_count, locked
                 FROM verification_request
                 WHERE verification_request_id = ?
                 """,
-                issued.otpRequestId()
-        );
+                issued.otpRequestId());
         assertThat(((Number) state.get("error_count")).intValue()).isEqualTo(5);
         assertThat(state.get("locked")).isEqualTo(true);
     }
@@ -148,9 +135,7 @@ class OtpConcurrencyIntegrationTest extends IntegrationTestSupport {
                 Map.of(
                         "withdrawalAccountId", 101L,
                         "depositAccountNumber", "110660000103",
-                        "amount", 100_000L
-                )
-        );
+                        "amount", 100_000L));
     }
 
     private int activeRequestCount(Long currentCustomerId) {
@@ -171,14 +156,10 @@ class OtpConcurrencyIntegrationTest extends IntegrationTestSupport {
                 """,
                 Integer.class,
                 currentCustomerId,
-                currentCustomerId
-        );
+                currentCustomerId);
     }
 
-    private <T> List<Invocation<T>> invokeConcurrently(
-            int count,
-            Callable<T> action
-    ) throws Exception {
+    private <T> List<Invocation<T>> invokeConcurrently(int count, Callable<T> action) throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(count);
         CountDownLatch ready = new CountDownLatch(count);
         CountDownLatch start = new CountDownLatch(1);

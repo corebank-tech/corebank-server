@@ -6,9 +6,8 @@ import com.shinhan.corebank.otp.application.port.in.VerifyOtpCommand;
 import com.shinhan.corebank.otp.application.port.in.VerifyOtpResult;
 import com.shinhan.corebank.otp.application.port.in.VerifyOtpUseCase;
 import com.shinhan.corebank.otp.domain.exception.OtpVerificationFailedException;
-import org.springframework.stereotype.Service;
-
 import java.util.regex.Pattern;
+import org.springframework.stereotype.Service;
 
 // OTP 입력 형식을 확인하고 커밋된 검증 결과를 API 성공 또는 업무 예외로 변환한다.
 @Service

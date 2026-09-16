@@ -5,8 +5,7 @@ import com.shinhan.corebank.product.domain.ProductTermsId;
 
 final class ProductTermsMapper {
 
-    private ProductTermsMapper() {
-    }
+    private ProductTermsMapper() {}
 
     static ProductTerms toDomain(ProductTermsJpaEntity entity) {
         return ProductTerms.builder()

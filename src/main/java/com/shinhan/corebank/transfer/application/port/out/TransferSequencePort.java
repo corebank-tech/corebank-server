@@ -1,8 +1,7 @@
 package com.shinhan.corebank.transfer.application.port.out;
 
-import java.time.LocalDate;
-
 import com.shinhan.corebank.transfer.domain.TransferChannel;
+import java.time.LocalDate;
 
 public interface TransferSequencePort {
 

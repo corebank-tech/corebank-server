@@ -4,7 +4,6 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-
 import java.time.LocalDateTime;
 
 // 공용 verification_request 테이블의 이메일 인증 필드를 매핑한다.
@@ -37,22 +36,13 @@ public class EmailVerificationJpaEntity {
     @Column(name = "verified_at", columnDefinition = "DATETIME(6)")
     private LocalDateTime verifiedAt;
 
-    @Column(
-            name = "expires_at",
-            nullable = false,
-            columnDefinition = "DATETIME(6)"
-    )
+    @Column(name = "expires_at", nullable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime expiresAt;
 
-    @Column(
-            name = "created_at",
-            nullable = false,
-            columnDefinition = "DATETIME(6)"
-    )
+    @Column(name = "created_at", nullable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime createdAt;
 
-    protected EmailVerificationJpaEntity() {
-    }
+    protected EmailVerificationJpaEntity() {}
 
     public EmailVerificationJpaEntity(
             String verificationRequestId,
@@ -64,8 +54,7 @@ public class EmailVerificationJpaEntity {
             boolean used,
             LocalDateTime verifiedAt,
             LocalDateTime expiresAt,
-            LocalDateTime createdAt
-    ) {
+            LocalDateTime createdAt) {
         this.verificationRequestId = verificationRequestId;
         this.purpose = purpose;
         this.target = target;

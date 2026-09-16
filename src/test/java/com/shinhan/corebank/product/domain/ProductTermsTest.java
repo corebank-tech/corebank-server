@@ -13,9 +13,8 @@ class ProductTermsTest {
     @Test
     @DisplayName("displayOrder 없이 생성하면 CMN0002를 던진다")
     void rejectsNullDisplayOrder() {
-        assertThatThrownBy(() -> ProductTerms.builder()
-                .id(new ProductTermsId(1L, 2L))
-                .build())
+        assertThatThrownBy(() ->
+                        ProductTerms.builder().id(new ProductTermsId(1L, 2L)).build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));
@@ -24,9 +23,7 @@ class ProductTermsTest {
     @Test
     @DisplayName("id 없이 생성하면 CMN0002를 던진다")
     void rejectsNullId() {
-        assertThatThrownBy(() -> ProductTerms.builder()
-                .displayOrder((short) 1)
-                .build())
+        assertThatThrownBy(() -> ProductTerms.builder().displayOrder((short) 1).build())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING));

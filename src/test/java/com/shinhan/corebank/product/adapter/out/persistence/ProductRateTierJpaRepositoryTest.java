@@ -51,7 +51,9 @@ class ProductRateTierJpaRepositoryTest extends IntegrationTestSupport {
     @Test
     @DisplayName("productId로 조회하면 다른 상품 것은 제외하고 termMonths 오름차순으로 반환한다")
     void findAllByProductId_returnsOwnTiersSortedByTermMonths() {
-        Long otherProductId = productRepository.save(ProductTestFixtures.productWithCode("SVN-901")).getProductId();
+        Long otherProductId = productRepository
+                .save(ProductTestFixtures.productWithCode("SVN-901"))
+                .getProductId();
         repository.save(rateTier(productId, (short) 24, new BigDecimal("3.50")));
         repository.save(rateTier(productId, (short) 6, new BigDecimal("2.80")));
         repository.save(rateTier(otherProductId, (short) 12, new BigDecimal("3.00")));
@@ -60,8 +62,7 @@ class ProductRateTierJpaRepositoryTest extends IntegrationTestSupport {
 
         List<ProductRateTierJpaEntity> result = repository.findAllByProductId(productId);
 
-        assertThat(result).extracting(e -> e.getId().getTermMonths())
-                .containsExactly((short) 6, (short) 24);
+        assertThat(result).extracting(e -> e.getId().getTermMonths()).containsExactly((short) 6, (short) 24);
     }
 
     private ProductRateTierJpaEntity rateTier(Long productId, short termMonths, BigDecimal rate) {

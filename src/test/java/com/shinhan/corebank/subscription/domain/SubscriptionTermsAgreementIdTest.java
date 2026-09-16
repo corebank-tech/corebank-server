@@ -13,11 +13,9 @@ import org.junit.jupiter.params.provider.CsvSource;
 class SubscriptionTermsAgreementIdTest {
 
     @ParameterizedTest(name = "subscriptionId={0}, termsId={1}")
-    @CsvSource(nullValues = "null", value = {
-            "null, 2",
-            "1,    null",
-            "null, null"
-    })
+    @CsvSource(
+            nullValues = "null",
+            value = {"null, 2", "1,    null", "null, null"})
     @DisplayName("subscriptionId 또는 termsId가 null이면 CMN0002를 던진다")
     void rejectsNull(Long subscriptionId, Long termsId) {
         assertThatThrownBy(() -> new SubscriptionTermsAgreementId(subscriptionId, termsId))

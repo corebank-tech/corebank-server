@@ -34,9 +34,11 @@ class SubscriptionTermsAgreementJpaRepositoryTest extends IntegrationTestSupport
     @Test
     @DisplayName("SubscriptionTermsAgreement을 저장하면 복합키(subscriptionId, termsId)로 조회된다")
     void saveAndFindById() {
-        Long productId = productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
+        Long productId =
+                productRepository.save(ProductTestFixtures.defaultProduct()).getProductId();
         Long customerId = SubscriptionTestFixtures.insertCustomer(jdbcTemplate, "sta_test_user");
-        Long withdrawalAccountId = SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000002", customerId, null);
+        Long withdrawalAccountId =
+                SubscriptionTestFixtures.insertAccount(jdbcTemplate, "110000000002", customerId, null);
         Long subscriptionId = subscriptionRepository
                 .save(SubscriptionTestFixtures.defaultSubscription(customerId, productId, withdrawalAccountId))
                 .getSubscriptionId();

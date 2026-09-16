@@ -2,10 +2,9 @@ package com.shinhan.corebank.autotransfer.adapter.out.persistence;
 
 import com.shinhan.corebank.autotransfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.autotransfer.application.port.out.TransferLookupResult;
-import org.springframework.stereotype.Component;
-
 import java.time.LocalDate;
 import java.util.Optional;
+import org.springframework.stereotype.Component;
 
 @Component
 public class TransferLookupAdapter implements TransferLookupPort {
@@ -19,9 +18,14 @@ public class TransferLookupAdapter implements TransferLookupPort {
 
     @Override
     public Optional<TransferLookupResult> findBySourceAndDate(Long autoTransferId, LocalDate executionDate) {
-        return transferLookupJpaRepository.findBySourceAndDate(SOURCE_TYPE_AUTO, autoTransferId, executionDate.atStartOfDay(),
-                executionDate.plusDays(1).atStartOfDay()).stream().findFirst()
+        return transferLookupJpaRepository
+                .findBySourceAndDate(
+                        SOURCE_TYPE_AUTO,
+                        autoTransferId,
+                        executionDate.atStartOfDay(),
+                        executionDate.plusDays(1).atStartOfDay())
+                .stream()
+                .findFirst()
                 .map(e -> new TransferLookupResult(e.getTransactionNumber(), e.getStatus(), e.getErrorMessage()));
     }
-
 }

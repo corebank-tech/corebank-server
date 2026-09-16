@@ -2,10 +2,9 @@ package com.shinhan.corebank.scheduledtransfer.adapter.out.persistence;
 
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import jakarta.persistence.*;
-import lombok.*;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import lombok.*;
 
 @Entity
 @Table(name = "scheduled_transfer")
@@ -64,4 +63,8 @@ public class ScheduledTransferJpaEntity {
 
     @Column(name = "failure_reason", length = 200)
     private String failureReason;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 }

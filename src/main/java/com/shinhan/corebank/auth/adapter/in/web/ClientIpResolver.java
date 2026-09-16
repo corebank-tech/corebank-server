@@ -1,9 +1,8 @@
 package com.shinhan.corebank.auth.adapter.in.web;
 
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.stereotype.Component;
-
 import java.util.Objects;
+import org.springframework.stereotype.Component;
 
 // ALB 전달 헤더 또는 원격 주소에서 로그인 요청 IP를 추출
 @Component
@@ -16,9 +15,7 @@ public class ClientIpResolver {
         Objects.requireNonNull(request, "request must not be null");
 
         String forwardedFor = request.getHeader(X_FORWARDED_FOR);
-        String clientIp = hasText(forwardedFor)
-                ? lastForwardedIp(forwardedFor)
-                : request.getRemoteAddr();
+        String clientIp = hasText(forwardedFor) ? lastForwardedIp(forwardedFor) : request.getRemoteAddr();
 
         return validateAndNormalize(clientIp);
     }
@@ -32,17 +29,13 @@ public class ClientIpResolver {
     // customer와 audit_log 컬럼 제약에 맞는 IP만 허용
     private String validateAndNormalize(String clientIp) {
         if (!hasText(clientIp)) {
-            throw new IllegalArgumentException(
-                    "로그인 IP는 필수입니다."
-            );
+            throw new IllegalArgumentException("로그인 IP는 필수입니다.");
         }
 
         String normalizedIp = clientIp.trim();
 
         if (normalizedIp.length() > MAX_IP_LENGTH) {
-            throw new IllegalArgumentException(
-                    "로그인 IP는 45자 이하여야 합니다."
-            );
+            throw new IllegalArgumentException("로그인 IP는 45자 이하여야 합니다.");
         }
 
         return normalizedIp;

@@ -1,12 +1,10 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import com.shinhan.corebank.transfer.application.port.out.WithdrawalAccountDetail;
+import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
-
-import com.shinhan.corebank.transfer.application.port.out.WithdrawalAccountDetail;
-
-import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -37,7 +35,8 @@ public interface AccountLockJpaRepository extends JpaRepository<AccountLockJpaEn
      * 바로 LockedAccountType을 만들 수 없다. 인터페이스 프로젝션(PayeeProjection)으로 raw 값을
      * 받아 어댑터의 자바 코드에서 enum으로 변환한다.
      */
-    @Query("""
+    @Query(
+            """
         SELECT a.accountId AS accountId, c.userName AS payeeName, a.accountType AS accountType, a.status AS status
         FROM AccountLockJpaEntity a
         JOIN CustomerNameJpaEntity c ON a.customerId = c.customerId
@@ -47,8 +46,11 @@ public interface AccountLockJpaRepository extends JpaRepository<AccountLockJpaEn
 
     interface PayeeProjection {
         Long getAccountId();
+
         String getPayeeName();
+
         String getAccountType();
+
         String getStatus();
     }
 
@@ -56,7 +58,8 @@ public interface AccountLockJpaRepository extends JpaRepository<AccountLockJpaEn
      * findPayeeByAccountNumber의 일괄 조회 버전. 결과를 계좌번호별로 다시 매핑해야 하므로
      * accountNumber도 함께 프로젝션한다.
      */
-    @Query("""
+    @Query(
+            """
         SELECT a.accountNumber AS accountNumber, a.accountId AS accountId, c.userName AS payeeName,
                a.accountType AS accountType, a.status AS status
         FROM AccountLockJpaEntity a
@@ -67,9 +70,13 @@ public interface AccountLockJpaRepository extends JpaRepository<AccountLockJpaEn
 
     interface BatchPayeeProjection {
         String getAccountNumber();
+
         Long getAccountId();
+
         String getPayeeName();
+
         String getAccountType();
+
         String getStatus();
     }
 
@@ -78,7 +85,8 @@ public interface AccountLockJpaRepository extends JpaRepository<AccountLockJpaEn
      * 계좌번호 해석(findPayeeByAccountNumber)과 동일한 이유로, 여기서 락을 걸면
      * lockForTransfer의 오름차순 락 획득 계약보다 먼저 출금계좌 행에 락이 걸린다.
      */
-    @Query("""
+    @Query(
+            """
         SELECT new com.shinhan.corebank.transfer.application.port.out.WithdrawalAccountDetail(
             a.accountId, a.customerId, a.withdrawalRegistered)
         FROM AccountLockJpaEntity a
@@ -92,7 +100,8 @@ public interface AccountLockJpaRepository extends JpaRepository<AccountLockJpaEn
      * 컬럼이라 JPQL 생성자식으로 바로 enum을 만들 수 없어, 인터페이스 프로젝션으로 raw 값을
      * 받아 어댑터에서 enum으로 변환한다.
      */
-    @Query("""
+    @Query(
+            """
         SELECT a.balance AS balance, a.status AS status
         FROM AccountLockJpaEntity a
         WHERE a.accountId = :accountId
@@ -101,6 +110,7 @@ public interface AccountLockJpaRepository extends JpaRepository<AccountLockJpaEn
 
     interface PreCheckProjection {
         long getBalance();
+
         String getStatus();
     }
 }

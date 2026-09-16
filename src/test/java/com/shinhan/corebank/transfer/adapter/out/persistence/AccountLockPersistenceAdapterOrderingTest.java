@@ -1,7 +1,9 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import java.util.Optional;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.when;
 
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -9,9 +11,6 @@ import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.when;
 
 /**
  * 데드락 회피의 핵심 메커니즘(항상 계좌 ID 오름차순으로 락을 건다)을 실제 스레드 타이밍에

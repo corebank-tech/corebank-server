@@ -3,7 +3,6 @@ package com.shinhan.corebank.limit.domain;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
-
 import lombok.Getter;
 
 /**

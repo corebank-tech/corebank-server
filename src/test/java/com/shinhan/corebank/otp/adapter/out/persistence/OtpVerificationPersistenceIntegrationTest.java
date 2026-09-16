@@ -1,28 +1,32 @@
 package com.shinhan.corebank.otp.adapter.out.persistence;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.otp.api.OtpTransactionType;
 import com.shinhan.corebank.otp.application.port.in.IssueOtpCommand;
 import com.shinhan.corebank.otp.application.port.in.IssueOtpResult;
 import com.shinhan.corebank.otp.application.port.in.IssueOtpUseCase;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
 // OTP가 기존 verification_request에 저장되고 재발급 시 이전 요청이 만료되는지 검증한다.
 @Transactional
 class OtpVerificationPersistenceIntegrationTest extends IntegrationTestSupport {
 
-    @Autowired CustomerTestFixture customerFixture;
-    @Autowired IssueOtpUseCase issueOtpUseCase;
-    @Autowired JdbcTemplate jdbcTemplate;
+    @Autowired
+    CustomerTestFixture customerFixture;
+
+    @Autowired
+    IssueOtpUseCase issueOtpUseCase;
+
+    @Autowired
+    JdbcTemplate jdbcTemplate;
 
     @Test
     @DisplayName("두 번째 OTP 발급은 기존 활성 OTP를 만료시키고 신규 요청만 활성으로 남긴다")
@@ -31,19 +35,12 @@ class OtpVerificationPersistenceIntegrationTest extends IntegrationTestSupport {
         Map<String, Object> data = Map.of(
                 "withdrawalAccountId", 101L,
                 "depositAccountNumber", "110660000103",
-                "amount", 100_000L
-        );
+                "amount", 100_000L);
 
-        IssueOtpResult first = issueOtpUseCase.issue(new IssueOtpCommand(
-                customerId,
-                OtpTransactionType.IMMEDIATE_TRANSFER,
-                data
-        ));
-        IssueOtpResult second = issueOtpUseCase.issue(new IssueOtpCommand(
-                customerId,
-                OtpTransactionType.IMMEDIATE_TRANSFER,
-                data
-        ));
+        IssueOtpResult first =
+                issueOtpUseCase.issue(new IssueOtpCommand(customerId, OtpTransactionType.IMMEDIATE_TRANSFER, data));
+        IssueOtpResult second =
+                issueOtpUseCase.issue(new IssueOtpCommand(customerId, OtpTransactionType.IMMEDIATE_TRANSFER, data));
 
         Map<String, Object> firstRow = jdbcTemplate.queryForMap(
                 """
@@ -52,8 +49,7 @@ class OtpVerificationPersistenceIntegrationTest extends IntegrationTestSupport {
                 FROM verification_request
                 WHERE verification_request_id = ?
                 """,
-                first.otpRequestId()
-        );
+                first.otpRequestId());
         Integer activeCount = jdbcTemplate.queryForObject(
                 """
                 SELECT COUNT(*)
@@ -70,8 +66,7 @@ class OtpVerificationPersistenceIntegrationTest extends IntegrationTestSupport {
                 """,
                 Integer.class,
                 customerId,
-                second.otpRequestId()
-        );
+                second.otpRequestId());
         Integer secondValiditySeconds = jdbcTemplate.queryForObject(
                 """
                 SELECT TIMESTAMPDIFF(SECOND, created_at, expires_at)
@@ -79,8 +74,7 @@ class OtpVerificationPersistenceIntegrationTest extends IntegrationTestSupport {
                 WHERE verification_request_id = ?
                 """,
                 Integer.class,
-                second.otpRequestId()
-        );
+                second.otpRequestId());
 
         assertThat(firstRow.get("purpose")).isEqualTo("OTP_TRANSACTION");
         assertThat(firstRow.get("target")).isNull();

@@ -1,8 +1,7 @@
 package com.shinhan.corebank.common.code;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-
 import java.util.List;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CommonCodeJpaRepository extends JpaRepository<CommonCodeJpaEntity, CommonCodeId> {
 

@@ -1,17 +1,16 @@
 package com.shinhan.corebank.signup.adapter.out.persistence;
 
 import com.shinhan.corebank.signup.domain.model.TermsType;
+import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import java.util.List;
-import java.util.Optional;
-
 // 회원가입 유형의 최신 약관 행을 조회한다.
-public interface SignupTermsJpaRepository
-        extends JpaRepository<SignupTermsJpaEntity, Long> {
+public interface SignupTermsJpaRepository extends JpaRepository<SignupTermsJpaEntity, Long> {
 
-    @Query("""
+    @Query(
+            """
             select term
             from SignupTermsJpaEntity term
             where term.termsType = :termsType
@@ -30,12 +29,7 @@ public interface SignupTermsJpaRepository
               )
             order by term.termsId asc
             """)
-    List<SignupTermsJpaEntity> findLatestByTermsType(
-            TermsType termsType
-    );
+    List<SignupTermsJpaEntity> findLatestByTermsType(TermsType termsType);
 
-    Optional<SignupTermsJpaEntity> findByTermsIdAndVersion(
-            Long termsId,
-            String version
-    );
+    Optional<SignupTermsJpaEntity> findByTermsIdAndVersion(Long termsId, String version);
 }

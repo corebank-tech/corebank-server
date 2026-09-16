@@ -2,13 +2,12 @@ package com.shinhan.corebank.signup.adapter.out.redis;
 
 import com.shinhan.corebank.signup.application.port.out.AccountAuthTokenPort;
 import com.shinhan.corebank.signup.domain.model.AccountAuthTokenPayload;
+import java.time.Duration;
+import java.util.Optional;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
-
-import java.time.Duration;
-import java.util.Optional;
 
 // accountAuthToken을 Redis에 저장하고 원자적으로 소비한다.
 @Component
@@ -19,31 +18,17 @@ public class AccountAuthTokenRedisAdapter implements AccountAuthTokenPort {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
-    public AccountAuthTokenRedisAdapter(
-            StringRedisTemplate redisTemplate,
-            ObjectMapper objectMapper
-    ) {
+    public AccountAuthTokenRedisAdapter(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
     }
 
     @Override
-    public void save(
-            String token,
-            AccountAuthTokenPayload payload,
-            Duration ttl
-    ) {
+    public void save(String token, AccountAuthTokenPayload payload, Duration ttl) {
         try {
-            redisTemplate.opsForValue().set(
-                    key(token),
-                    objectMapper.writeValueAsString(payload),
-                    ttl
-            );
+            redisTemplate.opsForValue().set(key(token), objectMapper.writeValueAsString(payload), ttl);
         } catch (JacksonException exception) {
-            throw new IllegalStateException(
-                    "계좌 인증 토큰 직렬화에 실패했습니다.",
-                    exception
-            );
+            throw new IllegalStateException("계좌 인증 토큰 직렬화에 실패했습니다.", exception);
         }
     }
 
@@ -63,15 +48,9 @@ public class AccountAuthTokenRedisAdapter implements AccountAuthTokenPort {
         }
 
         try {
-            return Optional.of(objectMapper.readValue(
-                    json,
-                    AccountAuthTokenPayload.class
-            ));
+            return Optional.of(objectMapper.readValue(json, AccountAuthTokenPayload.class));
         } catch (JacksonException exception) {
-            throw new IllegalStateException(
-                    "계좌 인증 토큰 역직렬화에 실패했습니다.",
-                    exception
-            );
+            throw new IllegalStateException("계좌 인증 토큰 역직렬화에 실패했습니다.", exception);
         }
     }
 

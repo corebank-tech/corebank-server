@@ -1,34 +1,27 @@
 package com.shinhan.corebank.account.support;
 
-import lombok.RequiredArgsConstructor;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Component;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
 public class CustomerTestFixture {
 
-    private static final String PASSWORD_HASH =
-            "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq";
+    private static final String PASSWORD_HASH = "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq";
 
     private final JdbcTemplate jdbcTemplate;
 
     public Long createCustomer() {
-        String suffix = UUID.randomUUID()
-                .toString()
-                .replace("-", "")
-                .substring(0, 8);
+        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
 
         String userId = "accttest" + suffix;
         String email = "accttest" + suffix + "@example.com";
 
-        LocalDateTime now = LocalDateTime.of(
-                2026, 8, 10, 10, 0
-        );
+        LocalDateTime now = LocalDateTime.of(2026, 8, 10, 10, 0);
 
         jdbcTemplate.update(
                 """
@@ -64,8 +57,7 @@ public class CustomerTestFixture {
                 now,
                 now,
                 now,
-                now
-        );
+                now);
 
         return jdbcTemplate.queryForObject(
                 """
@@ -74,8 +66,7 @@ public class CustomerTestFixture {
                 WHERE user_id = ?
                 """,
                 Long.class,
-                userId
-        );
+                userId);
     }
 
     public void deleteCustomer(Long customerId) {
@@ -84,7 +75,6 @@ public class CustomerTestFixture {
                 DELETE FROM customer
                 WHERE customer_id = ?
                 """,
-                customerId
-        );
+                customerId);
     }
 }

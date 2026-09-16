@@ -20,24 +20,16 @@ public class OtpExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(OtpExceptionHandler.class);
 
     @ExceptionHandler(OtpVerificationFailedException.class)
-    public ResponseEntity<ErrorResponse> handleVerificationFailure(
-            OtpVerificationFailedException exception
-    ) {
+    public ResponseEntity<ErrorResponse> handleVerificationFailure(OtpVerificationFailedException exception) {
         ErrorCode errorCode = exception.getErrorCode();
         OtpFailureData data = new OtpFailureData(
                 null,
                 exception.getAttemptResult().errorCount(),
-                exception.getAttemptResult().remainingAttempts()
-        );
+                exception.getAttemptResult().remainingAttempts());
 
         log.warn("[{}] {}", errorCode.getCode(), errorCode.getMessage());
 
-        return ResponseEntity
-                .status(HttpStatus.valueOf(errorCode.getStatus()))
-                .body(new ErrorResponse(
-                        errorCode.getCode(),
-                        errorCode.getMessage(),
-                        data
-                ));
+        return ResponseEntity.status(HttpStatus.valueOf(errorCode.getStatus()))
+                .body(new ErrorResponse(errorCode.getCode(), errorCode.getMessage(), data));
     }
 }

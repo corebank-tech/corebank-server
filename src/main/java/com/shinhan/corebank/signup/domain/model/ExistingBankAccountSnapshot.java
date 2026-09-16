@@ -12,6 +12,4 @@ public record ExistingBankAccountSnapshot(
         String status,
         String passwordHash,
         LocalDate openedDate,
-        LocalDate maturityDate
-) {
-}
+        LocalDate maturityDate) {}

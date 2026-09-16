@@ -1,9 +1,7 @@
 package com.shinhan.corebank.transfer.application.service;
 
-import java.time.Clock;
-import java.time.LocalDateTime;
-
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
@@ -13,9 +11,9 @@ import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.LedgerPair;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
-import com.shinhan.corebank.transfer.domain.exception.LimitErrorCode;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,8 +48,7 @@ public class ProductSubscriptionDepositService implements ProductSubscriptionDep
         // 채번은 SequenceGenerator 안에서 REQUIRES_NEW로 독립 커밋된다 — 이 트랜잭션이 뒤에서
         // 롤백돼도 번호만 비고(gap) 채번 행은 남는다. 영업일자 기준은 TransferExecutionService와
         // 동일하게 맞춘다(같은 transaction_sequence 행을 공유하므로 기준이 갈리면 안 된다).
-        String transactionNumber =
-                transferSequencePort.nextTransactionNumber(occurredAt.toLocalDate(), CHANNEL);
+        String transactionNumber = transferSequencePort.nextTransactionNumber(occurredAt.toLocalDate(), CHANNEL);
 
         LockedAccountsForTransfer locked =
                 accountLockPort.lockForTransfer(command.withdrawalAccountId(), command.depositAccountId());
@@ -63,7 +60,7 @@ public class ProductSubscriptionDepositService implements ProductSubscriptionDep
             throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
         }
         if (locked.withdrawal().balance() < command.amount()) {
-            throw new BusinessException(LimitErrorCode.INSUFFICIENT_WITHDRAWABLE_AMOUNT);
+            throw new BusinessException(LmtErrorCode.INSUFFICIENT_WITHDRAWABLE_AMOUNT);
         }
 
         TransferBalances balances = accountLockPort.applyTransfer(locked, command.amount(), occurredAt);

@@ -9,17 +9,15 @@ import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Clock;
-import java.time.LocalDateTime;
-
 @Service
 @RequiredArgsConstructor
-public class ProductAccountOpeningService
-        implements ProductAccountOpeningUseCase {
+public class ProductAccountOpeningService implements ProductAccountOpeningUseCase {
 
     private final IssueAccountNumberUseCase issueAccountNumberUseCase;
     private final AccountPersistencePort accountPersistencePort;
@@ -27,24 +25,15 @@ public class ProductAccountOpeningService
 
     @Override
     @Transactional
-    public AccountOpeningResult open(
-            ProductAccountOpeningCommand command
-    ) {
+    public AccountOpeningResult open(ProductAccountOpeningCommand command) {
         if (command == null) {
-            throw new BusinessException(
-                    CommonErrorCode.REQUIRED_FIELD_MISSING
-            );
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
         validateProductAccountType(command.accountType());
 
-        String accountNumber =
-                issueAccountNumberUseCase.issue(
-                        command.accountType(),
-                        command.productId()
-                );
+        String accountNumber = issueAccountNumberUseCase.issue(command.accountType(), command.productId());
 
-        LocalDateTime openedDate =
-                LocalDateTime.now(clock);
+        LocalDateTime openedDate = LocalDateTime.now(clock);
 
         Account account = Account.open(
                 accountNumber,
@@ -53,27 +42,16 @@ public class ProductAccountOpeningService
                 command.accountType(),
                 command.newAccountPasswordHash(),
                 openedDate,
-                command.maturityDate()
-        );
+                command.maturityDate());
 
-        Account savedAccount =
-                accountPersistencePort.save(account);
+        Account savedAccount = accountPersistencePort.save(account);
 
-        return new AccountOpeningResult(
-                savedAccount.getAccountId(),
-                savedAccount.getAccountNumber()
-        );
+        return new AccountOpeningResult(savedAccount.getAccountId(), savedAccount.getAccountNumber());
     }
 
-    private void validateProductAccountType(
-            AccountType accountType
-    ) {
-        if (accountType != AccountType.TIME_DEPOSIT
-                && accountType
-                != AccountType.INSTALLMENT_SAVINGS) {
-            throw new BusinessException(
-                    CommonErrorCode.INVALID_INPUT
-            );
+    private void validateProductAccountType(AccountType accountType) {
+        if (accountType != AccountType.TIME_DEPOSIT && accountType != AccountType.INSTALLMENT_SAVINGS) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
     }
 }

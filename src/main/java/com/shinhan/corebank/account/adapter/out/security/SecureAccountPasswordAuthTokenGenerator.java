@@ -1,15 +1,13 @@
 package com.shinhan.corebank.account.adapter.out.security;
 
 import com.shinhan.corebank.account.application.port.out.AccountPasswordAuthTokenGeneratorPort;
-import org.springframework.stereotype.Component;
-
 import java.security.SecureRandom;
 import java.util.Base64;
+import org.springframework.stereotype.Component;
 
 // 256bit CSPRNG 난수로 계좌비밀번호 인증 토큰을 생성한다.
 @Component
-public class SecureAccountPasswordAuthTokenGenerator
-        implements AccountPasswordAuthTokenGeneratorPort {
+public class SecureAccountPasswordAuthTokenGenerator implements AccountPasswordAuthTokenGeneratorPort {
 
     private static final int TOKEN_BYTES = 32;
 
@@ -20,8 +18,6 @@ public class SecureAccountPasswordAuthTokenGenerator
         byte[] bytes = new byte[TOKEN_BYTES];
         secureRandom.nextBytes(bytes);
 
-        return Base64.getUrlEncoder()
-                .withoutPadding()
-                .encodeToString(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 }

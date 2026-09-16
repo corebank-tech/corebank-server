@@ -12,8 +12,7 @@ public record ErrorResponse(String code, String message, Object data) {
     }
 
     public static ResponseEntity<ErrorResponse> toResponseEntity(ErrorCode errorCode, String message) {
-        return ResponseEntity
-                .status(HttpStatus.valueOf(errorCode.getStatus()))
+        return ResponseEntity.status(HttpStatus.valueOf(errorCode.getStatus()))
                 .body(new ErrorResponse(errorCode.getCode(), message, null));
     }
 }

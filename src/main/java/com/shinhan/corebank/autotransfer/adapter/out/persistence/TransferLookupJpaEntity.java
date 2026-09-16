@@ -1,17 +1,16 @@
 package com.shinhan.corebank.autotransfer.adapter.out.persistence;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Enumerated;
-import lombok.AccessLevel;
 import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.LocalDateTime;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "transfer")

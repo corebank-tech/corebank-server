@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 25개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 259개 컬럼
+**대상**: 26개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 268개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -26,7 +26,7 @@
 
 | # | 테이블 | 설명 | 담당 | 컬럼 |
 | --- | --- | --- | --- |----|
-| 1 | `customer` | 고객 | P6 | 16 |
+| 1 | `customer` | 고객 | P6 | 17 |
 | 2 | `terms` | 약관 | P6 | 10 |
 | 3 | `customer_terms_agreement` | 회원가입 약관 동의 | P6 | 4  |
 | 4 | `verification_request` | 인증 요청 | P6 | 13 |
@@ -36,23 +36,24 @@
 | 8 | `product_preferential_rate` | 상품 우대금리 | P3 | 4  |
 | 9 | `product_terms` | 상품-약관 연결 | P3 | 2  |
 | 10 | `account` | 계좌 | P2 | 21 |
-| 11 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4  |
-| 12 | `transfer` | 이체 거래 | P4 | 21 |
-| 13 | `ledger_entry` | 원장 | P4 | 13 |
-| 14 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1  |
-| 15 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6  |
-| 16 | `transfer_limit` | 이체한도 | P1 | 5  |
-| 17 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 5  |
-| 18 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 6  |
-| 19 | `product_subscription` | 상품가입 | P3 | 18 |
-| 20 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5  |
-| 21 | `scheduled_transfer` | 예약이체 | P3 | 17 |
-| 22 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
-| 23 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8  |
-| 24 | `idempotency_key` | 멱등키 | P5 | 9  |
-| 25 | `audit_log` | 감사 로그 | P5 | 8  |
-| 26 | `common_code` | 공통코드 | P5 | 8  |
-| 27 | `batch_execution_lock` | 배치 중복 트리거 방지 락 | P5 | 3  |
+| 11 | `account_number_sequence` | 계좌번호 채번 규칙 | P2 | 8  |
+| 12 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4  |
+| 13 | `transfer` | 이체 거래 | P4 | 21 |
+| 14 | `ledger_entry` | 원장 | P4 | 13 |
+| 15 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1  |
+| 16 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6  |
+| 17 | `transfer_limit` | 이체한도 | P1 | 5  |
+| 18 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 5  |
+| 19 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 6  |
+| 20 | `product_subscription` | 상품가입 | P3 | 18 |
+| 21 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5  |
+| 22 | `scheduled_transfer` | 예약이체 | P3 | 17 |
+| 23 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
+| 24 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8  |
+| 25 | `idempotency_key` | 멱등키 | P5 | 9  |
+| 26 | `audit_log` | 감사 로그 | P5 | 8  |
+| 27 | `common_code` | 공통코드 | P5 | 8  |
+| 28 | `batch_execution_lock` | 배치 중복 트리거 방지 락 | P5 | 3  |
 
 ---
 
@@ -68,6 +69,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `customer_id` | `BIGINT` | **PK** | X |  | 고객 내부 식별자. 명세의 `customerId`. 클라이언트에 노출되는 유일한 고객 키 |
 | `user_id` | `VARCHAR(20)` | **UK** | X |  | 고객이 직접 정한 로그인 아이디. 내부 PK인 `customer_id`와 다른 화면 입력값이다 |
+| `existing_bank_customer_id` | `VARCHAR(100)` | **UK** | O |  | 실명계좌 인증으로 확인한 기존 은행 원장의 고객 식별자. 재가입 판정 기준(ATH0303). 실서비스의 CI 대리 키이며, 원장 인증 없이 만들어진 기존 행은 NULL |
 | `password_hash` | `CHAR(60)` |  | X |  | 로그인 비밀번호의 BCrypt 해시. 평문·복호화 가능 암호화 금지 |
 | `user_name` | `VARCHAR(50)` |  | X |  | 고객 실명. 응답 시 이름 길이별 마스킹 적용 (2자 `이*` / 3자 `홍*동` / 4자 이상 `남**수`) |
 | `birth_date` | `DATE` |  | X |  | 생년월일. 실명계좌 인증·아이디 찾기의 대조값. 로그 평문 기록 금지 |
@@ -89,6 +91,7 @@
 | --- | --- | --- |
 | UNIQUE | `uk_customer_user_id` | `user_id` |
 | UNIQUE | `uk_customer_email` | `email` |
+| UNIQUE | `uk_customer_existing_bank_customer_id` | `existing_bank_customer_id` |
 
 ---
 
@@ -412,7 +415,7 @@
 
 > 이체 거래 (즉시·예약·자동 3종의 단일 수렴점)
 
-즉시·예약·자동이체 3종이 모두 이 테이블 1행으로 수렴한다. 예약·자동은 `source_type`·`source_id`로 원본을 역추적한다. `status = ERROR`인 행은 원장 기표가 0행이다. 예약·자동이체는 `uk_transfer_source_execution_date`(`source_type, source_id, execution_date`)로 같은 회차의 중복 실행을 상태(PROCESSING/SUCCESS/ERROR)와 무관하게 DB 레벨에서 막는다 — 즉시이체는 세 컬럼 모두 NULL이라 이 제약의 영향을 받지 않는다(MySQL은 NULL을 서로 다른 값으로 취급).
+즉시·예약·자동이체 3종이 모두 이 테이블 1행으로 수렴한다. 예약·자동은 `source_type`·`source_id`로 원본을 역추적한다. `status = ERROR`인 행은 원장 기표가 0행이다. 예약·자동이체는 `uk_transfer_source_execution_date`(`source_type, source_id, execution_date`)로 같은 회차의 중복 실행을 상태(SUCCESS/ERROR)와 무관하게 DB 레벨에서 막는다 — 즉시이체는 세 컬럼 모두 NULL이라 이 제약의 영향을 받지 않는다(MySQL은 NULL을 서로 다른 값으로 취급).
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
@@ -426,7 +429,7 @@
 | `fee` | `BIGINT` |  | X | `0` | 수수료. 당행 이체는 0으로 고정 |
 | `transfer_type` | `VARCHAR(12)` |  | X |  | 이체 종류. `IMMEDIATE`(즉시) / `SCHEDULED`(예약) / `AUTO`(자동) |
 | `channel` | `CHAR(2)` |  | X |  | 거래 채널. `WB`(인터넷뱅킹) / `BT`(배치). 거래번호의 채널 2자리와 같은 값 |
-| `status` | `VARCHAR(12)` |  | X |  | 처리 결과. `SUCCESS`(정상) / `ERROR`(오류) / `PROCESSING`(응답 유실·타임아웃 시에만) |
+| `status` | `VARCHAR(12)` |  | X |  | 처리 결과. `SUCCESS`(정상) / `ERROR`(오류). `PROCESSING`은 INSERT 직후의 트랜잭션 내부 상태라 커밋된 행에는 나타나지 않는다 (#377) |
 | `source_type` | `VARCHAR(12)` |  | O |  | 이 이체를 만든 원본 구분. `SCHEDULED`(예약이체) / `AUTO`(자동이체). 즉시이체는 NULL |
 | `source_id` | `BIGINT` |  | O |  | 예약·자동이체 원본 PK. `source_type`과 함께 역추적에 쓴다 |
 | `execution_date` | `DATE` |  | O |  | `source_id`와 함께 멱등키를 구성하는 회차 실행일자. SCHEDULED/AUTO 전용(즉시이체는 NULL). 배치가 실제로 호출된 날짜가 아니라 그 회차의 논리적 실행일(`scheduled_transfer.scheduled_date` / `auto_transfer_execution.execution_date`)이 들어가야 크래시 후 재시도가 같은 회차로 식별된다 |
@@ -460,7 +463,7 @@
 
 > 원장 (APPEND-ONLY. UPDATE/DELETE 금지)
 
-**APPEND-ONLY.** `UPDATE`·`DELETE`를 금지한다. 취소는 반대 방향 기표를 새로 쌓는다. `occurred_at` 기준 RANGE 파티션이라 FK를 선언할 수 없고, 파티션 키가 PK에 포함돼야 해서 PK가 복합키다.
+**APPEND-ONLY.** `UPDATE`·`DELETE`를 금지한다. 취소는 반대 방향 기표를 새로 쌓는다. `occurred_at` 기준 RANGE 파티션이라 FK를 선언할 수 없고, 파티션 키가 PK에 포함돼야 해서 PK가 복합키다. 파티션 범위와 유지보수 절차는 [flyway_guide.md](flyway_guide.md) §5를 따른다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
@@ -679,6 +682,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | `executed_at` | `DATETIME(6)` |  | O |  | 배치 실행 일시. 미실행이면 NULL |
 | `canceled_at` | `DATETIME(6)` |  | O |  | 취소 일시. 미취소면 NULL |
 | `failure_reason` | `VARCHAR(200)` |  | O |  | 실행 실패 사유 |
+| `version` | `BIGINT` |  | X | `0` | 낙관적 락 버전. 다건 취소가 읽어둔 건을 배치가 `PROCESSING`으로 선점하면 취소 저장이 CMN0303으로 걸린다 |
 | `active_dup_key` | `VARCHAR(80)` *GEN* | **UK** | O |  | **생성 컬럼.** `WAITING`일 때만 값이 생겨 중복 예약을 막는다 (SCD0301) |
 
 **인덱스**
@@ -845,11 +849,11 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 
 > 배치 중복 트리거 방지 락 (#189). Apache Fineract `SchedulerTriggerListener.vetoJobExecution()` 패턴 참고
 
-다중 인스턴스 배포 시 같은 배치(`DailyTransferBatchScheduler.runDailyBatch()`)가 동시에 두 번 트리거되는 걸 막는다. `SELECT ... FOR UPDATE`로 행을 잠그고 플래그만 확인·갱신한 뒤 즉시 커밋하는 짧은 트랜잭션이라, 배치 실행 전체 동안 이 테이블을 잠그지 않는다. `currently_running=TRUE`인 채로 `updated_at`이 stale 임계값(6시간)보다 오래되면 서버 크래시로 락 해제가 못 불린 것으로 보고 강제로 재획득한다.
+다중 인스턴스 배포 시 같은 배치(예: `DailyTransferBatchScheduler.runDailyBatch()`)가 동시에 두 번 트리거되는 걸 막는다. `SELECT ... FOR UPDATE`로 행을 잠그고 플래그만 확인·갱신한 뒤 즉시 커밋하는 짧은 트랜잭션이라, 배치 실행 전체 동안 이 테이블을 잠그지 않는다. `currently_running=TRUE`인 채로 `updated_at`이 stale 임계값(6시간)보다 오래되면 서버 크래시로 락 해제가 못 불린 것으로 보고 강제로 재획득한다. 배치 종류마다 `job_name`을 하나씩 등록해 재사용한다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
-| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. 현재는 `DAILY_TRANSFER_BATCH` 한 행뿐 |
+| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP` 2행 |
 | `currently_running` | `BOOLEAN` |  | X | `FALSE` | 이 배치가 지금 실행 중인지. 트리거 시작 시 `TRUE`, 종료 시(성공/실패 무관) `FALSE`로 되돌림 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각. stale(크래시로 방치됨) 판단 기준 |
 

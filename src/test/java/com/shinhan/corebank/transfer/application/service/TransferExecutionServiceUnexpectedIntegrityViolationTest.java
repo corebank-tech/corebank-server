@@ -1,6 +1,10 @@
 package com.shinhan.corebank.transfer.application.service;
 
-import java.time.LocalDate;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
@@ -9,8 +13,8 @@ import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
 import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
-
 import jakarta.persistence.EntityManager;
+import java.time.LocalDate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,12 +22,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * uk_transfer_source_execution_date(멱등성) 충돌이 아닌 다른 DataIntegrityViolationException의
@@ -53,8 +51,8 @@ class TransferExecutionServiceUnexpectedIntegrityViolationTest extends Integrati
             + "ERROR로 확정 기록하되 예외는 그대로 전파한다 - 호출자가 인프라성 DB 오류를 정상적인 이체 실패로 오인하지 않게 한다")
     void execute_withNonIdempotencyDataIntegrityViolation_recordsErrorButPropagatesException() {
         // given
-        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
-                TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
 
         DataIntegrityViolationException unrelatedViolation =
                 new DataIntegrityViolationException("Duplicate entry 'x' for key 'transfer.some_other_uk'");
@@ -81,8 +79,7 @@ class TransferExecutionServiceUnexpectedIntegrityViolationTest extends Integrati
         // when & then: 사전조회·재조회는 실제 DB를 보는데 save()가 대역이라 실제로는 아무 행도 안
         // 남아있다 - 즉 재조회가 비어있어 "이건 멱등성 충돌이 아니다"로 판정되고, 일반
         // RuntimeException과 동일하게 원래 예외가 그대로(같은 인스턴스로) 전파돼야 한다.
-        assertThatThrownBy(() -> transferExecutionService.execute(command))
-                .isSameAs(unrelatedViolation);
+        assertThatThrownBy(() -> transferExecutionService.execute(command)).isSameAs(unrelatedViolation);
 
         // then: 그럼에도 failTransfer()가 호출되어 save()가 두 번(자금이동 시도 + ERROR 확정) 불렸다 -
         // 예외 전파와 별개로 ERROR 확정 기록 자체는 시도됐다는 뜻이다.

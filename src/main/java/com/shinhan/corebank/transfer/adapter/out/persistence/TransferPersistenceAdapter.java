@@ -2,7 +2,6 @@ package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
 import com.shinhan.corebank.transfer.domain.Transfer;
-
 import org.springframework.stereotype.Component;
 
 @Component

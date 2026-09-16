@@ -1,14 +1,14 @@
 package com.shinhan.corebank.scheduledtransfer.adapter.out.persistence;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.LocalDateTime;
-import java.util.List;
-
 public interface ScheduledTransferLookupJpaRepository extends JpaRepository<ScheduledTransferLookupJpaEntity, Long> {
-    @Query("""
+    @Query(
+            """
             select t
             from ScheduledTransferLookupJpaEntity t
             where t.sourceType = :sourceType
@@ -21,6 +21,5 @@ public interface ScheduledTransferLookupJpaRepository extends JpaRepository<Sche
             @Param("sourceType") String sourceType,
             @Param("sourceId") Long sourceId,
             @Param("startOfDay") LocalDateTime startOfDay,
-            @Param("endOfDay") LocalDateTime endOfDay
-    );
+            @Param("endOfDay") LocalDateTime endOfDay);
 }

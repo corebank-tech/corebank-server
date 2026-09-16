@@ -15,27 +15,30 @@ import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferCancelCommand;
+import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferCancelResult;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferChangeCommand;
-import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterCommand;
 import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AuthTokenVerificationPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferOtpVerificationPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
+import com.shinhan.corebank.autotransfer.application.port.out.DepositAccountInfo;
 import com.shinhan.corebank.autotransfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
-import com.shinhan.corebank.autotransfer.domain.AutoTransferErrorCode;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
+import com.shinhan.corebank.autotransfer.domain.exception.AutoTransferErrorCode;
+import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
-import org.springframework.dao.OptimisticLockingFailureException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,6 +48,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 @ExtendWith(MockitoExtension.class)
 class AutoTransferCommandServiceTest {
@@ -77,11 +81,24 @@ class AutoTransferCommandServiceTest {
         // findById()로 DB에서 막 가져온 상황을 흉내내야 하므로, autoTransferId가 없는 register()가 아니라
         // 이미 ID가 채번된 상태를 표현하는 reconstitute()를 사용한다.
         return AutoTransfer.reconstitute(
-                10L, 1L, 2L, "110987654321", "홍길동",
-                10_000L, 1, 15,
-                LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), LocalDate.now().plusDays(10).plusDays(4),
-                "내메모", "받는메모", AutoTransferStatus.NORMAL,
-                LocalDateTime.now(), null, LocalDateTime.now(), 0L);
+                10L,
+                1L,
+                2L,
+                "110987654321",
+                "홍길동",
+                10_000L,
+                1,
+                15,
+                LocalDate.now().plusDays(10),
+                LocalDate.now().plusMonths(12),
+                LocalDate.now().plusDays(10).plusDays(4),
+                "내메모",
+                "받는메모",
+                AutoTransferStatus.NORMAL,
+                LocalDateTime.now(),
+                null,
+                LocalDateTime.now(),
+                0L);
     }
 
     private AutoTransferChangeCommand.AutoTransferChangeCommandBuilder validChangeCommandBuilder() {
@@ -97,9 +114,32 @@ class AutoTransferCommandServiceTest {
                 .requestIp("127.0.0.1");
     }
 
+    private AutoTransfer existingAutoTransfer(Long autoTransferId, Long withdrawalAccountId) {
+        return AutoTransfer.reconstitute(
+                autoTransferId,
+                1L,
+                withdrawalAccountId,
+                "110987654321",
+                "홍길동",
+                10_000L,
+                1,
+                15,
+                LocalDate.now().plusDays(10),
+                LocalDate.now().plusMonths(12),
+                LocalDate.now().plusDays(10).plusDays(4),
+                "내메모",
+                "받는메모",
+                AutoTransferStatus.NORMAL,
+                LocalDateTime.now(),
+                null,
+                LocalDateTime.now(),
+                0L);
+    }
+
     private AutoTransferCancelCommand.AutoTransferCancelCommandBuilder validCancelCommandBuilder() {
         return AutoTransferCancelCommand.builder()
                 .customerId(1L)
+                .autoTransferIds(List.of(10L))
                 .accountPasswordAuthToken("valid-token")
                 .otpAuthToken("valid-otp-token")
                 .requestIp("127.0.0.1");
@@ -129,28 +169,61 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
-        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15)).thenReturn(false);
+        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
+                .thenReturn(false);
         when(clock.withZone(any())).thenReturn(Clock.systemUTC());
         // 실제 어댑터는 INSERT 후 채번된 ID로 다시 조립해서 돌려준다 — 감사로그가 autoTransferId를 필요로 하므로 그 동작을 흉내낸다
         when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> {
             AutoTransfer arg = invocation.getArgument(0);
             return AutoTransfer.reconstitute(
-                    100L, arg.getCustomerId(), arg.getWithdrawalAccountId(), arg.getDepositAccountNumber(), arg.getPayeeName(),
-                    arg.getAmount(), arg.getCycleMonths(), arg.getTransferDay(), arg.getStartDate(), arg.getEndDate(), arg.getNextExecutionDate(),
-                    arg.getMyPassbookMemo(), arg.getRecipientPassbookMemo(), arg.getStatus(), arg.getRegisteredAt(), arg.getTerminatedAt(), arg.getUpdatedAt(), arg.getVersion());
+                    100L,
+                    arg.getCustomerId(),
+                    arg.getWithdrawalAccountId(),
+                    arg.getDepositAccountNumber(),
+                    arg.getPayeeName(),
+                    arg.getAmount(),
+                    arg.getCycleMonths(),
+                    arg.getTransferDay(),
+                    arg.getStartDate(),
+                    arg.getEndDate(),
+                    arg.getNextExecutionDate(),
+                    arg.getMyPassbookMemo(),
+                    arg.getRecipientPassbookMemo(),
+                    arg.getStatus(),
+                    arg.getRegisteredAt(),
+                    arg.getTerminatedAt(),
+                    arg.getUpdatedAt(),
+                    arg.getVersion());
         });
 
-        AutoTransfer result = autoTransferCommandService.register(validCommandBuilder().build());
+        AutoTransfer result =
+                autoTransferCommandService.register(validCommandBuilder().build());
 
         assertThat(result.getWithdrawalAccountId()).isEqualTo(2L);
         assertThat(result.getAmount()).isEqualTo(10_000L);
         verify(autoTransferPersistencePort).save(any(AutoTransfer.class));
-        verify(autoTransferOtpVerificationPort).verifyRegisterAndConsume(
-                eq("valid-otp-token"), eq(1L), eq(2L), eq("110987654321"), eq(10_000L), eq(1), eq(15), any(), any());
-        verify(auditLogService).record(eq(1L), isNull(), eq(AuditEventType.AUTO_TRANSFER_INFO_CHANGE),
-                eq("127.0.0.1"), eq(true), any());
+        verify(autoTransferOtpVerificationPort)
+                .verifyRegisterAndConsume(
+                        eq("valid-otp-token"),
+                        eq(1L),
+                        eq(2L),
+                        eq("110987654321"),
+                        eq(10_000L),
+                        eq(1),
+                        eq(15),
+                        any(),
+                        any());
+        verify(auditLogService)
+                .record(
+                        eq(1L),
+                        isNull(),
+                        eq(AuditEventType.AUTO_TRANSFER_INFO_CHANGE),
+                        eq("127.0.0.1"),
+                        eq(true),
+                        any());
     }
 
     // 인증 토큰은 소유권·업무규칙 검증을 모두 통과한 뒤 상태 변경 직전에 검증하므로
@@ -161,13 +234,17 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
-        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15)).thenReturn(false);
+        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
+                .thenReturn(false);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
-                .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
+                .when(authTokenVerificationPort)
+                .verifyAndConsume(anyString(), any(), any());
 
-        assertThatThrownBy(() -> autoTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> autoTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class);
 
         verify(autoTransferOtpVerificationPort, never())
@@ -181,14 +258,17 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
-        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15)).thenReturn(false);
+        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
+                .thenReturn(false);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(autoTransferOtpVerificationPort)
                 .verifyRegisterAndConsume(any(), any(), any(), any(), any(), any(), any(), any(), any());
 
-        assertThatThrownBy(() -> autoTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> autoTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class);
 
         verify(autoTransferPersistencePort, never()).save(any());
@@ -199,7 +279,8 @@ class AutoTransferCommandServiceTest {
     void register_accountNotOwnedByCustomer_throwsAccountNotAccessible() {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(false);
 
-        assertThatThrownBy(() -> autoTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> autoTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
@@ -213,7 +294,8 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(false);
 
-        assertThatThrownBy(() -> autoTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> autoTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
@@ -228,12 +310,13 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(false);
 
-        assertThatThrownBy(() -> autoTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> autoTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
 
-        verify(accountStatusPort, never()).findAccountTypeByNumber(any());
+        verify(accountStatusPort, never()).findDepositAccountInfo(any());
         verify(autoTransferPersistencePort, never()).existsActiveDuplicate(any(), any(), anyInt());
     }
 
@@ -243,9 +326,10 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.empty());
+        when(accountStatusPort.findDepositAccountInfo("110987654321")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> autoTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> autoTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
@@ -257,31 +341,53 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.TIME_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(
+                        AccountType.TIME_DEPOSIT, LocalDate.now().plusMonths(6))));
 
-        assertThatThrownBy(() -> autoTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> autoTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(AutoTransferErrorCode.UNSUPPORTED_DEPOSIT_ACCOUNT_TYPE));
     }
 
     @ParameterizedTest
-    @EnumSource(value = AccountType.class, names = {"DEMAND_DEPOSIT", "INSTALLMENT_SAVINGS"})
+    @EnumSource(
+            value = AccountType.class,
+            names = {"DEMAND_DEPOSIT", "INSTALLMENT_SAVINGS"})
     @DisplayName("입금계좌가 입출금·정기적금이면 등록이 허용된다 (REQ-PRDT-012, #317)")
     void register_allowedDepositAccountTypes_succeeds(AccountType allowedType) {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(allowedType));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(allowedType, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
-        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15)).thenReturn(false);
+        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
+                .thenReturn(false);
         when(clock.withZone(any())).thenReturn(Clock.systemUTC());
         when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> {
             AutoTransfer arg = invocation.getArgument(0);
             return AutoTransfer.reconstitute(
-                    100L, arg.getCustomerId(), arg.getWithdrawalAccountId(), arg.getDepositAccountNumber(), arg.getPayeeName(),
-                    arg.getAmount(), arg.getCycleMonths(), arg.getTransferDay(), arg.getStartDate(), arg.getEndDate(), arg.getNextExecutionDate(),
-                    arg.getMyPassbookMemo(), arg.getRecipientPassbookMemo(), arg.getStatus(), arg.getRegisteredAt(), arg.getTerminatedAt(), arg.getUpdatedAt(), arg.getVersion());
+                    100L,
+                    arg.getCustomerId(),
+                    arg.getWithdrawalAccountId(),
+                    arg.getDepositAccountNumber(),
+                    arg.getPayeeName(),
+                    arg.getAmount(),
+                    arg.getCycleMonths(),
+                    arg.getTransferDay(),
+                    arg.getStartDate(),
+                    arg.getEndDate(),
+                    arg.getNextExecutionDate(),
+                    arg.getMyPassbookMemo(),
+                    arg.getRecipientPassbookMemo(),
+                    arg.getStatus(),
+                    arg.getRegisteredAt(),
+                    arg.getTerminatedAt(),
+                    arg.getUpdatedAt(),
+                    arg.getVersion());
         });
 
         autoTransferCommandService.register(validCommandBuilder().build());
@@ -295,10 +401,12 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(5_000L);
 
-        assertThatThrownBy(() -> autoTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> autoTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(LmtErrorCode.ONE_TIME_LIMIT_EXCEEDED));
@@ -312,11 +420,14 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
-        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15)).thenReturn(true);
+        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
+                .thenReturn(true);
 
-        assertThatThrownBy(() -> autoTransferCommandService.register(validCommandBuilder().build()))
+        assertThatThrownBy(() -> autoTransferCommandService.register(
+                        validCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(AutoTransferErrorCode.DUPLICATE_REGISTRATION));
@@ -325,20 +436,99 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
+    @DisplayName("정기적금 입금계좌의 만기일보다 종료일이 늦으면 END_DATE_AFTER_MATURITY_DATE를 던진다 (#418)")
+    void register_endDateAfterMaturityDate_throws() {
+        when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
+        when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(
+                        AccountType.INSTALLMENT_SAVINGS, LocalDate.now().plusMonths(6))));
+
+        AutoTransferRegisterCommand command =
+                validCommandBuilder().endDate(LocalDate.now().plusMonths(12)).build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.register(command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.END_DATE_AFTER_MATURITY_DATE));
+
+        verify(autoTransferPersistencePort, never()).existsActiveDuplicate(any(), any(), anyInt());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("종료일이 입금계좌 만기일과 같거나 그 이전이면 등록이 허용된다 (#418, 경계값)")
+    void register_endDateOnMaturityDate_succeeds() {
+        when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
+        when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
+        LocalDate maturityDate = LocalDate.now().plusMonths(12);
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.INSTALLMENT_SAVINGS, maturityDate)));
+        when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
+        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
+                .thenReturn(false);
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+        // save()는 실제로는 INSERT 후 채번된 ID로 재조립해서 돌려준다 — audit 로그가 autoTransferId를
+        // 필요로 하므로(Map.of는 null 값을 허용하지 않는다) 그대로 돌려주면 NPE가 난다
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> {
+            AutoTransfer arg = invocation.getArgument(0);
+            return AutoTransfer.reconstitute(
+                    100L,
+                    arg.getCustomerId(),
+                    arg.getWithdrawalAccountId(),
+                    arg.getDepositAccountNumber(),
+                    arg.getPayeeName(),
+                    arg.getAmount(),
+                    arg.getCycleMonths(),
+                    arg.getTransferDay(),
+                    arg.getStartDate(),
+                    arg.getEndDate(),
+                    arg.getNextExecutionDate(),
+                    arg.getMyPassbookMemo(),
+                    arg.getRecipientPassbookMemo(),
+                    arg.getStatus(),
+                    arg.getRegisteredAt(),
+                    arg.getTerminatedAt(),
+                    arg.getUpdatedAt(),
+                    arg.getVersion());
+        });
+
+        // endDate == maturityDate(경계값 그 자체) — isAfter는 false라 통과해야 한다
+        AutoTransferRegisterCommand command =
+                validCommandBuilder().endDate(maturityDate).build();
+
+        autoTransferCommandService.register(command);
+
+        verify(autoTransferPersistencePort).save(any(AutoTransfer.class));
+    }
+
+    @Test
     @DisplayName("정상적으로 변경하면 저장하고 감사로그를 남긴다")
     void change_success() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
-        when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
-        AutoTransfer result = autoTransferCommandService.change(10L, validChangeCommandBuilder().build());
+        AutoTransfer result = autoTransferCommandService.change(
+                10L, validChangeCommandBuilder().build());
 
         assertThat(result.getAmount()).isEqualTo(20_000L);
         assertThat(result.getCycleMonths()).isEqualTo(3);
         verify(autoTransferPersistencePort).save(any(AutoTransfer.class));
-        verify(auditLogService).record(eq(1L), isNull(), eq(AuditEventType.AUTO_TRANSFER_INFO_CHANGE),
-                eq("127.0.0.1"), eq(true), any());
+        verify(auditLogService)
+                .record(
+                        eq(1L),
+                        isNull(),
+                        eq(AuditEventType.AUTO_TRANSFER_INFO_CHANGE),
+                        eq("127.0.0.1"),
+                        eq(true),
+                        any());
     }
 
     @Test
@@ -347,7 +537,8 @@ class AutoTransferCommandServiceTest {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
-        when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         AutoTransferChangeCommand command = AutoTransferChangeCommand.builder()
                 .customerId(1L)
@@ -370,9 +561,12 @@ class AutoTransferCommandServiceTest {
     void change_amountExceedsOneTimeLimit_throws() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(5_000L);
 
-        AutoTransferChangeCommand command = validChangeCommandBuilder().amount(20_000L).build();
+        AutoTransferChangeCommand command =
+                validChangeCommandBuilder().amount(20_000L).build();
 
         assertThatThrownBy(() -> autoTransferCommandService.change(10L, command))
                 .isInstanceOf(BusinessException.class)
@@ -386,14 +580,28 @@ class AutoTransferCommandServiceTest {
     @DisplayName("정상 상태가 아닌 건은 한도 초과 금액을 보내도 LMT0002가 아니라 AUT0302를 던진다")
     void change_notModifiableStatus_throwsNotInNormalStatus_evenWithOverLimitAmount() {
         AutoTransfer terminated = AutoTransfer.reconstitute(
-                10L, 1L, 2L, "110987654321", "홍길동",
-                10_000L, 1, 15,
-                LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), null,
-                "내메모", "받는메모", AutoTransferStatus.TERMINATED,
-                LocalDateTime.now(), LocalDateTime.now(), LocalDateTime.now(), 0L);
+                10L,
+                1L,
+                2L,
+                "110987654321",
+                "홍길동",
+                10_000L,
+                1,
+                15,
+                LocalDate.now().plusDays(10),
+                LocalDate.now().plusMonths(12),
+                null,
+                "내메모",
+                "받는메모",
+                AutoTransferStatus.TERMINATED,
+                LocalDateTime.now(),
+                LocalDateTime.now(),
+                LocalDateTime.now(),
+                0L);
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(terminated));
 
-        AutoTransferChangeCommand command = validChangeCommandBuilder().amount(20_000L).build();
+        AutoTransferChangeCommand command =
+                validChangeCommandBuilder().amount(20_000L).build();
 
         assertThatThrownBy(() -> autoTransferCommandService.change(10L, command))
                 .isInstanceOf(BusinessException.class)
@@ -410,7 +618,8 @@ class AutoTransferCommandServiceTest {
     void change_amountNotProvided_skipsLimitCheck() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
-        when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         AutoTransferChangeCommand command = AutoTransferChangeCommand.builder()
                 .customerId(1L)
@@ -426,16 +635,82 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
+    @DisplayName("변경 요청의 종료일이 입금계좌 만기일보다 늦으면 END_DATE_AFTER_MATURITY_DATE를 던지고 저장하지 않는다 (#418)")
+    void change_endDateAfterMaturityDate_throws() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(
+                        AccountType.INSTALLMENT_SAVINGS, LocalDate.now().plusMonths(6))));
+
+        AutoTransferChangeCommand command = validChangeCommandBuilder()
+                .endDate(LocalDate.now().plusMonths(12))
+                .build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.change(10L, command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.END_DATE_AFTER_MATURITY_DATE));
+
+        // 만기일 검증이 한도 검증보다 먼저 실행돼야 하므로, 한도 조회 자체가 일어나면 안 된다
+        verify(transferLimitPort, never()).findOneTimeLimit(any());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("변경 시 입금계좌를 찾을 수 없으면 ACCOUNT_NOT_ACCESSIBLE을 던지고 저장하지 않는다 (#418 리뷰 반영)")
+    void change_depositAccountNotFound_throwsAccountNotAccessible() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321")).thenReturn(Optional.empty());
+
+        AutoTransferChangeCommand command = validChangeCommandBuilder()
+                .endDate(LocalDate.now().plusMonths(6))
+                .build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.change(10L, command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
+
+        // 만기일 검증이 한도 검증보다 먼저 실행돼야 하므로, 한도 조회 자체가 일어나면 안 된다
+        verify(transferLimitPort, never()).findOneTimeLimit(any());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("종료일을 안 바꾸면 만기일 검증을 하지 않는다 (#418)")
+    void change_endDateNotProvided_skipsMaturityCheck() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        AutoTransferChangeCommand command = AutoTransferChangeCommand.builder()
+                .customerId(1L)
+                .cycleMonths(3)
+                .accountPasswordAuthToken("valid-token")
+                .otpAuthToken("valid-otp-token")
+                .requestIp("127.0.0.1")
+                .build();
+
+        autoTransferCommandService.change(10L, command);
+
+        verify(accountStatusPort, never()).findDepositAccountInfo(any());
+    }
+
+    @Test
     @DisplayName("대상 자동이체가 없으면 NOT_FOUND를 던진다")
     void change_notFound_throws() {
         when(autoTransferPersistencePort.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> autoTransferCommandService.change(999L, validChangeCommandBuilder().build()))
+        assertThatThrownBy(() -> autoTransferCommandService.change(
+                        999L, validChangeCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(AutoTransferErrorCode.NOT_FOUND));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(AutoTransferErrorCode.NOT_FOUND));
 
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
     }
 
     @Test
@@ -444,14 +719,15 @@ class AutoTransferCommandServiceTest {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
 
-        AutoTransferChangeCommand command = validChangeCommandBuilder().customerId(999L).build();
+        AutoTransferChangeCommand command =
+                validChangeCommandBuilder().customerId(999L).build();
 
         assertThatThrownBy(() -> autoTransferCommandService.change(10L, command))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(AutoTransferErrorCode.NOT_FOUND));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(AutoTransferErrorCode.NOT_FOUND));
 
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
     }
 
@@ -460,14 +736,19 @@ class AutoTransferCommandServiceTest {
     void change_invalidAuthToken_propagatesException() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
-                .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
+                .when(authTokenVerificationPort)
+                .verifyAndConsume(anyString(), any(), any());
 
-        assertThatThrownBy(() -> autoTransferCommandService.change(10L, validChangeCommandBuilder().build()))
+        assertThatThrownBy(() -> autoTransferCommandService.change(
+                        10L, validChangeCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class);
 
-        verify(autoTransferOtpVerificationPort, never()).verifyChangeAndConsume(any(), any(), any(), any(), any(), any());
+        verify(autoTransferOtpVerificationPort, never())
+                .verifyChangeAndConsume(any(), any(), any(), any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
         verify(auditLogService, never()).record(any(), any(), any(), any(), anyBoolean(), any());
     }
@@ -477,11 +758,15 @@ class AutoTransferCommandServiceTest {
     void change_invalidOtpAuthToken_propagatesException() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
-                .when(autoTransferOtpVerificationPort).verifyChangeAndConsume(any(), any(), any(), any(), any(), any());
+                .when(autoTransferOtpVerificationPort)
+                .verifyChangeAndConsume(any(), any(), any(), any(), any(), any());
 
-        assertThatThrownBy(() -> autoTransferCommandService.change(10L, validChangeCommandBuilder().build()))
+        assertThatThrownBy(() -> autoTransferCommandService.change(
+                        10L, validChangeCommandBuilder().build()))
                 .isInstanceOf(BusinessException.class);
 
         verify(autoTransferPersistencePort, never()).save(any());
@@ -497,11 +782,14 @@ class AutoTransferCommandServiceTest {
         // (CONCURRENT_MODIFICATION 응답)은 ApiExceptionHandler의 공용 핸들러가 이미 담당한다.
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.save(any(AutoTransfer.class)))
                 .thenThrow(new OptimisticLockingFailureException("다른 요청이 먼저 이 자동이체를 변경했습니다"));
 
-        assertThatThrownBy(() -> autoTransferCommandService.change(10L, validChangeCommandBuilder().build()))
+        assertThatThrownBy(() -> autoTransferCommandService.change(
+                        10L, validChangeCommandBuilder().build()))
                 .isInstanceOf(OptimisticLockingFailureException.class);
     }
 
@@ -510,44 +798,170 @@ class AutoTransferCommandServiceTest {
     void cancel_success() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
-        when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         when(clock.withZone(any())).thenReturn(Clock.systemUTC());
 
-        autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build());
+        List<AutoTransferCancelResult> results =
+                autoTransferCommandService.cancel(validCancelCommandBuilder().build());
 
+        assertThat(results).singleElement().satisfies(result -> {
+            assertThat(result.autoTransferId()).isEqualTo(10L);
+            assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(result.terminatedAt()).isNotNull();
+        });
         assertThat(existing.getStatus()).isEqualTo(AutoTransferStatus.TERMINATED);
+        verify(autoTransferOtpVerificationPort).verifyCancelAndConsume(eq("valid-otp-token"), eq(1L), eq(List.of(10L)));
         verify(autoTransferPersistencePort).save(any(AutoTransfer.class));
-        verify(auditLogService).record(eq(1L), isNull(), eq(AuditEventType.AUTO_TRANSFER_INFO_CHANGE),
-                eq("127.0.0.1"), eq(true), any());
+        verify(auditLogService)
+                .record(
+                        eq(1L),
+                        isNull(),
+                        eq(AuditEventType.AUTO_TRANSFER_INFO_CHANGE),
+                        eq("127.0.0.1"),
+                        eq(true),
+                        any());
     }
 
     @Test
-    @DisplayName("대상 자동이체가 없으면 NOT_FOUND를 던진다")
-    void cancel_notFound_throws() {
-        when(autoTransferPersistencePort.findById(999L)).thenReturn(Optional.empty());
+    @DisplayName("해지 가능한 건과 불가능한 건이 섞이면 가능한 건만 해지하고 나머지는 건별 실패로 반환한다")
+    void cancel_partialFailure_terminatesOnlyCancelableOnes() {
+        AutoTransfer cancelable = existingAutoTransfer(10L, 2L);
+        // 기간 만료로 종료된 건은 고객이 해지한 적이 없으므로 멱등 성공이 아니라 AUT0302 실패다
+        AutoTransfer expired = AutoTransfer.reconstitute(
+                11L,
+                1L,
+                2L,
+                "110987654321",
+                "홍길동",
+                10_000L,
+                1,
+                15,
+                LocalDate.now().minusMonths(12),
+                LocalDate.now().minusDays(1),
+                LocalDate.now().minusDays(1),
+                "내메모",
+                "받는메모",
+                AutoTransferStatus.EXPIRED,
+                LocalDateTime.now(),
+                null,
+                LocalDateTime.now(),
+                0L);
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(cancelable));
+        when(autoTransferPersistencePort.findById(11L)).thenReturn(Optional.of(expired));
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
 
-        assertThatThrownBy(() -> autoTransferCommandService.cancel(999L, validCancelCommandBuilder().build()))
+        List<AutoTransferCancelResult> results = autoTransferCommandService.cancel(
+                validCancelCommandBuilder().autoTransferIds(List.of(10L, 11L)).build());
+
+        assertThat(results)
+                .extracting(
+                        AutoTransferCancelResult::autoTransferId,
+                        AutoTransferCancelResult::status,
+                        AutoTransferCancelResult::failureCode)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(10L, ProcessResultStatus.SUCCESS, null),
+                        org.assertj.core.groups.Tuple.tuple(
+                                11L, ProcessResultStatus.ERROR, AutoTransferErrorCode.NOT_IN_NORMAL_STATUS.getCode()));
+        // OTP 토큰에는 요청한 조합 전체가 묶여 있으므로 해지 가능한 건만 추려서 넘기면 안 된다
+        verify(autoTransferOtpVerificationPort)
+                .verifyCancelAndConsume(eq("valid-otp-token"), eq(1L), eq(List.of(10L, 11L)));
+        verify(autoTransferPersistencePort).save(any(AutoTransfer.class));
+    }
+
+    @Test
+    @DisplayName("해지 대상의 출금계좌가 서로 다르면 CMN0001을 던지고 OTP를 소비하지 않는다 (api_conventions.md §6-3)")
+    void cancel_mixedWithdrawalAccounts_throwsInvalidInput() {
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existingAutoTransfer(10L, 2L)));
+        when(autoTransferPersistencePort.findById(11L)).thenReturn(Optional.of(existingAutoTransfer(11L, 3L)));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+
+        AutoTransferCancelCommand command =
+                validCancelCommandBuilder().autoTransferIds(List.of(10L, 11L)).build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.cancel(command))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(AutoTransferErrorCode.NOT_FOUND));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
 
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+        verify(autoTransferPersistencePort, never()).save(any());
     }
 
     @Test
-    @DisplayName("소유자가 아니면(customerId 불일치) 존재를 숨기고 NOT_FOUND를 던진다")
-    void cancel_customerIdMismatch_throwsNotFound() {
+    @DisplayName("이미 해지된 건이 다른 출금계좌여도 CMN0001을 던진다 — 계좌 혼합 검사는 해지 대상이 아니라 소유 확인된 전체 기준")
+    void cancel_alreadyTerminatedOnOtherAccount_throwsInvalidInput() {
+        AutoTransfer cancelableOnAccountTwo = existingAutoTransfer(10L, 2L);
+        AutoTransfer alreadyTerminatedOnAccountThree = AutoTransfer.reconstitute(
+                11L,
+                1L,
+                3L,
+                "110987654321",
+                "홍길동",
+                10_000L,
+                1,
+                15,
+                LocalDate.now().plusDays(10),
+                LocalDate.now().plusMonths(12),
+                LocalDate.now().plusDays(10),
+                "내메모",
+                "받는메모",
+                AutoTransferStatus.TERMINATED,
+                LocalDateTime.now(),
+                LocalDateTime.now(),
+                LocalDateTime.now(),
+                0L);
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(cancelableOnAccountTwo));
+        when(autoTransferPersistencePort.findById(11L)).thenReturn(Optional.of(alreadyTerminatedOnAccountThree));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+
+        AutoTransferCancelCommand command =
+                validCancelCommandBuilder().autoTransferIds(List.of(10L, 11L)).build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.cancel(command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
+
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
+        verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("대상 자동이체가 없으면 건별 실패(AUT0201)로 반환한다")
+    void cancel_notFound_returnsItemFailure() {
+        when(autoTransferPersistencePort.findById(999L)).thenReturn(Optional.empty());
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+
+        List<AutoTransferCancelResult> results = autoTransferCommandService.cancel(
+                validCancelCommandBuilder().autoTransferIds(List.of(999L)).build());
+
+        assertThat(results)
+                .singleElement()
+                .extracting(AutoTransferCancelResult::failureCode)
+                .isEqualTo(AutoTransferErrorCode.NOT_FOUND.getCode());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
+        verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("소유자가 아니면(customerId 불일치) 존재를 숨기고 미존재와 같은 AUT0201로 반환한다")
+    void cancel_customerIdMismatch_returnsNotFoundItemFailure() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
 
-        AutoTransferCancelCommand command = validCancelCommandBuilder().customerId(999L).build();
+        List<AutoTransferCancelResult> results = autoTransferCommandService.cancel(
+                validCancelCommandBuilder().customerId(999L).build());
 
-        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, command))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(AutoTransferErrorCode.NOT_FOUND));
-
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        assertThat(results)
+                .singleElement()
+                .extracting(AutoTransferCancelResult::failureCode)
+                .isEqualTo(AutoTransferErrorCode.NOT_FOUND.getCode());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
     }
 
@@ -558,10 +972,12 @@ class AutoTransferCommandServiceTest {
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
         when(clock.withZone(any())).thenReturn(Clock.systemUTC());
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
-                .when(authTokenVerificationPort).verify(anyString(), any(), anyString());
+                .when(authTokenVerificationPort)
+                .verifyAndConsume(anyString(), any(), any());
 
-        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
-                .isInstanceOf(BusinessException.class);
+        AutoTransferCancelCommand command = validCancelCommandBuilder().build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.cancel(command)).isInstanceOf(BusinessException.class);
 
         verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
@@ -575,60 +991,129 @@ class AutoTransferCommandServiceTest {
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
         when(clock.withZone(any())).thenReturn(Clock.systemUTC());
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
-                .when(autoTransferOtpVerificationPort).verifyCancelAndConsume(any(), any(), any());
+                .when(autoTransferOtpVerificationPort)
+                .verifyCancelAndConsume(any(), any(), any());
 
-        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
-                .isInstanceOf(BusinessException.class);
+        AutoTransferCancelCommand command = validCancelCommandBuilder().build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.cancel(command)).isInstanceOf(BusinessException.class);
 
         verify(autoTransferPersistencePort, never()).save(any());
         verify(auditLogService, never()).record(any(), any(), any(), any(), anyBoolean(), any());
     }
 
     @Test
-    @DisplayName("정상 상태가 아닌 건은 해지 요청도 OTP를 소비하지 않고 AUT0302를 던진다")
-    void cancel_notModifiableStatus_throwsNotInNormalStatus_withoutConsumingOtp() {
+    @DisplayName("이미 해지(TERMINATED)된 건은 재검증·저장 없이 그대로 멱등 성공으로 반환한다")
+    void cancel_alreadyTerminated_returnsIdempotentSuccess() {
         AutoTransfer terminated = AutoTransfer.reconstitute(
-                10L, 1L, 2L, "110987654321", "홍길동",
-                10_000L, 1, 15,
-                LocalDate.now().plusDays(10), LocalDate.now().plusMonths(12), null,
-                "내메모", "받는메모", AutoTransferStatus.TERMINATED,
-                LocalDateTime.now(), LocalDateTime.now(), LocalDateTime.now(), 0L);
+                10L,
+                1L,
+                2L,
+                "110987654321",
+                "홍길동",
+                10_000L,
+                1,
+                15,
+                LocalDate.now().plusDays(10),
+                LocalDate.now().plusMonths(12),
+                LocalDate.now().plusDays(10),
+                "내메모",
+                "받는메모",
+                AutoTransferStatus.TERMINATED,
+                LocalDateTime.now(),
+                LocalDateTime.now(),
+                LocalDateTime.now(),
+                0L);
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(terminated));
         when(clock.withZone(any())).thenReturn(Clock.systemUTC());
 
-        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS));
+        List<AutoTransferCancelResult> results =
+                autoTransferCommandService.cancel(validCancelCommandBuilder().build());
 
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        assertThat(results).singleElement().satisfies(result -> {
+            assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(result.failureCode()).isNull();
+        });
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
     }
 
     @Test
-    @DisplayName("다음 실행 예정일 당일 해지 요청은 OTP를 소비하지 않고 AUT0303을 던진다")
-    void cancel_onExecutionDate_throwsCannotTerminateOnExecutionDate_withoutConsumingOtp() {
+    @DisplayName("기간 만료로 종료(EXPIRED)된 건은 OTP를 소비하지 않고 건별 실패(AUT0302)로 반환한다")
+    void cancel_expiredStatus_returnsItemFailure_withoutConsumingOtp() {
+        AutoTransfer expired = AutoTransfer.reconstitute(
+                10L,
+                1L,
+                2L,
+                "110987654321",
+                "홍길동",
+                10_000L,
+                1,
+                15,
+                LocalDate.now().minusMonths(12),
+                LocalDate.now().minusDays(1),
+                LocalDate.now().minusDays(1),
+                "내메모",
+                "받는메모",
+                AutoTransferStatus.EXPIRED,
+                LocalDateTime.now(),
+                null,
+                LocalDateTime.now(),
+                0L);
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(expired));
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+
+        List<AutoTransferCancelResult> results =
+                autoTransferCommandService.cancel(validCancelCommandBuilder().build());
+
+        assertThat(results)
+                .singleElement()
+                .extracting(AutoTransferCancelResult::failureCode)
+                .isEqualTo(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS.getCode());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
+        verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("다음 실행 예정일 당일 해지 요청은 OTP를 소비하지 않고 건별 실패(AUT0303)로 반환한다")
+    void cancel_onExecutionDate_returnsItemFailure_withoutConsumingOtp() {
         // 서비스가 clock.withZone(SEOUL) 기준으로 오늘 날짜를 판정하므로, 픽스처의
         // nextExecutionDate도 LocalDate.now()(JVM 기본 시간대)가 아니라 같은 고정 Clock에서
         // 뽑아야 시간대에 따라 날짜가 어긋나 flaky해지지 않는다.
         Clock fixedClock = Clock.fixed(Instant.parse("2026-08-22T02:00:00Z"), ZoneId.of("Asia/Seoul"));
         LocalDate today = LocalDate.now(fixedClock);
         AutoTransfer dueToday = AutoTransfer.reconstitute(
-                10L, 1L, 2L, "110987654321", "홍길동",
-                10_000L, 1, 15,
-                today.minusMonths(1), today.plusMonths(12), today,
-                "내메모", "받는메모", AutoTransferStatus.NORMAL,
-                LocalDateTime.now(), null, LocalDateTime.now(), 0L);
+                10L,
+                1L,
+                2L,
+                "110987654321",
+                "홍길동",
+                10_000L,
+                1,
+                15,
+                today.minusMonths(1),
+                today.plusMonths(12),
+                today,
+                "내메모",
+                "받는메모",
+                AutoTransferStatus.NORMAL,
+                LocalDateTime.now(),
+                null,
+                LocalDateTime.now(),
+                0L);
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(dueToday));
         when(clock.withZone(any())).thenReturn(fixedClock);
 
-        assertThatThrownBy(() -> autoTransferCommandService.cancel(10L, validCancelCommandBuilder().build()))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(AutoTransferErrorCode.CANNOT_TERMINATE_ON_EXECUTION_DATE));
+        List<AutoTransferCancelResult> results =
+                autoTransferCommandService.cancel(validCancelCommandBuilder().build());
 
-        verify(authTokenVerificationPort, never()).verify(any(), any(), any());
+        assertThat(results)
+                .singleElement()
+                .extracting(AutoTransferCancelResult::failureCode)
+                .isEqualTo(AutoTransferErrorCode.CANNOT_TERMINATE_ON_EXECUTION_DATE.getCode());
+        verify(authTokenVerificationPort, never()).verifyAndConsume(any(), any(), any());
         verify(autoTransferOtpVerificationPort, never()).verifyCancelAndConsume(any(), any(), any());
         verify(autoTransferPersistencePort, never()).save(any());
     }

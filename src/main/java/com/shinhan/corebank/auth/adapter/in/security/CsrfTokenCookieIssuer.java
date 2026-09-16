@@ -15,10 +15,7 @@ public class CsrfTokenCookieIssuer {
     private final CookieCsrfTokenRepository csrfTokenRepository;
     private final CsrfTokenRequestAttributeHandler csrfTokenRequestHandler;
 
-    public void rotate(
-            HttpServletRequest request,
-            HttpServletResponse response
-    ) {
+    public void rotate(HttpServletRequest request, HttpServletResponse response) {
         csrfTokenRepository.saveToken(null, request, response);
 
         CsrfToken csrfToken = csrfTokenRepository.generateToken(request);

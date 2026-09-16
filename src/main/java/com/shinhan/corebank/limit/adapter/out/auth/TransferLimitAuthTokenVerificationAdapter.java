@@ -1,12 +1,10 @@
 package com.shinhan.corebank.limit.adapter.out.auth;
 
-import java.util.Map;
-
 import com.shinhan.corebank.limit.application.port.out.AuthTokenVerificationPort;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerification;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.otp.api.OtpTransactionType;
-
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

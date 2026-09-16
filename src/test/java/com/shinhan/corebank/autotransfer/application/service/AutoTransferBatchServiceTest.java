@@ -5,7 +5,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,7 +12,6 @@ import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferBatchQ
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
-import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -41,11 +39,24 @@ class AutoTransferBatchServiceTest {
 
     private AutoTransfer autoTransfer(Long autoTransferId) {
         return AutoTransfer.reconstitute(
-                autoTransferId, 1L, 2L, "110987654321", "홍길동",
-                10000L, 1, 15,
-                LocalDate.of(2026, 1, 1), LocalDate.of(2027, 1, 1), DATE,
-                "메모", "받는메모", AutoTransferStatus.NORMAL,
-                LocalDateTime.of(2026, 1, 1, 0, 0), null, LocalDateTime.of(2026, 1, 1, 0, 0), 0L);
+                autoTransferId,
+                1L,
+                2L,
+                "110987654321",
+                "홍길동",
+                10000L,
+                1,
+                15,
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2027, 1, 1),
+                DATE,
+                "메모",
+                "받는메모",
+                AutoTransferStatus.NORMAL,
+                LocalDateTime.of(2026, 1, 1, 0, 0),
+                null,
+                LocalDateTime.of(2026, 1, 1, 0, 0),
+                0L);
     }
 
     private AutoTransferExecution processingExecution() {
@@ -72,10 +83,11 @@ class AutoTransferBatchServiceTest {
     void executeDaily_saveProcessingConstraintViolation_skipsCompleteProcessing() {
         AutoTransfer target = autoTransfer(10L);
         when(autoTransferBatchQueryPort.findDueForExecution(DATE)).thenReturn(List.of(target));
-        RuntimeException rootCause = new RuntimeException(
-                "Duplicate entry '10-2026-03-15' for key 'auto_transfer_execution.uk_ate_dup'");
+        RuntimeException rootCause =
+                new RuntimeException("Duplicate entry '10-2026-03-15' for key 'auto_transfer_execution.uk_ate_dup'");
         doThrow(new DataIntegrityViolationException("insert failed", rootCause))
-                .when(autoTransferBatchItemProcessor).saveProcessing(target);
+                .when(autoTransferBatchItemProcessor)
+                .saveProcessing(target);
 
         autoTransferBatchService.executeDaily(DATE);
 
@@ -91,7 +103,8 @@ class AutoTransferBatchServiceTest {
         RuntimeException rootCause = new RuntimeException(
                 "Cannot add or update a child row: a foreign key constraint fails (`fk_ate_auto_transfer`)");
         doThrow(new DataIntegrityViolationException("insert failed", rootCause))
-                .when(autoTransferBatchItemProcessor).saveProcessing(failing);
+                .when(autoTransferBatchItemProcessor)
+                .saveProcessing(failing);
         AutoTransferExecution saved = processingExecution();
         when(autoTransferBatchItemProcessor.saveProcessing(eq(succeeding))).thenReturn(saved);
 
@@ -108,7 +121,8 @@ class AutoTransferBatchServiceTest {
         AutoTransfer succeeding = autoTransfer(11L);
         when(autoTransferBatchQueryPort.findDueForExecution(DATE)).thenReturn(List.of(failing, succeeding));
         doThrow(new RuntimeException("DB 연결 장애"))
-                .when(autoTransferBatchItemProcessor).saveProcessing(failing);
+                .when(autoTransferBatchItemProcessor)
+                .saveProcessing(failing);
         AutoTransferExecution saved = processingExecution();
         when(autoTransferBatchItemProcessor.saveProcessing(eq(succeeding))).thenReturn(saved);
 
@@ -129,7 +143,8 @@ class AutoTransferBatchServiceTest {
         when(autoTransferBatchItemProcessor.saveProcessing(eq(failing))).thenReturn(savedFailing);
         when(autoTransferBatchItemProcessor.saveProcessing(eq(succeeding))).thenReturn(savedSucceeding);
         doThrow(new RuntimeException("이체 실행 중 장애"))
-                .when(autoTransferBatchItemProcessor).completeProcessing(failing, savedFailing, DATE);
+                .when(autoTransferBatchItemProcessor)
+                .completeProcessing(failing, savedFailing, DATE);
 
         autoTransferBatchService.executeDaily(DATE);
 

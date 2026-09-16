@@ -5,9 +5,5 @@ import org.springframework.context.annotation.Configuration;
 
 // 회원가입 설정 프로퍼티를 Spring 빈으로 등록한다.
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({
-        SignupTokenProperties.class,
-        EmailVerificationProperties.class
-})
-public class SignupConfiguration {
-}
+@EnableConfigurationProperties({SignupTokenProperties.class, EmailVerificationProperties.class})
+public class SignupConfiguration {}

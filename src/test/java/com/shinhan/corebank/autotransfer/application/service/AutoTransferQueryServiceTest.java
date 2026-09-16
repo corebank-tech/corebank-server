@@ -90,8 +90,7 @@ class AutoTransferQueryServiceTest {
     @DisplayName("all=true면 size가 허용값이 아니어도 예외 없이 unpaged로 조회한다")
     void allTrue_skipsPageSizeValidation_usesUnpaged() {
         stubClock();
-        when(autoTransferQueryPort.search(1L, 1L, null, Pageable.unpaged()))
-                .thenReturn(new PageImpl<>(List.of()));
+        when(autoTransferQueryPort.search(1L, 1L, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of()));
         when(accountStatusPort.findAccountAlias(1L)).thenReturn(Optional.empty());
 
         Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, null, 0, 7, true);
@@ -105,8 +104,8 @@ class AutoTransferQueryServiceTest {
     void rejectsNegativePage() {
         assertThatThrownBy(() -> autoTransferQueryService.search(1L, 1L, null, -1, 10, false))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT));
 
         verify(autoTransferQueryPort, never()).search(any(), any(), any(), any(Pageable.class));
     }
@@ -115,14 +114,26 @@ class AutoTransferQueryServiceTest {
     @DisplayName("검증을 통과하면 포트 결과를 fromAlias와 함께 반환한다")
     void delegatesToPort() {
         stubClock();
-        AutoTransfer autoTransfer = AutoTransfer.register(1L, 1L, "110987654321", "홍길동", 100_000L, 1, 15,
-                LocalDate.now().plusDays(1), LocalDate.now().plusMonths(6), null, null, LocalDateTime.now());
+        AutoTransfer autoTransfer = AutoTransfer.register(
+                1L,
+                1L,
+                "110987654321",
+                "홍길동",
+                100_000L,
+                1,
+                15,
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusMonths(6),
+                null,
+                null,
+                LocalDateTime.now());
         Page<AutoTransfer> pageFromPort = new PageImpl<>(List.of(autoTransfer));
         when(autoTransferQueryPort.search(1L, 1L, AutoTransferStatus.NORMAL, PageRequest.of(0, 10)))
                 .thenReturn(pageFromPort);
         when(accountStatusPort.findAccountAlias(1L)).thenReturn(Optional.of("월세계좌"));
 
-        Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, AutoTransferStatus.NORMAL, 0, 10, false);
+        Page<AutoTransferListItem> result =
+                autoTransferQueryService.search(1L, 1L, AutoTransferStatus.NORMAL, 0, 10, false);
 
         assertThat(result.getContent()).hasSize(1);
         AutoTransferListItem item = result.getContent().get(0);
@@ -150,9 +161,24 @@ class AutoTransferQueryServiceTest {
 
     private AutoTransfer reconstitute(AutoTransferStatus status, LocalDate nextExecutionDate) {
         return AutoTransfer.reconstitute(
-                1L, 1L, 1L, "110987654321", "홍길동", 100_000L, 1, 15,
-                LocalDate.of(2026, 1, 1), LocalDate.of(2027, 1, 1), nextExecutionDate,
-                "내메모", null, status, LocalDateTime.of(2026, 1, 1, 10, 0), null, null, null);
+                1L,
+                1L,
+                1L,
+                "110987654321",
+                "홍길동",
+                100_000L,
+                1,
+                15,
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2027, 1, 1),
+                nextExecutionDate,
+                "내메모",
+                null,
+                status,
+                LocalDateTime.of(2026, 1, 1, 10, 0),
+                null,
+                null,
+                null);
     }
 
     @Test
@@ -195,7 +221,8 @@ class AutoTransferQueryServiceTest {
 
         Page<AutoTransferListItem> result = autoTransferQueryService.search(1L, 1L, null, 0, 10, false);
 
-        assertThat(result.getContent()).extracting(AutoTransferListItem::cancelable)
+        assertThat(result.getContent())
+                .extracting(AutoTransferListItem::cancelable)
                 .containsExactly(false, false);
     }
 }

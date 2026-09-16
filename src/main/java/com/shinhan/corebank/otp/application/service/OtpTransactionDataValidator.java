@@ -2,13 +2,12 @@ package com.shinhan.corebank.otp.application.service;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-import org.springframework.stereotype.Component;
-
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.stereotype.Component;
 
 // 거래정보가 비어 있거나 민감한 인증정보와 null 선택 필드를 포함하는지 검사한다.
 @Component
@@ -34,9 +33,7 @@ public class OtpTransactionDataValidator {
 
     private void validateFieldName(String fieldName) {
         String normalized = fieldName.toLowerCase(Locale.ROOT);
-        if (normalized.contains("password")
-                || normalized.equals("otpcode")
-                || normalized.endsWith("authtoken")) {
+        if (normalized.contains("password") || normalized.equals("otpcode") || normalized.endsWith("authtoken")) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
     }

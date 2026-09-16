@@ -1,10 +1,9 @@
 package com.shinhan.corebank.signup.adapter.out.redis;
 
 import com.shinhan.corebank.signup.application.port.out.AuthTokenGeneratorPort;
-import org.springframework.stereotype.Component;
-
 import java.security.SecureRandom;
 import java.util.Base64;
+import org.springframework.stereotype.Component;
 
 // 회원가입 인증 토큰을 256비트 CSPRNG 난수로 생성한다.
 @Component
@@ -44,8 +43,6 @@ public class SecureAuthTokenGenerator implements AuthTokenGeneratorPort {
         byte[] randomBytes = new byte[TOKEN_BYTES];
         secureRandom.nextBytes(randomBytes);
 
-        return prefix + Base64.getUrlEncoder()
-                .withoutPadding()
-                .encodeToString(randomBytes);
+        return prefix + Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
     }
 }

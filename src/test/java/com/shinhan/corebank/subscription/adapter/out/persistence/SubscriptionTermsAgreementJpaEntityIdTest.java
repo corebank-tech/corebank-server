@@ -15,11 +15,9 @@ import org.junit.jupiter.params.provider.CsvSource;
 class SubscriptionTermsAgreementJpaEntityIdTest {
 
     @ParameterizedTest(name = "subscriptionId={0}, termsId={1}")
-    @CsvSource(nullValues = "null", value = {
-            "null, 2",
-            "1,    null",
-            "null, null"
-    })
+    @CsvSource(
+            nullValues = "null",
+            value = {"null, 2", "1,    null", "null, null"})
     @DisplayName("subscriptionId 또는 termsId가 null이면 CMN0002를 던진다")
     void rejectsNull(Long subscriptionId, Long termsId) {
         assertThatThrownBy(() -> new SubscriptionTermsAgreementJpaEntityId(subscriptionId, termsId))
@@ -48,7 +46,8 @@ class SubscriptionTermsAgreementJpaEntityIdTest {
     @Test
     @DisplayName("무인자 생성자는 Hibernate 전용이므로 protected 로 제한한다")
     void restrictsNoArgConstructorToProtected() throws NoSuchMethodException {
-        Constructor<SubscriptionTermsAgreementJpaEntityId> constructor = SubscriptionTermsAgreementJpaEntityId.class.getDeclaredConstructor();
+        Constructor<SubscriptionTermsAgreementJpaEntityId> constructor =
+                SubscriptionTermsAgreementJpaEntityId.class.getDeclaredConstructor();
 
         assertThat(Modifier.isProtected(constructor.getModifiers())).isTrue();
     }

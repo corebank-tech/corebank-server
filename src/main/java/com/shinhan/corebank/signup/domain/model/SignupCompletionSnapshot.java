@@ -6,8 +6,7 @@ import java.util.List;
 public record SignupCompletionSnapshot(
         TempSignupTokenPayload signup,
         ExistingBankCustomerProfile customerProfile,
-        List<ExistingBankAccountSnapshot> accounts
-) {
+        List<ExistingBankAccountSnapshot> accounts) {
     public SignupCompletionSnapshot {
         accounts = List.copyOf(accounts);
     }

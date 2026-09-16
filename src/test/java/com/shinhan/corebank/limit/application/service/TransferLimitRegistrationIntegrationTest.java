@@ -1,14 +1,29 @@
 package com.shinhan.corebank.limit.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willReturn;
+import static org.mockito.BDDMockito.willThrow;
+
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.ExistingAccountRegistration;
 import com.shinhan.corebank.limit.api.TransferLimitRegistration;
+import com.shinhan.corebank.signup.adapter.out.mock.MockExistingBankCustomerVerificationAdapter;
 import com.shinhan.corebank.signup.adapter.out.redis.TempSignupTokenRedisAdapter;
 import com.shinhan.corebank.signup.application.port.in.CompleteSignupCommand;
 import com.shinhan.corebank.signup.application.service.SignupCompletionService;
 import com.shinhan.corebank.signup.domain.model.AgreedTerm;
+import com.shinhan.corebank.signup.domain.model.ExistingBankAccountSnapshot;
+import com.shinhan.corebank.signup.domain.model.ExistingBankCustomerProfile;
 import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
-
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,32 +31,32 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.BDDMockito.then;
-import static org.mockito.BDDMockito.willThrow;
-
 // 회원가입 트랜잭션이 이체한도 기본값까지 함께 만들고 함께 롤백하는지 검증한다(REQ-TRSF-029).
 // 커밋 여부 자체가 검증 대상이라 클래스에 @Transactional 을 걸지 않는다.
 class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
 
-    private static final String PASSWORD_HASH =
-            "$2y$10$1NOtaTsHuD0rdffA3ReFKO5S0J4bHlVES6okQMYubUd0OuVFfMZXa";
+    private static final String PASSWORD_HASH = "$2y$10$1NOtaTsHuD0rdffA3ReFKO5S0J4bHlVES6okQMYubUd0OuVFfMZXa";
     private static final long DEFAULT_ONE_TIME_LIMIT = 1_000_000L;
     private static final long DEFAULT_DAILY_LIMIT = 5_000_000L;
 
-    @Autowired SignupCompletionService completionService;
-    @Autowired TempSignupTokenRedisAdapter tempTokenAdapter;
-    @Autowired JdbcTemplate jdbcTemplate;
+    @Autowired
+    SignupCompletionService completionService;
 
-    @MockitoBean ExistingAccountRegistration accountRegistration;
-    @MockitoSpyBean TransferLimitRegistration transferLimitRegistration;
+    @Autowired
+    TempSignupTokenRedisAdapter tempTokenAdapter;
+
+    @Autowired
+    JdbcTemplate jdbcTemplate;
+
+    @MockitoBean
+    ExistingAccountRegistration accountRegistration;
+    // 원장 어댑터는 조회·프로필·계좌 세 포트를 한 빈으로 구현한다. @MockitoBean 으로
+    // 포트 하나만 대체하면 나머지 포트 주입이 깨지므로 구현체를 스파이로 감싼다.
+    @MockitoSpyBean
+    MockExistingBankCustomerVerificationAdapter ledgerAdapter;
+
+    @MockitoSpyBean
+    TransferLimitRegistration transferLimitRegistration;
 
     @Test
     void assignsPolicyDefaultLimitWhenSignupCompletes() {
@@ -51,12 +66,14 @@ class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
         var result = completionService.complete(new CompleteSignupCommand(token));
 
         assertThat(jdbcTemplate.queryForObject(
-                "select one_time_limit from transfer_limit where customer_id = ?",
-                Long.class, result.customerId()))
+                        "select one_time_limit from transfer_limit where customer_id = ?",
+                        Long.class,
+                        result.customerId()))
                 .isEqualTo(DEFAULT_ONE_TIME_LIMIT);
         assertThat(jdbcTemplate.queryForObject(
-                "select daily_limit from transfer_limit where customer_id = ?",
-                Long.class, result.customerId()))
+                        "select daily_limit from transfer_limit where customer_id = ?",
+                        Long.class,
+                        result.customerId()))
                 .isEqualTo(DEFAULT_DAILY_LIMIT);
     }
 
@@ -69,10 +86,11 @@ class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
         var result = completionService.complete(new CompleteSignupCommand(token));
 
         assertThat(jdbcTemplate.queryForObject(
-                "select date(tl.created_at) = date(c.joined_at)"
-                        + " from transfer_limit tl join customer c on c.customer_id = tl.customer_id"
-                        + " where tl.customer_id = ?",
-                Boolean.class, result.customerId()))
+                        "select date(tl.created_at) = date(c.joined_at)"
+                                + " from transfer_limit tl join customer c on c.customer_id = tl.customer_id"
+                                + " where tl.customer_id = ?",
+                        Boolean.class,
+                        result.customerId()))
                 .isTrue();
     }
 
@@ -86,7 +104,8 @@ class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
         String userId = "lmtrb" + suffix();
         String token = saveTempToken(userId);
         willThrow(new IllegalStateException("account import failure"))
-                .given(accountRegistration).registerAll(any());
+                .given(accountRegistration)
+                .registerAll(any());
 
         assertThatThrownBy(() -> completionService.complete(new CompleteSignupCommand(token)))
                 .isInstanceOf(IllegalStateException.class);
@@ -94,8 +113,9 @@ class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
         ArgumentCaptor<Long> customerIdCaptor = ArgumentCaptor.forClass(Long.class);
         then(transferLimitRegistration).should().registerDefault(customerIdCaptor.capture());
         assertThat(jdbcTemplate.queryForObject(
-                "select count(*) from transfer_limit where customer_id = ?",
-                Integer.class, customerIdCaptor.getValue()))
+                        "select count(*) from transfer_limit where customer_id = ?",
+                        Integer.class,
+                        customerIdCaptor.getValue()))
                 .isZero();
     }
 
@@ -105,28 +125,51 @@ class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
         String userId = "lmtfa" + suffix();
         String token = saveTempToken(userId);
         willThrow(new IllegalStateException("limit registration failure"))
-                .given(transferLimitRegistration).registerDefault(any());
+                .given(transferLimitRegistration)
+                .registerDefault(any());
 
         assertThatThrownBy(() -> completionService.complete(new CompleteSignupCommand(token)))
                 .isInstanceOf(IllegalStateException.class);
 
         assertThat(jdbcTemplate.queryForObject(
-                "select count(*) from customer where user_id = ?", Integer.class, userId))
+                        "select count(*) from customer where user_id = ?", Integer.class, userId))
                 .isZero();
     }
 
+    // 이 클래스는 커밋 여부가 검증 대상이라 롤백되지 않으므로, 앞선 테스트가 커밋한
+    // existing_bank_customer_id 를 뒤 테스트가 다시 쓰면 ATH0303 에 걸린다. 원장 조회를
+    // 목으로 끊고 테스트마다 다른 원장 고객을 만들어 실행 순서와 무관하게 만든다.
     private String saveTempToken(String userId) {
+        String bankCustomerId = "BANK_CUSTOMER_" + suffix();
+        willReturn(Optional.of(new ExistingBankCustomerProfile(bankCustomerId, "홍길동", LocalDate.of(1990, 1, 1))))
+                .given(ledgerAdapter)
+                .findByCustomerId(bankCustomerId);
+        willReturn(List.of(new ExistingBankAccountSnapshot(
+                        "BANK_ACCOUNT_" + suffix(),
+                        "110" + suffix(),
+                        "DEMAND_DEPOSIT",
+                        null,
+                        1_000_000L,
+                        "ACTIVE",
+                        PASSWORD_HASH,
+                        LocalDate.of(2024, 1, 10),
+                        null)))
+                .given(ledgerAdapter)
+                .findAllByCustomerId(bankCustomerId);
+
         String token = "TEMP_SIGNUP_" + UUID.randomUUID();
-        tempTokenAdapter.save(token, new TempSignupTokenPayload(
-                signupTerms(),
-                "BANK_CUSTOMER_001",
-                "BANK_ACCOUNT_001",
-                userId,
-                PASSWORD_HASH,
-                userId + "@example.com",
-                "01012345678",
-                Instant.now()
-        ), Duration.ofMinutes(30));
+        tempTokenAdapter.save(
+                token,
+                new TempSignupTokenPayload(
+                        signupTerms(),
+                        bankCustomerId,
+                        "BANK_ACCOUNT_001",
+                        userId,
+                        PASSWORD_HASH,
+                        userId + "@example.com",
+                        "01012345678",
+                        Instant.now()),
+                Duration.ofMinutes(30));
         return token;
     }
 
@@ -137,10 +180,7 @@ class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
     private List<AgreedTerm> signupTerms() {
         return jdbcTemplate.query(
                 "select terms_id, version from terms where terms_type = 'SIGNUP' order by terms_id",
-                (resultSet, rowNumber) -> new AgreedTerm(
-                        resultSet.getString("terms_id"),
-                        resultSet.getString("version")
-                )
-        );
+                (resultSet, rowNumber) ->
+                        new AgreedTerm(resultSet.getString("terms_id"), resultSet.getString("version")));
     }
 }

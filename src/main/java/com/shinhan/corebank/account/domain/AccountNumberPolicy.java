@@ -1,6 +1,6 @@
 package com.shinhan.corebank.account.domain;
 
-//계좌번호 생성과 관련한 변하지 않는 규칙 모아둠
+// 계좌번호 생성과 관련한 변하지 않는 규칙 모아둠
 public class AccountNumberPolicy {
 
     public static final String BANK_CODE = "088";

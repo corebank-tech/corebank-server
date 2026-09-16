@@ -26,8 +26,7 @@ public class EmailVerificationRequest {
             boolean used,
             LocalDateTime verifiedAt,
             LocalDateTime expiresAt,
-            LocalDateTime createdAt
-    ) {
+            LocalDateTime createdAt) {
         this.verificationRequestId = verificationRequestId;
         this.purpose = purpose;
         this.target = target;
@@ -46,20 +45,9 @@ public class EmailVerificationRequest {
             String target,
             String codeHash,
             LocalDateTime expiresAt,
-            LocalDateTime createdAt
-    ) {
+            LocalDateTime createdAt) {
         return new EmailVerificationRequest(
-                verificationRequestId,
-                purpose,
-                target,
-                codeHash,
-                0,
-                false,
-                false,
-                null,
-                expiresAt,
-                createdAt
-        );
+                verificationRequestId, purpose, target, codeHash, 0, false, false, null, expiresAt, createdAt);
     }
 
     public void verify(LocalDateTime verifiedAt) {

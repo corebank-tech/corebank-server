@@ -2,6 +2,7 @@ package com.shinhan.corebank.signup.application.service;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.signup.api.EmailChangeVerificationTokenVerifier;
 import com.shinhan.corebank.signup.application.port.in.IssueEmailVerificationCommand;
 import com.shinhan.corebank.signup.application.port.in.IssueEmailVerificationResult;
 import com.shinhan.corebank.signup.application.port.in.IssueEmailVerificationUseCase;
@@ -14,34 +15,29 @@ import com.shinhan.corebank.signup.application.port.out.EmailVerificationRequest
 import com.shinhan.corebank.signup.application.port.out.EmailVerificationTokenPort;
 import com.shinhan.corebank.signup.application.port.out.SignupCustomerAvailabilityPort;
 import com.shinhan.corebank.signup.application.port.out.VerificationRequestIdGeneratorPort;
-import com.shinhan.corebank.signup.api.EmailChangeVerificationTokenVerifier;
 import com.shinhan.corebank.signup.config.EmailVerificationProperties;
 import com.shinhan.corebank.signup.config.SignupTokenProperties;
 import com.shinhan.corebank.signup.domain.exception.SignupErrorCode;
 import com.shinhan.corebank.signup.domain.model.EmailVerificationPurpose;
 import com.shinhan.corebank.signup.domain.model.EmailVerificationRequest;
 import com.shinhan.corebank.signup.domain.model.EmailVerificationTokenPayload;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.util.Locale;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Clock;
-import java.time.LocalDateTime;
-import java.util.Locale;
-import java.util.regex.Pattern;
-
 // 이메일 인증번호의 발급·재발급 무효화·검증·완료 토큰 발급을 처리한다.
 @Service
 @RequiredArgsConstructor
-public class EmailVerificationService implements
-        IssueEmailVerificationUseCase,
-        VerifyEmailUseCase,
-        EmailChangeVerificationTokenVerifier {
+public class EmailVerificationService
+        implements IssueEmailVerificationUseCase, VerifyEmailUseCase, EmailChangeVerificationTokenVerifier {
 
     private static final Pattern CODE_PATTERN = Pattern.compile("^\\d{6}$");
-    private static final Pattern EMAIL_PATTERN =
-            Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     private final SignupCustomerAvailabilityPort customerAvailabilityPort;
     private final EmailVerificationRequestPort requestPort;
@@ -56,9 +52,7 @@ public class EmailVerificationService implements
 
     @Transactional
     @Override
-    public IssueEmailVerificationResult issue(
-            IssueEmailVerificationCommand command
-    ) {
+    public IssueEmailVerificationResult issue(IssueEmailVerificationCommand command) {
         if (command.email() == null
                 || command.purpose() == null
                 || command.email().length() > 100
@@ -85,31 +79,22 @@ public class EmailVerificationService implements
                 email,
                 passwordEncoder.encode(verificationCode),
                 now.plus(properties.codeTtl()),
-                now
-        ));
+                now));
 
         // Phase 1에서는 실제 메일 발송 대신 인증번호를 응답으로 반환한다.
         return new IssueEmailVerificationResult(
-                requestId,
-                verificationCode,
-                properties.codeTtl().toSeconds()
-        );
+                requestId, verificationCode, properties.codeTtl().toSeconds());
     }
 
     @Transactional
     @Override
     public VerifyEmailResult verify(VerifyEmailCommand command) {
-        EmailVerificationRequest request = requestPort.findByIdForUpdate(
-                        command.emailVerificationId()
-                )
-                .orElseThrow(() -> new BusinessException(
-                        SignupErrorCode.EMAIL_VERIFICATION_REQUEST_NOT_FOUND
-                ));
+        EmailVerificationRequest request = requestPort
+                .findByIdForUpdate(command.emailVerificationId())
+                .orElseThrow(() -> new BusinessException(SignupErrorCode.EMAIL_VERIFICATION_REQUEST_NOT_FOUND));
 
         if (request.used()) {
-            throw new BusinessException(
-                    SignupErrorCode.EMAIL_VERIFICATION_REQUEST_NOT_FOUND
-            );
+            throw new BusinessException(SignupErrorCode.EMAIL_VERIFICATION_REQUEST_NOT_FOUND);
         }
 
         LocalDateTime now = LocalDateTime.now(clock);
@@ -121,9 +106,7 @@ public class EmailVerificationService implements
         if (code == null
                 || !CODE_PATTERN.matcher(code).matches()
                 || !passwordEncoder.matches(code, request.codeHash())) {
-            throw new BusinessException(
-                    SignupErrorCode.EMAIL_VERIFICATION_CODE_MISMATCH
-            );
+            throw new BusinessException(SignupErrorCode.EMAIL_VERIFICATION_CODE_MISMATCH);
         }
 
         // 비관적 락 안에서 사용 완료 처리하여 동일 요청의 중복 성공을 막는다.
@@ -133,49 +116,30 @@ public class EmailVerificationService implements
         String token = authTokenGeneratorPort.generateEmailVerificationToken();
         tokenPort.save(
                 token,
-                new EmailVerificationTokenPayload(
-                        request.target(),
-                        request.purpose(),
-                        now
-                ),
-                tokenProperties.emailVerificationTtl()
-        );
+                new EmailVerificationTokenPayload(request.target(), request.purpose(), now),
+                tokenProperties.emailVerificationTtl());
 
-        return new VerifyEmailResult(
-                token,
-                now.atZone(clock.getZone()).toOffsetDateTime()
-        );
+        return new VerifyEmailResult(token, now.atZone(clock.getZone()).toOffsetDateTime());
     }
 
     // 이메일과 EMAIL_CHANGE 목적이 일치하는 인증 토큰만 원자적으로 소비한다.
     @Override
-    public void verifyAndConsumeForEmailChange(
-            String emailVerificationToken,
-            String email
-    ) {
-        if (emailVerificationToken == null
-                || emailVerificationToken.isBlank()
-                || email == null
-                || email.isBlank()) {
+    public void verifyAndConsumeForEmailChange(String emailVerificationToken, String email) {
+        if (emailVerificationToken == null || emailVerificationToken.isBlank() || email == null || email.isBlank()) {
             throw invalidEmailVerificationToken();
         }
 
-        EmailVerificationTokenPayload payload = tokenPort.find(
-                emailVerificationToken
-        ).orElseThrow(this::invalidEmailVerificationToken);
+        EmailVerificationTokenPayload payload =
+                tokenPort.find(emailVerificationToken).orElseThrow(this::invalidEmailVerificationToken);
         validateEmailChangePayload(payload, email);
 
-        EmailVerificationTokenPayload consumed = tokenPort.consume(
-                emailVerificationToken
-        ).orElseThrow(this::invalidEmailVerificationToken);
+        EmailVerificationTokenPayload consumed =
+                tokenPort.consume(emailVerificationToken).orElseThrow(this::invalidEmailVerificationToken);
         validateEmailChangePayload(consumed, email);
     }
 
     // 인증 토큰이 요청 이메일과 이메일 변경 목적에 묶여 있는지 확인한다.
-    private void validateEmailChangePayload(
-            EmailVerificationTokenPayload payload,
-            String email
-    ) {
+    private void validateEmailChangePayload(EmailVerificationTokenPayload payload, String email) {
         if (payload.purpose() != EmailVerificationPurpose.EMAIL_CHANGE
                 || !payload.email().equalsIgnoreCase(email)) {
             throw invalidEmailVerificationToken();
@@ -184,8 +148,6 @@ public class EmailVerificationService implements
 
     // 이메일 변경 인증 토큰 실패를 공통 ATH0103 예외로 변환한다.
     private BusinessException invalidEmailVerificationToken() {
-        return new BusinessException(
-                SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN
-        );
+        return new BusinessException(SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN);
     }
 }

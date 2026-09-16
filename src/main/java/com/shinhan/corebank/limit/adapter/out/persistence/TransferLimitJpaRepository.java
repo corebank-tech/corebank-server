@@ -1,9 +1,8 @@
 package com.shinhan.corebank.limit.adapter.out.persistence;
 
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.Optional;
-
-import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -43,15 +42,19 @@ public interface TransferLimitJpaRepository extends JpaRepository<TransferLimitJ
      * 같은 형태다. 네이티브 INSERT 는 JPA Auditing 을 타지 않아 시각을 직접 채운다.
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(value = """
+    @Query(
+            value =
+                    """
         INSERT INTO transfer_limit (customer_id, one_time_limit, daily_limit, created_at, updated_at)
         VALUES (:customerId, :oneTimeLimit, :dailyLimit, :now, :now)
         ON DUPLICATE KEY UPDATE customer_id = customer_id
-        """, nativeQuery = true)
-    void insertIfAbsent(@Param("customerId") Long customerId,
-                        @Param("oneTimeLimit") long oneTimeLimit,
-                        @Param("dailyLimit") long dailyLimit,
-                        @Param("now") LocalDateTime now);
+        """,
+            nativeQuery = true)
+    void insertIfAbsent(
+            @Param("customerId") Long customerId,
+            @Param("oneTimeLimit") long oneTimeLimit,
+            @Param("dailyLimit") long dailyLimit,
+            @Param("now") LocalDateTime now);
 
     /**
      * 잠가 둔 행의 한도를 갱신한다. <b>단순 UPDATE 다</b> - 호출 전에
@@ -64,15 +67,19 @@ public interface TransferLimitJpaRepository extends JpaRepository<TransferLimitJ
      * 걸고, JPA Auditing 을 타지 않으므로 updated_at 을 자바 Clock 에서 넘겨받는다.
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(value = """
+    @Query(
+            value =
+                    """
         UPDATE transfer_limit
            SET one_time_limit = :oneTimeLimit,
                daily_limit    = :dailyLimit,
                updated_at     = :now
          WHERE customer_id = :customerId
-        """, nativeQuery = true)
-    void updateLimit(@Param("customerId") Long customerId,
-                     @Param("oneTimeLimit") long oneTimeLimit,
-                     @Param("dailyLimit") long dailyLimit,
-                     @Param("now") LocalDateTime now);
+        """,
+            nativeQuery = true)
+    void updateLimit(
+            @Param("customerId") Long customerId,
+            @Param("oneTimeLimit") long oneTimeLimit,
+            @Param("dailyLimit") long dailyLimit,
+            @Param("now") LocalDateTime now);
 }

@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.common.exception.BusinessException;
-
 import java.time.LocalDate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,8 +20,7 @@ class TransferLimitDailyUsageTest {
         TransferLimitDailyUsage usage = TransferLimitDailyUsage.restore(CUSTOMER_ID, USAGE_DATE, 5_000_000L);
 
         // when & then
-        assertThatThrownBy(() -> usage.add(-3_000_000L))
-                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> usage.add(-3_000_000L)).isInstanceOf(BusinessException.class);
         assertThat(usage.getUsedAmount()).isEqualTo(5_000_000L);
     }
 

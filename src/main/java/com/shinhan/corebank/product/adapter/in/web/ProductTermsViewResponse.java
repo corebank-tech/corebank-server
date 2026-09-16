@@ -1,7 +1,6 @@
 package com.shinhan.corebank.product.adapter.in.web;
 
 import com.shinhan.corebank.product.domain.ProductTermsView;
-
 import java.time.LocalDateTime;
 
 public record ProductTermsViewResponse(
@@ -12,8 +11,7 @@ public record ProductTermsViewResponse(
         Boolean viewRequired,
         String content,
         LocalDateTime viewedAt,
-        LocalDateTime viewExpiresAt
-) {
+        LocalDateTime viewExpiresAt) {
     public static ProductTermsViewResponse from(ProductTermsView view) {
         return new ProductTermsViewResponse(
                 view.getTermsId(),

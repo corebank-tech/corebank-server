@@ -1,7 +1,6 @@
 package com.shinhan.corebank.account.application.port.in;
 
 public enum AccountGroupCode {
-
     DEMAND_DEPOSIT("입출금계좌"),
     DEPOSIT_SAVINGS("예금·적금");
 

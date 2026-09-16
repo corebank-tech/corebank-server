@@ -2,17 +2,16 @@ package com.shinhan.corebank.common.audit;
 
 import com.shinhan.corebank.common.util.MaskingUtil;
 import jakarta.persistence.*;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * 감사 로그 (REQ-NFR-010).
@@ -32,23 +31,23 @@ public class AuditLogJpaEntity {
     private Long auditLogId;
 
     @Column(name = "customer_id")
-    private Long customerId;                        // 비로그인 시도는 NULL
+    private Long customerId; // 비로그인 시도는 NULL
 
     @Column(name = "transaction_number", columnDefinition = "CHAR(20)")
-    private String transactionNumber;               // 거래와 로그를 잇는 키
+    private String transactionNumber; // 거래와 로그를 잇는 키
 
     @Column(name = "event_type", nullable = false, length = 40)
     private String eventType;
 
     @Column(name = "request_ip", nullable = false, length = 45)
-    private String requestIp;                       // IPv6 대응
+    private String requestIp; // IPv6 대응
 
     @Column(name = "result", nullable = false, length = 12)
-    private String result;                          // SUCCESS / FAILURE
+    private String result; // SUCCESS / FAILURE
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "detail")
-    private Map<String, Object> detail;                          // 마스킹 후 저장
+    private Map<String, Object> detail; // 마스킹 후 저장
 
     @Column(name = "requested_at", nullable = false)
     private LocalDateTime requestedAt;
@@ -57,17 +56,20 @@ public class AuditLogJpaEntity {
 
     public static final String ACCOUNT_NUMBER_KEY_SUFFIX = "AccountNumber";
 
-    public static AuditLogJpaEntity of(Long customerId, String transactionNumber,
-                                       AuditEventType eventType, String requestIp,
-                                       boolean success, Map<String, Object> detail, LocalDateTime now) {
+    public static AuditLogJpaEntity of(
+            Long customerId,
+            String transactionNumber,
+            AuditEventType eventType,
+            String requestIp,
+            boolean success,
+            Map<String, Object> detail,
+            LocalDateTime now) {
         boolean hasTransactionNumber = transactionNumber != null && !transactionNumber.isBlank();
         if (eventType.isLedgerChanging() && !hasTransactionNumber) {
-            throw new IllegalArgumentException(
-                    "원장 변경 이벤트(%s)는 transactionNumber 가 반드시 있어야 합니다.".formatted(eventType));
+            throw new IllegalArgumentException("원장 변경 이벤트(%s)는 transactionNumber 가 반드시 있어야 합니다.".formatted(eventType));
         }
         if (!eventType.isLedgerChanging() && hasTransactionNumber) {
-            throw new IllegalArgumentException(
-                    "원장 비변경 이벤트(%s)는 transactionNumber 가 없어야 합니다.".formatted(eventType));
+            throw new IllegalArgumentException("원장 비변경 이벤트(%s)는 transactionNumber 가 없어야 합니다.".formatted(eventType));
         }
 
         AuditLogJpaEntity e = new AuditLogJpaEntity();
@@ -80,18 +82,21 @@ public class AuditLogJpaEntity {
         e.requestedAt = now;
         return e;
     }
+
     private static Map<String, Object> sanitizeDetail(Map<String, Object> detail) {
-        if(detail == null) {return null;}
+        if (detail == null) {
+            return null;
+        }
         Map<String, Object> sanitized = new HashMap<>();
-        for(Map.Entry<String, Object> entry : detail.entrySet()) {
+        for (Map.Entry<String, Object> entry : detail.entrySet()) {
             String key = entry.getKey();
             Object value = entry.getValue();
 
-            if(FORBIDDEN_DETAIL_KEY.contains(key)) {
+            if (FORBIDDEN_DETAIL_KEY.contains(key)) {
                 throw new IllegalArgumentException("detail에 금지된 키가 포함되어 있습니다: " + key);
             }
-            if(key.toLowerCase().endsWith(ACCOUNT_NUMBER_KEY_SUFFIX.toLowerCase())) {
-                sanitized.put(key, MaskingUtil.maskAccountNumber((String)value));
+            if (key.toLowerCase().endsWith(ACCOUNT_NUMBER_KEY_SUFFIX.toLowerCase())) {
+                sanitized.put(key, MaskingUtil.maskAccountNumber((String) value));
             } else {
                 sanitized.put(key, sanitizeValue(value));
             }

@@ -34,8 +34,14 @@ class TransferLookupAdapterTest extends IntegrationTestSupport {
         Long withdrawalAccountId = insertAccount(customerId);
         Long depositAccountId = insertAccount(customerId);
         Long autoTransferId = 5001L;
-        insertTransfer(withdrawalAccountId, depositAccountId, "20260315BT0000000001",
-                ProcessResultStatus.SUCCESS, "AUTO", autoTransferId, null,
+        insertTransfer(
+                withdrawalAccountId,
+                depositAccountId,
+                "20260315BT0000000001",
+                ProcessResultStatus.SUCCESS,
+                "AUTO",
+                autoTransferId,
+                null,
                 LocalDateTime.of(2026, 3, 15, 0, 10, 0));
 
         Optional<TransferLookupResult> result = adapter.findBySourceAndDate(autoTransferId, LocalDate.of(2026, 3, 15));
@@ -53,8 +59,14 @@ class TransferLookupAdapterTest extends IntegrationTestSupport {
         Long withdrawalAccountId = insertAccount(customerId);
         Long depositAccountId = insertAccount(customerId);
         Long autoTransferId = 5002L;
-        insertTransfer(withdrawalAccountId, depositAccountId, "20260315BT0000000002",
-                ProcessResultStatus.ERROR, "AUTO", autoTransferId, "잔액 부족",
+        insertTransfer(
+                withdrawalAccountId,
+                depositAccountId,
+                "20260315BT0000000002",
+                ProcessResultStatus.ERROR,
+                "AUTO",
+                autoTransferId,
+                "잔액 부족",
                 LocalDateTime.of(2026, 3, 15, 0, 10, 0));
 
         Optional<TransferLookupResult> result = adapter.findBySourceAndDate(autoTransferId, LocalDate.of(2026, 3, 15));
@@ -80,8 +92,14 @@ class TransferLookupAdapterTest extends IntegrationTestSupport {
         Long depositAccountId = insertAccount(customerId);
         Long autoTransferId = 5003L;
         // 3/16 00:00:00 정각 - 3/15 범위(< 3/16 00:00:00)에 안 들어감
-        insertTransfer(withdrawalAccountId, depositAccountId, "20260316BT0000000003",
-                ProcessResultStatus.SUCCESS, "AUTO", autoTransferId, null,
+        insertTransfer(
+                withdrawalAccountId,
+                depositAccountId,
+                "20260316BT0000000003",
+                ProcessResultStatus.SUCCESS,
+                "AUTO",
+                autoTransferId,
+                null,
                 LocalDateTime.of(2026, 3, 16, 0, 0, 0));
 
         Optional<TransferLookupResult> result = adapter.findBySourceAndDate(autoTransferId, LocalDate.of(2026, 3, 15));
@@ -96,11 +114,23 @@ class TransferLookupAdapterTest extends IntegrationTestSupport {
         Long withdrawalAccountId = insertAccount(customerId);
         Long depositAccountId = insertAccount(customerId);
         Long autoTransferId = 5005L;
-        insertTransfer(withdrawalAccountId, depositAccountId, "20260315BT0000000005",
-                ProcessResultStatus.ERROR, "AUTO", autoTransferId, "잔액 부족",
+        insertTransfer(
+                withdrawalAccountId,
+                depositAccountId,
+                "20260315BT0000000005",
+                ProcessResultStatus.ERROR,
+                "AUTO",
+                autoTransferId,
+                "잔액 부족",
                 LocalDateTime.of(2026, 3, 15, 0, 10, 0));
-        insertTransfer(withdrawalAccountId, depositAccountId, "20260315BT0000000006",
-                ProcessResultStatus.SUCCESS, "AUTO", autoTransferId, null,
+        insertTransfer(
+                withdrawalAccountId,
+                depositAccountId,
+                "20260315BT0000000006",
+                ProcessResultStatus.SUCCESS,
+                "AUTO",
+                autoTransferId,
+                null,
                 LocalDateTime.of(2026, 3, 15, 0, 20, 0));
 
         Optional<TransferLookupResult> result = adapter.findBySourceAndDate(autoTransferId, LocalDate.of(2026, 3, 15));
@@ -117,8 +147,14 @@ class TransferLookupAdapterTest extends IntegrationTestSupport {
         Long withdrawalAccountId = insertAccount(customerId);
         Long depositAccountId = insertAccount(customerId);
         Long sourceId = 5004L;
-        insertTransfer(withdrawalAccountId, depositAccountId, "20260315BT0000000004",
-                ProcessResultStatus.SUCCESS, "SCHEDULED", sourceId, null,
+        insertTransfer(
+                withdrawalAccountId,
+                depositAccountId,
+                "20260315BT0000000004",
+                ProcessResultStatus.SUCCESS,
+                "SCHEDULED",
+                sourceId,
+                null,
                 LocalDateTime.of(2026, 3, 15, 0, 10, 0));
 
         Optional<TransferLookupResult> result = adapter.findBySourceAndDate(sourceId, LocalDate.of(2026, 3, 15));
@@ -128,29 +164,45 @@ class TransferLookupAdapterTest extends IntegrationTestSupport {
 
     private Long insertCustomer() {
         long seq = CUSTOMER_SEQ.incrementAndGet();
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO customer (user_id, password_hash, user_name, birth_date, email, phone_number, joined_at, created_at, updated_at) "
                                 + "VALUES (:userId, 'x', '홍길동', '1990-01-01', :email, '01012345678', NOW(), NOW(), NOW())")
                 .setParameter("userId", "u" + seq)
                 .setParameter("email", "test" + seq + "@test.com")
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
     private Long insertAccount(Long customerId) {
         String accountNumber = String.format("%012d", ACCOUNT_SEQ.incrementAndGet());
-        entityManager.createNativeQuery(
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO account (account_number, customer_id, account_type, status, password_hash, opened_date, created_at, updated_at) "
                                 + "VALUES (:accountNumber, :customerId, 'DEMAND_DEPOSIT', 'ACTIVE', 'x', NOW(), NOW(), NOW())")
                 .setParameter("accountNumber", accountNumber)
                 .setParameter("customerId", customerId)
                 .executeUpdate();
-        return ((Number) entityManager.createNativeQuery("SELECT LAST_INSERT_ID()").getSingleResult()).longValue();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT LAST_INSERT_ID()")
+                        .getSingleResult())
+                .longValue();
     }
 
-    private void insertTransfer(Long withdrawalAccountId, Long depositAccountId, String transactionNumber,
-            ProcessResultStatus status, String sourceType, Long sourceId, String errorMessage, LocalDateTime transferredAt) {
-        entityManager.createNativeQuery(
+    private void insertTransfer(
+            Long withdrawalAccountId,
+            Long depositAccountId,
+            String transactionNumber,
+            ProcessResultStatus status,
+            String sourceType,
+            Long sourceId,
+            String errorMessage,
+            LocalDateTime transferredAt) {
+        entityManager
+                .createNativeQuery(
                         "INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id, "
                                 + "deposit_account_number, payee_name, amount, fee, transfer_type, channel, status, "
                                 + "source_type, source_id, error_message, transferred_at, created_at) "

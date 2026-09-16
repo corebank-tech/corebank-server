@@ -3,12 +3,11 @@ package com.shinhan.corebank.product.adapter.out.persistence;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import jakarta.persistence.Embeddable;
+import java.io.Serializable;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.io.Serializable;
 
 /**
  * 도메인 미러({@link com.shinhan.corebank.product.domain.ProductTermsId})와 달리 이쪽은

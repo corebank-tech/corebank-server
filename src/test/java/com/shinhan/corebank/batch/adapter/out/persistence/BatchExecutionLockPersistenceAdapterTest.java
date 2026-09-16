@@ -49,20 +49,19 @@ class BatchExecutionLockPersistenceAdapterTest extends IntegrationTestSupport {
     @BeforeEach
     void setUp() {
         jobName = "TEST_JOB_" + JOB_SEQ.incrementAndGet();
-        transactionTemplate().executeWithoutResult(status ->
-                entityManager.createNativeQuery(
-                                "INSERT INTO batch_execution_lock (job_name, currently_running, updated_at) "
-                                        + "VALUES (:jobName, FALSE, NOW())")
-                        .setParameter("jobName", jobName)
-                        .executeUpdate());
+        transactionTemplate().executeWithoutResult(status -> entityManager
+                .createNativeQuery("INSERT INTO batch_execution_lock (job_name, currently_running, updated_at) "
+                        + "VALUES (:jobName, FALSE, NOW())")
+                .setParameter("jobName", jobName)
+                .executeUpdate());
     }
 
     @AfterEach
     void cleanUp() {
-        transactionTemplate().executeWithoutResult(status ->
-                entityManager.createNativeQuery("DELETE FROM batch_execution_lock WHERE job_name = :jobName")
-                        .setParameter("jobName", jobName)
-                        .executeUpdate());
+        transactionTemplate().executeWithoutResult(status -> entityManager
+                .createNativeQuery("DELETE FROM batch_execution_lock WHERE job_name = :jobName")
+                .setParameter("jobName", jobName)
+                .executeUpdate());
     }
 
     @Test
@@ -71,7 +70,8 @@ class BatchExecutionLockPersistenceAdapterTest extends IntegrationTestSupport {
         boolean acquired = adapter.tryAcquire(jobName);
 
         assertThat(acquired).isTrue();
-        BatchExecutionLockJpaEntity persisted = batchExecutionLockJpaRepository.findById(jobName).orElseThrow();
+        BatchExecutionLockJpaEntity persisted =
+                batchExecutionLockJpaRepository.findById(jobName).orElseThrow();
         assertThat(persisted.isCurrentlyRunning()).isTrue();
     }
 
@@ -104,18 +104,18 @@ class BatchExecutionLockPersistenceAdapterTest extends IntegrationTestSupport {
         // DB의 NOW() 대신 어댑터와 동일한 Clock 빈으로 계산한다 - DB 컨테이너와 JVM은 서로 다른
         // 프로세스의 시계라 6시간 경계값 근처에서 미세한 시계 오차로 흔들릴 수 있다(CI에서 실제로 발생).
         LocalDateTime sevenHoursAgo = LocalDateTime.now(clock).minusHours(7);
-        transactionTemplate().executeWithoutResult(status ->
-                entityManager.createNativeQuery(
-                                "UPDATE batch_execution_lock SET updated_at = :updatedAt "
-                                        + "WHERE job_name = :jobName")
-                        .setParameter("updatedAt", sevenHoursAgo)
-                        .setParameter("jobName", jobName)
-                        .executeUpdate());
+        transactionTemplate().executeWithoutResult(status -> entityManager
+                .createNativeQuery(
+                        "UPDATE batch_execution_lock SET updated_at = :updatedAt " + "WHERE job_name = :jobName")
+                .setParameter("updatedAt", sevenHoursAgo)
+                .setParameter("jobName", jobName)
+                .executeUpdate());
 
         boolean reacquired = adapter.tryAcquire(jobName);
 
         assertThat(reacquired).isTrue();
-        BatchExecutionLockJpaEntity persisted = batchExecutionLockJpaRepository.findById(jobName).orElseThrow();
+        BatchExecutionLockJpaEntity persisted =
+                batchExecutionLockJpaRepository.findById(jobName).orElseThrow();
         assertThat(persisted.isCurrentlyRunning()).isTrue();
     }
 
@@ -124,13 +124,12 @@ class BatchExecutionLockPersistenceAdapterTest extends IntegrationTestSupport {
     void tryAcquire_recentlyRunning_stillReturnsFalse() {
         adapter.tryAcquire(jobName);
         LocalDateTime fiveHoursAgo = LocalDateTime.now(clock).minusHours(5);
-        transactionTemplate().executeWithoutResult(status ->
-                entityManager.createNativeQuery(
-                                "UPDATE batch_execution_lock SET updated_at = :updatedAt "
-                                        + "WHERE job_name = :jobName")
-                        .setParameter("updatedAt", fiveHoursAgo)
-                        .setParameter("jobName", jobName)
-                        .executeUpdate());
+        transactionTemplate().executeWithoutResult(status -> entityManager
+                .createNativeQuery(
+                        "UPDATE batch_execution_lock SET updated_at = :updatedAt " + "WHERE job_name = :jobName")
+                .setParameter("updatedAt", fiveHoursAgo)
+                .setParameter("jobName", jobName)
+                .executeUpdate());
 
         boolean secondAttempt = adapter.tryAcquire(jobName);
 
@@ -140,7 +139,6 @@ class BatchExecutionLockPersistenceAdapterTest extends IntegrationTestSupport {
     @Test
     @DisplayName("존재하지 않는 jobName으로 선점을 시도하면 예외를 던진다")
     void tryAcquire_unknownJobName_throwsIllegalState() {
-        assertThatThrownBy(() -> adapter.tryAcquire("NO_SUCH_JOB"))
-                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> adapter.tryAcquire("NO_SUCH_JOB")).isInstanceOf(IllegalStateException.class);
     }
 }
