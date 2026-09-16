@@ -89,6 +89,12 @@ class QaSeedDataIntegrationTest extends IntegrationTestSupport {
                                 jdbc,
                                 "SELECT COUNT(*) FROM account WHERE account_number = '088100000001' AND balance = 100000 AND password_failure_count = 0 AND password_locked = FALSE AND alias = '주거래 통장'"))
                 .isEqualTo(1);
+        // 시드 고객은 가입 흐름을 안 타 한도 행이 없으면 이체 경로가 LMT9001 로 거부된다.
+        assertThat(
+                        count(
+                                jdbc,
+                                "SELECT COUNT(*) FROM transfer_limit t JOIN customer c ON c.customer_id = t.customer_id WHERE c.user_id IN ('honggildong','kimminji','leeseojun') AND t.one_time_limit = 1000000 AND t.daily_limit = 5000000"))
+                .isEqualTo(3);
     }
 
     private int count(JdbcTemplate jdbc, String sql) {

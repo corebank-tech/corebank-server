@@ -1122,10 +1122,19 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                 .setParameter("userId", userId)
                 .setParameter("email", email)
                 .executeUpdate();
-        return ((Number) entityManager
+        Long customerId = ((Number) entityManager
                         .createNativeQuery("SELECT LAST_INSERT_ID()")
                         .getSingleResult())
                 .longValue();
+        // 가입 연계(REQ-TRSF-029)가 만들어 주는 한도 행을 여기서 대신 채운다.
+        // 없으면 이체 경로가 LMT9001 로 거부된다(#388).
+        entityManager
+                .createNativeQuery(
+                        "INSERT INTO transfer_limit (customer_id, one_time_limit, daily_limit, created_at, updated_at) "
+                                + "VALUES (:customerId, 1000000, 5000000, NOW(6), NOW(6))")
+                .setParameter("customerId", customerId)
+                .executeUpdate();
+        return customerId;
     }
 
     // withdrawal_registered=TRUE로 채운다 - 등록 시 출금계좌 등록 여부 검증(#234)이 이 값을 확인하므로,

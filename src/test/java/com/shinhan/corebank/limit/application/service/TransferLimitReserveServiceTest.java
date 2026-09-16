@@ -100,16 +100,16 @@ class TransferLimitReserveServiceTest {
     }
 
     @Test
-    @DisplayName("한도 행이 없는 고객은 정책 기본값 1회 100만원으로 검사한다")
-    void checkAndReserve_limitRowMissing_checksAgainstPolicyDefault() {
-        // given - 가입 시 기본값 부여(REQ-TRSF-029)가 연결되기 전이라 행이 없는 고객이 있다
+    @DisplayName("한도 행이 없는 고객은 정책 기본값으로 통과시키지 않고 LMT9001 로 거부한다")
+    void checkAndReserve_limitRowMissing_rejectsWithLmt9001() {
+        // given - 가입 연계(REQ-TRSF-029)와 백필이 보장하므로, 행이 없다면 데이터 결함이다
         when(transferLimitCommandPort.findForShareByCustomerId(CUSTOMER_ID)).thenReturn(Optional.empty());
 
-        // when & then
-        assertThatThrownBy(() -> serviceAt(TODAY.atTime(14, 0)).checkAndReserve(CUSTOMER_ID, 1_000_001L))
+        // when & then - 정책 기본값(1회 100만) 이내 금액이어도 통과하지 않는다
+        assertThatThrownBy(() -> serviceAt(TODAY.atTime(14, 0)).checkAndReserve(CUSTOMER_ID, 10_000L))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(LmtErrorCode.ONE_TIME_LIMIT_EXCEEDED);
+                .isEqualTo(LmtErrorCode.TRANSFER_LIMIT_NOT_FOUND);
     }
 
     @Test
