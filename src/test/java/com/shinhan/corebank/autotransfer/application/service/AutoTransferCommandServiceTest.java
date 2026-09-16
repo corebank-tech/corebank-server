@@ -22,6 +22,7 @@ import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AuthTokenVerificationPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferOtpVerificationPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
+import com.shinhan.corebank.autotransfer.application.port.out.DepositAccountInfo;
 import com.shinhan.corebank.autotransfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
@@ -168,8 +169,8 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
-                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
                 .thenReturn(false);
@@ -233,8 +234,8 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
-                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
                 .thenReturn(false);
@@ -257,8 +258,8 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
-                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
                 .thenReturn(false);
@@ -315,7 +316,7 @@ class AutoTransferCommandServiceTest {
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
 
-        verify(accountStatusPort, never()).findAccountTypeByNumber(any());
+        verify(accountStatusPort, never()).findDepositAccountInfo(any());
         verify(autoTransferPersistencePort, never()).existsActiveDuplicate(any(), any(), anyInt());
     }
 
@@ -325,7 +326,7 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.empty());
+        when(accountStatusPort.findDepositAccountInfo("110987654321")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> autoTransferCommandService.register(
                         validCommandBuilder().build()))
@@ -340,8 +341,9 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
-                .thenReturn(Optional.of(AccountType.TIME_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(
+                        AccountType.TIME_DEPOSIT, LocalDate.now().plusMonths(6))));
 
         assertThatThrownBy(() -> autoTransferCommandService.register(
                         validCommandBuilder().build()))
@@ -359,7 +361,8 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321")).thenReturn(Optional.of(allowedType));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(allowedType, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
                 .thenReturn(false);
@@ -398,8 +401,8 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
-                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(5_000L);
 
         assertThatThrownBy(() -> autoTransferCommandService.register(
@@ -417,8 +420,8 @@ class AutoTransferCommandServiceTest {
         when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
         when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
         when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
-        when(accountStatusPort.findAccountTypeByNumber("110987654321"))
-                .thenReturn(Optional.of(AccountType.DEMAND_DEPOSIT));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
                 .thenReturn(true);
@@ -433,10 +436,81 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
+    @DisplayName("정기적금 입금계좌의 만기일보다 종료일이 늦으면 END_DATE_AFTER_MATURITY_DATE를 던진다 (#418)")
+    void register_endDateAfterMaturityDate_throws() {
+        when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
+        when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(
+                        AccountType.INSTALLMENT_SAVINGS, LocalDate.now().plusMonths(6))));
+
+        AutoTransferRegisterCommand command =
+                validCommandBuilder().endDate(LocalDate.now().plusMonths(12)).build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.register(command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.END_DATE_AFTER_MATURITY_DATE));
+
+        verify(autoTransferPersistencePort, never()).existsActiveDuplicate(any(), any(), anyInt());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("종료일이 입금계좌 만기일과 같거나 그 이전이면 등록이 허용된다 (#418, 경계값)")
+    void register_endDateOnMaturityDate_succeeds() {
+        when(accountStatusPort.belongsToCustomer(2L, 1L)).thenReturn(true);
+        when(accountStatusPort.isActiveAccount(2L)).thenReturn(true);
+        when(accountStatusPort.isWithdrawalRegistered(2L)).thenReturn(true);
+        LocalDate maturityDate = LocalDate.now().plusMonths(12);
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.INSTALLMENT_SAVINGS, maturityDate)));
+        when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
+        when(autoTransferPersistencePort.existsActiveDuplicate(2L, "110987654321", 15))
+                .thenReturn(false);
+        when(clock.withZone(any())).thenReturn(Clock.systemUTC());
+        // save()는 실제로는 INSERT 후 채번된 ID로 재조립해서 돌려준다 — audit 로그가 autoTransferId를
+        // 필요로 하므로(Map.of는 null 값을 허용하지 않는다) 그대로 돌려주면 NPE가 난다
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class))).thenAnswer(invocation -> {
+            AutoTransfer arg = invocation.getArgument(0);
+            return AutoTransfer.reconstitute(
+                    100L,
+                    arg.getCustomerId(),
+                    arg.getWithdrawalAccountId(),
+                    arg.getDepositAccountNumber(),
+                    arg.getPayeeName(),
+                    arg.getAmount(),
+                    arg.getCycleMonths(),
+                    arg.getTransferDay(),
+                    arg.getStartDate(),
+                    arg.getEndDate(),
+                    arg.getNextExecutionDate(),
+                    arg.getMyPassbookMemo(),
+                    arg.getRecipientPassbookMemo(),
+                    arg.getStatus(),
+                    arg.getRegisteredAt(),
+                    arg.getTerminatedAt(),
+                    arg.getUpdatedAt(),
+                    arg.getVersion());
+        });
+
+        // endDate == maturityDate(경계값 그 자체) — isAfter는 false라 통과해야 한다
+        AutoTransferRegisterCommand command =
+                validCommandBuilder().endDate(maturityDate).build();
+
+        autoTransferCommandService.register(command);
+
+        verify(autoTransferPersistencePort).save(any(AutoTransfer.class));
+    }
+
+    @Test
     @DisplayName("정상적으로 변경하면 저장하고 감사로그를 남긴다")
     void change_success() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.save(any(AutoTransfer.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -487,6 +561,8 @@ class AutoTransferCommandServiceTest {
     void change_amountExceedsOneTimeLimit_throws() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(5_000L);
 
         AutoTransferChangeCommand command =
@@ -559,6 +635,71 @@ class AutoTransferCommandServiceTest {
     }
 
     @Test
+    @DisplayName("변경 요청의 종료일이 입금계좌 만기일보다 늦으면 END_DATE_AFTER_MATURITY_DATE를 던지고 저장하지 않는다 (#418)")
+    void change_endDateAfterMaturityDate_throws() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(
+                        AccountType.INSTALLMENT_SAVINGS, LocalDate.now().plusMonths(6))));
+
+        AutoTransferChangeCommand command = validChangeCommandBuilder()
+                .endDate(LocalDate.now().plusMonths(12))
+                .build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.change(10L, command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.END_DATE_AFTER_MATURITY_DATE));
+
+        // 만기일 검증이 한도 검증보다 먼저 실행돼야 하므로, 한도 조회 자체가 일어나면 안 된다
+        verify(transferLimitPort, never()).findOneTimeLimit(any());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("변경 시 입금계좌를 찾을 수 없으면 ACCOUNT_NOT_ACCESSIBLE을 던지고 저장하지 않는다 (#418 리뷰 반영)")
+    void change_depositAccountNotFound_throwsAccountNotAccessible() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321")).thenReturn(Optional.empty());
+
+        AutoTransferChangeCommand command = validChangeCommandBuilder()
+                .endDate(LocalDate.now().plusMonths(6))
+                .build();
+
+        assertThatThrownBy(() -> autoTransferCommandService.change(10L, command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AutoTransferErrorCode.ACCOUNT_NOT_ACCESSIBLE));
+
+        // 만기일 검증이 한도 검증보다 먼저 실행돼야 하므로, 한도 조회 자체가 일어나면 안 된다
+        verify(transferLimitPort, never()).findOneTimeLimit(any());
+        verify(autoTransferPersistencePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("종료일을 안 바꾸면 만기일 검증을 하지 않는다 (#418)")
+    void change_endDateNotProvided_skipsMaturityCheck() {
+        AutoTransfer existing = existingAutoTransfer();
+        when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(autoTransferPersistencePort.save(any(AutoTransfer.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        AutoTransferChangeCommand command = AutoTransferChangeCommand.builder()
+                .customerId(1L)
+                .cycleMonths(3)
+                .accountPasswordAuthToken("valid-token")
+                .otpAuthToken("valid-otp-token")
+                .requestIp("127.0.0.1")
+                .build();
+
+        autoTransferCommandService.change(10L, command);
+
+        verify(accountStatusPort, never()).findDepositAccountInfo(any());
+    }
+
+    @Test
     @DisplayName("대상 자동이체가 없으면 NOT_FOUND를 던진다")
     void change_notFound_throws() {
         when(autoTransferPersistencePort.findById(999L)).thenReturn(Optional.empty());
@@ -595,6 +736,8 @@ class AutoTransferCommandServiceTest {
     void change_invalidAuthToken_propagatesException() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(authTokenVerificationPort)
@@ -615,6 +758,8 @@ class AutoTransferCommandServiceTest {
     void change_invalidOtpAuthToken_propagatesException() {
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         doThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED))
                 .when(autoTransferOtpVerificationPort)
@@ -637,6 +782,8 @@ class AutoTransferCommandServiceTest {
         // (CONCURRENT_MODIFICATION 응답)은 ApiExceptionHandler의 공용 핸들러가 이미 담당한다.
         AutoTransfer existing = existingAutoTransfer();
         when(autoTransferPersistencePort.findById(10L)).thenReturn(Optional.of(existing));
+        when(accountStatusPort.findDepositAccountInfo("110987654321"))
+                .thenReturn(Optional.of(new DepositAccountInfo(AccountType.DEMAND_DEPOSIT, null)));
         when(transferLimitPort.findOneTimeLimit(1L)).thenReturn(1_000_000L);
         when(autoTransferPersistencePort.save(any(AutoTransfer.class)))
                 .thenThrow(new OptimisticLockingFailureException("다른 요청이 먼저 이 자동이체를 변경했습니다"));

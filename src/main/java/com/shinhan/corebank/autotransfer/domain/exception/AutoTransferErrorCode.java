@@ -16,6 +16,7 @@ public enum AutoTransferErrorCode implements ErrorCode {
     INVALID_CYCLE_MONTHS("AUT0007", 400, "이체주기는 1개월, 3개월, 6개월 중 하나여야 합니다."),
     INVALID_AMOUNT("AUT0008", 400, "이체금액은 0보다 커야 합니다."),
     MEMO_LENGTH_EXCEEDED("AUT0009", 400, "통장 표시내용은 10자 이내여야 합니다."),
+    END_DATE_AFTER_MATURITY_DATE("AUT0010", 400, "종료일은 입금계좌의 만기일을 초과할 수 없습니다."),
     NOT_FOUND("AUT0201", 404, "자동이체 등록 건을 찾을 수 없습니다."),
     ACCOUNT_NOT_ACCESSIBLE("AUT0202", 404, "계좌를 확인할 수 없습니다."),
     DUPLICATE_REGISTRATION("AUT0301", 409, "동일 조건의 자동이체가 이미 등록되어 있습니다."),
