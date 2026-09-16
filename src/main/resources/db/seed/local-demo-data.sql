@@ -215,7 +215,7 @@ INSERT INTO account (
 
     -- H1: 정상 주 출금계좌
     (
-        '088100000001',
+        '088100000010',
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
@@ -239,7 +239,7 @@ INSERT INTO account (
 
     -- H2: 본인 계좌 간 이체 및 역방향 동시이체
     (
-        '088100000002',
+        '088100000011',
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
@@ -263,7 +263,7 @@ INSERT INTO account (
 
     -- H3: 상태와 잔액은 정상이지만 출금계좌 미등록
     (
-        '088100000003',
+        '088100000012',
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
@@ -287,7 +287,7 @@ INSERT INTO account (
 
     -- H4: 잔액 부족 및 예약·자동이체 실행 실패
     (
-        '088100000004',
+        '088100000013',
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
@@ -311,7 +311,7 @@ INSERT INTO account (
 
     -- H5: 출금계좌로 등록돼 있지만 현재 거래정지
     (
-        '088100000005',
+        '088100000014',
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
