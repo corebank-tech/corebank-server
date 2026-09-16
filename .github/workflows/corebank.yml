@@ -256,10 +256,17 @@ jobs:
               --command-id "$COMMAND_ID" \
               --instance-id "${{ secrets.EC2_INSTANCE_ID }}" \
               --query '{Status:Status,StandardOutput:StandardOutputContent,StandardError:StandardErrorContent}' \
-              --output json 2>/dev/null) || continue
+              --output json 2>/dev/null) || {
+                if [ "$SECONDS" -ge "$POLL_DEADLINE" ]; then
+                  echo "::error::SSM command polling exceeded 300s while querying invocation"
+                  STATUS="TimedOut"
+                  break
+                fi
+                continue
+              }
             STATUS=$(jq -r '.Status' <<< "$INVOCATION")
             case "$STATUS" in
-              Pending|InProgress|Delayed) ;;
+              Pending|InProgress|Delayed|Cancelling) ;;
               *) break ;;
             esac
             if [ "$SECONDS" -ge "$POLL_DEADLINE" ]; then
