@@ -15,6 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AccountPasswordVerificationProcessor {
 
+    // 공개 인증 API에서 계좌 존재·소유 여부에 따른 BCrypt 처리 시간 차이를 줄이기 위한 고정 해시다.
+    private static final String DUMMY_PASSWORD_HASH = "$2a$10$TKFDPDX3R71KXVXhzHGIfuD5TTj2R8Z0uSnVgFKgO5B5p3vpqI1CG";
+
     private final AccountPersistencePort accountPersistencePort;
     private final PasswordEncoder passwordEncoder;
 
@@ -37,5 +40,10 @@ public class AccountPasswordVerificationProcessor {
         AccountPasswordAttemptResult result = account.recordPasswordSuccess();
         accountPersistencePort.updatePasswordState(account);
         return result;
+    }
+
+    // 계좌정보 불일치 경로에서도 실제 검증과 같은 BCrypt 비용을 지불하되 계좌 상태는 변경하지 않는다.
+    public void performDummyVerification(String accountPassword) {
+        passwordEncoder.matches(accountPassword, DUMMY_PASSWORD_HASH);
     }
 }

@@ -29,6 +29,7 @@ public class AccountIdentityVerificationService implements AccountIdentityVerifi
                 .orElse(null);
 
         if (account == null || !verification.candidateCustomerIds().contains(account.getCustomerId())) {
+            passwordProcessor.performDummyVerification(verification.accountPassword());
             return result(AccountIdentityVerificationStatus.INFORMATION_MISMATCH, null);
         }
 

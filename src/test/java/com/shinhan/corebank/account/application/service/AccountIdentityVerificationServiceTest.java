@@ -39,8 +39,8 @@ class AccountIdentityVerificationServiceTest {
     }
 
     @Test
-    @DisplayName("계좌가 없거나 후보 고객 소유가 아니면 비밀번호를 비교하지 않는다")
-    void hidesMissingOrForeignAccount() {
+    @DisplayName("후보 고객 소유가 아닌 계좌는 더미 비밀번호를 비교하고 정보를 숨긴다")
+    void hidesForeignAccountWithDummyPasswordVerification() {
         Account foreignAccount = account(101L, 9L);
         given(persistencePort.findByAccountNumber("110550051877")).willReturn(Optional.of(foreignAccount));
 
@@ -48,6 +48,24 @@ class AccountIdentityVerificationServiceTest {
 
         assertThat(result.status()).isEqualTo(AccountIdentityVerificationStatus.INFORMATION_MISMATCH);
         assertThat(result.customerId()).isNull();
+        verify(processor).performDummyVerification("1234");
+        verify(processor, never())
+                .verify(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 계좌도 더미 비밀번호를 비교하고 정보를 숨긴다")
+    void hidesMissingAccountWithDummyPasswordVerification() {
+        given(persistencePort.findByAccountNumber("110550051877")).willReturn(Optional.empty());
+
+        AccountIdentityVerificationResult result = service.verify(verification(Set.of(1L, 2L)));
+
+        assertThat(result.status()).isEqualTo(AccountIdentityVerificationStatus.INFORMATION_MISMATCH);
+        assertThat(result.customerId()).isNull();
+        verify(processor).performDummyVerification("1234");
         verify(processor, never())
                 .verify(
                         org.mockito.ArgumentMatchers.any(),
