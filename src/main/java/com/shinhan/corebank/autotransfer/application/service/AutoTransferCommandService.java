@@ -89,8 +89,8 @@ public class AutoTransferCommandService
 
         // 인증 완료 토큰 — OTP는 성공 시 즉시 소비되므로 위 선행 검증을 모두 통과한 뒤 상태 변경 직전에 검증한다
         // (otp_integration_guide.md §9)
-        authTokenVerificationPort.verify(
-                command.accountPasswordAuthToken(), command.withdrawalAccountId(), "AUTO_TRANSFER_REGISTER");
+        authTokenVerificationPort.verifyAndConsume(
+                command.accountPasswordAuthToken(), command.customerId(), command.withdrawalAccountId());
         autoTransferOtpVerificationPort.verifyRegisterAndConsume(
                 command.otpAuthToken(),
                 command.customerId(),
@@ -155,8 +155,8 @@ public class AutoTransferCommandService
         }
         // 인증 완료 토큰 — OTP는 성공 시 즉시 소비되므로 위 무관한 검증을 모두 통과한 뒤
         // 상태 변경 직전에 검증한다(otp_integration_guide.md §9)
-        authTokenVerificationPort.verify(
-                command.accountPasswordAuthToken(), autoTransfer.getWithdrawalAccountId(), "AUTO_TRANSFER_CHANGE");
+        authTokenVerificationPort.verifyAndConsume(
+                command.accountPasswordAuthToken(), command.customerId(), autoTransfer.getWithdrawalAccountId());
         autoTransferOtpVerificationPort.verifyChangeAndConsume(
                 command.otpAuthToken(),
                 command.customerId(),
@@ -243,10 +243,10 @@ public class AutoTransferCommandService
         }
 
         // 위에서 단일 계좌임을 확인했으므로 어느 건의 출금계좌를 써도 같다
-        authTokenVerificationPort.verify(
+        authTokenVerificationPort.verifyAndConsume(
                 command.accountPasswordAuthToken(),
-                cancelable.getFirst().getWithdrawalAccountId(),
-                "AUTO_TRANSFER_CANCEL");
+                command.customerId(),
+                cancelable.getFirst().getWithdrawalAccountId());
         // OTP 토큰에는 요청한 id 조합 전체가 묶여 있다 — 해지 가능한 건만 추려서 넘기면
         // 발급 시점 거래정보와 어긋나 OTP0102가 난다
         autoTransferOtpVerificationPort.verifyCancelAndConsume(
