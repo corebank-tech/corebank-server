@@ -95,6 +95,14 @@ class QaSeedDataIntegrationTest extends IntegrationTestSupport {
                                 jdbc,
                                 "SELECT COUNT(*) FROM transfer_limit t JOIN customer c ON c.customer_id = t.customer_id WHERE c.user_id IN ('honggildong','kimminji','leeseojun') AND t.one_time_limit = 1000000 AND t.daily_limit = 5000000"))
                 .isEqualTo(3);
+        // QA 데모 계좌(088100000010~14)가 실가입 채번과 겹치지 않도록 예약됐는지 확인한다.
+        assertThat(jdbc.queryForObject(
+                        """
+                        SELECT last_sequence FROM account_number_sequence
+                        WHERE bank_code = '088' AND account_type = 'DEMAND_DEPOSIT' AND product_id IS NULL
+                        """,
+                        Long.class))
+                .isGreaterThanOrEqualTo(14L);
     }
 
     private int count(JdbcTemplate jdbc, String sql) {
