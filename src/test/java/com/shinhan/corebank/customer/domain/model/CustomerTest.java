@@ -26,7 +26,30 @@ class CustomerTest {
     void rejectInconsistentLoginState() {
         assertThatThrownBy(() -> restoreCustomer(5, false))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("로그인 실패 횟수와 계정 잠금 상태가 일치하지 않습니다.");
+                .hasMessage("로그인 실패 횟수가 최대이면 계정이 잠겨야 합니다.");
+    }
+
+    @Test
+    @DisplayName("비밀번호 재설정은 로그인 실패 횟수를 초기화하고 계정 잠금은 유지한다")
+    void resetPasswordKeepsAccountLocked() {
+        Customer customer = restoreCustomer(5, true);
+        LocalDateTime changedAt = LocalDateTime.of(2026, 9, 17, 10, 0);
+
+        customer.resetPassword("new-password-hash", changedAt);
+
+        assertThat(customer.getPasswordHash()).isEqualTo("new-password-hash");
+        assertThat(customer.getPasswordChangedAt()).isEqualTo(changedAt);
+        assertThat(customer.getLoginFailureCount()).isZero();
+        assertThat(customer.isAccountLocked()).isTrue();
+    }
+
+    @Test
+    @DisplayName("잠금 계정은 실패 횟수가 초기화된 상태로 복원할 수 있다")
+    void restoreLockedCustomerWithResetFailureCount() {
+        Customer customer = restoreCustomer(0, true);
+
+        assertThat(customer.getLoginFailureCount()).isZero();
+        assertThat(customer.isAccountLocked()).isTrue();
     }
 
     @Test

@@ -92,4 +92,10 @@ public class CustomerJpaEntity extends BaseEntity {
         this.phoneNumber = phoneNumber;
         this.email = email;
     }
+
+    public void updatePassword(String passwordHash, LocalDateTime passwordChangedAt, int loginFailureCount) {
+        this.passwordHash = passwordHash;
+        this.passwordChangedAt = passwordChangedAt;
+        this.loginFailureCount = loginFailureCount;
+    }
 }
