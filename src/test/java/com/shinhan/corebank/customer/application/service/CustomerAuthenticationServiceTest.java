@@ -15,6 +15,7 @@ import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePor
 import com.shinhan.corebank.customer.domain.model.Customer;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -61,6 +62,22 @@ class CustomerAuthenticationServiceTest {
         Optional<CustomerAuthenticationData> result = service.findByUserId("unknown");
 
         assertThat(result).isEmpty();
+    }
+
+    // 아이디 찾기 후보 조회가 고객 PK와 로그인 아이디를 올바르게 반환하는지 검증한다.
+    @Test
+    @DisplayName("성명과 생년월일이 일치하는 아이디 찾기 후보를 반환한다")
+    void findsIdentityCandidates() {
+        Customer customer = createCustomer(1L, 0, false);
+        given(customerPersistencePort.findAllByUserNameAndBirthDate("홍길동", LocalDate.of(1990, 1, 1)))
+                .willReturn(List.of(customer));
+
+        var result = service.findAllByIdentity("홍길동", LocalDate.of(1990, 1, 1));
+
+        assertThat(result).singleElement().satisfies(candidate -> {
+            assertThat(candidate.customerId()).isEqualTo(1L);
+            assertThat(candidate.userId()).isEqualTo("user01");
+        });
     }
 
     // 로그인 실패 횟수와 잠금 상태를 고객에게 반영해 저장

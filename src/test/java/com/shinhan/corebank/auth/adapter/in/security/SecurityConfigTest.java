@@ -113,6 +113,7 @@ class SecurityConfigTest {
     @ValueSource(
             strings = {
                 "/auth/terms/check",
+                "/auth/find-id",
                 "/auth/verify-account",
                 "/auth/check-id",
                 "/auth/signup/validate",
