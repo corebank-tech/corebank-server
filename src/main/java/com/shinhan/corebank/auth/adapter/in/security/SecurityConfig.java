@@ -120,6 +120,8 @@ public class SecurityConfig {
                             pathPattern(HttpMethod.POST, "/auth/signup/complete"),
                             pathPattern(HttpMethod.POST, "/auth/email-verifications"),
                             pathPattern(HttpMethod.POST, "/auth/email-verifications/{emailVerificationId}/verify"),
+                            pathPattern(HttpMethod.POST, "/auth/password-reset-requests"),
+                            pathPattern(HttpMethod.PUT, "/auth/password-reset-requests/{passwordResetRequestId}"),
                             pathPattern(HttpMethod.GET, "/actuator/health"));
                 })
                 .authorizeHttpRequests(authorize -> authorize
@@ -157,6 +159,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/auth/email-verifications")
                         .permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/email-verifications/{emailVerificationId}/verify")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/password-reset-requests")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.PUT, "/auth/password-reset-requests/{passwordResetRequestId}")
                         .permitAll()
 
                         // Swagger-UI/API 문서는 인증 없이 접근 가능하도록 공개

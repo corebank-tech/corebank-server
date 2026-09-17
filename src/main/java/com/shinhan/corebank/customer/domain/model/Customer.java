@@ -151,6 +151,19 @@ public class Customer {
         this.email = email;
     }
 
+    // 비밀번호 재설정 성공 시 계정 잠금은 유지하고 로그인 실패 횟수만 초기화한다.
+    public void resetPassword(String passwordHash, LocalDateTime changedAt) {
+        if (passwordHash == null || passwordHash.isBlank()) {
+            throw new IllegalArgumentException("비밀번호 해시는 필수입니다.");
+        }
+        if (changedAt == null) {
+            throw new IllegalArgumentException("비밀번호 변경 일시는 필수입니다.");
+        }
+        this.passwordHash = passwordHash;
+        this.passwordChangedAt = changedAt;
+        this.loginFailureCount = 0;
+    }
+
     private static boolean isValidIpAddress(String loginIp) {
         return isValidIpv4Address(loginIp) || isValidIpv6Address(loginIp);
     }
@@ -210,8 +223,8 @@ public class Customer {
             throw new IllegalArgumentException("로그인 실패 횟수는 0회 이상 %d회 이하여야 합니다.".formatted(MAX_LOGIN_FAILURE_COUNT));
         }
 
-        if (accountLocked != (loginFailureCount == MAX_LOGIN_FAILURE_COUNT)) {
-            throw new IllegalArgumentException("로그인 실패 횟수와 계정 잠금 상태가 일치하지 않습니다.");
+        if (!accountLocked && loginFailureCount == MAX_LOGIN_FAILURE_COUNT) {
+            throw new IllegalArgumentException("로그인 실패 횟수가 최대이면 계정이 잠겨야 합니다.");
         }
     }
 }

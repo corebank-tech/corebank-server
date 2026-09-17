@@ -107,6 +107,15 @@ public class CustomerPersistenceAdapter implements CustomerPersistencePort {
         return customerMapper.toDomain(savedEntity);
     }
 
+    @Override
+    public Customer updatePassword(Customer customer) {
+        Objects.requireNonNull(customer, "customer must not be null");
+        CustomerJpaEntity entity = findExistingEntityForUpdate(customer.getCustomerId());
+        entity.updatePassword(
+                customer.getPasswordHash(), customer.getPasswordChangedAt(), customer.getLoginFailureCount());
+        return customerMapper.toDomain(customerJpaRepository.saveAndFlush(entity));
+    }
+
     // customerId가 없는 신규 고객만 저장
     @Override
     public Customer save(Customer customer) {
