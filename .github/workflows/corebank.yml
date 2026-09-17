@@ -259,7 +259,7 @@ jobs:
               --output json 2>/dev/null) || {
                 if [ "$SECONDS" -ge "$POLL_DEADLINE" ]; then
                   echo "::error::SSM command polling exceeded 300s while querying invocation"
-                  STATUS="TimedOut"
+                  STATUS="PollTimedOut"
                   break
                 fi
                 continue
