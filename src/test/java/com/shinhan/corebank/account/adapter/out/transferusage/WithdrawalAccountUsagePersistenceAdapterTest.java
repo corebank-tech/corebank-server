@@ -113,6 +113,38 @@ class WithdrawalAccountUsagePersistenceAdapterTest extends IntegrationTestSuppor
         assertThat(exists).isFalse();
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"EXPIRED", "TERMINATED"})
+    @DisplayName("PROCESSING 회차가 있으면 자동이체가 종료 상태여도 출금계좌 사용 중으로 조회한다")
+    void findProcessingExecutionEvenWhenAutoTransferIsNotNormal(String autoTransferStatus) {
+        // given
+        Long autoTransferId = insertAutoTransfer(autoTransferStatus, "2026-08-01", "2026-12-31");
+
+        insertAutoTransferExecution(autoTransferId, "PROCESSING");
+
+        // when
+        boolean exists = autoTransferUsageQueryPort.existsUsingWithdrawalAccount(accountId);
+
+        // then
+        assertThat(exists).isTrue();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"SUCCESS", "ERROR"})
+    @DisplayName("확정된 자동이체 회차는 종료 상태 자동이체의 출금계좌 삭제를 막지 않는다")
+    void ignoreConfirmedExecutionWhenAutoTransferIsNotNormal(String executionStatus) {
+        // given
+        Long autoTransferId = insertAutoTransfer("TERMINATED", "2026-08-01", "2026-12-31");
+
+        insertAutoTransferExecution(autoTransferId, executionStatus);
+
+        // when
+        boolean exists = autoTransferUsageQueryPort.existsUsingWithdrawalAccount(accountId);
+
+        // then
+        assertThat(exists).isFalse();
+    }
+
     @Test
     @DisplayName("종료일이 지났어도 상태가 NORMAL이면 출금계좌 사용 중으로 조회한다")
     void findNormalAutoTransferEvenWhenEndDatePassed() {
@@ -153,7 +185,7 @@ class WithdrawalAccountUsagePersistenceAdapterTest extends IntegrationTestSuppor
                 "2026-08-20 10:00:00");
     }
 
-    private void insertAutoTransfer(String status, String startDate, String endDate) {
+    private Long insertAutoTransfer(String status, String startDate, String endDate) {
         jdbcTemplate.update(
                 """
                         INSERT INTO auto_transfer (
@@ -186,5 +218,26 @@ class WithdrawalAccountUsagePersistenceAdapterTest extends IntegrationTestSuppor
                 status,
                 "2026-08-20 10:00:00",
                 "2026-08-20 10:00:00");
+
+        return jdbcTemplate.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+    }
+
+    private void insertAutoTransferExecution(Long autoTransferId, String status) {
+        jdbcTemplate.update(
+                """
+                        INSERT INTO auto_transfer_execution (
+                            auto_transfer_id,
+                            execution_date,
+                            amount,
+                            status,
+                            executed_at
+                        )
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                autoTransferId,
+                "2026-08-20",
+                10_000L,
+                status,
+                "2026-08-20 10:05:00");
     }
 }
