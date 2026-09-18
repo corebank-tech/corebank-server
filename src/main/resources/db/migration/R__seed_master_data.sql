@@ -126,6 +126,8 @@ ON DUPLICATE KEY UPDATE
 -- 가 충돌하므로 쓰지 않는다.
 -- 재실행 대비: last_sequence 는 ON DUPLICATE KEY UPDATE 에서 절대 건드리지 않는다
 -- (이미 발급된 번호를 다시 발급해 account_number 가 충돌하는 것을 막는다).
+-- 입출금계좌(10) 중 088100000010~088100000014 는 QA 데모 계좌(홍길동) 전용으로
+-- V202609161800 에서 last_sequence 를 앞당겨 예약해뒀다. 실가입은 절대 이 대역을 못 받는다.
 -- ====================================================================
 INSERT INTO account_number_sequence
   (bank_code, account_type, product_id, product_prefix, last_sequence, created_at, updated_at)

@@ -23,6 +23,17 @@ public final class TransferTestFixtures {
         """)
                 .executeUpdate();
 
+        // 가입 연계(REQ-TRSF-029)가 만들어 주는 한도 행을 여기서 대신 채운다.
+        // 없으면 이체 경로가 LMT9001 로 거부된다(#388).
+        entityManager
+                .createNativeQuery(
+                        """
+            INSERT INTO transfer_limit (customer_id, one_time_limit, daily_limit, created_at, updated_at)
+            VALUES (1, 1000000, 5000000, NOW(6), NOW(6))
+            ON DUPLICATE KEY UPDATE customer_id = customer_id
+        """)
+                .executeUpdate();
+
         entityManager
                 .createNativeQuery(
                         """

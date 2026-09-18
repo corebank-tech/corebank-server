@@ -136,6 +136,10 @@ SET @basic_deposit_product_id = (
 -- 계좌번호 채번 기준 데이터
 --
 -- 이미 더 큰 번호까지 발급된 경우 last_sequence를 낮추지 않는다.
+-- 입출금계좌(10)는 088100000010~088100000014가 QA 데모 계좌(홍길동) 전용 예약
+-- 대역이라, 이 시드가 GREATEST로 값을 밀어 올릴 때도 그 상한인 14를 써야
+-- account_number_sequence 행이 유실돼 재생성되는 경우에도 실가입 채번이
+-- 10번대와 다시 충돌하지 않는다.
 -- ====================================================================
 
 INSERT INTO account_number_sequence (
@@ -152,7 +156,7 @@ INSERT INTO account_number_sequence (
         'DEMAND_DEPOSIT',
         NULL,
         '10',
-        9,
+        14,
         '2026-08-01 00:00:00.000000',
         '2026-08-05 00:00:00.000000'
     ),
@@ -215,7 +219,7 @@ INSERT INTO account (
 
     -- H1: 정상 주 출금계좌
     (
-        '088100000001',
+        '088100000010',
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
@@ -239,7 +243,7 @@ INSERT INTO account (
 
     -- H2: 본인 계좌 간 이체 및 역방향 동시이체
     (
-        '088100000002',
+        '088100000011',
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
@@ -263,7 +267,7 @@ INSERT INTO account (
 
     -- H3: 상태와 잔액은 정상이지만 출금계좌 미등록
     (
-        '088100000003',
+        '088100000012',
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
@@ -287,7 +291,7 @@ INSERT INTO account (
 
     -- H4: 잔액 부족 및 예약·자동이체 실행 실패
     (
-        '088100000004',
+        '088100000013',
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
@@ -311,7 +315,7 @@ INSERT INTO account (
 
     -- H5: 출금계좌로 등록돼 있지만 현재 거래정지
     (
-        '088100000005',
+        '088100000014',
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
@@ -518,3 +522,40 @@ ON DUPLICATE KEY UPDATE
     ),
     version = IF(customer_id = VALUES(customer_id), VALUES(version), version),
     updated_at = IF(customer_id = VALUES(customer_id), VALUES(updated_at), updated_at);
+
+-- ====================================================================
+-- 이체한도 (P1 소유)
+--
+-- 가입 흐름(REQ-TRSF-029)이 한도 행을 만들지만, 이 시드는 customer 를 SQL 로
+-- 직접 넣으므로 그 경로를 타지 않는다. V202608212056 백필도 Flyway 단계라
+-- ApplicationRunner 인 DemoDataLoader 보다 먼저 끝나 이 세 고객을 못 잡는다.
+-- 그래서 여기서 직접 채운다 - 없으면 이체 경로가 LMT9001 로 거부된다.
+--
+-- 금액은 POL-013(1회 100만) · POL-014(1일 500만)이며 자바쪽 기본값
+-- TransferLimit.DEFAULT_ONE_TIME_LIMIT · DEFAULT_DAILY_LIMIT 와 같은 값이어야 한다.
+--
+-- created_at 은 백필과 같은 기준으로 가입 시각을 쓴다 - 이 컬럼의 뜻이
+-- "한도 최초 부여 일시"(schema_reference.md)라 부여됐어야 할 시점이 곧 가입 시점이다.
+-- ====================================================================
+
+INSERT INTO transfer_limit (
+    customer_id,
+    one_time_limit,
+    daily_limit,
+    created_at,
+    updated_at
+)
+SELECT c.customer_id,
+       1000000,
+       5000000,
+       c.joined_at,
+       c.joined_at
+  FROM customer c
+ WHERE c.customer_id IN (@hong_customer_id, @kim_customer_id, @lee_customer_id)
+
+-- 시드 고객의 한도는 매 기동마다 기준값으로 되돌린다. 계좌 잔액과 같은 취급이다.
+-- qa-seed 는 continue-on-error=false 라 ON DUPLICATE 를 빼면 재기동이 중복키로 실패한다.
+ON DUPLICATE KEY UPDATE
+    one_time_limit = VALUES(one_time_limit),
+    daily_limit    = VALUES(daily_limit),
+    updated_at     = VALUES(updated_at);

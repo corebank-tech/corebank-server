@@ -1,6 +1,8 @@
 package com.shinhan.corebank.customer.adapter.out.persistence;
 
 import jakarta.persistence.LockModeType;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -12,6 +14,9 @@ public interface CustomerJpaRepository extends JpaRepository<CustomerJpaEntity, 
 
     // 로그인 아이디로 고객 Entity 조회
     Optional<CustomerJpaEntity> findByUserId(String userId);
+
+    // 아이디 찾기에서 동명이인을 고려해 성명·생년월일이 일치하는 고객을 모두 조회한다.
+    List<CustomerJpaEntity> findAllByUserNameAndBirthDate(String userName, LocalDate birthDate);
 
     boolean existsByUserId(String userId);
 
