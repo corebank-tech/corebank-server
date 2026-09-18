@@ -72,11 +72,13 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
                 customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate);
 
         Page<AutoTransferExecutionHistoryItem> itemPage = rows.map(this::toItem);
-        if (pageable.isUnpaged()) {
-            itemPage = mergeMissingExecutions(
-                    itemPage, customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, today);
+        List<AutoTransferExecutionHistoryItem> missing = pageable.isUnpaged()
+                ? findMissingExecutions(customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, today)
+                : List.of();
+        if (!missing.isEmpty()) {
+            itemPage = mergeIntoPage(itemPage, missing);
         }
-        return new AutoTransferExecutionHistoryResult(itemPage, toSummary(aggregate));
+        return new AutoTransferExecutionHistoryResult(itemPage, toSummary(aggregate, missing));
     }
 
     // 어댑터가 준 Row(out) → Controller가 쓸 Item(in)으로 변환
@@ -95,26 +97,22 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
     }
 
     // 실행 예정이었는데 이력 없음 감지 -> nextExecutionDate가 오늘보다 과거인 자동이체는 이력이 안남음
-    // 페이지 미분할 조회에서만 병합
-    private Page<AutoTransferExecutionHistoryItem> mergeMissingExecutions(
-            Page<AutoTransferExecutionHistoryItem> itemPage,
-            Long customerId,
-            Long withdrawalAccountId,
-            LocalDate fromDate,
-            LocalDate toDate,
-            LocalDate today) {
+    // 페이지 미분할 조회에서만 계산
+    private List<AutoTransferExecutionHistoryItem> findMissingExecutions(
+            Long customerId, Long withdrawalAccountId, LocalDate fromDate, LocalDate toDate, LocalDate today) {
         List<AutoTransfer> normalAutoTransfers = autoTransferQueryPort
                 .search(customerId, withdrawalAccountId, AutoTransferStatus.NORMAL, Pageable.unpaged())
                 .getContent();
-        List<AutoTransferExecutionHistoryItem> missing = normalAutoTransfers.stream()
+        return normalAutoTransfers.stream()
                 .filter(autoTransfer -> autoTransfer.getNextExecutionDate().isBefore(today))
                 .filter(autoTransfer -> !autoTransfer.getNextExecutionDate().isBefore(fromDate)
                         && !autoTransfer.getNextExecutionDate().isAfter(toDate))
                 .map(this::toMissingItem)
                 .toList();
-        if (missing.isEmpty()) {
-            return itemPage;
-        }
+    }
+
+    private Page<AutoTransferExecutionHistoryItem> mergeIntoPage(
+            Page<AutoTransferExecutionHistoryItem> itemPage, List<AutoTransferExecutionHistoryItem> missing) {
         List<AutoTransferExecutionHistoryItem> merged = new ArrayList<>(itemPage.getContent());
         merged.addAll(missing);
         merged.sort(Comparator.comparing(AutoTransferExecutionHistoryItem::executedAt)
@@ -137,8 +135,16 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
     }
 
     // 어댑터가 준 Aggregate(out) → Controller가 쓸 Summary(in)으로 변환
-    private AutoTransferExecutionHistorySummary toSummary(AutoTransferExecutionHistoryAggregate aggregate) {
+    private AutoTransferExecutionHistorySummary toSummary(
+            AutoTransferExecutionHistoryAggregate aggregate, List<AutoTransferExecutionHistoryItem> missing) {
+        long missingCount = missing.size();
+        long missingAmount = missing.stream()
+                .mapToLong(AutoTransferExecutionHistoryItem::amount)
+                .sum();
         return new AutoTransferExecutionHistorySummary(
-                aggregate.successCount(), aggregate.successAmount(), aggregate.errorCount(), aggregate.errorAmount());
+                aggregate.successCount(),
+                aggregate.successAmount(),
+                aggregate.errorCount() + missingCount,
+                aggregate.errorAmount() + missingAmount);
     }
 }

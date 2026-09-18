@@ -245,6 +245,11 @@ class AutoTransferExecutionHistoryQueryServiceTest {
         assertThat(missingItem.failureReason()).isEqualTo("관리자에게 문의해주세요");
         assertThat(missingItem.executedAt()).isEqualTo(stuckDate.atStartOfDay());
         assertThat(missingItem.withdrawalAccountId()).isEqualTo(2L);
+
+        // 목록에 합성 행이 섞였으면 상단 요약(실패 건수/금액)에도 그만큼 같이 반영돼야 한다
+        assertThat(result.summary().errorCount()).isEqualTo(1L);
+        assertThat(result.summary().errorAmount()).isEqualTo(stuck.getAmount());
+        assertThat(result.summary().successCount()).isEqualTo(1L);
     }
 
     @Test
