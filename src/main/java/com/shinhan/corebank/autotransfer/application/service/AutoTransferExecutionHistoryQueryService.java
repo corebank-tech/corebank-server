@@ -7,15 +7,23 @@ import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferExecuti
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryAggregate;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryQueryPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryRow;
+import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferQueryPort;
+import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
+import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.util.PageableResolver;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +39,7 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
     private final AutoTransferExecutionHistoryQueryPort autoTransferExecutionHistoryQueryPort;
+    private final AutoTransferQueryPort autoTransferQueryPort;
     private final Clock clock;
 
     @Override
@@ -63,6 +72,10 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
                 customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate);
 
         Page<AutoTransferExecutionHistoryItem> itemPage = rows.map(this::toItem);
+        if (pageable.isUnpaged()) {
+            itemPage = mergeMissingExecutions(
+                    itemPage, customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, today);
+        }
         return new AutoTransferExecutionHistoryResult(itemPage, toSummary(aggregate));
     }
 
@@ -79,6 +92,48 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
                 row.cycleMonths(),
                 row.myPassbookMemo(),
                 row.failureReason());
+    }
+
+    // 실행 예정이었는데 이력 없음 감지 -> nextExecutionDate가 오늘보다 과거인 자동이체는 이력이 안남음
+    // 페이지 미분할 조회에서만 병합
+    private Page<AutoTransferExecutionHistoryItem> mergeMissingExecutions(
+            Page<AutoTransferExecutionHistoryItem> itemPage,
+            Long customerId,
+            Long withdrawalAccountId,
+            LocalDate fromDate,
+            LocalDate toDate,
+            LocalDate today) {
+        List<AutoTransfer> normalAutoTransfers = autoTransferQueryPort
+                .search(customerId, withdrawalAccountId, AutoTransferStatus.NORMAL, Pageable.unpaged())
+                .getContent();
+        List<AutoTransferExecutionHistoryItem> missing = normalAutoTransfers.stream()
+                .filter(autoTransfer -> autoTransfer.getNextExecutionDate().isBefore(today))
+                .filter(autoTransfer -> !autoTransfer.getNextExecutionDate().isBefore(fromDate)
+                        && !autoTransfer.getNextExecutionDate().isAfter(toDate))
+                .map(this::toMissingItem)
+                .toList();
+        if (missing.isEmpty()) {
+            return itemPage;
+        }
+        List<AutoTransferExecutionHistoryItem> merged = new ArrayList<>(itemPage.getContent());
+        merged.addAll(missing);
+        merged.sort(Comparator.comparing(AutoTransferExecutionHistoryItem::executedAt)
+                .reversed());
+        return new PageImpl<>(merged, Pageable.unpaged(), merged.size());
+    }
+
+    private AutoTransferExecutionHistoryItem toMissingItem(AutoTransfer autoTransfer) {
+        return new AutoTransferExecutionHistoryItem(
+                null,
+                ProcessResultStatus.ERROR,
+                autoTransfer.getNextExecutionDate().atStartOfDay(),
+                autoTransfer.getWithdrawalAccountId(),
+                autoTransfer.getDepositAccountNumber(),
+                autoTransfer.getPayeeName(),
+                autoTransfer.getAmount(),
+                autoTransfer.getCycleMonths(),
+                autoTransfer.getMyPassbookMemo(),
+                "관리자에게 문의해주세요");
     }
 
     // 어댑터가 준 Aggregate(out) → Controller가 쓸 Summary(in)으로 변환
