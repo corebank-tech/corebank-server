@@ -110,6 +110,58 @@ class CustomerTest {
         assertThat(customer.getEmail()).isEqualTo("user01@example.com");
     }
 
+    @Test
+    @DisplayName("관리자가 잠긴 계정을 해제하면 잠금이 풀리고 실패 횟수가 0이 된다")
+    void unlocksLockedAccountByAdmin() {
+        Customer customer = restoreCustomer(5, true);
+
+        customer.unlockByAdmin();
+
+        assertThat(customer.isAccountLocked()).isFalse();
+        assertThat(customer.getLoginFailureCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("잠기지 않은 계정도 관리자 해제 시 실패 횟수가 0이 된다")
+    void resetsFailureCountWhenUnlockingUnlockedAccount() {
+        Customer customer = restoreCustomer(3, false);
+
+        customer.unlockByAdmin();
+
+        assertThat(customer.isAccountLocked()).isFalse();
+        assertThat(customer.getLoginFailureCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("관리자 비밀번호 초기화는 비밀번호를 바꾸고 잠금까지 해제한다")
+    void resetsPasswordAndUnlocksByAdmin() {
+        Customer customer = restoreCustomer(5, true);
+        LocalDateTime changedAt = LocalDateTime.of(2026, 9, 21, 10, 0);
+
+        customer.resetPasswordByAdmin("newPasswordHash", changedAt);
+
+        assertThat(customer.getPasswordHash()).isEqualTo("newPasswordHash");
+        assertThat(customer.getPasswordChangedAt()).isEqualTo(changedAt);
+        assertThat(customer.isAccountLocked()).isFalse();
+        assertThat(customer.getLoginFailureCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("관리자 초기화 필수값이 없으면 고객 상태를 변경하지 않는다")
+    void rejectsMissingValuesOnAdminPasswordReset() {
+        Customer customer = restoreCustomer(5, true);
+        LocalDateTime changedAt = LocalDateTime.of(2026, 9, 21, 10, 0);
+
+        assertThatThrownBy(() -> customer.resetPasswordByAdmin(" ", changedAt))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> customer.resetPasswordByAdmin("newPasswordHash", null))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(customer.getPasswordHash()).isEqualTo("passwordHash");
+        assertThat(customer.isAccountLocked()).isTrue();
+        assertThat(customer.getLoginFailureCount()).isEqualTo(5);
+    }
+
     private Customer restoreCustomer(int loginFailureCount, boolean accountLocked) {
         LocalDateTime joinedAt = LocalDateTime.of(2026, 1, 1, 9, 0);
 
