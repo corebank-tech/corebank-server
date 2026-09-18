@@ -107,6 +107,9 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
                 .filter(autoTransfer -> autoTransfer.getNextExecutionDate().isBefore(today))
                 .filter(autoTransfer -> !autoTransfer.getNextExecutionDate().isBefore(fromDate)
                         && !autoTransfer.getNextExecutionDate().isAfter(toDate))
+                // PROCESSING으로 실제 처리 중인 건 재확정 배치가 곧 정리하므로 "관리자 문의" 대상에서 뺌
+                .filter(autoTransfer -> !autoTransferExecutionHistoryQueryPort.existsProcessing(
+                        autoTransfer.getAutoTransferId(), autoTransfer.getNextExecutionDate()))
                 .map(this::toMissingItem)
                 .toList();
     }

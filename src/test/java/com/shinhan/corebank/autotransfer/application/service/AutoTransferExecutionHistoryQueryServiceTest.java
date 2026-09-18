@@ -253,6 +253,27 @@ class AutoTransferExecutionHistoryQueryServiceTest {
     }
 
     @Test
+    @DisplayName("정체된 것처럼 보여도 실제로 PROCESSING 행이 있으면(재확정 배치가 곧 정리할 것) 합성하지 않는다 (#442 리뷰 반영)")
+    void search_allTrue_stuckButActuallyProcessing_doesNotMerge() {
+        LocalDate stuckDate = TODAY.minusDays(3);
+        AutoTransfer stuck = stuckAutoTransfer(5L, stuckDate);
+        when(autoTransferExecutionHistoryQueryPort.search(
+                        eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY), eq(Pageable.unpaged())))
+                .thenReturn(Page.empty(Pageable.unpaged()));
+        when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
+                .thenReturn(AutoTransferExecutionHistoryAggregate.empty());
+        when(autoTransferQueryPort.search(eq(1L), eq(2L), eq(AutoTransferStatus.NORMAL), eq(Pageable.unpaged())))
+                .thenReturn(new PageImpl<>(List.of(stuck)));
+        when(autoTransferExecutionHistoryQueryPort.existsProcessing(eq(5L), eq(stuckDate)))
+                .thenReturn(true);
+
+        AutoTransferExecutionHistoryResult result = service.search(1L, 2L, null, null, 0, 10, true);
+
+        assertThat(result.page().getContent()).isEmpty();
+        assertThat(result.summary().errorCount()).isZero();
+    }
+
+    @Test
     @DisplayName("정체된 nextExecutionDate가 조회기간보다 이전이면 합성하지 않는다")
     void search_allTrue_stuckAutoTransferOutsideRange_doesNotMerge() {
         LocalDate stuckDate = TODAY.minusMonths(2); // 기본 조회기간(최근 1개월) 밖

@@ -444,6 +444,39 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(result.errorAmount()).isZero();
     }
 
+    @Test
+    @DisplayName("해당 자동이체+실행일 조합으로 PROCESSING 행이 있으면 true를 반환한다 (#442)")
+    void existsProcessing_found_returnsTrue() {
+        AutoTransferJpaEntity autoTransfer =
+                repository.save(autoTransfer(accountA, "110000000043", AutoTransferStatus.NORMAL, 10));
+        entityManager.flush();
+        executionRepository.save(
+                execution(autoTransfer, LocalDate.of(2026, 3, 20), ProcessResultStatus.PROCESSING, 7000L, null, null));
+        entityManager.flush();
+        entityManager.clear();
+
+        boolean result = adapter.existsProcessing(autoTransfer.getAutoTransferId(), LocalDate.of(2026, 3, 20));
+
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    @DisplayName("PROCESSING 행이 없으면(이력 자체가 없거나 SUCCESS/ERROR로 이미 확정됐으면) false를 반환한다 (#442)")
+    void existsProcessing_notFound_returnsFalse() {
+        AutoTransferJpaEntity autoTransfer =
+                repository.save(autoTransfer(accountA, "110000000044", AutoTransferStatus.NORMAL, 10));
+        entityManager.flush();
+        executionRepository.save(execution(
+                autoTransfer, LocalDate.of(2026, 3, 20), ProcessResultStatus.SUCCESS, 7000L, "TXN0099", null));
+        entityManager.flush();
+        entityManager.clear();
+
+        // 같은 날짜에 SUCCESS로 확정된 행만 있고 PROCESSING은 없음
+        boolean result = adapter.existsProcessing(autoTransfer.getAutoTransferId(), LocalDate.of(2026, 3, 20));
+
+        assertThat(result).isFalse();
+    }
+
     private AutoTransferExecutionJpaEntity execution(
             AutoTransferJpaEntity autoTransfer,
             LocalDate executionDate,
