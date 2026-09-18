@@ -186,6 +186,20 @@ public class AutoTransferPersistenceAdapter
         return new AutoTransferExecutionHistoryAggregate(successCount, successAmount, errorCount, errorAmount);
     }
 
+    @Override
+    // uk_ate_dup(auto_transfer_id+execution_date UNIQUE) 조합으로 PROCESSING 행이 실제 있는지만 확인
+    public boolean existsProcessing(Long autoTransferId, LocalDate executionDate) {
+        Integer result = queryFactory
+                .selectOne()
+                .from(autoTransferExecutionJpaEntity)
+                .where(
+                        autoTransferExecutionJpaEntity.autoTransfer.autoTransferId.eq(autoTransferId),
+                        autoTransferExecutionJpaEntity.executionDate.eq(executionDate),
+                        autoTransferExecutionJpaEntity.status.eq(ProcessResultStatus.PROCESSING))
+                .fetchFirst();
+        return result != null;
+    }
+
     // search()·summarize() 공통 조건: 소유자 확인 + 조회기간 + PROCESSING 제외
     private Predicate[] executionHistoryConditions(
             Long customerId, Long withdrawalAccountId, LocalDate fromDate, LocalDate toDate) {
