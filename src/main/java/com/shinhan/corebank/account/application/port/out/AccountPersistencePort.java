@@ -10,6 +10,9 @@ public interface AccountPersistencePort {
 
     boolean existsByAccountNumber(String accountNumber);
 
+    // 아이디 찾기에서 입력한 계좌번호로 소유권 검증 대상 계좌를 조회한다.
+    Optional<Account> findByAccountNumber(String accountNumber);
+
     List<Account> findAllByCustomerId(Long customerId);
 
     Optional<Account> findByAccountIdAndCustomerId(Long accountId, Long customerId);

@@ -110,6 +110,7 @@ public class SecurityConfig {
                     csrf.csrfTokenRequestHandler(csrfTokenRequestHandler);
                     csrf.ignoringRequestMatchers(
                             pathPattern(HttpMethod.POST, "/auth/login"),
+                            pathPattern(HttpMethod.POST, "/auth/find-id"),
                             pathPattern(HttpMethod.POST, "/auth/terms/check"),
                             pathPattern(HttpMethod.POST, "/auth/verify-account"),
                             pathPattern(HttpMethod.POST, "/auth/check-id"),
@@ -134,6 +135,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/products/*/terms/*")
                         .authenticated()
                         .requestMatchers(HttpMethod.POST, "/auth/login")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/find-id")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/auth/terms")
                         .permitAll()

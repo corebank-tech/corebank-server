@@ -30,13 +30,16 @@ public interface TransferLimitControllerDocs {
                     로그인 고객의 1회 이체한도, 1일 이체한도, 당일 사용금액, 당일 잔여 이체가능금액을 조회한다.
                     한도는 계좌가 아니라 고객 단위이므로 계좌 ID를 받지 않는다.
                     당일 사용금액은 KST 영업일 기준이며, 그날 첫 조회라 사용 이력이 없으면 0으로 응답한다.
-                    한도를 아직 부여받지 않은 고객에게는 정책 기본값(1회 100만원 · 1일 500만원)으로 응답한다.
                     """)
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "이체한도 조회 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "500",
+                description = "`LMT9001` 한도 정보가 없어 조회할 수 없음. " + "가입 연계(REQ-TRSF-029)와 백필이 보장하므로 나오면 데이터 결함이다",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     ApiResponse<TransferLimitResponse> getTransferLimit(@AuthenticationPrincipal AuthenticatedCustomer customer);

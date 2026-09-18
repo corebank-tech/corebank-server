@@ -1,13 +1,16 @@
 package com.shinhan.corebank.limit.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,16 +47,15 @@ class TransferLimitProviderServiceTest {
     }
 
     @Test
-    @DisplayName("한도 행이 없는 고객의 1회 이체한도는 정책 기본값 100만원이다")
-    void findOneTimeLimit_limitRowMissing_returnsPolicyDefault() {
-        // given - 가입 시 기본값 부여(REQ-TRSF-029)가 연결되기 전이라 행이 없는 고객이 있다
+    @DisplayName("한도 행이 없는 고객은 정책 기본값으로 응답하지 않고 LMT9001 로 거부한다")
+    void findOneTimeLimit_limitRowMissing_rejectsWithLmt9001() {
+        // given - 가입 연계(REQ-TRSF-029)와 백필이 보장하므로, 행이 없다면 데이터 결함이다
         when(transferLimitQueryPort.findByCustomerId(CUSTOMER_ID)).thenReturn(Optional.empty());
 
-        // when
-        long oneTimeLimit = service().findOneTimeLimit(CUSTOMER_ID);
-
-        // then - 당일 사용액은 등록 검증에 필요 없으므로 조회하지 않는다
-        assertThat(oneTimeLimit).isEqualTo(1_000_000L);
-        verify(transferLimitQueryPort, never()).findUsage(any(), any());
+        // when & then
+        assertThatThrownBy(() -> service().findOneTimeLimit(CUSTOMER_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(LmtErrorCode.TRANSFER_LIMIT_NOT_FOUND);
     }
 }
