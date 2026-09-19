@@ -60,8 +60,9 @@ public class AdminCustomerController {
                 description = "검색 성공. 0건이면 items가 빈 배열"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "`CMN0002` 검색 조건 없음 · `CMN0001` 성명 1글자 · `CMN0005` 지원하지 않는 페이지 크기 · "
-                        + "`CMN0006` 전체조회(all=true) 결과 100건 초과",
+                description =
+                        "`CMN0002` 검색 조건 없음(accountLocked=false 단독 포함) · `CMN0001` 아이디·성명 1글자 · `CMN0005` 지원하지 않는 페이지 크기 · "
+                                + "`CMN0006` 전체조회(all=true) 결과 100건 초과",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
@@ -69,12 +70,14 @@ public class AdminCustomerController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ApiResponse<PageResponse<AdminCustomerSummaryResponse>> search(
-            @Parameter(description = "로그인 아이디 앞부분", example = "hong") @RequestParam(required = false) String userId,
+            @Parameter(description = "로그인 아이디 앞부분. 두 글자 이상", example = "hong") @RequestParam(required = false)
+                    String userId,
             @Parameter(description = "성명 앞부분. 두 글자 이상", example = "홍길") @RequestParam(required = false) String userName,
             @Parameter(description = "이메일 전체(정확 일치)", example = "hong@corebank.example.com")
                     @RequestParam(required = false)
                     String email,
-            @Parameter(description = "잠금 여부", example = "true") @RequestParam(required = false) Boolean accountLocked,
+            @Parameter(description = "잠금 여부. false 단독으로는 검색할 수 없다", example = "true") @RequestParam(required = false)
+                    Boolean accountLocked,
             @Parameter(description = "페이지 번호(0부터 시작). all=true면 무시됨", example = "0") @RequestParam(defaultValue = "0")
                     int page,
             @Parameter(description = "페이지 크기. 5/10/20/30/50 중 하나. all=true면 무시됨", example = "10")

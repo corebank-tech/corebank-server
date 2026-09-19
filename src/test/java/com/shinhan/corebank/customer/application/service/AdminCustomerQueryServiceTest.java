@@ -60,6 +60,27 @@ class AdminCustomerQueryServiceTest {
     }
 
     @Test
+    @DisplayName("잠기지 않은 계정(accountLocked=false)만으로는 회원 목록이 되므로 CMN0002로 거부한다")
+    void rejectsUnlockedOnlyCondition() {
+        assertThatThrownBy(() ->
+                        service.search(new AdminCustomerSearchQuery(null, null, null, false), PageRequest.of(0, 10)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        verify(customerAdminQueryPort, never()).search(any(), any());
+    }
+
+    @Test
+    @DisplayName("아이디 조건은 두 글자 이상이어야 한다")
+    void rejectsOneCharacterUserId() {
+        assertThatThrownBy(() ->
+                        service.search(new AdminCustomerSearchQuery("a", null, null, null), PageRequest.of(0, 10)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.INVALID_INPUT);
+    }
+
+    @Test
     @DisplayName("성명 조건은 두 글자 이상이어야 한다")
     void rejectsOneCharacterName() {
         assertThatThrownBy(() ->
@@ -88,7 +109,7 @@ class AdminCustomerQueryServiceTest {
         given(customerAdminQueryPort.count(any())).willReturn(101L);
 
         assertThatThrownBy(
-                        () -> service.search(new AdminCustomerSearchQuery(null, null, null, false), Pageable.unpaged()))
+                        () -> service.search(new AdminCustomerSearchQuery(null, null, null, true), Pageable.unpaged()))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(CommonErrorCode.ALL_QUERY_TOO_LARGE);
