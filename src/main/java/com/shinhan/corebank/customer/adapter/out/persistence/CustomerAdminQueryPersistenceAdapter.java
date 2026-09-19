@@ -53,7 +53,9 @@ public class CustomerAdminQueryPersistenceAdapter implements CustomerAdminQueryP
             query.offset(pageable.getOffset()).limit(pageable.getPageSize());
         }
         List<CustomerAdminView> content = query.fetch();
-        return new PageImpl<>(content, pageable, count(condition));
+        // 전체 조회는 이미 전 건을 읽었으므로 건수 쿼리를 다시 보내지 않는다.
+        long total = pageable.isPaged() ? count(condition) : content.size();
+        return new PageImpl<>(content, pageable, total);
     }
 
     @Override
