@@ -32,8 +32,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AdminCustomerCommandService implements AdminCustomerCommandUseCase {
 
-    private static final String PASSWORD_CHANGED = "CHANGED";
-
     private final CustomerPersistencePort customerPersistencePort;
     private final TemporaryPasswordGeneratorPort temporaryPasswordGeneratorPort;
     private final PasswordEncoder passwordEncoder;
@@ -67,7 +65,8 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
 
         Customer customer = findTargetForUpdate(command, AuditEventType.PASSWORD_RESET_BY_ADMIN);
         Map<String, Object> changes = new LinkedHashMap<>();
-        changes.put("password", PASSWORD_CHANGED);
+        // "password" 키는 AuditLogJpaEntity가 금지하므로 값 없이 바뀌었다는 표시만 남긴다.
+        changes.put("passwordChanged", true);
         changes.putAll(loginStateChanges(customer));
 
         customer.resetPasswordByAdmin(passwordHash, LocalDateTime.now(clock));

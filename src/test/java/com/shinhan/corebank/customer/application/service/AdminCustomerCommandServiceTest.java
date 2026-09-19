@@ -12,6 +12,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.shinhan.corebank.common.audit.AuditEventType;
+import com.shinhan.corebank.common.audit.AuditLogJpaEntity;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
@@ -85,6 +86,7 @@ class AdminCustomerCommandServiceTest {
         Map<String, Object> detail = captureDetail(AuditEventType.ACCOUNT_UNLOCK, true);
         assertThat(detail).containsEntry("targetCustomerId", TARGET_ID);
         assertThat(detail.get("changes")).isEqualTo(Map.of("accountLocked", false, "loginFailureCount", 0));
+        assertNoForbiddenKeys(detail);
     }
 
     @Test
@@ -121,8 +123,9 @@ class AdminCustomerCommandServiceTest {
 
         Map<String, Object> detail = captureDetail(AuditEventType.PASSWORD_RESET_BY_ADMIN, true);
         assertThat(detail.get("changes"))
-                .isEqualTo(Map.of("password", "CHANGED", "accountLocked", false, "loginFailureCount", 0));
+                .isEqualTo(Map.of("passwordChanged", true, "accountLocked", false, "loginFailureCount", 0));
         assertThat(detail.toString()).doesNotContain(TEMPORARY_PASSWORD).doesNotContain(ENCODED);
+        assertNoForbiddenKeys(detail);
     }
 
     @Test
@@ -152,6 +155,17 @@ class AdminCustomerCommandServiceTest {
         verify(customerPersistencePort, never()).updateLoginFailureState(any());
         Map<String, Object> detail = captureDetail(AuditEventType.ACCOUNT_UNLOCK, false);
         assertThat(detail).containsEntry("targetCustomerId", TARGET_ID).containsEntry("reason", "CUSTOMER_NOT_FOUND");
+    }
+
+    // AuditLogJpaEntity는 금지 키가 있으면 저장 시점에 예외를 던진다 — 모킹한 단위 테스트에서도 미리 잡는다.
+    @SuppressWarnings("unchecked")
+    private void assertNoForbiddenKeys(Map<String, Object> detail) {
+        detail.forEach((key, value) -> {
+            assertThat(AuditLogJpaEntity.FORBIDDEN_DETAIL_KEY).doesNotContain(key);
+            if (value instanceof Map<?, ?> nested) {
+                assertNoForbiddenKeys((Map<String, Object>) nested);
+            }
+        });
     }
 
     @SuppressWarnings("unchecked")
