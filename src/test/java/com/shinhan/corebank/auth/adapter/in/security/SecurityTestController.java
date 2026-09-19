@@ -46,6 +46,11 @@ class SecurityTestController {
         return ApiResponse.success("updated");
     }
 
+    @GetMapping("/admin/test")
+    ApiResponse<String> admin() {
+        return ApiResponse.success("admin");
+    }
+
     @GetMapping("/actuator/health")
     Map<String, String> health() {
         return Map.of("status", "UP");
