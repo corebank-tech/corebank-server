@@ -27,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class AdminCustomerQueryService implements AdminCustomerQueryUseCase {
 
-    private static final int MIN_NAME_LENGTH = 2;
+    private static final int MIN_PREFIX_LENGTH = 2;
     private static final long MAX_ALL_QUERY_SIZE = 100;
     private static final String FULL_MASK = "****";
 
@@ -74,11 +74,15 @@ public class AdminCustomerQueryService implements AdminCustomerQueryUseCase {
         String userName = normalize(query.userName());
         String email = normalize(query.email());
 
-        if (userId == null && userName == null && email == null && query.accountLocked() == null) {
+        // accountLocked=false 단독은 잠기지 않은 전 고객 = 회원 목록이 되므로 조건으로 치지 않는다.
+        boolean hasQualifyingCondition =
+                userId != null || userName != null || email != null || Boolean.TRUE.equals(query.accountLocked());
+        if (!hasQualifyingCondition) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING, "검색 조건을 하나 이상 입력해 주세요.");
         }
-        if (userName != null && userName.length() < MIN_NAME_LENGTH) {
-            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "성명은 두 글자 이상 입력해 주세요.");
+        // 한 글자 앞부분 일치는 고객 대부분을 끌어오므로 막는다.
+        if (isTooShort(userId) || isTooShort(userName)) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "아이디·성명은 두 글자 이상 입력해 주세요.");
         }
         return new CustomerSearchCondition(userId, userName, email, query.accountLocked());
     }
@@ -106,6 +110,10 @@ public class AdminCustomerQueryService implements AdminCustomerQueryUseCase {
 
     private OffsetDateTime toOffset(LocalDateTime dateTime) {
         return dateTime == null ? null : dateTime.atZone(clock.getZone()).toOffsetDateTime();
+    }
+
+    private static boolean isTooShort(String prefix) {
+        return prefix != null && prefix.length() < MIN_PREFIX_LENGTH;
     }
 
     private static String normalize(String value) {
