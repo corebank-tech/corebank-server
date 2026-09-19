@@ -224,6 +224,40 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 .isFalse();
     }
 
+    // 관리자 초기화는 비밀번호·변경시각·실패 횟수·잠금 4개 칼럼만 바꾸고 나머지는 그대로 둔다.
+    @Test
+    @DisplayName("관리자 비밀번호 초기화 결과를 4개 칼럼에만 저장한다")
+    void updatePasswordResetByAdmin() {
+        Customer savedCustomer = customerPersistencePort.save(createCustomer());
+        savedCustomer.recordLoginFailure();
+        savedCustomer.recordLoginFailure();
+        customerPersistencePort.updateLoginFailureState(savedCustomer);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Customer lockedCustomer = customerPersistencePort
+                .findByIdForUpdate(savedCustomer.getCustomerId())
+                .orElseThrow();
+        LocalDateTime changedAt = LocalDateTime.of(2026, 9, 21, 10, 0);
+        lockedCustomer.resetPasswordByAdmin("$2a$10$newAdminResetHash", changedAt);
+
+        customerPersistencePort.updatePasswordResetByAdmin(lockedCustomer);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Customer updatedCustomer =
+                customerPersistencePort.findById(savedCustomer.getCustomerId()).orElseThrow();
+
+        assertThat(updatedCustomer.getPasswordHash()).isEqualTo("$2a$10$newAdminResetHash");
+        assertThat(updatedCustomer.getPasswordChangedAt()).isEqualTo(changedAt);
+        assertThat(updatedCustomer.getLoginFailureCount()).isZero();
+        assertThat(updatedCustomer.isAccountLocked()).isFalse();
+        assertThat(updatedCustomer.getEmail()).isEqualTo("adapter-user@example.com");
+        assertThat(updatedCustomer.getLastLoginAt()).isEqualTo(LocalDateTime.of(2026, 8, 10, 9, 0));
+    }
+
     private Customer createCustomer() {
         LocalDateTime joinedAt = LocalDateTime.of(2026, 1, 1, 9, 0);
 
