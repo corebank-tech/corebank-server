@@ -282,6 +282,32 @@ class PasswordResetServiceTest {
     }
 
     @Test
+    @DisplayName("인증번호 발급 대상 고객을 찾을 수 없으면 동일한 사용자 없음 오류를 반환한다")
+    void rejectMissingCustomerDuringIssue() {
+        given(customerFacade.findPasswordResetCustomer("user01")).willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> service.issue(new IssuePasswordResetCommand("user01", "홍길동", "user@example.com")), "ATH0201");
+        verify(requestPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("이메일 형식이 올바르지 않으면 인증번호를 발급할 수 없다")
+    void rejectInvalidEmailDuringIssue() {
+        assertErrorCode(
+                () -> service.issue(new IssuePasswordResetCommand("user01", "홍길동", "invalid-email")), "CMN0001");
+        verify(customerFacade, never()).findPasswordResetCustomer(any());
+    }
+
+    @Test
+    @DisplayName("고객 ID를 확인할 재설정 요청이 없으면 오류를 반환한다")
+    void rejectMissingRequestWhenResolvingCustomerId() {
+        given(requestPort.findById("PRR_missing")).willReturn(Optional.empty());
+
+        assertErrorCode(() -> service.resolveCustomerId("PRR_missing"), "ATH0202");
+    }
+
+    @Test
     @DisplayName("재설정 요청 ID로 고객 ID를 확인한다")
     void resolveCustomerId() {
         given(requestPort.findById("PRR_test")).willReturn(Optional.of(activeRequest()));

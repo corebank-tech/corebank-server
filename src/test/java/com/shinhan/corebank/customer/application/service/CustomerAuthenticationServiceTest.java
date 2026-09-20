@@ -252,6 +252,38 @@ class CustomerAuthenticationServiceTest {
         verify(customerPersistencePort, never()).updatePassword(customer);
     }
 
+    @Test
+    @DisplayName("로그인 성공 처리할 고객이 없으면 예외가 발생한다")
+    void updateLoginSuccessStateCustomerNotFound() {
+        given(customerPersistencePort.findByIdForUpdate(99L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.updateLoginSuccessState(
+                        new RecordLoginSuccessCommand(99L, LocalDateTime.of(2026, 9, 20, 12, 0), "127.0.0.1")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("로그인 상태를 변경할 고객이 존재하지 않습니다.");
+    }
+
+    @Test
+    @DisplayName("비밀번호 재설정 고객을 ID로 찾을 수 없으면 예외가 발생한다")
+    void findPasswordResetCustomerByIdNotFound() {
+        given(customerPersistencePort.findById(99L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.findPasswordResetCustomerById(99L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("비밀번호 재설정 고객이 존재하지 않습니다.");
+    }
+
+    @Test
+    @DisplayName("비밀번호를 변경할 고객이 없으면 예외가 발생한다")
+    void resetPasswordCustomerNotFound() {
+        given(customerPersistencePort.findByIdForUpdate(99L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.resetPassword(new ResetCustomerPasswordCommand(
+                        99L, "passwordHash", "newPasswordHash", LocalDateTime.of(2026, 9, 20, 12, 0))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("비밀번호를 변경할 고객이 존재하지 않습니다.");
+    }
+
     // 테스트용 고객 도메인 모델 생성
     private Customer createCustomer(Long customerId, int loginFailureCount, boolean accountLocked) {
         return createCustomer(customerId, loginFailureCount, accountLocked, null, null, null);
