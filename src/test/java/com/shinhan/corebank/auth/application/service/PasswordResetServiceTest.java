@@ -169,6 +169,119 @@ class PasswordResetServiceTest {
                         .isEqualTo("ATH0202"));
     }
 
+    @Test
+    @DisplayName("인증 요청을 찾을 수 없으면 비밀번호를 재설정할 수 없다")
+    void rejectMissingRequest() {
+        given(requestPort.findByIdForUpdate("PRR_missing")).willReturn(Optional.empty());
+
+        assertErrorCode(
+                () -> service.reset(
+                        new ResetPasswordCommand("PRR_missing", "123456", "NewPassword1!", "NewPassword1!")),
+                "ATH0202");
+    }
+
+    @Test
+    @DisplayName("만료된 인증번호로는 비밀번호를 재설정할 수 없다")
+    void rejectExpiredCode() {
+        PasswordResetRequest expired = PasswordResetRequest.issue(
+                "PRR_test",
+                1L,
+                "user@example.com",
+                "code-hash",
+                LocalDateTime.of(2026, 9, 17, 10, 0),
+                LocalDateTime.of(2026, 9, 17, 9, 57));
+        given(requestPort.findByIdForUpdate("PRR_test")).willReturn(Optional.of(expired));
+
+        assertErrorCode(
+                () -> service.reset(new ResetPasswordCommand("PRR_test", "123456", "NewPassword1!", "NewPassword1!")),
+                "ATH0008");
+    }
+
+    @Test
+    @DisplayName("신규 비밀번호와 확인값이 다르면 재설정할 수 없다")
+    void rejectPasswordConfirmationMismatch() {
+        given(requestPort.findByIdForUpdate("PRR_test")).willReturn(Optional.of(activeRequest()));
+        given(passwordEncoder.matches("123456", "code-hash")).willReturn(true);
+
+        assertErrorCode(
+                () -> service.reset(new ResetPasswordCommand("PRR_test", "123456", "NewPassword1!", "Different1!")),
+                "ATH0002");
+    }
+
+    @Test
+    @DisplayName("인증 후 고객 계정이 잠겼으면 재설정할 수 없다")
+    void rejectLockedCustomerDuringReset() {
+        PasswordResetCustomerData locked =
+                new PasswordResetCustomerData(1L, "user01", "홍길동", "user@example.com", "old-password-hash", true);
+        prepareVerifiedRequest(locked);
+
+        assertErrorCode(
+                () -> service.reset(new ResetPasswordCommand("PRR_test", "123456", "NewPassword1!", "NewPassword1!")),
+                "ATH0102");
+        verify(customerFacade, never()).resetPassword(any());
+    }
+
+    @Test
+    @DisplayName("직전 비밀번호는 재사용할 수 없다")
+    void rejectPreviousPasswordReuse() {
+        prepareVerifiedRequest(CUSTOMER);
+        given(passwordEncoder.matches("NewPassword1!", "old-password-hash")).willReturn(true);
+
+        assertErrorCode(
+                () -> service.reset(new ResetPasswordCommand("PRR_test", "123456", "NewPassword1!", "NewPassword1!")),
+                "ATH0003");
+        verify(customerFacade, never()).resetPassword(any());
+    }
+
+    @Test
+    @DisplayName("저장 직전 고객 계정이 잠겼으면 재설정을 취소한다")
+    void rejectAccountLockedWhileSavingPassword() {
+        preparePasswordChange(ResetCustomerPasswordResult.ACCOUNT_LOCKED);
+
+        assertErrorCode(
+                () -> service.reset(new ResetPasswordCommand("PRR_test", "123456", "NewPassword1!", "NewPassword1!")),
+                "ATH0102");
+        verify(requestPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("다른 요청이 비밀번호를 먼저 변경하면 재설정을 취소한다")
+    void rejectConcurrentPasswordChange() {
+        preparePasswordChange(ResetCustomerPasswordResult.PASSWORD_CHANGED_CONCURRENTLY);
+
+        assertErrorCode(
+                () -> service.reset(new ResetPasswordCommand("PRR_test", "123456", "NewPassword1!", "NewPassword1!")),
+                "CMN0303");
+        verify(requestPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("재설정 요청 ID로 고객 ID를 확인한다")
+    void resolveCustomerId() {
+        given(requestPort.findById("PRR_test")).willReturn(Optional.of(activeRequest()));
+
+        assertThat(service.resolveCustomerId("PRR_test")).isEqualTo(1L);
+    }
+
+    private void prepareVerifiedRequest(PasswordResetCustomerData customer) {
+        given(requestPort.findByIdForUpdate("PRR_test")).willReturn(Optional.of(activeRequest()));
+        given(passwordEncoder.matches("123456", "code-hash")).willReturn(true);
+        given(customerFacade.findPasswordResetCustomerById(1L)).willReturn(customer);
+    }
+
+    private void preparePasswordChange(ResetCustomerPasswordResult result) {
+        prepareVerifiedRequest(CUSTOMER);
+        given(passwordEncoder.matches("NewPassword1!", "old-password-hash")).willReturn(false);
+        given(passwordEncoder.encode("NewPassword1!")).willReturn("new-password-hash");
+        given(customerFacade.resetPassword(any())).willReturn(result);
+    }
+
+    private void assertErrorCode(org.assertj.core.api.ThrowableAssert.ThrowingCallable action, String code) {
+        assertThatThrownBy(action).isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(
+                        exception.getErrorCode().getCode())
+                .isEqualTo(code));
+    }
+
     private void assertInvalidPassword(String newPassword) {
         given(requestPort.findByIdForUpdate("PRR_test")).willReturn(Optional.of(activeRequest()));
         given(passwordEncoder.matches("123456", "code-hash")).willReturn(true);
