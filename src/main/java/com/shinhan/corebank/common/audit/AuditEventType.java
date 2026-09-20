@@ -15,6 +15,7 @@ public enum AuditEventType {
     // 원장 미변경 — transaction_number 는 NULL
     TRANSFER_LIMIT_CHANGE, // 이체한도 변경
     ACCOUNT_PASSWORD_CHANGE, // 계좌비밀번호 변경
+    LOGIN_PASSWORD_CHANGE, // 로그인 비밀번호 변경
     AUTO_TRANSFER_INFO_CHANGE, // 자동이체 등록 정보 변경(REQ-AUTO-010)
     SCHEDULED_TRANSFER_INFO_CHANGE, // 예약이체 등록 정보 변경(REQ-SCD 등록/취소)
     WITHDRAWAL_ACCOUNT_REGISTER, // 출금계좌 등록
