@@ -256,6 +256,32 @@ class PasswordResetServiceTest {
     }
 
     @Test
+    @DisplayName("기본 비밀번호 형식을 위반하면 재설정할 수 없다")
+    void rejectInvalidPasswordFormat() {
+        given(requestPort.findByIdForUpdate("PRR_test")).willReturn(Optional.of(activeRequest()));
+        given(passwordEncoder.matches("123456", "code-hash")).willReturn(true);
+
+        assertErrorCode(
+                () -> service.reset(new ResetPasswordCommand("PRR_test", "123456", "OnlyLetters", "OnlyLetters")),
+                "ATH0001");
+        verify(customerFacade, never()).findPasswordResetCustomerById(any());
+    }
+
+    @Test
+    @DisplayName("인증번호 발급 명령이 없으면 필수값 오류를 반환한다")
+    void rejectMissingIssueCommand() {
+        assertErrorCode(() -> service.issue(null), "CMN0002");
+        verify(customerFacade, never()).findPasswordResetCustomer(any());
+    }
+
+    @Test
+    @DisplayName("비밀번호 재설정 명령이 없으면 필수값 오류를 반환한다")
+    void rejectMissingResetCommand() {
+        assertErrorCode(() -> service.reset(null), "CMN0002");
+        verify(requestPort, never()).findByIdForUpdate(any());
+    }
+
+    @Test
     @DisplayName("재설정 요청 ID로 고객 ID를 확인한다")
     void resolveCustomerId() {
         given(requestPort.findById("PRR_test")).willReturn(Optional.of(activeRequest()));
