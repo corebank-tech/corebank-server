@@ -26,6 +26,7 @@ public class PasswordResetService implements IssuePasswordResetUseCase, ResetPas
     private static final Pattern CODE = Pattern.compile("^\\d{6}$");
     private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
     private static final Pattern PASSWORD = Pattern.compile("^(?=.*[A-Za-z])(?=.*\\d)(?=.*[^A-Za-z\\d\\s])\\S{8,15}$");
+    private static final Pattern FOUR_REPEATED_CHARACTERS = Pattern.compile("(.)\\1{3}");
     private final CustomerAuthenticationFacade customerFacade;
     private final PasswordResetRequestPort requestPort;
     private final PasswordEncoder passwordEncoder;
@@ -75,6 +76,7 @@ public class PasswordResetService implements IssuePasswordResetUseCase, ResetPas
         if (customer.accountLocked()) {
             throw new BusinessException(AuthErrorCode.ACCOUNT_LOCKED);
         }
+        validatePasswordRestrictions(command.newPassword(), customer.userId());
         if (passwordEncoder.matches(command.newPassword(), customer.passwordHash()))
             throw new BusinessException(AuthErrorCode.PREVIOUS_PASSWORD_REUSE);
         ResetCustomerPasswordResult resetResult = customerFacade.resetPassword(new ResetCustomerPasswordCommand(
@@ -121,6 +123,30 @@ public class PasswordResetService implements IssuePasswordResetUseCase, ResetPas
                 || command.newPasswordConfirm() == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
+    }
+
+    // 아이디 포함·동일 문자 반복·연속 증감 숫자인 비밀번호를 차단한다.
+    private void validatePasswordRestrictions(String password, String userId) {
+        if (password.toLowerCase(Locale.ROOT).contains(userId.toLowerCase(Locale.ROOT))
+                || FOUR_REPEATED_CHARACTERS.matcher(password).find()
+                || containsFourConsecutiveDigits(password)) {
+            throw new BusinessException(AuthErrorCode.INVALID_PASSWORD_FORMAT);
+        }
+    }
+
+    private boolean containsFourConsecutiveDigits(String password) {
+        for (int start = 0; start <= password.length() - 4; start++) {
+            String candidate = password.substring(start, start + 4);
+            if (candidate.chars().allMatch(Character::isDigit)) {
+                int firstGap = candidate.charAt(1) - candidate.charAt(0);
+                int secondGap = candidate.charAt(2) - candidate.charAt(1);
+                int thirdGap = candidate.charAt(3) - candidate.charAt(2);
+                if ((firstGap == 1 || firstGap == -1) && firstGap == secondGap && secondGap == thirdGap) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private String randomToken() {

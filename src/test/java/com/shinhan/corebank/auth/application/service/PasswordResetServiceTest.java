@@ -132,6 +132,30 @@ class PasswordResetServiceTest {
     }
 
     @Test
+    @DisplayName("아이디가 포함된 새 비밀번호는 사용할 수 없다")
+    void rejectPasswordContainingUserId() {
+        assertInvalidPassword("Aa!user01");
+    }
+
+    @Test
+    @DisplayName("동일 문자가 4자리 연속된 새 비밀번호는 사용할 수 없다")
+    void rejectPasswordWithFourRepeatedCharacters() {
+        assertInvalidPassword("Aaaaa1!x");
+    }
+
+    @Test
+    @DisplayName("오름차순 숫자가 4자리 연속된 새 비밀번호는 사용할 수 없다")
+    void rejectPasswordWithAscendingDigits() {
+        assertInvalidPassword("Ab!1234x");
+    }
+
+    @Test
+    @DisplayName("내림차순 숫자가 4자리 연속된 새 비밀번호는 사용할 수 없다")
+    void rejectPasswordWithDescendingDigits() {
+        assertInvalidPassword("Ab!4321x");
+    }
+
+    @Test
     @DisplayName("이미 사용한 인증 요청은 다시 사용할 수 없다")
     void rejectUsedRequest() {
         PasswordResetRequest request = activeRequest();
@@ -143,6 +167,21 @@ class PasswordResetServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(
                                 exception.getErrorCode().getCode())
                         .isEqualTo("ATH0202"));
+    }
+
+    private void assertInvalidPassword(String newPassword) {
+        given(requestPort.findByIdForUpdate("PRR_test")).willReturn(Optional.of(activeRequest()));
+        given(passwordEncoder.matches("123456", "code-hash")).willReturn(true);
+        given(customerFacade.findPasswordResetCustomerById(1L)).willReturn(CUSTOMER);
+
+        assertThatThrownBy(
+                        () -> service.reset(new ResetPasswordCommand("PRR_test", "123456", newPassword, newPassword)))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(
+                                exception.getErrorCode().getCode())
+                        .isEqualTo("ATH0001"));
+
+        verify(customerFacade, never()).resetPassword(any());
+        verify(requestPort, never()).save(any());
     }
 
     private PasswordResetRequest activeRequest() {
