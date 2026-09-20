@@ -190,6 +190,38 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(found.getUpdatedAt()).isNotNull();
     }
 
+    @Test
+    @DisplayName("비밀번호와 변경 일시, 로그인 실패 횟수를 함께 저장한다")
+    void updatePassword() {
+        Customer savedCustomer = customerPersistencePort.save(createCustomer());
+        entityManager.flush();
+        entityManager.clear();
+
+        LocalDateTime changedAt = LocalDateTime.of(2026, 9, 20, 12, 0);
+        savedCustomer.resetPassword("new-password-hash", changedAt);
+
+        Customer updated = customerPersistencePort.updatePassword(savedCustomer);
+        entityManager.flush();
+        entityManager.clear();
+
+        Customer found =
+                customerPersistencePort.findById(updated.getCustomerId()).orElseThrow();
+        assertThat(found.getPasswordHash()).isEqualTo("new-password-hash");
+        assertThat(found.getPasswordChangedAt()).isEqualTo(changedAt);
+        assertThat(found.getLoginFailureCount()).isZero();
+        assertThat(found.isAccountLocked()).isFalse();
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 고객의 비밀번호는 저장할 수 없다")
+    void rejectUpdatingPasswordForMissingCustomer() {
+        Customer missingCustomer = createCustomerWithId(999_999_999L);
+
+        assertThatThrownBy(() -> customerPersistencePort.updatePassword(missingCustomer))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("저장할 고객이 존재하지 않습니다.");
+    }
+
     // 통합 테스트에서 사용할 신규 고객 생성
     @Test
     @DisplayName("회원가입 중복확인을 위해 아이디와 이메일 존재 여부를 조회한다")
@@ -245,5 +277,27 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 joinedAt,
                 null,
                 null);
+    }
+
+    private Customer createCustomerWithId(Long customerId) {
+        LocalDateTime joinedAt = LocalDateTime.of(2026, 1, 1, 9, 0);
+        return Customer.restore(
+                customerId,
+                "missing-adapter-user",
+                null,
+                PASSWORD_HASH,
+                "홍길동",
+                LocalDate.of(1990, 1, 1),
+                "missing-adapter-user@example.com",
+                "01012345678",
+                0,
+                false,
+                null,
+                null,
+                null,
+                joinedAt,
+                joinedAt,
+                joinedAt,
+                joinedAt);
     }
 }

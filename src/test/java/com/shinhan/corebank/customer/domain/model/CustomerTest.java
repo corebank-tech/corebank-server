@@ -43,6 +43,33 @@ class CustomerTest {
         assertThat(customer.isAccountLocked()).isTrue();
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"", " "})
+    @DisplayName("비밀번호 해시가 비어 있으면 재설정할 수 없다")
+    void rejectBlankPasswordHash(String passwordHash) {
+        Customer customer = restoreCustomer(3, false);
+
+        assertThatThrownBy(() -> customer.resetPassword(passwordHash, LocalDateTime.of(2026, 9, 17, 10, 0)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("비밀번호 해시는 필수입니다.");
+
+        assertThat(customer.getPasswordHash()).isEqualTo("passwordHash");
+        assertThat(customer.getLoginFailureCount()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("비밀번호 변경 일시가 없으면 재설정할 수 없다")
+    void rejectMissingPasswordChangedAt() {
+        Customer customer = restoreCustomer(3, false);
+
+        assertThatThrownBy(() -> customer.resetPassword("new-password-hash", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("비밀번호 변경 일시는 필수입니다.");
+
+        assertThat(customer.getPasswordHash()).isEqualTo("passwordHash");
+        assertThat(customer.getLoginFailureCount()).isEqualTo(3);
+    }
+
     @Test
     @DisplayName("잠금 계정은 실패 횟수가 초기화된 상태로 복원할 수 있다")
     void restoreLockedCustomerWithResetFailureCount() {
@@ -81,7 +108,7 @@ class CustomerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"999.999.999.999", "not-an-ip", "203.0.113.10:8080", "2001:db8::gg"})
+    @ValueSource(strings = {"999.999.999.999", "127.0.a.1", "not-an-ip", "203.0.113.10:8080", "2001:db8::gg"})
     @DisplayName("IP 형식이 올바르지 않으면 로그인 성공 상태를 기록하지 않는다")
     void rejectInvalidIpAddress(String invalidIpAddress) {
         Customer customer = restoreCustomer(2, false);
@@ -131,6 +158,56 @@ class CustomerTest {
 
         assertThat(customer.getPhoneNumber()).isEqualTo("01012345678");
         assertThat(customer.getEmail()).isEqualTo("user01@example.com");
+    }
+
+    @Test
+    @DisplayName("이메일이 없으면 연락처를 변경할 수 없다")
+    void rejectsMissingEmail() {
+        Customer customer = restoreCustomer(0, false);
+
+        assertThatThrownBy(() -> customer.changeContactInfo("01087654321", " "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("이메일은 필수입니다.");
+    }
+
+    @Test
+    @DisplayName("잠긴 고객의 로그인 실패 횟수를 변경할 수 없다")
+    void rejectsLoginFailureForLockedCustomer() {
+        Customer customer = restoreCustomer(5, true);
+
+        assertThatThrownBy(customer::recordLoginFailure)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("잠긴 계정의 로그인 실패 상태는 변경할 수 없습니다.");
+    }
+
+    @Test
+    @DisplayName("잠긴 고객은 로그인 성공 처리할 수 없다")
+    void rejectsLoginSuccessForLockedCustomer() {
+        Customer customer = restoreCustomer(5, true);
+
+        assertThatThrownBy(() -> customer.recordLoginSuccess(LocalDateTime.of(2026, 8, 14, 10, 0), "127.0.0.1"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("잠긴 계정은 로그인 성공 처리할 수 없습니다.");
+    }
+
+    @Test
+    @DisplayName("로그인 일시가 없으면 성공 처리할 수 없다")
+    void rejectsMissingLoginAt() {
+        Customer customer = restoreCustomer(2, false);
+
+        assertThatThrownBy(() -> customer.recordLoginSuccess(null, "127.0.0.1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("로그인 일시는 필수입니다.");
+    }
+
+    @Test
+    @DisplayName("로그인 IP가 없으면 성공 처리할 수 없다")
+    void rejectsMissingLoginIp() {
+        Customer customer = restoreCustomer(2, false);
+
+        assertThatThrownBy(() -> customer.recordLoginSuccess(LocalDateTime.of(2026, 8, 14, 10, 0), " "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("로그인 IP는 필수입니다.");
     }
 
     private Customer restoreCustomer(int loginFailureCount, boolean accountLocked) {
