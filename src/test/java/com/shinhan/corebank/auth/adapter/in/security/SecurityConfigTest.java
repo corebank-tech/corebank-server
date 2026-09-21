@@ -2,6 +2,7 @@ package com.shinhan.corebank.auth.adapter.in.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -12,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import jakarta.servlet.http.Cookie;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.DisplayName;
@@ -23,11 +25,17 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = SecurityTestController.class)
-@TestPropertySource(properties = "app.security.cors.allowed-origins=http://localhost:5173,https://www.corebank.cloud")
+@TestPropertySource(
+        properties = {
+            "app.security.cors.allowed-origins=http://localhost:5173,https://www.corebank.cloud",
+            "app.security.admin.bootstrap-customer-ids=7"
+        })
 @Import({
     SecurityTestController.class,
     SecurityConfig.class,
@@ -265,5 +273,38 @@ class SecurityConfigTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("CMN0101"))
                 .andExpect(jsonPath("$.data").value((Object) null));
+    }
+
+    @Test
+    @DisplayName("관리자 API는 세션이 없으면 401 CMN0101을 반환한다")
+    void rejectsAdminApiWithoutSession() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/test").contextPath("/api/v1"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("CMN0101"));
+    }
+
+    // CSRF 실패도 403 CMN0102라서 원인을 섞지 않으려고 GET으로 검증한다.
+    @Test
+    @DisplayName("관리자 API는 허용 목록 밖의 고객이면 403 CMN0102를 반환한다")
+    void rejectsAdminApiForCustomerOutsideAllowlist() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/test").contextPath("/api/v1").with(authentication(customer(8L))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CMN0102"))
+                .andExpect(jsonPath("$.data").value((Object) null));
+    }
+
+    @Test
+    @DisplayName("관리자 API는 허용 목록의 고객이면 통과한다")
+    void permitsAdminApiForCustomerInAllowlist() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/test").contextPath("/api/v1").with(authentication(customer(7L))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("admin"));
+    }
+
+    private UsernamePasswordAuthenticationToken customer(Long customerId) {
+        return UsernamePasswordAuthenticationToken.authenticated(
+                new AuthenticatedCustomer(customerId, "user" + customerId, "테스터"),
+                null,
+                AuthorityUtils.createAuthorityList("ROLE_CUSTOMER"));
     }
 }

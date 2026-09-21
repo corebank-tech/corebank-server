@@ -2,6 +2,7 @@ package com.shinhan.corebank.auth.adapter.in.security;
 
 import static org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher.pathPattern;
 
+import com.shinhan.corebank.auth.adapter.in.web.ClientIpResolver;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -27,7 +28,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({CorsProperties.class, CsrfProperties.class})
+@EnableConfigurationProperties({CorsProperties.class, CsrfProperties.class, AdminBootstrapProperties.class})
 public class SecurityConfig {
 
     // 로그인 비밀번호 해시 검증에 사용할 BCrypt Encoder
@@ -101,7 +102,8 @@ public class SecurityConfig {
             SessionLogoutSuccessHandler logoutSuccessHandler,
             CorsConfigurationSource corsConfigurationSource,
             CookieCsrfTokenRepository csrfTokenRepository,
-            CsrfTokenRequestAttributeHandler csrfTokenRequestHandler)
+            CsrfTokenRequestAttributeHandler csrfTokenRequestHandler,
+            AdminBootstrapProperties adminBootstrapProperties)
             throws Exception {
         http.cors(cors -> cors.configurationSource(corsConfigurationSource))
                 // 기본 CSRF 보호를 유지하고 로그인과 회원가입, ALB 헬스체크만 검사에서 제외
@@ -166,6 +168,11 @@ public class SecurityConfig {
                                 "/swagger-ui.html", "/swagger-ui/**",
                                 "/v3/api-docs/**", "/v3/api-docs.yaml")
                         .permitAll()
+
+                        // 관리자 API는 PH-49a 전까지 허용 목록의 고객만 접근 (#448 임시 가드)
+                        .requestMatchers("/admin/**")
+                        .access(new AdminBootstrapAuthorizationManager(
+                                adminBootstrapProperties, new ClientIpResolver()))
 
                         // 인증된 사용자만 접근 가능
                         .anyRequest()

@@ -9,9 +9,12 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
+import com.shinhan.corebank.product.domain.exception.ProductErrorCode;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,10 +61,15 @@ public class AccountDetailQueryService implements AccountDetailQueryUseCase {
             return DEFAULT_DEMAND_DEPOSIT_NAME;
         }
 
-        return productQueryUseCase
-                .getDetail(account.getProductId())
-                .getProduct()
-                .getProductName();
+        Map<Long, String> productNames = productQueryUseCase.findProductNames(Set.of(account.getProductId()));
+
+        String productName = productNames.get(account.getProductId());
+
+        if (productName == null) {
+            throw new BusinessException(ProductErrorCode.PRODUCT_NOT_FOUND);
+        }
+
+        return productName;
     }
 
     // 거래정지·해지·비밀번호 잠금 계좌의 출금 가능 잔액을 0으로 반환한다.
