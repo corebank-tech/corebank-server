@@ -1,5 +1,6 @@
 package com.shinhan.corebank.auth.adapter.in.security;
 
+import com.shinhan.corebank.auth.adapter.in.web.ClientIpResolver;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import java.util.List;
 import java.util.function.Supplier;
@@ -22,10 +23,23 @@ class AdminBootstrapAuthorizationManager implements AuthorizationManager<Request
 
     private static final Logger log = LoggerFactory.getLogger(AdminBootstrapAuthorizationManager.class);
 
-    private final List<Long> allowedCustomerIds;
+    private static final String UNKNOWN_IP = "unknown";
 
-    AdminBootstrapAuthorizationManager(AdminBootstrapProperties properties) {
+    private final List<Long> allowedCustomerIds;
+    private final ClientIpResolver clientIpResolver;
+
+    AdminBootstrapAuthorizationManager(AdminBootstrapProperties properties, ClientIpResolver clientIpResolver) {
         this.allowedCustomerIds = properties.bootstrapCustomerIds();
+        this.clientIpResolver = clientIpResolver;
+    }
+
+    // 로그를 남기다 실패해서 인가 판정이 깨지지 않게 한다 — ClientIpResolver는 빈 값·45자 초과에 예외를 던진다.
+    private String resolveIp(RequestAuthorizationContext context) {
+        try {
+            return clientIpResolver.resolve(context.getRequest());
+        } catch (RuntimeException e) {
+            return UNKNOWN_IP;
+        }
     }
 
     // null을 반환하면 AuthorizationFilter가 허용으로 처리하므로 항상 결정을 반환한다.
@@ -40,9 +54,10 @@ class AdminBootstrapAuthorizationManager implements AuthorizationManager<Request
         boolean allowed = allowedCustomerIds.contains(customer.customerId());
         if (!allowed) {
             log.warn(
-                    "관리자 허용 목록 밖 접근 거부: customerId={}, uri={}",
+                    "관리자 허용 목록 밖 접근 거부: customerId={}, uri={}, ip={}",
                     customer.customerId(),
-                    context.getRequest().getRequestURI());
+                    context.getRequest().getRequestURI(),
+                    resolveIp(context));
         }
         return new AuthorizationDecision(allowed);
     }

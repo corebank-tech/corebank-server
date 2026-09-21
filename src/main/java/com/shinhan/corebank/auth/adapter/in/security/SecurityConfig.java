@@ -2,6 +2,7 @@ package com.shinhan.corebank.auth.adapter.in.security;
 
 import static org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher.pathPattern;
 
+import com.shinhan.corebank.auth.adapter.in.web.ClientIpResolver;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -170,7 +171,8 @@ public class SecurityConfig {
 
                         // 관리자 API는 PH-49a 전까지 허용 목록의 고객만 접근 (#448 임시 가드)
                         .requestMatchers("/admin/**")
-                        .access(new AdminBootstrapAuthorizationManager(adminBootstrapProperties))
+                        .access(new AdminBootstrapAuthorizationManager(
+                                adminBootstrapProperties, new ClientIpResolver()))
 
                         // 인증된 사용자만 접근 가능
                         .anyRequest()

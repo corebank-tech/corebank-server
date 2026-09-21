@@ -2,6 +2,7 @@ package com.shinhan.corebank.auth.adapter.in.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.shinhan.corebank.auth.adapter.in.web.ClientIpResolver;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -54,10 +55,25 @@ class AdminBootstrapAuthorizationManagerTest {
         assertThat(isGranted(List.of(7L), other)).isFalse();
     }
 
+    // 거부 로그에 접속 IP를 남기는데, IP 추출이 실패해도 인가 판정은 그대로여야 한다(ClientIpResolver는 빈 값에 예외를 던진다).
+    @Test
+    @DisplayName("접속 IP를 뽑지 못해도 허용 목록 판정은 그대로다")
+    void keepsDecisionWhenClientIpIsUnavailable() {
+        MockHttpServletRequest requestWithoutIp = new MockHttpServletRequest("GET", "/admin/customers");
+        requestWithoutIp.setRemoteAddr("");
+        RequestAuthorizationContext context = new RequestAuthorizationContext(requestWithoutIp);
+        AdminBootstrapAuthorizationManager manager = manager(List.of(7L));
+
+        assertThat(manager.authorize(() -> customer(8L), context).isGranted()).isFalse();
+        assertThat(manager.authorize(() -> customer(7L), context).isGranted()).isTrue();
+    }
+
     private boolean isGranted(List<Long> allowlist, Authentication authentication) {
-        AdminBootstrapAuthorizationManager manager =
-                new AdminBootstrapAuthorizationManager(new AdminBootstrapProperties(allowlist));
-        return manager.authorize(() -> authentication, CONTEXT).isGranted();
+        return manager(allowlist).authorize(() -> authentication, CONTEXT).isGranted();
+    }
+
+    private AdminBootstrapAuthorizationManager manager(List<Long> allowlist) {
+        return new AdminBootstrapAuthorizationManager(new AdminBootstrapProperties(allowlist), new ClientIpResolver());
     }
 
     private Authentication customer(Long customerId) {
