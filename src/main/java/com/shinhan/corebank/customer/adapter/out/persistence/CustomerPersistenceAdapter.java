@@ -25,6 +25,12 @@ public class CustomerPersistenceAdapter implements CustomerPersistencePort {
         return customerJpaRepository.findByUserId(userId).map(customerMapper::toDomain);
     }
 
+    @Override
+    public Optional<Customer> findByUserIdForUpdate(String userId) {
+        Objects.requireNonNull(userId, "userId must not be null");
+        return customerJpaRepository.findByUserIdForUpdate(userId).map(customerMapper::toDomain);
+    }
+
     // 아이디 찾기 후보 조회 결과를 도메인 모델로 변환해 JPA Entity 노출을 막는다.
     @Override
     public List<Customer> findAllByUserNameAndBirthDate(String userName, LocalDate birthDate) {
@@ -105,6 +111,15 @@ public class CustomerPersistenceAdapter implements CustomerPersistencePort {
 
         CustomerJpaEntity savedEntity = customerJpaRepository.saveAndFlush(entity);
         return customerMapper.toDomain(savedEntity);
+    }
+
+    @Override
+    public Customer updatePassword(Customer customer) {
+        Objects.requireNonNull(customer, "customer must not be null");
+        CustomerJpaEntity entity = findExistingEntityForUpdate(customer.getCustomerId());
+        entity.updatePassword(
+                customer.getPasswordHash(), customer.getPasswordChangedAt(), customer.getLoginFailureCount());
+        return customerMapper.toDomain(customerJpaRepository.saveAndFlush(entity));
     }
 
     // customerId가 없는 신규 고객만 저장
