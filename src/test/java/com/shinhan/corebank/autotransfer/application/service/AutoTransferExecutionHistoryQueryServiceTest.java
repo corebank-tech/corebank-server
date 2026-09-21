@@ -11,7 +11,6 @@ import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferExecuti
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryAggregate;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryQueryPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryRow;
-import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferQueryPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
@@ -22,6 +21,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,9 +44,6 @@ class AutoTransferExecutionHistoryQueryServiceTest {
     AutoTransferExecutionHistoryQueryPort autoTransferExecutionHistoryQueryPort;
 
     @Mock
-    AutoTransferQueryPort autoTransferQueryPort;
-
-    @Mock
     Clock clock;
 
     @InjectMocks
@@ -61,7 +58,9 @@ class AutoTransferExecutionHistoryQueryServiceTest {
         lenient().when(clock.withZone(SEOUL)).thenReturn(fixed);
         // findMissingExecutions()가 이제 페이지 조회에서도 항상 실행되므로, 기본값으로 "정체된
         // 자동이체 없음"을 깔아둔다 — 개별 테스트가 필요하면 이 스텁을 덮어써서 씀
-        lenient().when(autoTransferQueryPort.search(any(), any(), any(), any())).thenReturn(Page.empty());
+        lenient()
+                .when(autoTransferExecutionHistoryQueryPort.findNormalStuckBefore(any(), any(), any()))
+                .thenReturn(List.of());
     }
 
     private AutoTransferExecutionHistoryRow sampleRow() {
@@ -214,8 +213,8 @@ class AutoTransferExecutionHistoryQueryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(sampleRow()), Pageable.unpaged(), 1));
         when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
                 .thenReturn(new AutoTransferExecutionHistoryAggregate(1L, 10_000L, 0L, 0L));
-        when(autoTransferQueryPort.search(eq(1L), eq(2L), eq(AutoTransferStatus.NORMAL), eq(Pageable.unpaged())))
-                .thenReturn(Page.empty());
+        when(autoTransferExecutionHistoryQueryPort.findNormalStuckBefore(eq(1L), eq(2L), eq(TODAY)))
+                .thenReturn(List.of());
 
         AutoTransferExecutionHistoryResult result = service.search(1L, 2L, null, null, 0, 7, true);
 
@@ -232,8 +231,8 @@ class AutoTransferExecutionHistoryQueryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(sampleRow()), Pageable.unpaged(), 1));
         when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
                 .thenReturn(new AutoTransferExecutionHistoryAggregate(1L, 10_000L, 0L, 0L));
-        when(autoTransferQueryPort.search(eq(1L), eq(2L), eq(AutoTransferStatus.NORMAL), eq(Pageable.unpaged())))
-                .thenReturn(new PageImpl<>(List.of(stuck)));
+        when(autoTransferExecutionHistoryQueryPort.findNormalStuckBefore(eq(1L), eq(2L), eq(TODAY)))
+                .thenReturn(List.of(stuck));
 
         AutoTransferExecutionHistoryResult result = service.search(1L, 2L, null, null, 0, 10, true);
 
@@ -263,10 +262,10 @@ class AutoTransferExecutionHistoryQueryServiceTest {
                 .thenReturn(Page.empty(Pageable.unpaged()));
         when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
                 .thenReturn(AutoTransferExecutionHistoryAggregate.empty());
-        when(autoTransferQueryPort.search(eq(1L), eq(2L), eq(AutoTransferStatus.NORMAL), eq(Pageable.unpaged())))
-                .thenReturn(new PageImpl<>(List.of(stuck)));
-        when(autoTransferExecutionHistoryQueryPort.existsProcessing(eq(5L), eq(stuckDate)))
-                .thenReturn(true);
+        when(autoTransferExecutionHistoryQueryPort.findNormalStuckBefore(eq(1L), eq(2L), eq(TODAY)))
+                .thenReturn(List.of(stuck));
+        when(autoTransferExecutionHistoryQueryPort.findProcessingAutoTransferIds(eq(List.of(5L))))
+                .thenReturn(Set.of(5L));
 
         AutoTransferExecutionHistoryResult result = service.search(1L, 2L, null, null, 0, 10, true);
 
@@ -284,30 +283,17 @@ class AutoTransferExecutionHistoryQueryServiceTest {
                 .thenReturn(Page.empty(Pageable.unpaged()));
         when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
                 .thenReturn(AutoTransferExecutionHistoryAggregate.empty());
-        when(autoTransferQueryPort.search(eq(1L), eq(2L), eq(AutoTransferStatus.NORMAL), eq(Pageable.unpaged())))
-                .thenReturn(new PageImpl<>(List.of(stuck)));
+        when(autoTransferExecutionHistoryQueryPort.findNormalStuckBefore(eq(1L), eq(2L), eq(TODAY)))
+                .thenReturn(List.of(stuck));
 
         AutoTransferExecutionHistoryResult result = service.search(1L, 2L, null, null, 0, 10, true);
 
         assertThat(result.page().getContent()).isEmpty();
     }
 
-    @Test
-    @DisplayName("nextExecutionDate가 오늘이면 아직 정체된 게 아니므로 합성하지 않는다 (경계값)")
-    void search_allTrue_nextExecutionDateIsToday_doesNotMerge() {
-        AutoTransfer notYetDue = stuckAutoTransfer(5L, TODAY);
-        when(autoTransferExecutionHistoryQueryPort.search(
-                        eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY), eq(Pageable.unpaged())))
-                .thenReturn(Page.empty(Pageable.unpaged()));
-        when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
-                .thenReturn(AutoTransferExecutionHistoryAggregate.empty());
-        when(autoTransferQueryPort.search(eq(1L), eq(2L), eq(AutoTransferStatus.NORMAL), eq(Pageable.unpaged())))
-                .thenReturn(new PageImpl<>(List.of(notYetDue)));
-
-        AutoTransferExecutionHistoryResult result = service.search(1L, 2L, null, null, 0, 10, true);
-
-        assertThat(result.page().getContent()).isEmpty();
-    }
+    // "오늘이면 아직 정체된 게 아니다"라는 경계값은 이제 DB 쿼리 단계(findNormalStuckBefore의
+    // nextExecutionDate < before 조건)의 책임이라 이 서비스가 아니라 AutoTransferPersistenceAdapterTest에서
+    // 검증한다(#442 리뷰 반영으로 N+1 제거하며 필터링 위치를 서비스에서 어댑터로 옮김)
 
     @Test
     @DisplayName(
@@ -320,8 +306,8 @@ class AutoTransferExecutionHistoryQueryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(sampleRow())));
         when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
                 .thenReturn(new AutoTransferExecutionHistoryAggregate(1L, 10_000L, 0L, 0L));
-        when(autoTransferQueryPort.search(eq(1L), eq(2L), eq(AutoTransferStatus.NORMAL), eq(Pageable.unpaged())))
-                .thenReturn(new PageImpl<>(List.of(stuck)));
+        when(autoTransferExecutionHistoryQueryPort.findNormalStuckBefore(eq(1L), eq(2L), eq(TODAY)))
+                .thenReturn(List.of(stuck));
 
         AutoTransferExecutionHistoryResult result = service.search(1L, 2L, null, null, 0, 10, false);
 
@@ -353,8 +339,8 @@ class AutoTransferExecutionHistoryQueryServiceTest {
                 .thenReturn(new PageImpl<>(realRows));
         when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
                 .thenReturn(AutoTransferExecutionHistoryAggregate.empty());
-        when(autoTransferQueryPort.search(eq(1L), eq(2L), eq(AutoTransferStatus.NORMAL), eq(Pageable.unpaged())))
-                .thenReturn(new PageImpl<>(List.of(stuck)));
+        when(autoTransferExecutionHistoryQueryPort.findNormalStuckBefore(eq(1L), eq(2L), eq(TODAY)))
+                .thenReturn(List.of(stuck));
 
         AutoTransferExecutionHistoryResult firstPage = service.search(1L, 2L, null, null, 0, 5, false);
         AutoTransferExecutionHistoryResult secondPage = service.search(1L, 2L, null, null, 1, 5, false);

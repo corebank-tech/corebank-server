@@ -7,9 +7,7 @@ import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferExecuti
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryAggregate;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryQueryPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryRow;
-import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferQueryPort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
-import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
@@ -39,7 +37,6 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
     private final AutoTransferExecutionHistoryQueryPort autoTransferExecutionHistoryQueryPort;
-    private final AutoTransferQueryPort autoTransferQueryPort;
     private final Clock clock;
 
     @Override
@@ -103,20 +100,28 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
                 row.failureReason());
     }
 
-    // 실행 예정이었는데 이력 없음 감지 -> nextExecutionDate가 오늘보다 과거인 자동이체는 이력이 안남음
-    // 페이지 미분할 조회에서만 계산
+    // 실행 예정이었는데 이력 없음 감지 -> nextExecutionDate가 오늘보다 과거인 자동이체는 이력이 안남음.
+    // DB에서 status=NORMAL+정체 조건까지 걸러온 뒤(findNormalStuckBefore), PROCESSING 여부는
+    // 후보 전체를 한 번에 조회해서(findProcessingAutoTransferIds) 쿼리를 항상 2번으로 고정한다
+    // (후보 수만큼 늘어나던 N+1 문제, #442 리뷰 반영)
     private List<AutoTransferExecutionHistoryItem> findMissingExecutions(
             Long customerId, Long withdrawalAccountId, LocalDate fromDate, LocalDate toDate, LocalDate today) {
-        List<AutoTransfer> normalAutoTransfers = autoTransferQueryPort
-                .search(customerId, withdrawalAccountId, AutoTransferStatus.NORMAL, Pageable.unpaged())
-                .getContent();
-        return normalAutoTransfers.stream()
-                .filter(autoTransfer -> autoTransfer.getNextExecutionDate().isBefore(today))
-                .filter(autoTransfer -> !autoTransfer.getNextExecutionDate().isBefore(fromDate)
-                        && !autoTransfer.getNextExecutionDate().isAfter(toDate))
+        List<AutoTransfer> candidates =
+                autoTransferExecutionHistoryQueryPort
+                        .findNormalStuckBefore(customerId, withdrawalAccountId, today)
+                        .stream()
+                        .filter(autoTransfer ->
+                                !autoTransfer.getNextExecutionDate().isBefore(fromDate)
+                                        && !autoTransfer.getNextExecutionDate().isAfter(toDate))
+                        .toList();
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> processingAutoTransferIds = autoTransferExecutionHistoryQueryPort.findProcessingAutoTransferIds(
+                candidates.stream().map(AutoTransfer::getAutoTransferId).toList());
+        return candidates.stream()
                 // PROCESSING으로 실제 처리 중인 건 재확정 배치가 곧 정리하므로 "관리자 문의" 대상에서 뺌
-                .filter(autoTransfer -> !autoTransferExecutionHistoryQueryPort.existsProcessing(
-                        autoTransfer.getAutoTransferId(), autoTransfer.getNextExecutionDate()))
+                .filter(autoTransfer -> !processingAutoTransferIds.contains(autoTransfer.getAutoTransferId()))
                 .map(this::toMissingItem)
                 .toList();
     }
