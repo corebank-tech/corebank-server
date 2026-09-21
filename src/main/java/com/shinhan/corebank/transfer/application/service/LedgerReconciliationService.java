@@ -11,6 +11,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
@@ -20,7 +21,13 @@ public class LedgerReconciliationService implements LedgerReconciliationUseCase 
     private final LedgerReconciliationPort ledgerReconciliationPort;
     private final AccountBalanceSnapshotPort accountBalanceSnapshotPort;
 
+    /**
+     * 원장 합계 조회와 잔액 조회를 한 트랜잭션으로 묶는다. 분리돼 있으면 두 조회 사이에 다른
+     * 이체가 커밋될 때 서로 다른 시점의 스냅샷을 비교하게 되어 실제로는 정상인 계좌를
+     * 오탐(false positive)으로 잡아낼 수 있다.
+     */
     @Override
+    @Transactional(readOnly = true)
     public List<LedgerReconciliationMismatch> reconcile(LocalDate date) {
         List<Long> accountIds = ledgerReconciliationPort.findAccountIdsPostedBetween(
                 date.atStartOfDay(), date.plusDays(1).atStartOfDay());
