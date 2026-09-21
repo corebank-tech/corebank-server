@@ -10,6 +10,7 @@ import jakarta.persistence.EntityManager;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -144,5 +145,42 @@ class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
         assertThat(found.getOccurredAt()).isNotEqualTo(nanoTime);
         assertThat(Duration.between(nanoTime, found.getOccurredAt()).abs())
                 .isLessThanOrEqualTo(Duration.of(1, ChronoUnit.MICROS));
+    }
+
+    @Test
+    @DisplayName("지정 기간에 원장 기표가 있었던 계좌 ID만 중복 없이 반환한다 (대사 배치 증분 대상 선별)")
+    void findsDistinctAccountIdsPostedBetween() {
+        // given
+        saveEntry(101L, LocalDateTime.of(2026, 8, 9, 9, 0, 0), LedgerDirection.WITHDRAWAL, 1000L);
+        saveEntry(202L, LocalDateTime.of(2026, 8, 9, 15, 0, 0), LedgerDirection.DEPOSIT, 1000L);
+        // 같은 계좌(101)에 하루 중 두 번째 기표 - 중복 제거 확인용
+        saveEntry(101L, LocalDateTime.of(2026, 8, 9, 18, 0, 0), LedgerDirection.WITHDRAWAL, 500L);
+        // 대상 기간(8/9) 밖의 기표 - 결과에 섞이면 안 됨
+        saveEntry(303L, LocalDateTime.of(2026, 8, 8, 23, 0, 0), LedgerDirection.WITHDRAWAL, 700L);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        List<Long> accountIds = ledgerEntryJpaRepository.findDistinctAccountIdsPostedBetween(
+                LocalDateTime.of(2026, 8, 9, 0, 0, 0), LocalDateTime.of(2026, 8, 10, 0, 0, 0));
+
+        // then
+        assertThat(accountIds).containsExactlyInAnyOrder(101L, 202L);
+    }
+
+    private void saveEntry(Long accountId, LocalDateTime occurredAt, LedgerDirection direction, long amount) {
+        Long ledgerEntryId = ledgerEntryIdGenerator.nextId();
+        ledgerEntryJpaRepository.save(LedgerEntryJpaEntity.builder()
+                .ledgerEntryId(ledgerEntryId)
+                .accountId(accountId)
+                .transactionNumber(String.format("20260809WB%010d", ledgerEntryId))
+                .direction(direction)
+                .amount(amount)
+                .balanceAfter(100000L)
+                .transactionType("IMMEDIATE_TRANSFER")
+                .channel(TransferChannel.WB)
+                .reversed(false)
+                .occurredAt(occurredAt)
+                .build());
     }
 }

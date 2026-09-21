@@ -1,12 +1,29 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface LedgerEntryJpaRepository extends JpaRepository<LedgerEntryJpaEntity, LedgerEntryId> {
 
     List<LedgerEntryJpaEntity> findByTransactionNumber(String transactionNumber);
+
+    /**
+     * 지정 기간(fromInclusive~toExclusive)에 원장 기표가 있었던 계좌 ID를 중복 없이 반환한다.
+     * 대사 배치가 전 계좌를 매일 전수 대조하지 않고, 전일 기표가 발생한 계좌만 증분 대상으로
+     * 삼기 위한 선별 쿼리다.
+     */
+    @Query(
+            """
+        SELECT DISTINCT l.accountId
+        FROM LedgerEntryJpaEntity l
+        WHERE l.occurredAt >= :fromInclusive AND l.occurredAt < :toExclusive
+        """)
+    List<Long> findDistinctAccountIdsPostedBetween(
+            @Param("fromInclusive") LocalDateTime fromInclusive, @Param("toExclusive") LocalDateTime toExclusive);
 
     /**
      * ledgerEntryId 단건 조회. reversal_id가 가리키는 원거래 원장 행을 occurredAt 없이 조회할 때 사용한다.
