@@ -66,18 +66,25 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
             throw new BusinessException(CommonErrorCode.DATE_RANGE_EXCEEDED);
         }
 
-        Page<AutoTransferExecutionHistoryRow> rows = autoTransferExecutionHistoryQueryPort.search(
-                customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, pageable);
+        // 합성 행(관리자 문의)을 페이지 조회에도 섞어야 해서 DB 페이징에 맡기지 않고 조회기간
+        // 전체를 가져와 여기서 직접 정렬·페이징한다 — G-05 화면은 all=true를 보낼 방법이 없어
+        // pageable.isUnpaged()에서만 동작하던 기존 구현은 실제로는 한 번도 실행되지 않았다(#442 리뷰)
+        List<AutoTransferExecutionHistoryItem> realItems = autoTransferExecutionHistoryQueryPort
+                .search(customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, Pageable.unpaged())
+                .getContent()
+                .stream()
+                .map(this::toItem)
+                .toList();
         AutoTransferExecutionHistoryAggregate aggregate = autoTransferExecutionHistoryQueryPort.summarize(
                 customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate);
 
-        Page<AutoTransferExecutionHistoryItem> itemPage = rows.map(this::toItem);
-        List<AutoTransferExecutionHistoryItem> missing = pageable.isUnpaged()
-                ? findMissingExecutions(customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, today)
-                : List.of();
-        if (!missing.isEmpty()) {
-            itemPage = mergeIntoPage(itemPage, missing);
-        }
+        List<AutoTransferExecutionHistoryItem> missing =
+                findMissingExecutions(customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, today);
+        List<AutoTransferExecutionHistoryItem> merged = mergeSorted(realItems, missing);
+
+        Page<AutoTransferExecutionHistoryItem> itemPage = pageable.isUnpaged()
+                ? new PageImpl<>(merged, Pageable.unpaged(), merged.size())
+                : slice(merged, pageable);
         return new AutoTransferExecutionHistoryResult(itemPage, toSummary(aggregate, missing));
     }
 
@@ -114,13 +121,42 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
                 .toList();
     }
 
-    private Page<AutoTransferExecutionHistoryItem> mergeIntoPage(
-            Page<AutoTransferExecutionHistoryItem> itemPage, List<AutoTransferExecutionHistoryItem> missing) {
-        List<AutoTransferExecutionHistoryItem> merged = new ArrayList<>(itemPage.getContent());
-        merged.addAll(missing);
-        merged.sort(Comparator.comparing(AutoTransferExecutionHistoryItem::executedAt)
-                .reversed());
-        return new PageImpl<>(merged, Pageable.unpaged(), merged.size());
+    // 이미 정렬된 두 목록(진짜 이력·합성 행)을 executedAt 내림차순으로 병합한다(#442 리뷰 반영 —
+    // 전체를 다시 정렬하지 않고 missing만 정렬한 뒤 병합정렬 방식으로 합친다)
+    private List<AutoTransferExecutionHistoryItem> mergeSorted(
+            List<AutoTransferExecutionHistoryItem> realItems, List<AutoTransferExecutionHistoryItem> missing) {
+        if (missing.isEmpty()) {
+            return realItems;
+        }
+        List<AutoTransferExecutionHistoryItem> sortedMissing = missing.stream()
+                .sorted(Comparator.comparing(AutoTransferExecutionHistoryItem::executedAt)
+                        .reversed())
+                .toList();
+        List<AutoTransferExecutionHistoryItem> merged = new ArrayList<>(realItems.size() + sortedMissing.size());
+        int i = 0;
+        int j = 0;
+        while (i < realItems.size() && j < sortedMissing.size()) {
+            if (!realItems.get(i).executedAt().isBefore(sortedMissing.get(j).executedAt())) {
+                merged.add(realItems.get(i++));
+            } else {
+                merged.add(sortedMissing.get(j++));
+            }
+        }
+        while (i < realItems.size()) {
+            merged.add(realItems.get(i++));
+        }
+        while (j < sortedMissing.size()) {
+            merged.add(sortedMissing.get(j++));
+        }
+        return merged;
+    }
+
+    // 병합된 전체 목록에서 고객이 요청한 페이지만 잘라낸다 — DB 페이징 대신 서비스가 직접 담당
+    private Page<AutoTransferExecutionHistoryItem> slice(
+            List<AutoTransferExecutionHistoryItem> merged, Pageable pageable) {
+        int from = Math.min((int) pageable.getOffset(), merged.size());
+        int to = Math.min(from + pageable.getPageSize(), merged.size());
+        return new PageImpl<>(merged.subList(from, to), pageable, merged.size());
     }
 
     private AutoTransferExecutionHistoryItem toMissingItem(AutoTransfer autoTransfer) {
