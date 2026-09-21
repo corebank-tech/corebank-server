@@ -34,6 +34,9 @@ public interface CustomerPersistencePort {
     // 로그인 성공 관련 필드만 갱신
     void updateLoginSuccessState(Customer customer);
 
+    // 관리자 비밀번호 초기화 결과(비밀번호·변경시각·실패 횟수·잠금)만 갱신
+    void updatePasswordResetByAdmin(Customer customer);
+
     // 고객의 휴대폰 번호와 이메일을 갱신하고 저장 결과를 반환한다.
     Customer updateContactInfo(Customer customer);
 

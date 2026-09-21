@@ -20,7 +20,8 @@ public enum AuditEventType {
     WITHDRAWAL_ACCOUNT_REGISTER, // 출금계좌 등록
     WITHDRAWAL_ACCOUNT_DELETE, // 출금계좌 삭제
     LOGIN, // 로그인 (REQ-CMN-025 접속이력)
-    ACCOUNT_UNLOCK; // 관리자 계정 잠금 해제
+    ACCOUNT_UNLOCK, // 관리자 계정 잠금 해제
+    PASSWORD_RESET_BY_ADMIN; // 관리자 로그인 비밀번호 초기화(잠금 해제 포함, #449)
 
     /** 원장 변경 여부. true 면 transaction_number 가 있어야 한다 */
     public boolean isLedgerChanging() {

@@ -87,6 +87,15 @@ public class CustomerJpaEntity extends BaseEntity {
         this.loginFailureCount = loginFailureCount;
     }
 
+    // 관리자 비밀번호 초기화 대상인 비밀번호·변경시각·실패 횟수·잠금만 갱신
+    public void updatePasswordResetByAdmin(
+            String passwordHash, LocalDateTime passwordChangedAt, int loginFailureCount, boolean accountLocked) {
+        this.passwordHash = passwordHash;
+        this.passwordChangedAt = passwordChangedAt;
+        this.loginFailureCount = loginFailureCount;
+        this.accountLocked = accountLocked;
+    }
+
     // 고객정보 변경 대상인 휴대폰 번호와 이메일만 갱신한다.
     public void updateContactInfo(String phoneNumber, String email) {
         this.phoneNumber = phoneNumber;
