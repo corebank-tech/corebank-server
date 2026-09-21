@@ -25,7 +25,8 @@ public class TransferLimitAuthTokenVerificationAdapter implements AuthTokenVerif
     private final OtpAuthTokenVerifier otpAuthTokenVerifier;
 
     @Override
-    public void verifyAccountPassword(String authToken, Long customerId) {
+    // 로그인 고객 소유의 계좌비밀번호 인증 토큰을 검증하고 즉시 소비한다.
+    public void verifyAndConsumeAccountPassword(String authToken, Long customerId) {
         accountPasswordAuthTokenVerifier.verifyAndConsume(authToken, customerId);
     }
 

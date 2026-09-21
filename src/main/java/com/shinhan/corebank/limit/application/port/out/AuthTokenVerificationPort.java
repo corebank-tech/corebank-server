@@ -18,7 +18,7 @@ public interface AuthTokenVerificationPort {
      *
      * <p>토큰 payload의 customerId가 세션 고객과 일치할 때만 성공하며, 성공한 토큰은 즉시 소비된다.
      */
-    void verifyAccountPassword(String authToken, Long customerId);
+    void verifyAndConsumeAccountPassword(String authToken, Long customerId);
 
     /**
      * OTP 토큰을 검증하고 <b>일회용으로 소비한다</b>. 성공하면 그 토큰은 다시 쓸 수 없으므로

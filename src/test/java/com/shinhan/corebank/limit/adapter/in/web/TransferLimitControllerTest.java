@@ -190,6 +190,25 @@ class TransferLimitControllerTest extends IntegrationTestSupport {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    @DisplayName("계좌비밀번호 인증 토큰이 누락되면 400을 반환한다")
+    void updateTransferLimit_withoutAccountPasswordToken_returnsBadRequest() throws Exception {
+        Long customerId = insertCustomer();
+
+        mockMvc.perform(put("/transfer-limits")
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                                """
+                                {"oneTimeLimit": 3000000, "dailyLimit": 10000000,
+                                 "otpAuthToken": "OTP_AUTH_TEST"}
+                                """)
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
+    }
+
     private String body(long oneTimeLimit, long dailyLimit) {
         return """
                 {"oneTimeLimit": %d, "dailyLimit": %d,

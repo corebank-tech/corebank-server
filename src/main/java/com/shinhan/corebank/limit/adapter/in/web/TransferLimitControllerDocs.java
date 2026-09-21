@@ -15,9 +15,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 /**
  * 이체한도 API 의 Swagger 명세. 컨트롤러가 애너테이션에 묻히지 않도록 분리했다.
  * 매핑 애너테이션은 구현체가 갖는다.
- *
- * <p>계좌비밀번호 토큰 무효(APW0102)는 적지 않는다. P6 의 공개 API 가 아직 없어 통과시키므로
- * 발생할 수 없다. OTP 는 otp/api 가 구현돼 있어 실제로 검증되므로 403 을 적는다.
  */
 @Tag(name = "이체한도", description = "이체한도 조회·변경 API")
 public interface TransferLimitControllerDocs {
@@ -52,6 +49,8 @@ public interface TransferLimitControllerDocs {
                     로그인 고객의 1회·1일 이체한도를 함께 교체한다. 한쪽만 보내는 부분 수정은 허용하지 않는다 —
                     "1회 ≤ 1일" 정합성은 두 값을 함께 봐야 검증할 수 있다.
                     계좌비밀번호 토큰과 OTP 토큰을 모두 요구한다(2단계 인증).
+                    계좌비밀번호 토큰은 고객이 보유한 본인 계좌 중 하나로 인증해 발급하며,
+                    한도 변경 시에는 토큰의 고객 ID를 로그인 고객과 대조한다.
                     OTP 발급 시 transactionData 에 {"oneTimeLimit": 값, "dailyLimit": 값} 을 담아야 하며,
                     이 요청의 한도와 다르면 OTP0102 로 거부된다.
                     응답은 변경된 한도와 당일 사용 현황을 함께 담으므로 재조회할 필요가 없다.
@@ -69,7 +68,9 @@ public interface TransferLimitControllerDocs {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "`OTP0101` OTP 인증 토큰이 무효·만료·사용됨 · " + "`OTP0102` 인증한 거래 내용과 요청한 한도가 다름",
+                description = "`APW0102` 계좌비밀번호 인증 토큰이 무효·만료·사용됨 · "
+                        + "`OTP0101` OTP 인증 토큰이 무효·만료·사용됨 · "
+                        + "`OTP0102` 인증한 거래 내용과 요청한 한도가 다름",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",

@@ -46,7 +46,7 @@ public class TransferLimitCommandService implements TransferLimitCommandUseCase 
         // 소비하므로, 여기서 걸러야 할 입력 실수를 그 뒤에 두면 인증 토큰을 헛되이 쓰게 된다.
         TransferLimit.validateOrder(command.oneTimeLimit(), command.dailyLimit());
 
-        authTokenVerificationPort.verifyAccountPassword(command.accountPasswordAuthToken(), customerId);
+        authTokenVerificationPort.verifyAndConsumeAccountPassword(command.accountPasswordAuthToken(), customerId);
         authTokenVerificationPort.verifyAndConsumeOtp(
                 command.otpAuthToken(), customerId, command.oneTimeLimit(), command.dailyLimit());
 

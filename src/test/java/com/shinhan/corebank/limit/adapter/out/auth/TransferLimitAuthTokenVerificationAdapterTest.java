@@ -20,7 +20,7 @@ class TransferLimitAuthTokenVerificationAdapterTest {
     @Test
     @DisplayName("계좌비밀번호 토큰을 현재 고객 기준으로 검증하고 소비한다")
     void verifiesAccountPasswordTokenByCustomer() {
-        adapter.verifyAccountPassword("account-password-token", 1L);
+        adapter.verifyAndConsumeAccountPassword("account-password-token", 1L);
 
         verify(accountPasswordAuthTokenVerifier).verifyAndConsume("account-password-token", 1L);
     }
