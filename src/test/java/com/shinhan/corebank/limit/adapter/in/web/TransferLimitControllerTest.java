@@ -1,6 +1,8 @@
 package com.shinhan.corebank.limit.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -9,7 +11,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
+import com.shinhan.corebank.account.domain.exception.AccountPasswordErrorCode;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
@@ -44,6 +49,9 @@ class TransferLimitControllerTest extends IntegrationTestSupport {
     /** OTP 발급·검증 흐름은 otp 모듈이 자기 테스트로 검증한다. 여기서는 한도 API 자체가 대상이다. */
     @MockitoBean
     OtpAuthTokenVerifier otpAuthTokenVerifier;
+
+    @MockitoBean
+    AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
 
     @Test
     @DisplayName("한도와 당일 사용액이 있으면 1회·1일 한도와 사용액·잔여액을 반환한다")
@@ -107,6 +115,33 @@ class TransferLimitControllerTest extends IntegrationTestSupport {
         // 그대로 돌려주므로, 쓰기가 통째로 빠져도 본문은 새 값으로 나온다. 행을 직접 읽는다.
         assertThat(savedLimits(customerId)).containsExactly(3_000_000L, 10_000_000L);
         assertThat(historyBeforeValues(customerId)).containsExactly(1_000_000L, 5_000_000L);
+        verify(accountPasswordAuthTokenVerifier).verifyAndConsume("ACC_PWD_TEST", customerId);
+    }
+
+    @Test
+    @DisplayName("계좌비밀번호 토큰 검증에 실패하면 한도와 이력을 변경하지 않는다")
+    void updateTransferLimit_invalidAccountPasswordToken_doesNotChangeLimit() throws Exception {
+        Long customerId = insertCustomer();
+        insertTransferLimit(customerId, 1_000_000L, 5_000_000L);
+        entityManager.flush();
+        entityManager.clear();
+        doThrow(new BusinessException(AccountPasswordErrorCode.INVALID_AUTH_TOKEN))
+                .when(accountPasswordAuthTokenVerifier)
+                .verifyAndConsume("ACC_PWD_TEST", customerId);
+
+        mockMvc.perform(put("/transfer-limits")
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body(3_000_000L, 10_000_000L))
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("APW0102"));
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(savedLimits(customerId)).containsExactly(1_000_000L, 5_000_000L);
+        assertThat(historyCount(customerId)).isZero();
     }
 
     @Test
@@ -155,6 +190,25 @@ class TransferLimitControllerTest extends IntegrationTestSupport {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    @DisplayName("계좌비밀번호 인증 토큰이 누락되면 400을 반환한다")
+    void updateTransferLimit_withoutAccountPasswordToken_returnsBadRequest() throws Exception {
+        Long customerId = insertCustomer();
+
+        mockMvc.perform(put("/transfer-limits")
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                                """
+                                {"oneTimeLimit": 3000000, "dailyLimit": 10000000,
+                                 "otpAuthToken": "OTP_AUTH_TEST"}
+                                """)
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
+    }
+
     private String body(long oneTimeLimit, long dailyLimit) {
         return """
                 {"oneTimeLimit": %d, "dailyLimit": %d,
@@ -179,6 +233,15 @@ class TransferLimitControllerTest extends IntegrationTestSupport {
                 .setParameter("customerId", customerId)
                 .getSingleResult();
         return List.of(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
+    }
+
+    private long historyCount(Long customerId) {
+        return ((Number) entityManager
+                        .createNativeQuery(
+                                "SELECT COUNT(*) FROM transfer_limit_history WHERE customer_id = :customerId")
+                        .setParameter("customerId", customerId)
+                        .getSingleResult())
+                .longValue();
     }
 
     private UsernamePasswordAuthenticationToken authenticationOf(Long customerId) {
