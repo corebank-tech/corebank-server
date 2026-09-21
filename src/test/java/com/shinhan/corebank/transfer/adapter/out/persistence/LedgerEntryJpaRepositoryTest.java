@@ -1,6 +1,7 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.transfer.domain.LedgerDirection;
@@ -166,6 +167,32 @@ class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
 
         // then
         assertThat(accountIds).containsExactlyInAnyOrder(101L, 202L);
+    }
+
+    @Test
+    @DisplayName("계좌별로 입금은 더하고 출금은 뺀 원장 누적 합계를 반환한다 (대사 배치의 '원장상 잔액')")
+    void sumsSignedAmountByAccountIds() {
+        // given
+        // 101: 입금 3000 - 출금 1000 = 2000
+        saveEntry(101L, LocalDateTime.of(2026, 8, 9, 9, 0, 0), LedgerDirection.DEPOSIT, 3000L);
+        saveEntry(101L, LocalDateTime.of(2026, 8, 9, 10, 0, 0), LedgerDirection.WITHDRAWAL, 1000L);
+        // 202: 입금 5000
+        saveEntry(202L, LocalDateTime.of(2026, 8, 9, 11, 0, 0), LedgerDirection.DEPOSIT, 5000L);
+        // 조회 대상에서 뺄 계좌 - 결과에 섞이면 안 됨
+        saveEntry(303L, LocalDateTime.of(2026, 8, 9, 12, 0, 0), LedgerDirection.DEPOSIT, 9000L);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        List<LedgerEntryJpaRepository.AccountLedgerSumProjection> sums =
+                ledgerEntryJpaRepository.sumSignedAmountByAccountIds(List.of(101L, 202L));
+
+        // then
+        assertThat(sums)
+                .extracting(
+                        LedgerEntryJpaRepository.AccountLedgerSumProjection::getAccountId,
+                        LedgerEntryJpaRepository.AccountLedgerSumProjection::getSignedSum)
+                .containsExactlyInAnyOrder(tuple(101L, 2000L), tuple(202L, 5000L));
     }
 
     private void saveEntry(Long accountId, LocalDateTime occurredAt, LedgerDirection direction, long amount) {
