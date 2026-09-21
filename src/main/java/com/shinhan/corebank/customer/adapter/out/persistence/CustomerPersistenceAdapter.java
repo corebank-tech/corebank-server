@@ -25,6 +25,12 @@ public class CustomerPersistenceAdapter implements CustomerPersistencePort {
         return customerJpaRepository.findByUserId(userId).map(customerMapper::toDomain);
     }
 
+    @Override
+    public Optional<Customer> findByUserIdForUpdate(String userId) {
+        Objects.requireNonNull(userId, "userId must not be null");
+        return customerJpaRepository.findByUserIdForUpdate(userId).map(customerMapper::toDomain);
+    }
+
     // 아이디 찾기 후보 조회 결과를 도메인 모델로 변환해 JPA Entity 노출을 막는다.
     @Override
     public List<Customer> findAllByUserNameAndBirthDate(String userName, LocalDate birthDate) {

@@ -57,7 +57,7 @@ class PasswordResetServiceTest {
     @Test
     @DisplayName("일치하는 고객에게 180초 인증번호를 발급하고 기존 요청을 무효화한다")
     void issuePasswordResetCode() {
-        given(customerFacade.findPasswordResetCustomer("user01")).willReturn(Optional.of(CUSTOMER));
+        given(customerFacade.findPasswordResetCustomerForUpdate("user01")).willReturn(Optional.of(CUSTOMER));
         given(passwordEncoder.encode(any())).willReturn("code-hash");
         given(requestPort.save(any())).willAnswer(invocation -> invocation.getArgument(0));
 
@@ -80,7 +80,7 @@ class PasswordResetServiceTest {
     void rejectLockedCustomer() {
         PasswordResetCustomerData locked =
                 new PasswordResetCustomerData(1L, "user01", "홍길동", "user@example.com", "old-password-hash", true);
-        given(customerFacade.findPasswordResetCustomer("user01")).willReturn(Optional.of(locked));
+        given(customerFacade.findPasswordResetCustomerForUpdate("user01")).willReturn(Optional.of(locked));
 
         assertThatThrownBy(() -> service.issue(new IssuePasswordResetCommand("user01", "홍길동", "user@example.com")))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(
@@ -271,7 +271,34 @@ class PasswordResetServiceTest {
     @DisplayName("인증번호 발급 명령이 없으면 필수값 오류를 반환한다")
     void rejectMissingIssueCommand() {
         assertErrorCode(() -> service.issue(null), "CMN0002");
-        verify(customerFacade, never()).findPasswordResetCustomer(any());
+        verify(customerFacade, never()).findPasswordResetCustomerForUpdate(any());
+    }
+
+    @Test
+    @DisplayName("인증번호 발급 필수값 누락을 각 필드별로 거부한다")
+    void rejectEveryMissingIssueField() {
+        assertErrorCode(() -> service.issue(new IssuePasswordResetCommand(null, "홍길동", "user@example.com")), "CMN0002");
+        assertErrorCode(
+                () -> service.issue(new IssuePasswordResetCommand("user01", null, "user@example.com")), "CMN0002");
+        assertErrorCode(() -> service.issue(new IssuePasswordResetCommand("user01", "홍길동", null)), "CMN0002");
+    }
+
+    @Test
+    @DisplayName("인증번호 발급 입력값의 각 길이와 형식 경계를 검증한다")
+    void rejectEveryInvalidIssueField() {
+        assertErrorCode(() -> service.issue(new IssuePasswordResetCommand(" ", "홍길동", "user@example.com")), "CMN0001");
+        assertErrorCode(
+                () -> service.issue(new IssuePasswordResetCommand("usr1", "홍길동", "user@example.com")), "CMN0001");
+        assertErrorCode(
+                () -> service.issue(new IssuePasswordResetCommand("u".repeat(21), "홍길동", "user@example.com")),
+                "CMN0001");
+        assertErrorCode(
+                () -> service.issue(new IssuePasswordResetCommand("user01", " ", "user@example.com")), "CMN0001");
+        assertErrorCode(
+                () -> service.issue(new IssuePasswordResetCommand("user01", "가".repeat(51), "user@example.com")),
+                "CMN0001");
+        assertErrorCode(
+                () -> service.issue(new IssuePasswordResetCommand("user01", "홍길동", "a".repeat(101))), "CMN0001");
     }
 
     @Test
@@ -282,9 +309,52 @@ class PasswordResetServiceTest {
     }
 
     @Test
+    @DisplayName("비밀번호 재설정 필수값 누락을 각 필드별로 거부한다")
+    void rejectEveryMissingResetField() {
+        assertErrorCode(
+                () -> service.reset(new ResetPasswordCommand(null, "123456", "NewPassword1!", "NewPassword1!")),
+                "CMN0002");
+        assertErrorCode(
+                () -> service.reset(new ResetPasswordCommand("PRR_test", null, "NewPassword1!", "NewPassword1!")),
+                "CMN0002");
+        assertErrorCode(
+                () -> service.reset(new ResetPasswordCommand("PRR_test", "123456", null, "NewPassword1!")), "CMN0002");
+        assertErrorCode(
+                () -> service.reset(new ResetPasswordCommand("PRR_test", "123456", "NewPassword1!", null)), "CMN0002");
+    }
+
+    @Test
+    @DisplayName("숫자 6자리 형식이 아닌 인증번호를 거부한다")
+    void rejectMalformedVerificationCode() {
+        given(requestPort.findByIdForUpdate("PRR_test")).willReturn(Optional.of(activeRequest()));
+
+        assertErrorCode(
+                () -> service.reset(new ResetPasswordCommand("PRR_test", "12345", "NewPassword1!", "NewPassword1!")),
+                "ATH0007");
+    }
+
+    @Test
+    @DisplayName("연속 숫자가 아닌 네 자리 조합은 정상 비밀번호로 허용한다")
+    void allowNonConsecutiveFourDigitCombinations() {
+        for (String password : new String[] {"Ax!1357z", "Ax!1245z", "Ax!1235z", "Ax!9865z", "Ax!9875z"}) {
+            PasswordResetRequest request = activeRequest();
+            given(requestPort.findByIdForUpdate("PRR_test")).willReturn(Optional.of(request));
+            given(passwordEncoder.matches("123456", "code-hash")).willReturn(true);
+            given(customerFacade.findPasswordResetCustomerById(1L)).willReturn(CUSTOMER);
+            given(passwordEncoder.matches(password, "old-password-hash")).willReturn(false);
+            given(passwordEncoder.encode(password)).willReturn("new-password-hash");
+            given(customerFacade.resetPassword(any())).willReturn(ResetCustomerPasswordResult.COMPLETED);
+
+            assertThat(service.reset(new ResetPasswordCommand("PRR_test", "123456", password, password))
+                            .customerId())
+                    .isEqualTo(1L);
+        }
+    }
+
+    @Test
     @DisplayName("인증번호 발급 대상 고객을 찾을 수 없으면 동일한 사용자 없음 오류를 반환한다")
     void rejectMissingCustomerDuringIssue() {
-        given(customerFacade.findPasswordResetCustomer("user01")).willReturn(Optional.empty());
+        given(customerFacade.findPasswordResetCustomerForUpdate("user01")).willReturn(Optional.empty());
 
         assertErrorCode(
                 () -> service.issue(new IssuePasswordResetCommand("user01", "홍길동", "user@example.com")), "ATH0201");
@@ -296,7 +366,7 @@ class PasswordResetServiceTest {
     void rejectInvalidEmailDuringIssue() {
         assertErrorCode(
                 () -> service.issue(new IssuePasswordResetCommand("user01", "홍길동", "invalid-email")), "CMN0001");
-        verify(customerFacade, never()).findPasswordResetCustomer(any());
+        verify(customerFacade, never()).findPasswordResetCustomerForUpdate(any());
     }
 
     @Test

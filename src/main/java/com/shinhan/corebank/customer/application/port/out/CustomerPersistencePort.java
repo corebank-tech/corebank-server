@@ -11,6 +11,9 @@ public interface CustomerPersistencePort {
     // 로그인 아이디로 고객 조회
     Optional<Customer> findByUserId(String userId);
 
+    // 비밀번호 재설정 재발급을 직렬화하기 위해 로그인 아이디로 고객을 잠금 조회한다.
+    Optional<Customer> findByUserIdForUpdate(String userId);
+
     // 성명과 생년월일이 모두 일치하는 고객 목록 조회
     List<Customer> findAllByUserNameAndBirthDate(String userName, LocalDate birthDate);
 

@@ -39,11 +39,12 @@ public class PasswordResetService implements IssuePasswordResetUseCase, ResetPas
         validateIssue(command);
         String email = command.email().trim().toLowerCase(Locale.ROOT);
         PasswordResetCustomerData customer = customerFacade
-                .findPasswordResetCustomer(command.userId().trim())
+                .findPasswordResetCustomerForUpdate(command.userId().trim())
                 .filter(c -> c.customerName().equals(command.customerName().trim()))
                 .filter(c -> c.email().equalsIgnoreCase(email))
                 .orElseThrow(() -> new BusinessException(AuthErrorCode.USER_NOT_FOUND));
         if (customer.accountLocked()) throw new BusinessException(AuthErrorCode.ACCOUNT_LOCKED);
+        // 고객 행 잠금 안에서 기존 요청 무효화와 신규 저장을 순서대로 처리한다.
         requestPort.invalidateActive(customer.customerId());
         String id = "PRR_" + randomToken();
         String code = "%06d".formatted(random.nextInt(1_000_000));
@@ -63,12 +64,10 @@ public class PasswordResetService implements IssuePasswordResetUseCase, ResetPas
         if (request.used()) throw new BusinessException(AuthErrorCode.VERIFICATION_REQUEST_NOT_FOUND);
         LocalDateTime now = LocalDateTime.now(clock);
         if (!now.isBefore(request.expiresAt())) throw new BusinessException(AuthErrorCode.VERIFICATION_CODE_EXPIRED);
-        if (command.verificationCode() == null
-                || !CODE.matcher(command.verificationCode()).matches()
+        if (!CODE.matcher(command.verificationCode()).matches()
                 || !passwordEncoder.matches(command.verificationCode(), request.codeHash()))
             throw new BusinessException(AuthErrorCode.VERIFICATION_CODE_MISMATCH);
-        if (command.newPassword() == null
-                || !PASSWORD.matcher(command.newPassword()).matches())
+        if (!PASSWORD.matcher(command.newPassword()).matches())
             throw new BusinessException(AuthErrorCode.INVALID_PASSWORD_FORMAT);
         if (!command.newPassword().equals(command.newPasswordConfirm()))
             throw new BusinessException(AuthErrorCode.PASSWORD_CONFIRMATION_MISMATCH);

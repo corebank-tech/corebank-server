@@ -15,6 +15,10 @@ public interface CustomerJpaRepository extends JpaRepository<CustomerJpaEntity, 
     // 로그인 아이디로 고객 Entity 조회
     Optional<CustomerJpaEntity> findByUserId(String userId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select customer from CustomerJpaEntity customer where customer.userId = :userId")
+    Optional<CustomerJpaEntity> findByUserIdForUpdate(@Param("userId") String userId);
+
     // 아이디 찾기에서 동명이인을 고려해 성명·생년월일이 일치하는 고객을 모두 조회한다.
     List<CustomerJpaEntity> findAllByUserNameAndBirthDate(String userName, LocalDate birthDate);
 

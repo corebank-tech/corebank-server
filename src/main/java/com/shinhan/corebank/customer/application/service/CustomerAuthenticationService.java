@@ -85,10 +85,11 @@ public class CustomerAuthenticationService implements CustomerAuthenticationFaca
     }
 
     @Override
-    public Optional<PasswordResetCustomerData> findPasswordResetCustomer(String userId) {
+    @Transactional
+    public Optional<PasswordResetCustomerData> findPasswordResetCustomerForUpdate(String userId) {
         Objects.requireNonNull(userId, "userId must not be null");
         return customerPersistencePort
-                .findByUserId(userId)
+                .findByUserIdForUpdate(userId)
                 .map(customer -> new PasswordResetCustomerData(
                         customer.getCustomerId(),
                         customer.getUserId(),

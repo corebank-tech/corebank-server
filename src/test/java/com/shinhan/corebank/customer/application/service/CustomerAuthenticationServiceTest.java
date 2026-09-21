@@ -185,11 +185,11 @@ class CustomerAuthenticationServiceTest {
 
     @Test
     @DisplayName("아이디로 비밀번호 재설정 고객정보를 조회한다")
-    void findPasswordResetCustomer() {
+    void findPasswordResetCustomerForUpdate() {
         Customer customer = createCustomer(1L, 2, false);
-        given(customerPersistencePort.findByUserId("user01")).willReturn(Optional.of(customer));
+        given(customerPersistencePort.findByUserIdForUpdate("user01")).willReturn(Optional.of(customer));
 
-        Optional<PasswordResetCustomerData> result = service.findPasswordResetCustomer("user01");
+        Optional<PasswordResetCustomerData> result = service.findPasswordResetCustomerForUpdate("user01");
 
         assertThat(result)
                 .contains(new PasswordResetCustomerData(

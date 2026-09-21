@@ -103,6 +103,18 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(result.get().getUserId()).isEqualTo("adapter-user");
     }
 
+    @Test
+    @DisplayName("로그인 아이디로 고객을 비관적 잠금 조회한다")
+    void findByUserIdForUpdate() {
+        Customer savedCustomer = customerPersistencePort.save(createCustomer());
+        entityManager.flush();
+        entityManager.clear();
+
+        Optional<Customer> result = customerPersistencePort.findByUserIdForUpdate("adapter-user");
+
+        assertThat(result).get().extracting(Customer::getCustomerId).isEqualTo(savedCustomer.getCustomerId());
+    }
+
     // 기존 고객은 범용 save로 다시 저장할 수 없음
     @Test
     @DisplayName("customerId가 있는 기존 고객은 신규 저장에서 거부한다")

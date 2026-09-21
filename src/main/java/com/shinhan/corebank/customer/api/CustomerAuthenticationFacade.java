@@ -19,7 +19,7 @@ public interface CustomerAuthenticationFacade {
     // 로그인 성공 결과를 고객 상태에 반영하도록 요청
     LoginSuccessState updateLoginSuccessState(RecordLoginSuccessCommand command);
 
-    Optional<PasswordResetCustomerData> findPasswordResetCustomer(String userId);
+    Optional<PasswordResetCustomerData> findPasswordResetCustomerForUpdate(String userId);
 
     PasswordResetCustomerData findPasswordResetCustomerById(Long customerId);
 
