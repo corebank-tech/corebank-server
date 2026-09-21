@@ -2,6 +2,7 @@ package com.shinhan.corebank.auth.adapter.in.web;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyShort;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -108,6 +109,14 @@ class PasswordResetControllerTest {
                 .andExpect(jsonPath("$.data.changedAt").value("2026-09-17T10:00:00+09:00"));
 
         verify(idempotencyService).complete(any(), anyShort(), any());
+        verify(idempotencyService)
+                .begin(
+                        eq(IDEMPOTENCY_KEY),
+                        eq(1L),
+                        eq("PUT /auth/password-reset-requests/PRR_test"),
+                        eq("{\"customerId\":1,\"newPassword\":\"NewPassword1!\","
+                                + "\"newPasswordConfirm\":\"NewPassword1!\","
+                                + "\"passwordResetRequestId\":\"PRR_test\",\"verificationCode\":\"498210\"}"));
     }
 
     @Test

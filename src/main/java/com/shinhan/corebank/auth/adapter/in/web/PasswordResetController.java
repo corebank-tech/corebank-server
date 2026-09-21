@@ -1,6 +1,7 @@
 package com.shinhan.corebank.auth.adapter.in.web;
 
 import com.shinhan.corebank.auth.application.port.in.*;
+import com.shinhan.corebank.common.idempotency.IdempotencyFingerprint;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -35,21 +36,13 @@ public class PasswordResetController {
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody PasswordResetRequest request) {
         Long customerId = resetUseCase.resolveCustomerId(passwordResetRequestId);
+        // 공용 헬퍼로 요청 본문과 경로 변수를 정렬해 재시도마다 동일한 지문을 생성한다.
         return idempotentRequestExecutor.execute(
                 idempotencyKey,
                 customerId,
                 "PUT /auth/password-reset-requests/" + passwordResetRequestId,
-                Map.of(
-                        "customerId",
-                        customerId,
-                        "passwordResetRequestId",
-                        passwordResetRequestId,
-                        "verificationCode",
-                        request.verificationCode(),
-                        "newPassword",
-                        request.newPassword(),
-                        "newPasswordConfirm",
-                        request.newPasswordConfirm()),
+                IdempotencyFingerprint.of(
+                        customerId, request, Map.of("passwordResetRequestId", passwordResetRequestId)),
                 new TypeReference<>() {},
                 () -> {
                     ResetPasswordResult result = resetUseCase.reset(request.toCommand(passwordResetRequestId));
