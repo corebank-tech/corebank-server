@@ -11,6 +11,8 @@ import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -442,6 +444,75 @@ class AutoTransferPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(result.successAmount()).isZero();
         assertThat(result.errorCount()).isZero();
         assertThat(result.errorAmount()).isZero();
+    }
+
+    @Test
+    @DisplayName("status=NORMAL이면서 nextExecutionDate가 before보다 과거인 것만 반환한다 (#442)")
+    void findNormalStuckBefore_returnsOnlyStuckNormalOnes() {
+        AutoTransferJpaEntity stuck = repository.save(
+                autoTransferDue(accountA, "110000000045", AutoTransferStatus.NORMAL, LocalDate.of(2026, 3, 10)));
+        // 아직 안 지남 - before 기준보다 미래
+        repository.save(
+                autoTransferDue(accountA, "110000000046", AutoTransferStatus.NORMAL, LocalDate.of(2026, 3, 20)));
+        // 과거이긴 하지만 NORMAL이 아님
+        repository.save(
+                autoTransferDue(accountA, "110000000047", AutoTransferStatus.TERMINATED, LocalDate.of(2026, 3, 5)));
+        entityManager.flush();
+        entityManager.clear();
+
+        List<AutoTransfer> result = adapter.findNormalStuckBefore(customerId, accountA, LocalDate.of(2026, 3, 15));
+
+        assertThat(result).extracting(AutoTransfer::getAutoTransferId).containsExactly(stuck.getAutoTransferId());
+    }
+
+    @Test
+    @DisplayName("nextExecutionDate가 before와 정확히 같으면 아직 정체된 게 아니므로 포함하지 않는다 (경계값, #442)")
+    void findNormalStuckBefore_nextExecutionDateEqualsBefore_excluded() {
+        repository.save(
+                autoTransferDue(accountA, "110000000045", AutoTransferStatus.NORMAL, LocalDate.of(2026, 3, 15)));
+        entityManager.flush();
+        entityManager.clear();
+
+        List<AutoTransfer> result = adapter.findNormalStuckBefore(customerId, accountA, LocalDate.of(2026, 3, 15));
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("조건에 맞는 자동이체가 없으면 빈 리스트를 반환한다 (#442)")
+    void findNormalStuckBefore_noMatches_returnsEmpty() {
+        List<AutoTransfer> result = adapter.findNormalStuckBefore(customerId, accountA, LocalDate.of(2026, 3, 15));
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("후보 ID 중 PROCESSING 행이 있는 것만 한 번에 골라 반환한다 (#442)")
+    void findProcessingAutoTransferIds_returnsOnlyProcessingOnes() {
+        AutoTransferJpaEntity processing =
+                repository.save(autoTransfer(accountA, "110000000048", AutoTransferStatus.NORMAL, 10));
+        AutoTransferJpaEntity notProcessing =
+                repository.save(autoTransfer(accountA, "110000000049", AutoTransferStatus.NORMAL, 11));
+        entityManager.flush();
+        executionRepository.save(
+                execution(processing, LocalDate.of(2026, 3, 20), ProcessResultStatus.PROCESSING, 7000L, null, null));
+        executionRepository.save(execution(
+                notProcessing, LocalDate.of(2026, 3, 20), ProcessResultStatus.SUCCESS, 7000L, "TXN0099", null));
+        entityManager.flush();
+        entityManager.clear();
+
+        Set<Long> result = adapter.findProcessingAutoTransferIds(
+                List.of(processing.getAutoTransferId(), notProcessing.getAutoTransferId()));
+
+        assertThat(result).containsExactly(processing.getAutoTransferId());
+    }
+
+    @Test
+    @DisplayName("빈 ID 목록을 주면 쿼리 없이 빈 Set을 반환한다 (#442)")
+    void findProcessingAutoTransferIds_emptyIds_returnsEmptySet() {
+        Set<Long> result = adapter.findProcessingAutoTransferIds(List.of());
+
+        assertThat(result).isEmpty();
     }
 
     private AutoTransferExecutionJpaEntity execution(
