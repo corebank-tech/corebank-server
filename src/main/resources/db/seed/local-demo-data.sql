@@ -494,7 +494,22 @@ INSERT INTO account (
 
 -- 같은 QA 시드 소유자의 계좌만 초기화하며, 계좌번호가 충돌한 타인 계좌는 변경하지 않는다.
 ON DUPLICATE KEY UPDATE
-    balance = IF(customer_id = VALUES(customer_id), VALUES(balance), balance),
+    -- balance만 별도 조건이 더 있다: QA_SEED_INITIAL 외의 실거래 장부(QA가 테스트로 이 계좌를
+    -- 실제로 썼다는 뜻)가 있으면 재배포돼도 balance를 초기값으로 되돌리지 않는다. ledger_entry는
+    -- APPEND-ONLY라 같이 되돌릴 수 없는데, balance만 리셋하면 장부 합계와 어긋나 대사 배치가
+    -- 매번 가짜 불일치로 잡는다(PR #463 CodeRabbit 리뷰). 시드 이후 아무 거래도 없었던
+    -- 계좌만 기존처럼 초기화 대상이다.
+    balance = IF(
+        customer_id = VALUES(customer_id)
+            AND NOT EXISTS (
+                SELECT 1 FROM ledger_entry le
+                JOIN account a ON a.account_id = le.account_id
+                WHERE a.account_number = VALUES(account_number)
+                  AND le.transaction_type <> 'QA_SEED_INITIAL'
+            ),
+        VALUES(balance),
+        balance
+    ),
     status = IF(customer_id = VALUES(customer_id), VALUES(status), status),
     password_hash = IF(customer_id = VALUES(customer_id), VALUES(password_hash), password_hash),
     password_failure_count = IF(
