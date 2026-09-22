@@ -158,6 +158,7 @@ public class TransferController {
                 customerId, withdrawalAccountId, parseStatus(status), fromDate, toDate, sort, page, size, all)));
     }
 
+    // 성공은 CSV 원본, 실패만 공통 JSON 오류를 쓰는 파일 다운로드 응답 규약 — api_conventions.md §"파일 다운로드 응답 예외"
     @GetMapping("/export")
     @Operation(
             operationId = "exportTransfers",
@@ -166,12 +167,11 @@ public class TransferController {
                     """
             목록 조회(`GET /transfers`)와 동일한 조건·소유권 검증으로 조회한 전체 건을 CSV 파일로 내려받는다. \
             페이징은 적용되지 않는다(목록 API의 all=true와 동일한 조회). 성공 응답은 공통 응답 봉투(`code`/`message`/`data`) \
-            없이 CSV 파일 원본이 내려가고, 실패 시에만 공통 JSON 오류 응답을 사용한다(api_conventions.md \
-            §"파일 다운로드 응답 예외").""")
+            없이 CSV 파일 원본이 내려간다.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "CSV 파일. Content-Type은 `text/csv;charset=UTF-8`.",
+                description = "다운로드 성공",
                 content = @Content(mediaType = "text/csv")),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
