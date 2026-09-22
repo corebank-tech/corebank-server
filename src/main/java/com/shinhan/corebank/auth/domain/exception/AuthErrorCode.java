@@ -10,6 +10,7 @@ public enum AuthErrorCode implements ErrorCode {
     VERIFICATION_CODE_MISMATCH("ATH0007", 400, "인증번호가 일치하지 않습니다."),
     VERIFICATION_CODE_EXPIRED("ATH0008", 400, "인증번호가 만료되었습니다."),
     IDENTITY_INFORMATION_MISMATCH("ATH0009", 400, "실명 또는 계좌 정보가 일치하지 않습니다."),
+    CURRENT_PASSWORD_MISMATCH("ATH0010", 400, "현재 비밀번호가 일치하지 않습니다."),
 
     LOGIN_FAILED("ATH0101", 401, "아이디 또는 비밀번호가 일치하지 않습니다."),
 
