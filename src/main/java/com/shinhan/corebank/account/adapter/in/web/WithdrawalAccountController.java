@@ -123,7 +123,16 @@ public class WithdrawalAccountController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<ApiResponse<WithdrawalAccountUnregisterResponse>> unregister(
-            @PathVariable @Positive Long accountId, @RequestHeader("Idempotency-Key") String idempotencyKey) {
+            @Parameter(description = "출금계좌 등록을 삭제할 계좌의 내부 식별자", required = true, example = "101")
+                    @PathVariable
+                    @Positive
+                    Long accountId,
+            @Parameter(
+                            description = "멱등키. 동일 키로 재요청 시 재처리 없이 저장된 응답을 반환",
+                            required = true,
+                            example = "550e8400-e29b-41d4-a716-446655440000")
+                    @RequestHeader("Idempotency-Key")
+                    String idempotencyKey) {
 
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
 

@@ -138,7 +138,9 @@ public class TransferController {
                     LocalDate fromDate,
             @Parameter(description = "조회 종료일(미지정 시 오늘)", example = "2026-08-31") @RequestParam(required = false)
                     LocalDate toDate,
-            @RequestParam(defaultValue = "LATEST") TransferHistorySort sort,
+            @Parameter(description = "정렬 조건. LATEST(최신순)·OLDEST(과거순). 생략 시 LATEST", example = "LATEST")
+                    @RequestParam(defaultValue = "LATEST")
+                    TransferHistorySort sort,
             @Parameter(description = "페이지 번호(0부터 시작). all=true면 무시됨", example = "0") @RequestParam(defaultValue = "0")
                     int page,
             @Parameter(description = "페이지 크기. 5/10/20/30/50 중 하나만 허용. all=true면 무시됨", example = "10")
