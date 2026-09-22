@@ -359,6 +359,12 @@ erDiagram
     }
 
     %% ---------- 관계 ----------
+    %% 회계 원장 (PH-20). 이체·상품가입·이자와의 연결은 기표 훅(PH-24)이 생긴 뒤 표기한다.
+    %% 이 블록을 관계 목록 끝이 아니라 앞에 둔 것은 #463(원장-잔액 대사)이 파일 끝을
+    %% 건드려서다 — 같은 자리를 고치면 머지 순서에 따라 충돌한다.
+    gl_voucher ||--o{ gl_journal_entry : "전표-분개 (전표 단위 차대변 일치)"
+    gl_account ||--o{ gl_journal_entry : "계정별 분개"
+
     customer ||--o{ customer_terms_agreement : "동의"
     terms ||--o{ customer_terms_agreement : "대상"
     customer ||--o{ verification_request : "인증요청"
@@ -403,8 +409,4 @@ erDiagram
     customer ||--o{ audit_log : "행위"
     scheduled_transfer      |o--o| transfer : "실행결과 (WAITING 은 없음)"
     auto_transfer_execution |o--o| transfer : "실행결과 (ERROR 는 없음)"
-
-    %% 회계 원장 (PH-20). 이체·상품가입·이자와의 연결은 기표 훅(PH-24)이 생긴 뒤 표기한다
-    gl_voucher ||--o{ gl_journal_entry : "전표-분개 (전표 단위 차대변 일치)"
-    gl_account ||--o{ gl_journal_entry : "계정별 분개"
 ```
