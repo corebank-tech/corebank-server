@@ -1,9 +1,12 @@
 package com.shinhan.corebank.transfer.adapter.in.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -14,18 +17,21 @@ import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
 import jakarta.persistence.EntityManager;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -221,6 +227,54 @@ class TransferControllerTest extends IntegrationTestSupport {
                         .with(authentication(authenticationOf(2L)))
                         .param("withdrawalAccountId", "101"))
                 .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TRF0001"));
+    }
+
+    @Test
+    @DisplayName("이체결과 CSV 다운로드: 본인 계좌면 200 + text/csv 파일로 목록 조회와 동일한 값이 내려간다")
+    void exportCsv_success() throws Exception {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+            entityManager
+                    .createNativeQuery(
+                            """
+                INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id, deposit_account_number,
+                    payee_name, amount, fee, transfer_type, channel, status, transferred_at, created_at)
+                VALUES ('20260810IT0000000015', 101, 202, '110222222222', '성춘향', 10000, 0, 'IMMEDIATE', 'BT', 'SUCCESS',
+                    '2026-08-10 09:00:00', NOW(6))
+                ON DUPLICATE KEY UPDATE transaction_number = transaction_number
+            """)
+                    .executeUpdate();
+        });
+
+        MvcResult result = mockMvc.perform(get("/transfers/export")
+                        .with(authentication(authenticationOf(1L)))
+                        .param("withdrawalAccountId", "101")
+                        .param("fromDate", "2026-08-01")
+                        .param("toDate", "2026-08-31"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, "text/csv;charset=UTF-8"))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("attachment")))
+                .andReturn();
+
+        byte[] raw = result.getResponse().getContentAsByteArray();
+        String body = new String(raw, 3, raw.length - 3, StandardCharsets.UTF_8); // 앞 3바이트는 UTF-8 BOM
+        assertThat(body).contains("거래번호,처리상태,처리일시,입금계좌번호,예금주명,금액,이체구분,채널,오류코드,실패사유");
+        assertThat(body).contains("20260810IT0000000015,SUCCESS");
+        assertThat(body).contains("110******222,성*향,10000");
+    }
+
+    @Test
+    @DisplayName("이체결과 CSV 다운로드: 남의 출금계좌면 CSV 대신 400 + JSON 오류(TRF0001)를 반환한다")
+    void exportCsv_notOwned_returnsTrf0001() throws Exception {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        mockMvc.perform(get("/transfers/export")
+                        .with(authentication(authenticationOf(2L)))
+                        .param("withdrawalAccountId", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, containsString(MediaType.APPLICATION_JSON_VALUE)))
                 .andExpect(jsonPath("$.code").value("TRF0001"));
     }
 

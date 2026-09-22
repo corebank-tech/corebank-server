@@ -9,6 +9,7 @@ import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.transfer.application.port.in.PayeeInquiryUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
+import com.shinhan.corebank.transfer.application.port.in.TransferHistoryPage;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryQueryUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistorySort;
 import io.swagger.v3.oas.annotations.Operation;
@@ -23,6 +24,8 @@ import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -150,6 +153,49 @@ public class TransferController {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         return ApiResponse.success(TransferHistoryPageResponse.from(transferHistoryQueryUseCase.search(
                 customerId, withdrawalAccountId, parseStatus(status), fromDate, toDate, sort, page, size, all)));
+    }
+
+    @GetMapping("/export")
+    @Operation(
+            operationId = "exportTransfers",
+            summary = "이체결과 CSV 다운로드",
+            description =
+                    """
+            목록 조회(`GET /transfers`)와 동일한 조건·소유권 검증으로 조회한 전체 건을 CSV 파일로 내려받는다. \
+            페이징은 적용되지 않는다(목록 API의 all=true와 동일한 조회). 성공 응답은 공통 응답 봉투(`code`/`message`/`data`) \
+            없이 CSV 파일 원본이 내려가고, 실패 시에만 공통 JSON 오류 응답을 사용한다(api_conventions.md \
+            §"파일 다운로드 응답 예외").""")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "CSV 파일. Content-Type은 `text/csv;charset=UTF-8`.",
+                content = @Content(mediaType = "text/csv")),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "`TRF0001` 등록되지 않은/타인 소유 출금계좌 · `CMN0003`/`CMN0004` 조회기간 오류",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<byte[]> exportCsv(
+            @Parameter(description = "조회할 출금계좌 ID", required = true, example = "101") @RequestParam
+                    Long withdrawalAccountId,
+            @Parameter(description = "처리상태 필터. SUCCESS/ERROR, 미지정 또는 ALL이면 전체", example = "SUCCESS")
+                    @RequestParam(required = false)
+                    String status,
+            @Parameter(description = "조회 시작일(미지정 시 종료일-1개월)", example = "2026-08-01") @RequestParam(required = false)
+                    LocalDate fromDate,
+            @Parameter(description = "조회 종료일(미지정 시 오늘)", example = "2026-08-31") @RequestParam(required = false)
+                    LocalDate toDate,
+            @RequestParam(defaultValue = "LATEST") TransferHistorySort sort) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
+        TransferHistoryPage result = transferHistoryQueryUseCase.search(
+                customerId, withdrawalAccountId, parseStatus(status), fromDate, toDate, sort, 0, 1, true);
+        byte[] csv = TransferHistoryCsvWriter.write(result.page().getContent().stream()
+                .map(TransferHistoryItemResponse::from)
+                .toList());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"transfer-history.csv\"")
+                .contentType(MediaType.valueOf("text/csv;charset=UTF-8"))
+                .body(csv);
     }
 
     @GetMapping("/monthly-statistics")
