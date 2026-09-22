@@ -113,22 +113,4 @@ public interface AccountLockJpaRepository extends JpaRepository<AccountLockJpaEn
 
         String getStatus();
     }
-
-    /**
-     * 대사 배치(#378)가 원장 합계와 비교할 "화면상 잔액"을 일괄 조회한다. 락을 잡지 않는다 —
-     * 대사는 탐지 전용이고 잔액을 변경하지 않으므로 배치 실행 중 다른 이체와 경합할 이유가 없다.
-     */
-    @Query(
-            """
-        SELECT a.accountId AS accountId, a.balance AS balance
-        FROM AccountLockJpaEntity a
-        WHERE a.accountId IN :accountIds
-        """)
-    List<AccountBalanceProjection> findBalancesByAccountIds(@Param("accountIds") Collection<Long> accountIds);
-
-    interface AccountBalanceProjection {
-        Long getAccountId();
-
-        Long getBalance();
-    }
 }

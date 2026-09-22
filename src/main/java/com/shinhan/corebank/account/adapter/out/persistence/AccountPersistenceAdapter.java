@@ -4,9 +4,12 @@ import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -93,6 +96,17 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
         AccountJpaEntity savedEntity = accountJpaRepository.save(entity);
 
         return AccountMapper.toDomain(savedEntity);
+    }
+
+    @Override
+    public Map<Long, Long> findBalancesByAccountIds(Collection<Long> accountIds) {
+        if (accountIds.isEmpty()) {
+            return Map.of();
+        }
+        return accountJpaRepository.findBalancesByAccountIds(accountIds).stream()
+                .collect(Collectors.toMap(
+                        AccountJpaRepository.AccountBalanceProjection::getAccountId,
+                        AccountJpaRepository.AccountBalanceProjection::getBalance));
     }
 
     private void validateVersion(Account account, AccountJpaEntity entity) {

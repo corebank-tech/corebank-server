@@ -1,6 +1,7 @@
 package com.shinhan.corebank.account.adapter.out.persistence;
 
 import jakarta.persistence.LockModeType;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -29,4 +30,19 @@ public interface AccountJpaRepository extends JpaRepository<AccountJpaEntity, Lo
             """)
     Optional<AccountJpaEntity> findByAccountIdAndCustomerIdForUpdate(
             @Param("accountId") Long accountId, @Param("customerId") Long customerId);
+
+    // 다른 도메인의 배치용 잔액 일괄 조회. 락을 잡지 않는다(조회만, 변경 없음).
+    @Query(
+            """
+        SELECT a.accountId AS accountId, a.balance AS balance
+        FROM AccountJpaEntity a
+        WHERE a.accountId IN :accountIds
+        """)
+    List<AccountBalanceProjection> findBalancesByAccountIds(@Param("accountIds") Collection<Long> accountIds);
+
+    interface AccountBalanceProjection {
+        Long getAccountId();
+
+        Long getBalance();
+    }
 }
