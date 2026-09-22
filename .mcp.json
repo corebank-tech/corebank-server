@@ -1,6 +1,7 @@
 {
   "mcpServers": {
     "corebank-knowledge": {
+      "type": "sse",
       "url": "http://localhost:8765/sse"
     }
   }
