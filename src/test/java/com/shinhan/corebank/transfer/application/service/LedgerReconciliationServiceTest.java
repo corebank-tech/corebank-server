@@ -86,4 +86,17 @@ class LedgerReconciliationServiceTest {
 
         assertThat(mismatches).containsExactly(new LedgerReconciliationMismatch(101L, 2000L, 0L));
     }
+
+    @Test
+    @DisplayName("원장 합계가 0원이어도 계좌가 유실됐으면(잔액 조회 결과에 없음) 불일치로 잡는다")
+    void reconcile_treatsMissingAccountAsMismatch_evenWhenLedgerSumIsZero() {
+        when(ledgerReconciliationPort.findAccountIdsPostedBetween(FROM, TO)).thenReturn(List.of(101L));
+        when(ledgerReconciliationPort.sumSignedAmountByAccountIds(List.of(101L)))
+                .thenReturn(Map.of(101L, 0L));
+        when(accountBalanceSnapshotPort.findBalancesByAccountIds(List.of(101L))).thenReturn(Map.of());
+
+        List<LedgerReconciliationMismatch> mismatches = ledgerReconciliationService.reconcile(DATE);
+
+        assertThat(mismatches).containsExactly(new LedgerReconciliationMismatch(101L, 0L, 0L));
+    }
 }

@@ -41,8 +41,11 @@ public class LedgerReconciliationService implements LedgerReconciliationUseCase 
         List<LedgerReconciliationMismatch> mismatches = new ArrayList<>();
         for (Long accountId : accountIds) {
             long ledgerBalance = ledgerBalances.getOrDefault(accountId, 0L);
+            // 계좌 자체가 유실된 경우를 "잔액 0원"과 구분한다. 둘 다 0으로 취급하면 원장
+            // 합계도 마침 0원인 유실 계좌를 조용히 놓친다 (code-review 지적, PR #463).
+            boolean accountMissing = !accountBalances.containsKey(accountId);
             long accountBalance = accountBalances.getOrDefault(accountId, 0L);
-            if (ledgerBalance != accountBalance) {
+            if (accountMissing || ledgerBalance != accountBalance) {
                 mismatches.add(new LedgerReconciliationMismatch(accountId, ledgerBalance, accountBalance));
                 log.error(
                         "[LEDGER_RECONCILIATION_MISMATCH] date={}, accountId={}, ledgerBalance={}, accountBalance={}",

@@ -103,6 +103,19 @@ class QaSeedDataIntegrationTest extends IntegrationTestSupport {
                         """,
                         Long.class))
                 .isGreaterThanOrEqualTo(14L);
+        // QA 데모 계좌 초기 잔액에 대응하는 장부 기록이 잔액과 일치하는지, 재실행돼도
+        // 중복 없이 9건(잔액 0원인 K3·K4 제외)만 유지되는지 확인한다 (#378 대사 배치 오탐 방지).
+        assertThat(count(jdbc, "SELECT COUNT(*) FROM ledger_entry WHERE transaction_type = 'QA_SEED_INITIAL'"))
+                .isEqualTo(9);
+        assertThat(jdbc.queryForObject(
+                        """
+                        SELECT SUM(CASE WHEN direction = 'DEPOSIT' THEN amount ELSE -amount END)
+                        FROM ledger_entry WHERE account_id = (
+                            SELECT account_id FROM account WHERE account_number = '088100000010'
+                        )
+                        """,
+                        Long.class))
+                .isEqualTo(100000L);
     }
 
     private int count(JdbcTemplate jdbc, String sql) {
