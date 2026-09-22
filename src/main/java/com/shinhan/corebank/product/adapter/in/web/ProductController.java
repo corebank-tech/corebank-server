@@ -37,7 +37,11 @@ public class ProductController {
             summary = "상품 목록 검색",
             description = "판매 상태와 무관하게 상품 그룹·키워드로 상품을 검색한다. 로그인 없이 조회할 수 있다.")
     @ApiResponses({
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "상품 목록 조회 성공")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "상품 목록 조회 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "`CMN0001` page가 0보다 작음 · `CMN0005` 지원하지 않는 페이지 크기(5·10·20·30·50 외)",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ApiResponse<PageResponse<ProductListItemResponse>> searchProducts(
             @Parameter(description = "상품 그룹 필터. 생략 시 전체") @RequestParam(required = false) ProductGroup productGroup,
@@ -45,9 +49,10 @@ public class ProductController {
             @Parameter(description = "정렬 조건. RATE(금리 높은순)·NEW(신규 상품)·NAME(상품명). 생략 시 RATE", example = "RATE")
                     @RequestParam(defaultValue = "RATE")
                     ProductSortType sort,
-            @Parameter(description = "페이지 번호(0부터 시작)", example = "0") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "페이지 크기", example = "10") @RequestParam(defaultValue = "10") int size,
-            @Parameter(description = "true면 페이지 구분 없이 조건에 맞는 전체 건을 반환. page/size는 무시됨")
+            @Parameter(description = "페이지 번호(0부터 시작). 0 이상", example = "0") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "페이지 크기. 5·10·20·30·50 중 하나", example = "10") @RequestParam(defaultValue = "10")
+                    int size,
+            @Parameter(description = "true면 페이지 구분 없이 조건에 맞는 전체 건을 반환. page/size 값과 검증을 모두 건너뜀")
                     @RequestParam(defaultValue = "false")
                     boolean all) {
         Page<Product> result = productQueryUseCase.search(productGroup, keyword, sort, page, size, all);
