@@ -43,9 +43,63 @@ class TransferHistoryCsvWriterTest {
         String[] lines = body.split("\r\n");
 
         assertThat(lines).hasSize(2);
-        // OffsetDateTime.toString()은 초가 0이면 생략한다("09:00:00" -> "09:00") — java.time 표준 동작
         assertThat(lines[1])
-                .isEqualTo("20260810IT0000000012,SUCCESS,2026-08-10T09:00+09:00,110******222,성*향,10000,IMMEDIATE,WB,,");
+                .isEqualTo(
+                        "20260810IT0000000012,SUCCESS,2026-08-10T09:00:00+09:00,110******222,성*향,10000,IMMEDIATE,WB,,");
+    }
+
+    @Test
+    @DisplayName("초가 0이어도 처리일시 칼럼은 항상 초까지 고정폭으로 나온다")
+    void executedAt_alwaysIncludesSeconds() {
+        TransferHistoryItemResponse zeroSeconds = new TransferHistoryItemResponse(
+                "20260810IT0000000016",
+                ProcessResultStatus.SUCCESS,
+                OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
+                "110******222",
+                "성*향",
+                10000L,
+                TransferType.IMMEDIATE,
+                TransferChannel.WB,
+                null,
+                null);
+        TransferHistoryItemResponse nonZeroSeconds = new TransferHistoryItemResponse(
+                "20260810IT0000000017",
+                ProcessResultStatus.SUCCESS,
+                OffsetDateTime.parse("2026-08-10T09:00:05+09:00"),
+                "110******222",
+                "성*향",
+                10000L,
+                TransferType.IMMEDIATE,
+                TransferChannel.WB,
+                null,
+                null);
+
+        String body = stripBom(TransferHistoryCsvWriter.write(List.of(zeroSeconds, nonZeroSeconds)));
+        String[] lines = body.split("\r\n");
+
+        assertThat(lines[1]).contains(",2026-08-10T09:00:00+09:00,");
+        assertThat(lines[2]).contains(",2026-08-10T09:00:05+09:00,");
+    }
+
+    @Test
+    @DisplayName("예금주명이 =,+,-,@로 시작하면 앞에 작은따옴표를 붙여 Excel 수식 실행을 막는다")
+    void payeeNameStartingWithFormulaTrigger_isEscaped() {
+        TransferHistoryItemResponse item = new TransferHistoryItemResponse(
+                "20260810IT0000000018",
+                ProcessResultStatus.SUCCESS,
+                OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
+                "110******222",
+                "=HYPERLINK(\"http://evil\")",
+                10000L,
+                TransferType.IMMEDIATE,
+                TransferChannel.WB,
+                null,
+                null);
+
+        String body = stripBom(TransferHistoryCsvWriter.write(List.of(item)));
+        String[] lines = body.split("\r\n");
+
+        assertThat(lines[1]).contains("\"'=HYPERLINK(\"\"http://evil\"\")\"");
     }
 
     @Test
