@@ -54,6 +54,9 @@
 | 26 | `audit_log` | 감사 로그 | P5 | 8  |
 | 27 | `common_code` | 공통코드 | P5 | 8  |
 | 28 | `batch_execution_lock` | 배치 중복 트리거 방지 락 | P5 | 3  |
+| 29 | `gl_account` | 계정과목 | P3 | 6  |
+| 30 | `gl_voucher` | 전표 | P3 | 5  |
+| 31 | `gl_journal_entry` | 분개 | P3 | 8  |
 
 ---
 
@@ -856,5 +859,96 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP` 2행 |
 | `currently_running` | `BOOLEAN` |  | X | `FALSE` | 이 배치가 지금 실행 중인지. 트리거 시작 시 `TRUE`, 종료 시(성공/실패 무관) `FALSE`로 되돌림 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각. stale(크래시로 방치됨) 판단 기준 |
+
+---
+
+# 9. 회계 원장 — P3
+
+2차에 신설(PH-20, #451). 이자 지급(P2)과 타행 이체(P4)가 들어오면서 예수금 안의 이동만 있던 전제가 깨져 회계 원장이 필요해졌다.
+
+Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준으로 삼되 두 가지는 다르다. **금액을 `BIGINT` 원 단위 정수로 둔다**(Fineract 는 `DECIMAL(19,6)`, 절대규칙 5). **전표를 별도 테이블로 뺀다**(Fineract 는 `transaction_id` 를 공유하는 분개 묶음이 전표 역할) — 전표 단위 차대변 일치를 DB 제약으로 걸고 채번 규칙을 둘 자리가 필요하다.
+
+## `gl_account`
+
+> 계정과목
+
+코드 체계는 **대분류1 + 중분류2 + 세분류2 = 5자리**이고 첫 자리가 분류와 1:1 로 대응한다(1 자산 / 2 부채 / 3 자본 / 4 수익 / 5 비용). 시드 15개는 `R__seed_gl_account.sql` 이 넣는다 — 마스터성 데이터라 `V__` 가 아니라 `R__` 다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `account_code` | `CHAR(5)` | **PK** | X |  | 계정과목 코드. 대1+중2+세2. 첫 자리가 분류 |
+| `account_name` | `VARCHAR(50)` |  | X |  | 계정과목명. 시산표 화면에 그대로 표시된다 |
+| `account_class` | `VARCHAR(12)` |  | X |  | `ASSET` / `LIABILITY` / `EQUITY` / `REVENUE` / `EXPENSE` |
+| `normal_balance` | `VARCHAR(6)` |  | X |  | 정상잔액 방향. `DEBIT` / `CREDIT`. 자산·비용은 차변, 부채·자본·수익은 대변 |
+| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
+| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
+
+**제약**
+
+| 이름 | 내용 | 이유 |
+| --- | --- | --- |
+| `ck_gl_account_code` | `account_code REGEXP '^[1-5][0-9]{4}$'` | 코드 체계가 문서에만 있으면 깨진다. `ck_account_number` 와 같은 방식 |
+| `ck_gl_account_class` | 5분류 중 하나 | |
+| `ck_gl_account_normal` | `DEBIT` 또는 `CREDIT` | |
+
+---
+
+## `gl_voucher`
+
+> 전표 — 분개를 담는 단위
+
+거래 1건이 장부에 남긴 기표 단위다. 분개 여러 줄을 담고 **전표 하나 안에서 차변 합계와 대변 합계가 같아야 한다**(검증은 PH-21). 전표번호는 영업일 + 유형 + 일련번호이고 채번 규칙도 PH-21 이다.
+
+`updated_at` 이 없다. 전표는 수정하지 않는다 — 틀리면 지우거나 고치지 않고 정정 전표를 새로 세운다(용어표 "정정 체인"). 수정 시각 칸이 있으면 고쳐도 되는 것처럼 읽힌다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `voucher_no` | `VARCHAR(20)` | **PK** | X |  | 전표번호. 영업일 + 유형 + 일련 |
+| `trade_date` | `DATE` |  | X |  | 이 전표가 귀속되는 영업일 |
+| `tx_type` | `VARCHAR(24)` |  | X |  | `OPENING` / `TRANSFER` / `PRODUCT_SUBSCRIPTION` / `INTEREST` |
+| `description` | `VARCHAR(200)` |  | O |  | 적요 |
+| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
+
+**제약**
+
+| 이름 | 내용 | 이유 |
+| --- | --- | --- |
+| `ck_gl_voucher_tx_type` | 4개 유형 중 하나 | 타행 미결제 유형은 패턴 확정(P4 PH-33) 후 새 V 파일에서 넓힌다 |
+
+---
+
+## `gl_journal_entry`
+
+> 분개 — 전표 안의 한 줄
+
+계정과목 하나와 **차변 또는 대변 한쪽의 금액**을 가진다. Fineract `acc_gl_journal_entry.type_enum` + `amount` 와 같은 형태다.
+
+`trade_date` 를 전표에서 한 번 더 들고 간다. 600만 줄을 기간으로 거를 때 전표 조인을 없애기 위해서다 — Fineract 도 `entry_date` 를 같은 자리에 둔다. 분개는 전표와 함께 한 번만 쓰이고 수정되지 않으므로 두 값이 어긋날 경로가 없다.
+
+**시산표 집계용 복합 인덱스 `(account_code, trade_date)` 는 일부러 넣지 않았다.** PH-28 베이스라인(10/8)을 인덱스 없이 측정한 뒤 S3 에서 붙이고 재측정한다. 지금 넣으면 "개선 전" 수치가 사라진다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `journal_entry_id` | `BIGINT` | **PK** | X |  | AUTO_INCREMENT |
+| `voucher_no` | `VARCHAR(20)` | **FK** → `gl_voucher` | X |  | 이 줄이 속한 전표 |
+| `line_no` | `SMALLINT` |  | X |  | 전표 안의 줄 번호. 1부터 |
+| `account_code` | `CHAR(5)` | **FK** → `gl_account` | X |  | 계정과목 |
+| `dr_cr` | `VARCHAR(6)` |  | X |  | `DEBIT` / `CREDIT`. 금액의 방향을 이 칸이 말한다 |
+| `amount` | `BIGINT` |  | X |  | 원 단위 정수. 한 줄은 한쪽 금액만 가지므로 항상 양수 |
+| `trade_date` | `DATE` |  | X |  | 전표 `trade_date` 복제본. 시산표 집계 기준일 |
+| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_gl_journal_entry_line` | `voucher_no, line_no` |
+
+**제약**
+
+| 이름 | 내용 | 이유 |
+| --- | --- | --- |
+| `ck_gl_journal_entry_dr_cr` | `DEBIT` 또는 `CREDIT` | |
+| `ck_gl_journal_entry_amount` | `amount > 0` | 0원 분개와 음수 금액을 막는다. 방향은 `dr_cr` 이 말한다 |
 
 ---
