@@ -154,8 +154,8 @@
 | `code_hash` | `CHAR(60)` |  | X |  | 인증번호·OTP 6자리의 단방향 해시. 평문 저장·로그 기록 금지 |
 | `transaction_type` | `VARCHAR(32)` |  | O |  | **OTP 전용.** 어떤 거래를 승인하려는 OTP인지 (`IMMEDIATE_TRANSFER` 등) |
 | `transaction_data` | `JSON` |  | O |  | **OTP 전용.** 출금계좌·입금계좌·금액 등 거래 핵심 정보. 최종 거래 API가 요청 본문과 대조해 변조를 잡는다 (OTP0102) |
-| `error_count` | `TINYINT` |  | X | `0` | 인증번호 연속 오류 횟수. 5회를 넘기면 `locked`가 TRUE가 된다 (OTP0103) |
-| `locked` | `BOOLEAN` |  | X | `FALSE` | 잠금 여부. `error_count`가 5를 넘으면 TRUE. 재발급 전까지 검증 불가 (OTP0103) |
+| `error_count` | `TINYINT` |  | X | `0` | 인증번호 연속 오류 횟수. 5회에 도달하면 `locked`가 TRUE가 된다 (OTP0103) |
+| `locked` | `BOOLEAN` |  | X | `FALSE` | 잠금 여부. `error_count`가 5이면 TRUE. 재발급 전까지 검증 불가 (OTP0103) |
 | `used` | `BOOLEAN` |  | X | `FALSE` | 사용 완료 여부. 검증 성공 시 TRUE로 바꿔 재사용을 막는다 |
 | `verified_at` | `DATETIME(6)` |  | O |  | 검증 성공 시각. 미검증이면 NULL |
 | `expires_at` | `DATETIME(6)` |  | X |  | 유효시간 만료 시각. 발급 시각 + 180초 |
@@ -167,6 +167,8 @@
 | --- | --- | --- |
 | INDEX | `ix_vr_customer` | `customer_id, purpose, created_at DESC` |
 | INDEX | `ix_vr_target` | `target, purpose, created_at DESC` |
+
+이메일 인증번호 발급은 `target(이메일) + purpose` 단위로 직렬화합니다. 같은 조합의 동시 재발급도 기존 활성 요청 무효화와 신규 요청 저장을 순서대로 수행하여, 마지막으로 처리된 요청 하나만 `used = FALSE` 상태로 남겨야 합니다. `SIGN_UP`과 `EMAIL_CHANGE`처럼 목적이 다른 요청은 서로 무효화하지 않습니다.
 
 ---
 
