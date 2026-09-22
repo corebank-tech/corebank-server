@@ -6,6 +6,12 @@ on:
     paths:
       - 'docs/**.md'
 
+concurrency:
+  # 짧은 간격으로 병합된 docs PR들이 같은 EC2 대상에 동시에 SSM 명령을 보내
+  # sync.sh 실행이 겹치는 걸 막는다. 취소 대신 순서대로 큐잉한다.
+  group: knowledge-rag-sync
+  cancel-in-progress: false
+
 env:
   AWS_DEFAULT_REGION: 'ap-northeast-2'
 
@@ -13,6 +19,7 @@ jobs:
   sync:
     name: Sync docs/**.md changes to knowledge-rag index
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       id-token: write
       contents: read
@@ -33,8 +40,21 @@ jobs:
             BEFORE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
           fi
 
-          CHANGED=$(git diff --diff-filter=ACMR --name-only "$BEFORE" "$AFTER" -- 'docs/**.md' | tr '\n' ' ')
-          DELETED=$(git diff --diff-filter=D --name-only "$BEFORE" "$AFTER" -- 'docs/**.md' | tr '\n' ' ')
+          # --name-only만 쓰면 rename이 새 경로로만 잡히고 옛 경로가 안 지워진 채 남는다.
+          # --name-status -M으로 rename을 "R100<TAB>old<TAB>new" 형태로 받아
+          # 옛 경로는 DELETED, 새 경로는 CHANGED로 나눈다.
+          CHANGED=""
+          DELETED=""
+          while IFS=$'\t' read -r status path1 path2; do
+            case "$status" in
+              A*|M*|C*) CHANGED="$CHANGED $path1" ;;
+              D*) DELETED="$DELETED $path1" ;;
+              R*) DELETED="$DELETED $path1"; CHANGED="$CHANGED $path2" ;;
+            esac
+          done < <(git diff --name-status -M --diff-filter=ACMRD "$BEFORE" "$AFTER" -- 'docs/**.md')
+
+          CHANGED=$(echo "$CHANGED" | xargs)
+          DELETED=$(echo "$DELETED" | xargs)
 
           # 파일명이 이후 단계의 셸 명령 문자열(특히 SSM commands 파라미터)에 그대로 섞여
           # 들어가면 크래프팅된 파일명으로 커맨드 인젝션이 가능하다 — base64로 감싸서
