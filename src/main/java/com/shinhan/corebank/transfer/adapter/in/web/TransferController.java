@@ -43,6 +43,9 @@ import tools.jackson.core.type.TypeReference;
 @Tag(name = "이체", description = "즉시이체 실행 및 수취인(예금주) 조회 API")
 public class TransferController {
 
+    private static final int EXPORT_PAGE_NUMBER = 0;
+    private static final int EXPORT_PAGE_SIZE = 10;
+
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final PayeeInquiryUseCase payeeInquiryUseCase;
     private final CurrentCustomerProvider currentCustomerProvider;
@@ -187,8 +190,18 @@ public class TransferController {
                     LocalDate toDate,
             @RequestParam(defaultValue = "LATEST") TransferHistorySort sort) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
+        // all=true면 PageableResolver가 size 검증 없이 Pageable.unpaged()를 반환한다(PageableResolver 클래스 주석) —
+        // 그래도 여기 EXPORT_PAGE 값은 목록 API가 허용하는 크기 중 하나로 둬서 그 계약이 바뀌어도 안전하게 만든다
         TransferHistoryPage result = transferHistoryQueryUseCase.search(
-                customerId, withdrawalAccountId, parseStatus(status), fromDate, toDate, sort, 0, 1, true);
+                customerId,
+                withdrawalAccountId,
+                parseStatus(status),
+                fromDate,
+                toDate,
+                sort,
+                EXPORT_PAGE_NUMBER,
+                EXPORT_PAGE_SIZE,
+                true);
         byte[] csv = TransferHistoryCsvWriter.write(result.page().getContent().stream()
                 .map(TransferHistoryItemResponse::from)
                 .toList());
