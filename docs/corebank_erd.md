@@ -54,7 +54,7 @@ erDiagram
         char code_hash "인증번호·OTP 단방향 해시 (REQ-NFR-009)"
         varchar transaction_type "OTP 전용. IMMEDIATE_TRANSFER 등"
         json transaction_data "OTP 전용. 거래 내용 변조 검증"
-        tinyint error_count "5회 초과 시 OTP0103"
+        tinyint error_count "5회 오입력 시 OTP0103"
         boolean locked
         boolean used
         datetime verified_at "DATETIME(6)"
