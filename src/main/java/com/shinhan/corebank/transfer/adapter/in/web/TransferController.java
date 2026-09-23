@@ -9,6 +9,7 @@ import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.transfer.application.port.in.PayeeInquiryUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
+import com.shinhan.corebank.transfer.application.port.in.TransferHistoryPage;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryQueryUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistorySort;
 import io.swagger.v3.oas.annotations.Operation;
@@ -23,6 +24,8 @@ import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,6 +42,9 @@ import tools.jackson.core.type.TypeReference;
 @RequiredArgsConstructor
 @Tag(name = "이체", description = "즉시이체 실행 및 수취인(예금주) 조회 API")
 public class TransferController {
+
+    private static final int EXPORT_PAGE_NUMBER = 0;
+    private static final int EXPORT_PAGE_SIZE = 10;
 
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final PayeeInquiryUseCase payeeInquiryUseCase;
@@ -150,6 +156,59 @@ public class TransferController {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         return ApiResponse.success(TransferHistoryPageResponse.from(transferHistoryQueryUseCase.search(
                 customerId, withdrawalAccountId, parseStatus(status), fromDate, toDate, sort, page, size, all)));
+    }
+
+    // 성공은 CSV 원본, 실패만 공통 JSON 오류를 쓰는 파일 다운로드 응답 규약 — api_conventions.md §"파일 다운로드 응답 예외"
+    @GetMapping("/export")
+    @Operation(
+            operationId = "exportTransfers",
+            summary = "이체결과 CSV 다운로드",
+            description =
+                    """
+            목록 조회(`GET /transfers`)와 동일한 조건·소유권 검증으로 조회한 전체 건을 CSV 파일로 내려받는다. \
+            페이징은 적용되지 않는다(목록 API의 all=true와 동일한 조회). 성공 응답은 공통 응답 봉투(`code`/`message`/`data`) \
+            없이 CSV 파일 원본이 내려간다.""")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "다운로드 성공",
+                content = @Content(mediaType = "text/csv")),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "`TRF0001` 등록되지 않은/타인 소유 출금계좌 · `CMN0003`/`CMN0004` 조회기간 오류",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<byte[]> exportCsv(
+            @Parameter(description = "조회할 출금계좌 ID", required = true, example = "101") @RequestParam
+                    Long withdrawalAccountId,
+            @Parameter(description = "처리상태 필터. SUCCESS/ERROR, 미지정 또는 ALL이면 전체", example = "SUCCESS")
+                    @RequestParam(required = false)
+                    String status,
+            @Parameter(description = "조회 시작일(미지정 시 종료일-1개월)", example = "2026-08-01") @RequestParam(required = false)
+                    LocalDate fromDate,
+            @Parameter(description = "조회 종료일(미지정 시 오늘)", example = "2026-08-31") @RequestParam(required = false)
+                    LocalDate toDate,
+            @RequestParam(defaultValue = "LATEST") TransferHistorySort sort) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
+        // all=true면 PageableResolver가 size 검증 없이 Pageable.unpaged()를 반환한다(PageableResolver 클래스 주석) —
+        // 그래도 여기 EXPORT_PAGE 값은 목록 API가 허용하는 크기 중 하나로 둬서 그 계약이 바뀌어도 안전하게 만든다
+        TransferHistoryPage result = transferHistoryQueryUseCase.search(
+                customerId,
+                withdrawalAccountId,
+                parseStatus(status),
+                fromDate,
+                toDate,
+                sort,
+                EXPORT_PAGE_NUMBER,
+                EXPORT_PAGE_SIZE,
+                true);
+        byte[] csv = TransferHistoryCsvWriter.write(result.page().getContent().stream()
+                .map(TransferHistoryItemResponse::from)
+                .toList());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"transfer-history.csv\"")
+                .contentType(MediaType.valueOf("text/csv;charset=UTF-8"))
+                .body(csv);
     }
 
     @GetMapping("/monthly-statistics")
