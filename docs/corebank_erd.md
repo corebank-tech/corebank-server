@@ -377,3 +377,22 @@ erDiagram
     scheduled_transfer      |o--o| transfer : "실행결과 (WAITING 은 없음)"
     auto_transfer_execution |o--o| transfer : "실행결과 (ERROR 는 없음)"
 ```
+
+## 원장-잔액 대사 (Reconciliation, #378)
+
+`account.balance`는 조회 성능용 캐시이고, 진실의 원천은 `ledger_entry`다. 계좌별로 원장 기표를
+`SUM(DEPOSIT) - SUM(WITHDRAWAL)`로 더한 값이 항상 `account.balance`와 같아야 한다.
+
+- **탐지**: `LedgerReconciliationScheduler`가 매일 02:00(Asia/Seoul)에 트리거된다. 02시는
+  "보통 이쯤이면 끝나있겠지"로 잡은 시각일 뿐이고, 실행 전 `LedgerReconciliationBatchService`가
+  `DAILY_TRANSFER_BATCH`(자동이체→예약이체, 00:10 시작)가 실제로 끝났는지 최대 1시간 동안
+  1분 간격으로 재확인한다. 그래도 안 끝나면 이번 실행은 건너뛰고 `LEDGER_RECONCILIATION_SKIPPED`
+  ERROR 로그를 남긴다 — 조용히 다음날로 넘어가면 그 날짜는 영원히 대사가 안 된 채 묻히므로,
+  이 경우 담당자가 해당 날짜를 수동으로 재확인해야 한다. 대상 계좌는 전일 기표가 있었던
+  계좌만 골라 대조한다. 불일치는 `LEDGER_RECONCILIATION_MISMATCH` 마커로 ERROR 로그에
+  남는다(경보 채널 연동은 미정 — 현재는 로그 기반).
+- **자동 정정 없음**: `ledger_entry`는 파티션 테이블이라 FK로도 강제되지 않는 APPEND-ONLY
+  원장이다. 배치는 탐지까지만 하고 잔액을 임의로 덮어쓰지 않는다.
+- **대응 절차**: 불일치가 나오면 원장이 맞고 `account.balance`가 틀린 것으로 간주한다.
+  담당자가 원인(동시성 버그, 배포 중 유실 등)을 먼저 파악하고, 필요하면 반대기표(원거래와
+  반대 방향의 신규 `ledger_entry` 행)로만 정정한다. 기존 행을 UPDATE/DELETE하지 않는다.
