@@ -19,6 +19,7 @@ import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.idempotency.IdempotencyResult;
 import com.shinhan.corebank.common.idempotency.IdempotencyService;
+import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -30,7 +31,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * withIdempotency()의 release() 호출 범위를 순수 Mockito로 검증한다.
+ * 공용 IdempotentRequestExecutor 를 거치는 release() 호출 범위를 순수 Mockito로 검증한다(#408 에서 자체 withIdempotency() 를 제거).
  * DB를 쓰는 통합테스트로는 "action()은 성공했는데 complete() 이후 단계가 실패하는" 상황을
  * 자연스럽게 재현하기 어려워서, Controller를 직접 생성해 IdempotencyService를 Mock으로 감싼다.
  */
@@ -64,8 +65,7 @@ class AutoTransferControllerUnitTest {
     private AutoTransferController newController() {
         return new AutoTransferController(
                 autoTransferRegisterUseCase,
-                idempotencyService,
-                new ObjectMapper(),
+                new IdempotentRequestExecutor(idempotencyService, new ObjectMapper()),
                 autoTransferQueryUseCase,
                 autoTransferChangeUseCase,
                 autoTransferCancelUseCase,
