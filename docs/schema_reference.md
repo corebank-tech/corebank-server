@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 26개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 268개 컬럼
+**대상**: 29개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 287개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -888,8 +888,7 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 | 이름 | 내용 | 이유 |
 | --- | --- | --- |
 | `ck_gl_account_code` | `account_code REGEXP '^[1-5][0-9]{4}$'` | 코드 체계가 문서에만 있으면 깨진다. `ck_account_number` 와 같은 방식 |
-| `ck_gl_account_class` | 5분류 중 하나 | |
-| `ck_gl_account_normal` | `DEBIT` 또는 `CREDIT` | |
+| `ck_gl_account_class_code` | 코드 첫 자리 · `account_class` · `normal_balance` 다섯 조합 중 하나 | 열마다 따로 제한하면 `10100`+`LIABILITY` 나 `ASSET`+`CREDIT` 이 통과한다. 이 CHECK 가 두 열의 허용값 검사까지 포함한다. contra 계정(자산인데 정상잔액 대변)은 2차에 없고, 필요해지면 새 V 파일에서 넓힌다 |
 
 ---
 
@@ -914,6 +913,14 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 | 이름 | 내용 | 이유 |
 | --- | --- | --- |
 | `ck_gl_voucher_tx_type` | 4개 유형 중 하나 | 타행 미결제 유형은 패턴 확정(P4 PH-33) 후 새 V 파일에서 넓힌다 |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_gl_voucher_no_trade_date` | `voucher_no, trade_date` |
+
+`voucher_no` 가 이미 PK 라 이 UNIQUE 는 행을 더 제한하지 않는다. 분개가 복제해 가는 `trade_date` 를 복합 FK 로 묶기 위한 참조 대상이다.
 
 ---
 
@@ -943,6 +950,8 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 | 종류 | 이름 | 컬럼 |
 | --- | --- | --- |
 | UNIQUE | `uk_gl_journal_entry_line` | `voucher_no, line_no` |
+| FK | `fk_gl_journal_entry_voucher` | `voucher_no, trade_date` → `gl_voucher` |
+| FK | `fk_gl_journal_entry_account` | `account_code` → `gl_account` |
 
 **제약**
 
@@ -950,5 +959,8 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 | --- | --- | --- |
 | `ck_gl_journal_entry_dr_cr` | `DEBIT` 또는 `CREDIT` | |
 | `ck_gl_journal_entry_amount` | `amount > 0` | 0원 분개와 음수 금액을 막는다. 방향은 `dr_cr` 이 말한다 |
+| `ck_gl_journal_entry_line_no` | `line_no > 0` | 줄 번호는 1부터다. `NOT NULL`·UNIQUE 만으로는 0 과 음수가 통과한다 |
+
+**전표 FK 가 복합인 이유.** `voucher_no` 만 참조하면 전표와 다른 `trade_date` 를 가진 분개가 저장되고, 그대로 날짜별 시산표 집계가 틀어진다. 복제본이 원본과 같도록 DB 가 강제한다 — 특히 P6 시드 생성기(PH-60b)는 애플리케이션을 거치지 않고 600만 건을 직접 INSERT 하므로 애플리케이션 규약으로는 막을 수 없다.
 
 ---

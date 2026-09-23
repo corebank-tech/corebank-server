@@ -34,11 +34,20 @@ CREATE TABLE gl_account (
     created_at     DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     updated_at     DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     PRIMARY KEY (account_code),
-    -- 코드 첫 자리와 account_class 의 대응은 시드가 지킨다. 여기서는 체계 자체
-    -- (1~5 로 시작하는 5자리)만 강제한다 — account.ck_account_number 와 같은 방식.
+    -- 코드 체계(1~5 로 시작하는 5자리)를 강제한다 — account.ck_account_number 와 같은 방식.
     CONSTRAINT ck_gl_account_code   CHECK (account_code REGEXP '^[1-5][0-9]{4}$'),
-    CONSTRAINT ck_gl_account_class  CHECK (account_class IN ('ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE')),
-    CONSTRAINT ck_gl_account_normal CHECK (normal_balance IN ('DEBIT', 'CREDIT'))
+    -- 코드 첫 자리 · 분류 · 정상잔액 셋의 **조합**을 강제한다. 열마다 따로 제한하면
+    -- 10100(자산 코드) + LIABILITY 나 ASSET + CREDIT 같은 조합이 통과한다.
+    -- 이 CHECK 가 위 두 열의 허용값 검사까지 포함하므로 단일 열 CHECK 는 두지 않는다.
+    -- 대손충당금 같은 contra 계정(자산인데 정상잔액 대변)은 2차에 없다. 필요해지면
+    -- tx_type 과 마찬가지로 새 V 파일에서 넓힌다.
+    CONSTRAINT ck_gl_account_class_code CHECK (
+        (account_class = 'ASSET'     AND account_code LIKE '1%' AND normal_balance = 'DEBIT')
+     OR (account_class = 'LIABILITY' AND account_code LIKE '2%' AND normal_balance = 'CREDIT')
+     OR (account_class = 'EQUITY'    AND account_code LIKE '3%' AND normal_balance = 'CREDIT')
+     OR (account_class = 'REVENUE'   AND account_code LIKE '4%' AND normal_balance = 'CREDIT')
+     OR (account_class = 'EXPENSE'   AND account_code LIKE '5%' AND normal_balance = 'DEBIT')
+    )
 ) ENGINE=InnoDB COMMENT='계정과목 (PH-20)';
 
 -- --------------------------------------------------------------------
@@ -54,6 +63,10 @@ CREATE TABLE gl_voucher (
     description VARCHAR(200) NULL,
     created_at  DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     PRIMARY KEY (voucher_no),
+    -- 분개가 복제해 가는 trade_date 를 복합 FK 로 묶기 위한 참조 대상이다.
+    -- voucher_no 가 이미 PK 라 이 UNIQUE 는 행을 더 제한하지 않는다 — FK 가 참조할
+    -- 키를 만들어 주는 것이 목적이다.
+    UNIQUE KEY uk_gl_voucher_no_trade_date (voucher_no, trade_date),
     -- 타행 미결제 유형은 패턴이 확정되면(P4 PH-33) 새 V 파일에서 넓힌다.
     CONSTRAINT ck_gl_voucher_tx_type CHECK (tx_type IN ('OPENING', 'TRANSFER', 'PRODUCT_SUBSCRIPTION', 'INTEREST'))
 ) ENGINE=InnoDB COMMENT='전표 — 분개를 담는 단위 (PH-20)';
@@ -74,9 +87,16 @@ CREATE TABLE gl_journal_entry (
     created_at       DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     PRIMARY KEY (journal_entry_id),
     UNIQUE KEY uk_gl_journal_entry_line (voucher_no, line_no),
-    CONSTRAINT fk_gl_journal_entry_voucher FOREIGN KEY (voucher_no)   REFERENCES gl_voucher (voucher_no),
+    -- **복합 FK 다.** voucher_no 만 참조하면 전표와 다른 trade_date 를 가진 분개가
+    -- 저장되고, 그대로 날짜별 시산표 집계가 틀어진다. 복제본이 원본과 같도록 DB 가
+    -- 강제한다 — 특히 P6 시드 생성기(PH-60b)는 애플리케이션을 거치지 않고 600만 건을
+    -- 직접 INSERT 하므로, 애플리케이션 규약으로는 막을 수 없다.
+    CONSTRAINT fk_gl_journal_entry_voucher FOREIGN KEY (voucher_no, trade_date)
+        REFERENCES gl_voucher (voucher_no, trade_date),
     CONSTRAINT fk_gl_journal_entry_account FOREIGN KEY (account_code) REFERENCES gl_account (account_code),
     CONSTRAINT ck_gl_journal_entry_dr_cr   CHECK (dr_cr IN ('DEBIT', 'CREDIT')),
     -- 0 원 분개와 음수 금액을 막는다. 금액의 방향은 dr_cr 이 말한다.
-    CONSTRAINT ck_gl_journal_entry_amount  CHECK (amount > 0)
+    CONSTRAINT ck_gl_journal_entry_amount  CHECK (amount > 0),
+    -- 줄 번호는 1부터다. NOT NULL·UNIQUE 만으로는 0 과 음수가 통과한다.
+    CONSTRAINT ck_gl_journal_entry_line_no CHECK (line_no > 0)
 ) ENGINE=InnoDB COMMENT='분개 — 전표 안의 한 줄 (PH-20)';

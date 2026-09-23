@@ -3,6 +3,7 @@ package com.shinhan.corebank.gl.adapter.out.persistence;
 import com.shinhan.corebank.gl.domain.JournalDirection;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
@@ -14,6 +15,8 @@ import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 /**
  * 분개 — 전표 안의 한 줄 (PH-20).
@@ -34,6 +37,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "gl_journal_entry")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@EntityListeners(AuditingEntityListener.class)
 public class GlJournalEntryJpaEntity {
 
     @Id
@@ -60,6 +64,8 @@ public class GlJournalEntryJpaEntity {
     @Column(name = "trade_date", nullable = false)
     private LocalDate tradeDate;
 
+    /** 사유는 {@link GlVoucherJpaEntity#getCreatedAt()} 쪽 주석과 같다. */
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime createdAt;
 }
