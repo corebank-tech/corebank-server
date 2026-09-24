@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.shinhan.corebank.SharedTestObjectMapper;
 import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferCancelUseCase;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferChangeUseCase;
@@ -28,7 +29,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import tools.jackson.databind.ObjectMapper;
 
 /**
  * 공용 IdempotentRequestExecutor 를 거치는 release() 호출 범위를 순수 Mockito로 검증한다(#408 에서 자체 withIdempotency() 를 제거).
@@ -65,7 +65,7 @@ class AutoTransferControllerUnitTest {
     private AutoTransferController newController() {
         return new AutoTransferController(
                 autoTransferRegisterUseCase,
-                new IdempotentRequestExecutor(idempotencyService, new ObjectMapper()),
+                new IdempotentRequestExecutor(idempotencyService, SharedTestObjectMapper.INSTANCE),
                 autoTransferQueryUseCase,
                 autoTransferChangeUseCase,
                 autoTransferCancelUseCase,
