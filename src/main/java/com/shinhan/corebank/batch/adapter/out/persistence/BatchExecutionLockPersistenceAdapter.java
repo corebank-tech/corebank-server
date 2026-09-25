@@ -49,4 +49,12 @@ public class BatchExecutionLockPersistenceAdapter implements BatchExecutionLockP
                 .findByJobNameForUpdate(jobName)
                 .ifPresent(lock -> lock.markIdle(LocalDateTime.now(clock)));
     }
+
+    @Override
+    public boolean isRunning(String jobName) {
+        return batchExecutionLockJpaRepository
+                .findById(jobName)
+                .map(BatchExecutionLockJpaEntity::isCurrentlyRunning)
+                .orElse(false);
+    }
 }

@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 28개 테이블(26개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 31개 테이블(29개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -331,7 +331,40 @@ erDiagram
         datetime updated_at "DATETIME(6). stale 판단 기준"
     }
 
+    %% ---------- P3 (회계 원장, PH-20) ----------
+    gl_account {
+        char account_code PK "CHAR(5). 대1+중2+세2. 첫 자리가 분류"
+        varchar account_name "VARCHAR(50)"
+        varchar account_class "ASSET / LIABILITY / EQUITY / REVENUE / EXPENSE"
+        varchar normal_balance "DEBIT / CREDIT. 정상잔액 방향"
+        datetime created_at "DATETIME(6)"
+        datetime updated_at "DATETIME(6)"
+    }
+    gl_voucher {
+        varchar voucher_no PK "VARCHAR(20). 영업일+유형+일련 (채번 PH-21)"
+        date trade_date "귀속 영업일"
+        varchar tx_type "OPENING / TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST"
+        varchar description "VARCHAR(200). 적요"
+        datetime created_at "DATETIME(6). 전표는 수정하지 않아 updated_at 없음"
+    }
+    gl_journal_entry {
+        bigint journal_entry_id PK "AUTO_INCREMENT"
+        varchar voucher_no FK "VARCHAR(20)"
+        smallint line_no "전표 안의 줄 번호. 1부터"
+        char account_code FK "CHAR(5)"
+        varchar dr_cr "DEBIT / CREDIT. Fineract type_enum 대응"
+        bigint amount "원 단위 정수. 항상 양수"
+        date trade_date "전표에서 복제. 시산표 집계 기준일"
+        datetime created_at "DATETIME(6)"
+    }
+
     %% ---------- 관계 ----------
+    %% 회계 원장 (PH-20). 이체·상품가입·이자와의 연결은 기표 훅(PH-24)이 생긴 뒤 표기한다.
+    %% 이 블록을 관계 목록 끝이 아니라 앞에 둔 것은 #463(원장-잔액 대사)이 파일 끝을
+    %% 건드려서다 — 같은 자리를 고치면 머지 순서에 따라 충돌한다.
+    gl_voucher ||--o{ gl_journal_entry : "전표-분개 (전표 단위 차대변 일치)"
+    gl_account ||--o{ gl_journal_entry : "계정별 분개"
+
     customer ||--o{ customer_terms_agreement : "동의"
     terms ||--o{ customer_terms_agreement : "대상"
     customer ||--o{ verification_request : "인증요청"
@@ -377,3 +410,22 @@ erDiagram
     scheduled_transfer      |o--o| transfer : "실행결과 (WAITING 은 없음)"
     auto_transfer_execution |o--o| transfer : "실행결과 (ERROR 는 없음)"
 ```
+
+## 원장-잔액 대사 (Reconciliation, #378)
+
+`account.balance`는 조회 성능용 캐시이고, 진실의 원천은 `ledger_entry`다. 계좌별로 원장 기표를
+`SUM(DEPOSIT) - SUM(WITHDRAWAL)`로 더한 값이 항상 `account.balance`와 같아야 한다.
+
+- **탐지**: `LedgerReconciliationScheduler`가 매일 02:00(Asia/Seoul)에 트리거된다. 02시는
+  "보통 이쯤이면 끝나있겠지"로 잡은 시각일 뿐이고, 실행 전 `LedgerReconciliationBatchService`가
+  `DAILY_TRANSFER_BATCH`(자동이체→예약이체, 00:10 시작)가 실제로 끝났는지 최대 1시간 동안
+  1분 간격으로 재확인한다. 그래도 안 끝나면 이번 실행은 건너뛰고 `LEDGER_RECONCILIATION_SKIPPED`
+  ERROR 로그를 남긴다 — 조용히 다음날로 넘어가면 그 날짜는 영원히 대사가 안 된 채 묻히므로,
+  이 경우 담당자가 해당 날짜를 수동으로 재확인해야 한다. 대상 계좌는 전일 기표가 있었던
+  계좌만 골라 대조한다. 불일치는 `LEDGER_RECONCILIATION_MISMATCH` 마커로 ERROR 로그에
+  남는다(경보 채널 연동은 미정 — 현재는 로그 기반).
+- **자동 정정 없음**: `ledger_entry`는 파티션 테이블이라 FK로도 강제되지 않는 APPEND-ONLY
+  원장이다. 배치는 탐지까지만 하고 잔액을 임의로 덮어쓰지 않는다.
+- **대응 절차**: 불일치가 나오면 원장이 맞고 `account.balance`가 틀린 것으로 간주한다.
+  담당자가 원인(동시성 버그, 배포 중 유실 등)을 먼저 파악하고, 필요하면 반대기표(원거래와
+  반대 방향의 신규 `ledger_entry` 행)로만 정정한다. 기존 행을 UPDATE/DELETE하지 않는다.
