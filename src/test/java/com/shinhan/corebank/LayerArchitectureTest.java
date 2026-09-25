@@ -44,6 +44,13 @@ class LayerArchitectureTest {
     @ArchTest
     static final ArchRule customer = layerRule("customer");
 
+    /**
+     * Application 을 optional 로 둔다 — PH-20 범위는 스키마 골격(enum + JPA 엔티티)이라
+     * {@code gl.application} 이 아직 비어 있다. 서비스·포트가 생기는 PH-21 에서 뗀다.
+     */
+    @ArchTest
+    static final ArchRule gl = layerRule("gl", "Application");
+
     @ArchTest
     static final ArchRule limit = layerRule("limit");
 

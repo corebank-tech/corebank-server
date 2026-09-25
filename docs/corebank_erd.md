@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 28개 테이블(26개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 31개 테이블(29개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -331,7 +331,40 @@ erDiagram
         datetime updated_at "DATETIME(6). stale 판단 기준"
     }
 
+    %% ---------- P3 (회계 원장, PH-20) ----------
+    gl_account {
+        char account_code PK "CHAR(5). 대1+중2+세2. 첫 자리가 분류"
+        varchar account_name "VARCHAR(50)"
+        varchar account_class "ASSET / LIABILITY / EQUITY / REVENUE / EXPENSE"
+        varchar normal_balance "DEBIT / CREDIT. 정상잔액 방향"
+        datetime created_at "DATETIME(6)"
+        datetime updated_at "DATETIME(6)"
+    }
+    gl_voucher {
+        varchar voucher_no PK "VARCHAR(20). 영업일+유형+일련 (채번 PH-21)"
+        date trade_date "귀속 영업일"
+        varchar tx_type "OPENING / TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST"
+        varchar description "VARCHAR(200). 적요"
+        datetime created_at "DATETIME(6). 전표는 수정하지 않아 updated_at 없음"
+    }
+    gl_journal_entry {
+        bigint journal_entry_id PK "AUTO_INCREMENT"
+        varchar voucher_no FK "VARCHAR(20)"
+        smallint line_no "전표 안의 줄 번호. 1부터"
+        char account_code FK "CHAR(5)"
+        varchar dr_cr "DEBIT / CREDIT. Fineract type_enum 대응"
+        bigint amount "원 단위 정수. 항상 양수"
+        date trade_date "전표에서 복제. 시산표 집계 기준일"
+        datetime created_at "DATETIME(6)"
+    }
+
     %% ---------- 관계 ----------
+    %% 회계 원장 (PH-20). 이체·상품가입·이자와의 연결은 기표 훅(PH-24)이 생긴 뒤 표기한다.
+    %% 이 블록을 관계 목록 끝이 아니라 앞에 둔 것은 #463(원장-잔액 대사)이 파일 끝을
+    %% 건드려서다 — 같은 자리를 고치면 머지 순서에 따라 충돌한다.
+    gl_voucher ||--o{ gl_journal_entry : "전표-분개 (전표 단위 차대변 일치)"
+    gl_account ||--o{ gl_journal_entry : "계정별 분개"
+
     customer ||--o{ customer_terms_agreement : "동의"
     terms ||--o{ customer_terms_agreement : "대상"
     customer ||--o{ verification_request : "인증요청"
