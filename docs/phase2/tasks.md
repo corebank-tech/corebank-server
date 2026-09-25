@@ -572,10 +572,12 @@ public record JournalRequest(String txType,         // gl_voucher.tx_type 값: O
                              String referenceKey,   // 원 거래번호 — 원장·이체와 전표를 잇는 키
                              LocalDate tradeDate,
                              List<JournalLine> lines) {}
-public record JournalLine(String accountCode, String drCr /* DEBIT·CREDIT */, long amount) {}
+public record JournalLine(String accountCode, JournalDirection drCr, long amount) {}
+public enum JournalDirection { DEBIT, CREDIT }   // gl.domain 에서 gl.api 로 옮긴다 — 아래
 ```
 
 - 헤더 금액은 두지 않는다. 금액은 줄마다 있고 전표 합계는 줄에서 계산한다(OPN처럼 줄 금액이 다른 전표가 있다).
+- **`JournalDirection`을 `gl.domain`에서 `gl.api`로 옮긴다.** 지금은 `gl.domain`에 있는데(PR #478 머지분), `#349`가 건 `Api mayNotAccessAnyLayer()` 때문에 **`gl.api`가 `gl.domain`을 참조하면 `LayerArchitectureTest > gl`이 깨진다.** 공유 어휘를 소유 도메인의 `api`에 두는 것은 [ADR-0004](../adr/0004-domain-contract-surface.md) 결정 2와 같은 방향이다. `String drCr`로 두면 규칙은 피하지만 호출하는 트랙(P2 PH-14 · P4 PH-33-②)이 문자열 오타를 컴파일에서 못 잡는다.
 - **`gl_voucher`에 `reference_key` 컬럼을 새 V 파일로 추가한다**(PR #478 스키마에는 없다). 이 키가 없으면 "이체 1건당 전표 1건" 검증과 PH-28b 분개누락 탐지가 원장과 조인할 수 없다.
 - 전표 생성 + 분개 기표 서비스, `product_gl_mapping`
 - `GlLedgerPostingHook implements transfer.api.LedgerPostingHook` — 이체 유형별 패턴표로 전표 1건. **예외를 던진다(= 이체 롤백).**
