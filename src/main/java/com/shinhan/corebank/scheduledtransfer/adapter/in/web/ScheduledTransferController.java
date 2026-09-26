@@ -4,8 +4,7 @@ import com.shinhan.corebank.adapter.in.web.exception.ErrorResponse;
 import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-import com.shinhan.corebank.common.idempotency.IdempotencyResult;
-import com.shinhan.corebank.common.idempotency.IdempotencyService;
+import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.common.response.PageResponse;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelCommand;
@@ -26,15 +25,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("/scheduled-transfers")
@@ -43,8 +38,7 @@ import tools.jackson.databind.ObjectMapper;
 public class ScheduledTransferController {
     private final ScheduledTransferRegisterUseCase scheduledTransferRegisterUseCase;
     private final ScheduledTransferQueryUseCase scheduledTransferQueryUseCase;
-    private final IdempotencyService idempotencyService;
-    private final ObjectMapper objectMapper;
+    private final IdempotentRequestExecutor idempotentRequestExecutor;
     private final CurrentCustomerProvider currentCustomerProvider;
     private final ScheduledTransferCancelUseCase scheduledTransferCancelUseCase;
 
@@ -88,7 +82,7 @@ public class ScheduledTransferController {
             HttpServletRequest httpRequest) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         String requestIp = httpRequest.getRemoteAddr();
-        return withIdempotency(
+        return idempotentRequestExecutor.execute(
                 idempotencyKey,
                 customerId,
                 "POST /scheduled-transfers",
@@ -162,7 +156,7 @@ public class ScheduledTransferController {
                 .requestIp(requestIp)
                 .build();
 
-        return withIdempotency(
+        return idempotentRequestExecutor.execute(
                 idempotencyKey,
                 customerId,
                 "POST /scheduled-transfers/cancel",
@@ -284,31 +278,6 @@ public class ScheduledTransferController {
         }
     }
 
-    // 멱등키 처리 5단계를 한 곳에 모은 공용 헬퍼 (AutoTransferController와 동일 패턴)
-    private <T> ResponseEntity<ApiResponse<T>> withIdempotency(
-            String idempotencyKey,
-            Long customerId,
-            String endpoint,
-            Object fingerprint,
-            TypeReference<ApiResponse<T>> responseType,
-            Supplier<ApiResponse<T>> action) {
-        IdempotencyResult idempotencyResult =
-                idempotencyService.begin(idempotencyKey, customerId, endpoint, toJson(fingerprint));
-        if (idempotencyResult.replay()) {
-            return ResponseEntity.status(idempotencyResult.httpStatus())
-                    .body(fromJson(idempotencyResult.responseSnapshot(), responseType));
-        }
-        ApiResponse<T> response;
-        try {
-            response = action.get();
-        } catch (RuntimeException e) {
-            idempotencyService.release(idempotencyKey);
-            throw e;
-        }
-        idempotencyService.complete(idempotencyKey, (short) HttpStatus.OK.value(), toJson(response));
-        return ResponseEntity.ok(response);
-    }
-
     // 멱등키 해시는 인증 토큰을 제외한 지문으로 계산 — 토큰 재발급받아 재시도해도 같은 요청으로 인식되도록
     private Map<String, Object> fingerprint(ScheduledTransferRegisterRequest request) {
         Map<String, Object> fingerprint = new LinkedHashMap<>();
@@ -320,21 +289,5 @@ public class ScheduledTransferController {
         fingerprint.put("myPassbookMemo", request.myPassbookMemo());
         fingerprint.put("recipientPassbookMemo", request.recipientPassbookMemo());
         return fingerprint;
-    }
-
-    private String toJson(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JacksonException e) {
-            throw new IllegalStateException("요청/응답을 JSON으로 직렬화하지 못했습니다.", e);
-        }
-    }
-
-    private <T> T fromJson(String json, TypeReference<T> type) {
-        try {
-            return objectMapper.readValue(json, type);
-        } catch (JacksonException e) {
-            throw new IllegalStateException("저장된 응답을 역직렬화하지 못했습니다.", e);
-        }
     }
 }
