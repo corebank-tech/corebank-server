@@ -23,8 +23,10 @@ yyyyMMdd-TTT-NNNNNN        예) 20260922-TRF-000123
 
 전체 19자입니다(`voucher_no VARCHAR(20)`).
 
-**일련번호가 6자리인 이유.** PH-60b 가 원장 300만 건을 3개월에 넣고 원장 1건당 전표 1건이므로, 달력
-기준 하루 약 3.3만 · 영업일 기준 약 4.6만 건입니다. 4자리(9,999)로는 첫날부터 넘치고, 5자리(99,999)는
+**일련번호가 6자리인 이유.** PH-60b 는 3개월 동안 **거래 300만 건(= 전표 300만 건 · 분개 600만 줄)**을
+넣습니다. 거래 1건이 `ledger_entry` 에는 출금·입금 2행으로 남으므로(`LedgerPair`), 여기서 말하는 300만은
+`ledger_entry` 행 수가 아니라 거래 수입니다. 전표는 거래 1건당 1건이라 달력 기준 하루 약 3.3만 · 영업일
+기준 약 4.6만 건입니다. 4자리(9,999)로는 첫날부터 넘치고, 5자리(99,999)는
 핫스팟 구간(P5 PH-56 이 의도적으로 만드는 집중 구간)에서 여유가 2배뿐입니다.
 
 **유형별로 따로 셉니다.** 같은 날 `TRF` 와 `SUB` 는 각자 1부터 시작합니다. 런타임 기표(PH-24)에서
@@ -64,10 +66,12 @@ yyyyMMdd-TTT-NNNNNN        예) 20260922-TRF-000123
 | 3 | `30100` 개시잔액 | CREDIT | 1번 − 2번 (은행 자기자본 몫) |
 
 2번이 0이면 그 줄을 만들지 않습니다(0원 분개 금지). 3번도 같습니다.
+**1번 ≥ 2번이 전제입니다.** 1번이 2번보다 작으면 3번이 음수가 되어 `CHECK (amount > 0)` 에 걸리므로,
+생성기는 개시 전표를 만들기 전에 이 조건을 확인하고 어기면 적재를 중단합니다(시드 입력값 오류).
 
 ### 3-2. 당행 이체 — `TRANSFER` / `TRF`
 
-원장 2행(출금·입금)에 전표 1건이 대응합니다.
+`ledger_entry` 2행(출금·입금)에 전표 1건이 대응합니다.
 
 | line_no | 계정 | dr_cr | 금액 |
 |---|---|---|---|
@@ -87,7 +91,7 @@ yyyyMMdd-TTT-NNNNNN        예) 20260922-TRF-000123
 **계정 구성이 3-2 와 같습니다.** 다른 것은 `tx_type` 뿐입니다.
 
 상품가입 초입금은 **고객의 기존 입출금계좌에서 신규 예적금계좌로 옮기는 내부 이동**입니다
-(`ProductSubscriptionDepositService` 가 `withdrawalAccountId`·`depositAccountId` 로 원장 2행을
+(`ProductSubscriptionDepositService` 가 `withdrawalAccountId`·`depositAccountId` 로 `ledger_entry` 2행을
 남깁니다 — `LedgerPair.forProductSubscription`, "2행 복식기표 원장 쌍"). 외부에서 현금이 들어오는
 거래가 아니므로 차변은 현금성이 아니라 예수금입니다.
 
@@ -148,6 +152,17 @@ WHERE voucher_no NOT REGEXP '^[0-9]{8}-(OPN|TRF|SUB|INT)-[0-9]{6}$';
 -- (5) 거래일이 전표번호의 날짜와 다른 전표 — 0행이어야 한다
 SELECT voucher_no, trade_date FROM gl_voucher
 WHERE DATE_FORMAT(trade_date, '%Y%m%d') <> SUBSTRING(voucher_no, 1, 8);
+
+-- (6) 전표번호의 유형(TTT)과 tx_type 이 다른 전표 — 0행이어야 한다
+--     ELSE '' 는 매핑에 없는 tx_type 이 NULL 비교로 빠져나가지 않게 한다
+SELECT voucher_no, tx_type FROM gl_voucher
+WHERE SUBSTRING(voucher_no, 10, 3) <> CASE tx_type
+    WHEN 'OPENING'              THEN 'OPN'
+    WHEN 'TRANSFER'             THEN 'TRF'
+    WHEN 'PRODUCT_SUBSCRIPTION' THEN 'SUB'
+    WHEN 'INTEREST'             THEN 'INT'
+    ELSE ''
+END;
 ```
 
 `trade_date` 복제본 불일치는 복합 FK 가 막으므로 별도 쿼리가 필요 없습니다.
@@ -167,3 +182,4 @@ WHERE DATE_FORMAT(trade_date, '%Y%m%d') <> SUBSTRING(voucher_no, 1, 8);
 | 날짜 | 내용 |
 |---|---|
 | 2026-09-23 | 최초 작성 (PH-21 / #452). 패턴 2종 + 개시 전표, 채번 규칙 확정 |
+| 2026-09-27 | PR #491 리뷰 반영 — 거래·전표·분개 수 명시, 개시 전표 1번 ≥ 2번 전제, 검증 SQL (6) 추가 |
