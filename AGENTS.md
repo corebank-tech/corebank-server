@@ -94,7 +94,8 @@ docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·R
 | [hexagonal_architecture_guide.md](docs/hexagonal_architecture_guide.md) | 패키지 배치·레이어 책임·요청이 DB까지 가는 흐름 |
 | [api_conventions.md](docs/api_conventions.md) | 공통 응답·HTTP 상태·오류코드 마스터·Enum·필드명 |
 | [error_handling_guide.md](docs/error_handling_guide.md) | `ErrorCode`/`BusinessException` 구현, 도메인 오류코드 추가 |
-| [adr/](docs/adr/) | 되돌리기 어려운 설계 결정 — 0001 상품가입 검증, 0002 도메인 간 계좌 조회 |
+| [adr/](docs/adr/) | 되돌리기 어려운 설계 결정 — 0001 상품가입 검증, 0002 도메인 간 계좌 조회, 0003 `batch.api` 도메인 간 락 재사용 |
+| [phase2/README.md](docs/phase2/README.md) · [tasks.md](docs/phase2/tasks.md) | 2차 계획 정본 — 태스크 ID(PH-xx) 착수 전, 소유자·기한·트랙 간 계약 확인 |
 | [phase2/glossary.md](docs/phase2/glossary.md) | 2차 핵심 용어(PH-87) — 새 필드·Enum·화면 라벨 이름을 정하기 전 |
 
 **DB · 마이그레이션**
