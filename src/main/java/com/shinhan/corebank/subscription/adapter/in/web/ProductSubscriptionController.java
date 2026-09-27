@@ -107,8 +107,6 @@ public class ProductSubscriptionController {
     }
 
     // Idempotency-Key 필수 — api_conventions.md §7-3, "Y" 적용대상에 "상품가입 실행" 명시
-    // 계좌비밀번호 인증(accountPasswordAuthToken)은 ProductSubscriptionAuthTokenMockAdapter가 항상 통과시킨다(#475).
-    // 실제 검증기(account.api.AccountPasswordAuthTokenVerifier)를 연결하면 APW0102를 응답 목록에 추가해야 한다.
     @PostMapping
     @Operation(
             operationId = "createProductSubscription",
@@ -116,7 +114,7 @@ public class ProductSubscriptionController {
             description =
                     """
                     신규 계좌를 개설하고 상품에 가입한다. 계좌비밀번호 인증 토큰과 OTP 인증 토큰을 모두 받는다(REQ-PRDT-010).
-                    현재 구현은 OTP 토큰만 검증·소비하며, 계좌비밀번호 토큰 검증 연결은 #475에서 진행한다.
+                    계좌비밀번호 토큰은 출금계좌에 묶어 검증·소비하고, 이어서 OTP 토큰을 검증·소비한다.
                     가입금액·기간·약관동의 등은 사전검증(POST /product-subscriptions/validation)과 동일한 조건을
                     실행 시점에 다시 검증하며, 여기서는 검증 실패가 곧 요청 거부라 400으로 던진다(violations로 응답하지 않음).
                     정기예금(DEPOSIT)은 가입 시점에 초입금이 기표되고, 정기적금(SAVINGS)은 다음 회차부터 자동이체로 납입한다.
@@ -136,7 +134,10 @@ public class ProductSubscriptionController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "`OTP0101` OTP 인증 토큰이 무효·만료·사용됨 · " + "`OTP0102` 인증한 거래 내용과 요청한 가입내용이 다름",
+                description = "`APW0101` 출금계좌 비밀번호 5회 오류 잠금 · "
+                        + "`APW0102` 계좌비밀번호 인증 토큰이 무효·만료·사용됨 또는 출금계좌·고객과 불일치 · "
+                        + "`OTP0101` OTP 인증 토큰이 무효·만료·사용됨 · "
+                        + "`OTP0102` 인증한 거래 내용과 요청한 가입내용이 다름",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
