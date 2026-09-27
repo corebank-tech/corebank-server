@@ -104,9 +104,9 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"));
 
-        assertThat(adminAuditRows("PASSWORD_RESET_BY_ADMIN", "SUCCESS")).isEqualTo(1);
+        assertThat(adminAuditRows("LOGIN_PASSWORD_RESET_BY_ADMIN", "SUCCESS")).isEqualTo(1);
         String detail = jdbcTemplate.queryForObject(
-                "SELECT CAST(detail AS CHAR) FROM audit_log WHERE customer_id = ? AND event_type = 'PASSWORD_RESET_BY_ADMIN'",
+                "SELECT CAST(detail AS CHAR) FROM audit_log WHERE customer_id = ? AND event_type = 'LOGIN_PASSWORD_RESET_BY_ADMIN'",
                 String.class,
                 ADMIN_ID);
         assertThat(detail).doesNotContain(temporaryPassword).contains("\"passwordChanged\": true");
@@ -127,13 +127,13 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
                 .andExpect(jsonPath("$.code").value("CMN0102"));
 
         assertThat(jdbcTemplate.queryForObject(
-                        "SELECT COUNT(*) FROM audit_log WHERE customer_id = ? AND event_type = 'PASSWORD_RESET_BY_ADMIN' "
+                        "SELECT COUNT(*) FROM audit_log WHERE customer_id = ? AND event_type = 'LOGIN_PASSWORD_RESET_BY_ADMIN' "
                                 + "AND result = 'FAILURE' AND JSON_UNQUOTE(JSON_EXTRACT(detail, '$.reason')) "
                                 + "IN ('CUSTOMER_NOT_FOUND', 'SELF_TARGET')",
                         Integer.class,
                         ADMIN_ID))
                 .isEqualTo(2);
-        assertThat(adminAuditRows("PASSWORD_RESET_BY_ADMIN", "SUCCESS")).isZero();
+        assertThat(adminAuditRows("LOGIN_PASSWORD_RESET_BY_ADMIN", "SUCCESS")).isZero();
     }
 
     // MockHttpSession의 만료시간 기본값은 0이라 SessionLoginManager가 거부한다 — 운영과 같은 10분(POL-001)을 준다.

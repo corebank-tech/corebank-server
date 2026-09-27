@@ -121,7 +121,7 @@ class AdminCustomerCommandServiceTest {
         assertThat(saved.getValue().getPasswordHash()).isEqualTo(ENCODED);
         assertThat(saved.getValue().getPasswordChangedAt()).isEqualTo(LocalDateTime.of(2026, 9, 21, 10, 0));
 
-        Map<String, Object> detail = captureDetail(AuditEventType.PASSWORD_RESET_BY_ADMIN, true);
+        Map<String, Object> detail = captureDetail(AuditEventType.LOGIN_PASSWORD_RESET_BY_ADMIN, true);
         assertThat(detail.get("changes"))
                 .isEqualTo(Map.of("passwordChanged", true, "accountLocked", false, "loginFailureCount", 0));
         assertThat(detail.toString()).doesNotContain(TEMPORARY_PASSWORD).doesNotContain(ENCODED);
@@ -138,7 +138,7 @@ class AdminCustomerCommandServiceTest {
 
         verify(customerPersistencePort, never()).findByIdForUpdate(anyLong());
         verify(temporaryPasswordGeneratorPort, never()).generate();
-        Map<String, Object> detail = captureDetail(AuditEventType.PASSWORD_RESET_BY_ADMIN, false);
+        Map<String, Object> detail = captureDetail(AuditEventType.LOGIN_PASSWORD_RESET_BY_ADMIN, false);
         assertThat(detail).containsEntry("targetCustomerId", ADMIN_ID).containsEntry("reason", "SELF_TARGET");
     }
 

@@ -57,13 +57,13 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
     @Override
     @Transactional
     public AdminPasswordResetResult resetPassword(AdminCustomerOperationCommand command) {
-        rejectSelfTarget(command, AuditEventType.PASSWORD_RESET_BY_ADMIN);
+        rejectSelfTarget(command, AuditEventType.LOGIN_PASSWORD_RESET_BY_ADMIN);
 
         // BCrypt는 느리므로 대상 행 락을 잡기 전에 계산해 로그인 경로의 대기 시간을 늘리지 않는다.
         String temporaryPassword = temporaryPasswordGeneratorPort.generate();
         String passwordHash = passwordEncoder.encode(temporaryPassword);
 
-        Customer customer = findTargetForUpdate(command, AuditEventType.PASSWORD_RESET_BY_ADMIN);
+        Customer customer = findTargetForUpdate(command, AuditEventType.LOGIN_PASSWORD_RESET_BY_ADMIN);
         Map<String, Object> changes = new LinkedHashMap<>();
         // "password" 키는 AuditLogJpaEntity가 금지하므로 값 없이 바뀌었다는 표시만 남긴다.
         changes.put("passwordChanged", true);
@@ -72,7 +72,7 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
         customer.resetPasswordByAdmin(passwordHash, LocalDateTime.now(clock));
         customerPersistencePort.updatePasswordResetByAdmin(customer);
 
-        recordSuccess(command, AuditEventType.PASSWORD_RESET_BY_ADMIN, changes);
+        recordSuccess(command, AuditEventType.LOGIN_PASSWORD_RESET_BY_ADMIN, changes);
         return new AdminPasswordResetResult(
                 customer.getCustomerId(),
                 temporaryPassword,
