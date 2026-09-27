@@ -3,6 +3,8 @@ package com.shinhan.corebank.subscription.adapter.in.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -15,6 +17,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.adapter.out.persistence.AccountJpaEntity;
 import com.shinhan.corebank.account.adapter.out.persistence.AccountJpaRepository;
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerification;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
@@ -835,8 +838,9 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
         assertThat(subscriptionJpaRepository.count()).isEqualTo(subscriptionCountBefore);
     }
 
-    // REQ-PRDT-010 2단계 인증의 1단계. #475 이전에는 Mock 어댑터가 토큰을 보지 않고 통과시켰다 —
-    // 검증 연결이 다시 끊기면 이 테스트만 빨갛게 된다.
+    // REQ-PRDT-010 2단계 인증의 1단계. #475 이전에는 Mock 어댑터가 토큰을 보지 않고 통과시켰다.
+    // 요청 토큰·고객·출금계좌가 정확히 일치할 때만 거부하도록 스텁해, 검증 호출이 사라지거나
+    // 다른 계좌로 묶여 넘어가면 200이 나와 실패한다. OTP는 비밀번호 검증 뒤에 소비돼야 한다.
     @Test
     @DisplayName("계좌비밀번호 인증 토큰이 유효하지 않으면 403 + APW0102를 반환하고 계좌가 개설되지 않는다")
     void execute_invalidAccountPasswordAuthToken_returnsApw0102() throws Exception {
@@ -844,7 +848,8 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
         Long withdrawalAccountId = seedAccount("110000009015", customerId, 10_000_000L);
         doThrow(new BusinessException(AccountPasswordErrorCode.INVALID_AUTH_TOKEN))
                 .when(accountPasswordAuthTokenVerifier)
-                .verifyAndConsume(any());
+                .verifyAndConsume(
+                        new AccountPasswordAuthTokenVerification("ACC_PWD_test", customerId, withdrawalAccountId));
 
         long accountCountBefore = accountJpaRepository.count();
         long subscriptionCountBefore = subscriptionJpaRepository.count();
@@ -858,6 +863,7 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("APW0102"));
 
+        verify(otpAuthTokenVerifier, never()).verifyAndConsume(any());
         assertThat(accountJpaRepository.count()).isEqualTo(accountCountBefore);
         assertThat(subscriptionJpaRepository.count()).isEqualTo(subscriptionCountBefore);
     }
