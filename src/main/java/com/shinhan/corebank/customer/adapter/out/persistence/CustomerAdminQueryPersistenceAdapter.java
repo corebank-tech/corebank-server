@@ -14,8 +14,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.support.PageableExecutionUtils;
 import org.springframework.stereotype.Repository;
 
 // startsWith는 Querydsl이 %·_·!를 이스케이프해 "like ? escape '!'"로 보낸다 — 입력 와일드카드가 글자로 비교된다.
@@ -53,9 +53,8 @@ public class CustomerAdminQueryPersistenceAdapter implements CustomerAdminQueryP
             query.offset(pageable.getOffset()).limit(pageable.getPageSize());
         }
         List<CustomerAdminView> content = query.fetch();
-        // 전체 조회는 이미 전 건을 읽었으므로 건수 쿼리를 다시 보내지 않는다.
-        long total = pageable.isPaged() ? count(condition) : content.size();
-        return new PageImpl<>(content, pageable, total);
+        // 전체 조회이거나 결과가 한 페이지에 다 들어오면 건수 쿼리를 보내지 않는다.
+        return PageableExecutionUtils.getPage(content, pageable, () -> count(condition));
     }
 
     @Override
