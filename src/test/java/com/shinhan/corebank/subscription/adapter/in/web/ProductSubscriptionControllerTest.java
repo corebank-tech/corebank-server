@@ -15,8 +15,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.adapter.out.persistence.AccountJpaEntity;
 import com.shinhan.corebank.account.adapter.out.persistence.AccountJpaRepository;
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.account.domain.exception.AccountPasswordErrorCode;
 import com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
@@ -96,6 +98,10 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
     // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
     @MockitoBean
     OtpAuthTokenVerifier otpAuthTokenVerifier;
+
+    // 계좌비밀번호 인증 토큰도 같은 이유로 account.api 경계만 대체한다 — 발급/소비 로직은 account 도메인 테스트가 담당한다.
+    @MockitoBean
+    AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
 
     private final ObjectMapper jackson = new ObjectMapper();
 
@@ -825,6 +831,33 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.code").value("OTP0101"));
 
         // OTP 검증은 계좌개설(되돌릴 수 없는 지점) 앞에 있으므로 아무것도 남지 않아야 한다.
+        assertThat(accountJpaRepository.count()).isEqualTo(accountCountBefore);
+        assertThat(subscriptionJpaRepository.count()).isEqualTo(subscriptionCountBefore);
+    }
+
+    // REQ-PRDT-010 2단계 인증의 1단계. #475 이전에는 Mock 어댑터가 토큰을 보지 않고 통과시켰다 —
+    // 검증 연결이 다시 끊기면 이 테스트만 빨갛게 된다.
+    @Test
+    @DisplayName("계좌비밀번호 인증 토큰이 유효하지 않으면 403 + APW0102를 반환하고 계좌가 개설되지 않는다")
+    void execute_invalidAccountPasswordAuthToken_returnsApw0102() throws Exception {
+        Long productId = seedSavingsProduct("EXE-115", false);
+        Long withdrawalAccountId = seedAccount("110000009015", customerId, 10_000_000L);
+        doThrow(new BusinessException(AccountPasswordErrorCode.INVALID_AUTH_TOKEN))
+                .when(accountPasswordAuthTokenVerifier)
+                .verifyAndConsume(any());
+
+        long accountCountBefore = accountJpaRepository.count();
+        long subscriptionCountBefore = subscriptionJpaRepository.count();
+
+        mockMvc.perform(post("/product-subscriptions")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .with(authentication(authenticationOf(customerId)))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(executeRequestJson(productId, withdrawalAccountId, 500_000L, 12)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("APW0102"));
+
         assertThat(accountJpaRepository.count()).isEqualTo(accountCountBefore);
         assertThat(subscriptionJpaRepository.count()).isEqualTo(subscriptionCountBefore);
     }
