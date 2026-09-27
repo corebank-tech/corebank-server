@@ -65,6 +65,10 @@ public class AdminCustomerController {
                                 + "`CMN0006` 전체조회(all=true) 결과 100건 초과",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "`CMN0102` 관리자 허용 목록 밖",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -97,6 +101,14 @@ public class AdminCustomerController {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "`CMN0102` 관리자 허용 목록 밖",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "`ATH0201` 대상 고객 없음",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -114,6 +126,10 @@ public class AdminCustomerController {
             description = "잠금을 풀고 연속 로그인 실패 횟수를 0으로 되돌린다(REQ-AUTH-026·035). 이미 풀린 계정도 200이다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "해제 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "`CMN0102` 자기 자신 대상 또는 관리자 허용 목록 밖",
@@ -157,6 +173,10 @@ public class AdminCustomerController {
                     + "멱등키를 쓰지 않으며, 다시 요청하면 새 임시 비밀번호가 발급되고 이전 값은 쓸 수 없다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "초기화 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "`CMN0102` 자기 자신 대상 또는 관리자 허용 목록 밖",
