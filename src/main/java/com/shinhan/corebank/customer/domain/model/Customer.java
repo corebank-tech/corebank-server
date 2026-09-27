@@ -172,14 +172,7 @@ public class Customer {
 
     // 관리자 비밀번호 초기화. 고객 셀프 재설정과 달리 잠금까지 해제해 바로 로그인할 수 있게 한다.
     public void resetPasswordByAdmin(String passwordHash, LocalDateTime changedAt) {
-        if (passwordHash == null || passwordHash.isBlank()) {
-            throw new IllegalArgumentException("비밀번호 해시는 필수입니다.");
-        }
-        if (changedAt == null) {
-            throw new IllegalArgumentException("비밀번호 변경 일시는 필수입니다.");
-        }
-        this.passwordHash = passwordHash;
-        this.passwordChangedAt = changedAt;
+        resetPassword(passwordHash, changedAt);
         unlockByAdmin();
     }
 
