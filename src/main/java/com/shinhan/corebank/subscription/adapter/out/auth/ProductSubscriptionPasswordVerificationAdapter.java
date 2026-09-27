@@ -14,7 +14,7 @@ public class ProductSubscriptionPasswordVerificationAdapter implements ProductSu
     private final AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
 
     @Override
-    public void verifyAccountPasswordToken(String token, Long customerId, Long accountId) {
+    public void verifyAndConsumeAccountPasswordToken(String token, Long customerId, Long accountId) {
         accountPasswordAuthTokenVerifier.verifyAndConsume(
                 new AccountPasswordAuthTokenVerification(token, customerId, accountId));
     }

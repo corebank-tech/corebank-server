@@ -93,7 +93,7 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
             throw toBusinessException(validation.getViolations().get(0));
         }
 
-        passwordVerificationPort.verifyAccountPasswordToken(
+        passwordVerificationPort.verifyAndConsumeAccountPasswordToken(
                 command.accountPasswordAuthToken(), command.customerId(), command.withdrawalAccountId());
         otpVerificationPort.verifyAndConsume(
                 command.otpAuthToken(),
