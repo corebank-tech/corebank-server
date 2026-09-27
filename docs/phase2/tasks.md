@@ -62,19 +62,19 @@
 | [FE #101](#fe-101-계좌비밀번호-토큰-하드코딩-제거) | 계좌비밀번호 토큰 하드코딩 제거 (1차 잔여) | S1 | 0.5 | — | — | FE #101 | 예정 |
 | [PH-12](#ph-12-이자-계산기--절사-규칙) | 이자 계산기 · 절사 규칙 | S2 | 3.5 | PH-11 | **10/16** | — | 예정 |
 | [PH-90](#ph-90-원장잔액--출금가능액-분리--transferprecheck) | 원장잔액·출금가능액 분리 + `TransferPreCheck` | S2 | 3 | PH-87 · PH-99 | **10/16** (P4 머지) | — | 예정 |
-| [PH-70-①](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | `modules/data` Terraform plan | S2 | 1 | PH-50 | — | — | 예정 |
+| [PH-70-①](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | `modules/data` Terraform plan — RDS · ElastiCache | S2 | 1.5 | PH-50 | — | — | 예정 |
 | [PH-15](#ph-15-만기--감지--matured-전이--원리금--만기해지-api) | 만기 — 감지 · MATURED · 원리금 · 만기해지 API | S3 | 3.5 | PH-12 · PH-10 · PH-43 · 입금 계약(PH-99) | **10/23** | #419 | 예정 |
 | [PH-14](#ph-14-이자-지급--원천징수) | 이자 지급 · 원천징수 | S3 | 1.5 | PH-12 · PH-24 · 입금 계약(PH-99) | — | — | 예정 |
 | [PH-13](#ph-13-적수-집계-sql-전환--재측정) | 적수 집계 SQL 전환 · 재측정 | S3 | 1.5 | PH-11 | — | — | 예정 |
 | [PH-16](#ph-16-중도해지--휴면-전환--해지-시-자원-정리) | 중도해지 · 휴면 전환 · 해지 시 자원 정리 | S3 | 4 | PH-15 · PH-43 · 입금 계약(PH-99) · #467 | 휴면 스텝 통합 **10/30** | — | 예정 |
 | [PH-18](#ph-18-개인정보-컬럼-암호화) | 개인정보 컬럼 암호화 | S3 | 2 | — | — | — | 예정 |
-| [PH-70-②](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | RDS 복원 · 컷오버 (DB 쪽) | S3 | 1.5 | PH-70-① · PH-51 | **10/26 apply · 10/27 전환** | — | 예정 |
+| [PH-70-②](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | RDS 복원 · 컷오버 (DB 쪽) · 온프레미스 binlog 복제 | S3 | 3 | PH-70-① · PH-51 · 복제: PH-100-② | **10/26 apply · 10/27 전환 · 복제 시작** | — | 예정 |
 | [PH-58](#ph-58-엣지-계층) | 엣지 — WAF · Route53 · ACM · CloudFront | S3 | 1.5 | ACM: 가비아 DNS 권한 · WAF 연결: PH-51 | **ACM ARN → P5 10/16 (S2 말)** | — | 예정 |
 | [PH-72](#ph-72-접근통제-인프라) | 접근통제 — IAM · Secrets Manager · CloudTrail · Object Lock 버킷 | S3 | 2.5 | 버킷: 없음 · 나머지: PH-51 | **Object Lock 버킷 10/21** | — | 예정 |
 | [FE C-1](#fe-c-1-잔액출금가능액-라벨-분리) | 잔액/출금가능액 라벨 분리 (+#139 실연동) | S3 | 1 | PH-90 · FE C-6 | 10/21~ | — | 예정 |
 | [FE B-3](#fe-b-3-만기-안내) | 만기 안내 | S3 | 0.5 | PH-15 | — | — | 예정 |
 | [PH-19b](#ph-19b-생명주기-최종-검증--리포트) | 생명주기 최종 검증 · 15만 계좌 전수 대조 · 리포트 | S4 | 2.5 | 전 태스크 | 11/6 | — | 예정 |
-| [PH-54](#ph-54-dr-등급--복구-훈련) | DR 등급 · 페일오버 · 복구 훈련 | S4 | 3 | PH-51 · PH-70-② | — | — | 예정 |
+| [PH-54](#ph-54-dr-등급--복구-훈련) | DR 등급 · 페일오버 · 복구 훈련 · 온프레미스 전환 리허설 | S4 | 4.5 | PH-51 · PH-70-② | — | — | 예정 |
 
 ### P3 — 회계 GL · 정보계 설계 · 기획 리드 · 관리자 화면
 
@@ -141,8 +141,10 @@
 | [PH-42](#ph-42-correlation-id--로그-마스킹--json-로깅) | correlation id · 로그 마스킹 · JSON 로깅 | S2 | 2.5 | — | **10/8** | — | 예정 |
 | [PH-57](#ph-57-용량-산정) | 용량 산정 표 | S2 | 0.5 | PH-60b | — | — | 예정 |
 | [PH-47](#ph-47-메트릭--grafana) | 메트릭 · Grafana · 알람 | S2 | 3 | PH-42 | — | — | 예정 |
+| [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-① | 하이브리드 연결 — 온프레미스 VM 2대 · SSM 하이브리드 등록 | S2 | 1.5 | [O-10](README.md#8-미결) | — | — | 예정 |
 | [PH-51](#ph-51-컴퓨트-계층--컷오버) | 컴퓨트 계층 · 컷오버 | S3 | 4.5 | PH-50 · PH-57 · PH-58 ACM ARN | 리허설 10/19~23 · **apply 10/26 · 컷오버 10/27** | — | 예정 |
-| [PH-76](#ph-76-정보계-etl) | 정보계 ETL | S3 | 2.5 | PH-75 · PH-43 | — | — | 예정 |
+| [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-② | 하이브리드 연결 — Site-to-Site VPN | S3 | 1 | PH-50 · PH-100-① | 터널 **10/23** (리허설 안) → P2 | — | 예정 |
+| [PH-76](#ph-76-정보계-etl) | 정보계 ETL | S3 | 2.5 | PH-75 · PH-43 · 원본: PH-70-② 복제 | — | — | 예정 |
 | [PH-77](#ph-77-정보계-조회-api) | 정보계 조회 API | S3 | 1.5 | PH-76 | **10/28** | — | 예정 |
 | [PH-45](#ph-45-cob-병렬화--365) | 청크 → 병렬 스텝 · 실패 격리 · #365 | S3 | 3 | PH-43 | — | #365 | 예정 |
 | [PH-56](#ph-56-was-스케일아웃-비선형성-실증) | WAS 스케일아웃 비선형성 실증 | S4 | 1.5 | PH-51 · PH-30 · PH-49c | — | — | 예정 |
@@ -417,7 +419,8 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 
 **①**
 
-- RDS MySQL 1개(Multi-AZ), 파라미터 그룹(KST, 슬로우쿼리 로그), 자동 백업 7일, 저장 암호화
+- RDS MySQL 1개(Multi-AZ), 파라미터 그룹(KST, 슬로우쿼리 로그, `binlog_format = ROW`), 자동 백업 7일, 저장 암호화
+- ElastiCache Redis Multi-AZ(Primary 2a · Replica 2c, 자동 페일오버). 세션 저장소다([PH-49c](#ph-49c-세션-외부화)). 앱은 Primary endpoint만 쓴다.
 - 서브넷과 SG는 PH-50 출력값을 참조한다.
 - 기존 RDS 스냅샷을 복원하는 방식이다. `terraform import` 절차 1장을 쓰고 `plan`을 통과시킨다.
 
@@ -427,8 +430,12 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 - 10/27: Flyway `validate` 확인 후 앱 연결 전환(P5와 함께)
 - 적수 배치 1회 시간을 기록한다. 전환 확인용 기록이고 개선 전/후 비교에 쓰지 않는다(README §3-1).
 - **Plan B:** 기존 RDS를 유지하고 복원 절차 문서를 리포트에 싣는다.
+- 10/27~: 온프레미스 MySQL 레플리카로 binlog 복제를 시작한다. VPN(PH-100-②)이 있어야 한다.
+    - `CALL mysql.rds_set_configuration('binlog retention hours', 24)`, 복제 전용 계정, GTID
+    - 스냅샷이나 덤프로 초기 적재한 뒤 그 위치부터 복제한다.
+    - 복제가 늦어지면 P5 PH-76은 덤프 적재로 대신한다.
 
-**범위 밖:** Read Replica · ElastiCache · 커넥션풀 곡선(PH-53)
+**범위 밖:** 앱이 읽는 Read Replica · 커넥션풀 곡선(PH-53)
 
 ### PH-15. 만기 — 감지 · MATURED 전이 · 원리금 · 만기해지 API
 
@@ -514,6 +521,7 @@ S4지만 신규 API가 아니라 문서화·측정·훈련이다.
 - 백업과 DR 구분 문서 1장
 - **RDS 강제 페일오버 1회**: 전환 시간과 거래 실패 건수. 이 항목은 P2만 한다.
 - 스냅샷 복구 훈련 1회, Failback 절차, SPOF 점검표
+- **온프레미스 전환 리허설 1회**([D-25](README.md#d-25--927--리드-제안팀-회의-확인-대기)): 레플리카 승격 → 온프레미스 계정계 API 기동 → 가비아 DNS 전환. 전환 시간과 유실 구간을 기록한다. 전환 중 세션 저장소와 AWS 복귀 절차는 리허설 전에 정한다.
 - **완료 기준:** 측정한 복구 시간이 Tier별 RTO 안에 드는지 판정한다.
 
 ## 2-3. P3 태스크 상세
@@ -577,7 +585,7 @@ public enum JournalDirection { DEBIT, CREDIT }   // gl.domain 에서 gl.api 로 
 ```
 
 - 헤더 금액은 두지 않는다. 금액은 줄마다 있고 전표 합계는 줄에서 계산한다(OPN처럼 줄 금액이 다른 전표가 있다).
-- **`JournalDirection`을 `gl.domain`에서 `gl.api`로 옮긴다.** 지금은 `gl.domain`에 있는데(PR #478 머지분), `#349`가 건 `Api mayNotAccessAnyLayer()` 때문에 **`gl.api`가 `gl.domain`을 참조하면 `LayerArchitectureTest > gl`이 깨진다.** 공유 어휘를 소유 도메인의 `api`에 두는 것은 [ADR-0004](../adr/0004-domain-contract-surface.md) 결정 2와 같은 방향이다. `String drCr`로 두면 규칙은 피하지만 호출하는 트랙(P2 PH-14 · P4 PH-33-②)이 문자열 오타를 컴파일에서 못 잡는다.
+- **`JournalDirection`을 `gl.domain`에서 `gl.api`로 옮긴다.** 지금은 `gl.domain`에 있는데(PR #478 머지분), `#349`가 건 `Api mayNotAccessAnyLayer()` 때문에 **`gl.api`가 `gl.domain`을 참조하면 `LayerArchitectureTest > gl`이 깨진다.** 공유 어휘를 소유 도메인의 `api`에 두는 것은 [ADR-0004](../adr/0004-domain-contract-surface.md)(#495 초안, PH-24 PR에서 함께 머지) 결정 2와 같은 방향이다. `String drCr`로 두면 규칙은 피하지만 호출하는 트랙(P2 PH-14 · P4 PH-33-②)이 문자열 오타를 컴파일에서 못 잡는다.
 - **`gl_voucher`에 `reference_key` 컬럼을 새 V 파일로 추가한다**(PR #478 스키마에는 없다). 이 키가 없으면 "이체 1건당 전표 1건" 검증과 PH-28b 분개누락 탐지가 원장과 조인할 수 없다.
 - 전표 생성 + 분개 기표 서비스, `product_gl_mapping`
 - `GlLedgerPostingHook implements transfer.api.LedgerPostingHook` — 이체 유형별 패턴표로 전표 1건. **예외를 던진다(= 이체 롤백).**
@@ -598,6 +606,7 @@ public enum JournalDirection { DEBIT, CREDIT }   // gl.domain 에서 gl.api 로 
 - 마트 2종: `mart_daily_account_balance`(일별 계정잔액), `mart_product_subscription`(상품별 가입·해지)
     - **as-of 컬럼 필수, PII 컬럼 없음**(고객은 가명 ID)
 - 적재 주기, 읽기 전용 원칙, 정합성 기준(마트 합계 = 원장 합계)
+- 마트는 온프레미스 MySQL에 둔다([D-25](README.md#d-25--927--리드-제안팀-회의-확인-대기)). 적재는 P5 PH-76이 한다.
 - 조회 API 스키마 초안을 P5 PH-77과 FE ADM-03에 넘긴다.
 - **10/16에 넘긴다.** P5가 10/26~27 컷오버 사이에 PH-76·77을 소화해야 해서 10/21에서 앞당겼다.
 - **범위 밖:** 마감잔액 테이블
@@ -814,8 +823,9 @@ public interface BusinessDateProvider {
 
 ### PH-50. 네트워크 Terraform
 
-- VPC `10.30.0.0/16`, 2AZ, 서브넷 6개(public / app / data × 2), 라우팅 3종, **NAT 1개**
-- SG: ALB→WAS 8080, WAS→RDS 3306, WAS→util 6379/8000. NACL 기본
+- VPC `10.30.0.0/16`, 2AZ, 서브넷 6개(public / app / data × 2), 라우팅 3종, **NAT AZ별 1개(2개)**
+- VPN Gateway와 온프레미스 대역 라우팅([PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3), [O-10](README.md#8-미결))
+- SG: ALB→WAS 8080, WAS→RDS 3306, WAS→ElastiCache 6379, 온프레미스→RDS 3306(복제 계정), 온프레미스→WAS 8080(메트릭 수집). NACL 기본
 - Terraform 루트, 원격 상태(S3 + lock), 모듈 자리: `modules/network`·`modules/compute`(P5), `modules/data`·**`modules/security`**(P2)
 - **출력값 → P2 (10/2):** 서브넷 ID, SG ID
 - **완료 기준:** plan 통과. data 서브넷에 아웃바운드 없음.
@@ -850,10 +860,10 @@ public interface CobStep {
 | 3 | 대사 | P4 PH-38 | 10/6 인터페이스 머지 후 |
 | 4 | 만기 감지 | P2 PH-15 | 10/23 |
 | 5 | 휴면 전환 | P2 PH-16 | 자리만 10/16 · 등록 10/30까지 |
-| 6 | 정보계 ETL | P5 PH-76 | S3 |
-| 7 | 영업일 전환 | P5 | S2 |
+| 6 | 영업일 전환 | P5 | S2 |
 
 - **파티션 생성 호출 스텝은 없다**([#379 규격](#379-규격-전달)).
+- **정보계 ETL은 COB 스텝이 아니다.** 온프레미스에서 따로 돈다([PH-76](#ph-76-정보계-etl), [D-25](README.md#d-25--927--리드-제안팀-회의-확인-대기)).
 - 러너: 기존 스케줄러에서 순서대로 부르고 `BatchExecutionLockPort`로 단일 실행한다.
 - 대사 정책: 불일치 ≤ 임계(예: 10)면 soft(리포트·로그), 초과면 hard(마감 중단). P3 PH-28b가 이 정책으로 검증한다.
 - 배치 실행 기록 테이블(#371): job · step · 영업일 · 시작/종료 · 상태 · 실패 사유. **조회 API는 범위 밖**이다.
@@ -880,6 +890,7 @@ public interface CobStep {
 ### PH-47. 메트릭 · Grafana
 
 - Micrometer + Prometheus. 대시보드: 거래 · 배치 · JVM · DB
+- Prometheus · Grafana는 온프레미스 대외·모니터링 VM에 둔다(AWS와 장애 영역 분리). VPN 너머로 WAS 8080 actuator를 `ec2_sd_configs`로 수집하고, `/actuator/**`는 ALB에서 막는다.
 - 알람 3원칙: 노이즈 억제 · 실행 가능성 · **Runbook 링크 필수**
 - actuator 노출 범위 재설계. 관리자 화면에 거래 메트릭을 중복으로 만들지 않는다.
 - **완료 기준:** 알람 발생부터 인지까지 시간을 잰다.
@@ -888,8 +899,8 @@ public interface CobStep {
 ### PH-51. 컴퓨트 계층 · 컷오버
 
 - ALB(2AZ) + 대상그룹. 헬스체크는 `/actuator/health`이고, QA 시드 검증이 헬스체크를 죽이지 않게 한다(#439·#445).
-- WAS ASG: 시작 템플릿, min 1 / max 2. util 노드 1대(app 서브넷)에 Redis와 FastAPI(P6)를 docker로 올린다.
-- IAM은 인스턴스 프로파일 2개(WAS · util)와 SSM Agent·Session Manager 접속 기반까지다. 나머지 IAM은 P2 PH-72가 맡는다([D-11](README.md#d-11--920--p2p5)).
+- WAS ASG: 시작 템플릿, min 2 / max 2(AZ별 1대). 내비게이션 API(P6)는 각 WAS에 함께 뜬다. util 노드는 없다([D-25](README.md#d-25--927--리드-제안팀-회의-확인-대기)).
+- IAM은 인스턴스 프로파일 1개(WAS)와 SSM Agent·Session Manager 접속 기반까지다. 온프레미스 SSM 하이브리드 역할은 PH-100이 맡는다. 나머지 IAM은 P2 PH-72가 맡는다([D-11](README.md#d-11--920--p2p5)).
 - 현행 SSM 배포 스크립트(#440 반영분)를 이관한다.
 - HTTPS 리스너는 P2가 넘기는 ACM certificate ARN으로 만든다.
 - **출력값 → P2 (10/26 apply 직후):** ALB ARN · 리스너 ARN · ALB DNS name · ALB zone ID
@@ -900,13 +911,17 @@ public interface CobStep {
 ### PH-76. 정보계 ETL
 
 - **10/28 PH-77까지 가려면 PH-76은 10/19~23 리허설과 병행한다**(10/26~27은 컷오버).
-- COB 후속 스텝으로 마트 2종을 적재한다. 전일 확정분 증분이고 재적재가 가능하며, **PII는 적재하지 않는다.**
+- **온프레미스 독립 작업이다.** COB 스텝이 아니다([D-25](README.md#d-25--927--리드-제안팀-회의-확인-대기)). 레플리카에 복제된 COB 실행 기록에서 해당 영업일 완료 행이 보이면 시작한다. 복제는 커밋 순서대로 적용되므로, 그 행이 보이면 COB 결과도 모두 도착해 있다(병렬 복제면 `replica_preserve_commit_order = ON`).
+- 레플리카는 10/27 복제 시작(P2 PH-70-②) 뒤에 생긴다. 그 전에는 온프레미스 MySQL에 덤프를 적재해 개발하고, 10/27에 원본을 레플리카로 바꾼다. **Plan B:** 복제가 늦으면 덤프 적재로 시연한다.
+- 마트 2종을 온프레미스 MySQL에 적재한다. 전일 확정분 증분이고 재적재가 가능하며, **PII는 적재하지 않는다.**
 - 적재 실패는 soft다. 300만 원장 적재 시간을 기록하고, 마트 합계 = 원장 합계를 P3와 함께 검증한다.
 
 ### PH-77. 정보계 조회 API
 
 - 일별 수신 잔액 추이, 상품별 가입/해지, 채널별 거래량(`GL_READ`)
 - **모든 응답에 `asOf` 필드**가 있고 개인정보는 없다. p95·p99를 기록한다.
+- 온프레미스 정보계 API는 VPN 안쪽에서만 받는다. 브라우저는 평소처럼 ALB → WAS로 요청하고, WAS가 세션과 `GL_READ`를 확인한 뒤 VPN으로 온프레미스 API를 부른다(`adapter/out` 어댑터). 온프레미스 API는 인터넷에 공개하지 않는다.
+- 배포 형태(corebank 이미지 + 프로필 / 별도 앱)는 착수 전에 정한다.
 
 ### PH-45. COB 병렬화 · #365
 
@@ -918,7 +933,7 @@ public interface CobStep {
 ### PH-56. WAS 스케일아웃 비선형성 실증
 
 - **측정 환경 예외** — 3-Tier(WAS 2대)에서만 성립한다([README §3-1](README.md#3-1-판정과-측정-환경)).
-- P1 harness를 `BASE_URL = ALB DNS`로 돌려 WAS 1대 → 2대의 증가율을 잰다. 일반(계좌 분산)과 핫스팟(동일 계좌 동시 100건) 두 곡선이다.
+- P1 harness를 `BASE_URL = ALB DNS`로 돌려 WAS 1대 → 2대의 증가율을 잰다. ASG가 min 2라서 1대를 잴 때만 desired를 1로 낮춘다. 일반(계좌 분산)과 핫스팟(동일 계좌 동시 100건) 두 곡선이다.
 - **완료 기준:** 핫스팟의 2대 확장 증가율이 일반보다 유의하게 낮다는 것을 수치로 보인다.
 
 ### PH-55. 배포 파이프라인 · destroy 리허설
@@ -929,7 +944,25 @@ S4지만 CI/CD·문서·훈련이라 S4 규칙에 걸리지 않는다([D-05](REA
 - 무중단 배포(ASG 롤링 + 헬스체크)와 롤백 절차
 - **개발 권한 ≠ 배포 권한**(승인 이력은 Git에). 배포 Job의 성패가 실제 배포 성패와 같아야 한다(#440). 릴리스 노트를 쓴다.
 - 배포 다운타임 측정(롤링 교체 1회)
-- **`terraform destroy` 리허설 1회.** 실행 주체는 P5다([README §3-8](README.md#3-8-3-tier-수명과-destroy)).
+- **`terraform destroy` 리허설 1회.** 실행 주체는 P5다([README §3-8](README.md#3-8-3-tier-수명과-destroy)). VPN 연결 · VPN Gateway · Customer Gateway 리소스를 포함하고, 온프레미스 SSM 등록을 해제한다.
+
+### PH-100. 하이브리드 연결 (① 온프레미스 VM S2 → ② VPN 연결 S3)
+
+온프레미스는 신한DS 자체 서버다([D-25](README.md#d-25--927--리드-제안팀-회의-확인-대기)).
+
+**①**
+
+- VM 2대
+    - 정보계 VM: Nginx · 정보계 API · 계정계 API(대기) · MySQL 레플리카 · 마트
+    - 대외·모니터링 VM: 모의 대외기관 · Prometheus · Grafana
+- SSM 하이브리드 활성화로 등록한다. 인바운드 SSH는 열지 않는다.
+- Customer Gateway를 준비한다. 고정 공인 IP와 UDP 500·4500이 필요하다([O-10](README.md#8-미결)).
+
+**②**
+
+- Site-to-Site VPN: VPN Gateway ↔ Customer Gateway, IPsec 터널 2개, 정적 라우팅(온프레미스 대역 1개)
+- 10/19~23 리허설 안에 터널을 세운다. binlog 복제(P2 PH-70-②) · 대외 전문 · 메트릭 수집 · 정보계 조회가 이 터널을 지난다.
+- **완료 기준:** 온프레미스에서 사설 IP로 RDS 3306과 WAS 8080에 닿고, WAS에서 온프레미스 정보계 API와 모의 대외기관에 닿는다. 온프레미스의 인터넷 공개 포트는 Nginx 443 하나다.
 
 ## 2-6. P6 태스크 상세
 
@@ -970,7 +1003,7 @@ S4지만 CI/CD·문서·훈련이라 S4 규칙에 걸리지 않는다([D-05](REA
 
 - `spring-session-data-redis` + `@EnableRedisHttpSession`. 만료는 관리자 30분 / 고객 10분을 유지한다.
 - `SecurityContext` 직렬화를 확인하고, 로그아웃 시 세션을 삭제한다.
-- WAS 2 프로세스 로그인 유지 테스트(로컬 docker). P5 util 노드에서는 10/28에 15분 확인을 한다.
+- WAS 2 프로세스 로그인 유지 테스트(로컬 docker). 3-Tier ElastiCache에서는 10/28에 15분 확인을 한다.
 - `SecurityConfig`는 PH-49a-② 위에서 고친다(10/12~).
 - **ALB 스티키 세션은 쓰지 않는다.**
 - 현황: `SecurityConfig`가 `HttpSessionSecurityContextRepository`를 쓴다.

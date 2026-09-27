@@ -74,9 +74,9 @@
 <rect x="1121" y="567.9" width="140.42" height="30.599999999999998" rx="3" fill="#ffffff" opacity="0.92"/>
 <text x="1125" y="590" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="20.4" font-weight="600" text-anchor="start" fill="#DD344C">API · HTTPS</text>
 <path d="M1115 792 V 858" fill="none" stroke="#DD344C" stroke-width="2" marker-end="url(#m-flow)"/>
-<path d="M1145 300 H 2285 V 858" fill="none" stroke="#DD344C" stroke-width="2" marker-end="url(#m-flow)"/>
-<rect x="1352.31" y="269.9" width="495.37999999999994" height="30.599999999999998" rx="3" fill="#ffffff" opacity="0.92"/>
-<text x="1600" y="292" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="20.4" font-weight="600" text-anchor="middle" fill="#DD344C">정보계 조회 API · AWS 사용 불가 시 계정계 API</text>
+<path d="M1145 300 H 2285 V 768" fill="none" stroke="#6e7781" stroke-width="2" marker-end="url(#m-neutral)" stroke-dasharray="6 4"/>
+<rect x="1448.19" y="269.9" width="303.62" height="30.599999999999998" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="1600" y="292" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="20.4" font-weight="600" text-anchor="middle" fill="#6e7781">AWS 사용 불가 시 계정계 API</text>
 <path d="M1115 990 V 1025 H 830 V 1078" fill="none" stroke="#DD344C" stroke-width="2" marker-end="url(#m-flow)"/>
 <path d="M1115 1025 H 1290 V 1078" fill="none" stroke="#DD344C" stroke-width="2" marker-end="url(#m-flow)"/>
 <path d="M800 1050 V 932" fill="none" stroke="#6e7781" stroke-width="2" marker-end="url(#m-neutral)"/>
@@ -112,20 +112,23 @@
 <text x="1035" y="1510" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="20.4" font-weight="600" text-anchor="middle" fill="#C925D1">Sync replication</text>
 <rect x="953.57" y="1525.9" width="162.85999999999999" height="30.599999999999998" rx="3" fill="#ffffff" opacity="0.92"/>
 <text x="1035" y="1548" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="20.4" font-weight="600" text-anchor="middle" fill="#C925D1">Auto failover</text>
-<path d="M1450 1110 H 1500 V 1248" fill="none" stroke="#6e7781" stroke-width="2" marker-end="url(#m-neutral)"/>
-<rect x="1420.09" y="1157.9" width="109.82" height="30.599999999999998" rx="3" fill="#ffffff" opacity="0.92"/>
-<text x="1475" y="1180" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="20.4" font-weight="600" text-anchor="middle" fill="#6e7781">대외 전문</text>
+<path d="M1450 1060 H 1512 V 1248" fill="none" stroke="#DD344C" stroke-width="2" marker-end="url(#m-flow)"/>
+<rect x="1415.89" y="1025.9" width="130.22" height="30.599999999999998" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="1481" y="1048" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="20.4" font-weight="600" text-anchor="middle" fill="#DD344C">정보계 조회</text>
+<path d="M1450 1225 H 1488 V 1248" fill="none" stroke="#6e7781" stroke-width="2" marker-end="url(#m-neutral)"/>
+<rect x="1336.18" y="1209.9" width="109.82" height="30.599999999999998" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="1442" y="1232" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="20.4" font-weight="600" text-anchor="end" fill="#6e7781">대외 전문</text>
 <path d="M1468 1280 H 1430 V 1247" fill="none" stroke="#6e7781" stroke-width="2" marker-end="url(#m-neutral)" stroke-dasharray="6 4"/>
 <rect x="1341.68" y="1267.9" width="84.32" height="30.599999999999998" rx="3" fill="#ffffff" opacity="0.92"/>
 <text x="1422" y="1290" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="20.4" font-weight="600" text-anchor="end" fill="#6e7781">scrape</text>
 <path d="M740 1618 V 1655 H 1500 V 1312" fill="none" stroke="#C925D1" stroke-width="2" marker-end="url(#m-data)"/>
 <rect x="1057.84" y="1638.9" width="84.32" height="30.599999999999998" rx="3" fill="#ffffff" opacity="0.92"/>
 <text x="1100" y="1661" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="20.4" font-weight="600" text-anchor="middle" fill="#C925D1">binlog</text>
-<path d="M1790 1248 V 1110 H 1938" fill="none" stroke="#6e7781" stroke-width="2" marker-end="url(#m-neutral)"/>
+<path d="M1775 1250 V 1110 H 1938" fill="none" stroke="#6e7781" stroke-width="2" marker-end="url(#m-neutral)"/>
 <path d="M1938 1280 H 1822" fill="none" stroke="#6e7781" stroke-width="2" marker-end="url(#m-neutral)" stroke-dasharray="6 4"/>
+<path d="M1805 1250 V 945 H 2380 V 1078" fill="none" stroke="#DD344C" stroke-width="2" marker-end="url(#m-flow)"/>
 <path d="M1790 1312 V 1520 H 2158" fill="none" stroke="#C925D1" stroke-width="2" marker-end="url(#m-data)"/>
-<path d="M2285 990 V 1030 H 2380 V 1078" fill="none" stroke="#DD344C" stroke-width="2" marker-end="url(#m-flow)"/>
-<path d="M2285 1030 H 2190 V 1078" fill="none" stroke="#6e7781" stroke-width="2" marker-end="url(#m-neutral)" stroke-dasharray="6 4"/>
+<path d="M2285 900 V 915 H 2190 V 1078" fill="none" stroke="#6e7781" stroke-width="2" marker-end="url(#m-neutral)" stroke-dasharray="6 4"/>
 <path d="M2380 1240 V 1488" fill="none" stroke="#DD344C" stroke-width="2" marker-end="url(#m-flow)"/>
 <rect x="2386" y="1377.9" width="57.8" height="30.599999999999998" rx="3" fill="#ffffff" opacity="0.92"/>
 <text x="2390" y="1400" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="20.4" font-weight="600" text-anchor="start" fill="#DD344C">조회</text>
@@ -208,9 +211,9 @@
 <text x="1500" y="1340.6" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="22.95" font-weight="700" text-anchor="middle" fill="#1f2328"></text>
 <svg x="1760.0" y="1250.0" width="60" height="60" viewBox="0 0 48 48" overflow="visible"><path fill="#8c4fff" fill-rule="evenodd" d="m42.208 24.707-4.375 4.375-1.414-1.414L39.087 25H25v14.086l2.668-2.668 1.414 1.414-4.375 4.375a.997.997 0 0 1-1.414 0l-4.375-4.375 1.414-1.414L23 39.086V25H8.915l2.668 2.668-1.414 1.414-4.375-4.375a1 1 0 0 1 0-1.414l4.375-4.376 1.414 1.414L8.915 23H23V8.913l-2.668 2.668-1.414-1.414 4.375-4.375a1 1 0 0 1 1.414 0l4.375 4.375-1.414 1.414L25 8.913V23h14.087l-2.668-2.669 1.414-1.414 4.375 4.376a1 1 0 0 1 0 1.414M24 44C12.972 44 4 35.028 4 24S12.972 4 24 4s20 8.972 20 20-8.972 20-20 20m0-42C11.87 2 2 11.869 2 24s9.87 22 22 22 22-9.869 22-22S36.131 2 24 2"/></svg>
 <text x="1790" y="1340.6" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="22.95" font-weight="700" text-anchor="middle" fill="#1f2328"></text>
-<svg x="2255.0" y="860.0" width="60" height="60" viewBox="0 0 24 24" overflow="visible"><g fill="#009639"><path d="M12 0L1.605 6v12L12 24l10.395-6V6L12 0zm6 16.59c0 .705-.646 1.29-1.529 1.29-.631 0-1.351-.255-1.801-.81l-6-7.141v6.66c0 .721-.57 1.29-1.274 1.29H7.32c-.721 0-1.29-.6-1.29-1.29V7.41c0-.705.63-1.29 1.5-1.29.646 0 1.38.255 1.83.81l5.97 7.141V7.41c0-.721.6-1.29 1.29-1.29h.075c.72 0 1.29.6 1.29 1.29v9.18H18z"/></g></svg>
-<text x="2285" y="950.6" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="22.95" font-weight="700" text-anchor="middle" fill="#1f2328">Nginx</text>
-<text x="2285" y="981.2" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="19.55" font-weight="400" text-anchor="middle" fill="#59636e">HTTPS 종료</text>
+<svg x="2255.0" y="770.0" width="60" height="60" viewBox="0 0 24 24" overflow="visible"><g fill="#009639"><path d="M12 0L1.605 6v12L12 24l10.395-6V6L12 0zm6 16.59c0 .705-.646 1.29-1.529 1.29-.631 0-1.351-.255-1.801-.81l-6-7.141v6.66c0 .721-.57 1.29-1.274 1.29H7.32c-.721 0-1.29-.6-1.29-1.29V7.41c0-.705.63-1.29 1.5-1.29.646 0 1.38.255 1.83.81l5.97 7.141V7.41c0-.721.6-1.29 1.29-1.29h.075c.72 0 1.29.6 1.29 1.29v9.18H18z"/></g></svg>
+<text x="2285" y="860.6" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="22.95" font-weight="700" text-anchor="middle" fill="#1f2328">Nginx</text>
+<text x="2285" y="891.2" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="19.55" font-weight="400" text-anchor="middle" fill="#59636e">HTTPS 종료</text>
 <rect x="1940.0" y="1080.0" width="60" height="60" rx="8" fill="#8250df"/>
 <text x="1970" y="1118.5" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="22.099999999999998" font-weight="700" text-anchor="middle" fill="#ffffff">대외</text>
 <text x="1970" y="1170.6" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="22.95" font-weight="700" text-anchor="middle" fill="#1f2328">모의 대외기관</text>
