@@ -254,7 +254,8 @@ class TransferControllerTest extends IntegrationTestSupport {
                         .param("toDate", "2026-08-31"))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.CONTENT_TYPE, "text/csv;charset=UTF-8"))
-                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("attachment")))
+                .andExpect(header().string(
+                                HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"transfer-history.csv\""))
                 .andReturn();
 
         byte[] raw = result.getResponse().getContentAsByteArray();
