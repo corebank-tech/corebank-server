@@ -249,6 +249,21 @@ class BusinessDateIntegrationTest extends IntegrationTestSupport {
                     .isEqualTo(CommonErrorCode.CONCURRENT_MODIFICATION);
             assertThat(businessDateTestFixture.currentInDb()).isEqualTo(LocalDate.of(2026, 10, 8));
         }
+
+        @Test
+        @DisplayName("영업일 행이 없으면 전환하지 않고 CMN9001 로 거부한다")
+        void advanceWithoutRowThrows() {
+            jdbcTemplate.update("DELETE FROM business_date WHERE date_type = 'BUSINESS_DATE'");
+            try {
+                assertThatThrownBy(() -> businessDateAdvancer.advanceFrom(LocalDate.of(2026, 10, 2)))
+                        .isInstanceOf(BusinessException.class)
+                        .extracting("errorCode")
+                        .isEqualTo(CommonErrorCode.BUSINESS_DATE_NOT_FOUND);
+            } finally {
+                jdbcTemplate.update(
+                        "INSERT INTO business_date (date_type, business_date) VALUES ('BUSINESS_DATE', ?)", original);
+            }
+        }
     }
 
     // 예외도 결과로 모아 스레드 안 실패가 묻히지 않게 한다
