@@ -2,8 +2,11 @@ package com.shinhan.corebank.subscription.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.adapter.out.persistence.AccountJpaEntity;
@@ -13,6 +16,9 @@ import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.common.event.DomainEvent;
+import com.shinhan.corebank.common.event.DomainEventSink;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaEntity;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
@@ -25,8 +31,10 @@ import com.shinhan.corebank.product.domain.InterestPayType;
 import com.shinhan.corebank.product.domain.ProductGroup;
 import com.shinhan.corebank.product.domain.SaleStatus;
 import com.shinhan.corebank.subscription.adapter.out.persistence.ProductSubscriptionJpaRepository;
+import com.shinhan.corebank.subscription.api.ProductSubscriptionCompleted;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionExecuteUseCase;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionExecuteUseCase.ProductSubscriptionExecuteCommand;
+import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionExecuteUseCase.ProductSubscriptionExecuteResult;
 import com.shinhan.corebank.subscription.application.port.out.SaveTermsAgreementPort;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -35,6 +43,7 @@ import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -81,6 +90,10 @@ class ProductSubscriptionExecuteRollbackTest extends IntegrationTestSupport {
     @MockitoBean
     private AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
 
+    // 가입 트랜잭션이 발행하는 이벤트를 잡는다 — BEFORE_COMMIT 리스너의 sink 를 mock 으로 바꿔 끼운다(#436).
+    @MockitoBean
+    private DomainEventSink domainEventSink;
+
     private Long customerId;
     private Long productId;
     private Long withdrawalAccountId;
@@ -92,6 +105,8 @@ class ProductSubscriptionExecuteRollbackTest extends IntegrationTestSupport {
             sequenceFixture.deleteProductAccountSequence(productId, AccountType.INSTALLMENT_SAVINGS);
             sequenceFixture.deleteProductAccountSequence(productId, AccountType.TIME_DEPOSIT);
             jdbcTemplate.update("DELETE FROM product_rate_tier WHERE product_id = ?", productId);
+            // 성공 케이스(#436 발행 테스트)가 가입 행을 남긴다 — account 보다 먼저 지워야 fk_sub_account 에 안 걸린다
+            jdbcTemplate.update("DELETE FROM product_subscription WHERE product_id = ?", productId);
             jdbcTemplate.update("DELETE FROM account WHERE product_id = ?", productId);
         }
         if (withdrawalAccountId != null) {
@@ -178,6 +193,63 @@ class ProductSubscriptionExecuteRollbackTest extends IntegrationTestSupport {
         assertThat(jdbcTemplate.queryForObject(
                         "SELECT balance FROM account WHERE account_id = ?", Long.class, withdrawalAccountId))
                 .isEqualTo(10_000_000L);
+    }
+
+    @Test
+    @DisplayName("가입이 완료되면 가입 트랜잭션 안에서 ProductSubscriptionCompleted 가 한 번 발행된다 (#436)")
+    void execute_success_publishesProductSubscriptionCompletedOnce() {
+        customerId = customerTestFixture.createCustomer();
+        productId = seedSavingsProduct();
+        withdrawalAccountId = seedWithdrawalAccount();
+
+        ProductSubscriptionExecuteResult result =
+                productSubscriptionExecuteUseCase.execute(new ProductSubscriptionExecuteCommand(
+                        customerId,
+                        productId,
+                        500_000L,
+                        12,
+                        withdrawalAccountId,
+                        "1234",
+                        "1234",
+                        "ACC_PWD_test",
+                        "OTP_AUTH_test",
+                        List.of()));
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(ProductSubscriptionCompleted.class, event -> {
+            assertThat(event.customerId()).isEqualTo(customerId);
+            assertThat(event.refId()).isEqualTo(result.subscriptionId());
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(event.errorCode()).isNull();
+            assertThat(event.productName()).isEqualTo("청년 희망 적금");
+            assertThat(event.maskedAccountNumber()).contains("*");
+        });
+    }
+
+    @Test
+    @DisplayName("가입이 롤백되면 이벤트도 남지 않는다 — 발행 지점이 마지막 저장 뒤라 sink 가 아예 호출되지 않는다 (#436)")
+    void execute_rollback_publishesNothing() {
+        customerId = customerTestFixture.createCustomer();
+        productId = seedSavingsProduct();
+        withdrawalAccountId = seedWithdrawalAccount();
+        doThrow(new RuntimeException("forced terms agreement save failure"))
+                .when(saveTermsAgreementPort)
+                .saveAll(anyList());
+
+        catchThrowable(() -> productSubscriptionExecuteUseCase.execute(new ProductSubscriptionExecuteCommand(
+                customerId,
+                productId,
+                500_000L,
+                12,
+                withdrawalAccountId,
+                "1234",
+                "1234",
+                "ACC_PWD_test",
+                "OTP_AUTH_test",
+                List.of())));
+
+        verify(domainEventSink, never()).record(any());
     }
 
     private long countProductSubscriptionLedgerEntries() {

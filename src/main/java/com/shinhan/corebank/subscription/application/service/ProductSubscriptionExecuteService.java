@@ -12,6 +12,7 @@ import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductGroup;
+import com.shinhan.corebank.subscription.api.ProductSubscriptionCompleted;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionExecuteUseCase;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionValidationCommand;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionValidationCommand.AgreedTerms;
@@ -36,6 +37,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,6 +60,7 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
     private final SaveTermsAgreementPort saveTermsAgreementPort;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     // 권장 순서: 소비 없는 검증(비밀번호 확인·상품조회·중복가입·validate())을 전부 먼저 끝내고,
     // 인증 토큰 검증(1회성 소비)은 그 뒤에, 계좌개설(되돌릴 수 없는 지점) 바로 앞에 둔다 —
@@ -144,6 +147,16 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
                 .build());
 
         saveTermsAgreementPort.saveAll(toTermsAgreements(saved.getSubscriptionId(), command.agreedTerms(), now));
+
+        // 가입 트랜잭션 안에서 발행한다(#436). 계좌개설·초입금·약관 저장 중 하나라도 실패해 롤백되면 이벤트도 같이 사라진다.
+        eventPublisher.publishEvent(ProductSubscriptionCompleted.builder()
+                .customerId(command.customerId())
+                .refId(saved.getSubscriptionId())
+                .status(ProcessResultStatus.SUCCESS)
+                .occurredAt(now)
+                .productName(product.getProductName())
+                .maskedAccountNumber(MaskingUtil.maskAccountNumber(accountOpeningResult.accountNumber()))
+                .build());
 
         return new ProductSubscriptionExecuteResult(
                 saved.getSubscriptionId(),
