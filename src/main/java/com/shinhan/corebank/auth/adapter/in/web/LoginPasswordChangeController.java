@@ -45,7 +45,7 @@ public class LoginPasswordChangeController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "로그인 비밀번호 변경 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "`CMN0001` 입력 형식 오류 · `CMN0002` 필수 입력값 누락 · `ATH0001` 신규 비밀번호 정책 위반 · "
+                description = "`CMN0002` 필수 입력값 누락 · `ATH0001` 신규 비밀번호 정책 위반 · "
                         + "`ATH0002` 비밀번호 확인 불일치 · `ATH0003` 직전 비밀번호 재사용 · `ATH0010` 현재 비밀번호 불일치",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(

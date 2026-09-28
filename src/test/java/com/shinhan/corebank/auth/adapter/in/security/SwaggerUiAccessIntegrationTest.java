@@ -106,7 +106,15 @@ class SwaggerUiAccessIntegrationTest extends IntegrationTestSupport {
                                 "$['paths']['/auth/password-reset-requests/{passwordResetRequestId}']['put']['parameters'][1]['name']")
                         .value("Idempotency-Key"))
                 .andExpect(jsonPath("$['paths']['/customers/me/password']['put']['parameters'][0]['name']")
-                        .value("Idempotency-Key"));
+                        .value("Idempotency-Key"))
+                .andExpect(jsonPath(
+                                "$['paths']['/auth/password-reset-requests']['post']['responses']['400']['description']")
+                        .value(org.hamcrest.Matchers.containsString("CMN0001")))
+                .andExpect(jsonPath(
+                                "$['paths']['/auth/password-reset-requests/{passwordResetRequestId}']['put']['responses']['400']['description']")
+                        .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("CMN0001"))))
+                .andExpect(jsonPath("$['paths']['/customers/me/password']['put']['responses']['400']['description']")
+                        .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("CMN0001"))));
     }
 
     @Test
