@@ -324,6 +324,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             Transfer transfer = transferSavePort.save(createdTransfer);
 
             LocalDateTime executedAt = LocalDateTime.now(clock);
+            // [자리] PH-41: 여기서 businessDateProvider.today()로 tradeDate를 한 번 구해 원장·훅 B·transfer에 같이 쓴다.
 
             TransferBalances balances = accountLockPort.applyTransfer(locked, command.amount(), executedAt);
 
@@ -344,6 +345,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             runLedgerPostingHooks(command, payee, transactionNumber, executedAt);
 
             transfer.complete(balances.withdrawalBalanceAfter(), executedAt);
+            // [자리] EVT-2: TransferCompleted 발행. BEFORE_COMMIT 리스너가 받도록 이 템플릿 안에서 한다.
             return transferSavePort.save(transfer);
         });
     }
@@ -409,6 +411,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             TransferCommand command, Transfer created, String errorCode, String errorMessage, RuntimeException cause) {
         created.fail(errorCode, errorMessage);
         try {
+            // [자리] EVT-2: TransferFailed도 이 REQUIRES_NEW 안에서 발행한다. AFTER_COMMIT 리스너는 두지 않는다.
             requiresNewTransactionTemplate.executeWithoutResult(status -> transferSavePort.save(created));
         } catch (DataIntegrityViolationException recordingFailure) {
             // 이 ERROR 확정 INSERT 자체가 uk_transfer_source_execution_date에 걸렸다는 건, 동일
