@@ -1,12 +1,17 @@
 package com.shinhan.corebank.transfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.common.event.DomainEvent;
+import com.shinhan.corebank.common.event.DomainEventSink;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
+import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
@@ -36,7 +41,9 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -64,6 +71,9 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     private PlatformTransactionManager transactionManager;
 
     @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
+    @Autowired
     private AccountLockPort accountLockPort;
 
     @Autowired
@@ -84,6 +94,10 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     // account 도메인 테스트가 담당한다.
     @MockitoBean
     private AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
+
+    // 발행된 도메인 이벤트를 잡는다 — BEFORE_COMMIT 리스너가 넘기는 sink 를 mock 으로 바꿔 끼운다(#436).
+    @MockitoBean
+    private DomainEventSink domainEventSink;
 
     @Autowired
     private TransferSequencePort transferSequencePort;
@@ -373,7 +387,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 List.of(),
                 List.of(),
                 clock,
-                transactionManager);
+                transactionManager,
+                eventPublisher);
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         TransferResult first;
@@ -563,6 +578,72 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 101 AND status = 'PROCESSING'",
                 Long.class);
         assertThat(processingCount).isZero();
+    }
+
+    @Test
+    @DisplayName("즉시이체가 성공하면 기표 트랜잭션 안에서 TransferSettled 가 한 번 발행된다 (#436)")
+    void execute_immediateSuccess_publishesTransferSettledOnce() {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        transferExecutionService.execute(transferCommand(30000L));
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        Long transferId = jdbcTemplate.queryForObject(
+                "SELECT transfer_id FROM transfer WHERE withdrawal_account_id = 101 AND status = 'SUCCESS'",
+                Long.class);
+        assertThat(published.getValue()).isInstanceOfSatisfying(TransferSettled.class, event -> {
+            assertThat(event.customerId()).isEqualTo(1L);
+            assertThat(event.refId()).isEqualTo(transferId);
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(event.errorCode()).isNull();
+            assertThat(event.amount()).isEqualTo(30000L);
+            assertThat(event.counterpartyName()).contains("*");
+        });
+    }
+
+    @Test
+    @DisplayName("잔액부족으로 ERROR 확정되면 그 트랜잭션 안에서 ERROR 상태의 TransferSettled 가 발행된다 (#436)")
+    void execute_immediateInsufficientBalance_publishesErrorSettled() {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        transferExecutionService.execute(transferCommand(200_000L));
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        Long transferId = jdbcTemplate.queryForObject(
+                "SELECT transfer_id FROM transfer WHERE withdrawal_account_id = 101 AND status = 'ERROR'", Long.class);
+        assertThat(published.getValue()).isInstanceOfSatisfying(TransferSettled.class, event -> {
+            assertThat(event.refId()).isEqualTo(transferId);
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(event.errorCode()).isEqualTo(TransferErrorCode.INSUFFICIENT_BALANCE.getCode());
+        });
+    }
+
+    @Test
+    @DisplayName("예약·자동이체는 엔진이 발행하지 않는다 — 재생 호출을 포함해 한 번도 (#436)")
+    void execute_autoTransfer_publishesNothingEvenOnReplay() {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(30000L)
+                .transferType(TransferType.AUTO)
+                .channel(TransferChannel.BT)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .sourceId(556L)
+                .executionDate(LocalDate.of(2026, 9, 27))
+                .build();
+
+        transferExecutionService.execute(command);
+        transferExecutionService.execute(command);
+
+        verify(domainEventSink, never()).record(org.mockito.ArgumentMatchers.any());
     }
 
     private TransferCommand transferCommand(long amount) {

@@ -3,10 +3,12 @@ package com.shinhan.corebank.transfer.application.service;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
 import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
+import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
@@ -33,6 +35,7 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -69,6 +72,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private final List<LedgerPostingHook> ledgerPostingHooks;
     private final Clock clock;
     private final TransactionTemplate requiresNewTransactionTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     public TransferExecutionService(
             AccountLockPort accountLockPort,
@@ -82,7 +86,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             List<TransferPreCheck> transferPreChecks,
             List<LedgerPostingHook> ledgerPostingHooks,
             Clock clock,
-            PlatformTransactionManager transactionManager) {
+            PlatformTransactionManager transactionManager,
+            ApplicationEventPublisher eventPublisher) {
         this.accountLockPort = accountLockPort;
         this.transferLimitPort = transferLimitPort;
         this.transferAuthTokenVerificationPort = transferAuthTokenVerificationPort;
@@ -99,6 +104,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         this.clock = clock;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
         this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -346,8 +352,9 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             runLedgerPostingHooks(command, payee, transactionNumber, executedAt);
 
             transfer.complete(balances.withdrawalBalanceAfter(), executedAt);
-            // [자리] EVT-2: TransferCompleted 발행. BEFORE_COMMIT 리스너가 받도록 이 템플릿 안에서 한다.
-            return transferSavePort.save(transfer);
+            Transfer completed = transferSavePort.save(transfer);
+            publishIfImmediate(command, completed, executedAt);
+            return completed;
         });
     }
 
@@ -412,8 +419,10 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             TransferCommand command, Transfer created, String errorCode, String errorMessage, RuntimeException cause) {
         created.fail(errorCode, errorMessage);
         try {
-            // [자리] EVT-2: TransferFailed도 이 REQUIRES_NEW 안에서 발행한다. AFTER_COMMIT 리스너는 두지 않는다.
-            requiresNewTransactionTemplate.executeWithoutResult(status -> transferSavePort.save(created));
+            requiresNewTransactionTemplate.executeWithoutResult(status -> {
+                Transfer failed = transferSavePort.save(created);
+                publishIfImmediate(command, failed, LocalDateTime.now(clock));
+            });
         } catch (DataIntegrityViolationException recordingFailure) {
             // 이 ERROR 확정 INSERT 자체가 uk_transfer_source_execution_date에 걸렸다는 건, 동일
             // sourceId+executionDate로 실패한 경쟁 요청이 먼저 ERROR를 커밋했다는 뜻이다. 성공
@@ -438,6 +447,29 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 .errorCode(errorCode)
                 .errorMessage(errorMessage)
                 .build();
+    }
+
+    /**
+     * 즉시이체 결과가 확정된 트랜잭션 안에서 TransferSettled 를 발행한다(#436). 예약·자동이체는 발행하지
+     * 않는다 — 배치가 실행 기록(markSuccess/markFailed)을 저장하는 자기 트랜잭션에서 따로 발행해야 실행
+     * 기록과 이벤트가 함께 커밋된다. 즉시이체는 컨트롤러에 트랜잭션이 없어 여기서만 발행할 수 있다.
+     *
+     * <p>기표·ERROR 확정 트랜잭션(REQUIRES_NEW) 안에서 부르므로 BEFORE_COMMIT 리스너가 그 커밋에 붙는다.
+     * 재생 경로(findAlreadyProcessedResult)는 여기를 지나지 않아 같은 이체가 두 번 발행되지 않는다.
+     */
+    private void publishIfImmediate(TransferCommand command, Transfer transfer, LocalDateTime occurredAt) {
+        if (command.transferType() != TransferType.IMMEDIATE) {
+            return;
+        }
+        eventPublisher.publishEvent(TransferSettled.builder()
+                .customerId(command.customerId())
+                .refId(transfer.getTransferId())
+                .status(transfer.getStatus())
+                .errorCode(transfer.getErrorCode())
+                .occurredAt(occurredAt)
+                .amount(transfer.getAmount())
+                .counterpartyName(MaskingUtil.maskName(transfer.getPayeeName()))
+                .build());
     }
 
     private TransferSourceType resolveSourceType(TransferType transferType) {
