@@ -175,7 +175,7 @@ public class TransferController {
                 content = @Content(mediaType = "text/csv")),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "`TRF0001` 등록되지 않은/타인 소유 출금계좌 · `CMN0003`/`CMN0004` 조회기간 오류",
+                description = "`TRF0001` 등록되지 않은/타인 소유 출금계좌 · `CMN0001` 지원하지 않는 status 값 · `CMN0003`/`CMN0004` 조회기간 오류",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<byte[]> exportCsv(
