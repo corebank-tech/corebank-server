@@ -10,8 +10,11 @@ import static org.mockito.Mockito.when;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.audit.AuditLogJpaRepository;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.common.event.DomainEvent;
+import com.shinhan.corebank.common.event.DomainEventSink;
 import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledTransferJpaEntity;
 import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledTransferJpaRepository;
+import com.shinhan.corebank.scheduledtransfer.api.ScheduledTransferSettled;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferBatchUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLookupResult;
@@ -28,6 +31,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -66,12 +70,65 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @MockitoBean
     TransferLookupPort transferLookupPort;
 
+    // completeProcessing() 이 발행하는 이벤트를 잡는다 — BEFORE_COMMIT 리스너의 sink 를 mock 으로 바꿔 끼운다(#436).
+    @MockitoBean
+    DomainEventSink domainEventSink;
+
     private static final AtomicLong CUSTOMER_SEQ = new AtomicLong();
     private static final AtomicLong ACCOUNT_SEQ = new AtomicLong();
     private static final LocalDate SCHEDULED_DATE = LocalDate.of(2026, 3, 15);
 
     private Long customerId;
     private Long scheduledTransferId;
+
+    @Test
+    @DisplayName("completeProcessing() 이 실행 기록을 확정하면 같은 트랜잭션에서 ScheduledTransferSettled 가 한 번 발행된다 (#436)")
+    void completeProcessing_success_publishesScheduledTransferSettledOnce() {
+        when(transferExecutionUseCase.execute(any()))
+                .thenReturn(TransferResult.builder()
+                        .status(ProcessResultStatus.SUCCESS)
+                        .transactionNumber("20260315BT0000000007")
+                        .transferredAt(LocalDateTime.now())
+                        .build());
+        ScheduledTransfer target = reloadAsDomain();
+        itemProcessor.claim(target.getScheduledTransferId());
+
+        itemProcessor.completeProcessing(target, SCHEDULED_DATE);
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(ScheduledTransferSettled.class, event -> {
+            assertThat(event.customerId()).isEqualTo(customerId);
+            assertThat(event.refId()).isEqualTo(scheduledTransferId);
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(event.errorCode()).isNull();
+            assertThat(event.amount()).isEqualTo(10_000L);
+            assertThat(event.counterpartyName()).isEqualTo("홍*동");
+        });
+    }
+
+    @Test
+    @DisplayName("이체가 ERROR 로 확정되면 ERROR 상태와 오류코드를 담은 ScheduledTransferSettled 가 발행된다 (#436)")
+    void completeProcessing_error_publishesErrorSettled() {
+        when(transferExecutionUseCase.execute(any()))
+                .thenReturn(TransferResult.builder()
+                        .status(ProcessResultStatus.ERROR)
+                        .transactionNumber("20260315BT0000000008")
+                        .errorCode("TRF0004")
+                        .errorMessage("잔액이 부족합니다.")
+                        .build());
+        ScheduledTransfer target = reloadAsDomain();
+        itemProcessor.claim(target.getScheduledTransferId());
+
+        itemProcessor.completeProcessing(target, SCHEDULED_DATE);
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(ScheduledTransferSettled.class, event -> {
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(event.errorCode()).isEqualTo("TRF0004");
+        });
+    }
 
     private TransactionTemplate transactionTemplate() {
         return new TransactionTemplate(transactionManager);

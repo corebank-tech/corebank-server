@@ -1,5 +1,6 @@
 package com.shinhan.corebank.autotransfer.application.service;
 
+import com.shinhan.corebank.autotransfer.api.AutoTransferExecutionSettled;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionPersistencePort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
 import com.shinhan.corebank.autotransfer.application.port.out.StuckExecution;
@@ -10,6 +11,7 @@ import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
@@ -23,6 +25,7 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +46,7 @@ public class AutoTransferBatchItemProcessor {
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final AuditLogService auditLogService;
     private final TransferLookupPort transferLookupPort;
+    private final ApplicationEventPublisher eventPublisher;
 
     // DB에 지금부터 처리 시작 남
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -94,6 +98,18 @@ public class AutoTransferBatchItemProcessor {
                     result.errorMessage());
         }
         autoTransferExecutionPersistencePort.save(processingExecution, autoTransfer.getAutoTransferId());
+
+        // 회차 기록이 확정된 이 REQUIRES_NEW 트랜잭션 안에서 발행한다(#436). refId 는 등록 ID 가 아니라 회차 ID 다.
+        // 이체 엔진은 AUTO 를 발행하지 않는다 — 여기서만 한 번 나간다.
+        eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
+                .customerId(autoTransfer.getCustomerId())
+                .refId(processingExecution.getExecutionId())
+                .status(result.status())
+                .errorCode(result.errorCode())
+                .occurredAt(LocalDateTime.now())
+                .amount(autoTransfer.getAmount())
+                .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
+                .build());
 
         autoTransfer.advanceNextExecutionDate();
         if (autoTransfer.getNextExecutionDate().isAfter(autoTransfer.getEndDate())) {

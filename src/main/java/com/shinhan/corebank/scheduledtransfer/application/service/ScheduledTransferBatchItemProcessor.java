@@ -3,6 +3,8 @@ package com.shinhan.corebank.scheduledtransfer.application.service;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.common.util.MaskingUtil;
+import com.shinhan.corebank.scheduledtransfer.api.ScheduledTransferSettled;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferPersistencePort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLookupResult;
@@ -20,6 +22,7 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +41,7 @@ public class ScheduledTransferBatchItemProcessor {
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final AuditLogService auditLogService;
     private final TransferLookupPort transferLookupPort;
+    private final ApplicationEventPublisher eventPublisher;
 
     // WAITING -> PROCESSING 원자적 선점 (REQ-SCD-013 멱등성 방어)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -92,6 +96,18 @@ public class ScheduledTransferBatchItemProcessor {
         }
 
         recordAudit(scheduledTransfer, date, result.status() == ProcessResultStatus.SUCCESS, result.errorCode());
+
+        // 실행 기록이 확정된 이 REQUIRES_NEW 트랜잭션 안에서 발행해야 기록과 이벤트가 함께 커밋된다(#436).
+        // 이체 엔진은 SCHEDULED 를 발행하지 않는다 — 여기서만 한 번 나간다.
+        eventPublisher.publishEvent(ScheduledTransferSettled.builder()
+                .customerId(scheduledTransfer.getCustomerId())
+                .refId(scheduledTransfer.getScheduledTransferId())
+                .status(result.status())
+                .errorCode(result.errorCode())
+                .occurredAt(executedAt)
+                .amount(scheduledTransfer.getAmount())
+                .counterpartyName(MaskingUtil.maskName(scheduledTransfer.getPayeeName()))
+                .build());
     }
 
     // transfer 테이블에 실제 거래가 있었는지만 확인해서 확정 (PROCESSING에 멈춘 건 재확정)
