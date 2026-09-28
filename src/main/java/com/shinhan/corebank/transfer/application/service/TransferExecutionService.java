@@ -95,7 +95,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         this.transferPreChecks = transferPreChecks.stream()
                 .sorted(Comparator.comparingInt(TransferPreCheck::order))
                 .toList();
-        this.ledgerPostingHooks = ledgerPostingHooks;
+        this.ledgerPostingHooks = List.copyOf(ledgerPostingHooks);
         this.clock = clock;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
         this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
