@@ -444,7 +444,7 @@
 | `error_code` | `VARCHAR(10)` |  | O |  | 실패 시 오류코드 |
 | `error_message` | `VARCHAR(200)` |  | O |  | 실패 시 사유 문구 |
 | `transferred_at` | `DATETIME(6)` |  | X |  | 이체 처리 일시 |
-| `trade_date` | `DATE` |  | O |  | **거래일** — 이 이체가 귀속되는 영업일. 거래 시점의 `BusinessDateProvider.today()` 값이라 휴일·마감 후 거래는 자동으로 다음 영업일이 된다([glossary](phase2/glossary.md) 7번). P4가 10/16부터 대입하고, 그 전 행은 NULL이다 |
+| `trade_date` | `DATE` |  | O |  | **거래일** — 이 이체가 귀속되는 영업일. 거래 시점의 `BusinessDateProvider.today()` 값이라 휴일·마감 후 거래는 자동으로 다음 영업일이 된다([glossary](phase2/glossary.md) 7번). **자동·예약이체는 휴일에도 지정일에 실행되므로(REQ-AUTO-001), 휴일에 실행된 회차의 거래일도 다음 영업일이다** — 실행일(`execution_date`, 달력 날짜)과 거래일이 다를 수 있다. P4가 10/16부터 대입하고, 그 전 행은 NULL이다 |
 | `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
 
 **인덱스**
