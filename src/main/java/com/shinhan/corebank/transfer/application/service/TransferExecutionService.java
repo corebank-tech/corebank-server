@@ -3,6 +3,8 @@ package com.shinhan.corebank.transfer.application.service;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.transfer.api.TransferPreCheck;
+import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
@@ -26,6 +28,8 @@ import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -59,6 +63,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private final TransferSavePort transferSavePort;
     private final TransferLookupPort transferLookupPort;
     private final LedgerSavePort ledgerSavePort;
+    private final List<TransferPreCheck> transferPreChecks;
     private final Clock clock;
     private final TransactionTemplate requiresNewTransactionTemplate;
 
@@ -71,6 +76,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             TransferSavePort transferSavePort,
             TransferLookupPort transferLookupPort,
             LedgerSavePort ledgerSavePort,
+            List<TransferPreCheck> transferPreChecks,
             Clock clock,
             PlatformTransactionManager transactionManager) {
         this.accountLockPort = accountLockPort;
@@ -81,6 +87,10 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         this.transferSavePort = transferSavePort;
         this.transferLookupPort = transferLookupPort;
         this.ledgerSavePort = ledgerSavePort;
+        // 빈 등록 순서가 아니라 order()로 실행 순서를 고정한다.
+        this.transferPreChecks = transferPreChecks.stream()
+                .sorted(Comparator.comparingInt(TransferPreCheck::order))
+                .toList();
         this.clock = clock;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
         this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -110,6 +120,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             created = newTransfer(command, payee, transactionNumber, requestedAt);
 
             preCheckWithoutLock(command, payee);
+            runTransferPreChecks(command);
             consumeOtpAuthToken(command);
 
             Transfer completed = postLedger(command, payee, created, transactionNumber);
@@ -244,6 +255,15 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 });
         if (payee.status() != LockedAccountStatus.ACTIVE) {
             throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
+        }
+    }
+
+    // [훅 A] PH-99 사전검증. OTP·한도를 소모하기 전, ERROR 행을 남길 수 있는 created 확정 뒤 자리다.
+    private void runTransferPreChecks(TransferCommand command) {
+        TransferPreCheckContext context =
+                new TransferPreCheckContext(command.customerId(), command.withdrawalAccountId(), command.amount());
+        for (TransferPreCheck preCheck : transferPreChecks) {
+            preCheck.check(context);
         }
     }
 
