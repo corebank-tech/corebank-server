@@ -3,6 +3,8 @@ package com.shinhan.corebank.transfer.application.service;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.transfer.api.LedgerPostingContext;
+import com.shinhan.corebank.transfer.api.LedgerPostingHook;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
 import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
@@ -64,6 +66,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private final TransferLookupPort transferLookupPort;
     private final LedgerSavePort ledgerSavePort;
     private final List<TransferPreCheck> transferPreChecks;
+    private final List<LedgerPostingHook> ledgerPostingHooks;
     private final Clock clock;
     private final TransactionTemplate requiresNewTransactionTemplate;
 
@@ -77,6 +80,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             TransferLookupPort transferLookupPort,
             LedgerSavePort ledgerSavePort,
             List<TransferPreCheck> transferPreChecks,
+            List<LedgerPostingHook> ledgerPostingHooks,
             Clock clock,
             PlatformTransactionManager transactionManager) {
         this.accountLockPort = accountLockPort;
@@ -91,6 +95,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         this.transferPreChecks = transferPreChecks.stream()
                 .sorted(Comparator.comparingInt(TransferPreCheck::order))
                 .toList();
+        this.ledgerPostingHooks = ledgerPostingHooks;
         this.clock = clock;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
         this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -336,10 +341,27 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     command.channel(),
                     executedAt);
             ledgerSavePort.save(pair);
+            runLedgerPostingHooks(command, payee, transactionNumber, executedAt);
 
             transfer.complete(balances.withdrawalBalanceAfter(), executedAt);
             return transferSavePort.save(transfer);
         });
+    }
+
+    // [훅 B] PH-99 후속 기표. 기표 트랜잭션 안이라 훅 예외는 원장·잔액·한도 적립까지 롤백하고 이체를 실패시킨다.
+    private void runLedgerPostingHooks(
+            TransferCommand command, ResolvedPayee payee, String transactionNumber, LocalDateTime executedAt) {
+        // tradeDate는 PH-41에서 BusinessDateProvider로 바꾼다. 그 전까지는 기표 시각의 달력일이다.
+        LedgerPostingContext context = new LedgerPostingContext(
+                transactionNumber,
+                resolveTransactionType(command.transferType()),
+                command.amount(),
+                command.withdrawalAccountId(),
+                payee.accountId(),
+                executedAt.toLocalDate());
+        for (LedgerPostingHook hook : ledgerPostingHooks) {
+            hook.afterLedger(context);
+        }
     }
 
     // 채번 전에 터졌으면(created == null) 남길 행 자체가 없다.

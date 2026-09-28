@@ -1,14 +1,18 @@
 package com.shinhan.corebank.transfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
+import com.shinhan.corebank.transfer.api.LedgerPostingContext;
+import com.shinhan.corebank.transfer.api.LedgerPostingHook;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
 import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
@@ -26,6 +30,7 @@ import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -36,6 +41,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -90,6 +96,8 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
 
     @BeforeEach
     void seed() {
+        // 다른 테스트 클래스가 남긴 고객 1의 한도 사용액 행이 롤백 검증을 오염시키지 않게 먼저 비운다.
+        cleanUpCommittedData();
         new TransactionTemplate(transactionManager)
                 .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
     }
@@ -106,8 +114,8 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
     @DisplayName("[훅 A] PreCheck가 거부하면 ERROR로 확정하고 OTP·한도·잔액을 건드리지 않으며 뒤 순번은 호출하지 않는다")
     void preCheck_rejects_failsTransferBeforeOtpAndLimit() {
         List<Integer> called = new ArrayList<>();
-        TransferExecutionService service =
-                serviceWith(List.of(recordingPreCheck(1, called, true), recordingPreCheck(2, called, false)));
+        TransferExecutionService service = serviceWith(
+                List.of(recordingPreCheck(1, called, true), recordingPreCheck(2, called, false)), List.of());
 
         TransferResult result = service.execute(immediateCommand(30000L));
 
@@ -142,7 +150,8 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
                 received.add(context);
             }
         };
-        TransferExecutionService service = serviceWith(List.of(capturing, recordingPreCheck(10, called, false)));
+        TransferExecutionService service =
+                serviceWith(List.of(capturing, recordingPreCheck(10, called, false)), List.of());
 
         TransferResult result = service.execute(immediateCommand(30000L));
 
@@ -151,7 +160,68 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
         assertThat(received).containsExactly(new TransferPreCheckContext(1L, 101L, 30000L));
     }
 
-    private TransferExecutionService serviceWith(List<TransferPreCheck> preChecks) {
+    @Test
+    @DisplayName("[훅 B] 훅이 BusinessException을 던지면 잔액·원장·한도 적립이 롤백되고 이체는 ERROR로 확정된다")
+    void ledgerPostingHook_businessException_rollsBackLedgerAndFails() {
+        // 오류코드 값은 무관하다. GL 기표 실패를 대신하는 대역이다.
+        LedgerPostingHook failing = context -> {
+            throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
+        };
+        TransferExecutionService service = serviceWith(List.of(), List.of(failing));
+
+        TransferResult result = service.execute(immediateCommand(30000L));
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(TransferErrorCode.INSUFFICIENT_BALANCE.getCode());
+        assertRolledBack();
+        assertThat(transferStatuses()).containsExactly("ERROR");
+    }
+
+    @Test
+    @DisplayName("[훅 B] 훅이 예상 밖 예외를 던지면 삼키지 않고 호출자에 전파하며 기표를 롤백한다")
+    void ledgerPostingHook_unexpectedException_propagatesAndRollsBack() {
+        IllegalStateException boom = new IllegalStateException("gl down");
+        LedgerPostingHook failing = context -> {
+            throw boom;
+        };
+        TransferExecutionService service = serviceWith(List.of(), List.of(failing));
+
+        assertThatThrownBy(() -> service.execute(immediateCommand(30000L))).isSameAs(boom);
+
+        assertRolledBack();
+        String errorCode = jdbcTemplate.queryForObject(
+                "SELECT error_code FROM transfer WHERE withdrawal_account_id = 101 AND status = 'ERROR'", String.class);
+        assertThat(errorCode).isEqualTo(CommonErrorCode.INTERNAL_ERROR.getCode());
+    }
+
+    @Test
+    @DisplayName("[훅 B] 훅은 활성 트랜잭션 안에서 거래번호·유형·금액·계좌·거래일을 받는다")
+    void ledgerPostingHook_receivesContext_insideTransaction() {
+        List<LedgerPostingContext> received = new ArrayList<>();
+        List<Boolean> transactionActive = new ArrayList<>();
+        LedgerPostingHook capturing = context -> {
+            received.add(context);
+            transactionActive.add(TransactionSynchronizationManager.isActualTransactionActive());
+        };
+        TransferExecutionService service = serviceWith(List.of(), List.of(capturing));
+        LocalDate before = LocalDate.now(clock);
+
+        TransferResult result = service.execute(immediateCommand(30000L));
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(transactionActive).containsExactly(true);
+        assertThat(received).hasSize(1);
+        LedgerPostingContext context = received.get(0);
+        assertThat(context.transactionNumber()).isEqualTo(result.transactionNumber());
+        assertThat(context.txType()).isEqualTo("IMMEDIATE_TRANSFER");
+        assertThat(context.amount()).isEqualTo(30000L);
+        assertThat(context.fromAccountId()).isEqualTo(101L);
+        assertThat(context.toAccountId()).isEqualTo(202L);
+        assertThat(context.tradeDate()).isBetween(before, LocalDate.now(clock));
+    }
+
+    private TransferExecutionService serviceWith(
+            List<TransferPreCheck> preChecks, List<LedgerPostingHook> ledgerPostingHooks) {
         return new TransferExecutionService(
                 accountLockPort,
                 transferLimitPort,
@@ -162,6 +232,7 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
                 transferLookupPort,
                 ledgerSavePort,
                 preChecks,
+                ledgerPostingHooks,
                 clock,
                 transactionManager);
     }
@@ -194,6 +265,23 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
                 .transferType(TransferType.IMMEDIATE)
                 .channel(TransferChannel.WB)
                 .build();
+    }
+
+    private void assertRolledBack() {
+        assertThat(balanceOf(101)).isEqualTo(100000L);
+        assertThat(balanceOf(202)).isEqualTo(100000L);
+        Integer ledgerRows = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ledger_entry WHERE account_id IN (101, 202)", Integer.class);
+        assertThat(ledgerRows).isZero();
+        Integer usageRows = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transfer_limit_daily_usage WHERE customer_id = 1", Integer.class);
+        assertThat(usageRows).isZero();
+    }
+
+    private List<String> transferStatuses() {
+        return jdbcTemplate.queryForList(
+                "SELECT status FROM transfer WHERE withdrawal_account_id = 101 AND deposit_account_id = 202",
+                String.class);
     }
 
     private long balanceOf(long accountId) {
