@@ -7,15 +7,21 @@ import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferExecuti
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryAggregate;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryQueryPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryRow;
+import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.util.PageableResolver;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,13 +63,26 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
             throw new BusinessException(CommonErrorCode.DATE_RANGE_EXCEEDED);
         }
 
-        Page<AutoTransferExecutionHistoryRow> rows = autoTransferExecutionHistoryQueryPort.search(
-                customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, pageable);
+        // 합성 행(관리자 문의)을 페이지 조회에도 섞어야 해서 DB 페이징에 맡기지 않고 조회기간
+        // 전체를 가져와 여기서 직접 정렬·페이징한다 — G-05 화면은 all=true를 보낼 방법이 없어
+        // pageable.isUnpaged()에서만 동작하던 기존 구현은 실제로는 한 번도 실행되지 않았다(#442 리뷰)
+        List<AutoTransferExecutionHistoryItem> realItems = autoTransferExecutionHistoryQueryPort
+                .search(customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, Pageable.unpaged())
+                .getContent()
+                .stream()
+                .map(this::toItem)
+                .toList();
         AutoTransferExecutionHistoryAggregate aggregate = autoTransferExecutionHistoryQueryPort.summarize(
                 customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate);
 
-        Page<AutoTransferExecutionHistoryItem> itemPage = rows.map(this::toItem);
-        return new AutoTransferExecutionHistoryResult(itemPage, toSummary(aggregate));
+        List<AutoTransferExecutionHistoryItem> missing =
+                findMissingExecutions(customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, today);
+        List<AutoTransferExecutionHistoryItem> merged = mergeSorted(realItems, missing);
+
+        Page<AutoTransferExecutionHistoryItem> itemPage = pageable.isUnpaged()
+                ? new PageImpl<>(merged, Pageable.unpaged(), merged.size())
+                : slice(merged, pageable);
+        return new AutoTransferExecutionHistoryResult(itemPage, toSummary(aggregate, missing));
     }
 
     // 어댑터가 준 Row(out) → Controller가 쓸 Item(in)으로 변환
@@ -81,9 +100,95 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
                 row.failureReason());
     }
 
+    // 실행 예정이었는데 이력 없음 감지 -> nextExecutionDate가 오늘보다 과거인 자동이체는 이력이 안남음.
+    // DB에서 status=NORMAL+정체 조건까지 걸러온 뒤(findNormalStuckBefore), PROCESSING 여부는
+    // 후보 전체를 한 번에 조회해서(findProcessingAutoTransferIds) 쿼리를 항상 2번으로 고정한다
+    // (후보 수만큼 늘어나던 N+1 문제, #442 리뷰 반영)
+    private List<AutoTransferExecutionHistoryItem> findMissingExecutions(
+            Long customerId, Long withdrawalAccountId, LocalDate fromDate, LocalDate toDate, LocalDate today) {
+        List<AutoTransfer> candidates =
+                autoTransferExecutionHistoryQueryPort
+                        .findNormalStuckBefore(customerId, withdrawalAccountId, today)
+                        .stream()
+                        .filter(autoTransfer ->
+                                !autoTransfer.getNextExecutionDate().isBefore(fromDate)
+                                        && !autoTransfer.getNextExecutionDate().isAfter(toDate))
+                        .toList();
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> processingAutoTransferIds = autoTransferExecutionHistoryQueryPort.findProcessingAutoTransferIds(
+                candidates.stream().map(AutoTransfer::getAutoTransferId).toList());
+        return candidates.stream()
+                // PROCESSING으로 실제 처리 중인 건 재확정 배치가 곧 정리하므로 "관리자 문의" 대상에서 뺌
+                .filter(autoTransfer -> !processingAutoTransferIds.contains(autoTransfer.getAutoTransferId()))
+                .map(this::toMissingItem)
+                .toList();
+    }
+
+    // 이미 정렬된 두 목록(진짜 이력·합성 행)을 executedAt 내림차순으로 병합한다(#442 리뷰 반영 —
+    // 전체를 다시 정렬하지 않고 missing만 정렬한 뒤 병합정렬 방식으로 합친다)
+    private List<AutoTransferExecutionHistoryItem> mergeSorted(
+            List<AutoTransferExecutionHistoryItem> realItems, List<AutoTransferExecutionHistoryItem> missing) {
+        if (missing.isEmpty()) {
+            return realItems;
+        }
+        List<AutoTransferExecutionHistoryItem> sortedMissing = missing.stream()
+                .sorted(Comparator.comparing(AutoTransferExecutionHistoryItem::executedAt)
+                        .reversed())
+                .toList();
+        List<AutoTransferExecutionHistoryItem> merged = new ArrayList<>(realItems.size() + sortedMissing.size());
+        int i = 0;
+        int j = 0;
+        while (i < realItems.size() && j < sortedMissing.size()) {
+            if (!realItems.get(i).executedAt().isBefore(sortedMissing.get(j).executedAt())) {
+                merged.add(realItems.get(i++));
+            } else {
+                merged.add(sortedMissing.get(j++));
+            }
+        }
+        while (i < realItems.size()) {
+            merged.add(realItems.get(i++));
+        }
+        while (j < sortedMissing.size()) {
+            merged.add(sortedMissing.get(j++));
+        }
+        return merged;
+    }
+
+    // 병합된 전체 목록에서 고객이 요청한 페이지만 잘라낸다 — DB 페이징 대신 서비스가 직접 담당
+    private Page<AutoTransferExecutionHistoryItem> slice(
+            List<AutoTransferExecutionHistoryItem> merged, Pageable pageable) {
+        int from = Math.min((int) pageable.getOffset(), merged.size());
+        int to = Math.min(from + pageable.getPageSize(), merged.size());
+        return new PageImpl<>(merged.subList(from, to), pageable, merged.size());
+    }
+
+    private AutoTransferExecutionHistoryItem toMissingItem(AutoTransfer autoTransfer) {
+        return new AutoTransferExecutionHistoryItem(
+                null,
+                ProcessResultStatus.ERROR,
+                autoTransfer.getNextExecutionDate().atStartOfDay(),
+                autoTransfer.getWithdrawalAccountId(),
+                autoTransfer.getDepositAccountNumber(),
+                autoTransfer.getPayeeName(),
+                autoTransfer.getAmount(),
+                autoTransfer.getCycleMonths(),
+                autoTransfer.getMyPassbookMemo(),
+                "관리자에게 문의해주세요");
+    }
+
     // 어댑터가 준 Aggregate(out) → Controller가 쓸 Summary(in)으로 변환
-    private AutoTransferExecutionHistorySummary toSummary(AutoTransferExecutionHistoryAggregate aggregate) {
+    private AutoTransferExecutionHistorySummary toSummary(
+            AutoTransferExecutionHistoryAggregate aggregate, List<AutoTransferExecutionHistoryItem> missing) {
+        long missingCount = missing.size();
+        long missingAmount = missing.stream()
+                .mapToLong(AutoTransferExecutionHistoryItem::amount)
+                .sum();
         return new AutoTransferExecutionHistorySummary(
-                aggregate.successCount(), aggregate.successAmount(), aggregate.errorCount(), aggregate.errorAmount());
+                aggregate.successCount(),
+                aggregate.successAmount(),
+                aggregate.errorCount() + missingCount,
+                aggregate.errorAmount() + missingAmount);
     }
 }

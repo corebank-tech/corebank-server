@@ -92,8 +92,9 @@ ON DUPLICATE KEY UPDATE
 --   30: 정기적금
 --
 -- 주의:
---   account.balance는 조회용 캐시이며,
---   P4의 초기 ledger_entry 합계와 반드시 일치해야 한다.
+--   account.balance는 조회용 캐시이며, 초기 ledger_entry 합계와 반드시 일치해야
+--   한다. 아래 계좌 INSERT는 이 파일 뒤쪽의 "QA 데모 계좌 초기 잔액에 대응하는
+--   장부 기록" 섹션이 채워준다(#378 대사 배치 오탐 방지, PR #463 리뷰).
 -- ====================================================================
 
 SET @account_password_hash =
@@ -136,6 +137,10 @@ SET @basic_deposit_product_id = (
 -- 계좌번호 채번 기준 데이터
 --
 -- 이미 더 큰 번호까지 발급된 경우 last_sequence를 낮추지 않는다.
+-- 입출금계좌(10)는 088100000010~088100000014가 QA 데모 계좌(홍길동) 전용 예약
+-- 대역이라, 이 시드가 GREATEST로 값을 밀어 올릴 때도 그 상한인 14를 써야
+-- account_number_sequence 행이 유실돼 재생성되는 경우에도 실가입 채번이
+-- 10번대와 다시 충돌하지 않는다.
 -- ====================================================================
 
 INSERT INTO account_number_sequence (
@@ -152,7 +157,7 @@ INSERT INTO account_number_sequence (
         'DEMAND_DEPOSIT',
         NULL,
         '10',
-        9,
+        14,
         '2026-08-01 00:00:00.000000',
         '2026-08-05 00:00:00.000000'
     ),
@@ -215,7 +220,7 @@ INSERT INTO account (
 
     -- H1: 정상 주 출금계좌
     (
-        '088100000001',
+        '088100000010',
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
@@ -239,7 +244,7 @@ INSERT INTO account (
 
     -- H2: 본인 계좌 간 이체 및 역방향 동시이체
     (
-        '088100000002',
+        '088100000011',
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
@@ -263,7 +268,7 @@ INSERT INTO account (
 
     -- H3: 상태와 잔액은 정상이지만 출금계좌 미등록
     (
-        '088100000003',
+        '088100000012',
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
@@ -287,7 +292,7 @@ INSERT INTO account (
 
     -- H4: 잔액 부족 및 예약·자동이체 실행 실패
     (
-        '088100000004',
+        '088100000013',
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
@@ -311,7 +316,7 @@ INSERT INTO account (
 
     -- H5: 출금계좌로 등록돼 있지만 현재 거래정지
     (
-        '088100000005',
+        '088100000014',
         @hong_customer_id,
         NULL,
         'DEMAND_DEPOSIT',
@@ -489,7 +494,22 @@ INSERT INTO account (
 
 -- 같은 QA 시드 소유자의 계좌만 초기화하며, 계좌번호가 충돌한 타인 계좌는 변경하지 않는다.
 ON DUPLICATE KEY UPDATE
-    balance = IF(customer_id = VALUES(customer_id), VALUES(balance), balance),
+    -- balance만 별도 조건이 더 있다: QA_SEED_INITIAL 외의 실거래 장부(QA가 테스트로 이 계좌를
+    -- 실제로 썼다는 뜻)가 있으면 재배포돼도 balance를 초기값으로 되돌리지 않는다. ledger_entry는
+    -- APPEND-ONLY라 같이 되돌릴 수 없는데, balance만 리셋하면 장부 합계와 어긋나 대사 배치가
+    -- 매번 가짜 불일치로 잡는다(PR #463 CodeRabbit 리뷰). 시드 이후 아무 거래도 없었던
+    -- 계좌만 기존처럼 초기화 대상이다.
+    balance = IF(
+        customer_id = VALUES(customer_id)
+            AND NOT EXISTS (
+                SELECT 1 FROM ledger_entry le
+                JOIN account a ON a.account_id = le.account_id
+                WHERE a.account_number = VALUES(account_number)
+                  AND le.transaction_type <> 'QA_SEED_INITIAL'
+            ),
+        VALUES(balance),
+        balance
+    ),
     status = IF(customer_id = VALUES(customer_id), VALUES(status), status),
     password_hash = IF(customer_id = VALUES(customer_id), VALUES(password_hash), password_hash),
     password_failure_count = IF(
@@ -518,3 +538,194 @@ ON DUPLICATE KEY UPDATE
     ),
     version = IF(customer_id = VALUES(customer_id), VALUES(version), version),
     updated_at = IF(customer_id = VALUES(customer_id), VALUES(updated_at), updated_at);
+
+
+-- ====================================================================
+-- QA 데모 계좌 초기 잔액에 대응하는 장부 기록
+--
+-- 위 account INSERT는 balance 값을 SQL로 직접 채워 넣기만 하고, "이 잔액이 어디서
+-- 왔는지" 설명하는 ledger_entry는 하나도 안 남겼다. 대사 배치(#378)는 계좌별 장부
+-- 합계와 balance가 같은지 매일 확인하는데, 장부가 비어 있으면 합계가 항상 0이라
+-- 이 계좌들이 거래를 한 건이라도 하는 순간부터 영원히 불일치로 잡힌다(원인 규명
+-- 안 되는 가짜 경보, PR #463 리뷰). 여기서 각 계좌의 시작 잔액만큼 "초기 입금"
+-- 장부를 하나씩 남겨 장부 합계와 balance를 맞춘다.
+--
+-- 이 파일은 서버가 뜰 때마다 다시 실행되므로(Flyway 마이그레이션이 아니다),
+-- transaction_number로 이미 넣었는지 확인해 재실행 시 중복 삽입을 막는다.
+-- 계좌번호가 충돌해 다른 사람 소유가 된 경우(위 account UPSERT와 동일 사유)도
+-- 함께 걸러, 남의 계좌에 장부를 잘못 붙이지 않는다.
+-- 잔액이 0원인 계좌(K3 해지 계좌, K4 정기적금 초입 전)는 장부도 비어 있는 게
+-- 맞으므로 여기서 건너뛴다.
+-- ====================================================================
+
+INSERT INTO ledger_entry_id_sequence (sequence_id)
+SELECT NULL FROM dual WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000010' AND customer_id = @hong_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260701BT0100000010');
+INSERT INTO ledger_entry (
+    ledger_entry_id, occurred_at, account_id, transfer_id, transaction_number,
+    direction, amount, balance_after, transaction_type, transaction_content, channel, reversed, reversal_id
+)
+SELECT LAST_INSERT_ID(), '2026-07-01 09:00:00.000000',
+    (SELECT account_id FROM account WHERE account_number = '088100000010' AND customer_id = @hong_customer_id),
+    NULL, '20260701BT0100000010', 'DEPOSIT', 100000, 100000, 'QA_SEED_INITIAL', 'QA초기잔액', 'BT', FALSE, NULL
+WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000010' AND customer_id = @hong_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260701BT0100000010');
+
+INSERT INTO ledger_entry_id_sequence (sequence_id)
+SELECT NULL FROM dual WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000011' AND customer_id = @hong_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260702BT0100000011');
+INSERT INTO ledger_entry (
+    ledger_entry_id, occurred_at, account_id, transfer_id, transaction_number,
+    direction, amount, balance_after, transaction_type, transaction_content, channel, reversed, reversal_id
+)
+SELECT LAST_INSERT_ID(), '2026-07-02 09:00:00.000000',
+    (SELECT account_id FROM account WHERE account_number = '088100000011' AND customer_id = @hong_customer_id),
+    NULL, '20260702BT0100000011', 'DEPOSIT', 100000, 100000, 'QA_SEED_INITIAL', 'QA초기잔액', 'BT', FALSE, NULL
+WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000011' AND customer_id = @hong_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260702BT0100000011');
+
+INSERT INTO ledger_entry_id_sequence (sequence_id)
+SELECT NULL FROM dual WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000012' AND customer_id = @hong_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260703BT0100000012');
+INSERT INTO ledger_entry (
+    ledger_entry_id, occurred_at, account_id, transfer_id, transaction_number,
+    direction, amount, balance_after, transaction_type, transaction_content, channel, reversed, reversal_id
+)
+SELECT LAST_INSERT_ID(), '2026-07-03 09:00:00.000000',
+    (SELECT account_id FROM account WHERE account_number = '088100000012' AND customer_id = @hong_customer_id),
+    NULL, '20260703BT0100000012', 'DEPOSIT', 100000, 100000, 'QA_SEED_INITIAL', 'QA초기잔액', 'BT', FALSE, NULL
+WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000012' AND customer_id = @hong_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260703BT0100000012');
+
+INSERT INTO ledger_entry_id_sequence (sequence_id)
+SELECT NULL FROM dual WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000013' AND customer_id = @hong_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260704BT0100000013');
+INSERT INTO ledger_entry (
+    ledger_entry_id, occurred_at, account_id, transfer_id, transaction_number,
+    direction, amount, balance_after, transaction_type, transaction_content, channel, reversed, reversal_id
+)
+SELECT LAST_INSERT_ID(), '2026-07-04 09:00:00.000000',
+    (SELECT account_id FROM account WHERE account_number = '088100000013' AND customer_id = @hong_customer_id),
+    NULL, '20260704BT0100000013', 'DEPOSIT', 10000, 10000, 'QA_SEED_INITIAL', 'QA초기잔액', 'BT', FALSE, NULL
+WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000013' AND customer_id = @hong_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260704BT0100000013');
+
+INSERT INTO ledger_entry_id_sequence (sequence_id)
+SELECT NULL FROM dual WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000014' AND customer_id = @hong_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260705BT0100000014');
+INSERT INTO ledger_entry (
+    ledger_entry_id, occurred_at, account_id, transfer_id, transaction_number,
+    direction, amount, balance_after, transaction_type, transaction_content, channel, reversed, reversal_id
+)
+SELECT LAST_INSERT_ID(), '2026-07-05 09:00:00.000000',
+    (SELECT account_id FROM account WHERE account_number = '088100000014' AND customer_id = @hong_customer_id),
+    NULL, '20260705BT0100000014', 'DEPOSIT', 100000, 100000, 'QA_SEED_INITIAL', 'QA초기잔액', 'BT', FALSE, NULL
+WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000014' AND customer_id = @hong_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260705BT0100000014');
+
+INSERT INTO ledger_entry_id_sequence (sequence_id)
+SELECT NULL FROM dual WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000006' AND customer_id = @kim_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260705BT0100000006');
+INSERT INTO ledger_entry (
+    ledger_entry_id, occurred_at, account_id, transfer_id, transaction_number,
+    direction, amount, balance_after, transaction_type, transaction_content, channel, reversed, reversal_id
+)
+SELECT LAST_INSERT_ID(), '2026-07-05 11:30:00.000000',
+    (SELECT account_id FROM account WHERE account_number = '088100000006' AND customer_id = @kim_customer_id),
+    NULL, '20260705BT0100000006', 'DEPOSIT', 100000, 100000, 'QA_SEED_INITIAL', 'QA초기잔액', 'BT', FALSE, NULL
+WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000006' AND customer_id = @kim_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260705BT0100000006');
+
+INSERT INTO ledger_entry_id_sequence (sequence_id)
+SELECT NULL FROM dual WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000007' AND customer_id = @kim_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260706BT0100000007');
+INSERT INTO ledger_entry (
+    ledger_entry_id, occurred_at, account_id, transfer_id, transaction_number,
+    direction, amount, balance_after, transaction_type, transaction_content, channel, reversed, reversal_id
+)
+SELECT LAST_INSERT_ID(), '2026-07-06 09:00:00.000000',
+    (SELECT account_id FROM account WHERE account_number = '088100000007' AND customer_id = @kim_customer_id),
+    NULL, '20260706BT0100000007', 'DEPOSIT', 50000, 50000, 'QA_SEED_INITIAL', 'QA초기잔액', 'BT', FALSE, NULL
+WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000007' AND customer_id = @kim_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260706BT0100000007');
+
+INSERT INTO ledger_entry_id_sequence (sequence_id)
+SELECT NULL FROM dual WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088200000001' AND customer_id = @kim_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260801BT0200000001');
+INSERT INTO ledger_entry (
+    ledger_entry_id, occurred_at, account_id, transfer_id, transaction_number,
+    direction, amount, balance_after, transaction_type, transaction_content, channel, reversed, reversal_id
+)
+SELECT LAST_INSERT_ID(), '2026-08-01 10:00:00.000000',
+    (SELECT account_id FROM account WHERE account_number = '088200000001' AND customer_id = @kim_customer_id),
+    NULL, '20260801BT0200000001', 'DEPOSIT', 100000, 100000, 'QA_SEED_INITIAL', 'QA초기잔액', 'BT', FALSE, NULL
+WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088200000001' AND customer_id = @kim_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260801BT0200000001');
+
+INSERT INTO ledger_entry_id_sequence (sequence_id)
+SELECT NULL FROM dual WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000009' AND customer_id = @lee_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260710BT0100000009');
+INSERT INTO ledger_entry (
+    ledger_entry_id, occurred_at, account_id, transfer_id, transaction_number,
+    direction, amount, balance_after, transaction_type, transaction_content, channel, reversed, reversal_id
+)
+SELECT LAST_INSERT_ID(), '2026-07-10 15:00:00.000000',
+    (SELECT account_id FROM account WHERE account_number = '088100000009' AND customer_id = @lee_customer_id),
+    NULL, '20260710BT0100000009', 'DEPOSIT', 100000, 100000, 'QA_SEED_INITIAL', 'QA초기잔액', 'BT', FALSE, NULL
+WHERE
+    EXISTS (SELECT 1 FROM account WHERE account_number = '088100000009' AND customer_id = @lee_customer_id)
+    AND NOT EXISTS (SELECT 1 FROM ledger_entry WHERE transaction_number = '20260710BT0100000009');
+
+-- ====================================================================
+-- 이체한도 (P1 소유)
+--
+-- 가입 흐름(REQ-TRSF-029)이 한도 행을 만들지만, 이 시드는 customer 를 SQL 로
+-- 직접 넣으므로 그 경로를 타지 않는다. V202608212056 백필도 Flyway 단계라
+-- ApplicationRunner 인 DemoDataLoader 보다 먼저 끝나 이 세 고객을 못 잡는다.
+-- 그래서 여기서 직접 채운다 - 없으면 이체 경로가 LMT9001 로 거부된다.
+--
+-- 금액은 POL-013(1회 100만) · POL-014(1일 500만)이며 자바쪽 기본값
+-- TransferLimit.DEFAULT_ONE_TIME_LIMIT · DEFAULT_DAILY_LIMIT 와 같은 값이어야 한다.
+--
+-- created_at 은 백필과 같은 기준으로 가입 시각을 쓴다 - 이 컬럼의 뜻이
+-- "한도 최초 부여 일시"(schema_reference.md)라 부여됐어야 할 시점이 곧 가입 시점이다.
+-- ====================================================================
+
+INSERT INTO transfer_limit (
+    customer_id,
+    one_time_limit,
+    daily_limit,
+    created_at,
+    updated_at
+)
+SELECT c.customer_id,
+       1000000,
+       5000000,
+       c.joined_at,
+       c.joined_at
+  FROM customer c
+ WHERE c.customer_id IN (@hong_customer_id, @kim_customer_id, @lee_customer_id)
+
+-- 시드 고객의 한도는 매 기동마다 기준값으로 되돌린다. 계좌 잔액과 같은 취급이다.
+-- qa-seed 는 continue-on-error=false 라 ON DUPLICATE 를 빼면 재기동이 중복키로 실패한다.
+ON DUPLICATE KEY UPDATE
+    one_time_limit = VALUES(one_time_limit),
+    daily_limit    = VALUES(daily_limit),
+    updated_at     = VALUES(updated_at);

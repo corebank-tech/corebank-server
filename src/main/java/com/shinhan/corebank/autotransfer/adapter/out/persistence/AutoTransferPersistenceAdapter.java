@@ -18,8 +18,10 @@ import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -184,6 +186,39 @@ public class AutoTransferPersistenceAdapter
             }
         }
         return new AutoTransferExecutionHistoryAggregate(successCount, successAmount, errorCount, errorAmount);
+    }
+
+    @Override
+    // status=NORMAL + nextExecutionDate < before 조건만으로 걸러온다. Page가 아니라 List라
+    // count 쿼리가 안 붙는다(#442 리뷰 반영)
+    public List<AutoTransfer> findNormalStuckBefore(Long customerId, Long withdrawalAccountId, LocalDate before) {
+        return queryFactory
+                .selectFrom(autoTransferJpaEntity)
+                .where(
+                        autoTransferJpaEntity.customerId.eq(customerId),
+                        autoTransferJpaEntity.withdrawalAccountId.eq(withdrawalAccountId),
+                        autoTransferJpaEntity.status.eq(AutoTransferStatus.NORMAL),
+                        autoTransferJpaEntity.nextExecutionDate.before(before))
+                .fetch()
+                .stream()
+                .map(AutoTransferMapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    // 후보 ID 목록을 IN절 하나로 묶어서 PROCESSING인 것만 골라온다 — 후보마다 따로 조회하면
+    // N+1이 되므로 한 번에 조회한다(#442 리뷰 반영)
+    public Set<Long> findProcessingAutoTransferIds(List<Long> autoTransferIds) {
+        if (autoTransferIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(queryFactory
+                .select(autoTransferExecutionJpaEntity.autoTransfer.autoTransferId)
+                .from(autoTransferExecutionJpaEntity)
+                .where(
+                        autoTransferExecutionJpaEntity.autoTransfer.autoTransferId.in(autoTransferIds),
+                        autoTransferExecutionJpaEntity.status.eq(ProcessResultStatus.PROCESSING))
+                .fetch());
     }
 
     // search()·summarize() 공통 조건: 소유자 확인 + 조회기간 + PROCESSING 제외

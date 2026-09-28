@@ -172,6 +172,15 @@ class TransferExecutionServiceConcurrencyTest extends IntegrationTestSupport {
             ON DUPLICATE KEY UPDATE customer_id = customer_id
             """);
 
+        // 가입 연계(REQ-TRSF-029)가 만들어 주는 한도 행을 여기서 대신 채운다.
+        // 없으면 이체 경로가 LMT9001 로 거부된다(#388).
+        jdbcTemplate.update(
+                """
+            INSERT INTO transfer_limit (customer_id, one_time_limit, daily_limit, created_at, updated_at)
+            VALUES (1, 1000000, 5000000, NOW(6), NOW(6))
+            ON DUPLICATE KEY UPDATE customer_id = customer_id
+            """);
+
         jdbcTemplate.update(
                 """
             INSERT INTO account (account_id, account_number, customer_id, product_id, account_type, balance, status, password_hash, withdrawal_registered, withdrawal_registered_at, opened_date, created_at, updated_at)

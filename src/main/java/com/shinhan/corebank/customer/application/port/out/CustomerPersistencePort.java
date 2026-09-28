@@ -1,6 +1,8 @@
 package com.shinhan.corebank.customer.application.port.out;
 
 import com.shinhan.corebank.customer.domain.model.Customer;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 // customer 도메인과 영속성 어댑터 사이의 저장소 계약
@@ -8,6 +10,12 @@ public interface CustomerPersistencePort {
 
     // 로그인 아이디로 고객 조회
     Optional<Customer> findByUserId(String userId);
+
+    // 비밀번호 재설정 재발급을 직렬화하기 위해 로그인 아이디로 고객을 잠금 조회한다.
+    Optional<Customer> findByUserIdForUpdate(String userId);
+
+    // 성명과 생년월일이 모두 일치하는 고객 목록 조회
+    List<Customer> findAllByUserNameAndBirthDate(String userName, LocalDate birthDate);
 
     // 고객 PK로 고객 조회
     Optional<Customer> findById(Long customerId);
@@ -31,6 +39,8 @@ public interface CustomerPersistencePort {
 
     // 고객의 휴대폰 번호와 이메일을 갱신하고 저장 결과를 반환한다.
     Customer updateContactInfo(Customer customer);
+
+    Customer updatePassword(Customer customer);
 
     // customerId가 없는 신규 고객만 저장
     Customer save(Customer customer);

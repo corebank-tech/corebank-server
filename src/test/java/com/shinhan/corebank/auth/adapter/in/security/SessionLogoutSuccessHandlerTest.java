@@ -2,6 +2,7 @@ package com.shinhan.corebank.auth.adapter.in.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.shinhan.corebank.SharedTestObjectMapper;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,7 +14,7 @@ import tools.jackson.databind.ObjectMapper;
 
 class SessionLogoutSuccessHandlerTest {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = SharedTestObjectMapper.INSTANCE;
     private final SessionAuthenticationEntryPoint entryPoint = new SessionAuthenticationEntryPoint(objectMapper);
     private final SessionLogoutSuccessHandler logoutSuccessHandler =
             new SessionLogoutSuccessHandler(objectMapper, entryPoint);

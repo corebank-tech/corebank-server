@@ -6,6 +6,8 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.domain.AccountPasswordAuthTokenPayload;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -69,6 +71,77 @@ class AccountPasswordAuthTokenRedisAdapterTest extends IntegrationTestSupport {
 
         assertThat(adapter.consumeIfMatches(token, payload)).isTrue();
         assertThat(adapter.consumeIfMatches(token, payload)).isFalse();
+    }
+
+    @Test
+    @DisplayName("동일 고객이면 계좌와 무관하게 토큰을 한 번만 소비한다")
+    void consumesTokenByCustomerOnce() {
+        token = "ACCOUNT_AUTH_" + UUID.randomUUID();
+        adapter.save(token, payload(1L, 101L), Duration.ofMinutes(5));
+
+        assertThat(adapter.consumeIfCustomerMatches(token, 1L)).isTrue();
+        assertThat(adapter.consumeIfCustomerMatches(token, 1L)).isFalse();
+    }
+
+    @Test
+    @DisplayName("고객이 다르면 토큰을 삭제하지 않는다")
+    void customerMismatchDoesNotConsumeToken() {
+        token = "ACCOUNT_AUTH_" + UUID.randomUUID();
+        adapter.save(token, payload(1L, 101L), Duration.ofMinutes(5));
+
+        assertThat(adapter.consumeIfCustomerMatches(token, 2L)).isFalse();
+        assertThat(redisTemplate.hasKey(KEY_PREFIX + token)).isTrue();
+        assertThat(adapter.consumeIfCustomerMatches(token, 1L)).isTrue();
+    }
+
+    @Test
+    @DisplayName("Long 범위의 고객 ID도 손실 없이 비교한다")
+    void consumesTokenForMaximumLongCustomerId() {
+        token = "ACCOUNT_AUTH_" + UUID.randomUUID();
+        adapter.save(token, payload(Long.MAX_VALUE, 101L), Duration.ofMinutes(5));
+
+        assertThat(adapter.consumeIfCustomerMatches(token, Long.MAX_VALUE)).isTrue();
+    }
+
+    @Test
+    @DisplayName("만료된 고객 기준 인증 토큰은 소비할 수 없다")
+    void rejectsExpiredCustomerToken() throws Exception {
+        token = "ACCOUNT_AUTH_" + UUID.randomUUID();
+        adapter.save(token, payload(1L, 101L), Duration.ofMillis(50));
+
+        TimeUnit.MILLISECONDS.sleep(100);
+
+        assertThat(adapter.consumeIfCustomerMatches(token, 1L)).isFalse();
+    }
+
+    @Test
+    @DisplayName("같은 토큰을 동시에 소비하면 하나의 요청만 성공한다")
+    void onlyOneConcurrentCustomerConsumptionSucceeds() throws Exception {
+        token = "ACCOUNT_AUTH_" + UUID.randomUUID();
+        adapter.save(token, payload(1L, 101L), Duration.ofMinutes(5));
+        int requests = 8;
+        CountDownLatch ready = new CountDownLatch(requests);
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (var executor = Executors.newFixedThreadPool(requests)) {
+            var futures = java.util.stream.IntStream.range(0, requests)
+                    .mapToObj(index -> executor.submit(() -> {
+                        ready.countDown();
+                        start.await();
+                        return adapter.consumeIfCustomerMatches(token, 1L);
+                    }))
+                    .toList();
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            long successCount = 0;
+            for (var future : futures) {
+                if (future.get(5, TimeUnit.SECONDS)) {
+                    successCount++;
+                }
+            }
+            assertThat(successCount).isOne();
+        }
     }
 
     private AccountPasswordAuthTokenPayload payload(Long customerId, Long accountId) {

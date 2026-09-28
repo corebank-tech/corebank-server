@@ -1,5 +1,6 @@
 package com.shinhan.corebank.limit.adapter.out.auth;
 
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.limit.application.port.out.AuthTokenVerificationPort;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerification;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
@@ -11,8 +12,7 @@ import org.springframework.stereotype.Component;
 /**
  * 인증 토큰 검증을 P6 의 공개 API 에 위임한다.
  *
- * <p>OTP 는 otp/api 의 OtpAuthTokenVerifier 가 이미 구현돼 있어 그대로 호출한다. 계좌비밀번호는
- * 1차 범위 밖이라 검증하지 않는다 - transfer·autotransfer·scheduledtransfer·account 도 같다.
+ * <p>이체한도는 고객 단위 자원이므로 계좌비밀번호 토큰의 customerId만 세션 고객과 대조한다.
  *
  * <p>transactionData 의 키는 이 어댑터가 정한다. FE 는 OTP 발급(POST /otp) 시 같은 키·값을
  * 보내야 하며, 다르면 OTP0102 로 거부된다.
@@ -21,12 +21,13 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class TransferLimitAuthTokenVerificationAdapter implements AuthTokenVerificationPort {
 
+    private final AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
     private final OtpAuthTokenVerifier otpAuthTokenVerifier;
 
     @Override
-    public void verifyAccountPassword(String authToken, Long customerId) {
-        // 1차 범위는 OTP 인증까지다. 이 메서드는 2차를 위해 자리만 잡아 둔 것이고, 그때 P6 의
-        // 계좌비밀번호 공개 API 에 위임하도록 이 안쪽만 채우면 된다. 포트·서비스·테스트는 그대로 둔다.
+    // 로그인 고객 소유의 계좌비밀번호 인증 토큰을 검증하고 즉시 소비한다.
+    public void verifyAndConsumeAccountPassword(String authToken, Long customerId) {
+        accountPasswordAuthTokenVerifier.verifyAndConsume(authToken, customerId);
     }
 
     @Override

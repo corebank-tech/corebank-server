@@ -1,6 +1,7 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.transfer.domain.LedgerDirection;
@@ -10,6 +11,7 @@ import jakarta.persistence.EntityManager;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -144,5 +146,68 @@ class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
         assertThat(found.getOccurredAt()).isNotEqualTo(nanoTime);
         assertThat(Duration.between(nanoTime, found.getOccurredAt()).abs())
                 .isLessThanOrEqualTo(Duration.of(1, ChronoUnit.MICROS));
+    }
+
+    @Test
+    @DisplayName("지정 기간에 원장 기표가 있었던 계좌 ID만 중복 없이 반환한다 (대사 배치 증분 대상 선별)")
+    void findsDistinctAccountIdsPostedBetween() {
+        // given
+        saveEntry(101L, LocalDateTime.of(2026, 8, 9, 9, 0, 0), LedgerDirection.WITHDRAWAL, 1000L);
+        saveEntry(202L, LocalDateTime.of(2026, 8, 9, 15, 0, 0), LedgerDirection.DEPOSIT, 1000L);
+        // 같은 계좌(101)에 하루 중 두 번째 기표 - 중복 제거 확인용
+        saveEntry(101L, LocalDateTime.of(2026, 8, 9, 18, 0, 0), LedgerDirection.WITHDRAWAL, 500L);
+        // 대상 기간(8/9) 밖의 기표 - 결과에 섞이면 안 됨
+        saveEntry(303L, LocalDateTime.of(2026, 8, 8, 23, 0, 0), LedgerDirection.WITHDRAWAL, 700L);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        List<Long> accountIds = ledgerEntryJpaRepository.findDistinctAccountIdsPostedBetween(
+                LocalDateTime.of(2026, 8, 9, 0, 0, 0), LocalDateTime.of(2026, 8, 10, 0, 0, 0));
+
+        // then
+        assertThat(accountIds).containsExactlyInAnyOrder(101L, 202L);
+    }
+
+    @Test
+    @DisplayName("계좌별로 입금은 더하고 출금은 뺀 원장 누적 합계를 반환한다 (대사 배치의 '원장상 잔액')")
+    void sumsSignedAmountByAccountIds() {
+        // given
+        // 101: 입금 3000 - 출금 1000 = 2000
+        saveEntry(101L, LocalDateTime.of(2026, 8, 9, 9, 0, 0), LedgerDirection.DEPOSIT, 3000L);
+        saveEntry(101L, LocalDateTime.of(2026, 8, 9, 10, 0, 0), LedgerDirection.WITHDRAWAL, 1000L);
+        // 202: 입금 5000
+        saveEntry(202L, LocalDateTime.of(2026, 8, 9, 11, 0, 0), LedgerDirection.DEPOSIT, 5000L);
+        // 조회 대상에서 뺄 계좌 - 결과에 섞이면 안 됨
+        saveEntry(303L, LocalDateTime.of(2026, 8, 9, 12, 0, 0), LedgerDirection.DEPOSIT, 9000L);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        List<LedgerEntryJpaRepository.AccountLedgerSumProjection> sums =
+                ledgerEntryJpaRepository.sumSignedAmountByAccountIds(List.of(101L, 202L));
+
+        // then
+        assertThat(sums)
+                .extracting(
+                        LedgerEntryJpaRepository.AccountLedgerSumProjection::getAccountId,
+                        LedgerEntryJpaRepository.AccountLedgerSumProjection::getSignedSum)
+                .containsExactlyInAnyOrder(tuple(101L, 2000L), tuple(202L, 5000L));
+    }
+
+    private void saveEntry(Long accountId, LocalDateTime occurredAt, LedgerDirection direction, long amount) {
+        Long ledgerEntryId = ledgerEntryIdGenerator.nextId();
+        ledgerEntryJpaRepository.save(LedgerEntryJpaEntity.builder()
+                .ledgerEntryId(ledgerEntryId)
+                .accountId(accountId)
+                .transactionNumber(String.format("20260809WB%010d", ledgerEntryId))
+                .direction(direction)
+                .amount(amount)
+                .balanceAfter(100000L)
+                .transactionType("IMMEDIATE_TRANSFER")
+                .channel(TransferChannel.WB)
+                .reversed(false)
+                .occurredAt(occurredAt)
+                .build());
     }
 }

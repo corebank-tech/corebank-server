@@ -33,6 +33,13 @@ springdoc:
       header-name: X-XSRF-TOKEN
 
 app:
+  security:
+    admin:
+      # #448 임시 가드 — /admin/** 접근을 허용할 customer_id 목록(쉼표 구분). 비어 있으면 전부 403.
+      # 로컬에서 쓰려면 ADMIN_BOOTSTRAP_CUSTOMER_IDS=<customer_id> ./gradlew bootRun.
+      # 시드 계정(공개 저장소에 비밀번호가 있는 공개 픽스처)의 customer_id는 넣지 않는다.
+      # PH-49a 역할 기반 인가로 교체될 때 함께 지운다.
+      bootstrap-customer-ids: ${ADMIN_BOOTSTRAP_CUSTOMER_IDS:}
   account:
     password:
       auth-token-ttl: 5m

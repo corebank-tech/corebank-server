@@ -19,6 +19,7 @@ class SecurityTestController {
 
     @PostMapping({
         "/auth/terms/check",
+        "/auth/find-id",
         "/auth/verify-account",
         "/auth/check-id",
         "/auth/signup/validate",
@@ -43,6 +44,11 @@ class SecurityTestController {
     @PostMapping("/customers/me")
     ApiResponse<String> updateCustomer() {
         return ApiResponse.success("updated");
+    }
+
+    @GetMapping("/admin/test")
+    ApiResponse<String> admin() {
+        return ApiResponse.success("admin");
     }
 
     @GetMapping("/actuator/health")

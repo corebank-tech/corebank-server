@@ -52,6 +52,10 @@ class SwaggerUiAccessIntegrationTest extends IntegrationTestSupport {
         mockMvc.perform(get("/api/v1/v3/api-docs").contextPath("/api/v1"))
                 .andExpect(status().isOk())
                 .andExpect(summary("/auth/login", "post", "로그인"))
+                .andExpect(summary("/auth/find-id", "post", "아이디 찾기"))
+                .andExpect(summary("/auth/password-reset-requests", "post", "비밀번호 재설정 인증번호 발급"))
+                .andExpect(summary("/auth/password-reset-requests/{passwordResetRequestId}", "put", "비밀번호 재설정"))
+                .andExpect(summary("/customers/me/password", "put", "로그인 비밀번호 변경"))
                 .andExpect(summary("/customers/me", "get", "내 고객정보 조회"))
                 .andExpect(summary("/customers/me", "patch", "내 고객정보 변경"))
                 .andExpect(summary("/dashboard/login-status", "get", "로그인 상태 조회"))
@@ -75,6 +79,14 @@ class SwaggerUiAccessIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$['components']['schemas']['LoginRequest']['properties']['password']['writeOnly']")
                         .value(true))
+                .andExpect(jsonPath(
+                                "$['components']['schemas']['FindIdRequest']['properties']['accountPassword']['writeOnly']")
+                        .value(true))
+                .andExpect(jsonPath("$['components']['schemas']['FindIdRequest']['required']")
+                        .value(org.hamcrest.Matchers.hasItems(
+                                "customerName", "birthDate", "accountNumber", "accountPassword")))
+                .andExpect(jsonPath("$['paths']['/auth/find-id']['post']['requestBody']['required']")
+                        .value(true))
                 .andExpect(
                         jsonPath("$['components']['schemas']['VerifyOtpRequest']['properties']['otpCode']['writeOnly']")
                                 .value(true))
@@ -83,7 +95,26 @@ class SwaggerUiAccessIntegrationTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$['paths']['/customers/me']['patch']['parameters'][0]['required']")
                         .value(true))
                 .andExpect(jsonPath("$['paths']['/auth/signup/complete']['post']['parameters'][0]['name']")
-                        .value("Idempotency-Key"));
+                        .value("Idempotency-Key"))
+                .andExpect(jsonPath(
+                                "$['components']['schemas']['PasswordResetRequest']['properties']['verificationCode']['writeOnly']")
+                        .value(true))
+                .andExpect(jsonPath(
+                                "$['components']['schemas']['LoginPasswordChangeRequest']['properties']['currentPassword']['writeOnly']")
+                        .value(true))
+                .andExpect(jsonPath(
+                                "$['paths']['/auth/password-reset-requests/{passwordResetRequestId}']['put']['parameters'][1]['name']")
+                        .value("Idempotency-Key"))
+                .andExpect(jsonPath("$['paths']['/customers/me/password']['put']['parameters'][0]['name']")
+                        .value("Idempotency-Key"))
+                .andExpect(jsonPath(
+                                "$['paths']['/auth/password-reset-requests']['post']['responses']['400']['description']")
+                        .value(org.hamcrest.Matchers.containsString("CMN0001")))
+                .andExpect(jsonPath(
+                                "$['paths']['/auth/password-reset-requests/{passwordResetRequestId}']['put']['responses']['400']['description']")
+                        .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("CMN0001"))))
+                .andExpect(jsonPath("$['paths']['/customers/me/password']['put']['responses']['400']['description']")
+                        .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("CMN0001"))));
     }
 
     @Test

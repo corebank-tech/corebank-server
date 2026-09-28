@@ -699,10 +699,19 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                 .setParameter("userId", "u" + seq)
                 .setParameter("email", "test" + seq + "@test.com")
                 .executeUpdate();
-        return ((Number) entityManager
+        Long customerId = ((Number) entityManager
                         .createNativeQuery("SELECT LAST_INSERT_ID()")
                         .getSingleResult())
                 .longValue();
+        // 가입 연계(REQ-TRSF-029)가 만들어 주는 한도 행을 여기서 대신 채운다.
+        // 없으면 이체 경로가 LMT9001 로 거부된다(#388).
+        entityManager
+                .createNativeQuery(
+                        "INSERT INTO transfer_limit (customer_id, one_time_limit, daily_limit, created_at, updated_at) "
+                                + "VALUES (:customerId, 1000000, 5000000, NOW(6), NOW(6))")
+                .setParameter("customerId", customerId)
+                .executeUpdate();
+        return customerId;
     }
 
     private Long insertAccount(Long customerId) {

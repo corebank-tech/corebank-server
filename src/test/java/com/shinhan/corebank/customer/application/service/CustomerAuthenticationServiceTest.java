@@ -9,12 +9,16 @@ import static org.mockito.Mockito.verify;
 import com.shinhan.corebank.customer.api.CustomerAuthenticationData;
 import com.shinhan.corebank.customer.api.LoginFailureState;
 import com.shinhan.corebank.customer.api.LoginSuccessState;
+import com.shinhan.corebank.customer.api.PasswordResetCustomerData;
 import com.shinhan.corebank.customer.api.RecordLoginFailureCommand;
 import com.shinhan.corebank.customer.api.RecordLoginSuccessCommand;
+import com.shinhan.corebank.customer.api.ResetCustomerPasswordCommand;
+import com.shinhan.corebank.customer.api.ResetCustomerPasswordResult;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -61,6 +65,22 @@ class CustomerAuthenticationServiceTest {
         Optional<CustomerAuthenticationData> result = service.findByUserId("unknown");
 
         assertThat(result).isEmpty();
+    }
+
+    // 아이디 찾기 후보 조회가 고객 PK와 로그인 아이디를 올바르게 반환하는지 검증한다.
+    @Test
+    @DisplayName("성명과 생년월일이 일치하는 아이디 찾기 후보를 반환한다")
+    void findsIdentityCandidates() {
+        Customer customer = createCustomer(1L, 0, false);
+        given(customerPersistencePort.findAllByUserNameAndBirthDate("홍길동", LocalDate.of(1990, 1, 1)))
+                .willReturn(List.of(customer));
+
+        var result = service.findAllByIdentity("홍길동", LocalDate.of(1990, 1, 1));
+
+        assertThat(result).singleElement().satisfies(candidate -> {
+            assertThat(candidate.customerId()).isEqualTo(1L);
+            assertThat(candidate.userId()).isEqualTo("user01");
+        });
     }
 
     // 로그인 실패 횟수와 잠금 상태를 고객에게 반영해 저장
@@ -161,6 +181,107 @@ class CustomerAuthenticationServiceTest {
         assertThatThrownBy(() -> service.updateLoginFailureState(new RecordLoginFailureCommand(99L)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("로그인 상태를 변경할 고객이 존재하지 않습니다.");
+    }
+
+    @Test
+    @DisplayName("아이디로 비밀번호 재설정 고객정보를 조회한다")
+    void findPasswordResetCustomerForUpdate() {
+        Customer customer = createCustomer(1L, 2, false);
+        given(customerPersistencePort.findByUserIdForUpdate("user01")).willReturn(Optional.of(customer));
+
+        Optional<PasswordResetCustomerData> result = service.findPasswordResetCustomerForUpdate("user01");
+
+        assertThat(result)
+                .contains(new PasswordResetCustomerData(
+                        1L, "user01", "홍길동", "user01@example.com", "passwordHash", false));
+    }
+
+    @Test
+    @DisplayName("고객 ID로 비밀번호 재설정 고객정보를 조회한다")
+    void findPasswordResetCustomerById() {
+        Customer customer = createCustomer(1L, 2, false);
+        given(customerPersistencePort.findById(1L)).willReturn(Optional.of(customer));
+
+        PasswordResetCustomerData result = service.findPasswordResetCustomerById(1L);
+
+        assertThat(result)
+                .isEqualTo(new PasswordResetCustomerData(
+                        1L, "user01", "홍길동", "user01@example.com", "passwordHash", false));
+    }
+
+    @Test
+    @DisplayName("비밀번호 재설정 시 현재 해시를 재확인하고 새 해시를 저장한다")
+    void resetPassword() {
+        Customer customer = createCustomer(1L, 3, false);
+        LocalDateTime changedAt = LocalDateTime.of(2026, 9, 20, 12, 0);
+        given(customerPersistencePort.findByIdForUpdate(1L)).willReturn(Optional.of(customer));
+
+        ResetCustomerPasswordResult result = service.resetPassword(
+                new ResetCustomerPasswordCommand(1L, "passwordHash", "newPasswordHash", changedAt));
+
+        assertThat(result).isEqualTo(ResetCustomerPasswordResult.COMPLETED);
+        assertThat(customer.getPasswordHash()).isEqualTo("newPasswordHash");
+        assertThat(customer.getPasswordChangedAt()).isEqualTo(changedAt);
+        assertThat(customer.getLoginFailureCount()).isZero();
+        verify(customerPersistencePort).updatePassword(customer);
+    }
+
+    @Test
+    @DisplayName("잠긴 고객은 비밀번호를 변경하지 않는다")
+    void rejectPasswordResetForLockedCustomer() {
+        Customer customer = createCustomer(1L, 5, true);
+        given(customerPersistencePort.findByIdForUpdate(1L)).willReturn(Optional.of(customer));
+
+        ResetCustomerPasswordResult result = service.resetPassword(new ResetCustomerPasswordCommand(
+                1L, "passwordHash", "newPasswordHash", LocalDateTime.of(2026, 9, 20, 12, 0)));
+
+        assertThat(result).isEqualTo(ResetCustomerPasswordResult.ACCOUNT_LOCKED);
+        verify(customerPersistencePort, never()).updatePassword(customer);
+    }
+
+    @Test
+    @DisplayName("다른 요청이 먼저 비밀번호를 변경하면 저장하지 않는다")
+    void rejectConcurrentPasswordChange() {
+        Customer customer = createCustomer(1L, 1, false);
+        given(customerPersistencePort.findByIdForUpdate(1L)).willReturn(Optional.of(customer));
+
+        ResetCustomerPasswordResult result = service.resetPassword(new ResetCustomerPasswordCommand(
+                1L, "stalePasswordHash", "newPasswordHash", LocalDateTime.of(2026, 9, 20, 12, 0)));
+
+        assertThat(result).isEqualTo(ResetCustomerPasswordResult.PASSWORD_CHANGED_CONCURRENTLY);
+        verify(customerPersistencePort, never()).updatePassword(customer);
+    }
+
+    @Test
+    @DisplayName("로그인 성공 처리할 고객이 없으면 예외가 발생한다")
+    void updateLoginSuccessStateCustomerNotFound() {
+        given(customerPersistencePort.findByIdForUpdate(99L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.updateLoginSuccessState(
+                        new RecordLoginSuccessCommand(99L, LocalDateTime.of(2026, 9, 20, 12, 0), "127.0.0.1")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("로그인 상태를 변경할 고객이 존재하지 않습니다.");
+    }
+
+    @Test
+    @DisplayName("비밀번호 재설정 고객을 ID로 찾을 수 없으면 예외가 발생한다")
+    void findPasswordResetCustomerByIdNotFound() {
+        given(customerPersistencePort.findById(99L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.findPasswordResetCustomerById(99L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("비밀번호 재설정 고객이 존재하지 않습니다.");
+    }
+
+    @Test
+    @DisplayName("비밀번호를 변경할 고객이 없으면 예외가 발생한다")
+    void resetPasswordCustomerNotFound() {
+        given(customerPersistencePort.findByIdForUpdate(99L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.resetPassword(new ResetCustomerPasswordCommand(
+                        99L, "passwordHash", "newPasswordHash", LocalDateTime.of(2026, 9, 20, 12, 0))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("비밀번호를 변경할 고객이 존재하지 않습니다.");
     }
 
     // 테스트용 고객 도메인 모델 생성

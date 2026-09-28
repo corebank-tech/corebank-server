@@ -39,6 +39,18 @@ public class AccountPasswordAuthTokenService implements AccountPasswordAuthToken
         }
     }
 
+    @Override
+    // 고객 단위 업무에서는 계좌를 대조하지 않고 토큰의 고객 소유권만 검증해 소비한다.
+    public void verifyAndConsume(String accountPasswordAuthToken, Long customerId) {
+        if (accountPasswordAuthToken == null || accountPasswordAuthToken.isBlank() || customerId == null) {
+            throw invalidToken();
+        }
+
+        if (!tokenStorePort.consumeIfCustomerMatches(accountPasswordAuthToken, customerId)) {
+            throw invalidToken();
+        }
+    }
+
     // 토큰 검증에 필요한 모든 입력값이 존재하는지 확인한다.
     private void validateVerification(AccountPasswordAuthTokenVerification verification) {
         if (verification == null

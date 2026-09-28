@@ -1,12 +1,15 @@
 package com.shinhan.corebank.limit.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitResult;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
 import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -48,18 +51,16 @@ class TransferLimitQueryServiceTest {
     }
 
     @Test
-    @DisplayName("한도 행이 없는 고객은 정책 기본값 1회 100만원·1일 500만원으로 응답한다")
-    void get_limitRowMissing_returnsPolicyDefaults() {
-        // given - 가입 시 기본값 부여(REQ-TRSF-029)가 연결되기 전이라 행이 없는 고객이 있다
+    @DisplayName("한도 행이 없는 고객은 정책 기본값으로 응답하지 않고 LMT9001 로 거부한다")
+    void get_limitRowMissing_rejectsWithLmt9001() {
+        // given - 가입 연계(REQ-TRSF-029)와 백필이 보장하므로, 행이 없다면 데이터 결함이다
         when(transferLimitQueryPort.findByCustomerId(CUSTOMER_ID)).thenReturn(Optional.empty());
-        when(transferLimitQueryPort.findUsage(CUSTOMER_ID, TODAY)).thenReturn(Optional.empty());
 
-        // when
-        TransferLimitResult result = serviceAt(TODAY.atTime(14, 0)).get(CUSTOMER_ID);
-
-        // then
-        assertThat(result.oneTimeLimit()).isEqualTo(1_000_000L);
-        assertThat(result.dailyLimit()).isEqualTo(5_000_000L);
+        // when & then
+        assertThatThrownBy(() -> serviceAt(TODAY.atTime(14, 0)).get(CUSTOMER_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(LmtErrorCode.TRANSFER_LIMIT_NOT_FOUND);
     }
 
     @Test

@@ -11,6 +11,8 @@ import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferExecuti
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryAggregate;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryQueryPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryRow;
+import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
+import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
@@ -19,6 +21,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -53,6 +56,11 @@ class AutoTransferExecutionHistoryQueryServiceTest {
         Clock fixed = Clock.fixed(TODAY.atStartOfDay(SEOUL).toInstant(), SEOUL);
         // 검증 실패로 일찍 return하는 테스트들은 이 스텁을 안 타서 "불필요한 스텁"으로 걸리므로 lenient 처리
         lenient().when(clock.withZone(SEOUL)).thenReturn(fixed);
+        // findMissingExecutions()가 이제 페이지 조회에서도 항상 실행되므로, 기본값으로 "정체된
+        // 자동이체 없음"을 깔아둔다 — 개별 테스트가 필요하면 이 스텁을 덮어써서 씀
+        lenient()
+                .when(autoTransferExecutionHistoryQueryPort.findNormalStuckBefore(any(), any(), any()))
+                .thenReturn(List.of());
     }
 
     private AutoTransferExecutionHistoryRow sampleRow() {
@@ -67,6 +75,29 @@ class AutoTransferExecutionHistoryQueryServiceTest {
                 1,
                 "내메모",
                 null);
+    }
+
+    // status=NORMAL인데 nextExecutionDate가 주어진 날짜에 멈춰있는 자동이체 픽스처 — "조용히 실패"를 흉내낸다
+    private AutoTransfer stuckAutoTransfer(Long autoTransferId, LocalDate nextExecutionDate) {
+        return AutoTransfer.reconstitute(
+                autoTransferId,
+                1L,
+                2L,
+                "110987654321",
+                "홍길동",
+                10_000L,
+                1,
+                15,
+                nextExecutionDate.minusMonths(1),
+                nextExecutionDate.plusMonths(12),
+                nextExecutionDate,
+                "내메모",
+                "받는메모",
+                AutoTransferStatus.NORMAL,
+                LocalDateTime.now(),
+                null,
+                LocalDateTime.now(),
+                0L);
     }
 
     @Test
@@ -182,10 +213,161 @@ class AutoTransferExecutionHistoryQueryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(sampleRow()), Pageable.unpaged(), 1));
         when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
                 .thenReturn(new AutoTransferExecutionHistoryAggregate(1L, 10_000L, 0L, 0L));
+        when(autoTransferExecutionHistoryQueryPort.findNormalStuckBefore(eq(1L), eq(2L), eq(TODAY)))
+                .thenReturn(List.of());
 
         AutoTransferExecutionHistoryResult result = service.search(1L, 2L, null, null, 0, 7, true);
 
         assertThat(result.page().getContent()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("all=true 조회에서 NORMAL인데 nextExecutionDate가 조회기간 안의 과거면 관리자 문의 사유로 합성된 행이 섞여 나온다 (#442)")
+    void search_allTrue_stuckAutoTransferWithinRange_mergesAsAdminContactItem() {
+        LocalDate stuckDate = TODAY.minusDays(3);
+        AutoTransfer stuck = stuckAutoTransfer(5L, stuckDate);
+        when(autoTransferExecutionHistoryQueryPort.search(
+                        eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY), eq(Pageable.unpaged())))
+                .thenReturn(new PageImpl<>(List.of(sampleRow()), Pageable.unpaged(), 1));
+        when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
+                .thenReturn(new AutoTransferExecutionHistoryAggregate(1L, 10_000L, 0L, 0L));
+        when(autoTransferExecutionHistoryQueryPort.findNormalStuckBefore(eq(1L), eq(2L), eq(TODAY)))
+                .thenReturn(List.of(stuck));
+
+        AutoTransferExecutionHistoryResult result = service.search(1L, 2L, null, null, 0, 10, true);
+
+        assertThat(result.page().getContent()).hasSize(2);
+        var missingItem = result.page().getContent().stream()
+                .filter(item -> item.executionId() == null)
+                .findFirst()
+                .orElseThrow();
+        assertThat(missingItem.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(missingItem.failureReason()).isEqualTo("관리자에게 문의해주세요");
+        assertThat(missingItem.executedAt()).isEqualTo(stuckDate.atStartOfDay());
+        assertThat(missingItem.withdrawalAccountId()).isEqualTo(2L);
+
+        // 목록에 합성 행이 섞였으면 상단 요약(실패 건수/금액)에도 그만큼 같이 반영돼야 한다
+        assertThat(result.summary().errorCount()).isEqualTo(1L);
+        assertThat(result.summary().errorAmount()).isEqualTo(stuck.getAmount());
+        assertThat(result.summary().successCount()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("정체된 것처럼 보여도 실제로 PROCESSING 행이 있으면(재확정 배치가 곧 정리할 것) 합성하지 않는다 (#442 리뷰 반영)")
+    void search_allTrue_stuckButActuallyProcessing_doesNotMerge() {
+        LocalDate stuckDate = TODAY.minusDays(3);
+        AutoTransfer stuck = stuckAutoTransfer(5L, stuckDate);
+        when(autoTransferExecutionHistoryQueryPort.search(
+                        eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY), eq(Pageable.unpaged())))
+                .thenReturn(Page.empty(Pageable.unpaged()));
+        when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
+                .thenReturn(AutoTransferExecutionHistoryAggregate.empty());
+        when(autoTransferExecutionHistoryQueryPort.findNormalStuckBefore(eq(1L), eq(2L), eq(TODAY)))
+                .thenReturn(List.of(stuck));
+        when(autoTransferExecutionHistoryQueryPort.findProcessingAutoTransferIds(eq(List.of(5L))))
+                .thenReturn(Set.of(5L));
+
+        AutoTransferExecutionHistoryResult result = service.search(1L, 2L, null, null, 0, 10, true);
+
+        assertThat(result.page().getContent()).isEmpty();
+        assertThat(result.summary().errorCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("정체된 nextExecutionDate가 조회기간보다 이전이면 합성하지 않는다")
+    void search_allTrue_stuckAutoTransferOutsideRange_doesNotMerge() {
+        LocalDate stuckDate = TODAY.minusMonths(2); // 기본 조회기간(최근 1개월) 밖
+        AutoTransfer stuck = stuckAutoTransfer(5L, stuckDate);
+        when(autoTransferExecutionHistoryQueryPort.search(
+                        eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY), eq(Pageable.unpaged())))
+                .thenReturn(Page.empty(Pageable.unpaged()));
+        when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
+                .thenReturn(AutoTransferExecutionHistoryAggregate.empty());
+        when(autoTransferExecutionHistoryQueryPort.findNormalStuckBefore(eq(1L), eq(2L), eq(TODAY)))
+                .thenReturn(List.of(stuck));
+
+        AutoTransferExecutionHistoryResult result = service.search(1L, 2L, null, null, 0, 10, true);
+
+        assertThat(result.page().getContent()).isEmpty();
+    }
+
+    // "오늘이면 아직 정체된 게 아니다"라는 경계값은 이제 DB 쿼리 단계(findNormalStuckBefore의
+    // nextExecutionDate < before 조건)의 책임이라 이 서비스가 아니라 AutoTransferPersistenceAdapterTest에서
+    // 검증한다(#442 리뷰 반영으로 N+1 제거하며 필터링 위치를 서비스에서 어댑터로 옮김)
+
+    @Test
+    @DisplayName(
+            "all=false(페이지 조회)여도 정체된 자동이체를 감지해 합성 행을 섞는다 " + "(#442 리뷰 반영 — G-05 화면은 all=true를 보낼 방법이 없어 페이지 조회만 씀)")
+    void search_pagedQuery_stuckAutoTransferWithinRange_mergesAsAdminContactItem() {
+        LocalDate stuckDate = TODAY.minusDays(3);
+        AutoTransfer stuck = stuckAutoTransfer(5L, stuckDate);
+        when(autoTransferExecutionHistoryQueryPort.search(
+                        eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY), eq(Pageable.unpaged())))
+                .thenReturn(new PageImpl<>(List.of(sampleRow())));
+        when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
+                .thenReturn(new AutoTransferExecutionHistoryAggregate(1L, 10_000L, 0L, 0L));
+        when(autoTransferExecutionHistoryQueryPort.findNormalStuckBefore(eq(1L), eq(2L), eq(TODAY)))
+                .thenReturn(List.of(stuck));
+
+        AutoTransferExecutionHistoryResult result = service.search(1L, 2L, null, null, 0, 10, false);
+
+        assertThat(result.page().getContent()).hasSize(2);
+        assertThat(result.page().getTotalElements()).isEqualTo(2);
+        var missingItem = result.page().getContent().stream()
+                .filter(item -> item.executionId() == null)
+                .findFirst()
+                .orElseThrow();
+        assertThat(missingItem.failureReason()).isEqualTo("관리자에게 문의해주세요");
+        assertThat(result.summary().errorCount()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("합성 행이 섞인 전체 결과에서 요청한 페이지만 정확히 잘라 반환한다")
+    void search_pagedQuery_slicesMergedResultsCorrectly() {
+        // 최신순 정렬 기준: row(3/14) > row(3/13) > 합성 행(3/12) > row(3/11) > row(3/10) > row(3/9)
+        // size=5(허용 페이지 크기)라 0페이지에 5건, 1페이지에 나머지 1건이 와야 한다
+        List<AutoTransferExecutionHistoryRow> realRows = List.of(
+                executionRow(1L, LocalDateTime.of(2026, 3, 14, 9, 0)),
+                executionRow(2L, LocalDateTime.of(2026, 3, 13, 9, 0)),
+                executionRow(3L, LocalDateTime.of(2026, 3, 11, 9, 0)),
+                executionRow(4L, LocalDateTime.of(2026, 3, 10, 9, 0)),
+                executionRow(5L, LocalDateTime.of(2026, 3, 9, 9, 0)));
+        AutoTransfer stuck = stuckAutoTransfer(9L, LocalDate.of(2026, 3, 12));
+
+        when(autoTransferExecutionHistoryQueryPort.search(
+                        eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY), eq(Pageable.unpaged())))
+                .thenReturn(new PageImpl<>(realRows));
+        when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), eq(TODAY.minusMonths(1)), eq(TODAY)))
+                .thenReturn(AutoTransferExecutionHistoryAggregate.empty());
+        when(autoTransferExecutionHistoryQueryPort.findNormalStuckBefore(eq(1L), eq(2L), eq(TODAY)))
+                .thenReturn(List.of(stuck));
+
+        AutoTransferExecutionHistoryResult firstPage = service.search(1L, 2L, null, null, 0, 5, false);
+        AutoTransferExecutionHistoryResult secondPage = service.search(1L, 2L, null, null, 1, 5, false);
+
+        assertThat(firstPage.page().getContent()).hasSize(5);
+        assertThat(firstPage.page().getTotalElements()).isEqualTo(6);
+        assertThat(firstPage.page().getContent())
+                .extracting(item -> item.failureReason() != null)
+                .containsExactly(false, false, true, false, false);
+
+        assertThat(secondPage.page().getContent()).hasSize(1);
+        assertThat(secondPage.page().getContent().get(0).executionId()).isEqualTo(5L);
+        assertThat(secondPage.page().getTotalElements()).isEqualTo(6);
+    }
+
+    private AutoTransferExecutionHistoryRow executionRow(Long executionId, LocalDateTime executedAt) {
+        return new AutoTransferExecutionHistoryRow(
+                executionId,
+                ProcessResultStatus.SUCCESS,
+                executedAt,
+                2L,
+                "110987654321",
+                "홍길동",
+                10_000L,
+                1,
+                "내메모",
+                null);
     }
 
     @Test

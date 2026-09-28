@@ -187,16 +187,52 @@ public class AccountController {
     }
 
     @GetMapping("/{accountId}/transactions")
-    @Operation(operationId = "searchAccountTransactions")
+    @Operation(
+            operationId = "searchAccountTransactions",
+            summary = "계좌 거래내역 검색",
+            description =
+                    """
+                    로그인한 고객이 소유한 계좌의 거래내역을 기간·입출금 구분·키워드로 검색한다.
+                    fromDate 생략 시 toDate(생략 시 오늘, KST) 기준 1개월 전부터 조회하며, 조회기간은 최대 1년이다.
+                    """)
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "거래내역 조회 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "`CMN0003` 조회 시작일이 종료일보다 늦음 · `CMN0004` 조회기간이 1년 초과 · "
+                        + "`CMN0001` page가 1보다 작음 · `CMN0005` 지원하지 않는 페이지 크기(5·10·20·30·50 외)",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "`ACC0201` 계좌를 찾을 수 없거나 접근할 수 없음",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public ApiResponse<AccountTransactionResponse> getTransactions(
-            @PathVariable @Positive Long accountId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
-            @RequestParam(required = false) LedgerHistoryDirection direction,
-            @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) LedgerHistorySort sort,
-            @RequestParam(defaultValue = "1") @Positive int page,
-            @RequestParam(defaultValue = "10") int size,
+            @Parameter(description = "조회할 계좌의 내부 식별자", required = true, example = "101") @PathVariable @Positive
+                    Long accountId,
+            @Parameter(description = "조회 시작일. 생략 시 toDate 기준 1개월 전", example = "2026-08-22")
+                    @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate fromDate,
+            @Parameter(description = "조회 종료일. 생략 시 오늘(KST)", example = "2026-09-22")
+                    @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate toDate,
+            @Parameter(description = "입출금 구분. ALL·DEPOSIT·WITHDRAWAL. 생략 시 ALL", example = "ALL")
+                    @RequestParam(required = false)
+                    LedgerHistoryDirection direction,
+            @Parameter(description = "거래처명 검색 키워드") @RequestParam(required = false) String keyword,
+            @Parameter(description = "정렬 조건. LATEST(최신순)·OLDEST(과거순). 생략 시 LATEST", example = "LATEST")
+                    @RequestParam(required = false)
+                    LedgerHistorySort sort,
+            @Parameter(description = "페이지 번호(1부터 시작)", example = "1") @RequestParam(defaultValue = "1") @Positive
+                    int page,
+            @Parameter(description = "페이지 크기. 5·10·20·30·50 중 하나", example = "10") @RequestParam(defaultValue = "10")
+                    int size,
             @Parameter(description = "true면 페이지 구분 없이 조건에 맞는 전체 건을 반환. page/size는 무시됨")
                     @RequestParam(defaultValue = "false")
                     boolean all) {

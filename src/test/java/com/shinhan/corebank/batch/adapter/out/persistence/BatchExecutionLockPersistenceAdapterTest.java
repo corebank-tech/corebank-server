@@ -141,4 +141,22 @@ class BatchExecutionLockPersistenceAdapterTest extends IntegrationTestSupport {
     void tryAcquire_unknownJobName_throwsIllegalState() {
         assertThatThrownBy(() -> adapter.tryAcquire("NO_SUCH_JOB")).isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    @DisplayName("isRunning()은 락을 잡지 않고 currently_running만 조회한다")
+    void isRunning_reflectsCurrentlyRunningWithoutAcquiring() {
+        assertThat(adapter.isRunning(jobName)).isFalse();
+
+        adapter.tryAcquire(jobName);
+        assertThat(adapter.isRunning(jobName)).isTrue();
+
+        adapter.release(jobName);
+        assertThat(adapter.isRunning(jobName)).isFalse();
+    }
+
+    @Test
+    @DisplayName("isRunning()은 존재하지 않는 jobName을 실행 중이 아닌 것으로 본다")
+    void isRunning_unknownJobName_returnsFalse() {
+        assertThat(adapter.isRunning("NO_SUCH_JOB")).isFalse();
+    }
 }

@@ -359,4 +359,37 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
         // then
         assertThat(result).isEmpty();
     }
+
+    @Test
+    @DisplayName("계좌 ID 목록으로 잔액을 락 없이 일괄 조회한다 — 다른 도메인의 대사 배치(#378)가 쓰는 경로")
+    void findBalancesByAccountIds() {
+        // given
+        Account first = accountPersistencePort.save(Account.importExisting(
+                "088100000023",
+                customerId,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                100000L,
+                AccountStatus.ACTIVE,
+                PASSWORD_HASH,
+                LocalDateTime.of(2026, 8, 10, 10, 0),
+                null));
+        Account second = accountPersistencePort.save(Account.importExisting(
+                "088100000024",
+                customerId,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                50000L,
+                AccountStatus.ACTIVE,
+                PASSWORD_HASH,
+                LocalDateTime.of(2026, 8, 10, 10, 0),
+                null));
+
+        // when
+        var balances =
+                accountPersistencePort.findBalancesByAccountIds(List.of(first.getAccountId(), second.getAccountId()));
+
+        // then
+        assertThat(balances).containsEntry(first.getAccountId(), 100000L).containsEntry(second.getAccountId(), 50000L);
+    }
 }

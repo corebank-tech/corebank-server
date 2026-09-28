@@ -3,6 +3,8 @@ package com.shinhan.corebank.customer.application.service;
 import com.shinhan.corebank.customer.api.*;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,17 @@ public class CustomerAuthenticationService implements CustomerAuthenticationFaca
         Objects.requireNonNull(userId, "userId must not be null");
 
         return customerPersistencePort.findByUserId(userId).map(this::toAuthenticationData);
+    }
+
+    // 성명과 생년월일이 일치하는 아이디 찾기 후보를 반환한다.
+    @Override
+    public List<CustomerIdentityData> findAllByIdentity(String customerName, LocalDate birthDate) {
+        Objects.requireNonNull(customerName, "customerName must not be null");
+        Objects.requireNonNull(birthDate, "birthDate must not be null");
+
+        return customerPersistencePort.findAllByUserNameAndBirthDate(customerName, birthDate).stream()
+                .map(customer -> new CustomerIdentityData(customer.getCustomerId(), customer.getUserId()))
+                .toList();
     }
 
     // 로그인 실패 횟수와 계정 잠금 상태 저장
@@ -69,6 +82,55 @@ public class CustomerAuthenticationService implements CustomerAuthenticationFaca
         customerPersistencePort.updateLoginSuccessState(customer);
 
         return LoginSuccessState.COMPLETED;
+    }
+
+    @Override
+    @Transactional
+    public Optional<PasswordResetCustomerData> findPasswordResetCustomerForUpdate(String userId) {
+        Objects.requireNonNull(userId, "userId must not be null");
+        return customerPersistencePort
+                .findByUserIdForUpdate(userId)
+                .map(customer -> new PasswordResetCustomerData(
+                        customer.getCustomerId(),
+                        customer.getUserId(),
+                        customer.getUserName(),
+                        customer.getEmail(),
+                        customer.getPasswordHash(),
+                        customer.isAccountLocked()));
+    }
+
+    @Override
+    public PasswordResetCustomerData findPasswordResetCustomerById(Long customerId) {
+        Objects.requireNonNull(customerId, "customerId must not be null");
+        Customer customer = customerPersistencePort
+                .findById(customerId)
+                .orElseThrow(() -> new IllegalStateException("비밀번호 재설정 고객이 존재하지 않습니다."));
+        return new PasswordResetCustomerData(
+                customer.getCustomerId(),
+                customer.getUserId(),
+                customer.getUserName(),
+                customer.getEmail(),
+                customer.getPasswordHash(),
+                customer.isAccountLocked());
+    }
+
+    @Override
+    @Transactional
+    public ResetCustomerPasswordResult resetPassword(ResetCustomerPasswordCommand command) {
+        Objects.requireNonNull(command, "command must not be null");
+        Customer customer = customerPersistencePort
+                .findByIdForUpdate(command.customerId())
+                .orElseThrow(() -> new IllegalStateException("비밀번호를 변경할 고객이 존재하지 않습니다."));
+        if (customer.isAccountLocked()) {
+            return ResetCustomerPasswordResult.ACCOUNT_LOCKED;
+        }
+        if (!customer.getPasswordHash().equals(command.expectedPasswordHash())) {
+            return ResetCustomerPasswordResult.PASSWORD_CHANGED_CONCURRENTLY;
+        }
+
+        customer.resetPassword(command.newPasswordHash(), command.changedAt());
+        customerPersistencePort.updatePassword(customer);
+        return ResetCustomerPasswordResult.COMPLETED;
     }
 
     // customer 도메인 모델을 로그인 인증용 공개 데이터로 변환

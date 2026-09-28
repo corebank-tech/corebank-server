@@ -31,6 +31,21 @@ public class AccountPasswordAuthTokenRedisAdapter implements AccountPasswordAuth
                     """,
             Long.class);
 
+    private static final DefaultRedisScript<Long> CONSUME_BY_CUSTOMER_SCRIPT = new DefaultRedisScript<>(
+            """
+                    local value = redis.call('GET', KEYS[1])
+                    if not value then
+                        return 0
+                    end
+                    local customerId = string.match(value, '"customerId"%s*:%s*(%-?%d+)')
+                    if customerId ~= ARGV[1] then
+                        return -1
+                    end
+                    redis.call('DEL', KEYS[1])
+                    return 1
+                    """,
+            Long.class);
+
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -50,6 +65,18 @@ public class AccountPasswordAuthTokenRedisAdapter implements AccountPasswordAuth
 
         if (result == null) {
             throw new IllegalStateException("계좌비밀번호 인증 토큰 소비 결과를 확인할 수 없습니다.");
+        }
+
+        return result == SUCCESS;
+    }
+
+    @Override
+    // Lua 스크립트로 고객 일치 확인과 토큰 삭제를 하나의 원자 연산으로 수행한다.
+    public boolean consumeIfCustomerMatches(String token, Long customerId) {
+        Long result = redisTemplate.execute(CONSUME_BY_CUSTOMER_SCRIPT, List.of(key(token)), customerId.toString());
+
+        if (result == null) {
+            throw new IllegalStateException("계좌비밀번호 인증 토큰 고객 기준 소비 결과를 확인할 수 없습니다.");
         }
 
         return result == SUCCESS;

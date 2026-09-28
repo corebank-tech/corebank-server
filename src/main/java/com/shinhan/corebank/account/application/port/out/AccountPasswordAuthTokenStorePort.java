@@ -9,4 +9,7 @@ public interface AccountPasswordAuthTokenStorePort {
     void save(String token, AccountPasswordAuthTokenPayload payload, Duration ttl);
 
     boolean consumeIfMatches(String token, AccountPasswordAuthTokenPayload expectedPayload);
+
+    // 저장된 customerId가 일치할 때만 토큰을 원자적으로 삭제한다.
+    boolean consumeIfCustomerMatches(String token, Long customerId);
 }
