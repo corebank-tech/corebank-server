@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 31개 테이블(29개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 33개 테이블(31개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -356,6 +356,21 @@ erDiagram
         bigint amount "원 단위 정수. 항상 양수"
         date trade_date "전표에서 복제. 시산표 집계 기준일"
         datetime created_at "DATETIME(6)"
+    }
+
+    %% ---------- P5 (영업일, PH-40) ----------
+    %% 다른 테이블과 FK 없음. BusinessDateProvider 가 읽는다.
+    business_date {
+        varchar date_type PK "VARCHAR(20). 2차는 BUSINESS_DATE 1행"
+        date business_date "현재 영업일. 초기값 2026-10-02"
+        datetime created_at "DATETIME(6)"
+        datetime updated_at "DATETIME(6). 마지막 전환 시각"
+    }
+    holiday {
+        date holiday_date PK "주말 제외 공휴일만. 주말은 요일로 판정"
+        varchar holiday_name "VARCHAR(50)"
+        datetime created_at "DATETIME(6)"
+        datetime updated_at "DATETIME(6)"
     }
 
     %% ---------- 관계 ----------
