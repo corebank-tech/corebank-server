@@ -362,7 +362,7 @@ erDiagram
     %% 다른 테이블과 FK 없음. BusinessDateProvider 가 읽는다.
     business_date {
         varchar date_type PK "VARCHAR(20). 2차는 BUSINESS_DATE 1행"
-        date business_date "현재 영업일. 초기값 2026-10-02"
+        date business_date "현재 영업일. 기동 시 오늘로 맞춤"
         datetime created_at "DATETIME(6)"
         datetime updated_at "DATETIME(6). 마지막 전환 시각"
     }
