@@ -2,18 +2,18 @@ package com.shinhan.corebank.otp.adapter.out.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.shinhan.corebank.SharedTestObjectMapper;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import tools.jackson.databind.ObjectMapper;
 
 // JSON Key 순서와 정수 Java 타입 차이가 거래내용 비교에 영향을 주지 않는지 검증한다.
 class JacksonOtpTransactionDataCanonicalizerTest {
 
     private final JacksonOtpTransactionDataCanonicalizer canonicalizer =
-            new JacksonOtpTransactionDataCanonicalizer(new ObjectMapper());
+            new JacksonOtpTransactionDataCanonicalizer(SharedTestObjectMapper.INSTANCE);
 
     @Test
     @DisplayName("필드 순서가 다른 JSON 객체는 같은 canonical JSON이 된다")
