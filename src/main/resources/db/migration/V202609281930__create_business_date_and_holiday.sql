@@ -25,8 +25,6 @@ CREATE TABLE holiday
     PRIMARY KEY (holiday_date)
 ) ENGINE=InnoDB COMMENT='휴일 달력 — 주말 제외 공휴일만 (PH-40)';
 
--- 초기 영업일. NOW()/CURRENT_DATE 는 RDS 가 UTC 라 날짜가 어긋날 수 있어 직접 적는다.
--- 이후 값은 임시 전환 스케줄러가 달력 날짜에 맞춘다 (#471).
+-- 초기값은 과거이기만 하면 된다 — 서버 기동 시 오늘 달력에 맞춘다 (#471)
 INSERT INTO business_date (date_type, business_date)
-VALUES ('BUSINESS_DATE', '2026-10-02');
-
+VALUES ('BUSINESS_DATE', '2026-01-01');

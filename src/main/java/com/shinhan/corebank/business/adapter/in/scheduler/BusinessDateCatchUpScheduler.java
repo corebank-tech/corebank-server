@@ -10,7 +10,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-// 임시 — PH-43 COB 가 영업일 전환 스텝을 가지면 제거한다 (#471)
+// 자정 스케줄은 PH-43 COB 도입 시 제거하고, 기동 시 맞추기는 남긴다 (#471)
 @Component
 @RequiredArgsConstructor
 public class BusinessDateCatchUpScheduler {
@@ -18,7 +18,7 @@ public class BusinessDateCatchUpScheduler {
     private final BusinessDateCatchUpUseCase businessDateCatchUpUseCase;
     private final Clock clock;
 
-    // 초기값은 환경마다 Flyway 가 도는 날 들어가므로 기동 시에도 맞춘다
+    // 초기값(과거)이나 서버가 모두 꺼져 있던 동안 밀린 영업일을 오늘로 따라잡는다
     @EventListener(ApplicationReadyEvent.class)
     public void catchUpOnStartup() {
         catchUp();

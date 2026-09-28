@@ -10,6 +10,7 @@ import com.shinhan.corebank.business.application.port.in.BusinessDateCatchUpUseC
 import com.shinhan.corebank.business.support.BusinessDateTestFixture;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -44,6 +45,9 @@ class BusinessDateIntegrationTest extends IntegrationTestSupport {
 
     @Autowired
     JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    Clock clock;
 
     private LocalDate original;
 
@@ -129,8 +133,19 @@ class BusinessDateIntegrationTest extends IntegrationTestSupport {
     }
 
     @Nested
-    @DisplayName("달력에 맞추기 (임시 스케줄러)")
+    @DisplayName("달력에 맞추기")
     class CatchUp {
+
+        @Test
+        @DisplayName("Flyway 초기값(2026-01-01)이 아니라 기동 시 오늘 달력에 맞춰져 있다")
+        void alignedToCalendarOnStartup() {
+            LocalDate calendarToday = LocalDate.now(clock);
+            LocalDate expected = businessDateProvider.isBusinessDay(calendarToday)
+                    ? calendarToday
+                    : businessDateProvider.nextBusinessDay(calendarToday);
+
+            assertThat(original).isEqualTo(expected);
+        }
 
         @Test
         @DisplayName("연휴 동안 매일 불려도 영업일이 앞서 나가지 않는다")
