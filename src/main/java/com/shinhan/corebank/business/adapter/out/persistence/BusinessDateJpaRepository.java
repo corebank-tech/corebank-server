@@ -1,9 +1,12 @@
 package com.shinhan.corebank.business.adapter.out.persistence;
 
 import com.shinhan.corebank.business.domain.BusinessDateType;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -24,4 +27,8 @@ public interface BusinessDateJpaRepository extends JpaRepository<BusinessDateJpa
             @Param("expected") LocalDate expected,
             @Param("newDate") LocalDate newDate,
             @Param("now") LocalDateTime now);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM BusinessDateJpaEntity b WHERE b.dateType = :type")
+    Optional<BusinessDateJpaEntity> findByDateTypeForUpdate(@Param("type") BusinessDateType type);
 }

@@ -32,4 +32,9 @@ public class BusinessDatePersistenceAdapter implements BusinessDateQueryPort, Bu
     public boolean compareAndSet(BusinessDateType type, LocalDate expected, LocalDate newDate) {
         return businessDateRepository.compareAndSet(type, expected, newDate, LocalDateTime.now(clock)) == 1;
     }
+
+    @Override
+    public Optional<LocalDate> findBusinessDateForUpdate(BusinessDateType type) {
+        return businessDateRepository.findByDateTypeForUpdate(type).map(BusinessDateJpaEntity::getBusinessDate);
+    }
 }

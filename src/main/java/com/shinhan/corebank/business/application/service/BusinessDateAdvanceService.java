@@ -29,8 +29,11 @@ public class BusinessDateAdvanceService implements BusinessDateAdvancer {
             log.info("영업일 전환 {} -> {} (COB)", businessDate, next);
             return next;
         }
-        // 실패 스텝 재실행으로 이미 넘어간 경우만 통과시키고, 그 외 불일치는 드러낸다
-        if (businessDateProvider.today().equals(next)) {
+        // 재실행·동시 호출로 이미 넘어간 경우만 통과 — 일반 조회는 옛 스냅샷을 읽으므로 락 읽기로 확인한다
+        LocalDate current = businessDateCommandPort
+                .findBusinessDateForUpdate(BusinessDateType.BUSINESS_DATE)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.BUSINESS_DATE_NOT_FOUND));
+        if (current.equals(next)) {
             return next;
         }
         throw new BusinessException(CommonErrorCode.CONCURRENT_MODIFICATION);
