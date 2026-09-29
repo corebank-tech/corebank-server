@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 31개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 295개 컬럼
+**대상**: 31개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 297개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -38,8 +38,8 @@
 | 10 | `account` | 계좌 | P2 | 21 |
 | 11 | `account_number_sequence` | 계좌번호 채번 규칙 | P2 | 8  |
 | 12 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4  |
-| 13 | `transfer` | 이체 거래 | P4 | 21 |
-| 14 | `ledger_entry` | 원장 | P4 | 13 |
+| 13 | `transfer` | 이체 거래 | P4 | 22 |
+| 14 | `ledger_entry` | 원장 | P4 | 14 |
 | 15 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1  |
 | 16 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6  |
 | 17 | `transfer_limit` | 이체한도 | P1 | 5  |
@@ -446,6 +446,7 @@
 | `error_code` | `VARCHAR(10)` |  | O |  | 실패 시 오류코드 |
 | `error_message` | `VARCHAR(200)` |  | O |  | 실패 시 사유 문구 |
 | `transferred_at` | `DATETIME(6)` |  | X |  | 이체 처리 일시 |
+| `trade_date` | `DATE` |  | O |  | **거래일** — 이 이체가 귀속되는 영업일. 거래 시점의 `BusinessDateProvider.today()` 값이다. 휴일 거래는 다음 영업일이 된다([glossary](phase2/glossary.md) 7번). **마감 시작~영업일 전환 사이 거래의 거래일은 PH-43에서 정한다.** 성공·실패(ERROR) 행 모두 채운다 — 실패 행은 원장 없이 이 테이블에만 남는다. 자동·예약이체는 휴일에도 지정일에 실행되므로(REQ-AUTO-001), 휴일에 실행된 회차의 거래일도 다음 영업일이다 — 실행일(`execution_date`, 달력 날짜)과 거래일이 다를 수 있다. P4 대입 전 행은 NULL이다 |
 | `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
 
 **인덱스**
@@ -487,6 +488,11 @@
 | `reversed` | `BOOLEAN` |  | X | `FALSE` | 반대기표로 취소된 원거래인지 여부. 원본을 지우지 않고 이 값만 세운다 |
 | `reversal_id` | `BIGINT` |  | O |  | 반대기표 행이 가리키는 원거래의 `ledger_entry_id` |
 | `occurred_at` | `DATETIME(6)` | **PK** | X |  | 기표 발생 일시. RANGE 파티션 키이며 거래내역 조회의 기간 조건이 이 컬럼에 걸린다 |
+| `trade_date` | `DATE` |  | O |  | **거래일** — 이 기표가 귀속되는 영업일. `occurred_at`(발생 시각)과 다르다. 값 규칙은 `transfer.trade_date`와 같다. **원장을 쓰는 모든 경로(이체·상품가입 입금)가 채운다.** P4 대입 전 행은 NULL이다. P6 시드(PH-60b)는 GL과 같은 거래일을 넣는다 |
+
+**`trade_date` 는 NULL 을 허용한다(Expand).** 기존 행 채우기와 `NOT NULL` 전환 여부·시점은 별도 이슈(#515)에서 정한다. 거래일로 조회하는 곳이 아직 없어 인덱스는 두지 않는다 — `gl_journal_entry` 와 같은 판단이다.
+
+**`trade_date` 로 거를 때는 `occurred_at` 범위도 넉넉히 같이 건다.** 파티션 키가 `occurred_at` 이라 `trade_date` 조건만 걸면 모든 파티션을 읽는다. 거래일과 발생일의 간격은 일정하지 않다 — 연휴면 며칠 뒤이고, COB 가 늦어지면 하루 앞설 수도 있다.
 
 **인덱스**
 

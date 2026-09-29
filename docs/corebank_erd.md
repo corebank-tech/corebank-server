@@ -133,6 +133,7 @@ erDiagram
         varchar error_code "VARCHAR(10)"
         varchar error_message "VARCHAR(200)"
         datetime transferred_at "DATETIME(6)"
+        date trade_date "거래일(귀속 영업일). NULL 허용"
     }
     ledger_entry {
         bigint ledger_entry_id PK
@@ -148,6 +149,7 @@ erDiagram
         boolean reversed
         bigint reversal_id "반대기표가 가리키는 원거래"
         datetime occurred_at PK "RANGE PARTITION KEY"
+        date trade_date "거래일(귀속 영업일). NULL 허용"
     }
     favorite_account {
         bigint favorite_account_id PK
