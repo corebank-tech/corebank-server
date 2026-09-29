@@ -164,6 +164,18 @@ public class Customer {
         this.loginFailureCount = 0;
     }
 
+    // 관리자 수동 잠금 해제(REQ-AUTH-026). 실패 횟수도 0으로 되돌린다(REQ-AUTH-035).
+    public void unlockByAdmin() {
+        this.accountLocked = false;
+        this.loginFailureCount = 0;
+    }
+
+    // 관리자 비밀번호 초기화. 고객 셀프 재설정과 달리 잠금까지 해제해 바로 로그인할 수 있게 한다.
+    public void resetPasswordByAdmin(String passwordHash, LocalDateTime changedAt) {
+        resetPassword(passwordHash, changedAt);
+        unlockByAdmin();
+    }
+
     private static boolean isValidIpAddress(String loginIp) {
         return isValidIpv4Address(loginIp) || isValidIpv6Address(loginIp);
     }
