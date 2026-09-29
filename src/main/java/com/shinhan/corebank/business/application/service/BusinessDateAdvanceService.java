@@ -6,7 +6,9 @@ import com.shinhan.corebank.business.application.port.out.BusinessDateCommandPor
 import com.shinhan.corebank.business.domain.BusinessDateType;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,12 +20,18 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class BusinessDateAdvanceService implements BusinessDateAdvancer {
 
+    private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private final BusinessDateProvider businessDateProvider;
     private final BusinessDateCommandPort businessDateCommandPort;
+    private final Clock clock;
 
     @Override
     @Transactional
     public LocalDate advanceFrom(LocalDate businessDate) {
+        // 아직 오지 않은 영업일은 마감하지 않는다 — 23:30 COB 기준 조건. 자정 후 COB 로 바꾸면 < 로 좁힌다
+        if (businessDate.isAfter(LocalDate.now(clock.withZone(SEOUL)))) {
+            throw new BusinessException(CommonErrorCode.FUTURE_BUSINESS_DATE_CLOSE);
+        }
         LocalDate next = businessDateProvider.nextBusinessDay(businessDate);
         if (businessDateCommandPort.compareAndSet(BusinessDateType.BUSINESS_DATE, businessDate, next)) {
             log.info("영업일 전환 {} -> {} (COB)", businessDate, next);

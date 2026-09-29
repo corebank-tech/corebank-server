@@ -18,6 +18,7 @@ public enum CommonErrorCode implements ErrorCode {
     CONCURRENT_MODIFICATION("CMN0303", 409, "다른 요청에 의해 정보가 변경되었습니다. 다시 조회한 후 시도해 주세요."),
 
     BUSINESS_DATE_NOT_FOUND("CMN9001", 500, "영업일 정보를 확인할 수 없습니다."),
+    FUTURE_BUSINESS_DATE_CLOSE("CMN9002", 500, "아직 오지 않은 영업일은 마감할 수 없습니다."),
     INTERNAL_ERROR("CMN9999", 500, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
 
     private final String code;

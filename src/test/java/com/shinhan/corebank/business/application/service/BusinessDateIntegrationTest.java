@@ -206,48 +206,72 @@ class BusinessDateIntegrationTest extends IntegrationTestSupport {
         @Test
         @DisplayName("처리한 영업일에서 다음 영업일로 넘긴다")
         void advancesToNextBusinessDay() {
-            businessDateTestFixture.moveTo(LocalDate.of(2026, 10, 2));
+            businessDateTestFixture.moveTo(LocalDate.of(2026, 9, 23));
 
-            LocalDate next = businessDateAdvancer.advanceFrom(LocalDate.of(2026, 10, 2));
+            LocalDate next = businessDateAdvancer.advanceFrom(LocalDate.of(2026, 9, 23));
 
-            assertThat(next).isEqualTo(LocalDate.of(2026, 10, 6));
-            assertThat(businessDateTestFixture.currentInDb()).isEqualTo(LocalDate.of(2026, 10, 6));
+            assertThat(next).isEqualTo(LocalDate.of(2026, 9, 28));
+            assertThat(businessDateTestFixture.currentInDb()).isEqualTo(LocalDate.of(2026, 9, 28));
         }
 
         @Test
         @DisplayName("같은 영업일로 다시 불려도(실패 스텝 재실행) 두 번 넘기지 않는다")
         void retryDoesNotAdvanceTwice() {
-            businessDateTestFixture.moveTo(LocalDate.of(2026, 10, 2));
+            businessDateTestFixture.moveTo(LocalDate.of(2026, 9, 23));
 
-            businessDateAdvancer.advanceFrom(LocalDate.of(2026, 10, 2));
-            LocalDate retried = businessDateAdvancer.advanceFrom(LocalDate.of(2026, 10, 2));
+            businessDateAdvancer.advanceFrom(LocalDate.of(2026, 9, 23));
+            LocalDate retried = businessDateAdvancer.advanceFrom(LocalDate.of(2026, 9, 23));
 
-            assertThat(retried).isEqualTo(LocalDate.of(2026, 10, 6));
-            assertThat(businessDateTestFixture.currentInDb()).isEqualTo(LocalDate.of(2026, 10, 6));
+            assertThat(retried).isEqualTo(LocalDate.of(2026, 9, 28));
+            assertThat(businessDateTestFixture.currentInDb()).isEqualTo(LocalDate.of(2026, 9, 28));
         }
 
         @Test
         @DisplayName("동시에 두 번 불려도 한 영업일만 넘어간다")
         void concurrentAdvanceMovesOnce() throws Exception {
-            businessDateTestFixture.moveTo(LocalDate.of(2026, 10, 2));
+            businessDateTestFixture.moveTo(LocalDate.of(2026, 9, 23));
 
             List<Object> results =
-                    runConcurrently(8, () -> businessDateAdvancer.advanceFrom(LocalDate.of(2026, 10, 2)));
+                    runConcurrently(8, () -> businessDateAdvancer.advanceFrom(LocalDate.of(2026, 9, 23)));
 
-            assertThat(results).containsOnly(LocalDate.of(2026, 10, 6));
-            assertThat(businessDateTestFixture.currentInDb()).isEqualTo(LocalDate.of(2026, 10, 6));
+            assertThat(results).containsOnly(LocalDate.of(2026, 9, 28));
+            assertThat(businessDateTestFixture.currentInDb()).isEqualTo(LocalDate.of(2026, 9, 28));
         }
 
         @Test
         @DisplayName("저장값이 처리한 영업일과 다음 영업일 어느 쪽도 아니면 CMN0303 으로 드러낸다")
         void mismatchThrows() {
-            businessDateTestFixture.moveTo(LocalDate.of(2026, 10, 8));
+            businessDateTestFixture.moveTo(LocalDate.of(2026, 9, 30));
 
-            assertThatThrownBy(() -> businessDateAdvancer.advanceFrom(LocalDate.of(2026, 10, 2)))
+            assertThatThrownBy(() -> businessDateAdvancer.advanceFrom(LocalDate.of(2026, 9, 23)))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.CONCURRENT_MODIFICATION);
-            assertThat(businessDateTestFixture.currentInDb()).isEqualTo(LocalDate.of(2026, 10, 8));
+            assertThat(businessDateTestFixture.currentInDb()).isEqualTo(LocalDate.of(2026, 9, 30));
+        }
+
+        @Test
+        @DisplayName("아직 오지 않은 영업일은 마감하지 않고 CMN9002 로 거부한다 — 토요일 밤에 월요일 마감 방지")
+        void futureBusinessDateIsRejected() {
+            LocalDate tomorrow = LocalDate.now(clock).plusDays(1);
+            businessDateTestFixture.moveTo(tomorrow);
+
+            assertThatThrownBy(() -> businessDateAdvancer.advanceFrom(tomorrow))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.FUTURE_BUSINESS_DATE_CLOSE);
+            assertThat(businessDateTestFixture.currentInDb()).isEqualTo(tomorrow);
+        }
+
+        @Test
+        @DisplayName("오늘 영업일은 마감할 수 있다 — 23:30 COB 경계")
+        void todayCanBeClosed() {
+            LocalDate calendarToday = LocalDate.now(clock);
+            businessDateTestFixture.moveTo(calendarToday);
+
+            LocalDate next = businessDateAdvancer.advanceFrom(calendarToday);
+
+            assertThat(next).isEqualTo(businessDateProvider.nextBusinessDay(calendarToday));
         }
 
         @Test
@@ -255,7 +279,7 @@ class BusinessDateIntegrationTest extends IntegrationTestSupport {
         void advanceWithoutRowThrows() {
             jdbcTemplate.update("DELETE FROM business_date WHERE date_type = 'BUSINESS_DATE'");
             try {
-                assertThatThrownBy(() -> businessDateAdvancer.advanceFrom(LocalDate.of(2026, 10, 2)))
+                assertThatThrownBy(() -> businessDateAdvancer.advanceFrom(LocalDate.of(2026, 9, 23)))
                         .isInstanceOf(BusinessException.class)
                         .extracting("errorCode")
                         .isEqualTo(CommonErrorCode.BUSINESS_DATE_NOT_FOUND);
