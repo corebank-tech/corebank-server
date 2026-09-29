@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 29개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 289개 컬럼
+**대상**: 31개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 297개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -57,6 +57,8 @@
 | 29 | `gl_account` | 계정과목 | P3 | 6  |
 | 30 | `gl_voucher` | 전표 | P3 | 5  |
 | 31 | `gl_journal_entry` | 분개 | P3 | 8  |
+| 32 | `business_date` | 현재 영업일 | P5 | 4  |
+| 33 | `holiday` | 휴일 달력 | P5 | 4  |
 
 ---
 
@@ -970,3 +972,39 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 **전표 FK 가 복합인 이유.** `voucher_no` 만 참조하면 전표와 다른 `trade_date` 를 가진 분개가 저장되고, 그대로 날짜별 시산표 집계가 틀어진다. 복제본이 원본과 같도록 DB 가 강제한다 — 특히 P6 시드 생성기(PH-60b)는 애플리케이션을 거치지 않고 600만 건을 직접 INSERT 하므로 애플리케이션 규약으로는 막을 수 없다.
 
 ---
+
+# 10. 영업일 — P5
+
+2차에 신설(PH-40, #471). 영업일은 시스템 시각과 분리된 **논리 업무일자**이고 `business.api.BusinessDateProvider` 가 유일한 출처다([glossary](phase2/glossary.md) 6번).
+
+Apache Fineract 의 `m_business_date` 처럼 **시계가 아니라 DB 에 저장된 값**을 영업일로 쓴다. 테이블은 둘로 나눈다 — 매일 바뀌는 값 1개(`business_date`)와 한 번 넣고 거의 안 바뀌는 목록(`holiday`)은 성격이 다르다. Fineract 와 달리 영업일을 넘길 때 휴일을 건너뛴다(Fineract 는 `plusDays(1)` 이고 휴일은 별도 개념).
+
+## `business_date`
+
+> 현재 영업일
+
+`date_type` 별로 한 행이다. 2차에는 `BUSINESS_DATE` 한 행뿐이고, 마감 대상일(`COB_DATE`) 같은 종류가 필요해지면 테이블을 바꾸지 않고 행을 더한다(Fineract `BusinessDateType` 과 같은 구조).
+
+초기값 `2026-01-01` 은 의미 없는 과거 날짜다 — 서버가 뜰 때 오늘 달력에 맞춘다(오늘이 영업일이면 오늘, 아니면 다음 영업일. 저장값이 그보다 이전일 때만 바꾼다). V 파일이 실행되는 날은 환경마다(팀원 로컬·CI·배포) 달라서 특정 날짜를 박으면 미래나 과거로 어긋난다. `NOW()`·`CURRENT_DATE` 는 RDS 가 UTC 라 쓰지 않는다. 이후 영업일은 매일 자정(KST) 같은 방식으로 맞추고, PH-43 이후에는 COB 마지막 스텝이 다음 영업일로 넘긴다. 기동 시 맞추기는 PH-43 이후에도 남는다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `date_type` | `VARCHAR(20)` | **PK** | X |  | 영업일 종류. 2차는 `BUSINESS_DATE` 1행 |
+| `business_date` | `DATE` |  | X |  | 현재 영업일 |
+| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
+| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 마지막 영업일 전환 시각 |
+
+---
+
+## `holiday`
+
+> 휴일 달력 — 주말을 제외한 공휴일
+
+**주말은 넣지 않는다** — 토·일은 요일로 판정한다. 영업일 = 주말도 아니고 이 테이블에도 없는 날. 시드는 `R__seed_holiday.sql` 이 넣는다 — 운영에도 있어야 하고 대체공휴일·임시공휴일이 추가될 수 있는 마스터성 데이터라 `V__` 가 아니라 `R__` 다. 등록 API 는 2차 범위 밖이다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `holiday_date` | `DATE` | **PK** | X |  | 휴일 날짜 |
+| `holiday_name` | `VARCHAR(50)` |  | X |  | 예: `개천절`, `대체공휴일(추석)` |
+| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
+| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
