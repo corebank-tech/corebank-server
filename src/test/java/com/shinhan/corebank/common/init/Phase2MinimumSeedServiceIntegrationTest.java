@@ -55,6 +55,22 @@ class Phase2MinimumSeedServiceIntegrationTest extends IntegrationTestSupport {
                 .isEqualTo(12);
         assertThat(count("SELECT COUNT(*) FROM ledger_entry WHERE ledger_entry_id BETWEEN 81000001 AND 81000020"))
                 .isEqualTo(20);
+        assertThat(
+                        count(
+                                "SELECT COUNT(*) FROM transfer WHERE transfer_id BETWEEN 81000001 AND 81000004 AND trade_date IS NULL"))
+                .isZero();
+        assertThat(
+                        count(
+                                "SELECT COUNT(*) FROM ledger_entry WHERE ledger_entry_id BETWEEN 81000001 AND 81000020 AND trade_date IS NULL"))
+                .isZero();
+        assertThat(count(
+                        "SELECT COUNT(*) FROM transfer WHERE transfer_id BETWEEN 81000001 AND 81000004 AND trade_date <> ?",
+                        LocalDate.of(2026, 9, 1)))
+                .isZero();
+        assertThat(count(
+                        "SELECT COUNT(*) FROM ledger_entry WHERE ledger_entry_id BETWEEN 81000001 AND 81000020 AND trade_date <> ?",
+                        LocalDate.of(2026, 9, 1)))
+                .isZero();
         assertThat(count("SELECT COUNT(*) FROM auto_transfer WHERE auto_transfer_id BETWEEN 81000001 AND 81000002"))
                 .isEqualTo(2);
         assertThat(
@@ -77,6 +93,20 @@ class Phase2MinimumSeedServiceIntegrationTest extends IntegrationTestSupport {
                                OR SUM(direction = 'WITHDRAWAL') <> 1
                                OR SUM(direction = 'DEPOSIT') <> 1
                         ) broken
+                        """))
+                .isZero();
+        assertThat(
+                        count(
+                                """
+                        SELECT COUNT(*) FROM account a
+                        JOIN (
+                            SELECT account_id, MAX(occurred_at) AS last_occurred_at
+                            FROM ledger_entry
+                            WHERE account_id BETWEEN 81000001 AND 81000012
+                            GROUP BY account_id
+                        ) latest ON latest.account_id = a.account_id
+                        WHERE a.account_id BETWEEN 81000001 AND 81000012
+                          AND a.last_transaction_at <> latest.last_occurred_at
                         """))
                 .isZero();
         assertThat(

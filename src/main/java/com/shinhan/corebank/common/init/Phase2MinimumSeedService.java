@@ -34,16 +34,16 @@ public class Phase2MinimumSeedService {
     public Phase2MinimumSeedReport seed(Phase2MinimumSeedSpec spec) {
         // 고정 생성 규칙으로 적재한 뒤 같은 트랜잭션에서 건수와 원장 정합성을 검증한다.
         long startedAt = System.nanoTime();
-        long[] finalBalances = calculateFinalBalances(spec);
+        SeedAccountState accountState = calculateAccountState(spec);
 
         insertCustomers(spec);
         insertTransferLimits(spec);
-        insertAccounts(spec, finalBalances);
+        insertAccounts(spec, accountState);
         insertInitialLedgerEntries(spec);
         insertTransfersAndLedgerPairs(spec);
         insertAutoTransfers(spec);
         advanceLedgerSequence(spec);
-        insertOpeningVoucher(spec, finalBalances);
+        insertOpeningVoucher(spec, accountState.finalBalances());
         validate(spec);
 
         return new Phase2MinimumSeedReport(
@@ -55,21 +55,26 @@ public class Phase2MinimumSeedService {
                 Duration.ofNanos(System.nanoTime() - startedAt));
     }
 
-    private long[] calculateFinalBalances(Phase2MinimumSeedSpec spec) {
+    private SeedAccountState calculateAccountState(Phase2MinimumSeedSpec spec) {
         long[] balances = initialBalances(spec);
+        LocalDateTime[] lastTransactionAt = new LocalDateTime[spec.accountCount()];
+        java.util.Arrays.fill(lastTransactionAt, spec.baseDateTime().minusSeconds(1));
         for (int transferIndex = 0; transferIndex < spec.transferCount(); transferIndex++) {
             int withdrawal = demandAccountIndex(transferIndex % spec.customerCount());
             int deposit = demandAccountIndex(depositCustomerIndex(transferIndex, spec.customerCount()));
             long amount = transferAmount(transferIndex);
             balances[withdrawal] -= amount;
             balances[deposit] += amount;
+            LocalDateTime occurredAt = spec.baseDateTime().plusSeconds(transferIndex);
+            lastTransactionAt[withdrawal] = occurredAt;
+            lastTransactionAt[deposit] = occurredAt;
         }
         for (long balance : balances) {
             if (balance < 0) {
                 throw new IllegalStateException("PH-60 생성 결과에 음수 잔액이 있습니다.");
             }
         }
-        return balances;
+        return new SeedAccountState(balances, lastTransactionAt);
     }
 
     private long[] initialBalances(Phase2MinimumSeedSpec spec) {
@@ -124,7 +129,7 @@ public class Phase2MinimumSeedService {
         });
     }
 
-    private void insertAccounts(Phase2MinimumSeedSpec spec, long[] finalBalances) {
+    private void insertAccounts(Phase2MinimumSeedSpec spec, SeedAccountState accountState) {
         Long depositProductId = productId("PRD_BASIC_DEP");
         Long savingsProductId = productId("PRD_REGULAR_SAVE");
         String sql =
@@ -150,7 +155,7 @@ public class Phase2MinimumSeedService {
                 statement.setLong(4, accountKind == 1 ? depositProductId : savingsProductId);
             }
             statement.setString(5, accountType(accountKind));
-            statement.setLong(6, finalBalances[index]);
+            statement.setLong(6, accountState.finalBalances()[index]);
             statement.setString(7, PASSWORD_HASH);
             statement.setString(8, accountKind == 0 ? "PH60 주거래" : null);
             statement.setInt(9, accountKind + 1);
@@ -166,7 +171,7 @@ public class Phase2MinimumSeedService {
             } else {
                 statement.setDate(13, Date.valueOf(maturityDate));
             }
-            setTimestamp(statement, 14, spec.baseDateTime().plusSeconds(spec.transferCount()));
+            setTimestamp(statement, 14, accountState.lastTransactionAt()[index]);
             setTimestamp(statement, 15, openedAt);
             setTimestamp(statement, 16, spec.baseDateTime());
         });
@@ -178,8 +183,8 @@ public class Phase2MinimumSeedService {
                 INSERT IGNORE INTO ledger_entry (
                     ledger_entry_id, occurred_at, account_id, transfer_id, transaction_number,
                     direction, amount, balance_after, transaction_type, transaction_content,
-                    channel, reversed, reversal_id
-                ) VALUES (?, ?, ?, NULL, ?, 'DEPOSIT', ?, ?, 'PH60_SEED_INITIAL', 'PH60개시', 'BT', FALSE, NULL)
+                    channel, reversed, reversal_id, trade_date
+                ) VALUES (?, ?, ?, NULL, ?, 'DEPOSIT', ?, ?, 'PH60_SEED_INITIAL', 'PH60개시', 'BT', FALSE, NULL, ?)
                 """;
         batch(spec.accountCount(), sql, (statement, index) -> {
             long initialBalance = initialBalance(index);
@@ -189,6 +194,7 @@ public class Phase2MinimumSeedService {
             statement.setString(4, transactionNumber(spec, index));
             statement.setLong(5, initialBalance);
             statement.setLong(6, initialBalance);
+            statement.setDate(7, Date.valueOf(spec.baseDateTime().toLocalDate()));
         });
     }
 
@@ -220,9 +226,10 @@ public class Phase2MinimumSeedService {
                     transfer_id, transaction_number, withdrawal_account_id, deposit_account_id,
                     deposit_account_number, payee_name, amount, fee, transfer_type, channel, status,
                     source_type, source_id, execution_date, my_passbook_memo, recipient_passbook_memo,
-                    withdrawal_balance_after, error_code, error_message, transferred_at, created_at
+                    withdrawal_balance_after, error_code, error_message, transferred_at, created_at,
+                    trade_date
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'IMMEDIATE', 'BT', 'SUCCESS',
-                          NULL, NULL, NULL, 'PH60', 'PH60', ?, NULL, NULL, ?, ?)
+                          NULL, NULL, NULL, 'PH60', 'PH60', ?, NULL, NULL, ?, ?, ?)
                 """;
         jdbc.batchUpdate(transferSql, new BatchPreparedStatementSetter() {
             @Override
@@ -242,6 +249,7 @@ public class Phase2MinimumSeedService {
                 statement.setLong(8, withdrawalAfter[localIndex]);
                 setTimestamp(statement, 9, occurredAt);
                 setTimestamp(statement, 10, occurredAt);
+                statement.setDate(11, Date.valueOf(spec.baseDateTime().toLocalDate()));
             }
 
             @Override
@@ -255,8 +263,8 @@ public class Phase2MinimumSeedService {
                 INSERT IGNORE INTO ledger_entry (
                     ledger_entry_id, occurred_at, account_id, transfer_id, transaction_number,
                     direction, amount, balance_after, transaction_type, transaction_content,
-                    channel, reversed, reversal_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PH60_SEED_TRANSFER', 'PH60이체', 'BT', FALSE, NULL)
+                    channel, reversed, reversal_id, trade_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PH60_SEED_TRANSFER', 'PH60이체', 'BT', FALSE, NULL, ?)
                 """;
         jdbc.batchUpdate(ledgerSql, new BatchPreparedStatementSetter() {
             @Override
@@ -277,6 +285,7 @@ public class Phase2MinimumSeedService {
                 statement.setString(6, withdrawal ? "WITHDRAWAL" : "DEPOSIT");
                 statement.setLong(7, transferAmount(transferIndex));
                 statement.setLong(8, withdrawal ? withdrawalAfter[localIndex] : depositAfter[localIndex]);
+                statement.setDate(9, Date.valueOf(spec.baseDateTime().toLocalDate()));
             }
 
             @Override
@@ -391,6 +400,21 @@ public class Phase2MinimumSeedService {
                 "SELECT COUNT(*) FROM transfer WHERE transfer_id BETWEEN ? AND ? AND status = 'SUCCESS'",
                 spec.transferIdStart(),
                 spec.transferIdStart() + spec.transferCount() - 1);
+        // 이체와 원장은 개시 전표와 같은 고정 거래일로 귀속한다.
+        requireCount(
+                "transfer trade dates",
+                0,
+                "SELECT COUNT(*) FROM transfer WHERE transfer_id BETWEEN ? AND ? AND (trade_date IS NULL OR trade_date <> ?)",
+                spec.transferIdStart(),
+                spec.transferIdStart() + spec.transferCount() - 1,
+                Date.valueOf(spec.baseDateTime().toLocalDate()));
+        requireCount(
+                "ledger trade dates",
+                0,
+                "SELECT COUNT(*) FROM ledger_entry WHERE ledger_entry_id BETWEEN ? AND ? AND (trade_date IS NULL OR trade_date <> ?)",
+                spec.ledgerEntryIdStart(),
+                spec.ledgerEntryIdStart() + spec.ledgerEntryCount() - 1,
+                Date.valueOf(spec.baseDateTime().toLocalDate()));
         requireCount(
                 "near maturity accounts",
                 spec.nearMaturityAccountCount(),
@@ -444,6 +468,26 @@ public class Phase2MinimumSeedService {
                 spec.accountIdStart() + spec.accountCount() - 1);
         if (balanceMismatches != 0) {
             throw new IllegalStateException("PH-60 계좌 잔액 정합성 검증에 실패했습니다: " + balanceMismatches);
+        }
+
+        int lastTransactionMismatches = count(
+                """
+                SELECT COUNT(*) FROM account a
+                JOIN (
+                    SELECT account_id, MAX(occurred_at) AS last_occurred_at
+                    FROM ledger_entry
+                    WHERE account_id BETWEEN ? AND ?
+                    GROUP BY account_id
+                ) latest ON latest.account_id = a.account_id
+                WHERE a.account_id BETWEEN ? AND ?
+                  AND a.last_transaction_at <> latest.last_occurred_at
+                """,
+                spec.accountIdStart(),
+                spec.accountIdStart() + spec.accountCount() - 1,
+                spec.accountIdStart(),
+                spec.accountIdStart() + spec.accountCount() - 1);
+        if (lastTransactionMismatches != 0) {
+            throw new IllegalStateException("PH-60 계좌 마지막 거래 시각 검증에 실패했습니다: " + lastTransactionMismatches);
         }
 
         int unbalancedVoucher = count(
@@ -569,4 +613,6 @@ public class Phase2MinimumSeedService {
     private interface BatchBinder {
         void bind(PreparedStatement statement, int index) throws SQLException;
     }
+
+    private record SeedAccountState(long[] finalBalances, LocalDateTime[] lastTransactionAt) {}
 }
