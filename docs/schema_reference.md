@@ -446,7 +446,7 @@
 | `error_code` | `VARCHAR(10)` |  | O |  | 실패 시 오류코드 |
 | `error_message` | `VARCHAR(200)` |  | O |  | 실패 시 사유 문구 |
 | `transferred_at` | `DATETIME(6)` |  | X |  | 이체 처리 일시 |
-| `trade_date` | `DATE` |  | O |  | **거래일** — 이 이체가 귀속되는 영업일. 거래 시점의 `BusinessDateProvider.today()` 값이라 휴일·마감 후 거래는 자동으로 다음 영업일이 된다([glossary](phase2/glossary.md) 7번). **자동·예약이체는 휴일에도 지정일에 실행되므로(REQ-AUTO-001), 휴일에 실행된 회차의 거래일도 다음 영업일이다** — 실행일(`execution_date`, 달력 날짜)과 거래일이 다를 수 있다. P4가 10/16부터 대입하고, 그 전 행은 NULL이다 |
+| `trade_date` | `DATE` |  | O |  | **거래일** — 이 이체가 귀속되는 영업일. 거래 시점의 `BusinessDateProvider.today()` 값이다. 휴일 거래는 다음 영업일이 된다([glossary](phase2/glossary.md) 7번). **마감 시작~영업일 전환 사이 거래의 거래일은 PH-43에서 정한다.** 자동·예약이체는 휴일에도 지정일에 실행되므로(REQ-AUTO-001), 휴일에 실행된 회차의 거래일도 다음 영업일이다 — 실행일(`execution_date`, 달력 날짜)과 거래일이 다를 수 있다. P4 대입 전 행은 NULL이다 |
 | `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
 
 **인덱스**
@@ -488,7 +488,7 @@
 | `reversed` | `BOOLEAN` |  | X | `FALSE` | 반대기표로 취소된 원거래인지 여부. 원본을 지우지 않고 이 값만 세운다 |
 | `reversal_id` | `BIGINT` |  | O |  | 반대기표 행이 가리키는 원거래의 `ledger_entry_id` |
 | `occurred_at` | `DATETIME(6)` | **PK** | X |  | 기표 발생 일시. RANGE 파티션 키이며 거래내역 조회의 기간 조건이 이 컬럼에 걸린다 |
-| `trade_date` | `DATE` |  | O |  | **거래일** — 이 기표가 귀속되는 영업일. `occurred_at`(발생 시각)과 다르다. 값 규칙은 `transfer.trade_date`와 같다. 그 전 행과 대입 전 시드는 NULL이다 |
+| `trade_date` | `DATE` |  | O |  | **거래일** — 이 기표가 귀속되는 영업일. `occurred_at`(발생 시각)과 다르다. 값 규칙은 `transfer.trade_date`와 같다. **원장을 쓰는 모든 경로(이체·상품가입 입금)가 채운다.** P4 대입 전 행은 NULL이다. P6 시드(PH-60b)는 GL과 같은 거래일을 넣는다 |
 
 **`trade_date` 는 NULL 을 허용한다(Expand).** 기존 행을 `DATE(occurred_at)` 로 채우면 휴일 거래가 틀린 거래일을 갖는다. P4 대입(10/16) 이후 기존 행을 채우고 `NOT NULL` 로 좁힌다. 거래일로 조회하는 곳이 아직 없어 인덱스는 두지 않는다 — `gl_journal_entry` 와 같은 판단이다.
 
