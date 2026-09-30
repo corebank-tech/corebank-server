@@ -31,24 +31,28 @@ class Phase2MinimumSeedSpecTest {
     @Test
     @DisplayName("고객당 계좌 세 개 규칙을 위반하면 규격 생성을 거부한다")
     void rejectsInvalidAccountCount() {
+        assertThatIllegalArgumentException().isThrownBy(() -> spec(1, 3, 5, 0, 0, "860", BASE_TIME));
         assertThatIllegalArgumentException().isThrownBy(() -> spec(2, 5, 9, 0, 0, "860", BASE_TIME));
     }
 
     @Test
     @DisplayName("원장 행이 초기 기표와 이체 쌍으로 구성되지 않으면 거부한다")
     void rejectsInvalidLedgerCount() {
+        assertThatIllegalArgumentException().isThrownBy(() -> spec(2, 6, 5, 0, 0, "860", BASE_TIME));
         assertThatIllegalArgumentException().isThrownBy(() -> spec(2, 6, 7, 0, 0, "860", BASE_TIME));
     }
 
     @Test
     @DisplayName("자동이체 건수가 고객 수를 넘으면 거부한다")
     void rejectsInvalidAutoTransferCount() {
+        assertThatIllegalArgumentException().isThrownBy(() -> spec(2, 6, 8, -1, 0, "860", BASE_TIME));
         assertThatIllegalArgumentException().isThrownBy(() -> spec(2, 6, 8, 3, 0, "860", BASE_TIME));
     }
 
     @Test
     @DisplayName("만기 임박 계좌 건수가 고객 수를 넘으면 거부한다")
     void rejectsInvalidNearMaturityCount() {
+        assertThatIllegalArgumentException().isThrownBy(() -> spec(2, 6, 8, 0, -1, "860", BASE_TIME));
         assertThatIllegalArgumentException().isThrownBy(() -> spec(2, 6, 8, 0, 3, "860", BASE_TIME));
     }
 

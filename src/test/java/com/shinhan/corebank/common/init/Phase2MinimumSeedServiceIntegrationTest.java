@@ -9,6 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
 @Transactional
@@ -18,7 +19,7 @@ class Phase2MinimumSeedServiceIntegrationTest extends IntegrationTestSupport {
             4,
             12,
             20,
-            2,
+            3,
             2,
             8_100_001L,
             81_000_001L,
@@ -44,7 +45,7 @@ class Phase2MinimumSeedServiceIntegrationTest extends IntegrationTestSupport {
         assertThat(first.customers()).isEqualTo(4);
         assertThat(first.accounts()).isEqualTo(12);
         assertThat(first.ledgerEntries()).isEqualTo(20);
-        assertThat(first.autoTransfers()).isEqualTo(2);
+        assertThat(first.autoTransfers()).isEqualTo(3);
         assertThat(first.transfers()).isEqualTo(4);
         assertThat(first.elapsed()).isGreaterThanOrEqualTo(java.time.Duration.ZERO);
         assertThat(second.customers()).isEqualTo(first.customers());
@@ -71,17 +72,44 @@ class Phase2MinimumSeedServiceIntegrationTest extends IntegrationTestSupport {
                         "SELECT COUNT(*) FROM ledger_entry WHERE ledger_entry_id BETWEEN 81000001 AND 81000020 AND trade_date <> ?",
                         LocalDate.of(2026, 9, 1)))
                 .isZero();
-        assertThat(count("SELECT COUNT(*) FROM auto_transfer WHERE auto_transfer_id BETWEEN 81000001 AND 81000002"))
-                .isEqualTo(2);
+        assertThat(count("SELECT COUNT(*) FROM auto_transfer WHERE auto_transfer_id BETWEEN 81000001 AND 81000003"))
+                .isEqualTo(3);
         assertThat(
                         count(
                                 "SELECT COUNT(*) FROM account WHERE account_id BETWEEN 81000001 AND 81000012 AND status = 'MATURED'"))
                 .isZero();
         assertThat(count(
-                        "SELECT COUNT(*) FROM account WHERE account_id BETWEEN 81000001 AND 81000012 AND maturity_date > ? AND maturity_date <= ?",
-                        LocalDate.of(2026, 9, 1),
-                        LocalDate.of(2026, 10, 1)))
+                        "SELECT COUNT(*) FROM account WHERE account_id BETWEEN 81000001 AND 81000012 AND maturity_date >= ? AND maturity_date < ?",
+                        LocalDate.of(2026, 11, 1),
+                        LocalDate.of(2026, 12, 1)))
                 .isEqualTo(2);
+        assertThat(
+                        count(
+                                "SELECT COUNT(*) FROM transfer WHERE transfer_id BETWEEN 81000001 AND 81000004 AND (channel <> 'WB' OR transaction_number NOT LIKE '20260901WB%')"))
+                .isZero();
+        assertThat(
+                        count(
+                                "SELECT COUNT(*) FROM ledger_entry WHERE ledger_entry_id BETWEEN 81000013 AND 81000020 AND (transaction_type <> 'IMMEDIATE_TRANSFER' OR channel <> 'WB')"))
+                .isZero();
+        assertThat(
+                        count(
+                                "SELECT COUNT(*) FROM ledger_entry WHERE ledger_entry_id BETWEEN 81000001 AND 81000012 AND (transaction_type <> 'OPENING' OR channel <> 'BT')"))
+                .isZero();
+        assertThat(
+                        count(
+                                "SELECT COUNT(*) FROM transfer WHERE transfer_id BETWEEN 81000001 AND 81000004 AND DATE(transferred_at) <> '2026-09-01'"))
+                .isZero();
+        assertThat(
+                        count(
+                                "SELECT COUNT(*) FROM auto_transfer WHERE auto_transfer_id BETWEEN 81000001 AND 81000003 AND (start_date <> '2026-10-01' OR next_execution_date NOT BETWEEN '2026-10-01' AND '2026-10-28')"))
+                .isZero();
+        String customerPassword =
+                jdbc.queryForObject("SELECT password_hash FROM customer WHERE customer_id = 8100001", String.class);
+        String accountPassword =
+                jdbc.queryForObject("SELECT password_hash FROM account WHERE account_id = 81000001", String.class);
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        assertThat(encoder.matches("1234", customerPassword)).isTrue();
+        assertThat(encoder.matches("1234", accountPassword)).isTrue();
         assertThat(
                         count(
                                 """
@@ -126,7 +154,7 @@ class Phase2MinimumSeedServiceIntegrationTest extends IntegrationTestSupport {
                                 """
                         SELECT COUNT(*) FROM (
                             SELECT voucher_no FROM gl_journal_entry
-                            WHERE voucher_no = '20260901-OPN-600001'
+                            WHERE voucher_no = '20260901-OPN-000001'
                             GROUP BY voucher_no
                             HAVING SUM(CASE WHEN dr_cr = 'DEBIT' THEN amount ELSE 0 END)
                                 <> SUM(CASE WHEN dr_cr = 'CREDIT' THEN amount ELSE 0 END)
