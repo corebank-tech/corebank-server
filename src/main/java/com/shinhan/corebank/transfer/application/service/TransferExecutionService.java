@@ -317,6 +317,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
             }
 
+            // [자리] PH-90: hold_amount가 생기면 락으로 읽은 잔액 − 보류액으로 판정한다. 훅 A는 락 이전이라 최종 판정이 아니다.
             if (locked.withdrawal().balance() < command.amount()) {
                 throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
             }
