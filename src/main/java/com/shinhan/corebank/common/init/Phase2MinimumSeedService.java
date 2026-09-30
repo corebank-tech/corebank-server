@@ -25,6 +25,7 @@ public class Phase2MinimumSeedService {
     private static final long SAVINGS_INITIAL_BALANCE = 1_000_000L;
     private static final String PASSWORD_HASH = "$2y$10$1NOtaTsHuD0rdffA3ReFKO5S0J4bHlVES6okQMYubUd0OuVFfMZXa";
     private static final String OPENING_VOUCHER_NUMBER = "20260901-OPN-000001";
+    private static final LocalDate NEAR_MATURITY_START_DATE = LocalDate.of(2026, 10, 24);
 
     private final JdbcTemplate jdbc;
 
@@ -460,8 +461,8 @@ public class Phase2MinimumSeedService {
                 """,
                 spec.accountIdStart(),
                 spec.accountIdStart() + spec.accountCount() - 1,
-                Date.valueOf(spec.baseDateTime().toLocalDate().plusMonths(2)),
-                Date.valueOf(spec.baseDateTime().toLocalDate().plusMonths(3)));
+                Date.valueOf(NEAR_MATURITY_START_DATE),
+                Date.valueOf(NEAR_MATURITY_START_DATE.plusDays(30)));
         requireCount(
                 "matured accounts",
                 0,
@@ -633,13 +634,13 @@ public class Phase2MinimumSeedService {
             return null;
         }
         if (accountKind == 1 && customerIndex < spec.nearMaturityAccountCount()) {
-            return nearMaturityDate(spec, customerIndex);
+            return nearMaturityDate(customerIndex);
         }
         return spec.baseDateTime().toLocalDate().plusMonths(accountKind == 1 ? 12 : 24);
     }
 
-    private LocalDate nearMaturityDate(Phase2MinimumSeedSpec spec, int customerIndex) {
-        return spec.baseDateTime().toLocalDate().plusMonths(2).plusDays(customerIndex % 30L);
+    private LocalDate nearMaturityDate(int customerIndex) {
+        return NEAR_MATURITY_START_DATE.plusDays(customerIndex % 30L);
     }
 
     private LocalDateTime transferOccurredAt(Phase2MinimumSeedSpec spec, int transferIndex) {

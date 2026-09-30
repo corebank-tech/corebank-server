@@ -13,6 +13,8 @@ import org.springframework.core.env.MapPropertySource;
 
 class CorebankApplicationTest {
 
+    private static final String DEVTOOLS_RESTART_PROPERTY = "spring.devtools.restart.enabled";
+
     @Test
     @DisplayName("일회성 최소 시드 기동이 완료되면 main이 애플리케이션 컨텍스트를 닫는다")
     void mainClosesCompletedSeedContext() {
@@ -60,7 +62,7 @@ class CorebankApplicationTest {
     void closesCompletedSeedProcess() {
         GenericApplicationContext context = contextWithSeedExecution(true, true);
 
-        boolean shouldExit = CorebankApplication.closeCompletedSeedProcess(context);
+        boolean shouldExit = Phase2SeedProcessRunner.closeCompletedSeedProcess(context);
 
         assertThat(context.isActive()).isFalse();
         assertThat(shouldExit).isTrue();
@@ -71,7 +73,7 @@ class CorebankApplicationTest {
     void keepsRegularServerRunning() {
         GenericApplicationContext context = contextWithSeedExecution(true, false);
 
-        boolean shouldExit = CorebankApplication.closeCompletedSeedProcess(context);
+        boolean shouldExit = Phase2SeedProcessRunner.closeCompletedSeedProcess(context);
 
         assertThat(context.isActive()).isTrue();
         assertThat(shouldExit).isFalse();
@@ -83,11 +85,58 @@ class CorebankApplicationTest {
     void keepsServerRunningWithoutSeedProfile() {
         GenericApplicationContext context = contextWithSeedExecution(false, true);
 
-        boolean shouldExit = CorebankApplication.closeCompletedSeedProcess(context);
+        boolean shouldExit = Phase2SeedProcessRunner.closeCompletedSeedProcess(context);
 
         assertThat(context.isActive()).isTrue();
         assertThat(shouldExit).isFalse();
         context.close();
+    }
+
+    @Test
+    @DisplayName("최소 시드 명령이면 스프링 실행 전에 DevTools 재시작을 끈다")
+    void disablesDevToolsRestartForSeedCommand() {
+        String previous = System.getProperty(DEVTOOLS_RESTART_PROPERTY);
+        try {
+            System.clearProperty(DEVTOOLS_RESTART_PROPERTY);
+
+            boolean disabled = Phase2SeedProcessRunner.disableDevToolsRestartForSeed(
+                    new String[] {"--spring.profiles.active=local,phase2-seed", "--app.phase2-seed.execute=true"});
+
+            assertThat(disabled).isTrue();
+            assertThat(System.getProperty(DEVTOOLS_RESTART_PROPERTY)).isEqualTo("false");
+        } finally {
+            restoreSystemProperty(previous);
+        }
+    }
+
+    @Test
+    @DisplayName("최소 시드 프로필이나 실행 플래그가 빠지면 DevTools 설정을 바꾸지 않는다")
+    void keepsDevToolsSettingForRegularCommand() {
+        String previous = System.getProperty(DEVTOOLS_RESTART_PROPERTY);
+        try {
+            System.clearProperty(DEVTOOLS_RESTART_PROPERTY);
+
+            assertThat(Phase2SeedProcessRunner.disableDevToolsRestartForSeed(
+                            new String[] {"--spring.profiles.active=local"}))
+                    .isFalse();
+            assertThat(Phase2SeedProcessRunner.disableDevToolsRestartForSeed(
+                            new String[] {"--spring.profiles.active=local,phase2-seed"}))
+                    .isFalse();
+            assertThat(Phase2SeedProcessRunner.disableDevToolsRestartForSeed(
+                            new String[] {"--app.phase2-seed.execute=true"}))
+                    .isFalse();
+            assertThat(System.getProperty(DEVTOOLS_RESTART_PROPERTY)).isNull();
+        } finally {
+            restoreSystemProperty(previous);
+        }
+    }
+
+    private void restoreSystemProperty(String previous) {
+        if (previous == null) {
+            System.clearProperty(DEVTOOLS_RESTART_PROPERTY);
+        } else {
+            System.setProperty(DEVTOOLS_RESTART_PROPERTY, previous);
+        }
     }
 
     private GenericApplicationContext contextWithSeedExecution(boolean profileActive, boolean enabled) {

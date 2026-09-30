@@ -80,8 +80,8 @@ class Phase2MinimumSeedServiceIntegrationTest extends IntegrationTestSupport {
                 .isZero();
         assertThat(count(
                         "SELECT COUNT(*) FROM account WHERE account_id BETWEEN 81000001 AND 81000012 AND maturity_date >= ? AND maturity_date < ?",
-                        LocalDate.of(2026, 11, 1),
-                        LocalDate.of(2026, 12, 1)))
+                        LocalDate.of(2026, 10, 24),
+                        LocalDate.of(2026, 11, 23)))
                 .isEqualTo(2);
         assertThat(
                         count(
