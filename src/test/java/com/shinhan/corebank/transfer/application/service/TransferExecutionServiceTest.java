@@ -1,7 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.shinhan.corebank.IntegrationTestSupport;
@@ -596,6 +595,7 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         assertThat(published.getValue()).isInstanceOfSatisfying(TransferSettled.class, event -> {
             assertThat(event.customerId()).isEqualTo(1L);
             assertThat(event.refId()).isEqualTo(transferId);
+            assertThat(event.txType()).isEqualTo("IMMEDIATE_TRANSFER");
             assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
             assertThat(event.errorCode()).isNull();
             assertThat(event.amount()).isEqualTo(30000L);
@@ -623,8 +623,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("예약·자동이체는 엔진이 발행하지 않는다 — 재생 호출을 포함해 한 번도 (#436)")
-    void execute_autoTransfer_publishesNothingEvenOnReplay() {
+    @DisplayName("자동이체도 엔진이 TransferSettled 를 한 번 발행하고, 같은 회차 재생 호출은 다시 발행하지 않는다 (#436)")
+    void execute_autoTransfer_publishesOnceEvenOnReplay() {
         new TransactionTemplate(transactionManager)
                 .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
         TransferCommand command = TransferCommand.builder()
@@ -643,7 +643,15 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         transferExecutionService.execute(command);
         transferExecutionService.execute(command);
 
-        verify(domainEventSink, never()).record(org.mockito.ArgumentMatchers.any());
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        Long transferId = jdbcTemplate.queryForObject(
+                "SELECT transfer_id FROM transfer WHERE source_id = 556 AND status = 'SUCCESS'", Long.class);
+        assertThat(published.getValue()).isInstanceOfSatisfying(TransferSettled.class, event -> {
+            assertThat(event.refId()).isEqualTo(transferId);
+            assertThat(event.txType()).isEqualTo("AUTO_TRANSFER");
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        });
     }
 
     private TransferCommand transferCommand(long amount) {

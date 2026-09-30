@@ -353,7 +353,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
 
             transfer.complete(balances.withdrawalBalanceAfter(), executedAt);
             Transfer completed = transferSavePort.save(transfer);
-            publishIfImmediate(command, completed, executedAt);
+            publishSettled(command, completed, executedAt);
             return completed;
         });
     }
@@ -421,7 +421,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         try {
             requiresNewTransactionTemplate.executeWithoutResult(status -> {
                 Transfer failed = transferSavePort.save(created);
-                publishIfImmediate(command, failed, LocalDateTime.now(clock));
+                publishSettled(command, failed, LocalDateTime.now(clock));
             });
         } catch (DataIntegrityViolationException recordingFailure) {
             // 이 ERROR 확정 INSERT 자체가 uk_transfer_source_execution_date에 걸렸다는 건, 동일
@@ -450,20 +450,19 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     }
 
     /**
-     * 즉시이체 결과가 확정된 트랜잭션 안에서 TransferSettled 를 발행한다(#436). 예약·자동이체는 발행하지
-     * 않는다 — 배치가 실행 기록(markSuccess/markFailed)을 저장하는 자기 트랜잭션에서 따로 발행해야 실행
-     * 기록과 이벤트가 함께 커밋된다. 즉시이체는 컨트롤러에 트랜잭션이 없어 여기서만 발행할 수 있다.
+     * 이체 결과가 확정된 트랜잭션 안에서 TransferSettled 를 발행한다(#436). 즉시·예약·자동이체 모두 여기서
+     * 한 번 나간다. 돈이 움직인 커밋과 이벤트가 함께 커밋되므로, 뒤이은 배치 기록 저장이 실패해도 알림은
+     * 빠지지 않는다. transfer 행이 생기기 전의 사전검증 실패는 여기까지 오지 않으며, 배치는 그 경우만 따로
+     * 발행한다.
      *
      * <p>기표·ERROR 확정 트랜잭션(REQUIRES_NEW) 안에서 부르므로 BEFORE_COMMIT 리스너가 그 커밋에 붙는다.
      * 재생 경로(findAlreadyProcessedResult)는 여기를 지나지 않아 같은 이체가 두 번 발행되지 않는다.
      */
-    private void publishIfImmediate(TransferCommand command, Transfer transfer, LocalDateTime occurredAt) {
-        if (command.transferType() != TransferType.IMMEDIATE) {
-            return;
-        }
+    private void publishSettled(TransferCommand command, Transfer transfer, LocalDateTime occurredAt) {
         eventPublisher.publishEvent(TransferSettled.builder()
                 .customerId(command.customerId())
                 .refId(transfer.getTransferId())
+                .txType(resolveTransactionType(command.transferType()))
                 .status(transfer.getStatus())
                 .errorCode(transfer.getErrorCode())
                 .occurredAt(occurredAt)
