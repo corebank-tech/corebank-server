@@ -80,7 +80,7 @@ erDiagram
         bigint product_id FK "입출금계좌는 NULL"
         varchar account_type "DEMAND_DEPOSIT / TIME_DEPOSIT / INSTALLMENT_SAVINGS"
         bigint balance "원장 대사 대상"
-        varchar status "ACTIVE / SUSPENDED / CLOSED"
+        varchar status "ACTIVE / SUSPENDED / MATURED / CLOSED / DORMANT"
         char password_hash "계좌비밀번호 BCrypt"
         tinyint password_failure_count
         boolean password_locked "APW0101"

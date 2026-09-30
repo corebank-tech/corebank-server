@@ -425,16 +425,18 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 ### 5-1. 계좌 — P2
 
-| Enum | 값 | 의미 |
-| --- | --- | --- |
-| `AccountStatus` | `ACTIVE` | 정상 |
-|  | `SUSPENDED` | 거래정지 |
-|  | `CLOSED` | 해지 |
-| `AccountType` | `DEMAND_DEPOSIT` | 입출금계좌 |
-|  | `TIME_DEPOSIT` | 정기예금 |
-|  | `INSTALLMENT_SAVINGS` | 정기적금 |
-| `AccountGroup` | `DEMAND_DEPOSIT` | 입출금계좌 (화면 그룹) |
-|  | `DEPOSIT_SAVINGS` | 예금·적금 (화면 그룹) |
+| Enum | 값                     | 의미            |
+| --- |-----------------------|---------------|
+| `AccountStatus` | `ACTIVE`              | 정상            |
+|  | `SUSPENDED`           | 거래정지          |
+|  | `MATURED`             | 만기 도달         |
+|  | `CLOSED`              | 해지            |
+|  | `DORMANT`             | 휴면            |
+| `AccountType` | `DEMAND_DEPOSIT`      | 입출금계좌         |
+|  | `TIME_DEPOSIT`        | 정기예금          |
+|  | `INSTALLMENT_SAVINGS` | 정기적금          |
+| `AccountGroup` | `DEMAND_DEPOSIT`      | 입출금계좌 (화면 그룹) |
+|  | `DEPOSIT_SAVINGS`     | 예금·적금 (화면 그룹) |
 
 > `AccountGroup`은 `AccountType`과 다른 개념입니다. 화면 그룹핑 전용이며 값 종류가 다릅니다.
 
