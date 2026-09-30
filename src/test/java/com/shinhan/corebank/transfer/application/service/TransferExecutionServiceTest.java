@@ -370,6 +370,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 transferSavePort,
                 new PreCheckBarrierTransferLookupPort(transferLookupPort, bothPreChecksEmpty),
                 ledgerSavePort,
+                List.of(),
+                List.of(),
                 clock,
                 transactionManager);
 

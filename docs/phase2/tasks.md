@@ -677,17 +677,19 @@ ADM-01 검색·상세·변경 요청에 사유 코드 선택을 붙이고 `X-Acc
 
 ### PH-99. 이체 파이프라인 확장점(seam)
 
-**`TransferExecutionService.execute()`는 P4만 고친다.** 다른 트랙은 아래 훅에 구현체만 등록한다.
+**`TransferExecutionService.execute()`는 P4만 고친다.** 다른 트랙은 아래 훅에 구현체만 등록한다. 구현 규칙·정책 전문은 [transfer_seam.md](transfer_seam.md)다.
 
 ```
 TransferExecutionService.execute(command)                         ← 편집자: P4만
+ ├─ 사전 검증 · 채번 (기존)                                          ← 채번 뒤라 거부돼도 ERROR 행이 남는다
  ├─ [훅 A] TransferPreCheck 체인 (락 이전 · 읽기 전용 · order 순)
  │     └─ P2 PH-90 AvailableBalancePreCheck
- ├─ 계좌 락 · 한도 · 잔액 · 채번 (기존)
+ ├─ OTP 소비 (기존)
  ├─ requiresNewTransactionTemplate.execute {                       ← PH-80이 S2에 재작성
+ │     한도 · 계좌 락 · 잔액 (기존)
+ │     tradeDate = businessDateProvider.today()                   ← P5 provider, P4가 대입. 한 번 구해 원장·훅 B·transfer에 같이 쓴다
  │     원장 기표 LedgerPair (기존)
  │     [훅 B] LedgerPostingHook.afterLedger(ctx)                   ← P3 PH-24 (예외 → 롤백 = 이체 실패)
- │     transfer.tradeDate = businessDateProvider.today()          ← P5 provider, P4가 대입
  │     publisher.publishEvent(new TransferCompleted(...))         ← P1 타입, EVT-2
  │   }
  └─ failTransfer() REQUIRES_NEW { ERROR 저장; publishEvent(new TransferFailed(...)) }
@@ -707,10 +709,10 @@ TransferExecutionService.execute(command)                         ← 편집자:
 - 산출물
     - `transfer.api`에 인터페이스·레코드(`TransferPreCheck` · `TransferPreCheckContext` · `LedgerPostingHook` · `LedgerPostingContext`)를 **구현체 0개인 채로** 머지한다. **`transfer.application`·`transfer.domain` 타입을 쓰지 않는다** — 기존 `api` 패키지(`batch.api`·`account.api`·`limit.api`)처럼 원시 타입만 쓴다. `TransferCommand`는 `application/port/in`에 있어 넘기지 않는다.
     - **입금 계약(10/16까지)** — P2 이자·만기·해지 입금용 `transfer.api` 계약(예: `LedgerDepositUseCase.deposit(accountId, amount, txType, referenceKey)`). 원장 기표를 포함한다. 지금 transfer의 공개 입금 계약은 상품가입용(`ProductSubscriptionDepositUseCase`) 하나뿐이다. 인일은 P4 완충에서 쓴다([D-14](README.md#d-14--92123--p4-제안-리드-승인)).
-    - `execute()`에 자리 4곳을 주석으로 표시한다.
+    - 훅 A·B는 `execute()`에 호출 코드까지 연결한다(구현체 0개라 동작 변화 없음). tradeDate 대입과 완료·실패 이벤트 발행 자리는 주석으로 표시한다.
     - `docs/phase2/transfer_seam.md`에 정책을 적는다.
     - BEFORE_COMMIT 플러시 테스트 골격을 만든다(PH-32와 함께).
-- 현황: `transfer.api` 패키지가 아직 없다. `api` 패키지가 있는 도메인은 limit · auth · otp · signup · terms · batch · account · customer다.
+- 현황: 계약 4종·훅 A·B 연결·자리 표시·BEFORE_COMMIT 플러시 테스트 골격 완료(#501). 입금 계약은 남아 있다.
 
 ### PH-31. 고정길이 전문 규격
 
