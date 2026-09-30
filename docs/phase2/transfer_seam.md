@@ -44,7 +44,7 @@ execute(command)
 
 | 자리 | 계약 | 등록자 | 트랜잭션 | 실패하면 |
 |---|---|---|---|---|
-| 훅 A | `TransferPreCheck { int order(); void check(TransferPreCheckContext) }` | P2 PH-90 | 없음. 락 이전, 읽기 전용 | `BusinessException` → 이체 ERROR 확정. OTP·한도 소모 없음 |
+| 훅 A | `TransferPreCheck { int order(); void check(TransferPreCheckContext) }` | P2 PH-90 | 없음. 락 이전, 읽기 전용 | `BusinessException` → 이체 ERROR 확정. OTP·한도 소모 없음. 계좌비밀번호 토큰은 `verifyBeforeLock`에서 이미 소비돼 재시도 시 재인증 필요 |
 | 훅 B | `LedgerPostingHook { void afterLedger(LedgerPostingContext) }` | P3 PH-24 | 이체 REQUIRES_NEW 안 | 원장·잔액·한도 적립까지 롤백 → 이체 ERROR 확정 |
 | tradeDate | `business.api.BusinessDateProvider` | 제공 P5 PH-41, 대입 P4 | 같은 트랜잭션 | — |
 | 완료 이벤트 | `TransferCompleted` | 타입 P1 PH-32, 발행 P4 EVT-2 | 이체 REQUIRES_NEW 안 | 리스너 예외 → 이체 롤백 |
