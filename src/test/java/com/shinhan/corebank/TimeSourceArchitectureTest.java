@@ -41,6 +41,18 @@ class TimeSourceArchitectureTest {
             YearMonth.class.getName(),
             MonthDay.class.getName());
 
+    // 새 시계를 만드는 Clock static factory — withZone 은 기존 코드의 clock.withZone(KST) 관행이라 허용
+    private static final Set<String> CLOCK_FACTORIES = Set.of(
+            "system",
+            "systemUTC",
+            "systemDefaultZone",
+            "fixed",
+            "offset",
+            "tick",
+            "tickSeconds",
+            "tickMinutes",
+            "tickMillis");
+
     @ArchTest
     static final ArchRule noNowWithoutClock = noClasses()
             .should()
@@ -53,9 +65,9 @@ class TimeSourceArchitectureTest {
             .that()
             .doNotHaveFullyQualifiedName(JpaAuditingConfig.class.getName())
             .should()
-            .callMethodWhere(
-                    DescribedPredicate.describe("Clock.system*()", TimeSourceArchitectureTest::isSystemClockFactory))
-            .because("Clock 은 KST 고정 빈 하나만 둔다. 직접 만들면 now(clock) 규칙을 우회한다");
+            .callMethodWhere(DescribedPredicate.describe(
+                    "Clock static factory(system*·fixed·offset·tick*)", TimeSourceArchitectureTest::createsClock))
+            .because("Clock 은 KST 고정 빈 하나만 둔다. fixed·offset 등으로 만들면 now(clock) 규칙을 우회한다");
 
     private static boolean isNowWithoutClock(JavaMethodCall call) {
         if (!call.getName().equals("now")
@@ -66,8 +78,7 @@ class TimeSourceArchitectureTest {
         return params.isEmpty() || params.get(0).isAssignableTo(ZoneId.class);
     }
 
-    private static boolean isSystemClockFactory(JavaMethodCall call) {
-        return call.getTargetOwner().isEquivalentTo(Clock.class)
-                && call.getName().startsWith("system");
+    private static boolean createsClock(JavaMethodCall call) {
+        return call.getTargetOwner().isEquivalentTo(Clock.class) && CLOCK_FACTORIES.contains(call.getName());
     }
 }
