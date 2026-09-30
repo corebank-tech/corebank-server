@@ -103,15 +103,31 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     // @BeforeEach/@AfterEach는 Spring 테스트 트랜잭션 지원 대상이 아니라서(@Test에만 적용됨),
     // AuditLogServiceTest와 동일하게 TransactionTemplate으로 직접 트랜잭션을 열고 닫는다.
     @Test
-    @DisplayName(
-            "completeProcessing() 이 회차를 확정하면 같은 트랜잭션에서 회차 ID 를 refId 로 하는 AutoTransferExecutionSettled 가 한 번 발행된다 (#436)")
-    void completeProcessing_success_publishesExecutionSettledWithExecutionId() {
+    @DisplayName("거래번호가 있으면 ERROR 여도 이체 엔진이 이미 발행했으므로 배치는 이벤트를 발행하지 않는다 (#436)")
+    void completeProcessing_withTransactionNumber_publishesNothing() {
         AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
         when(transferExecutionUseCase.execute(any()))
                 .thenReturn(TransferResult.builder()
-                        .status(ProcessResultStatus.SUCCESS)
+                        .status(ProcessResultStatus.ERROR)
                         .transactionNumber("20260315BT0000000009")
-                        .transferredAt(LocalDateTime.now())
+                        .errorCode("TRF0303")
+                        .errorMessage("출금계좌 잔액이 부족합니다.")
+                        .build());
+
+        itemProcessor.completeProcessing(autoTransfer(), saved, today);
+
+        verify(domainEventSink, never()).record(any());
+    }
+
+    @Test
+    @DisplayName("사전검증 실패로 거래번호 없이 ERROR 확정되면 회차 ID 를 refId 로 하는 AutoTransferExecutionSettled 를 발행한다 (#436)")
+    void completeProcessing_earlyFailureWithoutTransactionNumber_publishesExecutionSettledWithExecutionId() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
+        when(transferExecutionUseCase.execute(any()))
+                .thenReturn(TransferResult.builder()
+                        .status(ProcessResultStatus.ERROR)
+                        .errorCode("TRF0201")
+                        .errorMessage("입금계좌를 찾을 수 없습니다.")
                         .build());
 
         itemProcessor.completeProcessing(autoTransfer(), saved, today);
@@ -121,7 +137,8 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
         assertThat(published.getValue()).isInstanceOfSatisfying(AutoTransferExecutionSettled.class, event -> {
             assertThat(event.customerId()).isEqualTo(customerId);
             assertThat(event.refId()).isEqualTo(saved.getExecutionId());
-            assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(event.errorCode()).isEqualTo("TRF0201");
             assertThat(event.amount()).isEqualTo(10000L);
             assertThat(event.counterpartyName()).isEqualTo("홍*동");
         });

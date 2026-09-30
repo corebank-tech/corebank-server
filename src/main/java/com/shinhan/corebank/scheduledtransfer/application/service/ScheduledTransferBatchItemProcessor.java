@@ -97,17 +97,20 @@ public class ScheduledTransferBatchItemProcessor {
 
         recordAudit(scheduledTransfer, date, result.status() == ProcessResultStatus.SUCCESS, result.errorCode());
 
-        // 실행 기록이 확정된 이 REQUIRES_NEW 트랜잭션 안에서 발행해야 기록과 이벤트가 함께 커밋된다(#436).
-        // 이체 엔진은 SCHEDULED 를 발행하지 않는다 — 여기서만 한 번 나간다.
-        eventPublisher.publishEvent(ScheduledTransferSettled.builder()
-                .customerId(scheduledTransfer.getCustomerId())
-                .refId(scheduledTransfer.getScheduledTransferId())
-                .status(result.status())
-                .errorCode(result.errorCode())
-                .occurredAt(executedAt)
-                .amount(scheduledTransfer.getAmount())
-                .counterpartyName(MaskingUtil.maskName(scheduledTransfer.getPayeeName()))
-                .build());
+        // 거래번호가 있으면 이체 엔진이 돈이 움직인 트랜잭션 안에서 이미 TransferSettled 를 발행했다(#436).
+        // 거래번호가 없는 건 transfer 행이 생기기 전의 사전검증 실패뿐이고, 엔진이 발행하지 못하므로 여기서
+        // 실행 기록과 함께 발행한다.
+        if (result.transactionNumber() == null) {
+            eventPublisher.publishEvent(ScheduledTransferSettled.builder()
+                    .customerId(scheduledTransfer.getCustomerId())
+                    .refId(scheduledTransfer.getScheduledTransferId())
+                    .status(result.status())
+                    .errorCode(result.errorCode())
+                    .occurredAt(executedAt)
+                    .amount(scheduledTransfer.getAmount())
+                    .counterpartyName(MaskingUtil.maskName(scheduledTransfer.getPayeeName()))
+                    .build());
+        }
     }
 
     // transfer 테이블에 실제 거래가 있었는지만 확인해서 확정 (PROCESSING에 멈춘 건 재확정)

@@ -99,17 +99,20 @@ public class AutoTransferBatchItemProcessor {
         }
         autoTransferExecutionPersistencePort.save(processingExecution, autoTransfer.getAutoTransferId());
 
-        // 회차 기록이 확정된 이 REQUIRES_NEW 트랜잭션 안에서 발행한다(#436). refId 는 등록 ID 가 아니라 회차 ID 다.
-        // 이체 엔진은 AUTO 를 발행하지 않는다 — 여기서만 한 번 나간다.
-        eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
-                .customerId(autoTransfer.getCustomerId())
-                .refId(processingExecution.getExecutionId())
-                .status(result.status())
-                .errorCode(result.errorCode())
-                .occurredAt(LocalDateTime.now())
-                .amount(autoTransfer.getAmount())
-                .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
-                .build());
+        // 거래번호가 있으면 이체 엔진이 돈이 움직인 트랜잭션 안에서 이미 TransferSettled 를 발행했다(#436).
+        // 거래번호가 없는 건 transfer 행이 생기기 전의 사전검증 실패뿐이라 엔진이 발행하지 못하므로, 회차
+        // 기록과 함께 여기서 발행한다. refId 는 등록 ID 가 아니라 회차 ID 다.
+        if (result.transactionNumber() == null) {
+            eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
+                    .customerId(autoTransfer.getCustomerId())
+                    .refId(processingExecution.getExecutionId())
+                    .status(result.status())
+                    .errorCode(result.errorCode())
+                    .occurredAt(LocalDateTime.now())
+                    .amount(autoTransfer.getAmount())
+                    .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
+                    .build());
+        }
 
         autoTransfer.advanceNextExecutionDate();
         if (autoTransfer.getNextExecutionDate().isAfter(autoTransfer.getEndDate())) {

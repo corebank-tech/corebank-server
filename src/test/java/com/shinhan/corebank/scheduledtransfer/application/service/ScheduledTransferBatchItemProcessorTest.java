@@ -3,6 +3,7 @@ package com.shinhan.corebank.scheduledtransfer.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -82,13 +83,31 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
     private Long scheduledTransferId;
 
     @Test
-    @DisplayName("completeProcessing() 이 실행 기록을 확정하면 같은 트랜잭션에서 ScheduledTransferSettled 가 한 번 발행된다 (#436)")
-    void completeProcessing_success_publishesScheduledTransferSettledOnce() {
+    @DisplayName("거래번호가 있으면 ERROR 여도 이체 엔진이 이미 발행했으므로 배치는 이벤트를 발행하지 않는다 (#436)")
+    void completeProcessing_withTransactionNumber_publishesNothing() {
         when(transferExecutionUseCase.execute(any()))
                 .thenReturn(TransferResult.builder()
-                        .status(ProcessResultStatus.SUCCESS)
+                        .status(ProcessResultStatus.ERROR)
                         .transactionNumber("20260315BT0000000007")
-                        .transferredAt(LocalDateTime.now())
+                        .errorCode("TRF0303")
+                        .errorMessage("출금계좌 잔액이 부족합니다.")
+                        .build());
+        ScheduledTransfer target = reloadAsDomain();
+        itemProcessor.claim(target.getScheduledTransferId());
+
+        itemProcessor.completeProcessing(target, SCHEDULED_DATE);
+
+        verify(domainEventSink, never()).record(any());
+    }
+
+    @Test
+    @DisplayName("사전검증 실패로 거래번호 없이 ERROR 확정되면 배치가 ScheduledTransferSettled 를 한 번 발행한다 (#436)")
+    void completeProcessing_earlyFailureWithoutTransactionNumber_publishesScheduledTransferSettled() {
+        when(transferExecutionUseCase.execute(any()))
+                .thenReturn(TransferResult.builder()
+                        .status(ProcessResultStatus.ERROR)
+                        .errorCode("TRF0201")
+                        .errorMessage("입금계좌를 찾을 수 없습니다.")
                         .build());
         ScheduledTransfer target = reloadAsDomain();
         itemProcessor.claim(target.getScheduledTransferId());
@@ -100,33 +119,10 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
         assertThat(published.getValue()).isInstanceOfSatisfying(ScheduledTransferSettled.class, event -> {
             assertThat(event.customerId()).isEqualTo(customerId);
             assertThat(event.refId()).isEqualTo(scheduledTransferId);
-            assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
-            assertThat(event.errorCode()).isNull();
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(event.errorCode()).isEqualTo("TRF0201");
             assertThat(event.amount()).isEqualTo(10_000L);
             assertThat(event.counterpartyName()).isEqualTo("홍*동");
-        });
-    }
-
-    @Test
-    @DisplayName("이체가 ERROR 로 확정되면 ERROR 상태와 오류코드를 담은 ScheduledTransferSettled 가 발행된다 (#436)")
-    void completeProcessing_error_publishesErrorSettled() {
-        when(transferExecutionUseCase.execute(any()))
-                .thenReturn(TransferResult.builder()
-                        .status(ProcessResultStatus.ERROR)
-                        .transactionNumber("20260315BT0000000008")
-                        .errorCode("TRF0004")
-                        .errorMessage("잔액이 부족합니다.")
-                        .build());
-        ScheduledTransfer target = reloadAsDomain();
-        itemProcessor.claim(target.getScheduledTransferId());
-
-        itemProcessor.completeProcessing(target, SCHEDULED_DATE);
-
-        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
-        verify(domainEventSink).record(published.capture());
-        assertThat(published.getValue()).isInstanceOfSatisfying(ScheduledTransferSettled.class, event -> {
-            assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
-            assertThat(event.errorCode()).isEqualTo("TRF0004");
         });
     }
 
