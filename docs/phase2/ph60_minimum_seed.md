@@ -6,9 +6,7 @@ PH-60은 현행 `customer`, `account`, `transfer`, `ledger_entry`, `auto_transfe
 
 대량 데이터 생성은 HTTP API로 노출하지 않는다. `phase2-seed` 프로필만으로는 실행되지 않으며, 정기 배포와 분리된 일회성 작업에서 `app.phase2-seed.execute=true`를 함께 지정해야 한다. 따라서 Swagger UI에 추가되는 엔드포인트는 없다.
 
-```bash
-./gradlew bootRun --args="--spring.profiles.active=local,phase2-seed --app.phase2-seed.execute=true"
-```
+실행 환경별 전체 명령은 로컬 시험은 §1-1, 운영 RDS 적재는 §6-3을 따른다. `local` 프로필을 함께 켜면 `DemoDataLoader`까지 실행되므로 PH-60 전용 실행에는 사용하지 않는다.
 
 애플리케이션 로그의 `PH-60 minimum seed ready`가 출력되면 적재와 자체 정합성 검증이 끝난 것이며, 일회성 프로세스는 성공 코드 `0`으로 자동 종료된다. 적재 또는 검증에 실패하면 애플리케이션 시작이 실패해 0이 아닌 종료 코드를 반환한다.
 
@@ -30,13 +28,23 @@ CREATE DATABASE IF NOT EXISTS minicore_ph60
     COLLATE utf8mb4_0900_ai_ci;
 ```
 
-3. 프로젝트 루트에서 아래 명령을 실행한다. `local` 설정을 사용하되 데이터베이스 이름만 `minicore_ph60`으로 덮어쓴다. Flyway가 빈 데이터베이스에 스키마와 기준 상품을 먼저 넣은 뒤 PH-60 시드를 적재한다.
+3. 프로젝트 루트에서 사용하는 터미널에 맞는 명령 하나를 실행한다. `phase2-seed`만 활성화하고 로컬 DB 접속값을 명시한다. `local` 프로필은 데모 시드도 실행하므로 함께 사용하지 않는다. Flyway가 빈 데이터베이스에 스키마와 기준 상품을 먼저 넣은 뒤 PH-60 시드를 적재한다. DevTools 재시작을 끄므로 적재 완료 후 정상 종료 코드 `0`을 받을 수 있다.
+
+Git Bash:
 
 ```bash
-./gradlew bootRun --args="--spring.profiles.active=local,phase2-seed --app.phase2-seed.execute=true --spring.datasource.url=jdbc:mysql://localhost:3306/minicore_ph60?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true --spring.main.web-application-type=none --spring.task.scheduling.enabled=false"
+./gradlew bootRun --args='--spring.profiles.active=phase2-seed --app.phase2-seed.execute=true --spring.datasource.url=jdbc:mysql://localhost:3306/minicore_ph60?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true --spring.datasource.username=root --spring.datasource.password=localpw --spring.jpa.hibernate.ddl-auto=validate --spring.data.redis.host=localhost --spring.main.web-application-type=none --spring.task.scheduling.enabled=false --spring.devtools.restart.enabled=false'
 ```
 
-4. `PH-60 minimum seed ready` 로그와 종료 코드 `0`을 확인하고 §5의 검수 SQL을 `minicore_ph60`에서 실행한다.
+Windows PowerShell:
+
+```powershell
+.\gradlew.bat bootRun --args="--spring.profiles.active=phase2-seed --app.phase2-seed.execute=true --spring.datasource.url=jdbc:mysql://localhost:3306/minicore_ph60?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true --spring.datasource.username=root --spring.datasource.password=localpw --spring.jpa.hibernate.ddl-auto=validate --spring.data.redis.host=localhost --spring.main.web-application-type=none --spring.task.scheduling.enabled=false --spring.devtools.restart.enabled=false"
+```
+
+Git Bash에서는 JDBC URL의 `&`가 셸 명령 구분자로 해석되지 않도록 `--args` 전체를 작은따옴표로 감싼다. 위 `root`와 `localpw`는 `compose.yaml`의 기본 로컬 계정 기준이며, 로컬 설정을 바꿨다면 실제 값으로 교체한다.
+
+4. `PH-60 minimum seed ready` 로그와 종료 코드 `0`을 확인하고 §5의 검수 SQL을 `minicore_ph60`에서 실행한다. 이미 이 성공 로그가 출력됐다면 이후 Gradle 종료 코드만 실패했더라도 시드는 커밋된 상태일 수 있으므로, 바로 재실행하지 말고 먼저 건수와 정합성을 검사한다.
 5. 처음부터 다시 시험하려면 운영 데이터에 손대지 말고 `minicore_ph60`만 삭제한 뒤 2단계부터 반복한다.
 
 ```sql
