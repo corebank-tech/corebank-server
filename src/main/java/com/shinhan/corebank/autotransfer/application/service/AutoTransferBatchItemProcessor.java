@@ -15,6 +15,7 @@ import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCas
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -43,6 +44,7 @@ public class AutoTransferBatchItemProcessor {
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final AuditLogService auditLogService;
     private final TransferLookupPort transferLookupPort;
+    private final Clock clock;
 
     // DB에 지금부터 처리 시작 남
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -51,7 +53,7 @@ public class AutoTransferBatchItemProcessor {
         // completeProcessing()이 만드는 TransferCommand.executionDate와 같은 값을 가리켜, 멱등성
         // 사전조회가 재시도 날짜가 달라져도 같은 회차로 인식한다.
         AutoTransferExecution processing = AutoTransferExecution.processing(
-                autoTransfer.getNextExecutionDate(), autoTransfer.getAmount(), LocalDateTime.now());
+                autoTransfer.getNextExecutionDate(), autoTransfer.getAmount(), LocalDateTime.now(clock));
         return autoTransferExecutionPersistencePort.save(processing, autoTransfer.getAutoTransferId());
     }
 
@@ -97,7 +99,7 @@ public class AutoTransferBatchItemProcessor {
 
         autoTransfer.advanceNextExecutionDate();
         if (autoTransfer.getNextExecutionDate().isAfter(autoTransfer.getEndDate())) {
-            autoTransfer.expire(LocalDateTime.now());
+            autoTransfer.expire(LocalDateTime.now(clock));
         }
         autoTransferPersistencePort.save(autoTransfer);
 
@@ -171,7 +173,7 @@ public class AutoTransferBatchItemProcessor {
 
         autoTransfer.advanceNextExecutionDate();
         if (autoTransfer.getNextExecutionDate().isAfter(autoTransfer.getEndDate())) {
-            autoTransfer.expire(LocalDateTime.now());
+            autoTransfer.expire(LocalDateTime.now(clock));
         }
         autoTransferPersistencePort.save(autoTransfer);
     }
