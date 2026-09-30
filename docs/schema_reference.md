@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 29개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 287개 컬럼
+**대상**: 31개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 297개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -38,8 +38,8 @@
 | 10 | `account` | 계좌 | P2 | 21 |
 | 11 | `account_number_sequence` | 계좌번호 채번 규칙 | P2 | 8  |
 | 12 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4  |
-| 13 | `transfer` | 이체 거래 | P4 | 21 |
-| 14 | `ledger_entry` | 원장 | P4 | 13 |
+| 13 | `transfer` | 이체 거래 | P4 | 22 |
+| 14 | `ledger_entry` | 원장 | P4 | 14 |
 | 15 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1  |
 | 16 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6  |
 | 17 | `transfer_limit` | 이체한도 | P1 | 5  |
@@ -57,6 +57,8 @@
 | 29 | `gl_account` | 계정과목 | P3 | 6  |
 | 30 | `gl_voucher` | 전표 | P3 | 5  |
 | 31 | `gl_journal_entry` | 분개 | P3 | 8  |
+| 32 | `business_date` | 현재 영업일 | P5 | 4  |
+| 33 | `holiday` | 휴일 달력 | P5 | 4  |
 
 ---
 
@@ -305,7 +307,7 @@
 | `product_id`               | `BIGINT`      | **FK** | O    |          | 입출금계좌는 NULL → `product.product_id`                                                |
 | `account_type`             | `VARCHAR(24)` |        | X    |          | 계좌 종류. `DEMAND_DEPOSIT`(입출금) / `TIME_DEPOSIT`(정기예금) / `INSTALLMENT_SAVINGS`(정기적금) |
 | `balance`                  | `BIGINT`      |        | X    | `0`      | 현재 잔액. **조회 성능용 캐시**이며 진실의 원천은 `ledger_entry` 합계다. 배치로 대사한다                       |
-| `status`                   | `VARCHAR(12)` |        | X    | `ACTIVE` | 계좌 상태. `ACTIVE`(정상) / `SUSPENDED`(거래정지) / `CLOSED`(해지)                            |
+| `status`                   | `VARCHAR(12)` |        | X    | `ACTIVE` | 계좌 상태. `ACTIVE`(정상) / `SUSPENDED`(거래정지) / `MATURED`(만기 도달) / `CLOSED`(해지) / `DORMANT`(휴면)                            |
 | `password_hash`            | `CHAR(60)`    |        | X    |          | 계좌비밀번호 4자리의 BCrypt 해시                                                             |
 | `password_failure_count`   | `TINYINT`     |        | X    | `0`      | 계좌비밀번호 연속 오류 횟수. 검증 실패 응답의 `errorCount`                                           |
 | `password_locked`          | `BOOLEAN`     |        | X    | `FALSE`  | 계좌비밀번호 잠금 여부. 5회 오류 시 TRUE가 되어 거래가 정지된다 (APW0101)                                 |
@@ -336,7 +338,7 @@
 | `ck_account_balance`                  | `balance >= 0`                                                                                                                                       | 계좌 잔액은 0원 이상이어야 한다.                                |
 | `ck_account_number`                   | `account_number REGEXP '^[0-9]{12}$'`                                                                                                                | 계좌번호는 하이픈 없는 숫자 12자리여야 한다.                         |
 | `ck_account_type`                     | `account_type IN ('DEMAND_DEPOSIT', 'TIME_DEPOSIT', 'INSTALLMENT_SAVINGS')`                                                                          | 계좌 유형은 입출금·정기예금·정기적금 중 하나여야 한다.                    |
-| `ck_account_status`                   | `status IN ('ACTIVE', 'SUSPENDED', 'CLOSED')`                                                                                                        | 계좌 상태는 정상·거래정지·해지 중 하나여야 한다.                       |
+| `ck_account_status`                   | `status IN ('ACTIVE', 'SUSPENDED', 'MATURED', 'CLOSED', 'DORMANT')`                                                                                    | 계좌 상태는 정상·거래정지·만기 도달·해지·휴면 중 하나여야 한다.                       |
 | `ck_account_password_lock_state`      | 오류 횟수가 `0~4`이면 `password_locked = FALSE`, 오류 횟수가 `5`이면 `password_locked = TRUE`                                                                      | 계좌비밀번호 연속 오류 횟수와 잠금 상태가 항상 일치해야 한다.                |
 | `ck_account_withdrawal_registered`    | `withdrawal_registered IN (FALSE, TRUE)`                                                                                                             | 출금계좌 등록 여부는 Boolean 값이어야 한다.                       |
 | `ck_account_product`                  | `DEMAND_DEPOSIT`이면 `product_id IS NULL`<br>`TIME_DEPOSIT` 또는 `INSTALLMENT_SAVINGS`이면 `product_id IS NOT NULL`                                        | 입출금계좌에는 상품이 연결되지 않고, 예·적금계좌에는 상품이 반드시 연결되어야 한다.    |
@@ -444,6 +446,7 @@
 | `error_code` | `VARCHAR(10)` |  | O |  | 실패 시 오류코드 |
 | `error_message` | `VARCHAR(200)` |  | O |  | 실패 시 사유 문구 |
 | `transferred_at` | `DATETIME(6)` |  | X |  | 이체 처리 일시 |
+| `trade_date` | `DATE` |  | O |  | **거래일** — 이 이체가 귀속되는 영업일. 거래 시점의 `BusinessDateProvider.today()` 값이다. 휴일 거래는 다음 영업일이 된다([glossary](phase2/glossary.md) 7번). **마감 시작~영업일 전환 사이 거래의 거래일은 PH-43에서 정한다.** 성공·실패(ERROR) 행 모두 채운다 — 실패 행은 원장 없이 이 테이블에만 남는다. 자동·예약이체는 휴일에도 지정일에 실행되므로(REQ-AUTO-001), 휴일에 실행된 회차의 거래일도 다음 영업일이다 — 실행일(`execution_date`, 달력 날짜)과 거래일이 다를 수 있다. P4 대입 전 행은 NULL이다 |
 | `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
 
 **인덱스**
@@ -479,12 +482,17 @@
 | `direction` | `VARCHAR(10)` |  | X |  | 기표 방향. `DEPOSIT`(입금) / `WITHDRAWAL`(출금). 금액은 늘 양수라 부호 역할을 이 컬럼이 한다 |
 | `amount` | `BIGINT` |  | X |  | 기표 금액. 항상 양수 |
 | `balance_after` | `BIGINT` |  | X |  | 이 기표 직후의 계좌 잔액 스냅샷. 통장 형태로 보여줄 때 쓴다 |
-| `transaction_type` | `VARCHAR(32)` |  | X |  | 기표를 일으킨 업무. `IMMEDIATE_TRANSFER` / `SCHEDULED_TRANSFER` / `AUTO_TRANSFER` / `PRODUCT_SUBSCRIPTION`(가입 초입금) / `INTEREST`(이자) / `REVERSAL`(반대기표) |
+| `transaction_type` | `VARCHAR(32)` |  | X |  | 기표를 일으킨 업무. `OPENING`(개시 잔액, 짝 없는 1행이며 상대편은 GL 개시 전표) / `IMMEDIATE_TRANSFER` / `SCHEDULED_TRANSFER` / `AUTO_TRANSFER` / `PRODUCT_SUBSCRIPTION`(가입 초입금) / `INTEREST`(이자) / `REVERSAL`(반대기표) |
 | `transaction_content` | `VARCHAR(10)` |  | O |  | 통장에 찍히는 적요. 최대 10자 |
 | `channel` | `CHAR(2)` |  | X |  | 거래 채널. `WB` / `BT` |
 | `reversed` | `BOOLEAN` |  | X | `FALSE` | 반대기표로 취소된 원거래인지 여부. 원본을 지우지 않고 이 값만 세운다 |
 | `reversal_id` | `BIGINT` |  | O |  | 반대기표 행이 가리키는 원거래의 `ledger_entry_id` |
 | `occurred_at` | `DATETIME(6)` | **PK** | X |  | 기표 발생 일시. RANGE 파티션 키이며 거래내역 조회의 기간 조건이 이 컬럼에 걸린다 |
+| `trade_date` | `DATE` |  | O |  | **거래일** — 이 기표가 귀속되는 영업일. `occurred_at`(발생 시각)과 다르다. 값 규칙은 `transfer.trade_date`와 같다. **원장을 쓰는 모든 경로(이체·상품가입 입금)가 채운다.** P4 대입 전 행은 NULL이다. P6 시드(PH-60b)는 GL과 같은 거래일을 넣는다 |
+
+**`trade_date` 는 NULL 을 허용한다(Expand).** 기존 행 채우기와 `NOT NULL` 전환 여부·시점은 별도 이슈(#515)에서 정한다. 거래일로 조회하는 곳이 아직 없어 인덱스는 두지 않는다 — `gl_journal_entry` 와 같은 판단이다.
+
+**`trade_date` 로 거를 때는 `occurred_at` 범위도 넉넉히 같이 건다.** 파티션 키가 `occurred_at` 이라 `trade_date` 조건만 걸면 모든 파티션을 읽는다. 거래일과 발생일의 간격은 일정하지 않다 — 연휴면 며칠 뒤이고, COB 가 늦어지면 하루 앞설 수도 있다.
 
 **인덱스**
 
@@ -966,3 +974,39 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 **전표 FK 가 복합인 이유.** `voucher_no` 만 참조하면 전표와 다른 `trade_date` 를 가진 분개가 저장되고, 그대로 날짜별 시산표 집계가 틀어진다. 복제본이 원본과 같도록 DB 가 강제한다 — 특히 P6 시드 생성기(PH-60b)는 애플리케이션을 거치지 않고 600만 건을 직접 INSERT 하므로 애플리케이션 규약으로는 막을 수 없다.
 
 ---
+
+# 10. 영업일 — P5
+
+2차에 신설(PH-40, #471). 영업일은 시스템 시각과 분리된 **논리 업무일자**이고 `business.api.BusinessDateProvider` 가 유일한 출처다([glossary](phase2/glossary.md) 6번).
+
+Apache Fineract 의 `m_business_date` 처럼 **시계가 아니라 DB 에 저장된 값**을 영업일로 쓴다. 테이블은 둘로 나눈다 — 매일 바뀌는 값 1개(`business_date`)와 한 번 넣고 거의 안 바뀌는 목록(`holiday`)은 성격이 다르다. Fineract 와 달리 영업일을 넘길 때 휴일을 건너뛴다(Fineract 는 `plusDays(1)` 이고 휴일은 별도 개념).
+
+## `business_date`
+
+> 현재 영업일
+
+`date_type` 별로 한 행이다. 2차에는 `BUSINESS_DATE` 한 행뿐이고, 마감 대상일(`COB_DATE`) 같은 종류가 필요해지면 테이블을 바꾸지 않고 행을 더한다(Fineract `BusinessDateType` 과 같은 구조).
+
+초기값 `2026-01-01` 은 의미 없는 과거 날짜다 — 서버가 뜰 때 오늘 달력에 맞춘다(오늘이 영업일이면 오늘, 아니면 다음 영업일. 저장값이 그보다 이전일 때만 바꾼다). V 파일이 실행되는 날은 환경마다(팀원 로컬·CI·배포) 달라서 특정 날짜를 박으면 미래나 과거로 어긋난다. `NOW()`·`CURRENT_DATE` 는 RDS 가 UTC 라 쓰지 않는다. 이후 영업일은 매일 자정(KST) 같은 방식으로 맞추고, PH-43 이후에는 COB 마지막 스텝이 다음 영업일로 넘긴다. 기동 시 맞추기는 PH-43 이후에도 남는다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `date_type` | `VARCHAR(20)` | **PK** | X |  | 영업일 종류. 2차는 `BUSINESS_DATE` 1행 |
+| `business_date` | `DATE` |  | X |  | 현재 영업일 |
+| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
+| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 마지막 영업일 전환 시각 |
+
+---
+
+## `holiday`
+
+> 휴일 달력 — 주말을 제외한 공휴일
+
+**주말은 넣지 않는다** — 토·일은 요일로 판정한다. 영업일 = 주말도 아니고 이 테이블에도 없는 날. 시드는 `R__seed_holiday.sql` 이 넣는다 — 운영에도 있어야 하고 대체공휴일·임시공휴일이 추가될 수 있는 마스터성 데이터라 `V__` 가 아니라 `R__` 다. 등록 API 는 2차 범위 밖이다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `holiday_date` | `DATE` | **PK** | X |  | 휴일 날짜 |
+| `holiday_name` | `VARCHAR(50)` |  | X |  | 예: `개천절`, `대체공휴일(추석)` |
+| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
+| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |

@@ -3,6 +3,10 @@ package com.shinhan.corebank.transfer.application.service;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.transfer.api.LedgerPostingContext;
+import com.shinhan.corebank.transfer.api.LedgerPostingHook;
+import com.shinhan.corebank.transfer.api.TransferPreCheck;
+import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
@@ -26,6 +30,8 @@ import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -59,6 +65,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private final TransferSavePort transferSavePort;
     private final TransferLookupPort transferLookupPort;
     private final LedgerSavePort ledgerSavePort;
+    private final List<TransferPreCheck> transferPreChecks;
+    private final List<LedgerPostingHook> ledgerPostingHooks;
     private final Clock clock;
     private final TransactionTemplate requiresNewTransactionTemplate;
 
@@ -71,6 +79,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             TransferSavePort transferSavePort,
             TransferLookupPort transferLookupPort,
             LedgerSavePort ledgerSavePort,
+            List<TransferPreCheck> transferPreChecks,
+            List<LedgerPostingHook> ledgerPostingHooks,
             Clock clock,
             PlatformTransactionManager transactionManager) {
         this.accountLockPort = accountLockPort;
@@ -81,6 +91,11 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         this.transferSavePort = transferSavePort;
         this.transferLookupPort = transferLookupPort;
         this.ledgerSavePort = ledgerSavePort;
+        // 빈 등록 순서가 아니라 order()로 실행 순서를 고정한다.
+        this.transferPreChecks = transferPreChecks.stream()
+                .sorted(Comparator.comparingInt(TransferPreCheck::order))
+                .toList();
+        this.ledgerPostingHooks = List.copyOf(ledgerPostingHooks);
         this.clock = clock;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
         this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -110,6 +125,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             created = newTransfer(command, payee, transactionNumber, requestedAt);
 
             preCheckWithoutLock(command, payee);
+            runTransferPreChecks(command);
             consumeOtpAuthToken(command);
 
             Transfer completed = postLedger(command, payee, created, transactionNumber);
@@ -247,6 +263,15 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         }
     }
 
+    // [훅 A] PH-99 사전검증. OTP·한도를 소모하기 전, ERROR 행을 남길 수 있는 created 확정 뒤 자리다.
+    private void runTransferPreChecks(TransferCommand command) {
+        TransferPreCheckContext context =
+                new TransferPreCheckContext(command.customerId(), command.withdrawalAccountId(), command.amount());
+        for (TransferPreCheck preCheck : transferPreChecks) {
+            preCheck.check(context);
+        }
+    }
+
     // 1차 검증(락 이전) ⑥: 인증 완료 토큰(OTP). 위 무관한 검증과 사전 체크를 모두 통과한
     // 뒤, 채번 직후·계좌 락 획득 직전에 소비한다(otp_integration_guide.md §9).
     private void consumeOtpAuthToken(TransferCommand command) {
@@ -292,6 +317,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
             }
 
+            // [자리] PH-90: hold_amount가 생기면 락으로 읽은 잔액 − 보류액으로 판정한다. 훅 A는 락 이전이라 최종 판정이 아니다.
             if (locked.withdrawal().balance() < command.amount()) {
                 throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
             }
@@ -299,6 +325,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             Transfer transfer = transferSavePort.save(createdTransfer);
 
             LocalDateTime executedAt = LocalDateTime.now(clock);
+            // [자리] PH-41: 여기서 businessDateProvider.today()로 tradeDate를 한 번 구해 원장·훅 B·transfer에 같이 쓴다.
 
             TransferBalances balances = accountLockPort.applyTransfer(locked, command.amount(), executedAt);
 
@@ -316,10 +343,28 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     command.channel(),
                     executedAt);
             ledgerSavePort.save(pair);
+            runLedgerPostingHooks(command, payee, transactionNumber, executedAt);
 
             transfer.complete(balances.withdrawalBalanceAfter(), executedAt);
+            // [자리] EVT-2: TransferCompleted 발행. BEFORE_COMMIT 리스너가 받도록 이 템플릿 안에서 한다.
             return transferSavePort.save(transfer);
         });
+    }
+
+    // [훅 B] PH-99 후속 기표. 기표 트랜잭션 안이라 훅 예외는 원장·잔액·한도 적립까지 롤백하고 이체를 실패시킨다.
+    private void runLedgerPostingHooks(
+            TransferCommand command, ResolvedPayee payee, String transactionNumber, LocalDateTime executedAt) {
+        // tradeDate는 PH-41에서 BusinessDateProvider로 바꾼다. 그 전까지는 기표 시각의 달력일이다.
+        LedgerPostingContext context = new LedgerPostingContext(
+                transactionNumber,
+                resolveTransactionType(command.transferType()),
+                command.amount(),
+                command.withdrawalAccountId(),
+                payee.accountId(),
+                executedAt.toLocalDate());
+        for (LedgerPostingHook hook : ledgerPostingHooks) {
+            hook.afterLedger(context);
+        }
     }
 
     // 채번 전에 터졌으면(created == null) 남길 행 자체가 없다.
@@ -367,6 +412,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             TransferCommand command, Transfer created, String errorCode, String errorMessage, RuntimeException cause) {
         created.fail(errorCode, errorMessage);
         try {
+            // [자리] EVT-2: TransferFailed도 이 REQUIRES_NEW 안에서 발행한다. AFTER_COMMIT 리스너는 두지 않는다.
             requiresNewTransactionTemplate.executeWithoutResult(status -> transferSavePort.save(created));
         } catch (DataIntegrityViolationException recordingFailure) {
             // 이 ERROR 확정 INSERT 자체가 uk_transfer_source_execution_date에 걸렸다는 건, 동일

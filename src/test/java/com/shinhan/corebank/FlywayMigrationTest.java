@@ -42,4 +42,19 @@ class FlywayMigrationTest extends IntegrationTestSupport {
 
         assertThat(partitions).containsAll(expected).contains("pmax");
     }
+
+    // #472 — 값 대입(P4) 전이라 NULL 을 허용해야 기존 행이 깨지지 않는다
+    @Test
+    @DisplayName("transfer·ledger_entry에 NULL 허용 DATE 컬럼 trade_date가 존재한다 (#472)")
+    void tradeDateColumnsExistAsNullableDate() {
+        List<String> columns = jdbcTemplate.queryForList(
+                """
+                SELECT CONCAT(TABLE_NAME, '.', DATA_TYPE, '.', IS_NULLABLE) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = 'trade_date'
+                   AND TABLE_NAME IN ('transfer', 'ledger_entry')
+                """,
+                String.class);
+
+        assertThat(columns).containsExactlyInAnyOrder("transfer.date.YES", "ledger_entry.date.YES");
+    }
 }

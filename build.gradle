@@ -104,7 +104,6 @@ def coveredClasses = files(sourceSets.main.output.classesDirs).asFileTree.matchi
     exclude '**/*JpaEntity.class'
     exclude '**/*JpaEntity$*.class'
     exclude '**/config/**'
-    exclude '**/CorebankApplication.class'
 }
 
 // 커버리지 리포트(REQ-NFR-015).

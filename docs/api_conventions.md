@@ -235,6 +235,8 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `CMN0301` | 409  | 동일 요청이 처리 중입니다.                          | 멱등키 중복, 처리 미완료                                 | —                                       |
 | `CMN0302` | 409  | 동일한 멱등키가 다른 요청에 사용되었습니다.                 | 동일한 Idempotency-Key에 요청 해시가 일치하지 않음            | —                                       |
 | `CMN0303` | 409  | 다른 요청에 의해 정보가 변경되었습니다. 다시 조회한 후 시도해 주세요. | 낙관적 락 충돌 등 동시 수정                               | —                                       |
+| `CMN9001` | 500  | 영업일 정보를 확인할 수 없습니다.                        | `business_date` 행이 없어 현재 영업일을 조회할 수 없음. Flyway가 초기 행을 넣으므로 나오면 데이터 결함이다(PH-40) | —                                       |
+| `CMN9002` | 500  | 아직 오지 않은 영업일은 마감할 수 없습니다.               | COB 영업일 전환에 오늘 달력보다 미래인 영업일이 넘어옴. COB "영업일 확인" 스텝이 막아야 하므로 나오면 결함이다(PH-40·PH-43) | —                                       |
 | `CMN9999` | 500  | 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.        | 예상하지 못한 서버 오류                                  | `INQ9999`, `TRANSACTION_ROLLBACK_ERROR` |
 
 > `CMN0001`, `CMN0201`, `CMN0303`,`CMN9999`는 `ApiExceptionHandler`가 자동 반환하므로 직접 던지지 않아도 됩니다.
@@ -258,7 +260,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `ATH0103` | 403 | 이메일 인증 토큰이 유효하지 않습니다. | `emailVerificationToken` 무효·만료 |
 | `ATH0104` | 403 | 약관 동의 토큰이 유효하지 않습니다. | `termsAuthToken` 무효·만료 |
 | `ATH0105` | 403 | 계좌 인증 토큰이 유효하지 않습니다. | `accountAuthToken` 무효·만료 |
-| `ATH0201` | 404 | 존재하지 않는 사용자입니다. | 아이디 찾기·비밀번호 재설정 대상 없음 |
+| `ATH0201` | 404 | 존재하지 않는 사용자입니다. | 아이디 찾기·비밀번호 재설정 대상 없음, 관리자 고객 계정 운영(`/admin/customers/**`)의 대상 고객 없음 |
 | `ATH0202` | 404 | 인증 요청을 찾을 수 없습니다. | `emailVerificationId`·`passwordResetRequestId` 없음 |
 | `ATH0301` | 409 | 이미 사용 중인 아이디입니다. | 아이디 중복 |
 | `ATH0302` | 409 | 이미 가입된 이메일입니다. | 이메일 중복 |
@@ -423,16 +425,18 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 ### 5-1. 계좌 — P2
 
-| Enum | 값 | 의미 |
-| --- | --- | --- |
-| `AccountStatus` | `ACTIVE` | 정상 |
-|  | `SUSPENDED` | 거래정지 |
-|  | `CLOSED` | 해지 |
-| `AccountType` | `DEMAND_DEPOSIT` | 입출금계좌 |
-|  | `TIME_DEPOSIT` | 정기예금 |
-|  | `INSTALLMENT_SAVINGS` | 정기적금 |
-| `AccountGroup` | `DEMAND_DEPOSIT` | 입출금계좌 (화면 그룹) |
-|  | `DEPOSIT_SAVINGS` | 예금·적금 (화면 그룹) |
+| Enum | 값                     | 의미            |
+| --- |-----------------------|---------------|
+| `AccountStatus` | `ACTIVE`              | 정상            |
+|  | `SUSPENDED`           | 거래정지          |
+|  | `MATURED`             | 만기 도달         |
+|  | `CLOSED`              | 해지            |
+|  | `DORMANT`             | 휴면            |
+| `AccountType` | `DEMAND_DEPOSIT`      | 입출금계좌         |
+|  | `TIME_DEPOSIT`        | 정기예금          |
+|  | `INSTALLMENT_SAVINGS` | 정기적금          |
+| `AccountGroup` | `DEMAND_DEPOSIT`      | 입출금계좌 (화면 그룹) |
+|  | `DEPOSIT_SAVINGS`     | 예금·적금 (화면 그룹) |
 
 > `AccountGroup`은 `AccountType`과 다른 개념입니다. 화면 그룹핑 전용이며 값 종류가 다릅니다.
 
@@ -762,9 +766,11 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 프로젝트 정책상 아래에 명시된 API에 `Idempotency-Key`를 적용합니다.
 
-회원가입 완료 · 고객정보 변경 · 로그인 비밀번호 변경 · 계좌비밀번호 변경 · 출금계좌 등록·삭제 · 계좌별명 등록·수정·삭제 · 계좌 표시순서 저장·초기화 · 자주 쓰는 계좌 등록·별칭 수정·삭제 · 상품가입 실행 · 즉시이체 실행 · 이체한도 변경 · 예약이체 등록·취소 · 자동이체 등록·변경·해지 · 알림 읽음 처리 · 비밀번호 재설정
+회원가입 완료 · 고객정보 변경 · 로그인 비밀번호 변경 · 계좌비밀번호 변경 · 출금계좌 등록·삭제 · 계좌별명 등록·수정·삭제 · 계좌 표시순서 저장·초기화 · 자주 쓰는 계좌 등록·별칭 수정·삭제 · 상품가입 실행 · 즉시이체 실행 · 이체한도 변경 · 예약이체 등록·취소 · 자동이체 등록·변경·해지 · 알림 읽음 처리 · 비밀번호 재설정 · 관리자 잠금 해제
 
-**`N` 대상**: 모든 조회 API, OTP 발급·검증, 계좌비밀번호 검증, 로그인·로그아웃·세션 연장
+**`N` 대상**: 모든 조회 API, OTP 발급·검증, 계좌비밀번호 검증, 로그인·로그아웃·세션 연장, 관리자 비밀번호 초기화
+
+> **관리자 비밀번호 초기화를 `N`으로 두는 이유** — 멱등키 저장소는 응답 본문을 `idempotency_key.response_snapshot`에 24시간 보관한다. 초기화 응답에는 임시 비밀번호 평문이 들어 있어, 적용하면 평문이 DB에 남는다. 대신 재요청할 때마다 새 임시 비밀번호가 발급되고 이전 값은 무효가 되며, 요청마다 감사로그가 1행씩 남는다.
 
 ### 7-4. 고객정보 변경 추가 규칙
 

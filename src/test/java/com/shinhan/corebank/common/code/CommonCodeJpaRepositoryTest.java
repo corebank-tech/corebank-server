@@ -29,7 +29,12 @@ class CommonCodeJpaRepositoryTest extends IntegrationTestSupport {
                         CommonCodeJpaEntity::getCode,
                         CommonCodeJpaEntity::getCodeName,
                         CommonCodeJpaEntity::getSortOrder)
-                .containsExactly(tuple("ACTIVE", "정상", 1), tuple("SUSPENDED", "거래정지", 2), tuple("CLOSED", "해지", 3));
+                .containsExactly(
+                        tuple("ACTIVE", "정상", 1),
+                        tuple("SUSPENDED", "거래정지", 2),
+                        tuple("CLOSED", "해지", 3),
+                        tuple("MATURED", "만기 도달", 4),
+                        tuple("DORMANT", "휴면", 5));
     }
 
     @Test

@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 31개 테이블(29개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 33개 테이블(31개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -80,7 +80,7 @@ erDiagram
         bigint product_id FK "입출금계좌는 NULL"
         varchar account_type "DEMAND_DEPOSIT / TIME_DEPOSIT / INSTALLMENT_SAVINGS"
         bigint balance "원장 대사 대상"
-        varchar status "ACTIVE / SUSPENDED / CLOSED"
+        varchar status "ACTIVE / SUSPENDED / MATURED / CLOSED / DORMANT"
         char password_hash "계좌비밀번호 BCrypt"
         tinyint password_failure_count
         boolean password_locked "APW0101"
@@ -133,6 +133,7 @@ erDiagram
         varchar error_code "VARCHAR(10)"
         varchar error_message "VARCHAR(200)"
         datetime transferred_at "DATETIME(6)"
+        date trade_date "거래일(귀속 영업일). NULL 허용"
     }
     ledger_entry {
         bigint ledger_entry_id PK
@@ -142,12 +143,13 @@ erDiagram
         varchar direction "DEPOSIT / WITHDRAWAL"
         bigint amount "양수만. 방향은 direction 이 표현"
         bigint balance_after "기표 직후 잔액"
-        varchar transaction_type "IMMEDIATE_TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / REVERSAL"
+        varchar transaction_type "OPENING / IMMEDIATE_TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / REVERSAL"
         varchar transaction_content "통장 표시내용"
         char channel "WB / BT"
         boolean reversed
         bigint reversal_id "반대기표가 가리키는 원거래"
         datetime occurred_at PK "RANGE PARTITION KEY"
+        date trade_date "거래일(귀속 영업일). NULL 허용"
     }
     favorite_account {
         bigint favorite_account_id PK
@@ -356,6 +358,21 @@ erDiagram
         bigint amount "원 단위 정수. 항상 양수"
         date trade_date "전표에서 복제. 시산표 집계 기준일"
         datetime created_at "DATETIME(6)"
+    }
+
+    %% ---------- P5 (영업일, PH-40) ----------
+    %% 다른 테이블과 FK 없음. BusinessDateProvider 가 읽는다.
+    business_date {
+        varchar date_type PK "VARCHAR(20). 2차는 BUSINESS_DATE 1행"
+        date business_date "현재 영업일. 기동 시 오늘로 맞춤"
+        datetime created_at "DATETIME(6)"
+        datetime updated_at "DATETIME(6). 마지막 전환 시각"
+    }
+    holiday {
+        date holiday_date PK "주말 제외 공휴일만. 주말은 요일로 판정"
+        varchar holiday_name "VARCHAR(50)"
+        datetime created_at "DATETIME(6)"
+        datetime updated_at "DATETIME(6)"
     }
 
     %% ---------- 관계 ----------
