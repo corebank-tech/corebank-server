@@ -2,7 +2,7 @@ import { login, executeTransfer } from './lib/session.js';
 import { customer } from './lib/seed.js';
 
 // 부하 계열: 계좌를 분산해 락 경합을 없앤 상태에서 처리량 한계를 찾는다.
-// 동시 사용자 수가 아니라 초당 요청 수를 올린다 — 사용자 수를 올리면 서버가 느려질 때
+// 동시 사용자 수가 아니라 초당 이체 시도 수(iteration/s)를 올린다 — 사용자 수를 올리면 서버가 느려질 때
 // 사용자가 대기에 묶여 실제 도착률이 따라 오르지 않아 한계점이 보이지 않는다.
 // 근거: docs/phase2/harness.md §3-1
 const START_RATE = Number(__ENV.START_RATE || 5);
