@@ -260,6 +260,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `ATH0103` | 403 | 이메일 인증 토큰이 유효하지 않습니다. | `emailVerificationToken` 무효·만료 |
 | `ATH0104` | 403 | 약관 동의 토큰이 유효하지 않습니다. | `termsAuthToken` 무효·만료 |
 | `ATH0105` | 403 | 계좌 인증 토큰이 유효하지 않습니다. | `accountAuthToken` 무효·만료 |
+| `ATH0106` | 403 | 이용이 정지된 계정입니다. 고객센터로 문의해 주세요. | 관리자가 이용정지(`SUSPENDED`)한 고객의 로그인. 비밀번호가 일치할 때만 반환하고, 불일치면 `ATH0101` 흐름(실패 횟수 증가)을 그대로 따른다. 비밀번호를 모르는 제3자에게 정지 여부가 드러나지 않게 하기 위해서다(REQ-AUTH-023) |
 | `ATH0201` | 404 | 존재하지 않는 사용자입니다. | 아이디 찾기·비밀번호 재설정 대상 없음, 관리자 고객 계정 운영(`/admin/customers/**`)의 대상 고객 없음 |
 | `ATH0202` | 404 | 인증 요청을 찾을 수 없습니다. | `emailVerificationId`·`passwordResetRequestId` 없음 |
 | `ATH0301` | 409 | 이미 사용 중인 아이디입니다. | 아이디 중복 |
@@ -525,6 +526,8 @@ public record ApiResponse<T>(String code, String message, T data) {
 |  | `WITHDRAWAL_ACCOUNT_REGISTER` | 출금계좌 등록 |
 | `EmailVerificationPurpose` | `SIGN_UP` | 회원가입 |
 |  | `EMAIL_CHANGE` | 이메일 변경 |
+| `CustomerStatus` | `ACTIVE` | 정상 |
+|  | `SUSPENDED` | 이용정지 (관리자 정지, 로그인 불가 `ATH0106`) |
 
 > 폐기: `TRANSFER`, `PRODUCT_SIGN`, `LIMIT_CHANGE`, `ACC_REGISTER`, `PROFILE_CHANGE` (기존 OTP 발급 명세의 약어)
 
