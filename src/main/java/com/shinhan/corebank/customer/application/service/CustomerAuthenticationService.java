@@ -77,6 +77,12 @@ public class CustomerAuthenticationService implements CustomerAuthenticationFaca
             return LoginSuccessState.ACCOUNT_LOCKED;
         }
 
+        // 비밀번호가 맞은 뒤에만 정지를 알려 제3자에게 정지 여부가 드러나지 않게 한다(REQ-AUTH-023).
+        // 같은 락 안에서 판정하므로 로그인 도중 관리자가 정지해도 성공 상태가 저장되지 않는다.
+        if (customer.isSuspended()) {
+            return LoginSuccessState.ACCOUNT_SUSPENDED;
+        }
+
         customer.recordLoginSuccess(command.loginAt(), command.loginIp());
 
         customerPersistencePort.updateLoginSuccessState(customer);
