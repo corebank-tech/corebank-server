@@ -574,19 +574,25 @@ S4지만 신규 API가 아니라 문서화·측정·훈련이다.
 ```java
 // gl.api
 public interface JournalPostingUseCase {
-    void post(JournalRequest request);   // 실패 시 예외를 던진다 — 삼키지 않는다
+    void post(JournalRequest request);   // 실패 시 예외를 던진다 — 삼키지 않는다. @Transactional(propagation = MANDATORY)
 }
-public record JournalRequest(String txType,         // gl_voucher.tx_type 값: OPENING · TRANSFER · PRODUCT_SUBSCRIPTION · INTEREST (타행은 PH-33-②가 추가)
-                             String referenceKey,   // 원 거래번호 — 원장·이체와 전표를 잇는 키
+public record JournalRequest(GlTxType txType,       // gl_voucher.tx_type (타행은 PH-33-②가 값을 추가)
+                             String referenceKey,   // 원 거래번호 — 원장·이체와 전표를 잇는 키. (txType, referenceKey) 유일
                              LocalDate tradeDate,
                              List<JournalLine> lines) {}
 public record JournalLine(String accountCode, JournalDirection drCr, long amount) {}
-public enum JournalDirection { DEBIT, CREDIT }   // gl.domain 에서 gl.api 로 옮긴다 — 아래
+public enum GlTxType { OPENING, TRANSFER, PRODUCT_SUBSCRIPTION, INTEREST }   // gl.domain 에서 gl.api 로 옮긴다 — 아래
+public enum JournalDirection { DEBIT, CREDIT }                              // gl.domain 에서 gl.api 로 옮긴다 — 아래
 ```
 
 - 헤더 금액은 두지 않는다. 금액은 줄마다 있고 전표 합계는 줄에서 계산한다(OPN처럼 줄 금액이 다른 전표가 있다).
-- **`JournalDirection`을 `gl.domain`에서 `gl.api`로 옮긴다.** 지금은 `gl.domain`에 있는데(PR #478 머지분), `#349`가 건 `Api mayNotAccessAnyLayer()` 때문에 **`gl.api`가 `gl.domain`을 참조하면 `LayerArchitectureTest > gl`이 깨진다.** 공유 어휘를 소유 도메인의 `api`에 두는 것은 [ADR-0004](../adr/0004-domain-contract-surface.md)(#495 초안, PH-24 PR에서 함께 머지) 결정 2와 같은 방향이다. `String drCr`로 두면 규칙은 피하지만 호출하는 트랙(P2 PH-14 · P4 PH-33-②)이 문자열 오타를 컴파일에서 못 잡는다.
-- **`gl_voucher`에 `reference_key` 컬럼을 새 V 파일로 추가한다**(PR #478 스키마에는 없다). 이 키가 없으면 "이체 1건당 전표 1건" 검증과 PH-28b 분개누락 탐지가 원장과 조인할 수 없다.
+- **`JournalDirection`·`GlTxType`을 `gl.domain`에서 `gl.api`로 옮긴다.** 지금은 `gl.domain`에 있는데(PR #478 머지분), `#349`가 건 `Api mayNotAccessAnyLayer()` 때문에 **`gl.api`가 `gl.domain`을 참조하면 `LayerArchitectureTest > gl`이 깨진다.** 공유 어휘를 소유 도메인의 `api`에 두는 것은 [ADR-0004](../adr/0004-domain-contract-surface.md)(#495 초안, PH-24 PR에서 함께 머지) 결정 2와 같은 방향이다. `String`으로 두면 규칙은 피하지만 호출하는 트랙(P2 PH-14 · P4 PH-33-②)이 문자열 오타를 컴파일에서 못 잡는다. 타행 유형은 PH-33-②가 `tx_type` CHECK를 넓히는 V 파일과 같은 PR에서 enum 값을 추가한다.
+- **`post()`는 호출자 트랜잭션 안에서만 돈다(`MANDATORY`).** 트랜잭션 없이 부르면 즉시 실패한다. `REQUIRED`면 트랜잭션 없는 호출(예: 배치)에서 전표가 원장과 다른 커밋에 들어가고, 아래 "GL이 이벤트가 아니라 동기 포트인 이유"가 깨진다.
+- **`gl_voucher`에 `reference_key` 컬럼을 새 V 파일로 추가한다**(PR #478 스키마에는 없다). `NOT NULL` + `UNIQUE (tx_type, reference_key)`. 이 키가 없으면 "이체 1건당 전표 1건" 검증과 PH-28b 분개누락 탐지가 원장과 조인할 수 없다.
+    - **같은 키로 두 번 부르면 예외다(no-op 아님).** 조용히 넘기면 원장만 두 번 기표된 상태가 가려진다. 예외면 원장까지 롤백된다.
+    - 개시 전표의 키는 `OPENING-{yyyyMMdd}`(거래일)다.
+    - PH-60b 시드(10/2)가 이 V 파일보다 먼저 들어간다. V 파일은 기존 행의 키를 채운 뒤 `NOT NULL`·`UNIQUE`를 건다. PH-60b 시드는 `TRANSFER`·`PRODUCT_SUBSCRIPTION` 전표의 `description`에 원장 `transaction_number`를 남긴다(개시 전표 제외). V 파일은 이 값을, 개시 전표는 `OPENING-20260901`을 `reference_key`로 옮긴다.
+    - 역분개를 도입하면(#129, 2차 범위 밖) 원 전표와 같은 키를 쓰지 말고 별도 `tx_type`(예: `REVERSAL`)을 둔다. Apache Fineract는 역분개에 원 거래와 같은 `transaction_id`를 쓰고 DB 유일 제약 없이 애플리케이션에서 중복을 거른다 — 전표 헤더 테이블이 없어서다. 우리는 `gl_voucher`가 있어 유일 제약을 건다.
 - 전표 생성 + 분개 기표 서비스, `product_gl_mapping`
 - `GlLedgerPostingHook implements transfer.api.LedgerPostingHook` — 이체 유형별 패턴표로 전표 1건. **예외를 던진다(= 이체 롤백).**
 - 상품가입 초입금 기표(`LedgerPair.forProductSubscription` 완료 지점)
@@ -983,7 +989,7 @@ S4지만 CI/CD·문서·훈련이라 S4 규칙에 걸리지 않는다([D-05](REA
 - PH-60의 실행법·전용 대역·검수 SQL·실측 결과는 [ph60_minimum_seed.md](ph60_minimum_seed.md)를 따른다. 대량 시드는 HTTP/Swagger 엔드포인트로 노출하지 않으며, 정기 배포와 분리된 일회성 작업에서 `phase2-seed` 프로필과 명시적 실행 플래그를 함께 지정할 때만 실행하고 검증 완료 후 자동 종료한다.
 - **P4 검수를 통과해야 완료다**(원장 짝 · 원장 합계 = 잔액 합계 · 전표 차대변). 적재 시간을 기록한다.
 - **10/6이 한계선이다.** 그보다 늦으면 10/8 개선 전 수치 마감(P2·P3·P4·P5)을 지킬 수 없다.
-- GL 쪽 선행은 머지 전에도 쓸 수 있다. 테이블은 PR #478(PH-20), 패턴·채번은 PR #491(PH-21)에 이미 있으므로 그 브랜치 기준으로 생성기를 먼저 짠다. 10/1 머지를 기다리지 않는다.
+- GL 쪽 선행은 머지 전에도 쓸 수 있다. 테이블(PR #478, PH-20)과 패턴·채번(PR #491, PH-21)은 `dev`에 머지됐다.
 - 누가 쓰나: PH-60은 P2 적수 · **P1 TPS·동시성** · P1 아웃박스 시뮬레이션. PH-60b는 P4 대사(10/6) · P3 시산표(10/8) · P5 COB(10/16).
 
 ### PH-22'. RAG 문서 선정
