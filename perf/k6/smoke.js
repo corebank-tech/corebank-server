@@ -1,9 +1,10 @@
 import { login, executeTransfer } from './lib/session.js';
+import { getRequiredBaseUrl } from './lib/env.js';
 
 // session.js 가 수동으로 통과시킨 4단계를 그대로 재현하는지만 본다. 수치는 믿지 않는다.
 export const options = { vus: 1, iterations: 1 };
 
-const BASE_URL = __ENV.BASE_URL || 'https://api.corebank.cloud/api/v1';
+const BASE_URL = getRequiredBaseUrl();
 const ACCOUNT_PASSWORD = __ENV.ACCOUNT_PASSWORD || '1234';
 
 // 시드 이체는 10,000~99,000 사이 1,000원 단위라(Phase2MinimumSeedService.transferAmount)

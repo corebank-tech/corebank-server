@@ -1,5 +1,6 @@
 import { login, executeTransfer } from './lib/session.js';
 import { customer } from './lib/seed.js';
+import { getRequiredBaseUrl } from './lib/env.js';
 
 // 부하 계열: 계좌를 분산해 락 경합을 없앤 상태에서 처리량 한계를 찾는다.
 // 동시 사용자 수가 아니라 초당 이체 시도 수(iteration/s)를 올린다 — 사용자 수를 올리면 서버가 느려질 때
@@ -33,7 +34,7 @@ export const options = {
   },
 };
 
-const BASE_URL = __ENV.BASE_URL || 'https://api.corebank.cloud/api/v1';
+const BASE_URL = getRequiredBaseUrl();
 const ACCOUNT_PASSWORD = __ENV.ACCOUNT_PASSWORD || '1234';
 
 // 고객을 분산한다. 같은 고객을 돌리면 계좌 행 락이 걸려 분산 시나리오가 아니게 되고,

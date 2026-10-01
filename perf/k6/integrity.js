@@ -1,12 +1,13 @@
 import { login, issueAccountPasswordToken, issueOtpToken, postTransfer } from './lib/session.js';
 import { customer } from './lib/seed.js';
+import { getRequiredBaseUrl } from './lib/env.js';
 
 // 정합성 계열: 계좌 하나에 동시 요청을 몰아 잔액이 어긋나는지 본다.
 // 빠른지가 아니라 틀리는지를 보므로 pass/fail 판정이고, 규모는 100 고정이다.
 // 근거: docs/phase2/harness.md §3-2
 const CONCURRENCY = Number(__ENV.CONCURRENCY || 100);
 const AMOUNT = Number(__ENV.AMOUNT || 19876);
-const BASE_URL = __ENV.BASE_URL || 'https://api.corebank.cloud/api/v1';
+const BASE_URL = getRequiredBaseUrl();
 const ACCOUNT_PASSWORD = __ENV.ACCOUNT_PASSWORD || '1234';
 
 export const options = {
