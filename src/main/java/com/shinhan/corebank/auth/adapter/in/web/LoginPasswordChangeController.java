@@ -40,7 +40,8 @@ public class LoginPasswordChangeController {
             operationId = "changeLoginPassword",
             summary = "로그인 비밀번호 변경",
             description = "로그인 고객의 현재 비밀번호를 확인한 뒤 신규 비밀번호로 변경한다. 성공하면 로그인 실패 횟수를 "
-                    + "0으로 초기화하며, 동일 멱등키와 동일 요청의 재시도에는 최초 응답을 재생한다.")
+                    + "0으로 초기화하고 현재 세션을 포함한 해당 고객의 모든 로그인 세션을 무효화하므로 새 비밀번호로 재로그인해야 한다. "
+                    + "동일 멱등키와 동일 요청의 재시도에는 최초 응답을 재생한다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "로그인 비밀번호 변경 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
