@@ -10,7 +10,6 @@ import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -27,8 +26,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class GlVoucherSequenceJpaEntity {
 
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
     @Id
     @Column(name = "trade_date", nullable = false)
     private LocalDate tradeDate;
@@ -44,20 +41,20 @@ public class GlVoucherSequenceJpaEntity {
     @Column(name = "updated_at", nullable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime updatedAt;
 
-    private GlVoucherSequenceJpaEntity(LocalDate tradeDate, GlTxType txType, int lastSeq) {
+    private GlVoucherSequenceJpaEntity(LocalDate tradeDate, GlTxType txType, int lastSeq, LocalDateTime now) {
         this.tradeDate = tradeDate;
         this.txType = txType;
         this.lastSeq = lastSeq;
-        this.updatedAt = LocalDateTime.now(KST);
+        this.updatedAt = now;
     }
 
-    static GlVoucherSequenceJpaEntity startAt(LocalDate tradeDate, GlTxType txType, int lastSeq) {
-        return new GlVoucherSequenceJpaEntity(tradeDate, txType, lastSeq);
+    static GlVoucherSequenceJpaEntity startAt(LocalDate tradeDate, GlTxType txType, int lastSeq, LocalDateTime now) {
+        return new GlVoucherSequenceJpaEntity(tradeDate, txType, lastSeq, now);
     }
 
-    int incrementAndGet() {
+    int incrementAndGet(LocalDateTime now) {
         this.lastSeq = this.lastSeq + 1;
-        this.updatedAt = LocalDateTime.now(KST);
+        this.updatedAt = now;
         return this.lastSeq;
     }
 }

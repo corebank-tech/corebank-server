@@ -5,7 +5,9 @@ import com.shinhan.corebank.gl.application.port.out.VoucherSequencePort;
 import com.shinhan.corebank.gl.domain.GlTxType;
 import com.shinhan.corebank.gl.domain.VoucherNumber;
 import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
@@ -38,13 +40,16 @@ public class GlVoucherSequenceAdapter implements VoucherSequencePort {
     private final GlVoucherSequenceJpaRepository sequenceRepository;
     private final GlVoucherJpaRepository voucherRepository;
     private final TransactionTemplate requiresNewTransactionTemplate;
+    private final Clock clock;
 
     public GlVoucherSequenceAdapter(
             GlVoucherSequenceJpaRepository sequenceRepository,
             GlVoucherJpaRepository voucherRepository,
-            PlatformTransactionManager transactionManager) {
+            PlatformTransactionManager transactionManager,
+            Clock clock) {
         this.sequenceRepository = sequenceRepository;
         this.voucherRepository = voucherRepository;
+        this.clock = clock;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
         this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -90,14 +95,15 @@ public class GlVoucherSequenceAdapter implements VoucherSequencePort {
             if (counter.getLastSeq() >= VoucherNumber.MAX_SEQUENCE) {
                 throw new BusinessException(GlErrorCode.VOUCHER_SEQUENCE_EXHAUSTED);
             }
-            return counter.incrementAndGet();
+            return counter.incrementAndGet(LocalDateTime.now(clock));
         }
 
         int next = lastIssuedSequence(tradeDate, txType) + 1;
         if (next > VoucherNumber.MAX_SEQUENCE) {
             throw new BusinessException(GlErrorCode.VOUCHER_SEQUENCE_EXHAUSTED);
         }
-        sequenceRepository.saveAndFlush(GlVoucherSequenceJpaEntity.startAt(tradeDate, txType, next));
+        sequenceRepository.saveAndFlush(
+                GlVoucherSequenceJpaEntity.startAt(tradeDate, txType, next, LocalDateTime.now(clock)));
         return next;
     }
 
