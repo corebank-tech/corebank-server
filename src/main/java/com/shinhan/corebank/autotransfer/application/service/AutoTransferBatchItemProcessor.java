@@ -102,7 +102,7 @@ public class AutoTransferBatchItemProcessor {
         // 거래번호가 있으면 이체 엔진이 돈이 움직인 트랜잭션 안에서 이미 TransferSettled 를 발행했다(#436).
         // 거래번호가 없는 건 transfer 행이 생기기 전의 사전검증 실패뿐이라 엔진이 발행하지 못하므로, 회차
         // 기록과 함께 여기서 발행한다. refId 는 등록 ID 가 아니라 회차 ID 다.
-        if (result.transactionNumber() == null) {
+        if (result.isPreValidationFailure()) {
             eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
                     .customerId(autoTransfer.getCustomerId())
                     .refId(processingExecution.getExecutionId())

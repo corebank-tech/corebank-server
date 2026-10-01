@@ -100,7 +100,7 @@ public class ScheduledTransferBatchItemProcessor {
         // 거래번호가 있으면 이체 엔진이 돈이 움직인 트랜잭션 안에서 이미 TransferSettled 를 발행했다(#436).
         // 거래번호가 없는 건 transfer 행이 생기기 전의 사전검증 실패뿐이고, 엔진이 발행하지 못하므로 여기서
         // 실행 기록과 함께 발행한다.
-        if (result.transactionNumber() == null) {
+        if (result.isPreValidationFailure()) {
             eventPublisher.publishEvent(ScheduledTransferSettled.builder()
                     .customerId(scheduledTransfer.getCustomerId())
                     .refId(scheduledTransfer.getScheduledTransferId())
