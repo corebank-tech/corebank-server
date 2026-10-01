@@ -144,6 +144,53 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
         });
     }
 
+    @Test
+    @DisplayName("재확정이 transfer 행을 찾지 못하면 가드를 통과한 뒤 회차 ID 를 refId 로 하는 ERROR 이벤트를 한 번 발행한다 (#436)")
+    void reconcileStuckExecution_noTransferRow_publishesErrorSettledOnce() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today)).thenReturn(Optional.empty());
+
+        itemProcessor.reconcileStuckExecution(new StuckExecution(autoTransfer(), saved));
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(AutoTransferExecutionSettled.class, event -> {
+            assertThat(event.customerId()).isEqualTo(customerId);
+            assertThat(event.refId()).isEqualTo(saved.getExecutionId());
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(event.amount()).isEqualTo(10000L);
+            assertThat(event.counterpartyName()).isEqualTo("홍*동");
+        });
+    }
+
+    @Test
+    @DisplayName("재확정이 transfer 행을 찾으면 이체 엔진이 이미 발행했으므로 배치는 이벤트를 발행하지 않는다 (#436)")
+    void reconcileStuckExecution_transferRowFound_publishesNothing() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
+                .thenReturn(Optional.of(
+                        new TransferLookupResult("20260315BT0000000011", ProcessResultStatus.ERROR, "잔액 부족")));
+
+        itemProcessor.reconcileStuckExecution(new StuckExecution(autoTransfer(), saved));
+
+        verify(domainEventSink, never()).record(any());
+    }
+
+    @Test
+    @DisplayName("transfer 행이 없는 회차를 재확정이 동시에 두 번 처리해도 실패 이벤트는 가드를 통과한 한 번만 나간다 (#436)")
+    void reconcileStuckExecution_concurrentDuplicateRunWithoutTransferRow_publishesOnce() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today)).thenReturn(Optional.empty());
+        // 두 재확정 실행이 저장 전에 각자 findAllProcessing()으로 같은 PROCESSING 스냅샷을 읽었다고 가정
+        AutoTransferExecution firstSnapshot = reloadExecution(saved.getExecutionId());
+        AutoTransferExecution secondSnapshot = reloadExecution(saved.getExecutionId());
+
+        itemProcessor.reconcileStuckExecution(new StuckExecution(autoTransfer(), firstSnapshot));
+        itemProcessor.reconcileStuckExecution(new StuckExecution(autoTransfer(), secondSnapshot));
+
+        verify(domainEventSink, times(1)).record(any());
+    }
+
     private TransactionTemplate transactionTemplate() {
         return new TransactionTemplate(transactionManager);
     }

@@ -126,6 +126,54 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
         });
     }
 
+    @Test
+    @DisplayName("재확정이 transfer 행을 찾지 못하면 가드를 통과한 뒤 ERROR 상태의 ScheduledTransferSettled 를 한 번 발행한다 (#436)")
+    void reconcileStuckExecution_noTransferRow_publishesErrorSettledOnce() {
+        itemProcessor.claim(scheduledTransferId);
+        when(transferLookupPort.findBySourceAndDate(scheduledTransferId, SCHEDULED_DATE))
+                .thenReturn(Optional.empty());
+
+        itemProcessor.reconcileStuckExecution(reloadAsDomain());
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(ScheduledTransferSettled.class, event -> {
+            assertThat(event.customerId()).isEqualTo(customerId);
+            assertThat(event.refId()).isEqualTo(scheduledTransferId);
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(event.amount()).isEqualTo(10_000L);
+            assertThat(event.counterpartyName()).isEqualTo("홍*동");
+        });
+    }
+
+    @Test
+    @DisplayName("재확정이 transfer 행을 찾으면 이체 엔진이 이미 발행했으므로 배치는 이벤트를 발행하지 않는다 (#436)")
+    void reconcileStuckExecution_transferRowFound_publishesNothing() {
+        itemProcessor.claim(scheduledTransferId);
+        when(transferLookupPort.findBySourceAndDate(scheduledTransferId, SCHEDULED_DATE))
+                .thenReturn(Optional.of(
+                        new TransferLookupResult("20260315BT0000000010", ProcessResultStatus.ERROR, "잔액 부족")));
+
+        itemProcessor.reconcileStuckExecution(reloadAsDomain());
+
+        verify(domainEventSink, never()).record(any());
+    }
+
+    @Test
+    @DisplayName("transfer 행이 없는 건을 재확정이 동시에 두 번 처리해도 실패 이벤트는 가드를 통과한 한 번만 나간다 (#436)")
+    void reconcileStuckExecution_concurrentDuplicateRunWithoutTransferRow_publishesOnce() {
+        itemProcessor.claim(scheduledTransferId);
+        when(transferLookupPort.findBySourceAndDate(scheduledTransferId, SCHEDULED_DATE))
+                .thenReturn(Optional.empty());
+        ScheduledTransfer firstSnapshot = reloadAsDomain();
+        ScheduledTransfer secondSnapshot = reloadAsDomain();
+
+        itemProcessor.reconcileStuckExecution(firstSnapshot);
+        itemProcessor.reconcileStuckExecution(secondSnapshot);
+
+        verify(domainEventSink, times(1)).record(any());
+    }
+
     private TransactionTemplate transactionTemplate() {
         return new TransactionTemplate(transactionManager);
     }

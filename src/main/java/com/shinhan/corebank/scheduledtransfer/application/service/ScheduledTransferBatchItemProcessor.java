@@ -120,7 +120,8 @@ public class ScheduledTransferBatchItemProcessor {
                 scheduledTransfer.getScheduledTransferId(), scheduledTransfer.getScheduledDate());
 
         LocalDateTime now = LocalDateTime.now();
-        if (lookup.isEmpty()) {
+        boolean hasNoTransferRow = lookup.isEmpty();
+        if (hasNoTransferRow) {
             scheduledTransfer.markFailed("실행 중 확인 불가로 재확정 배치가 오류 처리함", null, now);
         } else if (lookup.get().status() == ProcessResultStatus.SUCCESS) {
             scheduledTransfer.markSuccess(lookup.get().transactionNumber(), now);
@@ -150,6 +151,19 @@ public class ScheduledTransferBatchItemProcessor {
                 scheduledTransfer.getScheduledDate(),
                 scheduledTransfer.getStatus() == ScheduledTransferStatus.SUCCESS,
                 null);
+
+        // transfer 행이 없으면 이체 엔진이 발행하지 못했고, completeProcessing() 의 사전검증 실패 발행도 함께
+        // 롤백된 건이다. 재확정이 겹치면 가드에서 return 해도 트랜잭션은 커밋되므로 가드를 통과한 뒤에만 발행한다.
+        if (hasNoTransferRow) {
+            eventPublisher.publishEvent(ScheduledTransferSettled.builder()
+                    .customerId(scheduledTransfer.getCustomerId())
+                    .refId(scheduledTransfer.getScheduledTransferId())
+                    .status(ProcessResultStatus.ERROR)
+                    .occurredAt(now)
+                    .amount(scheduledTransfer.getAmount())
+                    .counterpartyName(MaskingUtil.maskName(scheduledTransfer.getPayeeName()))
+                    .build());
+        }
     }
 
     private void recordAudit(ScheduledTransfer scheduledTransfer, LocalDate date, boolean succeeded, String errorCode) {

@@ -150,7 +150,8 @@ public class AutoTransferBatchItemProcessor {
         Optional<TransferLookupResult> lookup =
                 transferLookupPort.findBySourceAndDate(autoTransfer.getAutoTransferId(), execution.getExecutionDate());
 
-        if (lookup.isEmpty()) {
+        boolean hasNoTransferRow = lookup.isEmpty();
+        if (hasNoTransferRow) {
             execution.markError("실행 중 확인 불가로 재확정 배치가 오류 처리함", null);
         } else if (lookup.get().status() == ProcessResultStatus.SUCCESS) {
             execution.markSuccess(lookup.get().transactionNumber());
@@ -173,6 +174,19 @@ public class AutoTransferBatchItemProcessor {
                     autoTransfer.getAutoTransferId(),
                     execution.getExecutionId());
             return;
+        }
+
+        // transfer 행이 없으면 이체 엔진이 발행하지 못했고, completeProcessing() 의 사전검증 실패 발행도 함께
+        // 롤백된 건이다. 재확정이 겹치면 가드에서 return 해도 트랜잭션은 커밋되므로 가드를 통과한 뒤에만 발행한다.
+        if (hasNoTransferRow) {
+            eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
+                    .customerId(autoTransfer.getCustomerId())
+                    .refId(execution.getExecutionId())
+                    .status(ProcessResultStatus.ERROR)
+                    .occurredAt(LocalDateTime.now())
+                    .amount(autoTransfer.getAmount())
+                    .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
+                    .build());
         }
 
         if (execution.getStatus() == ProcessResultStatus.ERROR) {
