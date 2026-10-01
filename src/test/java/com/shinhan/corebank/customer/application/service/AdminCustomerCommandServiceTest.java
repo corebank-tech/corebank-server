@@ -23,6 +23,7 @@ import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePor
 import com.shinhan.corebank.customer.application.port.out.TemporaryPasswordGeneratorPort;
 import com.shinhan.corebank.customer.domain.exception.CustomerErrorCode;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -193,6 +194,7 @@ class AdminCustomerCommandServiceTest {
                 "01012345678",
                 loginFailureCount,
                 accountLocked,
+                CustomerStatus.ACTIVE,
                 null,
                 null,
                 null,

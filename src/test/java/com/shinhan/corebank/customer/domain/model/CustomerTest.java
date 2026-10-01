@@ -262,7 +262,68 @@ class CustomerTest {
         assertThat(customer.getLoginFailureCount()).isEqualTo(5);
     }
 
+    @Test
+    @DisplayName("신규 가입 고객은 정상 상태다")
+    void registersActiveCustomer() {
+        Customer customer = Customer.register(
+                "user01",
+                null,
+                "passwordHash",
+                "홍길동",
+                LocalDate.of(1990, 1, 1),
+                "user01@example.com",
+                "01012345678",
+                LocalDateTime.of(2026, 1, 1, 9, 0));
+
+        assertThat(customer.getStatus()).isEqualTo(CustomerStatus.ACTIVE);
+        assertThat(customer.isSuspended()).isFalse();
+    }
+
+    @Test
+    @DisplayName("관리자가 정지하면 이용정지 상태가 되고 잠금과 실패 횟수는 그대로다")
+    void suspendsByAdminWithoutTouchingLoginState() {
+        Customer customer = restoreCustomer(3, false);
+
+        customer.changeStatusByAdmin(CustomerStatus.SUSPENDED);
+
+        assertThat(customer.getStatus()).isEqualTo(CustomerStatus.SUSPENDED);
+        assertThat(customer.isSuspended()).isTrue();
+        assertThat(customer.isAccountLocked()).isFalse();
+        assertThat(customer.getLoginFailureCount()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("관리자가 정지 계정을 되살리면 정상 상태가 된다")
+    void activatesSuspendedCustomerByAdmin() {
+        Customer customer = restoreCustomer(0, false, CustomerStatus.SUSPENDED);
+
+        customer.changeStatusByAdmin(CustomerStatus.ACTIVE);
+
+        assertThat(customer.getStatus()).isEqualTo(CustomerStatus.ACTIVE);
+        assertThat(customer.isSuspended()).isFalse();
+    }
+
+    @Test
+    @DisplayName("변경할 상태가 없으면 고객 상태를 바꾸지 않는다")
+    void rejectsMissingStatusOnAdminChange() {
+        Customer customer = restoreCustomer(0, false, CustomerStatus.SUSPENDED);
+
+        assertThatThrownBy(() -> customer.changeStatusByAdmin(null)).isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(customer.getStatus()).isEqualTo(CustomerStatus.SUSPENDED);
+    }
+
+    @Test
+    @DisplayName("계정 상태가 없으면 복원할 수 없다")
+    void rejectsMissingStatusOnRestore() {
+        assertThatThrownBy(() -> restoreCustomer(0, false, null)).isInstanceOf(IllegalArgumentException.class);
+    }
+
     private Customer restoreCustomer(int loginFailureCount, boolean accountLocked) {
+        return restoreCustomer(loginFailureCount, accountLocked, CustomerStatus.ACTIVE);
+    }
+
+    private Customer restoreCustomer(int loginFailureCount, boolean accountLocked, CustomerStatus status) {
         LocalDateTime joinedAt = LocalDateTime.of(2026, 1, 1, 9, 0);
 
         return Customer.restore(
@@ -276,6 +337,7 @@ class CustomerTest {
                 "01012345678",
                 loginFailureCount,
                 accountLocked,
+                status,
                 null,
                 null,
                 null,

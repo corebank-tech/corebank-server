@@ -16,6 +16,7 @@ import com.shinhan.corebank.customer.api.ResetCustomerPasswordCommand;
 import com.shinhan.corebank.customer.api.ResetCustomerPasswordResult;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -310,6 +311,7 @@ class CustomerAuthenticationServiceTest {
                 "01012345678",
                 loginFailureCount,
                 accountLocked,
+                CustomerStatus.ACTIVE,
                 lastLoginAt,
                 lastLoginIp,
                 previousLoginAt,

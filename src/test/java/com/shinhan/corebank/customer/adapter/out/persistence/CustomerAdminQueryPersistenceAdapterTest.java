@@ -8,6 +8,7 @@ import com.shinhan.corebank.customer.application.port.out.CustomerAdminView;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.application.port.out.CustomerSearchCondition;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -154,6 +155,7 @@ class CustomerAdminQueryPersistenceAdapterTest extends IntegrationTestSupport {
                 "01012345678",
                 failures,
                 locked,
+                CustomerStatus.ACTIVE,
                 null,
                 null,
                 null,
