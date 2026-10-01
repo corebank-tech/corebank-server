@@ -37,7 +37,9 @@ import tools.jackson.databind.ObjectMapper;
 class LoginApiIntegrationTest extends IntegrationTestSupport {
 
     private static final String USER_ID = "login-api-user";
+    private static final String OTHER_USER_ID = "login-api-other";
     private static final String RAW_PASSWORD = "CorrectPassword1!";
+    private static final String NEW_PASSWORD = "SaferPass2!";
     private static final String WRONG_PASSWORD = "WrongPassword1!";
 
     @LocalServerPort
@@ -223,6 +225,39 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
         assertThat(currentCsrfToken()).isNotEqualTo(csrfToken);
     }
 
+    @Test
+    @DisplayName("비밀번호 변경 성공 시 같은 고객의 모든 세션만 만료하고 새 비밀번호로 재로그인한다")
+    void invalidatesAllCustomerSessionsAfterPasswordChange() throws Exception {
+        insertCustomer(OTHER_USER_ID, "다른고객", "login-api-other@example.com", "01087654321", RAW_PASSWORD);
+        SessionClient currentSession = sessionClient();
+        SessionClient otherSession = sessionClient();
+        SessionClient otherCustomerSession = sessionClient();
+        assertLogin(currentSession, USER_ID, RAW_PASSWORD, 200);
+        assertLogin(otherSession, USER_ID, RAW_PASSWORD, 200);
+        assertLogin(otherCustomerSession, OTHER_USER_ID, RAW_PASSWORD, 200);
+
+        // 변경 실패 시 현재·다른 세션을 그대로 유지한다.
+        HttpResponse<String> failedChange = changePassword(currentSession, WRONG_PASSWORD, NEW_PASSWORD);
+        assertThat(failedChange.statusCode()).isEqualTo(400);
+        assertThat(objectMapper.readTree(failedChange.body()).get("code").asText())
+                .isEqualTo("ATH0010");
+        assertProtected(currentSession, 200, "0000");
+        assertProtected(otherSession, 200, "0000");
+
+        HttpResponse<String> successfulChange = changePassword(currentSession, RAW_PASSWORD, NEW_PASSWORD);
+        assertThat(successfulChange.statusCode())
+                .withFailMessage("비밀번호 변경 응답: %s", successfulChange.body())
+                .isEqualTo(200);
+        assertThat(objectMapper.readTree(successfulChange.body()).get("code").asText())
+                .isEqualTo("0000");
+
+        assertProtected(currentSession, 401, "CMN0101");
+        assertProtected(otherSession, 401, "CMN0101");
+        assertProtected(otherCustomerSession, 200, "0000");
+        assertLogin(sessionClient(), USER_ID, RAW_PASSWORD, 401);
+        assertLogin(sessionClient(), USER_ID, NEW_PASSWORD, 200);
+    }
+
     private HttpRequest loginRequest(String password) {
         return loginRequest(USER_ID, password);
     }
@@ -242,6 +277,60 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
                 .header("X-Forwarded-For", "203.0.113.10")
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                 .build();
+    }
+
+    private HttpResponse<String> changePassword(SessionClient client, String currentPassword, String newPassword)
+            throws Exception {
+        String body =
+                """
+                {
+                  "currentPassword": "%s",
+                  "newPassword": "%s",
+                  "newPasswordConfirm": "%s"
+                }
+                """
+                        .formatted(currentPassword, newPassword, newPassword);
+        return client.httpClient()
+                .send(
+                        HttpRequest.newBuilder(uri("/customers/me/password"))
+                                .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                                .header("X-XSRF-TOKEN", cookieValue(client.cookieManager(), "XSRF-TOKEN"))
+                                .header(
+                                        "Idempotency-Key",
+                                        java.util.UUID.randomUUID().toString())
+                                .PUT(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                                .build(),
+                        HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+    }
+
+    private void assertLogin(SessionClient client, String userId, String password, int expectedStatus)
+            throws Exception {
+        HttpResponse<String> response = client.httpClient()
+                .send(loginRequest(userId, password), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertThat(response.statusCode()).isEqualTo(expectedStatus);
+    }
+
+    private void assertProtected(SessionClient client, int expectedStatus, String expectedCode) throws Exception {
+        HttpResponse<String> response = client.httpClient()
+                .send(
+                        HttpRequest.newBuilder(uri("/accounts")).GET().build(),
+                        HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertThat(response.statusCode()).isEqualTo(expectedStatus);
+        assertThat(objectMapper.readTree(response.body()).get("code").asText()).isEqualTo(expectedCode);
+    }
+
+    private SessionClient sessionClient() {
+        CookieManager manager = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+        return new SessionClient(
+                manager, HttpClient.newBuilder().cookieHandler(manager).build());
+    }
+
+    private String cookieValue(CookieManager manager, String name) {
+        return manager.getCookieStore().getCookies().stream()
+                .filter(cookie -> name.equals(cookie.getName()))
+                .map(HttpCookie::getValue)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(name + " 쿠키가 존재하지 않습니다."));
     }
 
     private URI uri(String path) {
@@ -265,7 +354,11 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
     }
 
     private Long insertCustomer() {
-        String passwordHash = passwordEncoder.encode(RAW_PASSWORD);
+        return insertCustomer(USER_ID, "로그인고객", "login-api@example.com", "01012345678", RAW_PASSWORD);
+    }
+
+    private Long insertCustomer(String userId, String userName, String email, String phoneNumber, String password) {
+        String passwordHash = passwordEncoder.encode(password);
 
         jdbcTemplate.update(
                 """
@@ -284,14 +377,14 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
                     NOW(6), NOW(6), NOW(6)
                 )
                 """,
-                USER_ID,
+                userId,
                 passwordHash,
-                "로그인고객",
+                userName,
                 "1990-01-01",
-                "login-api@example.com",
-                "01012345678");
+                email,
+                phoneNumber);
 
-        return jdbcTemplate.queryForObject("SELECT customer_id FROM customer WHERE user_id = ?", Long.class, USER_ID);
+        return jdbcTemplate.queryForObject("SELECT customer_id FROM customer WHERE user_id = ?", Long.class, userId);
     }
 
     private void deleteTestData() {
@@ -301,13 +394,20 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
                 WHERE customer_id IN (
                     SELECT customer_id
                     FROM customer
-                    WHERE user_id = ?
+                    WHERE user_id IN (?, ?)
                 )
                 """,
-                USER_ID);
+                USER_ID,
+                OTHER_USER_ID);
 
-        jdbcTemplate.update("DELETE FROM customer WHERE user_id = ?", USER_ID);
+        jdbcTemplate.update(
+                "DELETE FROM idempotency_key WHERE customer_id IN (SELECT customer_id FROM customer WHERE user_id IN (?, ?))",
+                USER_ID,
+                OTHER_USER_ID);
+        jdbcTemplate.update("DELETE FROM customer WHERE user_id IN (?, ?)", USER_ID, OTHER_USER_ID);
     }
+
+    private record SessionClient(CookieManager cookieManager, HttpClient httpClient) {}
 
     // 로그인 전 세션 ID를 발급하기 위한 테스트 전용 공개 API
     @RestController
