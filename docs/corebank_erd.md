@@ -24,6 +24,7 @@ erDiagram
         varchar phone_number "하이픈 없음"
         tinyint login_failure_count "5회 시 잠금 (ATH0102)"
         boolean account_locked
+        varchar status "ACTIVE / SUSPENDED"
         datetime last_login_at "대시보드 currentLoginAt"
         varchar last_login_ip "대시보드 currentLoginIp"
         datetime previous_login_at "대시보드 previousLoginAt"

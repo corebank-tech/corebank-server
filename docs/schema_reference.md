@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 31개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 297개 컬럼
+**대상**: 31개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 298개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -26,7 +26,7 @@
 
 | # | 테이블 | 설명 | 담당 | 컬럼 |
 | --- | --- | --- | --- |----|
-| 1 | `customer` | 고객 | P6 | 17 |
+| 1 | `customer` | 고객 | P6 | 18 |
 | 2 | `terms` | 약관 | P6 | 10 |
 | 3 | `customer_terms_agreement` | 회원가입 약관 동의 | P6 | 4  |
 | 4 | `verification_request` | 인증 요청 | P6 | 13 |
@@ -82,6 +82,7 @@
 | `phone_number` | `VARCHAR(11)` |  | X |  | 휴대폰 번호. 하이픈 없이 숫자만 저장하고 응답 시 중간 4자리를 마스킹한다 |
 | `login_failure_count` | `TINYINT` |  | X | `0` | 로그인 비밀번호 연속 오류 횟수. 5회 도달 시 `account_locked`가 TRUE로 바뀐다 (ATH0102) |
 | `account_locked` | `BOOLEAN` |  | X | `FALSE` | 계정 잠금 여부. `login_failure_count` 5회 도달 시 TRUE, 관리자 잠금 해제로 FALSE 복귀 |
+| `status` | `VARCHAR(12)` |  | X | `ACTIVE` | 계정 상태. `ACTIVE`(정상) / `SUSPENDED`(이용정지). 관리자만 바꾼다. SUSPENDED면 비밀번호가 맞아도 로그인을 거부한다(ATH0106). 비밀번호 5회 오류 잠금(`account_locked`)과 별개이며 둘이 동시에 걸릴 수 있다 |
 | `last_login_at` | `DATETIME(6)` |  | O |  | 가장 최근 로그인 시각. 대시보드의 `currentLoginAt` |
 | `last_login_ip` | `VARCHAR(45)` |  | O |  | 가장 최근 로그인 IP. 대시보드의 `currentLoginIp` |
 | `previous_login_at` | `DATETIME(6)` |  | O |  | 직전 로그인 시각. 대시보드의 `previousLoginAt`. 부정 접속을 고객이 알아채는 단서 |
@@ -97,6 +98,12 @@
 | UNIQUE | `uk_customer_user_id` | `user_id` |
 | UNIQUE | `uk_customer_email` | `email` |
 | UNIQUE | `uk_customer_existing_bank_customer_id` | `existing_bank_customer_id` |
+
+**CHECK 제약**
+
+| 이름 | 조건 | 설명 |
+| --- | --- | --- |
+| `ck_customer_status` | `status IN ('ACTIVE', 'SUSPENDED')` | 계정 상태는 정상·이용정지 중 하나여야 한다. |
 
 ---
 
