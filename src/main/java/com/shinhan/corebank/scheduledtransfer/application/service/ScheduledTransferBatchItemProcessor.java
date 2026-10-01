@@ -15,6 +15,7 @@ import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCas
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -41,6 +42,7 @@ public class ScheduledTransferBatchItemProcessor {
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final AuditLogService auditLogService;
     private final TransferLookupPort transferLookupPort;
+    private final Clock clock;
     private final ApplicationEventPublisher eventPublisher;
 
     // WAITING -> PROCESSING 원자적 선점 (REQ-SCD-013 멱등성 방어)
@@ -72,7 +74,7 @@ public class ScheduledTransferBatchItemProcessor {
                     .formatted(scheduledTransfer.getScheduledTransferId(), date));
         }
 
-        LocalDateTime executedAt = LocalDateTime.now();
+        LocalDateTime executedAt = LocalDateTime.now(clock);
         if (result.status() == ProcessResultStatus.SUCCESS) {
             scheduledTransfer.markSuccess(result.transactionNumber(), executedAt);
         } else {
@@ -119,7 +121,7 @@ public class ScheduledTransferBatchItemProcessor {
         Optional<TransferLookupResult> lookup = transferLookupPort.findBySourceAndDate(
                 scheduledTransfer.getScheduledTransferId(), scheduledTransfer.getScheduledDate());
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         boolean hasNoTransferRow = lookup.isEmpty();
         if (hasNoTransferRow) {
             scheduledTransfer.markFailed("실행 중 확인 불가로 재확정 배치가 오류 처리함", null, now);
