@@ -10,12 +10,16 @@ const AMOUNT = Number(__ENV.AMOUNT || 19876);
 const BASE_URL = getRequiredBaseUrl();
 const ACCOUNT_PASSWORD = __ENV.ACCOUNT_PASSWORD || '1234';
 
+// per-vu-iterations 라야 VU 당 정확히 1건이 보장된다. shared-iterations 는 먼저 끝난 VU 가
+// 남은 반복을 더 가져가는데(k6 공식문서: 반복이 고르게 분배되지 않는다), 토큰을 VU 번호로
+// 집어오므로 그 VU 는 이미 쓴 1회용 토큰을 다시 보내 거절되고 다른 VU 토큰은 남는다.
+// 그러면 실제 동시 이체가 100건보다 적어져 「동일 계좌 100건 동시」 전제가 깨진다.
 export const options = {
   scenarios: {
     hotspot: {
-      executor: 'shared-iterations',
+      executor: 'per-vu-iterations',
       vus: CONCURRENCY,
-      iterations: CONCURRENCY,
+      iterations: 1,
       maxDuration: '2m',
     },
   },
