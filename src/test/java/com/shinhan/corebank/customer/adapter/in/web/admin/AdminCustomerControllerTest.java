@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -216,6 +217,22 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
                         .with(csrf()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0002"));
+    }
+
+    // 본문 status는 CMN9999를 피하려고 문자열 @Pattern으로 받는다. enum에 값이 늘면 패턴도 함께 늘려야 하므로 여기서 묶는다.
+    @Test
+    @DisplayName("CustomerStatus의 모든 값은 상태 변경 요청 검증을 통과한다")
+    void acceptsEveryCustomerStatusValue() throws Exception {
+        for (CustomerStatus status : CustomerStatus.values()) {
+            mockMvc.perform(post("/admin/customers/{id}/status", otherId)
+                            .header("Idempotency-Key", UUID.randomUUID().toString())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"status\":\"%s\"}".formatted(status.name()))
+                            .with(admin())
+                            .with(csrf()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.status").value(status.name()));
+        }
     }
 
     @Test
