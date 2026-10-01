@@ -55,4 +55,15 @@ public class GlVoucherJpaEntity {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime createdAt;
+
+    private GlVoucherJpaEntity(String voucherNo, LocalDate tradeDate, GlTxType txType, String description) {
+        this.voucherNo = voucherNo;
+        this.tradeDate = tradeDate;
+        this.txType = txType;
+        this.description = description;
+    }
+
+    static GlVoucherJpaEntity of(String voucherNo, LocalDate tradeDate, GlTxType txType, String description) {
+        return new GlVoucherJpaEntity(voucherNo, tradeDate, txType, description);
+    }
 }
