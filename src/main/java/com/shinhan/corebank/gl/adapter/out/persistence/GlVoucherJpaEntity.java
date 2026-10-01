@@ -7,13 +7,17 @@ import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PostPersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.domain.Persistable;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 /**
@@ -30,7 +34,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @EntityListeners(AuditingEntityListener.class)
-public class GlVoucherJpaEntity {
+public class GlVoucherJpaEntity implements Persistable<String> {
 
     @Id
     @Column(name = "voucher_no", length = 20)
@@ -55,4 +59,40 @@ public class GlVoucherJpaEntity {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime createdAt;
+
+    /**
+     * 전표번호를 직접 채워 넘기므로 Spring Data 는 기본적으로 기존 엔티티로 보고 merge(SELECT 후 UPDATE/INSERT)한다.
+     * 전표는 수정하지 않으니 항상 새것으로 알려 바로 INSERT 하게 한다 — 번호가 겹치면 merge 가 기존 전표를 덮어쓰지
+     * 않고 이 테이블 PK 위반으로 곧바로 실패한다.
+     */
+    @Transient
+    @Getter(AccessLevel.NONE)
+    private boolean newEntity = true;
+
+    private GlVoucherJpaEntity(String voucherNo, LocalDate tradeDate, GlTxType txType, String description) {
+        this.voucherNo = voucherNo;
+        this.tradeDate = tradeDate;
+        this.txType = txType;
+        this.description = description;
+    }
+
+    static GlVoucherJpaEntity of(String voucherNo, LocalDate tradeDate, GlTxType txType, String description) {
+        return new GlVoucherJpaEntity(voucherNo, tradeDate, txType, description);
+    }
+
+    @Override
+    public String getId() {
+        return voucherNo;
+    }
+
+    @Override
+    public boolean isNew() {
+        return newEntity;
+    }
+
+    @PostLoad
+    @PostPersist
+    void markNotNew() {
+        this.newEntity = false;
+    }
 }
