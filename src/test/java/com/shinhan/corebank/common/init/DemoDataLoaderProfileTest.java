@@ -27,6 +27,14 @@ class DemoDataLoaderProfileTest {
         }
     }
 
+    @Test
+    @DisplayName("phase2-seed가 함께 활성화되면 QA 시드 로더를 등록하지 않는다")
+    void doesNotRegisterLoaderWithPhase2Seed() {
+        try (AnnotationConfigApplicationContext context = contextWithProfiles("local", "phase2-seed")) {
+            assertThat(context.getBeansOfType(DemoDataLoader.class)).isEmpty();
+        }
+    }
+
     private AnnotationConfigApplicationContext contextWithProfiles(String... profiles) {
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
         context.getEnvironment().setActiveProfiles(profiles);

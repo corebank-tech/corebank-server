@@ -80,7 +80,7 @@ erDiagram
         bigint product_id FK "입출금계좌는 NULL"
         varchar account_type "DEMAND_DEPOSIT / TIME_DEPOSIT / INSTALLMENT_SAVINGS"
         bigint balance "원장 대사 대상"
-        varchar status "ACTIVE / SUSPENDED / CLOSED"
+        varchar status "ACTIVE / SUSPENDED / MATURED / CLOSED / DORMANT"
         char password_hash "계좌비밀번호 BCrypt"
         tinyint password_failure_count
         boolean password_locked "APW0101"
@@ -143,7 +143,7 @@ erDiagram
         varchar direction "DEPOSIT / WITHDRAWAL"
         bigint amount "양수만. 방향은 direction 이 표현"
         bigint balance_after "기표 직후 잔액"
-        varchar transaction_type "IMMEDIATE_TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / REVERSAL"
+        varchar transaction_type "OPENING / IMMEDIATE_TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / REVERSAL"
         varchar transaction_content "통장 표시내용"
         char channel "WB / BT"
         boolean reversed
