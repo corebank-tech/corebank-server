@@ -28,7 +28,8 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 /**
- * #449 DoD — 관리자 API로 푼 계정·초기화한 계정에 실제 /auth/login으로 로그인되는지, 감사가 실제로 커밋되는지 본다.
+ * #449·#450 DoD — 관리자 API로 푼 계정·초기화한 계정·정지했다 되살린 계정에 실제 /auth/login으로 로그인되는지,
+ * 감사가 실제로 커밋되는지 본다.
  *
  * <p>테스트 트랜잭션을 쓰지 않는다. 실패 감사는 AuditLogService가 별도 트랜잭션으로 커밋하는데, 테스트 트랜잭션
  * 안에서는 그 커밋을 확인할 수 없기 때문이다. 대신 넣은 행을 @AfterEach에서 지운다.
@@ -134,6 +135,58 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
                         ADMIN_ID))
                 .isEqualTo(2);
         assertThat(adminAuditRows("LOGIN_PASSWORD_RESET_BY_ADMIN", "SUCCESS")).isZero();
+    }
+
+    @Test
+    @DisplayName("정지한 고객은 맞는 비밀번호로도 ATH0106, 틀리면 ATH0101이고 되살리면 로그인된다")
+    void suspendedCustomerIsRejectedUntilActivated() throws Exception {
+        Long activeId = insertCustomer(null, "adm449active", "active@adm449.test", 0, false);
+
+        changeStatus(activeId, "SUSPENDED").andExpect(jsonPath("$.data.status").value("SUSPENDED"));
+
+        login("adm449active", ORIGINAL_PASSWORD)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ATH0106"))
+                .andExpect(jsonPath("$.data").doesNotExist());
+        // 비밀번호를 모르면 정지 계정도 일반 계정과 같은 ATH0101이고 실패 횟수가 오른다.
+        login("adm449active", "Wrong!449pass")
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("ATH0101"))
+                .andExpect(jsonPath("$.data.errorCount").value(1));
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT last_login_at IS NULL FROM customer WHERE customer_id = ?", Boolean.class, activeId))
+                .isTrue();
+
+        changeStatus(activeId, "ACTIVE").andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        login("adm449active", ORIGINAL_PASSWORD)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"));
+
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT JSON_UNQUOTE(JSON_EXTRACT(detail, '$.changes.status')) FROM audit_log "
+                                + "WHERE customer_id = ? AND event_type = 'CUSTOMER_STATUS_CHANGE' AND result = 'SUCCESS' "
+                                + "AND JSON_EXTRACT(detail, '$.targetCustomerId') = ? ORDER BY audit_log_id",
+                        String.class,
+                        ADMIN_ID,
+                        activeId))
+                .containsExactly("SUSPENDED", "ACTIVE");
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM audit_log WHERE customer_id = ? AND event_type = 'LOGIN' "
+                                + "AND result = 'FAILURE' AND JSON_UNQUOTE(JSON_EXTRACT(detail, '$.reason')) = 'ACCOUNT_SUSPENDED'",
+                        Integer.class,
+                        activeId))
+                .isEqualTo(1);
+    }
+
+    private ResultActions changeStatus(Long customerId, String status) throws Exception {
+        return mockMvc.perform(post("/admin/customers/{id}/status", customerId)
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType("application/json")
+                        .content("{\"status\":\"%s\"}".formatted(status))
+                        .with(admin())
+                        .with(csrf()))
+                .andExpect(status().isOk());
     }
 
     // MockHttpSession의 만료시간 기본값은 0이라 SessionLoginManager가 거부한다 — 운영과 같은 10분(POL-001)을 준다.
