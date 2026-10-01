@@ -164,6 +164,24 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("회차가 멈춘 사이 등록 금액이 바뀌어도 재확정 실패 이벤트의 금액은 회차에 저장된 금액이다 (#436)")
+    void reconcileStuckExecution_amountChangedAfterSaveProcessing_publishesExecutionAmount() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
+        AutoTransfer amountChanged = autoTransfer();
+        amountChanged.change(20000L, null, null, null, null);
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today)).thenReturn(Optional.empty());
+
+        itemProcessor.reconcileStuckExecution(new StuckExecution(amountChanged, saved));
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue())
+                .isInstanceOfSatisfying(AutoTransferExecutionSettled.class, event -> assertThat(event.amount())
+                        .isEqualTo(saved.getAmount())
+                        .isEqualTo(10000L));
+    }
+
+    @Test
     @DisplayName("재확정이 transfer 행을 찾으면 이체 엔진이 이미 발행했으므로 배치는 이벤트를 발행하지 않는다 (#436)")
     void reconcileStuckExecution_transferRowFound_publishesNothing() {
         AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());

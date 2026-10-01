@@ -109,7 +109,7 @@ public class AutoTransferBatchItemProcessor {
                     .status(result.status())
                     .errorCode(result.errorCode())
                     .occurredAt(LocalDateTime.now())
-                    .amount(autoTransfer.getAmount())
+                    .amount(processingExecution.getAmount())
                     .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
                     .build());
         }
@@ -184,7 +184,7 @@ public class AutoTransferBatchItemProcessor {
                     .refId(execution.getExecutionId())
                     .status(ProcessResultStatus.ERROR)
                     .occurredAt(LocalDateTime.now())
-                    .amount(autoTransfer.getAmount())
+                    .amount(execution.getAmount())
                     .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
                     .build());
         }
