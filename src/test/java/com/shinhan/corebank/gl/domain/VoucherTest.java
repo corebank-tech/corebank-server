@@ -30,12 +30,16 @@ class VoucherTest {
         }
 
         @Test
-        @DisplayName("일련번호가 1보다 작거나 999999보다 크면 GLA9005")
-        void rejectsSequenceOutOfRange() {
+        @DisplayName("일련번호가 1보다 작으면 호출 코드 오류라 IllegalArgumentException")
+        void rejectsNonPositiveSequenceAsProgrammingError() {
             assertThatThrownBy(() -> new VoucherNumber(TRADE_DATE, GlTxType.TRANSFER, 0))
-                    .isInstanceOf(BusinessException.class)
-                    .extracting("errorCode")
-                    .isEqualTo(GlErrorCode.VOUCHER_SEQUENCE_EXHAUSTED);
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("sequence");
+        }
+
+        @Test
+        @DisplayName("일련번호가 999999보다 크면 GLA9005")
+        void rejectsSequenceAboveMax() {
             assertThatThrownBy(() -> new VoucherNumber(TRADE_DATE, GlTxType.TRANSFER, 1_000_000))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")

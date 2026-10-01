@@ -19,7 +19,11 @@ public record VoucherNumber(LocalDate tradeDate, GlTxType txType, int sequence) 
     public VoucherNumber {
         Objects.requireNonNull(tradeDate, "tradeDate must not be null");
         Objects.requireNonNull(txType, "txType must not be null");
-        if (sequence < 1 || sequence > MAX_SEQUENCE) {
+        // 0 이하는 채번이 아니라 호출 코드의 버그라 범위 초과(GLA9005)와 나눈다.
+        if (sequence < 1) {
+            throw new IllegalArgumentException("sequence must be >= 1: " + sequence);
+        }
+        if (sequence > MAX_SEQUENCE) {
             throw new BusinessException(GlErrorCode.VOUCHER_SEQUENCE_EXHAUSTED);
         }
     }
