@@ -8,6 +8,7 @@ import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
 import java.time.LocalDate;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.TransientDataAccessException;
@@ -30,6 +31,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class GlVoucherSequenceAdapter implements VoucherSequencePort {
 
     private static final int MAX_FIRST_INSERT_RACE_RETRIES = 5;
+    private static final long BACKOFF_MIN_MILLIS = 10L;
+    private static final long BACKOFF_MAX_MILLIS_PER_ATTEMPT = 30L;
     private static final int SEQUENCE_DIGITS = 6;
 
     private final GlVoucherSequenceJpaRepository sequenceRepository;
@@ -60,9 +63,24 @@ public class GlVoucherSequenceAdapter implements VoucherSequencePort {
                 // 같은 (거래일, 유형)의 첫 행을 두 요청이 동시에 INSERT 하면 하나가 PK 위반이나 데드락으로 진다.
                 // 진 쪽은 다시 돌면 이미 생긴 행을 FOR UPDATE 로 잡는다.
                 lastRaceFailure = raceOnFirstOfDayInsert;
+                boolean hasNextAttempt = attempt < MAX_FIRST_INSERT_RACE_RETRIES - 1;
+                if (hasNextAttempt) {
+                    sleepBeforeRetry(attempt);
+                }
             }
         }
         throw lastRaceFailure;
+    }
+
+    /** 동시에 진 요청들이 같은 순간에 다시 부딪치지 않도록 재시도 간격을 흩뜨린다. */
+    private void sleepBeforeRetry(int attempt) {
+        long delayMillis = ThreadLocalRandom.current()
+                .nextLong(BACKOFF_MIN_MILLIS, BACKOFF_MAX_MILLIS_PER_ATTEMPT * (attempt + 1));
+        try {
+            Thread.sleep(delayMillis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private int incrementAndGet(LocalDate tradeDate, GlTxType txType) {
