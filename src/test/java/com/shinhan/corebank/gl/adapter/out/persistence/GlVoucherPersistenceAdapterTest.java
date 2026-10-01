@@ -1,6 +1,7 @@
 package com.shinhan.corebank.gl.adapter.out.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
 import com.shinhan.corebank.IntegrationTestSupport;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 @DisplayName("전표 저장(GlVoucherPersistenceAdapter) 통합 테스트")
@@ -72,6 +74,25 @@ class GlVoucherPersistenceAdapterTest extends IntegrationTestSupport {
                 TRADE_DATE);
         assertThat(((Number) total.get("debit_total")).longValue())
                 .isEqualTo(((Number) total.get("credit_total")).longValue());
+    }
+
+    @Test
+    @DisplayName("이미 있는 전표번호로 저장하면 전표 PK 위반으로 실패하고 기존 전표는 그대로다")
+    void rejectsDuplicateVoucherNumberAtVoucherPrimaryKey() {
+        VoucherNumber number = new VoucherNumber(TRADE_DATE, GlTxType.TRANSFER, 43);
+        adapter.save(Voucher.create(
+                number, "시드 거래", List.of(JournalEntry.debit("20100", 10_000L), JournalEntry.credit("20100", 10_000L))));
+
+        Voucher duplicate = Voucher.create(
+                number, "런타임 거래", List.of(JournalEntry.debit("20100", 500L), JournalEntry.credit("20100", 500L)));
+
+        // 분개 줄 유니크 키(uk_gl_journal_entry_line)가 아니라 전표 PK 에서 막혀야 원인이 로그에 바로 드러난다.
+        assertThatThrownBy(() -> adapter.save(duplicate))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasRootCauseMessage("Duplicate entry '20990106-TRF-000043' for key 'gl_voucher.PRIMARY'");
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT description FROM gl_voucher WHERE voucher_no = ?", String.class, number.value()))
+                .isEqualTo("시드 거래");
     }
 
     @Test
