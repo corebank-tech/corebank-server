@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.context.TestPropertySource;
@@ -166,6 +168,108 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
                         .with(csrf()))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CMN0102"));
+    }
+
+    @Test
+    @DisplayName("상태를 정지로 바꾸면 상세·검색 응답에 상태가 반영된다")
+    void changeStatusIsReflectedInDetailAndSearch() throws Exception {
+        mockMvc.perform(post("/admin/customers/{id}/status", otherId)
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"SUSPENDED\"}")
+                        .with(admin())
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("계정 상태가 변경되었습니다."))
+                .andExpect(jsonPath("$.data.customerId").value(otherId))
+                .andExpect(jsonPath("$.data.status").value("SUSPENDED"));
+
+        mockMvc.perform(get("/admin/customers/{id}", otherId).with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUSPENDED"));
+        mockMvc.perform(get("/admin/customers")
+                        .param("userId", "adm449")
+                        .param("status", "SUSPENDED")
+                        .with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalCount").value(1))
+                .andExpect(jsonPath("$.data.items[0].customerId").value(otherId))
+                .andExpect(jsonPath("$.data.items[0].status").value("SUSPENDED"));
+    }
+
+    @Test
+    @DisplayName("정의되지 않거나 빠진 상태는 CMN0001, 멱등키가 없으면 CMN0002다")
+    void rejectsInvalidStatusChange() throws Exception {
+        for (String body : new String[] {"{\"status\":\"DORMANT\"}", "{}"}) {
+            mockMvc.perform(post("/admin/customers/{id}/status", otherId)
+                            .header("Idempotency-Key", UUID.randomUUID().toString())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .with(admin())
+                            .with(csrf()))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("CMN0001"));
+        }
+        mockMvc.perform(post("/admin/customers/{id}/status", otherId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"SUSPENDED\"}")
+                        .with(admin())
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0002"));
+    }
+
+    // 본문 status는 CMN9999를 피하려고 문자열 @Pattern으로 받는다. enum에 값이 늘면 패턴도 함께 늘려야 하므로 여기서 묶는다.
+    @Test
+    @DisplayName("CustomerStatus의 모든 값은 상태 변경 요청 검증을 통과한다")
+    void acceptsEveryCustomerStatusValue() throws Exception {
+        for (CustomerStatus status : CustomerStatus.values()) {
+            mockMvc.perform(post("/admin/customers/{id}/status", otherId)
+                            .header("Idempotency-Key", UUID.randomUUID().toString())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"status\":\"%s\"}".formatted(status.name()))
+                            .with(admin())
+                            .with(csrf()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.status").value(status.name()));
+        }
+    }
+
+    @Test
+    @DisplayName("같은 멱등키로 다른 상태를 보내면 첫 응답을 재생하지 않고 CMN0302로 거부한다")
+    void rejectsSameIdempotencyKeyForDifferentStatus() throws Exception {
+        String key = UUID.randomUUID().toString();
+
+        mockMvc.perform(post("/admin/customers/{id}/status", otherId)
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"SUSPENDED\"}")
+                        .with(admin())
+                        .with(csrf()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/admin/customers/{id}/status", otherId)
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"ACTIVE\"}")
+                        .with(admin())
+                        .with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CMN0302"));
+    }
+
+    @Test
+    @DisplayName("status=ACTIVE 단독 검색은 CMN0002, 정의되지 않은 status 조건은 CMN0001이다")
+    void rejectsInvalidStatusSearch() throws Exception {
+        mockMvc.perform(get("/admin/customers").param("status", "ACTIVE").with(admin()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0002"));
+        mockMvc.perform(get("/admin/customers")
+                        .param("userId", "adm449")
+                        .param("status", "DORMANT")
+                        .with(admin()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
     }
 
     private RequestPostProcessor admin() {

@@ -108,4 +108,17 @@ class CustomerLoginAdapterTest {
 
         assertThat(result).isEqualTo(LoginSuccessUpdateResult.ACCOUNT_LOCKED);
     }
+
+    @Test
+    @DisplayName("로그인 성공 처리 중 이용정지 결과를 변환한다")
+    void recordLoginSuccessAccountSuspended() {
+        LocalDateTime loginAt = LocalDateTime.of(2026, 8, 12, 10, 0);
+        RecordLoginSuccessCommand command = new RecordLoginSuccessCommand(1L, loginAt, "192.168.0.10");
+        given(customerAuthenticationFacade.updateLoginSuccessState(command))
+                .willReturn(LoginSuccessState.ACCOUNT_SUSPENDED);
+
+        LoginSuccessUpdateResult result = adapter.recordLoginSuccess(1L, loginAt, "192.168.0.10");
+
+        assertThat(result).isEqualTo(LoginSuccessUpdateResult.ACCOUNT_SUSPENDED);
+    }
 }

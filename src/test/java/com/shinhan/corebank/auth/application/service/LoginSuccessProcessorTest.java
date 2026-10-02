@@ -61,6 +61,19 @@ class LoginSuccessProcessorTest {
         verify(recordLoginAuditPort, never()).record(1L, REQUEST_IP, true, LoginAuditReason.SUCCESS);
     }
 
+    // 이용정지 결과에도 성공 감사를 기록하지 않음
+    @Test
+    @DisplayName("이용정지 계정이면 성공 감사를 저장하지 않는다")
+    void skipsSuccessAuditForSuspendedAccount() {
+        given(loginCustomerPort.recordLoginSuccess(1L, LOGIN_AT, REQUEST_IP))
+                .willReturn(LoginSuccessUpdateResult.ACCOUNT_SUSPENDED);
+
+        LoginSuccessUpdateResult result = processor.process(1L, LOGIN_AT, REQUEST_IP);
+
+        assertThat(result).isEqualTo(LoginSuccessUpdateResult.ACCOUNT_SUSPENDED);
+        verify(recordLoginAuditPort, never()).record(1L, REQUEST_IP, true, LoginAuditReason.SUCCESS);
+    }
+
     // 성공 감사 저장 오류를 호출자에게 전파해 트랜잭션 롤백을 유도
     @Test
     @DisplayName("성공 감사 저장에 실패하면 예외를 전파한다")
