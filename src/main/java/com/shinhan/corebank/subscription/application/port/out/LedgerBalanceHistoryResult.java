@@ -5,9 +5,9 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.subscription.domain.LedgerBalancePoint;
 import java.util.List;
 
-public record LedgerBalanceHistory(long openingBalance, List<LedgerBalancePoint> points) {
+public record LedgerBalanceHistoryResult(long openingBalance, List<LedgerBalancePoint> points) {
 
-    public LedgerBalanceHistory {
+    public LedgerBalanceHistoryResult {
         if (points == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }

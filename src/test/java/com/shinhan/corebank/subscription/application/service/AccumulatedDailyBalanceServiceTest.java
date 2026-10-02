@@ -7,8 +7,8 @@ import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-import com.shinhan.corebank.subscription.application.port.out.LedgerBalanceHistory;
 import com.shinhan.corebank.subscription.application.port.out.LedgerBalanceHistoryPort;
+import com.shinhan.corebank.subscription.application.port.out.LedgerBalanceHistoryResult;
 import com.shinhan.corebank.subscription.domain.LedgerBalancePoint;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -40,7 +40,7 @@ class AccumulatedDailyBalanceServiceTest {
                 new LedgerBalancePoint(LocalDate.of(2026, 9, 2), LocalDateTime.of(2026, 9, 2, 10, 0), 1L, 1_500L));
 
         when(ledgerBalanceHistoryPort.load(accountId, fromInclusive, toExclusive))
-                .thenReturn(new LedgerBalanceHistory(1_000L, points));
+                .thenReturn(new LedgerBalanceHistoryResult(1_000L, points));
 
         long result = accumulatedDailyBalanceService.calculate(accountId, fromInclusive, toExclusive);
 
@@ -60,7 +60,7 @@ class AccumulatedDailyBalanceServiceTest {
         LocalDate toExclusive = LocalDate.of(2026, 9, 4);
 
         when(ledgerBalanceHistoryPort.load(accountId, fromInclusive, toExclusive))
-                .thenReturn(new LedgerBalanceHistory(2_000L, List.of()));
+                .thenReturn(new LedgerBalanceHistoryResult(2_000L, List.of()));
 
         long result = accumulatedDailyBalanceService.calculate(accountId, fromInclusive, toExclusive);
 

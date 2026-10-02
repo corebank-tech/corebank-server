@@ -26,6 +26,8 @@ public class LedgerBalanceQueryService implements LedgerBalanceQuery {
 
         validate(accountId, fromInclusive, toExclusive);
 
+        // TODO(#516, #515): trade_date 대입과 기존 행 보정 완료 후
+        // 시작 잔액·기간 조회를 함께 trade_date 기준으로 전환한다.
         LocalDateTime from = fromInclusive.atStartOfDay();
         LocalDateTime to = toExclusive.atStartOfDay();
 
@@ -42,6 +44,7 @@ public class LedgerBalanceQueryService implements LedgerBalanceQuery {
     }
 
     private LedgerBalanceEntry toApiEntry(LedgerBalancePoint point) {
+        // TODO(#516, #515): 위 조회 기준 전환과 함께 날짜도 실제 trade_date로 교체한다.
         return new LedgerBalanceEntry(
                 point.occurredAt().toLocalDate(), point.occurredAt(), point.ledgerEntryId(), point.balanceAfter());
     }

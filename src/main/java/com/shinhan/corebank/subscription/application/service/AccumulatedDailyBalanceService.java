@@ -3,8 +3,8 @@ package com.shinhan.corebank.subscription.application.service;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.subscription.application.port.in.AccumulatedDailyBalanceUseCase;
-import com.shinhan.corebank.subscription.application.port.out.LedgerBalanceHistory;
 import com.shinhan.corebank.subscription.application.port.out.LedgerBalanceHistoryPort;
+import com.shinhan.corebank.subscription.application.port.out.LedgerBalanceHistoryResult;
 import com.shinhan.corebank.subscription.domain.AccumulatedDailyBalanceCalculator;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +25,7 @@ public class AccumulatedDailyBalanceService implements AccumulatedDailyBalanceUs
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
 
-        LedgerBalanceHistory history = ledgerBalanceHistoryPort.load(accountId, fromInclusive, toExclusive);
+        LedgerBalanceHistoryResult history = ledgerBalanceHistoryPort.load(accountId, fromInclusive, toExclusive);
 
         return AccumulatedDailyBalanceCalculator.calculate(
                 history.openingBalance(), fromInclusive, toExclusive, history.points());

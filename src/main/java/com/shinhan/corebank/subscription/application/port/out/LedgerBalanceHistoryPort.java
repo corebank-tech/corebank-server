@@ -4,5 +4,5 @@ import java.time.LocalDate;
 
 public interface LedgerBalanceHistoryPort {
 
-    LedgerBalanceHistory load(Long accountId, LocalDate fromInclusive, LocalDate toExclusive);
+    LedgerBalanceHistoryResult load(Long accountId, LocalDate fromInclusive, LocalDate toExclusive);
 }

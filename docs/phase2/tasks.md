@@ -54,33 +54,33 @@
 
 ### P2 — 예적금 생명주기 · 이자 · 출금가능액 · 데이터 계층 · 엣지·접근통제·DR
 
-| ID | 제목 | S | 인일 | 선행 | 기한 | 이슈·PR   | 상태  |
-|---|---|---|---|---|---|---------|-----|
-| [PH-10](#ph-10-계좌-상태-전이-매트릭스--flyway) | 계좌 상태 전이 매트릭스 + Flyway | S1 | 3 | — | **Flyway 9/30 전** | #419    | 완료  |
-| [PH-11](#ph-11-적수-산출--일수-방식--베이스라인) | 적수 산출 · 일수 방식 · 베이스라인 | S1 | 2.5 | PH-60 (PH-40은 나오면 교체) | 베이스라인 10/6 | #524      | 진행중 |
-| [FE #139](#fe-139-matured-정책표) | MATURED 정책표 | S1 | 0.5 | PH-10 | — | FE #139 | 예정  |
-| [FE #101](#fe-101-계좌비밀번호-토큰-하드코딩-제거) | 계좌비밀번호 토큰 하드코딩 제거 (1차 잔여) | S1 | 0.5 | — | — | FE #101 | 예정  |
-| [PH-12](#ph-12-이자-계산기--절사-규칙) | 이자 계산기 · 절사 규칙 | S2 | 3.5 | PH-11 | **10/16** | —       | 예정  |
-| [PH-90](#ph-90-원장잔액--출금가능액-분리--transferprecheck) | 원장잔액·출금가능액 분리 + `TransferPreCheck` | S2 | 3 | PH-87 · PH-99 | **10/16** (P4 머지) | —       | 예정  |
-| [PH-70-①](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | `modules/data` Terraform plan — RDS · ElastiCache | S2 | 1.5 | PH-50 | — | —       | 예정  |
-| [PH-15](#ph-15-만기--감지--matured-전이--원리금--만기해지-api) | 만기 — 감지 · MATURED · 원리금 · 만기해지 API | S3 | 3.5 | PH-12 · PH-10 · PH-43 · 입금 계약(PH-99) | **10/23** | #419    | 예정  |
-| [PH-14](#ph-14-이자-지급--원천징수) | 이자 지급 · 원천징수 | S3 | 1.5 | PH-12 · PH-24 · 입금 계약(PH-99) | — | —       | 예정  |
-| [PH-13](#ph-13-적수-집계-sql-전환--재측정) | 적수 집계 SQL 전환 · 재측정 | S3 | 1.5 | PH-11 | — | —       | 예정  |
-| [PH-16](#ph-16-중도해지--휴면-전환--해지-시-자원-정리) | 중도해지 · 휴면 전환 · 해지 시 자원 정리 | S3 | 4 | PH-15 · PH-43 · 입금 계약(PH-99) · #467 | 휴면 스텝 통합 **10/30** | —       | 예정  |
-| [PH-18](#ph-18-개인정보-컬럼-암호화) | 개인정보 컬럼 암호화 | S3 | 2 | — | — | —       | 예정  |
-| [PH-70-②](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | RDS 복원 · 컷오버 (DB 쪽) · 온프레미스 binlog 복제 | S3 | 3 | PH-70-① · PH-51 · 복제: PH-100-② | **10/26 apply · 10/27 전환 · 복제 시작** | —       | 예정  |
-| [PH-58](#ph-58-엣지-계층) | 엣지 — WAF · Route53 · ACM · CloudFront | S3 | 1.5 | ACM: 가비아 DNS 권한 · WAF 연결: PH-51 | **ACM ARN → P5 10/16 (S2 말)** | —       | 예정  |
-| [PH-72](#ph-72-접근통제-인프라) | 접근통제 — IAM · Secrets Manager · CloudTrail · Object Lock 버킷 | S3 | 2.5 | 버킷: 없음 · 나머지: PH-51 | **Object Lock 버킷 10/21** | —       | 예정  |
-| [FE C-1](#fe-c-1-잔액출금가능액-라벨-분리) | 잔액/출금가능액 라벨 분리 (+#139 실연동) | S3 | 1 | PH-90 · FE C-6 | 10/21~ | —       | 예정  |
-| [FE B-3](#fe-b-3-만기-안내) | 만기 안내 | S3 | 0.5 | PH-15 | — | —       | 예정  |
-| [PH-19b](#ph-19b-생명주기-최종-검증--리포트) | 생명주기 최종 검증 · 15만 계좌 전수 대조 · 리포트 | S4 | 2.5 | 전 태스크 | 11/6 | —       | 예정  |
-| [PH-54](#ph-54-dr-등급--복구-훈련) | DR 등급 · 페일오버 · 복구 훈련 · 온프레미스 전환 리허설 | S4 | 4.5 | PH-51 · PH-70-② | — | —       | 예정  |
+| ID | 제목 | S | 인일 | 선행 | 기한 | 이슈·PR | 상태 |
+|---|---|---|---|---|---|---|---|
+| [PH-10](#ph-10-계좌-상태-전이-매트릭스--flyway) | 계좌 상태 전이 매트릭스 + Flyway | S1 | 3 | — | **Flyway 9/30 전** | #419 | 완료 |
+| [PH-11](#ph-11-적수-산출--일수-방식--베이스라인) | 적수 산출 · 일수 방식 · 베이스라인 | S1 | 2.5 | PH-60 (PH-40은 나오면 교체) | 베이스라인 10/6 | #524 | 진행 |
+| [FE #139](#fe-139-matured-정책표) | MATURED 정책표 | S1 | 0.5 | PH-10 | — | FE #139 | 예정 |
+| [FE #101](#fe-101-계좌비밀번호-토큰-하드코딩-제거) | 계좌비밀번호 토큰 하드코딩 제거 (1차 잔여) | S1 | 0.5 | — | — | FE #101 | 예정 |
+| [PH-12](#ph-12-이자-계산기--절사-규칙) | 이자 계산기 · 절사 규칙 | S2 | 3.5 | PH-11 | **10/16** | — | 예정 |
+| [PH-90](#ph-90-원장잔액--출금가능액-분리--transferprecheck) | 원장잔액·출금가능액 분리 + `TransferPreCheck` | S2 | 3 | PH-87 · PH-99 | **10/16** (P4 머지) | — | 예정 |
+| [PH-70-①](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | `modules/data` Terraform plan — RDS · ElastiCache | S2 | 1.5 | PH-50 | — | — | 예정 |
+| [PH-15](#ph-15-만기--감지--matured-전이--원리금--만기해지-api) | 만기 — 감지 · MATURED · 원리금 · 만기해지 API | S3 | 3.5 | PH-12 · PH-10 · PH-43 · 입금 계약(PH-99) | **10/23** | #419 | 예정 |
+| [PH-14](#ph-14-이자-지급--원천징수) | 이자 지급 · 원천징수 | S3 | 1.5 | PH-12 · PH-24 · 입금 계약(PH-99) | — | — | 예정 |
+| [PH-13](#ph-13-적수-집계-sql-전환--재측정) | 적수 집계 SQL 전환 · 재측정 | S3 | 1.5 | PH-11 | — | — | 예정 |
+| [PH-16](#ph-16-중도해지--휴면-전환--해지-시-자원-정리) | 중도해지 · 휴면 전환 · 해지 시 자원 정리 | S3 | 4 | PH-15 · PH-43 · 입금 계약(PH-99) · #467 | 휴면 스텝 통합 **10/30** | — | 예정 |
+| [PH-18](#ph-18-개인정보-컬럼-암호화) | 개인정보 컬럼 암호화 | S3 | 2 | — | — | — | 예정 |
+| [PH-70-②](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | RDS 복원 · 컷오버 (DB 쪽) · 온프레미스 binlog 복제 | S3 | 3 | PH-70-① · PH-51 · 복제: PH-100-② | **10/26 apply · 10/27 전환 · 복제 시작** | — | 예정 |
+| [PH-58](#ph-58-엣지-계층) | 엣지 — WAF · Route53 · ACM · CloudFront | S3 | 1.5 | ACM: 가비아 DNS 권한 · WAF 연결: PH-51 | **ACM ARN → P5 10/16 (S2 말)** | — | 예정 |
+| [PH-72](#ph-72-접근통제-인프라) | 접근통제 — IAM · Secrets Manager · CloudTrail · Object Lock 버킷 | S3 | 2.5 | 버킷: 없음 · 나머지: PH-51 | **Object Lock 버킷 10/21** | — | 예정 |
+| [FE C-1](#fe-c-1-잔액출금가능액-라벨-분리) | 잔액/출금가능액 라벨 분리 (+#139 실연동) | S3 | 1 | PH-90 · FE C-6 | 10/21~ | — | 예정 |
+| [FE B-3](#fe-b-3-만기-안내) | 만기 안내 | S3 | 0.5 | PH-15 | — | — | 예정 |
+| [PH-19b](#ph-19b-생명주기-최종-검증--리포트) | 생명주기 최종 검증 · 15만 계좌 전수 대조 · 리포트 | S4 | 2.5 | 전 태스크 | 11/6 | — | 예정 |
+| [PH-54](#ph-54-dr-등급--복구-훈련) | DR 등급 · 페일오버 · 복구 훈련 · 온프레미스 전환 리허설 | S4 | 4.5 | PH-51 · PH-70-② | — | — | 예정 |
 
 ### P3 — 회계 GL · 정보계 설계 · 기획 리드 · 관리자 화면
 
 | ID | 제목 | S | 인일 | 선행 | 기한 | 이슈·PR | 상태 |
 |---|---|---|---|---|---|---|---|
-| [PH-97](#ph-97-관리자-고객-계정-운영-api) | 관리자 고객 계정 운영 API (S0 이월분) | S1 | 0.5 | — | — | #449 · PR #459 · #450 | 진행 |
+| [PH-97](#ph-97-관리자-고객-계정-운영-api) | 관리자 고객 계정 운영 API (S0 이월분) | S1 | 0.5 | — | — | #449 · PR #459 · #450 · PR #529 | 완료 |
 | [PH-87](#ph-87-핵심-용어) | 핵심 용어 정의 | S1 | 0.5 | — | 9/23 | #447 · PR #453 | 완료 |
 | [PH-20](#ph-20-계정과목-체계--gl-테이블) | 계정과목 체계 · GL 테이블 | S1 | 2.5 | — | **10/1 Flyway** | #451 · PR #478 | 진행 |
 | [PH-21](#ph-21-전표-기표-구조--개시-잔액--분개-패턴표) | 전표 기표 구조 · 개시 잔액 · 분개 패턴표 | S1 | 2.5 | PH-20 | **패턴표 9/30 → P6** | #452 · PR #491 | 진행 |
@@ -122,7 +122,7 @@
 | [PH-38](#ph-38-원장-대사-배치) | 대사 — 불일치 저장 · 목록 API · 300만 베이스라인 · CobStep 편입 | S2 | 2 | PH-60b · CobStep 인터페이스 | 베이스라인 10/6 · API 10/16 | #468 | 예정 |
 | [PH-80](#ph-80-timeout--정정-체인--자동-재시도-금지) | TIMEOUT 추가 · 전체 머지 | S2 | 2.5 | PH-80 S1분 · P5 회차 현황 (10/6) | **10/8 머지** | — | 예정 |
 | [PH-99](#ph-99-이체-파이프라인-확장점seam) | `transfer.api` 입금 계약 (P2 이자·만기·해지용) | S2 | 0.5 | PH-99 | **10/16** | — | 예정 |
-| [EVT-2](#evt-2-publishevent-두-줄) | `publishEvent` 두 줄 | S2 | 0.5 | PH-32 | 10/6 | — | 예정 |
+| [EVT-2](#evt-2-publishevent-두-줄) | `publishEvent` 두 줄 | S2 | 0.5 | PH-32 | 10/6 | #505 | 완료 — P1이 #505에서 대신 처리 |
 | [HOOK-MERGE](#hook-merge-훅-구현체-머지) | 훅 구현체 3건 리뷰·머지 | S2 | 0.5 | PH-90 · PH-24 · PH-41 | 10/12~16 | — | 예정 |
 | [PH-33-②](#ph-33-대외계-①-모의-서버-s1--②-타행-이체-s3) | 타행 송신 · 조회거래 · 미결제 기표 · 격리 | S3 | 5 | PH-33-① · PH-24 | **10/23 머지** | — | 예정 |
 | [PH-36](#ph-36-장애-주입-3종--보상-트랜잭션) | 장애 주입 3종 · 보상 트랜잭션 | S3 | 2 | PH-33-② · PH-80 | — | — | 예정 |
@@ -182,7 +182,7 @@
 
 ### PH-32. 도메인 이벤트 발행 골격
 
-- 이벤트 클래스 — `TransferCompleted(transactionNumber, sourceType, amount, fromAccountId, toAccountId, occurredAt)` · `TransferFailed(...)` · `SubscriptionOpened(...)` · `AccountMatured(...)`. `AccountMatured`는 타입만 정의하고 2차에는 소비하지 않는다. 이름은 과거형이고, Reference Key는 거래번호다.
+- 이벤트 클래스 — `TransferCompleted(transactionNumber, sourceType, amount, fromAccountId, toAccountId, occurredAt)` · `TransferFailed(...)` · `SubscriptionOpened(...)` · `AccountMatured(...)`. (#505에서 이체는 `TransferSettled` 하나로 합쳤다 — 성공·실패는 `status`, 이체 종류는 `txType`.) `AccountMatured`는 타입만 정의하고 2차에는 소비하지 않는다. 이름은 과거형이고, Reference Key는 거래번호다.
 - `@TransactionalEventListener(phase = BEFORE_COMMIT)` 리스너 자리와 **JdbcTemplate INSERT 규약**을 문서로 남긴다. 규칙은 [README §3-3](README.md#3-3-이벤트아웃박스)을 따른다.
 - `publishEvent` 자리와 페이로드는 P4와 합의한다. 자리 표시는 PH-99(10/2)가 하고, 두 줄은 EVT-2(10/6)가 넣는다.
 - 테스트: BEFORE_COMMIT 리스너 INSERT가 커밋에 실리는지 통합 테스트(PH-99 골격 위), 리스너 예외 시 롤백을 테스트로 고정.
@@ -690,9 +690,9 @@ TransferExecutionService.execute(command)                         ← 편집자:
  │     tradeDate = businessDateProvider.today()                   ← P5 provider, P4가 대입. 한 번 구해 원장·훅 B·transfer에 같이 쓴다
  │     원장 기표 LedgerPair (기존)
  │     [훅 B] LedgerPostingHook.afterLedger(ctx)                   ← P3 PH-24 (예외 → 롤백 = 이체 실패)
- │     publisher.publishEvent(new TransferCompleted(...))         ← P1 타입, EVT-2
+ │     publisher.publishEvent(new TransferSettled(...))           ← P1 타입, EVT-2(#505)
  │   }
- └─ failTransfer() REQUIRES_NEW { ERROR 저장; publishEvent(new TransferFailed(...)) }
+ └─ failTransfer() REQUIRES_NEW { ERROR 저장; publishEvent(new TransferSettled(...)) }
 
 [BEFORE_COMMIT 리스너 — P1 PH-96] 아웃박스 INSERT (JdbcTemplate). 예외 → 원본 롤백
 ```
@@ -702,7 +702,7 @@ TransferExecutionService.execute(command)                         ← 편집자:
 | A | `transfer.api.TransferPreCheck { int order(); void check(TransferPreCheckContext ctx); }` — `record TransferPreCheckContext(long customerId, long withdrawalAccountId, long amount)`. 거부는 `BusinessException` | P2 PH-90 | 락 이전, 읽기 전용 |
 | B | `transfer.api.LedgerPostingHook { void afterLedger(LedgerPostingContext ctx); }` — `record LedgerPostingContext(String transactionNumber, String txType, long amount, long fromAccountId, long toAccountId, LocalDate tradeDate)` | P3 PH-24 | 이체 REQUIRES_NEW 안. 예외 = 롤백 |
 | tradeDate | `business.api.BusinessDateProvider` 주입 | 제공 P5 PH-40, 대입 P4 | 같은 트랜잭션 |
-| 이벤트 | 완료는 템플릿 콜백 안, 실패는 `failTransfer()` 안 | P4 EVT-2 | 활성 트랜잭션 안이어야 리스너가 받는다 |
+| 이벤트 | 완료는 템플릿 콜백 안, 실패는 `failTransfer()` 안 | P1 #505(EVT-2 대신), 이후 P4 소유 | 활성 트랜잭션 안이어야 리스너가 받는다 |
 
 - **머지 순서(강제):** PH-99(10/2) → PH-80(10/8) → PH-90 → PH-24 → PH-41 대입(10/12~16, P4가 순서대로 머지) → PH-33-②(10/23). 이 창에서 순서대로 머지하려면 **PH-90·PH-24 PR은 10/12까지 리뷰 가능한 상태로 올린다.** PH-28 API(10/16)가 PH-24 위에 서므로 PH-24는 늦어도 10/14에 머지돼야 한다. 이 순서를 벗어나 `execute()`를 고치는 PR은 P4가 리뷰에서 막는다.
 - **GL이 이벤트가 아니라 동기 포트인 이유:** 이벤트로 하면 전표가 원장과 다른 커밋에 들어가 "분개누락"이 정상 상태가 되기 때문이다.
@@ -756,6 +756,8 @@ TransferExecutionService.execute(command)                         ← 편집자:
 ### EVT-2. `publishEvent` 두 줄
 
 완료 이벤트는 REQUIRES_NEW 템플릿 콜백 안에, 실패 이벤트는 `failTransfer()` 안에 넣는다. P1 플러시 통합 테스트가 통과해야 한다.
+
+> 2026-09-30: P1이 #505(PH-32)에서 대신 넣었다. 배치에서 발행하면 재확정 경로가 이벤트를 내지 않아 알림이 빠지므로 엔진 한 곳에서 즉시·예약·자동을 모두 발행한다(#504 리뷰 합의).
 
 ### HOOK-MERGE. 훅 구현체 머지
 

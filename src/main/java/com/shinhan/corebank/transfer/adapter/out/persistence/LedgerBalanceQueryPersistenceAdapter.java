@@ -26,8 +26,7 @@ public class LedgerBalanceQueryPersistenceAdapter implements LedgerBalanceQueryP
                         ledgerEntryJpaEntity.accountId.eq(accountId),
                         ledgerEntryJpaEntity.occurredAt.lt(beforeExclusive))
                 .orderBy(ledgerEntryJpaEntity.occurredAt.desc(), ledgerEntryJpaEntity.ledgerEntryId.desc())
-                .limit(1)
-                .fetchOne();
+                .fetchFirst();
 
         return Optional.ofNullable(entity).map(this::toPoint);
     }
