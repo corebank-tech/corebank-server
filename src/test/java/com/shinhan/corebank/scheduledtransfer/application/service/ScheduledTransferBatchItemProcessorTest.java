@@ -3,6 +3,7 @@ package com.shinhan.corebank.scheduledtransfer.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -10,8 +11,11 @@ import static org.mockito.Mockito.when;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.audit.AuditLogJpaRepository;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.common.event.DomainEvent;
+import com.shinhan.corebank.common.event.DomainEventSink;
 import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledTransferJpaEntity;
 import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledTransferJpaRepository;
+import com.shinhan.corebank.scheduledtransfer.api.ScheduledTransferSettled;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferBatchUseCase;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLookupResult;
@@ -28,6 +32,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -66,12 +71,108 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
     @MockitoBean
     TransferLookupPort transferLookupPort;
 
+    // completeProcessing() 이 발행하는 이벤트를 잡는다 — BEFORE_COMMIT 리스너의 sink 를 mock 으로 바꿔 끼운다(#436).
+    @MockitoBean
+    DomainEventSink domainEventSink;
+
     private static final AtomicLong CUSTOMER_SEQ = new AtomicLong();
     private static final AtomicLong ACCOUNT_SEQ = new AtomicLong();
     private static final LocalDate SCHEDULED_DATE = LocalDate.of(2026, 3, 15);
 
     private Long customerId;
     private Long scheduledTransferId;
+
+    @Test
+    @DisplayName("거래번호가 있으면 ERROR 여도 이체 엔진이 이미 발행했으므로 배치는 이벤트를 발행하지 않는다 (#436)")
+    void completeProcessing_withTransactionNumber_publishesNothing() {
+        when(transferExecutionUseCase.execute(any()))
+                .thenReturn(TransferResult.builder()
+                        .status(ProcessResultStatus.ERROR)
+                        .transactionNumber("20260315BT0000000007")
+                        .errorCode("TRF0303")
+                        .errorMessage("출금계좌 잔액이 부족합니다.")
+                        .build());
+        ScheduledTransfer target = reloadAsDomain();
+        itemProcessor.claim(target.getScheduledTransferId());
+
+        itemProcessor.completeProcessing(target, SCHEDULED_DATE);
+
+        verify(domainEventSink, never()).record(any());
+    }
+
+    @Test
+    @DisplayName("사전검증 실패로 거래번호 없이 ERROR 확정되면 배치가 ScheduledTransferSettled 를 한 번 발행한다 (#436)")
+    void completeProcessing_earlyFailureWithoutTransactionNumber_publishesScheduledTransferSettled() {
+        when(transferExecutionUseCase.execute(any()))
+                .thenReturn(TransferResult.builder()
+                        .status(ProcessResultStatus.ERROR)
+                        .errorCode("TRF0201")
+                        .errorMessage("입금계좌를 찾을 수 없습니다.")
+                        .build());
+        ScheduledTransfer target = reloadAsDomain();
+        itemProcessor.claim(target.getScheduledTransferId());
+
+        itemProcessor.completeProcessing(target, SCHEDULED_DATE);
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(ScheduledTransferSettled.class, event -> {
+            assertThat(event.customerId()).isEqualTo(customerId);
+            assertThat(event.refId()).isEqualTo(scheduledTransferId);
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(event.errorCode()).isEqualTo("TRF0201");
+            assertThat(event.amount()).isEqualTo(10_000L);
+            assertThat(event.counterpartyName()).isEqualTo("홍*동");
+        });
+    }
+
+    @Test
+    @DisplayName("재확정이 transfer 행을 찾지 못하면 가드를 통과한 뒤 ERROR 상태의 ScheduledTransferSettled 를 한 번 발행한다 (#436)")
+    void reconcileStuckExecution_noTransferRow_publishesErrorSettledOnce() {
+        itemProcessor.claim(scheduledTransferId);
+        when(transferLookupPort.findBySourceAndDate(scheduledTransferId, SCHEDULED_DATE))
+                .thenReturn(Optional.empty());
+
+        itemProcessor.reconcileStuckExecution(reloadAsDomain());
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(ScheduledTransferSettled.class, event -> {
+            assertThat(event.customerId()).isEqualTo(customerId);
+            assertThat(event.refId()).isEqualTo(scheduledTransferId);
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(event.amount()).isEqualTo(10_000L);
+            assertThat(event.counterpartyName()).isEqualTo("홍*동");
+        });
+    }
+
+    @Test
+    @DisplayName("재확정이 transfer 행을 찾으면 이체 엔진이 이미 발행했으므로 배치는 이벤트를 발행하지 않는다 (#436)")
+    void reconcileStuckExecution_transferRowFound_publishesNothing() {
+        itemProcessor.claim(scheduledTransferId);
+        when(transferLookupPort.findBySourceAndDate(scheduledTransferId, SCHEDULED_DATE))
+                .thenReturn(Optional.of(
+                        new TransferLookupResult("20260315BT0000000010", ProcessResultStatus.ERROR, "잔액 부족")));
+
+        itemProcessor.reconcileStuckExecution(reloadAsDomain());
+
+        verify(domainEventSink, never()).record(any());
+    }
+
+    @Test
+    @DisplayName("transfer 행이 없는 건을 재확정이 동시에 두 번 처리해도 실패 이벤트는 가드를 통과한 한 번만 나간다 (#436)")
+    void reconcileStuckExecution_concurrentDuplicateRunWithoutTransferRow_publishesOnce() {
+        itemProcessor.claim(scheduledTransferId);
+        when(transferLookupPort.findBySourceAndDate(scheduledTransferId, SCHEDULED_DATE))
+                .thenReturn(Optional.empty());
+        ScheduledTransfer firstSnapshot = reloadAsDomain();
+        ScheduledTransfer secondSnapshot = reloadAsDomain();
+
+        itemProcessor.reconcileStuckExecution(firstSnapshot);
+        itemProcessor.reconcileStuckExecution(secondSnapshot);
+
+        verify(domainEventSink, times(1)).record(any());
+    }
 
     private TransactionTemplate transactionTemplate() {
         return new TransactionTemplate(transactionManager);

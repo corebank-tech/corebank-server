@@ -1,6 +1,7 @@
 package com.shinhan.corebank.common.idempotency;
 
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -17,6 +18,7 @@ public class IdempotencyKeyCleanupScheduler {
 
     private final IdempotencyKeyJpaRepository idempotencyKeyJpaRepository;
     private final BatchExecutionLockPort batchExecutionLockPort;
+    private final Clock clock;
 
     @Scheduled(cron = "0 0 * * * *", zone = "Asia/Seoul")
     public void cleanupExpired() {
@@ -28,7 +30,7 @@ public class IdempotencyKeyCleanupScheduler {
             int totalDeleted = 0;
             int deletedThisRound;
             do {
-                deletedThisRound = idempotencyKeyJpaRepository.deleteExpiredBatch(LocalDateTime.now(), BATCH_SIZE);
+                deletedThisRound = idempotencyKeyJpaRepository.deleteExpiredBatch(LocalDateTime.now(clock), BATCH_SIZE);
                 totalDeleted += deletedThisRound;
             } while (deletedThisRound == BATCH_SIZE);
             if (totalDeleted > 0) {

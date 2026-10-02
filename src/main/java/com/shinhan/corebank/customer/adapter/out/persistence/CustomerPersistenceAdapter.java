@@ -122,6 +122,18 @@ public class CustomerPersistenceAdapter implements CustomerPersistencePort {
         return customerMapper.toDomain(customerJpaRepository.saveAndFlush(entity));
     }
 
+    // 관리자 계정 상태 변경 결과만 저장
+    @Override
+    public void updateStatus(Customer customer) {
+        Objects.requireNonNull(customer, "customer must not be null");
+
+        CustomerJpaEntity entity = findExistingEntityForUpdate(customer.getCustomerId());
+
+        entity.updateStatus(customer.getStatus());
+
+        customerJpaRepository.save(entity);
+    }
+
     // 관리자 비밀번호 초기화 결과만 저장
     @Override
     public void updatePasswordResetByAdmin(Customer customer) {

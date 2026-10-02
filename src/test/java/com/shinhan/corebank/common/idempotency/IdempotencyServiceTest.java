@@ -12,6 +12,7 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.Optional;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
@@ -29,6 +31,9 @@ class IdempotencyServiceTest {
 
     @Mock
     IdempotencyKeyJpaRepository repository;
+
+    @Spy
+    Clock clock = Clock.systemDefaultZone();
 
     @InjectMocks
     IdempotencyService idempotencyService;

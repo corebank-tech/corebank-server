@@ -64,6 +64,11 @@ public class LoginService implements LoginUseCase {
             throw LoginFailedException.accountLocked();
         }
 
+        if (updateResult == LoginSuccessUpdateResult.ACCOUNT_SUSPENDED) {
+            recordFailureAudit(loginCustomer.getCustomerId(), command.requestIp(), LoginAuditReason.ACCOUNT_SUSPENDED);
+            throw LoginFailedException.accountSuspended();
+        }
+
         return new LoginResult(loginCustomer.getCustomerId(), loginCustomer.getUserId(), loginCustomer.getUserName());
     }
 

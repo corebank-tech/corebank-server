@@ -1,5 +1,6 @@
 package com.shinhan.corebank.customer.application.port.out;
 
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -14,5 +15,6 @@ public record CustomerAdminView(
         String phoneNumber,
         int loginFailureCount,
         boolean accountLocked,
+        CustomerStatus status,
         LocalDateTime lastLoginAt,
         LocalDateTime joinedAt) {}
