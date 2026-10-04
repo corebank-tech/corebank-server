@@ -258,6 +258,61 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
         assertLogin(sessionClient(), USER_ID, NEW_PASSWORD, 200);
     }
 
+    @Test
+    @DisplayName("비밀번호 찾기 재설정 성공 시에도 같은 고객의 모든 기존 세션을 만료한다")
+    void invalidatesAllCustomerSessionsAfterPasswordReset() throws Exception {
+        SessionClient firstSession = sessionClient();
+        SessionClient secondSession = sessionClient();
+        assertLogin(firstSession, USER_ID, RAW_PASSWORD, 200);
+        assertLogin(secondSession, USER_ID, RAW_PASSWORD, 200);
+
+        HttpResponse<String> issueResponse = httpClient.send(
+                HttpRequest.newBuilder(uri("/auth/password-reset-requests"))
+                        .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                        .POST(HttpRequest.BodyPublishers.ofString(
+                                """
+                                {
+                                  "userId": "%s",
+                                  "customerName": "로그인고객",
+                                  "email": "login-api@example.com"
+                                }
+                                """
+                                        .formatted(USER_ID),
+                                StandardCharsets.UTF_8))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        JsonNode issueBody = objectMapper.readTree(issueResponse.body()).get("data");
+
+        assertThat(issueResponse.statusCode()).isEqualTo(200);
+        String requestId = issueBody.get("passwordResetRequestId").asText();
+        String verificationCode = issueBody.get("verificationCode").asText();
+
+        HttpResponse<String> resetResponse = httpClient.send(
+                HttpRequest.newBuilder(uri("/auth/password-reset-requests/" + requestId))
+                        .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                        .header("Idempotency-Key", java.util.UUID.randomUUID().toString())
+                        .PUT(HttpRequest.BodyPublishers.ofString(
+                                """
+                                {
+                                  "verificationCode": "%s",
+                                  "newPassword": "%s",
+                                  "newPasswordConfirm": "%s"
+                                }
+                                """
+                                        .formatted(verificationCode, NEW_PASSWORD, NEW_PASSWORD),
+                                StandardCharsets.UTF_8))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+
+        assertThat(resetResponse.statusCode())
+                .withFailMessage("비밀번호 재설정 응답: %s", resetResponse.body())
+                .isEqualTo(200);
+        assertProtected(firstSession, 401, "CMN0101");
+        assertProtected(secondSession, 401, "CMN0101");
+        assertLogin(sessionClient(), USER_ID, RAW_PASSWORD, 401);
+        assertLogin(sessionClient(), USER_ID, NEW_PASSWORD, 200);
+    }
+
     private HttpRequest loginRequest(String password) {
         return loginRequest(USER_ID, password);
     }
@@ -388,6 +443,10 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
     }
 
     private void deleteTestData() {
+        jdbcTemplate.update(
+                "DELETE FROM verification_request WHERE customer_id IN (SELECT customer_id FROM customer WHERE user_id IN (?, ?))",
+                USER_ID,
+                OTHER_USER_ID);
         jdbcTemplate.update(
                 """
                 DELETE FROM audit_log

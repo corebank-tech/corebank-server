@@ -41,7 +41,8 @@ public class LoginPasswordChangeController {
             summary = "로그인 비밀번호 변경",
             description = "로그인 고객의 현재 비밀번호를 확인한 뒤 신규 비밀번호로 변경한다. 성공하면 로그인 실패 횟수를 "
                     + "0으로 초기화하고 현재 세션을 포함한 해당 고객의 모든 로그인 세션을 무효화하므로 새 비밀번호로 재로그인해야 한다. "
-                    + "동일 멱등키와 동일 요청의 재시도에는 최초 응답을 재생한다.")
+                    + "성공 후 같은 멱등키로 재시도하면 만료된 세션 때문에 `401 CMN0101`이 반환될 수 있다. "
+                    + "이때는 변경이 이미 반영됐을 수 있으므로 새 비밀번호로 로그인한다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "로그인 비밀번호 변경 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -64,7 +65,7 @@ public class LoginPasswordChangeController {
     })
     public ResponseEntity<ApiResponse<LoginPasswordChangeResponse>> change(
             @Parameter(
-                            description = "멱등키. 동일 키와 동일 요청으로 재시도하면 최초 응답을 반환",
+                            description = "멱등키. 성공 전 동일 요청은 최초 응답을 재생하지만 성공 후에는 만료된 세션으로 401이 반환될 수 있음",
                             required = true,
                             example = "550e8400-e29b-41d4-a716-446655440000")
                     @RequestHeader("Idempotency-Key")

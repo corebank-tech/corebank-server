@@ -14,7 +14,7 @@ public class LoginPasswordChangedSessionListener {
 
     private final SessionRegistry sessionRegistry;
 
-    // expireNow는 멱등적인 JVM 메모리 변경이므로 별도 재시도 없이 실패를 전파해 조용한 부분 성공을 막는다.
+    // expireNow는 메모리 플래그 변경이라 재시도하지 않으며 실패는 AFTER_COMMIT ERROR 로그로 확인한다.
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void invalidateAll(LoginPasswordChangedEvent event) {
         sessionRegistry.getAllPrincipals().stream()
