@@ -26,7 +26,7 @@ public class LoginSuccessProcessor {
 
         LoginSuccessUpdateResult updateResult = loginCustomerPort.recordLoginSuccess(customerId, loginAt, requestIp);
 
-        if (updateResult == LoginSuccessUpdateResult.ACCOUNT_LOCKED) {
+        if (updateResult != LoginSuccessUpdateResult.COMPLETED) {
             return updateResult;
         }
 

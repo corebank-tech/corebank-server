@@ -1,6 +1,7 @@
 package com.shinhan.corebank.customer.adapter.out.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.customer.application.port.out.CustomerAdminQueryPort;
@@ -8,6 +9,7 @@ import com.shinhan.corebank.customer.application.port.out.CustomerAdminView;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.application.port.out.CustomerSearchCondition;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -98,6 +100,26 @@ class CustomerAdminQueryPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("계정 상태는 값 일치로 거르고 목록 행에 상태를 담는다")
+    void filtersByStatus() {
+        Customer gamma = customerPersistencePort.findByIdForUpdate(newestId).orElseThrow();
+        gamma.changeStatusByAdmin(CustomerStatus.SUSPENDED);
+        customerPersistencePort.updateStatus(gamma);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(search(
+                                new CustomerSearchCondition(PREFIX, null, null, null, CustomerStatus.SUSPENDED),
+                                PageRequest.of(0, 10))
+                        .getContent())
+                .extracting(CustomerAdminView::customerId, CustomerAdminView::status)
+                .containsExactly(tuple(newestId, CustomerStatus.SUSPENDED));
+        assertThat(customerAdminQueryPort.count(
+                        new CustomerSearchCondition(PREFIX, null, null, null, CustomerStatus.ACTIVE)))
+                .isEqualTo(4);
+    }
+
+    @Test
     @DisplayName("페이지 경계와 전체 건수를 조건 기준으로 계산한다")
     void pagesAndCounts() {
         Page<CustomerAdminView> second = search(condition(PREFIX, null, null, null), PageRequest.of(1, 2));
@@ -127,6 +149,7 @@ class CustomerAdminQueryPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(view.phoneNumber()).isEqualTo("01012345678");
         assertThat(view.loginFailureCount()).isEqualTo(5);
         assertThat(view.accountLocked()).isTrue();
+        assertThat(view.status()).isEqualTo(CustomerStatus.ACTIVE);
         assertThat(List.of(CustomerAdminView.class.getRecordComponents()))
                 .extracting(component -> component.getName())
                 .doesNotContain("passwordHash");
@@ -138,7 +161,7 @@ class CustomerAdminQueryPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     private CustomerSearchCondition condition(String userId, String userName, String email, Boolean accountLocked) {
-        return new CustomerSearchCondition(userId, userName, email, accountLocked);
+        return new CustomerSearchCondition(userId, userName, email, accountLocked, null);
     }
 
     private Long save(String userId, String userName, String email, int failures, boolean locked, int joinedDay) {
@@ -154,6 +177,7 @@ class CustomerAdminQueryPersistenceAdapterTest extends IntegrationTestSupport {
                 "01012345678",
                 failures,
                 locked,
+                CustomerStatus.ACTIVE,
                 null,
                 null,
                 null,

@@ -1,5 +1,6 @@
 package com.shinhan.corebank.auth.application.service;
 
+import com.shinhan.corebank.auth.application.event.LoginPasswordChangedEvent;
 import com.shinhan.corebank.auth.application.port.in.*;
 import com.shinhan.corebank.auth.application.port.out.PasswordResetRequestPort;
 import com.shinhan.corebank.auth.domain.exception.AuthErrorCode;
@@ -15,6 +16,7 @@ import java.util.Base64;
 import java.util.Locale;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +32,7 @@ public class PasswordResetService implements IssuePasswordResetUseCase, ResetPas
     private final CustomerAuthenticationFacade customerFacade;
     private final PasswordResetRequestPort requestPort;
     private final PasswordEncoder passwordEncoder;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
     private final SecureRandom random = new SecureRandom();
 
@@ -88,6 +91,8 @@ public class PasswordResetService implements IssuePasswordResetUseCase, ResetPas
         }
         request.use(now);
         requestPort.save(request);
+        // 비밀번호 재설정도 커밋된 뒤 해당 고객의 기존 로그인 세션을 모두 만료한다.
+        eventPublisher.publishEvent(new LoginPasswordChangedEvent(customer.customerId()));
         return new ResetPasswordResult(
                 customer.customerId(), now.atZone(clock.getZone()).toOffsetDateTime());
     }

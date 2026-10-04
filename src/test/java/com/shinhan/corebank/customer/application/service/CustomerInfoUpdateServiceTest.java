@@ -15,6 +15,7 @@ import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePor
 import com.shinhan.corebank.customer.application.port.out.EmailChangeVerificationPort;
 import com.shinhan.corebank.customer.domain.exception.CustomerErrorCode;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -157,6 +158,7 @@ class CustomerInfoUpdateServiceTest {
                 "01012345678",
                 0,
                 false,
+                CustomerStatus.ACTIVE,
                 null,
                 null,
                 null,
@@ -179,6 +181,7 @@ class CustomerInfoUpdateServiceTest {
                 customer.getPhoneNumber(),
                 customer.getLoginFailureCount(),
                 customer.isAccountLocked(),
+                CustomerStatus.ACTIVE,
                 customer.getLastLoginAt(),
                 customer.getLastLoginIp(),
                 customer.getPreviousLoginAt(),

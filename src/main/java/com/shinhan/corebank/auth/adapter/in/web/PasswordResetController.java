@@ -57,7 +57,8 @@ public class PasswordResetController {
             operationId = "resetPassword",
             summary = "비밀번호 재설정",
             description = "인증번호와 신규 비밀번호를 검증하고 비밀번호를 변경한다. 인증 요청은 한 번만 사용할 수 있으며, "
-                    + "성공하면 로그인 실패 횟수를 0으로 초기화한다. 동일 멱등키와 동일 요청의 재시도에는 최초 응답을 재생한다.")
+                    + "성공하면 로그인 실패 횟수를 0으로 초기화하고 해당 고객의 기존 로그인 세션을 모두 무효화한다. "
+                    + "이 API는 비로그인 경로이므로 동일 멱등키와 동일 요청의 재시도에는 최초 응답을 재생한다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "비밀번호 재설정 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(

@@ -7,11 +7,13 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerCommandUseCase;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerOperationCommand;
 import com.shinhan.corebank.customer.application.port.in.AdminPasswordResetResult;
+import com.shinhan.corebank.customer.application.port.in.AdminStatusChangeResult;
 import com.shinhan.corebank.customer.application.port.in.AdminUnlockResult;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.application.port.out.TemporaryPasswordGeneratorPort;
 import com.shinhan.corebank.customer.domain.exception.CustomerErrorCode;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -78,6 +80,26 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
                 temporaryPassword,
                 customer.isAccountLocked(),
                 customer.getLoginFailureCount());
+    }
+
+    @Override
+    @Transactional
+    public AdminStatusChangeResult changeStatus(AdminCustomerOperationCommand command, CustomerStatus status) {
+        Objects.requireNonNull(status, "status must not be null");
+        rejectSelfTarget(command, AuditEventType.CUSTOMER_STATUS_CHANGE);
+
+        // 로그인 성공 처리와 같은 락이라, 로그인 도중 정지해도 그 로그인은 성공 상태를 저장하지 못한다.
+        Customer customer = findTargetForUpdate(command, AuditEventType.CUSTOMER_STATUS_CHANGE);
+        Map<String, Object> changes = new LinkedHashMap<>();
+        if (customer.getStatus() != status) {
+            changes.put("status", status.name());
+        }
+
+        customer.changeStatusByAdmin(status);
+        customerPersistencePort.updateStatus(customer);
+
+        recordSuccess(command, AuditEventType.CUSTOMER_STATUS_CHANGE, changes);
+        return new AdminStatusChangeResult(customer.getCustomerId(), customer.getStatus());
     }
 
     // 자기 계정 초기화는 셀프 재설정의 이메일 인증을 우회하므로 막는다.
