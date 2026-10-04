@@ -60,7 +60,13 @@ public final class MockExternalServer implements AutoCloseable {
         MockExternalServer server = new MockExternalServer(bind, port, adminPort);
         server.admin.start();
         Thread.ofPlatform().name("mock-external-accept").start(server::acceptLoop);
-        LOG.log(Level.INFO, "모의 대외기관 시작 — 전문 {0}:{1}, 관리 {0}:{2}", bind, server.port(), server.adminPort());
+        // MessageFormat은 숫자에 천 단위 쉼표를 붙이므로 포트는 문자열로 넘긴다.
+        LOG.log(
+                Level.INFO,
+                "모의 대외기관 시작 — 전문 {0}:{1}, 관리 {0}:{2}",
+                bind,
+                String.valueOf(server.port()),
+                String.valueOf(server.adminPort()));
         return server;
     }
 
