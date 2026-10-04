@@ -1,7 +1,7 @@
 package com.shinhan.corebank.transfer.application.service;
 
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.transfer.application.port.in.TransferReversalUseCase;
+import com.shinhan.corebank.transfer.application.port.in.TransferCorrectionUseCase;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LedgerLookupPort;
 import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
@@ -26,19 +26,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 정정 체인 취소정정 구현체 (PH-80).
- * [원거래 조회 → 채번 → 계좌 락 → 원거래 무효화 → 취소정정 이체 INSERT → 상태·잔액 검증 → 잔액 이동 → 원장 반대기표]를
- * 한 트랜잭션으로 수행한다. 어느 단계든 실패하면 전부 롤백돼 원거래는 유효한 채로 남는다.
+ * 정정 체인 구현체 (PH-80). 취소정정·정상거래 모두
+ * [원거래 조회 → 채번 → 계좌 락 → 정정 이체 INSERT(자리 차지) → 상태·잔액 검증 → 잔액 이동 → 원장]을
+ * 한 트랜잭션으로 수행한다. 어느 단계든 실패하면 전부 롤백된다.
  *
  * 고객 화면에서 시작되는 거래가 아니라 채널은 BT이고 이체 한도를 차감하지 않는다.
  * 알림 이벤트(TransferSettled)는 발행하지 않는다 — 정정 전용 알림은 P1과 따로 정한다.
  */
 @Service
 @RequiredArgsConstructor
-public class TransferReversalService implements TransferReversalUseCase {
+public class TransferCorrectionService implements TransferCorrectionUseCase {
 
     private static final TransferChannel CHANNEL = TransferChannel.BT;
-    private static final String PASSBOOK_MEMO = "취소정정";
+    private static final String REVERSAL_MEMO = "취소정정";
 
     private final TransferLookupPort transferLookupPort;
     private final TransferSavePort transferSavePort;
@@ -67,13 +67,7 @@ public class TransferReversalService implements TransferReversalUseCase {
 
         original.invalidate(executedAt);
         Transfer reversal = claimReversal(original, locked, transactionNumber, executedAt);
-
-        if (locked.withdrawal().status() != LockedAccountStatus.ACTIVE) {
-            throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
-        }
-        if (locked.deposit().status() != LockedAccountStatus.ACTIVE) {
-            throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
-        }
+        requireActiveAccounts(locked);
         if (locked.withdrawal().balance() < original.getAmount()) {
             throw new BusinessException(TransferErrorCode.REVERSAL_INSUFFICIENT_BALANCE);
         }
@@ -101,8 +95,91 @@ public class TransferReversalService implements TransferReversalUseCase {
         return new TransferReversalResult(transactionNumber, original.getTransactionNumber(), original.getAmount());
     }
 
-    // 잔액 검증보다 먼저 취소정정 행을 넣어 자리를 차지한다. 동시 정정은 둘 다 무효화 검사를 통과할 수 있어
-    // (락 전에 읽은 원거래 스냅샷) uk_transfer_correction만 확실히 막는다 — 잔액 검증이 먼저면 이유가 TRF0306으로 바뀐다.
+    @Override
+    @Transactional
+    public TransferRepostResult repost(String originalTransactionNumber, long correctedAmount) {
+        Transfer original = transferLookupPort
+                .findByTransactionNumber(originalTransactionNumber)
+                .orElseThrow(() -> new BusinessException(TransferErrorCode.TRANSACTION_NOT_FOUND));
+        // 취소정정보다 정상거래가 먼저 생기면 원거래와 정상거래 금액이 둘 다 나간 상태가 된다.
+        if (!original.isInvalidated()) {
+            throw new BusinessException(TransferErrorCode.NOT_CORRECTABLE);
+        }
+
+        LocalDateTime requestedAt = LocalDateTime.now(clock);
+        String transactionNumber = transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), CHANNEL);
+        LockedAccountsForTransfer locked =
+                accountLockPort.lockForTransfer(original.getWithdrawalAccountId(), original.getDepositAccountId());
+        LocalDateTime executedAt = LocalDateTime.now(clock);
+
+        Transfer repost = claimRepost(original, correctedAmount, transactionNumber, executedAt);
+        requireActiveAccounts(locked);
+        if (locked.withdrawal().balance() < correctedAmount) {
+            throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
+        }
+
+        TransferBalances balances = accountLockPort.applyTransfer(locked, correctedAmount, executedAt);
+        ledgerSavePort.save(LedgerPair.forTransfer(
+                repost.getTransferId(),
+                transactionNumber,
+                original.getWithdrawalAccountId(),
+                balances.withdrawalBalanceAfter(),
+                original.getDepositAccountId(),
+                balances.depositBalanceAfter(),
+                correctedAmount,
+                original.getTransferType().ledgerTransactionType(),
+                original.getMyPassbookMemo(),
+                original.getRecipientPassbookMemo(),
+                CHANNEL,
+                executedAt));
+        repost.complete(balances.withdrawalBalanceAfter(), executedAt);
+        transferSavePort.save(repost);
+
+        return new TransferRepostResult(transactionNumber, original.getTransactionNumber(), correctedAmount);
+    }
+
+    // 정상거래는 원래 하려던 거래라 예금주명·통장 메모를 원거래 스냅샷 그대로 쓴다.
+    private Transfer claimRepost(
+            Transfer original, long correctedAmount, String transactionNumber, LocalDateTime executedAt) {
+        Transfer repost = Transfer.create(
+                transactionNumber,
+                original.getWithdrawalAccountId(),
+                original.getDepositAccountId(),
+                original.getDepositAccountNumber(),
+                original.getPayeeName(),
+                correctedAmount,
+                0L,
+                original.getTransferType(),
+                CHANNEL,
+                null,
+                null,
+                null,
+                original.getMyPassbookMemo(),
+                original.getRecipientPassbookMemo(),
+                executedAt);
+        repost.linkToOriginal(CorrectionType.REPOST, original.getTransferId());
+        return claim(repost);
+    }
+
+    private void requireActiveAccounts(LockedAccountsForTransfer locked) {
+        if (locked.withdrawal().status() != LockedAccountStatus.ACTIVE) {
+            throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
+        }
+        if (locked.deposit().status() != LockedAccountStatus.ACTIVE) {
+            throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
+        }
+    }
+
+    // 정정 이체를 상태·잔액 검증보다 먼저 넣어 자리를 차지한다. 동시 정정은 락 전에 읽은 원거래 스냅샷으로
+    // 앞선 검사를 통과할 수 있어 uk_transfer_correction만 확실히 막는다 — 검증이 먼저면 거부 사유가 잔액 부족으로 바뀐다.
+    private Transfer claim(Transfer correction) {
+        try {
+            return transferSavePort.save(correction);
+        } catch (DataIntegrityViolationException alreadyCorrected) {
+            throw new BusinessException(TransferErrorCode.NOT_CORRECTABLE);
+        }
+    }
+
     private Transfer claimReversal(
             Transfer original, LockedAccountsForTransfer locked, String transactionNumber, LocalDateTime executedAt) {
         String refundAccountNumber = locked.deposit().accountNumber();
@@ -124,14 +201,10 @@ public class TransferReversalService implements TransferReversalUseCase {
                 null,
                 null,
                 null,
-                PASSBOOK_MEMO,
-                PASSBOOK_MEMO,
+                REVERSAL_MEMO,
+                REVERSAL_MEMO,
                 executedAt);
         reversal.linkToOriginal(CorrectionType.REVERSAL, original.getTransferId());
-        try {
-            return transferSavePort.save(reversal);
-        } catch (DataIntegrityViolationException alreadyReversed) {
-            throw new BusinessException(TransferErrorCode.NOT_CORRECTABLE);
-        }
+        return claim(reversal);
     }
 }

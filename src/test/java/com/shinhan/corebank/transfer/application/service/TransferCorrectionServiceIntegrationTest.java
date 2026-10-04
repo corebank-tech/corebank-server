@@ -9,8 +9,9 @@ import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
+import com.shinhan.corebank.transfer.application.port.in.TransferCorrectionUseCase.TransferRepostResult;
+import com.shinhan.corebank.transfer.application.port.in.TransferCorrectionUseCase.TransferReversalResult;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
-import com.shinhan.corebank.transfer.application.port.in.TransferReversalUseCase.TransferReversalResult;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
@@ -33,11 +34,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
- * PH-80 정정 체인 취소정정 통합 테스트. 원거래는 실제 이체 실행으로 만들고 결과는 커밋된 행을 다시 읽어 본다.
+ * PH-80 정정 체인 취소정정·정상거래 통합 테스트. 원거래는 실제 이체 실행으로 만들고 결과는 커밋된 행을 다시 읽어 본다.
  * 스레드마다 독립 트랜잭션이 필요해 이 클래스는 @Transactional을 두지 않는다.
  */
-@DisplayName("TransferReversalService — 정정 체인 취소정정 (#548)")
-class TransferReversalServiceIntegrationTest extends IntegrationTestSupport {
+@DisplayName("TransferCorrectionService — 정정 체인 취소정정·정상거래 (#548)")
+class TransferCorrectionServiceIntegrationTest extends IntegrationTestSupport {
 
     private static final long CUSTOMER_ID = 548L;
     private static final long ACCOUNT_A = 54801L;
@@ -48,7 +49,7 @@ class TransferReversalServiceIntegrationTest extends IntegrationTestSupport {
     private static final long AMOUNT = 50_000L;
 
     @Autowired
-    private TransferReversalService transferReversalService;
+    private TransferCorrectionService transferCorrectionService;
 
     @Autowired
     private TransferExecutionService transferExecutionService;
@@ -80,7 +81,7 @@ class TransferReversalServiceIntegrationTest extends IntegrationTestSupport {
         TransferResult original = transfer(ACCOUNT_A, ACCOUNT_B_NUMBER, AMOUNT);
 
         // when
-        TransferReversalResult result = transferReversalService.reverse(original.transactionNumber());
+        TransferReversalResult result = transferCorrectionService.reverse(original.transactionNumber());
 
         // then: 잔액이 원래대로
         assertThat(result.amount()).isEqualTo(AMOUNT);
@@ -116,10 +117,10 @@ class TransferReversalServiceIntegrationTest extends IntegrationTestSupport {
     void reverseTwice_throws() {
         // given
         TransferResult original = transfer(ACCOUNT_A, ACCOUNT_B_NUMBER, AMOUNT);
-        transferReversalService.reverse(original.transactionNumber());
+        transferCorrectionService.reverse(original.transactionNumber());
 
         // when & then
-        assertThatThrownBy(() -> transferReversalService.reverse(original.transactionNumber()))
+        assertThatThrownBy(() -> transferCorrectionService.reverse(original.transactionNumber()))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
@@ -135,7 +136,7 @@ class TransferReversalServiceIntegrationTest extends IntegrationTestSupport {
         transfer(ACCOUNT_B, ACCOUNT_A_NUMBER, 30_000L);
 
         // when & then
-        assertThatThrownBy(() -> transferReversalService.reverse(original.transactionNumber()))
+        assertThatThrownBy(() -> transferCorrectionService.reverse(original.transactionNumber()))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(TransferErrorCode.REVERSAL_INSUFFICIENT_BALANCE);
@@ -154,7 +155,7 @@ class TransferReversalServiceIntegrationTest extends IntegrationTestSupport {
         CountDownLatch start = new CountDownLatch(1);
         Callable<TransferReversalResult> reverse = () -> {
             start.await();
-            return transferReversalService.reverse(original.transactionNumber());
+            return transferCorrectionService.reverse(original.transactionNumber());
         };
 
         try {
@@ -184,6 +185,76 @@ class TransferReversalServiceIntegrationTest extends IntegrationTestSupport {
             pool.shutdownNow();
             pool.awaitTermination(5, TimeUnit.SECONDS);
         }
+    }
+
+    @Test
+    @DisplayName("취소정정 뒤 고친 금액으로 정상거래를 하면 잔액이 의도대로 되고, 원거래 하나에서 취소정정·정상거래를 모두 찾는다")
+    void repost_afterReverse_completesChain() {
+        // given: 30,000원을 보내려다 50,000원을 보냈고, 되돌렸다
+        TransferResult original = transfer(ACCOUNT_A, ACCOUNT_B_NUMBER, AMOUNT);
+        transferCorrectionService.reverse(original.transactionNumber());
+
+        // when
+        TransferRepostResult result = transferCorrectionService.repost(original.transactionNumber(), 30_000L);
+
+        // then: 원래 의도대로 30,000원만 옮겨졌다
+        assertThat(result.amount()).isEqualTo(30_000L);
+        assertThat(balanceOf(ACCOUNT_A)).isEqualTo(STARTING_BALANCE_A - 30_000L);
+        assertThat(balanceOf(ACCOUNT_B)).isEqualTo(30_000L);
+
+        // then: 삭제 0건 — 이체 3행, 원장 6행
+        assertThat(countTransfers()).isEqualTo(3);
+        assertThat(countLedgerRows()).isEqualTo(6);
+
+        // then: 원거래 하나에서 체인 전체를 찾는다
+        Object originalId = transferRow(original.transactionNumber()).get("transfer_id");
+        List<Map<String, Object>> chain = jdbcTemplate.queryForList(
+                "SELECT correction_type, withdrawal_account_id, amount, status FROM transfer WHERE ref_transfer_id = ?",
+                originalId);
+        assertThat(chain).extracting(row -> row.get("correction_type")).containsExactlyInAnyOrder("REVERSAL", "REPOST");
+        Map<String, Object> repost = chain.stream()
+                .filter(row -> "REPOST".equals(row.get("correction_type")))
+                .findFirst()
+                .orElseThrow();
+        assertThat(repost.get("withdrawal_account_id")).isEqualTo(ACCOUNT_A);
+        assertThat(repost.get("amount")).isEqualTo(30_000L);
+        assertThat(repost.get("status")).isEqualTo(ProcessResultStatus.SUCCESS.name());
+
+        // then: 계좌마다 원장 증감 합계 = 잔액 증감
+        assertThat(signedLedgerSum(ACCOUNT_A)).isEqualTo(balanceOf(ACCOUNT_A) - STARTING_BALANCE_A);
+        assertThat(signedLedgerSum(ACCOUNT_B)).isEqualTo(balanceOf(ACCOUNT_B));
+    }
+
+    @Test
+    @DisplayName("취소정정하지 않은 원거래에 정상거래를 하면 TRF0305로 거부된다 — 돈이 이중으로 나가지 않는다")
+    void repost_withoutReverse_throws() {
+        // given
+        TransferResult original = transfer(ACCOUNT_A, ACCOUNT_B_NUMBER, AMOUNT);
+
+        // when & then
+        assertThatThrownBy(() -> transferCorrectionService.repost(original.transactionNumber(), 30_000L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+        assertThat(countTransfers()).isEqualTo(1);
+        assertThat(balanceOf(ACCOUNT_B)).isEqualTo(AMOUNT);
+    }
+
+    @Test
+    @DisplayName("정상거래를 두 번 하면 두 번째는 TRF0305로 거부된다")
+    void repostTwice_throws() {
+        // given
+        TransferResult original = transfer(ACCOUNT_A, ACCOUNT_B_NUMBER, AMOUNT);
+        transferCorrectionService.reverse(original.transactionNumber());
+        transferCorrectionService.repost(original.transactionNumber(), 30_000L);
+
+        // when & then
+        assertThatThrownBy(() -> transferCorrectionService.repost(original.transactionNumber(), 30_000L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+        assertThat(countTransfers()).isEqualTo(3);
+        assertThat(balanceOf(ACCOUNT_B)).isEqualTo(30_000L);
     }
 
     private TransferResult transfer(long withdrawalAccountId, String depositAccountNumber, long amount) {

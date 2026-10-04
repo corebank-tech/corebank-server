@@ -8,5 +8,14 @@ public enum TransferType {
     SCHEDULED,
 
     // 자동이체
-    AUTO
+    AUTO;
+
+    /** ledger_entry.transaction_type 값. TransferExecutionService.resolveTransactionType과 같은 매핑이다. */
+    public String ledgerTransactionType() {
+        return switch (this) {
+            case IMMEDIATE -> "IMMEDIATE_TRANSFER";
+            case SCHEDULED -> "SCHEDULED_TRANSFER";
+            case AUTO -> "AUTO_TRANSFER";
+        };
+    }
 }
