@@ -170,8 +170,7 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
         }
     }
 
-    // 정정 이체를 상태·잔액 검증보다 먼저 넣어 자리를 차지한다. 동시 정정은 락 전에 읽은 원거래 스냅샷으로
-    // 앞선 검사를 통과할 수 있어 uk_transfer_correction만 확실히 막는다 — 검증이 먼저면 거부 사유가 잔액 부족으로 바뀐다.
+    // 동시 정정은 락 전 스냅샷으로 앞선 검사를 통과하므로, 검증보다 먼저 INSERT해 유니크 제약이 막게 한다.
     private Transfer claim(Transfer correction) {
         try {
             return transferSavePort.save(correction);
