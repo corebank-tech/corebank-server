@@ -1,5 +1,6 @@
 package com.shinhan.corebank.auth.application.service;
 
+import com.shinhan.corebank.auth.application.event.LoginPasswordChangedEvent;
 import com.shinhan.corebank.auth.application.port.in.ChangeLoginPasswordCommand;
 import com.shinhan.corebank.auth.application.port.in.ChangeLoginPasswordResult;
 import com.shinhan.corebank.auth.application.port.in.ChangeLoginPasswordUseCase;
@@ -18,6 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +35,7 @@ public class LoginPasswordChangeService implements ChangeLoginPasswordUseCase {
     private final CustomerAuthenticationFacade customerFacade;
     private final PasswordEncoder passwordEncoder;
     private final AuditLogService auditLogService;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     @Override
@@ -64,6 +67,8 @@ public class LoginPasswordChangeService implements ChangeLoginPasswordUseCase {
 
         auditLogService.record(
                 customer.customerId(), null, AuditEventType.LOGIN_PASSWORD_CHANGE, command.requestIp(), true, Map.of());
+        // 롤백 시 세션을 유지하도록 AFTER_COMMIT 리스너가 처리할 이벤트만 발행한다.
+        eventPublisher.publishEvent(new LoginPasswordChangedEvent(customer.customerId()));
         return new ChangeLoginPasswordResult(
                 customer.customerId(), now.atZone(clock.getZone()).toOffsetDateTime());
     }
