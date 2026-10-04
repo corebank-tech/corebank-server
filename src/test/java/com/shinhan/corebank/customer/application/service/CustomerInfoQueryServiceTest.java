@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.given;
 import com.shinhan.corebank.customer.application.port.in.CustomerInfoResult;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -75,6 +76,7 @@ class CustomerInfoQueryServiceTest {
                 "01012345678",
                 0,
                 false,
+                CustomerStatus.ACTIVE,
                 null,
                 null,
                 null,

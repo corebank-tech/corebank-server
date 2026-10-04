@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 33개 테이블(31개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 34개 테이블(32개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -24,6 +24,7 @@ erDiagram
         varchar phone_number "하이픈 없음"
         tinyint login_failure_count "5회 시 잠금 (ATH0102)"
         boolean account_locked
+        varchar status "ACTIVE / SUSPENDED"
         datetime last_login_at "대시보드 currentLoginAt"
         varchar last_login_ip "대시보드 currentLoginIp"
         datetime previous_login_at "대시보드 previousLoginAt"
@@ -343,7 +344,7 @@ erDiagram
         datetime updated_at "DATETIME(6)"
     }
     gl_voucher {
-        varchar voucher_no PK "VARCHAR(20). 영업일+유형+일련 (채번 PH-21)"
+        varchar voucher_no PK "VARCHAR(20). yyyyMMdd-TTT-NNNNNN. gl_voucher_sequence 가 채번"
         date trade_date "귀속 영업일"
         varchar tx_type "OPENING / TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST"
         varchar description "VARCHAR(200). 적요"
@@ -358,6 +359,12 @@ erDiagram
         bigint amount "원 단위 정수. 항상 양수"
         date trade_date "전표에서 복제. 시산표 집계 기준일"
         datetime created_at "DATETIME(6)"
+    }
+    gl_voucher_sequence {
+        date trade_date PK "전표의 거래일"
+        varchar tx_type PK "gl_voucher.tx_type 과 같은 값"
+        int last_seq "마지막 일련번호. 1~999999"
+        datetime updated_at "DATETIME(6)"
     }
 
     %% ---------- P5 (영업일, PH-40) ----------

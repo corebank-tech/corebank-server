@@ -16,6 +16,7 @@ import com.shinhan.corebank.customer.application.port.out.CustomerAdminQueryPort
 import com.shinhan.corebank.customer.application.port.out.CustomerAdminView;
 import com.shinhan.corebank.customer.application.port.out.CustomerSearchCondition;
 import com.shinhan.corebank.customer.domain.exception.CustomerErrorCode;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -52,8 +53,8 @@ class AdminCustomerQueryServiceTest {
     @Test
     @DisplayName("조건이 하나도 없으면 전체 목록이 되므로 CMN0002로 거부한다")
     void rejectsSearchWithoutCondition() {
-        assertThatThrownBy(
-                        () -> service.search(new AdminCustomerSearchQuery(" ", "", null, null), PageRequest.of(0, 10)))
+        assertThatThrownBy(() ->
+                        service.search(new AdminCustomerSearchQuery(" ", "", null, null, null), PageRequest.of(0, 10)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -62,8 +63,8 @@ class AdminCustomerQueryServiceTest {
     @Test
     @DisplayName("잠기지 않은 계정(accountLocked=false)만으로는 회원 목록이 되므로 CMN0002로 거부한다")
     void rejectsUnlockedOnlyCondition() {
-        assertThatThrownBy(() ->
-                        service.search(new AdminCustomerSearchQuery(null, null, null, false), PageRequest.of(0, 10)))
+        assertThatThrownBy(() -> service.search(
+                        new AdminCustomerSearchQuery(null, null, null, false, null), PageRequest.of(0, 10)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -71,10 +72,39 @@ class AdminCustomerQueryServiceTest {
     }
 
     @Test
+    @DisplayName("정상 상태(status=ACTIVE)만으로는 회원 목록이 되므로 CMN0002로 거부한다")
+    void rejectsActiveOnlyCondition() {
+        assertThatThrownBy(() -> service.search(
+                        new AdminCustomerSearchQuery(null, null, null, null, CustomerStatus.ACTIVE),
+                        PageRequest.of(0, 10)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        verify(customerAdminQueryPort, never()).search(any(), any());
+    }
+
+    @Test
+    @DisplayName("이용정지 상태만으로도 검색할 수 있고 조건이 포트로 그대로 전달된다")
+    void searchesBySuspendedStatusOnly() {
+        given(customerAdminQueryPort.search(
+                        new CustomerSearchCondition(null, null, null, null, CustomerStatus.SUSPENDED),
+                        PageRequest.of(0, 10)))
+                .willReturn(new PageImpl<>(List.of(view(7L, "adm449beta")), PageRequest.of(0, 10), 1));
+
+        AdminCustomerSummary row = service.search(
+                        new AdminCustomerSearchQuery(null, null, null, null, CustomerStatus.SUSPENDED),
+                        PageRequest.of(0, 10))
+                .getContent()
+                .get(0);
+
+        assertThat(row.status()).isEqualTo(CustomerStatus.SUSPENDED);
+    }
+
+    @Test
     @DisplayName("아이디 조건은 두 글자 이상이어야 한다")
     void rejectsOneCharacterUserId() {
-        assertThatThrownBy(() ->
-                        service.search(new AdminCustomerSearchQuery("a", null, null, null), PageRequest.of(0, 10)))
+        assertThatThrownBy(() -> service.search(
+                        new AdminCustomerSearchQuery("a", null, null, null, null), PageRequest.of(0, 10)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(CommonErrorCode.INVALID_INPUT);
@@ -83,8 +113,8 @@ class AdminCustomerQueryServiceTest {
     @Test
     @DisplayName("성명 조건은 두 글자 이상이어야 한다")
     void rejectsOneCharacterName() {
-        assertThatThrownBy(() ->
-                        service.search(new AdminCustomerSearchQuery(null, "김", null, null), PageRequest.of(0, 10)))
+        assertThatThrownBy(() -> service.search(
+                        new AdminCustomerSearchQuery(null, "김", null, null, null), PageRequest.of(0, 10)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(CommonErrorCode.INVALID_INPUT);
@@ -94,11 +124,11 @@ class AdminCustomerQueryServiceTest {
     @DisplayName("잠금 여부만으로도 검색할 수 있고, 입력 앞뒤 공백은 지운다")
     void searchesWithTrimmedConditions() {
         given(customerAdminQueryPort.search(
-                        new CustomerSearchCondition("adm449", null, "a@b.test", true), PageRequest.of(0, 10)))
+                        new CustomerSearchCondition("adm449", null, "a@b.test", true, null), PageRequest.of(0, 10)))
                 .willReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
 
         Page<AdminCustomerSummary> page = service.search(
-                new AdminCustomerSearchQuery(" adm449 ", " ", " a@b.test ", true), PageRequest.of(0, 10));
+                new AdminCustomerSearchQuery(" adm449 ", " ", " a@b.test ", true, null), PageRequest.of(0, 10));
 
         assertThat(page.getContent()).isEmpty();
     }
@@ -108,8 +138,8 @@ class AdminCustomerQueryServiceTest {
     void rejectsLargeAllQueryBeforeReadingRows() {
         given(customerAdminQueryPort.count(any())).willReturn(101L);
 
-        assertThatThrownBy(
-                        () -> service.search(new AdminCustomerSearchQuery(null, null, null, true), Pageable.unpaged()))
+        assertThatThrownBy(() ->
+                        service.search(new AdminCustomerSearchQuery(null, null, null, true, null), Pageable.unpaged()))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(CommonErrorCode.ALL_QUERY_TOO_LARGE);
@@ -123,7 +153,7 @@ class AdminCustomerQueryServiceTest {
                 .willReturn(new PageImpl<>(List.of(view(7L, "adm449beta")), PageRequest.of(0, 10), 1));
 
         AdminCustomerSummary row = service.search(
-                        new AdminCustomerSearchQuery("adm449", null, null, null), PageRequest.of(0, 10))
+                        new AdminCustomerSearchQuery("adm449", null, null, null, null), PageRequest.of(0, 10))
                 .getContent()
                 .get(0);
 
@@ -144,7 +174,7 @@ class AdminCustomerQueryServiceTest {
                 .willReturn(new PageImpl<>(List.of(view(8L, "abc")), PageRequest.of(0, 10), 1));
 
         AdminCustomerSummary row = service.search(
-                        new AdminCustomerSearchQuery(null, null, "beta@adm449.test", null), PageRequest.of(0, 10))
+                        new AdminCustomerSearchQuery(null, null, "beta@adm449.test", null, null), PageRequest.of(0, 10))
                 .getContent()
                 .get(0);
 
@@ -164,6 +194,7 @@ class AdminCustomerQueryServiceTest {
         assertThat(detail.phoneNumber()).isEqualTo("010****5678");
         assertThat(detail.loginFailureCount()).isEqualTo(5);
         assertThat(detail.accountLocked()).isTrue();
+        assertThat(detail.status()).isEqualTo(CustomerStatus.SUSPENDED);
         assertThatThrownBy(() -> service.getDetail(9L))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
@@ -180,6 +211,7 @@ class AdminCustomerQueryServiceTest {
                 "01012345678",
                 5,
                 true,
+                CustomerStatus.SUSPENDED,
                 null,
                 LocalDateTime.of(2026, 9, 2, 9, 0));
     }
