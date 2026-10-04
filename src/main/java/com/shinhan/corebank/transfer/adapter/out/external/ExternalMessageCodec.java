@@ -3,6 +3,8 @@ package com.shinhan.corebank.transfer.adapter.out.external;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.Arrays;
+import java.util.function.Supplier;
 
 /**
  * 타행 이체 전문 한 장을 124바이트로 쓰고 읽는다 (docs/phase2/fixed_length_message_spec.md).
@@ -96,6 +98,49 @@ public final class ExternalMessageCodec {
                 readNumeric(message, Field.AMOUNT),
                 blankToNull(readText(message, Field.PAYEE_NAME)),
                 blankToNull(readText(message, Field.MEMO)));
+    }
+
+    /**
+     * 형식이 깨진 전문에 돌려줄 1003 응답. 받는 쪽이 읽을 수 있어야 하므로 깨진 칸을 그대로 돌려주지 않는다.
+     * 살릴 수 있는 칸(거래코드·기관코드·일련번호·계좌번호·금액)만 건지고 나머지는 규격에 맞는 빈 값으로 채운다.
+     */
+    public static byte[] malformedResponse(byte[] received, LocalDateTime sentAt) {
+        byte[] in = new byte[MESSAGE_LENGTH];
+        Arrays.fill(in, (byte) ' ');
+        System.arraycopy(received, 0, in, 0, Math.min(received.length, MESSAGE_LENGTH));
+        return encode(new ExternalMessage(
+                MessageKind.RESPONSE,
+                salvage(() -> TransactionCode.fromCode(readText(in, Field.TRANSACTION_CODE)), TransactionCode.TRANSFER),
+                sentAt,
+                salvage(() -> String.format("%03d", readNumeric(in, Field.BANK_CODE)), "000"),
+                salvage(() -> nonBlank(readText(in, Field.SERIAL_NUMBER)), "0".repeat(Field.SERIAL_NUMBER.length)),
+                ResponseCode.MALFORMED_MESSAGE,
+                salvage(() -> digits(readText(in, Field.ACCOUNT_NUMBER)), "0"),
+                salvage(() -> readNumeric(in, Field.AMOUNT), 0L),
+                null,
+                null));
+    }
+
+    private static <T> T salvage(Supplier<T> read, T fallback) {
+        try {
+            return read.get();
+        } catch (IllegalArgumentException e) {
+            return fallback;
+        }
+    }
+
+    private static String digits(String value) {
+        if (value.isEmpty() || !value.chars().allMatch(c -> c >= '0' && c <= '9')) {
+            throw new IllegalArgumentException("숫자 칸이 아니다");
+        }
+        return value;
+    }
+
+    private static String nonBlank(String value) {
+        if (value.isBlank()) {
+            throw new IllegalArgumentException("빈 칸이다");
+        }
+        return value;
     }
 
     private static void write(byte[] out, Field field, byte[] bytes) {

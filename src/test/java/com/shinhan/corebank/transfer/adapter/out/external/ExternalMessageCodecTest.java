@@ -171,6 +171,38 @@ class ExternalMessageCodecTest {
     }
 
     @Nested
+    @DisplayName("형식 오류 응답(1003)")
+    class MalformedResponseTest {
+
+        private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 23, 10, 30, 16);
+
+        @Test
+        @DisplayName("금액 칸만 깨졌으면 나머지 헤더·본문을 살려 1003으로 답하고, 그 응답은 다시 읽힌다")
+        void salvagesReadableFields() {
+            byte[] broken = bytes(SPEC_REQUEST);
+            System.arraycopy(bytes("00000000500 0"), 0, broken, 71, 13);
+
+            ExternalMessage response = ExternalMessageCodec.decode(ExternalMessageCodec.malformedResponse(broken, NOW));
+
+            assertThat(response.kind()).isEqualTo(MessageKind.RESPONSE);
+            assertThat(response.responseCode()).isEqualTo(ResponseCode.MALFORMED_MESSAGE);
+            assertThat(response.serialNumber()).isEqualTo("20261023WB0000000123");
+            assertThat(response.bankCode()).isEqualTo("004");
+            assertThat(response.accountNumber()).isEqualTo("1234567890123");
+            assertThat(response.amount()).isZero();
+        }
+
+        @Test
+        @DisplayName("4바이트만 와도 읽을 수 있는 1003 응답을 만든다")
+        void answersEvenTruncatedMessage() {
+            byte[] response = ExternalMessageCodec.malformedResponse(bytes("0120"), NOW);
+
+            assertThat(response).hasSize(ExternalMessageCodec.MESSAGE_LENGTH);
+            assertThat(ExternalMessageCodec.decode(response).responseCode()).isEqualTo(ResponseCode.MALFORMED_MESSAGE);
+        }
+    }
+
+    @Nested
     @DisplayName("응답 만들기")
     class ToResponseTest {
 
