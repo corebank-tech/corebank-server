@@ -542,4 +542,120 @@ class TransferTest {
                     .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
         }
     }
+
+    @Nested
+    @DisplayName("invalidate — 정정 체인 원거래 무효화")
+    class InvalidateTest {
+
+        private final LocalDateTime invalidatedAt = LocalDateTime.of(2026, 8, 10, 9, 0, 0);
+
+        @Test
+        @DisplayName("SUCCESS 이체는 무효화되고 status는 그대로 SUCCESS다")
+        void invalidateSuccessTransfer() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.complete(90000L, LocalDateTime.of(2026, 8, 9, 12, 0, 1));
+
+            // when
+            transfer.invalidate(invalidatedAt);
+
+            // then
+            assertThat(transfer.getInvalidatedAt()).isEqualTo(invalidatedAt);
+            assertThat(transfer.isInvalidated()).isTrue();
+            assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
+        }
+
+        @Test
+        @DisplayName("이미 무효화된 이체를 다시 무효화하면 TRF0305로 거부된다")
+        void invalidateTwice_throws() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.complete(90000L, LocalDateTime.of(2026, 8, 9, 12, 0, 1));
+            transfer.invalidate(invalidatedAt);
+
+            // when & then
+            assertThatThrownBy(() -> transfer.invalidate(invalidatedAt.plusMinutes(1)))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+            assertThat(transfer.getInvalidatedAt()).isEqualTo(invalidatedAt);
+        }
+
+        @Test
+        @DisplayName("ERROR 이체는 돈이 움직이지 않았으므로 무효화할 수 없다")
+        void invalidateErrorTransfer_throws() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.fail("TRF0304", "거래정지 또는 해지 상태의 출금계좌입니다.");
+
+            // when & then
+            assertThatThrownBy(() -> transfer.invalidate(invalidatedAt))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+        }
+
+        @Test
+        @DisplayName("취소정정 거래는 무효화할 수 없다 — 취소의 취소 금지")
+        void invalidateReversal_throws() {
+            // given
+            Transfer reversal = newProcessingTransfer();
+            reversal.linkToOriginal(CorrectionType.REVERSAL, 1L);
+            reversal.complete(90000L, LocalDateTime.of(2026, 8, 10, 9, 0, 0));
+
+            // when & then
+            assertThatThrownBy(() -> reversal.invalidate(invalidatedAt))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+        }
+    }
+
+    @Nested
+    @DisplayName("linkToOriginal — 정정 체인 연결")
+    class LinkToOriginalTest {
+
+        @Test
+        @DisplayName("저장 전(PROCESSING) 이체에 원거래와 역할을 연결한다")
+        void linkProcessingTransfer() {
+            // given
+            Transfer reversal = newProcessingTransfer();
+
+            // when
+            reversal.linkToOriginal(CorrectionType.REVERSAL, 1L);
+
+            // then
+            assertThat(reversal.getRefTransferId()).isEqualTo(1L);
+            assertThat(reversal.getCorrectionType()).isEqualTo(CorrectionType.REVERSAL);
+        }
+
+        @Test
+        @DisplayName("이미 확정된 이체에는 연결할 수 없다")
+        void linkCompletedTransfer_throws() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.complete(90000L, LocalDateTime.of(2026, 8, 9, 12, 0, 1));
+
+            // when & then
+            assertThatThrownBy(() -> transfer.linkToOriginal(CorrectionType.REPOST, 1L))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+        }
+
+        @Test
+        @DisplayName("한 번 연결한 이체는 다시 연결할 수 없다")
+        void linkTwice_throws() {
+            // given
+            Transfer reversal = newProcessingTransfer();
+            reversal.linkToOriginal(CorrectionType.REVERSAL, 1L);
+
+            // when & then
+            assertThatThrownBy(() -> reversal.linkToOriginal(CorrectionType.REPOST, 2L))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+            assertThat(reversal.getRefTransferId()).isEqualTo(1L);
+        }
+    }
 }

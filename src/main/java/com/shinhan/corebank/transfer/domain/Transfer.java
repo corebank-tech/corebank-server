@@ -37,6 +37,10 @@ public class Transfer {
     private String errorMessage;
     private LocalDateTime transferredAt;
     private LocalDateTime createdAt;
+    // 정정 체인(PH-80). 무효화는 status와 별개 — 성공했던 이력을 지우지 않고 무효가 된 시각만 더한다.
+    private LocalDateTime invalidatedAt;
+    private Long refTransferId;
+    private CorrectionType correctionType;
 
     /**
      * 신규 이체 도메인 생성 팩토리
@@ -104,6 +108,32 @@ public class Transfer {
         this.status = ProcessResultStatus.ERROR;
         this.errorCode = errorCode;
         this.errorMessage = errorMessage;
+    }
+
+    // 정정 체인의 원거래로 무효화한다. 돈이 움직인 확정 거래만 대상이고, 취소의 취소와 재무효화는 막는다.
+    public void invalidate(LocalDateTime at) {
+        TransferValidations.requireNonNull(at, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        if (this.status != ProcessResultStatus.SUCCESS
+                || isInvalidated()
+                || this.correctionType == CorrectionType.REVERSAL) {
+            throw new BusinessException(TransferErrorCode.NOT_CORRECTABLE);
+        }
+        this.invalidatedAt = at;
+    }
+
+    // 새로 만든 취소정정·정상거래에 원거래를 연결한다. 확정된 거래의 출신은 바꿀 수 없다.
+    public void linkToOriginal(CorrectionType type, Long originalTransferId) {
+        TransferValidations.requireNonNull(type, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonNull(originalTransferId, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        if (this.status != ProcessResultStatus.PROCESSING || this.refTransferId != null) {
+            throw new BusinessException(TransferErrorCode.NOT_CORRECTABLE);
+        }
+        this.refTransferId = originalTransferId;
+        this.correctionType = type;
+    }
+
+    public boolean isInvalidated() {
+        return this.invalidatedAt != null;
     }
 
     // 커밋 전 과도 상태(PROCESSING)에서만 확정으로 전이 가능. 이미 확정된 이체는 재변경 금지.
