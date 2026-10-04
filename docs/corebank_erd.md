@@ -135,6 +135,9 @@ erDiagram
         varchar error_message "VARCHAR(200)"
         datetime transferred_at "DATETIME(6)"
         date trade_date "거래일(귀속 영업일). NULL 허용"
+        datetime invalidated_at "정정 체인 무효화 시각. NULL이면 유효"
+        bigint ref_transfer_id FK "정정 체인 원거래"
+        varchar correction_type "REVERSAL / REPOST"
     }
     ledger_entry {
         bigint ledger_entry_id PK
@@ -424,6 +427,7 @@ erDiagram
 
     account  ||--o{ ledger_entry : "계좌별 기표"
     transfer ||--o{ ledger_entry : "성공 시 출금1행+입금1행 / 실패 시 0행"
+    transfer |o--o{ transfer : "정정 체인 — 취소정정·정상거래가 원거래를 가리킨다"
     customer ||--o{ audit_log : "행위"
     scheduled_transfer      |o--o| transfer : "실행결과 (WAITING 은 없음)"
     auto_transfer_execution |o--o| transfer : "실행결과 (ERROR 는 없음)"
