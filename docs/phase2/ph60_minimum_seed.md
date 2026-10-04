@@ -4,7 +4,7 @@
 
 PH-60은 현행 `customer`, `account`, `transfer`, `ledger_entry`, `auto_transfer` 구조로 기능·성능 검증용 데이터를 만든다. 계정계·채널계 모델 분리는 후속 작업에서 다룬다.
 
-대량 데이터 생성은 HTTP API로 노출하지 않는다. `phase2-seed` 프로필만으로는 실행되지 않으며, 정기 배포와 분리된 일회성 작업에서 `app.phase2-seed.execute=true`를 함께 지정해야 한다. 따라서 Swagger UI에 추가되는 엔드포인트는 없다.
+대량 데이터 생성은 HTTP API로 노출하지 않는다. `phase2-seed` 프로필만으로는 실행되지 않으며, 정기 배포와 분리된 일회성 작업에서 `app.phase2-seed.minimum.execute=true`를 함께 지정해야 한다. 따라서 Swagger UI에 추가되는 엔드포인트는 없다.
 
 실행 환경별 전체 명령은 로컬 시험은 §1-1, 운영 RDS 적재는 §6-4를 따른다. 일반 로컬 기동에서는 `DemoDataLoader`가 실행되지만, `phase2-seed`와 일회성 실행 플래그가 함께 활성화되면 방어 코드가 데모 시드와 기동 시 영업일 보정을 차단한다. PH-60 전용 실행은 환경을 단순하게 유지하기 위해 아래와 같이 `phase2-seed`만 사용한다.
 
@@ -37,13 +37,13 @@ CREATE DATABASE IF NOT EXISTS minicore_ph60
 Git Bash:
 
 ```bash
-./gradlew bootRun --args='--spring.profiles.active=phase2-seed --app.phase2-seed.execute=true --spring.datasource.url=jdbc:mysql://localhost:3306/minicore_ph60?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true --spring.datasource.username=root --spring.datasource.password=localpw --spring.jpa.hibernate.ddl-auto=validate --spring.data.redis.host=localhost --spring.main.web-application-type=none --spring.task.scheduling.enabled=false --spring.devtools.restart.enabled=false'
+./gradlew bootRun --args='--spring.profiles.active=phase2-seed --app.phase2-seed.minimum.execute=true --spring.datasource.url=jdbc:mysql://localhost:3306/minicore_ph60?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true --spring.datasource.username=root --spring.datasource.password=localpw --spring.jpa.hibernate.ddl-auto=validate --spring.data.redis.host=localhost --spring.main.web-application-type=none --spring.task.scheduling.enabled=false --spring.devtools.restart.enabled=false'
 ```
 
 Windows PowerShell:
 
 ```powershell
-.\gradlew.bat bootRun --args="--spring.profiles.active=phase2-seed --app.phase2-seed.execute=true --spring.datasource.url=jdbc:mysql://localhost:3306/minicore_ph60?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true --spring.datasource.username=root --spring.datasource.password=localpw --spring.jpa.hibernate.ddl-auto=validate --spring.data.redis.host=localhost --spring.main.web-application-type=none --spring.task.scheduling.enabled=false --spring.devtools.restart.enabled=false"
+.\gradlew.bat bootRun --args="--spring.profiles.active=phase2-seed --app.phase2-seed.minimum.execute=true --spring.datasource.url=jdbc:mysql://localhost:3306/minicore_ph60?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true --spring.datasource.username=root --spring.datasource.password=localpw --spring.jpa.hibernate.ddl-auto=validate --spring.data.redis.host=localhost --spring.main.web-application-type=none --spring.task.scheduling.enabled=false --spring.devtools.restart.enabled=false"
 ```
 
 Git Bash에서는 JDBC URL의 `&`가 셸 명령 구분자로 해석되지 않도록 `--args` 전체를 작은따옴표로 감싼다. 위 `root`와 `localpw`는 `compose.yaml`의 기본 로컬 계정 기준이며, 로컬 설정을 바꿨다면 실제 값으로 교체한다.
@@ -102,6 +102,7 @@ QA 시드의 고객·계좌·거래번호 대역과 겹치지 않는다. 각 행
 - 개시 잔액은 `20260901-OPN-000001` 전표 1건으로 기록한다.
 - GL 분개는 현금 `10100` 차변과 예수금 `20100` 대변 각 1행이며 금액이 같다.
 - PH-60b는 이 데이터를 이어서 확장하며 개시 전표를 추가로 만들지 않는다.
+- 위 `860` 계좌번호는 이미 적재된 PH-60 전용 대역이다. PH-60b 신규 계좌는 이 규칙을 복사하지 않고 실제 당행 코드 `088`, 상품별 prefix와 `account_number_sequence` 예약 대역을 사용한다([ph60b_bulk_seed.md](ph60b_bulk_seed.md) §3).
 - 자동이체 시작일은 `2026-10-01`이며, 다음 실행일이 10월 1~28일로 분산되어 10월 배치 부하 검증에 실제 사용된다.
 
 ## 5. P4 검수 SQL
@@ -151,11 +152,11 @@ WHERE voucher_no = '20260901-OPN-000001';
 
 ### 6-1. 선택한 방식
 
-운영 RDS에는 로컬 덤프를 옮기지 않는다. **main 배포와 별도로 운영 서버에서 배포된 Docker 이미지를 일회성 컨테이너로 한 번만 실행해 운영 RDS에 직접 적재한다.** 이 컨테이너는 HTTP 요청을 받지 않으며, 적재와 자체 검증을 마치면 스스로 종료되고 자동 삭제된다. 다만 스케줄러는 꺼지지 않으므로 실행 시각을 §6-4에 따라 고른다.
+운영 RDS에는 로컬 덤프를 옮기지 않는다. **main 배포와 별도로 운영 서버에서 배포된 Docker 이미지를 일회성 컨테이너로 한 번만 실행해 운영 RDS에 직접 적재한다.** 이 컨테이너는 HTTP 서버를 실행하지 않고, `phase2-seed` 프로필이 `SchedulingConfig`를 제외하므로 스케줄러도 등록하지 않는다. 적재와 자체 검증을 마치면 자동 삭제된다.
 
 자동 종료되는 것은 일회성 시드 프로세스뿐이다. 적재가 성공하면 데이터는 운영 RDS에 커밋되어 그대로 유지되므로, 이후 정상 `prod` 서버를 대상으로 수행하는 TPS·동시성 등 성능 테스트에는 지장이 없다.
 
-정상 서비스의 배포 설정에는 `phase2-seed` 프로필과 `app.phase2-seed.execute` 플래그를 추가하지 않는다. 이 두 값은 아래 일회성 명령에만 넣는다.
+정상 서비스의 배포 설정에는 `phase2-seed` 프로필과 `app.phase2-seed.minimum.execute` 플래그를 추가하지 않는다. 이 두 값은 아래 일회성 명령에만 넣는다.
 
 역할은 다음과 같이 나눈다.
 
@@ -232,7 +233,7 @@ cd /home/ubuntu/corebank
 
 docker compose run --rm corebank-server \
   --spring.profiles.active=prod,phase2-seed \
-  --app.phase2-seed.execute=true \
+  --app.phase2-seed.minimum.execute=true \
   --spring.main.web-application-type=none \
   2>&1 | tee "$HOME/ph60-seed-$(date +%Y%m%d-%H%M%S).log"
 
@@ -241,7 +242,7 @@ echo "exit=${PIPESTATUS[0]}"
 
 - **로그 파일**: `/home/ubuntu/corebank`는 root 소유라 `ubuntu` 계정으로는 파일을 쓸 수 없다. 로그는 `$HOME`에 남기고, 이 경로를 §7에 기록한다.
 - **종료 코드**: `tee`로 파이프를 걸면 `$?`는 `tee`의 결과가 된다. 시드 프로세스의 종료 코드는 바로 다음 줄에서 `${PIPESTATUS[0]}`로 읽는다.
-- **실행 시각**: 일회성 컨테이너에도 `SchedulingConfig`의 `@EnableScheduling`이 그대로 적용된다. `--spring.task.scheduling.enabled=false`로는 꺼지지 않으므로 이 인자는 넣지 않는다. 영업일 맞추기 스케줄러만 `phase2-seed` 프로필에서 빠지고, 매시 정각 멱등키 정리·00:10 이체 배치·02:00 대사는 시드가 도는 동안 그 시각이 되면 이 컨테이너에서도 실행된다. 적재가 끝나면 프로세스가 종료되므로 영향을 받는 시간은 실행 시간뿐이다(운영 실측 2분 34초). **매시 5~40분 사이에 시작하고, 이체 배치가 있는 0시대(00:00~00:59)는 피한다.**
+- **스케줄러 격리**: `phase2-seed` 프로필에서는 `SchedulingConfig`가 등록되지 않으므로 일회성 컨테이너에서 정기 배치가 실행되지 않는다.
 
 성공 기준은 두 가지다.
 
@@ -264,7 +265,7 @@ echo "exit=${PIPESTATUS[0]}"
 1. §6-2의 건수 쿼리를 다시 실행한다. 결과는 고객 `10,000`, 계좌 `30,000`, 이체 `235,000`, 원장 `500,000`, 자동이체 `5,000`이어야 한다.
 2. §5의 원장 쌍·잔액·차대변 검수 SQL을 실행한다. 세 결과가 모두 `0`이어야 한다.
 3. main 배포 담당은 실행 일시, Docker 이미지 태그 또는 커밋 SHA, 시드 적재 소요 시간, 실제 건수와 로그 위치를 §7에 기록한다. P4는 정합성 검수 결과를 같은 표에 기록한다.
-4. 정상 서비스는 기존 `prod` 프로필만으로 기동한다. 배포 환경변수와 서비스 실행 명령에 `phase2-seed` 및 `app.phase2-seed.execute`가 없는지 다시 확인한다.
+4. 정상 서비스는 기존 `prod` 프로필만으로 기동한다. 배포 환경변수와 서비스 실행 명령에 `phase2-seed` 및 `app.phase2-seed.minimum.execute`가 없는지 다시 확인한다.
 5. 정상 서비스의 헬스 체크와 주요 조회 API를 확인한다. 이후 배포에서는 시드 프로세스를 다시 실행하지 않는다.
 
 ## 7. 측정 결과
