@@ -57,4 +57,36 @@ class LogbackConfigTest {
         assertThat(json.get("message").asText()).isEqualTo("계좌 123******012로 이체 완료, 연락처 010****5678");
         assertThat(json.get("level").asText()).isEqualTo("INFO");
     }
+
+    // 클라이언트가 X-Correlation-Id에 JSON 특수문자(쌍따옴표·개행)를 넣어 로그 구조를 깨거나
+    // 가짜 필드를 주입하려는 시도를 할 수 있다 - 라이브러리가 이스케이프하는지 직접 확인한다
+    @Test
+    void correlationId에_쌍따옴표와_개행이_있어도_JSON이_깨지지_않는다() throws Exception {
+        LoggerContext context = (LoggerContext) org.slf4j.LoggerFactory.getILoggerFactory();
+        context.reset();
+        JoranConfigurator configurator = new JoranConfigurator();
+        configurator.setContext(context);
+        configurator.doConfigure(getClass().getClassLoader().getResource("logback-spring.xml"));
+
+        String malicious = "abc\",\"injected\":\"evil\nvalue";
+
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+        System.setOut(new PrintStream(captured));
+
+        String line;
+        try {
+            MDC.put("correlationId", malicious);
+            Logger logger = context.getLogger(LogbackConfigTest.class);
+            logger.info("정상 처리");
+        } finally {
+            System.setOut(originalOut);
+            MDC.clear();
+        }
+        line = captured.toString().trim();
+
+        var json = objectMapper.readTree(line);
+        assertThat(json.get("correlationId").asText()).isEqualTo(malicious);
+        assertThat(json.has("injected")).isFalse();
+    }
 }
