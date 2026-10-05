@@ -414,10 +414,12 @@ P6의 AI 기능을 약관 RAG에서 **서비스 안내 내비게이션**으로 �
 
 도메인 간 계약면은 `<domain>.api` 하나로 한다. 호출하는 쪽은 상대 도메인의 `application`·`domain`을 직접 참조하지 않는다([#359](https://github.com/corebank-tech/corebank-server/issues/359), 기한 10/2).
 
-- 근거는 실측이다. 도메인 간 참조 130건 중 **70건이 계약면을 거치지 않는다.** 그중 49건은 호출당하는 도메인 4개(`transfer` 27 · `product` 18 · `autotransfer` 2 · `scheduledtransfer` 2)에 `api/`가 아예 없어서 생긴 것이다 — 계약면이 없으니 호출하는 쪽이 `application.port.in`과 `domain`을 직접 잡을 수밖에 없다.
+- 근거는 실측이다. 도메인 간 참조 130건 중 **70건이 계약면을 거치지 않는다.** 그중 49건은 호출당하는 도메인 4개(`transfer` 27 · `product` 18 · `autotransfer` 2 · `scheduledtransfer` 2)에 계약면이 없어서 생긴 것이다(9/2 측정). 이후 `transfer`·`autotransfer`·`scheduledtransfer`에는 `api/`가 생겼지만 **호출하는 쪽이 쓰는 계약은 아직 거기 들어 있지 않고**(예: `transfer.application.port.in.TransferExecutionUseCase`·`LedgerHistoryResult`), `product`는 `api/` 자체가 없다. 그래서 남은 일은 패키지를 새로 만드는 것이 아니라 **이미 있는 `api`에 무엇을 넣을지 정하는 것**이다.
+- **공유 enum·에러코드도 `api`로 옮긴다.** `api` 타입의 시그니처에 실려 나가는 값(`TransferChannel`·`ProductGroup`·`ProductErrorCode` 같은 것)이 `domain`에 남아 있으면 호출하는 쪽이 결국 `domain`을 import하게 되어 계약면이 계약면 구실을 못 한다. 다만 **일괄 이동은 하지 않는다** — 그 도메인의 `api` 계약을 만들거나 고칠 때 같이 옮긴다. AGENTS.md §3-2가 이 결정 전까지 기존 참조를 허용해 둔 대상이 이것이고, 그 문장은 ADR-0004와 같은 PR에서 고친다.
+- **ADR-0004가 머지되기 전까지는 AGENTS.md §3-2를 그대로 따른다**(`api`·`port.in` 둘 다 허용). 정본 우선순위가 `ADR > docs 규약 문서`라 그 사이에 새로 들어오는 참조를 규약 위반으로 보지 않는다.
 - 선례는 ADR-0003(`batch.api`)이다.
 - **ADR-0004 문서는 문서만 담은 PR로 내지 않고 [PH-24](tasks.md#ph-24-gl-분개-서비스--이체-기표-훅--glapi) 구현 PR에 함께 넣는다.** PH-24가 `gl.api`를 만드는 작업이라 이 결정이 처음 적용되는 자리이고, 그래서 `JournalDirection`이 `gl.domain`에서 `gl.api`로 옮겨간다. 결정만 기한 안에 여기 적어 두고 문서는 코드와 같이 간다.
-- 후속은 P4 [#350](https://github.com/corebank-tech/corebank-server/issues/350)(헥사고날 가이드에 `api/` 규약)과 ArchUnit 전 도메인 확대다. 기존 우회 70건을 일괄로 걷어내는 일은 범위 밖이고, 도메인을 건드릴 때 그 도메인 몫만 정리한다.
+- 후속은 P4 [#350](https://github.com/corebank-tech/corebank-server/issues/350)(헥사고날 가이드에 `api/` 규약)과 ArchUnit 확대다. **ArchUnit은 우회가 0이 된 도메인부터 하나씩 건다** — 규칙을 먼저 걸고 코드를 맞추는 것이 아니라 맞은 도메인을 잠근다. 기존 우회 70건의 일괄 정리와 전 도메인 일괄 적용은 2차 범위 밖이고 인일을 잡지 않는다(3차나 별도 합의). 그래서 `transfer` 정리가 P4 완충으로 넘어오지 않는다([D-14](#d-14--92123--p4-제안-리드-승인)). 도메인을 건드릴 때 그 도메인 몫만 정리한다.
 
 ---
 
@@ -425,7 +427,7 @@ P6의 AI 기능을 약관 RAG에서 **서비스 안내 내비게이션**으로 �
 
 | ID | 질문 | 누가 | 언제까지 |
 |---|---|---|---|
-| ~~O-01~~ | **해결(10/1).** FE `docs/requirements-admin.md` 정정 PR(FE #159) — ① §3 POL-A09 조회 사유 필수 ② §4 REQ-ADM-019 신설 ③ §5 EX-A03 해제 ④ §5 EX-A13 근거 수정(D-10) ⑤ ADM-03 `GL_READ`(D-09) ⑥ ADM-04 담당 P3(D-04) ⑦ #129·#131·#132 닫힘 반영(D-18) ⑧ 인용 경로를 v3에서 `docs/phase2`로. FE 코드 주석(`src/mocks/handlers/admin.ts`, `src/shared/types/admin-permission.ts`)의 v3 경로도 함께 고친다 | P3 | ~~9/30~~ → FE PR #160(10/1 머지). ⑧은 `src/` 전수 재검색에서 두 파일 외에 `adm02-trial-balance.tsx`·`ph28-trial-balance.ts`의 v3 문서 **파일명** 인용 4곳이 더 나와 FE #158로 넘겼다 |
+| ~~O-01~~ | **해결(10/1).** FE `docs/requirements-admin.md` 정정 이슈(FE #159) — ① §3 POL-A09 조회 사유 필수 ② §4 REQ-ADM-019 신설 ③ §5 EX-A03 해제 ④ §5 EX-A13 근거 수정(D-10) ⑤ ADM-03 `GL_READ`(D-09) ⑥ ADM-04 담당 P3(D-04) ⑦ #129·#131·#132 닫힘 반영(D-18) ⑧ 인용 경로를 v3에서 `docs/phase2`로. FE 코드 주석(`src/mocks/handlers/admin.ts`, `src/shared/types/admin-permission.ts`)의 v3 경로도 함께 고친다 | P3 | ~~9/30~~ → FE PR #160(10/1 머지). ⑧은 `src/` 전수 재검색에서 두 파일 외에 `adm02-trial-balance.tsx`·`ph28-trial-balance.ts`의 v3 문서 **파일명** 인용 4곳이 더 나와 FE #158로 넘겼다 |
 | O-02 | glossary의 제안 명칭 `inquiry`(조회거래) · `correction`(정정 체인) · "처리 불명"(TIMEOUT) 확인 | P4 | PH-80 전(10/8) |
 | O-03 | AWS 계정 소유자 확인 | P5 | PH-50 전(10/2) |
 | O-04 | 대사 불일치 알림 채널 — 지금은 로그만 남긴다(PR #463 리뷰 6). PH-47 알람 규칙에 넣을지 | P5 · P4 | PH-47(S2) |
