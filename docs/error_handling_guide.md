@@ -461,3 +461,16 @@ public ApiResponse<ProductResponse> getProduct(@PathVariable Long productId) {
 - [ ] `throw new BusinessException(...)` 로만 던졌는가 (컨트롤러에서 try-catch 안 함)
 - [ ] 컨트롤러가 성공 응답만 반환하는가
 - [ ] 새로 만든 오류코드를 [api_conventions.md](api_conventions.md) §4 표에 추가했는가
+
+## 9. 로그 레벨 규칙
+
+| 상황 | 레벨 | 예시 |
+|---|---|---|
+| 예상된 비즈니스 거부(`BusinessException`) | `warn` | 잘못된 입력, 중복 요청, 권한 없음 |
+| 처리되지 않은 예외(`ApiExceptionHandler`의 최종 캐치) | `error` | NPE 등 예상 못 한 버그 |
+| 정상적인 주요 흐름 | `info` | 요청 처리 시작/종료, 배치 시작/종료 |
+| 개발용 상세 정보 | `debug` | SQL 쿼리 등. `application-local.yml`에서만 켜짐 |
+
+- 운영(`logback-spring.xml` 기본값)은 `INFO` 이상만 찍는다 — `debug`는 로컬에서만 보인다.
+- `BusinessException`을 `error`로 찍지 않는다 — 고객 입력 실수까지 장애 알람이 울리면 안 된다.
+- 반대로 처리되지 않은 예외를 `warn`으로 낮추지 않는다 — 모니터링(PH-47)이 `error`만 감시한다.
