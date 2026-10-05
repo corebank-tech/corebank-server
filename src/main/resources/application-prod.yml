@@ -11,7 +11,7 @@ spring:
     username: ${DB_USER}
     password: ${DB_PASSWORD}
     hikari:
-      # 풀 × WAS 대수 + 여유(약 15) ≤ RDS max_connections(60). WAS 2대가 되면 다시 계산한다(#553).
+      # 서버 연결 수 × 서버 대수 + 그 밖의 접속(약 15) ≤ DB 최대 연결(60). 서버가 2대가 되면 다시 계산한다(#553).
       maximum-pool-size: 20
       connection-timeout: 3000
       max-lifetime: 570000
