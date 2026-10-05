@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202610042330__add_transfer_correction_chain.sql
+-- V202610051913__add_transfer_correction_chain.sql
 -- 이체 정정 체인 컬럼 추가 (P4, PH-80 S1분 / #548)
 --
 -- 정정 체인: 원거래 무효화 → 취소정정 거래 INSERT → 정상거래 INSERT. DELETE 0건.
