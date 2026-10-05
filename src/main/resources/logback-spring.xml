@@ -1,12 +1,54 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
+    <conversionRule conversionWord="mask" converterClass="com.shinhan.corebank.common.logging.MaskingConverter" />
+
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS, Asia/Seoul} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <pattern>
+                    <pattern>
+                        {
+                            "timestamp": "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, Asia/Seoul}",
+                            "level": "%level",
+                            "logger": "%logger{36}",
+                            "thread": "%thread",
+                            "correlationId": "%mdc{correlationId}",
+                            "customerId": "%mdc{customerId}",
+                            "message": "%mask(%msg)"
+                        }
+                    </pattern>
+                </pattern>
+            </providers>
+        </encoder>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/corebank.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/corebank.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <pattern>
+                    <pattern>
+                        {
+                            "timestamp": "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, Asia/Seoul}",
+                            "level": "%level",
+                            "logger": "%logger{36}",
+                            "thread": "%thread",
+                            "correlationId": "%mdc{correlationId}",
+                            "customerId": "%mdc{customerId}",
+                            "message": "%mask(%msg)"
+                        }
+                    </pattern>
+                </pattern>
+            </providers>
         </encoder>
     </appender>
 
     <root level="INFO">
         <appender-ref ref="CONSOLE" />
+        <appender-ref ref="FILE" />
     </root>
 </configuration>
