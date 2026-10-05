@@ -22,7 +22,8 @@ public enum AuditEventType {
     WITHDRAWAL_ACCOUNT_DELETE, // 출금계좌 삭제
     LOGIN, // 로그인 (REQ-CMN-025 접속이력)
     ACCOUNT_UNLOCK, // 관리자 계정 잠금 해제
-    LOGIN_PASSWORD_RESET_BY_ADMIN; // 관리자 로그인 비밀번호 초기화(잠금 해제 포함, #449)
+    LOGIN_PASSWORD_RESET_BY_ADMIN, // 관리자 로그인 비밀번호 초기화(잠금 해제 포함, #449)
+    CUSTOMER_STATUS_CHANGE; // 관리자 고객 계정 상태 변경(이용정지·해제, #450)
 
     /** 원장 변경 여부. true 면 transaction_number 가 있어야 한다 */
     public boolean isLedgerChanging() {

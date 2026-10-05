@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -50,6 +51,7 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 "01012345678",
                 3,
                 false,
+                CustomerStatus.ACTIVE,
                 lastLoginAt,
                 "127.0.0.1",
                 previousLoginAt,
@@ -302,6 +304,50 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(updatedCustomer.getLastLoginAt()).isEqualTo(LocalDateTime.of(2026, 8, 10, 9, 0));
     }
 
+    // 상태 변경은 status 칼럼만 바꾸고 잠금·실패 횟수는 그대로 둔다.
+    @Test
+    @DisplayName("관리자 계정 상태 변경 결과를 status 칼럼에만 저장한다")
+    void updateStatus() {
+        Customer savedCustomer = customerPersistencePort.save(createCustomer());
+        savedCustomer.recordLoginFailure();
+        customerPersistencePort.updateLoginFailureState(savedCustomer);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Customer lockedCustomer = customerPersistencePort
+                .findByIdForUpdate(savedCustomer.getCustomerId())
+                .orElseThrow();
+        lockedCustomer.changeStatusByAdmin(CustomerStatus.SUSPENDED);
+
+        customerPersistencePort.updateStatus(lockedCustomer);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Customer updatedCustomer =
+                customerPersistencePort.findById(savedCustomer.getCustomerId()).orElseThrow();
+
+        assertThat(updatedCustomer.getStatus()).isEqualTo(CustomerStatus.SUSPENDED);
+        assertThat(updatedCustomer.getLoginFailureCount()).isEqualTo(4);
+        assertThat(updatedCustomer.isAccountLocked()).isFalse();
+        assertThat(updatedCustomer.getPasswordHash()).isEqualTo(PASSWORD_HASH);
+    }
+
+    // 엔티티를 거치지 않는 SQL 경로(시드·수동 수정)는 CHECK 제약이 막는다.
+    @Test
+    @DisplayName("정의되지 않은 계정 상태는 DB CHECK 제약이 거부한다")
+    void rejectsUndefinedStatusByCheckConstraint() {
+        Customer savedCustomer = customerPersistencePort.save(createCustomer());
+        entityManager.flush();
+
+        assertThatThrownBy(() -> entityManager
+                        .createNativeQuery("UPDATE customer SET status = 'DORMANT' WHERE customer_id = :customerId")
+                        .setParameter("customerId", savedCustomer.getCustomerId())
+                        .executeUpdate())
+                .hasRootCauseMessage("Check constraint 'ck_customer_status' is violated.");
+    }
+
     private Customer createCustomer() {
         LocalDateTime joinedAt = LocalDateTime.of(2026, 1, 1, 9, 0);
 
@@ -316,6 +362,7 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 "01012345678",
                 3,
                 false,
+                CustomerStatus.ACTIVE,
                 LocalDateTime.of(2026, 8, 10, 9, 0),
                 "127.0.0.1",
                 LocalDateTime.of(2026, 8, 9, 9, 0),
@@ -338,6 +385,7 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 "01012345678",
                 0,
                 false,
+                CustomerStatus.ACTIVE,
                 null,
                 null,
                 null,

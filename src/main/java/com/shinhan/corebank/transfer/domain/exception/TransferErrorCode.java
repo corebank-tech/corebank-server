@@ -18,6 +18,8 @@ public enum TransferErrorCode implements ErrorCode {
     INVALID_STATUS_TRANSITION("TRF0302", 409, "이미 처리 완료(SUCCESS/ERROR)된 이체는 상태를 변경할 수 없습니다."),
     INSUFFICIENT_BALANCE("TRF0303", 409, "출금계좌 잔액이 부족합니다."),
     WITHDRAWAL_ACCOUNT_SUSPENDED("TRF0304", 409, "거래정지 또는 해지 상태의 출금계좌입니다."),
+    NOT_CORRECTABLE("TRF0305", 409, "정정할 수 없는 이체입니다."),
+    REVERSAL_INSUFFICIENT_BALANCE("TRF0306", 409, "입금계좌 잔액이 부족해 이체를 되돌릴 수 없습니다."),
     ACCOUNT_LOCK_TARGET_NOT_FOUND("TRF9001", 500, "이체 처리 중 계좌 정보를 확인할 수 없습니다."),
     TRANSACTION_SEQUENCE_EXHAUSTED("TRF9002", 500, "거래번호 일련번호 채번 가능 범위를 초과했습니다.");
 

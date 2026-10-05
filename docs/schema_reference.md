@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 31개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 297개 컬럼
+**대상**: 32개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 305개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -26,7 +26,7 @@
 
 | # | 테이블 | 설명 | 담당 | 컬럼 |
 | --- | --- | --- | --- |----|
-| 1 | `customer` | 고객 | P6 | 17 |
+| 1 | `customer` | 고객 | P6 | 18 |
 | 2 | `terms` | 약관 | P6 | 10 |
 | 3 | `customer_terms_agreement` | 회원가입 약관 동의 | P6 | 4  |
 | 4 | `verification_request` | 인증 요청 | P6 | 13 |
@@ -38,7 +38,7 @@
 | 10 | `account` | 계좌 | P2 | 21 |
 | 11 | `account_number_sequence` | 계좌번호 채번 규칙 | P2 | 8  |
 | 12 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4  |
-| 13 | `transfer` | 이체 거래 | P4 | 22 |
+| 13 | `transfer` | 이체 거래 | P4 | 25 |
 | 14 | `ledger_entry` | 원장 | P4 | 14 |
 | 15 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1  |
 | 16 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6  |
@@ -59,6 +59,7 @@
 | 31 | `gl_journal_entry` | 분개 | P3 | 8  |
 | 32 | `business_date` | 현재 영업일 | P5 | 4  |
 | 33 | `holiday` | 휴일 달력 | P5 | 4  |
+| 34 | `gl_voucher_sequence` | 전표번호 일련번호 채번 | P3 | 4  |
 
 ---
 
@@ -82,6 +83,7 @@
 | `phone_number` | `VARCHAR(11)` |  | X |  | 휴대폰 번호. 하이픈 없이 숫자만 저장하고 응답 시 중간 4자리를 마스킹한다 |
 | `login_failure_count` | `TINYINT` |  | X | `0` | 로그인 비밀번호 연속 오류 횟수. 5회 도달 시 `account_locked`가 TRUE로 바뀐다 (ATH0102) |
 | `account_locked` | `BOOLEAN` |  | X | `FALSE` | 계정 잠금 여부. `login_failure_count` 5회 도달 시 TRUE, 관리자 잠금 해제로 FALSE 복귀 |
+| `status` | `VARCHAR(12)` |  | X | `ACTIVE` | 계정 상태. `ACTIVE`(정상) / `SUSPENDED`(이용정지). 관리자만 바꾼다. SUSPENDED면 비밀번호가 맞아도 로그인을 거부한다(ATH0106). 비밀번호 5회 오류 잠금(`account_locked`)과 별개이며 둘이 동시에 걸릴 수 있다 |
 | `last_login_at` | `DATETIME(6)` |  | O |  | 가장 최근 로그인 시각. 대시보드의 `currentLoginAt` |
 | `last_login_ip` | `VARCHAR(45)` |  | O |  | 가장 최근 로그인 IP. 대시보드의 `currentLoginIp` |
 | `previous_login_at` | `DATETIME(6)` |  | O |  | 직전 로그인 시각. 대시보드의 `previousLoginAt`. 부정 접속을 고객이 알아채는 단서 |
@@ -97,6 +99,12 @@
 | UNIQUE | `uk_customer_user_id` | `user_id` |
 | UNIQUE | `uk_customer_email` | `email` |
 | UNIQUE | `uk_customer_existing_bank_customer_id` | `existing_bank_customer_id` |
+
+**CHECK 제약**
+
+| 이름 | 조건 | 설명 |
+| --- | --- | --- |
+| `ck_customer_status` | `status IN ('ACTIVE', 'SUSPENDED')` | 계정 상태는 정상·이용정지 중 하나여야 한다. |
 
 ---
 
@@ -447,6 +455,9 @@
 | `error_message` | `VARCHAR(200)` |  | O |  | 실패 시 사유 문구 |
 | `transferred_at` | `DATETIME(6)` |  | X |  | 이체 처리 일시 |
 | `trade_date` | `DATE` |  | O |  | **거래일** — 이 이체가 귀속되는 영업일. 거래 시점의 `BusinessDateProvider.today()` 값이다. 휴일 거래는 다음 영업일이 된다([glossary](phase2/glossary.md) 7번). **마감 시작~영업일 전환 사이 거래의 거래일은 PH-43에서 정한다.** 성공·실패(ERROR) 행 모두 채운다 — 실패 행은 원장 없이 이 테이블에만 남는다. 자동·예약이체는 휴일에도 지정일에 실행되므로(REQ-AUTO-001), 휴일에 실행된 회차의 거래일도 다음 영업일이다 — 실행일(`execution_date`, 달력 날짜)과 거래일이 다를 수 있다. P4 대입 전 행은 NULL이다 |
+| `invalidated_at` | `DATETIME(6)` |  | O |  | 정정 체인으로 **무효화된 시각**. NULL이면 유효한 거래다. 무효화는 `status`를 바꾸지 않는다 — `status`는 처리 결과(성공·실패)이고 무효화는 그 뒤에 일어나는 별개의 사건이다. SUCCESS인 원거래만 무효화되며 한 번 무효화되면 되돌리지 않는다(PH-80) |
+| `ref_transfer_id` | `BIGINT` | **FK** | O |  | 정정 체인의 **원거래** → `transfer.transfer_id`. 취소정정·정상거래 모두 원거래를 가리키므로 원거래 하나로 체인 전체를 찾는다. 일반 거래는 NULL |
+| `correction_type` | `VARCHAR(12)` |  | O |  | 정정 체인에서의 역할. `REVERSAL`(취소정정 — 원거래와 반대 방향) / `REPOST`(정상거래 — 원래 의도한 거래). 일반 거래는 NULL. `ref_transfer_id`와 함께 있거나 함께 없다 |
 | `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
 
 **인덱스**
@@ -456,6 +467,7 @@
 | UNIQUE | `uk_transfer_txno` | `transaction_number` |
 | INDEX | `ix_transfer_wacc` | `withdrawal_account_id, transferred_at DESC` |
 | UNIQUE | `uk_transfer_source_execution_date` | `source_type, source_id, execution_date` |
+| UNIQUE | `uk_transfer_correction` | `ref_transfer_id, correction_type` — 원거래 하나에 취소정정·정상거래는 각각 1건. 동시 정정을 DB가 막는다 |
 
 **CHECK 제약**
 
@@ -464,6 +476,8 @@
 | `ck_transfer_amount` | `amount > 0` |
 | `ck_transfer_fee` | `fee >= 0` |
 | `ck_transfer_selfsend` | `withdrawal_account_id <> deposit_account_id` |
+| `ck_transfer_correction_type` | `correction_type IN ('REVERSAL', 'REPOST')` |
+| `ck_transfer_correction_ref` | `(correction_type IS NULL) = (ref_transfer_id IS NULL)` — 반쪽 정정 금지 |
 
 ---
 
@@ -471,7 +485,7 @@
 
 > 원장 (APPEND-ONLY. UPDATE/DELETE 금지)
 
-**APPEND-ONLY.** `UPDATE`·`DELETE`를 금지한다. 취소는 반대 방향 기표를 새로 쌓는다. `occurred_at` 기준 RANGE 파티션이라 FK를 선언할 수 없고, 파티션 키가 PK에 포함돼야 해서 PK가 복합키다. 파티션 범위와 유지보수 절차는 [flyway_guide.md](flyway_guide.md) §5를 따른다.
+**APPEND-ONLY.** `UPDATE`·`DELETE`를 금지한다. 취소는 반대 방향 기표를 새로 쌓는다. **예외는 `reversed` 하나다** — 반대기표를 쌓을 때 원거래 행의 이 값만 `FALSE`→`TRUE`로 한 번 세운다(정정 체인, PH-80). 금액·잔액·시각은 어떤 경우에도 바꾸지 않는다. `occurred_at` 기준 RANGE 파티션이라 FK를 선언할 수 없고, 파티션 키가 PK에 포함돼야 해서 PK가 복합키다. 파티션 범위와 유지보수 절차는 [flyway_guide.md](flyway_guide.md) §5를 따른다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
@@ -876,7 +890,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 
 2차에 신설(PH-20, #451). 이자 지급(P2)과 타행 이체(P4)가 들어오면서 예수금 안의 이동만 있던 전제가 깨져 회계 원장이 필요해졌다.
 
-Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준으로 삼되 두 가지는 다르다. **금액을 `BIGINT` 원 단위 정수로 둔다**(Fineract 는 `DECIMAL(19,6)`, 절대규칙 5). **전표를 별도 테이블로 뺀다**(Fineract 는 `transaction_id` 를 공유하는 분개 묶음이 전표 역할) — 전표 단위 차대변 일치를 DB 제약으로 걸고 채번 규칙을 둘 자리가 필요하다.
+Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준으로 삼되 두 가지는 다르다. **금액을 `BIGINT` 원 단위 정수로 둔다**(Fineract 는 `DECIMAL(19,6)`, 절대규칙 5). **전표를 별도 테이블로 뺀다**(Fineract 는 `transaction_id` 를 공유하는 분개 묶음이 전표 역할) — 전표 단위로 차대변을 검증하고 채번 규칙을 둘 자리가 필요하다. 차대변 검증 자체는 Fineract 와 같이 애플리케이션에서만 한다([gl_journal_patterns.md](phase2/gl_journal_patterns.md) §2).
 
 ## `gl_account`
 
@@ -906,7 +920,7 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 
 > 전표 — 분개를 담는 단위
 
-거래 1건이 장부에 남긴 기표 단위다. 분개 여러 줄을 담고 **전표 하나 안에서 차변 합계와 대변 합계가 같아야 한다**(검증은 PH-21). 전표번호는 영업일 + 유형 + 일련번호이고 채번 규칙도 PH-21 이다.
+거래 1건이 장부에 남긴 기표 단위다. 분개 여러 줄을 담고 **전표 하나 안에서 차변 합계와 대변 합계가 같아야 한다.** 이 검증은 도메인(`gl.domain.Voucher`)에서만 하고 DB 제약은 걸지 않는다 — 근거는 [gl_journal_patterns.md](phase2/gl_journal_patterns.md) §2. 전표번호 `yyyyMMdd-TTT-NNNNNN` 은 `gl_voucher_sequence` 가 채번한다.
 
 `updated_at` 이 없다. 전표는 수정하지 않는다 — 틀리면 지우거나 고치지 않고 정정 전표를 새로 세운다(용어표 "정정 체인"). 수정 시각 칸이 있으면 고쳐도 되는 것처럼 읽힌다.
 
@@ -972,6 +986,29 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 | `ck_gl_journal_entry_line_no` | `line_no > 0` | 줄 번호는 1부터다. `NOT NULL`·UNIQUE 만으로는 0 과 음수가 통과한다 |
 
 **전표 FK 가 복합인 이유.** `voucher_no` 만 참조하면 전표와 다른 `trade_date` 를 가진 분개가 저장되고, 그대로 날짜별 시산표 집계가 틀어진다. 복제본이 원본과 같도록 DB 가 강제한다 — 특히 P6 시드 생성기(PH-60b)는 애플리케이션을 거치지 않고 600만 건을 직접 INSERT 하므로 애플리케이션 규약으로는 막을 수 없다.
+
+---
+
+## `gl_voucher_sequence`
+
+> 전표번호 일련번호 채번 (PH-21)
+
+전표번호 끝 6자리를 (거래일, 유형)마다 1부터 채번한다. 구조는 `transaction_sequence` 와 같다. 카운터는 기표 트랜잭션과 **별도로 커밋**한다 — 같은 트랜잭션이면 이체가 커밋될 때까지 행 락을 잡아 같은 날 같은 유형의 기표가 직렬화된다. 대가로 기표가 롤백되면 결번이 생긴다.
+
+그날 행이 없으면 `gl_voucher` 에 이미 있는 가장 큰 번호 다음부터 시작한다. 시드(PH-60b)는 이 카운터를 거치지 않고 전표를 직접 넣기 때문이다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `trade_date` | `DATE` | **PK** | X |  | 전표의 거래일. 전표번호 앞 8자리와 같다 |
+| `tx_type` | `VARCHAR(24)` | **PK** | X |  | `gl_voucher.tx_type` 과 같은 값 |
+| `last_seq` | `INT` |  | X |  | 해당 거래일·유형에서 마지막으로 나간 일련번호 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 마지막 채번 시각 |
+
+**CHECK 제약**
+
+| 이름 | 조건 |
+| --- | --- |
+| `ck_gl_voucher_sequence_range` | `last_seq BETWEEN 1 AND 999999` |
 
 ---
 

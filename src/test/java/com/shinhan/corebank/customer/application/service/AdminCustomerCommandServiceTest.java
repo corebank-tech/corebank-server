@@ -18,11 +18,13 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerOperationCommand;
 import com.shinhan.corebank.customer.application.port.in.AdminPasswordResetResult;
+import com.shinhan.corebank.customer.application.port.in.AdminStatusChangeResult;
 import com.shinhan.corebank.customer.application.port.in.AdminUnlockResult;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.application.port.out.TemporaryPasswordGeneratorPort;
 import com.shinhan.corebank.customer.domain.exception.CustomerErrorCode;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -157,6 +159,67 @@ class AdminCustomerCommandServiceTest {
         assertThat(detail).containsEntry("targetCustomerId", TARGET_ID).containsEntry("reason", "CUSTOMER_NOT_FOUND");
     }
 
+    @Test
+    @DisplayName("정상 계정을 정지하면 상태만 저장하고 바뀐 상태를 감사 1행에 남긴다")
+    void suspendsActiveAccount() {
+        given(customerPersistencePort.findByIdForUpdate(TARGET_ID)).willReturn(Optional.of(customer(2, false)));
+
+        AdminStatusChangeResult result = service.changeStatus(command(TARGET_ID), CustomerStatus.SUSPENDED);
+
+        assertThat(result.customerId()).isEqualTo(TARGET_ID);
+        assertThat(result.status()).isEqualTo(CustomerStatus.SUSPENDED);
+        ArgumentCaptor<Customer> saved = ArgumentCaptor.forClass(Customer.class);
+        verify(customerPersistencePort).updateStatus(saved.capture());
+        assertThat(saved.getValue().getStatus()).isEqualTo(CustomerStatus.SUSPENDED);
+        assertThat(saved.getValue().getLoginFailureCount()).isEqualTo(2);
+
+        Map<String, Object> detail = captureDetail(AuditEventType.CUSTOMER_STATUS_CHANGE, true);
+        assertThat(detail).containsEntry("targetCustomerId", TARGET_ID);
+        assertThat(detail.get("changes")).isEqualTo(Map.of("status", "SUSPENDED"));
+        assertNoForbiddenKeys(detail);
+    }
+
+    @Test
+    @DisplayName("이미 같은 상태로 바꾸면 200 결과를 주고 changes는 비어 있다")
+    void recordsEmptyChangesWhenStatusUnchanged() {
+        given(customerPersistencePort.findByIdForUpdate(TARGET_ID)).willReturn(Optional.of(customer(0, false)));
+
+        AdminStatusChangeResult result = service.changeStatus(command(TARGET_ID), CustomerStatus.ACTIVE);
+
+        assertThat(result.status()).isEqualTo(CustomerStatus.ACTIVE);
+        Map<String, Object> detail = captureDetail(AuditEventType.CUSTOMER_STATUS_CHANGE, true);
+        assertThat(detail.get("changes")).isEqualTo(Map.of());
+    }
+
+    @Test
+    @DisplayName("상태 변경도 자기 자신 대상이면 CMN0102로 거부하고 실패 감사를 남긴다")
+    void rejectsSelfTargetOnStatusChange() {
+        assertThatThrownBy(() -> service.changeStatus(command(ADMIN_ID), CustomerStatus.SUSPENDED))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.FORBIDDEN);
+
+        verify(customerPersistencePort, never()).findByIdForUpdate(anyLong());
+        verify(customerPersistencePort, never()).updateStatus(any());
+        Map<String, Object> detail = captureDetail(AuditEventType.CUSTOMER_STATUS_CHANGE, false);
+        assertThat(detail).containsEntry("targetCustomerId", ADMIN_ID).containsEntry("reason", "SELF_TARGET");
+    }
+
+    @Test
+    @DisplayName("상태 변경 대상이 없으면 ATH0201로 거부하고 실패 감사를 남긴다")
+    void rejectsMissingTargetOnStatusChange() {
+        given(customerPersistencePort.findByIdForUpdate(TARGET_ID)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.changeStatus(command(TARGET_ID), CustomerStatus.SUSPENDED))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(CustomerErrorCode.CUSTOMER_NOT_FOUND);
+
+        verify(customerPersistencePort, never()).updateStatus(any());
+        Map<String, Object> detail = captureDetail(AuditEventType.CUSTOMER_STATUS_CHANGE, false);
+        assertThat(detail).containsEntry("targetCustomerId", TARGET_ID).containsEntry("reason", "CUSTOMER_NOT_FOUND");
+    }
+
     // AuditLogJpaEntity는 금지 키가 있으면 저장 시점에 예외를 던진다 — 모킹한 단위 테스트에서도 미리 잡는다.
     @SuppressWarnings("unchecked")
     private void assertNoForbiddenKeys(Map<String, Object> detail) {
@@ -193,6 +256,7 @@ class AdminCustomerCommandServiceTest {
                 "01012345678",
                 loginFailureCount,
                 accountLocked,
+                CustomerStatus.ACTIVE,
                 null,
                 null,
                 null,

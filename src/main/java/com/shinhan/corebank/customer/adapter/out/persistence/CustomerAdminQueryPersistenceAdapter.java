@@ -32,6 +32,7 @@ public class CustomerAdminQueryPersistenceAdapter implements CustomerAdminQueryP
             customerJpaEntity.phoneNumber,
             customerJpaEntity.loginFailureCount,
             customerJpaEntity.accountLocked,
+            customerJpaEntity.status,
             customerJpaEntity.lastLoginAt,
             customerJpaEntity.joinedAt);
 
@@ -83,7 +84,8 @@ public class CustomerAdminQueryPersistenceAdapter implements CustomerAdminQueryP
             condition.userId() != null ? customerJpaEntity.userId.startsWith(condition.userId()) : null,
             condition.userName() != null ? customerJpaEntity.userName.startsWith(condition.userName()) : null,
             condition.email() != null ? customerJpaEntity.email.eq(condition.email()) : null,
-            accountLockedEq(condition.accountLocked())
+            accountLockedEq(condition.accountLocked()),
+            condition.status() != null ? customerJpaEntity.status.eq(condition.status()) : null
         };
     }
 

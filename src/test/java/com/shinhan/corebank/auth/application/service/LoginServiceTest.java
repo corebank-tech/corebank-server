@@ -140,6 +140,24 @@ class LoginServiceTest {
         verify(recordLoginAuditPort).record(1L, REQUEST_IP, false, LoginAuditReason.ACCOUNT_LOCKED);
     }
 
+    // 비밀번호가 맞은 이용정지 계정은 정지 오류를 반환하고 실패 감사를 남김
+    @Test
+    @DisplayName("비밀번호가 일치한 이용정지 계정은 ATH0106을 반환한다")
+    void suspendedAccountWithMatchingPassword() {
+        LoginCommand command = loginCommand();
+        given(loginCustomerPort.findByUserId(command.userId())).willReturn(Optional.of(loginCustomer(0, false)));
+        given(passwordHashVerifierPort.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
+        given(loginSuccessProcessor.process(1L, LOGIN_AT, REQUEST_IP))
+                .willReturn(LoginSuccessUpdateResult.ACCOUNT_SUSPENDED);
+
+        LoginFailedException exception = catchThrowableOfType(() -> service.login(command), LoginFailedException.class);
+
+        assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.ACCOUNT_SUSPENDED);
+        assertThat(exception.getAttemptResult()).isEmpty();
+        verify(recordLoginAuditPort).record(1L, REQUEST_IP, false, LoginAuditReason.ACCOUNT_SUSPENDED);
+        verify(loginCustomerPort, never()).recordLoginFailure(1L);
+    }
+
     // 잠금 전 비밀번호 불일치는 저장된 최신 횟수와 잔여 횟수를 노출
     @Test
     @DisplayName("비밀번호 불일치 4회는 최신 횟수와 잔여 횟수로 ATH0101을 반환한다")
