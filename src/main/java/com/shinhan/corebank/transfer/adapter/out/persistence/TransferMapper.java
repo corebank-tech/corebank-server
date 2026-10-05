@@ -32,6 +32,9 @@ public class TransferMapper {
                 .errorMessage(domain.getErrorMessage())
                 .transferredAt(domain.getTransferredAt())
                 .createdAt(domain.getCreatedAt())
+                .invalidatedAt(domain.getInvalidatedAt())
+                .refTransferId(domain.getRefTransferId())
+                .correctionType(domain.getCorrectionType())
                 .build();
     }
 
@@ -62,6 +65,9 @@ public class TransferMapper {
                 .errorMessage(entity.getErrorMessage())
                 .transferredAt(entity.getTransferredAt())
                 .createdAt(entity.getCreatedAt())
+                .invalidatedAt(entity.getInvalidatedAt())
+                .refTransferId(entity.getRefTransferId())
+                .correctionType(entity.getCorrectionType())
                 .build();
     }
 }

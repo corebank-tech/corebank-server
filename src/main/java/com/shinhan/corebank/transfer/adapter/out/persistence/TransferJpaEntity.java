@@ -1,6 +1,7 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.transfer.domain.CorrectionType;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
@@ -89,4 +90,14 @@ public class TransferJpaEntity {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime createdAt;
+
+    @Column(name = "invalidated_at", columnDefinition = "DATETIME(6)")
+    private LocalDateTime invalidatedAt;
+
+    @Column(name = "ref_transfer_id")
+    private Long refTransferId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "correction_type", length = 12)
+    private CorrectionType correctionType;
 }

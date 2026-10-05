@@ -5,12 +5,25 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface LedgerEntryJpaRepository extends JpaRepository<LedgerEntryJpaEntity, LedgerEntryId> {
 
     List<LedgerEntryJpaEntity> findByTransactionNumber(String transactionNumber);
+
+    /**
+     * 원거래 행 하나에 reversed를 세운다. APPEND-ONLY의 유일한 예외다(schema_reference.md ledger_entry).
+     * PK 전체로 찍어 파티션 하나만 건드리고, 아직 취소되지 않은 행만 바꿔 바뀐 행 수로 이중 취소를 가려낸다.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(
+            """
+        UPDATE LedgerEntryJpaEntity l SET l.reversed = true
+        WHERE l.ledgerEntryId = :ledgerEntryId AND l.occurredAt = :occurredAt AND l.reversed = false
+        """)
+    int markReversed(@Param("ledgerEntryId") Long ledgerEntryId, @Param("occurredAt") LocalDateTime occurredAt);
 
     /**
      * 지정 기간(fromInclusive~toExclusive)에 원장 기표가 있었던 계좌 ID를 중복 없이 반환한다.
