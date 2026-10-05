@@ -185,11 +185,13 @@ public final class MockExternalServer implements AutoCloseable {
         if ("POST".equals(exchange.getRequestMethod())) {
             Map<String, String> query = parseQuery(exchange.getRequestURI().getRawQuery());
             try {
-                faults.set(
-                        FaultSwitch.Mode.valueOf(query.getOrDefault("mode", "")),
-                        Duration.ofMillis(Long.parseLong(query.getOrDefault("delayMs", "0"))));
+                long delayMs = Long.parseLong(query.getOrDefault("delayMs", "0"));
+                if (delayMs < 0) {
+                    throw new IllegalArgumentException("delayMs는 0 이상이다");
+                }
+                faults.set(FaultSwitch.Mode.valueOf(query.getOrDefault("mode", "")), Duration.ofMillis(delayMs));
             } catch (IllegalArgumentException e) {
-                reply(exchange, 400, "mode는 NONE·DELAY·NO_RESPONSE·DUPLICATE, delayMs는 밀리초 정수다");
+                reply(exchange, 400, "mode는 NONE·DELAY·NO_RESPONSE·DUPLICATE, delayMs는 0 이상의 밀리초 정수다");
                 return;
             }
             LOG.log(Level.INFO, "장애 스위치 변경 — {0}", faults.current());

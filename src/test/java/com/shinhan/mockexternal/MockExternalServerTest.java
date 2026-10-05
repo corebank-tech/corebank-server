@@ -233,6 +233,20 @@ class MockExternalServerTest {
                     .isEqualTo(ResponseCode.APPROVED);
         }
 
+        // 음수 지연은 sleep이 바로 리턴해 실제로는 NONE처럼 돌면서 스위치에는 DELAY로 보인다.
+        @Test
+        @DisplayName("음수 지연은 400으로 거부하고 스위치를 바꾸지 않는다")
+        void rejectsNegativeDelay() throws Exception {
+            HttpResponse<String> response = setFault("mode=DELAY&delayMs=-1");
+
+            assertThat(response.statusCode()).isEqualTo(400);
+            HttpResponse<String> current = http.send(
+                    HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + server.adminPort() + "/faults"))
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(current.body()).isEqualTo("NONE delayMs=0");
+        }
+
         @Test
         @DisplayName("health는 200 OK다")
         void health() throws Exception {
