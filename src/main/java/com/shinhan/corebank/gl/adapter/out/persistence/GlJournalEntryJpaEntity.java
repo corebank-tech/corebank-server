@@ -68,4 +68,29 @@ public class GlJournalEntryJpaEntity {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime createdAt;
+
+    private GlJournalEntryJpaEntity(
+            String voucherNo,
+            Short lineNo,
+            String accountCode,
+            JournalDirection drCr,
+            Long amount,
+            LocalDate tradeDate) {
+        this.voucherNo = voucherNo;
+        this.lineNo = lineNo;
+        this.accountCode = accountCode;
+        this.drCr = drCr;
+        this.amount = amount;
+        this.tradeDate = tradeDate;
+    }
+
+    static GlJournalEntryJpaEntity of(
+            String voucherNo,
+            Short lineNo,
+            String accountCode,
+            JournalDirection drCr,
+            Long amount,
+            LocalDate tradeDate) {
+        return new GlJournalEntryJpaEntity(voucherNo, lineNo, accountCode, drCr, amount, tradeDate);
+    }
 }
