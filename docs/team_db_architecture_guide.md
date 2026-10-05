@@ -111,3 +111,11 @@ flowchart TD
 | **JPA DDL 모드** | `validate` (스키마 불일치 시 에러) | `validate` | `validate` |
 | **시드 데이터** | `DemoDataLoader` 자동 로딩 ⭕ | 자동 로딩 ❌ (순수 테스트 데이터만) | `prod,qa-seed` 팀 QA 배포는 자동 로딩 ⭕ / `prod` 단독은 ❌ |
 | **타임존 관리** | DB/JVM/로그 모두 **KST** (변환 없음) | DB/JVM/로그 모두 **KST** (변환 없음) | DB/JVM/로그 모두 **KST** (변환 없음) |
+| **커넥션 풀** (`hikari.maximum-pool-size`) | 10 | 16 | 20 |
+
+**운영 풀 크기 예산** — `풀 × WAS 대수 + 여유 ≤ RDS max_connections` 를 지킨다(#553).
+
+- RDS `db.t4g.micro` 기본 파라미터 그룹의 `max_connections` 는 **60** 이다.
+- 풀 10 상태의 `Max_used_connections` 가 25 였다. WAS 밖 접속(시드 적재·콘솔·bastion)이 최대 약 15개 겹친다고 보고 여유를 15로 잡는다.
+- EC2 1대 × 20 + 15 = 35. WAS 2대(PH-56)가 되면 40 + 15 = 55 로 빠듯하니 그때 다시 계산한다.
+- `connection-timeout`(3000ms)은 늘리지 않는다. 통로 수가 그대로면 실패를 늦게 알릴 뿐 처리량은 변하지 않는다.
