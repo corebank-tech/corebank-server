@@ -1,14 +1,20 @@
 package com.shinhan.corebank.auth.adapter.in.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.auth.application.port.in.LoginResult;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,8 +23,13 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
+import org.springframework.security.web.authentication.session.CompositeSessionAuthenticationStrategy;
+import org.springframework.security.web.authentication.session.RegisterSessionAuthenticationStrategy;
+import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 
 class SessionLoginManagerTest {
 
@@ -27,8 +38,14 @@ class SessionLoginManagerTest {
 
     private final HttpSessionSecurityContextRepository repository = new HttpSessionSecurityContextRepository();
 
-    private final SessionLoginManager manager =
-            new SessionLoginManager(new ChangeSessionIdAuthenticationStrategy(), repository, FIXED_CLOCK);
+    private final SessionRegistryImpl sessionRegistry = new SessionRegistryImpl();
+
+    private final SessionLoginManager manager = new SessionLoginManager(
+            new CompositeSessionAuthenticationStrategy(List.of(
+                    new ChangeSessionIdAuthenticationStrategy(),
+                    new RegisterSessionAuthenticationStrategy(sessionRegistry))),
+            repository,
+            FIXED_CLOCK);
 
     @AfterEach
     void clearSecurityContext() {
@@ -51,6 +68,9 @@ class SessionLoginManagerTest {
         assertThat(authentication.getAuthorities()).extracting("authority").containsExactly("ROLE_CUSTOMER");
         assertThat(authentication.getCredentials()).isNull();
         assertThat(SecurityContextHolder.getContext()).isSameAs(context);
+        assertThat(sessionRegistry.getAllSessions(authentication.getPrincipal(), false))
+                .extracting("sessionId")
+                .containsExactly(request.getSession(false).getId());
     }
 
     @Test
@@ -74,6 +94,32 @@ class SessionLoginManagerTest {
                 new LoginResult(1L, "login-user", "홍길동"), request, new MockHttpServletResponse());
 
         assertThat(sessionExpiresAt).isEqualTo(OffsetDateTime.parse("2026-08-16T10:10:00+09:00"));
+    }
+
+    @Test
+    @DisplayName("인증정보 저장 후 세션이 없으면 설정 오류로 처리한다")
+    void rejectsMissingSessionAfterAuthentication() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        SessionLoginManager invalidManager = new SessionLoginManager(
+                mock(SessionAuthenticationStrategy.class), mock(SecurityContextRepository.class), FIXED_CLOCK);
+        when(request.getSession(false)).thenReturn(null);
+
+        assertThatThrownBy(() ->
+                        invalidManager.establishSession(new LoginResult(1L, "login-user", "홍길동"), request, response))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("로그인 세션이 생성되지 않았습니다.");
+    }
+
+    @Test
+    @DisplayName("세션 만료시간이 0 이하면 설정 오류로 처리한다")
+    void rejectsNonPositiveSessionTimeout() {
+        MockHttpServletRequest request = requestWithSession(0);
+
+        assertThatThrownBy(() -> manager.establishSession(
+                        new LoginResult(1L, "login-user", "홍길동"), request, new MockHttpServletResponse()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("세션 만료시간은 1초 이상이어야 합니다.");
     }
 
     private MockHttpServletRequest requestWithSession(int timeoutSeconds) {

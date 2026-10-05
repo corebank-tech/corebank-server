@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.shinhan.corebank.auth.application.event.LoginPasswordChangedEvent;
 import com.shinhan.corebank.auth.application.port.in.ChangeLoginPasswordCommand;
 import com.shinhan.corebank.auth.domain.exception.AuthErrorCode;
 import com.shinhan.corebank.common.audit.AuditEventType;
@@ -31,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 // 로그인 비밀번호 변경의 검증 순서와 저장·감사 결과를 검증한다.
@@ -49,11 +51,15 @@ class LoginPasswordChangeServiceTest {
     @Mock
     AuditLogService auditLogService;
 
+    @Mock
+    ApplicationEventPublisher eventPublisher;
+
     private LoginPasswordChangeService service;
 
     @BeforeEach
     void setUp() {
-        service = new LoginPasswordChangeService(customerFacade, passwordEncoder, auditLogService, CLOCK);
+        service =
+                new LoginPasswordChangeService(customerFacade, passwordEncoder, auditLogService, eventPublisher, CLOCK);
     }
 
     @Test
@@ -73,6 +79,7 @@ class LoginPasswordChangeServiceTest {
                 .resetPassword(new ResetCustomerPasswordCommand(
                         1L, "old-hash", "new-hash", LocalDateTime.of(2026, 9, 20, 18, 30)));
         verify(auditLogService).record(1L, null, AuditEventType.LOGIN_PASSWORD_CHANGE, "127.0.0.1", true, Map.of());
+        verify(eventPublisher).publishEvent(new LoginPasswordChangedEvent(1L));
     }
 
     @Test
@@ -191,6 +198,7 @@ class LoginPasswordChangeServiceTest {
         assertThat(exception.getErrorCode()).isEqualTo(expected);
         verify(customerFacade, never()).resetPassword(any());
         verify(auditLogService, never()).record(any(), any(), any(), any(), anyBoolean(), any());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     private void assertPostSaveError(ChangeLoginPasswordCommand command, ErrorCode expected) {
@@ -198,6 +206,7 @@ class LoginPasswordChangeServiceTest {
         assertThat(exception.getErrorCode()).isEqualTo(expected);
         verify(customerFacade).resetPassword(any());
         verify(auditLogService, never()).record(any(), any(), any(), any(), anyBoolean(), any());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     private ChangeLoginPasswordCommand command(String current, String password, String confirmation) {
