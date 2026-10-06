@@ -489,10 +489,13 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `ProcessResultStatus` | `SUCCESS` | 정상 |
 |  | `ERROR` | 오류 |
 |  | `PROCESSING` | 처리중 (응답 유실·타임아웃 시에만) |
+|  | `TIMEOUT` | 처리 불명. 대외 응답이 없어 결과를 모른다. 실패가 아니며 재시도하지 않고 조회거래로 확정한다 (PH-80, #564) |
 
 **사용 도메인**: 즉시이체 · 자동이체 회차 실행결과 · 상품가입 결과 · 예약이체 취소/자동이체 해지 **다건 응답의 건별 결과**(#330 — `items[].status`)
 
-> `PROCESSING`을 실제로 관측할 수 있는 곳은 **회차 테이블**(`auto_transfer_execution`·`scheduled_transfer_execution`)입니다. `transfer` 행은 INSERT부터 확정까지가 한 트랜잭션이라 `SUCCESS`/`ERROR`로만 커밋되므로, 이체 응답과 이체결과 목록에는 `PROCESSING`이 나오지 않습니다. (#377)
+> `PROCESSING`을 실제로 관측할 수 있는 곳은 **회차 테이블**(`auto_transfer_execution`·`scheduled_transfer_execution`)입니다. `transfer` 행은 INSERT부터 확정까지가 한 트랜잭션이라 `SUCCESS`/`ERROR`/`TIMEOUT`으로만 커밋되므로, 이체 응답과 이체결과 목록에는 `PROCESSING`이 나오지 않습니다. (#377)
+
+> `TIMEOUT`은 이체(`transfer`)에만 생깁니다. 이체 응답에서 `TIMEOUT`이면 `transactionNumber`만 채워지고 나머지는 null입니다. 화면은 "처리 결과 확인 중"으로 안내하고 재시도 버튼을 두지 않습니다(FE B-9). 자동이체 회차·상품가입에는 나오지 않습니다.
 
 > 상품가입이 쓰던 `SUCCESS`/`FAILED`/`PROCESSING`은 이 Enum으로 통일합니다. (REQ-TRSF-017)
 
