@@ -13,6 +13,9 @@ import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
+import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase;
+import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase.ProductSubscriptionDepositCommand;
+import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase.ProductSubscriptionDepositResult;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.application.service.TransferExecutionService;
@@ -47,6 +50,9 @@ class GlLedgerPostingHookTest extends IntegrationTestSupport {
     private GlLedgerPostingHook hook;
 
     @Autowired
+    private ProductSubscriptionDepositUseCase productSubscriptionDepositUseCase;
+
+    @Autowired
     private EntityManager entityManager;
 
     @Autowired
@@ -76,11 +82,12 @@ class GlLedgerPostingHookTest extends IntegrationTestSupport {
 
     @AfterEach
     void cleanUpCommittedData() {
+        // 상품가입은 transfer 행이 없으므로 원장 거래번호로 전표를 찾는다.
         jdbcTemplate.update("DELETE e FROM gl_journal_entry e JOIN gl_voucher v ON v.voucher_no = e.voucher_no"
-                + " JOIN transfer t ON t.transaction_number = v.reference_key"
-                + " WHERE t.withdrawal_account_id = 101 AND t.deposit_account_id = 202");
-        jdbcTemplate.update("DELETE v FROM gl_voucher v JOIN transfer t ON t.transaction_number = v.reference_key"
-                + " WHERE t.withdrawal_account_id = 101 AND t.deposit_account_id = 202");
+                + " WHERE v.reference_key IN"
+                + " (SELECT transaction_number FROM ledger_entry WHERE account_id IN (101, 202))");
+        jdbcTemplate.update("DELETE FROM gl_voucher WHERE reference_key IN"
+                + " (SELECT transaction_number FROM ledger_entry WHERE account_id IN (101, 202))");
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202)");
         jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id = 101 AND deposit_account_id = 202");
         jdbcTemplate.update("UPDATE account SET balance = 100000, status = 'ACTIVE' WHERE account_id IN (101, 202)");
@@ -103,6 +110,23 @@ class GlLedgerPostingHookTest extends IntegrationTestSupport {
                         voucher.get("voucher_no")))
                 .extracting(row -> row.get("account_code"), row -> row.get("dr_cr"), row -> row.get("amount"))
                 .containsExactly(tuple("20100", "DEBIT", 30_000L), tuple("20100", "CREDIT", 30_000L));
+    }
+
+    @Test
+    @DisplayName("상품가입 초입금 1건에 SUB 전표 1건이 원장 거래번호를 참조 키로 선다")
+    void productSubscriptionDepositPostsOneSubscriptionVoucher() {
+        ProductSubscriptionDepositResult result =
+                productSubscriptionDepositUseCase.deposit(new ProductSubscriptionDepositCommand(101L, 202L, 20_000L));
+
+        Map<String, Object> voucher = jdbcTemplate.queryForMap(
+                "SELECT voucher_no, tx_type FROM gl_voucher WHERE reference_key = ?", result.transactionNumber());
+        assertThat(voucher.get("tx_type")).isEqualTo("PRODUCT_SUBSCRIPTION");
+        assertThat((String) voucher.get("voucher_no")).matches("^[0-9]{8}-SUB-[0-9]{6}$");
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT account_code, dr_cr, amount FROM gl_journal_entry WHERE voucher_no = ? ORDER BY line_no",
+                        voucher.get("voucher_no")))
+                .extracting(row -> row.get("account_code"), row -> row.get("dr_cr"), row -> row.get("amount"))
+                .containsExactly(tuple("20100", "DEBIT", 20_000L), tuple("20100", "CREDIT", 20_000L));
     }
 
     @Test
