@@ -2,6 +2,7 @@ package com.shinhan.corebank.transfer.application.port.out;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.SortedMap;
 
 /**
  * 대사 배치(#378)가 원장 합계와 비교할 "화면상 잔액"(account.balance)을 조회한다.
@@ -12,4 +13,7 @@ public interface AccountBalanceSnapshotPort {
 
     /** 존재하지 않는 계좌 ID는 결과 맵에서 생략된다. */
     Map<Long, Long> findBalancesByAccountIds(Collection<Long> accountIds);
+
+    /** 전수 대사(#468)용 keyset 페이지. afterAccountId 다음 계좌부터 오름차순 최대 limit개, 비면 끝이다. */
+    SortedMap<Long, Long> findBalancesAfter(long afterAccountId, int limit);
 }

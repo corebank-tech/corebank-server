@@ -4,6 +4,7 @@ import com.shinhan.corebank.account.api.AccountBalanceQuery;
 import com.shinhan.corebank.transfer.application.port.out.AccountBalanceSnapshotPort;
 import java.util.Collection;
 import java.util.Map;
+import java.util.SortedMap;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,5 +25,10 @@ public class AccountBalanceSnapshotPersistenceAdapter implements AccountBalanceS
     @Override
     public Map<Long, Long> findBalancesByAccountIds(Collection<Long> accountIds) {
         return accountBalanceQuery.findBalancesByAccountIds(accountIds);
+    }
+
+    @Override
+    public SortedMap<Long, Long> findBalancesAfter(long afterAccountId, int limit) {
+        return accountBalanceQuery.findBalancesAfter(afterAccountId, limit);
     }
 }
