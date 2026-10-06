@@ -15,15 +15,17 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
 
     private static final String HEADER = "X-Correlation-Id";
     private static final String CORRELATION_ID_KEY = "correlationId";
-    // UUID 형식만 허용 - 응답·로그에 같은 값을 그대로 남기려면 PII가 섞여 들어올 수 없는 형식으로 제한해야 한다(PR #560 2차 리뷰)
+    // 16진수엔 숫자(0-9)가 포함되므로 UUID 형식이어도 세그먼트 안에 계좌번호·전화번호를 그대로
+    // 심을 수 있다 - 형식 검증과 별도로 11자리 이상 연속 숫자 여부까지 봐야 한다(PR #560 3차 리뷰)
     private static final Pattern UUID_PATTERN =
             Pattern.compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
+    private static final Pattern LONG_DIGIT_RUN = Pattern.compile("\\d{11,}");
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String correlationId = request.getHeader(HEADER);
-        if (correlationId == null || !UUID_PATTERN.matcher(correlationId).matches()) {
+        while (correlationId == null || !isSafe(correlationId)) {
             correlationId = UUID.randomUUID().toString();
         }
         response.setHeader(HEADER, correlationId);
@@ -33,5 +35,10 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
         } finally {
             MDC.remove(CORRELATION_ID_KEY);
         }
+    }
+
+    private static boolean isSafe(String value) {
+        return UUID_PATTERN.matcher(value).matches()
+                && !LONG_DIGIT_RUN.matcher(value).find();
     }
 }

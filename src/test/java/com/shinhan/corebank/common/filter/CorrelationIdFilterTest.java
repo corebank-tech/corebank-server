@@ -60,6 +60,24 @@ class CorrelationIdFilterTest {
         assertThat(response.getHeader("X-Correlation-Id")).isEqualTo(seenCorrelationId[0]);
     }
 
+    // 16진수엔 숫자(0-9)가 포함돼, 하이픈 위치만 맞으면 세그먼트 안에 계좌번호를 그대로 심어도
+    // "유효한 UUID"로 통과한다(PR #560 3차 리뷰) - 형식 검증만으로는 못 막던 사례를 실제로 재현한다
+    @Test
+    void 헤더가_UUID_형식이지만_마지막_세그먼트에_계좌번호가_그대로_들어있으면_교체한다() throws Exception {
+        String uuidShapedAccountNumber = "123e4567-e89b-42d3-a456-123456789012";
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-Correlation-Id", uuidShapedAccountNumber);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        String[] seenCorrelationId = new String[1];
+        FilterChain chain = (req, res) -> seenCorrelationId[0] = MDC.get("correlationId");
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(seenCorrelationId[0]).isNotEqualTo(uuidShapedAccountNumber);
+        assertThat(seenCorrelationId[0]).doesNotContainPattern("\\d{11,}");
+        assertThat(response.getHeader("X-Correlation-Id")).isEqualTo(seenCorrelationId[0]);
+    }
+
     // 응답과 로그가 항상 같은 값을 보도록 하는 게 이 필터의 핵심 계약이다 - 교체된 값도 예외가 아님을 명시적으로 검증
     @Test
     void 새로_생성한_ID도_응답헤더와_MDC에_동일하게_들어간다() throws Exception {
