@@ -7,4 +7,7 @@ import java.time.LocalDate;
 public interface LedgerReconciliationBatchUseCase {
 
     void run(LocalDate date);
+
+    // 전 계좌 전수 대사(#468)를 같은 락으로 실행한다. 증분 대사와 동시에 돌지 않는다.
+    void runFull();
 }

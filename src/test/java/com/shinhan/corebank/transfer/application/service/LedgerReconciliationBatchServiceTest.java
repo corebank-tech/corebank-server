@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
+import com.shinhan.corebank.transfer.application.port.in.LedgerFullReconciliationUseCase;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationUseCase;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -30,12 +31,56 @@ class LedgerReconciliationBatchServiceTest {
     LedgerReconciliationUseCase ledgerReconciliationUseCase;
 
     @Mock
+    LedgerFullReconciliationUseCase ledgerFullReconciliationUseCase;
+
+    @Mock
     BatchExecutionLockPort batchExecutionLockPort;
 
     private LedgerReconciliationBatchService service() {
         // 대기 로직을 빠르게 돌리도록 poll 간격 1ms, 최대 대기 5ms(=5회 재확인)로 좁힌다.
         return new LedgerReconciliationBatchService(
-                ledgerReconciliationUseCase, batchExecutionLockPort, Duration.ofMillis(1), Duration.ofMillis(5));
+                ledgerReconciliationUseCase,
+                ledgerFullReconciliationUseCase,
+                batchExecutionLockPort,
+                Duration.ofMillis(1),
+                Duration.ofMillis(5));
+    }
+
+    @Test
+    @DisplayName("전수 대사도 같은 락을 잡고 실행한 뒤 반납한다 — 증분 대사와 동시에 돌지 않는다(#468)")
+    void runFull_acquiresSameLock_reconcilesAll_thenReleases() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+
+        service().runFull();
+
+        InOrder inOrder = inOrder(batchExecutionLockPort, ledgerFullReconciliationUseCase);
+        inOrder.verify(batchExecutionLockPort).tryAcquire(JOB_NAME);
+        inOrder.verify(ledgerFullReconciliationUseCase).reconcileAll();
+        inOrder.verify(batchExecutionLockPort).release(JOB_NAME);
+    }
+
+    @Test
+    @DisplayName("락 선점에 실패하면(증분 대사가 아직 실행 중) 전수 대사를 건너뛴다")
+    void runFull_lockNotAcquired_skips() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(false);
+
+        service().runFull();
+
+        verify(ledgerFullReconciliationUseCase, never()).reconcileAll();
+        verify(batchExecutionLockPort, never()).release(JOB_NAME);
+    }
+
+    @Test
+    @DisplayName("전수 대사 중 예외가 나도 락은 반납된다")
+    void runFull_fails_lockStillReleased() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        doThrow(new IllegalStateException("boom"))
+                .when(ledgerFullReconciliationUseCase)
+                .reconcileAll();
+
+        service().runFull();
+
+        verify(batchExecutionLockPort).release(JOB_NAME);
     }
 
     @Test
