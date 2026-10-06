@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
 public class MaskingConverter extends CompositeConverter<ILoggingEvent> {
 
     private static final Pattern ACCOUNT_NUMBER = Pattern.compile("\\b\\d{12}\\b");
-    private static final Pattern PHONE_NUMBER = Pattern.compile("\\b01\\d{9}\\b");
+    private static final Pattern PHONE_NUMBER = Pattern.compile("\\b\\d{11}\\b");
 
     @Override
     protected String transform(ILoggingEvent event, String in) {

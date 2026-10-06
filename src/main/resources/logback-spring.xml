@@ -12,7 +12,7 @@
                             "level": "%level",
                             "logger": "%logger{36}",
                             "thread": "%thread",
-                            "correlationId": "%mdc{correlationId}",
+                            "correlationId": "%mask(%mdc{correlationId})",
                             "customerId": "%mdc{customerId}",
                             "message": "%mask(%msg)"
                         }
@@ -24,8 +24,9 @@
 
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>logs/corebank.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/corebank.%d{yyyy-MM-dd}.log</fileNamePattern>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/corebank.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>200MB</maxFileSize>
             <maxHistory>30</maxHistory>
             <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>
@@ -38,7 +39,7 @@
                             "level": "%level",
                             "logger": "%logger{36}",
                             "thread": "%thread",
-                            "correlationId": "%mdc{correlationId}",
+                            "correlationId": "%mask(%mdc{correlationId})",
                             "customerId": "%mdc{customerId}",
                             "message": "%mask(%msg)"
                         }

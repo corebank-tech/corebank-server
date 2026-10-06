@@ -89,4 +89,33 @@ class LogbackConfigTest {
         assertThat(json.get("correlationId").asText()).isEqualTo(malicious);
         assertThat(json.has("injected")).isFalse();
     }
+
+    // 클라이언트가 X-Correlation-Id 헤더에 계좌번호 형식 값을 그대로 넣으면, message가 아니라
+    // correlationId 필드로 로그에 남아 마스킹을 비켜갈 수 있었다(PR #560 리뷰). 필드 자체도 가려지는지 확인한다
+    @Test
+    void correlationId에_계좌번호_형식_값이_있어도_가려진다() throws Exception {
+        LoggerContext context = (LoggerContext) org.slf4j.LoggerFactory.getILoggerFactory();
+        context.reset();
+        JoranConfigurator configurator = new JoranConfigurator();
+        configurator.setContext(context);
+        configurator.doConfigure(getClass().getClassLoader().getResource("logback-spring.xml"));
+
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+        System.setOut(new PrintStream(captured));
+
+        String line;
+        try {
+            MDC.put("correlationId", "123456789012");
+            Logger logger = context.getLogger(LogbackConfigTest.class);
+            logger.info("정상 처리");
+        } finally {
+            System.setOut(originalOut);
+            MDC.clear();
+        }
+        line = captured.toString().trim();
+
+        var json = objectMapper.readTree(line);
+        assertThat(json.get("correlationId").asText()).isEqualTo("123******012");
+    }
 }

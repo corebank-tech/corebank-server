@@ -83,7 +83,9 @@ public class SecurityConfig {
                 "Idempotency-Key",
                 // 브라우저가 거래용 일회성 인증 토큰을 헤더로 전송할 수 있도록 preflight에서 허용한다.
                 "Account-Password-Auth-Token",
-                "Otp-Auth-Token"));
+                "Otp-Auth-Token",
+                "X-Correlation-Id"));
+        configuration.setExposedHeaders(List.of("X-Correlation-Id"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 
