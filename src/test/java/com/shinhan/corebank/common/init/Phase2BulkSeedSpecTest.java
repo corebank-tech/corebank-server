@@ -18,6 +18,8 @@ class Phase2BulkSeedSpecTest {
         assertThat(spec.ledgerEntryCount()).isEqualTo(6_000_000);
         assertThat(spec.voucherCount()).isEqualTo(3_000_000);
         assertThat(spec.journalEntryCount()).isEqualTo(6_000_000);
+        assertThat(spec.periodStart()).isEqualTo(LocalDate.of(2026, 9, 1));
+        assertThat(spec.periodEnd()).isEqualTo(LocalDate.of(2026, 10, 5));
     }
 
     @Test
@@ -140,10 +142,10 @@ class Phase2BulkSeedSpecTest {
     }
 
     private LocalDate validStart() {
-        return LocalDate.of(2026, 7, 1);
+        return LocalDate.of(2026, 9, 1);
     }
 
     private LocalDate validEnd() {
-        return LocalDate.of(2026, 9, 30);
+        return LocalDate.of(2026, 10, 5);
     }
 }

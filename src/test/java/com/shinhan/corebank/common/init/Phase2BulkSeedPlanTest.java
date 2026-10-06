@@ -22,12 +22,16 @@ class Phase2BulkSeedPlanTest {
     }
 
     @Test
-    @DisplayName("TRF와 SUB를 합쳐 월별 100만 건과 급여일 20만 건을 만든다")
+    @DisplayName("TRF와 SUB 300만 건을 9월~10월 5일에 배치하고 9월 급여일에 40만 건을 만든다")
     void distributesMonthlyAndPaydayCounts() {
         Map<Integer, Integer> monthly = new HashMap<>();
         Map<Integer, Integer> payday = new HashMap<>();
+        int outsidePeriod = 0;
         for (int index = 0; index < spec.transferCount(); index++) {
             LocalDate date = plan.tradeDate(index);
+            if (date.isBefore(spec.periodStart()) || date.isAfter(spec.periodEnd())) {
+                outsidePeriod++;
+            }
             monthly.merge(date.getMonthValue(), 1, Integer::sum);
             if (date.getDayOfMonth() == 25) {
                 payday.merge(date.getMonthValue(), 1, Integer::sum);
@@ -35,17 +39,21 @@ class Phase2BulkSeedPlanTest {
         }
         for (int index = 0; index < spec.subscriptionCount(); index++) {
             LocalDate date = plan.subscriptionDate(index);
+            if (date.isBefore(spec.periodStart()) || date.isAfter(spec.periodEnd())) {
+                outsidePeriod++;
+            }
             monthly.merge(date.getMonthValue(), 1, Integer::sum);
             if (date.getDayOfMonth() == 25) {
                 payday.merge(date.getMonthValue(), 1, Integer::sum);
             }
         }
 
+        assertThat(outsidePeriod).isZero();
         assertThat(monthly)
-                .containsEntry(7, 1_000_000)
-                .containsEntry(8, 1_000_000)
-                .containsEntry(9, 1_000_000);
-        assertThat(payday).containsEntry(7, 200_000).containsEntry(8, 200_000).containsEntry(9, 200_000);
+                .containsEntry(9, 2_000_000)
+                .containsEntry(10, 1_000_000)
+                .hasSize(2);
+        assertThat(payday).containsEntry(9, 400_000).doesNotContainKey(10);
     }
 
     @Test
@@ -74,9 +82,41 @@ class Phase2BulkSeedPlanTest {
         assertThat(plan.withdrawalAccountId(0)).isEqualTo(60_000_001L);
         assertThat(plan.withdrawalAccountId(10_000)).isEqualTo(60_000_001L);
         assertThat(plan.depositAccountId(0)).isEqualTo(spec.accountIdStart());
-        assertThat(plan.transferAmount(0)).isEqualTo(12_000_000L);
+        assertThat(plan.transferAmount(0)).isEqualTo(10_000_000L);
         assertThat(plan.transferAmount(spec.customerCount())).isBetween(10_000L, 99_000L);
         assertThat(plan.tradeDate(0)).isEqualTo(LocalDate.of(2026, 9, 1));
+        assertThat(plan.tradeDate(spec.customerCount() - 1)).isEqualTo(LocalDate.of(2026, 9, 1));
+        int firstRegularSeptemberTransfer = spec.customerCount() + plan.transferPaydayCount(0);
+        assertThat(plan.tradeDate(firstRegularSeptemberTransfer)).isEqualTo(LocalDate.of(2026, 9, 1));
+        assertThat(plan.occurredAt(spec.customerCount() - 1)).isBefore(plan.occurredAt(firstRegularSeptemberTransfer));
+        Map<Long, Long> suppliedByAccount = new HashMap<>();
+        for (int index = 0; index < spec.customerCount(); index++) {
+            long amount = plan.transferAmount(index);
+            assertThat(amount).isLessThanOrEqualTo(10_000_000L);
+            suppliedByAccount.merge(plan.withdrawalAccountId(index), amount, Long::sum);
+        }
+        assertThat(suppliedByAccount).hasSize(10_000).allSatisfy((accountId, amount) -> assertThat(amount)
+                .isLessThanOrEqualTo(50_000_000L));
+    }
+
+    @Test
+    @DisplayName("운영 규격의 전체 이체를 순서대로 적용해도 신규 요구불계좌 잔액은 음수가 되지 않는다")
+    void keepsProductionTransferBalancesNonNegative() {
+        long[] balances = new long[spec.customerCount()];
+        int insufficient = 0;
+        for (int index = 0; index < spec.transferCount(); index++) {
+            long amount = plan.transferAmount(index);
+            if (index >= spec.customerCount()) {
+                int source = (int) ((plan.withdrawalAccountId(index) - spec.accountIdStart()) / 3);
+                balances[source] -= amount;
+                if (balances[source] < 0) {
+                    insufficient++;
+                }
+            }
+            int target = (int) ((plan.depositAccountId(index) - spec.accountIdStart()) / 3);
+            balances[target] += amount;
+        }
+        assertThat(insufficient).isZero();
     }
 
     @Test
@@ -96,12 +136,15 @@ class Phase2BulkSeedPlanTest {
         assertThat(plan.productCode(0)).isEqualTo("PRD_SHORT_DEP");
         assertThat(plan.termMonths(0)).isEqualTo(1);
         assertThat(plan.accountStatus(0)).isEqualTo("MATURED");
-        assertThat(plan.maturityDate(0)).isEqualTo(LocalDate.of(2026, 8, 15));
+        assertThat(plan.maturityDate(0)).isEqualTo(LocalDate.of(2026, 10, 1));
 
         int near = spec.maturedCount();
-        assertThat(plan.termMonths(near)).isEqualTo(3);
+        assertThat(plan.termMonths(near)).isEqualTo(1);
         assertThat(plan.accountStatus(near)).isEqualTo("ACTIVE");
         assertThat(plan.maturityDate(near)).isEqualTo(LocalDate.of(2026, 10, 24));
+        assertThat(plan.termMonths(near + 7)).isEqualTo(2);
+        assertThat(plan.maturityDate(near + 7)).isEqualTo(LocalDate.of(2026, 11, 1));
+        assertThat(plan.maturityDate(near + 28)).isEqualTo(LocalDate.of(2026, 11, 22));
     }
 
     @Test
@@ -111,12 +154,12 @@ class Phase2BulkSeedPlanTest {
         int savings = spec.customerCount();
 
         assertThat(plan.productCode(deposit)).isEqualTo("PRD_BASIC_DEP");
-        assertThat(plan.subscriptionDate(deposit)).isAfterOrEqualTo(LocalDate.of(2026, 8, 1));
+        assertThat(plan.subscriptionDate(deposit)).isAfterOrEqualTo(LocalDate.of(2026, 9, 1));
         assertThat(plan.subscriptionAmount(deposit)).isEqualTo(1_000_000L);
         assertThat(plan.subscriptionAccountId(deposit)).isEqualTo(plan.timeDepositAccountId(deposit));
 
         assertThat(plan.productCode(savings)).isEqualTo("PRD_REGULAR_SAVE");
-        assertThat(plan.subscriptionDate(savings)).isAfterOrEqualTo(LocalDate.of(2026, 7, 22));
+        assertThat(plan.subscriptionDate(savings)).isAfterOrEqualTo(LocalDate.of(2026, 9, 1));
         assertThat(plan.subscriptionAmount(savings)).isEqualTo(50_000L);
         assertThat(plan.subscriptionAccountId(savings)).isEqualTo(plan.savingsAccountId(0));
     }
@@ -128,9 +171,8 @@ class Phase2BulkSeedPlanTest {
 
         assertThat(number).isEqualTo("20260801WB0102900001");
         assertThat(plan.occurredAt(0).toLocalDate()).isEqualTo(plan.tradeDate(0));
-        assertThat(plan.transferMonthlyCount(0) + plan.transferMonthlyCount(1) + plan.transferMonthlyCount(2))
-                .isEqualTo(spec.transferCount());
-        assertThat(plan.transferPaydayCount(0)).isLessThan(200_001);
+        assertThat(plan.transferMonthlyCount(0) + plan.transferMonthlyCount(1)).isEqualTo(spec.transferCount());
+        assertThat(plan.transferPaydayCount(0)).isLessThan(400_001);
     }
 
     @Test

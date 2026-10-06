@@ -4,7 +4,6 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -12,8 +11,9 @@ import java.util.Locale;
 // DB와 무관한 PH-60b 생성 규칙을 결정적으로 계산한다.
 final class Phase2BulkSeedPlan {
 
-    private static final int MONTHLY_TRANSACTION_COUNT = 1_000_000;
-    private static final int PAYDAY_TRANSACTION_COUNT = 200_000;
+    // 데모 기준일(10/5)까지 300만 건을 압축하고 9/25 급여일 집중을 유지한다.
+    private static final int[] PERIOD_TRANSACTION_COUNTS = {2_000_000, 1_000_000};
+    private static final int SEPTEMBER_PAYDAY_TRANSACTION_COUNT = 400_000;
     private static final int HOTSPOT_PERCENT = 30;
     private static final int HOTSPOT_ACCOUNT_COUNT = 100;
     private static final long PH60_DEMAND_ACCOUNT_START = 60_000_001L;
@@ -26,45 +26,56 @@ final class Phase2BulkSeedPlan {
 
     Phase2BulkSeedPlan(Phase2BulkSeedSpec spec) {
         this.spec = spec;
-        this.weightedDates = List.of(weightedDates(2026, 7), weightedDates(2026, 8), weightedDates(2026, 9));
-        int[] subscriptionMonthlyCounts = new int[3];
-        int[] subscriptionPaydayCounts = new int[3];
+        this.weightedDates = List.of(
+                weightedDates(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)),
+                weightedDates(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 5)));
+        int[] subscriptionMonthlyCounts = new int[2];
+        int[] subscriptionPaydayCounts = new int[2];
         for (int index = 0; index < spec.subscriptionCount(); index++) {
             LocalDate date = subscriptionDate(index);
-            int monthIndex = date.getMonthValue() - 7;
+            int monthIndex = date.getMonthValue() - 9;
             subscriptionMonthlyCounts[monthIndex]++;
             if (date.getDayOfMonth() == 25) {
                 subscriptionPaydayCounts[monthIndex]++;
             }
         }
-        this.transferMonthlyCounts = new int[3];
-        this.transferPaydayCounts = new int[3];
-        for (int month = 0; month < 3; month++) {
-            transferMonthlyCounts[month] = MONTHLY_TRANSACTION_COUNT - subscriptionMonthlyCounts[month];
-            transferPaydayCounts[month] = PAYDAY_TRANSACTION_COUNT - subscriptionPaydayCounts[month];
+        this.transferMonthlyCounts = new int[2];
+        this.transferPaydayCounts = new int[2];
+        for (int month = 0; month < 2; month++) {
+            transferMonthlyCounts[month] = PERIOD_TRANSACTION_COUNTS[month] - subscriptionMonthlyCounts[month];
+            transferPaydayCounts[month] =
+                    (month == 0 ? SEPTEMBER_PAYDAY_TRANSACTION_COUNT : 0) - subscriptionPaydayCounts[month];
         }
     }
 
     LocalDate tradeDate(int transferIndex) {
-        if (transferIndex < spec.dormantCandidateCount()) {
+        // PH-60 개시 원장 뒤에 자금을 먼저 공급해 9/1의 다른 거래보다 앞서게 한다.
+        if (transferIndex < spec.customerCount()) {
             return LocalDate.of(2026, 9, 1);
         }
-        int distributableIndex = transferIndex - spec.dormantCandidateCount();
+        int distributableIndex = transferIndex - spec.customerCount();
         int monthIndex = transferMonthIndex(distributableIndex);
         int monthOrdinal = distributableIndex;
         for (int month = 0; month < monthIndex; month++) {
             monthOrdinal -= distributableMonthlyCount(month);
         }
         if (monthOrdinal < transferPaydayCounts[monthIndex]) {
-            return LocalDate.of(2026, monthIndex + 7, 25);
+            return LocalDate.of(2026, 9, 25);
         }
         List<LocalDate> dates = weightedDates.get(monthIndex);
         return dates.get((monthOrdinal - transferPaydayCounts[monthIndex]) % dates.size());
     }
 
     LocalDateTime occurredAt(int globalTransactionIndex) {
+        if (globalTransactionIndex < spec.customerCount()) {
+            return LocalDateTime.of(2026, 9, 1, 0, 0).plusSeconds(globalTransactionIndex / 5L + 1);
+        }
+        LocalDate date = tradeDate(globalTransactionIndex);
+        if (date.equals(LocalDate.of(2026, 9, 1))) {
+            return date.atTime(3, 0).plusSeconds(Math.floorMod(globalTransactionIndex, 75_600));
+        }
         int seconds = Math.floorMod(globalTransactionIndex / 3, 86_399);
-        return LocalDateTime.of(tradeDate(globalTransactionIndex), LocalTime.ofSecondOfDay(seconds + 1L));
+        return LocalDateTime.of(date, LocalTime.ofSecondOfDay(seconds + 1L));
     }
 
     boolean hotspot(int transferIndex) {
@@ -96,7 +107,7 @@ final class Phase2BulkSeedPlan {
     }
 
     long transferAmount(int transferIndex) {
-        return transferIndex < spec.customerCount() ? 12_000_000L : 10_000L + transferIndex % 90 * 1_000L;
+        return transferIndex < spec.customerCount() ? 10_000_000L : 10_000L + transferIndex % 90 * 1_000L;
     }
 
     int subscriptionCustomerIndex(int subscriptionIndex) {
@@ -119,22 +130,32 @@ final class Phase2BulkSeedPlan {
             return 1;
         }
         if (subscriptionIndex < spec.maturedCount() + spec.nearMaturityCount()) {
-            return 3;
+            return nearMaturityOffset(subscriptionIndex) < 7 ? 1 : 2;
         }
-        return timeDeposit(subscriptionIndex) ? 12 : 12;
+        return 12;
     }
 
     LocalDate subscriptionDate(int subscriptionIndex) {
         if (subscriptionIndex < spec.maturedCount()) {
-            return LocalDate.of(2026, 7, 15).plusDays(subscriptionIndex % 17L);
+            if (subscriptionIndex < spec.dormantCandidateCount()) {
+                return LocalDate.of(2026, 9, 1);
+            }
+            return LocalDate.of(2026, 9, 1).plusDays(subscriptionIndex % 5L);
         }
         if (subscriptionIndex < spec.maturedCount() + spec.nearMaturityCount()) {
-            return LocalDate.of(2026, 7, 24).plusDays((subscriptionIndex - spec.maturedCount()) % 30L);
+            // 1·2개월 기간을 조합해 가입은 10/5 이전, 만기는 10/24~11/22로 둔다.
+            int offset = nearMaturityOffset(subscriptionIndex);
+            return offset < 7
+                    ? LocalDate.of(2026, 9, 24).plusDays(offset)
+                    : LocalDate.of(2026, 9, 1).plusDays(offset - 7L);
         }
         if (timeDeposit(subscriptionIndex)) {
-            return LocalDate.of(2026, 8, 1).plusDays(subscriptionIndex % 61L);
+            return LocalDate.of(2026, 9, 1).plusDays(subscriptionIndex % 35L);
         }
-        return LocalDate.of(2026, 7, 22).plusDays(subscriptionIndex % 71L);
+        if (subscriptionCustomerIndex(subscriptionIndex) < spec.dormantCandidateCount()) {
+            return LocalDate.of(2026, 9, 1);
+        }
+        return LocalDate.of(2026, 9, 1).plusDays(subscriptionIndex % 35L);
     }
 
     LocalDate maturityDate(int subscriptionIndex) {
@@ -217,12 +238,20 @@ final class Phase2BulkSeedPlan {
         int ordinal = transferIndex - spec.customerCount();
         int eligibleCount = spec.customerCount() - spec.dormantCandidateCount();
         if (hotspot(transferIndex) || eligibleCount <= HOTSPOT_ACCOUNT_COUNT) {
+            // 100건 중 30건의 실제 핫스팟 순번으로 압축해 100계좌를 고르게 순환한다.
+            int hotspotOrdinal = Math.floorDiv(ordinal, 100) * HOTSPOT_PERCENT + Math.floorMod(ordinal, 100);
             return spec.dormantCandidateCount()
-                    + Math.floorMod(ordinal, Math.min(HOTSPOT_ACCOUNT_COUNT, eligibleCount));
+                    + Math.floorMod(hotspotOrdinal, Math.min(HOTSPOT_ACCOUNT_COUNT, eligibleCount));
         }
+        int regularOrdinal =
+                Math.floorDiv(ordinal, 100) * (100 - HOTSPOT_PERCENT) + Math.floorMod(ordinal, 100) - HOTSPOT_PERCENT;
         return spec.dormantCandidateCount()
                 + HOTSPOT_ACCOUNT_COUNT
-                + Math.floorMod(ordinal, eligibleCount - HOTSPOT_ACCOUNT_COUNT);
+                + Math.floorMod(regularOrdinal, eligibleCount - HOTSPOT_ACCOUNT_COUNT);
+    }
+
+    private int nearMaturityOffset(int subscriptionIndex) {
+        return Math.floorMod(subscriptionIndex - spec.maturedCount(), 29);
     }
 
     private int transferMonthIndex(int transferIndex) {
@@ -237,15 +266,13 @@ final class Phase2BulkSeedPlan {
     }
 
     private int distributableMonthlyCount(int monthIndex) {
-        return transferMonthlyCounts[monthIndex] - (monthIndex == 2 ? spec.dormantCandidateCount() : 0);
+        return transferMonthlyCounts[monthIndex] - (monthIndex == 0 ? spec.customerCount() : 0);
     }
 
-    private List<LocalDate> weightedDates(int year, int month) {
+    private List<LocalDate> weightedDates(LocalDate start, LocalDate end) {
         List<LocalDate> result = new ArrayList<>();
-        YearMonth yearMonth = YearMonth.of(year, month);
-        for (int day = 1; day <= yearMonth.lengthOfMonth(); day++) {
-            LocalDate date = yearMonth.atDay(day);
-            if (day == 25) {
+        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
+            if (date.equals(LocalDate.of(2026, 9, 25))) {
                 continue;
             }
             int weight = isWeekend(date) ? 1 : 5;

@@ -38,7 +38,7 @@ class Phase2BulkSeedServiceIntegrationTest extends IntegrationTestSupport {
             10,
             10,
             2,
-            2,
+            8,
             2,
             50,
             10,
@@ -50,8 +50,8 @@ class Phase2BulkSeedServiceIntegrationTest extends IntegrationTestSupport {
             110_000_001L,
             110_000_001L,
             110_000_001L,
-            LocalDate.of(2026, 7, 1),
-            LocalDate.of(2026, 9, 30));
+            LocalDate.of(2026, 9, 1),
+            LocalDate.of(2026, 10, 5));
 
     @Autowired
     private Phase2MinimumSeedService minimumSeedService;
@@ -83,6 +83,10 @@ class Phase2BulkSeedServiceIntegrationTest extends IntegrationTestSupport {
                         count(
                                 "SELECT COUNT(*) FROM product_subscription WHERE subscription_id BETWEEN 110000001 AND 110000200"))
                 .isEqualTo(200);
+        assertThat(
+                        count(
+                                "SELECT COUNT(*) FROM product_subscription WHERE subscription_id=110000010 AND term_months=2 AND applied_rate=2.70 AND maturity_date='2026-11-01'"))
+                .isEqualTo(1);
         assertThat(count("SELECT COUNT(*) FROM ledger_entry WHERE ledger_entry_id BETWEEN 110000001 AND 110000800"))
                 .isEqualTo(800);
         assertThat(count(

@@ -47,8 +47,8 @@ public record Phase2BulkSeedSpec(
                 100_000_001L,
                 100_000_001L,
                 100_000_001L,
-                LocalDate.of(2026, 7, 1),
-                LocalDate.of(2026, 9, 30));
+                LocalDate.of(2026, 9, 1),
+                LocalDate.of(2026, 10, 5));
     }
 
     public Phase2BulkSeedSpec {
