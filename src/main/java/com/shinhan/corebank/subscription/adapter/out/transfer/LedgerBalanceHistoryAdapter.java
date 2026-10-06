@@ -7,6 +7,7 @@ import com.shinhan.corebank.transfer.api.LedgerBalanceHistory;
 import com.shinhan.corebank.transfer.api.LedgerBalanceQuery;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import java.time.LocalDate;
 
 @Component
 @RequiredArgsConstructor
@@ -16,7 +17,7 @@ public class LedgerBalanceHistoryAdapter implements LedgerBalanceHistoryPort {
 
     @Override
     public LedgerBalanceHistoryResult load(
-            Long accountId, java.time.LocalDate fromInclusive, java.time.LocalDate toExclusive) {
+            Long accountId, LocalDate fromInclusive, LocalDate toExclusive) {
 
         LedgerBalanceHistory history = ledgerBalanceQuery.query(accountId, fromInclusive, toExclusive);
 
