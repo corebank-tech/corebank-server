@@ -21,7 +21,9 @@ const MAX_VUS = Number(__ENV.MAX_VUS || 200);
 // 측정 중에는 로그인하지 않는다. ramping-arrival-rate 는 반복마다 풀에서 빈 VU 를 아무거나
 // 집어오므로, VU 안에서 세션을 캐시하면 사실상 매 반복이 새 로그인이 된다(실측으로 확인).
 // setup() 에서 세션을 미리 만들어 넘기면 로그인이 측정 구간 밖으로 빠진다.
-const SESSION_POOL = Number(__ENV.SESSION_POOL || 20);
+// 세션 수가 VU 수보다 적으면 여러 VU 가 같은 고객을 집어 계좌 행 락이 섞인다.
+// 분산 시나리오의 전제가 깨지므로 VU 수만큼 둔다.
+const SESSION_POOL = Number(__ENV.SESSION_POOL || MAX_VUS);
 
 const fixedScenario = {
   level: {
@@ -76,7 +78,9 @@ export default function (data) {
 
   // 금액을 고객마다 달리해 시드(1,000원 단위)와 구분하고, 원장에서 어느 고객이 만든 건지도 읽는다.
   const amount = 19876 + me.seq;
-  const peer = customer(me.seq + 1);
+  // 받는 쪽은 출금 고객 집합 밖에서 고른다. 바로 옆 순번을 쓰면 그 계좌가 다른 VU 의
+  // 출금 계좌라 입금 쪽에서도 같은 행을 잠근다.
+  const peer = customer(SESSION_POOL + me.seq);
 
   executeTransfer(
     BASE_URL,
