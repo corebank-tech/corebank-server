@@ -40,12 +40,12 @@ class CorrelationIdSecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("요청에 X-Correlation-Id를 실어 보내면 401 응답에도 같은 값이 그대로 돌아온다")
+    @DisplayName("요청에 유효한 UUID 형식 X-Correlation-Id를 실어 보내면 401 응답에도 같은 값이 그대로 돌아온다")
     void unauthorizedResponse_echoesClientProvidedCorrelationId() throws Exception {
-        mockMvc.perform(get("/api/v1/customers/me")
-                        .contextPath("/api/v1")
-                        .header("X-Correlation-Id", "client-fixed-id"))
+        String validUuid = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
+
+        mockMvc.perform(get("/api/v1/customers/me").contextPath("/api/v1").header("X-Correlation-Id", validUuid))
                 .andExpect(status().isUnauthorized())
-                .andExpect(header().string("X-Correlation-Id", "client-fixed-id"));
+                .andExpect(header().string("X-Correlation-Id", validUuid));
     }
 }

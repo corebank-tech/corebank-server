@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.slf4j.MDC;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -14,12 +15,15 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
 
     private static final String HEADER = "X-Correlation-Id";
     private static final String CORRELATION_ID_KEY = "correlationId";
+    // UUID 형식만 허용 - 응답·로그에 같은 값을 그대로 남기려면 PII가 섞여 들어올 수 없는 형식으로 제한해야 한다(PR #560 2차 리뷰)
+    private static final Pattern UUID_PATTERN =
+            Pattern.compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String correlationId = request.getHeader(HEADER);
-        if (correlationId == null || correlationId.isBlank()) {
+        if (correlationId == null || !UUID_PATTERN.matcher(correlationId).matches()) {
             correlationId = UUID.randomUUID().toString();
         }
         response.setHeader(HEADER, correlationId);

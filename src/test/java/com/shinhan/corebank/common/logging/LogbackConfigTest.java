@@ -90,10 +90,11 @@ class LogbackConfigTest {
         assertThat(json.has("injected")).isFalse();
     }
 
-    // 클라이언트가 X-Correlation-Id 헤더에 계좌번호 형식 값을 그대로 넣으면, message가 아니라
-    // correlationId 필드로 로그에 남아 마스킹을 비켜갈 수 있었다(PR #560 리뷰). 필드 자체도 가려지는지 확인한다
+    // correlationId는 CorrelationIdFilter가 UUID 형식만 통과시키므로 PII가 섞여 들어올 수 없다.
+    // 마스킹을 걸면 응답 헤더(원문)와 로그(마스킹값)가 달라져 같은 ID로 로그를 못 찾게 되므로,
+    // correlationId는 의도적으로 마스킹하지 않는다(PR #560 2차 리뷰) - 원문 그대로 남는지 확인한다
     @Test
-    void correlationId에_계좌번호_형식_값이_있어도_가려진다() throws Exception {
+    void correlationId는_숫자로만_이루어진_값이어도_마스킹되지_않고_그대로_남는다() throws Exception {
         LoggerContext context = (LoggerContext) org.slf4j.LoggerFactory.getILoggerFactory();
         context.reset();
         JoranConfigurator configurator = new JoranConfigurator();
@@ -116,7 +117,7 @@ class LogbackConfigTest {
         line = captured.toString().trim();
 
         var json = objectMapper.readTree(line);
-        assertThat(json.get("correlationId").asText()).isEqualTo("123******012");
+        assertThat(json.get("correlationId").asText()).isEqualTo("123456789012");
     }
 
     // log.error(msg, e) 로 찍은 처리되지 않은 예외의 스택이 JSON에서 통째로 사라졌었다(PR #560 리뷰).
