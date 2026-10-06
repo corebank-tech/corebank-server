@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.gl.domain.GlTxType;
+import com.shinhan.corebank.gl.api.GlTxType;
 import com.shinhan.corebank.gl.domain.VoucherNumber;
 import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
 import java.time.LocalDate;

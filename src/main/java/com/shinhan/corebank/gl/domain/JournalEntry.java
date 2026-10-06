@@ -1,6 +1,7 @@
 package com.shinhan.corebank.gl.domain;
 
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.gl.api.JournalDirection;
 import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
 import java.util.Objects;
 

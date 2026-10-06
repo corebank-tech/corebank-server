@@ -1,6 +1,6 @@
 package com.shinhan.corebank.gl.adapter.out.persistence;
 
-import com.shinhan.corebank.gl.domain.GlTxType;
+import com.shinhan.corebank.gl.api.GlTxType;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.util.Optional;

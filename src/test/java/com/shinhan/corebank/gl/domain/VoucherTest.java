@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.gl.api.GlTxType;
+import com.shinhan.corebank.gl.api.JournalDirection;
 import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
 import java.time.LocalDate;
 import java.util.List;

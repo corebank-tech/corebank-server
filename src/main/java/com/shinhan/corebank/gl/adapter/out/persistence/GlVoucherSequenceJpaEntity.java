@@ -1,6 +1,6 @@
 package com.shinhan.corebank.gl.adapter.out.persistence;
 
-import com.shinhan.corebank.gl.domain.GlTxType;
+import com.shinhan.corebank.gl.api.GlTxType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
