@@ -25,6 +25,8 @@ erDiagram
         tinyint login_failure_count "5회 시 잠금 (ATH0102)"
         boolean account_locked
         varchar status "ACTIVE / SUSPENDED"
+        varchar role "CUSTOMER / ADMIN"
+        varchar permissions "관리자 권한 CSV, 고객은 NULL"
         datetime last_login_at "대시보드 currentLoginAt"
         varchar last_login_ip "대시보드 currentLoginIp"
         datetime previous_login_at "대시보드 previousLoginAt"
