@@ -1,6 +1,8 @@
 package com.shinhan.corebank.transfer.application.service;
 
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.transfer.api.LedgerPostingContext;
+import com.shinhan.corebank.transfer.api.LedgerPostingHook;
 import com.shinhan.corebank.transfer.application.port.in.TransferCorrectionUseCase;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LedgerLookupPort;
@@ -20,6 +22,7 @@ import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -30,6 +33,9 @@ import org.springframework.transaction.annotation.Transactional;
  * [원거래 조회 → 채번 → 계좌 락 → 정정 이체 INSERT(자리 차지) → 상태·잔액 검증 → 잔액 이동 → 원장]을
  * 한 트랜잭션으로 수행한다. 어느 단계든 실패하면 전부 롤백된다.
  *
+ * 원장 기표 직후 훅 B(LedgerPostingHook)를 부른다 — 정정 거래도 원장이 생기므로 GL 전표가 같은 트랜잭션에 함께 선다(PH-24).
+ * 취소정정은 txType REVERSAL, 정상거래는 원거래 유형 그대로 넘긴다.
+ *
  * 고객 화면에서 시작되는 거래가 아니라 채널은 BT이고 이체 한도를 차감하지 않는다.
  * 알림 이벤트(TransferSettled)는 발행하지 않는다 — 정정 전용 알림은 P1과 따로 정한다.
  */
@@ -39,6 +45,8 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
 
     private static final TransferChannel CHANNEL = TransferChannel.BT;
     private static final String REVERSAL_MEMO = "취소정정";
+    // ledger_entry.transaction_type 의 취소정정 값(LedgerPair.forReversal).
+    private static final String REVERSAL_LEDGER_TYPE = "REVERSAL";
 
     private final TransferLookupPort transferLookupPort;
     private final TransferSavePort transferSavePort;
@@ -46,6 +54,7 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
     private final AccountLockPort accountLockPort;
     private final LedgerLookupPort ledgerLookupPort;
     private final LedgerSavePort ledgerSavePort;
+    private final List<LedgerPostingHook> ledgerPostingHooks;
     private final Clock clock;
 
     @Override
@@ -89,6 +98,13 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
                         CHANNEL,
                         executedAt),
                 originalLedger);
+        runLedgerPostingHooks(new LedgerPostingContext(
+                transactionNumber,
+                REVERSAL_LEDGER_TYPE,
+                original.getAmount(),
+                original.getDepositAccountId(),
+                original.getWithdrawalAccountId(),
+                executedAt.toLocalDate()));
         reversal.complete(balances.withdrawalBalanceAfter(), executedAt);
         transferSavePort.save(reversal);
 
@@ -132,10 +148,24 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
                 original.getRecipientPassbookMemo(),
                 CHANNEL,
                 executedAt));
+        runLedgerPostingHooks(new LedgerPostingContext(
+                transactionNumber,
+                original.getTransferType().ledgerTransactionType(),
+                correctedAmount,
+                original.getWithdrawalAccountId(),
+                original.getDepositAccountId(),
+                executedAt.toLocalDate()));
         repost.complete(balances.withdrawalBalanceAfter(), executedAt);
         transferSavePort.save(repost);
 
         return new TransferRepostResult(transactionNumber, original.getTransactionNumber(), correctedAmount);
+    }
+
+    // [훅 B] 기표 트랜잭션 안이라 훅 예외는 정정 전체를 롤백한다. tradeDate 는 PH-41 전까지 기표 시각의 달력일이다.
+    private void runLedgerPostingHooks(LedgerPostingContext context) {
+        for (LedgerPostingHook hook : ledgerPostingHooks) {
+            hook.afterLedger(context);
+        }
     }
 
     // 정상거래는 원래 하려던 거래라 예금주명·통장 메모를 원거래 스냅샷 그대로 쓴다.

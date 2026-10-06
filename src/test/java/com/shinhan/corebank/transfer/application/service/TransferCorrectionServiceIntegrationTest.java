@@ -2,6 +2,7 @@ package com.shinhan.corebank.transfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
@@ -220,6 +221,24 @@ class TransferCorrectionServiceIntegrationTest extends IntegrationTestSupport {
         assertThat(repost.get("amount")).isEqualTo(30_000L);
         assertThat(repost.get("status")).isEqualTo(ProcessResultStatus.SUCCESS.name());
 
+        // then: 체인의 거래마다 GL 전표가 1건씩 선다 — 원거래·정상거래는 TRF, 취소정정은 REV (PH-24)
+        List<Map<String, Object>> vouchers = jdbcTemplate.queryForList(
+                "SELECT t.correction_type, v.tx_type, SUM(e.amount) AS line_total FROM transfer t"
+                        + " JOIN gl_voucher v ON v.reference_key = t.transaction_number"
+                        + " JOIN gl_journal_entry e ON e.voucher_no = v.voucher_no"
+                        + " WHERE t.transfer_id = ? OR t.ref_transfer_id = ?"
+                        + " GROUP BY t.correction_type, v.tx_type",
+                originalId,
+                originalId);
+        assertThat(vouchers)
+                .extracting(row -> row.get("correction_type"), row -> row.get("tx_type"), row -> ((Number)
+                                row.get("line_total"))
+                        .longValue())
+                .containsExactlyInAnyOrder(
+                        tuple(null, "TRANSFER", 2 * AMOUNT),
+                        tuple("REVERSAL", "REVERSAL", 2 * AMOUNT),
+                        tuple("REPOST", "TRANSFER", 2 * 30_000L));
+
         // then: 계좌마다 원장 증감 합계 = 잔액 증감
         assertThat(signedLedgerSum(ACCOUNT_A)).isEqualTo(balanceOf(ACCOUNT_A) - STARTING_BALANCE_A);
         assertThat(signedLedgerSum(ACCOUNT_B)).isEqualTo(balanceOf(ACCOUNT_B));
@@ -307,6 +326,17 @@ class TransferCorrectionServiceIntegrationTest extends IntegrationTestSupport {
 
     // 정정 거래가 원거래를 FK로 가리키므로 정정 거래부터 지운다.
     private void cleanUp() {
+        jdbcTemplate.update(
+                "DELETE e FROM gl_journal_entry e JOIN gl_voucher v ON v.voucher_no = e.voucher_no"
+                        + " JOIN transfer t ON t.transaction_number = v.reference_key"
+                        + " WHERE t.withdrawal_account_id IN (?, ?)",
+                ACCOUNT_A,
+                ACCOUNT_B);
+        jdbcTemplate.update(
+                "DELETE v FROM gl_voucher v JOIN transfer t ON t.transaction_number = v.reference_key"
+                        + " WHERE t.withdrawal_account_id IN (?, ?)",
+                ACCOUNT_A,
+                ACCOUNT_B);
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (?, ?)", ACCOUNT_A, ACCOUNT_B);
         jdbcTemplate.update(
                 "DELETE FROM transfer WHERE withdrawal_account_id IN (?, ?) AND ref_transfer_id IS NOT NULL",
