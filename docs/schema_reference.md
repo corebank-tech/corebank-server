@@ -444,7 +444,7 @@
 | `fee` | `BIGINT` |  | X | `0` | 수수료. 당행 이체는 0으로 고정 |
 | `transfer_type` | `VARCHAR(12)` |  | X |  | 이체 종류. `IMMEDIATE`(즉시) / `SCHEDULED`(예약) / `AUTO`(자동) |
 | `channel` | `CHAR(2)` |  | X |  | 거래 채널. `WB`(인터넷뱅킹) / `BT`(배치). 거래번호의 채널 2자리와 같은 값 |
-| `status` | `VARCHAR(12)` |  | X |  | 처리 결과. `SUCCESS`(정상) / `ERROR`(오류). `PROCESSING`은 INSERT 직후의 트랜잭션 내부 상태라 커밋된 행에는 나타나지 않는다 (#377) |
+| `status` | `VARCHAR(12)` |  | X |  | 처리 결과. `SUCCESS`(정상) / `ERROR`(오류) / `TIMEOUT`(처리 불명 — 대외 전문 무응답으로 상대 처리 여부를 모른다. 실패가 아니며 조회거래로 확정한다, PH-80). `PROCESSING`은 INSERT 직후의 트랜잭션 내부 상태라 커밋된 행에는 나타나지 않는다 (#377) |
 | `source_type` | `VARCHAR(12)` |  | O |  | 이 이체를 만든 원본 구분. `SCHEDULED`(예약이체) / `AUTO`(자동이체). 즉시이체는 NULL |
 | `source_id` | `BIGINT` |  | O |  | 예약·자동이체 원본 PK. `source_type`과 함께 역추적에 쓴다 |
 | `execution_date` | `DATE` |  | O |  | `source_id`와 함께 멱등키를 구성하는 회차 실행일자. SCHEDULED/AUTO 전용(즉시이체는 NULL). 배치가 실제로 호출된 날짜가 아니라 그 회차의 논리적 실행일(`scheduled_transfer.scheduled_date` / `auto_transfer_execution.execution_date`)이 들어가야 크래시 후 재시도가 같은 회차로 식별된다 |
