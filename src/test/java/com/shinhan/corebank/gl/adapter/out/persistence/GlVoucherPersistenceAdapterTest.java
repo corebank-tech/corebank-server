@@ -5,10 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.gl.api.GlTxType;
 import com.shinhan.corebank.gl.domain.JournalEntry;
 import com.shinhan.corebank.gl.domain.Voucher;
 import com.shinhan.corebank.gl.domain.VoucherNumber;
+import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -102,7 +104,7 @@ class GlVoucherPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("같은 유형·참조 키로 다른 전표번호를 저장하면 참조 키 유니크 위반으로 실패한다")
+    @DisplayName("같은 유형·참조 키로 다른 전표번호를 저장하면 GLA9008")
     void rejectsDuplicateReferenceKeyOfSameType() {
         String referenceKey = "20990106WB0000000050";
         adapter.save(Voucher.create(
@@ -118,9 +120,9 @@ class GlVoucherPersistenceAdapterTest extends IntegrationTestSupport {
                 List.of(JournalEntry.debit("20100", 10_000L), JournalEntry.credit("20100", 10_000L)));
 
         assertThatThrownBy(() -> adapter.save(sameKey))
-                .isInstanceOf(DataIntegrityViolationException.class)
-                .hasRootCauseMessage("Duplicate entry 'TRANSFER-" + referenceKey
-                        + "' for key 'gl_voucher.uk_gl_voucher_tx_type_reference_key'");
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(GlErrorCode.DUPLICATE_REFERENCE_KEY);
     }
 
     @Test
