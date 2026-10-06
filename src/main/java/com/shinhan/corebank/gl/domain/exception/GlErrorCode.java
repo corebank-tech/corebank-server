@@ -20,7 +20,8 @@ public enum GlErrorCode implements ErrorCode {
     VOUCHER_SEQUENCE_EXHAUSTED("GLA9005", 500, "전표번호 일련번호 채번 가능 범위를 초과했습니다."),
     VOUCHER_TYPE_MISMATCH("GLA9006", 500, "전표번호의 유형이 전표 유형과 다릅니다."),
     MISSING_REFERENCE_KEY("GLA9007", 500, "전표의 참조 키가 없습니다."),
-    DUPLICATE_REFERENCE_KEY("GLA9008", 500, "이미 기표된 거래입니다.");
+    DUPLICATE_REFERENCE_KEY("GLA9008", 500, "이미 기표된 거래입니다."),
+    UNSUPPORTED_LEDGER_TX_TYPE("GLA9009", 500, "분개 패턴이 없는 거래유형입니다.");
 
     private final String code;
     private final int status;
