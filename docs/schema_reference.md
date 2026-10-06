@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 32개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 305개 컬럼
+**대상**: 32개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 306개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -55,7 +55,7 @@
 | 27 | `common_code` | 공통코드 | P5 | 8  |
 | 28 | `batch_execution_lock` | 배치 중복 트리거 방지 락 | P5 | 3  |
 | 29 | `gl_account` | 계정과목 | P3 | 6  |
-| 30 | `gl_voucher` | 전표 | P3 | 5  |
+| 30 | `gl_voucher` | 전표 | P3 | 6  |
 | 31 | `gl_journal_entry` | 분개 | P3 | 8  |
 | 32 | `business_date` | 현재 영업일 | P5 | 4  |
 | 33 | `holiday` | 휴일 달력 | P5 | 4  |
@@ -928,7 +928,8 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 | --- | --- | --- | --- | --- | --- |
 | `voucher_no` | `VARCHAR(20)` | **PK** | X |  | 전표번호. 영업일 + 유형 + 일련 |
 | `trade_date` | `DATE` |  | X |  | 이 전표가 귀속되는 영업일 |
-| `tx_type` | `VARCHAR(24)` |  | X |  | `OPENING` / `TRANSFER` / `PRODUCT_SUBSCRIPTION` / `INTEREST` |
+| `tx_type` | `VARCHAR(24)` |  | X |  | `OPENING` / `TRANSFER` / `PRODUCT_SUBSCRIPTION` / `INTEREST` / `REVERSAL` |
+| `reference_key` | `VARCHAR(40)` |  | X |  | 원 거래번호. 원장 `transaction_number` 와 같은 값이고 개시 전표는 `OPENING-{yyyyMMdd}`. 원장과 전표를 1:1 로 잇는다(PH-24) |
 | `description` | `VARCHAR(200)` |  | O |  | 적요 |
 | `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
 
@@ -936,15 +937,18 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 
 | 이름 | 내용 | 이유 |
 | --- | --- | --- |
-| `ck_gl_voucher_tx_type` | 4개 유형 중 하나 | 타행 미결제 유형은 패턴 확정(P4 PH-33) 후 새 V 파일에서 넓힌다 |
+| `ck_gl_voucher_tx_type` | 5개 유형 중 하나 | `REVERSAL` 은 정정 체인 취소정정(PH-24). 타행 미결제 유형은 패턴 확정(P4 PH-33) 후 새 V 파일에서 넓힌다 |
 
 **인덱스**
 
 | 종류 | 이름 | 컬럼 |
 | --- | --- | --- |
 | UNIQUE | `uk_gl_voucher_no_trade_date` | `voucher_no, trade_date` |
+| UNIQUE | `uk_gl_voucher_tx_type_reference_key` | `tx_type, reference_key` |
 
-`voucher_no` 가 이미 PK 라 이 UNIQUE 는 행을 더 제한하지 않는다. 분개가 복제해 가는 `trade_date` 를 복합 FK 로 묶기 위한 참조 대상이다.
+`voucher_no` 가 이미 PK 라 `uk_gl_voucher_no_trade_date` 는 행을 더 제한하지 않는다. 분개가 복제해 가는 `trade_date` 를 복합 FK 로 묶기 위한 참조 대상이다.
+
+`uk_gl_voucher_tx_type_reference_key` 는 같은 거래를 두 번 기표하는 것을 막는다. 두 번째 기표는 예외가 되어 원장까지 롤백된다 — 조용히 넘기면 원장만 두 번 기표된 상태가 가려진다.
 
 ---
 
