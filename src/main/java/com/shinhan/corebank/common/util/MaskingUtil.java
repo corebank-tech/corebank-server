@@ -56,5 +56,17 @@ public class MaskingUtil {
         return phoneNumber.substring(0, 3) + "****" + phoneNumber.substring(7);
     }
 
+    // "123456" -> "****56", 2자리 이하는 전부 가린다
+    public static String maskCustomerId(Long customerId) {
+        if (customerId == null) {
+            throw new IllegalArgumentException("고객 ID가 없습니다.");
+        }
+        String raw = String.valueOf(customerId);
+        if (raw.length() <= 2) {
+            return "*".repeat(raw.length());
+        }
+        return "*".repeat(raw.length() - 2) + raw.substring(raw.length() - 2);
+    }
+
     private MaskingUtil() {} // new 만드는거 방지
 }

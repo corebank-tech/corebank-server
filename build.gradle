@@ -92,6 +92,9 @@ dependencies {
     // Swagger / OpenAPI UI
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
 
+    // JSON 구조화 로깅 (PH-42)
+    implementation 'net.logstash.logback:logstash-logback-encoder:8.0'
+
     // 테스트
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-flyway-test'
