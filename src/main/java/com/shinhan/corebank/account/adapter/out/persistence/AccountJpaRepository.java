@@ -4,6 +4,7 @@ import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -39,6 +40,16 @@ public interface AccountJpaRepository extends JpaRepository<AccountJpaEntity, Lo
         WHERE a.accountId IN :accountIds
         """)
     List<AccountBalanceProjection> findBalancesByAccountIds(@Param("accountIds") Collection<Long> accountIds);
+
+    // 전수 대사용 keyset 페이지. OFFSET 없이 PK 다음 지점부터 읽어 뒤 페이지도 느려지지 않는다. 락을 잡지 않는다.
+    @Query(
+            """
+        SELECT a.accountId AS accountId, a.balance AS balance
+        FROM AccountJpaEntity a
+        WHERE a.accountId > :afterAccountId
+        ORDER BY a.accountId
+        """)
+    List<AccountBalanceProjection> findBalancesAfter(@Param("afterAccountId") long afterAccountId, Pageable pageable);
 
     interface AccountBalanceProjection {
         Long getAccountId();
