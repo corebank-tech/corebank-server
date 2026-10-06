@@ -118,4 +118,34 @@ class LogbackConfigTest {
         var json = objectMapper.readTree(line);
         assertThat(json.get("correlationId").asText()).isEqualTo("123******012");
     }
+
+    // log.error(msg, e) 로 찍은 처리되지 않은 예외의 스택이 JSON에서 통째로 사라졌었다(PR #560 리뷰).
+    // stackTrace 필드에 실제로 남는지, 예외 메시지 속 계좌번호도 마스킹되는지 같이 확인한다
+    @Test
+    void 예외를_찍으면_stackTrace_필드에_마스킹된_스택이_남는다() throws Exception {
+        LoggerContext context = (LoggerContext) org.slf4j.LoggerFactory.getILoggerFactory();
+        context.reset();
+        JoranConfigurator configurator = new JoranConfigurator();
+        configurator.setContext(context);
+        configurator.doConfigure(getClass().getClassLoader().getResource("logback-spring.xml"));
+
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+        System.setOut(new PrintStream(captured));
+
+        String line;
+        try {
+            Logger logger = context.getLogger(LogbackConfigTest.class);
+            logger.error("처리되지 않은 예외 발생", new RuntimeException("계좌 123456789012 처리 실패"));
+        } finally {
+            System.setOut(originalOut);
+        }
+        line = captured.toString().trim();
+
+        var json = objectMapper.readTree(line);
+        String stackTrace = json.get("stackTrace").asText();
+        assertThat(stackTrace).contains("RuntimeException");
+        assertThat(stackTrace).contains("123******012");
+        assertThat(stackTrace).doesNotContain("123456789012");
+    }
 }

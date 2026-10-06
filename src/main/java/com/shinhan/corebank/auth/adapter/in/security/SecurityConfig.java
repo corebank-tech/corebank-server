@@ -3,6 +3,7 @@ package com.shinhan.corebank.auth.adapter.in.security;
 import static org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher.pathPattern;
 
 import com.shinhan.corebank.auth.adapter.in.web.ClientIpResolver;
+import com.shinhan.corebank.common.filter.CorrelationIdFilter;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -25,6 +26,7 @@ import org.springframework.security.web.authentication.session.CompositeSessionA
 import org.springframework.security.web.authentication.session.RegisterSessionAuthenticationStrategy;
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
@@ -129,7 +131,8 @@ public class SecurityConfig {
             AdminBootstrapProperties adminBootstrapProperties,
             SessionRegistry sessionRegistry)
             throws Exception {
-        http.cors(cors -> cors.configurationSource(corsConfigurationSource))
+        http.addFilterBefore(new CorrelationIdFilter(), SecurityContextHolderFilter.class)
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 // 기본 CSRF 보호를 유지하고 로그인과 회원가입, ALB 헬스체크만 검사에서 제외
                 .csrf(csrf -> {
                     csrf.csrfTokenRepository(csrfTokenRepository);

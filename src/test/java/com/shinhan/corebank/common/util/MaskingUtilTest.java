@@ -125,4 +125,23 @@ class MaskingUtilTest {
                 .isThrownBy(() -> MaskingUtil.maskPhoneNumber(raw))
                 .withMessageNotContaining(raw);
     }
+
+    @Test
+    @DisplayName("3자리 이상 고객 ID는 뒤 2자리만 남기고 나머지가 마스킹된다")
+    void customerIdWithThreeOrMoreDigits_masked() {
+        assertThat(MaskingUtil.maskCustomerId(123456L)).isEqualTo("****56");
+    }
+
+    @Test
+    @DisplayName("2자리 이하 고객 ID는 전부 마스킹된다")
+    void customerIdWithTwoOrFewerDigits_fullyMasked() {
+        assertThat(MaskingUtil.maskCustomerId(7L)).isEqualTo("*");
+        assertThat(MaskingUtil.maskCustomerId(42L)).isEqualTo("**");
+    }
+
+    @Test
+    @DisplayName("null 고객 ID는 예외를 던진다")
+    void nullCustomerId_throws() {
+        assertThatIllegalArgumentException().isThrownBy(() -> MaskingUtil.maskCustomerId(null));
+    }
 }

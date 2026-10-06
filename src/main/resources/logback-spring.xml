@@ -14,7 +14,8 @@
                             "thread": "%thread",
                             "correlationId": "%mask(%mdc{correlationId})",
                             "customerId": "%mdc{customerId}",
-                            "message": "%mask(%msg)"
+                            "message": "%mask(%msg)",
+                            "stackTrace": "%mask(%ex{full})"
                         }
                     </pattern>
                 </pattern>
@@ -41,7 +42,8 @@
                             "thread": "%thread",
                             "correlationId": "%mask(%mdc{correlationId})",
                             "customerId": "%mdc{customerId}",
-                            "message": "%mask(%msg)"
+                            "message": "%mask(%msg)",
+                            "stackTrace": "%mask(%ex{full})"
                         }
                     </pattern>
                 </pattern>
