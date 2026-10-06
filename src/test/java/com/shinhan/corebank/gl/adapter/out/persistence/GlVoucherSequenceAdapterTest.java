@@ -119,9 +119,11 @@ class GlVoucherSequenceAdapterTest extends IntegrationTestSupport {
     private void insertSeedVoucher(String voucherNo) {
         GlTxType txType = voucherNo.contains("-SUB-") ? GlTxType.PRODUCT_SUBSCRIPTION : GlTxType.TRANSFER;
         jdbcTemplate.update(
-                "INSERT INTO gl_voucher (voucher_no, trade_date, tx_type, created_at) VALUES (?, ?, ?, NOW(6))",
+                "INSERT INTO gl_voucher (voucher_no, trade_date, tx_type, reference_key, created_at)"
+                        + " VALUES (?, ?, ?, ?, NOW(6))",
                 voucherNo,
                 TRADE_DATE,
-                txType.name());
+                txType.name(),
+                "SEED-" + voucherNo);
     }
 }

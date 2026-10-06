@@ -5,6 +5,7 @@ import com.shinhan.corebank.gl.api.GlTxType;
 import com.shinhan.corebank.gl.api.JournalDirection;
 import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -25,25 +26,34 @@ public final class Voucher {
     private static final String CASH_ACCOUNT = "10100";
     private static final String DEPOSIT_ACCOUNT = "20100";
     private static final String OPENING_EQUITY_ACCOUNT = "30100";
+    private static final String OPENING_REFERENCE_PREFIX = "OPENING-";
 
     private final VoucherNumber number;
+    /** 원 거래번호. {@code (txType, referenceKey)} 로 유일하다(PH-24). */
+    private final String referenceKey;
+
     private final String description;
     private final List<JournalEntry> entries;
 
-    private Voucher(VoucherNumber number, String description, List<JournalEntry> entries) {
+    private Voucher(VoucherNumber number, String referenceKey, String description, List<JournalEntry> entries) {
         this.number = Objects.requireNonNull(number, "number must not be null");
+        if (referenceKey == null || referenceKey.isBlank()) {
+            throw new BusinessException(GlErrorCode.MISSING_REFERENCE_KEY);
+        }
+        this.referenceKey = referenceKey;
         this.description = description;
         this.entries = List.copyOf(entries);
         validateBalanced(this.entries);
     }
 
-    public static Voucher create(VoucherNumber number, String description, List<JournalEntry> entries) {
-        return new Voucher(number, description, entries);
+    public static Voucher create(
+            VoucherNumber number, String referenceKey, String description, List<JournalEntry> entries) {
+        return new Voucher(number, referenceKey, description, entries);
     }
 
     /**
      * 개시 잔액 전표 (gl_journal_patterns.md §3-1). 차 현금성 / 대 예수금(고객 잔액 합계) + 대 개시잔액(차액).
-     * 0원 줄은 만들지 않는다.
+     * 0원 줄은 만들지 않는다. 참조 키는 {@code OPENING-{거래일}} 이다.
      */
     public static Voucher opening(VoucherNumber number, long cashTotal, long customerDepositTotal) {
         if (number.txType() != GlTxType.OPENING) {
@@ -63,7 +73,8 @@ public final class Voucher {
         if (equity > 0) {
             entries.add(JournalEntry.credit(OPENING_EQUITY_ACCOUNT, equity));
         }
-        return new Voucher(number, "개시 잔액", entries);
+        String referenceKey = OPENING_REFERENCE_PREFIX + number.tradeDate().format(DateTimeFormatter.BASIC_ISO_DATE);
+        return new Voucher(number, referenceKey, "개시 잔액", entries);
     }
 
     public LocalDate getTradeDate() {
