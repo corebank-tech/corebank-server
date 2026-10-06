@@ -1,8 +1,11 @@
 package com.shinhan.corebank.customer.adapter.out.persistence;
 
 import com.shinhan.corebank.common.entity.BaseEntity;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -57,6 +60,10 @@ public class CustomerJpaEntity extends BaseEntity {
     @Column(name = "account_locked", nullable = false)
     private boolean accountLocked;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 12)
+    private CustomerStatus status;
+
     @Column(name = "last_login_at", columnDefinition = "DATETIME(6)")
     private LocalDateTime lastLoginAt;
 
@@ -94,6 +101,11 @@ public class CustomerJpaEntity extends BaseEntity {
         this.passwordChangedAt = passwordChangedAt;
         this.loginFailureCount = loginFailureCount;
         this.accountLocked = accountLocked;
+    }
+
+    // 관리자 계정 상태 변경 대상인 상태만 갱신한다.
+    public void updateStatus(CustomerStatus status) {
+        this.status = status;
     }
 
     // 고객정보 변경 대상인 휴대폰 번호와 이메일만 갱신한다.

@@ -35,7 +35,6 @@
 | [PH-49a-②](#ph-49a-관리자-인증-①-결정스키마-102--②-구현-108) | 관리자 인증 구현 | S2 | 3 | PH-49a-① | **10/8 머지** | — | 예정 |
 | [PH-96-①](#ph-96-transactional-outbox-①-발행측릴레이-s2--②-구독-s3) | Transactional Outbox — 발행측 · 릴레이 | S2 | 4 | PH-32 · PH-99 · EVT-2 | 유실 재현 10/8 | #437 | 예정 |
 | [PH-89](#ph-89-감사-5w--조회-감사--조회-사유-강제) | 감사 5W · 조회 감사 · 조회 사유 강제 | S2 | 2.5 | PH-49a-② | 10/16 | #458 | 예정 |
-| [FE #136](#fe-136-관리자-세션-정책--로그인-훅-교체) | 관리자 세션 정책 · 로그인 훅 교체 | S2 | 0.25 | PH-49a-② | 10/16 릴리스 전 | FE #136 | 예정 |
 | 리드 | FE 리드 조율 | S2 | 0.5 | — | — | — | — |
 | [PH-04](#ph-04-알림-조회-api--마스킹-통일) | 알림 조회 API · 마스킹 통일 | S3 | 3 | PH-01 | — | #390 #391 #392 #410 | 예정 |
 | [PH-96-②](#ph-96-transactional-outbox-①-발행측릴레이-s2--②-구독-s3) | 아웃박스 구독 — 알림 4종 | S3 | 1.5 | PH-96-① · PH-04 | — | #393 #394 #395 #396 | 예정 |
@@ -56,8 +55,8 @@
 
 | ID | 제목 | S | 인일 | 선행 | 기한 | 이슈·PR | 상태 |
 |---|---|---|---|---|---|---|---|
-| [PH-10](#ph-10-계좌-상태-전이-매트릭스--flyway) | 계좌 상태 전이 매트릭스 + Flyway | S1 | 3 | — | **Flyway 9/30 전** | #419 | 예정 |
-| [PH-11](#ph-11-적수-산출--일수-방식--베이스라인) | 적수 산출 · 일수 방식 · 베이스라인 | S1 | 2.5 | PH-60 (PH-40은 나오면 교체) | 베이스라인 10/6 | — | 예정 |
+| [PH-10](#ph-10-계좌-상태-전이-매트릭스--flyway) | 계좌 상태 전이 매트릭스 + Flyway | S1 | 3 | — | **Flyway 9/30 전** | #419 | 완료 |
+| [PH-11](#ph-11-적수-산출--일수-방식--베이스라인) | 적수 산출 · 일수 방식 · 베이스라인 | S1 | 2.5 | PH-60 (PH-40은 나오면 교체) | 베이스라인 10/6 | #524 | 진행 |
 | [FE #139](#fe-139-matured-정책표) | MATURED 정책표 | S1 | 0.5 | PH-10 | — | FE #139 | 예정 |
 | [FE #101](#fe-101-계좌비밀번호-토큰-하드코딩-제거) | 계좌비밀번호 토큰 하드코딩 제거 (1차 잔여) | S1 | 0.5 | — | — | FE #101 | 예정 |
 | [PH-12](#ph-12-이자-계산기--절사-규칙) | 이자 계산기 · 절사 규칙 | S2 | 3.5 | PH-11 | **10/16** | — | 예정 |
@@ -80,16 +79,17 @@
 
 | ID | 제목 | S | 인일 | 선행 | 기한 | 이슈·PR | 상태 |
 |---|---|---|---|---|---|---|---|
-| [PH-97](#ph-97-관리자-고객-계정-운영-api) | 관리자 고객 계정 운영 API (S0 이월분) | S1 | 0.5 | — | — | #449 · PR #459 · #450 | 진행 |
+| [PH-97](#ph-97-관리자-고객-계정-운영-api) | 관리자 고객 계정 운영 API (S0 이월분) | S1 | 0.5 | — | — | #449 · PR #459 · #450 · PR #529 | 완료 |
 | [PH-87](#ph-87-핵심-용어) | 핵심 용어 정의 | S1 | 0.5 | — | 9/23 | #447 · PR #453 | 완료 |
-| [PH-20](#ph-20-계정과목-체계--gl-테이블) | 계정과목 체계 · GL 테이블 | S1 | 2.5 | — | **10/1 Flyway** | #451 · PR #478 | 진행 |
-| [PH-21](#ph-21-전표-기표-구조--개시-잔액--분개-패턴표) | 전표 기표 구조 · 개시 잔액 · 분개 패턴표 | S1 | 2.5 | PH-20 | **패턴표 9/30 → P6** | #452 · PR #491 | 진행 |
-| [#359](#359-도메인-간-계약면-결정) | 도메인 간 계약면 결정 ADR | S1 | 0.5 | — | — | #359 | 예정 |
-| [#475](#475-상품가입-계좌비밀번호-토큰-검증-연결) | 상품가입 계좌비밀번호 토큰 검증 연결 | S1 | 0.5 | — | — | #475 | 예정 |
+| [PH-20](#ph-20-계정과목-체계--gl-테이블) | 계정과목 체계 · GL 테이블 | S1 | 2.5 | — | **10/1 Flyway** | #451 · PR #478 | 완료 |
+| [PH-21](#ph-21-전표-기표-구조--개시-잔액--분개-패턴표) | 전표 기표 구조 · 개시 잔액 · 분개 패턴표 | S1 | 2.5 | PH-20 | **패턴표 9/30 → P6** | #452 · PR #491 · PR #526 | 완료 |
+| [#359](#359-도메인-간-계약면-결정) | 도메인 간 계약면 결정 ADR | S1 | 0.5 | — | — | #359 | 진행([D-26](README.md#d-26--102--p3)) |
+| [#475](#475-상품가입-계좌비밀번호-토큰-검증-연결) | 상품가입 계좌비밀번호 토큰 검증 연결 | S1 | 0.5 | — | — | #475 · PR #497 | 완료 |
 | PM | 기획 리드 (주 0.5일 상한) | S1 | 0.5 | — | — | — | — |
 | [PH-24](#ph-24-gl-분개-서비스--이체-기표-훅--glapi) | GL 분개 서비스 · 이체 기표 훅 · `gl.api` | S2 | 4.5 | PH-21 · PH-99 | 시그니처 9/30 · PR 10/12 · **머지 10/14** | — | 예정 |
 | [PH-28](#ph-28-시산표-api--베이스라인) | 시산표 API · 베이스라인 | S2 | 2.5 | 베이스라인: PH-60b · API: PH-24 | 베이스라인 10/8 · API 10/16 | — | 예정 |
 | [PH-75](#ph-75-정보계-마트-설계) | 정보계 마트 설계 | S2 | 1 | PH-40 | **10/16** → P5 | — | 예정 |
+| [FE #136](#fe-136-관리자-세션-정책--로그인-훅-교체) | 관리자 세션 정책 · 로그인 훅 교체 | S2 | 0.25 | PH-49a-② | 10/16 릴리스 전 | FE #136 · PR #162 | 진행 |
 | PM | 기획 리드 | S2 | 0.5 | — | — | — | — |
 | [GL-IDX](#gl-idx-시산표-인덱스-개선) | 시산표 인덱스 개선 · 재측정 | S3 | 1 | PH-28 | — | — | 예정 |
 | [PH-28b](#ph-28b-회계-결함-주입--탐지율) | 회계 결함 주입 · 탐지율 | S3 | 2.5 | PH-28 · PH-38 | S3 2주차 | — | 예정 |
@@ -113,16 +113,16 @@
 
 | ID | 제목 | S | 인일 | 선행 | 기한 | 이슈·PR | 상태 |
 |---|---|---|---|---|---|---|---|
-| [PH-99](#ph-99-이체-파이프라인-확장점seam) | 이체 파이프라인 확장점(seam) | S1 | 1.5 | — | **10/2** (목표 9/30) | — | 예정 |
-| [PH-31](#ph-31-고정길이-전문-규격) | 고정길이 전문 규격 (문서) | S1 | 0.5 | — | — | — | 예정 |
+| [PH-99](#ph-99-이체-파이프라인-확장점seam) | 이체 파이프라인 확장점(seam) | S1 | 1.5 | — | **10/2** (목표 9/30) | #501 · PR #504 | 완료 |
+| [PH-31](#ph-31-고정길이-전문-규격) | 고정길이 전문 규격 (문서) | S1 | 0.5 | — | — | #544 · PR #546 | 완료 |
 | [PH-38](#ph-38-원장-대사-배치) | 원장 대사 배치 — 착수 | S1 | 1 | — | — | #378 · PR #463 | 완료 |
-| [PH-33-①](#ph-33-대외계-①-모의-서버-s1--②-타행-이체-s3) | 모의 대외계 서버 · 전문 어댑터 | S1 | 1.5 | PH-31 | — | — | 예정 |
+| [PH-33-①](#ph-33-대외계-①-모의-서버-s1--②-타행-이체-s3) | 모의 대외계 서버 · 전문 어댑터 | S1 | 1.5 | PH-31 | — | #551 · PR #552 | 완료 |
 | [#379 규격](#379-규격-전달) | 파티션 프로시저 규격·판단 → P5 | S1 | 0 (완충) | — | **10/6** | #379 | 예정 |
-| [PH-80](#ph-80-timeout--정정-체인--자동-재시도-금지) | 정정 체인 · INVALID · 재시도 금지 규약 (TIMEOUT 제외분) | S1 | 1.5 | PH-99 | — | — | 예정 |
+| [PH-80](#ph-80-timeout--정정-체인--자동-재시도-금지) | 정정 체인 · INVALID · 재시도 금지 규약 (TIMEOUT 제외분) | S1 | 1.5 | PH-99 | — | #548 · PR #550 | 완료 |
 | [PH-38](#ph-38-원장-대사-배치) | 대사 — 불일치 저장 · 목록 API · 300만 베이스라인 · CobStep 편입 | S2 | 2 | PH-60b · CobStep 인터페이스 | 베이스라인 10/6 · API 10/16 | #468 | 예정 |
 | [PH-80](#ph-80-timeout--정정-체인--자동-재시도-금지) | TIMEOUT 추가 · 전체 머지 | S2 | 2.5 | PH-80 S1분 · P5 회차 현황 (10/6) | **10/8 머지** | — | 예정 |
 | [PH-99](#ph-99-이체-파이프라인-확장점seam) | `transfer.api` 입금 계약 (P2 이자·만기·해지용) | S2 | 0.5 | PH-99 | **10/16** | — | 예정 |
-| [EVT-2](#evt-2-publishevent-두-줄) | `publishEvent` 두 줄 | S2 | 0.5 | PH-32 | 10/6 | — | 예정 |
+| [EVT-2](#evt-2-publishevent-두-줄) | `publishEvent` 두 줄 | S2 | 0.5 | PH-32 | 10/6 | #505 | 완료 — P1이 #505에서 대신 처리 |
 | [HOOK-MERGE](#hook-merge-훅-구현체-머지) | 훅 구현체 3건 리뷰·머지 | S2 | 0.5 | PH-90 · PH-24 · PH-41 | 10/12~16 | — | 예정 |
 | [PH-33-②](#ph-33-대외계-①-모의-서버-s1--②-타행-이체-s3) | 타행 송신 · 조회거래 · 미결제 기표 · 격리 | S3 | 5 | PH-33-① · PH-24 | **10/23 머지** | — | 예정 |
 | [PH-36](#ph-36-장애-주입-3종--보상-트랜잭션) | 장애 주입 3종 · 보상 트랜잭션 | S3 | 2 | PH-33-② · PH-80 | — | — | 예정 |
@@ -182,7 +182,7 @@
 
 ### PH-32. 도메인 이벤트 발행 골격
 
-- 이벤트 클래스 — `TransferCompleted(transactionNumber, sourceType, amount, fromAccountId, toAccountId, occurredAt)` · `TransferFailed(...)` · `SubscriptionOpened(...)` · `AccountMatured(...)`. `AccountMatured`는 타입만 정의하고 2차에는 소비하지 않는다. 이름은 과거형이고, Reference Key는 거래번호다.
+- 이벤트 클래스 — `TransferCompleted(transactionNumber, sourceType, amount, fromAccountId, toAccountId, occurredAt)` · `TransferFailed(...)` · `SubscriptionOpened(...)` · `AccountMatured(...)`. (#505에서 이체는 `TransferSettled` 하나로 합쳤다 — 성공·실패는 `status`, 이체 종류는 `txType`.) `AccountMatured`는 타입만 정의하고 2차에는 소비하지 않는다. 이름은 과거형이고, Reference Key는 거래번호다.
 - `@TransactionalEventListener(phase = BEFORE_COMMIT)` 리스너 자리와 **JdbcTemplate INSERT 규약**을 문서로 남긴다. 규칙은 [README §3-3](README.md#3-3-이벤트아웃박스)을 따른다.
 - `publishEvent` 자리와 페이로드는 P4와 합의한다. 자리 표시는 PH-99(10/2)가 하고, 두 줄은 EVT-2(10/6)가 넣는다.
 - 테스트: BEFORE_COMMIT 리스너 INSERT가 커밋에 실리는지 통합 테스트(PH-99 골격 위), 리스너 예외 시 롤백을 테스트로 고정.
@@ -193,7 +193,7 @@
 
 9/18 결정으로 PH-30 전체가 P1 소유다([D-03](README.md#d-03--918--p1p4-합의)). P4는 수치를 받아 리포트에 싣는다.
 
-- ① k6 시나리오 3종 — 분산(계좌 분산) · **핫스팟(동일 계좌 동시 100건)** · 동일 계좌 100/500/1000. **`BASE_URL`과 VU를 파라미터로** 받는다. P5 PH-56이 3-Tier ALB DNS에 같은 harness를 돌리기 때문이다.
+- ① k6 시나리오 **2계열** — **부하**(계좌 분산, 수준별 고정 도착률로 최대 안정 처리량·변곡점 탐색) · **정합성**(동일 계좌 동시 100건 고정). **`BASE_URL`과 부하 파라미터를 인자로** 받는다 (P5 PH-56이 3-Tier ALB DNS에 같은 harness를 돌린다). 구분 기준은 규모가 아니라 계좌를 분산하느냐 한 계좌에 몰아넣느냐다 — 조정 근거는 [harness.md](harness.md) §8.
 - ② 이체 TPS·p95·p99 베이스라인(단일 EC2). ②-b 한도 경로(`checkAndReserve`)의 p95·p99를 따로 잰다.
 - ③ 데드락률 · 잔액 오차 · 원장 짝 무결성 (#384)
 - ④ 리포트 양식(평균·p95·**p99** 칸)과 `harness.md`를 공유한다. 모든 트랙의 성능 리포트가 이 양식을 쓴다.
@@ -290,6 +290,14 @@
 ### FE #136. 관리자 세션 정책 · 로그인 훅 교체
 
 PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그인 훅을 `/admin/auth/login`으로 바꾸고 30분 만료를 반영한다(FE `requirements-admin.md` REQ-ADM-006·007).
+
+**담당이 P1에서 P3로 옮겨졌다**(10/1). 선행이 안 풀린 채로 P1 S2가 인일을 넘겨 P3가 받았다.
+
+작업이 선행 조건으로 둘로 갈린다.
+
+- **30분 만료 반영 — 완료**(FE PR #162, 10/1 머지). 값이 PH-49a-① 결정 4로 확정돼 서버 없이 먼저 했다. 만료 길이는 보고 있는 경로가 아니라 세션의 역할로 고른다. 다만 **서버 세션은 아직 10분**(`application.yml` `session.timeout: 10m`)이라 PH-49a-②가 30분을 넣기 전까지는 화면이 잔여 30분을 보여도 서버가 10분에 401을 준다. 10/16 릴리스에 양쪽이 같이 나가면 해소된다.
+- **로그인 훅 교체 — 남음.** PH-49a-②(10/8 머지)가 선행이고, 로그인 계약 JSON은 PH-49a-①이 넘겨주기로 돼 있다.
+
 **완료 기준:** 관리자 로그인이 `/admin/auth/login`을 호출하고, 관리자 세션이 30분 무조작 후 만료돼 `/admin/login`으로 이동한다.
 
 ### PH-04. 알림 조회 API · 마스킹 통일
@@ -549,8 +557,8 @@ S4지만 신규 API가 아니라 문서화·측정·훈련이다.
 ### PH-21. 전표 기표 구조 · 개시 잔액 · 분개 패턴표
 
 - **정본은 [gl_journal_patterns.md](gl_journal_patterns.md)**(PR #491). 아래는 요약이고, 어긋나면 그 문서를 따른다.
-- 전표번호: `yyyyMMdd-TTT-NNNNNN`(19자, `voucher_no VARCHAR(20)`). `yyyyMMdd`는 거래일, `TTT`는 `OPN`·`TRF`·`SUB`·`INT`, `NNNNNN`은 (거래일, 유형)마다 1부터 시작하는 **6자리** 일련번호다. 4자리로는 PH-60b 첫날부터 넘친다. PH-40 전에는 `LocalDate`로 임시 채번한다.
-- 전표 단위 차대변 일치 검증(도메인 + DB 제약)
+- 전표번호: `yyyyMMdd-TTT-NNNNNN`(19자, `voucher_no VARCHAR(20)`). `yyyyMMdd`는 거래일, `TTT`는 `OPN`·`TRF`·`SUB`·`INT`, `NNNNNN`은 (거래일, 유형)마다 1부터 시작하는 **6자리** 일련번호다. 4자리로는 PH-60b 첫날부터 넘친다. 거래일은 호출자가 넘기고, 일련번호는 `gl_voucher_sequence`가 기표와 별도 트랜잭션으로 채번한다(결번 허용).
+- 전표 단위 차대변 일치 검증은 도메인에서만 한다. DB 제약은 걸지 않는다 — 근거는 패턴 문서 §2(PH-28b 결함 주입과 충돌, MySQL에 행 간 제약 없음).
 - 개시 잔액 전표(`OPN`): 차 `10100` 현금성 / 대 `20100` 예수금(고객 잔액 합계) + 대 `30100` 개시잔액(차액). 0원 줄은 만들지 않는다. P6 적재 순서는 계정 시드 → 개시 전표 → 거래 전표다.
 - **당행 이체(`TRF`)와 상품가입 초입금(`SUB`)은 둘 다 차 `20100` 예수금 / 대 `20100` 예수금이다.** 상품가입은 고객의 입출금계좌에서 새 예적금계좌로 옮기는 내부 이동이라 **현금성 계정이 끼지 않는다.** 차대변은 맞아서 검증에 걸리지 않으므로 틀려도 드러나지 않는다. 주의한다.
 - 미확정 패턴 2종은 소유 트랙이 정해서 패턴 문서에 추가한다: 이자 지급 2줄(P2 PH-14), 타행 미결제 2패턴(P4 PH-33-②). **PH-60b는 이 둘을 만들지 않는다.**
@@ -560,6 +568,8 @@ S4지만 신규 API가 아니라 문서화·측정·훈련이다.
 ### #359. 도메인 간 계약면 결정
 
 `<domain>.api` 단일화 결정 ADR 1건이다. ADR-0003(`batch.api`)을 선례로 쓴다. 결정이 나면 P4 #350 가이드 문서화와 ArchUnit 전 도메인 확대가 따라온다. 모놀리식 ADR은 범위 밖이다.
+
+**결정 자체는 [D-26](README.md#d-26--102--p3)에 기록했다**(기한 10/2). ADR 문서(ADR-0004)는 문서만 담은 PR로 내지 않고 [PH-24](#ph-24-gl-분개-서비스--이체-기표-훅--glapi) 구현 PR에 함께 넣는다 — PH-24가 `gl.api`를 만드는 작업이라 이 결정이 처음 적용되는 자리다.
 
 ### #475. 상품가입 계좌비밀번호 토큰 검증 연결
 
@@ -574,19 +584,25 @@ S4지만 신규 API가 아니라 문서화·측정·훈련이다.
 ```java
 // gl.api
 public interface JournalPostingUseCase {
-    void post(JournalRequest request);   // 실패 시 예외를 던진다 — 삼키지 않는다
+    void post(JournalRequest request);   // 실패 시 예외를 던진다 — 삼키지 않는다. @Transactional(propagation = MANDATORY)
 }
-public record JournalRequest(String txType,         // gl_voucher.tx_type 값: OPENING · TRANSFER · PRODUCT_SUBSCRIPTION · INTEREST (타행은 PH-33-②가 추가)
-                             String referenceKey,   // 원 거래번호 — 원장·이체와 전표를 잇는 키
+public record JournalRequest(GlTxType txType,       // gl_voucher.tx_type (타행은 PH-33-②가 값을 추가)
+                             String referenceKey,   // 원 거래번호 — 원장·이체와 전표를 잇는 키. (txType, referenceKey) 유일
                              LocalDate tradeDate,
                              List<JournalLine> lines) {}
 public record JournalLine(String accountCode, JournalDirection drCr, long amount) {}
-public enum JournalDirection { DEBIT, CREDIT }   // gl.domain 에서 gl.api 로 옮긴다 — 아래
+public enum GlTxType { OPENING, TRANSFER, PRODUCT_SUBSCRIPTION, INTEREST }   // gl.domain 에서 gl.api 로 옮긴다 — 아래
+public enum JournalDirection { DEBIT, CREDIT }                              // gl.domain 에서 gl.api 로 옮긴다 — 아래
 ```
 
 - 헤더 금액은 두지 않는다. 금액은 줄마다 있고 전표 합계는 줄에서 계산한다(OPN처럼 줄 금액이 다른 전표가 있다).
-- **`JournalDirection`을 `gl.domain`에서 `gl.api`로 옮긴다.** 지금은 `gl.domain`에 있는데(PR #478 머지분), `#349`가 건 `Api mayNotAccessAnyLayer()` 때문에 **`gl.api`가 `gl.domain`을 참조하면 `LayerArchitectureTest > gl`이 깨진다.** 공유 어휘를 소유 도메인의 `api`에 두는 것은 [ADR-0004](../adr/0004-domain-contract-surface.md)(#495 초안, PH-24 PR에서 함께 머지) 결정 2와 같은 방향이다. `String drCr`로 두면 규칙은 피하지만 호출하는 트랙(P2 PH-14 · P4 PH-33-②)이 문자열 오타를 컴파일에서 못 잡는다.
-- **`gl_voucher`에 `reference_key` 컬럼을 새 V 파일로 추가한다**(PR #478 스키마에는 없다). 이 키가 없으면 "이체 1건당 전표 1건" 검증과 PH-28b 분개누락 탐지가 원장과 조인할 수 없다.
+- **`JournalDirection`·`GlTxType`을 `gl.domain`에서 `gl.api`로 옮긴다.** 지금은 `gl.domain`에 있는데(PR #478 머지분), `#349`가 건 `Api mayNotAccessAnyLayer()` 때문에 **`gl.api`가 `gl.domain`을 참조하면 `LayerArchitectureTest > gl`이 깨진다.** 공유 어휘를 소유 도메인의 `api`에 두는 것은 [ADR-0004](../adr/0004-domain-contract-surface.md)(#495 초안, PH-24 PR에서 함께 머지) 결정 2와 같은 방향이다. `String`으로 두면 규칙은 피하지만 호출하는 트랙(P2 PH-14 · P4 PH-33-②)이 문자열 오타를 컴파일에서 못 잡는다. 타행 유형은 PH-33-②가 `tx_type` CHECK를 넓히는 V 파일과 같은 PR에서 enum 값을 추가한다.
+- **`post()`는 호출자 트랜잭션 안에서만 돈다(`MANDATORY`).** 트랜잭션 없이 부르면 즉시 실패한다. `REQUIRED`면 트랜잭션 없는 호출(예: 배치)에서 전표가 원장과 다른 커밋에 들어가고, 아래 "GL이 이벤트가 아니라 동기 포트인 이유"가 깨진다.
+- **`gl_voucher`에 `reference_key` 컬럼을 새 V 파일로 추가한다**(PR #478 스키마에는 없다). `NOT NULL` + `UNIQUE (tx_type, reference_key)`. 이 키가 없으면 "이체 1건당 전표 1건" 검증과 PH-28b 분개누락 탐지가 원장과 조인할 수 없다.
+    - **같은 키로 두 번 부르면 예외다(no-op 아님).** 조용히 넘기면 원장만 두 번 기표된 상태가 가려진다. 예외면 원장까지 롤백된다.
+    - 개시 전표의 키는 `OPENING-{yyyyMMdd}`(거래일)다.
+    - PH-60b 시드(10/2)가 이 V 파일보다 먼저 들어간다. V 파일은 기존 행의 키를 채운 뒤 `NOT NULL`·`UNIQUE`를 건다. PH-60b 시드는 `TRANSFER`·`PRODUCT_SUBSCRIPTION` 전표의 `description`에 원장 `transaction_number`를 남긴다(개시 전표 제외). V 파일은 이 값을, 개시 전표는 `OPENING-20260901`을 `reference_key`로 옮긴다.
+    - 역분개를 도입하면(#129, 2차 범위 밖) 원 전표와 같은 키를 쓰지 말고 별도 `tx_type`(예: `REVERSAL`)을 둔다. Apache Fineract는 역분개에 원 거래와 같은 `transaction_id`를 쓰고 DB 유일 제약 없이 애플리케이션에서 중복을 거른다 — 전표 헤더 테이블이 없어서다. 우리는 `gl_voucher`가 있어 유일 제약을 건다.
 - 전표 생성 + 분개 기표 서비스, `product_gl_mapping`
 - `GlLedgerPostingHook implements transfer.api.LedgerPostingHook` — 이체 유형별 패턴표로 전표 1건. **예외를 던진다(= 이체 롤백).**
 - 상품가입 초입금 기표(`LedgerPair.forProductSubscription` 완료 지점)
@@ -634,7 +650,7 @@ AI로 불일치 목록을 뽑고 고친다. **C-1보다 먼저 한다.**
 
 ### FE C-2. 영업일·거래일 표기
 
-예약·자동이체 화면에 **거래일만** 표기한다. 로그인 훅 교체는 FE #136(P1)이다.
+예약·자동이체 화면에 **거래일만** 표기한다. 로그인 훅 교체는 FE #136(P3)이다.
 **완료 기준:** 예약·자동이체 화면의 일자 라벨이 glossary의 "거래일"이고, 값이 서버 `tradeDate`와 같다.
 
 ### FE ADM-04. 대사 불일치 목록 (#130-①)
@@ -690,9 +706,9 @@ TransferExecutionService.execute(command)                         ← 편집자:
  │     tradeDate = businessDateProvider.today()                   ← P5 provider, P4가 대입. 한 번 구해 원장·훅 B·transfer에 같이 쓴다
  │     원장 기표 LedgerPair (기존)
  │     [훅 B] LedgerPostingHook.afterLedger(ctx)                   ← P3 PH-24 (예외 → 롤백 = 이체 실패)
- │     publisher.publishEvent(new TransferCompleted(...))         ← P1 타입, EVT-2
+ │     publisher.publishEvent(new TransferSettled(...))           ← P1 타입, EVT-2(#505)
  │   }
- └─ failTransfer() REQUIRES_NEW { ERROR 저장; publishEvent(new TransferFailed(...)) }
+ └─ failTransfer() REQUIRES_NEW { ERROR 저장; publishEvent(new TransferSettled(...)) }
 
 [BEFORE_COMMIT 리스너 — P1 PH-96] 아웃박스 INSERT (JdbcTemplate). 예외 → 원본 롤백
 ```
@@ -702,7 +718,7 @@ TransferExecutionService.execute(command)                         ← 편집자:
 | A | `transfer.api.TransferPreCheck { int order(); void check(TransferPreCheckContext ctx); }` — `record TransferPreCheckContext(long customerId, long withdrawalAccountId, long amount)`. 거부는 `BusinessException` | P2 PH-90 | 락 이전, 읽기 전용 |
 | B | `transfer.api.LedgerPostingHook { void afterLedger(LedgerPostingContext ctx); }` — `record LedgerPostingContext(String transactionNumber, String txType, long amount, long fromAccountId, long toAccountId, LocalDate tradeDate)` | P3 PH-24 | 이체 REQUIRES_NEW 안. 예외 = 롤백 |
 | tradeDate | `business.api.BusinessDateProvider` 주입 | 제공 P5 PH-40, 대입 P4 | 같은 트랜잭션 |
-| 이벤트 | 완료는 템플릿 콜백 안, 실패는 `failTransfer()` 안 | P4 EVT-2 | 활성 트랜잭션 안이어야 리스너가 받는다 |
+| 이벤트 | 완료는 템플릿 콜백 안, 실패는 `failTransfer()` 안 | P1 #505(EVT-2 대신), 이후 P4 소유 | 활성 트랜잭션 안이어야 리스너가 받는다 |
 
 - **머지 순서(강제):** PH-99(10/2) → PH-80(10/8) → PH-90 → PH-24 → PH-41 대입(10/12~16, P4가 순서대로 머지) → PH-33-②(10/23). 이 창에서 순서대로 머지하려면 **PH-90·PH-24 PR은 10/12까지 리뷰 가능한 상태로 올린다.** PH-28 API(10/16)가 PH-24 위에 서므로 PH-24는 늦어도 10/14에 머지돼야 한다. 이 순서를 벗어나 `execute()`를 고치는 PR은 P4가 리뷰에서 막는다.
 - **GL이 이벤트가 아니라 동기 포트인 이유:** 이벤트로 하면 전표가 원장과 다른 커밋에 들어가 "분개누락"이 정상 상태가 되기 때문이다.
@@ -715,6 +731,8 @@ TransferExecutionService.execute(command)                         ← 편집자:
 - 현황: 계약 4종·훅 A·B 연결·자리 표시·BEFORE_COMMIT 플러시 테스트 골격 완료(#501). 입금 계약은 남아 있다.
 
 ### PH-31. 고정길이 전문 규격
+
+**정본은 [fixed_length_message_spec.md](fixed_length_message_spec.md)다.** 아래는 범위 요약이다.
 
 - 헤더: 전문길이 · 종별 · 거래코드 · 전송일시 · 기관코드 · 일련번호 · 응답코드
 - 본문: 계좌 · 금액 · 예금주 · 적요
@@ -752,10 +770,13 @@ TransferExecutionService.execute(command)                         ← 편집자:
 - 상태 역행 금지 검증, 자동 재시도 금지 규약 문서와 리뷰 체크 항목
 - TIMEOUT 응답 스키마를 10/8까지 FE B-9(P1)에 넘긴다.
 - **완료 기준:** 정정 시나리오가 DELETE 없이 끝난다. 체인을 따라 과거를 재구성할 수 있다.
+- 현황: S1분 완료(#548). 정정 체인·재시도 금지 규약의 정본은 [transfer_correction.md](transfer_correction.md)다. INVALID는 `status` 값이 아니라 `transfer.invalidated_at`(무효화 시각)으로 표기한다 — `ProcessResultStatus`는 건드리지 않았다. TIMEOUT 추가와 TIMEOUT 응답 스키마는 S2분에 남아 있다.
 
 ### EVT-2. `publishEvent` 두 줄
 
 완료 이벤트는 REQUIRES_NEW 템플릿 콜백 안에, 실패 이벤트는 `failTransfer()` 안에 넣는다. P1 플러시 통합 테스트가 통과해야 한다.
+
+> 2026-09-30: P1이 #505(PH-32)에서 대신 넣었다. 배치에서 발행하면 재확정 경로가 이벤트를 내지 않아 알림이 빠지므로 엔진 한 곳에서 즉시·예약·자동을 모두 발행한다(#504 리뷰 합의).
 
 ### HOOK-MERGE. 훅 구현체 머지
 
@@ -767,6 +788,7 @@ PH-90 PreCheck → PH-24 훅 B → PH-41 tradeDate 대입 순서로 머지한다
 
 - 별도 프로세스 모의 서버(응답 지연 · 무응답 · 중복응답 스위치)
 - `adapter/out/external` 전문 직렬화·역직렬화 + 단위 테스트
+- 현황: 완료(#551). 실행법·응답 규칙·장애 스위치·P5 실행 계약은 [mock_external_server.md](mock_external_server.md)다. 실행 파일은 `mock-external.jar` 하나이고, 은행 앱과 같은 저장소의 별도 소스셋에서 따로 빌드한다.
 
 **②**
 
@@ -981,7 +1003,7 @@ S4지만 CI/CD·문서·훈련이라 S4 규칙에 걸리지 않는다([D-05](REA
 - PH-60의 실행법·전용 대역·검수 SQL·실측 결과는 [ph60_minimum_seed.md](ph60_minimum_seed.md)를 따른다. 대량 시드는 HTTP/Swagger 엔드포인트로 노출하지 않으며, 정기 배포와 분리된 일회성 작업에서 `phase2-seed` 프로필과 명시적 실행 플래그를 함께 지정할 때만 실행하고 검증 완료 후 자동 종료한다.
 - **P4 검수를 통과해야 완료다**(원장 짝 · 원장 합계 = 잔액 합계 · 전표 차대변). 적재 시간을 기록한다.
 - **10/6이 한계선이다.** 그보다 늦으면 10/8 개선 전 수치 마감(P2·P3·P4·P5)을 지킬 수 없다.
-- GL 쪽 선행은 머지 전에도 쓸 수 있다. 테이블은 PR #478(PH-20), 패턴·채번은 PR #491(PH-21)에 이미 있으므로 그 브랜치 기준으로 생성기를 먼저 짠다. 10/1 머지를 기다리지 않는다.
+- GL 쪽 선행은 머지 전에도 쓸 수 있다. 테이블(PR #478, PH-20)과 패턴·채번(PR #491, PH-21)은 `dev`에 머지됐다.
 - 누가 쓰나: PH-60은 P2 적수 · **P1 TPS·동시성** · P1 아웃박스 시뮬레이션. PH-60b는 P4 대사(10/6) · P3 시산표(10/8) · P5 COB(10/16).
 
 ### PH-22'. RAG 문서 선정

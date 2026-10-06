@@ -38,6 +38,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -60,6 +61,9 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
 
     @Autowired
     private PlatformTransactionManager transactionManager;
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
 
     @Autowired
     private AccountLockPort accountLockPort;
@@ -234,7 +238,8 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
                 preChecks,
                 ledgerPostingHooks,
                 clock,
-                transactionManager);
+                transactionManager,
+                eventPublisher);
     }
 
     private static TransferPreCheck recordingPreCheck(int order, List<Integer> called, boolean reject) {

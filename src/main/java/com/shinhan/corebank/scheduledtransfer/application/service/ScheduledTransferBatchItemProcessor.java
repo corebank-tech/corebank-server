@@ -3,6 +3,8 @@ package com.shinhan.corebank.scheduledtransfer.application.service;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.common.util.MaskingUtil;
+import com.shinhan.corebank.scheduledtransfer.api.ScheduledTransferSettled;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferPersistencePort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLookupResult;
@@ -13,6 +15,7 @@ import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCas
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -20,6 +23,7 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +42,8 @@ public class ScheduledTransferBatchItemProcessor {
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final AuditLogService auditLogService;
     private final TransferLookupPort transferLookupPort;
+    private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     // WAITING -> PROCESSING 원자적 선점 (REQ-SCD-013 멱등성 방어)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -68,7 +74,7 @@ public class ScheduledTransferBatchItemProcessor {
                     .formatted(scheduledTransfer.getScheduledTransferId(), date));
         }
 
-        LocalDateTime executedAt = LocalDateTime.now();
+        LocalDateTime executedAt = LocalDateTime.now(clock);
         if (result.status() == ProcessResultStatus.SUCCESS) {
             scheduledTransfer.markSuccess(result.transactionNumber(), executedAt);
         } else {
@@ -92,6 +98,21 @@ public class ScheduledTransferBatchItemProcessor {
         }
 
         recordAudit(scheduledTransfer, date, result.status() == ProcessResultStatus.SUCCESS, result.errorCode());
+
+        // 거래번호가 있으면 이체 엔진이 돈이 움직인 트랜잭션 안에서 이미 TransferSettled 를 발행했다(#436).
+        // 거래번호가 없는 건 transfer 행이 생기기 전의 사전검증 실패뿐이고, 엔진이 발행하지 못하므로 여기서
+        // 실행 기록과 함께 발행한다.
+        if (result.isPreValidationFailure()) {
+            eventPublisher.publishEvent(ScheduledTransferSettled.builder()
+                    .customerId(scheduledTransfer.getCustomerId())
+                    .refId(scheduledTransfer.getScheduledTransferId())
+                    .status(result.status())
+                    .errorCode(result.errorCode())
+                    .occurredAt(executedAt)
+                    .amount(scheduledTransfer.getAmount())
+                    .counterpartyName(MaskingUtil.maskName(scheduledTransfer.getPayeeName()))
+                    .build());
+        }
     }
 
     // transfer 테이블에 실제 거래가 있었는지만 확인해서 확정 (PROCESSING에 멈춘 건 재확정)
@@ -100,8 +121,9 @@ public class ScheduledTransferBatchItemProcessor {
         Optional<TransferLookupResult> lookup = transferLookupPort.findBySourceAndDate(
                 scheduledTransfer.getScheduledTransferId(), scheduledTransfer.getScheduledDate());
 
-        LocalDateTime now = LocalDateTime.now();
-        if (lookup.isEmpty()) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        boolean hasNoTransferRow = lookup.isEmpty();
+        if (hasNoTransferRow) {
             scheduledTransfer.markFailed("실행 중 확인 불가로 재확정 배치가 오류 처리함", null, now);
         } else if (lookup.get().status() == ProcessResultStatus.SUCCESS) {
             scheduledTransfer.markSuccess(lookup.get().transactionNumber(), now);
@@ -131,6 +153,19 @@ public class ScheduledTransferBatchItemProcessor {
                 scheduledTransfer.getScheduledDate(),
                 scheduledTransfer.getStatus() == ScheduledTransferStatus.SUCCESS,
                 null);
+
+        // transfer 행이 없으면 이체 엔진이 발행하지 못했고, completeProcessing() 의 사전검증 실패 발행도 함께
+        // 롤백된 건이다. 재확정이 겹치면 가드에서 return 해도 트랜잭션은 커밋되므로 가드를 통과한 뒤에만 발행한다.
+        if (hasNoTransferRow) {
+            eventPublisher.publishEvent(ScheduledTransferSettled.builder()
+                    .customerId(scheduledTransfer.getCustomerId())
+                    .refId(scheduledTransfer.getScheduledTransferId())
+                    .status(ProcessResultStatus.ERROR)
+                    .occurredAt(now)
+                    .amount(scheduledTransfer.getAmount())
+                    .counterpartyName(MaskingUtil.maskName(scheduledTransfer.getPayeeName()))
+                    .build());
+        }
     }
 
     private void recordAudit(ScheduledTransfer scheduledTransfer, LocalDate date, boolean succeeded, String errorCode) {

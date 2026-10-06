@@ -12,6 +12,7 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.customer.application.port.in.LoginStatusResult;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -99,6 +100,7 @@ class LoginStatusQueryServiceTest {
                 "01012345678",
                 0,
                 false,
+                CustomerStatus.ACTIVE,
                 LocalDateTime.of(2026, 3, 10, 11, 0),
                 lastLoginIp,
                 previousLoginAt,

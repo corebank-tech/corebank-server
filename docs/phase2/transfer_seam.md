@@ -32,12 +32,12 @@ execute(command)
        원장 2행 저장
        [훅 B] LedgerPostingHook.afterLedger(ctx)
        transfer.complete
-         [자리] EVT-2 publishEvent(TransferCompleted)
        transfer 저장
+       publishEvent(TransferSettled)   ← 즉시·예약·자동 모두. P1 #505, 이후 P4 소유
     }
  실패 시 failTransfer() — REQUIRES_NEW {
-       [자리] EVT-2 publishEvent(TransferFailed)
        ERROR 행 저장
+       publishEvent(TransferSettled)   ← status=ERROR
     }
 ```
 
@@ -48,8 +48,9 @@ execute(command)
 | 훅 A | `TransferPreCheck { int order(); void check(TransferPreCheckContext) }` | P2 PH-90 | 없음. 락 이전, 읽기 전용 | `BusinessException` → 이체 ERROR 확정. OTP·한도 소모 없음. 계좌비밀번호 토큰은 `verifyBeforeLock`에서 이미 소비돼 재시도 시 재인증 필요 |
 | 훅 B | `LedgerPostingHook { void afterLedger(LedgerPostingContext) }` | P3 PH-24 | 이체 REQUIRES_NEW 안 | 원장·잔액·한도 적립까지 롤백 → 이체 ERROR 확정 |
 | tradeDate | `business.api.BusinessDateProvider` | 제공 P5 PH-41, 대입 P4 | 같은 트랜잭션 | — |
-| 완료 이벤트 | `TransferCompleted` | 타입 P1 PH-32, 발행 P4 EVT-2 | 이체 REQUIRES_NEW 안 | 리스너 예외 → 이체 롤백 |
-| 실패 이벤트 | `TransferFailed` | 타입 P1 PH-32, 발행 P4 EVT-2 | `failTransfer()` REQUIRES_NEW 안 | — |
+| 확정 이벤트 | `TransferSettled` — 성공·실패를 `status`로, 이체 종류를 `txType`으로 구분 | 타입·페이로드 P1 PH-32. 발행 코드는 P1이 #505에서 넣었고(EVT-2 대신) | 성공은 기표 REQUIRES_NEW 안, 실패는 `failTransfer()` REQUIRES_NEW 안 | 리스너 예외 → 이체 롤백 |
+
+transfer 행이 생기기 전의 사전검증 실패는 엔진이 발행하지 않습니다. 즉시이체는 고객이 API 응답으로 오류를 받고, 예약·자동이체는 배치가 거래번호 없는 결과일 때와 재확정이 transfer 행을 찾지 못했을 때만 `ScheduledTransferSettled`·`AutoTransferExecutionSettled`를 발행합니다.
 
 컨텍스트 레코드는 원시 타입만 담습니다. `api` 패키지는 ArchUnit에서 다른 계층을 참조할 수 없어 `TransferCommand`를 넘기지 않습니다.
 

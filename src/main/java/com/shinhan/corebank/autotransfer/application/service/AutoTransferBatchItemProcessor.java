@@ -1,5 +1,6 @@
 package com.shinhan.corebank.autotransfer.application.service;
 
+import com.shinhan.corebank.autotransfer.api.AutoTransferExecutionSettled;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionPersistencePort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
 import com.shinhan.corebank.autotransfer.application.port.out.StuckExecution;
@@ -10,11 +11,13 @@ import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -23,6 +26,7 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +47,8 @@ public class AutoTransferBatchItemProcessor {
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final AuditLogService auditLogService;
     private final TransferLookupPort transferLookupPort;
+    private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     // DB에 지금부터 처리 시작 남
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -51,7 +57,7 @@ public class AutoTransferBatchItemProcessor {
         // completeProcessing()이 만드는 TransferCommand.executionDate와 같은 값을 가리켜, 멱등성
         // 사전조회가 재시도 날짜가 달라져도 같은 회차로 인식한다.
         AutoTransferExecution processing = AutoTransferExecution.processing(
-                autoTransfer.getNextExecutionDate(), autoTransfer.getAmount(), LocalDateTime.now());
+                autoTransfer.getNextExecutionDate(), autoTransfer.getAmount(), LocalDateTime.now(clock));
         return autoTransferExecutionPersistencePort.save(processing, autoTransfer.getAutoTransferId());
     }
 
@@ -95,9 +101,24 @@ public class AutoTransferBatchItemProcessor {
         }
         autoTransferExecutionPersistencePort.save(processingExecution, autoTransfer.getAutoTransferId());
 
+        // 거래번호가 있으면 이체 엔진이 돈이 움직인 트랜잭션 안에서 이미 TransferSettled 를 발행했다(#436).
+        // 거래번호가 없는 건 transfer 행이 생기기 전의 사전검증 실패뿐이라 엔진이 발행하지 못하므로, 회차
+        // 기록과 함께 여기서 발행한다. refId 는 등록 ID 가 아니라 회차 ID 다.
+        if (result.isPreValidationFailure()) {
+            eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
+                    .customerId(autoTransfer.getCustomerId())
+                    .refId(processingExecution.getExecutionId())
+                    .status(result.status())
+                    .errorCode(result.errorCode())
+                    .occurredAt(LocalDateTime.now(clock))
+                    .amount(processingExecution.getAmount())
+                    .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
+                    .build());
+        }
+
         autoTransfer.advanceNextExecutionDate();
         if (autoTransfer.getNextExecutionDate().isAfter(autoTransfer.getEndDate())) {
-            autoTransfer.expire(LocalDateTime.now());
+            autoTransfer.expire(LocalDateTime.now(clock));
         }
         autoTransferPersistencePort.save(autoTransfer);
 
@@ -131,7 +152,8 @@ public class AutoTransferBatchItemProcessor {
         Optional<TransferLookupResult> lookup =
                 transferLookupPort.findBySourceAndDate(autoTransfer.getAutoTransferId(), execution.getExecutionDate());
 
-        if (lookup.isEmpty()) {
+        boolean hasNoTransferRow = lookup.isEmpty();
+        if (hasNoTransferRow) {
             execution.markError("실행 중 확인 불가로 재확정 배치가 오류 처리함", null);
         } else if (lookup.get().status() == ProcessResultStatus.SUCCESS) {
             execution.markSuccess(lookup.get().transactionNumber());
@@ -156,6 +178,19 @@ public class AutoTransferBatchItemProcessor {
             return;
         }
 
+        // transfer 행이 없으면 이체 엔진이 발행하지 못했고, completeProcessing() 의 사전검증 실패 발행도 함께
+        // 롤백된 건이다. 재확정이 겹치면 가드에서 return 해도 트랜잭션은 커밋되므로 가드를 통과한 뒤에만 발행한다.
+        if (hasNoTransferRow) {
+            eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
+                    .customerId(autoTransfer.getCustomerId())
+                    .refId(execution.getExecutionId())
+                    .status(ProcessResultStatus.ERROR)
+                    .occurredAt(LocalDateTime.now(clock))
+                    .amount(execution.getAmount())
+                    .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
+                    .build());
+        }
+
         if (execution.getStatus() == ProcessResultStatus.ERROR) {
             List<AutoTransferExecution> recent = autoTransferExecutionPersistencePort.findRecentByAutoTransferId(
                     autoTransfer.getAutoTransferId(), CONSECUTIVE_FAILURE_THRESHOLD);
@@ -171,7 +206,7 @@ public class AutoTransferBatchItemProcessor {
 
         autoTransfer.advanceNextExecutionDate();
         if (autoTransfer.getNextExecutionDate().isAfter(autoTransfer.getEndDate())) {
-            autoTransfer.expire(LocalDateTime.now());
+            autoTransfer.expire(LocalDateTime.now(clock));
         }
         autoTransferPersistencePort.save(autoTransfer);
     }

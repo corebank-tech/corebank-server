@@ -1,6 +1,8 @@
 package com.shinhan.corebank.transfer.domain;
 
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import lombok.AccessLevel;
@@ -13,6 +15,10 @@ public class LedgerPair {
 
     /** ledger_entry.transaction_type 중 상품가입 초입금을 나타내는 값(schema_reference.md). */
     private static final String PRODUCT_SUBSCRIPTION_TYPE = "PRODUCT_SUBSCRIPTION";
+    /** 반대기표(정정 체인 취소정정)의 transaction_type. */
+    private static final String REVERSAL_TYPE = "REVERSAL";
+
+    private static final String REVERSAL_MEMO = "취소정정";
 
     private final LedgerEntry withdrawalEntry;
     private final LedgerEntry depositEntry;
@@ -48,7 +54,9 @@ public class LedgerPair {
                 myPassbookMemo,
                 recipientPassbookMemo,
                 channel,
-                occurredAt);
+                occurredAt,
+                null,
+                null);
     }
 
     /**
@@ -80,10 +88,52 @@ public class LedgerPair {
                 myPassbookMemo,
                 recipientPassbookMemo,
                 channel,
-                occurredAt);
+                occurredAt,
+                null,
+                null);
     }
 
-    // transferId·transactionType만 다르고 나머지 검증·조립은 두 팩토리가 완전히 같다.
+    /**
+     * 정정 체인 취소정정용 반대기표 2행. 원거래 출금계좌로 돈을 되돌리므로 방향이 원거래와 반대다.
+     * 각 행의 reversal_id는 같은 계좌의 원거래 행을 가리킨다. 원거래 행의 reversed 표시는 저장 쪽이 세운다.
+     */
+    public static LedgerPair forReversal(
+            Long reversalTransferId,
+            String transactionNumber,
+            LedgerEntry originalWithdrawal,
+            LedgerEntry originalDeposit,
+            long payeeBalanceAfter,
+            long originalWithdrawalAccountBalanceAfter,
+            TransferChannel channel,
+            LocalDateTime occurredAt) {
+        TransferValidations.requireNonNull(reversalTransferId, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonNull(
+                originalWithdrawal.getLedgerEntryId(), CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonNull(originalDeposit.getLedgerEntryId(), CommonErrorCode.REQUIRED_FIELD_MISSING);
+        // 바꿔 넣으면 돈이 되돌아가지 않고 같은 방향으로 한 번 더 간다.
+        if (originalWithdrawal.getDirection() != LedgerDirection.WITHDRAWAL
+                || originalDeposit.getDirection() != LedgerDirection.DEPOSIT) {
+            throw new BusinessException(TransferErrorCode.NOT_CORRECTABLE);
+        }
+
+        return create(
+                reversalTransferId,
+                transactionNumber,
+                originalDeposit.getAccountId(),
+                payeeBalanceAfter,
+                originalWithdrawal.getAccountId(),
+                originalWithdrawalAccountBalanceAfter,
+                originalWithdrawal.getAmount(),
+                REVERSAL_TYPE,
+                REVERSAL_MEMO,
+                REVERSAL_MEMO,
+                channel,
+                occurredAt,
+                originalDeposit.getLedgerEntryId(),
+                originalWithdrawal.getLedgerEntryId());
+    }
+
+    // transferId·transactionType·reversalId만 다르고 나머지 검증·조립은 세 팩토리가 완전히 같다.
     private static LedgerPair create(
             Long transferId,
             String transactionNumber,
@@ -96,7 +146,9 @@ public class LedgerPair {
             String myPassbookMemo,
             String recipientPassbookMemo,
             TransferChannel channel,
-            LocalDateTime occurredAt) {
+            LocalDateTime occurredAt,
+            Long withdrawalReversalId,
+            Long depositReversalId) {
         TransferValidations.requireAccountIdsPresent(withdrawalAccountId, depositAccountId);
         TransferValidations.requireNonNull(occurredAt, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requireNonBlank(transactionNumber, CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -118,6 +170,7 @@ public class LedgerPair {
                 .transactionContent(myPassbookMemo)
                 .channel(channel)
                 .reversed(false)
+                .reversalId(withdrawalReversalId)
                 .occurredAt(truncatedOccurredAt)
                 .build();
 
@@ -133,6 +186,7 @@ public class LedgerPair {
                 .transactionContent(recipientPassbookMemo)
                 .channel(channel)
                 .reversed(false)
+                .reversalId(depositReversalId)
                 .occurredAt(truncatedOccurredAt)
                 .build();
         return new LedgerPair(withdrawal, deposit);

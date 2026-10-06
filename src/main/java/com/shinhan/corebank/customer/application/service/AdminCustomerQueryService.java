@@ -10,6 +10,7 @@ import com.shinhan.corebank.customer.application.port.out.CustomerAdminQueryPort
 import com.shinhan.corebank.customer.application.port.out.CustomerAdminView;
 import com.shinhan.corebank.customer.application.port.out.CustomerSearchCondition;
 import com.shinhan.corebank.customer.domain.exception.CustomerErrorCode;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -65,6 +66,7 @@ public class AdminCustomerQueryService implements AdminCustomerQueryUseCase {
                 mask(() -> customerInfoMasker.maskPhoneNumber(view.phoneNumber())),
                 view.loginFailureCount(),
                 view.accountLocked(),
+                view.status(),
                 toOffset(view.lastLoginAt()),
                 toOffset(view.joinedAt()));
     }
@@ -74,9 +76,12 @@ public class AdminCustomerQueryService implements AdminCustomerQueryUseCase {
         String userName = normalize(query.userName());
         String email = normalize(query.email());
 
-        // accountLocked=false 단독은 잠기지 않은 전 고객 = 회원 목록이 되므로 조건으로 치지 않는다.
-        boolean hasQualifyingCondition =
-                userId != null || userName != null || email != null || Boolean.TRUE.equals(query.accountLocked());
+        // accountLocked=false·status=ACTIVE 단독은 사실상 회원 목록이 되므로 조건으로 치지 않는다.
+        boolean hasQualifyingCondition = userId != null
+                || userName != null
+                || email != null
+                || Boolean.TRUE.equals(query.accountLocked())
+                || query.status() == CustomerStatus.SUSPENDED;
         if (!hasQualifyingCondition) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING, "검색 조건을 하나 이상 입력해 주세요.");
         }
@@ -84,7 +89,7 @@ public class AdminCustomerQueryService implements AdminCustomerQueryUseCase {
         if (isTooShort(userId) || isTooShort(userName)) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT, "아이디·성명은 두 글자 이상 입력해 주세요.");
         }
-        return new CustomerSearchCondition(userId, userName, email, query.accountLocked());
+        return new CustomerSearchCondition(userId, userName, email, query.accountLocked(), query.status());
     }
 
     private AdminCustomerSummary toSummary(CustomerAdminView view) {
@@ -95,6 +100,7 @@ public class AdminCustomerQueryService implements AdminCustomerQueryUseCase {
                 mask(() -> customerInfoMasker.maskEmail(view.email())),
                 view.loginFailureCount(),
                 view.accountLocked(),
+                view.status(),
                 toOffset(view.lastLoginAt()),
                 toOffset(view.joinedAt()));
     }

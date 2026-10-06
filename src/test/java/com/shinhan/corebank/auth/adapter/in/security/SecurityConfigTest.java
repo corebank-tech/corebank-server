@@ -27,6 +27,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.context.SecurityContextImpl;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -47,6 +50,9 @@ class SecurityConfigTest {
 
     @Autowired
     MockMvc mockMvc;
+
+    @Autowired
+    SessionRegistry sessionRegistry;
 
     @Test
     @DisplayName("허용된 로컬 프론트엔드 Origin의 preflight 요청을 허용한다")
@@ -148,6 +154,24 @@ class SecurityConfigTest {
                 .andExpect(jsonPath("$.code").value("CMN0101"))
                 .andExpect(jsonPath("$.message").value("인증정보가 없거나 세션이 만료되었습니다."))
                 .andExpect(jsonPath("$.data").value((Object) null));
+    }
+
+    @Test
+    @DisplayName("비밀번호 변경으로 만료된 세션은 401 CMN0101을 반환한다")
+    void rejectsExpiredSession() throws Exception {
+        AuthenticatedCustomer principal = new AuthenticatedCustomer(1L, "user01", "홍길동");
+        UsernamePasswordAuthenticationToken authentication = UsernamePasswordAuthenticationToken.authenticated(
+                principal, null, AuthorityUtils.createAuthorityList("ROLE_CUSTOMER"));
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute(
+                HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
+                new SecurityContextImpl(authentication));
+        sessionRegistry.registerNewSession(session.getId(), principal);
+        sessionRegistry.getSessionInformation(session.getId()).expireNow();
+
+        mockMvc.perform(get("/api/v1/customers/me").contextPath("/api/v1").session(session))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("CMN0101"));
     }
 
     @Test

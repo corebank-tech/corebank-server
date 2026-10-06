@@ -26,6 +26,7 @@ public class Customer {
     private String phoneNumber;
     private int loginFailureCount;
     private boolean accountLocked;
+    private CustomerStatus status;
     private LocalDateTime lastLoginAt;
     private String lastLoginIp;
     private LocalDateTime previousLoginAt;
@@ -55,6 +56,7 @@ public class Customer {
                 phoneNumber,
                 0,
                 false,
+                CustomerStatus.ACTIVE,
                 null,
                 null,
                 null,
@@ -76,6 +78,7 @@ public class Customer {
             String phoneNumber,
             int loginFailureCount,
             boolean accountLocked,
+            CustomerStatus status,
             LocalDateTime lastLoginAt,
             String lastLoginIp,
             LocalDateTime previousLoginAt,
@@ -84,6 +87,7 @@ public class Customer {
             LocalDateTime createdAt,
             LocalDateTime updatedAt) {
         validateLoginState(loginFailureCount, accountLocked);
+        validateStatus(status);
 
         return new Customer(
                 customerId,
@@ -96,6 +100,7 @@ public class Customer {
                 phoneNumber,
                 loginFailureCount,
                 accountLocked,
+                status,
                 lastLoginAt,
                 lastLoginIp,
                 previousLoginAt,
@@ -176,6 +181,17 @@ public class Customer {
         unlockByAdmin();
     }
 
+    // 관리자 계정 상태 변경(#450). 잠금·실패 횟수는 건드리지 않는다.
+    public void changeStatusByAdmin(CustomerStatus status) {
+        validateStatus(status);
+        this.status = status;
+    }
+
+    // 이용정지 여부. 정지 계정은 비밀번호가 맞아도 로그인할 수 없다.
+    public boolean isSuspended() {
+        return status == CustomerStatus.SUSPENDED;
+    }
+
     private static boolean isValidIpAddress(String loginIp) {
         return isValidIpv4Address(loginIp) || isValidIpv6Address(loginIp);
     }
@@ -227,6 +243,12 @@ public class Customer {
             return true;
         } catch (UnknownHostException exception) {
             return false;
+        }
+    }
+
+    private static void validateStatus(CustomerStatus status) {
+        if (status == null) {
+            throw new IllegalArgumentException("계정 상태는 필수입니다.");
         }
     }
 

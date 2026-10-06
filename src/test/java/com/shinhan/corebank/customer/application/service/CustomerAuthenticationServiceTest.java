@@ -16,6 +16,7 @@ import com.shinhan.corebank.customer.api.ResetCustomerPasswordCommand;
 import com.shinhan.corebank.customer.api.ResetCustomerPasswordResult;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -172,6 +173,37 @@ class CustomerAuthenticationServiceTest {
         verify(customerPersistencePort, never()).updateLoginSuccessState(customer);
     }
 
+    // 비밀번호가 맞아도 이용정지 고객은 접속정보와 실패 횟수를 변경하지 않음
+    @Test
+    @DisplayName("이용정지 고객은 로그인 성공 상태를 저장하지 않고 정지 결과를 반환한다")
+    void returnSuspendedStateWithoutSavingLoginSuccess() {
+        Customer customer = createCustomer(1L, 2, false);
+        customer.changeStatusByAdmin(CustomerStatus.SUSPENDED);
+        given(customerPersistencePort.findByIdForUpdate(1L)).willReturn(Optional.of(customer));
+
+        LoginSuccessState result = service.updateLoginSuccessState(
+                new RecordLoginSuccessCommand(1L, LocalDateTime.of(2026, 8, 12, 10, 0), "192.168.0.10"));
+
+        assertThat(result).isEqualTo(LoginSuccessState.ACCOUNT_SUSPENDED);
+        assertThat(customer.getLoginFailureCount()).isEqualTo(2);
+        assertThat(customer.getLastLoginAt()).isNull();
+        verify(customerPersistencePort, never()).updateLoginSuccessState(customer);
+    }
+
+    // 잠금과 정지가 겹치면 기존 잠금 응답을 우선한다
+    @Test
+    @DisplayName("잠기고 정지된 고객은 잠금 결과를 반환한다")
+    void returnLockedStateWhenLockedAndSuspended() {
+        Customer customer = createCustomer(1L, 5, true);
+        customer.changeStatusByAdmin(CustomerStatus.SUSPENDED);
+        given(customerPersistencePort.findByIdForUpdate(1L)).willReturn(Optional.of(customer));
+
+        LoginSuccessState result = service.updateLoginSuccessState(
+                new RecordLoginSuccessCommand(1L, LocalDateTime.of(2026, 8, 12, 10, 0), "192.168.0.10"));
+
+        assertThat(result).isEqualTo(LoginSuccessState.ACCOUNT_LOCKED);
+    }
+
     // 상태 변경 대상 고객이 없으면 내부 정합성 예외 발생
     @Test
     @DisplayName("상태를 변경할 고객이 없으면 예외가 발생한다")
@@ -310,6 +342,7 @@ class CustomerAuthenticationServiceTest {
                 "01012345678",
                 loginFailureCount,
                 accountLocked,
+                CustomerStatus.ACTIVE,
                 lastLoginAt,
                 lastLoginIp,
                 previousLoginAt,

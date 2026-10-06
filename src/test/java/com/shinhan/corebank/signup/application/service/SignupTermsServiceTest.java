@@ -19,6 +19,7 @@ import com.shinhan.corebank.signup.config.SignupTokenProperties;
 import com.shinhan.corebank.signup.domain.exception.SignupErrorCode;
 import com.shinhan.corebank.signup.domain.model.SignupTerm;
 import com.shinhan.corebank.signup.domain.model.TermsAuthTokenPayload;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,7 +70,8 @@ class SignupTermsServiceTest {
                         Duration.ofMinutes(3),
                         Duration.ofMinutes(30),
                         Duration.ofMinutes(10),
-                        Duration.ofMinutes(30)));
+                        Duration.ofMinutes(30)),
+                Clock.systemDefaultZone());
 
         given(signupTermsQueryPort.findLatestSignupTerms()).willReturn(CURRENT_TERMS);
     }

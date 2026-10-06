@@ -1,6 +1,7 @@
 package com.shinhan.corebank.customer.adapter.in.web.admin;
 
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerSummary;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.OffsetDateTime;
 
@@ -11,6 +12,7 @@ public record AdminCustomerSummaryResponse(
         @Schema(description = "이메일(마스킹)", example = "hong****@corebank.example.com") String email,
         @Schema(description = "연속 로그인 실패 횟수", example = "5") int loginFailureCount,
         @Schema(description = "계정 잠금 여부", example = "true") boolean accountLocked,
+        @Schema(description = "계정 상태. ACTIVE(정상) / SUSPENDED(이용정지)", example = "ACTIVE") CustomerStatus status,
         @Schema(description = "최근 로그인 일시. 로그인 이력이 없으면 null", example = "2026-09-21T09:14:22+09:00")
                 OffsetDateTime lastLoginAt,
         @Schema(description = "가입 완료 일시", example = "2025-08-05T10:02:00+09:00") OffsetDateTime joinedAt) {
@@ -23,6 +25,7 @@ public record AdminCustomerSummaryResponse(
                 summary.email(),
                 summary.loginFailureCount(),
                 summary.accountLocked(),
+                summary.status(),
                 summary.lastLoginAt(),
                 summary.joinedAt());
     }

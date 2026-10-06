@@ -406,4 +406,117 @@ class LedgerPairTest {
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
     }
+
+    @Nested
+    @DisplayName("forReversal — 정정 체인 반대기표")
+    class ForReversalTest {
+
+        private final LocalDateTime originalAt = LocalDateTime.of(2026, 8, 9, 12, 0, 0);
+        private final LocalDateTime reversedAt = LocalDateTime.of(2026, 8, 10, 9, 0, 0);
+
+        private LedgerEntry savedEntry(long ledgerEntryId, long accountId, LedgerDirection direction) {
+            return LedgerEntry.builder()
+                    .ledgerEntryId(ledgerEntryId)
+                    .accountId(accountId)
+                    .transferId(1L)
+                    .transactionNumber("20260809WB0000000001")
+                    .direction(direction)
+                    .amount(50_000L)
+                    .balanceAfter(0L)
+                    .transactionType("IMMEDIATE_TRANSFER")
+                    .channel(TransferChannel.WB)
+                    .reversed(false)
+                    .occurredAt(originalAt)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("원거래와 방향을 뒤집은 2행을 만들고, 각 행이 같은 계좌의 원거래 행을 가리킨다")
+        void flipsDirectionAndPointsToOriginalRows() {
+            // given: 원거래 A(101) 출금 → B(202) 입금
+            LedgerEntry originalWithdrawal = savedEntry(1001L, 101L, LedgerDirection.WITHDRAWAL);
+            LedgerEntry originalDeposit = savedEntry(1002L, 202L, LedgerDirection.DEPOSIT);
+
+            // when
+            LedgerPair reversal = LedgerPair.forReversal(
+                    9L,
+                    "20260810BT0000000001",
+                    originalWithdrawal,
+                    originalDeposit,
+                    20_000L,
+                    150_000L,
+                    TransferChannel.BT,
+                    reversedAt);
+
+            // then: B에서 빠져 A로 돌아간다
+            LedgerEntry withdrawal = reversal.getWithdrawalEntry();
+            assertThat(withdrawal.getAccountId()).isEqualTo(202L);
+            assertThat(withdrawal.getDirection()).isEqualTo(LedgerDirection.WITHDRAWAL);
+            assertThat(withdrawal.getReversalId()).isEqualTo(1002L);
+            assertThat(withdrawal.getBalanceAfter()).isEqualTo(20_000L);
+
+            LedgerEntry deposit = reversal.getDepositEntry();
+            assertThat(deposit.getAccountId()).isEqualTo(101L);
+            assertThat(deposit.getDirection()).isEqualTo(LedgerDirection.DEPOSIT);
+            assertThat(deposit.getReversalId()).isEqualTo(1001L);
+            assertThat(deposit.getBalanceAfter()).isEqualTo(150_000L);
+
+            // then: 금액은 원거래 그대로, 유형은 REVERSAL, 반대기표 자신은 reversed=false
+            assertThat(reversal.getWithdrawalEntry().getAmount()).isEqualTo(50_000L);
+            assertThat(reversal.getDepositEntry().getAmount()).isEqualTo(50_000L);
+            assertThat(withdrawal.getTransactionType()).isEqualTo("REVERSAL");
+            assertThat(deposit.getTransactionType()).isEqualTo("REVERSAL");
+            assertThat(withdrawal.isReversed()).isFalse();
+            assertThat(deposit.isReversed()).isFalse();
+            assertThat(withdrawal.getTransferId()).isEqualTo(9L);
+        }
+
+        @Test
+        @DisplayName("저장되지 않아 ID가 없는 원거래 행으로는 반대기표를 만들 수 없다")
+        void originalWithoutId_throws() {
+            // given
+            LedgerEntry unsaved = LedgerEntry.builder()
+                    .accountId(101L)
+                    .direction(LedgerDirection.WITHDRAWAL)
+                    .amount(50_000L)
+                    .build();
+            LedgerEntry originalDeposit = savedEntry(1002L, 202L, LedgerDirection.DEPOSIT);
+
+            // when & then
+            assertThatThrownBy(() -> LedgerPair.forReversal(
+                            9L,
+                            "20260810BT0000000001",
+                            unsaved,
+                            originalDeposit,
+                            0L,
+                            0L,
+                            TransferChannel.BT,
+                            reversedAt))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        @Test
+        @DisplayName("출금·입금 행을 바꿔 넣으면 거부한다 — 돈이 같은 방향으로 한 번 더 간다")
+        void swappedOriginalRows_throws() {
+            // given
+            LedgerEntry originalWithdrawal = savedEntry(1001L, 101L, LedgerDirection.WITHDRAWAL);
+            LedgerEntry originalDeposit = savedEntry(1002L, 202L, LedgerDirection.DEPOSIT);
+
+            // when & then
+            assertThatThrownBy(() -> LedgerPair.forReversal(
+                            9L,
+                            "20260810BT0000000001",
+                            originalDeposit,
+                            originalWithdrawal,
+                            0L,
+                            0L,
+                            TransferChannel.BT,
+                            reversedAt))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+        }
+    }
 }

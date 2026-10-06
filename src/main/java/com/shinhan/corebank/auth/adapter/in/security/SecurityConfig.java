@@ -3,9 +3,11 @@ package com.shinhan.corebank.auth.adapter.in.security;
 import static org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher.pathPattern;
 
 import com.shinhan.corebank.auth.adapter.in.web.ClientIpResolver;
+import com.shinhan.corebank.common.filter.CorrelationIdFilter;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.servlet.ServletListenerRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -13,15 +15,22 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
+import org.springframework.security.web.authentication.session.CompositeSessionAuthenticationStrategy;
+import org.springframework.security.web.authentication.session.RegisterSessionAuthenticationStrategy;
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.session.HttpSessionEventPublisher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -43,10 +52,24 @@ public class SecurityConfig {
         return new HttpSessionSecurityContextRepository();
     }
 
-    // 기존 세션이 있으면 로그인 성공 시 세션 ID를 변경
+    // 실제 인증정보는 HttpSession에 두고, 고객별 활성 세션을 찾기 위한 메타데이터만 별도로 관리한다.
     @Bean
-    public SessionAuthenticationStrategy sessionAuthenticationStrategy() {
-        return new ChangeSessionIdAuthenticationStrategy();
+    public SessionRegistry sessionRegistry() {
+        return new SessionRegistryImpl();
+    }
+
+    // 로그아웃·타임아웃으로 HttpSession이 종료되면 SessionRegistry의 메타데이터도 제거한다.
+    @Bean
+    public ServletListenerRegistrationBean<HttpSessionEventPublisher> httpSessionEventPublisher() {
+        return new ServletListenerRegistrationBean<>(new HttpSessionEventPublisher());
+    }
+
+    // 기존 로그인 흐름의 세션 ID 변경 뒤, 같은 고객의 세션을 찾을 수 있도록 새 ID를 색인한다.
+    @Bean
+    public SessionAuthenticationStrategy sessionAuthenticationStrategy(SessionRegistry sessionRegistry) {
+        return new CompositeSessionAuthenticationStrategy(List.of(
+                new ChangeSessionIdAuthenticationStrategy(),
+                new RegisterSessionAuthenticationStrategy(sessionRegistry)));
     }
 
     @Bean
@@ -62,7 +85,9 @@ public class SecurityConfig {
                 "Idempotency-Key",
                 // 브라우저가 거래용 일회성 인증 토큰을 헤더로 전송할 수 있도록 preflight에서 허용한다.
                 "Account-Password-Auth-Token",
-                "Otp-Auth-Token"));
+                "Otp-Auth-Token",
+                "X-Correlation-Id"));
+        configuration.setExposedHeaders(List.of("X-Correlation-Id"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 
@@ -103,9 +128,11 @@ public class SecurityConfig {
             CorsConfigurationSource corsConfigurationSource,
             CookieCsrfTokenRepository csrfTokenRepository,
             CsrfTokenRequestAttributeHandler csrfTokenRequestHandler,
-            AdminBootstrapProperties adminBootstrapProperties)
+            AdminBootstrapProperties adminBootstrapProperties,
+            SessionRegistry sessionRegistry)
             throws Exception {
-        http.cors(cors -> cors.configurationSource(corsConfigurationSource))
+        http.addFilterBefore(new CorrelationIdFilter(), SecurityContextHolderFilter.class)
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 // 기본 CSRF 보호를 유지하고 로그인과 회원가입, ALB 헬스체크만 검사에서 제외
                 .csrf(csrf -> {
                     csrf.csrfTokenRepository(csrfTokenRepository);
@@ -188,7 +215,14 @@ public class SecurityConfig {
                         exception.authenticationEntryPoint(entryPoint).accessDeniedHandler(deniedHandler))
                 // HttpSession 생성 방식, 세션 고정 공격 방지 정책을 설정
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
-                        .sessionFixation(fixation -> fixation.changeSessionId()))
+                        .sessionFixation(fixation -> fixation.changeSessionId())
+                        // 동시 로그인 수는 제한하지 않고 비밀번호 변경으로 만료된 세션만 다음 요청에서 차단한다.
+                        .maximumSessions(-1)
+                        .sessionRegistry(sessionRegistry)
+                        .expiredSessionStrategy(event -> entryPoint.commence(
+                                event.getRequest(),
+                                event.getResponse(),
+                                new AuthenticationException("로그인 비밀번호 변경으로 세션이 만료되었습니다.") {})))
                 // CSRF 검사를 유지하고 CsrfLogoutHandler가 XSRF-TOKEN을 Path=/로 폐기한다.
                 .logout(logout -> logout.logoutRequestMatcher(pathPattern(HttpMethod.POST, "/auth/logout"))
                         .invalidateHttpSession(true)

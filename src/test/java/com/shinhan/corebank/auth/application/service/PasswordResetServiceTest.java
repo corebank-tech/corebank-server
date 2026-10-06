@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.shinhan.corebank.auth.application.event.LoginPasswordChangedEvent;
 import com.shinhan.corebank.auth.application.port.in.IssuePasswordResetCommand;
 import com.shinhan.corebank.auth.application.port.in.ResetPasswordCommand;
 import com.shinhan.corebank.auth.application.port.out.PasswordResetRequestPort;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 @ExtendWith(MockitoExtension.class)
@@ -47,11 +49,14 @@ class PasswordResetServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private PasswordResetService service;
 
     @BeforeEach
     void setUp() {
-        service = new PasswordResetService(customerFacade, requestPort, passwordEncoder, CLOCK);
+        service = new PasswordResetService(customerFacade, requestPort, passwordEncoder, eventPublisher, CLOCK);
     }
 
     @Test
@@ -105,6 +110,7 @@ class PasswordResetServiceTest {
 
         verify(requestPort, never()).save(any());
         verify(customerFacade, never()).resetPassword(any());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
@@ -129,6 +135,7 @@ class PasswordResetServiceTest {
                 .resetPassword(new ResetCustomerPasswordCommand(
                         1L, "old-password-hash", "new-password-hash", LocalDateTime.of(2026, 9, 17, 10, 0)));
         verify(requestPort).save(request);
+        verify(eventPublisher).publishEvent(new LoginPasswordChangedEvent(1L));
     }
 
     @Test
