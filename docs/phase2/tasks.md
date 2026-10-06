@@ -120,7 +120,7 @@
 | [#379 규격](#379-규격-전달) | 파티션 프로시저 규격·판단 → P5 | S1 | 0 (완충) | — | **10/6** | #379 | 예정 |
 | [PH-80](#ph-80-timeout--정정-체인--자동-재시도-금지) | 정정 체인 · INVALID · 재시도 금지 규약 (TIMEOUT 제외분) | S1 | 1.5 | PH-99 | — | #548 · PR #550 | 완료 |
 | [PH-38](#ph-38-원장-대사-배치) | 대사 — 불일치 저장 · 목록 API · 300만 베이스라인 · CobStep 편입 | S2 | 2 | PH-60b · CobStep 인터페이스 | 베이스라인 10/6 · API 10/16 | #468 | 예정 |
-| [PH-80](#ph-80-timeout--정정-체인--자동-재시도-금지) | TIMEOUT 추가 · 전체 머지 | S2 | 2.5 | PH-80 S1분 · P5 회차 현황 (10/6) | **10/8 머지** | — | 예정 |
+| [PH-80](#ph-80-timeout--정정-체인--자동-재시도-금지) | TIMEOUT 추가 · 전체 머지 | S2 | 2.5 | PH-80 S1분 · P5 회차 현황 (10/6) | **10/8 머지** | #564 | 완료 |
 | [PH-99](#ph-99-이체-파이프라인-확장점seam) | `transfer.api` 입금 계약 (P2 이자·만기·해지용) | S2 | 0.5 | PH-99 | **10/16** | — | 예정 |
 | [EVT-2](#evt-2-publishevent-두-줄) | `publishEvent` 두 줄 | S2 | 0.5 | PH-32 | 10/6 | #505 | 완료 — P1이 #505에서 대신 처리 |
 | [HOOK-MERGE](#hook-merge-훅-구현체-머지) | 훅 구현체 3건 리뷰·머지 | S2 | 0.5 | PH-90 · PH-24 · PH-41 | 10/12~16 | — | 예정 |
@@ -770,7 +770,7 @@ TransferExecutionService.execute(command)                         ← 편집자:
 - 상태 역행 금지 검증, 자동 재시도 금지 규약 문서와 리뷰 체크 항목
 - TIMEOUT 응답 스키마를 10/8까지 FE B-9(P1)에 넘긴다.
 - **완료 기준:** 정정 시나리오가 DELETE 없이 끝난다. 체인을 따라 과거를 재구성할 수 있다.
-- 현황: S1분 완료(#548). 정정 체인·재시도 금지 규약의 정본은 [transfer_correction.md](transfer_correction.md)다. INVALID는 `status` 값이 아니라 `transfer.invalidated_at`(무효화 시각)으로 표기한다 — `ProcessResultStatus`는 건드리지 않았다. TIMEOUT 추가와 TIMEOUT 응답 스키마는 S2분에 남아 있다.
+- 현황: S1분 완료(#548). 정정 체인·재시도 금지 규약의 정본은 [transfer_correction.md](transfer_correction.md)다. INVALID는 `status` 값이 아니라 `transfer.invalidated_at`(무효화 시각)으로 표기한다 — `ProcessResultStatus`는 건드리지 않았다. S2분(#564): `ProcessResultStatus.TIMEOUT`(`isConfirmed()` false) · `Transfer.timeout()` · `transfer.status` 주석과 공통코드 · TIMEOUT 응답 스키마(`TransferResponse` `@Schema`)를 넣었다. 조회거래로 확정하는 전이는 PH-33-②다.
 
 ### EVT-2. `publishEvent` 두 줄
 

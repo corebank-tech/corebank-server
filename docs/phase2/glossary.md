@@ -6,7 +6,7 @@ P4는 TIMEOUT과 정정 체인을, P5는 영업일을 만든다. 이름이 트�
 
 - PH-87 범위(잔액·출금가능액·적수·전표·분개·영업일/거래일·MATURED·TIMEOUT·정정)를 11개 용어로 정리했다. "정정"은 조회거래와 정정 체인 두 용어로 나눴다.
 - 이 범위 밖의 용어와 화면 라벨 불일치 목록은 S3의 C-6에서 따로 뽑는다.
-- 영문명 중 `inquiry`(조회거래)와 한글명 "처리 불명"(TIMEOUT)은 이 문서의 제안이다. 소유 트랙(P4)이 확인하면 이 줄을 지운다. `correction`(정정 체인)은 #548에서 코드·컬럼 이름으로 확정했다.
+- 소유 트랙(P4) 확인 완료(O-02): `correction`(정정 체인)은 #548, "처리 불명"(TIMEOUT)은 #564에서 코드·공통코드 이름으로 확정했다. `inquiry`(조회거래)는 PH-33-②에서 전문 이름으로 쓴다.
 - "지금 코드" 칸은 2026-09-18 `dev` 기준이다. 이름이 새로 생기거나 바뀌면 그 PR에서 이 칸도 고친다.
 
 ## 1. 용어표
@@ -21,7 +21,7 @@ P4는 TIMEOUT과 정정 체인을, P5는 영업일을 만든다. 이름이 트�
 | 6 | **영업일** | `businessDate` | 시스템 시각과 분리된 **논리 업무일자**다. COB 마지막 스텝에서 다음 영업일로 전환된다. `business.api.BusinessDateProvider`가 유일한 출처이고, `LocalDate.now()`로 대신하지 않는다 | P5 COB(`CobStep.run(businessDate)`), P2 만기 감지·적수 일수, P3 전표번호 | 없음. P5 PH-40(10/2)에서 생긴다 |
 | 7 | **거래일** | `tradeDate` | 거래 한 건이 **귀속되는 영업일**이다. 발생 시각(`occurredAt`)과 다르다 — 휴일이나 마감 뒤에 발생한 거래는 다음 영업일이 거래일이다 | `transfer.trade_date`, `ledger_entry.trade_date`, GL 분개 집계 기준일 | 없음. 원장에는 발생 시각 `occurredAt`만 있다. P5 PH-41이 컬럼을 추가하고 P4가 값을 넣는다(10/16) |
 | 8 | **만기** | `MATURED` | 예·적금 계좌의 만기일이 영업일 기준으로 도래해 `ACTIVE`에서 전이된 상태다. 신규 거래 대상에서 빠진다. 만기 이후에는 이자가 붙지 않는다(2차 고정) | `AccountStatus`, P2 PH-15 만기 감지, FE #139 | `AccountStatus.MATURED` (PH-10 #419에서 추가) |
-| 9 | **처리 불명** | `TIMEOUT` | 대외 전문에 응답이 없어 **상대 은행이 처리했는지 알 수 없는** 상태다. 실패(`ERROR`)가 아니다. 자동 재시도하지 않고 조회거래로 확정한다 | `transfer.status`, P4 PH-80·PH-33, FE B-9 | 없음. `transfer.status`는 공용 `ProcessResultStatus`이고, **커밋된 행은 `SUCCESS`·`ERROR`뿐**이다. `PROCESSING`은 한 트랜잭션 안의 과도 상태라 API·DB에 나타나지 않는다(#377, `Transfer.java`). TIMEOUT은 `PROCESSING`의 대체가 아니라 **새 확정 상태**다. 자동·예약이체 회차 테이블도 이 Enum을 쓰므로 P5 영향을 확인한 뒤 확장한다 |
+| 9 | **처리 불명** | `TIMEOUT` | 대외 전문에 응답이 없어 **상대 은행이 처리했는지 알 수 없는** 상태다. 실패(`ERROR`)가 아니다. 자동 재시도하지 않고 조회거래로 확정한다 | `transfer.status`, P4 PH-80·PH-33, FE B-9 | `ProcessResultStatus.TIMEOUT`, `Transfer.timeout()`, 공통코드 `PROCESS_RESULT_STATUS`/`TIMEOUT` "처리 불명" (#564). `PROCESSING`의 대체가 아니라 **커밋되는 행 상태**다 — 다만 `isConfirmed()`는 false라 자동·예약이체 배치가 ERROR로 굳히지 않는다. 자동·예약이체 회차는 TIMEOUT을 쓰지 않는다([process_result_status_usage.md](process_result_status_usage.md)) |
 | 10 | **조회거래** | `inquiry` (전문) | 원거래의 실제 처리 결과를 상대 은행에 **다시 묻는 전문**이다. 원장을 바꾸지 않는다. "정정"이 아니다 | P4 PH-33 타행 이체 | 없음 |
 | 11 | **정정 체인** | `correction` (`ref_transfer_id`) | 이미 기표된 거래를 **지우지 않고** 바로잡는 순서다. 원거래를 `INVALID`로 표기(`invalidated_at`) → 취소정정 거래 INSERT → 정상 거래 INSERT. DELETE는 0건이고, `ref_transfer_id`로 원거래까지 거슬러 올라갈 수 있다. **2차에는 당일취소·익일정정 구분이 없고, 정정 경로는 정정 체인 하나다** — v3 PH-33·PH-80 범위 축소에서 뺐다(P4 확인) | P4 PH-80, 감사 추적 | `transfer.invalidated_at`·`ref_transfer_id`·`correction_type`(`REVERSAL` 취소정정 / `REPOST` 정상거래), `TransferCorrectionUseCase`. 정본은 [transfer_correction.md](transfer_correction.md) (#548) |
 
