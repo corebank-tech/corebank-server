@@ -1,8 +1,8 @@
 package com.shinhan.corebank.gl.adapter.out.persistence;
 
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.gl.api.GlTxType;
 import com.shinhan.corebank.gl.application.port.out.VoucherSequencePort;
-import com.shinhan.corebank.gl.domain.GlTxType;
 import com.shinhan.corebank.gl.domain.VoucherNumber;
 import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
 import java.time.Clock;

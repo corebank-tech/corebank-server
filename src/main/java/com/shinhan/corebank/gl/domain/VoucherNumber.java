@@ -1,6 +1,7 @@
 package com.shinhan.corebank.gl.domain;
 
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.gl.api.GlTxType;
 import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;

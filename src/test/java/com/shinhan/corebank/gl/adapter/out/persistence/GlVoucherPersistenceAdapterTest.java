@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
 import com.shinhan.corebank.IntegrationTestSupport;
-import com.shinhan.corebank.gl.domain.GlTxType;
+import com.shinhan.corebank.gl.api.GlTxType;
 import com.shinhan.corebank.gl.domain.JournalEntry;
 import com.shinhan.corebank.gl.domain.Voucher;
 import com.shinhan.corebank.gl.domain.VoucherNumber;

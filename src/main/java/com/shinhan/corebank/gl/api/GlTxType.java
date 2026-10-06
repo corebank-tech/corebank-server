@@ -1,4 +1,4 @@
-package com.shinhan.corebank.gl.domain;
+package com.shinhan.corebank.gl.api;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
