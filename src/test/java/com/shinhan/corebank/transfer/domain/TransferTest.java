@@ -541,6 +541,63 @@ class TransferTest {
                     .extracting("errorCode")
                     .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
         }
+
+        @Test
+        @DisplayName("처리 중 이체를 timeout() 처리하면 TIMEOUT이 되고 실패 정보는 비어 있다")
+        void timesOutProcessingTransfer() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+
+            // when
+            transfer.timeout();
+
+            // then
+            assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.TIMEOUT);
+            assertThat(transfer.getErrorCode()).isNull();
+            assertThat(transfer.getErrorMessage()).isNull();
+        }
+
+        @Test
+        @DisplayName("TIMEOUT 이체를 complete()하면 BusinessException(INVALID_STATUS_TRANSITION) — 확정은 조회거래로만 한다")
+        void throwsExceptionWhenCompletingTimedOutTransfer() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.timeout();
+
+            // when & then
+            assertThatThrownBy(() -> transfer.complete(90000L, LocalDateTime.now()))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
+        }
+
+        @Test
+        @DisplayName("TIMEOUT 이체를 fail()하면 BusinessException(INVALID_STATUS_TRANSITION) — 결과를 모르는 거래를 실패로 단정하지 않는다")
+        void throwsExceptionWhenFailingTimedOutTransfer() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.timeout();
+
+            // when & then
+            assertThatThrownBy(() -> transfer.fail("TRF9999", "응답 없음"))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
+        }
+
+        @Test
+        @DisplayName("이미 확정(SUCCESS)된 이체를 timeout() 처리하면 BusinessException(INVALID_STATUS_TRANSITION) 예외가 발생한다")
+        void throwsExceptionWhenTimingOutCompletedTransfer() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.complete(90000L, LocalDateTime.now());
+
+            // when & then
+            assertThatThrownBy(transfer::timeout)
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
+        }
     }
 
     @Nested
