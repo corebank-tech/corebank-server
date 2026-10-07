@@ -5,9 +5,13 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -66,6 +70,66 @@ class Phase2BulkSeedServiceValidationTest {
     }
 
     @Test
+    @DisplayName("모든 업무 단계가 완료된 시드는 재실행을 거부한다")
+    void rejectsCompletedSeed() {
+        Phase2BulkSeedSpec spec = Phase2BulkSeedSpec.production();
+        Phase2BulkSeedService service = service(new RecordingJdbcTemplate(
+                spec.customerCount(),
+                spec.accountCount(),
+                spec.transferCount(),
+                spec.subscriptionCount(),
+                spec.autoTransferCount(),
+                spec.scheduledTransferCount()));
+
+        assertThatIllegalStateException()
+                .isThrownBy(() -> service.rejectCompletedSeed(spec))
+                .withMessageContaining("already complete");
+    }
+
+    @Test
+    @DisplayName("완료되지 않은 시드는 중단 지점부터 재개할 수 있다")
+    void acceptsIncompleteSeedForResume() {
+        Phase2BulkSeedSpec spec = Phase2BulkSeedSpec.production();
+        Phase2BulkSeedService service =
+                service(new RecordingJdbcTemplate(spec.customerCount(), spec.accountCount(), 50_000));
+
+        assertThatCode(() -> service.rejectCompletedSeed(spec)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("각 후속 업무 단계가 하나라도 미완료면 재개를 허용한다")
+    void acceptsEveryIncompleteBusinessStageForResume() {
+        Phase2BulkSeedSpec spec = Phase2BulkSeedSpec.production();
+        List<RecordingJdbcTemplate> incompleteStages = List.of(
+                new RecordingJdbcTemplate(spec.customerCount(), 0),
+                new RecordingJdbcTemplate(spec.customerCount(), spec.accountCount(), spec.transferCount(), 0),
+                new RecordingJdbcTemplate(
+                        spec.customerCount(), spec.accountCount(), spec.transferCount(), spec.subscriptionCount(), 0),
+                new RecordingJdbcTemplate(
+                        spec.customerCount(),
+                        spec.accountCount(),
+                        spec.transferCount(),
+                        spec.subscriptionCount(),
+                        spec.autoTransferCount(),
+                        0));
+
+        for (RecordingJdbcTemplate jdbc : incompleteStages) {
+            assertThatCode(() -> service(jdbc).rejectCompletedSeed(spec)).doesNotThrowAnyException();
+        }
+    }
+
+    @Test
+    @DisplayName("원장 시간순 잔액 정규화는 원장과 계좌를 모두 갱신한다")
+    void normalizesChronologicalBalances() {
+        RecordingJdbcTemplate jdbc = new RecordingJdbcTemplate();
+        Phase2BulkSeedService service = service(jdbc);
+
+        service.normalizeBalancesChronologically(Phase2BulkSeedSpec.production());
+
+        assertThat(jdbc.updateCount).isEqualTo(2);
+    }
+
+    @Test
     @DisplayName("구간 체크포인트는 완료 또는 청크 경계만 허용한다")
     void validatesChunkCheckpoint() {
         Phase2BulkSeedService service = service(new RecordingJdbcTemplate());
@@ -75,6 +139,14 @@ class Phase2BulkSeedServiceValidationTest {
         assertThatIllegalStateException()
                 .isThrownBy(() -> service.validateCompletedChunkCount("transfer", 51, 100, 50))
                 .withMessageContaining("checkpoint");
+        assertThatIllegalStateException()
+                .isThrownBy(() -> service.validateCompletedChunkCount("transfer", -1, 100, 50))
+                .withMessageContaining("checkpoint");
+        assertThatIllegalStateException()
+                .isThrownBy(() -> service.validateCompletedChunkCount("transfer", 101, 100, 50))
+                .withMessageContaining("checkpoint");
+        assertThatCode(() -> service.validateCompletedChunkCount("transfer", 100, 100, 30))
+                .doesNotThrowAnyException();
     }
 
     @Test
@@ -114,12 +186,17 @@ class Phase2BulkSeedServiceValidationTest {
         Phase2BulkSeedService gap = service(new RangeJdbcTemplate(new Phase2BulkSeedService.RangeProgress(10, 12, 2)));
         Phase2BulkSeedService contiguous =
                 service(new RangeJdbcTemplate(new Phase2BulkSeedService.RangeProgress(10, 11, 2)));
+        Phase2BulkSeedService wrongMinimum =
+                service(new RangeJdbcTemplate(new Phase2BulkSeedService.RangeProgress(11, 12, 2)));
 
         assertThatIllegalStateException()
                 .isThrownBy(() -> missingRate.rate(1, 12))
                 .withMessageContaining("상품 기간 금리");
         assertThatIllegalStateException()
                 .isThrownBy(() -> gap.rangeCount("transfer", "transfer_id", 10, 20))
+                .withMessageContaining("누락된 체크포인트");
+        assertThatIllegalStateException()
+                .isThrownBy(() -> wrongMinimum.rangeCount("transfer", "transfer_id", 10, 20))
                 .withMessageContaining("누락된 체크포인트");
         assertThat(contiguous.rangeCount("transfer", "transfer_id", 10, 20)).isEqualTo(2);
     }
@@ -156,6 +233,19 @@ class Phase2BulkSeedServiceValidationTest {
     }
 
     @Test
+    @DisplayName("PH-60 전표와 분개 중 어느 한쪽만 존재해도 부분 적재로 거부한다")
+    void rejectsEachPartialMinimumSeedBackfillShape() {
+        Phase2BulkSeedSpec spec = Phase2BulkSeedSpec.production();
+
+        assertThatIllegalStateException()
+                .isThrownBy(() -> service(new RecordingJdbcTemplate(235_000, 0)).backfillPhase60Gl(spec))
+                .withMessageContaining("부분 적재");
+        assertThatIllegalStateException()
+                .isThrownBy(() -> service(new RecordingJdbcTemplate(0, 1)).backfillPhase60Gl(spec))
+                .withMessageContaining("부분 적재");
+    }
+
+    @Test
     @DisplayName("완료된 PH-60 전표 보완은 다시 생성하지 않는다")
     void skipsCompletedMinimumSeedBackfill() {
         RecordingJdbcTemplate jdbc = new RecordingJdbcTemplate(235_000, 470_000);
@@ -179,7 +269,10 @@ class Phase2BulkSeedServiceValidationTest {
     }
 
     private Phase2BulkSeedService service(RecordingJdbcTemplate jdbc) {
-        return new Phase2BulkSeedService(jdbc, new NoOpTransactionManager());
+        return new Phase2BulkSeedService(
+                jdbc,
+                new NoOpTransactionManager(),
+                Clock.fixed(Instant.parse("2026-10-07T00:00:00Z"), ZoneId.of("Asia/Seoul")));
     }
 
     private static class RecordingJdbcTemplate extends JdbcTemplate {

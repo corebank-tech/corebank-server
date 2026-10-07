@@ -1,24 +1,27 @@
 package com.shinhan.corebank.common.init;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
-@Transactional
 class Phase2BulkSeedServiceIntegrationTest extends IntegrationTestSupport {
 
     private static final Phase2MinimumSeedSpec MINIMUM_SPEC = new Phase2MinimumSeedSpec(
             100,
             300,
-            300,
+            500,
             0,
             0,
             6_000_001L,
@@ -62,11 +65,47 @@ class Phase2BulkSeedServiceIntegrationTest extends IntegrationTestSupport {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    @Autowired
+    private Clock clock;
+
+    @BeforeEach
+    @AfterEach
+    void cleanSeedRanges() {
+        // 실제 커밋·재개를 검증하므로 각 테스트 전후에 전용 ID 대역만 명시적으로 정리한다.
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            jdbc.update("DELETE FROM gl_journal_entry WHERE journal_entry_id BETWEEN 110000001 AND 110999999");
+            jdbc.update(
+                    "DELETE voucher FROM gl_voucher voucher JOIN transfer seeded ON seeded.transaction_number=voucher.description WHERE seeded.transfer_id BETWEEN 110000001 AND 110999999");
+            jdbc.update(
+                    "DELETE voucher FROM gl_voucher voucher JOIN ledger_entry seeded ON seeded.transaction_number=voucher.description WHERE seeded.ledger_entry_id BETWEEN 110000001 AND 110999999");
+            jdbc.update("DELETE FROM ledger_entry WHERE ledger_entry_id BETWEEN 110000001 AND 110999999");
+            jdbc.update("DELETE FROM product_subscription WHERE subscription_id BETWEEN 110000001 AND 110999999");
+            jdbc.update("DELETE FROM transfer WHERE transfer_id BETWEEN 110000001 AND 110999999");
+            jdbc.update("DELETE FROM scheduled_transfer WHERE scheduled_transfer_id BETWEEN 110000001 AND 110999999");
+            jdbc.update("DELETE FROM auto_transfer WHERE auto_transfer_id BETWEEN 110000001 AND 110999999");
+            jdbc.update("DELETE FROM account WHERE account_id BETWEEN 110000001 AND 110999999");
+            jdbc.update("DELETE FROM transfer_limit WHERE customer_id BETWEEN 11000001 AND 11099999");
+            jdbc.update("DELETE FROM customer WHERE customer_id BETWEEN 11000001 AND 11099999");
+            jdbc.update("DELETE FROM gl_journal_entry WHERE journal_entry_id BETWEEN 6000000001 AND 6000999999");
+            jdbc.update("DELETE FROM gl_journal_entry WHERE journal_entry_id BETWEEN 119000001 AND 119999999");
+            jdbc.update(
+                    "DELETE voucher FROM gl_voucher voucher JOIN transfer seeded ON seeded.transaction_number=voucher.description WHERE seeded.transfer_id BETWEEN 60000001 AND 60999999");
+            jdbc.update("DELETE FROM ledger_entry WHERE ledger_entry_id BETWEEN 60000001 AND 60999999");
+            jdbc.update("DELETE FROM transfer WHERE transfer_id BETWEEN 60000001 AND 60999999");
+            jdbc.update("DELETE FROM auto_transfer WHERE auto_transfer_id BETWEEN 60000001 AND 60999999");
+            jdbc.update("DELETE FROM account WHERE account_id BETWEEN 60000001 AND 60999999");
+            jdbc.update("DELETE FROM transfer_limit WHERE customer_id BETWEEN 6000001 AND 6099999");
+            jdbc.update("DELETE FROM customer WHERE customer_id BETWEEN 6000001 AND 6099999");
+            jdbc.update("DELETE FROM gl_journal_entry WHERE voucher_no='20260901-OPN-000001'");
+            jdbc.update("DELETE FROM gl_voucher WHERE voucher_no='20260901-OPN-000001'");
+        });
+    }
+
     @Test
     @DisplayName("축소 PH-60b 시드는 거래·가입·원장·전표·분개를 같은 구간에 생성한다")
     void seedsScaledBulkData() {
         minimumSeedService.seed(MINIMUM_SPEC);
-        Phase2BulkSeedService service = new TestBulkSeedService(jdbc, transactionManager);
+        Phase2BulkSeedService service = new TestBulkSeedService(jdbc, transactionManager, clock);
 
         Phase2BulkSeedReport report = service.seed(BULK_SPEC);
 
@@ -126,14 +165,54 @@ class Phase2BulkSeedServiceIntegrationTest extends IntegrationTestSupport {
                 .isZero();
     }
 
+    @Test
+    @DisplayName("두 번째 거래 구간 실패 후 첫 구간은 남고 재실행은 실패 구간부터 이어진다")
+    void resumesFromLastCommittedChunk() {
+        minimumSeedService.seed(MINIMUM_SPEC);
+        Phase2BulkSeedService failing = new FailSecondTransferChunkService(jdbc, transactionManager, clock);
+
+        assertThatThrownBy(() -> failing.seed(BULK_SPEC)).hasMessageContaining("의도한 두 번째 구간 실패");
+        assertThat(count("SELECT COUNT(*) FROM transfer WHERE transfer_id BETWEEN 110000001 AND 110000200"))
+                .isEqualTo(50);
+        assertThat(count("SELECT COUNT(*) FROM ledger_entry WHERE ledger_entry_id BETWEEN 110000001 AND 110000400"))
+                .isEqualTo(100);
+        assertThat(count(
+                        "SELECT COUNT(*) FROM gl_journal_entry WHERE journal_entry_id BETWEEN 110470001 AND 110470400"))
+                .isEqualTo(100);
+
+        new TestBulkSeedService(jdbc, transactionManager, clock).seed(BULK_SPEC);
+
+        assertThat(count("SELECT COUNT(*) FROM transfer WHERE transfer_id BETWEEN 110000001 AND 110000200"))
+                .isEqualTo(200);
+        assertThat(count("SELECT COUNT(*) FROM ledger_entry WHERE ledger_entry_id BETWEEN 110000001 AND 110000400"))
+                .isEqualTo(400);
+    }
+
+    @Test
+    @DisplayName("PH-60 전표 보완 INSERT SELECT를 실제 MySQL에서 실행한다")
+    void backfillsMinimumSeedGlWithRealSql() {
+        minimumSeedService.seed(MINIMUM_SPEC);
+        Phase2BulkSeedService service = new TestBulkSeedService(jdbc, transactionManager, clock);
+
+        service.backfillTransferGl(60_000_001L, MINIMUM_SPEC.transferCount(), 119_000_001L);
+
+        assertThat(
+                        count(
+                                "SELECT COUNT(*) FROM gl_voucher voucher JOIN transfer seeded ON seeded.transaction_number=voucher.description WHERE seeded.transfer_id BETWEEN 60000001 AND 60000100"))
+                .isEqualTo(100);
+        assertThat(count(
+                        "SELECT COUNT(*) FROM gl_journal_entry WHERE journal_entry_id BETWEEN 119000001 AND 119000200"))
+                .isEqualTo(200);
+    }
+
     private int count(String sql, Object... args) {
         return jdbc.queryForObject(sql, Integer.class, args);
     }
 
-    private static final class TestBulkSeedService extends Phase2BulkSeedService {
+    private static class TestBulkSeedService extends Phase2BulkSeedService {
 
-        private TestBulkSeedService(JdbcTemplate jdbc, PlatformTransactionManager transactionManager) {
-            super(jdbc, transactionManager);
+        private TestBulkSeedService(JdbcTemplate jdbc, PlatformTransactionManager transactionManager, Clock clock) {
+            super(jdbc, transactionManager, clock);
         }
 
         @Override
@@ -149,6 +228,24 @@ class Phase2BulkSeedServiceIntegrationTest extends IntegrationTestSupport {
         @Override
         void advanceSequences(Phase2BulkSeedSpec spec) {
             // 테스트 롤백을 유지하기 위해 암시적 커밋이 발생하는 ALTER TABLE을 제외한다.
+        }
+    }
+
+    private static final class FailSecondTransferChunkService extends TestBulkSeedService {
+
+        private int chunks;
+
+        private FailSecondTransferChunkService(
+                JdbcTemplate jdbc, PlatformTransactionManager transactionManager, Clock clock) {
+            super(jdbc, transactionManager, clock);
+        }
+
+        @Override
+        void insertTransferChunk(Phase2BulkSeedSpec spec, Phase2BulkSeedPlan plan, int offset, int size) {
+            if (++chunks == 2) {
+                throw new IllegalStateException("의도한 두 번째 구간 실패");
+            }
+            super.insertTransferChunk(spec, plan, offset, size);
         }
     }
 }

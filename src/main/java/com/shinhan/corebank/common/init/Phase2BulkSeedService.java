@@ -5,15 +5,18 @@ import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -34,10 +37,12 @@ public class Phase2BulkSeedService {
 
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
+    private final Clock clock;
 
-    public Phase2BulkSeedService(JdbcTemplate jdbc, PlatformTransactionManager transactionManager) {
+    public Phase2BulkSeedService(JdbcTemplate jdbc, PlatformTransactionManager transactionManager, Clock clock) {
         this.jdbc = jdbc;
         this.transaction = new TransactionTemplate(transactionManager);
+        this.clock = clock;
     }
 
     public Phase2BulkSeedReport seed(Phase2BulkSeedSpec spec) {
@@ -45,11 +50,13 @@ public class Phase2BulkSeedService {
         long startedAt = System.nanoTime();
         Phase2BulkSeedPlan plan = new Phase2BulkSeedPlan(spec);
         validatePrerequisites();
+        rejectCompletedSeed(spec);
         runStage("customers", spec.customerCount(), customerCount(spec), () -> insertCustomers(spec, plan));
         runStage("accounts", spec.accountCount(), accountCount(spec), () -> insertAccounts(spec, plan));
         backfillPhase60Gl(spec);
         insertTransferChunks(spec, plan);
         insertSubscriptionChunks(spec, plan);
+        transaction.executeWithoutResult(status -> normalizeBalancesChronologically(spec));
         runStage(
                 "auto transfers",
                 spec.autoTransferCount(),
@@ -72,6 +79,42 @@ public class Phase2BulkSeedService {
                 spec.autoTransferCount(),
                 spec.scheduledTransferCount(),
                 Duration.ofNanos(System.nanoTime() - startedAt));
+    }
+
+    void rejectCompletedSeed(Phase2BulkSeedSpec spec) {
+        // 모든 업무 데이터가 이미 있으면 성공으로 오인하지 않도록 완료 시드의 재실행을 거부한다.
+        if (count(
+                                "SELECT COUNT(*) FROM customer WHERE customer_id BETWEEN ? AND ?",
+                                spec.customerIdStart(),
+                                spec.customerIdStart() + spec.customerCount() - 1)
+                        == spec.customerCount()
+                && count(
+                                "SELECT COUNT(*) FROM account WHERE account_id BETWEEN ? AND ?",
+                                spec.accountIdStart(),
+                                spec.accountIdStart() + spec.accountCount() - 1)
+                        == spec.accountCount()
+                && count(
+                                "SELECT COUNT(*) FROM transfer WHERE transfer_id BETWEEN ? AND ?",
+                                spec.transferIdStart(),
+                                spec.transferIdStart() + spec.transferCount() - 1)
+                        == spec.transferCount()
+                && count(
+                                "SELECT COUNT(*) FROM product_subscription WHERE subscription_id BETWEEN ? AND ?",
+                                spec.subscriptionIdStart(),
+                                spec.subscriptionIdStart() + spec.subscriptionCount() - 1)
+                        == spec.subscriptionCount()
+                && count(
+                                "SELECT COUNT(*) FROM auto_transfer WHERE auto_transfer_id BETWEEN ? AND ?",
+                                spec.autoTransferIdStart(),
+                                spec.autoTransferIdStart() + spec.autoTransferCount() - 1)
+                        == spec.autoTransferCount()
+                && count(
+                                "SELECT COUNT(*) FROM scheduled_transfer WHERE scheduled_transfer_id BETWEEN ? AND ?",
+                                spec.scheduledTransferIdStart(),
+                                spec.scheduledTransferIdStart() + spec.scheduledTransferCount() - 1)
+                        == spec.scheduledTransferCount()) {
+            throw new IllegalStateException("PH-60b seed is already complete");
+        }
     }
 
     void validatePrerequisites() {
@@ -190,13 +233,20 @@ public class Phase2BulkSeedService {
     }
 
     void backfillPhase60Gl(Phase2BulkSeedSpec spec) {
+        backfillTransferGl(PH60_TRANSFER_ID_START, PH60_TRANSFER_COUNT, spec.journalEntryIdStart());
+    }
+
+    void backfillTransferGl(long transferIdStart, int transferCount, long journalEntryIdStart) {
+        // 운영 SQL과 같은 INSERT SELECT를 축소 대역에서도 실행해 전표·분개 보완을 검증한다.
         int vouchers = count(
-                "SELECT COUNT(*) FROM gl_voucher WHERE voucher_no BETWEEN '20260901-TRF-000001' AND '20260901-TRF-235000'");
+                "SELECT COUNT(*) FROM gl_voucher voucher JOIN transfer seeded ON seeded.transaction_number=voucher.description WHERE seeded.transfer_id BETWEEN ? AND ?",
+                transferIdStart,
+                transferIdStart + transferCount - 1);
         int journals = count(
                 "SELECT COUNT(*) FROM gl_journal_entry WHERE journal_entry_id BETWEEN ? AND ?",
-                spec.journalEntryIdStart(),
-                spec.journalEntryIdStart() + PH60_TRANSFER_COUNT * 2L - 1);
-        if (vouchers == PH60_TRANSFER_COUNT && journals == PH60_TRANSFER_COUNT * 2) {
+                journalEntryIdStart,
+                journalEntryIdStart + transferCount * 2L - 1);
+        if (vouchers == transferCount && journals == transferCount * 2) {
             return;
         }
         if (vouchers != 0 || journals != 0) {
@@ -206,28 +256,37 @@ public class Phase2BulkSeedService {
             jdbc.update(
                     """
                     INSERT INTO gl_voucher (voucher_no, trade_date, tx_type, description, created_at)
-                    SELECT CONCAT('20260901-TRF-', LPAD(transfer_id - 60000000, 6, '0')),
+                    SELECT CONCAT(DATE_FORMAT(trade_date, '%Y%m%d'), '-TRF-', LPAD(transfer_id - ? + 1, 6, '0')),
                            trade_date, 'TRANSFER', transaction_number, created_at
                     FROM transfer
-                    WHERE transfer_id BETWEEN 60000001 AND 60235000
+                    WHERE transfer_id BETWEEN ? AND ?
                     ORDER BY transfer_id
-                    """);
+                    """,
+                    transferIdStart, transferIdStart, transferIdStart + transferCount - 1);
             jdbc.update(
                     """
                     INSERT INTO gl_journal_entry
                         (journal_entry_id, voucher_no, line_no, account_code, dr_cr, amount, trade_date, created_at)
-                    SELECT ? + (transfer_id - 60000001) * 2,
-                           CONCAT('20260901-TRF-', LPAD(transfer_id - 60000000, 6, '0')),
+                    SELECT ? + (transfer_id - ?) * 2,
+                           CONCAT(DATE_FORMAT(trade_date, '%Y%m%d'), '-TRF-', LPAD(transfer_id - ? + 1, 6, '0')),
                            1, '20100', 'DEBIT', amount, trade_date, created_at
-                    FROM transfer WHERE transfer_id BETWEEN 60000001 AND 60235000
+                    FROM transfer WHERE transfer_id BETWEEN ? AND ?
                     UNION ALL
-                    SELECT ? + (transfer_id - 60000001) * 2 + 1,
-                           CONCAT('20260901-TRF-', LPAD(transfer_id - 60000000, 6, '0')),
+                    SELECT ? + (transfer_id - ?) * 2 + 1,
+                           CONCAT(DATE_FORMAT(trade_date, '%Y%m%d'), '-TRF-', LPAD(transfer_id - ? + 1, 6, '0')),
                            2, '20100', 'CREDIT', amount, trade_date, created_at
-                    FROM transfer WHERE transfer_id BETWEEN 60000001 AND 60235000
+                    FROM transfer WHERE transfer_id BETWEEN ? AND ?
                     """,
-                    spec.journalEntryIdStart(),
-                    spec.journalEntryIdStart());
+                    journalEntryIdStart,
+                    transferIdStart,
+                    transferIdStart,
+                    transferIdStart,
+                    transferIdStart + transferCount - 1,
+                    journalEntryIdStart,
+                    transferIdStart,
+                    transferIdStart,
+                    transferIdStart,
+                    transferIdStart + transferCount - 1);
         });
     }
 
@@ -242,8 +301,9 @@ public class Phase2BulkSeedService {
         }
     }
 
-    private void insertTransferChunk(Phase2BulkSeedSpec spec, Phase2BulkSeedPlan plan, int offset, int size) {
+    void insertTransferChunk(Phase2BulkSeedSpec spec, Phase2BulkSeedPlan plan, int offset, int size) {
         Map<Long, Long> balances = lockTransferBalances(spec);
+        Set<Long> touched = new LinkedHashSet<>();
         List<TransferSeed> transfers = new ArrayList<>(size);
         Map<VoucherKey, Integer> voucherSequences = voucherSequences("TRANSFER");
         for (int local = 0; local < size; local++) {
@@ -256,6 +316,8 @@ public class Phase2BulkSeedService {
             long depositAfter = balance(balances, depositId) + amount;
             balances.put(withdrawalId, withdrawalAfter);
             balances.put(depositId, depositAfter);
+            touched.add(withdrawalId);
+            touched.add(depositId);
             LocalDate tradeDate = plan.tradeDate(index);
             VoucherKey key = new VoucherKey(tradeDate, "TRANSFER");
             int voucherSequence = voucherSequences.merge(key, 1, Integer::sum);
@@ -274,7 +336,7 @@ public class Phase2BulkSeedService {
         insertTransferLedgers(spec, transfers);
         insertVouchers(transfers.stream().map(TransferSeed::voucher).toList());
         insertTransferJournals(spec, transfers);
-        updateBalances(balances, spec.jdbcBatchSize());
+        updateBalances(balances, touched, spec.jdbcBatchSize());
     }
 
     private void insertSubscriptionChunks(Phase2BulkSeedSpec spec, Phase2BulkSeedPlan plan) {
@@ -292,6 +354,7 @@ public class Phase2BulkSeedService {
     private void insertSubscriptionChunk(
             Phase2BulkSeedSpec spec, Phase2BulkSeedPlan plan, Map<String, ProductSeed> products, int offset, int size) {
         Map<Long, Long> balances = lockNewAccountBalances(spec);
+        Set<Long> touched = new LinkedHashSet<>();
         List<SubscriptionSeed> subscriptions = new ArrayList<>(size);
         Map<VoucherKey, Integer> voucherSequences = voucherSequences("PRODUCT_SUBSCRIPTION");
         for (int local = 0; local < size; local++) {
@@ -305,6 +368,8 @@ public class Phase2BulkSeedService {
             long depositAfter = balance(balances, depositId) + amount;
             balances.put(withdrawalId, withdrawalAfter);
             balances.put(depositId, depositAfter);
+            touched.add(withdrawalId);
+            touched.add(depositId);
             LocalDate tradeDate = plan.subscriptionDate(index);
             VoucherKey key = new VoucherKey(tradeDate, "PRODUCT_SUBSCRIPTION");
             int voucherSequence = voucherSequences.merge(key, 1, Integer::sum);
@@ -332,7 +397,47 @@ public class Phase2BulkSeedService {
         insertSubscriptionLedgers(spec, subscriptions);
         insertVouchers(subscriptions.stream().map(SubscriptionSeed::voucher).toList());
         insertSubscriptionJournals(spec, subscriptions);
-        updateBalances(balances, spec.jdbcBatchSize());
+        updateBalances(balances, touched, spec.jdbcBatchSize());
+    }
+
+    void normalizeBalancesChronologically(Phase2BulkSeedSpec spec) {
+        // TRF와 SUB 생성 순서와 무관하게 원장 발생시각 누계가 balance_after의 정본이 되게 한다.
+        jdbc.update(
+                """
+                UPDATE ledger_entry target
+                JOIN (
+                    SELECT ledger_entry_id, running_balance FROM (
+                        SELECT ledger_entry_id,
+                               SUM(CASE WHEN direction='DEPOSIT' THEN amount ELSE -amount END)
+                                   OVER (PARTITION BY account_id ORDER BY occurred_at, ledger_entry_id) running_balance
+                        FROM ledger_entry
+                        WHERE account_id BETWEEN ? AND ? OR account_id BETWEEN ? AND ?
+                    ) calculated
+                ) ordered ON ordered.ledger_entry_id=target.ledger_entry_id
+                SET target.balance_after=ordered.running_balance
+                WHERE target.balance_after<>ordered.running_balance
+                """,
+                PH60_ACCOUNT_ID_START,
+                PH60_ACCOUNT_ID_START + PH60_ACCOUNT_COUNT - 1,
+                spec.accountIdStart(),
+                spec.accountIdStart() + spec.accountCount() - 1);
+        jdbc.update(
+                """
+                UPDATE account target
+                JOIN (
+                    SELECT account_id,
+                           SUM(CASE WHEN direction='DEPOSIT' THEN amount ELSE -amount END) ledger_balance
+                    FROM ledger_entry
+                    WHERE account_id BETWEEN ? AND ? OR account_id BETWEEN ? AND ?
+                    GROUP BY account_id
+                ) calculated ON calculated.account_id=target.account_id
+                SET target.balance=calculated.ledger_balance, target.updated_at=NOW(6)
+                WHERE target.balance<>calculated.ledger_balance
+                """,
+                PH60_ACCOUNT_ID_START,
+                PH60_ACCOUNT_ID_START + PH60_ACCOUNT_COUNT - 1,
+                spec.accountIdStart(),
+                spec.accountIdStart() + spec.accountCount() - 1);
     }
 
     private void insertTransfers(Phase2BulkSeedSpec spec, List<TransferSeed> seeds) {
@@ -564,7 +669,8 @@ public class Phase2BulkSeedService {
         batch(spec.autoTransferCount(), spec.jdbcBatchSize(), sql, (statement, index) -> {
             int source = (spec.dormantCandidateCount() + index) % spec.customerCount();
             int target = (source + 1) % spec.customerCount();
-            LocalDate start = LocalDate.of(2026, 10, 1).plusDays(index % 28L);
+            // 적재 다음 날부터 배치 대상이 되게 해 과거 실행일 상태로 시드되지 않게 한다.
+            LocalDate start = LocalDate.now(clock).plusDays(1L + index % 28L);
             statement.setLong(1, spec.autoTransferIdStart() + index);
             statement.setLong(2, spec.customerIdStart() + source);
             statement.setLong(3, plan.demandAccountId(source));
@@ -604,7 +710,8 @@ public class Phase2BulkSeedService {
             statement.setLong(3, plan.demandAccountId(source));
             statement.setString(4, plan.accountNumber(target * 3));
             statement.setLong(5, 20_000L + index % 30 * 1_000L);
-            statement.setDate(6, Date.valueOf(LocalDate.of(2026, 10, 1).plusDays(index % 365L)));
+            // 예약일도 적재 다음 날 이후로 두어 WAITING 거래가 실행 누락 상태로 시작하지 않게 한다.
+            statement.setDate(6, Date.valueOf(LocalDate.now(clock).plusDays(1L + index % 365L)));
             setTimestamp(statement, 7, spec.periodEnd().atTime(13, 0));
         });
     }
@@ -651,6 +758,59 @@ public class Phase2BulkSeedService {
                 "SELECT COUNT(*) FROM account WHERE account_id BETWEEN ? AND ? AND balance < 0",
                 spec.accountIdStart(),
                 spec.accountIdStart() + spec.accountCount() - 1);
+        requireZero(
+                "account and ledger balance mismatches",
+                """
+                SELECT COUNT(*) FROM account account_row
+                LEFT JOIN (
+                    SELECT account_id,
+                           SUM(CASE WHEN direction='DEPOSIT' THEN amount ELSE -amount END) ledger_balance
+                    FROM ledger_entry
+                    WHERE account_id BETWEEN ? AND ? OR account_id BETWEEN ? AND ?
+                    GROUP BY account_id
+                ) ledger_sum ON ledger_sum.account_id=account_row.account_id
+                WHERE (account_row.account_id BETWEEN ? AND ? OR account_row.account_id BETWEEN ? AND ?)
+                  AND account_row.balance<>COALESCE(ledger_sum.ledger_balance, 0)
+                """,
+                PH60_ACCOUNT_ID_START,
+                PH60_ACCOUNT_ID_START + PH60_ACCOUNT_COUNT - 1,
+                spec.accountIdStart(),
+                spec.accountIdStart() + spec.accountCount() - 1,
+                PH60_ACCOUNT_ID_START,
+                PH60_ACCOUNT_ID_START + PH60_ACCOUNT_COUNT - 1,
+                spec.accountIdStart(),
+                spec.accountIdStart() + spec.accountCount() - 1);
+        requireZero(
+                "chronological ledger balance mismatches",
+                """
+                SELECT COUNT(*) FROM (
+                    SELECT balance_after,
+                           SUM(CASE WHEN direction='DEPOSIT' THEN amount ELSE -amount END)
+                               OVER (PARTITION BY account_id ORDER BY occurred_at, ledger_entry_id) expected_balance
+                    FROM ledger_entry
+                    WHERE account_id BETWEEN ? AND ? OR account_id BETWEEN ? AND ?
+                ) ordered
+                WHERE balance_after<>expected_balance
+                """,
+                PH60_ACCOUNT_ID_START,
+                PH60_ACCOUNT_ID_START + PH60_ACCOUNT_COUNT - 1,
+                spec.accountIdStart(),
+                spec.accountIdStart() + spec.accountCount() - 1);
+        requireZero(
+                "broken transaction ledger pairs",
+                """
+                SELECT COUNT(*) FROM (
+                    SELECT transaction_number
+                    FROM ledger_entry
+                    WHERE ledger_entry_id BETWEEN ? AND ?
+                    GROUP BY transaction_number
+                    HAVING COUNT(*)<>2
+                       OR SUM(direction='WITHDRAWAL')<>1
+                       OR SUM(direction='DEPOSIT')<>1
+                ) broken
+                """,
+                spec.ledgerEntryIdStart(),
+                spec.ledgerEntryIdStart() + spec.ledgerEntryCount() - 1);
         requireZero(
                 "unbalanced vouchers",
                 """
@@ -732,8 +892,11 @@ public class Phase2BulkSeedService {
         return balances;
     }
 
-    private void updateBalances(Map<Long, Long> balances, int batchSize) {
-        List<Map.Entry<Long, Long>> entries = new ArrayList<>(balances.entrySet());
+    private void updateBalances(Map<Long, Long> balances, Set<Long> touched, int batchSize) {
+        // 각 구간에서 실제 입출금이 발생한 계좌만 갱신해 불필요한 잠금과 UPDATE를 줄인다.
+        List<Map.Entry<Long, Long>> entries = touched.stream()
+                .map(accountId -> Map.entry(accountId, balances.get(accountId)))
+                .toList();
         batchSeeds(
                 entries,
                 batchSize,
