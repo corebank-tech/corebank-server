@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.SortedMap;
 
 public interface AccountPersistencePort {
 
@@ -26,4 +27,7 @@ public interface AccountPersistencePort {
     // 다른 도메인의 배치가 잔액만 필요할 때 전체 Account 도메인 객체 조립 없이 조회한다.
     // 존재하지 않는 계좌 ID는 결과 맵에서 생략된다.
     Map<Long, Long> findBalancesByAccountIds(Collection<Long> accountIds);
+
+    // afterAccountId보다 큰 계좌를 account_id 오름차순으로 최대 limit개. 비어 있으면 끝이다.
+    SortedMap<Long, Long> findBalancesAfter(long afterAccountId, int limit);
 }

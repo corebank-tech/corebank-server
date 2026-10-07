@@ -1,6 +1,7 @@
 package com.shinhan.corebank.transfer.application.service;
 
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
+import com.shinhan.corebank.transfer.application.port.in.LedgerFullReconciliationUseCase;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationBatchUseCase;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationUseCase;
 import java.time.Duration;
@@ -19,17 +20,20 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
     private static final String DAILY_TRANSFER_BATCH_JOB_NAME = "DAILY_TRANSFER_BATCH";
 
     private final LedgerReconciliationUseCase ledgerReconciliationUseCase;
+    private final LedgerFullReconciliationUseCase ledgerFullReconciliationUseCase;
     private final BatchExecutionLockPort batchExecutionLockPort;
     private final Duration dailyBatchWaitPollInterval;
     private final Duration dailyBatchMaxWait;
 
     public LedgerReconciliationBatchService(
             LedgerReconciliationUseCase ledgerReconciliationUseCase,
+            LedgerFullReconciliationUseCase ledgerFullReconciliationUseCase,
             BatchExecutionLockPort batchExecutionLockPort,
             @Value("${app.ledger-reconciliation.daily-batch-wait-poll-interval:PT1M}")
                     Duration dailyBatchWaitPollInterval,
             @Value("${app.ledger-reconciliation.daily-batch-max-wait:PT1H}") Duration dailyBatchMaxWait) {
         this.ledgerReconciliationUseCase = ledgerReconciliationUseCase;
+        this.ledgerFullReconciliationUseCase = ledgerFullReconciliationUseCase;
         this.batchExecutionLockPort = batchExecutionLockPort;
         this.dailyBatchWaitPollInterval = dailyBatchWaitPollInterval;
         this.dailyBatchMaxWait = dailyBatchMaxWait;
@@ -45,16 +49,26 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
                     date);
             return;
         }
+        runWithLock("date=" + date, () -> ledgerReconciliationUseCase.reconcile(date));
+    }
+
+    // 전수 대사는 청크마다 같은 스냅샷을 읽어 다른 배치가 돌아도 오탐이 없으므로 일일 배치 완료를 기다리지 않는다.
+    @Override
+    public void runFull() {
+        runWithLock("scope=FULL", ledgerFullReconciliationUseCase::reconcileAll);
+    }
+
+    private void runWithLock(String target, Runnable reconciliation) {
         if (!batchExecutionLockPort.tryAcquire(JOB_NAME)) {
-            log.warn("이미 실행 중인 배치가 있어 이번 트리거는 건너뜀 - jobName={}", JOB_NAME);
+            log.warn("이미 실행 중인 배치가 있어 이번 트리거는 건너뜀 - jobName={}, {}", JOB_NAME, target);
             return;
         }
         try {
-            log.info("원장-잔액 대사 배치 시작 - date={}", date);
-            ledgerReconciliationUseCase.reconcile(date);
-            log.info("원장-잔액 대사 배치 종료 - date={}", date);
+            log.info("원장-잔액 대사 배치 시작 - {}", target);
+            reconciliation.run();
+            log.info("원장-잔액 대사 배치 종료 - {}", target);
         } catch (Exception e) {
-            log.error("원장-잔액 대사 배치 실패 - date={}", date, e);
+            log.error("원장-잔액 대사 배치 실패 - {}", target, e);
         } finally {
             batchExecutionLockPort.release(JOB_NAME);
         }

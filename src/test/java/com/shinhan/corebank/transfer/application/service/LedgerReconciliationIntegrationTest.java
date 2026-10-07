@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
+import static java.time.format.DateTimeFormatter.BASIC_ISO_DATE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
@@ -7,6 +8,7 @@ import com.shinhan.corebank.transfer.adapter.out.persistence.LedgerEntryIdGenera
 import com.shinhan.corebank.transfer.adapter.out.persistence.LedgerEntryJpaEntity;
 import com.shinhan.corebank.transfer.adapter.out.persistence.LedgerEntryJpaRepository;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
+import com.shinhan.corebank.transfer.application.port.in.LedgerFullReconciliationUseCase;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationMismatch;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationUseCase;
 import com.shinhan.corebank.transfer.domain.LedgerDirection;
@@ -25,9 +27,13 @@ import org.springframework.transaction.annotation.Transactional;
 class LedgerReconciliationIntegrationTest extends IntegrationTestSupport {
 
     private static final LocalDate DATE = LocalDate.of(2026, 8, 9);
+    private static final LocalDateTime DORMANT_POSTED_AT = LocalDateTime.of(2026, 8, 1, 10, 0, 0);
 
     @Autowired
     private LedgerReconciliationUseCase ledgerReconciliationUseCase;
+
+    @Autowired
+    private LedgerFullReconciliationUseCase ledgerFullReconciliationUseCase;
 
     @Autowired
     private LedgerEntryJpaRepository ledgerEntryJpaRepository;
@@ -59,19 +65,50 @@ class LedgerReconciliationIntegrationTest extends IntegrationTestSupport {
         assertThat(mismatches).containsExactly(new LedgerReconciliationMismatch(101L, 95000L, 100000L));
     }
 
+    @Test
+    @DisplayName("원장 기표 없이 잔액만 틀어진 휴면 계좌는 증분 대사가 놓치고 전수 대사가 잡는다(#468)")
+    void reconcileAll_detectsDormantDriftMissedByIncremental() {
+        // given — 8/1 기표로 원장과 잔액이 맞던 계좌 101·202가, 그 뒤 원장을 거치지 않고 잔액만 7,000원 늘었다
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        saveEntry(101L, LedgerDirection.DEPOSIT, 100000L, DORMANT_POSTED_AT);
+        saveEntry(202L, LedgerDirection.DEPOSIT, 100000L, DORMANT_POSTED_AT);
+        entityManager.flush();
+        entityManager
+                .createNativeQuery("UPDATE account SET balance = balance + 7000 WHERE account_id IN (101, 202)")
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        var incremental = ledgerReconciliationUseCase.reconcile(DATE);
+        var full = ledgerFullReconciliationUseCase.reconcileAll();
+
+        // then — 다른 시드 계좌가 섞일 수 있어 정확 일치 대신 포함 여부로 본다
+        assertThat(incremental).isEmpty();
+        assertThat(full)
+                .contains(
+                        new LedgerReconciliationMismatch(101L, 100000L, 107000L),
+                        new LedgerReconciliationMismatch(202L, 100000L, 107000L));
+    }
+
     private void saveEntry(Long accountId, LedgerDirection direction, long amount) {
+        saveEntry(accountId, direction, amount, LocalDateTime.of(2026, 8, 9, 10, 0, 0));
+    }
+
+    private void saveEntry(Long accountId, LedgerDirection direction, long amount, LocalDateTime occurredAt) {
         Long ledgerEntryId = ledgerEntryIdGenerator.nextId();
         ledgerEntryJpaRepository.save(LedgerEntryJpaEntity.builder()
                 .ledgerEntryId(ledgerEntryId)
                 .accountId(accountId)
-                .transactionNumber(String.format("20260809WB%010d", ledgerEntryId))
+                .transactionNumber(
+                        String.format("%sWB%010d", occurredAt.toLocalDate().format(BASIC_ISO_DATE), ledgerEntryId))
                 .direction(direction)
                 .amount(amount)
                 .balanceAfter(amount)
                 .transactionType("IMMEDIATE_TRANSFER")
                 .channel(TransferChannel.WB)
                 .reversed(false)
-                .occurredAt(LocalDateTime.of(2026, 8, 9, 10, 0, 0))
+                .occurredAt(occurredAt)
                 .build());
     }
 }
