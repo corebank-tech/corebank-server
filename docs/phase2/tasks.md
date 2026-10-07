@@ -799,6 +799,7 @@ PH-90 PreCheck → PH-24 훅 B → PH-41 tradeDate 대입 순서로 머지한다
 - Resilience4j 타임아웃·서킷브레이커 — 타행만 막고 당행은 계속 돈다.
 - 은행코드 시드 5개. 은행 목록·미결제 상태 스키마를 10/16까지 FE B-8(P3)에 넘긴다.
 - 타행 확정 시점에도 `transfer.completed`가 발행된다.
+- **착수 시 P5와 확인:** 자동·예약이체 재확정 배치(`AutoTransferBatchItemProcessor`·`ScheduledTransferBatchItemProcessor`의 `reconcileStuckExecution()`)는 조회한 transfer가 SUCCESS·ERROR가 아니면 else 분기에서 회차를 ERROR로 확정한다. TIMEOUT 행이 이 분기로 오면 처리 불명이 실패로 굳는다. 지금은 회차가 당행 전용이라 오지 않지만([process_result_status_usage.md](process_result_status_usage.md) §2), 송신 연결 전에 두 else 분기와 `completeProcessing()` 예외 메시지("PROCESSING으로 미확정")를 TIMEOUT 기준으로 맞출지 P5와 정한다(PR #570 리뷰).
 - **완료 기준:** 정상 흐름과 "무응답 후 조회 확인" 흐름이 돈다. 모의 서버가 무응답이어도 당행 TPS가 유지된다.
 - **범위 밖:** 미결제 정산(PH-35), 타행 수수료(`FEE = 0L` 유지)
 
