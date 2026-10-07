@@ -586,6 +586,20 @@ class TransferTest {
         }
 
         @Test
+        @DisplayName("TIMEOUT 이체를 다시 timeout()하면 BusinessException(INVALID_STATUS_TRANSITION) 예외가 발생한다")
+        void throwsExceptionWhenTimingOutTimedOutTransfer() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.timeout();
+
+            // when & then
+            assertThatThrownBy(transfer::timeout)
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
+        }
+
+        @Test
         @DisplayName("이미 확정(SUCCESS)된 이체를 timeout() 처리하면 BusinessException(INVALID_STATUS_TRANSITION) 예외가 발생한다")
         void throwsExceptionWhenTimingOutCompletedTransfer() {
             // given
