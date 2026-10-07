@@ -131,6 +131,48 @@ class CorebankApplicationTest {
         }
     }
 
+    @Test
+    @DisplayName("PH-11 베이스라인 실행이 완료되면 프로세스 컨텍스트를 닫는다")
+    void closesCompletedPh11BaselineProcess() {
+        GenericApplicationContext context = contextWithPh11BaselineExecution(true, true);
+
+        boolean shouldExit = Phase2SeedProcessRunner.closeCompletedSeedProcess(context);
+
+        assertThat(context.isActive()).isFalse();
+        assertThat(shouldExit).isTrue();
+    }
+
+    @Test
+    @DisplayName("PH-11 베이스라인 실행 플래그가 없으면 서버 컨텍스트를 유지한다")
+    void keepsContextWithoutPh11BaselineExecutionFlag() {
+        GenericApplicationContext context = contextWithPh11BaselineExecution(true, false);
+
+        boolean shouldExit = Phase2SeedProcessRunner.closeCompletedSeedProcess(context);
+
+        assertThat(context.isActive()).isTrue();
+        assertThat(shouldExit).isFalse();
+
+        context.close();
+    }
+
+    @Test
+    @DisplayName("PH-11 베이스라인 명령이면 스프링 실행 전에 DevTools 재시작을 끈다")
+    void disablesDevToolsRestartForPh11BaselineCommand() {
+        String previous = System.getProperty(DEVTOOLS_RESTART_PROPERTY);
+
+        try {
+            System.clearProperty(DEVTOOLS_RESTART_PROPERTY);
+
+            boolean disabled = Phase2SeedProcessRunner.disableDevToolsRestartForSeed(
+                    new String[] {"--spring.profiles.active=local,ph11-baseline", "--app.ph11-baseline.execute=true"});
+
+            assertThat(disabled).isTrue();
+            assertThat(System.getProperty(DEVTOOLS_RESTART_PROPERTY)).isEqualTo("false");
+        } finally {
+            restoreSystemProperty(previous);
+        }
+    }
+
     private void restoreSystemProperty(String previous) {
         if (previous == null) {
             System.clearProperty(DEVTOOLS_RESTART_PROPERTY);
@@ -149,6 +191,24 @@ class CorebankApplicationTest {
                 .addFirst(new MapPropertySource(
                         "phase2SeedTest", Map.of("app.phase2-seed.execute", Boolean.toString(enabled))));
         context.refresh();
+        return context;
+    }
+
+    private GenericApplicationContext contextWithPh11BaselineExecution(boolean profileActive, boolean enabled) {
+
+        GenericApplicationContext context = new GenericApplicationContext();
+
+        if (profileActive) {
+            context.getEnvironment().setActiveProfiles("ph11-baseline");
+        }
+
+        context.getEnvironment()
+                .getPropertySources()
+                .addFirst(new MapPropertySource(
+                        "ph11BaselineTest", Map.of("app.ph11-baseline.execute", Boolean.toString(enabled))));
+
+        context.refresh();
+
         return context;
     }
 }
