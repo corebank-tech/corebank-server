@@ -26,6 +26,11 @@ public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner 
     @Override
     public void run(ApplicationArguments args) {
         BaselineResult result = measure();
+
+        String totalSecondsForLog = String.format(Locale.ROOT, "%.3f", result.totalSeconds());
+        String averageMsForLog = String.format(Locale.ROOT, "%.3f", result.averageMs());
+        String p95MsForLog = String.format(Locale.ROOT, "%.3f", result.p95Ms());
+        String p99MsForLog = String.format(Locale.ROOT, "%.3f", result.p99Ms());
         String checksumForLog = String.format(Locale.ROOT, "%,d", result.checksum());
 
         log.info(
@@ -46,10 +51,10 @@ public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner 
                 properties.accountCount(),
                 properties.fromInclusive(),
                 properties.toExclusive(),
-                result.totalSeconds(),
-                result.averageMs(),
-                result.p95Ms(),
-                result.p99Ms(),
+                totalSecondsForLog,
+                averageMsForLog,
+                p95MsForLog,
+                p99MsForLog,
                 checksumForLog,
                 result.zeroResultCount());
     }
@@ -70,11 +75,12 @@ public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner 
             long accumulatedDailyBalance = accumulatedDailyBalanceUseCase.calculate(
                     accountId, properties.fromInclusive(), properties.toExclusive());
 
+            elapsedNanos[i] = System.nanoTime() - start;
+
             if (accumulatedDailyBalance == 0L) {
                 zeroResultCount++;
             }
 
-            elapsedNanos[i] = System.nanoTime() - start;
             checksum = Math.addExact(checksum, accumulatedDailyBalance);
         }
 
