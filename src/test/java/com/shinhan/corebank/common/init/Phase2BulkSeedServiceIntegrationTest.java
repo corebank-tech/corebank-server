@@ -142,26 +142,26 @@ class Phase2BulkSeedServiceIntegrationTest extends IntegrationTestSupport {
         assertThat(
                         count(
                                 """
-                        SELECT COUNT(*) FROM (
-                            SELECT account_id, MAX(trade_date) AS latest
-                            FROM ledger_entry
-                            WHERE account_id IN (110000001, 110000004)
-                            GROUP BY account_id
-                            HAVING latest <> '2026-09-01'
-                        ) broken
-                        """))
+                    SELECT COUNT(*) FROM (
+                        SELECT account_id, MAX(trade_date) AS latest
+                        FROM ledger_entry
+                        WHERE account_id IN (110000001, 110000004)
+                        GROUP BY account_id
+                        HAVING latest <> '2026-09-01'
+                    ) broken
+                    """))
                 .isZero();
         assertThat(
                         count(
                                 """
-                        SELECT COUNT(*) FROM (
-                            SELECT voucher_no FROM gl_journal_entry
-                            WHERE journal_entry_id BETWEEN 110470001 AND 110470800
-                            GROUP BY voucher_no
-                            HAVING COUNT(*) <> 2
-                               OR SUM(CASE WHEN dr_cr='DEBIT' THEN amount ELSE -amount END) <> 0
-                        ) broken
-                        """))
+                    SELECT COUNT(*) FROM (
+                        SELECT voucher_no FROM gl_journal_entry
+                        WHERE journal_entry_id BETWEEN 110470001 AND 110470800
+                        GROUP BY voucher_no
+                        HAVING COUNT(*) <> 2
+                           OR SUM(CASE WHEN dr_cr='DEBIT' THEN amount ELSE -amount END) <> 0
+                    ) broken
+                    """))
                 .isZero();
     }
 
@@ -227,7 +227,7 @@ class Phase2BulkSeedServiceIntegrationTest extends IntegrationTestSupport {
 
         @Override
         void advanceSequences(Phase2BulkSeedSpec spec) {
-            // 테스트 롤백을 유지하기 위해 암시적 커밋이 발생하는 ALTER TABLE을 제외한다.
+            // 테스트 전용 ID 대역 밖의 실제 자동 채번 값을 변경하지 않도록 ALTER TABLE을 제외한다.
         }
     }
 
@@ -241,11 +241,10 @@ class Phase2BulkSeedServiceIntegrationTest extends IntegrationTestSupport {
         }
 
         @Override
-        void insertTransferChunk(Phase2BulkSeedSpec spec, Phase2BulkSeedPlan plan, int offset, int size) {
+        void afterTransferCompanionsInserted(int offset) {
             if (++chunks == 2) {
                 throw new IllegalStateException("의도한 두 번째 구간 실패");
             }
-            super.insertTransferChunk(spec, plan, offset, size);
         }
     }
 }

@@ -49,7 +49,7 @@ final class Phase2BulkSeedPlan {
     }
 
     LocalDate tradeDate(int transferIndex) {
-        // PH-60 개시 원장 뒤에 자금을 먼저 공급해 9/1의 다른 거래보다 앞서게 한다.
+        // 최초 5만 건의 자금 공급 거래일을 PH-60 개시일인 9월 1일로 고정한다.
         if (transferIndex < spec.customerCount()) {
             return LocalDate.of(2026, 9, 1);
         }
@@ -68,7 +68,8 @@ final class Phase2BulkSeedPlan {
 
     LocalDateTime occurredAt(int globalTransactionIndex) {
         if (globalTransactionIndex < spec.customerCount()) {
-            return LocalDateTime.of(2026, 9, 1, 0, 0).plusSeconds(globalTransactionIndex / 5L + 1);
+            // 공급 5만 건을 개시 직후 1마이크로초 간격으로 두어 PH-60의 첫 이체보다 먼저 발생시킨다.
+            return LocalDateTime.of(2026, 9, 1, 0, 0).plusNanos((globalTransactionIndex + 1L) * 1_000L);
         }
         LocalDate date = tradeDate(globalTransactionIndex);
         if (date.equals(LocalDate.of(2026, 9, 1))) {
@@ -107,7 +108,8 @@ final class Phase2BulkSeedPlan {
     }
 
     long transferAmount(int transferIndex) {
-        return transferIndex < spec.customerCount() ? 10_000_000L : 10_000L + transferIndex % 90 * 1_000L;
+        // PH-60의 9월 1일 출금과 합산해도 5,000만 원 일 한도 안에 들도록 계좌당 공급 합계를 4,750만 원으로 제한한다.
+        return transferIndex < spec.customerCount() ? 9_500_000L : 10_000L + transferIndex % 90 * 1_000L;
     }
 
     int subscriptionCustomerIndex(int subscriptionIndex) {

@@ -33,6 +33,8 @@ public class Phase2BulkSeedService {
     private static final int PH60_TRANSFER_COUNT = 235_000;
     private static final long PH60_ACCOUNT_ID_START = 60_000_001L;
     private static final int PH60_ACCOUNT_COUNT = 30_000;
+    private static final int ACCOUNT_LOCK_BATCH_SIZE = 1_000;
+    private static final int BALANCE_NORMALIZATION_ACCOUNT_CHUNK_SIZE = 5_000;
     private static final String OPENING_VOUCHER_NUMBER = "20260901-OPN-000001";
 
     private final JdbcTemplate jdbc;
@@ -46,7 +48,7 @@ public class Phase2BulkSeedService {
     }
 
     public Phase2BulkSeedReport seed(Phase2BulkSeedSpec spec) {
-        // 각 단계와 구간을 독립 트랜잭션으로 실행해 실패 지점부터 재개할 수 있게 한다.
+        // 업무 단계와 5만 거래·5천 계좌 구간을 독립 트랜잭션으로 실행해 완료 구간을 보존한다.
         long startedAt = System.nanoTime();
         Phase2BulkSeedPlan plan = new Phase2BulkSeedPlan(spec);
         validatePrerequisites();
@@ -56,7 +58,7 @@ public class Phase2BulkSeedService {
         backfillPhase60Gl(spec);
         insertTransferChunks(spec, plan);
         insertSubscriptionChunks(spec, plan);
-        transaction.executeWithoutResult(status -> normalizeBalancesChronologically(spec));
+        normalizeBalancesChronologically(spec);
         runStage(
                 "auto transfers",
                 spec.autoTransferCount(),
@@ -302,7 +304,12 @@ public class Phase2BulkSeedService {
     }
 
     void insertTransferChunk(Phase2BulkSeedSpec spec, Phase2BulkSeedPlan plan, int offset, int size) {
-        Map<Long, Long> balances = lockTransferBalances(spec);
+        Set<Long> accountIds = new java.util.TreeSet<>();
+        for (int index = offset; index < offset + size; index++) {
+            accountIds.add(plan.withdrawalAccountId(index));
+            accountIds.add(plan.depositAccountId(index));
+        }
+        Map<Long, Long> balances = lockBalances(accountIds);
         Set<Long> touched = new LinkedHashSet<>();
         List<TransferSeed> transfers = new ArrayList<>(size);
         Map<VoucherKey, Integer> voucherSequences = voucherSequences("TRANSFER");
@@ -336,7 +343,12 @@ public class Phase2BulkSeedService {
         insertTransferLedgers(spec, transfers);
         insertVouchers(transfers.stream().map(TransferSeed::voucher).toList());
         insertTransferJournals(spec, transfers);
+        afterTransferCompanionsInserted(offset);
         updateBalances(balances, touched, spec.jdbcBatchSize());
+    }
+
+    void afterTransferCompanionsInserted(int offset) {
+        // 테스트가 거래·원장·전표·분개 INSERT 이후의 구간 롤백을 결정적으로 주입하는 지점이다.
     }
 
     private void insertSubscriptionChunks(Phase2BulkSeedSpec spec, Phase2BulkSeedPlan plan) {
@@ -353,7 +365,13 @@ public class Phase2BulkSeedService {
 
     private void insertSubscriptionChunk(
             Phase2BulkSeedSpec spec, Phase2BulkSeedPlan plan, Map<String, ProductSeed> products, int offset, int size) {
-        Map<Long, Long> balances = lockNewAccountBalances(spec);
+        Set<Long> accountIds = new java.util.TreeSet<>();
+        for (int index = offset; index < offset + size; index++) {
+            int customerIndex = plan.subscriptionCustomerIndex(index);
+            accountIds.add(plan.demandAccountId(customerIndex));
+            accountIds.add(plan.subscriptionAccountId(index));
+        }
+        Map<Long, Long> balances = lockBalances(accountIds);
         Set<Long> touched = new LinkedHashSet<>();
         List<SubscriptionSeed> subscriptions = new ArrayList<>(size);
         Map<VoucherKey, Integer> voucherSequences = voucherSequences("PRODUCT_SUBSCRIPTION");
@@ -401,7 +419,20 @@ public class Phase2BulkSeedService {
     }
 
     void normalizeBalancesChronologically(Phase2BulkSeedSpec spec) {
-        // TRF와 SUB 생성 순서와 무관하게 원장 발생시각 누계가 balance_after의 정본이 되게 한다.
+        normalizeAccountRangeInChunks(PH60_ACCOUNT_ID_START, PH60_ACCOUNT_ID_START + PH60_ACCOUNT_COUNT - 1, spec);
+        normalizeAccountRangeInChunks(spec.accountIdStart(), spec.accountIdStart() + spec.accountCount() - 1, spec);
+    }
+
+    private void normalizeAccountRangeInChunks(long firstAccountId, long lastAccountId, Phase2BulkSeedSpec spec) {
+        for (long start = firstAccountId; start <= lastAccountId; start += BALANCE_NORMALIZATION_ACCOUNT_CHUNK_SIZE) {
+            long chunkStart = start;
+            long chunkEnd = Math.min(start + BALANCE_NORMALIZATION_ACCOUNT_CHUNK_SIZE - 1L, lastAccountId);
+            transaction.executeWithoutResult(status -> normalizeAccountRange(chunkStart, chunkEnd, spec));
+        }
+    }
+
+    private void normalizeAccountRange(long accountIdStart, long accountIdEnd, Phase2BulkSeedSpec spec) {
+        // 5천 계좌 범위별로 원장·이체·계좌를 함께 정규화해 장시간 트랜잭션과 전체 롤백을 피한다.
         jdbc.update(
                 """
                 UPDATE ledger_entry target
@@ -411,16 +442,29 @@ public class Phase2BulkSeedService {
                                SUM(CASE WHEN direction='DEPOSIT' THEN amount ELSE -amount END)
                                    OVER (PARTITION BY account_id ORDER BY occurred_at, ledger_entry_id) running_balance
                         FROM ledger_entry
-                        WHERE account_id BETWEEN ? AND ? OR account_id BETWEEN ? AND ?
+                        WHERE account_id BETWEEN ? AND ?
                     ) calculated
                 ) ordered ON ordered.ledger_entry_id=target.ledger_entry_id
                 SET target.balance_after=ordered.running_balance
                 WHERE target.balance_after<>ordered.running_balance
                 """,
-                PH60_ACCOUNT_ID_START,
-                PH60_ACCOUNT_ID_START + PH60_ACCOUNT_COUNT - 1,
-                spec.accountIdStart(),
-                spec.accountIdStart() + spec.accountCount() - 1);
+                accountIdStart,
+                accountIdEnd);
+        jdbc.update(
+                """
+                UPDATE transfer target
+                JOIN ledger_entry withdrawal
+                  ON withdrawal.transfer_id=target.transfer_id
+                 AND withdrawal.direction='WITHDRAWAL'
+                SET target.withdrawal_balance_after=withdrawal.balance_after
+                WHERE target.transfer_id BETWEEN ? AND ?
+                  AND withdrawal.account_id BETWEEN ? AND ?
+                  AND target.withdrawal_balance_after<>withdrawal.balance_after
+                """,
+                spec.transferIdStart(),
+                spec.transferIdStart() + spec.transferCount() - 1,
+                accountIdStart,
+                accountIdEnd);
         jdbc.update(
                 """
                 UPDATE account target
@@ -428,16 +472,14 @@ public class Phase2BulkSeedService {
                     SELECT account_id,
                            SUM(CASE WHEN direction='DEPOSIT' THEN amount ELSE -amount END) ledger_balance
                     FROM ledger_entry
-                    WHERE account_id BETWEEN ? AND ? OR account_id BETWEEN ? AND ?
+                    WHERE account_id BETWEEN ? AND ?
                     GROUP BY account_id
                 ) calculated ON calculated.account_id=target.account_id
                 SET target.balance=calculated.ledger_balance, target.updated_at=NOW(6)
                 WHERE target.balance<>calculated.ledger_balance
                 """,
-                PH60_ACCOUNT_ID_START,
-                PH60_ACCOUNT_ID_START + PH60_ACCOUNT_COUNT - 1,
-                spec.accountIdStart(),
-                spec.accountIdStart() + spec.accountCount() - 1);
+                accountIdStart,
+                accountIdEnd);
     }
 
     private void insertTransfers(Phase2BulkSeedSpec spec, List<TransferSeed> seeds) {
@@ -669,8 +711,10 @@ public class Phase2BulkSeedService {
         batch(spec.autoTransferCount(), spec.jdbcBatchSize(), sql, (statement, index) -> {
             int source = (spec.dormantCandidateCount() + index) % spec.customerCount();
             int target = (source + 1) % spec.customerCount();
-            // 적재 다음 날부터 배치 대상이 되게 해 과거 실행일 상태로 시드되지 않게 한다.
-            LocalDate start = LocalDate.now(clock).plusDays(1L + index % 28L);
+            // 시작일 당일을 포함해 처음 도래하는 지정 이체일을 계산해 transfer_day 계약을 지킨다.
+            LocalDate start = LocalDate.now(clock).plusDays(1);
+            int transferDay = index % 28 + 1;
+            LocalDate firstExecutionDate = firstExecutionDate(start, transferDay);
             statement.setLong(1, spec.autoTransferIdStart() + index);
             statement.setLong(2, spec.customerIdStart() + source);
             statement.setLong(3, plan.demandAccountId(source));
@@ -683,13 +727,22 @@ public class Phase2BulkSeedService {
                         case 1 -> 3;
                         default -> 6;
                     });
-            statement.setInt(7, index % 28 + 1);
+            statement.setInt(7, transferDay);
             statement.setDate(8, Date.valueOf(start));
             statement.setDate(9, Date.valueOf(start.plusYears(2)));
-            statement.setDate(10, Date.valueOf(start));
+            statement.setDate(10, Date.valueOf(firstExecutionDate));
             setTimestamp(statement, 11, spec.periodEnd().atTime(12, 0));
             setTimestamp(statement, 12, spec.periodEnd().atTime(12, 0));
         });
+    }
+
+    LocalDate firstExecutionDate(LocalDate startDate, int transferDay) {
+        LocalDate candidate = startDate.withDayOfMonth(Math.min(transferDay, startDate.lengthOfMonth()));
+        if (candidate.isBefore(startDate)) {
+            LocalDate nextMonth = startDate.plusMonths(1).withDayOfMonth(1);
+            return nextMonth.withDayOfMonth(Math.min(transferDay, nextMonth.lengthOfMonth()));
+        }
+        return candidate;
     }
 
     private void insertScheduledTransfers(Phase2BulkSeedSpec spec, Phase2BulkSeedPlan plan) {
@@ -759,6 +812,36 @@ public class Phase2BulkSeedService {
                 spec.accountIdStart(),
                 spec.accountIdStart() + spec.accountCount() - 1);
         requireZero(
+                "negative chronological ledger balances",
+                """
+                SELECT COUNT(*) FROM ledger_entry
+                WHERE (account_id BETWEEN ? AND ? OR account_id BETWEEN ? AND ?)
+                  AND balance_after < 0
+                """,
+                PH60_ACCOUNT_ID_START,
+                PH60_ACCOUNT_ID_START + PH60_ACCOUNT_COUNT - 1,
+                spec.accountIdStart(),
+                spec.accountIdStart() + spec.accountCount() - 1);
+        requireZero(
+                "PH-60 funding daily limit violations",
+                """
+                SELECT COUNT(*) FROM (
+                    SELECT seeded.withdrawal_account_id
+                    FROM transfer seeded
+                    JOIN account source ON source.account_id=seeded.withdrawal_account_id
+                    JOIN transfer_limit limits ON limits.customer_id=source.customer_id
+                    WHERE seeded.trade_date=?
+                      AND seeded.withdrawal_account_id BETWEEN ? AND ?
+                      AND MOD(seeded.withdrawal_account_id - ?, 3)=0
+                    GROUP BY seeded.withdrawal_account_id, limits.daily_limit
+                    HAVING SUM(seeded.amount)>limits.daily_limit
+                ) violations
+                """,
+                Date.valueOf(spec.periodStart()),
+                PH60_ACCOUNT_ID_START,
+                PH60_ACCOUNT_ID_START + PH60_ACCOUNT_COUNT - 1,
+                PH60_ACCOUNT_ID_START);
+        requireZero(
                 "account and ledger balance mismatches",
                 """
                 SELECT COUNT(*) FROM account account_row
@@ -797,6 +880,19 @@ public class Phase2BulkSeedService {
                 spec.accountIdStart(),
                 spec.accountIdStart() + spec.accountCount() - 1);
         requireZero(
+                "transfer and withdrawal ledger balance mismatches",
+                """
+                SELECT COUNT(*)
+                FROM transfer seeded
+                JOIN ledger_entry withdrawal
+                  ON withdrawal.transfer_id=seeded.transfer_id
+                 AND withdrawal.direction='WITHDRAWAL'
+                WHERE seeded.transfer_id BETWEEN ? AND ?
+                  AND seeded.withdrawal_balance_after<>withdrawal.balance_after
+                """,
+                spec.transferIdStart(),
+                spec.transferIdStart() + spec.transferCount() - 1);
+        requireZero(
                 "broken transaction ledger pairs",
                 """
                 SELECT COUNT(*) FROM (
@@ -807,10 +903,20 @@ public class Phase2BulkSeedService {
                     HAVING COUNT(*)<>2
                        OR SUM(direction='WITHDRAWAL')<>1
                        OR SUM(direction='DEPOSIT')<>1
+                       OR SUM(CASE WHEN direction='DEPOSIT' THEN amount ELSE -amount END)<>0
                 ) broken
                 """,
                 spec.ledgerEntryIdStart(),
                 spec.ledgerEntryIdStart() + spec.ledgerEntryCount() - 1);
+        requireZero(
+                "auto transfer first execution date mismatches",
+                """
+                SELECT COUNT(*) FROM auto_transfer
+                WHERE auto_transfer_id BETWEEN ? AND ?
+                  AND DAY(next_execution_date)<>transfer_day
+                """,
+                spec.autoTransferIdStart(),
+                spec.autoTransferIdStart() + spec.autoTransferCount() - 1);
         requireZero(
                 "unbalanced vouchers",
                 """
@@ -870,25 +976,18 @@ public class Phase2BulkSeedService {
         }
     }
 
-    private Map<Long, Long> lockTransferBalances(Phase2BulkSeedSpec spec) {
+    private Map<Long, Long> lockBalances(Set<Long> accountIds) {
         Map<Long, Long> balances = new LinkedHashMap<>();
-        jdbc.query(
-                "SELECT account_id, balance FROM account WHERE account_id BETWEEN ? AND ? AND MOD(account_id - ?, 3)=0 FOR UPDATE",
-                (RowCallbackHandler) result -> balances.put(result.getLong(1), result.getLong(2)),
-                PH60_ACCOUNT_ID_START,
-                PH60_ACCOUNT_ID_START + PH60_ACCOUNT_COUNT - 1,
-                PH60_ACCOUNT_ID_START);
-        balances.putAll(lockNewAccountBalances(spec));
-        return balances;
-    }
-
-    private Map<Long, Long> lockNewAccountBalances(Phase2BulkSeedSpec spec) {
-        Map<Long, Long> balances = new LinkedHashMap<>();
-        jdbc.query(
-                "SELECT account_id, balance FROM account WHERE account_id BETWEEN ? AND ? FOR UPDATE",
-                (RowCallbackHandler) result -> balances.put(result.getLong(1), result.getLong(2)),
-                spec.accountIdStart(),
-                spec.accountIdStart() + spec.accountCount() - 1);
+        List<Long> ordered = accountIds.stream().sorted().toList();
+        for (int offset = 0; offset < ordered.size(); offset += ACCOUNT_LOCK_BATCH_SIZE) {
+            List<Long> chunk = ordered.subList(offset, Math.min(offset + ACCOUNT_LOCK_BATCH_SIZE, ordered.size()));
+            String placeholders = String.join(",", java.util.Collections.nCopies(chunk.size(), "?"));
+            jdbc.query(
+                    "SELECT account_id, balance FROM account WHERE account_id IN (" + placeholders
+                            + ") ORDER BY account_id FOR UPDATE",
+                    (RowCallbackHandler) result -> balances.put(result.getLong(1), result.getLong(2)),
+                    chunk.toArray());
+        }
         return balances;
     }
 

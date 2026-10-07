@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeAll;
@@ -82,10 +84,12 @@ class Phase2BulkSeedPlanTest {
         assertThat(plan.withdrawalAccountId(0)).isEqualTo(60_000_001L);
         assertThat(plan.withdrawalAccountId(10_000)).isEqualTo(60_000_001L);
         assertThat(plan.depositAccountId(0)).isEqualTo(spec.accountIdStart());
-        assertThat(plan.transferAmount(0)).isEqualTo(10_000_000L);
+        assertThat(plan.transferAmount(0)).isEqualTo(9_500_000L);
         assertThat(plan.transferAmount(spec.customerCount())).isBetween(10_000L, 99_000L);
         assertThat(plan.tradeDate(0)).isEqualTo(LocalDate.of(2026, 9, 1));
         assertThat(plan.tradeDate(spec.customerCount() - 1)).isEqualTo(LocalDate.of(2026, 9, 1));
+        assertThat(plan.occurredAt(spec.customerCount() - 1))
+                .isBefore(LocalDate.of(2026, 9, 1).atStartOfDay().plusNanos(360_000_000L));
         int firstRegularSeptemberTransfer = spec.customerCount() + plan.transferPaydayCount(0);
         assertThat(plan.tradeDate(firstRegularSeptemberTransfer)).isEqualTo(LocalDate.of(2026, 9, 1));
         assertThat(plan.occurredAt(spec.customerCount() - 1)).isBefore(plan.occurredAt(firstRegularSeptemberTransfer));
@@ -96,11 +100,11 @@ class Phase2BulkSeedPlanTest {
             suppliedByAccount.merge(plan.withdrawalAccountId(index), amount, Long::sum);
         }
         assertThat(suppliedByAccount).hasSize(10_000).allSatisfy((accountId, amount) -> assertThat(amount)
-                .isLessThanOrEqualTo(50_000_000L));
+                .isEqualTo(47_500_000L));
     }
 
     @Test
-    @DisplayName("운영 규격의 전체 이체를 순서대로 적용해도 신규 요구불계좌 잔액은 음수가 되지 않는다")
+    @DisplayName("운영 규격 TRF 생성 순서에서 신규 요구불계좌 잔액은 음수가 되지 않는다")
     void keepsProductionTransferBalancesNonNegative() {
         long[] balances = new long[spec.customerCount()];
         int insufficient = 0;
@@ -117,6 +121,54 @@ class Phase2BulkSeedPlanTest {
             balances[target] += amount;
         }
         assertThat(insufficient).isZero();
+    }
+
+    @Test
+    @DisplayName("운영 규격 TRF와 SUB를 발생시각 순으로 적용해도 모든 신규 계좌 잔액은 음수가 되지 않는다")
+    void keepsProductionChronologicalBalancesNonNegative() {
+        int transactionCount = spec.transactionCount();
+        int indexBits = 22;
+        long indexMask = (1L << indexBits) - 1;
+        long[] chronological = new long[transactionCount];
+        for (int index = 0; index < spec.transferCount(); index++) {
+            long epochSecond = plan.occurredAt(index).toEpochSecond(ZoneOffset.UTC);
+            chronological[index] = (epochSecond << indexBits) | index;
+        }
+        for (int index = 0; index < spec.subscriptionCount(); index++) {
+            LocalDate date = plan.subscriptionDate(index);
+            long epochSecond = date.atTime(12, 0).plusSeconds(index % 43_200).toEpochSecond(ZoneOffset.UTC);
+            int globalIndex = spec.transferCount() + index;
+            chronological[globalIndex] = (epochSecond << indexBits) | globalIndex;
+        }
+        Arrays.sort(chronological);
+
+        long[] balances = new long[spec.accountCount()];
+        int negative = 0;
+        for (long encoded : chronological) {
+            int globalIndex = (int) (encoded & indexMask);
+            if (globalIndex < spec.transferCount()) {
+                long amount = plan.transferAmount(globalIndex);
+                if (globalIndex >= spec.customerCount()) {
+                    int source = accountIndex(plan.withdrawalAccountId(globalIndex));
+                    balances[source] -= amount;
+                    negative += balances[source] < 0 ? 1 : 0;
+                }
+                balances[accountIndex(plan.depositAccountId(globalIndex))] += amount;
+            } else {
+                int subscriptionIndex = globalIndex - spec.transferCount();
+                long amount = plan.subscriptionAmount(subscriptionIndex);
+                int source = accountIndex(plan.demandAccountId(plan.subscriptionCustomerIndex(subscriptionIndex)));
+                balances[source] -= amount;
+                negative += balances[source] < 0 ? 1 : 0;
+                balances[accountIndex(plan.subscriptionAccountId(subscriptionIndex))] += amount;
+            }
+        }
+
+        assertThat(negative).isZero();
+    }
+
+    private int accountIndex(long accountId) {
+        return Math.toIntExact(accountId - spec.accountIdStart());
     }
 
     @Test

@@ -119,14 +119,23 @@ class Phase2BulkSeedServiceValidationTest {
     }
 
     @Test
-    @DisplayName("원장 시간순 잔액 정규화는 원장과 계좌를 모두 갱신한다")
+    @DisplayName("원장 시간순 잔액 정규화는 5천 계좌씩 원장·이체·계좌를 갱신한다")
     void normalizesChronologicalBalances() {
         RecordingJdbcTemplate jdbc = new RecordingJdbcTemplate();
         Phase2BulkSeedService service = service(jdbc);
 
         service.normalizeBalancesChronologically(Phase2BulkSeedSpec.production());
 
-        assertThat(jdbc.updateCount).isEqualTo(2);
+        assertThat(jdbc.updateCount).isEqualTo(108);
+    }
+
+    @Test
+    @DisplayName("자동이체 최초 실행일은 시작일 당일 이후 처음 도래하는 지정 이체일이다")
+    void calculatesFirstAutoTransferExecutionDate() {
+        Phase2BulkSeedService service = service(new RecordingJdbcTemplate());
+
+        assertThat(service.firstExecutionDate(LocalDate.of(2026, 10, 13), 20)).isEqualTo(LocalDate.of(2026, 10, 20));
+        assertThat(service.firstExecutionDate(LocalDate.of(2026, 10, 13), 1)).isEqualTo(LocalDate.of(2026, 11, 1));
     }
 
     @Test
