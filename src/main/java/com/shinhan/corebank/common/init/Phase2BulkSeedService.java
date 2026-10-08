@@ -164,6 +164,7 @@ public class Phase2BulkSeedService {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, FALSE, ?, ?, ?, ?)
                 """;
         batch(spec.customerCount(), spec.jdbcBatchSize(), customerSql, (statement, index) -> {
+            // 고객 가입을 계좌 개설과 최초 자금 공급보다 먼저 완료된 시각으로 둔다.
             LocalDateTime timestamp =
                     spec.periodStart().minusDays(1).atStartOfDay().plusSeconds(index);
             statement.setLong(1, spec.customerIdStart() + index);
@@ -564,6 +565,7 @@ public class Phase2BulkSeedService {
             } else {
                 statement.setNull(8, java.sql.Types.TINYINT);
             }
+            // 앱 가입 규칙처럼 기간별 금리를 기본금리로 쓰고 만기 예상금액도 같은 방식으로 채운다.
             statement.setBigDecimal(9, seed.appliedRate());
             statement.setBigDecimal(10, seed.appliedRate());
             statement.setLong(11, expectedMaturityAmount(seed));
@@ -1059,6 +1061,7 @@ public class Phase2BulkSeedService {
     }
 
     private void reserveAccountNumberRanges(Phase2BulkSeedSpec spec) {
+        // 계좌 INSERT와 함께 최종 사용 번호까지 예약해 중간 실패 후 앱 채번 충돌을 막는다.
         int shortDepositCount = spec.maturedCount() + spec.nearMaturityCount();
         reserveAccountNumber("DEMAND_DEPOSIT", null, "10", 6_000_000 + spec.customerCount());
         reserveAccountNumber(
