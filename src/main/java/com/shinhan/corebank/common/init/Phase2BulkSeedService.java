@@ -929,7 +929,8 @@ public class Phase2BulkSeedService {
                        OR MOD(subscription.subscription_amount, product_row.amount_unit)<>0
                        OR rate_tier.rate IS NULL
                        OR subscription.base_rate<>rate_tier.rate
-                       OR subscription.base_rate+subscription.preferential_rate<>subscription.applied_rate)
+                       OR subscription.base_rate+subscription.preferential_rate<>subscription.applied_rate
+                       OR subscription.expected_maturity_amount IS NULL)
                 """,
                 spec.subscriptionIdStart(),
                 spec.subscriptionIdStart() + spec.subscriptionCount() - 1);
