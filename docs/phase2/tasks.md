@@ -145,7 +145,7 @@
 | [PH-42](#ph-42-correlation-id--로그-마스킹--json-로깅) | correlation id · 로그 마스킹 · JSON 로깅 | S2 | 2.5 | — | **10/8** | — | 예정 |
 | [PH-57](#ph-57-용량-산정) | 용량 산정 표 | S2 | 0.5 | PH-60b | 60b 베이스라인 결과를 받은 뒤 | — | 예정 |
 | [PH-47](#ph-47-메트릭--grafana) | 메트릭 · Grafana · 알람 | S2 | 3 | PH-42 | — | — | 예정 |
-| [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-① | 하이브리드 연결 — 온프레미스 VM 2대 · SSM 하이브리드 등록 | S2 | 1.5 | [O-10](README.md#8-미결) | — | — | 예정 |
+| [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-① | 하이브리드 연결 — 온프레미스 VM 1대 · SSM 하이브리드 등록 | S2 | 1.5 | [O-10](README.md#8-미결) | — | — | 예정 |
 | [PH-51](#ph-51-컴퓨트-계층--컷오버) | 컴퓨트 계층 · 컷오버 | S3 | 4.5 | PH-50 · PH-57 · PH-58 ACM ARN | 리허설 10/19~23 · **apply 10/26 · 컷오버 10/27** | — | 예정 |
 | [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-② | 하이브리드 연결 — Site-to-Site VPN | S3 | 1 | PH-50 · PH-100-① | 터널 **10/23** (리허설 안) → P2 | — | 예정 |
 | [PH-76](#ph-76-정보계-etl) | 정보계 ETL | S3 | 2.5 | PH-75 · PH-43 · 원본: PH-70-② 복제 | — | — | 예정 |
@@ -934,7 +934,7 @@ public interface CobStep {
 ### PH-47. 메트릭 · Grafana
 
 - Micrometer + Prometheus. 대시보드: 거래 · 배치 · JVM · DB
-- Prometheus · Grafana는 온프레미스 대외·모니터링 VM에 둔다(AWS와 장애 영역 분리). VPN 너머로 WAS 8080 actuator를 `ec2_sd_configs`로 수집하고, `/actuator/**`는 ALB에서 막는다.
+- Prometheus · Grafana는 온프레미스 부트캠프 VM의 대외·모니터링 영역에 둔다(AWS와 장애 영역 분리). VPN 너머로 WAS 8080 actuator를 `ec2_sd_configs`로 수집하고, `/actuator/**`는 ALB에서 막는다.
 - 알람 3원칙: 노이즈 억제 · 실행 가능성 · **Runbook 링크 필수**
 - actuator 노출 범위 재설계. 관리자 화면에 거래 메트릭을 중복으로 만들지 않는다.
 - **완료 기준:** 알람 발생부터 인지까지 시간을 잰다.
@@ -996,9 +996,9 @@ S4지만 CI/CD·문서·훈련이라 S4 규칙에 걸리지 않는다([D-05](REA
 
 **①**
 
-- VM 2대
-    - 정보계 VM: Nginx · 정보계 API · 계정계 API(대기) · MySQL 레플리카 · 마트
-    - 대외·모니터링 VM: 모의 대외기관 · Prometheus · Grafana
+- 부트캠프 VM 1대 안에서 역할을 논리적으로 분리한다.
+    - 정보계·DR 영역: Nginx · 정보계 API · 계정계 API(DR 대기, AWS 사용 불가 시 기동) · MySQL 레플리카 · 마트
+    - 대외·모니터링 영역: 모의 대외기관 · Prometheus · Grafana
 - SSM 하이브리드 활성화로 등록한다. 인바운드 SSH는 열지 않는다.
 - Customer Gateway를 준비한다. 고정 공인 IP와 UDP 500·4500이 필요하다([O-10](README.md#8-미결)).
 
