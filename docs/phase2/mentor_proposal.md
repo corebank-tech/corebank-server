@@ -115,9 +115,9 @@
 
 #### 3) 인프라 아키텍처 (별첨 그림 3)
 
-- 현행 : 단일 EC2(t3.small)에 애플리케이션과 Redis를 Docker로 구동하고 RDS MySQL에 연결한다.
+- 현행 : 단일 EC2(t3.small)에 애플리케이션과 Redis를 Docker로 구동하고 RDS MySQL에 연결한다. Redis는 2차에서 제거하고 인증 토큰·세션을 MySQL로 옮긴다.
 - 2차 : AWS와 온프레미스(신한DS 자체 서버)의 하이브리드다.
-  - AWS : 2AZ VPC, 서브넷 6개(public·app·data × 2), AZ별 NAT. ALB – WAS ASG(min 2, AZ별 1대) – RDS MySQL Multi-AZ · ElastiCache Redis Multi-AZ로 구성하고, 내비게이션 API는 각 WAS에 함께 띄운다. 앞단에 WAF를 두고, 서버 접근은 SSH 없이 SSM Session Manager로만 한다.
+  - AWS : 2AZ VPC, 서브넷 6개(public·app·data × 2), AZ별 NAT. ALB – WAS ASG(min 2, AZ별 1대) – RDS MySQL Multi-AZ로 구성하고, 내비게이션 API는 각 WAS에 함께 띄운다. 앞단에 WAF를 두고, 서버 접근은 SSH 없이 SSM Session Manager로만 한다.
   - 온프레미스 : VM 2대(정보계 / 대외기관·모니터링)를 Site-to-Site VPN으로 연결한다. RDS를 온프레미스 MySQL로 binlog 복제해 정보계 원본으로 쓰고, AWS를 쓸 수 없을 때는 이 레플리카를 계정계 DB로 승격한다.
 - 10/19~23 리허설, 10/26 구축, 10/27 전환(컷오버). 컷오버 실패 시 기존 EC2로 운영을 유지한다.
 
@@ -160,7 +160,7 @@
 
 **운영·인프라**
 
-- 3-Tier 전환 : 2AZ 네트워크, WAS ASG(min 2), RDS 스냅샷 복원 이관, ElastiCache, 온프레미스 하이브리드 연결(Site-to-Site VPN)
+- 3-Tier 전환 : 2AZ 네트워크, WAS ASG(min 2), RDS 스냅샷 복원 이관, 온프레미스 하이브리드 연결(Site-to-Site VPN)
 - 보안 : WAF, IAM 역할 분리, Secrets Manager, 감사로그 WORM 저장(S3 Object Lock), 개인정보 컬럼 암호화, 로그 마스킹
 - 운영 : Prometheus·Grafana(온프레미스, AWS와 장애 영역 분리) 대시보드와 알람, 무중단 롤링 배포, DR Tier별 복구 훈련
 
@@ -176,7 +176,7 @@
 - GL 기표 동기 포트 : 전표를 이벤트로 비동기 기표하면 원장과 다른 커밋에 들어가 분개누락이 정상 상태가 된다. 그래서 같은 트랜잭션에서 동기로 기표한다.
 - Transactional Outbox : BEFORE_COMMIT 리스너가 이벤트를 거래와 같은 트랜잭션에 적재하고, 릴레이가 이후 발송한다. 커밋 직후 프로세스가 종료돼도 이벤트가 유실되지 않는다.
 - Resilience4j : 타행 응답 지연 시 타임아웃·서킷브레이커로 차단해 당행 이체로 장애가 전파되지 않게 한다.
-- Spring Session Redis : 세션을 외부화해 WAS 2대에서도 로그인 상태를 유지한다. ALB 스티키 세션은 쓰지 않는다.
+- Spring Session JDBC : 세션을 RDS에 외부화해 WAS 2대에서도 로그인 상태를 유지한다. ALB 스티키 세션은 쓰지 않는다. 별도 캐시 서버(Redis)를 두지 않아 인증 상태가 업무 데이터와 같은 트랜잭션에 묶인다.
 - Terraform : 인프라를 코드로 관리해 단기 가동·삭제 후에도 동일 환경을 재구성한다.
 - k6 : 분산·핫스팟(동일 계좌 동시 100·500·1,000건) 시나리오로 TPS와 p95·p99를 측정한다.
 - Prometheus·Grafana : 거래·배치·JVM·DB 메트릭을 수집하고, 알람마다 런북을 연결한다.
@@ -186,25 +186,25 @@
 ### 6. 개발 환경
 
 - 언어 : Java 21, TypeScript 6, Python
-- 백엔드 : Spring Boot 4.0.7, Spring Security, Spring Data JPA, Querydsl, MySQL 8.4, Redis 7.4, Flyway
+- 백엔드 : Spring Boot 4.0.7, Spring Security, Spring Data JPA, Querydsl, MySQL 8.4, Flyway
 - 프론트엔드 : React 19, Vite 8, TanStack Query 5, Tailwind CSS 4, Storybook 10, MSW, orval
 - AI : FastAPI, Qdrant, Ollama(embeddinggemma), Claude API
-- 인프라 : AWS(EC2·RDS·ElastiCache·ALB·WAF·Route 53·SSM·S3·Site-to-Site VPN), 온프레미스(신한DS 자체 서버), Terraform, Docker, Cloudflare Pages
+- 인프라 : AWS(EC2·RDS·ALB·WAF·Route 53·SSM·S3·Site-to-Site VPN), 온프레미스(신한DS 자체 서버), Terraform, Docker, Cloudflare Pages
 - 배포·품질 : GitHub Actions, Docker Hub, AWS SSM, JaCoCo, Error Prone, Spotless, k6
 - 협업 : GitHub Projects, Discord, Notion, Claude Code, PR-Agent
 
 ### 7. 필요 기자재 및 예산
 
 별도 하드웨어는 필요 없다. 아래 금액은 AWS 서울 리전 온디맨드 단가와 Claude API 공개 단가 기준 추정치다(1달러 = 1,400원 가정).
-- 3-Tier 환경(10/19~11/9, 약 20일) : 약 $220(약 31만 원)
-  - NAT 게이트웨이 2개(AZ별) 약 $57, RDS MySQL Multi-AZ(db.t3.small) 약 $50, WAS(t3.small, 2대) 약 $25, ElastiCache Redis Multi-AZ(cache.t3.micro 2노드) 약 $24, Site-to-Site VPN 약 $24, ALB 약 $15
+- 3-Tier 환경(10/19~11/9, 약 20일) : 약 $196(약 27만 원)
+  - NAT 게이트웨이 2개(AZ별) 약 $57, RDS MySQL Multi-AZ(db.t3.small) 약 $50, WAS(t3.small, 2대) 약 $25, Site-to-Site VPN 약 $24, ALB 약 $15
   - WAF·Route 53·Secrets Manager·S3·퍼블릭 IPv4 등 약 $25
   - 온프레미스 서버는 신한DS 과정에서 제공하는 자체 서버라 비용이 없다.
 - 기존 운영 서버(EC2 t3.small, 11/6까지 유지) : 약 $40(2개월). 기존 RDS는 1차부터 운영 중인 인스턴스라 이번 예산에서 제외했다.
 - 협업 RAG 서버(EC2 t3.small, gp3 20GB) : 월 약 $21, 11/18까지 약 $45
 - 내비게이션 LLM API : 약 $50. 콘솔에 월 $50 사용 한도를 설정한다. Claude Sonnet 5 단가(100만 토큰당 입력 $2·출력 $10) 기준 1회(입력 4천·출력 3백 토큰) 약 $0.011로, 한도 내 약 4,500회 호출할 수 있다.
 - AI 코드 리뷰(PR-Agent) : 월 $10 한도(1차부터 운영), 2개월 약 $20
-- 합계 : 약 $300(약 42만 원)
+- 합계 : 약 $276(약 39만 원)
 
 ### 8. 예상 결과물
 
@@ -225,7 +225,7 @@
 - 김다연 (기획 리드)
   - 담당 : 회계 GL·시산표·결함 주입, 정보계 설계, 관리자 화면, UAT, 발표 통합, 개발자 협업 RAG / 산출물 : 회계 통제·정보계 리포트
 - 정선우
-  - 담당 : 예적금 생명주기·이자·원천징수, 원장잔액·출금가능액 분리, 개인정보 암호화, RDS 이관·ElastiCache·온프레미스 복제, WAF·접근통제, DR / 산출물 : 원리금 정확도·잔액 체계 리포트
+  - 담당 : 예적금 생명주기·이자·원천징수, 원장잔액·출금가능액 분리, 개인정보 암호화, RDS 이관·온프레미스 복제, WAF·접근통제, DR / 산출물 : 원리금 정확도·잔액 체계 리포트
 - 류재성
   - 담당 : COB·영업일, 네트워크·컴퓨트(Terraform)·온프레미스 연결(VPN), 정보계 ETL·조회 API, 모니터링, 배포 파이프라인 / 산출물 : 배치·인프라 리포트
 - 장영훈
