@@ -20,11 +20,12 @@ public record TransferResponse(
                 String errorCode,
         @Schema(description = "실패 메시지. status=ERROR일 때만 채워짐. TIMEOUT이면 null", nullable = true) String errorMessage,
         @Schema(description = "이체 후 출금계좌 잔액. status=SUCCESS일 때만 채워짐 (TIMEOUT이면 null)") Long withdrawalBalanceAfter) {
+    // transfer 행의 transferred_at은 NOT NULL이라 ERROR·TIMEOUT 행에도 생성 시각이 남는다 — 계약대로 SUCCESS만 내보낸다.
     public static TransferResponse from(TransferResult result) {
         return new TransferResponse(
                 result.status(),
                 result.transactionNumber(),
-                result.transferredAt(),
+                result.status() == ProcessResultStatus.SUCCESS ? result.transferredAt() : null,
                 result.errorCode(),
                 result.errorMessage(),
                 result.withdrawalBalanceAfter());
