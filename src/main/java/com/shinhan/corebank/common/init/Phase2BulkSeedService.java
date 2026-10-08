@@ -1090,6 +1090,7 @@ public class Phase2BulkSeedService {
 
     void advanceSequences(Phase2BulkSeedSpec spec) {
         transaction.executeWithoutResult(status -> {
+            int shortDepositCount = spec.maturedCount() + spec.nearMaturityCount();
             advanceAutoIncrement("customer", spec.customerIdStart() + spec.customerCount());
             advanceAutoIncrement("account", spec.accountIdStart() + spec.accountCount());
             advanceAutoIncrement("transfer", spec.transferIdStart() + spec.transferCount());
@@ -1103,11 +1104,14 @@ public class Phase2BulkSeedService {
                     "INSERT IGNORE INTO ledger_entry_id_sequence(sequence_id) VALUES (?)",
                     spec.ledgerEntryIdStart() + spec.ledgerEntryCount() - 1);
             jdbc.update(
-                    "UPDATE account_number_sequence SET last_sequence=GREATEST(last_sequence, 6050000) WHERE bank_code='088' AND product_prefix IN ('10','32')");
+                    "UPDATE account_number_sequence SET last_sequence=GREATEST(last_sequence, ?) WHERE bank_code='088' AND product_prefix IN ('10','32')",
+                    6_000_000 + spec.customerCount());
             jdbc.update(
-                    "UPDATE account_number_sequence SET last_sequence=GREATEST(last_sequence, 6048000) WHERE bank_code='088' AND product_prefix='20'");
+                    "UPDATE account_number_sequence SET last_sequence=GREATEST(last_sequence, ?) WHERE bank_code='088' AND product_prefix='20'",
+                    6_000_000 + spec.customerCount() - shortDepositCount);
             jdbc.update(
-                    "UPDATE account_number_sequence SET last_sequence=GREATEST(last_sequence, 6002000) WHERE bank_code='088' AND product_prefix='23'");
+                    "UPDATE account_number_sequence SET last_sequence=GREATEST(last_sequence, ?) WHERE bank_code='088' AND product_prefix='23'",
+                    6_000_000 + shortDepositCount);
             jdbc.update(
                     """
                     UPDATE account a

@@ -267,13 +267,15 @@ class Phase2BulkSeedServiceValidationTest {
     @Test
     @DisplayName("적재 완료 후 모든 자동 채번을 전용 대역 다음으로 이동한다")
     void advancesSequences() {
-        RecordingJdbcTemplate jdbc = new RecordingJdbcTemplate();
+        SequenceJdbcTemplate jdbc = new SequenceJdbcTemplate();
         Phase2BulkSeedService service = service(jdbc);
 
         service.advanceSequences(Phase2BulkSeedSpec.production());
 
-        org.assertj.core.api.Assertions.assertThat(jdbc.executeCount).isEqualTo(7);
-        org.assertj.core.api.Assertions.assertThat(jdbc.updateCount).isEqualTo(5);
+        RecordingJdbcTemplate recording = jdbc;
+        org.assertj.core.api.Assertions.assertThat(recording.executeCount).isEqualTo(7);
+        org.assertj.core.api.Assertions.assertThat(recording.updateCount).isEqualTo(5);
+        assertThat(jdbc.accountNumberSequenceValues).containsExactly(6_050_000, 6_048_000, 6_002_000);
     }
 
     private Phase2BulkSeedService service(RecordingJdbcTemplate jdbc) {
@@ -334,6 +336,19 @@ class Phase2BulkSeedServiceValidationTest {
         @SuppressWarnings("unchecked")
         public <T> T queryForObject(String sql, RowMapper<T> rowMapper, Object... args) {
             return (T) new Phase2BulkSeedService.ProductSeed(1, String.valueOf(args[0]));
+        }
+    }
+
+    private static final class SequenceJdbcTemplate extends RecordingJdbcTemplate {
+
+        private final java.util.List<Integer> accountNumberSequenceValues = new java.util.ArrayList<>();
+
+        @Override
+        public int update(String sql, Object... args) {
+            if (sql.startsWith("UPDATE account_number_sequence")) {
+                accountNumberSequenceValues.add((Integer) args[0]);
+            }
+            return super.update(sql, args);
         }
     }
 
