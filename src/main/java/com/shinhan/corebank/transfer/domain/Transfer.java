@@ -9,8 +9,9 @@ import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Getter;
 
-// PROCESSING은 커밋되지 않는다(#377). INSERT부터 complete()/fail()까지가 한 트랜잭션이라
-// 커밋된 transfer 행은 항상 SUCCESS 아니면 ERROR다 — 이중 전이를 막는 내부 상태일 뿐이다.
+// PROCESSING은 커밋되지 않는다(#377). INSERT부터 complete()/fail()/timeout()까지가 한 트랜잭션이라
+// 커밋된 transfer 행은 SUCCESS · ERROR · TIMEOUT 중 하나다 — PROCESSING은 이중 전이를 막는 내부 상태일 뿐이다.
+// TIMEOUT은 대외 전문 무응답이라 결과를 모르는 확정 행이다. SUCCESS·ERROR로의 확정은 조회거래가 맡는다(PH-80 · PH-33).
 // 회차 테이블(auto_transfer_execution 등)의 PROCESSING은 별개로 실제 커밋된다(#365).
 @Getter
 @Builder
@@ -108,6 +109,12 @@ public class Transfer {
         this.status = ProcessResultStatus.ERROR;
         this.errorCode = errorCode;
         this.errorMessage = errorMessage;
+    }
+
+    // 처리 불명 처리. 실패가 아니라 결과를 모르는 상태라 오류 정보를 남기지 않는다.
+    public void timeout() {
+        requireProcessing();
+        this.status = ProcessResultStatus.TIMEOUT;
     }
 
     // 정정 체인의 원거래로 무효화한다. 돈이 움직인 확정 거래만 대상이고, 취소의 취소와 재무효화는 막는다.

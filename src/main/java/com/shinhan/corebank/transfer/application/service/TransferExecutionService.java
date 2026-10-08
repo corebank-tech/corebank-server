@@ -343,7 +343,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     payee.accountId(),
                     balances.depositBalanceAfter(),
                     command.amount(),
-                    resolveTransactionType(command.transferType()),
+                    command.transferType().ledgerTransactionType(),
                     command.myPassbookMemo(),
                     command.recipientPassbookMemo(),
                     command.channel(),
@@ -364,7 +364,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         // tradeDate는 PH-41에서 BusinessDateProvider로 바꾼다. 그 전까지는 기표 시각의 달력일이다.
         LedgerPostingContext context = new LedgerPostingContext(
                 transactionNumber,
-                resolveTransactionType(command.transferType()),
+                command.transferType().ledgerTransactionType(),
                 command.amount(),
                 command.withdrawalAccountId(),
                 payee.accountId(),
@@ -462,7 +462,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         eventPublisher.publishEvent(TransferSettled.builder()
                 .customerId(command.customerId())
                 .refId(transfer.getTransferId())
-                .txType(resolveTransactionType(command.transferType()))
+                .txType(command.transferType().ledgerTransactionType())
                 .status(transfer.getStatus())
                 .errorCode(transfer.getErrorCode())
                 .occurredAt(occurredAt)
@@ -476,14 +476,6 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             case SCHEDULED -> TransferSourceType.SCHEDULED;
             case AUTO -> TransferSourceType.AUTO;
             case IMMEDIATE -> null;
-        };
-    }
-
-    private String resolveTransactionType(TransferType transferType) {
-        return switch (transferType) {
-            case IMMEDIATE -> "IMMEDIATE_TRANSFER";
-            case SCHEDULED -> "SCHEDULED_TRANSFER";
-            case AUTO -> "AUTO_TRANSFER";
         };
     }
 }

@@ -63,7 +63,7 @@ repost(원거래 거래번호, 고친 금액)   // 정상거래 — reverse 뒤�
 - ERROR나 결과 불명인 이체를 같은 의도로 **자동** 재실행하기 — 다시 보낼지는 고객이나 운영자가 새 거래로 정한다
 - 정정을 위해 `transfer`·`ledger_entry` 행을 UPDATE(정해진 컬럼 밖)·DELETE하기
 
-**결과를 모를 때 할 일** (TIMEOUT은 S2에서 추가)
+**결과를 모를 때 할 일**
 
 ```
 응답 없음 → 처리 불명(TIMEOUT)으로 기록 → 조회거래(PH-33)로 상대 결과 확인
@@ -88,5 +88,6 @@ repost(원거래 거래번호, 고친 금액)   // 정상거래 — reverse 뒤�
 |---|---|---|
 | 정정 알림 | 정정 거래는 `TransferSettled`를 발행하지 않는다. 발행하면 "이체 완료" 알림으로 나간다 | 정정 전용 이벤트·알림을 P1과 정한다 |
 | 이체내역 화면 | 원장 거래내역은 취소된 행을 숨기지만, 이체내역(`transfer` 기준)은 원거래·정정 거래를 모두 보여 준다. 지금은 정정을 부르는 API가 없어 화면에 나오지 않는다 | 화면 표시 방식을 FE와 정한다 |
-| 원장 거래유형 매핑 | `TransferType.ledgerTransactionType()`과 `TransferExecutionService.resolveTransactionType()`이 같은 매핑을 따로 갖는다 | `execute()`를 고치는 S2 TIMEOUT 작업 때 하나로 합친다 |
-| TIMEOUT | 없음 | PH-80 S2분 — P5 회차 현황(10/6)을 받은 뒤 `ProcessResultStatus`에 추가 |
+| 원장 거래유형 매핑 | `TransferType.ledgerTransactionType()` 한 곳에 둔다(#564에서 `TransferExecutionService` 사본을 지움) | — |
+| TIMEOUT | `ProcessResultStatus.TIMEOUT`과 `Transfer.timeout()`(PROCESSING → TIMEOUT)만 있다. TIMEOUT에서 `complete()`·`fail()`은 막힌다(#564) | 조회거래로 SUCCESS·ERROR를 확정하는 전이와 호출자는 PH-33-② |
+| TIMEOUT 집계 | 이력 요약·월별 통계(`successCount`·`failureCount`)는 TIMEOUT 건을 세지 않는다. 지금은 TIMEOUT을 만드는 경로가 없어 0건이다 | PH-33-②에서 "확인 중" 건수를 둘지 FE와 정한다 |

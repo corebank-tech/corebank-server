@@ -65,7 +65,8 @@ public class TransferController {
             description =
                     """
             이체 요청이 처리됨. 실행 자체의 성공 여부와 이체 성공 여부는 다르다 — 응답 본문의 status로 \
-            판단한다. status=ERROR면 errorCode에 `TRF0001`(등록되지 않은 출금계좌) · `TRF0002`(출금·입금계좌 동일) \
+            판단한다. status=TIMEOUT이면 처리 불명(대외 응답 없음)이라 실패가 아니다 — 재시도하지 않는다. \
+            status=ERROR면 errorCode에 `TRF0001`(등록되지 않은 출금계좌) · `TRF0002`(출금·입금계좌 동일) \
             · `TRF0004`(입금 불가 상품유형) · `TRF0201`(입금계좌를 찾을 수 없음) · `TRF0301`/`TRF0304`(거래정지·해지 \
             상태의 입금/출금계좌) · `TRF0303`(출금계좌 잔액 부족) · `OTP0101`(OTP 인증 토큰 무효) · `OTP0102`(인증한 \
             거래 내용과 요청 내용 불일치) 중 하나가 담긴다.""")
@@ -137,7 +138,7 @@ public class TransferController {
     public ApiResponse<TransferHistoryPageResponse> search(
             @Parameter(description = "조회할 출금계좌 ID", required = true, example = "101") @RequestParam
                     Long withdrawalAccountId,
-            @Parameter(description = "처리상태 필터. SUCCESS/ERROR, 미지정 또는 ALL이면 전체", example = "SUCCESS")
+            @Parameter(description = "처리상태 필터. SUCCESS/ERROR/TIMEOUT, 미지정 또는 ALL이면 전체", example = "SUCCESS")
                     @RequestParam(required = false)
                     String status,
             @Parameter(description = "조회 시작일(미지정 시 종료일-1개월)", example = "2026-08-01") @RequestParam(required = false)
@@ -183,7 +184,7 @@ public class TransferController {
     public ResponseEntity<byte[]> exportCsv(
             @Parameter(description = "조회할 출금계좌 ID", required = true, example = "101") @RequestParam
                     Long withdrawalAccountId,
-            @Parameter(description = "처리상태 필터. SUCCESS/ERROR, 미지정 또는 ALL이면 전체", example = "SUCCESS")
+            @Parameter(description = "처리상태 필터. SUCCESS/ERROR/TIMEOUT, 미지정 또는 ALL이면 전체", example = "SUCCESS")
                     @RequestParam(required = false)
                     String status,
             @Parameter(description = "조회 시작일(미지정 시 종료일-1개월)", example = "2026-08-01") @RequestParam(required = false)
