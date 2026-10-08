@@ -1,0 +1,118 @@
+# ADR-0007. Redis 제거 — 인증 토큰·잠금은 MySQL로, 세션 외부화는 Spring Session JDBC로
+
+- 상태: 수락됨 (2026-10-09) — 성능 판정은 PH-101-② 측정으로 확인한다(아래 "측정과 판정")
+- 관련: 이슈 #580(PH-101-① 구현) · #581(계획 문서) · #498(토큰 소비 롤백 버그), PR #567(PH-30 병목 재정의),
+  `docs/phase2/tasks.md` §PH-101 · PH-49c · PH-70 · PH-50 · PH-08 · PH-30
+- 번호: 0006은 domain-contract-surface(#495, D-26)가 예약했다(ADR-0005 머리말 참고)
+
+## 맥락
+
+**Redis는 캐시나 세션 저장소가 아니다.** 지금 Redis에 있는 것은 TTL이 붙은 일회성 상태뿐이다.
+
+| 용도 | 어댑터 | 도메인 |
+|---|---|---|
+| 인증 토큰 8종 — OTP 거래 인증 · 계좌비밀번호 인증 · 회원가입 단계 5종(약관 · 아이디 확인 · 이메일 · 계좌 인증 · 임시가입) | `*TokenRedisAdapter` | otp · account · signup |
+| 회원가입 토큰 다중 소비 · 선점 (Lua 스크립트) | `SignupTokenTransitionRedisAdapter` · `TempSignupTokenClaimRedisAdapter` | signup |
+| OTP 발급 잠금 (`SET NX` + TTL) | `OtpIssueLockRedisAdapter` | otp |
+| 약관 열람 이력 (TTL 30분) | `TermsViewHistoryRedisAdapter` | product |
+
+HTTP 세션은 JVM 메모리에 있다(`HttpSessionSecurityContextRepository`). 운영에서 Redis는 앱과 같은 EC2(t3.small)에
+컨테이너로 떠 있다(`.github/workflows/corebank.yml` 인라인 compose의 `corebank-redis`).
+
+2차 계획은 3-Tier · AZ 이중화를 위해 **Spring Session Redis(PH-49c)와 ElastiCache Multi-AZ(PH-70)**를 새로 세우는
+것이었다. 이 결정을 다시 본 이유는 네 가지다.
+
+1. **성능상 Redis가 필요하다는 근거가 없다.** PR #567 실측에서 이체 부하의 병목은 CPU 포화였다
+   (`us` 98~99% · `wa` 0, BCrypt 강도 10이 이체당 4회로 추정). Redis 연산은 이체당 6회 안팎이라
+   그 몫은 측정 오차 안에 묻힌다.
+2. **MySQL과 Redis는 한 트랜잭션에 묶이지 않고, 그 결과가 실제 버그로 있다.**
+   - #498: 상품가입(`ProductSubscriptionExecuteService`, `@Transactional`)이 실패해 DB가 롤백돼도
+     Redis에서 지운 토큰은 돌아오지 않는다. 고객은 인증을 처음부터 다시 해야 한다.
+   - `OtpVerificationProcessor`는 트랜잭션 안에서 Redis에 토큰을 저장한다. DB가 롤백돼도 토큰은 남는다.
+3. **ElastiCache Multi-AZ는 6인 · 6주 프로젝트에 운영 구성요소를 하나 더 얹는다.** 보안그룹 · 페일오버 ·
+   메모리 정책 · 모니터링 · 비용이 따라온다.
+4. **온프레미스 전환 리허설(D-25)의 미결이 남아 있었다.** `tasks.md`는 "전환 중 세션 저장소와 AWS 복귀
+   절차는 리허설 전에 정한다"고 비워 뒀다. 세션과 토큰이 RDS에 있으면 binlog 복제로 함께 넘어간다.
+
+## 결정
+
+**Redis를 쓰지 않는다. Redis가 하던 일은 MySQL이 맡고, 세션 외부화는 Spring Session JDBC로 한다.**
+
+1. **토큰 · 잠금 · 이력 → MySQL** (PH-101-①, #580)
+   - 신규 테이블 `auth_token` · `otp_issue_lock` · `terms_view_history`. 토큰 원문은 저장하지 않고 SHA-256 해시만 둔다.
+   - 일회성 소비는 조건부 `UPDATE`(`consumed_at IS NULL AND expires_at > now`) 한 번으로 하고,
+     영향받은 행이 1일 때만 성공이다. 유효성은 항상 `expires_at`으로 판정하고, 만료 행 정리 배치는 저장 공간 회수용이다.
+   - **포트(`application/port/out`)는 그대로 두고 어댑터만 바꾼다.** 되돌릴 때도 어댑터만 바꾸면 된다.
+2. **토큰 저장과 소비는 호출자 트랜잭션에 참여한다.** 업무가 롤백되면 소비도 롤백된다. #498은 별도 복원
+   코드 없이 해결된다. 같은 토큰으로 동시에 들어온 요청은 조건부 `UPDATE`의 행 잠금으로 한 건만 성공한다.
+   OTP 발급 잠금만 여러 인스턴스에 바로 보여야 하므로 `REQUIRES_NEW`로 잡는다.
+3. **세션 외부화(PH-49c)는 Spring Session JDBC로 한다.** 만료 정책(관리자 30분 · 고객 10분)은 그대로다.
+4. **ElastiCache는 만들지 않는다.** PH-70 `modules/data`에서 빼고, PH-50 보안그룹의 6379 규칙을 지운다.
+5. **레이트리밋(PH-08 · #465)도 MySQL로 한다.** IP 단위 전역 제한은 WAF(PH-58)가 맡으므로
+   앱에 남는 카운터는 양이 적다.
+6. **새 코드에서 Redis를 쓰지 않는다.**
+
+## 검토한 대안
+
+### 대안 A — Redis 유지 + ElastiCache Multi-AZ (원래 계획)
+
+TTL과 원자적 소비에 잘 맞는 도구인 건 맞다. 하지만 위 맥락 2의 부분 성공 문제가 그대로 남고, 구성요소 ·
+비용 · 장애 대응 범위가 늘고, D-25 전환 때 저장소 하나를 따로 옮겨야 한다. 성능 이득은 측정으로 보일 수 없다. 기각.
+
+### 대안 B — 단일 EC2의 Redis 컨테이너 유지 + ALB 스티키 세션
+
+변경이 가장 적다. 하지만 인스턴스나 AZ가 죽으면 세션이 사라져 AZ 이중화의 목적을 잃는다. 2차 계획도
+스티키 세션을 쓰지 않기로 했다(PH-49c). 기각.
+
+### 대안 C — JWT + DB 리프레시 토큰
+
+세션 공유 저장소가 필요 없다. 하지만 즉시 폐기 · 전체 로그아웃(비밀번호 변경 시 세션 무효화)이 복잡해지고,
+지금 `HttpSession` · Spring Security 구조를 크게 바꿔야 한다. 2차 범위에 비해 크다. 기각.
+
+### 대안 D — 세션만 Redis, 토큰은 MySQL
+
+세션 조회 부하를 RDS에서 떼어 낼 수 있다. 다만 Redis 운영 부담은 그대로 남는다. 지금은 채택하지 않고,
+측정에서 세션 쓰기 부하가 RDS 기준을 넘을 때 돌아올 경로로 남긴다. 보류.
+
+## 측정과 판정
+
+판정 측정은 **PH-101-②**(P1, 공동 P2)가 맡는다. 성능 개선 측정(PH-30)과는 질문이 다르다 —
+PH-30은 "얼마나 빨라졌나", 이 측정은 "빼도 손해가 없나"다.
+
+- **시점:** 10/16 릴리스 1(Redis 제거 · JDBC 세션 · GL 훅)과 PH-60b 적재가 끝난 뒤, LOCK-TUNE 전. 같은 날 연달아 잰다.
+- **A'** = 릴리스 1 `main`에서 #580 커밋만 되돌린 이미지(Redis 있음) / **B'** = 운영 그대로(Redis 없음).
+  harness는 PH-30 `perf/k6/load.js`다.
+- **B' 수치는 PH-30의 새 "개선 전" 기준선을 겸한다.** 기존 case1(PR #530 · #567)은 병목 진단 · 정합성 기록으로 남긴다.
+
+**판정 기준 — 측정 전에 합의하고, 결과를 본 뒤 바꾸지 않는다** (제안값)
+
+| 항목 | 기준 (B' vs A') |
+|---|---|
+| 수준별 성공률 · 에러율 | A'와 같음 |
+| 포화가 시작되는 도착률 | A'와 같음 |
+| 엔드포인트별 p95 (`/accounts/{id}/password/verify` · `/otp/issue` · `/otp/verify` · `/transfers`) | 증가 10% 이내 또는 +20ms 이내 중 큰 값 |
+| RDS CPU · connection 사용률 | 70% 미만 · 80% 미만 |
+| 정합성 | 잔액 오차 0 · 원장 짝 100% |
+
+기준에 못 미치면 원인이 된 사용처부터 Redis로 되돌리는 것을 검토한다(포트 유지로 어댑터 교체).
+
+## 결과
+
+**감수하는 것**
+
+- 세션과 토큰 쓰기가 RDS로 간다. 요청마다 세션 조회와 접근 시각 갱신이 생긴다. PH-57 용량 산정과
+  `max_connections` 검토에 이 부하를 넣는다.
+- 만료 행 정리 배치가 하나 늘어난다(`IdempotencyKeyCleanupScheduler`와 같은 방식).
+- 판정 전에 Redis 제거가 운영에 나간다. 기준 미달이면 되돌리는 릴리스가 필요하다.
+
+**현재 상태** — 진행 중인 항목은 각자의 이슈에서 추적한다
+
+| 항목 | 담당 | 상태 |
+|---|---|---|
+| 토큰 · 잠금 · 이력 MySQL 이전, #498 해결 | P4 · #580 (PH-101-①) | 진행 — 10/16 릴리스 1 목표 |
+| 계획 문서 반영 | P4 · #581 | 진행 |
+| 판정 측정 · PH-30 기준선 | P1 (공동 P2) · PH-101-② | 예정 — 10/16 릴리스 + 60b 적재 뒤 |
+| Spring Session JDBC | P6 · PH-49c | 예정 — 10/16 |
+| 세션 외부화 비용 단독 측정 | 미정 | PH-49c 담당과 합의 후 |
+| MySQL 레이트리밋 | P1 · PH-08 (S3) · P6 · #465 | 예정 |
+| ElastiCache 제외 · 6379 규칙 삭제 | P2 · PH-70-① / P5 · PH-50 | 예정 |
