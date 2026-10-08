@@ -62,7 +62,7 @@
 | [FE #101](#fe-101-계좌비밀번호-토큰-하드코딩-제거) | 계좌비밀번호 토큰 하드코딩 제거 (1차 잔여) | S1 | 0.5 | — | — | FE #101 | 예정 |
 | [PH-12](#ph-12-이자-계산기--절사-규칙) | 이자 계산기 · 절사 규칙 | S2 | 3.5 | PH-11 | **10/16** | — | 예정 |
 | [PH-90](#ph-90-원장잔액--출금가능액-분리--transferprecheck) | 원장잔액·출금가능액 분리 + `TransferPreCheck` | S2 | 3 | PH-87 · PH-99 | **10/16** (P4 머지) | — | 예정 |
-| [PH-70-①](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | `modules/data` Terraform plan — RDS · ElastiCache | S2 | 1.5 | PH-50 | — | — | 예정 |
+| [PH-70-①](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | `modules/data` Terraform plan — RDS | S2 | 1.5 | PH-50 | — | — | 예정 |
 | [PH-15](#ph-15-만기--감지--matured-전이--원리금--만기해지-api) | 만기 — 감지 · MATURED · 원리금 · 만기해지 API | S3 | 3.5 | PH-12 · PH-10 · PH-43 · 입금 계약(PH-99) | **10/23** | #419 | 예정 |
 | [PH-14](#ph-14-이자-지급--원천징수) | 이자 지급 · 원천징수 | S3 | 1.5 | PH-12 · PH-24 · 입금 계약(PH-99) | — | — | 예정 |
 | [PH-13](#ph-13-적수-집계-sql-전환--재측정) | 적수 집계 SQL 전환 · 재측정 | S3 | 1.5 | PH-11 | — | — | 예정 |
@@ -164,7 +164,7 @@
 | [PH-22'](#ph-22-rag-문서-선정) | RAG 문서 선정 | S1 | 1 | — | — | — | 대체([D-22](README.md#d-22--923--팀-합의멘토-제출-기획서)) |
 | [PH-61](#ph-61-조항-파서--색인) | 조항 파서 · OpenSearch 색인 · 벡터 베이스라인 | S2 | 3.5 | PH-22' | 베이스라인 10/16 | — | 대체([D-22](README.md#d-22--923--팀-합의멘토-제출-기획서)) |
 | [PH-29'](#ph-29-평가셋--응대-정책--프롬프트-v1) | 평가셋 80 · 응대 정책 · 프롬프트 v1 | S2 | 2.5 | PH-22' | — | — | 대체([D-22](README.md#d-22--923--팀-합의멘토-제출-기획서)) |
-| [PH-49c](#ph-49c-세션-외부화) | 세션 외부화 — Spring Session Redis | S2 | 1 | PH-49a-② | **10/16** | — | 예정 |
+| [PH-49c](#ph-49c-세션-외부화) | 세션 외부화 — Spring Session JDBC | S2 | 1 | PH-49a-② | **10/16** | — | 예정 |
 | [PH-92](#ph-92-mfa--step-up-매트릭스) | MFA · Step-up 매트릭스 | S2 | 0.5 | — | 10/16 전 | — | 예정 |
 | [PH-65-①](#ph-65-rag-서빙-①-스키마-1016--②-구현-1028) | RAG 서빙 API 스키마 | S2 | 0.5 | — | **10/16** | — | 대체([D-22](README.md#d-22--923--팀-합의멘토-제출-기획서)) |
 | [PH-62](#ph-62-하이브리드-검색) | 하이브리드 검색 | S3 | 2 | PH-61 | — | — | 대체([D-22](README.md#d-22--923--팀-합의멘토-제출-기획서)) |
@@ -325,7 +325,7 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 
 #332 대응이다. 반복 요청으로 계정 존재 여부를 구분할 수 있다는 문제다.
 
-- Redis 카운터로 로그인·OTP·이체를 제한한다.
+- MySQL 카운터(만료 시각 컬럼)로 로그인·OTP·이체를 제한한다([ADR-0007](../adr/0007-remove-redis.md)).
 - **IP+아이디 조합** 실패 카운터로 계정 열거를 차단한다. 존재하지 않는 아이디도 실패 횟수를 누적하고, 같은 `ATH0102`로 전환한다.
 - `429` 응답 규약을 문서화한다. TTL은 자체 정책값(예: 15분)으로 정한다.
 - 무차별 로그인 1만 건 주입 테스트
@@ -430,7 +430,7 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 **①**
 
 - RDS MySQL 1개(Multi-AZ), 파라미터 그룹(KST, 슬로우쿼리 로그, `binlog_format = ROW`), 자동 백업 7일, 저장 암호화
-- ElastiCache Redis Multi-AZ(Primary 2a · Replica 2c, 자동 페일오버). 세션 저장소다([PH-49c](#ph-49c-세션-외부화)). 앱은 Primary endpoint만 쓴다.
+- ElastiCache는 만들지 않는다([ADR-0007](../adr/0007-remove-redis.md)). 세션은 RDS에 둔다([PH-49c](#ph-49c-세션-외부화)).
 - 서브넷과 SG는 PH-50 출력값을 참조한다.
 - 기존 RDS 스냅샷을 복원하는 방식이다. `terraform import` 절차 1장을 쓰고 `plan`을 통과시킨다.
 
@@ -875,7 +875,7 @@ public interface BusinessDateProvider {
 
 - VPC `10.30.0.0/16`, 2AZ, 서브넷 6개(public / app / data × 2), 라우팅 3종, **NAT AZ별 1개(2개)**
 - VPN Gateway와 온프레미스 대역 라우팅([PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3), [O-10](README.md#8-미결))
-- SG: ALB→WAS 8080, WAS→RDS 3306, WAS→ElastiCache 6379, 온프레미스→RDS 3306(복제 계정), 온프레미스→WAS 8080(메트릭 수집). NACL 기본
+- SG: ALB→WAS 8080, WAS→RDS 3306, 온프레미스→RDS 3306(복제 계정), 온프레미스→WAS 8080(메트릭 수집). NACL 기본
 - Terraform 루트, 원격 상태(S3 + lock), 모듈 자리: `modules/network`·`modules/compute`(P5), `modules/data`·**`modules/security`**(P2)
 - **출력값 → P2 (10/2):** 서브넷 ID, SG ID
 - **완료 기준:** plan 통과. data 서브넷에 아웃바운드 없음.
@@ -1060,9 +1060,10 @@ S4지만 CI/CD·문서·훈련이라 S4 규칙에 걸리지 않는다([D-05](REA
 
 ### PH-49c. 세션 외부화
 
-- `spring-session-data-redis` + `@EnableRedisHttpSession`. 만료는 관리자 30분 / 고객 10분을 유지한다.
+- `spring-session-jdbc`. 세션 테이블은 Flyway로 만든다(`initialize-schema: never`, AGENTS.md 규칙 6). 만료는 관리자 30분 / 고객 10분을 유지한다([ADR-0007](../adr/0007-remove-redis.md)).
 - `SecurityContext` 직렬화를 확인하고, 로그아웃 시 세션을 삭제한다.
-- WAS 2 프로세스 로그인 유지 테스트(로컬 docker). 3-Tier ElastiCache에서는 10/28에 15분 확인을 한다.
+- WAS 2 프로세스 로그인 유지 테스트(로컬 docker). 3-Tier에서는 10/28에 RDS 세션으로 15분 확인을 한다.
+- 비밀번호 변경 · 고객 상태 변경 시 세션 일괄 종료(`LoginPasswordChangedSessionListener` · #527)가 **다른 WAS의 세션까지** 닿는지 확인한다. 지금은 JVM 메모리 기준이다.
 - `SecurityConfig`는 PH-49a-② 위에서 고친다(10/12~).
 - **ALB 스티키 세션은 쓰지 않는다.**
 - 현황: `SecurityConfig`가 `HttpSessionSecurityContextRepository`를 쓴다.
@@ -1120,7 +1121,7 @@ LLM 호출 + 근거 검증 노드(인용 없으면 거부), LangSmith 트레이�
 | #350 | 헥사고날 가이드에 `api/` 규약 | P4 | #359 결정 뒤 |
 | #363 | `@MockitoBean` 후속 | P3 | — |
 | #467 | 출금계좌 사용 여부 조회를 autotransfer 계약으로 | P2 | — |
-| #464 · #465 · #479~#488 · PR #490 | 인증·비밀번호 정책 보완 11건 | P6 | #465는 비밀번호 변경 재인증용 Redis 레이트리밋 |
+| #464 · #465 · #479~#488 · PR #490 | 인증·비밀번호 정책 보완 11건 | P6 | #465는 비밀번호 변경 재인증용 레이트리밋 — MySQL로 구현(PH-08과 같은 저장소) |
 | #372 | 감사로그 upfront logging 검토 | P5 | PH-46 범위 밖 — 참고 자료로 열어 둔다 |
 | FE #100 · #102 · #105 | 계정찾기 · 비밀번호 변경 연동 | P2 (#105는 담당 미지정) | 서버 #326~#328 완료 |
 | FE #109 · #121 | 환경변수 가드 · 연동 목록 | P1 | — |
