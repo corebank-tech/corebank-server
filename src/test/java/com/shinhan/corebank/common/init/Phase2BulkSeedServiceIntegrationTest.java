@@ -124,8 +124,20 @@ class Phase2BulkSeedServiceIntegrationTest extends IntegrationTestSupport {
                 .isEqualTo(200);
         assertThat(
                         count(
-                                "SELECT COUNT(*) FROM product_subscription WHERE subscription_id=110000010 AND term_months=2 AND applied_rate=2.70 AND maturity_date='2026-11-01'"))
+                                "SELECT COUNT(*) FROM product_subscription WHERE subscription_id=110000010 AND term_months=2 AND base_rate=2.70 AND applied_rate=2.70 AND expected_maturity_amount=502250 AND maturity_date='2026-11-01'"))
                 .isEqualTo(1);
+        assertThat(
+                        count(
+                                "SELECT COUNT(*) FROM product_subscription WHERE subscription_id BETWEEN 110000001 AND 110000200 AND base_rate + preferential_rate <> applied_rate"))
+                .isZero();
+        assertThat(
+                        count(
+                                "SELECT COUNT(*) FROM product_subscription WHERE subscription_id BETWEEN 110000001 AND 110000200 AND expected_maturity_amount IS NULL"))
+                .isZero();
+        assertThat(
+                        count(
+                                "SELECT COUNT(*) FROM transfer seeded JOIN ledger_entry withdrawal ON withdrawal.transfer_id=seeded.transfer_id AND withdrawal.direction='WITHDRAWAL' WHERE seeded.transfer_id BETWEEN 60000001 AND 60000100 AND seeded.withdrawal_balance_after<>withdrawal.balance_after"))
+                .isZero();
         assertThat(count("SELECT COUNT(*) FROM ledger_entry WHERE ledger_entry_id BETWEEN 110000001 AND 110000800"))
                 .isEqualTo(800);
         assertThat(count(
@@ -138,6 +150,10 @@ class Phase2BulkSeedServiceIntegrationTest extends IntegrationTestSupport {
         assertThat(
                         count(
                                 "SELECT COUNT(*) FROM customer WHERE customer_id BETWEEN 11000001 AND 11000100 AND user_id NOT REGEXP '^[a-z][a-z0-9]{5,15}$'"))
+                .isZero();
+        assertThat(
+                        count(
+                                "SELECT COUNT(*) FROM customer customer_row JOIN account account_row ON account_row.customer_id=customer_row.customer_id WHERE customer_row.customer_id BETWEEN 11000001 AND 11000100 AND customer_row.joined_at>account_row.created_at"))
                 .isZero();
         assertThat(
                         count(

@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -334,7 +333,7 @@ class Phase2BulkSeedServiceValidationTest {
         @Override
         @SuppressWarnings("unchecked")
         public <T> T queryForObject(String sql, RowMapper<T> rowMapper, Object... args) {
-            return (T) new Phase2BulkSeedService.ProductSeed(1, String.valueOf(args[0]), BigDecimal.ONE);
+            return (T) new Phase2BulkSeedService.ProductSeed(1, String.valueOf(args[0]));
         }
     }
 

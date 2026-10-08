@@ -1,6 +1,7 @@
 package com.shinhan.corebank.common.init;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -163,7 +164,8 @@ public class Phase2BulkSeedService {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, FALSE, ?, ?, ?, ?)
                 """;
         batch(spec.customerCount(), spec.jdbcBatchSize(), customerSql, (statement, index) -> {
-            LocalDateTime timestamp = spec.periodStart().atStartOfDay().plusSeconds(index);
+            LocalDateTime timestamp =
+                    spec.periodStart().minusDays(1).atStartOfDay().plusSeconds(index);
             statement.setLong(1, spec.customerIdStart() + index);
             statement.setString(2, plan.customerUserId(index));
             statement.setString(3, PASSWORD_HASH);
@@ -187,7 +189,7 @@ public class Phase2BulkSeedService {
 
     private void insertAccounts(Phase2BulkSeedSpec spec, Phase2BulkSeedPlan plan) {
         Map<String, ProductSeed> products = products();
-        reserveAccountNumberRanges();
+        reserveAccountNumberRanges(spec);
         String sql =
                 """
                 INSERT INTO account (
@@ -457,12 +459,9 @@ public class Phase2BulkSeedService {
                   ON withdrawal.transfer_id=target.transfer_id
                  AND withdrawal.direction='WITHDRAWAL'
                 SET target.withdrawal_balance_after=withdrawal.balance_after
-                WHERE target.transfer_id BETWEEN ? AND ?
-                  AND withdrawal.account_id BETWEEN ? AND ?
+                WHERE withdrawal.account_id BETWEEN ? AND ?
                   AND target.withdrawal_balance_after<>withdrawal.balance_after
                 """,
-                spec.transferIdStart(),
-                spec.transferIdStart() + spec.transferCount() - 1,
                 accountIdStart,
                 accountIdEnd);
         jdbc.update(
@@ -550,7 +549,7 @@ public class Phase2BulkSeedService {
                     subscription_amount, term_months, payment_day, base_rate, preferential_rate,
                     applied_rate, maturity_handling, expected_maturity_amount, status,
                     transaction_number, opened_date, maturity_date, subscribed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, ?, 'TRANSFER', NULL, 'SUCCESS', ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, ?, 'TRANSFER', ?, 'SUCCESS', ?, ?, ?, ?)
                 """;
         batchSeeds(seeds, spec.jdbcBatchSize(), sql, (statement, seed) -> {
             statement.setLong(1, spec.subscriptionIdStart() + seed.index());
@@ -565,13 +564,33 @@ public class Phase2BulkSeedService {
             } else {
                 statement.setNull(8, java.sql.Types.TINYINT);
             }
-            statement.setBigDecimal(9, seed.product().baseRate());
+            statement.setBigDecimal(9, seed.appliedRate());
             statement.setBigDecimal(10, seed.appliedRate());
-            statement.setString(11, seed.transactionNumber());
-            statement.setDate(12, Date.valueOf(seed.tradeDate()));
-            statement.setDate(13, Date.valueOf(seed.maturityDate()));
-            setTimestamp(statement, 14, seed.occurredAt());
+            statement.setLong(11, expectedMaturityAmount(seed));
+            statement.setString(12, seed.transactionNumber());
+            statement.setDate(13, Date.valueOf(seed.tradeDate()));
+            statement.setDate(14, Date.valueOf(seed.maturityDate()));
+            setTimestamp(statement, 15, seed.occurredAt());
         });
+    }
+
+    private long expectedMaturityAmount(SubscriptionSeed seed) {
+        long principal;
+        long weightedMonths;
+        if (seed.product().code().equals("PRD_REGULAR_SAVE")) {
+            principal = Math.multiplyExact(seed.amount(), seed.termMonths());
+            weightedMonths = (long) seed.termMonths() * (seed.termMonths() + 1) / 2;
+        } else {
+            principal = seed.amount();
+            weightedMonths = seed.termMonths();
+        }
+        long interest = BigDecimal.valueOf(seed.amount())
+                .multiply(seed.appliedRate())
+                .divide(BigDecimal.valueOf(100))
+                .multiply(BigDecimal.valueOf(weightedMonths))
+                .divide(BigDecimal.valueOf(12), 0, RoundingMode.DOWN)
+                .longValueExact();
+        return Math.addExact(principal, interest);
     }
 
     private void insertSubscriptionLedgers(Phase2BulkSeedSpec spec, List<SubscriptionSeed> seeds) {
@@ -887,11 +906,33 @@ public class Phase2BulkSeedService {
                 JOIN ledger_entry withdrawal
                   ON withdrawal.transfer_id=seeded.transfer_id
                  AND withdrawal.direction='WITHDRAWAL'
-                WHERE seeded.transfer_id BETWEEN ? AND ?
+                WHERE (seeded.transfer_id BETWEEN ? AND ? OR seeded.transfer_id BETWEEN ? AND ?)
                   AND seeded.withdrawal_balance_after<>withdrawal.balance_after
                 """,
                 spec.transferIdStart(),
-                spec.transferIdStart() + spec.transferCount() - 1);
+                spec.transferIdStart() + spec.transferCount() - 1,
+                PH60_TRANSFER_ID_START,
+                PH60_TRANSFER_ID_START + PH60_TRANSFER_COUNT - 1);
+        requireZero(
+                "subscription product rule violations",
+                """
+                SELECT COUNT(*)
+                FROM product_subscription subscription
+                JOIN product product_row ON product_row.product_id=subscription.product_id
+                LEFT JOIN product_rate_tier rate_tier
+                  ON rate_tier.product_id=subscription.product_id
+                 AND rate_tier.term_months=subscription.term_months
+                WHERE subscription.subscription_id BETWEEN ? AND ?
+                  AND (subscription.opened_date<product_row.sale_start_date
+                       OR subscription.term_months NOT BETWEEN product_row.min_term_months AND product_row.max_term_months
+                       OR subscription.subscription_amount NOT BETWEEN product_row.min_amount AND product_row.max_amount
+                       OR MOD(subscription.subscription_amount, product_row.amount_unit)<>0
+                       OR rate_tier.rate IS NULL
+                       OR subscription.base_rate<>rate_tier.rate
+                       OR subscription.base_rate+subscription.preferential_rate<>subscription.applied_rate)
+                """,
+                spec.subscriptionIdStart(),
+                spec.subscriptionIdStart() + spec.subscriptionCount() - 1);
         requireZero(
                 "broken transaction ledger pairs",
                 """
@@ -1016,11 +1057,17 @@ public class Phase2BulkSeedService {
         return sequences;
     }
 
-    private void reserveAccountNumberRanges() {
-        reserveAccountNumber("DEMAND_DEPOSIT", null, "10", 6_000_000);
-        reserveAccountNumber("TIME_DEPOSIT", product("PRD_BASIC_DEP").id(), "20", 6_000_000);
-        reserveAccountNumber("TIME_DEPOSIT", product("PRD_SHORT_DEP").id(), "23", 6_000_000);
-        reserveAccountNumber("INSTALLMENT_SAVINGS", product("PRD_REGULAR_SAVE").id(), "32", 6_000_000);
+    private void reserveAccountNumberRanges(Phase2BulkSeedSpec spec) {
+        int shortDepositCount = spec.maturedCount() + spec.nearMaturityCount();
+        reserveAccountNumber("DEMAND_DEPOSIT", null, "10", 6_000_000 + spec.customerCount());
+        reserveAccountNumber(
+                "TIME_DEPOSIT",
+                product("PRD_BASIC_DEP").id(),
+                "20",
+                6_000_000 + spec.customerCount() - shortDepositCount);
+        reserveAccountNumber("TIME_DEPOSIT", product("PRD_SHORT_DEP").id(), "23", 6_000_000 + shortDepositCount);
+        reserveAccountNumber(
+                "INSTALLMENT_SAVINGS", product("PRD_REGULAR_SAVE").id(), "32", 6_000_000 + spec.customerCount());
     }
 
     private void reserveAccountNumber(String type, Long productId, String prefix, int minimum) {
@@ -1087,8 +1134,8 @@ public class Phase2BulkSeedService {
     private ProductSeed product(String code) {
         try {
             return jdbc.queryForObject(
-                    "SELECT product_id, product_code, base_rate FROM product WHERE product_code=?",
-                    (result, row) -> new ProductSeed(result.getLong(1), result.getString(2), result.getBigDecimal(3)),
+                    "SELECT product_id, product_code FROM product WHERE product_code=?",
+                    (result, row) -> new ProductSeed(result.getLong(1), result.getString(2)),
                     code);
         } catch (EmptyResultDataAccessException exception) {
             throw new IllegalStateException("PH-60b 필수 상품이 없습니다: " + code, exception);
@@ -1283,7 +1330,7 @@ public class Phase2BulkSeedService {
         void bind(PreparedStatement statement, T seed) throws SQLException;
     }
 
-    record ProductSeed(long id, String code, BigDecimal baseRate) {}
+    record ProductSeed(long id, String code) {}
 
     private record VoucherKey(LocalDate date, String type) {}
 
