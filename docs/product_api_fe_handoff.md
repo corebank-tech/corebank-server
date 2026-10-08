@@ -235,9 +235,9 @@ const rows = rateTiers.map(t => ({
 > if (rateTier.isEmpty()) { /* TERM_NOT_ALLOWED */ }
 > ```
 >
-> 시드에 실제로 걸리는 케이스가 있습니다. `PRD_SHORT_DEP`(코어 단기예금)는 `minTermMonths=1`, `maxTermMonths=12`지만 `termOptions=[1, 3, 6, 12]`입니다. **2개월은 범위 안이지만 가입하면 막힙니다.**
+> PH-60b 만기 임박 시드를 위해 `PRD_SHORT_DEP`(코어 단기예금)의 2개월 금리 구간을 추가했습니다. `minTermMonths=1`, `maxTermMonths=12`이며 `termOptions=[1, 2, 3, 6, 12]`입니다. **4개월은 범위 안이지만 가입하면 막힙니다.**
 >
-> 그래서 가입기간 안내는 `1 · 3 · 6 · 12개월 중 선택`처럼 `termOptions`를 그대로 노출하고, 기간 선택 UI도 `termOptions`로만 구성하십시오. `minTermMonths`/`maxTermMonths`는 요약 카드의 표시용으로만 쓰는 게 안전합니다.
+> 그래서 가입기간 안내는 `1 · 2 · 3 · 6 · 12개월 중 선택`처럼 `termOptions`를 그대로 노출하고, 기간 선택 UI도 `termOptions`로만 구성하십시오. `minTermMonths`/`maxTermMonths`는 요약 카드의 표시용으로만 쓰는 게 안전합니다.
 >
 > `PRD0002`의 서버 메시지가 "가입기간이 상품 허용 범위를 벗어났습니다"인데 실제 규칙은 범위가 아니라 집합 포함이라, 이 문구를 그대로 노출하면 고객이 헷갈립니다. FE에서 문구를 바꿔 쓰는 걸 권합니다.
 

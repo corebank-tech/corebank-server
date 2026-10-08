@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @Profile("phase2-seed")
-@ConditionalOnProperty(name = "app.phase2-seed.execute", havingValue = "true")
+@ConditionalOnProperty(name = "app.phase2-seed.minimum.execute", havingValue = "true")
 public class Phase2MinimumSeedLoader implements ApplicationRunner {
 
     private final Phase2MinimumSeedService seedService;
