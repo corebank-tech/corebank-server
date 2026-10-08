@@ -9,8 +9,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -107,6 +110,15 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
                 .collect(Collectors.toMap(
                         AccountJpaRepository.AccountBalanceProjection::getAccountId,
                         AccountJpaRepository.AccountBalanceProjection::getBalance));
+    }
+
+    @Override
+    public SortedMap<Long, Long> findBalancesAfter(long afterAccountId, int limit) {
+        SortedMap<Long, Long> page = new TreeMap<>();
+        accountJpaRepository
+                .findBalancesAfter(afterAccountId, PageRequest.of(0, limit))
+                .forEach(row -> page.put(row.getAccountId(), row.getBalance()));
+        return page;
     }
 
     private void validateVersion(Account account, AccountJpaEntity entity) {

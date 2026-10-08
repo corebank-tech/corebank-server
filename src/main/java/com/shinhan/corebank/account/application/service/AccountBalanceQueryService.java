@@ -4,6 +4,7 @@ import com.shinhan.corebank.account.api.AccountBalanceQuery;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import java.util.Collection;
 import java.util.Map;
+import java.util.SortedMap;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -17,5 +18,10 @@ public class AccountBalanceQueryService implements AccountBalanceQuery {
     @Override
     public Map<Long, Long> findBalancesByAccountIds(Collection<Long> accountIds) {
         return accountPersistencePort.findBalancesByAccountIds(accountIds);
+    }
+
+    @Override
+    public SortedMap<Long, Long> findBalancesAfter(long afterAccountId, int limit) {
+        return accountPersistencePort.findBalancesAfter(afterAccountId, limit);
     }
 }

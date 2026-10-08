@@ -745,12 +745,13 @@ TransferExecutionService.execute(command)                         ← 편집자:
 - `LedgerReconciliationScheduler`가 매일 02:00(KST)에 전일 거래 계좌만 원장 합계와 `account.balance`를 대조한다.
 - 불일치는 **ERROR 로그만** 남긴다. 자동 정정은 하지 않는다.
 - 락 행 `V202609220900`. 자동·예약이체 배치 완료를 확인한 뒤 실행한다.
+- 현황: 전수 대사(#468) 추가. 매주 일 03:00에 전 계좌를 청크로 훑어 원장 기표 없는 휴면 계좌 드리프트까지 잡는다. 계좌 목록은 `account.api.AccountBalanceQuery.findBalancesAfter`(keyset 페이지)로 받는다. 종료 INFO 로그의 `elapsedMs`가 아래 300만 베이스라인의 측정값이다.
 
 **S2 남은 일 (2일)**
 
 - **불일치 저장 테이블** — Flyway + `schema_reference.md` + ERD. 목록 API와 FE ADM-04가 읽을 데이터다.
 - 불일치 목록 조회 API(관리자, `AUDIT_READ`)
-- 300만 원장 대사 시간 베이스라인(10/6). 전수 스캔 경로는 #468이다.
+- 300만 원장 대사 시간 베이스라인(10/6). 전수 대사 경로(#468)로 잰다.
 - **`CobStep` 편입** — P5 인터페이스(10/6)가 들어오면 독립 스케줄러를 대사 스텝 구현체로 옮긴다. 등록 주체는 P4이고, soft/hard 임계는 P5가 정한다.
 
 **완료 기준:** 목데이터에서 불일치 0건. 실행시간 기록. 결함 주입(PH-28b) 불일치가 목록 API로 조회된다.

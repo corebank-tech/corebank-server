@@ -2,6 +2,7 @@ package com.shinhan.corebank.account.adapter.out.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.assertj.core.api.Assertions.entry;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
@@ -391,5 +392,45 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
 
         // then
         assertThat(balances).containsEntry(first.getAccountId(), 100000L).containsEntry(second.getAccountId(), 50000L);
+    }
+
+    @Test
+    @DisplayName("커서(afterAccountId) 다음 계좌부터 account_id 오름차순으로 limit개만 잔액을 조회한다 — 전수 대사(#468)의 keyset 페이지")
+    void findBalancesAfter() {
+        // given — 같은 트랜잭션에서 연달아 저장해 ID가 이어지므로, 커서를 첫 계좌 바로 앞에 두면 시드 계좌가 섞이지 않는다
+        Account first = saveDemandDeposit("088100000025", 100000L);
+        Account second = saveDemandDeposit("088100000026", 50000L);
+        long cursor = first.getAccountId() - 1;
+
+        // when
+        var firstPage = accountPersistencePort.findBalancesAfter(cursor, 1);
+        var nextPage = accountPersistencePort.findBalancesAfter(firstPage.lastKey(), 1);
+
+        // then
+        assertThat(firstPage).containsExactly(entry(first.getAccountId(), 100000L));
+        assertThat(nextPage).containsExactly(entry(second.getAccountId(), 50000L));
+    }
+
+    @Test
+    @DisplayName("커서 뒤에 계좌가 없으면 빈 맵을 돌려준다 — 전수 대사의 종료 조건")
+    void findBalancesAfterReturnsEmptyAtEnd() {
+        // when
+        var page = accountPersistencePort.findBalancesAfter(Long.MAX_VALUE, 1000);
+
+        // then
+        assertThat(page).isEmpty();
+    }
+
+    private Account saveDemandDeposit(String accountNumber, long balance) {
+        return accountPersistencePort.save(Account.importExisting(
+                accountNumber,
+                customerId,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                balance,
+                AccountStatus.ACTIVE,
+                PASSWORD_HASH,
+                LocalDateTime.of(2026, 8, 10, 10, 0),
+                null));
     }
 }

@@ -27,4 +27,13 @@ public class LedgerReconciliationScheduler {
         ledgerReconciliationBatchUseCase.run(
                 LocalDate.now(clock.withZone(SEOUL)).minusDays(1));
     }
+
+    /**
+     * 전 계좌 전수 대사(#468). 원장 기표가 없어 매일 도는 증분 대사가 보지 못하는 휴면 계좌의 드리프트를 잡는다.
+     * 계좌 수에 비례해 비싸므로 주 1회, 이체가 가장 적고 02:00 증분 대사와 겹치지 않는 일요일 03:00에 돈다.
+     */
+    @Scheduled(cron = "0 0 3 * * SUN", zone = "Asia/Seoul")
+    public void runWeeklyFullReconciliation() {
+        ledgerReconciliationBatchUseCase.runFull();
+    }
 }
