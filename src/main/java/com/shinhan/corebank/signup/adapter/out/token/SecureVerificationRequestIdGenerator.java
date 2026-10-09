@@ -1,4 +1,4 @@
-package com.shinhan.corebank.signup.adapter.out.redis;
+package com.shinhan.corebank.signup.adapter.out.token;
 
 import com.shinhan.corebank.signup.application.port.out.VerificationRequestIdGeneratorPort;
 import java.security.SecureRandom;
