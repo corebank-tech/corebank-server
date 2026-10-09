@@ -33,6 +33,10 @@ springdoc:
       header-name: X-XSRF-TOKEN
 
 app:
+  # 일회성 토큰·OTP 발급 잠금·약관 열람 이력 저장소 (#580). jdbc(MySQL) | redis
+  # PH-101-② 측정 A'/B' 전환과 장애 시 복귀용. 환경 변수는 APP_EPHEMERALSTORE_PROVIDER.
+  ephemeral-store:
+    provider: jdbc
   security:
     admin:
       # #448 임시 가드 — /admin/** 접근을 허용할 customer_id 목록(쉼표 구분). 비어 있으면 전부 403.
