@@ -87,7 +87,7 @@
 | [#359](#359-도메인-간-계약면-결정) | 도메인 간 계약면 결정 ADR | S1 | 0.5 | — | — | #359 | 예정 |
 | [#475](#475-상품가입-계좌비밀번호-토큰-검증-연결) | 상품가입 계좌비밀번호 토큰 검증 연결 | S1 | 0.5 | — | — | #475 | 예정 |
 | PM | 기획 리드 (주 0.5일 상한) | S1 | 0.5 | — | — | — | — |
-| [PH-24](#ph-24-gl-분개-서비스--이체-기표-훅--glapi) | GL 분개 서비스 · 이체 기표 훅 · `gl.api` | S2 | 4.5 | PH-21 · PH-99 | 시그니처 9/30 · PR 10/12 · **머지 10/14** | — | 예정 |
+| [PH-24](#ph-24-gl-분개-서비스--이체-기표-훅--glapi) | GL 분개 서비스 · 이체 기표 훅 · `gl.api` | S2 | 4.5 | PH-21 · PH-99 | 시그니처 9/30 · PR 10/12 · **머지 10/14** | — | 진행 |
 | [PH-28](#ph-28-시산표-api--베이스라인) | 시산표 API · 베이스라인 | S2 | 2.5 | 베이스라인: PH-60b · API: PH-24 | 베이스라인 10/8 · API 10/16 | — | 예정 |
 | [PH-75](#ph-75-정보계-마트-설계) | 정보계 마트 설계 | S2 | 1 | PH-40 | **10/16** → P5 | — | 예정 |
 | PM | 기획 리드 | S2 | 0.5 | — | — | — | — |
@@ -561,6 +561,8 @@ S4지만 신규 API가 아니라 문서화·측정·훈련이다.
 
 `<domain>.api` 단일화 결정 ADR 1건이다. ADR-0003(`batch.api`)을 선례로 쓴다. 결정이 나면 P4 #350 가이드 문서화와 ArchUnit 전 도메인 확대가 따라온다. 모놀리식 ADR은 범위 밖이다.
 
+**결정 자체는 [D-26](README.md#d-26--102--p3)에 기록했다**(기한 10/2). ADR 문서([ADR-0006](../adr/0006-domain-contract-surface.md))는 문서만 담은 PR로 내지 않고 [PH-24](#ph-24-gl-분개-서비스--이체-기표-훅--glapi) 구현 PR에 함께 넣는다 — PH-24가 `gl.api`를 만드는 작업이라 이 결정이 처음 적용되는 자리다.
+
 ### #475. 상품가입 계좌비밀번호 토큰 검증 연결
 
 - `subscription/adapter/out/auth/ProductSubscriptionAuthTokenMockAdapter`는 `accountPasswordAuthToken`을 보지 않고 항상 통과시킨다. 이 mock을 P6의 `AccountPasswordAuthTokenVerifier`로 교체한다. 계좌비밀번호 인증 mock은 이 파일 하나다(다른 mock 3개 — 가입 기존고객 확인, 자동·예약이체 계좌 상태 — 는 인증이 아니고 범위 밖).
@@ -585,11 +587,18 @@ public enum JournalDirection { DEBIT, CREDIT }   // gl.domain 에서 gl.api 로 
 ```
 
 - 헤더 금액은 두지 않는다. 금액은 줄마다 있고 전표 합계는 줄에서 계산한다(OPN처럼 줄 금액이 다른 전표가 있다).
-- **`JournalDirection`을 `gl.domain`에서 `gl.api`로 옮긴다.** 지금은 `gl.domain`에 있는데(PR #478 머지분), `#349`가 건 `Api mayNotAccessAnyLayer()` 때문에 **`gl.api`가 `gl.domain`을 참조하면 `LayerArchitectureTest > gl`이 깨진다.** 공유 어휘를 소유 도메인의 `api`에 두는 것은 [ADR-0004](../adr/0004-domain-contract-surface.md)(#495 초안, PH-24 PR에서 함께 머지) 결정 2와 같은 방향이다. `String drCr`로 두면 규칙은 피하지만 호출하는 트랙(P2 PH-14 · P4 PH-33-②)이 문자열 오타를 컴파일에서 못 잡는다.
-- **`gl_voucher`에 `reference_key` 컬럼을 새 V 파일로 추가한다**(PR #478 스키마에는 없다). 이 키가 없으면 "이체 1건당 전표 1건" 검증과 PH-28b 분개누락 탐지가 원장과 조인할 수 없다.
-- 전표 생성 + 분개 기표 서비스, `product_gl_mapping`
+- **`JournalDirection`·`GlTxType`을 `gl.domain`에서 `gl.api`로 옮긴다.** 지금은 `gl.domain`에 있는데(PR #478 머지분), `#349`가 건 `Api mayNotAccessAnyLayer()` 때문에 **`gl.api`가 `gl.domain`을 참조하면 `LayerArchitectureTest > gl`이 깨진다.** 공유 어휘를 소유 도메인의 `api`에 두는 것은 [ADR-0006](../adr/0006-domain-contract-surface.md)(#495 초안, PH-24 PR에서 함께 머지. 0004·0005 는 다른 결정이 먼저 썼다) 결정 2와 같은 방향이다. `String`으로 두면 규칙은 피하지만 호출하는 트랙(P2 PH-14 · P4 PH-33-②)이 문자열 오타를 컴파일에서 못 잡는다. 타행 유형은 PH-33-②가 `tx_type` CHECK를 넓히는 V 파일과 같은 PR에서 enum 값을 추가한다.
+- **`post()`는 호출자 트랜잭션 안에서만 돈다(`MANDATORY`).** 트랜잭션 없이 부르면 즉시 실패한다. `REQUIRED`면 트랜잭션 없는 호출(예: 배치)에서 전표가 원장과 다른 커밋에 들어가고, 아래 "GL이 이벤트가 아니라 동기 포트인 이유"가 깨진다.
+- **`gl_voucher`에 `reference_key` 컬럼을 새 V 파일로 추가한다**(PR #478 스키마에는 없다). `NOT NULL` + `UNIQUE (tx_type, reference_key)`. 이 키가 없으면 "이체 1건당 전표 1건" 검증과 PH-28b 분개누락 탐지가 원장과 조인할 수 없다.
+    - **같은 키로 두 번 부르면 예외다(no-op 아님).** 조용히 넘기면 원장만 두 번 기표된 상태가 가려진다. 예외면 원장까지 롤백된다.
+    - 개시 전표의 키는 `OPENING-{yyyyMMdd}`(거래일)다.
+    - PH-60b 시드(10/2)가 이 V 파일보다 먼저 들어간다. V 파일은 기존 행의 키를 채운 뒤 `NOT NULL`·`UNIQUE`를 건다. PH-60b 시드는 `TRANSFER`·`PRODUCT_SUBSCRIPTION` 전표의 `description`에 원장 `transaction_number`를 남긴다(개시 전표 제외). V 파일은 이 값을, 개시 전표는 `OPENING-20260901`을 `reference_key`로 옮긴다.
+    - 역분개를 도입하면(#129, 2차 범위 밖) 원 전표와 같은 키를 쓰지 말고 별도 `tx_type`(예: `REVERSAL`)을 둔다. Apache Fineract는 역분개에 원 거래와 같은 `transaction_id`를 쓰고 DB 유일 제약 없이 애플리케이션에서 중복을 거른다 — 전표 헤더 테이블이 없어서다. 우리는 `gl_voucher`가 있어 유일 제약을 건다.
+- 전표 생성 + 분개 기표 서비스. `product_gl_mapping` 은 만들지 않는다 — 예수금 계정이 `20100` 하나라 모든 매핑이 같은 값이고 FE 시산표·정보계 지표도 예수금 하나를 전제한다. 예수금을 나눌 때 도입한다(2차 범위 밖).
 - `GlLedgerPostingHook implements transfer.api.LedgerPostingHook` — 이체 유형별 패턴표로 전표 1건. **예외를 던진다(= 이체 롤백).**
-- 상품가입 초입금 기표(`LedgerPair.forProductSubscription` 완료 지점)
+- 상품가입 초입금 기표(`LedgerPair.forProductSubscription` 완료 지점). `ProductSubscriptionDepositService` 가 원장 저장 직후 훅 B 를 부른다.
+- 정정 체인(#548) 기표. `TransferCorrectionService` 가 원장 저장 직후 훅 B 를 부른다 — 취소정정은 `REVERSAL`(`REV`), 정상거래는 `TRF`.
+- 채번은 전용 커넥션 풀(3개)로 한다. 이체 트랜잭션 안에서 메인 풀 커넥션을 하나 더 꺼내면 동시 기표 수가 풀 크기에 닿을 때 순환 대기로 멈춘다.
 - 훅 전/후 이체 성능 저하율은 P1 PH-30 harness로 잰다.
 - **완료 기준:** 이체 1건당 전표 1건, 차대변 일치. 훅에서 예외가 나면 이체가 롤백된다(테스트).
 
