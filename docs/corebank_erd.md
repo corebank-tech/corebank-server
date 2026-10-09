@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 34개 테이블(32개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 37개 테이블(35개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -336,6 +336,28 @@ erDiagram
         boolean currently_running "배치 중복 트리거 방지 락 (#189)"
         datetime updated_at "DATETIME(6). stale 판단 기준"
     }
+    auth_token {
+        bigint auth_token_id PK
+        varchar purpose UK "TERMS_AUTH / ... / ACCOUNT_PASSWORD_AUTH (#580)"
+        char token_hash UK "SHA-256. 원문 미저장"
+        bigint customer_id "로그인 고객 토큰만. FK 없음"
+        text payload "JSON 문자열. utf8mb4_bin"
+        char claim_id "임시가입 토큰 선점 ID"
+        datetime created_at "DATETIME(6)"
+        datetime expires_at "유효성 판정 기준"
+        datetime consumed_at "NULL 이면 미소비"
+    }
+    otp_issue_lock {
+        bigint customer_id PK "FK 없음 (#580)"
+        char owner_id "UUID. 주인만 해제"
+        datetime expires_at "지나면 재획득 가능"
+    }
+    terms_view_history {
+        bigint customer_id PK "FK 없음 (#580)"
+        bigint terms_id PK
+        datetime viewed_at "DATETIME(6)"
+        datetime expires_at "열람 후 30분"
+    }
 
     %% ---------- P3 (회계 원장, PH-20) ----------
     gl_account {
@@ -420,6 +442,11 @@ erDiagram
     account ||--o{ auto_transfer : "출금"
     auto_transfer ||--o{ auto_transfer_execution : "회차"
     customer o|--o{ idempotency_key : "발급"
+    %% 일회성 저장소 (#580). 수명이 짧아 FK 없음
+    customer ||..o{ auth_token : "인증 토큰"
+    customer ||..o| otp_issue_lock : "OTP 발급 잠금"
+    customer ||..o{ terms_view_history : "약관 열람"
+    terms ||..o{ terms_view_history : "열람 대상"
 
     %% 논리 관계 (ledger_entry 는 파티션 테이블이라 FK 선언 불가)
     %% 채번 자원 (FK 없음. 거래번호/원장ID 생성)

@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 32개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 305개 컬럼
+**대상**: 35개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 321개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -60,6 +60,9 @@
 | 32 | `business_date` | 현재 영업일 | P5 | 4  |
 | 33 | `holiday` | 휴일 달력 | P5 | 4  |
 | 34 | `gl_voucher_sequence` | 전표번호 일련번호 채번 | P3 | 4  |
+| 35 | `auth_token` | 일회성 인증 토큰 | P4 | 9  |
+| 36 | `otp_issue_lock` | OTP 발급 잠금 | P4 | 3  |
+| 37 | `terms_view_history` | 상품 약관 열람 이력 | P4 | 4  |
 
 ---
 
@@ -880,9 +883,67 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
-| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP` 2행 |
+| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP`, `LEDGER_RECONCILIATION_BATCH`, `AUTH_TOKEN_CLEANUP` 4행 |
 | `currently_running` | `BOOLEAN` |  | X | `FALSE` | 이 배치가 지금 실행 중인지. 트리거 시작 시 `TRUE`, 종료 시(성공/실패 무관) `FALSE`로 되돌림 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각. stale(크래시로 방치됨) 판단 기준 |
+
+---
+
+## `auth_token`
+
+> 일회성 인증 토큰 (#580). Redis에 있던 토큰 7종을 옮겼다
+
+약관 동의 · 아이디 확인 · 이메일 인증 · 계좌 인증 · 임시가입(회원가입 5종)과 OTP 인증 · 계좌비밀번호 인증 토큰을 한 테이블에 둔다. 토큰 원문은 저장하지 않고 SHA-256 해시로 찾는다. 소비는 `consumed_at IS NULL AND expires_at > now` 조건부 `UPDATE` 한 번이고, 영향받은 행이 1일 때만 성공이다. 저장·소비 모두 호출자 트랜잭션에 참여하므로 업무가 롤백되면 소비도 롤백된다(#498).
+
+유효성은 항상 `expires_at`으로 판정한다. `AUTH_TOKEN_CLEANUP` 배치는 만료 행을 지워 공간을 회수할 뿐이다. 길어야 30분 사는 데이터라 `customer`에 FK를 걸지 않는다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `auth_token_id` | `BIGINT` | **PK** | X |  | 내부 식별자 (AUTO_INCREMENT) |
+| `purpose` | `VARCHAR(30)` | **UK** | X |  | 토큰 종류. `TERMS_AUTH` / `USER_ID_CHECK` / `EMAIL_VERIFICATION` / `ACCOUNT_AUTH` / `TEMP_SIGNUP` / `OTP_AUTH` / `ACCOUNT_PASSWORD_AUTH` |
+| `token_hash` | `CHAR(64)` | **UK** | X |  | 토큰 원문의 SHA-256 16진수 |
+| `customer_id` | `BIGINT` |  | O |  | 로그인 고객 토큰의 고객. 회원가입 토큰은 `NULL` |
+| `payload` | `TEXT` |  | X |  | 토큰에 묶인 값(JSON 문자열). `utf8mb4_bin`이라 값 일치 소비가 바이트 단위로 비교된다 |
+| `claim_id` | `CHAR(36)` |  | O |  | 임시가입 토큰을 선점한 가입 완료 요청 ID. 선점 전·복구 후는 `NULL` |
+| `created_at` | `DATETIME(6)` |  | X |  | 발급 시각 |
+| `expires_at` | `DATETIME(6)` |  | X |  | 만료 시각. 이 시각이 지나면 조회·소비되지 않는다 |
+| `consumed_at` | `DATETIME(6)` |  | O |  | 소비 시각. `NULL`이면 아직 쓰지 않은 토큰 |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_auth_token_hash_purpose` | `token_hash, purpose` |
+| INDEX | `ix_auth_token_expires` | `expires_at` |
+
+---
+
+## `otp_issue_lock`
+
+> 고객별 OTP 발급 잠금 (#580). Redis `SET NX` 잠금을 옮겼다
+
+같은 고객의 OTP 발급 요청을 여러 인스턴스에서 한 번에 하나만 통과시킨다. 잠금은 발급 트랜잭션과 별도로(`REQUIRES_NEW`) 바로 커밋해 다른 인스턴스에 즉시 보이게 한다. 만료된 잠금은 다른 요청이 다시 잡을 수 있고, 해제는 `owner_id`가 같을 때만 된다. 고객당 1행이라 정리 배치가 없다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `customer_id` | `BIGINT` | **PK** | X |  | 잠금 대상 고객 |
+| `owner_id` | `CHAR(36)` |  | X |  | 잠금을 잡은 발급 요청 ID(UUID) |
+| `expires_at` | `DATETIME(6)` |  | X |  | 잠금 만료 시각 |
+
+---
+
+## `terms_view_history`
+
+> 상품 약관 열람 이력 (#580). Redis TTL 30분 키를 옮겼다
+
+상품가입 전 약관을 열람했는지 30분 동안 인정한다. 다시 열람하면 같은 행의 `viewed_at`·`expires_at`을 덮어쓴다. 고객×약관당 1행이라 정리 배치가 없다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `customer_id` | `BIGINT` | **PK** | X |  | 열람 고객 |
+| `terms_id` | `BIGINT` | **PK** | X |  | 열람한 약관 |
+| `viewed_at` | `DATETIME(6)` |  | X |  | 마지막 열람 시각 |
+| `expires_at` | `DATETIME(6)` |  | X |  | 열람 인정 만료 시각 (열람 후 30분) |
 
 ---
 
