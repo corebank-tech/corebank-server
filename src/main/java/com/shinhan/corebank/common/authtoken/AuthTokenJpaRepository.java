@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 소비는 모두 "아직 안 썼고 만료되지 않았다"는 조건부 UPDATE 한 번이다.
@@ -69,4 +70,10 @@ public interface AuthTokenJpaRepository extends JpaRepository<AuthTokenJpaEntity
             @Param("purpose") AuthTokenPurpose purpose,
             @Param("customerId") Long customerId,
             @Param("now") LocalDateTime now);
+
+    // 한 번에 다 지우면 긴 트랜잭션이 되어 토큰 소비 UPDATE를 오래 막으므로 나눠서 지운다.
+    @Modifying
+    @Transactional
+    @Query(value = "DELETE FROM auth_token WHERE expires_at < :now LIMIT :limit", nativeQuery = true)
+    int deleteExpiredBatch(@Param("now") LocalDateTime now, @Param("limit") int limit);
 }
