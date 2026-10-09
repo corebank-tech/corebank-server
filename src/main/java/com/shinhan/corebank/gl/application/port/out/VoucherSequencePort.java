@@ -1,6 +1,6 @@
 package com.shinhan.corebank.gl.application.port.out;
 
-import com.shinhan.corebank.gl.domain.GlTxType;
+import com.shinhan.corebank.gl.api.GlTxType;
 import com.shinhan.corebank.gl.domain.VoucherNumber;
 import java.time.LocalDate;
 

@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.gl.domain.GlTxType;
+import com.shinhan.corebank.gl.api.GlTxType;
 import com.shinhan.corebank.gl.domain.VoucherNumber;
 import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
 import java.time.LocalDate;
@@ -119,9 +119,11 @@ class GlVoucherSequenceAdapterTest extends IntegrationTestSupport {
     private void insertSeedVoucher(String voucherNo) {
         GlTxType txType = voucherNo.contains("-SUB-") ? GlTxType.PRODUCT_SUBSCRIPTION : GlTxType.TRANSFER;
         jdbcTemplate.update(
-                "INSERT INTO gl_voucher (voucher_no, trade_date, tx_type, created_at) VALUES (?, ?, ?, NOW(6))",
+                "INSERT INTO gl_voucher (voucher_no, trade_date, tx_type, reference_key, created_at)"
+                        + " VALUES (?, ?, ?, ?, NOW(6))",
                 voucherNo,
                 TRADE_DATE,
-                txType.name());
+                txType.name(),
+                "SEED-" + voucherNo);
     }
 }

@@ -1,4 +1,4 @@
-package com.shinhan.corebank.gl.domain;
+package com.shinhan.corebank.gl.api;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +15,9 @@ public enum GlTxType {
     OPENING("OPN"),
     TRANSFER("TRF"),
     PRODUCT_SUBSCRIPTION("SUB"),
-    INTEREST("INT");
+    INTEREST("INT"),
+    /** 정정 체인(#548)의 취소정정. 원 전표와 같은 키를 쓰지 않고 자기 거래번호를 참조 키로 쓴다. */
+    REVERSAL("REV");
 
     /** 전표번호 가운데 3자리. docs/phase2/gl_journal_patterns.md §1. */
     private final String voucherCode;

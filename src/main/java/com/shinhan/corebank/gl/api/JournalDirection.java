@@ -1,4 +1,4 @@
-package com.shinhan.corebank.gl.domain;
+package com.shinhan.corebank.gl.api;
 
 /**
  * 분개 한 줄의 방향. 금액은 항상 양수이고 차변인지 대변인지는 이 값이 말한다.

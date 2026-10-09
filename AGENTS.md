@@ -34,17 +34,15 @@ docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·R
    근거 [hexagonal_architecture_guide.md](docs/hexagonal_architecture_guide.md) · 위반 사례 PR #37
    센서: 전 도메인 (`LayerArchitectureTest`, #349에서 확대 완료)
 
-2. **다른 도메인은 소유 도메인의 공개 계약을 통해서만 호출한다.**
-   계약면은 `<domain>.api`와 `<domain>.application.port.in`의 공개 UseCase 둘 다 통용된다
-   (예: `limit.api.TransferLimitProvider`, `account.application.port.in.WithdrawableAccountQueryUseCase`).
-   **어느 쪽 하나로 단일화할지는 #359에서 정한다 — 그때까지 둘 다 정상이다.**
-   상대 도메인의 `adapter`와 도메인 모델·서비스 구현을 직접 참조하지 않는다.
+2. **다른 도메인은 소유 도메인의 `<domain>.api`를 통해서만 호출한다.**
+   상대 도메인의 `application`·`domain`·`adapter`를 직접 참조하지 않는다. 공유 enum·에러코드도
+   소유 도메인의 `api`에 둔다(예: `gl.api.GlTxType`).
+   **기존 우회 참조는 일괄 정리하지 않는다** — 그 도메인의 `api` 계약을 만들거나 고칠 때 그 몫만
+   옮기고, 에이전트가 무관한 PR에서 선제적으로 정리하지 않는다.
    승인된 예외는 `transfer`의 `AccountLockJpaEntity` 부분 매핑 **하나뿐**이고, 새 예외는
-   ADR과 소유 도메인 합의가 있어야 한다. **공유 enum·에러코드(예: `account.domain.AccountType`)는
-   이 금지 대상이 아니다 — #359 결정 전까지 기존 참조를 그대로 허용하고, 에이전트가
-   선제적으로 정리하지 않는다.** 단일화 방향은 #359에서 정한다.
-   근거 [ADR-0002](docs/adr/0002-cross-domain-account-read-mechanism.md)
-   센서: `terms`만 (`TermsArchitectureTest`) — 전 도메인 확대는 #359
+   ADR과 소유 도메인 합의가 있어야 한다.
+   근거 [ADR-0006](docs/adr/0006-domain-contract-surface.md), [ADR-0002](docs/adr/0002-cross-domain-account-read-mechanism.md)
+   센서: `terms`·`batch`만 — 우회가 0이 된 도메인부터 하나씩 건다
 
 3. **성공 응답은 항상 HTTP `200` + `code="0000"`. `201`·`204`를 쓰지 않는다.**
    `data`에 성공/실패를 다시 담지 않는다(`data.result = "SUCCESS"` 패턴 폐기).
@@ -94,7 +92,7 @@ docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·R
 | [hexagonal_architecture_guide.md](docs/hexagonal_architecture_guide.md) | 패키지 배치·레이어 책임·요청이 DB까지 가는 흐름 |
 | [api_conventions.md](docs/api_conventions.md) | 공통 응답·HTTP 상태·오류코드 마스터·Enum·필드명 |
 | [error_handling_guide.md](docs/error_handling_guide.md) | `ErrorCode`/`BusinessException` 구현, 도메인 오류코드 추가 |
-| [adr/](docs/adr/) | 되돌리기 어려운 설계 결정 — 0001 상품가입 검증, 0002 도메인 간 계좌 조회, 0003 `batch.api` 도메인 간 락 재사용 |
+| [adr/](docs/adr/) | 되돌리기 어려운 설계 결정 — 0001 상품가입 검증, 0002 도메인 간 계좌 조회, 0003 `batch.api` 도메인 간 락 재사용, 0004 COB 스텝 순서, 0005 Spring Batch·MQ·API Gateway 미도입, 0006 도메인 간 계약면 |
 | [phase2/README.md](docs/phase2/README.md) · [tasks.md](docs/phase2/tasks.md) | 2차 계획 정본 — 태스크 ID(PH-xx) 착수 전, 소유자·기한·트랙 간 계약 확인 |
 | [phase2/glossary.md](docs/phase2/glossary.md) | 2차 핵심 용어(PH-87) — 새 필드·Enum·화면 라벨 이름을 정하기 전 |
 

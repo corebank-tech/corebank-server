@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.gl.api.GlTxType;
+import com.shinhan.corebank.gl.api.JournalDirection;
 import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
 import java.time.LocalDate;
 import java.util.List;
@@ -18,6 +20,7 @@ class VoucherTest {
     private static final LocalDate TRADE_DATE = LocalDate.of(2026, 9, 22);
     private static final VoucherNumber TRANSFER_NO = new VoucherNumber(TRADE_DATE, GlTxType.TRANSFER, 123);
     private static final VoucherNumber OPENING_NO = new VoucherNumber(TRADE_DATE, GlTxType.OPENING, 1);
+    private static final String REFERENCE_KEY = "20260922WB0000000123";
 
     @Nested
     @DisplayName("전표번호")
@@ -56,6 +59,7 @@ class VoucherTest {
         void createsBalancedVoucher() {
             Voucher voucher = Voucher.create(
                     TRANSFER_NO,
+                    REFERENCE_KEY,
                     null,
                     List.of(JournalEntry.debit("20100", 10_000L), JournalEntry.credit("20100", 10_000L)));
 
@@ -69,6 +73,7 @@ class VoucherTest {
         void createsBalancedVoucherWithMultipleLinesOnOneSide() {
             Voucher voucher = Voucher.create(
                     TRANSFER_NO,
+                    REFERENCE_KEY,
                     null,
                     List.of(
                             JournalEntry.debit("10100", 10_000L),
@@ -84,7 +89,7 @@ class VoucherTest {
             List<JournalEntry> entries =
                     List.of(JournalEntry.debit("20100", 10_000L), JournalEntry.credit("20100", 9_999L));
 
-            assertThatThrownBy(() -> Voucher.create(TRANSFER_NO, null, entries))
+            assertThatThrownBy(() -> Voucher.create(TRANSFER_NO, REFERENCE_KEY, null, entries))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(GlErrorCode.UNBALANCED_VOUCHER);
@@ -96,7 +101,7 @@ class VoucherTest {
             List<JournalEntry> entries =
                     List.of(JournalEntry.debit("20100", 10_000L), JournalEntry.debit("10100", 10_000L));
 
-            assertThatThrownBy(() -> Voucher.create(TRANSFER_NO, null, entries))
+            assertThatThrownBy(() -> Voucher.create(TRANSFER_NO, REFERENCE_KEY, null, entries))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(GlErrorCode.UNBALANCED_VOUCHER);
@@ -107,10 +112,26 @@ class VoucherTest {
         void rejectsSingleLineVoucher() {
             List<JournalEntry> entries = List.of(JournalEntry.debit("20100", 10_000L));
 
-            assertThatThrownBy(() -> Voucher.create(TRANSFER_NO, null, entries))
+            assertThatThrownBy(() -> Voucher.create(TRANSFER_NO, REFERENCE_KEY, null, entries))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(GlErrorCode.TOO_FEW_JOURNAL_ENTRIES);
+        }
+
+        @Test
+        @DisplayName("참조 키가 없거나 비어 있으면 GLA9007")
+        void rejectsMissingReferenceKey() {
+            List<JournalEntry> entries =
+                    List.of(JournalEntry.debit("20100", 10_000L), JournalEntry.credit("20100", 10_000L));
+
+            assertThatThrownBy(() -> Voucher.create(TRANSFER_NO, null, null, entries))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(GlErrorCode.MISSING_REFERENCE_KEY);
+            assertThatThrownBy(() -> Voucher.create(TRANSFER_NO, " ", null, entries))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(GlErrorCode.MISSING_REFERENCE_KEY);
         }
 
         @Test
@@ -142,6 +163,14 @@ class VoucherTest {
                             tuple("10100", JournalDirection.DEBIT, 1_000_000L),
                             tuple("20100", JournalDirection.CREDIT, 700_000L),
                             tuple("30100", JournalDirection.CREDIT, 300_000L));
+        }
+
+        @Test
+        @DisplayName("참조 키는 OPENING-{거래일} 이다")
+        void referenceKeyIsOpeningTradeDate() {
+            Voucher voucher = Voucher.opening(OPENING_NO, 1_000_000L, 700_000L);
+
+            assertThat(voucher.getReferenceKey()).isEqualTo("OPENING-20260922");
         }
 
         @Test
