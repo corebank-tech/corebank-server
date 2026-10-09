@@ -1,5 +1,6 @@
 package com.shinhan.corebank.otp.adapter.out.redis;
 
+import com.shinhan.corebank.common.ephemeralstore.ConditionalOnRedisEphemeralStore;
 import com.shinhan.corebank.otp.application.port.out.OtpAuthTokenStorePort;
 import com.shinhan.corebank.otp.domain.model.OtpAuthTokenPayload;
 import java.time.Duration;
@@ -13,6 +14,7 @@ import tools.jackson.databind.ObjectMapper;
 
 // otpAuthToken의 고객·요청 페이로드를 JSON으로 저장하고 값이 같을 때만 소비한다.
 @Component
+@ConditionalOnRedisEphemeralStore
 public class OtpAuthTokenRedisAdapter implements OtpAuthTokenStorePort {
 
     private static final String KEY_PREFIX = "otp:auth:";
