@@ -260,9 +260,9 @@ public class Phase2BulkSeedService {
         transaction.executeWithoutResult(status -> {
             jdbc.update(
                     """
-                    INSERT INTO gl_voucher (voucher_no, trade_date, tx_type, description, created_at)
+                    INSERT INTO gl_voucher (voucher_no, trade_date, tx_type, reference_key, description, created_at)
                     SELECT CONCAT(DATE_FORMAT(trade_date, '%Y%m%d'), '-TRF-', LPAD(transfer_id - ? + 1, 6, '0')),
-                           trade_date, 'TRANSFER', transaction_number, created_at
+                           trade_date, 'TRANSFER', transaction_number, transaction_number, created_at
                     FROM transfer
                     WHERE transfer_id BETWEEN ? AND ?
                     ORDER BY transfer_id
@@ -648,14 +648,16 @@ public class Phase2BulkSeedService {
     }
 
     private void insertVouchers(List<VoucherSeed> seeds) {
-        String sql =
-                "INSERT INTO gl_voucher (voucher_no, trade_date, tx_type, description, created_at) VALUES (?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO gl_voucher (voucher_no, trade_date, tx_type, reference_key, description, created_at)"
+                + " VALUES (?, ?, ?, ?, ?, ?)";
+        // reference_key 는 원장 거래번호다(PH-24). description 에도 같은 값을 남긴다.
         batchSeeds(seeds, 2_000, sql, (statement, seed) -> {
             statement.setString(1, seed.number());
             statement.setDate(2, Date.valueOf(seed.tradeDate()));
             statement.setString(3, seed.type());
             statement.setString(4, seed.description());
-            setTimestamp(statement, 5, seed.createdAt());
+            statement.setString(5, seed.description());
+            setTimestamp(statement, 6, seed.createdAt());
         });
     }
 

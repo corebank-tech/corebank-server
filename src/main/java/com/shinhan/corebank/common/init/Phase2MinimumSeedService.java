@@ -7,6 +7,7 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -352,11 +353,12 @@ public class Phase2MinimumSeedService {
         LocalDate tradeDate = spec.baseDateTime().toLocalDate();
         jdbc.update(
                 """
-                INSERT IGNORE INTO gl_voucher (voucher_no, trade_date, tx_type, description, created_at)
-                VALUES (?, ?, 'OPENING', 'PH-60 최소 시드 개시 잔액', ?)
+                INSERT IGNORE INTO gl_voucher (voucher_no, trade_date, tx_type, reference_key, description, created_at)
+                VALUES (?, ?, 'OPENING', ?, 'PH-60 최소 시드 개시 잔액', ?)
                 """,
                 OPENING_VOUCHER_NUMBER,
                 Date.valueOf(tradeDate),
+                "OPENING-" + tradeDate.format(DateTimeFormatter.BASIC_ISO_DATE),
                 Timestamp.valueOf(spec.baseDateTime()));
         jdbc.update(
                 """
