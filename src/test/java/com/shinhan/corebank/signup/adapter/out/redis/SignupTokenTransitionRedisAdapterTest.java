@@ -2,7 +2,7 @@ package com.shinhan.corebank.signup.adapter.out.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.RedisEphemeralStoreTestSupport;
 import com.shinhan.corebank.signup.domain.model.AccountAuthTokenPayload;
 import com.shinhan.corebank.signup.domain.model.AgreedTerm;
 import com.shinhan.corebank.signup.domain.model.EmailVerificationPurpose;
@@ -23,7 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 // Redis 토큰 전환의 원자성, TTL, 일회성 소비와 수정 회전을 검증한다.
-class SignupTokenTransitionRedisAdapterTest extends IntegrationTestSupport {
+class SignupTokenTransitionRedisAdapterTest extends RedisEphemeralStoreTestSupport {
 
     @Autowired
     TermsAuthTokenRedisAdapter termsAdapter;

@@ -1,5 +1,6 @@
 package com.shinhan.corebank.signup.adapter.out.redis;
 
+import com.shinhan.corebank.common.ephemeralstore.ConditionalOnRedisEphemeralStore;
 import com.shinhan.corebank.signup.application.port.out.TempSignupTokenPort;
 import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
 import java.time.Duration;
@@ -11,6 +12,7 @@ import tools.jackson.databind.ObjectMapper;
 
 // tempSignupToken을 Redis에 저장하고 조회하거나 원자적으로 소비한다.
 @Component
+@ConditionalOnRedisEphemeralStore
 public class TempSignupTokenRedisAdapter implements TempSignupTokenPort {
 
     static final String KEY_PREFIX = "signup:temp-signup:";

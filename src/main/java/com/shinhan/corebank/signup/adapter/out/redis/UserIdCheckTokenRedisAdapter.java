@@ -1,5 +1,6 @@
 package com.shinhan.corebank.signup.adapter.out.redis;
 
+import com.shinhan.corebank.common.ephemeralstore.ConditionalOnRedisEphemeralStore;
 import com.shinhan.corebank.signup.application.port.out.UserIdCheckTokenPort;
 import com.shinhan.corebank.signup.domain.model.UserIdCheckTokenPayload;
 import java.time.Duration;
@@ -11,6 +12,7 @@ import tools.jackson.databind.ObjectMapper;
 
 // 아이디 중복확인 토큰을 Redis에서 원자적으로 저장·소비한다.
 @Component
+@ConditionalOnRedisEphemeralStore
 public class UserIdCheckTokenRedisAdapter implements UserIdCheckTokenPort {
 
     private static final String KEY_PREFIX = "signup:user-id-check:";

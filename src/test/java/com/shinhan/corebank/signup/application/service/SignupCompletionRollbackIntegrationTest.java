@@ -7,8 +7,8 @@ import static org.mockito.BDDMockito.willThrow;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.ExistingAccountRegistration;
-import com.shinhan.corebank.signup.adapter.out.redis.TempSignupTokenRedisAdapter;
 import com.shinhan.corebank.signup.application.port.in.CompleteSignupCommand;
+import com.shinhan.corebank.signup.application.port.out.TempSignupTokenPort;
 import com.shinhan.corebank.signup.domain.model.AgreedTerm;
 import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
 import java.time.Duration;
@@ -29,7 +29,7 @@ class SignupCompletionRollbackIntegrationTest extends IntegrationTestSupport {
     SignupCompletionService completionService;
 
     @Autowired
-    TempSignupTokenRedisAdapter tempTokenAdapter;
+    TempSignupTokenPort tempTokenAdapter;
 
     @Autowired
     JdbcTemplate jdbcTemplate;
