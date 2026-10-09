@@ -1,5 +1,7 @@
 package com.shinhan.corebank.common.authtoken;
 
+import static java.util.stream.Collectors.toSet;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -7,9 +9,12 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
@@ -78,6 +83,64 @@ public class AuthTokenStore {
         return repository.consumeIfCustomerMatches(hash(token), purpose, customerId, LocalDateTime.now(clock)) == 1;
     }
 
+    // 원본 토큰을 모두 소비하고 새 토큰을 발급한다. 원본이 하나라도 없으면 아무것도 바꾸지 않는다(회원가입 Lua 대체).
+    @Transactional
+    public boolean transition(
+            List<Source> sources, AuthTokenPurpose purpose, String newToken, Object payload, Duration ttl) {
+        if (sources.isEmpty() || sources.stream().anyMatch(source -> isBlank(source.token()))) {
+            return false;
+        }
+        LocalDateTime now = LocalDateTime.now(clock);
+        Set<Key> sourceKeys = sources.stream()
+                .map(source -> new Key(source.purpose(), hash(source.token())))
+                .collect(toSet());
+        Set<Key> lockedKeys = repository
+                .lockUsable(sourceKeys.stream().map(Key::tokenHash).toList(), now)
+                .stream()
+                .map(entity -> new Key(entity.getPurpose(), entity.getTokenHash()))
+                .collect(toSet());
+        if (!lockedKeys.containsAll(sourceKeys)) {
+            return false;
+        }
+        sourceKeys.forEach(key -> repository.consume(key.tokenHash(), key.purpose(), now));
+        try {
+            repository.saveAndFlush(
+                    AuthTokenJpaEntity.issue(purpose, hash(newToken), null, serialize(payload), now, now.plus(ttl)));
+        } catch (DataIntegrityViolationException exception) {
+            throw new IllegalStateException("발급할 인증 토큰이 이미 있습니다.", exception);
+        }
+        return true;
+    }
+
+    // 다른 요청이 쓰지 못하게 선점한다. 선점된 토큰은 조회·소비되지 않는다.
+    @Transactional
+    public <T> Optional<T> claim(AuthTokenPurpose purpose, String token, String claimId, Class<T> payloadType) {
+        if (isBlank(token) || isBlank(claimId)) {
+            return Optional.empty();
+        }
+        String tokenHash = hash(token);
+        if (repository.claim(tokenHash, purpose, claimId, LocalDateTime.now(clock)) != 1) {
+            return Optional.empty();
+        }
+        return repository.findPayload(tokenHash, purpose).map(json -> deserialize(json, payloadType));
+    }
+
+    @Transactional
+    public boolean completeClaim(AuthTokenPurpose purpose, String token, String claimId) {
+        if (isBlank(token) || isBlank(claimId)) {
+            return false;
+        }
+        return repository.completeClaim(hash(token), purpose, claimId, LocalDateTime.now(clock)) == 1;
+    }
+
+    @Transactional
+    public boolean releaseClaim(AuthTokenPurpose purpose, String token, String claimId) {
+        if (isBlank(token) || isBlank(claimId)) {
+            return false;
+        }
+        return repository.releaseClaim(hash(token), purpose, claimId, LocalDateTime.now(clock)) == 1;
+    }
+
     static String hash(String token) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -103,7 +166,11 @@ public class AuthTokenStore {
         }
     }
 
-    private boolean isBlank(String token) {
-        return token == null || token.isBlank();
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
+
+    public record Source(AuthTokenPurpose purpose, String token) {}
+
+    private record Key(AuthTokenPurpose purpose, String tokenHash) {}
 }
