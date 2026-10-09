@@ -42,7 +42,7 @@ public class AuthTokenStore {
                 AuthTokenJpaEntity.issue(purpose, hash(token), customerId, serialize(payload), now, now.plus(ttl)));
     }
 
-    @Transactional(readOnly = true)
+    // SELECT 한 번이라 트랜잭션을 열지 않는다. 호출자 트랜잭션이 있으면 그 안에서 읽는다.
     public <T> Optional<T> find(AuthTokenPurpose purpose, String token, Class<T> payloadType) {
         if (isBlank(token)) {
             return Optional.empty();
