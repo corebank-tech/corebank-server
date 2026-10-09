@@ -2,7 +2,7 @@ package com.shinhan.corebank.otp.adapter.out.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.RedisEphemeralStoreTestSupport;
 import java.time.Duration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -11,7 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 // 고객별 OTP 발급 잠금의 배타성과 소유자 조건부 해제를 검증한다.
-class OtpIssueLockRedisAdapterTest extends IntegrationTestSupport {
+class OtpIssueLockRedisAdapterTest extends RedisEphemeralStoreTestSupport {
 
     private static final Long CUSTOMER_ID = 9_999_999L;
     private static final String KEY = "otp:issue-lock:" + CUSTOMER_ID;

@@ -1,5 +1,6 @@
 package com.shinhan.corebank.otp.adapter.out.redis;
 
+import com.shinhan.corebank.common.ephemeralstore.ConditionalOnRedisEphemeralStore;
 import com.shinhan.corebank.otp.application.port.out.OtpIssueLockPort;
 import java.time.Duration;
 import java.util.List;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 // 고객별 Redis 잠금으로 동시 OTP 발급 트랜잭션의 진입 순서를 보장한다.
 @Component
+@ConditionalOnRedisEphemeralStore
 @RequiredArgsConstructor
 public class OtpIssueLockRedisAdapter implements OtpIssueLockPort {
 
