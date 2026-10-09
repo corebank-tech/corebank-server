@@ -2,8 +2,6 @@ package com.shinhan.corebank.common.authtoken;
 
 import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
-import java.util.Collection;
-import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -75,16 +73,18 @@ public interface AuthTokenJpaRepository extends JpaRepository<AuthTokenJpaEntity
             @Param("customerId") Long customerId,
             @Param("now") LocalDateTime now);
 
-    // 회원가입 전환의 원본 토큰을 먼저 잠근다. 하나라도 빠졌으면 아무것도 소비하지 않기 위해서다.
+    // 회원가입 전환의 원본 토큰을 먼저 잠근다. 유니크 키 전체(=)로 찾아야 간격 잠금 없이 행 하나만 잠긴다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
             """
         SELECT t FROM AuthTokenJpaEntity t
-         WHERE t.tokenHash IN :tokenHashes
+         WHERE t.tokenHash = :tokenHash AND t.purpose = :purpose
            AND t.consumedAt IS NULL AND t.claimId IS NULL AND t.expiresAt > :now
         """)
-    List<AuthTokenJpaEntity> lockUsable(
-            @Param("tokenHashes") Collection<String> tokenHashes, @Param("now") LocalDateTime now);
+    Optional<AuthTokenJpaEntity> lockUsable(
+            @Param("tokenHash") String tokenHash,
+            @Param("purpose") AuthTokenPurpose purpose,
+            @Param("now") LocalDateTime now);
 
     @Modifying(flushAutomatically = true)
     @Query(

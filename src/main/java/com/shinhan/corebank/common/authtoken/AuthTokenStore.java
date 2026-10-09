@@ -1,18 +1,16 @@
 package com.shinhan.corebank.common.authtoken;
 
-import static java.util.stream.Collectors.toSet;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
@@ -91,16 +89,16 @@ public class AuthTokenStore {
             return false;
         }
         LocalDateTime now = LocalDateTime.now(clock);
-        Set<Key> sourceKeys = sources.stream()
+        // 해시 순으로 잠가 여러 토큰을 함께 쓰는 전환끼리 잠금 순서가 엇갈리지 않게 한다.
+        List<Key> sourceKeys = sources.stream()
                 .map(source -> new Key(source.purpose(), hash(source.token())))
-                .collect(toSet());
-        Set<Key> lockedKeys = repository
-                .lockUsable(sourceKeys.stream().map(Key::tokenHash).toList(), now)
-                .stream()
-                .map(entity -> new Key(entity.getPurpose(), entity.getTokenHash()))
-                .collect(toSet());
-        if (!lockedKeys.containsAll(sourceKeys)) {
-            return false;
+                .distinct()
+                .sorted(Comparator.comparing(Key::tokenHash).thenComparing(Key::purpose))
+                .toList();
+        for (Key key : sourceKeys) {
+            if (repository.lockUsable(key.tokenHash(), key.purpose(), now).isEmpty()) {
+                return false;
+            }
         }
         sourceKeys.forEach(key -> repository.consume(key.tokenHash(), key.purpose(), now));
         try {
