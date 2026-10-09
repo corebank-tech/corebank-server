@@ -25,6 +25,12 @@ spring:
     redis:
       port: 6379
 
+management:
+  health:
+    redis:
+      # provider=jdbc면 Redis가 내려가도 UP이어야 한다. redis일 때만 RedisEphemeralStoreHealthConfiguration이 넣는다.
+      enabled: false
+
 springdoc:
   swagger-ui:
     csrf:

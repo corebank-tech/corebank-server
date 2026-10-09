@@ -34,4 +34,10 @@ class EphemeralStoreJdbcSwitchTest extends IntegrationTestSupport {
                         .filter(className -> className.contains(".adapter.out.redis.")))
                 .isEmpty();
     }
+
+    @Test
+    @DisplayName("기본값(provider=jdbc)이면 Redis가 헬스체크에 들어가지 않는다")
+    void noRedisHealthIndicator() {
+        assertThat(context.containsBean("redisHealthIndicator")).isFalse();
+    }
 }
