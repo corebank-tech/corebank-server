@@ -547,8 +547,17 @@ public record ApiResponse<T>(String code, String message, T data) {
 |  | `EMAIL_CHANGE` | 이메일 변경 |
 | `CustomerStatus` | `ACTIVE` | 정상 |
 |  | `SUSPENDED` | 이용정지 (관리자 정지, 로그인 불가 `ATH0106`) |
+| `CustomerRole` | `CUSTOMER` | 고객 |
+|  | `ADMIN` | 관리자 (`/admin/auth/login` 통과 대상) |
+| `AdminPermission` | `GL_READ` | 정보계 조회 |
+|  | `GL_WRITE` | 정보계 변경 |
+|  | `CUSTOMER_READ` | 고객 조회 |
+|  | `CUSTOMER_WRITE` | 고객 변경 |
+|  | `AUDIT_READ` | 감사로그 조회 |
 
 > 폐기: `TRANSFER`, `PRODUCT_SIGN`, `LIMIT_CHANGE`, `ACC_REGISTER`, `PROFILE_CHANGE` (기존 OTP 발급 명세의 약어)
+
+> `AdminPermission`은 5종 고정입니다. 값을 늘리면 `/admin/**` 권한 매핑표(PH-49a-②)와 부여·회수 API(PH-49b)를 함께 고쳐야 합니다.
 
 ### 5-9. 알림 — P6
 
