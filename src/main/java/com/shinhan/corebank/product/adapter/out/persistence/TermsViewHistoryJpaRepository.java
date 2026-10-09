@@ -38,4 +38,10 @@ public interface TermsViewHistoryJpaRepository
         """)
     Optional<TermsView> findUsable(
             @Param("customerId") Long customerId, @Param("termsId") Long termsId, @Param("now") LocalDateTime now);
+
+    // 한 번에 다 지우면 긴 트랜잭션이 되어 열람 upsert를 오래 막으므로 나눠서 지운다.
+    @Modifying
+    @Transactional
+    @Query(value = "DELETE FROM terms_view_history WHERE expires_at < :now LIMIT :limit", nativeQuery = true)
+    int deleteExpiredBatch(@Param("now") LocalDateTime now, @Param("limit") int limit);
 }

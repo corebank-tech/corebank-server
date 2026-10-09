@@ -883,7 +883,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
-| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP`, `LEDGER_RECONCILIATION_BATCH`, `AUTH_TOKEN_CLEANUP` 4행 |
+| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP`, `LEDGER_RECONCILIATION_BATCH`, `AUTH_TOKEN_CLEANUP`, `TERMS_VIEW_HISTORY_CLEANUP` 5행 |
 | `currently_running` | `BOOLEAN` |  | X | `FALSE` | 이 배치가 지금 실행 중인지. 트리거 시작 시 `TRUE`, 종료 시(성공/실패 무관) `FALSE`로 되돌림 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각. stale(크래시로 방치됨) 판단 기준 |
 
@@ -936,7 +936,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 
 > 상품 약관 열람 이력 (#580). Redis TTL 30분 키를 옮겼다
 
-상품가입 전 약관을 열람했는지 30분 동안 인정한다. 다시 열람하면 같은 행의 `viewed_at`·`expires_at`을 덮어쓴다. 고객×약관당 1행이라 정리 배치가 없다.
+상품가입 전 약관을 열람했는지 30분 동안 인정한다. 다시 열람하면 같은 행의 `viewed_at`·`expires_at`을 덮어쓴다. 유효성은 `expires_at`으로 판정하고, `TERMS_VIEW_HISTORY_CLEANUP` 배치가 만료 행을 지운다(Redis TTL처럼 30분 지난 열람 기록을 남기지 않는다).
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
@@ -944,6 +944,12 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | `terms_id` | `BIGINT` | **PK** | X |  | 열람한 약관 |
 | `viewed_at` | `DATETIME(6)` |  | X |  | 마지막 열람 시각 |
 | `expires_at` | `DATETIME(6)` |  | X |  | 열람 인정 만료 시각 (열람 후 30분) |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| INDEX | `ix_terms_view_history_expires` | `expires_at` |
 
 ---
 

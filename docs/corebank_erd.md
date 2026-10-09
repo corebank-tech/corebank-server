@@ -356,7 +356,7 @@ erDiagram
         bigint customer_id PK "FK 없음 (#580)"
         bigint terms_id PK
         datetime viewed_at "DATETIME(6)"
-        datetime expires_at "열람 후 30분"
+        datetime expires_at "열람 후 30분. 지나면 정리 배치가 삭제"
     }
 
     %% ---------- P3 (회계 원장, PH-20) ----------
