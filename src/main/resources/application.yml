@@ -41,6 +41,7 @@ springdoc:
 app:
   # 일회성 토큰·OTP 발급 잠금·약관 열람 이력 저장소 (#580). jdbc(MySQL) | redis
   # PH-101-② 측정 A'/B' 전환과 장애 시 복귀용. 환경 변수는 APP_EPHEMERALSTORE_PROVIDER.
+  # 바꾸면 이전 저장소에 발급된 토큰(최대 30분)은 쓸 수 없어 진행 중이던 사용자는 인증을 다시 받는다.
   ephemeral-store:
     provider: jdbc
   security:

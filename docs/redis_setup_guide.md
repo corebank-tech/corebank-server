@@ -1,6 +1,6 @@
 # 🧰 Corebank Redis 로컬/배포 세팅 가이드
 
-> ⚠️ **#580 이후 기본값(`app.ephemeral-store.provider=jdbc`)에서는 Redis를 쓰지 않습니다.** 토큰·OTP 발급 잠금·약관 열람 이력은 MySQL에 저장됩니다. 이 문서는 `provider=redis`로 되돌릴 때와 PH-101-② 측정(A')에만 해당하며, 판정을 통과하면 Redis와 함께 지웁니다. `actuator/health`는 `provider=redis`일 때만 Redis 상태를 포함하므로, 기본값에서는 Redis 없이 띄워도 `UP`입니다.
+> ⚠️ **#580 이후 기본값(`app.ephemeral-store.provider=jdbc`)에서는 Redis를 쓰지 않습니다.** 토큰·OTP 발급 잠금·약관 열람 이력은 MySQL에 저장됩니다. 이 문서는 `provider=redis`로 되돌릴 때와 PH-101-② 측정(A')에만 해당하며, 판정을 통과하면 Redis와 함께 지웁니다. provider를 바꾸면 두 저장소가 토큰을 공유하지 않으므로, 전환 직전에 발급된 토큰(최대 30분)은 소비할 수 없고 진행 중이던 사용자는 인증을 다시 받아야 합니다. 설정을 되돌리는 것도 사용자 영향이 없는 복구가 아닙니다. `actuator/health`는 `provider=redis`일 때만 Redis 상태를 포함하므로, 기본값에서는 Redis 없이 띄워도 `UP`입니다.
 
 > **대상**: Corebank 프로젝트 개발 팀원 전체
 > **목적**: 약관 열람 이력(TTL 30분) 등 Redis를 사용하는 기능 개발 시 로컬 환경 셋업 방법과, EC2 배포 파이프라인에서 Redis가 어떻게 뜨는지 안내
