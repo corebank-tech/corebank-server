@@ -18,10 +18,10 @@ PH-60 minimum seed ready: customers=10000, accounts=30000, transfers=235000, led
 
 기존 `minicore` 데이터베이스와 분리된 `minicore_ph60` 데이터베이스에서 시험한다.
 
-1. 로컬 MySQL과 Redis를 실행한다.
+1. 로컬 MySQL을 실행한다. 일회성 토큰 저장소가 MySQL로 바뀌어(#580) Redis는 필요 없다.
 
 ```bash
-docker compose up -d minicore-mysql minicore-redis
+docker compose up -d minicore-mysql
 ```
 
 2. DBeaver·DataGrip 또는 MySQL 클라이언트로 로컬 MySQL에 접속해 시험용 데이터베이스를 만든다.
