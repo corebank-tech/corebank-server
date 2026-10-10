@@ -438,18 +438,19 @@ public class Phase2BulkSeedService {
 
     private void normalizeAccountRange(long accountIdStart, long accountIdEnd, Phase2BulkSeedSpec spec) {
         // 5천 계좌 범위별로 원장·이체·계좌를 함께 정규화해 장시간 트랜잭션과 전체 롤백을 피한다.
+        // 복합 PK(ledger_entry_id, occurred_at)를 모두 걸어야 파티션 하나만 찾는다. id만 걸면 파티션 19개를 매번 뒤진다(#587).
         jdbc.update(
                 """
                 UPDATE ledger_entry target
                 JOIN (
-                    SELECT ledger_entry_id, running_balance FROM (
-                        SELECT ledger_entry_id,
+                    SELECT ledger_entry_id, occurred_at, running_balance FROM (
+                        SELECT ledger_entry_id, occurred_at,
                                SUM(CASE WHEN direction='DEPOSIT' THEN amount ELSE -amount END)
                                    OVER (PARTITION BY account_id ORDER BY occurred_at, ledger_entry_id) running_balance
                         FROM ledger_entry
                         WHERE account_id BETWEEN ? AND ?
                     ) calculated
-                ) ordered ON ordered.ledger_entry_id=target.ledger_entry_id
+                ) ordered ON ordered.ledger_entry_id=target.ledger_entry_id AND ordered.occurred_at=target.occurred_at
                 SET target.balance_after=ordered.running_balance
                 WHERE target.balance_after<>ordered.running_balance
                 """,
