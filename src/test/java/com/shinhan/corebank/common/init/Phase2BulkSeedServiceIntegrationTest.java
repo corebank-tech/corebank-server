@@ -138,6 +138,10 @@ class Phase2BulkSeedServiceIntegrationTest extends IntegrationTestSupport {
                         count(
                                 "SELECT COUNT(*) FROM transfer seeded JOIN ledger_entry withdrawal ON withdrawal.transfer_id=seeded.transfer_id AND withdrawal.direction='WITHDRAWAL' WHERE seeded.transfer_id BETWEEN 60000001 AND 60000100 AND seeded.withdrawal_balance_after<>withdrawal.balance_after"))
                 .isZero();
+        assertThat(
+                        count(
+                                "SELECT COUNT(*) FROM transfer seeded LEFT JOIN account deposit ON deposit.account_id=seeded.deposit_account_id WHERE seeded.transfer_id BETWEEN 110000001 AND 110000200 AND (seeded.deposit_account_number IS NULL OR seeded.deposit_account_number<>deposit.account_number)"))
+                .isZero();
         assertThat(count("SELECT COUNT(*) FROM ledger_entry WHERE ledger_entry_id BETWEEN 110000001 AND 110000800"))
                 .isEqualTo(800);
         assertThat(count(

@@ -312,7 +312,8 @@ public class Phase2BulkSeedService {
             accountIds.add(plan.withdrawalAccountId(index));
             accountIds.add(plan.depositAccountId(index));
         }
-        Map<Long, Long> balances = lockBalances(accountIds);
+        LockedAccounts locked = lockAccounts(accountIds);
+        Map<Long, Long> balances = locked.balances();
         Set<Long> touched = new LinkedHashSet<>();
         List<TransferSeed> transfers = new ArrayList<>(size);
         Map<VoucherKey, Integer> voucherSequences = voucherSequences("TRANSFER");
@@ -335,6 +336,7 @@ public class Phase2BulkSeedService {
                     index,
                     withdrawalId,
                     depositId,
+                    locked.accountNumbers().get(depositId),
                     amount,
                     withdrawalAfter,
                     depositAfter,
@@ -374,7 +376,7 @@ public class Phase2BulkSeedService {
             accountIds.add(plan.demandAccountId(customerIndex));
             accountIds.add(plan.subscriptionAccountId(index));
         }
-        Map<Long, Long> balances = lockBalances(accountIds);
+        Map<Long, Long> balances = lockAccounts(accountIds).balances();
         Set<Long> touched = new LinkedHashSet<>();
         List<SubscriptionSeed> subscriptions = new ArrayList<>(size);
         Map<VoucherKey, Integer> voucherSequences = voucherSequences("PRODUCT_SUBSCRIPTION");
@@ -436,18 +438,19 @@ public class Phase2BulkSeedService {
 
     private void normalizeAccountRange(long accountIdStart, long accountIdEnd, Phase2BulkSeedSpec spec) {
         // 5천 계좌 범위별로 원장·이체·계좌를 함께 정규화해 장시간 트랜잭션과 전체 롤백을 피한다.
+        // 복합 PK(ledger_entry_id, occurred_at)를 모두 걸어야 파티션 하나만 찾는다. id만 걸면 파티션 19개를 매번 뒤진다(#587).
         jdbc.update(
                 """
                 UPDATE ledger_entry target
                 JOIN (
-                    SELECT ledger_entry_id, running_balance FROM (
-                        SELECT ledger_entry_id,
+                    SELECT ledger_entry_id, occurred_at, running_balance FROM (
+                        SELECT ledger_entry_id, occurred_at,
                                SUM(CASE WHEN direction='DEPOSIT' THEN amount ELSE -amount END)
                                    OVER (PARTITION BY account_id ORDER BY occurred_at, ledger_entry_id) running_balance
                         FROM ledger_entry
                         WHERE account_id BETWEEN ? AND ?
                     ) calculated
-                ) ordered ON ordered.ledger_entry_id=target.ledger_entry_id
+                ) ordered ON ordered.ledger_entry_id=target.ledger_entry_id AND ordered.occurred_at=target.occurred_at
                 SET target.balance_after=ordered.running_balance
                 WHERE target.balance_after<>ordered.running_balance
                 """,
@@ -490,7 +493,7 @@ public class Phase2BulkSeedService {
                     deposit_account_number, payee_name, amount, fee, transfer_type, channel, status,
                     source_type, source_id, execution_date, my_passbook_memo, recipient_passbook_memo,
                     withdrawal_balance_after, error_code, error_message, transferred_at, created_at, trade_date
-                ) VALUES (?, ?, ?, ?, (SELECT account_number FROM account WHERE account_id = ?),
+                ) VALUES (?, ?, ?, ?, ?,
                           'PH60B', ?, 0, 'IMMEDIATE', 'WB', 'SUCCESS', NULL, NULL, NULL,
                           'PH60B', 'PH60B', ?, NULL, NULL, ?, ?, ?)
                 """;
@@ -499,7 +502,8 @@ public class Phase2BulkSeedService {
             statement.setString(2, seed.transactionNumber());
             statement.setLong(3, seed.withdrawalAccountId());
             statement.setLong(4, seed.depositAccountId());
-            statement.setLong(5, seed.depositAccountId());
+            // 서브쿼리를 2,000행 배치에 넣으면 운영 RDS에서 문장마다 테이블 2,001개를 열어 구간이 30분대로 느려진다(#587).
+            statement.setString(5, seed.depositAccountNumber());
             statement.setLong(6, seed.amount());
             statement.setLong(7, seed.withdrawalAfter());
             setTimestamp(statement, 8, seed.occurredAt());
@@ -1020,19 +1024,23 @@ public class Phase2BulkSeedService {
         }
     }
 
-    private Map<Long, Long> lockBalances(Set<Long> accountIds) {
+    private LockedAccounts lockAccounts(Set<Long> accountIds) {
         Map<Long, Long> balances = new LinkedHashMap<>();
+        Map<Long, String> accountNumbers = new HashMap<>();
         List<Long> ordered = accountIds.stream().sorted().toList();
         for (int offset = 0; offset < ordered.size(); offset += ACCOUNT_LOCK_BATCH_SIZE) {
             List<Long> chunk = ordered.subList(offset, Math.min(offset + ACCOUNT_LOCK_BATCH_SIZE, ordered.size()));
             String placeholders = String.join(",", java.util.Collections.nCopies(chunk.size(), "?"));
             jdbc.query(
-                    "SELECT account_id, balance FROM account WHERE account_id IN (" + placeholders
+                    "SELECT account_id, balance, account_number FROM account WHERE account_id IN (" + placeholders
                             + ") ORDER BY account_id FOR UPDATE",
-                    (RowCallbackHandler) result -> balances.put(result.getLong(1), result.getLong(2)),
+                    (RowCallbackHandler) result -> {
+                        balances.put(result.getLong(1), result.getLong(2));
+                        accountNumbers.put(result.getLong(1), result.getString(3));
+                    },
                     chunk.toArray());
         }
-        return balances;
+        return new LockedAccounts(balances, accountNumbers);
     }
 
     private void updateBalances(Map<Long, Long> balances, Set<Long> touched, int batchSize) {
@@ -1347,10 +1355,13 @@ public class Phase2BulkSeedService {
     private record VoucherSeed(
             String number, LocalDate tradeDate, String type, String description, LocalDateTime createdAt) {}
 
+    private record LockedAccounts(Map<Long, Long> balances, Map<Long, String> accountNumbers) {}
+
     private record TransferSeed(
             int index,
             long withdrawalAccountId,
             long depositAccountId,
+            String depositAccountNumber,
             long amount,
             long withdrawalAfter,
             long depositAfter,
