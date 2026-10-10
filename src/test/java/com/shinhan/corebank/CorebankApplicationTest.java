@@ -1,6 +1,7 @@
 package com.shinhan.corebank;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mockStatic;
 
 import java.util.Map;
@@ -18,7 +19,7 @@ class CorebankApplicationTest {
     @Test
     @DisplayName("일회성 최소 시드 기동이 완료되면 main이 애플리케이션 컨텍스트를 닫는다")
     void mainClosesCompletedSeedContext() {
-        String[] args = {"--spring.profiles.active=phase2-seed", "--app.phase2-seed.execute=true"};
+        String[] args = {"--spring.profiles.active=phase2-seed", "--app.phase2-seed.minimum.execute=true"};
         GenericApplicationContext context = contextWithSeedExecution(true, true);
 
         try (MockedStatic<SpringApplication> springApplication = mockStatic(SpringApplication.class)) {
@@ -100,7 +101,8 @@ class CorebankApplicationTest {
             System.clearProperty(DEVTOOLS_RESTART_PROPERTY);
 
             boolean disabled = Phase2SeedProcessRunner.disableDevToolsRestartForSeed(
-                    new String[] {"--spring.profiles.active=local,phase2-seed", "--app.phase2-seed.execute=true"});
+                    new String[] {"--spring.profiles.active=local,phase2-seed", "--app.phase2-seed.minimum.execute=true"
+                    });
 
             assertThat(disabled).isTrue();
             assertThat(System.getProperty(DEVTOOLS_RESTART_PROPERTY)).isEqualTo("false");
@@ -123,7 +125,7 @@ class CorebankApplicationTest {
                             new String[] {"--spring.profiles.active=local,phase2-seed"}))
                     .isFalse();
             assertThat(Phase2SeedProcessRunner.disableDevToolsRestartForSeed(
-                            new String[] {"--app.phase2-seed.execute=true"}))
+                            new String[] {"--app.phase2-seed.minimum.execute=true"}))
                     .isFalse();
             assertThat(System.getProperty(DEVTOOLS_RESTART_PROPERTY)).isNull();
         } finally {
@@ -173,6 +175,34 @@ class CorebankApplicationTest {
         }
     }
 
+    @Test
+    @DisplayName("최소 시드와 대량 시드 플래그를 동시에 켜면 기동을 거부한다")
+    void rejectsBothSeedExecutionFlags() {
+        String[] args = {
+            "--spring.profiles.active=phase2-seed",
+            "--app.phase2-seed.minimum.execute=true",
+            "--app.phase2-seed.bulk.execute=true"
+        };
+
+        assertThatThrownBy(() -> Phase2SeedProcessRunner.validateExecutionFlags(args))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("동시에 실행");
+    }
+
+    @Test
+    @DisplayName("대량 시드 실행 플래그도 DevTools 재시작을 끈다")
+    void disablesDevToolsForBulkSeed() {
+        String previous = System.getProperty(DEVTOOLS_RESTART_PROPERTY);
+        try {
+            System.clearProperty(DEVTOOLS_RESTART_PROPERTY);
+            boolean disabled = Phase2SeedProcessRunner.disableDevToolsRestartForSeed(
+                    new String[] {"--spring.profiles.active=phase2-seed", "--app.phase2-seed.bulk.execute=true"});
+            assertThat(disabled).isTrue();
+        } finally {
+            restoreSystemProperty(previous);
+        }
+    }
+
     private void restoreSystemProperty(String previous) {
         if (previous == null) {
             System.clearProperty(DEVTOOLS_RESTART_PROPERTY);
@@ -189,7 +219,7 @@ class CorebankApplicationTest {
         context.getEnvironment()
                 .getPropertySources()
                 .addFirst(new MapPropertySource(
-                        "phase2SeedTest", Map.of("app.phase2-seed.execute", Boolean.toString(enabled))));
+                        "phase2SeedTest", Map.of("app.phase2-seed.minimum.execute", Boolean.toString(enabled))));
         context.refresh();
         return context;
     }
