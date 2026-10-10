@@ -502,9 +502,9 @@ ON DUPLICATE KEY UPDATE
     balance = IF(
         customer_id = VALUES(customer_id)
             AND NOT EXISTS (
+                -- 계좌번호로 계좌를 다시 찾으면 원장 전체를 훑는다(#588). 갱신 중인 행의 account_id로 바로 찾는다.
                 SELECT 1 FROM ledger_entry le
-                JOIN account a ON a.account_id = le.account_id
-                WHERE a.account_number = VALUES(account_number)
+                WHERE le.account_id = account.account_id
                   AND le.transaction_type <> 'QA_SEED_INITIAL'
             ),
         VALUES(balance),
