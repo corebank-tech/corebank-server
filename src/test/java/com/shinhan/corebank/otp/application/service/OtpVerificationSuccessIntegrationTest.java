@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.otp.adapter.out.redis.OtpAuthTokenRedisAdapter;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerification;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.otp.api.OtpTransactionType;
@@ -16,20 +15,17 @@ import com.shinhan.corebank.otp.application.port.in.IssueOtpUseCase;
 import com.shinhan.corebank.otp.application.port.in.VerifyOtpCommand;
 import com.shinhan.corebank.otp.application.port.in.VerifyOtpResult;
 import com.shinhan.corebank.otp.application.port.in.VerifyOtpUseCase;
+import com.shinhan.corebank.otp.application.port.out.OtpAuthTokenStorePort;
 import com.shinhan.corebank.otp.domain.model.OtpAuthTokenPayload;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-// OTP 성공 시 DB 완료 상태와 Redis 300초 토큰 및 최종 거래 일회성을 함께 검증한다.
+// OTP 성공 시 DB 완료 상태와 300초 인증 토큰 및 최종 거래 일회성을 함께 검증한다.
 class OtpVerificationSuccessIntegrationTest extends IntegrationTestSupport {
-
-    private static final String REDIS_PREFIX = "otp:auth:";
 
     @Autowired
     CustomerTestFixture customerFixture;
@@ -44,10 +40,7 @@ class OtpVerificationSuccessIntegrationTest extends IntegrationTestSupport {
     OtpAuthTokenVerifier otpAuthTokenVerifier;
 
     @Autowired
-    OtpAuthTokenRedisAdapter otpAuthTokenRedisAdapter;
-
-    @Autowired
-    StringRedisTemplate redisTemplate;
+    OtpAuthTokenStorePort otpAuthTokenStorePort;
 
     @Autowired
     JdbcTemplate jdbcTemplate;
@@ -58,8 +51,8 @@ class OtpVerificationSuccessIntegrationTest extends IntegrationTestSupport {
 
     @AfterEach
     void cleanUp() {
-        if (otpAuthToken != null) {
-            redisTemplate.delete(REDIS_PREFIX + otpAuthToken);
+        if (customerId != null) {
+            jdbcTemplate.update("DELETE FROM auth_token WHERE customer_id = ?", customerId);
         }
         if (otpRequestId != null) {
             jdbcTemplate.update("DELETE FROM verification_request WHERE verification_request_id = ?", otpRequestId);
@@ -92,13 +85,16 @@ class OtpVerificationSuccessIntegrationTest extends IntegrationTestSupport {
                 WHERE verification_request_id = ?
                 """,
                 otpRequestId);
-        Long ttlSeconds = redisTemplate.getExpire(REDIS_PREFIX + otpAuthToken, TimeUnit.SECONDS);
+        Long ttlSeconds = jdbcTemplate.queryForObject(
+                "SELECT TIMESTAMPDIFF(SECOND, created_at, expires_at) FROM auth_token WHERE purpose = 'OTP_AUTH' AND customer_id = ?",
+                Long.class,
+                customerId);
 
         assertThat(state.get("used")).isEqualTo(true);
         assertThat(state.get("verified_at")).isNotNull();
-        assertThat(otpAuthTokenRedisAdapter.find(otpAuthToken))
+        assertThat(otpAuthTokenStorePort.find(otpAuthToken))
                 .contains(new OtpAuthTokenPayload(otpRequestId, customerId));
-        assertThat(ttlSeconds).isBetween(295L, 300L);
+        assertThat(ttlSeconds).isEqualTo(300L);
 
         OtpAuthTokenVerification verification = new OtpAuthTokenVerification(
                 otpAuthToken, customerId, OtpTransactionType.IMMEDIATE_TRANSFER, transactionData);

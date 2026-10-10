@@ -1,4 +1,4 @@
-package com.shinhan.corebank.signup.adapter.out.redis;
+package com.shinhan.corebank.signup.adapter.out.token;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

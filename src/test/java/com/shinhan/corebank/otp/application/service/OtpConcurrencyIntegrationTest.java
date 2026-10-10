@@ -17,7 +17,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -27,13 +26,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 // 동시 OTP 발급·성공 검증·오답 검증에서 활성 요청과 횟수의 원자성을 검증한다.
 class OtpConcurrencyIntegrationTest extends IntegrationTestSupport {
-
-    private static final String REDIS_PREFIX = "otp:auth:";
 
     @Autowired
     CustomerTestFixture customerFixture;
@@ -47,16 +43,12 @@ class OtpConcurrencyIntegrationTest extends IntegrationTestSupport {
     @Autowired
     JdbcTemplate jdbcTemplate;
 
-    @Autowired
-    StringRedisTemplate redisTemplate;
-
     private Long customerId;
-    private final List<String> authTokens = new CopyOnWriteArrayList<>();
 
     @AfterEach
     void cleanUp() {
-        authTokens.forEach(token -> redisTemplate.delete(REDIS_PREFIX + token));
         if (customerId != null) {
+            jdbcTemplate.update("DELETE FROM auth_token WHERE customer_id = ?", customerId);
             jdbcTemplate.update("DELETE FROM verification_request WHERE customer_id = ?", customerId);
             customerFixture.deleteCustomer(customerId);
         }
@@ -82,11 +74,6 @@ class OtpConcurrencyIntegrationTest extends IntegrationTestSupport {
         VerifyOtpCommand command = new VerifyOtpCommand(customerId, issued.otpRequestId(), issued.otpCode());
 
         List<Invocation<VerifyOtpResult>> invocations = invokeConcurrently(2, () -> verifyOtpUseCase.verify(command));
-        invocations.stream()
-                .filter(Invocation::succeeded)
-                .map(Invocation::value)
-                .map(VerifyOtpResult::otpAuthToken)
-                .forEach(authTokens::add);
 
         assertThat(invocations.stream().filter(Invocation::succeeded).count()).isOne();
         assertThat(invocations.stream()

@@ -2,7 +2,7 @@ package com.shinhan.corebank.signup.adapter.out.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.RedisEphemeralStoreTestSupport;
 import com.shinhan.corebank.signup.domain.model.AgreedTerm;
 import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
 import java.time.Duration;
@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 // tempSignupToken의 Redis 선점·완료·실패 복구와 일회성을 검증한다.
-class TempSignupTokenClaimRedisAdapterTest extends IntegrationTestSupport {
+class TempSignupTokenClaimRedisAdapterTest extends RedisEphemeralStoreTestSupport {
 
     @Autowired
     TempSignupTokenRedisAdapter tempTokenAdapter;

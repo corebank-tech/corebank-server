@@ -2,7 +2,7 @@ package com.shinhan.corebank.signup.adapter.out.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.RedisEphemeralStoreTestSupport;
 import com.shinhan.corebank.signup.domain.model.AgreedTerm;
 import com.shinhan.corebank.signup.domain.model.TermsAuthTokenPayload;
 import java.time.Duration;
@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
-class TermsAuthTokenRedisAdapterTest extends IntegrationTestSupport {
+class TermsAuthTokenRedisAdapterTest extends RedisEphemeralStoreTestSupport {
 
     private static final Duration TERMS_AUTH_TTL = Duration.ofMinutes(30);
     private static final String KEY_PREFIX = "signup:terms-auth:";

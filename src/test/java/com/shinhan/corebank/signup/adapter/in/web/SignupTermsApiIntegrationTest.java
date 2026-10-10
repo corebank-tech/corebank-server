@@ -8,27 +8,26 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.common.authtoken.AuthTokenTestRows;
 import com.shinhan.corebank.signup.application.port.out.SignupTermsQueryPort;
+import com.shinhan.corebank.signup.application.port.out.TermsAuthTokenPort;
 import com.shinhan.corebank.signup.domain.model.SignupTerm;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 @AutoConfigureMockMvc
 class SignupTermsApiIntegrationTest extends IntegrationTestSupport {
-
-    private static final String REDIS_KEY_PREFIX = "signup:terms-auth:";
 
     @Autowired
     MockMvc mockMvc;
@@ -37,7 +36,10 @@ class SignupTermsApiIntegrationTest extends IntegrationTestSupport {
     SignupTermsQueryPort signupTermsQueryPort;
 
     @Autowired
-    StringRedisTemplate redisTemplate;
+    TermsAuthTokenPort termsAuthTokenPort;
+
+    @Autowired
+    JdbcTemplate jdbcTemplate;
 
     @Autowired
     ObjectMapper objectMapper;
@@ -46,7 +48,8 @@ class SignupTermsApiIntegrationTest extends IntegrationTestSupport {
 
     @AfterEach
     void deleteGeneratedTokens() {
-        generatedTokens.forEach(token -> redisTemplate.delete(REDIS_KEY_PREFIX + token));
+        generatedTokens.forEach(token ->
+                jdbcTemplate.update("DELETE FROM auth_token WHERE token_hash = ?", AuthTokenTestRows.hashOf(token)));
     }
 
     @Test
@@ -62,7 +65,7 @@ class SignupTermsApiIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("약관 동의 검증 API는 CSRF 없이 토큰을 발급하고 Redis에 30분간 저장한다")
+    @DisplayName("약관 동의 검증 API는 CSRF 없이 토큰을 발급하고 30분간 저장한다")
     void checkTermsIssuesAndStoresTermsAuthToken() throws Exception {
         List<Map<String, Object>> agreements = signupTermsQueryPort.findLatestSignupTerms().stream()
                 .map(this::agreement)
@@ -85,12 +88,14 @@ class SignupTermsApiIntegrationTest extends IntegrationTestSupport {
         String token = response.get("data").get("termsAuthToken").asText();
         generatedTokens.add(token);
 
-        String redisKey = REDIS_KEY_PREFIX + token;
-        Long ttl = redisTemplate.getExpire(redisKey, TimeUnit.SECONDS);
+        Long ttl = jdbcTemplate.queryForObject(
+                "SELECT TIMESTAMPDIFF(SECOND, created_at, expires_at) FROM auth_token WHERE token_hash = ?",
+                Long.class,
+                AuthTokenTestRows.hashOf(token));
 
         assertThat(token).startsWith("TERMS_AUTH_");
-        assertThat(redisTemplate.hasKey(redisKey)).isTrue();
-        assertThat(ttl).isBetween(1_795L, 1_800L);
+        assertThat(termsAuthTokenPort.find(token)).isPresent();
+        assertThat(ttl).isEqualTo(1_800L);
     }
 
     private Map<String, Object> agreement(SignupTerm term) {

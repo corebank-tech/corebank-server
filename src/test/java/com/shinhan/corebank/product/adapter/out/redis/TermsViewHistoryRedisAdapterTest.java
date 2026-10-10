@@ -2,7 +2,7 @@ package com.shinhan.corebank.product.adapter.out.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.RedisEphemeralStoreTestSupport;
 import com.shinhan.corebank.product.application.port.out.TermsView;
 import java.time.Duration;
 import java.util.Optional;
@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
-class TermsViewHistoryRedisAdapterTest extends IntegrationTestSupport {
+class TermsViewHistoryRedisAdapterTest extends RedisEphemeralStoreTestSupport {
 
     @Autowired
     TermsViewHistoryRedisAdapter adapter;
