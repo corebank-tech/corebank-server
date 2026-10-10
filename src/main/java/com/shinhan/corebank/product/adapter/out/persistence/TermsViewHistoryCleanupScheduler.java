@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-// 만료 약관 열람 이력을 지운다. Redis TTL처럼 30분 지난 고객 열람 기록을 남기지 않는다. 유효성은 expires_at 조건이 판정한다.
+// 만료 약관 열람 이력을 지운다. 유효성은 expires_at 조건이 판정하고, 이 배치는 만료 행을 최대 1시간 안에 회수한다.
 @Component
 @RequiredArgsConstructor
 public class TermsViewHistoryCleanupScheduler {
