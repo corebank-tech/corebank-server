@@ -11,7 +11,7 @@
 
 | 용도 | 어댑터 | 도메인 |
 |---|---|---|
-| 인증 토큰 8종 — OTP 거래 인증 · 계좌비밀번호 인증 · 회원가입 단계 5종(약관 · 아이디 확인 · 이메일 · 계좌 인증 · 임시가입) | `*TokenRedisAdapter` | otp · account · signup |
+| 인증 토큰 7종 — OTP 거래 인증 · 계좌비밀번호 인증 · 회원가입 단계 5종(약관 · 아이디 확인 · 이메일 · 계좌 인증 · 임시가입) | `*TokenRedisAdapter` | otp · account · signup |
 | 회원가입 토큰 다중 소비 · 선점 (Lua 스크립트) | `SignupTokenTransitionRedisAdapter` · `TempSignupTokenClaimRedisAdapter` | signup |
 | OTP 발급 잠금 (`SET NX` + TTL) | `OtpIssueLockRedisAdapter` | otp |
 | 약관 열람 이력 (TTL 30분) | `TermsViewHistoryRedisAdapter` | product |
@@ -90,6 +90,9 @@ TTL과 원자적 소비에 잘 맞는 도구인 건 맞다. 하지만 위 맥락
 PH-30은 "얼마나 빨라졌나", 이 측정은 "빼도 손해가 없나"다.
 
 - **시점:** 10/16 릴리스 1(Redis → MySQL 전환 · JDBC 세션 · GL 훅)과 PH-60b 적재가 끝난 뒤, LOCK-TUNE 전. 같은 날 회차마다 번갈아(A' → B' → A' → B' …) 잰다.
+- **기한:** 10/22(10/23 릴리스 2 전). 그때까지 못 재면 측정을 포기하고 릴리스 2를 내보낸다. 판정은 같은 이미지에서 스위치만
+  바꾸면 되므로 릴리스 2 뒤에 따로 재고, 그동안 `provider=jdbc`를 유지하며 Redis 최종 제거를 보류한다. PH-30 개선 전 기준선은
+  기존 case1(PR #530 · #567)로 되돌린다.
 - **A'** = 릴리스 1 운영 이미지 + `provider=redis`(Redis 있음) / **B'** = 같은 이미지 + `provider=jdbc`(운영 그대로).
   같은 이미지에서 저장소만 다르다. harness는 PH-30 `perf/k6/load.js`다.
 - **B' 수치는 PH-30의 새 "개선 전" 기준선을 겸한다.** 기존 case1(PR #530 · #567)은 병목 진단 · 정합성 기록으로 남긴다.
@@ -127,7 +130,7 @@ PH-30은 "얼마나 빨라졌나", 이 측정은 "빼도 손해가 없나"다.
 | 토큰 · 잠금 · 이력 MySQL 이전 · 저장소 스위치, #498 해결 | P4 · #580 1단계 (PH-101-①) | 진행 — 10/16 릴리스 1 목표 |
 | Redis 최종 제거 (어댑터 · 의존 · 운영 컨테이너) | P4 · #580 2단계 (PH-101-①) | 예정 — PH-101-② 판정 통과 뒤 |
 | 계획 문서 반영 | P4 · #581 | 진행 |
-| 판정 측정 · PH-30 기준선 | P1 · P4 (P2 RDS 지표) · PH-101-② | 예정 — 10/16 릴리스 + 60b 적재 뒤 |
+| 판정 측정 · PH-30 기준선 | P1 · P4 (P2 RDS 지표) · PH-101-② | 예정 — 10/16 릴리스 + 60b 적재 뒤, 10/22까지 |
 | Spring Session JDBC | P6 · PH-49c | 예정 — 10/16 |
 | 세션 외부화 비용 단독 측정 | 미정 | PH-49c 담당과 합의 후 |
 | MySQL 레이트리밋 | P1 · PH-08 (S3) · P6 · #465 | 예정 |
