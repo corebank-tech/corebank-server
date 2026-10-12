@@ -32,7 +32,7 @@ terraform/
     modules/
       network/       VPC·서브넷·NAT·라우팅·SG (P5, plan 완료)
       compute/        자리만 (ALB·ASG, PH-51)
-      data/           자리만 (RDS·ElastiCache, P2 담당)
+      data/           자리만 (RDS, P2 담당)
 ```
 
 ## 지금 상태
@@ -50,9 +50,8 @@ terraform/
 | `module.network.vpc_id` | VPC 참조 |
 | `module.network.data_subnet_ids` | RDS 서브넷 그룹 |
 | `module.network.rds_sg_id` | RDS에 붙일 보안그룹 |
-| `module.network.cache_sg_id` | ElastiCache에 붙일 보안그룹 |
 
-**주의**: `alb`·`was`·`rds`·`cache` 네 보안그룹의 인바운드·아웃바운드 규칙은 모두 `modules/network/security_groups.tf`에서만 관리한다. 다른 모듈(`modules/data` 등)에서 `aws_security_group_rule`로 같은 보안그룹에 규칙을 추가하면 이 파일의 인라인 규칙과 충돌해 apply가 깨진다. RDS·ElastiCache에 추가 포트가 필요하면 이 파일을 고쳐달라고 요청한다.
+**주의**: `alb`·`was`·`rds` 세 보안그룹의 인바운드·아웃바운드 규칙은 모두 `modules/network/security_groups.tf`에서만 관리한다. 다른 모듈(`modules/data` 등)에서 `aws_security_group_rule`로 같은 보안그룹에 규칙을 추가하면 이 파일의 인라인 규칙과 충돌해 apply가 깨진다. RDS에 추가 포트가 필요하면 이 파일을 고쳐달라고 요청한다.
 
 ## bootstrap 상태 파일 보관
 
