@@ -397,9 +397,9 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 
 1차 잔여 작업으로, 계좌비밀번호 인증이 필요한 화면의 하드코딩된 `accountPasswordAuthToken`을 실제 서버 발급 토큰으로 교체했다.
 
-- C-05 상품가입 인증은 [FE PR 116](https://github.com/corebank-tech/corebank-fe/pull/116)에서 반영했다.
-- E-01~E-03 예약이체 등록, E-04 예약이체 취소, G-01~G-03 자동이체 등록, G-04 자동이체 변경·해지는 [FE PR 155](https://github.com/corebank-tech/corebank-fe/pull/155)에서 반영했다.
-- [FE 이슈 101](https://github.com/corebank-tech/corebank-fe/issues/101)은 완료 상태다.
+- C-05 상품가입 인증은 FE PR #116에서 반영했다.
+- E-01~E-03 예약이체 등록, E-04 예약이체 취소, G-01~G-03 자동이체 등록, G-04 자동이체 변경·해지는 FE PR #155에서 반영했다.
+- FE #101은 완료 상태다.
 
 **완료 기준:** FE 코드에 하드코딩된 계좌비밀번호 토큰 값이 0건이다.
 
