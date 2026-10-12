@@ -6,7 +6,7 @@ import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-// COB 체인의 대사 스텝(PH-38, #604). 영업일 전환은 러너가 스텝 루프 전에 하므로 이 스텝이 체인의 첫 스텝이다(ADR-0004).
+// COB 체인 표 2번 대사 스텝(PH-38, #604). 1번 영업일 전환은 러너가 스텝 루프 전에 직접 한다(ADR-0004).
 @Component
 @RequiredArgsConstructor
 public class LedgerReconciliationCobStep implements CobStep {
