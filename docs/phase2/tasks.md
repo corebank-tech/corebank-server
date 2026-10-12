@@ -139,7 +139,7 @@
 | [PH-40](#ph-40-영업일-도입--ph-41-거래일-컬럼) | 영업일 provider · 공휴일 시드 · 거래일 컬럼 · ArchUnit | S1 | 3 | — | **10/2** | #471 #472 #473 | 예정 |
 | [PH-50](#ph-50-네트워크-terraform) | 네트워크 Terraform · 원격 상태 · 출력값 | S1 | 3.5 | — | **10/2** plan · 출력값 → P2 | #474 | 예정 |
 | [PH-85](#ph-85-adr--미도입-결정) | ADR — Spring Batch·MQ·API GW 미도입 | S1 | 0.5 | — | — | — | 예정 |
-| [PH-94](#ph-94-expand-contract-규약) | Expand-Contract 규약 1절 | S1 | 0.5 | — | — | — | 예정 |
+| [PH-94](#ph-94-expand-contract-규약) | Expand-Contract 규약 1절 | S1 | 0.5 | — | — | #542 | 완료 |
 | [PH-43](#ph-43-cob-파이프라인) | COB 러너 · `CobStep` · 실행 기록 · 대사 정책 · 베이스라인 | S2 | 4.5 | PH-40 (베이스라인: PH-60b) | 인터페이스 **10/6** · 베이스라인: 60b 적재 뒤 | #371 | 예정 |
 | [PH-42](#ph-42-correlation-id--로그-마스킹--json-로깅) | correlation id · 로그 마스킹 · JSON 로깅 | S2 | 2.5 | — | **10/8** | — | 예정 |
 | [PH-57](#ph-57-용량-산정) | 용량 산정 표 | S2 | 0.5 | PH-60b | 60b 베이스라인 결과를 받은 뒤 | — | 예정 |
