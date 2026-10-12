@@ -25,7 +25,3 @@ output "was_sg_id" {
 output "rds_sg_id" {
   value = module.network.rds_sg_id
 }
-
-output "cache_sg_id" {
-  value = module.network.cache_sg_id
-}
