@@ -118,7 +118,7 @@
 - 현행 : 단일 EC2(t3.small)에 애플리케이션과 Redis를 Docker로 구동하고 RDS MySQL에 연결한다. Redis는 2차에서 제거하고 인증 토큰·세션을 MySQL로 옮긴다.
 - 2차 : AWS와 온프레미스(신한DS 자체 서버)의 하이브리드다.
   - AWS : 2AZ VPC, 서브넷 6개(public·app·data × 2), AZ별 NAT. ALB – WAS ASG(min 2, AZ별 1대) – RDS MySQL Multi-AZ로 구성하고, 내비게이션 API는 각 WAS에 함께 띄운다. 앞단에 WAF를 두고, 서버 접근은 SSH 없이 SSM Session Manager로만 한다.
-  - 온프레미스 : VM 2대(정보계 / 대외기관·모니터링)를 Site-to-Site VPN으로 연결한다. RDS를 온프레미스 MySQL로 binlog 복제해 정보계 원본으로 쓰고, AWS를 쓸 수 없을 때는 이 레플리카를 계정계 DB로 승격한다.
+  - 온프레미스 : 부트캠프 VM 1대를 AWS와 Site-to-Site VPN으로 연결하고, VM 내부를 정보계·DR 영역과 대외기관·모니터링 영역으로 논리적으로 구분한다. RDS를 온프레미스 MySQL로 binlog 복제해 정보계 원본으로 쓰고, AWS를 쓸 수 없을 때는 이 레플리카를 계정계 DB로 승격한다.
 - 10/19~23 리허설, 10/26 구축, 10/27 전환(컷오버). 컷오버 실패 시 기존 EC2로 운영을 유지한다.
 
 ### 4. 주요 기능 (1차 세부 요구사항은 요구사항 정의서 v1.7, 2차 태스크와 규약은 레포 docs 참조)
