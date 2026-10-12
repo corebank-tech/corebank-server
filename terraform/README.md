@@ -37,7 +37,7 @@ terraform/
 
 ## 지금 상태
 
-- `network` 모듈: plan 통과(29개 리소스), **apply는 아직 안 함**
+- `network` 모듈: plan 통과(28개 리소스), **apply는 아직 안 함**
 - 실제 apply는 S3 스프린트(10/19~23 리허설 → 10/26 본 apply)에 진행
 - 지금은 코드만 보고 `modules/data`를 짜면 됨 — 실제 ID 값은 apply 후에 채워짐
 
