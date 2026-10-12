@@ -49,7 +49,7 @@ spring.flyway.clean-disabled: true
 
 ---
 
-## 3. 규칙 5가지
+## 3. 규칙 6가지
 
 **① 적용된 `V` 파일은 절대 수정하지 않습니다.**
 변경은 새 파일에 `ALTER`로 씁니다.
@@ -85,6 +85,12 @@ ALTER TABLE transfer_limit_daily_usage ADD COLUMN created_at DATETIME(6) NULL;  
 한 파일 안의 여러 문장(`ALTER` → `UPDATE` → `ALTER`)도 같은 이유로 부분 적용될 수 있습니다. 파일 분리는 이를 **한 테이블 범위로 좁히는 완화책**이며 부분 적용 자체를 막지는 못하므로, 문장 수는 최소로 유지합니다.
 
 > 이 규칙 이전에 작성된 파일은 **①(체크섬 불변)이 우선**하므로 그대로 둡니다. 소급 분리하지 마십시오.
+
+**⑥ 2차 기간 중 `DROP`·`RENAME` 금지.**
+컬럼 삭제(`DROP COLUMN`)나 이름 변경(`RENAME COLUMN`/`CHANGE COLUMN`)은 이미 적용된
+마이그레이션을 쓰는 FE·다른 도메인 코드를 깨뜨립니다. 필드를 없애려면
+`api_conventions.md` §9 Expand-Contract 절차(Expand → FE 전환 확인 → Contract)를 먼저
+따르고, Contract 단계 전에는 마이그레이션에서도 `DROP`/`RENAME`을 쓰지 않습니다.
 
 ---
 
