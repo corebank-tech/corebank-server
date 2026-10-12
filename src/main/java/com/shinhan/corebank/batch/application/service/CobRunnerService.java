@@ -2,6 +2,7 @@ package com.shinhan.corebank.batch.application.service;
 
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import com.shinhan.corebank.batch.api.CobStep;
+import com.shinhan.corebank.batch.api.CobStepHaltException;
 import com.shinhan.corebank.batch.application.port.in.CobRunnerUseCase;
 import com.shinhan.corebank.business.api.BusinessDateAdvancer;
 import com.shinhan.corebank.business.api.BusinessDateProvider;
@@ -65,6 +66,9 @@ public class CobRunnerService implements CobRunnerUseCase {
                 log.info("COB 스텝 시작 - name={}, order={}", step.name(), step.order());
                 step.run(cobDate);
                 log.info("COB 스텝 종료 - name={}", step.name());
+            } catch (CobStepHaltException e) {
+                log.error("COB 스텝이 마감 중단을 요청함 - name={}, cobDate={}, 이후 스텝 생략", step.name(), cobDate, e);
+                break;
             } catch (Exception e) {
                 log.error("COB 스텝 실패 - name={}, cobDate={}", step.name(), cobDate, e);
             }

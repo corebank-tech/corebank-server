@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import com.shinhan.corebank.batch.api.CobStep;
+import com.shinhan.corebank.batch.api.CobStepHaltException;
 import com.shinhan.corebank.business.api.BusinessDateAdvancer;
 import com.shinhan.corebank.business.api.BusinessDateProvider;
 import java.time.LocalDate;
@@ -133,6 +134,29 @@ class CobRunnerServiceTest {
 
         verify(first).run(COB_DATE);
         verify(second).run(COB_DATE);
+        verify(batchExecutionLockPort).release(JOB_NAME);
+    }
+
+    @Test
+    @DisplayName("스텝이 CobStepHaltException을 던지면 이후 스텝은 실행하지 않고 즉시 멈추지만, 락은 반납된다")
+    void run_stepThrowsHaltException_skipsRemainingSteps_butLockReleased() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+
+        CobStep first = stepOf("first", 1);
+        CobStep second = stepOf("second", 2);
+        org.mockito.Mockito.doThrow(new CobStepHaltException("불일치 임계 초과"))
+                .when(first)
+                .run(COB_DATE);
+
+        CobRunnerService service = new CobRunnerService(
+                batchExecutionLockPort, businessDateProvider, businessDateAdvancer, List.of(first, second));
+
+        service.run(COB_DATE.plusDays(10));
+
+        verify(first).run(COB_DATE);
+        verify(second, never()).run(any());
         verify(batchExecutionLockPort).release(JOB_NAME);
     }
 }
