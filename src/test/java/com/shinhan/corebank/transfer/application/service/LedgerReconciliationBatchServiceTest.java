@@ -1,6 +1,8 @@
 package com.shinhan.corebank.transfer.application.service;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -10,9 +12,12 @@ import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import com.shinhan.corebank.transfer.application.port.in.LedgerFullReconciliationUseCase;
+import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationMismatch;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationUseCase;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.stream.LongStream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +31,7 @@ class LedgerReconciliationBatchServiceTest {
     private static final String JOB_NAME = "LEDGER_RECONCILIATION_BATCH";
     private static final String DAILY_BATCH_JOB_NAME = "DAILY_TRANSFER_BATCH";
     private static final LocalDate DATE = LocalDate.of(2026, 8, 9);
+    private static final int COB_HARD_THRESHOLD = 10;
 
     @Mock
     LedgerReconciliationUseCase ledgerReconciliationUseCase;
@@ -43,7 +49,41 @@ class LedgerReconciliationBatchServiceTest {
                 ledgerFullReconciliationUseCase,
                 batchExecutionLockPort,
                 Duration.ofMillis(1),
-                Duration.ofMillis(5));
+                Duration.ofMillis(5),
+                COB_HARD_THRESHOLD);
+    }
+
+    private static List<LedgerReconciliationMismatch> mismatches(int count) {
+        return LongStream.rangeClosed(1, count)
+                .mapToObj(accountId -> new LedgerReconciliationMismatch(accountId, 1_000L, 900L))
+                .toList();
+    }
+
+    @Test
+    @DisplayName("COB 대사는 전수 대사를 실행하고, 단일 실행은 COB 락이 보장하므로 대사 락을 잡지 않는다")
+    void runInCob_reconcilesAll_withoutReconciliationLock() {
+        when(ledgerFullReconciliationUseCase.reconcileAll()).thenReturn(List.of());
+
+        service().runInCob(DATE);
+
+        verify(ledgerFullReconciliationUseCase).reconcileAll();
+        verify(batchExecutionLockPort, never()).tryAcquire(anyString());
+    }
+
+    @Test
+    @DisplayName("COB 대사 불일치가 임계 이하(soft)면 예외 없이 끝난다")
+    void runInCob_mismatchesAtThreshold_soft_completesNormally() {
+        when(ledgerFullReconciliationUseCase.reconcileAll()).thenReturn(mismatches(COB_HARD_THRESHOLD));
+
+        assertThatCode(() -> service().runInCob(DATE)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("COB 대사 불일치가 임계를 넘어도(hard) #556 전까지는 마감 중단 예외를 던지지 않는다(#600)")
+    void runInCob_mismatchesOverThreshold_hard_doesNotHaltYet() {
+        when(ledgerFullReconciliationUseCase.reconcileAll()).thenReturn(mismatches(COB_HARD_THRESHOLD + 1));
+
+        assertThatCode(() -> service().runInCob(DATE)).doesNotThrowAnyException();
     }
 
     @Test
