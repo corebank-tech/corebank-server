@@ -649,7 +649,7 @@ AI로 불일치 목록을 뽑고 고친다. **C-1보다 먼저 한다.**
 
 ### FE B-8. 타행이체 입력·결과
 
-은행 선택 · 미결제 상태 · TIMEOUT 안내. 은행 목록·미결제 스키마는 PH-33에서 10/16까지 받는다. 편집권도 넘겨받았고 PR·머지는 P3가 한다.
+은행 선택 · 미결제 상태 · TIMEOUT 안내. 은행 목록·요청·응답 스키마는 [interbank_transfer_fe_handoff.md](interbank_transfer_fe_handoff.md)다(PH-33, #609). 편집권도 넘겨받았고 PR·머지는 P3가 한다.
 **완료 기준:** 모의 대외계 정상 응답이면 완료 화면, 무응답이면 TIMEOUT 안내(재시도 버튼 없음)가 뜬다. 은행 목록은 서버 응답에서 온다.
 
 ### FE 조회 사유 입력
@@ -785,6 +785,7 @@ PH-90 PreCheck → PH-24 훅 B → PH-41 tradeDate 대입 순서로 머지한다
 - **미결제타점권 기표 2패턴**: 요청 시 예수금 → 미결제타점권(`10200`), 확정 시 해소. 훅 B에서 `gl.api`를 부른다. 차대 방향은 P4가 정해 [gl_journal_patterns.md](gl_journal_patterns.md)에 적는다. **`gl_voucher.tx_type` CHECK에 타행 유형이 없으므로 새 V 파일로 CHECK를 넓힌다**(기존 마이그레이션 수정 금지).
 - Resilience4j 타임아웃·서킷브레이커 — 타행만 막고 당행은 계속 돈다.
 - 은행코드 시드 5개. 은행 목록·미결제 상태 스키마를 10/16까지 FE B-8(P3)에 넘긴다.
+    - 현황(#609): [interbank_transfer_fe_handoff.md](interbank_transfer_fe_handoff.md)로 넘겼다. 엔드포인트는 당행과 분리(`GET /transfers/banks` · `POST /transfers/interbank`)하고, 결과 상태는 `SUCCESS`·`ERROR`·`TIMEOUT`을 그대로 쓴다. 미결제는 GL 내부라 FE에 노출하지 않는다. (가칭) 오류코드 4개는 이 태스크 PR에서 오류코드 마스터에 등록하며 확정한다.
 - 타행 확정 시점에도 `transfer.completed`가 발행된다.
 - **착수 시 P5와 확인:** 자동·예약이체 재확정 배치(`AutoTransferBatchItemProcessor`·`ScheduledTransferBatchItemProcessor`의 `reconcileStuckExecution()`)는 조회한 transfer가 SUCCESS·ERROR가 아니면 else 분기에서 회차를 ERROR로 확정한다. TIMEOUT 행이 이 분기로 오면 처리 불명이 실패로 굳는다. 지금은 회차가 당행 전용이라 오지 않지만([process_result_status_usage.md](process_result_status_usage.md) §2), 송신 연결 전에 두 else 분기와 `completeProcessing()` 예외 메시지("PROCESSING으로 미확정")를 TIMEOUT 기준으로 맞출지 P5와 정한다(PR #570 리뷰).
 - **완료 기준:** 정상 흐름과 "무응답 후 조회 확인" 흐름이 돈다. 모의 서버가 무응답이어도 당행 TPS가 유지된다.
