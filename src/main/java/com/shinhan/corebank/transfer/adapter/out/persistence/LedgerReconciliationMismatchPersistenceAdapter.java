@@ -1,10 +1,14 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationMismatch;
+import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationMismatchQueryUseCase.LedgerReconciliationMismatchView;
 import com.shinhan.corebank.transfer.application.port.out.LedgerReconciliationMismatchPort;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,5 +36,29 @@ public class LedgerReconciliationMismatchPersistenceAdapter implements LedgerRec
                         .detectedAt(detectedAt)
                         .build())
                 .toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<LocalDate> findLatestBusinessDate() {
+        return repository.findLatestBusinessDate();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countByBusinessDate(LocalDate businessDate) {
+        return repository.countByBusinessDate(businessDate);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<LedgerReconciliationMismatchView> findByBusinessDate(LocalDate businessDate, Pageable pageable) {
+        return repository
+                .findByBusinessDateOrderByAccountIdAsc(businessDate, pageable)
+                .map(entity -> new LedgerReconciliationMismatchView(
+                        entity.getAccountId(),
+                        entity.getLedgerBalance(),
+                        entity.getAccountBalance(),
+                        entity.getDetectedAt()));
     }
 }

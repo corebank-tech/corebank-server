@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.tuple;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationMismatch;
+import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationMismatchQueryUseCase.LedgerReconciliationMismatchView;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -12,6 +13,8 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 @Transactional
@@ -101,6 +104,48 @@ class LedgerReconciliationMismatchPersistenceAdapterTest extends IntegrationTest
         assertThat(rowsOf(OTHER_BUSINESS_DATE))
                 .extracting(LedgerReconciliationMismatchJpaEntity::getAccountId)
                 .containsExactly(ACCOUNT_A);
+    }
+
+    @Test
+    @DisplayName("가장 최근 영업일을 찾는다")
+    void findLatestBusinessDate_returnsMaxDate() {
+        adapter.replaceForBusinessDate(
+                OTHER_BUSINESS_DATE,
+                List.of(new LedgerReconciliationMismatch(ACCOUNT_A, 1_000L, 900L)),
+                FIRST_RUN_AT.minusDays(1));
+        adapter.replaceForBusinessDate(
+                BUSINESS_DATE, List.of(new LedgerReconciliationMismatch(ACCOUNT_B, 0L, 50L)), FIRST_RUN_AT);
+        flushAndClear();
+
+        assertThat(adapter.findLatestBusinessDate()).contains(BUSINESS_DATE);
+    }
+
+    @Test
+    @DisplayName("영업일 목록을 계좌 ID 오름차순 페이지로 돌려주고 건수를 센다")
+    void findByBusinessDate_pagesByAccountId() {
+        adapter.replaceForBusinessDate(
+                BUSINESS_DATE,
+                List.of(
+                        new LedgerReconciliationMismatch(ACCOUNT_C, 300L, 0L),
+                        new LedgerReconciliationMismatch(ACCOUNT_A, 1_000L, 900L),
+                        new LedgerReconciliationMismatch(ACCOUNT_B, 0L, 50L)),
+                FIRST_RUN_AT);
+        flushAndClear();
+
+        Page<LedgerReconciliationMismatchView> firstPage =
+                adapter.findByBusinessDate(BUSINESS_DATE, PageRequest.of(0, 2));
+
+        assertThat(firstPage.getContent())
+                .extracting(LedgerReconciliationMismatchView::accountId)
+                .containsExactly(ACCOUNT_A, ACCOUNT_B);
+        assertThat(firstPage.getTotalElements()).isEqualTo(3);
+        assertThat(adapter.countByBusinessDate(BUSINESS_DATE)).isEqualTo(3);
+        assertThat(adapter.countByBusinessDate(OTHER_BUSINESS_DATE)).isZero();
+    }
+
+    private void flushAndClear() {
+        entityManager.flush();
+        entityManager.clear();
     }
 
     // 영속성 컨텍스트 캐시가 아니라 DB 값을 본다
