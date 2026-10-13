@@ -63,10 +63,22 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
         runWithLock("scope=FULL", ledgerFullReconciliationUseCase::reconcileAll);
     }
 
-    // 단일 실행은 COB 락이 보장한다. runWithLock은 예외를 삼켜 나중에 켤 CobStepHaltException이 러너에 닿지 못하므로 쓰지 않는다.
+    // run()·runFull()과 서로 막도록 같은 락을 잡되, 나중에 켤 CobStepHaltException이 러너에 닿도록 catch 없이 try/finally만 쓴다
     @Override
     public void runInCob(LocalDate cobDate) {
-        List<LedgerReconciliationMismatch> mismatches = ledgerFullReconciliationUseCase.reconcileAll();
+        if (!batchExecutionLockPort.tryAcquire(JOB_NAME)) {
+            log.error("[LEDGER_RECONCILIATION_SKIPPED] 다른 대사가 실행 중이라 COB 대사를 건너뜀 - cobDate={}. 수동으로 재확인해야 함", cobDate);
+            return;
+        }
+        try {
+            judgeCobMismatches(cobDate, ledgerFullReconciliationUseCase.reconcileAll());
+        } finally {
+            batchExecutionLockPort.release(JOB_NAME);
+        }
+    }
+
+    // soft/hard는 마감을 계속할지의 판단이다 — 건별 불일치는 1건이어도 사고라 reconcileAll이 따로 ERROR로 남긴다
+    private void judgeCobMismatches(LocalDate cobDate, List<LedgerReconciliationMismatch> mismatches) {
         if (mismatches.size() > cobHardThreshold) {
             // hard지만 #556(COB_DATE 저장·실패 스텝 재실행) 전까지는 멈추면 복구할 수 없어 로그만 남긴다(#600)
             log.error(

@@ -2,8 +2,8 @@ package com.shinhan.corebank.transfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -92,19 +92,50 @@ class LedgerReconciliationBatchServiceTest {
     }
 
     @Test
-    @DisplayName("COB 대사는 전수 대사를 실행하고, 단일 실행은 COB 락이 보장하므로 대사 락을 잡지 않는다")
-    void runInCob_reconcilesAll_withoutReconciliationLock() {
+    @DisplayName("COB 대사는 run()·runFull()과 같은 락을 잡고 전수 대사를 실행한 뒤 반납한다")
+    void runInCob_acquiresSameLock_reconcilesAll_thenReleases() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
         when(ledgerFullReconciliationUseCase.reconcileAll()).thenReturn(List.of());
 
         service().runInCob(DATE);
 
-        verify(ledgerFullReconciliationUseCase).reconcileAll();
-        verify(batchExecutionLockPort, never()).tryAcquire(anyString());
+        InOrder inOrder = inOrder(batchExecutionLockPort, ledgerFullReconciliationUseCase);
+        inOrder.verify(batchExecutionLockPort).tryAcquire(JOB_NAME);
+        inOrder.verify(ledgerFullReconciliationUseCase).reconcileAll();
+        inOrder.verify(batchExecutionLockPort).release(JOB_NAME);
+    }
+
+    @Test
+    @DisplayName("COB 대사가 락을 못 잡으면 대사를 건너뛰고 SKIPPED를 ERROR로 남기며 release()는 부르지 않는다")
+    void runInCob_lockNotAcquired_skipsAndLogsError() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(false);
+
+        service().runInCob(DATE);
+
+        verify(ledgerFullReconciliationUseCase, never()).reconcileAll();
+        verify(batchExecutionLockPort, never()).release(JOB_NAME);
+        assertThat(logsWith("[LEDGER_RECONCILIATION_SKIPPED]"))
+                .singleElement()
+                .extracting(ILoggingEvent::getLevel)
+                .isEqualTo(Level.ERROR);
+    }
+
+    @Test
+    @DisplayName("COB 대사 중 예외는 삼키지 않고 러너까지 전파하되 락은 반납한다 — 나중에 켤 CobStepHaltException 경로")
+    void runInCob_reconcileFails_propagatesException_lockStillReleased() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        IllegalStateException failure = new IllegalStateException("boom");
+        doThrow(failure).when(ledgerFullReconciliationUseCase).reconcileAll();
+
+        assertThatThrownBy(() -> service().runInCob(DATE)).isSameAs(failure);
+
+        verify(batchExecutionLockPort).release(JOB_NAME);
     }
 
     @Test
     @DisplayName("COB 대사 불일치가 0건이면 soft·hard 로그를 남기지 않는다")
     void runInCob_noMismatch_logsNeitherSoftNorHard() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
         when(ledgerFullReconciliationUseCase.reconcileAll()).thenReturn(List.of());
 
         service().runInCob(DATE);
@@ -116,6 +147,7 @@ class LedgerReconciliationBatchServiceTest {
     @Test
     @DisplayName("COB 대사 불일치가 임계와 같으면(soft) SOFT를 WARN으로 남기고 예외 없이 끝난다")
     void runInCob_mismatchesAtThreshold_soft_logsWarn() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
         when(ledgerFullReconciliationUseCase.reconcileAll()).thenReturn(mismatches(COB_HARD_THRESHOLD));
 
         assertThatCode(() -> service().runInCob(DATE)).doesNotThrowAnyException();
@@ -130,6 +162,7 @@ class LedgerReconciliationBatchServiceTest {
     @Test
     @DisplayName("COB 대사 불일치가 임계를 넘으면(hard) HARD를 ERROR로 남기되 #556 전까지는 마감 중단 예외를 던지지 않는다(#600)")
     void runInCob_mismatchesOverThreshold_hard_logsErrorWithoutHalting() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
         when(ledgerFullReconciliationUseCase.reconcileAll()).thenReturn(mismatches(COB_HARD_THRESHOLD + 1));
 
         assertThatCode(() -> service().runInCob(DATE)).doesNotThrowAnyException();
