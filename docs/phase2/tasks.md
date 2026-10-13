@@ -122,7 +122,7 @@
 | [PH-80](#ph-80-timeout--정정-체인--자동-재시도-금지) | 정정 체인 · INVALID · 재시도 금지 규약 (TIMEOUT 제외분) | S1 | 1.5 | PH-99 | — | #548 · PR #550 | 완료 |
 | [PH-38](#ph-38-원장-대사-배치) | 대사 — 불일치 저장 · 목록 API · 300만 베이스라인 · CobStep 편입 | S2 | 2 | PH-60b · CobStep 인터페이스 | 베이스라인: 60b 적재 뒤 · API 10/16 | #468 | 예정 |
 | [PH-80](#ph-80-timeout--정정-체인--자동-재시도-금지) | TIMEOUT 추가 · 전체 머지 | S2 | 2.5 | PH-80 S1분 · P5 회차 현황 (10/6) | **10/8 머지** | #564 | 완료 |
-| [PH-99](#ph-99-이체-파이프라인-확장점seam) | `transfer.api` 입금 계약 (P2 이자·만기·해지용) | S2 | 0.5 | PH-99 | **10/16** | — | 예정 |
+| [PH-99](#ph-99-이체-파이프라인-확장점seam) | `transfer.api` 입금 계약 (P2 이자·만기·해지용) | S2 | 0.5 | PH-99 | **10/16** | #595 | 진행 |
 | [EVT-2](#evt-2-publishevent-두-줄) | `publishEvent` 두 줄 | S2 | 0.5 | PH-32 | 10/6 | #505 | 완료 — P1이 #505에서 대신 처리 |
 | [HOOK-MERGE](#hook-merge-훅-구현체-머지) | 훅 구현체 3건 리뷰·머지 | S2 | 0.5 | PH-90 · PH-24 · PH-41 | 10/12~16 | — | 예정 |
 | [PH-101-①](#ph-101-redis-제거-①-구현-s2--②-판정-측정-s3) | Redis 제거 1단계 — 토큰·잠금·이력 MySQL 이전 · 저장소 스위치 (D-14 예외) | S2 | 3.5 | — | dev 머지 10/15 · **릴리스 10/16** | #580 · #581 | 진행 |
@@ -717,7 +717,8 @@ TransferExecutionService.execute(command)                         ← 편집자:
     - 훅 A·B는 `execute()`에 호출 코드까지 연결한다(구현체 0개라 동작 변화 없음). tradeDate 대입과 완료·실패 이벤트 발행 자리는 주석으로 표시한다.
     - `docs/phase2/transfer_seam.md`에 정책을 적는다.
     - BEFORE_COMMIT 플러시 테스트 골격을 만든다(PH-32와 함께).
-- 현황: 계약 4종·훅 A·B 연결·자리 표시·BEFORE_COMMIT 플러시 테스트 골격 완료(#501). 입금 계약은 남아 있다.
+- 현황: 계약 4종·훅 A·B 연결·자리 표시·BEFORE_COMMIT 플러시 테스트 골격 완료(#501).
+    - 입금 계약(#595): `transfer.api.LedgerDepositUseCase` — `transferBetween`(만기·해지, 원장 2행) · `credit`(이자, 원장 1행). 호출자 트랜잭션 참여, GL은 호출자가 올림, 중복은 P2 상태 전이가 막음. `ledger_entry.transaction_type`에 `MATURITY`·`TERMINATION` 추가. 사용법은 [transfer_seam.md](transfer_seam.md) §8.
 
 ### PH-31. 고정길이 전문 규격
 

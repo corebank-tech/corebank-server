@@ -3,7 +3,7 @@
 > **정본입니다.** `TransferExecutionService.execute()`에 다른 트랙이 기능을 붙이는 규칙은 이 문서를 따릅니다.
 > 태스크 범위·기한은 [tasks.md](tasks.md) §PH-99, 이벤트·아웃박스 규칙은 [README.md](README.md) §3-3입니다.
 >
-> **대상**: P2 PH-90(훅 A) · P3 PH-24(훅 B) · P5 PH-41(tradeDate) · P1 PH-32·PH-96(이벤트·아웃박스)
+> **대상**: P2 PH-90(훅 A) · P3 PH-24(훅 B) · P5 PH-41(tradeDate) · P1 PH-32·PH-96(이벤트·아웃박스) · P2 PH-14·PH-15·PH-16(입금 계약, §8)
 
 ---
 
@@ -111,7 +111,47 @@ PH-90·PH-24 PR은 **10/12까지 리뷰 가능한 상태**로 올립니다. 이 
 
 `TransferSeamOutboxFlushTest`는 아웃박스 테이블이 생기기 전의 골격입니다. PH-96은 프로브 테이블(`seam_outbox_probe`)과 프로브 리스너를 실제 아웃박스로 바꿔 끼웁니다.
 
-## 8. 범위 밖
+## 8. 입금 계약 — 예적금 이자·만기·해지 (#595)
 
-- **입금 계약** — P2 이자·만기·해지 입금용 `transfer.api` 계약(예: `LedgerDepositUseCase`). 10/16까지 별도 PR입니다.
+`execute()`의 훅이 아니라 **다른 도메인이 계좌에 돈을 넣는 별도 계약**입니다. P2는 `transfer.api`만 import합니다.
+`LedgerPair`·`AccountLockPort`를 직접 쓰지 않습니다.
+
+```java
+public interface LedgerDepositUseCase {
+    // 상품 계좌 → 고객 계좌, 원장 2행. 만기해지·중도해지
+    LedgerDepositResult transferBetween(long fromAccountId, long toAccountId, long amount, DepositType type, DepositChannel channel);
+    // 은행 → 계좌, 원장 1행(상대편은 GL 전표). 이자
+    LedgerDepositResult credit(long accountId, long amount, DepositType type, DepositChannel channel);
+}
+record LedgerDepositResult(String transactionNumber, long depositBalanceAfter) {}
+```
+
+| 메서드 | `type` | 원장 | 돈이 빠지는 계좌 | 돈이 들어가는 계좌 |
+|---|---|---|---|---|
+| `transferBetween` | `MATURITY`(만기해지) · `TERMINATION`(중도해지) | 2행 | `ACTIVE`·`MATURED`, 잔액 ≥ 금액 | `ACTIVE` |
+| `credit` | `INTEREST`(이자) | 1행 | — | `ACTIVE`·`MATURED` |
+
+`channel`은 COB가 일으키면 `BT`, 고객이 요청한 중도해지는 `WB`입니다. 통장 표시는 `만기해지`·`중도해지`·`이자`로 고정합니다.
+
+**거부**
+
+| 상황 | 오류코드 |
+|---|---|
+| 메서드와 맞지 않는 `type` (예: `credit`에 `MATURITY`) | `CMN0001` |
+| 빠지는 계좌가 `ACTIVE`·`MATURED`가 아님 | `TRF0304` |
+| 들어가는 계좌 상태가 위 표와 다름 | `TRF0301` |
+| 빠지는 계좌 잔액 부족 | `TRF0303` |
+| 계좌가 없음 | `TRF9001` |
+
+**정책**
+
+1. **호출자 트랜잭션에 참여합니다(REQUIRED).** 만기·해지의 상태 전이(`MATURED` → `CLOSED`)와 입금을 한 트랜잭션에 넣으면, 상태 전이가 실패할 때 잔액·원장도 함께 롤백됩니다. 채번만 독립 커밋이라 롤백되면 거래번호가 빕니다.
+2. **원장(`ledger_entry`)까지만 기표합니다.** 전표는 호출자가 같은 트랜잭션에서 `gl.api`로 올립니다. 훅 B(`LedgerPostingHook`)는 부르지 않습니다.
+3. **중복은 호출자가 막습니다.** 같은 건을 두 번 부르면 두 번 기표됩니다. 만기·해지는 `CLOSED` 전이가, 이자는 지급 이력이 한 번만을 보장합니다. 돌려받은 `transactionNumber`를 지급 이력에 저장해 원장과 잇습니다.
+4. **만기 시점 이자는 `credit` → `transferBetween` 순서로 부릅니다.** 상품 계좌에 마지막 이자를 넣은 뒤 원리금을 한 번에 옮깁니다. 이때 상품 계좌 락을 쥔 채 고객 계좌 락을 더 잡으므로 계좌 ID 오름차순 규칙을 벗어날 수 있습니다. 상품 계좌는 고객 계좌보다 늦게 개설돼 ID가 크고, 어긋나도 MySQL이 데드락을 감지해 한쪽을 롤백합니다.
+
+테스트는 `LedgerDepositServiceTest`가 고정합니다 — 호출자 롤백 시 잔액·원장 롤백, `credit` → `transferBetween` 뒤 잔액 = 원장 합계, 거부 5종.
+
+## 9. 범위 밖
+
 - **지연이체 보류 자리** — 훅 A는 읽기 전용이라 이체를 보류로 돌릴 수 없습니다. 방법은 [README.md](README.md) O-09에서 정합니다.
