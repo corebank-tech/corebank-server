@@ -15,7 +15,9 @@ public record AccountDetailResponse(
         @Schema(description = "일부 마스킹한 예금주명", example = "홍*동") String ownerName,
         @Schema(description = "하이픈 없는 계좌번호", example = "110550051877") String accountNumber,
         @Schema(description = "현재 잔액(원)", example = "1500000") long balance,
-        @Schema(description = "출금 가능 잔액(원). 출금 제한 시 0", example = "1500000") long availableBalance,
+        @Schema(description = "원장잔액(원)", example = "100000") long ledgerBalance,
+        @Schema(description = "출금가능액(원). ACTIVE 계좌는 원장잔액에서 보류액을 차감하며 그 외 상태는 0", example = "70000")
+                long availableBalance,
         @Schema(description = "계좌 개설일", example = "2025-03-10") LocalDate openedDate,
         @Schema(description = "계좌 상태", example = "ACTIVE") AccountStatus status,
         @Schema(description = "계좌비밀번호 연속 오류 횟수", example = "2") int passwordFailureCount,
@@ -30,6 +32,7 @@ public record AccountDetailResponse(
                 MaskingUtil.maskName(ownerName),
                 result.accountNumber(),
                 result.balance(),
+                result.ledgerBalance(),
                 result.availableBalance(),
                 result.openedDate(),
                 result.status(),

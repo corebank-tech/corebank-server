@@ -58,7 +58,10 @@ public record AccountOverviewResponse(
                     LocalDateTime lastTransactionAt,
             @Schema(description = "만기일. 입출금계좌는 null", example = "2027-08-20", nullable = true) LocalDate maturityDate,
             @Schema(description = "출금계좌 등록 여부", example = "true") boolean withdrawalRegistered,
-            @Schema(description = "이체 가능 여부", example = "true") boolean transferEnabled) {
+            @Schema(description = "이체 가능 여부", example = "true") boolean transferEnabled,
+            @Schema(description = "원장잔액(원)", example = "100000") long ledgerBalance,
+            @Schema(description = "출금가능액(원)", example = "70000") long availableBalance,
+            @Schema(description = "계좌비밀번호 잠금 여부", example = "false") boolean passwordLocked) {
 
         private static AccountItemResponse from(AccountOverviewResult.AccountItem account) {
             return new AccountItemResponse(
@@ -75,7 +78,10 @@ public record AccountOverviewResponse(
                     account.lastTransactionAt(),
                     account.maturityDate(),
                     account.withdrawalRegistered(),
-                    account.transferEnabled());
+                    account.transferEnabled(),
+                    account.ledgerBalance(),
+                    account.availableBalance(),
+                    account.passwordLocked());
         }
     }
 }

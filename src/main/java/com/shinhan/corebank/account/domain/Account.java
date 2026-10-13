@@ -21,6 +21,7 @@ public class Account {
     private final AccountType accountType;
 
     private long balance;
+    private long holdAmount;
     private AccountStatus status;
 
     private String passwordHash;
@@ -54,6 +55,7 @@ public class Account {
             Long productId,
             AccountType accountType,
             long balance,
+            long holdAmount,
             AccountStatus status,
             String passwordHash,
             int passwordFailureCount,
@@ -75,6 +77,7 @@ public class Account {
         this.productId = productId;
         this.accountType = accountType;
         this.balance = balance;
+        this.holdAmount = holdAmount;
         this.status = status;
         this.passwordHash = passwordHash;
         this.passwordFailureCount = passwordFailureCount;
@@ -108,6 +111,7 @@ public class Account {
                 customerId,
                 productId,
                 accountType,
+                0L,
                 0L,
                 AccountStatus.ACTIVE,
                 passwordHash,
@@ -144,6 +148,7 @@ public class Account {
                 productId,
                 accountType,
                 balance,
+                0L,
                 status,
                 passwordHash,
                 0,
@@ -190,6 +195,56 @@ public class Account {
                 productId,
                 accountType,
                 balance,
+                0L,
+                status,
+                passwordHash,
+                passwordFailureCount,
+                passwordLocked,
+                alias,
+                displayOrder,
+                withdrawalRegistered,
+                withdrawalRegisteredAt,
+                openedDate,
+                maturityDate,
+                closedDate,
+                lastTransactionAt,
+                version,
+                createdAt,
+                updatedAt);
+    }
+
+    public static Account reconstitute(
+            Long accountId,
+            String accountNumber,
+            Long customerId,
+            Long productId,
+            AccountType accountType,
+            long balance,
+            long holdAmount,
+            AccountStatus status,
+            String passwordHash,
+            int passwordFailureCount,
+            boolean passwordLocked,
+            String alias,
+            Integer displayOrder,
+            boolean withdrawalRegistered,
+            LocalDateTime withdrawalRegisteredAt,
+            LocalDateTime openedDate,
+            LocalDate maturityDate,
+            LocalDateTime closedDate,
+            LocalDateTime lastTransactionAt,
+            Long version,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt) {
+
+        return new Account(
+                accountId,
+                accountNumber,
+                customerId,
+                productId,
+                accountType,
+                balance,
+                holdAmount,
                 status,
                 passwordHash,
                 passwordFailureCount,
@@ -326,6 +381,7 @@ public class Account {
         validateAccountNumber();
         validateCustomer();
         validateBalance();
+        validateHoldAmount();
         validatePasswordHash();
         validateOpenedDate();
         validateProductAndMaturity();
@@ -351,6 +407,12 @@ public class Account {
     private void validateBalance() {
         if (balance < 0) {
             throw new IllegalStateException("계좌 잔액은 음수일 수 없습니다.");
+        }
+    }
+
+    private void validateHoldAmount() {
+        if (holdAmount < 0 || holdAmount > balance) {
+            throw new IllegalStateException("보류액은 0 이상이고 원장잔액 이하여야 합니다.");
         }
     }
 
@@ -445,5 +507,13 @@ public class Account {
         if (displayOrder != null && displayOrder <= 0) {
             throw new IllegalStateException("계좌 표시순서는 1 이상이어야 합니다.");
         }
+    }
+
+    public long getAvailableBalance() {
+        if (status != AccountStatus.ACTIVE) {
+            return 0L;
+        }
+
+        return balance - holdAmount;
     }
 }
