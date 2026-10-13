@@ -1,12 +1,16 @@
 package com.shinhan.corebank.batch.application.service;
 
+import com.shinhan.corebank.batch.api.BatchExecutionHistoryPort;
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
+import com.shinhan.corebank.batch.api.BatchStepStatus;
 import com.shinhan.corebank.batch.api.CobStep;
 import com.shinhan.corebank.batch.api.CobStepHaltException;
 import com.shinhan.corebank.batch.application.port.in.CobRunnerUseCase;
 import com.shinhan.corebank.business.api.BusinessDateAdvancer;
 import com.shinhan.corebank.business.api.BusinessDateProvider;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -23,16 +27,22 @@ public class CobRunnerService implements CobRunnerUseCase {
     private final BatchExecutionLockPort batchExecutionLockPort;
     private final BusinessDateProvider businessDateProvider;
     private final BusinessDateAdvancer businessDateAdvancer;
+    private final BatchExecutionHistoryPort batchExecutionHistoryPort;
+    private final Clock clock;
     private final List<CobStep> steps;
 
     public CobRunnerService(
             BatchExecutionLockPort batchExecutionLockPort,
             BusinessDateProvider businessDateProvider,
             BusinessDateAdvancer businessDateAdvancer,
+            BatchExecutionHistoryPort batchExecutionHistoryPort,
+            Clock clock,
             List<CobStep> steps) {
         this.batchExecutionLockPort = batchExecutionLockPort;
         this.businessDateProvider = businessDateProvider;
         this.businessDateAdvancer = businessDateAdvancer;
+        this.batchExecutionHistoryPort = batchExecutionHistoryPort;
+        this.clock = clock;
         this.steps =
                 steps.stream().sorted(Comparator.comparingInt(CobStep::order)).collect(Collectors.toList());
         rejectDuplicateOrder(this.steps);
@@ -62,15 +72,30 @@ public class CobRunnerService implements CobRunnerUseCase {
         log.info("COB 시작 - cobDate={}, nextBusinessDate={}", cobDate, nextBusinessDate);
 
         for (CobStep step : steps) {
+            LocalDateTime startedAt = LocalDateTime.now(clock);
+            BatchStepStatus status;
+            String failureReason = null;
+            boolean halt = false;
             try {
                 log.info("COB 스텝 시작 - name={}, order={}", step.name(), step.order());
                 step.run(cobDate);
                 log.info("COB 스텝 종료 - name={}", step.name());
+                status = BatchStepStatus.SUCCESS;
             } catch (CobStepHaltException e) {
                 log.error("COB 스텝이 마감 중단을 요청함 - name={}, cobDate={}, 이후 스텝 생략", step.name(), cobDate, e);
-                break;
+                status = BatchStepStatus.HALTED;
+                failureReason = e.getMessage();
+                halt = true;
             } catch (Exception e) {
                 log.error("COB 스텝 실패 - name={}, cobDate={}", step.name(), cobDate, e);
+                status = BatchStepStatus.FAILURE;
+                failureReason = e.getMessage();
+            }
+            // 기록은 try/catch 바깥에서 한 번만 - 안에 두면 record() 자체의 실패가 "스텝 실패"로 잘못 다시 잡힌다
+            batchExecutionHistoryPort.record(
+                    JOB_NAME, step.name(), cobDate, startedAt, LocalDateTime.now(clock), status, failureReason);
+            if (halt) {
+                break;
             }
         }
         log.info("COB 종료 - cobDate={}", cobDate);
