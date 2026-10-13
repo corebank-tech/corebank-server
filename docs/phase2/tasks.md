@@ -644,7 +644,7 @@ AI로 불일치 목록을 뽑고 고친다. **C-1보다 먼저 한다.**
 
 ### FE ADM-04. 대사 불일치 목록 (#130-①)
 
-관리자 골격 위에 올린다. 권한은 `AUDIT_READ`다. PH-38 S2의 목록 API가 선행이다. **지금은 불일치를 로그로만 남겨 목록 API가 읽을 테이블이 없다**([PH-38](#ph-38-원장-대사-배치)).
+관리자 골격 위에 올린다. 권한은 `AUDIT_READ`다. PH-38 S2의 목록 API가 선행이다. 목록 API는 `GET /admin/ledger-reconciliation/mismatches`다(#613, 응답 스키마는 Swagger `getLedgerReconciliationMismatches`) — [PH-38](#ph-38-원장-대사-배치).
 **완료 기준:** FE `requirements-admin.md` REQ-ADM-040~042(PH-38 목록 API 스키마가 나온 뒤 P3가 채운다)를 통과한다.
 
 ### FE B-8. 타행이체 입력·결과
@@ -738,6 +738,7 @@ TransferExecutionService.execute(command)                         ← 편집자:
 
 - **불일치 저장 테이블** — Flyway + `schema_reference.md` + ERD. 목록 API와 FE ADM-04가 읽을 데이터다.
 - 불일치 목록 조회 API(관리자, `AUDIT_READ`)
+    - 현황(#613): 테이블 `ledger_reconciliation_mismatch`(영업일 `COB_DATE`별, 같은 영업일 재대사는 교체)와 `GET /admin/ledger-reconciliation/mismatches`(영업일 생략 시 최근 영업일, `all=true`는 100건 상한)를 넣었다. 권한은 아직 `/admin/**` 임시 가드(#448)이고 `AUDIT_READ`는 PH-49a 머지 때 붙인다. COB 대사 스텝에서 저장을 부르는 연결은 #605 머지 뒤 후속 PR이다 — 그 전까지 테이블은 비어 있다.
 - 300만 원장 대사 시간 베이스라인(60b 적재 뒤, [D-27](README.md#d-27--109--팀-합의)). 전수 대사 경로(#468)로 잰다.
 - **`CobStep` 편입** — P5 인터페이스(10/6)가 들어오면 독립 스케줄러를 대사 스텝 구현체로 옮긴다. 등록 주체는 P4이고, soft/hard 임계는 P5가 정한다.
 
