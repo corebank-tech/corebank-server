@@ -137,6 +137,7 @@ record LedgerDepositResult(String transactionNumber, long depositBalanceAfter) {
 
 | 상황 | 오류코드 |
 |---|---|
+| 금액이 0 이하 | `TRF0003` |
 | 메서드와 맞지 않는 `type` (예: `credit`에 `MATURITY`) | `CMN0001` |
 | 빠지는 계좌가 `ACTIVE`·`MATURED`가 아님 | `TRF0304` |
 | 들어가는 계좌 상태가 위 표와 다름 | `TRF0301` |
@@ -146,11 +147,13 @@ record LedgerDepositResult(String transactionNumber, long depositBalanceAfter) {
 **정책**
 
 1. **호출자 트랜잭션에 참여합니다(REQUIRED).** 만기·해지의 상태 전이(`MATURED` → `CLOSED`)와 입금을 한 트랜잭션에 넣으면, 상태 전이가 실패할 때 잔액·원장도 함께 롤백됩니다. 채번만 독립 커밋이라 롤백되면 거래번호가 빕니다.
+   **거부되면 호출자 트랜잭션도 롤백 전용이 됩니다.** 예외를 잡고 같은 트랜잭션에서 다음 계좌로 넘어가면 커밋 때 `UnexpectedRollbackException`으로 앞선 건까지 사라집니다. 여러 계좌를 도는 이자 배치는 건별로 트랜잭션을 나눕니다.
 2. **원장(`ledger_entry`)까지만 기표합니다.** 전표는 호출자가 같은 트랜잭션에서 `gl.api`로 올립니다. 훅 B(`LedgerPostingHook`)는 부르지 않습니다.
 3. **중복은 호출자가 막습니다.** 같은 건을 두 번 부르면 두 번 기표됩니다. 만기·해지는 `CLOSED` 전이가, 이자는 지급 이력이 한 번만을 보장합니다. 돌려받은 `transactionNumber`를 지급 이력에 저장해 원장과 잇습니다.
-4. **만기 시점 이자는 `credit` → `transferBetween` 순서로 부릅니다.** 상품 계좌에 마지막 이자를 넣은 뒤 원리금을 한 번에 옮깁니다. 이때 상품 계좌 락을 쥔 채 고객 계좌 락을 더 잡으므로 계좌 ID 오름차순 규칙을 벗어날 수 있습니다. 상품 계좌는 고객 계좌보다 늦게 개설돼 ID가 크고, 어긋나도 MySQL이 데드락을 감지해 한쪽을 롤백합니다.
+4. **`credit`(이자)은 계좌의 `last_transaction_at`을 바꾸지 않습니다.** 은행이 넣는 돈은 고객 거래가 아니라, 휴면 판정의 최종 거래일을 늦추면 안 됩니다. `transferBetween`은 고객 계좌로 원리금이 들어가는 거래라 두 계좌 모두 갱신합니다. Apache Fineract도 휴면 판정 최종 거래일을 입금·출금(`transaction_type_enum in (1,2)`)으로만 계산하고 이자 지급(3)은 뺍니다(`SavingsAccountReadPlatformServiceImpl.retrieveSavingsIdsPendingInactive`). PH-16 휴면 전환은 이 전제를 씁니다.
+5. **만기 시점 이자는 `credit` → `transferBetween` 순서로 부릅니다.** 상품 계좌에 마지막 이자를 넣은 뒤 원리금을 한 번에 옮깁니다. 이때 상품 계좌 락을 쥔 채 고객 계좌 락을 더 잡으므로 계좌 ID 오름차순 규칙을 벗어날 수 있습니다. 상품 계좌는 고객 계좌보다 늦게 개설돼 ID가 크고, 어긋나도 MySQL이 데드락을 감지해 한쪽을 롤백합니다.
 
-테스트는 `LedgerDepositServiceTest`가 고정합니다 — 호출자 롤백 시 잔액·원장 롤백, `credit` → `transferBetween` 뒤 잔액 = 원장 합계, 거부 5종.
+테스트는 `LedgerDepositServiceTest`가 고정합니다 — 호출자 롤백 시 잔액·원장 롤백, `credit` → `transferBetween` 뒤 잔액 = 원장 합계, 거부 6종. `last_transaction_at` 유지는 `AccountLockPersistenceAdapterTest`가 고정합니다.
 
 ## 9. 범위 밖
 
