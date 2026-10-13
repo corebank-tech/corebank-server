@@ -116,7 +116,7 @@
 | --- | --- | --- | --- |
 | `status` | `SUCCESS` | `ERROR` | `TIMEOUT` |
 | `transactionNumber` | 있음 | 채번 뒤 실패면 있음 · 그 전 실패면 `null` | 있음 — §7 재조회에 쓴다 |
-| `transferredAt` | 있음 | `null` | `null` |
+| `transferredAt` | 있음. **오프셋 포함**(`+09:00`, [api_conventions.md](../api_conventions.md) REQ-CMN-016) — 당행 응답은 오프셋이 없으니 같은 파서를 쓰지 않는다 | `null` | `null` |
 | `payeeBankCode` | 있음 | 있음 | 있음 |
 | `payeeName` | 있음(마스킹, 예 `김*수`) — 상대 은행이 돌려준 이름 | `null` | `null` |
 | `withdrawalBalanceAfter` | 있음 | `null` | `null` |
@@ -131,7 +131,7 @@
   "data": {
     "status": "SUCCESS",
     "transactionNumber": "20261023WB0000000123",
-    "transferredAt": "2026-10-23T10:30:16",
+    "transferredAt": "2026-10-23T10:30:16+09:00",
     "payeeBankCode": "004",
     "payeeName": "김*수",
     "withdrawalBalanceAfter": 950000,
