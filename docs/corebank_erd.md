@@ -147,7 +147,7 @@ erDiagram
         varchar direction "DEPOSIT / WITHDRAWAL"
         bigint amount "양수만. 방향은 direction 이 표현"
         bigint balance_after "기표 직후 잔액"
-        varchar transaction_type "OPENING / IMMEDIATE_TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / REVERSAL"
+        varchar transaction_type "OPENING / IMMEDIATE_TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / MATURITY / TERMINATION / REVERSAL"
         varchar transaction_content "통장 표시내용"
         char channel "WB / BT"
         boolean reversed
