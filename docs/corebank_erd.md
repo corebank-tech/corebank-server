@@ -481,11 +481,14 @@ erDiagram
   soft(`LEDGER_RECONCILIATION_SOFT` WARN), 초과면 hard(`LEDGER_RECONCILIATION_HARD` ERROR)다. hard는
   원래 `CobStepHaltException`으로 마감을 멈출 자리지만, 영업일 전환 뒤라 멈추면 복구할 수단이 없어
   #556(`COB_DATE` 저장·실패 스텝 재실행) 전까지는 로그만 남기고 다음 스텝으로 넘어간다(#600).
+  soft/hard는 **마감을 계속할지**의 판단이지 경보 심각도가 아니다 — 원장 불일치는 1건이어도 사고라
+  건별 `LEDGER_RECONCILIATION_MISMATCH`는 soft/hard와 무관하게 항상 ERROR다.
 - **전수 대사 (#468)**: 원장을 거치지 않고 잔액만 틀어진 휴면 계좌까지 잡도록 **전 계좌**를
   `account_id` 순 청크(기본 1,000개, `app.ledger-reconciliation.full-scan-chunk-size`)로 훑는다.
   원장이 한 줄도 없는 계좌는 원장 합계를 0으로 본다. 청크마다 짧은 읽기 전용 트랜잭션을 열어 같은
   스냅샷에서 잔액과 원장 합계를 읽으므로 COB 중 들어오는 거래나 다른 배치가 돌아도 오탐이 없다.
-  단일 실행은 COB 락이 보장한다. 불일치는 같은 마커에 `scope=FULL`을 붙여 남기고, 끝나면 계좌 수·
+  COB 대사는 증분 경로(`run(date)`)·`runFull()`과 같은 락(`LEDGER_RECONCILIATION_BATCH`)을 잡는다. 못 잡으면
+  `LEDGER_RECONCILIATION_SKIPPED` ERROR를 남기고 그날 대사를 건너뛰므로 수동 재확인이 필요하다. 불일치는 같은 마커에 `scope=FULL`을 붙여 남기고, 끝나면 계좌 수·
   불일치 수·`elapsedMs`를 INFO로 남긴다.
 - **증분 대사 (#378, 현재 트리거 없음)**: 전일 기표가 있었던 계좌만 대조하는 경로
   (`LedgerReconciliationBatchUseCase.run(date)`)는 코드에 남아 있지만 부르는 곳이 없다. 거래일

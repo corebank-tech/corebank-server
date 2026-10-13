@@ -740,7 +740,7 @@ TransferExecutionService.execute(command)                         ← 편집자:
 - 불일치 목록 조회 API(관리자, `AUDIT_READ`)
 - 300만 원장 대사 시간 베이스라인(60b 적재 뒤, [D-27](README.md#d-27--109--팀-합의)). 전수 대사 경로(#468)로 잰다.
 - **`CobStep` 편입** — P5 인터페이스(10/6)가 들어오면 독립 스케줄러를 대사 스텝 구현체로 옮긴다. 등록 주체는 P4이고, soft/hard 임계는 P5가 정한다.
-    - 현황(#604): `LedgerReconciliationCobStep`(`order=2`)이 전수 대사를 돌리고 독립 스케줄(02:00 증분 · 일 03:00 전수)은 없앴다. 증분 대사는 기표 시각 기준이라 COB 안에서 23:30~24:00·주말 거래를 놓쳐 쓰지 않는다. 임계는 `app.ledger-reconciliation.cob-hard-threshold`(기본 10). **hard도 #556 전까지는 로그만 남긴다**(#600) — #556 완료 뒤 P4가 `CobStepHaltException`을 켠다.
+    - 현황(#604): `LedgerReconciliationCobStep`(`order=2`)이 전수 대사를 돌리고 독립 스케줄(02:00 증분 · 일 03:00 전수)은 없앴다. 증분 대사는 기표 시각 기준이라 COB 안에서 23:30~24:00·주말 거래를 놓쳐 쓰지 않는다. 임계는 `app.ledger-reconciliation.cob-hard-threshold`(기본 10). **hard도 #556 전까지는 로그만 남긴다**(#600) — #556 완료 뒤 P4가 `CobStepHaltException`을 켠다. `run()`·`runFull()`과 같은 대사 락을 잡고(못 잡으면 `LEDGER_RECONCILIATION_SKIPPED` ERROR), COB가 길어져도 00:10 자동이체가 밀리지 않게 스케줄러 스레드 풀을 2로 늘렸다(`spring.task.scheduling.pool.size`).
 
 **완료 기준:** 목데이터에서 불일치 0건. 실행시간 기록. 결함 주입(PH-28b) 불일치가 목록 API로 조회된다.
 
@@ -916,7 +916,7 @@ public interface CobStep {
 - COB 베이스라인: 15만 계좌 순차, 단일 EC2. **날짜 미확정** — 60b 베이스라인(PH-11·28·38·43)은 각자 개선 PR 직전 코드로 한 번에 하나씩 재고, 순서는 별도 공지(D-27). 측정 시점에 대사·만기감지가 몇 개 꽂혀 있는지 #556에서 확인한다.
 - **선행은 PH-40뿐이다.** 대사 배치를 기다리지 않는다(선행 순환 정정).
 - **완료 기준:** 스텝이 순서대로 돌고 기록이 남는다. 대사 후 원장 합계 = 잔액 합계이고, 불일치 시 정책대로 동작한다.
-- 현황: 러너·스텝 인터페이스(`CobRunnerService`·`CobStep`·`CobScheduler`)는 머지됐다(PR #543·#557). **하드 중단 신호(`CobStepHaltException`)도 머지됐다(#600).** 다만 `implements CobStep`은 아직 하나도 없다 — 대사(`transfer`)와 멱등키 정리는 여전히 각자 독립 스케줄러로 돈다. `DailyTransferBatchService`(자동·예약이체)는 COB 스텝이 아니라 별도로 존재한다.
+- 현황: 러너·스텝 인터페이스(`CobRunnerService`·`CobStep`·`CobScheduler`)는 머지됐다(PR #543·#557). **하드 중단 신호(`CobStepHaltException`)도 머지됐다(#600).** 대사는 COB 스텝(`LedgerReconciliationCobStep`, `order=2`)으로 편입됐고 독립 스케줄러는 없앴다(#604). 멱등키 정리는 여전히 독립 스케줄러로 돈다. `DailyTransferBatchService`(자동·예약이체)는 COB 스텝이 아니라 별도로 존재한다.
 
 **P4에 주는 것 (10/6):** 자동·예약이체 회차 상태 사용 현황 1장과 "배치 회차는 TIMEOUT을 쓰지 않는다"는 결론. PH-80의 전제다.
 
