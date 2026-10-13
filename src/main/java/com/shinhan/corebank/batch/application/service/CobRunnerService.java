@@ -91,9 +91,13 @@ public class CobRunnerService implements CobRunnerUseCase {
                 status = BatchStepStatus.FAILURE;
                 failureReason = e.getMessage();
             }
-            // 기록은 try/catch 바깥에서 한 번만 - 안에 두면 record() 자체의 실패가 "스텝 실패"로 잘못 다시 잡힌다
-            batchExecutionHistoryPort.record(
-                    JOB_NAME, step.name(), cobDate, startedAt, LocalDateTime.now(clock), status, failureReason);
+            // 기록은 스텝 try/catch 바깥에서 한 번만 하되, 기록(관측용) 자체의 실패가 나머지 스텝을 막지 않게 별도로 감싼다.
+            try {
+                batchExecutionHistoryPort.record(
+                        JOB_NAME, step.name(), cobDate, startedAt, LocalDateTime.now(clock), status, failureReason);
+            } catch (Exception e) {
+                log.error("COB 스텝 실행 기록 저장 실패 - name={}, cobDate={}, status={}", step.name(), cobDate, status, e);
+            }
             if (halt) {
                 break;
             }

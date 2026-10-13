@@ -282,4 +282,30 @@ class CobRunnerServiceTest {
         verify(batchExecutionHistoryPort, never())
                 .record(eq(JOB_NAME), eq("second"), any(), any(), any(), any(), any());
     }
+
+    @Test
+    @DisplayName("실행 기록 저장 자체가 실패해도 그 스텝은 성공 처리된 채로 나머지 스텝은 계속 실행된다 (#603, 셀프리뷰 반영)")
+    void run_recordThrows_doesNotAbortRemainingSteps() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+
+        CobStep first = stepOf("first", 1);
+        CobStep second = stepOf("second", 2);
+        org.mockito.Mockito.doThrow(new RuntimeException("DB 순단"))
+                .when(batchExecutionHistoryPort)
+                .record(eq(JOB_NAME), eq("first"), any(), any(), any(), any(), any());
+        CobRunnerService service = new CobRunnerService(
+                batchExecutionLockPort,
+                businessDateProvider,
+                businessDateAdvancer,
+                batchExecutionHistoryPort,
+                CLOCK,
+                List.of(first, second));
+
+        service.run(COB_DATE.plusDays(10));
+
+        verify(second).run(COB_DATE);
+        verify(batchExecutionLockPort).release(JOB_NAME);
+    }
 }
