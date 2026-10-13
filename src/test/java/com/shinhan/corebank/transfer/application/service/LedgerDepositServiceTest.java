@@ -211,6 +211,21 @@ class LedgerDepositServiceTest extends IntegrationTestSupport {
                 CommonErrorCode.INVALID_INPUT);
     }
 
+    @Test
+    @DisplayName("금액이 0 이하이면 채번·락 전에 TRF0003으로 거부한다")
+    void rejectsNonPositiveAmount() {
+        long sequenceRowsBefore = sequenceTotal();
+
+        assertRejected(
+                () -> ledgerDepositUseCase.credit(PRODUCT_ACCOUNT, 0L, DepositType.INTEREST, DepositChannel.BT),
+                TransferErrorCode.INVALID_AMOUNT);
+        assertRejected(
+                () -> ledgerDepositUseCase.transferBetween(
+                        PRODUCT_ACCOUNT, CUSTOMER_ACCOUNT, -1L, DepositType.TERMINATION, DepositChannel.WB),
+                TransferErrorCode.INVALID_AMOUNT);
+        assertThat(sequenceTotal()).isEqualTo(sequenceRowsBefore);
+    }
+
     private void assertRejected(Runnable call, Object errorCode) {
         assertThatThrownBy(call::run)
                 .isInstanceOf(BusinessException.class)
@@ -277,6 +292,10 @@ class LedgerDepositServiceTest extends IntegrationTestSupport {
 
     private long balanceOf(long accountId) {
         return jdbcTemplate.queryForObject("SELECT balance FROM account WHERE account_id = ?", Long.class, accountId);
+    }
+
+    private long sequenceTotal() {
+        return jdbcTemplate.queryForObject("SELECT COALESCE(SUM(last_seq), 0) FROM transaction_sequence", Long.class);
     }
 
     private long ledgerSumOf(long accountId) {

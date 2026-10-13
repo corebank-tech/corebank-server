@@ -51,6 +51,7 @@ public class LedgerDepositService implements LedgerDepositUseCase {
     @Transactional
     public LedgerDepositResult transferBetween(
             long fromAccountId, long toAccountId, long amount, DepositType type, DepositChannel channel) {
+        requirePositiveAmount(amount);
         requireType(type, TRANSFER_BETWEEN_TYPES);
         TransferChannel transferChannel = toTransferChannel(channel);
         String transactionNumber = nextTransactionNumber(transferChannel);
@@ -89,6 +90,7 @@ public class LedgerDepositService implements LedgerDepositUseCase {
     @Override
     @Transactional
     public LedgerDepositResult credit(long accountId, long amount, DepositType type, DepositChannel channel) {
+        requirePositiveAmount(amount);
         requireType(type, CREDIT_TYPES);
         TransferChannel transferChannel = toTransferChannel(channel);
         String transactionNumber = nextTransactionNumber(transferChannel);
@@ -113,6 +115,13 @@ public class LedgerDepositService implements LedgerDepositUseCase {
                 executedAt));
 
         return new LedgerDepositResult(transactionNumber, balanceAfter);
+    }
+
+    // 원장 팩토리도 막지만, 그때는 이미 채번·락을 마친 뒤라 앞에서 먼저 거른다.
+    private static void requirePositiveAmount(long amount) {
+        if (amount <= 0) {
+            throw new BusinessException(TransferErrorCode.INVALID_AMOUNT);
+        }
     }
 
     private static void requireType(DepositType type, Set<DepositType> allowed) {
