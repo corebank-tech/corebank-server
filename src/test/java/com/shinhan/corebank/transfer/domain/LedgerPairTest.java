@@ -408,6 +408,93 @@ class LedgerPairTest {
     }
 
     @Nested
+    @DisplayName("forDeposit — 예적금 만기·해지 입금")
+    class ForDepositTest {
+
+        @Test
+        @DisplayName("transfer_id 없이 넘겨받은 거래유형으로 상품계좌 출금·고객계좌 입금 2행을 만든다")
+        void createsPairWithGivenTransactionType() {
+            // given
+            LocalDateTime occurredAt = LocalDateTime.of(2026, 10, 23, 3, 0, 0, 123456789);
+
+            // when
+            LedgerPair pair = LedgerPair.forDeposit(
+                    "20261023BT0000000001",
+                    303L,
+                    0L,
+                    101L,
+                    1_520_000L,
+                    1_020_000L,
+                    "MATURITY",
+                    "만기해지",
+                    TransferChannel.BT,
+                    occurredAt);
+
+            // then
+            LedgerEntry withdrawal = pair.getWithdrawalEntry();
+            assertThat(withdrawal.getTransferId()).isNull();
+            assertThat(withdrawal.getTransactionType()).isEqualTo("MATURITY");
+            assertThat(withdrawal.getAccountId()).isEqualTo(303L);
+            assertThat(withdrawal.getDirection()).isEqualTo(LedgerDirection.WITHDRAWAL);
+            assertThat(withdrawal.getBalanceAfter()).isZero();
+            assertThat(withdrawal.getTransactionContent()).isEqualTo("만기해지");
+
+            LedgerEntry deposit = pair.getDepositEntry();
+            assertThat(deposit.getTransferId()).isNull();
+            assertThat(deposit.getTransactionType()).isEqualTo("MATURITY");
+            assertThat(deposit.getAccountId()).isEqualTo(101L);
+            assertThat(deposit.getDirection()).isEqualTo(LedgerDirection.DEPOSIT);
+            assertThat(deposit.getBalanceAfter()).isEqualTo(1_520_000L);
+            assertThat(deposit.getTransactionContent()).isEqualTo("만기해지");
+
+            assertThat(withdrawal.getAmount()).isEqualTo(1_020_000L).isEqualTo(deposit.getAmount());
+            assertThat(withdrawal.getOccurredAt())
+                    .isEqualTo(occurredAt.truncatedTo(ChronoUnit.MICROS))
+                    .isEqualTo(deposit.getOccurredAt());
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {"   "})
+        @DisplayName("거래유형이 없으면(null/공백) BusinessException(REQUIRED_FIELD_MISSING) 예외가 발생한다")
+        void throwsExceptionWhenTransactionTypeIsBlank(String invalidType) {
+            assertThatThrownBy(() -> LedgerPair.forDeposit(
+                            "20261023BT0000000001",
+                            303L,
+                            0L,
+                            101L,
+                            1_520_000L,
+                            1_020_000L,
+                            invalidType,
+                            "만기해지",
+                            TransferChannel.BT,
+                            LocalDateTime.now()))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        @Test
+        @DisplayName("상품계좌와 입금계좌가 같으면 BusinessException(SAME_ACCOUNT_TRANSFER) 예외가 발생한다")
+        void throwsExceptionWhenSameAccount() {
+            assertThatThrownBy(() -> LedgerPair.forDeposit(
+                            "20261023BT0000000001",
+                            303L,
+                            0L,
+                            303L,
+                            1_020_000L,
+                            1_020_000L,
+                            "TERMINATION",
+                            "중도해지",
+                            TransferChannel.WB,
+                            LocalDateTime.now()))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
+        }
+    }
+
+    @Nested
     @DisplayName("forReversal — 정정 체인 반대기표")
     class ForReversalTest {
 
