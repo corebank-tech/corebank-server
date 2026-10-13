@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.application.port.out;
 
+import com.shinhan.corebank.transfer.domain.LedgerEntry;
 import com.shinhan.corebank.transfer.domain.LedgerPair;
 
 public interface LedgerSavePort {
@@ -16,4 +17,10 @@ public interface LedgerSavePort {
      * 원거래 행이 이미 취소돼 있으면 TRF0305로 거부한다.
      */
     void saveReversal(LedgerPair reversal, PostedLedgerPair original);
+
+    /**
+     * 상대 고객 계좌 없는 입금 1행을 저장한다. 1행은 {@link LedgerEntry#forCredit}으로 만든 것만 받는다 —
+     * 2행 경로({@link #save})와 섞이지 않게 메서드를 나눴다.
+     */
+    void saveCredit(LedgerEntry credit);
 }
