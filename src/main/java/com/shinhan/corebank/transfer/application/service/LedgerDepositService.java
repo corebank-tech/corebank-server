@@ -100,7 +100,7 @@ public class LedgerDepositService implements LedgerDepositUseCase {
             throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
         }
 
-        long balanceAfter = accountLockPort.applyCredit(locked, amount, executedAt);
+        long balanceAfter = accountLockPort.applyCredit(locked, amount);
 
         ledgerSavePort.saveCredit(LedgerEntry.forCredit(
                 transactionNumber,

@@ -119,9 +119,9 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
     }
 
     @Override
-    public long applyCredit(LockedAccount locked, long amount, LocalDateTime executedAt) {
+    public long applyCredit(LockedAccount locked, long amount) {
         AccountLockJpaEntity entity = findForUpdate(locked.accountId());
-        entity.credit(amount, executedAt);
+        entity.creditBankPosting(amount);
         return entity.getBalance();
     }
 

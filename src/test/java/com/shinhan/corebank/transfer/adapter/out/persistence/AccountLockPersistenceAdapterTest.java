@@ -359,17 +359,21 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("applyCredit은 잠근 계좌에 금액을 더하고 last_transaction_at을 갱신한 뒤 입금 후 잔액을 돌려준다")
-    void applyCredit_addsAmount_andReturnsBalanceAfter() {
+    @DisplayName("applyCredit은 잠근 계좌에 금액을 더해 입금 후 잔액을 돌려주고, 이자는 고객 거래가 아니라 last_transaction_at은 그대로 둔다")
+    void applyCredit_addsAmount_andKeepsLastTransactionAt() {
         // given
         TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        LocalDateTime lastCustomerTransactionAt = LocalDateTime.of(2026, 8, 18, 10, 30);
+        entityManager
+                .createNativeQuery("UPDATE account SET last_transaction_at = ?1 WHERE account_id = 202")
+                .setParameter(1, lastCustomerTransactionAt)
+                .executeUpdate();
         entityManager.flush();
         entityManager.clear();
         LockedAccount locked = adapter.lockForCredit(202L);
-        LocalDateTime executedAt = LocalDateTime.of(2026, 10, 23, 3, 0);
 
         // when
-        long balanceAfter = adapter.applyCredit(locked, 20000L, executedAt);
+        long balanceAfter = adapter.applyCredit(locked, 20000L);
         entityManager.flush();
         entityManager.clear();
 
@@ -383,7 +387,7 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
                 .createNativeQuery("SELECT last_transaction_at FROM account WHERE account_id = 202")
                 .getSingleResult();
         assertThat(balance).isEqualTo(120000L);
-        assertThat(lastTransactionAt).isEqualTo(executedAt);
+        assertThat(lastTransactionAt).isEqualTo(lastCustomerTransactionAt);
     }
 
     @Test

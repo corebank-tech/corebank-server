@@ -58,8 +58,10 @@ public interface AccountLockPort {
     LockedAccount lockForCredit(Long accountId);
 
     /**
-     * lockForCredit으로 잡은 계좌에 amount를 더하고 입금 후 잔액을 반환한다. last_transaction_at도
-     * executedAt으로 갱신한다. lockForCredit과 같은 트랜잭션에서 불러야 한다.
+     * lockForCredit으로 잡은 계좌에 amount를 더하고 입금 후 잔액을 반환한다. lockForCredit과 같은 트랜잭션에서
+     * 불러야 한다.
+     *
+     * last_transaction_at은 갱신하지 않는다 — 이자는 고객 거래가 아니라 휴면 판정을 늦추면 안 된다(Fineract도 뺀다).
      */
-    long applyCredit(LockedAccount locked, long amount, LocalDateTime executedAt);
+    long applyCredit(LockedAccount locked, long amount);
 }
