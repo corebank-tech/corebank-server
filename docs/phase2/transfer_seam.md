@@ -155,8 +155,12 @@ record LedgerDepositResult(String transactionNumber, long depositBalanceAfter) {
 4. **`credit`(이자)은 계좌의 `last_transaction_at`을 바꾸지 않습니다.** 은행이 넣는 돈은 고객 거래가 아니라, 휴면 판정의 최종 거래일을 늦추면 안 됩니다. `transferBetween`은 고객 계좌로 원리금이 들어가는 거래라 두 계좌 모두 갱신합니다. Apache Fineract도 휴면 판정 최종 거래일을 입금·출금(`transaction_type_enum in (1,2)`)으로만 계산하고 이자 지급(3)은 뺍니다(`SavingsAccountReadPlatformServiceImpl.retrieveSavingsIdsPendingInactive`). PH-16 휴면 전환은 이 전제를 씁니다.
 5. **만기 시점 이자는 `credit` → `transferBetween` 순서로 부릅니다.** 상품 계좌에 마지막 이자를 넣은 뒤 원리금을 한 번에 옮깁니다. 이때 상품 계좌 락을 쥔 채 고객 계좌 락을 더 잡으므로 계좌 ID 오름차순 규칙을 벗어날 수 있습니다. 상품 계좌는 고객 계좌보다 늦게 개설돼 ID가 크고, 어긋나도 MySQL이 데드락을 감지해 한쪽을 롤백합니다.
 6. **받는 계좌가 누구의 어떤 계좌인지는 호출자가 검증합니다.** 이 계약은 계좌 ID만 받고 고객을 모르므로, `toAccountId`의 상태(`ACTIVE`)만 봅니다. 그 계좌가 같은 고객의 등록 출금계좌인지(PH-15 "원리금은 출금계좌로")는 P2가 가입 정보에서 꺼내 넘기기 전에 확인합니다.
+7. **입금 계약을 부른 뒤에 계좌를 처음 읽어 상태를 바꿉니다.** `account` 행을 account의 `AccountJpaEntity`와 transfer의 `AccountLockJpaEntity`가 같은 `version` 컬럼으로 각자 고칩니다. 입금 **전에** 읽은 `Account`로 저장하면 커밋 때 두 UPDATE가 같은 옛 version을 조건으로 나가 낙관적 락 충돌(`ObjectOptimisticLockingFailureException`)이 나고 입금까지 전체 롤백됩니다. 잔액이 조용히 덮이지는 않지만 만기해지가 매번 실패합니다. 순서는 이렇게 둡니다.
+   - 금액 계산에 필요한 잔액은 엔티티를 올리지 않는 조회(`AccountPersistencePort.findBalancesByAccountIds` 등)나 가입 정보로 구합니다.
+   - 상품 계좌 상태는 이 계약이 락을 잡은 뒤 다시 봅니다(`TRF0304`·`TRF0307`). 호출자가 미리 `Account`를 올려 검사할 필요가 없습니다.
+   - 입금 뒤 `Account`를 조회해 `CLOSED`로 바꾸고 저장합니다. 조회 쿼리 전에 transfer 변경이 flush돼 새 version을 읽습니다.
 
-테스트는 `LedgerDepositServiceTest`가 고정합니다 — 호출자 롤백 시 잔액·원장 롤백, `credit` → `transferBetween` 뒤 잔액 = 원장 합계, 거부 8종. `last_transaction_at` 유지는 `AccountLockPersistenceAdapterTest`가 고정합니다.
+테스트는 `LedgerDepositServiceTest`가 고정합니다 — 호출자 롤백 시 잔액·원장 롤백, `credit` → `transferBetween` 뒤 잔액 = 원장 합계, 거부 8종, 호출자 account 저장 순서 2종(입금 전 조회 → 전체 롤백 / 입금 뒤 조회 → 함께 커밋). `last_transaction_at` 유지는 `AccountLockPersistenceAdapterTest`가 고정합니다.
 
 ## 9. 범위 밖
 
