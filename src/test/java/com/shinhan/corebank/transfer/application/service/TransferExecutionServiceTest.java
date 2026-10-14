@@ -26,6 +26,9 @@ import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -113,6 +116,9 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     @Autowired
     private Clock clock;
 
+    @Autowired
+    private MeterRegistry meterRegistry;
+
     @AfterEach
     void cleanUpCommittedData() {
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202)");
@@ -189,6 +195,44 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         assertThat(((Number) withdrawalEntry.get("account_id")).longValue()).isEqualTo(101L);
         assertThat(((Number) withdrawalEntry.get("amount")).longValue()).isEqualTo(30000L);
         assertThat(((Number) withdrawalEntry.get("balance_after")).longValue()).isEqualTo(70000L);
+    }
+
+    @Test
+    @DisplayName("정상 이체가 완료되면 transfer.count{result=SUCCESS} 카운터와 transfer.duration 타이머가 올라간다")
+    void execute_completesTransfer_recordsMetrics() {
+        // given: 픽스처는 별도 트랜잭션에서 커밋한다.
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(10000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build();
+
+        // 다른 테스트도 같은 Spring 컨텍스트의 MeterRegistry를 공유하므로 절대값이 아니라
+        // 이 호출 전후의 증가분(delta)으로 검증한다 - SUCCESS 카운터는 이 테스트 전에 이미
+        // 존재할 수도, 아직 없을 수도 있어 find()로 null-safe하게 "전" 값을 읽는다.
+        double successCountBefore = successCounter().map(Counter::count).orElse(0.0);
+        long timerCountBefore = meterRegistry.get("transfer.duration").timer().count();
+
+        TransferResult result = transferExecutionService.execute(command);
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(successCounter().orElseThrow().count()).isEqualTo(successCountBefore + 1);
+        assertThat(meterRegistry.get("transfer.duration").timer().count()).isEqualTo(timerCountBefore + 1);
+    }
+
+    private Optional<Counter> successCounter() {
+        return Optional.ofNullable(
+                meterRegistry.find("transfer.count").tag("result", "SUCCESS").counter());
     }
 
     @Test
@@ -387,7 +431,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 List.of(),
                 clock,
                 transactionManager,
-                eventPublisher);
+                eventPublisher,
+                new SimpleMeterRegistry());
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         TransferResult first;

@@ -28,6 +28,7 @@ import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -239,7 +240,8 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
                 ledgerPostingHooks,
                 clock,
                 transactionManager,
-                eventPublisher);
+                eventPublisher,
+                new SimpleMeterRegistry());
     }
 
     private static TransferPreCheck recordingPreCheck(int order, List<Integer> called, boolean reject) {

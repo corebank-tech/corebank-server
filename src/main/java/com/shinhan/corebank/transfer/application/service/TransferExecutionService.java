@@ -30,6 +30,9 @@ import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -73,6 +76,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private final Clock clock;
     private final TransactionTemplate requiresNewTransactionTemplate;
     private final ApplicationEventPublisher eventPublisher;
+    private final MeterRegistry meterRegistry;
+    private final Timer transferDurationTimer;
 
     public TransferExecutionService(
             AccountLockPort accountLockPort,
@@ -87,7 +92,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             List<LedgerPostingHook> ledgerPostingHooks,
             Clock clock,
             PlatformTransactionManager transactionManager,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            MeterRegistry meterRegistry) {
         this.accountLockPort = accountLockPort;
         this.transferLimitPort = transferLimitPort;
         this.transferAuthTokenVerificationPort = transferAuthTokenVerificationPort;
@@ -105,10 +111,25 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
         this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.eventPublisher = eventPublisher;
+        this.meterRegistry = meterRegistry;
+        this.transferDurationTimer =
+                Timer.builder("transfer.duration").description("이체 처리 소요시간").register(meterRegistry);
     }
 
     @Override
     public TransferResult execute(TransferCommand command) {
+        Timer.Sample sample = Timer.start(meterRegistry);
+        TransferResult result = doExecute(command);
+        sample.stop(transferDurationTimer);
+        Counter.builder("transfer.count")
+                .description("이체 처리 결과별 건수")
+                .tag("result", result.status().name())
+                .register(meterRegistry)
+                .increment();
+        return result;
+    }
+
+    private TransferResult doExecute(TransferCommand command) {
         Optional<TransferResult> alreadyProcessed = findAlreadyProcessedResult(command);
         if (alreadyProcessed.isPresent()) {
             return alreadyProcessed.get();
