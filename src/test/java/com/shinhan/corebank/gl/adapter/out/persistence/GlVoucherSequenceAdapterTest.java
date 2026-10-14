@@ -8,6 +8,9 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.gl.api.GlTxType;
 import com.shinhan.corebank.gl.domain.VoucherNumber;
 import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +24,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @DisplayName("전표번호 채번기(GlVoucherSequenceAdapter) 통합 테스트")
 class GlVoucherSequenceAdapterTest extends IntegrationTestSupport {
@@ -33,6 +37,12 @@ class GlVoucherSequenceAdapterTest extends IntegrationTestSupport {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private HikariDataSource mainDataSource;
+
+    @Autowired
+    private Clock clock;
 
     @AfterEach
     void tearDown() {
@@ -113,6 +123,32 @@ class GlVoucherSequenceAdapterTest extends IntegrationTestSupport {
             assertThat(issued).contains("20990105-TRF-000001", "20990105-TRF-000016");
         } finally {
             executor.shutdownNow();
+        }
+    }
+
+    @Test
+    @DisplayName("채번 풀은 메인 풀의 timeout·lifetime 설정을 따르고 이름과 크기만 다르다")
+    void sequencePoolCopiesMainPoolSettings() {
+        HikariConfig prodLike = new HikariConfig();
+        mainDataSource.copyStateTo(prodLike);
+        prodLike.setPoolName("prod-like-main");
+        prodLike.setConnectionTimeout(3_000);
+        prodLike.setMaxLifetime(570_000);
+
+        try (HikariDataSource main = new HikariDataSource(prodLike)) {
+            GlVoucherSequenceAdapter sequenceAdapter = new GlVoucherSequenceAdapter(main, clock);
+            try {
+                HikariDataSource sequencePool =
+                        (HikariDataSource) ReflectionTestUtils.getField(sequenceAdapter, "sequenceDataSource");
+
+                assertThat(sequencePool.getConnectionTimeout()).isEqualTo(3_000);
+                assertThat(sequencePool.getMaxLifetime()).isEqualTo(570_000);
+                assertThat(sequencePool.getJdbcUrl()).isEqualTo(main.getJdbcUrl());
+                assertThat(sequencePool.getPoolName()).isEqualTo("gl-voucher-sequence");
+                assertThat(sequencePool.getMaximumPoolSize()).isEqualTo(3);
+            } finally {
+                sequenceAdapter.closePool();
+            }
         }
     }
 

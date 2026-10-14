@@ -5,6 +5,7 @@ import com.shinhan.corebank.gl.api.GlTxType;
 import com.shinhan.corebank.gl.application.port.out.VoucherSequencePort;
 import com.shinhan.corebank.gl.domain.VoucherNumber;
 import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
+import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import jakarta.annotation.PreDestroy;
 import java.time.Clock;
@@ -13,7 +14,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
-import org.springframework.boot.jdbc.autoconfigure.JdbcConnectionDetails;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.TransientDataAccessException;
@@ -49,22 +49,23 @@ public class GlVoucherSequenceAdapter implements VoucherSequencePort {
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
-    public GlVoucherSequenceAdapter(JdbcConnectionDetails connectionDetails, Clock clock) {
-        this.sequenceDataSource = newSequencePool(connectionDetails);
+    public GlVoucherSequenceAdapter(HikariDataSource mainDataSource, Clock clock) {
+        this.sequenceDataSource = newSequencePool(mainDataSource);
         this.jdbcTemplate = new JdbcTemplate(sequenceDataSource);
         this.transactionTemplate = new TransactionTemplate(new DataSourceTransactionManager(sequenceDataSource));
         this.clock = clock;
     }
 
-    private static HikariDataSource newSequencePool(JdbcConnectionDetails connectionDetails) {
-        HikariDataSource dataSource = new HikariDataSource();
-        dataSource.setPoolName("gl-voucher-sequence");
-        dataSource.setJdbcUrl(connectionDetails.getJdbcUrl());
-        dataSource.setUsername(connectionDetails.getUsername());
-        dataSource.setPassword(connectionDetails.getPassword());
-        dataSource.setDriverClassName(connectionDetails.getDriverClassName());
-        dataSource.setMaximumPoolSize(POOL_SIZE);
-        return dataSource;
+    /**
+     * 메인 풀 설정을 그대로 복사하고 이름과 크기만 바꾼다. 채번은 이체가 계좌 행 락을 쥔 채 기다리는 경로라,
+     * {@code connection-timeout} 이 메인 풀(운영 3초)보다 길면 락을 그만큼 오래 잡는다.
+     */
+    private static HikariDataSource newSequencePool(HikariDataSource mainDataSource) {
+        HikariConfig config = new HikariConfig();
+        mainDataSource.copyStateTo(config);
+        config.setPoolName("gl-voucher-sequence");
+        config.setMaximumPoolSize(POOL_SIZE);
+        return new HikariDataSource(config);
     }
 
     @PreDestroy
