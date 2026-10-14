@@ -154,6 +154,7 @@ record LedgerDepositResult(String transactionNumber, long depositBalanceAfter) {
 3. **중복은 호출자가 막습니다.** 같은 건을 두 번 부르면 두 번 기표됩니다. 만기·해지는 `CLOSED` 전이가, 이자는 지급 이력이 한 번만을 보장합니다. 돌려받은 `transactionNumber`를 지급 이력에 저장해 원장과 잇습니다.
 4. **`credit`(이자)은 계좌의 `last_transaction_at`을 바꾸지 않습니다.** 은행이 넣는 돈은 고객 거래가 아니라, 휴면 판정의 최종 거래일을 늦추면 안 됩니다. `transferBetween`은 고객 계좌로 원리금이 들어가는 거래라 두 계좌 모두 갱신합니다. Apache Fineract도 휴면 판정 최종 거래일을 입금·출금(`transaction_type_enum in (1,2)`)으로만 계산하고 이자 지급(3)은 뺍니다(`SavingsAccountReadPlatformServiceImpl.retrieveSavingsIdsPendingInactive`). PH-16 휴면 전환은 이 전제를 씁니다.
 5. **만기 시점 이자는 `credit` → `transferBetween` 순서로 부릅니다.** 상품 계좌에 마지막 이자를 넣은 뒤 원리금을 한 번에 옮깁니다. 이때 상품 계좌 락을 쥔 채 고객 계좌 락을 더 잡으므로 계좌 ID 오름차순 규칙을 벗어날 수 있습니다. 상품 계좌는 고객 계좌보다 늦게 개설돼 ID가 크고, 어긋나도 MySQL이 데드락을 감지해 한쪽을 롤백합니다.
+6. **받는 계좌가 누구의 어떤 계좌인지는 호출자가 검증합니다.** 이 계약은 계좌 ID만 받고 고객을 모르므로, `toAccountId`의 상태(`ACTIVE`)만 봅니다. 그 계좌가 같은 고객의 등록 출금계좌인지(PH-15 "원리금은 출금계좌로")는 P2가 가입 정보에서 꺼내 넘기기 전에 확인합니다.
 
 테스트는 `LedgerDepositServiceTest`가 고정합니다 — 호출자 롤백 시 잔액·원장 롤백, `credit` → `transferBetween` 뒤 잔액 = 원장 합계, 거부 8종. `last_transaction_at` 유지는 `AccountLockPersistenceAdapterTest`가 고정합니다.
 
