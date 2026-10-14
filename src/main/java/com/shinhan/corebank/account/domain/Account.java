@@ -166,6 +166,8 @@ public class Account {
                 null);
     }
 
+    // 기존 호출부 호환 및 테스트용: 보류액을 0으로 복원한다.
+    // 운영 DB 계좌 복원에는 holdAmount를 받는 오버로드를 사용해야 한다.
     public static Account reconstitute(
             Long accountId,
             String accountNumber,
