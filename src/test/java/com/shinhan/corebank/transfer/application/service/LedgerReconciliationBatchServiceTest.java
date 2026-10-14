@@ -1,5 +1,8 @@
 package com.shinhan.corebank.transfer.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
@@ -8,17 +11,27 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import com.shinhan.corebank.transfer.application.port.in.LedgerFullReconciliationUseCase;
+import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationMismatch;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationUseCase;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.stream.LongStream;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 
 @ExtendWith(MockitoExtension.class)
 class LedgerReconciliationBatchServiceTest {
@@ -26,6 +39,11 @@ class LedgerReconciliationBatchServiceTest {
     private static final String JOB_NAME = "LEDGER_RECONCILIATION_BATCH";
     private static final String DAILY_BATCH_JOB_NAME = "DAILY_TRANSFER_BATCH";
     private static final LocalDate DATE = LocalDate.of(2026, 8, 9);
+    private static final int COB_HARD_THRESHOLD = 10;
+    private static final String SOFT_MARKER = "[LEDGER_RECONCILIATION_SOFT]";
+    private static final String HARD_MARKER = "[LEDGER_RECONCILIATION_HARD]";
+    private static final Logger SERVICE_LOGGER =
+            (Logger) LoggerFactory.getLogger(LedgerReconciliationBatchService.class);
 
     @Mock
     LedgerReconciliationUseCase ledgerReconciliationUseCase;
@@ -36,6 +54,26 @@ class LedgerReconciliationBatchServiceTest {
     @Mock
     BatchExecutionLockPort batchExecutionLockPort;
 
+    // 콘솔 문자열이 아니라 로그 이벤트를 받아야 레벨(WARN/ERROR)을 정확히 비교할 수 있다
+    private final ListAppender<ILoggingEvent> logAppender = new ListAppender<>();
+
+    @BeforeEach
+    void attachLogAppender() {
+        logAppender.start();
+        SERVICE_LOGGER.addAppender(logAppender);
+    }
+
+    @AfterEach
+    void detachLogAppender() {
+        SERVICE_LOGGER.detachAppender(logAppender);
+    }
+
+    private List<ILoggingEvent> logsWith(String marker) {
+        return logAppender.list.stream()
+                .filter(event -> event.getFormattedMessage().contains(marker))
+                .toList();
+    }
+
     private LedgerReconciliationBatchService service() {
         // 대기 로직을 빠르게 돌리도록 poll 간격 1ms, 최대 대기 5ms(=5회 재확인)로 좁힌다.
         return new LedgerReconciliationBatchService(
@@ -43,7 +81,97 @@ class LedgerReconciliationBatchServiceTest {
                 ledgerFullReconciliationUseCase,
                 batchExecutionLockPort,
                 Duration.ofMillis(1),
-                Duration.ofMillis(5));
+                Duration.ofMillis(5),
+                COB_HARD_THRESHOLD);
+    }
+
+    private static List<LedgerReconciliationMismatch> mismatches(int count) {
+        return LongStream.rangeClosed(1, count)
+                .mapToObj(accountId -> new LedgerReconciliationMismatch(accountId, 1_000L, 900L))
+                .toList();
+    }
+
+    @Test
+    @DisplayName("COB 대사는 run()·runFull()과 같은 락을 잡고 전수 대사를 실행한 뒤 반납한다")
+    void runInCob_acquiresSameLock_reconcilesAll_thenReleases() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(ledgerFullReconciliationUseCase.reconcileAll()).thenReturn(List.of());
+
+        service().runInCob(DATE);
+
+        InOrder inOrder = inOrder(batchExecutionLockPort, ledgerFullReconciliationUseCase);
+        inOrder.verify(batchExecutionLockPort).tryAcquire(JOB_NAME);
+        inOrder.verify(ledgerFullReconciliationUseCase).reconcileAll();
+        inOrder.verify(batchExecutionLockPort).release(JOB_NAME);
+    }
+
+    @Test
+    @DisplayName("COB 대사가 락을 못 잡으면 대사를 건너뛰고 SKIPPED를 ERROR로 남기며 release()는 부르지 않는다")
+    void runInCob_lockNotAcquired_skipsAndLogsError() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(false);
+
+        service().runInCob(DATE);
+
+        verify(ledgerFullReconciliationUseCase, never()).reconcileAll();
+        verify(batchExecutionLockPort, never()).release(JOB_NAME);
+        assertThat(logsWith("[LEDGER_RECONCILIATION_SKIPPED]"))
+                .singleElement()
+                .extracting(ILoggingEvent::getLevel)
+                .isEqualTo(Level.ERROR);
+    }
+
+    @Test
+    @DisplayName("COB 대사 중 예외는 삼키지 않고 러너까지 전파하되 락은 반납한다 — 나중에 켤 CobStepHaltException 경로")
+    void runInCob_reconcileFails_propagatesException_lockStillReleased() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        IllegalStateException failure = new IllegalStateException("boom");
+        doThrow(failure).when(ledgerFullReconciliationUseCase).reconcileAll();
+
+        assertThatThrownBy(() -> service().runInCob(DATE)).isSameAs(failure);
+
+        verify(batchExecutionLockPort).release(JOB_NAME);
+    }
+
+    @Test
+    @DisplayName("COB 대사 불일치가 0건이면 soft·hard 로그를 남기지 않는다")
+    void runInCob_noMismatch_logsNeitherSoftNorHard() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(ledgerFullReconciliationUseCase.reconcileAll()).thenReturn(List.of());
+
+        service().runInCob(DATE);
+
+        assertThat(logsWith(SOFT_MARKER)).isEmpty();
+        assertThat(logsWith(HARD_MARKER)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("COB 대사 불일치가 임계와 같으면(soft) SOFT를 WARN으로 남기고 예외 없이 끝난다")
+    void runInCob_mismatchesAtThreshold_soft_logsWarn() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(ledgerFullReconciliationUseCase.reconcileAll()).thenReturn(mismatches(COB_HARD_THRESHOLD));
+
+        assertThatCode(() -> service().runInCob(DATE)).doesNotThrowAnyException();
+
+        assertThat(logsWith(SOFT_MARKER))
+                .singleElement()
+                .extracting(ILoggingEvent::getLevel)
+                .isEqualTo(Level.WARN);
+        assertThat(logsWith(HARD_MARKER)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("COB 대사 불일치가 임계를 넘으면(hard) HARD를 ERROR로 남기되 #556 전까지는 마감 중단 예외를 던지지 않는다(#600)")
+    void runInCob_mismatchesOverThreshold_hard_logsErrorWithoutHalting() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(ledgerFullReconciliationUseCase.reconcileAll()).thenReturn(mismatches(COB_HARD_THRESHOLD + 1));
+
+        assertThatCode(() -> service().runInCob(DATE)).doesNotThrowAnyException();
+
+        assertThat(logsWith(HARD_MARKER))
+                .singleElement()
+                .extracting(ILoggingEvent::getLevel)
+                .isEqualTo(Level.ERROR);
+        assertThat(logsWith(SOFT_MARKER)).isEmpty();
     }
 
     @Test
