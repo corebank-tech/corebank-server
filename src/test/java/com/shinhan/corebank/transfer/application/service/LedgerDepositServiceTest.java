@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
+import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.api.DepositChannel;
@@ -20,6 +22,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -40,6 +43,10 @@ class LedgerDepositServiceTest extends IntegrationTestSupport {
 
     @Autowired
     private LedgerDepositUseCase ledgerDepositUseCase;
+
+    // PH-15 호출자 흐름 재현용 — 테스트는 ArchUnit 대상이 아니다.
+    @Autowired
+    private AccountPersistencePort accountPersistencePort;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -156,6 +163,57 @@ class LedgerDepositServiceTest extends IntegrationTestSupport {
                         PRODUCT_ACCOUNT,
                         CUSTOMER_ACCOUNT))
                 .isZero();
+    }
+
+    // close()는 PH-15에서 생기므로, 아래 두 테스트는 같은 save() 경로를 타는 별칭 변경으로 상태 전이를 대신한다.
+    @Test
+    @DisplayName("입금 전에 읽은 계좌로 account 저장하면 커밋 때 낙관적 락 충돌로 전체 롤백된다 — 잔액이 덮이지는 않는다")
+    void callerSavesSnapshotReadBeforeDeposit_rollsBackWhole() {
+        // given
+        setStatus(PRODUCT_ACCOUNT, "MATURED");
+
+        // when: 계좌 조회 → 입금 → 저장. account와 transfer 엔티티가 같은 version을 각자 들고 UPDATE한다.
+        assertThatThrownBy(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                    Account product = accountPersistencePort
+                            .findByAccountIdAndCustomerIdForUpdate(PRODUCT_ACCOUNT, CUSTOMER_ID)
+                            .orElseThrow();
+                    ledgerDepositUseCase.transferBetween(
+                            PRODUCT_ACCOUNT, CUSTOMER_ACCOUNT, PRINCIPAL, DepositType.MATURITY, DepositChannel.BT);
+                    product.changeAlias("만기해지");
+                    accountPersistencePort.save(product);
+                }))
+                .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+
+        // then
+        assertThat(balanceOf(PRODUCT_ACCOUNT)).isEqualTo(PRINCIPAL).isEqualTo(ledgerSumOf(PRODUCT_ACCOUNT));
+        assertThat(balanceOf(CUSTOMER_ACCOUNT)).isEqualTo(CUSTOMER_OPENING).isEqualTo(ledgerSumOf(CUSTOMER_ACCOUNT));
+    }
+
+    @Test
+    @DisplayName("입금 뒤에 계좌를 처음 읽어 account 저장하면 상태 변경과 입금이 함께 커밋된다")
+    void callerReadsAccountAfterDeposit_commitsBoth() {
+        // given
+        setStatus(PRODUCT_ACCOUNT, "MATURED");
+
+        // when: 입금 → 계좌 조회 → 저장. 조회 쿼리 전에 transfer 변경이 flush돼 새 version을 읽는다.
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            ledgerDepositUseCase.transferBetween(
+                    PRODUCT_ACCOUNT, CUSTOMER_ACCOUNT, PRINCIPAL, DepositType.MATURITY, DepositChannel.BT);
+            Account product = accountPersistencePort
+                    .findByAccountIdAndCustomerIdForUpdate(PRODUCT_ACCOUNT, CUSTOMER_ID)
+                    .orElseThrow();
+            product.changeAlias("만기해지");
+            accountPersistencePort.save(product);
+        });
+
+        // then
+        assertThat(balanceOf(PRODUCT_ACCOUNT)).isZero().isEqualTo(ledgerSumOf(PRODUCT_ACCOUNT));
+        assertThat(balanceOf(CUSTOMER_ACCOUNT))
+                .isEqualTo(CUSTOMER_OPENING + PRINCIPAL)
+                .isEqualTo(ledgerSumOf(CUSTOMER_ACCOUNT));
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT alias FROM account WHERE account_id = ?", String.class, PRODUCT_ACCOUNT))
+                .isEqualTo("만기해지");
     }
 
     @Test
