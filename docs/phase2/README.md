@@ -173,7 +173,7 @@ flowchart TB
     - VPN 연결 · VPN Gateway · Customer Gateway도 destroy 대상이다. 온프레미스 SSM 등록은 따로 해제한다.
 - 구성도: [핵심 흐름](../assets/infra-core.svg) · [상세 구성](../assets/infra-detail.svg). AWS와 온프레미스(신한DS 자체 서버)를 Site-to-Site VPN으로 잇는 하이브리드다([D-25](#d-25--927--리드-제안팀-회의-확인-대기)).
 - 인프라 경계
-    - P5: VPC·서브넷·NAT(AZ별)·SG·ALB·ASG(min 2, AZ별 1대)·인스턴스 프로파일·SSM 접속 · Site-to-Site VPN · 온프레미스 VM 2대([PH-100](tasks.md#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3))
+    - P5: VPC·서브넷·NAT(AZ별)·SG·ALB·ASG(min 2, AZ별 1대)·인스턴스 프로파일·SSM 접속 · Site-to-Site VPN · 온프레미스 VM 1대([PH-100](tasks.md#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3))
     - P2: RDS 스냅샷 복원(Multi-AZ)·온프레미스 binlog 복제·WAF·Route53·ACM·CloudFront·사람/CI/AI IAM·Secrets Manager·CloudTrail·Object Lock 버킷·DR
     - 상세는 [D-11](#d-11--920--p2p5) · [D-25](#d-25--927--리드-제안팀-회의-확인-대기)
 
@@ -407,7 +407,7 @@ P6의 AI 기능을 약관 RAG에서 **서비스 안내 내비게이션**으로 �
 3-Tier 인프라를 AWS와 온프레미스(신한DS 자체 서버)의 하이브리드로 바꾼다. 구성도는 [핵심 흐름](../assets/infra-core.svg) · [상세 구성](../assets/infra-detail.svg)이다. §6의 "Read Replica · ElastiCache"를 되살리는 결정이라, 팀 회의에서 확인한 뒤 이 내용을 머지한다([O-11](#8-미결)).
 
 - AWS: NAT는 AZ별로 둔다. WAS ASG는 min 2(AZ별 1대)다. util 노드는 없애고 내비게이션 API는 각 WAS에 함께 뜬다. 세션 Redis는 ElastiCache Multi-AZ다.
-- 온프레미스: VM 2대다. 정보계 VM(Nginx · 정보계 API · 계정계 API 대기 · MySQL 레플리카 · 마트)과 대외·모니터링 VM(모의 대외기관 · Prometheus · Grafana). 모의 대외기관은 컷오버(10/27)부터 온프레미스에서 돈다.
+- 온프레미스: 부트캠프 VM 1대다. VM 내부를 정보계·DR 영역(Nginx · 정보계 API · 계정계 API DR 대기 · MySQL 레플리카 · 마트)과 대외·모니터링 영역(모의 대외기관 · Prometheus · Grafana)으로 논리적으로 구분한다. 계정계 API는 AWS 주 운영 환경을 사용할 수 없을 때 기동한다. 모의 대외기관은 컷오버(10/27)부터 온프레미스에서 돈다.
 - 연결: Site-to-Site VPN(IPsec). RDS → 온프레미스 레플리카 binlog 복제, 대외 전문, 메트릭 수집, 정보계 조회가 이 터널을 지난다.
 - 정보계 ETL은 COB 스텝에서 빼고 온프레미스 독립 작업으로 둔다. 레플리카에 복제된 COB 완료 기록을 보고 시작한다([PH-76](tasks.md#ph-76-정보계-etl)).
 - 정보계 조회는 WAS가 세션과 `GL_READ`를 확인한 뒤 VPN으로 온프레미스 정보계 API를 부른다. 온프레미스 API는 인터넷에 공개하지 않는다([PH-77](tasks.md#ph-77-정보계-조회-api)).
