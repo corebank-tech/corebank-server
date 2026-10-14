@@ -170,6 +170,26 @@ class LedgerDepositServiceTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("만기 전(ACTIVE) 상품 계좌의 만기해지는 TRF0307로 거부한다")
+    void transferBetween_rejectsMaturityOnActiveAccount() {
+        assertRejected(
+                () -> ledgerDepositUseCase.transferBetween(
+                        PRODUCT_ACCOUNT, CUSTOMER_ACCOUNT, PRINCIPAL, DepositType.MATURITY, DepositChannel.BT),
+                TransferErrorCode.DEPOSIT_TYPE_STATUS_MISMATCH);
+    }
+
+    @Test
+    @DisplayName("만기 도달(MATURED) 상품 계좌의 중도해지는 TRF0307로 거부한다")
+    void transferBetween_rejectsTerminationOnMaturedAccount() {
+        setStatus(PRODUCT_ACCOUNT, "MATURED");
+
+        assertRejected(
+                () -> ledgerDepositUseCase.transferBetween(
+                        PRODUCT_ACCOUNT, CUSTOMER_ACCOUNT, PRINCIPAL, DepositType.TERMINATION, DepositChannel.WB),
+                TransferErrorCode.DEPOSIT_TYPE_STATUS_MISMATCH);
+    }
+
+    @Test
     @DisplayName("받는 고객 계좌가 ACTIVE가 아니면 TRF0301로 거부한다")
     void transferBetween_rejectsInactiveToAccount() {
         setStatus(CUSTOMER_ACCOUNT, "MATURED");

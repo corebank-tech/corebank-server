@@ -19,6 +19,7 @@ import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -41,6 +42,10 @@ public class LedgerDepositService implements LedgerDepositUseCase {
     // 만기 계좌도 해지 전까지는 돈이 들고 나야 한다 — 만기 이자 입금과 원리금 출금.
     private static final Set<LockedAccountStatus> PRODUCT_ACCOUNT_STATUSES =
             Set.of(LockedAccountStatus.ACTIVE, LockedAccountStatus.MATURED);
+    // 만기해지는 만기 도달 뒤, 중도해지는 만기 전에만 — 호출자 검사는 락 전이라 여기서 다시 막는다.
+    private static final Map<DepositType, LockedAccountStatus> REQUIRED_PRODUCT_STATUS = Map.of(
+            DepositType.MATURITY, LockedAccountStatus.MATURED,
+            DepositType.TERMINATION, LockedAccountStatus.ACTIVE);
 
     private final AccountLockPort accountLockPort;
     private final TransferSequencePort transferSequencePort;
@@ -62,6 +67,9 @@ public class LedgerDepositService implements LedgerDepositUseCase {
 
         if (!PRODUCT_ACCOUNT_STATUSES.contains(locked.withdrawal().status())) {
             throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
+        }
+        if (locked.withdrawal().status() != REQUIRED_PRODUCT_STATUS.get(type)) {
+            throw new BusinessException(TransferErrorCode.DEPOSIT_TYPE_STATUS_MISMATCH);
         }
         if (locked.deposit().status() != LockedAccountStatus.ACTIVE) {
             throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);

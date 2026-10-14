@@ -16,7 +16,7 @@ public interface LedgerDepositUseCase {
     /**
      * 상품 계좌에서 고객 계좌로 옮긴다(원장 2행). 만기해지·중도해지용이다.
      *
-     * @param fromAccountId 돈이 빠지는 상품 계좌. ACTIVE 또는 MATURED여야 한다
+     * @param fromAccountId 돈이 빠지는 상품 계좌. MATURITY면 MATURED, TERMINATION이면 ACTIVE여야 한다
      * @param toAccountId   돈이 들어가는 고객 계좌. ACTIVE여야 한다
      * @param type          {@link DepositType#MATURITY} 또는 {@link DepositType#TERMINATION}
      */
