@@ -218,7 +218,7 @@
 
 **① 결정 5개를 [admin_auth.md](admin_auth.md)에 적는다.**
 
-1. 저장 모델: `customer.role`(CUSTOMER/ADMIN)과 `customer.permissions` VARCHAR(200) CSV
+1. 저장 모델: `customer.role`(CUSTOMER/ADMIN)과 `admin_permission` 조인 테이블(행 하나가 권한 하나)
 2. 권한은 고정 5종: `GL_READ · GL_WRITE · CUSTOMER_READ · CUSTOMER_WRITE · AUDIT_READ`. 부여·회수 API는 PH-49b에서 만들고, 이 시점에는 시드로만 준다.
 3. 로그인 경로를 `/admin/auth/login`으로 분리
 4. 관리자 세션 30분 무조작 만료(고객은 10분)

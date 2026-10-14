@@ -26,12 +26,17 @@ erDiagram
         boolean account_locked
         varchar status "ACTIVE / SUSPENDED"
         varchar role "CUSTOMER / ADMIN"
-        varchar permissions "관리자 권한 CSV, 고객은 NULL"
         datetime last_login_at "대시보드 currentLoginAt"
         varchar last_login_ip "대시보드 currentLoginIp"
         datetime previous_login_at "대시보드 previousLoginAt"
         datetime password_changed_at "DATETIME(6)"
         datetime joined_at "DATETIME(6)"
+    }
+
+    admin_permission {
+        bigint customer_id PK,FK "관리자"
+        varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ"
+        datetime granted_at "권한 부여 시각"
     }
     terms {
         bigint terms_id PK
@@ -436,6 +441,7 @@ erDiagram
     gl_voucher ||--o{ gl_journal_entry : "전표-분개 (전표 단위 차대변 일치)"
     gl_account ||--o{ gl_journal_entry : "계정별 분개"
 
+    customer ||--o{ admin_permission : "권한보유"
     customer ||--o{ customer_terms_agreement : "동의"
     terms ||--o{ customer_terms_agreement : "대상"
     customer ||--o{ verification_request : "인증요청"

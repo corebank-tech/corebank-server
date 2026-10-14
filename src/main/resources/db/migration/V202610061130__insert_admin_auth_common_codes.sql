@@ -2,9 +2,13 @@
 -- V202610061130__insert_admin_auth_common_codes.sql
 -- 대상 테이블: common_code (소유 P5 · 작업 P1)
 --
--- customer.role 과 customer.permissions(V202610061129)의 화면 표시명을
--- 등록한다(PH-49a-①, #561). GET /customers/me 가 role 과 permissions[] 를
+-- customer.role(V202610061129) 과 admin_permission.permission(V202610061131) 의
+-- 화면 표시명을 등록한다(PH-49a-①, #561). GET /customers/me 가 role 과 permissions[] 를
 -- 내보내므로 프론트가 표시명을 매핑할 행이 있어야 한다.
+--
+-- admin_permission 은 이 테이블에 FK 를 걸지 못한다. common_code 가 code_group 으로
+-- 여러 종류를 함께 담아 ADMIN_PERMISSION 행만 참조할 수 없기 때문이다. 대신 그쪽 CHECK 로
+-- 값을 고정했고, 권한이 늘면 두 곳을 함께 바꾼다.
 -- common_code 의 code 는 서버 Enum(CustomerRole · AdminPermission) 값과
 -- 문자열이 일치해야 한다 (schema_reference.md common_code 절, REQ-CMN-023).
 --

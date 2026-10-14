@@ -1,6 +1,6 @@
 # 관리자 인증 — 결정과 스키마 (PH-49a-①)
 
-관리자를 별도 테이블로 분리하지 않고 `customer`에 `role`·`permissions`를 더하고, 로그인 경로만
+관리자를 별도 테이블로 분리하지 않고 `customer`에 `role`을 더하고 권한은 `admin_permission`에 두며, 로그인 경로만
 `/admin/auth/login`으로 갈라낸다. **이 문서가 PH-49a-② 구현의 정본이다** — 여기 적힌 값 그대로 짜고,
 없는 것만 다시 논의한다.
 
@@ -8,20 +8,28 @@
 |---|---|
 | 이슈 | [#561](https://github.com/corebank-tech/corebank-server/issues/561) |
 | 후속 | PH-49a-②(10/8) · PH-89(`#458`) · FE `#136` · PH-49c · PH-49b |
-| Flyway | `V202610061129`(컬럼) · `V202610061130`(공통코드) |
+| Flyway | `V202610061129`(`customer.role`) · `V202610061130`(공통코드) · `V202610061131`(`admin_permission`) |
 
 ## 1. 결정 5개
 
 **① 저장 모델** — `customer.role`(`CUSTOMER`/`ADMIN`, `VARCHAR(12)` NOT NULL DEFAULT `CUSTOMER`) ·
-`customer.permissions`(`VARCHAR(200)` NULL, 권한 CSV).
+`admin_permission`(`customer_id` + `permission` 복합 PK, 행 하나가 권한 하나).
 
 관리자 테이블을 따로 두지 않는 이유는 비밀번호·잠금·세션 메커니즘을 고객과 공유하고
-`SessionLoginManager`를 그대로 쓰기 때문이다. 권한을 조인 테이블로 두지 않는 이유는 값이 5종 고정이고
-부여·회수가 계정 단위로만 일어나기 때문이다.
+`SessionLoginManager`를 그대로 쓰기 때문이다.
 
-`role=CUSTOMER`인 행의 `permissions`는 **NULL**이다. 빈 문자열을 쓰지 않는다 — "권한 0개인 관리자"와
-"관리자가 아닌 고객"을 구분해야 한다. 둘이 모순되는 상태(`CUSTOMER`인데 권한이 있음)를 막는 DB 제약은
-그 값을 쓰는 부여·회수 API가 생기는 PH-49b에서 함께 넣는다.
+**권한은 조인 테이블로 둔다.** 처음에는 `customer.permissions`에 CSV로 담으려 했으나 PR #572 리뷰에서
+바꿨다. 값이 5종 고정이라 CSV로도 담기지만,
+
+- CSV는 글자일 뿐이라 `GL_RAED` 같은 **오타를 DB가 막지 못하고**,
+- 표시명을 등록한 `common_code`(`ADMIN_PERMISSION`)와 **값이 이어지지 않으며**,
+- PH-49b의 **부여·회수 API가 문자열을 자르고 붙이는 코드**가 된다.
+
+행으로 두면 CHECK가 오타를 막고 부여·회수가 `INSERT`/`DELETE` 한 줄이 된다.
+
+**권한이 없는 관리자는 `admin_permission`에 행이 0개다.** "권한 0개인 관리자"와 "관리자가 아닌 고객"은
+`customer.role`로 갈린다. 둘이 모순되는 상태(`CUSTOMER`인데 권한 행이 있음)를 막는 제약은 그 값을 쓰는
+부여·회수 API가 생기는 PH-49b에서 함께 넣는다.
 
 **② 권한 5종 고정**
 
@@ -50,7 +58,7 @@
 
 **⑤ `GET /customers/me`에 `role`·`permissions[]` 추가**
 
-CSV는 저장 형식이고 API 계약은 **배열**이다. 고객은 `role: "CUSTOMER"`, `permissions: []`로 나간다
+저장은 행이고 API 계약은 **배열**이다. 고객은 `role: "CUSTOMER"`, `permissions: []`로 나간다
 (NULL이 아니라 빈 배열).
 
 ## 2. 스키마
@@ -90,18 +98,37 @@ QA 데모 데이터(`local-demo-data.sql`)와 **파일을 나눈 이유**는 `De
 
 ```sql
 -- 해시는 BCrypt(strength 10)로 미리 만들어 채운다. 평문을 SQL 에 쓰지 않는다.
--- 운영 관리자는 한 명으로 시작하고, 추가는 PH-49b 부여·회수 API 로 만든다.
+-- 운영 관리자는 한 명으로 시작한다. 계정을 더 만들 때도 이 SQL 을 쓴다 —
+-- PH-49b 는 이미 있는 관리자의 권한을 주고 빼는 API 라 계정 생성과 role 지정은 못 한다.
 INSERT INTO customer (
     user_id, password_hash, user_name, birth_date, email, phone_number,
-    login_failure_count, account_locked, status, role, permissions,
+    login_failure_count, account_locked, status, role,
     joined_at, created_at, updated_at
 ) VALUES (
     :user_id, :bcrypt_hash, :user_name, :birth_date, :email, :phone_number,
     0, FALSE, 'ACTIVE', 'ADMIN',
-    'GL_READ,GL_WRITE,CUSTOMER_READ,CUSTOMER_WRITE,AUDIT_READ',
     NOW(6), NOW(6), NOW(6)
 );
--- 확인: SELECT user_id, role, permissions FROM customer WHERE role = 'ADMIN';
+
+-- 권한은 행으로 넣는다. 조회 전용 관리자면 READ 세 줄만 넣는다.
+INSERT INTO admin_permission (customer_id, permission, granted_at)
+SELECT customer_id, p.permission, NOW(6)
+  FROM customer c
+  JOIN (
+        SELECT 'GL_READ' AS permission
+         UNION ALL SELECT 'GL_WRITE'
+         UNION ALL SELECT 'CUSTOMER_READ'
+         UNION ALL SELECT 'CUSTOMER_WRITE'
+         UNION ALL SELECT 'AUDIT_READ'
+       ) p
+ WHERE c.user_id = :user_id;
+
+-- 확인
+SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS permissions
+  FROM customer c
+  LEFT JOIN admin_permission ap ON ap.customer_id = c.customer_id
+ WHERE c.role = 'ADMIN'
+ GROUP BY c.customer_id;
 ```
 
 ## 5. FE 계약 (FE `#136`)
