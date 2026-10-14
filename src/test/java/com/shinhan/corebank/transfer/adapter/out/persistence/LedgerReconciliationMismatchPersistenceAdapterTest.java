@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
 
 @Transactional
@@ -141,6 +142,32 @@ class LedgerReconciliationMismatchPersistenceAdapterTest extends IntegrationTest
         assertThat(firstPage.getTotalElements()).isEqualTo(3);
         assertThat(adapter.countByBusinessDate(BUSINESS_DATE)).isEqualTo(3);
         assertThat(adapter.countByBusinessDate(OTHER_BUSINESS_DATE)).isZero();
+    }
+
+    @Test
+    @DisplayName("Pageable.unpaged()로 조회하면 그 영업일 전체를 계좌 ID 오름차순 한 페이지로 돌려준다")
+    void findByBusinessDate_unpaged_returnsAllRowsInOnePage() {
+        adapter.replaceForBusinessDate(
+                BUSINESS_DATE,
+                List.of(
+                        new LedgerReconciliationMismatch(ACCOUNT_C, 300L, 0L),
+                        new LedgerReconciliationMismatch(ACCOUNT_A, 1_000L, 900L),
+                        new LedgerReconciliationMismatch(ACCOUNT_B, 0L, 50L)),
+                FIRST_RUN_AT);
+        adapter.replaceForBusinessDate(
+                OTHER_BUSINESS_DATE,
+                List.of(new LedgerReconciliationMismatch(ACCOUNT_A, 1_000L, 900L)),
+                FIRST_RUN_AT.minusDays(1));
+        flushAndClear();
+
+        Page<LedgerReconciliationMismatchView> all = adapter.findByBusinessDate(BUSINESS_DATE, Pageable.unpaged());
+
+        assertThat(all.getContent())
+                .extracting(LedgerReconciliationMismatchView::accountId)
+                .containsExactly(ACCOUNT_A, ACCOUNT_B, ACCOUNT_C);
+        assertThat(all.getTotalElements()).isEqualTo(3);
+        assertThat(all.getTotalPages()).isEqualTo(1);
+        assertThat(all.getNumber()).isZero();
     }
 
     private void flushAndClear() {
