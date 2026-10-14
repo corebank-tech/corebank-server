@@ -35,7 +35,7 @@
 | 7 | `product_rate_tier` | 상품 기간별 금리 | P3 | 3  |
 | 8 | `product_preferential_rate` | 상품 우대금리 | P3 | 4  |
 | 9 | `product_terms` | 상품-약관 연결 | P3 | 2  |
-| 10 | `account` | 계좌 | P2 | 21 |
+| 10 | `account` | 계좌 | P2 | 22 |
 | 11 | `account_number_sequence` | 계좌번호 채번 규칙 | P2 | 8  |
 | 12 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4  |
 | 13 | `transfer` | 이체 거래 | P4 | 25 |
@@ -318,6 +318,7 @@
 | `product_id`               | `BIGINT`      | **FK** | O    |          | 입출금계좌는 NULL → `product.product_id`                                                |
 | `account_type`             | `VARCHAR(24)` |        | X    |          | 계좌 종류. `DEMAND_DEPOSIT`(입출금) / `TIME_DEPOSIT`(정기예금) / `INSTALLMENT_SAVINGS`(정기적금) |
 | `balance`                  | `BIGINT`      |        | X    | `0`      | 현재 잔액. **조회 성능용 캐시**이며 진실의 원천은 `ledger_entry` 합계다. 배치로 대사한다                       |
+| `hold_amount` | `BIGINT` | | X | `0` | 지급정지 보류액. 출금가능액 계산 시 잔액에서 차감한다. |
 | `status`                   | `VARCHAR(12)` |        | X    | `ACTIVE` | 계좌 상태. `ACTIVE`(정상) / `SUSPENDED`(거래정지) / `MATURED`(만기 도달) / `CLOSED`(해지) / `DORMANT`(휴면)                            |
 | `password_hash`            | `CHAR(60)`    |        | X    |          | 계좌비밀번호 4자리의 BCrypt 해시                                                             |
 | `password_failure_count`   | `TINYINT`     |        | X    | `0`      | 계좌비밀번호 연속 오류 횟수. 검증 실패 응답의 `errorCount`                                           |
@@ -347,6 +348,7 @@
 | 이름                                    | 조건                                                                                                                                                   | 설명                                                 |
 |---------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------|
 | `ck_account_balance`                  | `balance >= 0`                                                                                                                                       | 계좌 잔액은 0원 이상이어야 한다.                                |
+| `ck_account_hold_amount` | `hold_amount >= 0 AND hold_amount <= balance` | 보류액은 0원 이상이며 원장잔액을 초과하지 않는다. |
 | `ck_account_number`                   | `account_number REGEXP '^[0-9]{12}$'`                                                                                                                | 계좌번호는 하이픈 없는 숫자 12자리여야 한다.                         |
 | `ck_account_type`                     | `account_type IN ('DEMAND_DEPOSIT', 'TIME_DEPOSIT', 'INSTALLMENT_SAVINGS')`                                                                          | 계좌 유형은 입출금·정기예금·정기적금 중 하나여야 한다.                    |
 | `ck_account_status`                   | `status IN ('ACTIVE', 'SUSPENDED', 'MATURED', 'CLOSED', 'DORMANT')`                                                                                    | 계좌 상태는 정상·거래정지·만기 도달·해지·휴면 중 하나여야 한다.                       |
