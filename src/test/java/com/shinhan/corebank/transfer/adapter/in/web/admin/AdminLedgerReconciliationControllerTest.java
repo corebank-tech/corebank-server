@@ -84,6 +84,31 @@ class AdminLedgerReconciliationControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("all=true면 그 영업일 전체를 계좌 ID 오름차순 한 페이지로 내려준다")
+    void all_returnsWholeDateInOnePage() throws Exception {
+        mismatchAdapter.replaceForBusinessDate(
+                EARLIER_DATE,
+                List.of(
+                        new LedgerReconciliationMismatch(ACCOUNT_B, 0L, 50L),
+                        new LedgerReconciliationMismatch(ACCOUNT_A, 1_000L, 900L)),
+                LocalDateTime.of(2099, 2, 3, 23, 31, 5));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get(URL).param("businessDate", "2099-02-03")
+                        .param("all", "true")
+                        .with(customer(ADMIN_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.totalCount").value(2))
+                .andExpect(jsonPath("$.data.totalPages").value(1))
+                .andExpect(jsonPath("$.data.items.length()").value(2))
+                .andExpect(jsonPath("$.data.items[0].accountId").value(ACCOUNT_A))
+                .andExpect(jsonPath("$.data.items[1].accountId").value(ACCOUNT_B));
+    }
+
+    @Test
     @DisplayName("기록이 없는 영업일은 items가 빈 배열이다")
     void emptyDate_returnsEmptyItems() throws Exception {
         mockMvc.perform(get(URL).param("businessDate", "2099-03-01").with(customer(ADMIN_ID)))
