@@ -8,7 +8,7 @@
 |---|---|
 | 이슈 | [#561](https://github.com/corebank-tech/corebank-server/issues/561) |
 | 후속 | PH-49a-②(10/8) · PH-89(`#458`) · FE `#136` · PH-49c · PH-49b |
-| Flyway | `V202610061129`(`customer.role`) · `V202610061130`(공통코드) · `V202610061131`(`admin_permission`) |
+| Flyway | `V202610152100`(`customer.role`) · `V202610152101`(공통코드) · `V202610152102`(`admin_permission`) |
 
 ## 1. 결정 5개
 
@@ -63,9 +63,10 @@
 
 ## 2. 스키마
 
-`V202610061129`가 컬럼 2개와 `ck_customer_role`을, `V202610061130`이 공통코드
-(`CUSTOMER_ROLE` 2행 · `ADMIN_PERMISSION` 5행)를 넣는다. 파일을 나눈 이유는 MySQL DDL이 암묵적
-커밋이라 한 파일에서 ALTER 성공 후 INSERT가 실패하면 컬럼만 남고 이력은 실패로 기록되기 때문이다.
+`V202610152100`가 `customer.role`과 `ck_customer_role`을, `V202610152101`이 공통코드
+(`CUSTOMER_ROLE` 2행 · `ADMIN_PERMISSION` 5행)를, `V202610152102`가 `admin_permission` 테이블을
+넣는다. 파일을 나눈 이유는 MySQL DDL이 암묵적 커밋이라 한 파일에서 ALTER 성공 후 INSERT가
+실패하면 컬럼만 남고 이력은 실패로 기록되기 때문이다.
 
 공통코드가 필요한 이유는 `code`가 서버 Enum 값과 일치해야 하고 행이 없으면 프론트가 표시명 매핑에
 실패하기 때문이다(`schema_reference.md` `common_code` 절 · REQ-CMN-023).
