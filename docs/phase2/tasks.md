@@ -934,8 +934,9 @@ public interface CobStep {
 **① 애플리케이션 쪽 (#541, VM 무관, 지금 착수):**
 
 - Micrometer + `micrometer-registry-prometheus`. `/actuator/prometheus`는 local·test profile만 노출(prod는 ②에서 같이 켠다)
-- JVM·DB(HikariCP)·HTTP 기본 메트릭은 자동 수집. 거래(이체) 커스텀 메트릭 — `TransferExecutionService`에 Counter(`transfer.count`, 태그 `result`)·Timer(`transfer.duration`). 자동·예약이체도 같은 서비스를 거쳐가 한 곳만 계측
+- JVM·DB(HikariCP)·HTTP 기본 메트릭은 자동 수집. 거래(이체) 커스텀 메트릭 — `TransferExecutionService`에 Counter(`transfer.count`, 태그 `result`)·Timer(`transfer.duration`). 자동·예약이체도 같은 서비스를 거쳐가 한 곳만 계측 — **완료**
 - 관리자 화면과 겹치는 거래 메트릭 없음(10/12 확인, ADM-01~04 성격 다름)
+- 배치(COB) 커스텀 메트릭 — `CobRunnerService`에 거래와 같은 패턴으로 step 결과별 Counter·Timer 추가. **PR #606(#603)이 같은 메서드(`runSteps()`)를 손대는 중이라 그 머지 뒤로 미룸** — 지금 넣으면 머지 시 같은 메서드에서 충돌난다
 
 **② Grafana·알람 (#619, PH-100 선행, 아직 착수 불가):**
 
