@@ -21,6 +21,11 @@ spring:
     locations: classpath:db/migration
     validate-on-migrate: true
     baseline-on-migrate: false
+  task:
+    scheduling:
+      pool:
+        # COB(23:30)가 대사로 길어져도 00:10 자동이체 등 다른 @Scheduled가 같은 스레드를 기다리지 않게 한다 (#604)
+        size: 2
   data:
     redis:
       port: 6379

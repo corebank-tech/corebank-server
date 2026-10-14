@@ -481,21 +481,28 @@ erDiagram
 `account.balance`는 조회 성능용 캐시이고, 진실의 원천은 `ledger_entry`다. 계좌별로 원장 기표를
 `SUM(DEPOSIT) - SUM(WITHDRAWAL)`로 더한 값이 항상 `account.balance`와 같아야 한다.
 
-- **탐지**: `LedgerReconciliationScheduler`가 매일 02:00(Asia/Seoul)에 트리거된다. 02시는
-  "보통 이쯤이면 끝나있겠지"로 잡은 시각일 뿐이고, 실행 전 `LedgerReconciliationBatchService`가
-  `DAILY_TRANSFER_BATCH`(자동이체→예약이체, 00:10 시작)가 실제로 끝났는지 최대 1시간 동안
-  1분 간격으로 재확인한다. 그래도 안 끝나면 이번 실행은 건너뛰고 `LEDGER_RECONCILIATION_SKIPPED`
-  ERROR 로그를 남긴다 — 조용히 다음날로 넘어가면 그 날짜는 영원히 대사가 안 된 채 묻히므로,
-  이 경우 담당자가 해당 날짜를 수동으로 재확인해야 한다. 대상 계좌는 전일 기표가 있었던
-  계좌만 골라 대조한다. 불일치는 `LEDGER_RECONCILIATION_MISMATCH` 마커로 ERROR 로그에
+- **탐지 (#604)**: COB 체인의 대사 스텝(`LedgerReconciliationCobStep`, `order=2`)이 영업일 23:30 COB에서
+  돈다. 독립 스케줄(매일 02:00 증분 · 일요일 03:00 전수)은 없앴다. 스텝은 아래 **전수 대사**를 돌린다 —
+  증분 대사는 기표 시각 기준 달력 하루만 보므로, 영업일에만 도는 COB 안에서는 23:30~24:00 거래와
+  주말·연휴 기표 계좌가 어느 날 대사에도 잡히지 않기 때문이다. 주말·연휴 불일치는 다음 영업일 COB에서
+  잡힌다(누락이 아니라 발견 지연). 불일치는 `LEDGER_RECONCILIATION_MISMATCH` 마커로 ERROR 로그에
   남는다(경보 채널 연동은 미정 — 현재는 로그 기반).
-- **전수 대사 (#468)**: 증분 대사는 기표가 있었던 계좌만 보므로, 원장을 거치지 않고 잔액만 틀어진
-  휴면 계좌는 영원히 대상에 들지 않는다. 그래서 같은 스케줄러가 매주 일요일 03:00에 **전 계좌**를
+- **soft / hard**: 불일치 건수가 임계(`app.ledger-reconciliation.cob-hard-threshold`, 기본 10) 이하면
+  soft(`LEDGER_RECONCILIATION_SOFT` WARN), 초과면 hard(`LEDGER_RECONCILIATION_HARD` ERROR)다. hard는
+  원래 `CobStepHaltException`으로 마감을 멈출 자리지만, 영업일 전환 뒤라 멈추면 복구할 수단이 없어
+  #556(`COB_DATE` 저장·실패 스텝 재실행) 전까지는 로그만 남기고 다음 스텝으로 넘어간다(#600).
+  soft/hard는 **마감을 계속할지**의 판단이지 경보 심각도가 아니다 — 원장 불일치는 1건이어도 사고라
+  건별 `LEDGER_RECONCILIATION_MISMATCH`는 soft/hard와 무관하게 항상 ERROR다.
+- **전수 대사 (#468)**: 원장을 거치지 않고 잔액만 틀어진 휴면 계좌까지 잡도록 **전 계좌**를
   `account_id` 순 청크(기본 1,000개, `app.ledger-reconciliation.full-scan-chunk-size`)로 훑는다.
   원장이 한 줄도 없는 계좌는 원장 합계를 0으로 본다. 청크마다 짧은 읽기 전용 트랜잭션을 열어 같은
-  스냅샷에서 잔액과 원장 합계를 읽으므로 다른 배치가 돌아도 오탐이 없고, 그래서 일일 배치 완료를
-  기다리지 않는다. 증분 대사와 같은 락(`LEDGER_RECONCILIATION_BATCH`)을 써서 둘이 동시에 돌지 않는다.
-  불일치는 같은 마커에 `scope=FULL`을 붙여 남기고, 끝나면 계좌 수·불일치 수·`elapsedMs`를 INFO로 남긴다.
+  스냅샷에서 잔액과 원장 합계를 읽으므로 COB 중 들어오는 거래나 다른 배치가 돌아도 오탐이 없다.
+  COB 대사는 증분 경로(`run(date)`)·`runFull()`과 같은 락(`LEDGER_RECONCILIATION_BATCH`)을 잡는다. 못 잡으면
+  `LEDGER_RECONCILIATION_SKIPPED` ERROR를 남기고 그날 대사를 건너뛰므로 수동 재확인이 필요하다. 불일치는 같은 마커에 `scope=FULL`을 붙여 남기고, 끝나면 계좌 수·
+  불일치 수·`elapsedMs`를 INFO로 남긴다.
+- **증분 대사 (#378, 현재 트리거 없음)**: 전일 기표가 있었던 계좌만 대조하는 경로
+  (`LedgerReconciliationBatchUseCase.run(date)`)는 코드에 남아 있지만 부르는 곳이 없다. 거래일
+  (`trade_date`, PH-41) 기준으로 바꾸면 COB 안에서도 날짜 구멍 없이 쓸 수 있다.
 - **자동 정정 없음**: `ledger_entry`는 파티션 테이블이라 FK로도 강제되지 않는 APPEND-ONLY
   원장이다. 배치는 탐지까지만 하고 잔액을 임의로 덮어쓰지 않는다.
 - **대응 절차**: 불일치가 나오면 원장이 맞고 `account.balance`가 틀린 것으로 간주한다.
