@@ -53,13 +53,6 @@ resource "aws_security_group" "was" {
     cidr_blocks = [var.vpc_cidr]
   }
 
-  egress {
-    from_port   = 6379
-    to_port     = 6379
-    protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr]
-  }
-
   tags = { Name = "${var.name_prefix}-sg-was" }
 }
 
@@ -76,19 +69,4 @@ resource "aws_security_group" "rds" {
   }
 
   tags = { Name = "${var.name_prefix}-sg-rds" }
-}
-
-resource "aws_security_group" "cache" {
-  name        = "${var.name_prefix}-sg-cache"
-  description = "ElastiCache Redis - WAS에서 오는 6379만 허용"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    from_port       = 6379
-    to_port         = 6379
-    protocol        = "tcp"
-    security_groups = [aws_security_group.was.id]
-  }
-
-  tags = { Name = "${var.name_prefix}-sg-cache" }
 }
