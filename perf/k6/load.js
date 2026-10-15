@@ -1,6 +1,6 @@
 import { login } from './lib/session.js';
 import { executeTransfer } from './lib/transfer.js';
-import { customer } from './lib/ph60Accounts.js';
+import { customer, customerCount } from './lib/ph60Accounts.js';
 import { getRequiredBaseUrl } from './lib/env.js';
 
 // 부하 계열: 계좌를 분산해 락 경합을 없앤 상태에서 처리량 한계를 찾는다.
@@ -21,7 +21,24 @@ const MAX_VUS = Number(__ENV.MAX_VUS || 200);
 // 측정 중에는 로그인하지 않는다. ramping-arrival-rate 는 반복마다 풀에서 빈 VU 를 아무거나
 // 집어오므로, VU 안에서 세션을 캐시하면 사실상 매 반복이 새 로그인이 된다(실측으로 확인).
 // setup() 에서 세션을 미리 만들어 넘기면 로그인이 측정 구간 밖으로 빠진다.
-const SESSION_POOL = Number(__ENV.SESSION_POOL || 20);
+// 세션 수가 VU 수보다 적으면 여러 VU 가 같은 고객을 집어 계좌 행 락이 섞인다.
+// 분산 시나리오의 전제가 깨지므로 VU 수만큼 둔다.
+const SESSION_POOL = Number(__ENV.SESSION_POOL || MAX_VUS);
+
+// 기본값만 맞춰 두면 SESSION_POOL 을 환경변수로 낮게 덮었을 때 전제가 다시 깨진다.
+// 측정을 끝까지 돌리고 나서야 알아차리므로 시작 전에 끊는다.
+if (SESSION_POOL < MAX_VUS) {
+  throw new Error(
+    `SESSION_POOL(${SESSION_POOL}) 이 MAX_VUS(${MAX_VUS}) 보다 작다 — 여러 VU 가 같은 고객을 집어 계좌 행 락이 섞인다`
+  );
+}
+// 출금은 1..SESSION_POOL, 수취는 SESSION_POOL+1..2*SESSION_POOL 을 쓴다.
+// 합이 시드 고객 수를 넘으면 customer() 의 랩어라운드로 수취가 출금 집합으로 되돌아온다.
+if (SESSION_POOL * 2 > customerCount) {
+  throw new Error(
+    `출금·수취로 고객 ${SESSION_POOL * 2} 명이 필요한데 시드는 ${customerCount} 명이다 — SESSION_POOL 을 ${Math.floor(customerCount / 2)} 이하로 둔다`
+  );
+}
 
 const fixedScenario = {
   level: {
@@ -76,7 +93,9 @@ export default function (data) {
 
   // 금액을 고객마다 달리해 시드(1,000원 단위)와 구분하고, 원장에서 어느 고객이 만든 건지도 읽는다.
   const amount = 19876 + me.seq;
-  const peer = customer(me.seq + 1);
+  // 받는 쪽은 출금 고객 집합 밖에서 고른다. 바로 옆 순번을 쓰면 그 계좌가 다른 VU 의
+  // 출금 계좌라 입금 쪽에서도 같은 행을 잠근다.
+  const peer = customer(SESSION_POOL + me.seq);
 
   executeTransfer(
     BASE_URL,
