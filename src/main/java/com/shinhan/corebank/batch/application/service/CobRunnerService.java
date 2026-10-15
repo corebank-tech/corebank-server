@@ -8,6 +8,9 @@ import com.shinhan.corebank.batch.api.CobStepHaltException;
 import com.shinhan.corebank.batch.application.port.in.CobRunnerUseCase;
 import com.shinhan.corebank.business.api.BusinessDateAdvancer;
 import com.shinhan.corebank.business.api.BusinessDateProvider;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -29,6 +32,7 @@ public class CobRunnerService implements CobRunnerUseCase {
     private final BusinessDateAdvancer businessDateAdvancer;
     private final BatchExecutionHistoryPort batchExecutionHistoryPort;
     private final Clock clock;
+    private final MeterRegistry meterRegistry;
     private final List<CobStep> steps;
 
     public CobRunnerService(
@@ -37,12 +41,14 @@ public class CobRunnerService implements CobRunnerUseCase {
             BusinessDateAdvancer businessDateAdvancer,
             BatchExecutionHistoryPort batchExecutionHistoryPort,
             Clock clock,
+            MeterRegistry meterRegistry,
             List<CobStep> steps) {
         this.batchExecutionLockPort = batchExecutionLockPort;
         this.businessDateProvider = businessDateProvider;
         this.businessDateAdvancer = businessDateAdvancer;
         this.batchExecutionHistoryPort = batchExecutionHistoryPort;
         this.clock = clock;
+        this.meterRegistry = meterRegistry;
         this.steps =
                 steps.stream().sorted(Comparator.comparingInt(CobStep::order)).collect(Collectors.toList());
         rejectDuplicateOrder(this.steps);
@@ -73,6 +79,7 @@ public class CobRunnerService implements CobRunnerUseCase {
 
         for (CobStep step : steps) {
             LocalDateTime startedAt = LocalDateTime.now(clock);
+            Timer.Sample sample = Timer.start(meterRegistry);
             BatchStepStatus status;
             String failureReason = null;
             boolean halt = false;
@@ -91,6 +98,16 @@ public class CobRunnerService implements CobRunnerUseCase {
                 status = BatchStepStatus.FAILURE;
                 failureReason = e.getMessage();
             }
+            sample.stop(Timer.builder("cob.step.duration")
+                    .description("COB 스텝 처리 소요시간")
+                    .tag("step", step.name())
+                    .register(meterRegistry));
+            Counter.builder("cob.step.count")
+                    .description("COB 스텝 처리 결과별 건수")
+                    .tag("step", step.name())
+                    .tag("status", status.name())
+                    .register(meterRegistry)
+                    .increment();
             // 기록은 스텝 try/catch 바깥에서 한 번만 하되, 기록(관측용) 자체의 실패가 나머지 스텝을 막지 않게 별도로 감싼다.
             try {
                 batchExecutionHistoryPort.record(
