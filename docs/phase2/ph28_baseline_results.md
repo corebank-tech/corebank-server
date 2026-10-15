@@ -24,15 +24,22 @@
 measure() {
   local from=$1 to=$2
   local sql="SET @from_date='$from'; SET @to_date='$to'; $(sed -n '/^EXPLAIN ANALYZE/,/^ORDER BY s.account_code;/p' perf/sql/ph28_trial_balance_baseline.sql)"
+  local i out timing
   for i in $(seq 0 20); do
-    mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" "$MYSQL_DB" -N -r -e "$sql" \
-      | head -1 | sed -E 's/.*actual time=[0-9.]+\.\.([0-9.]+).*/\1/' \
-      | awk -v i="$i" '{ print (i == 0 ? "first" : "warm"), $1 }'
+    # 실패하거나 시간을 못 읽은 회차를 표본에 넣지 않는다. 그 자리에서 멈추고 기간을 다시 잰다.
+    if ! out=$(mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" "$MYSQL_DB" -N -r -e "$sql"); then
+      echo "mysql failed at iteration $i" >&2
+      return 1
+    fi
+    timing=$(printf '%s\n' "$out" | sed -nE '1s/.*actual time=[0-9.]+\.\.([0-9.]+).*/\1/p')
+    if [[ ! "$timing" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+      echo "invalid actual time at iteration $i: $timing" >&2
+      return 1
+    fi
+    echo "$([[ $i -eq 0 ]] && echo first || echo warm) $timing"
   done
 }
-measure 2026-10-01 2026-10-01
-measure 2026-09-01 2026-09-30
-measure 2026-09-01 2026-10-05
+measure 2026-10-01 2026-10-01 && measure 2026-09-01 2026-09-30 && measure 2026-09-01 2026-10-05
 ```
 
 같은 SQL 파일의 0번(데이터 확인)과 `SHOW INDEX` 결과도 함께 남긴다.
