@@ -61,7 +61,7 @@
 
 | 헤더 | 값 |
 | --- | --- |
-| `Idempotency-Key` | 요청마다 새 UUID. 같은 키로 다시 보내면 서버가 다시 처리하지 않고 처음 응답을 돌려준다 |
+| `Idempotency-Key` | **이체 1건마다 새 UUID v4.** 응답을 못 받아 같은 이체를 다시 보낼 때만 같은 키를 쓴다. 같은 키 · 같은 본문이면 처리가 끝난 뒤에는 처음 응답을 다시 돌려주고, 아직 처리 중이면 `CMN0301`(409)다. 같은 키에 본문이 다르면 `CMN0302`(409)다([api_conventions.md](../api_conventions.md) §7-2) |
 | `Account-Password-Auth-Token` | 계좌 비밀번호 인증 뒤 받은 1회용 토큰 |
 | `Otp-Auth-Token` | OTP 인증 뒤 받은 1회용 토큰(§4-3) |
 
