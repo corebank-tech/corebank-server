@@ -88,7 +88,7 @@
 | [#475](#475-상품가입-계좌비밀번호-토큰-검증-연결) | 상품가입 계좌비밀번호 토큰 검증 연결 | S1 | 0.5 | — | — | #475 | 예정 |
 | PM | 기획 리드 (주 0.5일 상한) | S1 | 0.5 | — | — | — | — |
 | [PH-24](#ph-24-gl-분개-서비스--이체-기표-훅--glapi) | GL 분개 서비스 · 이체 기표 훅 · `gl.api` | S2 | 4.5 | PH-21 · PH-99 | 시그니처 9/30 · PR 10/12 · **머지 10/14** | — | 진행 |
-| [PH-28](#ph-28-시산표-api--베이스라인) | 시산표 API · 베이스라인 | S2 | 2.5 | 베이스라인: PH-60b · API: PH-24 | 베이스라인: 60b 적재 뒤 · API 10/16 | — | 예정 |
+| [PH-28](#ph-28-시산표-api--베이스라인) | 시산표 API · 베이스라인 | S2 | 2.5 | 베이스라인: PH-60b · API: PH-24 | 베이스라인: 60b 적재 뒤 · API 10/16 | — | 진행 |
 | [PH-75](#ph-75-정보계-마트-설계) | 정보계 마트 설계 | S2 | 1 | PH-40 | **10/16** → P5 | — | 예정 |
 | PM | 기획 리드 | S2 | 0.5 | — | — | — | — |
 | [GL-IDX](#gl-idx-시산표-인덱스-개선) | 시산표 인덱스 개선 · 재측정 | S3 | 1 | PH-28 | — | — | 예정 |
@@ -607,6 +607,7 @@ public enum JournalDirection { DEBIT, CREDIT }   // gl.domain 에서 gl.api 로 
 
 - 기간별·계정별 차변/대변 합계를 네이티브 SQL로 낸다.
 - 600만 분개 원시집계 시간 베이스라인과 실행계획(10/8). PH-24 전에는 시드 분개만으로 잰다.
+- API는 `GET /admin/trial-balance?fromDate&toDate`다. 베이스라인 절차와 결과는 [ph28_baseline_results.md](ph28_baseline_results.md)에 적는다.
 - 관리자 시산표 API(`GL_READ`). **계약이 두 층이라 섞지 않는다.**
     - 분개 저장 계약: `gl_journal_entry` 한 줄 = 계정 · `dr_cr`(DEBIT/CREDIT) · `amount`. FE 목(#158)이 이 모양을 따른다.
     - 시산표 응답 계약: 계정별 집계 행 = `accountCode` · `accountName` · `accountClass` · `normalBalance` · `debitTotal` · `creditTotal` · `entryCount`. FE `TrialBalanceRow`(`src/entities/gl/lib/aggregate-trial-balance.ts`)가 이 모양이다. 필드명을 바꾸려면 FE와 먼저 맞춘다.
