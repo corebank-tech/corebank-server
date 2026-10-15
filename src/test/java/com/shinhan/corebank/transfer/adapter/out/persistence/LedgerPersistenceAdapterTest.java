@@ -7,6 +7,7 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.application.port.out.PostedLedgerPair;
 import com.shinhan.corebank.transfer.domain.LedgerDirection;
+import com.shinhan.corebank.transfer.domain.LedgerEntry;
 import com.shinhan.corebank.transfer.domain.LedgerPair;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
@@ -175,5 +176,37 @@ class LedgerPersistenceAdapterTest extends IntegrationTestSupport {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+    }
+
+    @Test
+    @DisplayName("입금 1행을 저장하면 transfer_id 없는 DEPOSIT 1행만 생긴다")
+    void saveCredit_persistsSingleDepositEntry() {
+        // given
+        LedgerEntry credit = LedgerEntry.forCredit(
+                "20261023BT0000000595",
+                202L,
+                120000L,
+                20000L,
+                "INTEREST",
+                "이자",
+                TransferChannel.BT,
+                LocalDateTime.of(2026, 10, 23, 3, 0));
+
+        // when
+        adapter.saveCredit(credit);
+        entityManager.flush();
+        entityManager.clear();
+
+        // then
+        List<LedgerEntryJpaEntity> entries = repository.findByTransactionNumber("20261023BT0000000595");
+        assertThat(entries).hasSize(1);
+        LedgerEntryJpaEntity saved = entries.get(0);
+        assertThat(saved.getLedgerEntryId()).isNotNull();
+        assertThat(saved.getTransferId()).isNull();
+        assertThat(saved.getAccountId()).isEqualTo(202L);
+        assertThat(saved.getDirection()).isEqualTo(LedgerDirection.DEPOSIT);
+        assertThat(saved.getAmount()).isEqualTo(20000L);
+        assertThat(saved.getBalanceAfter()).isEqualTo(120000L);
+        assertThat(saved.getTransactionType()).isEqualTo("INTEREST");
     }
 }

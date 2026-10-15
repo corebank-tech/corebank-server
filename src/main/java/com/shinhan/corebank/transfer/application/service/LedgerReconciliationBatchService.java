@@ -3,9 +3,11 @@ package com.shinhan.corebank.transfer.application.service;
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import com.shinhan.corebank.transfer.application.port.in.LedgerFullReconciliationUseCase;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationBatchUseCase;
+import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationMismatch;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationUseCase;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,7 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
     private final BatchExecutionLockPort batchExecutionLockPort;
     private final Duration dailyBatchWaitPollInterval;
     private final Duration dailyBatchMaxWait;
+    private final int cobHardThreshold;
 
     public LedgerReconciliationBatchService(
             LedgerReconciliationUseCase ledgerReconciliationUseCase,
@@ -31,12 +34,14 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
             BatchExecutionLockPort batchExecutionLockPort,
             @Value("${app.ledger-reconciliation.daily-batch-wait-poll-interval:PT1M}")
                     Duration dailyBatchWaitPollInterval,
-            @Value("${app.ledger-reconciliation.daily-batch-max-wait:PT1H}") Duration dailyBatchMaxWait) {
+            @Value("${app.ledger-reconciliation.daily-batch-max-wait:PT1H}") Duration dailyBatchMaxWait,
+            @Value("${app.ledger-reconciliation.cob-hard-threshold:10}") int cobHardThreshold) {
         this.ledgerReconciliationUseCase = ledgerReconciliationUseCase;
         this.ledgerFullReconciliationUseCase = ledgerFullReconciliationUseCase;
         this.batchExecutionLockPort = batchExecutionLockPort;
         this.dailyBatchWaitPollInterval = dailyBatchWaitPollInterval;
         this.dailyBatchMaxWait = dailyBatchMaxWait;
+        this.cobHardThreshold = cobHardThreshold;
     }
 
     @Override
@@ -56,6 +61,40 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
     @Override
     public void runFull() {
         runWithLock("scope=FULL", ledgerFullReconciliationUseCase::reconcileAll);
+    }
+
+    // run()·runFull()과 서로 막도록 같은 락을 잡되, 나중에 켤 CobStepHaltException이 러너에 닿도록 catch 없이 try/finally만 쓴다
+    @Override
+    public void runInCob(LocalDate cobDate) {
+        if (!batchExecutionLockPort.tryAcquire(JOB_NAME)) {
+            log.error("[LEDGER_RECONCILIATION_SKIPPED] 다른 대사가 실행 중이라 COB 대사를 건너뜀 - cobDate={}. 수동으로 재확인해야 함", cobDate);
+            return;
+        }
+        try {
+            judgeCobMismatches(cobDate, ledgerFullReconciliationUseCase.reconcileAll());
+        } finally {
+            batchExecutionLockPort.release(JOB_NAME);
+        }
+    }
+
+    // soft/hard는 마감을 계속할지의 판단이다 — 건별 불일치는 1건이어도 사고라 reconcileAll이 따로 ERROR로 남긴다
+    private void judgeCobMismatches(LocalDate cobDate, List<LedgerReconciliationMismatch> mismatches) {
+        if (mismatches.size() > cobHardThreshold) {
+            // hard지만 #556(COB_DATE 저장·실패 스텝 재실행) 전까지는 멈추면 복구할 수 없어 로그만 남긴다(#600)
+            log.error(
+                    "[LEDGER_RECONCILIATION_HARD] cobDate={}, mismatches={}, threshold={} - 마감 중단 대상이나 #556 전까지 계속 진행",
+                    cobDate,
+                    mismatches.size(),
+                    cobHardThreshold);
+            return;
+        }
+        if (!mismatches.isEmpty()) {
+            log.warn(
+                    "[LEDGER_RECONCILIATION_SOFT] cobDate={}, mismatches={}, threshold={}",
+                    cobDate,
+                    mismatches.size(),
+                    cobHardThreshold);
+        }
     }
 
     private void runWithLock(String target, Runnable reconciliation) {

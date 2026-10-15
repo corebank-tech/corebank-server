@@ -43,6 +43,12 @@ public class LedgerPersistenceAdapter implements LedgerSavePort, LedgerLookupPor
     }
 
     @Override
+    @Transactional
+    public void saveCredit(LedgerEntry credit) {
+        saveEntry(credit);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Optional<PostedLedgerPair> findPostedPair(String transactionNumber) {
         List<LedgerEntry> entries = repository.findByTransactionNumber(transactionNumber).stream()
