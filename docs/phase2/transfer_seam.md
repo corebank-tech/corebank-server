@@ -46,7 +46,7 @@ execute(command)
 | 자리 | 계약 | 등록자 | 트랜잭션 | 실패하면 |
 |---|---|---|---|---|
 | 훅 A | `TransferPreCheck { int order(); void check(TransferPreCheckContext) }` | P2 PH-90 | 없음. 락 이전, 읽기 전용 | `BusinessException` → 이체 ERROR 확정. OTP·한도 소모 없음. 계좌비밀번호 토큰은 `verifyBeforeLock`에서 이미 소비돼 재시도 시 재인증 필요 |
-| 훅 B | `LedgerPostingHook { void afterLedger(LedgerPostingContext) }` | P3 PH-24 | 이체 REQUIRES_NEW 안 | 원장·잔액·한도 적립까지 롤백 → 이체 ERROR 확정 |
+| 훅 B | `LedgerPostingHook { void afterLedger(LedgerPostingContext) }` | P3 PH-24 | 원장을 기표한 트랜잭션 안. 이체는 REQUIRES_NEW, 상품가입·정정은 호출자 트랜잭션 | 원장·잔액·한도 적립까지 롤백 → 이체 ERROR 확정. 상품가입·정정은 예외가 호출자에게 전파된다 |
 | tradeDate | `business.api.BusinessDateProvider` | 제공 P5 PH-41, 대입 P4 | 같은 트랜잭션 | — |
 | 확정 이벤트 | `TransferSettled` — 성공·실패를 `status`로, 이체 종류를 `txType`으로 구분 | 타입·페이로드 P1 PH-32. 발행 코드는 P1이 #505에서 넣었고(EVT-2 대신) | 성공은 기표 REQUIRES_NEW 안, 실패는 `failTransfer()` REQUIRES_NEW 안 | 리스너 예외 → 이체 롤백 |
 
@@ -57,7 +57,7 @@ transfer 행이 생기기 전의 사전검증 실패는 엔진이 발행하지 �
 | 레코드 | 필드 |
 |---|---|
 | `TransferPreCheckContext` | `customerId` · `withdrawalAccountId` · `amount` |
-| `LedgerPostingContext` | `transactionNumber` · `txType`(`IMMEDIATE_TRANSFER`·`SCHEDULED_TRANSFER`·`AUTO_TRANSFER`) · `amount` · `fromAccountId` · `toAccountId` · `tradeDate` |
+| `LedgerPostingContext` | `transactionNumber` · `txType`(원장 `transaction_type` 값 — `IMMEDIATE_TRANSFER`·`SCHEDULED_TRANSFER`·`AUTO_TRANSFER`·`PRODUCT_SUBSCRIPTION`·`REVERSAL`) · `amount` · `fromAccountId` · `toAccountId` · `tradeDate` |
 
 ## 4. 구현체 예시
 
@@ -90,6 +90,7 @@ class AvailableBalancePreCheck implements TransferPreCheck {
 4. **훅 B는 예외를 삼키지 않습니다.** GL 기표 실패는 이체 실패입니다. 이벤트가 아니라 동기 호출인 이유는, 다른 커밋에 들어가면 "원장은 있는데 전표가 없는" 상태가 정상이 되기 때문입니다.
    **훅 B는 같은 트랜잭션의 DB 쓰기만 합니다.** 롤백이 되돌리는 건 DB뿐이라 외부 호출은 아웃박스(정책 8)로 넘깁니다. 훅 B 실패 시 즉시이체는 OTP가 이미 소비돼 재인증이 필요하고, 배치 이체는 정책 1처럼 ERROR 결과가 멱등키로 남습니다.
 5. **훅 B는 `order()`가 없습니다.** 등록자가 P3 하나뿐입니다. 둘 이상이 필요해지면 P4와 순서 규칙을 먼저 정합니다.
+   **훅 B는 원장이 생기는 모든 자리에서 부릅니다**(PH-24). `TransferExecutionService`(즉시·예약·자동) 외에 `ProductSubscriptionDepositService`(상품가입 초입금)와 `TransferCorrectionService`(취소정정 `REVERSAL`·정상거래는 원거래 유형)가 원장 저장 직후 부릅니다. 원장을 새로 쓰는 경로를 만들면 훅 B 호출도 함께 넣어야 합니다 — GL 은 모르는 `txType` 을 예외로 거부합니다(`GLA9009`).
 6. **tradeDate는 `executedAt` 캡처 줄에서 한 번만 구합니다.** 원장(`ledger_entry.trade_date`, #472)·훅 B 컨텍스트·transfer가 같은 값을 씁니다. 훅 B와 원장이 먼저 필요로 하므로 원장 기표보다 앞에 둡니다. 한 이체 안에서 두 번 구하면 마감 경계에서 원장과 전표의 거래일이 갈릴 수 있습니다. PH-41 전까지 훅 B에는 `executedAt`의 달력일이 들어갑니다.
 7. **이벤트는 활성 트랜잭션 안에서 발행합니다.** `@TransactionalEventListener`는 트랜잭션 밖 발행을 받지 않습니다. `AFTER_COMMIT` 리스너는 두지 않습니다(README §3-3).
 8. **아웃박스 리스너는 `BEFORE_COMMIT` + `JdbcTemplate` INSERT입니다.** INSERT가 실패하면 이체도 롤백됩니다. 의도된 동작입니다.

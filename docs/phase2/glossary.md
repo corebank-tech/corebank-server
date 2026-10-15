@@ -13,8 +13,8 @@ P4는 TIMEOUT과 정정 체인을, P5는 영업일을 만든다. 이름이 트�
 
 | # | 한글명 | 영문명 | 정의 | 쓰는 곳 | 지금 코드 |
 |---|---|---|---|---|---|
-| 1 | **원장잔액** | `ledgerBalance` | 원장에 기표된 거래를 모두 반영한 계좌 잔액이다. 출금 제한이나 보류와 무관하게 "장부상 얼마가 있는가"를 뜻한다. 저장 위치는 `account.balance` 그대로다 | account 조회 API, P4 대사(원장 합계 vs 계좌 잔액), P2 적수 | API 필드는 `balance`(계좌 상세·개요). `ledgerBalance`는 PH-90에서 **추가**한다 (§2) |
-| 2 | **출금가능액** | `availableBalance` | 지금 출금·이체에 쓸 수 있는 금액이다. 2차 정의는 **원장잔액 − 지급정지 보류액**이다. 계좌가 정상(`ACTIVE`)이 아니면 잔액 전체가 묶인 것으로 보고 0이다. **계좌비밀번호 잠금은 이 값에 반영하지 않는다** — 잠금은 돈이 아니라 인증 상태라서 `passwordLocked`로 따로 판정한다. **이체 금액 판정은 이 값으로 한다** | P2 PH-90 `TransferPreCheck`, 이체·상품가입 출금계좌 선택 화면 | 계좌 상세 API에만 있다(`AccountDetailQueryService.resolveAvailableBalance` — 정상·미잠금이면 잔액, 아니면 0). 보류액 차감은 없고, 잠금 시 0으로 만드는 부분은 PH-90에서 뺀다 |
+| 1 | **원장잔액** | `ledgerBalance` | 원장에 기표된 거래를 모두 반영한 계좌 잔액이다. 출금 제한이나 보류와 무관하게 "장부상 얼마가 있는가"를 뜻한다. 저장 위치는 `account.balance` 그대로다 | account 조회 API, P4 대사(원장 합계 vs 계좌 잔액), P2 적수 | 계좌 상세·목록 API에서 기존 balance를 유지하면서 ledgerBalance를 추가한다. 두 필드는 같은 값을 반환한다 (PH-90 #612). |
+| 2 | **출금가능액** | `availableBalance` | 지금 출금·이체에 쓸 수 있는 금액이다. 2차 정의는 **원장잔액 − 지급정지 보류액**이다. 계좌가 정상(`ACTIVE`)이 아니면 잔액 전체가 묶인 것으로 보고 0이다. **계좌비밀번호 잠금은 이 값에 반영하지 않는다** — 잠금은 돈이 아니라 인증 상태라서 `passwordLocked`로 따로 판정한다. **이체 금액 판정은 이 값으로 한다** | P2 PH-90 `TransferPreCheck`, 이체·상품가입 출금계좌 선택 화면 | Account.getAvailableBalance()에서 ACTIVE 계좌는 balance - holdAmount, 그 외 상태는 0으로 계산한다. 비밀번호 잠금은 별도로 판정한다. 상세·목록 API와 TransferPreCheck에서 사용한다 (PH-90 #612). |
 | 3 | **적수** | `accumulatedDailyBalance` | 이자 계산 기간 동안 **매일의 일말 원장잔액을 모두 더한 값**이다. 잔액이 기간 내내 같을 때만 `잔액 × 일수`와 같다 — 예: 1일차 100원, 2~3일차 120원이면 적수는 340원이다. 일수 계산 방식은 **실일수/365**를 사용한다. **원장에서 즉시 집계한 계산 결과**이며, 원장 기표나 별도 일잔액 테이블이 아니다 | P2 PH-11·PH-13 이자 계산, 만기·해지 원리금 | 없음. P2 PH-11에서 생긴다 |
 | 4 | **전표** | `voucher` (번호 `voucherNo`) | 거래 1건이 회계 장부에 남긴 기표 단위다. 분개 여러 줄을 담고, **전표 하나 안에서 차변 합계와 대변 합계가 같아야** 한다. 번호는 거래일(귀속 영업일) + 유형 + 일련번호다. 형식은 [gl_journal_patterns.md](gl_journal_patterns.md) §1 | P3 GL(`gl_voucher`), P4 이체 기표 훅, P2 이자 분개, P6 시드 | 없음. #451·#452에서 생긴다 |
 | 5 | **분개** | `journalEntry` | 전표 안의 한 줄이다. 계정과목 하나와 차변 또는 대변 한쪽의 금액(원 단위 정수)을 가진다 | P3 GL(`gl_journal_entry`), 시산표, 결함 주입 탐지 | 없음. #451·#452에서 생긴다 |
@@ -36,7 +36,7 @@ P4는 TIMEOUT과 정정 체인을, P5는 영업일을 만든다. 이름이 트�
 - `availableBalance`는 계좌 상세뿐 아니라 **출금계좌 목록 응답에도** 있어야 한다.
   FE 출금계좌 선택 화면이 지금은 목록 응답에 이 필드가 없어서 `balance`로 대신하고 있다.
   잠금은 `availableBalance`에 담기지 않으므로 목록 응답에 `passwordLocked`도 함께 추가한다.
-  지금 목록 응답(`AccountOverviewResponse`)에는 `status`·`transferEnabled`만 있고, `transferEnabled`는 잠금을 보지 않는다.
+  PH-90에서 목록 응답에 ledgerBalance·availableBalance·passwordLocked를 추가했다. 기존 transferEnabled의 판정 기준은 유지한다.
 - `balanceAfter`(거래 후 잔액)는 거래 시점의 원장잔액이다. 이름은 바꾸지 않는다.
 
 ## 3. 화면 라벨

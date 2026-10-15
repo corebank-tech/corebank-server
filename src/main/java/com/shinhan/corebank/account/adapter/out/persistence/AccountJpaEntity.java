@@ -42,6 +42,10 @@ public class AccountJpaEntity extends BaseEntity {
     @Column(name = "balance", nullable = false)
     private Long balance;
 
+    @Builder.Default
+    @Column(name = "hold_amount", nullable = false)
+    private Long holdAmount = 0L;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 12)
     private AccountStatus status;
@@ -85,6 +89,7 @@ public class AccountJpaEntity extends BaseEntity {
 
     public void updateFrom(Account account) {
         this.balance = account.getBalance();
+        this.holdAmount = account.getHoldAmount();
         this.status = account.getStatus();
         this.passwordHash = account.getPasswordHash();
         this.passwordFailureCount = (byte) account.getPasswordFailureCount();

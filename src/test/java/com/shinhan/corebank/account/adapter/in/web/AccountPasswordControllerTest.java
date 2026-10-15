@@ -154,7 +154,7 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("다섯 번째 오답은 APW0101로 잠그고 상세 조회의 출금 가능 잔액을 0으로 만든다")
+    @DisplayName("다섯 번째 오답은 APW0101로 잠그되 출금가능액은 유지한다")
     void locksOnFifthFailure() throws Exception {
         Long customerId = customerTestFixture.createCustomer();
         Account account = saveAccount(customerId, 4);
@@ -176,7 +176,9 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
         mockMvc.perform(get("/accounts/{accountId}", account.getAccountId())
                         .with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.availableBalance").value(0))
+                .andExpect(jsonPath("$.data.balance").value(1_500_000L))
+                .andExpect(jsonPath("$.data.ledgerBalance").value(1_500_000L))
+                .andExpect(jsonPath("$.data.availableBalance").value(1_500_000L))
                 .andExpect(jsonPath("$.data.passwordLocked").value(true));
     }
 
