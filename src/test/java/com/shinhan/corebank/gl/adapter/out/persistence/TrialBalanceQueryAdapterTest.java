@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.gl.api.GlTxType;
 import com.shinhan.corebank.gl.domain.GlAccountClass;
 import com.shinhan.corebank.gl.domain.GlNormalBalance;
-import com.shinhan.corebank.gl.domain.GlTxType;
 import com.shinhan.corebank.gl.domain.JournalEntry;
 import com.shinhan.corebank.gl.domain.TrialBalanceLine;
 import com.shinhan.corebank.gl.domain.Voucher;
@@ -45,9 +45,10 @@ class TrialBalanceQueryAdapterTest extends IntegrationTestSupport {
         jdbcTemplate.update("DELETE FROM gl_voucher WHERE trade_date BETWEEN ? AND ?", BAND_FROM, BAND_TO);
     }
 
+    // 참조 키는 (tx_type, reference_key) 유니크라 전표마다 달라야 한다. 전표번호를 붙여 겹치지 않게 한다.
     private void saveVoucher(LocalDate tradeDate, int sequence, JournalEntry... entries) {
-        voucherPersistenceAdapter.save(
-                Voucher.create(new VoucherNumber(tradeDate, GlTxType.TRANSFER, sequence), null, List.of(entries)));
+        VoucherNumber number = new VoucherNumber(tradeDate, GlTxType.TRANSFER, sequence);
+        voucherPersistenceAdapter.save(Voucher.create(number, "PH28-" + number.value(), null, List.of(entries)));
     }
 
     @Test

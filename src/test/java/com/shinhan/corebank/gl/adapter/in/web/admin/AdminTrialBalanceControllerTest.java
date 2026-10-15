@@ -8,7 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.gl.adapter.out.persistence.GlVoucherPersistenceAdapter;
-import com.shinhan.corebank.gl.domain.GlTxType;
+import com.shinhan.corebank.gl.api.GlTxType;
 import com.shinhan.corebank.gl.domain.JournalEntry;
 import com.shinhan.corebank.gl.domain.Voucher;
 import com.shinhan.corebank.gl.domain.VoucherNumber;
@@ -49,6 +49,7 @@ class AdminTrialBalanceControllerTest extends IntegrationTestSupport {
     void returnsTrialBalanceInFeContractShape() throws Exception {
         voucherPersistenceAdapter.save(Voucher.create(
                 new VoucherNumber(DAY, GlTxType.TRANSFER, 1),
+                "PH28-CONTROLLER-1",
                 null,
                 List.of(JournalEntry.debit("20100", 1_000L), JournalEntry.credit("20100", 1_000L))));
 
