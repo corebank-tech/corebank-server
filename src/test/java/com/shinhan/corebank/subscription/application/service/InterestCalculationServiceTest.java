@@ -2,9 +2,7 @@ package com.shinhan.corebank.subscription.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
@@ -18,6 +16,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -150,5 +150,30 @@ class InterestCalculationServiceTest {
 
         verify(balanceUseCase).calculate(101L, jan31, feb28);
         verify(balanceUseCase).calculate(101L, feb28, mar15);
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "2026-01-29, 2026-02-28, 2026-03-29",
+        "2026-01-30, 2026-02-28, 2026-03-30",
+        "2028-01-29, 2028-02-29, 2028-03-29",
+        "2028-01-30, 2028-02-29, 2028-03-30",
+        "2028-01-31, 2028-02-29, 2028-03-31"
+    })
+    @DisplayName("월복리: 월말 가입 및 윤년 2월의 구간 경계를 정확히 생성한다")
+    void calculateMonthlyCompound_monthEndAndLeapYear(String openedText, String boundaryText, String endText) {
+
+        LocalDate opened = LocalDate.parse(openedText);
+        LocalDate boundary = LocalDate.parse(boundaryText);
+        LocalDate end = LocalDate.parse(endText);
+
+        InterestResult result = service.calculate(new InterestCalculationCommand(
+                101L, opened, end, new BigDecimal("3.70"), CalculationMode.MONTHLY_COMPOUND));
+
+        assertThat(result.gross()).isZero();
+
+        verify(balanceUseCase).calculate(101L, opened, boundary);
+        verify(balanceUseCase).calculate(101L, boundary, end);
+        verifyNoMoreInteractions(balanceUseCase);
     }
 }

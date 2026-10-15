@@ -183,7 +183,7 @@ InterestResult(gross, tax, net, appliedRate)
 
 - `LedgerDepositUseCase.transferBetween()`은 상품 계좌 `WITHDRAWAL` 1행과 고객 계좌 `DEPOSIT` 1행을 남긴다. `transaction_type`은 만기해지 `MATURITY`, 중도해지 `TERMINATION`이다.
 - 해지 기표의 `transfer_id`는 `NULL`이므로 PH-75·PH-76은 `transfer` 조인만으로 해지 거래를 추출하지 않는다.
-- 완료 조건: 상품 계좌의 `account.balance = 0`이고 해당 계좌 **원장 부호 합계도 0**, 수취 계좌 역시 원장 합계와 잔액이 일치한다. 실제 통합 검증은 PH-15·PH-16에서 수행한다.
+- **PH-15·PH-16 통합 테스트 완료 조건(해지 처리 중 수행하는 런타임 대사 아님):** 상품 계좌의 `account.balance = 0`이고 해당 계좌 원장 부호 합계도 0이어야 한다. 수취 계좌 역시 원장 합계와 잔액이 일치해야 한다.
 
 ## 7. 구현 경계 및 검증 항목
 
