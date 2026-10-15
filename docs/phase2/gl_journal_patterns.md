@@ -18,7 +18,7 @@ yyyyMMdd-TTT-NNNNNN        예) 20260922-TRF-000123
 | 조각 | 내용 |
 |---|---|
 | `yyyyMMdd` | **거래일**(`trade_date`). 발생 시각이 아니라 귀속 영업일입니다 |
-| `TTT` | 전표유형 3자 — `OPN` / `TRF` / `SUB` / `INT` |
+| `TTT` | 전표유형 3자 — `OPN` / `TRF` / `SUB` / `INT` / `REV` |
 | `NNNNNN` | **(거래일, 유형)당 1부터** 증가하는 6자리 0채움 일련번호 |
 
 전체 19자입니다(`voucher_no VARCHAR(20)`).
@@ -50,6 +50,9 @@ yyyyMMdd-TTT-NNNNNN        예) 20260922-TRF-000123
 5. **전표를 먼저 INSERT 한 뒤 분개를 넣습니다**(FK). 계정과목은 `R__seed_gl_account.sql` 이
    먼저 적재하므로 신경 쓰지 않아도 됩니다.
 6. 금액은 **원 단위 정수**입니다(`BIGINT`).
+7. **`reference_key` 에 원 거래번호를 넣습니다**(PH-24). 원장 2행이 공유하는 `transaction_number` 이고,
+   개시 전표는 `OPENING-{yyyyMMdd}` 입니다. `UNIQUE (tx_type, reference_key)` 라 같은 거래를 두 번 기표하면
+   INSERT 가 거부됩니다. 이 키로 원장과 전표를 1:1 로 잇습니다(§5 (7)).
 
 **1번(차대변 일치)은 DB 제약으로 걸지 않습니다**(PH-21 결정). 서버는 전표 도메인(`gl.domain.Voucher`)이
 저장 전에 거부하고(`GLA9001`), 저장된 뒤의 불일치는 §5 검증 SQL 로 찾습니다. 이유는 셋입니다.
@@ -110,9 +113,23 @@ yyyyMMdd-TTT-NNNNNN        예) 20260922-TRF-000123
 거래가 아니므로 차변은 현금성이 아니라 예수금입니다.
 
 > 요구불예수금과 저축성예수금을 계정으로 나누면 두 패턴이 갈리지만, 2차 계정과목 15개에는
-> 예수금이 하나뿐이라 나누지 않았습니다. 상품별 계정 매핑(`product_gl_mapping`)은 PH-24 범위입니다.
+> 예수금이 하나뿐이라 나누지 않았습니다. 상품별 계정 매핑(`product_gl_mapping`)은 예수금을 나눌 때
+> 도입합니다(2차 범위 밖). FE 시산표 목과 정보계 지표(REQ-ADM-030 "총 예수금 잔액")도 예수금 하나를 전제합니다.
 
-### 3-4. 아직 확정되지 않은 패턴
+### 3-4. 취소정정 — `REVERSAL` / `REV`
+
+정정 체인([transfer_correction.md](transfer_correction.md))의 취소정정 거래입니다. 원거래 입금계좌에서
+원거래 출금계좌로 돈이 돌아가며 `ledger_entry` 에 `REVERSAL` 2행이 남습니다.
+
+| line_no | 계정 | dr_cr | 금액 |
+|---|---|---|---|
+| 1 | `20100` 예수금 | DEBIT | 원거래 금액 (원거래 입금계좌 측) |
+| 2 | `20100` 예수금 | CREDIT | 원거래 금액 (원거래 출금계좌 측) |
+
+계정 구성은 3-2 와 같습니다. **원 전표를 지우거나 고치지 않고** 새 전표를 세웁니다. 참조 키는 원거래가
+아니라 취소정정 거래 자신의 거래번호입니다. 정상거래(`REPOST`)는 보통 이체와 같아 3-2 `TRF` 로 기표합니다.
+
+### 3-5. 아직 확정되지 않은 패턴
 
 | 패턴 | 소유 | 시점 | 상태 |
 |---|---|---|---|
@@ -161,7 +178,7 @@ GROUP BY voucher_no HAVING COUNT(*) < 2;
 
 -- (4) 전표번호 형식 위반 — 0행이어야 한다
 SELECT voucher_no FROM gl_voucher
-WHERE voucher_no NOT REGEXP '^[0-9]{8}-(OPN|TRF|SUB|INT)-[0-9]{6}$';
+WHERE voucher_no NOT REGEXP '^[0-9]{8}-(OPN|TRF|SUB|INT|REV)-[0-9]{6}$';
 
 -- (5) 거래일이 전표번호의 날짜와 다른 전표 — 0행이어야 한다
 SELECT voucher_no, trade_date FROM gl_voucher
@@ -175,8 +192,16 @@ WHERE SUBSTRING(voucher_no, 10, 3) <> CASE tx_type
     WHEN 'TRANSFER'             THEN 'TRF'
     WHEN 'PRODUCT_SUBSCRIPTION' THEN 'SUB'
     WHEN 'INTEREST'             THEN 'INT'
+    WHEN 'REVERSAL'             THEN 'REV'
     ELSE ''
 END;
+
+-- (7) 전표가 없는 원장 거래 — 0행이어야 한다(PH-24 이후 기표분)
+SELECT DISTINCT le.transaction_number, le.transaction_type
+FROM ledger_entry le
+LEFT JOIN gl_voucher v ON v.reference_key = le.transaction_number
+WHERE le.transaction_type <> 'OPENING'
+  AND v.voucher_no IS NULL;
 ```
 
 `trade_date` 복제본 불일치는 복합 FK 가 막으므로 별도 쿼리가 필요 없습니다.
@@ -198,3 +223,4 @@ END;
 | 2026-09-23 | 최초 작성 (PH-21 / #452). 패턴 2종 + 개시 전표, 채번 규칙 확정 |
 | 2026-09-27 | PR #491 리뷰 반영 — 거래·전표·분개 수 명시, 개시 전표 1번 ≥ 2번 전제, 검증 SQL (6) 추가 |
 | 2026-10-01 | PH-21 구현 — 차대변 DB 제약을 걸지 않기로 결정(§2), 채번 카운터 `gl_voucher_sequence`(§1) |
+| 2026-10-07 | PH-24 — 참조 키 규칙(§2-7), 취소정정 패턴(§3-4), 검증 SQL (7). `product_gl_mapping` 은 예수금 분리 시 도입 |

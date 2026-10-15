@@ -11,6 +11,7 @@ public record AccountDetailResult(
         String accountName,
         String accountNumber,
         long balance,
+        long ledgerBalance,
         long availableBalance,
         LocalDate openedDate,
         AccountStatus status,
