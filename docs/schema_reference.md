@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 35개 비즈니스 테이블 + 3개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`) · 330개 컬럼
+**대상**: 36개 비즈니스 테이블 + 3개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`) · 336개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -64,6 +64,7 @@
 | 36 | `otp_issue_lock` | OTP 발급 잠금 | P4 | 3  |
 | 37 | `terms_view_history` | 상품 약관 열람 이력 | P4 | 4  |
 | 38 | `batch_execution_history` | 배치 스텝 실행 기록 | P5 | 8  |
+| 39 | `ledger_reconciliation_mismatch` | 원장-잔액 대사 불일치 목록 | P4 | 6  |
 
 ---
 
@@ -541,6 +542,29 @@
 | 컬럼명 | 데이터 타입 | NULL 허용 | 기본값 | 키 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `sequence_id` | `BIGINT` | X | `AUTO_INCREMENT` | PK | 생성 즉시 `ledger_entry.ledger_entry_id`로 그대로 쓰인다 |
+
+---
+
+## `ledger_reconciliation_mismatch`
+
+> 원장-잔액 대사 불일치 목록 (PH-38)
+
+COB 대사 스텝이 원장 누적 합계와 `account.balance`가 다른 계좌를 영업일별로 남긴다. 관리자 목록 API(FE ADM-04)가 읽는다. **같은 영업일을 다시 대사하면 그날 행을 모두 지우고 새 결과로 바꾼다** — 재실행 이력은 `batch_execution_history`가 남긴다. 대사는 보고만 하고 정정하지 않으므로 처리 상태 컬럼이 없다. 감사용 기록이라 계좌가 해지·정리돼도 남도록 `account`에 FK를 걸지 않는다. 차액(`ledger_balance - account_balance`)은 저장하지 않고 조회할 때 계산한다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `ledger_reconciliation_mismatch_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 불일치 행 식별자 |
+| `business_date` | `DATE` | **UK** | X |  | 대사한 COB의 마감 대상 영업일(ADR-0004 `COB_DATE`). `batch_execution_history.business_date`와 같은 값이다 |
+| `account_id` | `BIGINT` | **UK** | X |  | 불일치 계좌 |
+| `ledger_balance` | `BIGINT` |  | X |  | 원장 누적 합계 `SUM(DEPOSIT) - SUM(WITHDRAWAL)`. 원장이 없는 계좌는 0 |
+| `account_balance` | `BIGINT` |  | X |  | 대사 시점의 `account.balance` |
+| `detected_at` | `DATETIME(6)` |  | X |  | 대사가 불일치를 확인한 시각 |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_ledger_reconciliation_mismatch_date_account` | `business_date, account_id` — 영업일별 목록 조회와 최근 영업일 조회도 이 인덱스를 쓴다 |
 
 ---
 
