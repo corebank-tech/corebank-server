@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202610131600__create_ledger_reconciliation_mismatch.sql
+-- V202610151100__create_ledger_reconciliation_mismatch.sql
 -- 원장-잔액 대사 불일치 목록 (P4, PH-38 / #613)
 
 -- 주의: Flyway 적용 후에는 이 파일을 수정하지 마십시오 (체크섬 불변).
