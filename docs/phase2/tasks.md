@@ -466,7 +466,7 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 
 - 중도해지 API, 예치기간 구간별 중도해지이율, 수수료(요율은 yml)
 - 중도해지이율은 실제 예치기간에 해당하는 구간별 이율을 선택해 가입일부터 해지일까지 전체 기간에 소급 적용한다. 복리 상품도 중도해지 시 단리로 재계산한다. 계산식은 [이자 계산 정책](interest_calculation_policy.md)을 따른다.
-- 해지 시 `transfer.api.LedgerDepositUseCase.transferBetween(..., TERMINATION, ...)`으로 원리금 전액을 고객 계좌에 이체하고, 상품 계좌 잔액 0원 및 원장 대사 일치를 확인한 뒤 동일 트랜잭션에서 `CLOSED`로 전이한다.
+- 중도해지 시 이자가 있으면 PH-14의 이자 지급 계약에 따라 세후이자를 `INTEREST`로 상품 계좌에 기표한다. 이후 `transfer.api.LedgerDepositUseCase.transferBetween(..., TERMINATION, ...)`으로 원리금 전액을 고객 계좌에 이체한다. 상품 계좌 잔액 0원과 원장 대사 일치를 확인하고 동일 트랜잭션에서 `CLOSED`로 전이한다.
 - 휴면 전환 서비스와 휴면 해제 API
     - 휴면 전환은 `CobStep` 구현체로 **만기감지 바로 다음 자리**에 들어간다([PH-43](#ph-43-cob-파이프라인)).
     - **10/30까지 통합하고 S4에는 검증만 한다**([D-12](README.md#d-12--923--리드p2-회신-채택)).
