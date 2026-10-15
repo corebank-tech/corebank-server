@@ -649,7 +649,7 @@ AI로 불일치 목록을 뽑고 고친다. **C-1보다 먼저 한다.**
 
 ### FE B-8. 타행이체 입력·결과
 
-은행 선택 · 미결제 상태 · TIMEOUT 안내. 은행 목록·요청·응답 스키마는 [interbank_transfer_fe_handoff.md](interbank_transfer_fe_handoff.md)다(PH-33, #609). 편집권도 넘겨받았고 PR·머지는 P3가 한다.
+은행 선택 · TIMEOUT 안내. 미결제는 회계(GL) 내부 기표라 화면에 나오지 않는다. 은행 목록·요청·응답 스키마는 [interbank_transfer_fe_handoff.md](interbank_transfer_fe_handoff.md)다(PH-33, #609). 편집권도 넘겨받았고 PR·머지는 P3가 한다.
 **완료 기준:** 모의 대외계 정상 응답이면 완료 화면, 무응답이면 TIMEOUT 안내(재시도 버튼 없음)가 뜬다. 은행 목록은 서버 응답에서 온다.
 
 ### FE 조회 사유 입력
