@@ -1015,7 +1015,7 @@ S4지만 CI/CD·문서·훈련이라 S4 규칙에 걸리지 않는다([D-05](REA
 
 - Site-to-Site VPN: VPN Gateway ↔ Customer Gateway, IPsec 터널 2개, 정적 라우팅(온프레미스 대역 1개)
 - 10/19~23 리허설 안에 터널을 세운다. binlog 복제(P2 PH-70-②) · 대외 전문 · 메트릭 수집 · 정보계 조회가 이 터널을 지난다.
-- NAT 뒤 VM의 strongSwan 설정 요점(#624 테스트): 온프레미스가 먼저 접속하고(`auto=start`), `leftid`는 내부 IP가 아닌 공인 IP로 두며, `forceencaps=yes`로 UDP 캡슐화를 강제한다. AWS 정적 라우팅의 트래픽 선택기가 `0.0.0.0/0`이라 `mark`와 `install_routes = no`로 VM의 기본 경로를 보호하지 않으면 SSH가 끊긴다.
+- NAT 뒤 VM의 strongSwan 설정 요점(#624 테스트). `ipsec.conf`(연결 설정): 온프레미스가 먼저 접속하고(`auto=start`), `leftid`는 내부 IP가 아닌 공인 IP로 두며, `forceencaps=yes`로 UDP 캡슐화를 강제하고, `mark`로 터널에 태울 패킷을 좁힌다. `strongswan.conf`(`/etc/strongswan.d/*.conf`로 포함되는 charon 설정): `charon { install_routes = no }`로 라우팅 표 변경을 막는다. AWS 정적 라우팅의 트래픽 선택기가 `0.0.0.0/0`이라 둘 중 하나라도 빠지면 VM의 기본 경로가 터널로 들어가 SSH가 끊긴다.
 - **완료 기준:** 온프레미스에서 사설 IP로 RDS 3306과 WAS 8080에 닿고, WAS에서 온프레미스 정보계 API와 모의 대외기관에 닿는다. 온프레미스의 인터넷 공개 포트는 Nginx 443 하나다.
 
 ## 2-6. P6 태스크 상세
