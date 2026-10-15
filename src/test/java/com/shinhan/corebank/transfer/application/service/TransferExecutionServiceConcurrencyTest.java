@@ -62,6 +62,18 @@ class TransferExecutionServiceConcurrencyTest extends IntegrationTestSupport {
 
     @AfterEach
     void cleanUpCommittedData() {
+        // 전표는 이체 거래번호로 찾으므로 이체 행보다 먼저 지운다.
+        jdbcTemplate.update(
+                "DELETE e FROM gl_journal_entry e JOIN gl_voucher v ON v.voucher_no = e.voucher_no"
+                        + " JOIN transfer t ON t.transaction_number = v.reference_key"
+                        + " WHERE t.withdrawal_account_id IN (?, ?)",
+                ACCOUNT_A,
+                ACCOUNT_B);
+        jdbcTemplate.update(
+                "DELETE v FROM gl_voucher v JOIN transfer t ON t.transaction_number = v.reference_key"
+                        + " WHERE t.withdrawal_account_id IN (?, ?)",
+                ACCOUNT_A,
+                ACCOUNT_B);
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (?, ?)", ACCOUNT_A, ACCOUNT_B);
         jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id IN (?, ?)", ACCOUNT_A, ACCOUNT_B);
         jdbcTemplate.update("DELETE FROM account WHERE account_id IN (?, ?)", ACCOUNT_A, ACCOUNT_B);
@@ -138,6 +150,15 @@ class TransferExecutionServiceConcurrencyTest extends IntegrationTestSupport {
                     ACCOUNT_A,
                     ACCOUNT_B);
             assertThat(unbalancedTransactionCount).isZero();
+
+            // then: 이체마다 TRF 전표가 정확히 1건 기표된다
+            List<String> voucherReferenceKeys = jdbcTemplate.queryForList(
+                    "SELECT v.reference_key FROM gl_voucher v JOIN transfer t ON t.transaction_number = v.reference_key"
+                            + " WHERE t.withdrawal_account_id IN (?, ?) AND v.tx_type = 'TRANSFER'",
+                    String.class,
+                    ACCOUNT_A,
+                    ACCOUNT_B);
+            assertThat(voucherReferenceKeys).containsExactlyInAnyOrderElementsOf(transactionNumbers);
         } finally {
             pool.shutdownNow();
             pool.awaitTermination(5, TimeUnit.SECONDS);
