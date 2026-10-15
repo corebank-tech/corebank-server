@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 35개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 322개 컬럼
+**대상**: 35개 비즈니스 테이블 + 3개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`) · 330개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -63,6 +63,7 @@
 | 35 | `auth_token` | 일회성 인증 토큰 | P4 | 9  |
 | 36 | `otp_issue_lock` | OTP 발급 잠금 | P4 | 3  |
 | 37 | `terms_view_history` | 상품 약관 열람 이력 | P4 | 4  |
+| 38 | `batch_execution_history` | 배치 스텝 실행 기록 | P5 | 8  |
 
 ---
 
@@ -888,6 +889,25 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP`, `LEDGER_RECONCILIATION_BATCH`, `AUTH_TOKEN_CLEANUP`, `TERMS_VIEW_HISTORY_CLEANUP` 5행 |
 | `currently_running` | `BOOLEAN` |  | X | `FALSE` | 이 배치가 지금 실행 중인지. 트리거 시작 시 `TRUE`, 종료 시(성공/실패 무관) `FALSE`로 되돌림 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각. stale(크래시로 방치됨) 판단 기준 |
+
+---
+
+## `batch_execution_history`
+
+> COB 등 배치가 스텝을 실행한 기록 (#603)
+
+`CobRunnerService`가 스텝(`CobStep`)을 하나 실행할 때마다 결과를 1행 추가한다(append-only, UPDATE·DELETE 없음). 스텝이 시작하기 전에는 행이 없고, 끝난 뒤(성공·실패·중단 중 하나로 확정된 뒤) 한 번만 INSERT한다. 관리자 조회 API는 아직 없다(#603 범위 밖).
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `batch_execution_history_id` | `BIGINT` | **PK** | X |  | 내부 식별자 (AUTO_INCREMENT) |
+| `job_name` | `VARCHAR(50)` |  | X |  | 배치 식별자. 예: `COB` |
+| `step_name` | `VARCHAR(100)` |  | X |  | `CobStep.name()` |
+| `business_date` | `DATE` |  | X |  | 스텝이 처리한 영업일(`COB_DATE`) |
+| `started_at` | `DATETIME(6)` |  | X |  | 스텝 시작 시각 |
+| `ended_at` | `DATETIME(6)` |  | X |  | 스텝 종료(성공/실패/중단 확정) 시각 |
+| `status` | `VARCHAR(10)` |  | X |  | `SUCCESS` / `FAILURE` / `HALTED`(`CobStepHaltException`, #600) |
+| `failure_reason` | `TEXT` |  | O |  | 실패·중단 시 예외 메시지. `SUCCESS`면 `NULL` |
 
 ---
 
