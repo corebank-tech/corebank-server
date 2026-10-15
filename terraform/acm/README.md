@@ -219,7 +219,25 @@ ISSUED
 
 2026-10-14에 `ISSUED` 상태를 확인했다.
 
-Terraform 적용 직후에는 `PENDING_VALIDATION` 상태일 수 있으며, DNS 검증 완료 후 `ISSUED`로 전환된다.
+`aws_acm_certificate_validation` 리소스를 통해 DNS 검증 완료를 기다리므로, Terraform 적용이 정상 완료되면 인증서는 `ISSUED` 상태다.
+
+### 인증서 검증 및 교체 정책
+
+- `aws_acm_certificate_validation`으로 인증서 발급 완료를 확인한다.
+- 검증용 DNS CNAME은 가비아에서 수동 관리한다.
+- 기존 인증서의 의도치 않은 삭제를 방지하기 위해 `prevent_destroy = true`를 적용한다.
+- ACM과 ALB는 별도 Terraform State에서 관리하므로, 인증서 교체는 자동으로 이루어지지 않는다.
+
+### 인증서 교체 절차
+
+1. 신규 ACM 인증서를 별도 리소스로 발급한다.
+2. 필요한 DNS CNAME을 등록하고 ISSUED 상태를 확인한다.
+3. P5와 협의하여 ALB HTTPS 리스너의 인증서 ARN을 변경한다.
+4. HTTPS 연결을 검증한다.
+5. 기존 인증서가 더 이상 사용되지 않는 것을 확인한 후 제거한다.
+
+기존 인증서를 사용하는 동안에는
+`prevent_destroy`를 해제하거나 인증서를 임의로 삭제하지 않는다.
 
 ## 8. 다른 인프라 작업과의 관계
 

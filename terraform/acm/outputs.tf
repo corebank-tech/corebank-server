@@ -1,6 +1,6 @@
 output "alb_certificate_arn" {
-  description = "ALB HTTPS listener certificate ARN"
-  value       = aws_acm_certificate.alb.arn
+  description = "Validated ALB HTTPS listener certificate ARN"
+  value       = aws_acm_certificate_validation.alb.certificate_arn
 }
 
 output "alb_dns_validation_records" {
