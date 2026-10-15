@@ -421,6 +421,41 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(page).isEmpty();
     }
 
+    @Test
+    @DisplayName("DB 보류액이 도메인 객체로 정확하게 복원된다")
+    void restoresHoldAmountFromDatabase() {
+        // given
+        LocalDateTime openedAt = LocalDateTime.of(2026, 8, 10, 10, 0);
+
+        Account account = Account.open(
+                ACCOUNT_NUMBER, customerId, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, openedAt, null);
+
+        Account saved = accountPersistencePort.save(account);
+        entityManager.flush();
+
+        jdbcTemplate.update(
+                """
+                UPDATE account
+                SET balance = ?, hold_amount = ?
+                WHERE account_id = ?
+                """,
+                100_000L,
+                30_000L,
+                saved.getAccountId());
+
+        entityManager.clear();
+
+        // when
+        Account restored = accountPersistencePort
+                .findByAccountIdAndCustomerId(saved.getAccountId(), customerId)
+                .orElseThrow();
+
+        // then
+        assertThat(restored.getBalance()).isEqualTo(100_000L);
+        assertThat(restored.getHoldAmount()).isEqualTo(30_000L);
+        assertThat(restored.getAvailableBalance()).isEqualTo(70_000L);
+    }
+
     private Account saveDemandDeposit(String accountNumber, long balance) {
         return accountPersistencePort.save(Account.importExisting(
                 accountNumber,

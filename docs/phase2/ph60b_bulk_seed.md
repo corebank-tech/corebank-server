@@ -81,7 +81,7 @@ SUB 100,000건에는 이미 `MATURED`인 정기예금 1,000건과 `ACTIVE` 만�
 
 PH-60 이체 235,000건은 출금·입금 `ledger_entry` 470,000행이 있지만 대응하는 TRF 전표가 없다. PH-60b 실행 시 TRF 전표 235,000건과 분개 470,000행을 별도로 보완한다.
 
-TRF와 SUB 전표의 `description`에는 해당 거래 원장 두 행이 공유하는 `transaction_number`를 넣는다. PH-24에서 `reference_key`가 추가되면 P3가 이 값을 옮긴다.
+TRF와 SUB 전표의 `reference_key`·`description`에는 해당 거래 원장 두 행이 공유하는 `transaction_number`를 넣는다. 개시 전표의 `reference_key`는 `OPENING-{yyyyMMdd}`다. PH-24 이전에 적재된 전표는 PH-24 V 파일이 `description`에서 `reference_key`를 채운다.
 
 PH-60 이체일은 모두 2026-09-01이므로 보완 전표는 `20260901-TRF-000001~235000`을 사용한다. PH-60b의 2026-09-01 TRF 전표는 `20260901-TRF-235001`부터 이어서 채번한다.
 

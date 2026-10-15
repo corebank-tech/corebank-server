@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 37개 테이블(35개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 39개 테이블(36개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -81,6 +81,7 @@ erDiagram
         bigint product_id FK "입출금계좌는 NULL"
         varchar account_type "DEMAND_DEPOSIT / TIME_DEPOSIT / INSTALLMENT_SAVINGS"
         bigint balance "원장 대사 대상"
+        bigint hold_amount "지급정지 보류액"
         varchar status "ACTIVE / SUSPENDED / MATURED / CLOSED / DORMANT"
         char password_hash "계좌비밀번호 BCrypt"
         tinyint password_failure_count
@@ -147,7 +148,7 @@ erDiagram
         varchar direction "DEPOSIT / WITHDRAWAL"
         bigint amount "양수만. 방향은 direction 이 표현"
         bigint balance_after "기표 직후 잔액"
-        varchar transaction_type "OPENING / IMMEDIATE_TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / REVERSAL"
+        varchar transaction_type "OPENING / IMMEDIATE_TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / MATURITY / TERMINATION / REVERSAL"
         varchar transaction_content "통장 표시내용"
         char channel "WB / BT"
         boolean reversed
@@ -165,6 +166,14 @@ erDiagram
     }
     ledger_entry_id_sequence {
         bigint sequence_id PK "AUTO_INCREMENT (ledger_entry.ledger_entry_id 전용 채번 카운터)"
+    }
+    ledger_reconciliation_mismatch {
+        bigint ledger_reconciliation_mismatch_id PK
+        date business_date UK "COB_DATE (마감 대상 영업일)"
+        bigint account_id UK "FK 없음 (감사용 기록)"
+        bigint ledger_balance "원장 누적 합계"
+        bigint account_balance "대사 시점 account.balance"
+        datetime detected_at "DATETIME(6)"
     }
 
     %% ---------- P1 ----------
@@ -336,6 +345,16 @@ erDiagram
         boolean currently_running "배치 중복 트리거 방지 락 (#189)"
         datetime updated_at "DATETIME(6). stale 판단 기준"
     }
+    batch_execution_history {
+        bigint batch_execution_history_id PK
+        varchar job_name "예: COB"
+        varchar step_name "CobStep.name()"
+        date business_date "COB_DATE"
+        datetime started_at "DATETIME(6)"
+        datetime ended_at "DATETIME(6)"
+        varchar status "SUCCESS / FAILURE / HALTED (#600, #603)"
+        text failure_reason "실패·중단 시만. SUCCESS면 NULL"
+    }
     auth_token {
         bigint auth_token_id PK
         varchar purpose UK "TERMS_AUTH / ... / ACCOUNT_PASSWORD_AUTH (#580)"
@@ -371,7 +390,8 @@ erDiagram
     gl_voucher {
         varchar voucher_no PK "VARCHAR(20). yyyyMMdd-TTT-NNNNNN. gl_voucher_sequence 가 채번"
         date trade_date "귀속 영업일"
-        varchar tx_type "OPENING / TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST"
+        varchar tx_type "OPENING / TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / REVERSAL"
+        varchar reference_key UK "VARCHAR(40). 원 거래번호. (tx_type, reference_key) 유일"
         varchar description "VARCHAR(200). 적요"
         datetime created_at "DATETIME(6). 전표는 수정하지 않아 updated_at 없음"
     }
@@ -453,6 +473,7 @@ erDiagram
     transaction_sequence ||..o{ transfer : "거래번호 채번"
     transaction_sequence ||..o{ ledger_entry : "거래번호 채번"
     ledger_entry_id_sequence ||..o{ ledger_entry : "ledger_entry_id 전용 채번"
+    account ||..o{ ledger_reconciliation_mismatch : "대사 불일치 (FK 없음)"
 
     %% 같은 두 엔티티를 두 번 참조하는 관계 (중복 제거 대상이라 명시)
     account ||--o{ transfer : "입금 계좌 (당행)"
@@ -495,6 +516,9 @@ erDiagram
   (`trade_date`, PH-41) 기준으로 바꾸면 COB 안에서도 날짜 구멍 없이 쓸 수 있다.
 - **자동 정정 없음**: `ledger_entry`는 파티션 테이블이라 FK로도 강제되지 않는 APPEND-ONLY
   원장이다. 배치는 탐지까지만 하고 잔액을 임의로 덮어쓰지 않는다.
+- **불일치 목록 (#613)**: COB 대사가 찾은 불일치 계좌를 `ledger_reconciliation_mismatch`에
+  영업일(`COB_DATE`)별로 남기고, 관리자 목록 API가 읽는다. 같은 영업일을 다시 대사하면 그날 행을
+  지우고 새 결과로 바꾼다. 재실행 이력은 `batch_execution_history`(#603)가 맡는다.
 - **대응 절차**: 불일치가 나오면 원장이 맞고 `account.balance`가 틀린 것으로 간주한다.
   담당자가 원인(동시성 버그, 배포 중 유실 등)을 먼저 파악하고, 필요하면 반대기표(원거래와
   반대 방향의 신규 `ledger_entry` 행)로만 정정한다. 기존 행을 UPDATE/DELETE하지 않는다.

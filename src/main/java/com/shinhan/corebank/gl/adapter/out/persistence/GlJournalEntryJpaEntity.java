@@ -1,6 +1,6 @@
 package com.shinhan.corebank.gl.adapter.out.persistence;
 
-import com.shinhan.corebank.gl.domain.JournalDirection;
+import com.shinhan.corebank.gl.api.JournalDirection;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;

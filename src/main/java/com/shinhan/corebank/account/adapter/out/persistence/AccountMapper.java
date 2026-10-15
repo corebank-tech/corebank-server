@@ -14,6 +14,7 @@ public final class AccountMapper {
                 .productId(domain.getProductId())
                 .accountType(domain.getAccountType())
                 .balance(domain.getBalance())
+                .holdAmount(domain.getHoldAmount())
                 .status(domain.getStatus())
                 .passwordHash(domain.getPasswordHash())
                 .passwordFailureCount((byte) domain.getPasswordFailureCount())
@@ -38,6 +39,7 @@ public final class AccountMapper {
                 entity.getProductId(),
                 entity.getAccountType(),
                 entity.getBalance(),
+                entity.getHoldAmount(),
                 entity.getStatus(),
                 entity.getPasswordHash(),
                 entity.getPasswordFailureCount(),
