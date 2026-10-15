@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 39개 테이블(36개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 40개 테이블(37개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -25,11 +25,18 @@ erDiagram
         tinyint login_failure_count "5회 시 잠금 (ATH0102)"
         boolean account_locked
         varchar status "ACTIVE / SUSPENDED"
+        varchar role "CUSTOMER / ADMIN"
         datetime last_login_at "대시보드 currentLoginAt"
         varchar last_login_ip "대시보드 currentLoginIp"
         datetime previous_login_at "대시보드 previousLoginAt"
         datetime password_changed_at "DATETIME(6)"
         datetime joined_at "DATETIME(6)"
+    }
+
+    admin_permission {
+        bigint customer_id PK,FK "관리자"
+        varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ"
+        datetime granted_at "권한 부여 시각"
     }
     terms {
         bigint terms_id PK
@@ -434,6 +441,7 @@ erDiagram
     gl_voucher ||--o{ gl_journal_entry : "전표-분개 (전표 단위 차대변 일치)"
     gl_account ||--o{ gl_journal_entry : "계정별 분개"
 
+    customer ||--o{ admin_permission : "권한보유"
     customer ||--o{ customer_terms_agreement : "동의"
     terms ||--o{ customer_terms_agreement : "대상"
     customer ||--o{ verification_request : "인증요청"
