@@ -75,7 +75,7 @@ public class AccountLockJpaEntity {
     @Column(name = "version", nullable = false)
     private long version;
 
-    /** 마지막 거래 시각(#150). 이체 실행(debit/credit) 시점에만 이 어댑터가 갱신한다. */
+    /** 마지막 거래 시각(#150). 고객 거래(debit/credit) 시점에만 이 어댑터가 갱신한다. 은행이 넣는 이자는 갱신하지 않는다. */
     @Column(name = "last_transaction_at", columnDefinition = "DATETIME(6)")
     private LocalDateTime lastTransactionAt;
 
@@ -89,5 +89,10 @@ public class AccountLockJpaEntity {
         Objects.requireNonNull(executedAt, "executedAt");
         this.balance = Math.addExact(this.balance, amount);
         this.lastTransactionAt = executedAt;
+    }
+
+    // 이자처럼 은행이 넣는 돈은 고객 거래가 아니라 휴면 판정 기준(last_transaction_at)을 늦추면 안 된다.
+    public void creditBankPosting(long amount) {
+        this.balance = Math.addExact(this.balance, amount);
     }
 }

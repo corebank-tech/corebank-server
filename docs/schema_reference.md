@@ -498,11 +498,11 @@
 | `ledger_entry_id` | `BIGINT` | **PK** | X |  | 원장 행 식별자. 거래내역 조회 응답의 `ledgerEntryId` |
 | `account_id` | `BIGINT` |  | X |  | 기표 대상 계좌 |
 | `transfer_id` | `BIGINT` |  | O |  | 원본 이체 거래. 상품가입 초입금·이자 지급처럼 이체가 아닌 기표는 NULL |
-| `transaction_number` | `CHAR(20)` |  | X |  | 이 기표가 속한 거래번호. **출금 행과 입금 행이 같은 값**을 갖는다 |
+| `transaction_number` | `CHAR(20)` |  | X |  | 이 기표가 속한 거래번호. **출금 행과 입금 행이 같은 값**을 갖는다. 짝 없는 1행(`OPENING`·`INTEREST`)은 이 번호를 혼자 쓴다 |
 | `direction` | `VARCHAR(10)` |  | X |  | 기표 방향. `DEPOSIT`(입금) / `WITHDRAWAL`(출금). 금액은 늘 양수라 부호 역할을 이 컬럼이 한다 |
 | `amount` | `BIGINT` |  | X |  | 기표 금액. 항상 양수 |
 | `balance_after` | `BIGINT` |  | X |  | 이 기표 직후의 계좌 잔액 스냅샷. 통장 형태로 보여줄 때 쓴다 |
-| `transaction_type` | `VARCHAR(32)` |  | X |  | 기표를 일으킨 업무. `OPENING`(개시 잔액, 짝 없는 1행이며 상대편은 GL 개시 전표) / `IMMEDIATE_TRANSFER` / `SCHEDULED_TRANSFER` / `AUTO_TRANSFER` / `PRODUCT_SUBSCRIPTION`(가입 초입금) / `INTEREST`(이자) / `REVERSAL`(반대기표) |
+| `transaction_type` | `VARCHAR(32)` |  | X |  | 기표를 일으킨 업무. `OPENING`(개시 잔액, 짝 없는 1행이며 상대편은 GL 개시 전표) / `IMMEDIATE_TRANSFER` / `SCHEDULED_TRANSFER` / `AUTO_TRANSFER` / `PRODUCT_SUBSCRIPTION`(가입 초입금) / `INTEREST`(이자, 짝 없는 1행이며 상대편은 GL 이자 전표) / `MATURITY`(만기해지, 상품 계좌 → 고객 계좌 2행) / `TERMINATION`(중도해지, 상품 계좌 → 고객 계좌 2행) / `REVERSAL`(반대기표). `INTEREST`·`MATURITY`·`TERMINATION`은 입금 계약 `transfer.api.LedgerDepositUseCase`(#595)만 남긴다 |
 | `transaction_content` | `VARCHAR(10)` |  | O |  | 통장에 찍히는 적요. 최대 10자 |
 | `channel` | `CHAR(2)` |  | X |  | 거래 채널. `WB` / `BT` |
 | `reversed` | `BOOLEAN` |  | X | `FALSE` | 반대기표로 취소된 원거래인지 여부. 원본을 지우지 않고 이 값만 세운다 |
