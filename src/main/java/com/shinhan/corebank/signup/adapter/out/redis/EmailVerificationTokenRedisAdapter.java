@@ -1,5 +1,6 @@
 package com.shinhan.corebank.signup.adapter.out.redis;
 
+import com.shinhan.corebank.common.ephemeralstore.ConditionalOnRedisEphemeralStore;
 import com.shinhan.corebank.signup.application.port.out.EmailVerificationTokenPort;
 import com.shinhan.corebank.signup.domain.model.EmailVerificationTokenPayload;
 import java.time.Duration;
@@ -11,6 +12,7 @@ import tools.jackson.databind.ObjectMapper;
 
 // 이메일 인증 완료 토큰을 Redis에서 원자적으로 저장·소비한다.
 @Component
+@ConditionalOnRedisEphemeralStore
 public class EmailVerificationTokenRedisAdapter implements EmailVerificationTokenPort {
 
     private static final String KEY_PREFIX = "signup:email-verification:";

@@ -1,5 +1,6 @@
 package com.shinhan.corebank.signup.adapter.out.redis;
 
+import com.shinhan.corebank.common.ephemeralstore.ConditionalOnRedisEphemeralStore;
 import com.shinhan.corebank.signup.application.port.out.TempSignupTokenClaimPort;
 import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
 import java.util.List;
@@ -12,6 +13,7 @@ import tools.jackson.databind.ObjectMapper;
 
 // Redis Lua로 tempSignupToken의 선점·완료·실패 복구를 원자적으로 처리한다.
 @Component
+@ConditionalOnRedisEphemeralStore
 public class TempSignupTokenClaimRedisAdapter implements TempSignupTokenClaimPort {
 
     private static final String SOURCE_PREFIX = "signup:temp-signup:";

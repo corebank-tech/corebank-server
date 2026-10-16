@@ -274,7 +274,7 @@ const rows = rateTiers.map(t => ({
 ```
 
 - `required` — 필수 동의 약관 여부. 가입 플로우 C-03 약관 동의 화면의 "필수/선택" 배지에 쓰십시오.
-- `viewRequired` — 전문 열람까지 해야 하는 약관 여부. **`true`면 본문 조회 전까지 동의 체크박스를 비활성화해야 합니다.** 가입 실행 시 서버가 열람 이력(Redis)을 재검증하므로 FE 상태값만으로는 통과하지 못합니다.
+- `viewRequired` — 전문 열람까지 해야 하는 약관 여부. **`true`면 본문 조회 전까지 동의 체크박스를 비활성화해야 합니다.** 가입 실행 시 서버가 열람 이력(MySQL `terms_view_history`, 열람 후 30분)을 재검증하므로 FE 상태값만으로는 통과하지 못합니다.
 - `displayOrder` — 노출 순서. 서버가 이 순서로 정렬해 내려줍니다.
 
 네 필드 모두 이제 항상 값이 있습니다. FE의 `null` 방어 처리는 필요 없습니다.
@@ -311,7 +311,7 @@ const rows = rateTiers.map(t => ({
 ## 7. 로컬 확인 방법
 
 ```bash
-docker compose up -d minicore-mysql minicore-redis
+docker compose up -d minicore-mysql   # Redis는 app.ephemeral-store.provider=redis일 때만 필요 (#580)
 ./gradlew bootRun --args='--spring.profiles.active=local'
 
 # 목록 — 정렬 3종 / 필터 / 2페이지

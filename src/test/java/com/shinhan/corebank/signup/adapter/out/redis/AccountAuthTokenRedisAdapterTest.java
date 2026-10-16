@@ -2,7 +2,7 @@ package com.shinhan.corebank.signup.adapter.out.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.RedisEphemeralStoreTestSupport;
 import com.shinhan.corebank.signup.domain.model.AccountAuthTokenPayload;
 import java.time.Duration;
 import java.time.Instant;
@@ -14,7 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 // accountAuthToken의 TTL, 최소 payload와 일회성 소비를 검증한다.
-class AccountAuthTokenRedisAdapterTest extends IntegrationTestSupport {
+class AccountAuthTokenRedisAdapterTest extends RedisEphemeralStoreTestSupport {
 
     private static final String KEY_PREFIX = "signup:account-auth:";
 

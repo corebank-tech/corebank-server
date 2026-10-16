@@ -2,7 +2,7 @@ package com.shinhan.corebank.account.adapter.out.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.RedisEphemeralStoreTestSupport;
 import com.shinhan.corebank.account.domain.AccountPasswordAuthTokenPayload;
 import java.time.Duration;
 import java.util.UUID;
@@ -16,7 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 // accountPasswordAuthToken의 300초 TTL과 고객·계좌 조건부 소비를 검증한다.
-class AccountPasswordAuthTokenRedisAdapterTest extends IntegrationTestSupport {
+class AccountPasswordAuthTokenRedisAdapterTest extends RedisEphemeralStoreTestSupport {
 
     private static final String KEY_PREFIX = "account:password:auth:";
 

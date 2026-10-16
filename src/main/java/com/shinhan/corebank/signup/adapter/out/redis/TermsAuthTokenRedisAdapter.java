@@ -1,5 +1,6 @@
 package com.shinhan.corebank.signup.adapter.out.redis;
 
+import com.shinhan.corebank.common.ephemeralstore.ConditionalOnRedisEphemeralStore;
 import com.shinhan.corebank.signup.application.port.out.TermsAuthTokenPort;
 import com.shinhan.corebank.signup.domain.model.TermsAuthTokenPayload;
 import java.time.Duration;
@@ -11,6 +12,7 @@ import tools.jackson.databind.ObjectMapper;
 
 // 약관 동의 인증 토큰을 Redis에 저장하고 한 번만 소비한다.
 @Component
+@ConditionalOnRedisEphemeralStore
 public class TermsAuthTokenRedisAdapter implements TermsAuthTokenPort {
 
     private static final String KEY_PREFIX = "signup:terms-auth:";

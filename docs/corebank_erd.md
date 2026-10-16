@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 34개 테이블(32개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 40개 테이블(37개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -25,11 +25,18 @@ erDiagram
         tinyint login_failure_count "5회 시 잠금 (ATH0102)"
         boolean account_locked
         varchar status "ACTIVE / SUSPENDED"
+        varchar role "CUSTOMER / ADMIN"
         datetime last_login_at "대시보드 currentLoginAt"
         varchar last_login_ip "대시보드 currentLoginIp"
         datetime previous_login_at "대시보드 previousLoginAt"
         datetime password_changed_at "DATETIME(6)"
         datetime joined_at "DATETIME(6)"
+    }
+
+    admin_permission {
+        bigint customer_id PK,FK "관리자"
+        varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ"
+        datetime granted_at "권한 부여 시각"
     }
     terms {
         bigint terms_id PK
@@ -81,6 +88,7 @@ erDiagram
         bigint product_id FK "입출금계좌는 NULL"
         varchar account_type "DEMAND_DEPOSIT / TIME_DEPOSIT / INSTALLMENT_SAVINGS"
         bigint balance "원장 대사 대상"
+        bigint hold_amount "지급정지 보류액"
         varchar status "ACTIVE / SUSPENDED / MATURED / CLOSED / DORMANT"
         char password_hash "계좌비밀번호 BCrypt"
         tinyint password_failure_count
@@ -147,7 +155,7 @@ erDiagram
         varchar direction "DEPOSIT / WITHDRAWAL"
         bigint amount "양수만. 방향은 direction 이 표현"
         bigint balance_after "기표 직후 잔액"
-        varchar transaction_type "OPENING / IMMEDIATE_TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / REVERSAL"
+        varchar transaction_type "OPENING / IMMEDIATE_TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / MATURITY / TERMINATION / REVERSAL"
         varchar transaction_content "통장 표시내용"
         char channel "WB / BT"
         boolean reversed
@@ -165,6 +173,14 @@ erDiagram
     }
     ledger_entry_id_sequence {
         bigint sequence_id PK "AUTO_INCREMENT (ledger_entry.ledger_entry_id 전용 채번 카운터)"
+    }
+    ledger_reconciliation_mismatch {
+        bigint ledger_reconciliation_mismatch_id PK
+        date business_date UK "COB_DATE (마감 대상 영업일)"
+        bigint account_id UK "FK 없음 (감사용 기록)"
+        bigint ledger_balance "원장 누적 합계"
+        bigint account_balance "대사 시점 account.balance"
+        datetime detected_at "DATETIME(6)"
     }
 
     %% ---------- P1 ----------
@@ -336,6 +352,38 @@ erDiagram
         boolean currently_running "배치 중복 트리거 방지 락 (#189)"
         datetime updated_at "DATETIME(6). stale 판단 기준"
     }
+    batch_execution_history {
+        bigint batch_execution_history_id PK
+        varchar job_name "예: COB"
+        varchar step_name "CobStep.name()"
+        date business_date "COB_DATE"
+        datetime started_at "DATETIME(6)"
+        datetime ended_at "DATETIME(6)"
+        varchar status "SUCCESS / FAILURE / HALTED (#600, #603)"
+        text failure_reason "실패·중단 시만. SUCCESS면 NULL"
+    }
+    auth_token {
+        bigint auth_token_id PK
+        varchar purpose UK "TERMS_AUTH / ... / ACCOUNT_PASSWORD_AUTH (#580)"
+        char token_hash UK "SHA-256. 원문 미저장"
+        bigint customer_id "로그인 고객 토큰만. FK 없음"
+        text payload "JSON 문자열. utf8mb4_bin"
+        char claim_id "임시가입 토큰 선점 ID"
+        datetime created_at "DATETIME(6)"
+        datetime expires_at "유효성 판정 기준"
+        datetime consumed_at "NULL 이면 미소비"
+    }
+    otp_issue_lock {
+        bigint customer_id PK "FK 없음 (#580)"
+        char owner_id "UUID. 주인만 해제"
+        datetime expires_at "지나면 재획득 가능"
+    }
+    terms_view_history {
+        bigint customer_id PK "FK 없음 (#580)"
+        bigint terms_id PK
+        datetime viewed_at "DATETIME(6)"
+        datetime expires_at "열람 후 30분. 지나면 정리 배치가 삭제"
+    }
 
     %% ---------- P3 (회계 원장, PH-20) ----------
     gl_account {
@@ -349,7 +397,8 @@ erDiagram
     gl_voucher {
         varchar voucher_no PK "VARCHAR(20). yyyyMMdd-TTT-NNNNNN. gl_voucher_sequence 가 채번"
         date trade_date "귀속 영업일"
-        varchar tx_type "OPENING / TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST"
+        varchar tx_type "OPENING / TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / REVERSAL"
+        varchar reference_key UK "VARCHAR(40). 원 거래번호. (tx_type, reference_key) 유일"
         varchar description "VARCHAR(200). 적요"
         datetime created_at "DATETIME(6). 전표는 수정하지 않아 updated_at 없음"
     }
@@ -392,6 +441,7 @@ erDiagram
     gl_voucher ||--o{ gl_journal_entry : "전표-분개 (전표 단위 차대변 일치)"
     gl_account ||--o{ gl_journal_entry : "계정별 분개"
 
+    customer ||--o{ admin_permission : "권한보유"
     customer ||--o{ customer_terms_agreement : "동의"
     terms ||--o{ customer_terms_agreement : "대상"
     customer ||--o{ verification_request : "인증요청"
@@ -420,12 +470,18 @@ erDiagram
     account ||--o{ auto_transfer : "출금"
     auto_transfer ||--o{ auto_transfer_execution : "회차"
     customer o|--o{ idempotency_key : "발급"
+    %% 일회성 저장소 (#580). 수명이 짧아 FK 없음
+    customer ||..o{ auth_token : "인증 토큰"
+    customer ||..o| otp_issue_lock : "OTP 발급 잠금"
+    customer ||..o{ terms_view_history : "약관 열람"
+    terms ||..o{ terms_view_history : "열람 대상"
 
     %% 논리 관계 (ledger_entry 는 파티션 테이블이라 FK 선언 불가)
     %% 채번 자원 (FK 없음. 거래번호/원장ID 생성)
     transaction_sequence ||..o{ transfer : "거래번호 채번"
     transaction_sequence ||..o{ ledger_entry : "거래번호 채번"
     ledger_entry_id_sequence ||..o{ ledger_entry : "ledger_entry_id 전용 채번"
+    account ||..o{ ledger_reconciliation_mismatch : "대사 불일치 (FK 없음)"
 
     %% 같은 두 엔티티를 두 번 참조하는 관계 (중복 제거 대상이라 명시)
     account ||--o{ transfer : "입금 계좌 (당행)"
@@ -444,23 +500,33 @@ erDiagram
 `account.balance`는 조회 성능용 캐시이고, 진실의 원천은 `ledger_entry`다. 계좌별로 원장 기표를
 `SUM(DEPOSIT) - SUM(WITHDRAWAL)`로 더한 값이 항상 `account.balance`와 같아야 한다.
 
-- **탐지**: `LedgerReconciliationScheduler`가 매일 02:00(Asia/Seoul)에 트리거된다. 02시는
-  "보통 이쯤이면 끝나있겠지"로 잡은 시각일 뿐이고, 실행 전 `LedgerReconciliationBatchService`가
-  `DAILY_TRANSFER_BATCH`(자동이체→예약이체, 00:10 시작)가 실제로 끝났는지 최대 1시간 동안
-  1분 간격으로 재확인한다. 그래도 안 끝나면 이번 실행은 건너뛰고 `LEDGER_RECONCILIATION_SKIPPED`
-  ERROR 로그를 남긴다 — 조용히 다음날로 넘어가면 그 날짜는 영원히 대사가 안 된 채 묻히므로,
-  이 경우 담당자가 해당 날짜를 수동으로 재확인해야 한다. 대상 계좌는 전일 기표가 있었던
-  계좌만 골라 대조한다. 불일치는 `LEDGER_RECONCILIATION_MISMATCH` 마커로 ERROR 로그에
+- **탐지 (#604)**: COB 체인의 대사 스텝(`LedgerReconciliationCobStep`, `order=2`)이 영업일 23:30 COB에서
+  돈다. 독립 스케줄(매일 02:00 증분 · 일요일 03:00 전수)은 없앴다. 스텝은 아래 **전수 대사**를 돌린다 —
+  증분 대사는 기표 시각 기준 달력 하루만 보므로, 영업일에만 도는 COB 안에서는 23:30~24:00 거래와
+  주말·연휴 기표 계좌가 어느 날 대사에도 잡히지 않기 때문이다. 주말·연휴 불일치는 다음 영업일 COB에서
+  잡힌다(누락이 아니라 발견 지연). 불일치는 `LEDGER_RECONCILIATION_MISMATCH` 마커로 ERROR 로그에
   남는다(경보 채널 연동은 미정 — 현재는 로그 기반).
-- **전수 대사 (#468)**: 증분 대사는 기표가 있었던 계좌만 보므로, 원장을 거치지 않고 잔액만 틀어진
-  휴면 계좌는 영원히 대상에 들지 않는다. 그래서 같은 스케줄러가 매주 일요일 03:00에 **전 계좌**를
+- **soft / hard**: 불일치 건수가 임계(`app.ledger-reconciliation.cob-hard-threshold`, 기본 10) 이하면
+  soft(`LEDGER_RECONCILIATION_SOFT` WARN), 초과면 hard(`LEDGER_RECONCILIATION_HARD` ERROR)다. hard는
+  원래 `CobStepHaltException`으로 마감을 멈출 자리지만, 영업일 전환 뒤라 멈추면 복구할 수단이 없어
+  #556(`COB_DATE` 저장·실패 스텝 재실행) 전까지는 로그만 남기고 다음 스텝으로 넘어간다(#600).
+  soft/hard는 **마감을 계속할지**의 판단이지 경보 심각도가 아니다 — 원장 불일치는 1건이어도 사고라
+  건별 `LEDGER_RECONCILIATION_MISMATCH`는 soft/hard와 무관하게 항상 ERROR다.
+- **전수 대사 (#468)**: 원장을 거치지 않고 잔액만 틀어진 휴면 계좌까지 잡도록 **전 계좌**를
   `account_id` 순 청크(기본 1,000개, `app.ledger-reconciliation.full-scan-chunk-size`)로 훑는다.
   원장이 한 줄도 없는 계좌는 원장 합계를 0으로 본다. 청크마다 짧은 읽기 전용 트랜잭션을 열어 같은
-  스냅샷에서 잔액과 원장 합계를 읽으므로 다른 배치가 돌아도 오탐이 없고, 그래서 일일 배치 완료를
-  기다리지 않는다. 증분 대사와 같은 락(`LEDGER_RECONCILIATION_BATCH`)을 써서 둘이 동시에 돌지 않는다.
-  불일치는 같은 마커에 `scope=FULL`을 붙여 남기고, 끝나면 계좌 수·불일치 수·`elapsedMs`를 INFO로 남긴다.
+  스냅샷에서 잔액과 원장 합계를 읽으므로 COB 중 들어오는 거래나 다른 배치가 돌아도 오탐이 없다.
+  COB 대사는 증분 경로(`run(date)`)·`runFull()`과 같은 락(`LEDGER_RECONCILIATION_BATCH`)을 잡는다. 못 잡으면
+  `LEDGER_RECONCILIATION_SKIPPED` ERROR를 남기고 그날 대사를 건너뛰므로 수동 재확인이 필요하다. 불일치는 같은 마커에 `scope=FULL`을 붙여 남기고, 끝나면 계좌 수·
+  불일치 수·`elapsedMs`를 INFO로 남긴다.
+- **증분 대사 (#378, 현재 트리거 없음)**: 전일 기표가 있었던 계좌만 대조하는 경로
+  (`LedgerReconciliationBatchUseCase.run(date)`)는 코드에 남아 있지만 부르는 곳이 없다. 거래일
+  (`trade_date`, PH-41) 기준으로 바꾸면 COB 안에서도 날짜 구멍 없이 쓸 수 있다.
 - **자동 정정 없음**: `ledger_entry`는 파티션 테이블이라 FK로도 강제되지 않는 APPEND-ONLY
   원장이다. 배치는 탐지까지만 하고 잔액을 임의로 덮어쓰지 않는다.
+- **불일치 목록 (#613)**: COB 대사가 찾은 불일치 계좌를 `ledger_reconciliation_mismatch`에
+  영업일(`COB_DATE`)별로 남기고, 관리자 목록 API가 읽는다. 같은 영업일을 다시 대사하면 그날 행을
+  지우고 새 결과로 바꾼다. 재실행 이력은 `batch_execution_history`(#603)가 맡는다.
 - **대응 절차**: 불일치가 나오면 원장이 맞고 `account.balance`가 틀린 것으로 간주한다.
   담당자가 원인(동시성 버그, 배포 중 유실 등)을 먼저 파악하고, 필요하면 반대기표(원거래와
   반대 방향의 신규 `ledger_entry` 행)로만 정정한다. 기존 행을 UPDATE/DELETE하지 않는다.

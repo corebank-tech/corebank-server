@@ -1,5 +1,6 @@
 package com.shinhan.corebank.product.adapter.out.redis;
 
+import com.shinhan.corebank.common.ephemeralstore.ConditionalOnRedisEphemeralStore;
 import com.shinhan.corebank.product.application.port.out.TermsView;
 import com.shinhan.corebank.product.application.port.out.TermsViewHistoryPort;
 import java.time.Clock;
@@ -11,6 +12,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnRedisEphemeralStore
 public class TermsViewHistoryRedisAdapter implements TermsViewHistoryPort {
 
     private static final Duration VIEW_TTL = Duration.ofMinutes(30);

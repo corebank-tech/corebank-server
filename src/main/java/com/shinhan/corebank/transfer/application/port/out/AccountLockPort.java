@@ -50,4 +50,18 @@ public interface AccountLockPort {
      * 오름차순 락 계약이 깨지는 경로 자체를 막을 수 있다.
      */
     TransferBalances applyTransfer(LockedAccountsForTransfer locked, long amount, LocalDateTime executedAt);
+
+    /**
+     * 상대 계좌 없는 입금(이자 지급 등)을 위해 계좌 1개를 비관적 락으로 잡는다. 한 번에 1개만 잡으므로
+     * 오름차순 규칙이 필요 없다.
+     */
+    LockedAccount lockForCredit(Long accountId);
+
+    /**
+     * lockForCredit으로 잡은 계좌에 amount를 더하고 입금 후 잔액을 반환한다. lockForCredit과 같은 트랜잭션에서
+     * 불러야 한다.
+     *
+     * last_transaction_at은 갱신하지 않는다 — 이자는 고객 거래가 아니라 휴면 판정을 늦추면 안 된다(Fineract도 뺀다).
+     */
+    long applyCredit(LockedAccount locked, long amount);
 }

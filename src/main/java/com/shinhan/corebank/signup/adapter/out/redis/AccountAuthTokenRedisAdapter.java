@@ -1,5 +1,6 @@
 package com.shinhan.corebank.signup.adapter.out.redis;
 
+import com.shinhan.corebank.common.ephemeralstore.ConditionalOnRedisEphemeralStore;
 import com.shinhan.corebank.signup.application.port.out.AccountAuthTokenPort;
 import com.shinhan.corebank.signup.domain.model.AccountAuthTokenPayload;
 import java.time.Duration;
@@ -11,6 +12,7 @@ import tools.jackson.databind.ObjectMapper;
 
 // accountAuthToken을 Redis에 저장하고 원자적으로 소비한다.
 @Component
+@ConditionalOnRedisEphemeralStore
 public class AccountAuthTokenRedisAdapter implements AccountAuthTokenPort {
 
     private static final String KEY_PREFIX = "signup:account-auth:";

@@ -26,5 +26,8 @@ public record AccountOverviewResult(OffsetDateTime asOf, long totalAssets, List<
             LocalDateTime lastTransactionAt,
             LocalDate maturityDate,
             boolean withdrawalRegistered,
-            boolean transferEnabled) {}
+            boolean transferEnabled,
+            long ledgerBalance,
+            long availableBalance,
+            boolean passwordLocked) {}
 }

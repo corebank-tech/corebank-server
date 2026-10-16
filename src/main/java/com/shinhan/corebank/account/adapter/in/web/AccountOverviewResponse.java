@@ -58,7 +58,14 @@ public record AccountOverviewResponse(
                     LocalDateTime lastTransactionAt,
             @Schema(description = "만기일. 입출금계좌는 null", example = "2027-08-20", nullable = true) LocalDate maturityDate,
             @Schema(description = "출금계좌 등록 여부", example = "true") boolean withdrawalRegistered,
-            @Schema(description = "이체 가능 여부", example = "true") boolean transferEnabled) {
+            @Schema(description = "이체 가능 여부", example = "true") boolean transferEnabled,
+            @Schema(description = "원장잔액(원). balance와 동일", example = "2500000") long ledgerBalance,
+            @Schema(
+                            description = "출금가능액(원). ACTIVE 계좌는 원장잔액에서 보류액을 차감하며 그 외 상태는 0. "
+                                    + "비밀번호 잠금 여부와 무관하며 passwordLocked로 별도 판단한다.",
+                            example = "70000")
+                    long availableBalance,
+            @Schema(description = "계좌비밀번호 잠금 여부", example = "false") boolean passwordLocked) {
 
         private static AccountItemResponse from(AccountOverviewResult.AccountItem account) {
             return new AccountItemResponse(
@@ -75,7 +82,10 @@ public record AccountOverviewResponse(
                     account.lastTransactionAt(),
                     account.maturityDate(),
                     account.withdrawalRegistered(),
-                    account.transferEnabled());
+                    account.transferEnabled(),
+                    account.ledgerBalance(),
+                    account.availableBalance(),
+                    account.passwordLocked());
         }
     }
 }

@@ -2,6 +2,7 @@ package com.shinhan.corebank.account.adapter.out.redis;
 
 import com.shinhan.corebank.account.application.port.out.AccountPasswordAuthTokenStorePort;
 import com.shinhan.corebank.account.domain.AccountPasswordAuthTokenPayload;
+import com.shinhan.corebank.common.ephemeralstore.ConditionalOnRedisEphemeralStore;
 import java.time.Duration;
 import java.util.List;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -12,6 +13,7 @@ import tools.jackson.databind.ObjectMapper;
 
 // 계좌비밀번호 인증 토큰의 고객·계좌 payload를 Redis에 저장한다.
 @Component
+@ConditionalOnRedisEphemeralStore
 public class AccountPasswordAuthTokenRedisAdapter implements AccountPasswordAuthTokenStorePort {
 
     private static final String KEY_PREFIX = "account:password:auth:";

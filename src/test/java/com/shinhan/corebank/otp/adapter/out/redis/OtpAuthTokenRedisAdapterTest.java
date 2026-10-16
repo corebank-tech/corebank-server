@@ -2,7 +2,7 @@ package com.shinhan.corebank.otp.adapter.out.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.RedisEphemeralStoreTestSupport;
 import com.shinhan.corebank.otp.domain.model.OtpAuthTokenPayload;
 import java.time.Duration;
 import java.util.UUID;
@@ -14,7 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 // otpAuthToken의 고객·요청 페이로드와 300초 TTL 및 조건부 소비를 검증한다.
-class OtpAuthTokenRedisAdapterTest extends IntegrationTestSupport {
+class OtpAuthTokenRedisAdapterTest extends RedisEphemeralStoreTestSupport {
 
     private static final String KEY_PREFIX = "otp:auth:";
 

@@ -1,5 +1,6 @@
 package com.shinhan.corebank.signup.adapter.out.redis;
 
+import com.shinhan.corebank.common.ephemeralstore.ConditionalOnRedisEphemeralStore;
 import com.shinhan.corebank.signup.application.port.out.SignupTokenTransitionPort;
 import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
 import java.time.Duration;
@@ -13,6 +14,7 @@ import tools.jackson.databind.ObjectMapper;
 
 // Redis Lua로 선행 인증 토큰 소비와 tempSignupToken 저장을 원자적으로 처리한다.
 @Component
+@ConditionalOnRedisEphemeralStore
 public class SignupTokenTransitionRedisAdapter implements SignupTokenTransitionPort {
 
     private static final String TERMS_PREFIX = "signup:terms-auth:";

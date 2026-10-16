@@ -11,8 +11,8 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.ExistingAccountRegistration;
 import com.shinhan.corebank.limit.api.TransferLimitRegistration;
 import com.shinhan.corebank.signup.adapter.out.mock.MockExistingBankCustomerVerificationAdapter;
-import com.shinhan.corebank.signup.adapter.out.redis.TempSignupTokenRedisAdapter;
 import com.shinhan.corebank.signup.application.port.in.CompleteSignupCommand;
+import com.shinhan.corebank.signup.application.port.out.TempSignupTokenPort;
 import com.shinhan.corebank.signup.application.service.SignupCompletionService;
 import com.shinhan.corebank.signup.domain.model.AgreedTerm;
 import com.shinhan.corebank.signup.domain.model.ExistingBankAccountSnapshot;
@@ -43,7 +43,7 @@ class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
     SignupCompletionService completionService;
 
     @Autowired
-    TempSignupTokenRedisAdapter tempTokenAdapter;
+    TempSignupTokenPort tempTokenAdapter;
 
     @Autowired
     JdbcTemplate jdbcTemplate;
