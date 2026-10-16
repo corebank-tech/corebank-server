@@ -184,7 +184,7 @@ jobs:
                 interval: 10s
                 timeout: 5s
                 retries: 12
-                start_period: 60s
+                start_period: 600s  # 릴리스 1 gl_voucher 마이그레이션(#585)용 임시 상향, 배포 뒤 60s로 복귀 (#629)
               networks:
                 - corebank-net
               depends_on:
@@ -225,7 +225,8 @@ jobs:
 
           # Docker Compose를 이용한 최신 이미지 풀 및 무중단/선언적 배포
           docker compose pull
-          docker compose up -d --remove-orphans --wait --wait-timeout 180
+          # 릴리스 1 gl_voucher 마이그레이션(#585)용 임시 상향, 배포 뒤 180으로 복귀 (#629)
+          docker compose up -d --remove-orphans --wait --wait-timeout 600
           
           # 이전 오래된 도커 이미지 정리 (디스크 용량 확보)
           docker image prune -f || true
@@ -245,10 +246,10 @@ jobs:
             --output text)
 
           # aws ssm wait command-executed는 delay 5 x maxAttempts 20 = 최대 100초만 기다린다.
-          # 실제 배포는 이미지 풀 + `docker compose up --wait-timeout 180`으로 100초를 넘길 수 있어
+          # 실제 배포는 이미지 풀 + `docker compose up --wait-timeout 600`으로 100초를 넘길 수 있어
           # 배포가 성공해도 Job만 실패하는 오탐이 난다. get-command-invocation의 Status를
           # 직접 폴링해 종료 상태까지 기다린다.
-          POLL_DEADLINE=$((SECONDS + 300))
+          POLL_DEADLINE=$((SECONDS + 720))
           STATUS="Pending"
           while :; do
             sleep 5
@@ -258,7 +259,7 @@ jobs:
               --query '{Status:Status,StandardOutput:StandardOutputContent,StandardError:StandardErrorContent}' \
               --output json 2>/dev/null) || {
                 if [ "$SECONDS" -ge "$POLL_DEADLINE" ]; then
-                  echo "::error::SSM command polling exceeded 300s while querying invocation"
+                  echo "::error::SSM command polling exceeded 720s while querying invocation"
                   STATUS="PollTimedOut"
                   break
                 fi
@@ -270,7 +271,7 @@ jobs:
               *) break ;;
             esac
             if [ "$SECONDS" -ge "$POLL_DEADLINE" ]; then
-              echo "::error::SSM command polling exceeded 300s without reaching a terminal status (last status: $STATUS, CommandId: $COMMAND_ID)"
+              echo "::error::SSM command polling exceeded 720s without reaching a terminal status (last status: $STATUS, CommandId: $COMMAND_ID)"
               break
             fi
           done
