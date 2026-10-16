@@ -29,7 +29,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
  * REQ-TRSF-015 서비스 레벨 재현: AccountLockDeadlockAvoidanceTest가 락 획득만(어댑터 레벨)
- * 검증한다면, 이 테스트는 채번·원장 2행 저장·완료 기록까지 포함한 TransferExecutionService의
+ * 검증한다면, 이 테스트는 채번·원장 2행 저장·GL 전표 기표·완료 기록까지 포함한 TransferExecutionService의
  * execute() 전체를 다수 스레드로 동시 실행해도 안전한지 증명한다.
  * 스레드별로 독립된 트랜잭션/커넥션이 필요하므로 이 테스트 클래스는 @Transactional을 두지 않는다.
  */
@@ -80,7 +80,7 @@ class TransferExecutionServiceConcurrencyTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("A→B, B→A 교차 이체를 다건 동시 실행해도 데드락 없이 전부 성공하고 원장이 정합한다")
+    @DisplayName("A→B, B→A 교차 이체를 다건 동시 실행해도 데드락 없이 전부 성공하고 원장과 전표가 정합한다")
     void concurrentCrossTransfers_allSucceed_withConsistentLedger() throws Exception {
         // given
         seedAccounts();
@@ -159,6 +159,28 @@ class TransferExecutionServiceConcurrencyTest extends IntegrationTestSupport {
                     ACCOUNT_A,
                     ACCOUNT_B);
             assertThat(voucherReferenceKeys).containsExactlyInAnyOrderElementsOf(transactionNumbers);
+
+            // then: 전표마다 차변 1줄 + 대변 1줄이고 금액이 같다.
+            // (분개가 0줄인 전표도 잡도록 LEFT JOIN 하고 줄 수는 COUNT(e.journal_entry_id)로 센다.
+            // 분개가 없으면 SUM 은 NULL 이 되어 SUM 조건만으로는 걸리지 않는다.)
+            Long unbalancedVoucherCount = jdbcTemplate.queryForObject(
+                    """
+                    SELECT COUNT(*) FROM (
+                        SELECT v.voucher_no
+                        FROM gl_voucher v
+                        JOIN transfer t ON t.transaction_number = v.reference_key
+                        LEFT JOIN gl_journal_entry e ON e.voucher_no = v.voucher_no
+                        WHERE t.withdrawal_account_id IN (?, ?) AND v.tx_type = 'TRANSFER'
+                        GROUP BY v.voucher_no
+                        HAVING COUNT(e.journal_entry_id) <> 2
+                            OR SUM(e.dr_cr = 'DEBIT') <> 1
+                            OR SUM(CASE WHEN e.dr_cr = 'DEBIT' THEN e.amount ELSE -e.amount END) <> 0
+                    ) unbalanced
+                    """,
+                    Long.class,
+                    ACCOUNT_A,
+                    ACCOUNT_B);
+            assertThat(unbalancedVoucherCount).isZero();
         } finally {
             pool.shutdownNow();
             pool.awaitTermination(5, TimeUnit.SECONDS);
