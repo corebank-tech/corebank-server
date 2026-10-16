@@ -94,6 +94,40 @@ public class LedgerPair {
     }
 
     /**
+     * 예적금 만기·해지 입금용 2행(상품 계좌 출금 → 고객 계좌 입금). 이체가 아니라 transfer_id는 NULL이고,
+     * transaction_type은 입금 계약이 넘긴 업무 구분(MATURITY·TERMINATION)을 그대로 쓴다.
+     */
+    public static LedgerPair forDeposit(
+            String transactionNumber,
+            Long fromAccountId,
+            long fromBalanceAfter,
+            Long toAccountId,
+            long toBalanceAfter,
+            long amount,
+            String transactionType,
+            String passbookMemo,
+            TransferChannel channel,
+            LocalDateTime occurredAt) {
+        TransferValidations.requireNonBlank(transactionType, CommonErrorCode.REQUIRED_FIELD_MISSING);
+
+        return create(
+                null,
+                transactionNumber,
+                fromAccountId,
+                fromBalanceAfter,
+                toAccountId,
+                toBalanceAfter,
+                amount,
+                transactionType,
+                passbookMemo,
+                passbookMemo,
+                channel,
+                occurredAt,
+                null,
+                null);
+    }
+
+    /**
      * 정정 체인 취소정정용 반대기표 2행. 원거래 출금계좌로 돈을 되돌리므로 방향이 원거래와 반대다.
      * 각 행의 reversal_id는 같은 계좌의 원거래 행을 가리킨다. 원거래 행의 reversed 표시는 저장 쪽이 세운다.
      */
@@ -133,7 +167,7 @@ public class LedgerPair {
                 originalWithdrawal.getLedgerEntryId());
     }
 
-    // transferId·transactionType·reversalId만 다르고 나머지 검증·조립은 세 팩토리가 완전히 같다.
+    // transferId·transactionType·reversalId만 다르고 나머지 검증·조립은 네 팩토리가 완전히 같다.
     private static LedgerPair create(
             Long transferId,
             String transactionNumber,

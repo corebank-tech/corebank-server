@@ -472,6 +472,26 @@ class AccountOverviewQueryServiceTest {
         assertThat(accountIdsByDisplayOrder).containsExactly(201L, 101L, 202L);
     }
 
+    @Test
+    @DisplayName("계좌 목록에 원장잔액, 출금가능액, 비밀번호 잠금을 반환한다")
+    void includesBalanceAndPasswordLockFields() {
+        Account account = createAccount(
+                101L, "088100000001", null, AccountType.DEMAND_DEPOSIT, 100_000L, AccountStatus.ACTIVE, null, true);
+
+        given(accountPersistencePort.findAllByCustomerId(CUSTOMER_ID)).willReturn(List.of(account));
+
+        AccountOverviewResult result = service.getOverview(CUSTOMER_ID);
+
+        AccountOverviewResult.AccountItem item =
+                result.items().get(0).accounts().get(0);
+
+        assertThat(item.balance()).isEqualTo(100_000L);
+        assertThat(item.ledgerBalance()).isEqualTo(100_000L);
+        assertThat(item.availableBalance()).isEqualTo(100_000L);
+        assertThat(item.passwordLocked()).isFalse();
+        assertThat(result.totalAssets()).isEqualTo(100_000L);
+    }
+
     private Account createAccount(
             Long accountId,
             String accountNumber,

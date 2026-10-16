@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 35개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 321개 컬럼
+**대상**: 37개 비즈니스 테이블 + 3개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`) · 340개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -26,7 +26,7 @@
 
 | # | 테이블 | 설명 | 담당 | 컬럼 |
 | --- | --- | --- | --- |----|
-| 1 | `customer` | 고객 | P6 | 18 |
+| 1 | `customer` | 고객 | P6 | 19 |
 | 2 | `terms` | 약관 | P6 | 10 |
 | 3 | `customer_terms_agreement` | 회원가입 약관 동의 | P6 | 4  |
 | 4 | `verification_request` | 인증 요청 | P6 | 13 |
@@ -35,7 +35,7 @@
 | 7 | `product_rate_tier` | 상품 기간별 금리 | P3 | 3  |
 | 8 | `product_preferential_rate` | 상품 우대금리 | P3 | 4  |
 | 9 | `product_terms` | 상품-약관 연결 | P3 | 2  |
-| 10 | `account` | 계좌 | P2 | 21 |
+| 10 | `account` | 계좌 | P2 | 22 |
 | 11 | `account_number_sequence` | 계좌번호 채번 규칙 | P2 | 8  |
 | 12 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4  |
 | 13 | `transfer` | 이체 거래 | P4 | 25 |
@@ -55,7 +55,7 @@
 | 27 | `common_code` | 공통코드 | P5 | 8  |
 | 28 | `batch_execution_lock` | 배치 중복 트리거 방지 락 | P5 | 3  |
 | 29 | `gl_account` | 계정과목 | P3 | 6  |
-| 30 | `gl_voucher` | 전표 | P3 | 5  |
+| 30 | `gl_voucher` | 전표 | P3 | 6  |
 | 31 | `gl_journal_entry` | 분개 | P3 | 8  |
 | 32 | `business_date` | 현재 영업일 | P5 | 4  |
 | 33 | `holiday` | 휴일 달력 | P5 | 4  |
@@ -63,6 +63,9 @@
 | 35 | `auth_token` | 일회성 인증 토큰 | P4 | 9  |
 | 36 | `otp_issue_lock` | OTP 발급 잠금 | P4 | 3  |
 | 37 | `terms_view_history` | 상품 약관 열람 이력 | P4 | 4  |
+| 38 | `batch_execution_history` | 배치 스텝 실행 기록 | P5 | 8  |
+| 39 | `ledger_reconciliation_mismatch` | 원장-잔액 대사 불일치 목록 | P4 | 6  |
+| 40 | `admin_permission` | 관리자 권한 | P1 | 3  |
 
 ---
 
@@ -87,6 +90,7 @@
 | `login_failure_count` | `TINYINT` |  | X | `0` | 로그인 비밀번호 연속 오류 횟수. 5회 도달 시 `account_locked`가 TRUE로 바뀐다 (ATH0102) |
 | `account_locked` | `BOOLEAN` |  | X | `FALSE` | 계정 잠금 여부. `login_failure_count` 5회 도달 시 TRUE, 관리자 잠금 해제로 FALSE 복귀 |
 | `status` | `VARCHAR(12)` |  | X | `ACTIVE` | 계정 상태. `ACTIVE`(정상) / `SUSPENDED`(이용정지). 관리자만 바꾼다. SUSPENDED면 비밀번호가 맞아도 로그인을 거부한다(ATH0106). 비밀번호 5회 오류 잠금(`account_locked`)과 별개이며 둘이 동시에 걸릴 수 있다 |
+| `role` | `VARCHAR(12)` |  | X | `CUSTOMER` | 계정 구분. `CUSTOMER`(고객) / `ADMIN`(관리자). 관리자 로그인은 `/admin/auth/login`으로 분리되고 이 값이 `ADMIN`인 계정만 통과한다 |
 | `last_login_at` | `DATETIME(6)` |  | O |  | 가장 최근 로그인 시각. 대시보드의 `currentLoginAt` |
 | `last_login_ip` | `VARCHAR(45)` |  | O |  | 가장 최근 로그인 IP. 대시보드의 `currentLoginIp` |
 | `previous_login_at` | `DATETIME(6)` |  | O |  | 직전 로그인 시각. 대시보드의 `previousLoginAt`. 부정 접속을 고객이 알아채는 단서 |
@@ -108,6 +112,37 @@
 | 이름 | 조건 | 설명 |
 | --- | --- | --- |
 | `ck_customer_status` | `status IN ('ACTIVE', 'SUSPENDED')` | 계정 상태는 정상·이용정지 중 하나여야 한다. |
+| `ck_customer_role` | `role IN ('CUSTOMER', 'ADMIN')` | 계정 구분은 고객·관리자 중 하나여야 한다. |
+
+---
+
+## `admin_permission`
+
+> 관리자 권한 (#561)
+
+행 하나가 권한 하나다. 권한이 없는 관리자는 행이 0개이며, 관리자인지 아닌지는 `customer.role`로 가린다.
+CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_code`의 표시명과 값이 이어지지 않기
+때문이다(PR #572 리뷰). 부여·회수 API는 PH-49b 몫이고 이 시점에는 시드로만 넣는다.
+
+| 컬럼 | 타입 | 키 | NULL | 기본값 | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `customer_id` | `BIGINT` | **PK, FK** | X |  | 권한을 가진 관리자. `customer.customer_id` 참조 |
+| `permission` | `VARCHAR(20)` | **PK** | X |  | 권한 하나. `GL_READ`·`GL_WRITE`·`CUSTOMER_READ`·`CUSTOMER_WRITE`·`AUDIT_READ`. `common_code`의 `ADMIN_PERMISSION` 그룹과 값이 같다 |
+| `granted_at` | `DATETIME(6)` |  | X |  | 권한을 준 시각. 회수는 행 삭제라 이력은 `audit_log`가 맡는다 |
+
+**기본키** — `(customer_id, permission)` 복합. 같은 권한이 두 번 들어가지 않는다.
+
+**외래키**
+
+| 이름 | 컬럼 | 참조 |
+| --- | --- | --- |
+| `fk_admin_permission_customer` | `customer_id` | `customer(customer_id)` |
+
+**CHECK 제약**
+
+| 이름 | 조건 | 설명 |
+| --- | --- | --- |
+| `ck_admin_permission` | `permission COLLATE utf8mb4_0900_as_cs IN ('GL_READ', 'GL_WRITE', 'CUSTOMER_READ', 'CUSTOMER_WRITE', 'AUDIT_READ')` | 고정 5종만 허용한다. `common_code`는 `code_group`으로 여러 종류를 함께 담아 FK를 걸 수 없어 CHECK로 고정하고, 권한이 늘면 둘을 함께 바꾼다. |
 
 ---
 
@@ -318,6 +353,7 @@
 | `product_id`               | `BIGINT`      | **FK** | O    |          | 입출금계좌는 NULL → `product.product_id`                                                |
 | `account_type`             | `VARCHAR(24)` |        | X    |          | 계좌 종류. `DEMAND_DEPOSIT`(입출금) / `TIME_DEPOSIT`(정기예금) / `INSTALLMENT_SAVINGS`(정기적금) |
 | `balance`                  | `BIGINT`      |        | X    | `0`      | 현재 잔액. **조회 성능용 캐시**이며 진실의 원천은 `ledger_entry` 합계다. 배치로 대사한다                       |
+| `hold_amount` | `BIGINT` | | X | `0` | 지급정지 보류액. 출금가능액 계산 시 잔액에서 차감한다. |
 | `status`                   | `VARCHAR(12)` |        | X    | `ACTIVE` | 계좌 상태. `ACTIVE`(정상) / `SUSPENDED`(거래정지) / `MATURED`(만기 도달) / `CLOSED`(해지) / `DORMANT`(휴면)                            |
 | `password_hash`            | `CHAR(60)`    |        | X    |          | 계좌비밀번호 4자리의 BCrypt 해시                                                             |
 | `password_failure_count`   | `TINYINT`     |        | X    | `0`      | 계좌비밀번호 연속 오류 횟수. 검증 실패 응답의 `errorCount`                                           |
@@ -347,6 +383,7 @@
 | 이름                                    | 조건                                                                                                                                                   | 설명                                                 |
 |---------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------|
 | `ck_account_balance`                  | `balance >= 0`                                                                                                                                       | 계좌 잔액은 0원 이상이어야 한다.                                |
+| `ck_account_hold_amount` | `hold_amount >= 0 AND hold_amount <= balance` | 보류액은 0원 이상이며 원장잔액을 초과하지 않는다. |
 | `ck_account_number`                   | `account_number REGEXP '^[0-9]{12}$'`                                                                                                                | 계좌번호는 하이픈 없는 숫자 12자리여야 한다.                         |
 | `ck_account_type`                     | `account_type IN ('DEMAND_DEPOSIT', 'TIME_DEPOSIT', 'INSTALLMENT_SAVINGS')`                                                                          | 계좌 유형은 입출금·정기예금·정기적금 중 하나여야 한다.                    |
 | `ck_account_status`                   | `status IN ('ACTIVE', 'SUSPENDED', 'MATURED', 'CLOSED', 'DORMANT')`                                                                                    | 계좌 상태는 정상·거래정지·만기 도달·해지·휴면 중 하나여야 한다.                       |
@@ -495,11 +532,11 @@
 | `ledger_entry_id` | `BIGINT` | **PK** | X |  | 원장 행 식별자. 거래내역 조회 응답의 `ledgerEntryId` |
 | `account_id` | `BIGINT` |  | X |  | 기표 대상 계좌 |
 | `transfer_id` | `BIGINT` |  | O |  | 원본 이체 거래. 상품가입 초입금·이자 지급처럼 이체가 아닌 기표는 NULL |
-| `transaction_number` | `CHAR(20)` |  | X |  | 이 기표가 속한 거래번호. **출금 행과 입금 행이 같은 값**을 갖는다 |
+| `transaction_number` | `CHAR(20)` |  | X |  | 이 기표가 속한 거래번호. **출금 행과 입금 행이 같은 값**을 갖는다. 짝 없는 1행(`OPENING`·`INTEREST`)은 이 번호를 혼자 쓴다 |
 | `direction` | `VARCHAR(10)` |  | X |  | 기표 방향. `DEPOSIT`(입금) / `WITHDRAWAL`(출금). 금액은 늘 양수라 부호 역할을 이 컬럼이 한다 |
 | `amount` | `BIGINT` |  | X |  | 기표 금액. 항상 양수 |
 | `balance_after` | `BIGINT` |  | X |  | 이 기표 직후의 계좌 잔액 스냅샷. 통장 형태로 보여줄 때 쓴다 |
-| `transaction_type` | `VARCHAR(32)` |  | X |  | 기표를 일으킨 업무. `OPENING`(개시 잔액, 짝 없는 1행이며 상대편은 GL 개시 전표) / `IMMEDIATE_TRANSFER` / `SCHEDULED_TRANSFER` / `AUTO_TRANSFER` / `PRODUCT_SUBSCRIPTION`(가입 초입금) / `INTEREST`(이자) / `REVERSAL`(반대기표) |
+| `transaction_type` | `VARCHAR(32)` |  | X |  | 기표를 일으킨 업무. `OPENING`(개시 잔액, 짝 없는 1행이며 상대편은 GL 개시 전표) / `IMMEDIATE_TRANSFER` / `SCHEDULED_TRANSFER` / `AUTO_TRANSFER` / `PRODUCT_SUBSCRIPTION`(가입 초입금) / `INTEREST`(이자, 짝 없는 1행이며 상대편은 GL 이자 전표) / `MATURITY`(만기해지, 상품 계좌 → 고객 계좌 2행) / `TERMINATION`(중도해지, 상품 계좌 → 고객 계좌 2행) / `REVERSAL`(반대기표). `INTEREST`·`MATURITY`·`TERMINATION`은 입금 계약 `transfer.api.LedgerDepositUseCase`(#595)만 남긴다 |
 | `transaction_content` | `VARCHAR(10)` |  | O |  | 통장에 찍히는 적요. 최대 10자 |
 | `channel` | `CHAR(2)` |  | X |  | 거래 채널. `WB` / `BT` |
 | `reversed` | `BOOLEAN` |  | X | `FALSE` | 반대기표로 취소된 원거래인지 여부. 원본을 지우지 않고 이 값만 세운다 |
@@ -538,6 +575,29 @@
 | 컬럼명 | 데이터 타입 | NULL 허용 | 기본값 | 키 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `sequence_id` | `BIGINT` | X | `AUTO_INCREMENT` | PK | 생성 즉시 `ledger_entry.ledger_entry_id`로 그대로 쓰인다 |
+
+---
+
+## `ledger_reconciliation_mismatch`
+
+> 원장-잔액 대사 불일치 목록 (PH-38)
+
+COB 대사 스텝이 원장 누적 합계와 `account.balance`가 다른 계좌를 영업일별로 남긴다. 관리자 목록 API(FE ADM-04)가 읽는다. **같은 영업일을 다시 대사하면 그날 행을 모두 지우고 새 결과로 바꾼다** — 재실행 이력은 `batch_execution_history`가 남긴다. 대사는 보고만 하고 정정하지 않으므로 처리 상태 컬럼이 없다. 감사용 기록이라 계좌가 해지·정리돼도 남도록 `account`에 FK를 걸지 않는다. 차액(`ledger_balance - account_balance`)은 저장하지 않고 조회할 때 계산한다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `ledger_reconciliation_mismatch_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 불일치 행 식별자 |
+| `business_date` | `DATE` | **UK** | X |  | 대사한 COB의 마감 대상 영업일(ADR-0004 `COB_DATE`). `batch_execution_history.business_date`와 같은 값이다 |
+| `account_id` | `BIGINT` | **UK** | X |  | 불일치 계좌 |
+| `ledger_balance` | `BIGINT` |  | X |  | 원장 누적 합계 `SUM(DEPOSIT) - SUM(WITHDRAWAL)`. 원장이 없는 계좌는 0 |
+| `account_balance` | `BIGINT` |  | X |  | 대사 시점의 `account.balance` |
+| `detected_at` | `DATETIME(6)` |  | X |  | 대사가 불일치를 확인한 시각 |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_ledger_reconciliation_mismatch_date_account` | `business_date, account_id` — 영업일별 목록 조회와 최근 영업일 조회도 이 인덱스를 쓴다 |
 
 ---
 
@@ -889,6 +949,25 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 
 ---
 
+## `batch_execution_history`
+
+> COB 등 배치가 스텝을 실행한 기록 (#603)
+
+`CobRunnerService`가 스텝(`CobStep`)을 하나 실행할 때마다 결과를 1행 추가한다(append-only, UPDATE·DELETE 없음). 스텝이 시작하기 전에는 행이 없고, 끝난 뒤(성공·실패·중단 중 하나로 확정된 뒤) 한 번만 INSERT한다. 관리자 조회 API는 아직 없다(#603 범위 밖).
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `batch_execution_history_id` | `BIGINT` | **PK** | X |  | 내부 식별자 (AUTO_INCREMENT) |
+| `job_name` | `VARCHAR(50)` |  | X |  | 배치 식별자. 예: `COB` |
+| `step_name` | `VARCHAR(100)` |  | X |  | `CobStep.name()` |
+| `business_date` | `DATE` |  | X |  | 스텝이 처리한 영업일(`COB_DATE`) |
+| `started_at` | `DATETIME(6)` |  | X |  | 스텝 시작 시각 |
+| `ended_at` | `DATETIME(6)` |  | X |  | 스텝 종료(성공/실패/중단 확정) 시각 |
+| `status` | `VARCHAR(10)` |  | X |  | `SUCCESS` / `FAILURE` / `HALTED`(`CobStepHaltException`, #600) |
+| `failure_reason` | `TEXT` |  | O |  | 실패·중단 시 예외 메시지. `SUCCESS`면 `NULL` |
+
+---
+
 ## `auth_token`
 
 > 일회성 인증 토큰 (#580). Redis에 있던 토큰 7종을 옮겼다
@@ -995,7 +1074,8 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 | --- | --- | --- | --- | --- | --- |
 | `voucher_no` | `VARCHAR(20)` | **PK** | X |  | 전표번호. 영업일 + 유형 + 일련 |
 | `trade_date` | `DATE` |  | X |  | 이 전표가 귀속되는 영업일 |
-| `tx_type` | `VARCHAR(24)` |  | X |  | `OPENING` / `TRANSFER` / `PRODUCT_SUBSCRIPTION` / `INTEREST` |
+| `tx_type` | `VARCHAR(24)` |  | X |  | `OPENING` / `TRANSFER` / `PRODUCT_SUBSCRIPTION` / `INTEREST` / `REVERSAL` |
+| `reference_key` | `VARCHAR(40)` |  | X |  | 원 거래번호. 원장 `transaction_number` 와 같은 값이고 개시 전표는 `OPENING-{yyyyMMdd}`. 원장과 전표를 1:1 로 잇는다(PH-24) |
 | `description` | `VARCHAR(200)` |  | O |  | 적요 |
 | `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
 
@@ -1003,15 +1083,18 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 
 | 이름 | 내용 | 이유 |
 | --- | --- | --- |
-| `ck_gl_voucher_tx_type` | 4개 유형 중 하나 | 타행 미결제 유형은 패턴 확정(P4 PH-33) 후 새 V 파일에서 넓힌다 |
+| `ck_gl_voucher_tx_type` | 5개 유형 중 하나 | `REVERSAL` 은 정정 체인 취소정정(PH-24). 타행 미결제 유형은 패턴 확정(P4 PH-33) 후 새 V 파일에서 넓힌다 |
 
 **인덱스**
 
 | 종류 | 이름 | 컬럼 |
 | --- | --- | --- |
 | UNIQUE | `uk_gl_voucher_no_trade_date` | `voucher_no, trade_date` |
+| UNIQUE | `uk_gl_voucher_tx_type_reference_key` | `tx_type, reference_key` |
 
-`voucher_no` 가 이미 PK 라 이 UNIQUE 는 행을 더 제한하지 않는다. 분개가 복제해 가는 `trade_date` 를 복합 FK 로 묶기 위한 참조 대상이다.
+`voucher_no` 가 이미 PK 라 `uk_gl_voucher_no_trade_date` 는 행을 더 제한하지 않는다. 분개가 복제해 가는 `trade_date` 를 복합 FK 로 묶기 위한 참조 대상이다.
+
+`uk_gl_voucher_tx_type_reference_key` 는 같은 거래를 두 번 기표하는 것을 막는다. 두 번째 기표는 예외가 되어 원장까지 롤백된다 — 조용히 넘기면 원장만 두 번 기표된 상태가 가려진다.
 
 ---
 

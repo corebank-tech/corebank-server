@@ -1,6 +1,6 @@
 package com.shinhan.corebank.gl.adapter.out.persistence;
 
-import com.shinhan.corebank.gl.domain.GlTxType;
+import com.shinhan.corebank.gl.api.GlTxType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
@@ -47,6 +47,9 @@ public class GlVoucherJpaEntity implements Persistable<String> {
     @Column(name = "tx_type", nullable = false, length = 24)
     private GlTxType txType;
 
+    @Column(name = "reference_key", nullable = false, length = 40)
+    private String referenceKey;
+
     @Column(name = "description", length = 200)
     private String description;
 
@@ -69,15 +72,18 @@ public class GlVoucherJpaEntity implements Persistable<String> {
     @Getter(AccessLevel.NONE)
     private boolean newEntity = true;
 
-    private GlVoucherJpaEntity(String voucherNo, LocalDate tradeDate, GlTxType txType, String description) {
+    private GlVoucherJpaEntity(
+            String voucherNo, LocalDate tradeDate, GlTxType txType, String referenceKey, String description) {
         this.voucherNo = voucherNo;
         this.tradeDate = tradeDate;
         this.txType = txType;
+        this.referenceKey = referenceKey;
         this.description = description;
     }
 
-    static GlVoucherJpaEntity of(String voucherNo, LocalDate tradeDate, GlTxType txType, String description) {
-        return new GlVoucherJpaEntity(voucherNo, tradeDate, txType, description);
+    static GlVoucherJpaEntity of(
+            String voucherNo, LocalDate tradeDate, GlTxType txType, String referenceKey, String description) {
+        return new GlVoucherJpaEntity(voucherNo, tradeDate, txType, referenceKey, description);
     }
 
     @Override

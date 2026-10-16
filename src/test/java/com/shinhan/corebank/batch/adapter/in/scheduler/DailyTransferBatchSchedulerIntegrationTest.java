@@ -147,7 +147,7 @@ class DailyTransferBatchSchedulerIntegrationTest extends IntegrationTestSupport 
                 .setParameter("id", scheduledTransferId)
                 .getSingleResult();
         assertThat(scheduled[0]).isEqualTo("FAILED");
-        assertThat((String) scheduled[1]).contains("잔액이 부족");
+        assertThat((String) scheduled[1]).contains("출금가능금액이 부족");
 
         long balanceAfter = ((Number) entityManager
                         .createNativeQuery("SELECT balance FROM account WHERE account_id = :id")

@@ -133,7 +133,10 @@ public class AccountOverviewQueryService implements AccountOverviewQueryUseCase 
                 account.getLastTransactionAt(),
                 account.getMaturityDate(),
                 account.isWithdrawalRegistered(),
-                isTransferEnabled(account));
+                isTransferEnabled(account),
+                account.getBalance(),
+                account.getAvailableBalance(),
+                account.isPasswordLocked());
     }
 
     private String resolveAlias(Account account) {

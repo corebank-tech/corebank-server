@@ -127,7 +127,10 @@ class LoginStatusQueryServiceTest {
                         date,
                         null,
                         true,
-                        true))
+                        true,
+                        10_000L,
+                        10_000L,
+                        false))
                 .toList();
         AccountOverviewResult.Group group =
                 new AccountOverviewResult.Group(AccountGroupCode.DEMAND_DEPOSIT, "입출금계좌", 10_000L, accounts);

@@ -110,6 +110,21 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
         return new TransferBalances(withdrawalEntity.getBalance(), depositEntity.getBalance());
     }
 
+    @Override
+    public LockedAccount lockForCredit(Long accountId) {
+        if (accountId == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+        return toLockedAccount(findForUpdate(accountId));
+    }
+
+    @Override
+    public long applyCredit(LockedAccount locked, long amount) {
+        AccountLockJpaEntity entity = findForUpdate(locked.accountId());
+        entity.creditBankPosting(amount);
+        return entity.getBalance();
+    }
+
     private AccountLockJpaEntity findForUpdate(Long accountId) {
         return repository
                 .findByAccountIdForUpdate(accountId)
