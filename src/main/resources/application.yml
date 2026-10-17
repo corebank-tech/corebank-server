@@ -73,3 +73,6 @@ app:
       temp-signup-ttl: 30m
     email-verification:
       code-ttl: 3m
+  interest:
+    income-tax-rate: "0.14"
+    local-tax-ratio: "0.10"

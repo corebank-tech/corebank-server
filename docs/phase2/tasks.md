@@ -28,7 +28,7 @@
 | [PH-32](#ph-32-도메인-이벤트-발행-골격) | 도메인 이벤트 발행 골격 | S1 | 2 | — | **9/30** | #436 | 예정 |
 | [PH-30](#ph-30-k6-harness--이체-tps--동시성-정합성-s1-베이스라인--s4-재측정) | k6 harness · TPS·p95·p99 · 동시성 정합성 베이스라인 | S1 | 4 | PH-60 (9/30) | harness **10/2** · 베이스라인 **10/8** | #385 · #384 | 예정 |
 | [PH-01](#ph-01-알림-도메인-인수--영속성) | 알림 도메인 인수 · 영속성 | S1 | 3 | — | — | #389 | 예정 |
-| [PH-49a-①](#ph-49a-관리자-인증-①-결정스키마-102--②-구현-108) | 관리자 인증 — 결정 · 스키마 · Flyway | S1 | 1 | — | **10/2** | — | 예정 |
+| [PH-49a-①](#ph-49a-관리자-인증-①-결정스키마-102--②-구현-108) | 관리자 인증 — 결정 · 스키마 · Flyway | S1 | 1 | — | **10/2** | #561 | 진행 |
 | [PH-03-①](#ph-03-api-문서-전수-점검-①-측정-s1--②-0-마감-s4) | API 문서 전수 점검 — 측정 | S1 | 0.5 | — | — | #477 · PR #476 | 완료 |
 | [FE-SNAP](#fe-snap-codegen-스냅샷) | codegen 스냅샷 | S1 | 0.5 | — | — | — | 예정 |
 | 리드 | FE 리드 조율 | S1 | 0.5 | — | — | — | — |
@@ -60,7 +60,7 @@
 | [PH-10](#ph-10-계좌-상태-전이-매트릭스--flyway) | 계좌 상태 전이 매트릭스 + Flyway | S1 | 3 | — | **Flyway 9/30 전** | #419 | 완료 |
 | [PH-11](#ph-11-적수-산출--일수-방식--베이스라인) | 적수 산출 · 일수 방식 · 베이스라인 | S1 | 2.5 | PH-60 · 15만 측정은 PH-60b · 날짜 기준은 PH-40 나오면 교체 | 3만 10/8 완료(#579) · 15만: 60b 적재 + PH-41 거래일 교체 뒤 | #524 | 진행 |
 | [FE #139](#fe-139-matured-정책표) | MATURED 정책표 | S1 | 0.5 | PH-10 | — | FE #139 | 예정 |
-| [PH-12](#ph-12-이자-계산기--절사-규칙) | 이자 계산기 · 절사 규칙 | S2 | 3.5 | PH-11 | **10/16** | — | 예정 |
+| [PH-12](#ph-12-이자-계산기--절사-규칙) | 이자 계산기 · 절사 규칙 | S2 | 3.5 | PH-11 | **10/16** | #623 | 완료 |
 | [PH-90](#ph-90-원장잔액--출금가능액-분리--transferprecheck) | 원장잔액·출금가능액 분리 + `TransferPreCheck` | S2 | 3 | PH-87 · PH-99 | **10/16** (P4 머지) | — | 예정 |
 | [PH-70-①](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | `modules/data` Terraform plan — RDS | S2 | 1.5 | PH-50 | — | — | 예정 |
 | [PH-15](#ph-15-만기--감지--matured-전이--원리금--만기해지-api) | 만기 — 감지 · MATURED · 원리금 · 만기해지 API | S3 | 3.5 | PH-12 · PH-10 · PH-43 · 입금 계약(PH-99) | **10/23** | #419 | 예정 |
@@ -217,9 +217,9 @@
 
 ### PH-49a. 관리자 인증 (① 결정·스키마 10/2 → ② 구현 10/8)
 
-**① 결정 5개를 `docs/phase2/admin_auth.md`에 적는다.**
+**① 결정 5개를 [admin_auth.md](admin_auth.md)에 적는다.**
 
-1. 저장 모델: `customer.role`(CUSTOMER/ADMIN)과 `customer.permissions` VARCHAR(200) CSV
+1. 저장 모델: `customer.role`(CUSTOMER/ADMIN)과 `admin_permission` 조인 테이블(행 하나가 권한 하나)
 2. 권한은 고정 5종: `GL_READ · GL_WRITE · CUSTOMER_READ · CUSTOMER_WRITE · AUDIT_READ`. 부여·회수 API는 PH-49b에서 만들고, 이 시점에는 시드로만 준다.
 3. 로그인 경로를 `/admin/auth/login`으로 분리
 4. 관리자 세션 30분 무조작 만료(고객은 10분)
@@ -399,11 +399,13 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 
 ### PH-12. 이자 계산기 · 절사 규칙
 
-- `product_rate_tier` 기간별 금리를 적용하고 원 단위로 절사한다. 금리는 가입 시점 스냅샷 `applied_rate`만 쓴다.
-- 상품 12종 계산 검증(스프레드시트 대조 오차 0)
-- 결과 값객체 `InterestResult(gross, tax, net, appliedRate)` — PH-14가 쓰고 P3 분개가 받는다.
-- **범위 밖:** 우대금리 조건 판정
-- **완료 기준:** 12종 오차 0원
+- [이자 계산 정책](interest_calculation_policy.md)에 따라 적수 기반 단리·월복리 계산기를 구현한다.
+- PH-11 적수 계산기를 재사용하고, 가입 시점의 `applied_rate`를 정상 만기 계산에 적용한다.
+- 결과 값객체 `InterestResult(gross, tax, net, appliedRate)`를 제공한다. PH-14가 사용하고 P3 분개가 받는다.
+- 상품 12종 계산 검증(스프레드시트 대조 오차 0원).
+- **범위 밖:** 우대금리 조건 판정, 실제 이자 지급·해지 처리(PH-14·PH-15·PH-16).
+- **완료 기준:** 단리·월복리·세금 절사 테스트 통과, 상품 12종 오차 0원.
+- **현황:** #623 완료 (PR #626).
 
 ### PH-90. 원장잔액 · 출금가능액 분리 + `TransferPreCheck`
 
@@ -444,6 +446,7 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 - 영업일 기준 만기 감지 → `ACTIVE → MATURED`. `batch.api.CobStep` 구현체로 등록하고, 체인 자리는 [PH-43](#ph-43-cob-파이프라인)이 정한다. 스텝은 자기 트랜잭션을 연다.
 - `AccountMatured` 이벤트 발행(PH-32 타입, 2차 알림 소비 없음)
 - 만기해지 API: 원리금 계산(PH-12) → 출금계좌 입금(PH-99의 `transfer.api` 입금 계약) → CLOSED. `LedgerPair`는 transfer 내부라 직접 쓰지 않는다.
+- 만기해지 시 이자가 있으면 `INTEREST`로 세후이자를 상품 계좌에 기표한 뒤 `MATURITY`로 원리금 전액을 고객 계좌에 이체한다. 상품 계좌 잔액 0원을 확인한 뒤 동일 트랜잭션에서 `CLOSED`로 전이한다. 기표·조회 순서는 [transfer_seam.md](transfer_seam.md) §8을 따르며, 원장 합계 정합성은 PH-15 통합 테스트에서 검증한다.
 - 계좌 상세 응답에 `maturityDate`·`status=MATURED`를 추가한다(Expand → B-3).
 - 만기 처리 단건 비용을 재서 P5 COB 시간에 합산한다.
 - **범위 밖:** 만기후이율(MATURED 이후 이자 없음)
@@ -452,7 +455,7 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 ### PH-14. 이자 지급 · 원천징수
 
 - 이자 지급 posting: PH-99의 `transfer.api` 입금 계약으로 계좌에 입금한다(원장 기표 포함).
-- 이자소득세 15.4%(소득세 14% + 지방 1.4%, 각각 원 단위 절사). 세율은 yml에 둔다.
+- 일반과세 이자소득세 14%는 세전이자 기준, 지방소득세는 절사된 이자소득세의 10% 기준으로 계산하며 각각 10원 미만 절사한다. 세율은 yml에 둔다. 상세 계산 순서는 [이자 계산 정책](interest_calculation_policy.md)을 따른다.
 - `gl.api.JournalPostingUseCase.post(...)` 호출 2줄 — 차 `50100` 이자비용 / 대 `20100` 예수금, 차 `20100` 예수금 / 대 `20200` 원천세예수금. **이 패턴의 확정은 P2 몫이다.** 확정한 뒤 [gl_journal_patterns.md](gl_journal_patterns.md) §3-4에 적는다(유형 `INT`).
 - **범위 밖:** 비과세·세금우대 구분
 
@@ -463,6 +466,8 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 ### PH-16. 중도해지 · 휴면 전환 · 해지 시 자원 정리
 
 - 중도해지 API, 예치기간 구간별 중도해지이율, 수수료(요율은 yml)
+- 중도해지이율은 실제 예치기간에 해당하는 구간별 이율을 선택해 가입일부터 해지일까지 전체 기간에 소급 적용한다. 복리 상품도 중도해지 시 단리로 재계산한다. 계산식은 [이자 계산 정책](interest_calculation_policy.md)을 따른다.
+- 중도해지 시 이자가 있으면 PH-14의 이자 지급 계약에 따라 세후이자를 `INTEREST`로 상품 계좌에 기표한다. 이후 `transfer.api.LedgerDepositUseCase.transferBetween(..., TERMINATION, ...)`으로 원리금 전액을 고객 계좌에 이체한다. 상품 계좌 잔액 0원을 확인한 뒤 동일 트랜잭션에서 `CLOSED`로 전이한다. 기표·조회 순서는 [transfer_seam.md](transfer_seam.md) §8을 따르며, 원장 합계 정합성은 PH-16 통합 테스트에서 검증한다.
 - 휴면 전환 서비스와 휴면 해제 API
     - 휴면 전환은 `CobStep` 구현체로 **만기감지 바로 다음 자리**에 들어간다([PH-43](#ph-43-cob-파이프라인)).
     - **10/30까지 통합하고 S4에는 검증만 한다**([D-12](README.md#d-12--923--리드p2-회신-채택)).
@@ -656,7 +661,7 @@ AI로 불일치 목록을 뽑고 고친다. **C-1보다 먼저 한다.**
 
 ### FE B-8. 타행이체 입력·결과
 
-은행 선택 · 미결제 상태 · TIMEOUT 안내. 은행 목록·미결제 스키마는 PH-33에서 10/16까지 받는다. 편집권도 넘겨받았고 PR·머지는 P3가 한다.
+은행 선택 · TIMEOUT 안내. 미결제는 회계(GL) 내부 기표라 화면에 나오지 않는다. 은행 목록·요청·응답 스키마는 [interbank_transfer_fe_handoff.md](interbank_transfer_fe_handoff.md)다(PH-33, #609). 편집권도 넘겨받았고 PR·머지는 P3가 한다.
 **완료 기준:** 모의 대외계 정상 응답이면 완료 화면, 무응답이면 TIMEOUT 안내(재시도 버튼 없음)가 뜬다. 은행 목록은 서버 응답에서 온다.
 
 ### FE 조회 사유 입력
@@ -795,6 +800,8 @@ PH-90 PreCheck → PH-24 훅 B → PH-41 tradeDate 대입 순서로 머지한다
 - **미결제타점권 기표 2패턴**: 요청 시 예수금 → 미결제타점권(`10200`), 확정 시 해소. 훅 B에서 `gl.api`를 부른다. 차대 방향은 P4가 정해 [gl_journal_patterns.md](gl_journal_patterns.md)에 적는다. **`gl_voucher.tx_type` CHECK에 타행 유형이 없으므로 새 V 파일로 CHECK를 넓힌다**(기존 마이그레이션 수정 금지).
 - Resilience4j 타임아웃·서킷브레이커 — 타행만 막고 당행은 계속 돈다.
 - 은행코드 시드 5개. 은행 목록·미결제 상태 스키마를 10/16까지 FE B-8(P3)에 넘긴다.
+    - 현황(#609): [interbank_transfer_fe_handoff.md](interbank_transfer_fe_handoff.md)로 넘겼다. 엔드포인트는 당행과 분리(`GET /transfers/banks` · `POST /transfers/interbank`)하고, 결과 상태는 `SUCCESS`·`ERROR`·`TIMEOUT`을 그대로 쓴다. 미결제는 GL 내부라 FE에 노출하지 않는다. (가칭) 오류코드 4개는 이 태스크 PR에서 오류코드 마스터에 등록하며 확정한다.
+- **이체 내역 상세 · 목록의 타행 건 마스킹**([인계 문서](interbank_transfer_fe_handoff.md) §7-1): 지금 `MaskingUtil.maskAccountNumber`는 12자리가 아니면, `maskName`은 `null`이면 예외를 던진다. 그대로 두면 타행 건이 하나라도 있는 상세 · 목록이 `CMN9999`(500)로 깨진다. 계좌번호는 §7-1 규칙(앞 · 뒤 자릿수÷4 노출)으로 넓히고, 예금주가 없는 `ERROR` · `TIMEOUT` 건은 `payeeName`을 `null`로 내린다. 같은 12자리 · 예금주 필수 전제가 `transfer.deposit_account_number` `CHAR(12)` · `payee_name` NOT NULL에도 있어 스키마 변경(Flyway · schema_reference · ERD)이 함께 필요하다. 로그 마스킹(`MaskingConverter`)도 계좌번호를 `\b\d{12}\b`로만 잡아 12자리가 아닌 타행 번호는 로그에 원문 그대로 남는다(REQ-NFR-009). 1~16자리로 넓히되, PH-42(P5)와 같은 파일이라 착수할 때 P5와 맞춘다.
 - 타행 확정 시점에도 `transfer.completed`가 발행된다.
 - **착수 시 P5와 확인:** 자동·예약이체 재확정 배치(`AutoTransferBatchItemProcessor`·`ScheduledTransferBatchItemProcessor`의 `reconcileStuckExecution()`)는 조회한 transfer가 SUCCESS·ERROR가 아니면 else 분기에서 회차를 ERROR로 확정한다. TIMEOUT 행이 이 분기로 오면 처리 불명이 실패로 굳는다. 지금은 회차가 당행 전용이라 오지 않지만([process_result_status_usage.md](process_result_status_usage.md) §2), 송신 연결 전에 두 else 분기와 `completeProcessing()` 예외 메시지("PROCESSING으로 미확정")를 TIMEOUT 기준으로 맞출지 P5와 정한다(PR #570 리뷰).
 - **완료 기준:** 정상 흐름과 "무응답 후 조회 확인" 흐름이 돈다. 모의 서버가 무응답이어도 당행 TPS가 유지된다.
