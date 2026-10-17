@@ -28,6 +28,8 @@ import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -224,8 +226,54 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
         assertThat(context.tradeDate()).isBetween(before, LocalDate.now(clock));
     }
 
+    @Test
+    @DisplayName("[메트릭] execute()가 예외를 던져도 transfer.count{result=EXCEPTION}과 transfer.duration이 한 번 기록된다 (#541)")
+    void execute_throws_recordsExceptionMetrics() {
+        MeterRegistry registry = new SimpleMeterRegistry();
+        LedgerPostingHook failing = context -> {
+            throw new IllegalStateException("gl down");
+        };
+        TransferExecutionService service = serviceWith(List.of(), List.of(failing), registry);
+
+        assertThatThrownBy(() -> service.execute(immediateCommand(30000L))).isInstanceOf(IllegalStateException.class);
+
+        assertThat(registry.get("transfer.count")
+                        .tags("result", "EXCEPTION", "replayed", "false")
+                        .counter()
+                        .count())
+                .isEqualTo(1.0);
+        assertThat(registry.get("transfer.duration")
+                        .tags("result", "EXCEPTION", "replayed", "false")
+                        .timer()
+                        .count())
+                .isEqualTo(1L);
+        assertThat(registry.get("transfer.count")
+                        .tags("result", "SUCCESS", "replayed", "false")
+                        .counter()
+                        .count())
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("[메트릭] 이체가 한 번도 없어도 결과 5종 × replayed 2종의 transfer.count·transfer.duration이 0으로 등록돼 있다 (#541)")
+    void construct_registersAllTransferMetricsAtZero() {
+        MeterRegistry registry = new SimpleMeterRegistry();
+
+        serviceWith(List.of(), List.of(), registry);
+
+        assertThat(registry.find("transfer.count").counters()).hasSize(10);
+        assertThat(registry.find("transfer.duration").timers()).hasSize(10);
+        assertThat(registry.find("transfer.count").counters())
+                .allSatisfy(counter -> assertThat(counter.count()).isZero());
+    }
+
     private TransferExecutionService serviceWith(
             List<TransferPreCheck> preChecks, List<LedgerPostingHook> ledgerPostingHooks) {
+        return serviceWith(preChecks, ledgerPostingHooks, new SimpleMeterRegistry());
+    }
+
+    private TransferExecutionService serviceWith(
+            List<TransferPreCheck> preChecks, List<LedgerPostingHook> ledgerPostingHooks, MeterRegistry registry) {
         return new TransferExecutionService(
                 accountLockPort,
                 transferLimitPort,
@@ -239,7 +287,8 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
                 ledgerPostingHooks,
                 clock,
                 transactionManager,
-                eventPublisher);
+                eventPublisher,
+                registry);
     }
 
     private static TransferPreCheck recordingPreCheck(int order, List<Integer> called, boolean reject) {

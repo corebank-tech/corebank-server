@@ -35,6 +35,12 @@ management:
     redis:
       # provider=jdbc면 Redis가 내려가도 UP이어야 한다. redis일 때만 RedisEphemeralStoreHealthConfiguration이 넣는다.
       enabled: false
+  metrics:
+    distribution:
+      percentiles-histogram:
+        # 구간별 건수(_bucket)를 내야 Prometheus에서 histogram_quantile로 이체 p95를 낼 수 있다(PH-30 판정 지표).
+        # http.server.requests는 시계열이 많이 늘어 대시보드를 만드는 #619에서 정한다.
+        transfer.duration: true
 
 springdoc:
   swagger-ui:
