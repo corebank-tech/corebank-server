@@ -940,7 +940,7 @@ public interface CobStep {
 
 원장 300만·분개 600만·이체 행 크기로 스토리지, 목표 TPS, 인스턴스 타입을 표 1장에 정리한다. 여유를 일부러 적게 잡는다(병목이 드러나야 개선 서사가 선다).
 
-- 현황(#539): [ph57_capacity_plan.md](ph57_capacity_plan.md) — WAS t3.small × 2 · RDS db.t3.small Multi-AZ · gp3 20GiB(자동 확장 없음) · 온프레미스 VM `/` 여유 20GB 이상. 사이징 목표는 20 TPS(WAS 2대 상한)이고 서비스 목표 300 TPS는 BCrypt 위치를 고친 뒤의 목표다.
+- 현황(#539): [ph57_capacity_plan.md](ph57_capacity_plan.md) — WAS t3.small × 2(CPU 크레딧 unlimited 명시) · RDS db.t3.small Multi-AZ · gp3 20GiB(자동 확장 없음) · 버퍼 풀 `{DBInstanceClassMemory*3/4}` 명시 · 온프레미스 VM `/` 여유 20GB 이상. 이 사양의 기대 처리량은 약 10 TPS(1대 실측 약 5 TPS × 2, 선형 가정 상한)이고 서비스 목표 300 TPS는 BCrypt 위치를 고친 뒤의 목표다.
 
 ### PH-47. 메트릭 · Grafana
 
