@@ -360,7 +360,7 @@ class CobRunnerServiceTest {
     }
 
     @Test
-    @DisplayName("스텝이 중단(hard)되면 중단된 스텝만 HALTED 태그로 카운터가 쌓이고, 생략된 스텝은 집계되지 않는다 (#541)")
+    @DisplayName("스텝이 중단(hard)되면 중단된 스텝만 HALTED 태그로 카운터가 쌓이고, 생략된 스텝은 0으로 남는다 (#541)")
     void run_stepHalts_recordsHaltedMetric_forHaltedStepOnly() {
         when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
         when(businessDateProvider.today()).thenReturn(COB_DATE);
@@ -388,8 +388,31 @@ class CobRunnerServiceTest {
                         .counter()
                         .count())
                 .isEqualTo(1.0);
-        assertThat(meterRegistry.find("cob.step.count").tag("step", "second").counter())
-                .isNull();
+        assertThat(meterRegistry.find("cob.step.count").tags("step", "second").counters().stream()
+                        .mapToDouble(counter -> counter.count())
+                        .sum())
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("COB가 한 번도 안 돌아도 스텝 × 상태 3종의 카운터와 스텝별 타이머가 0으로 등록돼 있다 (#541)")
+    void constructor_registersStepMetricsAtZero() {
+        CobStep first = stepOf("first", 1);
+        CobStep second = stepOf("second", 2);
+
+        new CobRunnerService(
+                batchExecutionLockPort,
+                businessDateProvider,
+                businessDateAdvancer,
+                batchExecutionHistoryPort,
+                CLOCK,
+                meterRegistry,
+                List.of(first, second));
+
+        assertThat(meterRegistry.find("cob.step.count").counters()).hasSize(6);
+        assertThat(meterRegistry.find("cob.step.duration").timers()).hasSize(2);
+        assertThat(meterRegistry.find("cob.step.count").counters())
+                .allSatisfy(counter -> assertThat(counter.count()).isZero());
     }
 
     @Test

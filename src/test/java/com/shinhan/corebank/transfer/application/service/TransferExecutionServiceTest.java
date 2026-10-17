@@ -26,7 +26,6 @@ import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityManager;
@@ -198,7 +197,7 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("정상 이체가 완료되면 transfer.count{result=SUCCESS} 카운터와 transfer.duration 타이머가 올라간다")
+    @DisplayName("정상 이체가 완료되면 transfer.count{result=SUCCESS,replayed=false} 카운터와 같은 태그의 transfer.duration 타이머가 올라간다")
     void execute_completesTransfer_recordsMetrics() {
         // given: 픽스처는 별도 트랜잭션에서 커밋한다.
         new TransactionTemplate(transactionManager)
@@ -218,21 +217,31 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 .build();
 
         // 다른 테스트도 같은 Spring 컨텍스트의 MeterRegistry를 공유하므로 절대값이 아니라
-        // 이 호출 전후의 증가분(delta)으로 검증한다 - SUCCESS 카운터는 이 테스트 전에 이미
-        // 존재할 수도, 아직 없을 수도 있어 find()로 null-safe하게 "전" 값을 읽는다.
-        double successCountBefore = successCounter().map(Counter::count).orElse(0.0);
-        long timerCountBefore = meterRegistry.get("transfer.duration").timer().count();
+        // 이 호출 전후의 증가분(delta)으로 검증한다. 메트릭은 서버 시작 때 0으로 등록된다.
+        double countBefore = transferCount("SUCCESS", false);
+        long timerCountBefore = transferTimerCount("SUCCESS", false);
 
         TransferResult result = transferExecutionService.execute(command);
 
         assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
-        assertThat(successCounter().orElseThrow().count()).isEqualTo(successCountBefore + 1);
-        assertThat(meterRegistry.get("transfer.duration").timer().count()).isEqualTo(timerCountBefore + 1);
+        assertThat(transferCount("SUCCESS", false)).isEqualTo(countBefore + 1);
+        assertThat(transferTimerCount("SUCCESS", false)).isEqualTo(timerCountBefore + 1);
     }
 
-    private Optional<Counter> successCounter() {
-        return Optional.ofNullable(
-                meterRegistry.find("transfer.count").tag("result", "SUCCESS").counter());
+    private double transferCount(String result, boolean replayed) {
+        return meterRegistry
+                .get("transfer.count")
+                .tags("result", result, "replayed", String.valueOf(replayed))
+                .counter()
+                .count();
+    }
+
+    private long transferTimerCount(String result, boolean replayed) {
+        return meterRegistry
+                .get("transfer.duration")
+                .tags("result", result, "replayed", String.valueOf(replayed))
+                .timer()
+                .count();
     }
 
     @Test
@@ -301,9 +310,16 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 .executionDate(executionDate)
                 .build();
 
+        double newCountBefore = transferCount("SUCCESS", false);
+        double replayedCountBefore = transferCount("SUCCESS", true);
+
         // when: 같은 회차를 두 번 실행한다 (당일 안전장치 미작동 후 익일 재시도 시나리오와 동일한 모양)
         TransferResult first = transferExecutionService.execute(command);
         TransferResult second = transferExecutionService.execute(command);
+
+        // then: 새로 처리한 이체는 1건, 다시 확인한 호출은 따로 1건으로 센다 — SUCCESS가 2건으로 부풀지 않는다
+        assertThat(transferCount("SUCCESS", false)).isEqualTo(newCountBefore + 1);
+        assertThat(transferCount("SUCCESS", true)).isEqualTo(replayedCountBefore + 1);
 
         // then: 두 번째 호출은 재처리 없이 첫 번째와 동일한 결과를 반환한다
         assertThat(first.status()).isEqualTo(ProcessResultStatus.SUCCESS);

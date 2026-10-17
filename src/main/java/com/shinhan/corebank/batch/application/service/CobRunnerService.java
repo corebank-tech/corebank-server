@@ -52,6 +52,33 @@ public class CobRunnerService implements CobRunnerUseCase {
         this.steps =
                 steps.stream().sorted(Comparator.comparingInt(CobStep::order)).collect(Collectors.toList());
         rejectDuplicateOrder(this.steps);
+        registerStepMetrics();
+    }
+
+    // 처음 발생할 때 생기는 메트릭은 COB가 한 번도 안 돈 서버의 /actuator/prometheus에 아예 안 나온다.
+    // 스텝 이름과 상태는 고정이니 시작할 때 0으로 만들어 둔다.
+    private void registerStepMetrics() {
+        for (CobStep step : steps) {
+            stepTimer(step.name());
+            for (BatchStepStatus status : BatchStepStatus.values()) {
+                stepCounter(step.name(), status);
+            }
+        }
+    }
+
+    private Timer stepTimer(String stepName) {
+        return Timer.builder("cob.step.duration")
+                .description("COB 스텝 처리 소요시간")
+                .tag("step", stepName)
+                .register(meterRegistry);
+    }
+
+    private Counter stepCounter(String stepName, BatchStepStatus status) {
+        return Counter.builder("cob.step.count")
+                .description("COB 스텝 처리 결과별 건수")
+                .tag("step", stepName)
+                .tag("status", status.name())
+                .register(meterRegistry);
     }
 
     @Override
@@ -98,16 +125,8 @@ public class CobRunnerService implements CobRunnerUseCase {
                 status = BatchStepStatus.FAILURE;
                 failureReason = e.getMessage();
             }
-            sample.stop(Timer.builder("cob.step.duration")
-                    .description("COB 스텝 처리 소요시간")
-                    .tag("step", step.name())
-                    .register(meterRegistry));
-            Counter.builder("cob.step.count")
-                    .description("COB 스텝 처리 결과별 건수")
-                    .tag("step", step.name())
-                    .tag("status", status.name())
-                    .register(meterRegistry)
-                    .increment();
+            sample.stop(stepTimer(step.name()));
+            stepCounter(step.name(), status).increment();
             // 기록은 스텝 try/catch 바깥에서 한 번만 하되, 기록(관측용) 자체의 실패가 나머지 스텝을 막지 않게 별도로 감싼다.
             try {
                 batchExecutionHistoryPort.record(
