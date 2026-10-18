@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.auth.application.port.in.LoginResult;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.session.SessionRegistryImpl;
@@ -58,7 +60,7 @@ class SessionLoginManagerTest {
         MockHttpServletRequest request = requestWithSession(600);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        manager.establishSession(new LoginResult(1L, "login-user", "홍길동"), request, response);
+        manager.establishSession(new LoginResult(1L, "login-user", "홍길동", CustomerRole.CUSTOMER), request, response);
 
         SecurityContext context = storedContext(request.getSession(false));
         Authentication authentication = context.getAuthentication();
@@ -80,7 +82,7 @@ class SessionLoginManagerTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         String previousSessionId = request.getSession(false).getId();
 
-        manager.establishSession(new LoginResult(1L, "login-user", "홍길동"), request, response);
+        manager.establishSession(new LoginResult(1L, "login-user", "홍길동", CustomerRole.CUSTOMER), request, response);
 
         assertThat(request.getSession(false).getId()).isNotEqualTo(previousSessionId);
     }
@@ -91,7 +93,9 @@ class SessionLoginManagerTest {
         MockHttpServletRequest request = requestWithSession(600);
 
         OffsetDateTime sessionExpiresAt = manager.establishSession(
-                new LoginResult(1L, "login-user", "홍길동"), request, new MockHttpServletResponse());
+                new LoginResult(1L, "login-user", "홍길동", CustomerRole.CUSTOMER),
+                request,
+                new MockHttpServletResponse());
 
         assertThat(sessionExpiresAt).isEqualTo(OffsetDateTime.parse("2026-08-16T10:10:00+09:00"));
     }
@@ -105,8 +109,8 @@ class SessionLoginManagerTest {
                 mock(SessionAuthenticationStrategy.class), mock(SecurityContextRepository.class), FIXED_CLOCK);
         when(request.getSession(false)).thenReturn(null);
 
-        assertThatThrownBy(() ->
-                        invalidManager.establishSession(new LoginResult(1L, "login-user", "홍길동"), request, response))
+        assertThatThrownBy(() -> invalidManager.establishSession(
+                        new LoginResult(1L, "login-user", "홍길동", CustomerRole.CUSTOMER), request, response))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("로그인 세션이 생성되지 않았습니다.");
     }
@@ -117,7 +121,9 @@ class SessionLoginManagerTest {
         MockHttpServletRequest request = requestWithSession(0);
 
         assertThatThrownBy(() -> manager.establishSession(
-                        new LoginResult(1L, "login-user", "홍길동"), request, new MockHttpServletResponse()))
+                        new LoginResult(1L, "login-user", "홍길동", CustomerRole.CUSTOMER),
+                        request,
+                        new MockHttpServletResponse()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("세션 만료시간은 1초 이상이어야 합니다.");
     }
