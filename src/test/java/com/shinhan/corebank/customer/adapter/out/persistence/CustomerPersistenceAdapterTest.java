@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
 import com.shinhan.corebank.customer.domain.model.CustomerStatus;
@@ -52,6 +53,7 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 3,
                 false,
                 CustomerStatus.ACTIVE,
+                CustomerRole.CUSTOMER,
                 lastLoginAt,
                 "127.0.0.1",
                 previousLoginAt,
@@ -363,6 +365,7 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 3,
                 false,
                 CustomerStatus.ACTIVE,
+                CustomerRole.CUSTOMER,
                 LocalDateTime.of(2026, 8, 10, 9, 0),
                 "127.0.0.1",
                 LocalDateTime.of(2026, 8, 9, 9, 0),
@@ -386,6 +389,7 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 0,
                 false,
                 CustomerStatus.ACTIVE,
+                CustomerRole.CUSTOMER,
                 null,
                 null,
                 null,
