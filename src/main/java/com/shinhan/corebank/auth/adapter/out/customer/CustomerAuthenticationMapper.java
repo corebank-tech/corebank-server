@@ -19,6 +19,7 @@ public class CustomerAuthenticationMapper {
                 data.getPasswordHash(),
                 data.getUserName(),
                 data.getLoginFailureCount(),
-                data.isAccountLocked());
+                data.isAccountLocked(),
+                data.getRole());
     }
 }
