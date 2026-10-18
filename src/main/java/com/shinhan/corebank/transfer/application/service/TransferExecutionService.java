@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
+import com.shinhan.corebank.business.api.BusinessDateProvider;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
@@ -31,6 +32,7 @@ import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -71,6 +73,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private final List<TransferPreCheck> transferPreChecks;
     private final List<LedgerPostingHook> ledgerPostingHooks;
     private final Clock clock;
+    private final BusinessDateProvider businessDateProvider;
     private final TransactionTemplate requiresNewTransactionTemplate;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -86,6 +89,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             List<TransferPreCheck> transferPreChecks,
             List<LedgerPostingHook> ledgerPostingHooks,
             Clock clock,
+            BusinessDateProvider businessDateProvider,
             PlatformTransactionManager transactionManager,
             ApplicationEventPublisher eventPublisher) {
         this.accountLockPort = accountLockPort;
@@ -102,6 +106,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 .toList();
         this.ledgerPostingHooks = List.copyOf(ledgerPostingHooks);
         this.clock = clock;
+        this.businessDateProvider = businessDateProvider;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
         this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.eventPublisher = eventPublisher;
@@ -123,12 +128,14 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         try {
             ResolvedPayee payee = verifyBeforeLock(command);
 
+            // 한 건에 한 번만 읽어 transfer에 싣는다 — 원장·훅 B·ERROR 행이 같은 거래일을 갖게(#516).
+            LocalDate tradeDate = businessDateProvider.today();
             String transactionNumber =
                     transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), command.channel());
 
             // 실패해도 ERROR로 남길 수 있도록, DB에 아직 저장되지 않은(transferId=null) 상태로
             // 들고 있는다. 아래 트랜잭션이 실패해 롤백되더라도 이 자바 객체 자체는 영향받지 않는다.
-            created = newTransfer(command, payee, transactionNumber, requestedAt);
+            created = newTransfer(command, payee, transactionNumber, requestedAt, tradeDate);
 
             preCheckWithoutLock(command, payee);
             runTransferPreChecks(command);
@@ -225,7 +232,11 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     }
 
     private Transfer newTransfer(
-            TransferCommand command, ResolvedPayee payee, String transactionNumber, LocalDateTime requestedAt) {
+            TransferCommand command,
+            ResolvedPayee payee,
+            String transactionNumber,
+            LocalDateTime requestedAt,
+            LocalDate tradeDate) {
         return Transfer.create(
                 transactionNumber,
                 command.withdrawalAccountId(),
@@ -242,7 +253,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 command.myPassbookMemo(),
                 command.recipientPassbookMemo(),
                 requestedAt,
-                requestedAt.toLocalDate());
+                tradeDate);
     }
 
     // 1차 검증(락 이전) ⑤: 잔액·계좌상태 사전 체크(락 없음, 비authoritative). OTP는
@@ -332,7 +343,6 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             Transfer transfer = transferSavePort.save(createdTransfer);
 
             LocalDateTime executedAt = LocalDateTime.now(clock);
-            // [자리] PH-41: 여기서 businessDateProvider.today()로 tradeDate를 한 번 구해 원장·훅 B·transfer에 같이 쓴다.
 
             TransferBalances balances = accountLockPort.applyTransfer(locked, command.amount(), executedAt);
 
@@ -349,9 +359,9 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     command.recipientPassbookMemo(),
                     command.channel(),
                     executedAt,
-                    executedAt.toLocalDate());
+                    transfer.getTradeDate());
             ledgerSavePort.save(pair);
-            runLedgerPostingHooks(command, payee, transactionNumber, executedAt);
+            runLedgerPostingHooks(command, payee, transactionNumber, transfer.getTradeDate());
 
             transfer.complete(balances.withdrawalBalanceAfter(), executedAt);
             Transfer completed = transferSavePort.save(transfer);
@@ -362,15 +372,14 @@ public class TransferExecutionService implements TransferExecutionUseCase {
 
     // [훅 B] PH-99 후속 기표. 기표 트랜잭션 안이라 훅 예외는 원장·잔액·한도 적립까지 롤백하고 이체를 실패시킨다.
     private void runLedgerPostingHooks(
-            TransferCommand command, ResolvedPayee payee, String transactionNumber, LocalDateTime executedAt) {
-        // tradeDate는 PH-41에서 BusinessDateProvider로 바꾼다. 그 전까지는 기표 시각의 달력일이다.
+            TransferCommand command, ResolvedPayee payee, String transactionNumber, LocalDate tradeDate) {
         LedgerPostingContext context = new LedgerPostingContext(
                 transactionNumber,
                 command.transferType().ledgerTransactionType(),
                 command.amount(),
                 command.withdrawalAccountId(),
                 payee.accountId(),
-                executedAt.toLocalDate());
+                tradeDate);
         for (LedgerPostingHook hook : ledgerPostingHooks) {
             hook.afterLedger(context);
         }
