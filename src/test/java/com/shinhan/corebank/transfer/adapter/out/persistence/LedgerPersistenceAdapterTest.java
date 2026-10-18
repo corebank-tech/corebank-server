@@ -79,6 +79,9 @@ class LedgerPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(deposit.getBalanceAfter()).isEqualTo(110000L);
         assertThat(withdrawal.getTransferId()).isEqualTo(500L);
         assertThat(deposit.getTransferId()).isEqualTo(500L);
+        assertThat(withdrawal.getTradeDate()).isEqualTo(TRADE_DATE);
+        assertThat(deposit.getTradeDate()).isEqualTo(TRADE_DATE);
+        assertThat(LedgerEntryMapper.toDomain(withdrawal).getTradeDate()).isEqualTo(TRADE_DATE);
     }
 
     private static final String ORIGINAL_TXNO = "20260812WB0000000548";
@@ -215,5 +218,6 @@ class LedgerPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(saved.getAmount()).isEqualTo(20000L);
         assertThat(saved.getBalanceAfter()).isEqualTo(120000L);
         assertThat(saved.getTransactionType()).isEqualTo("INTEREST");
+        assertThat(saved.getTradeDate()).isEqualTo(TRADE_DATE);
     }
 }

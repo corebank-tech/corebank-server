@@ -71,6 +71,8 @@ class TransferPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(found.getTransferId()).isEqualTo(saved.getTransferId());
         assertThat(found.getWithdrawalAccountId()).isEqualTo(101L);
         assertThat(found.getDepositAccountId()).isEqualTo(202L);
+        assertThat(found.getTradeDate()).isEqualTo(TRADE_DATE);
+        assertThat(TransferMapper.toDomain(found).getTradeDate()).isEqualTo(TRADE_DATE);
     }
 
     @Test
