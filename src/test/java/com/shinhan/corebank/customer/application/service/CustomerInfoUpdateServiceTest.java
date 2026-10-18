@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import com.shinhan.corebank.customer.application.port.in.UpdateCustomerInfoCommand;
 import com.shinhan.corebank.customer.application.port.in.UpdateCustomerInfoResult;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
@@ -159,6 +160,7 @@ class CustomerInfoUpdateServiceTest {
                 0,
                 false,
                 CustomerStatus.ACTIVE,
+                CustomerRole.CUSTOMER,
                 null,
                 null,
                 null,
@@ -182,6 +184,7 @@ class CustomerInfoUpdateServiceTest {
                 customer.getLoginFailureCount(),
                 customer.isAccountLocked(),
                 CustomerStatus.ACTIVE,
+                CustomerRole.CUSTOMER,
                 customer.getLastLoginAt(),
                 customer.getLastLoginIp(),
                 customer.getPreviousLoginAt(),

@@ -1,8 +1,11 @@
 package com.shinhan.corebank.customer.adapter.in.web;
 
+import com.shinhan.corebank.customer.api.AdminPermission;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import com.shinhan.corebank.customer.application.port.in.CustomerInfoResult;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 // 마스킹된 고객 기본정보를 HTTP 응답으로 반환한다.
 public record CustomerInfoResponse(
@@ -12,7 +15,9 @@ public record CustomerInfoResponse(
         @Schema(description = "생년월일", example = "1990-01-15") String birthDate,
         @Schema(description = "마스킹된 휴대폰 번호", example = "010****5678") String phoneNumber,
         @Schema(description = "마스킹된 이메일", example = "user****@mail.com") String email,
-        @Schema(description = "가입 일시", example = "2026-08-01T10:00:00+09:00") OffsetDateTime joinedAt) {
+        @Schema(description = "가입 일시", example = "2026-08-01T10:00:00+09:00") OffsetDateTime joinedAt,
+        @Schema(description = "계정 구분") CustomerRole role,
+        @Schema(description = "관리자 권한. 고객은 빈 배열이다") List<AdminPermission> permissions) {
 
     // application 조회 결과를 HTTP 응답 DTO로 변환한다.
     public static CustomerInfoResponse from(CustomerInfoResult result) {
@@ -23,6 +28,8 @@ public record CustomerInfoResponse(
                 result.birthDate(),
                 result.phoneNumber(),
                 result.email(),
-                result.joinedAt());
+                result.joinedAt(),
+                result.role(),
+                result.permissions());
     }
 }
