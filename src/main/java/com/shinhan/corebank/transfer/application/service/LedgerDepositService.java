@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
+import com.shinhan.corebank.business.api.BusinessDateProvider;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.api.DepositChannel;
@@ -18,6 +19,7 @@ import com.shinhan.corebank.transfer.domain.LedgerPair;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
@@ -51,6 +53,7 @@ public class LedgerDepositService implements LedgerDepositUseCase {
     private final TransferSequencePort transferSequencePort;
     private final LedgerSavePort ledgerSavePort;
     private final Clock clock;
+    private final BusinessDateProvider businessDateProvider;
 
     @Override
     @Transactional
@@ -59,6 +62,7 @@ public class LedgerDepositService implements LedgerDepositUseCase {
         requirePositiveAmount(amount);
         requireType(type, TRANSFER_BETWEEN_TYPES);
         TransferChannel transferChannel = toTransferChannel(channel);
+        LocalDate tradeDate = businessDateProvider.today();
         String transactionNumber = nextTransactionNumber(transferChannel);
 
         LockedAccountsForTransfer locked = accountLockPort.lockForTransfer(fromAccountId, toAccountId);
@@ -91,7 +95,7 @@ public class LedgerDepositService implements LedgerDepositUseCase {
                 passbookMemo(type),
                 transferChannel,
                 executedAt,
-                executedAt.toLocalDate()));
+                tradeDate));
 
         return new LedgerDepositResult(transactionNumber, balances.depositBalanceAfter());
     }
@@ -102,6 +106,7 @@ public class LedgerDepositService implements LedgerDepositUseCase {
         requirePositiveAmount(amount);
         requireType(type, CREDIT_TYPES);
         TransferChannel transferChannel = toTransferChannel(channel);
+        LocalDate tradeDate = businessDateProvider.today();
         String transactionNumber = nextTransactionNumber(transferChannel);
 
         LockedAccount locked = accountLockPort.lockForCredit(accountId);
@@ -122,7 +127,7 @@ public class LedgerDepositService implements LedgerDepositUseCase {
                 passbookMemo(type),
                 transferChannel,
                 executedAt,
-                executedAt.toLocalDate()));
+                tradeDate));
 
         return new LedgerDepositResult(transactionNumber, balanceAfter);
     }
