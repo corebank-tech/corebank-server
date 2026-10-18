@@ -1,9 +1,11 @@
 package com.shinhan.corebank.auth.application.port.in;
 
+import com.shinhan.corebank.customer.api.CustomerRole;
 import java.util.Objects;
 
-// 로그인 검증에 필요한 아이디, 비밀번호와 요청 IP
-public record LoginCommand(String userId, String password, String requestIp) {
+// 로그인 검증에 필요한 아이디, 비밀번호와 요청 IP.
+// requiredRole 은 그 경로가 요구하는 계정 구분이다 — null 이면 역할을 가리지 않는다(고객 로그인).
+public record LoginCommand(String userId, String password, String requestIp, CustomerRole requiredRole) {
 
     private static final int MAX_REQUEST_IP_LENGTH = 45;
 
@@ -24,6 +26,7 @@ public record LoginCommand(String userId, String password, String requestIp) {
     // 비밀번호가 로그에 노출되지 않도록 문자열 표현을 제한
     @Override
     public String toString() {
-        return "LoginCommand[" + "userId=" + userId + ", password=[PROTECTED]" + ", requestIp=" + requestIp + ']';
+        return "LoginCommand[" + "userId=" + userId + ", password=[PROTECTED]" + ", requestIp=" + requestIp
+                + ", requiredRole=" + requiredRole + ']';
     }
 }

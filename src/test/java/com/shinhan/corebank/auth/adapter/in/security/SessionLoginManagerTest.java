@@ -100,6 +100,32 @@ class SessionLoginManagerTest {
         assertThat(sessionExpiresAt).isEqualTo(OffsetDateTime.parse("2026-08-16T10:10:00+09:00"));
     }
 
+    // 전역 timeout 은 고객 기준 10분이다. 관리자만 세션 생성 직후 30분으로 덮는다.
+    @Test
+    @DisplayName("관리자 세션은 전역 timeout 을 30분으로 덮고 만료시각도 30분 뒤를 준다")
+    void overridesSessionTimeoutForAdmin() {
+        MockHttpServletRequest request = requestWithSession(600);
+
+        OffsetDateTime sessionExpiresAt = manager.establishSession(
+                new LoginResult(1L, "admin-user", "관리자", CustomerRole.ADMIN), request, new MockHttpServletResponse());
+
+        assertThat(request.getSession(false).getMaxInactiveInterval()).isEqualTo(1800);
+        assertThat(sessionExpiresAt).isEqualTo(OffsetDateTime.parse("2026-08-16T10:30:00+09:00"));
+    }
+
+    @Test
+    @DisplayName("관리자는 ROLE_ADMIN 권한으로 인증된다")
+    void grantsAdminAuthority() {
+        MockHttpServletRequest request = requestWithSession(600);
+
+        manager.establishSession(
+                new LoginResult(1L, "admin-user", "관리자", CustomerRole.ADMIN), request, new MockHttpServletResponse());
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication().getAuthorities())
+                .extracting(GrantedAuthority::getAuthority)
+                .containsExactly("ROLE_ADMIN");
+    }
+
     @Test
     @DisplayName("인증정보 저장 후 세션이 없으면 설정 오류로 처리한다")
     void rejectsMissingSessionAfterAuthentication() {

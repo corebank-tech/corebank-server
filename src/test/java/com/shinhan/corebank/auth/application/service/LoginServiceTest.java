@@ -164,6 +164,43 @@ class LoginServiceTest {
     }
 
     // 잠금 전 비밀번호 불일치는 저장된 최신 횟수와 잔여 횟수를 노출
+    // 관리자 경로에 고객 계정이 오면 비밀번호가 맞아도 거절한다. 비밀번호 불일치와 구분되면
+    // 어떤 아이디가 관리자인지 드러나므로 응답을 같은 모양으로 맞추고, 경로를 잘못 고른 것만으로
+    // 계정이 잠기지 않게 실패 횟수도 올리지 않는다.
+    @Test
+    @DisplayName("관리자 경로에 고객 계정이 오면 ATH0101을 주고 실패 횟수를 올리지 않는다")
+    void rejectsCustomerOnAdminPath() {
+        LoginCommand command = adminLoginCommand();
+        LoginAttemptResult attemptResult = new LoginAttemptResult(1, 4);
+        given(loginCustomerPort.findByUserId(command.userId())).willReturn(Optional.of(loginCustomer(0, false)));
+        given(passwordHashVerifierPort.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
+        given(loginAttemptProcessor.process(1)).willReturn(attemptResult);
+
+        LoginFailedException exception = catchThrowableOfType(() -> service.login(command), LoginFailedException.class);
+
+        assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);
+        assertThat(exception.getAttemptResult()).contains(attemptResult);
+        verify(loginCustomerPort, never()).recordLoginFailure(1L);
+        verify(loginSuccessProcessor, never()).process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER);
+        verify(recordLoginAuditPort)
+                .record(1L, REQUEST_IP, false, LoginAuditReason.INVALID_CREDENTIALS, CustomerRole.CUSTOMER);
+    }
+
+    @Test
+    @DisplayName("관리자 경로에 관리자 계정이 오면 통과한다")
+    void permitsAdminOnAdminPath() {
+        LoginCommand command = adminLoginCommand();
+        given(loginCustomerPort.findByUserId(command.userId())).willReturn(Optional.of(adminLoginCustomer()));
+        given(passwordHashVerifierPort.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
+        given(loginSuccessProcessor.process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.ADMIN))
+                .willReturn(LoginSuccessUpdateResult.COMPLETED);
+
+        LoginResult result = service.login(command);
+
+        assertThat(result.role()).isEqualTo(CustomerRole.ADMIN);
+        verify(loginSuccessProcessor).process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.ADMIN);
+    }
+
     @Test
     @DisplayName("비밀번호 불일치 4회는 최신 횟수와 잔여 횟수로 ATH0101을 반환한다")
     void invalidCredentialsBeforeLock() {
@@ -239,7 +276,15 @@ class LoginServiceTest {
     }
 
     private LoginCommand loginCommand() {
-        return new LoginCommand("user01", RAW_PASSWORD, REQUEST_IP);
+        return new LoginCommand("user01", RAW_PASSWORD, REQUEST_IP, null);
+    }
+
+    private LoginCommand adminLoginCommand() {
+        return new LoginCommand("user01", RAW_PASSWORD, REQUEST_IP, CustomerRole.ADMIN);
+    }
+
+    private LoginCustomer adminLoginCustomer() {
+        return new LoginCustomer(1L, "user01", PASSWORD_HASH, "홍길동", 0, false, CustomerRole.ADMIN);
     }
 
     private LoginCustomer loginCustomer(int failureCount, boolean accountLocked) {
