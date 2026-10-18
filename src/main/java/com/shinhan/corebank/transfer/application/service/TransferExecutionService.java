@@ -241,7 +241,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 command.executionDate(),
                 command.myPassbookMemo(),
                 command.recipientPassbookMemo(),
-                requestedAt);
+                requestedAt,
+                requestedAt.toLocalDate());
     }
 
     // 1차 검증(락 이전) ⑤: 잔액·계좌상태 사전 체크(락 없음, 비authoritative). OTP는
@@ -347,7 +348,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     command.myPassbookMemo(),
                     command.recipientPassbookMemo(),
                     command.channel(),
-                    executedAt);
+                    executedAt,
+                    executedAt.toLocalDate());
             ledgerSavePort.save(pair);
             runLedgerPostingHooks(command, payee, transactionNumber, executedAt);
 

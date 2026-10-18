@@ -12,6 +12,7 @@ import com.shinhan.corebank.transfer.domain.LedgerPair;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import jakarta.persistence.EntityManager;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Transactional
 class LedgerPersistenceAdapterTest extends IntegrationTestSupport {
+
+    private static final LocalDate TRADE_DATE = LocalDate.of(2026, 8, 12);
 
     @Autowired
     private LedgerPersistenceAdapter adapter;
@@ -47,7 +50,8 @@ class LedgerPersistenceAdapterTest extends IntegrationTestSupport {
                 "이체출금",
                 "이체입금",
                 TransferChannel.WB,
-                LocalDateTime.now());
+                LocalDateTime.now(),
+                TRADE_DATE);
 
         // when
         adapter.save(pair);
@@ -93,7 +97,8 @@ class LedgerPersistenceAdapterTest extends IntegrationTestSupport {
                 "이체출금",
                 "이체입금",
                 TransferChannel.WB,
-                ORIGINAL_AT));
+                ORIGINAL_AT,
+                TRADE_DATE));
         entityManager.flush();
         entityManager.clear();
     }
@@ -107,7 +112,8 @@ class LedgerPersistenceAdapterTest extends IntegrationTestSupport {
                 100000L,
                 100000L,
                 TransferChannel.BT,
-                ORIGINAL_AT.plusDays(1));
+                ORIGINAL_AT.plusDays(1),
+                TRADE_DATE);
     }
 
     @Test
@@ -190,7 +196,8 @@ class LedgerPersistenceAdapterTest extends IntegrationTestSupport {
                 "INTEREST",
                 "이자",
                 TransferChannel.BT,
-                LocalDateTime.of(2026, 10, 23, 3, 0));
+                LocalDateTime.of(2026, 10, 23, 3, 0),
+                TRADE_DATE);
 
         // when
         adapter.saveCredit(credit);

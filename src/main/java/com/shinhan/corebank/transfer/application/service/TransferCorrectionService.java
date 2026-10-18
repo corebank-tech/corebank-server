@@ -96,7 +96,8 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
                         balances.withdrawalBalanceAfter(),
                         balances.depositBalanceAfter(),
                         CHANNEL,
-                        executedAt),
+                        executedAt,
+                        executedAt.toLocalDate()),
                 originalLedger);
         runLedgerPostingHooks(new LedgerPostingContext(
                 transactionNumber,
@@ -147,7 +148,8 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
                 original.getMyPassbookMemo(),
                 original.getRecipientPassbookMemo(),
                 CHANNEL,
-                executedAt));
+                executedAt,
+                executedAt.toLocalDate()));
         runLedgerPostingHooks(new LedgerPostingContext(
                 transactionNumber,
                 original.getTransferType().ledgerTransactionType(),
@@ -186,7 +188,8 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
                 null,
                 original.getMyPassbookMemo(),
                 original.getRecipientPassbookMemo(),
-                executedAt);
+                executedAt,
+                executedAt.toLocalDate());
         repost.linkToOriginal(CorrectionType.REPOST, original.getTransferId());
         return claim(repost);
     }
@@ -232,7 +235,8 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
                 null,
                 REVERSAL_MEMO,
                 REVERSAL_MEMO,
-                executedAt);
+                executedAt,
+                executedAt.toLocalDate());
         reversal.linkToOriginal(CorrectionType.REVERSAL, original.getTransferId());
         return claim(reversal);
     }

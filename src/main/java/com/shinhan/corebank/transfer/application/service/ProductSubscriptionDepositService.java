@@ -85,7 +85,8 @@ public class ProductSubscriptionDepositService implements ProductSubscriptionDep
                 PASSBOOK_MEMO,
                 PASSBOOK_MEMO,
                 CHANNEL,
-                executedAt));
+                executedAt,
+                executedAt.toLocalDate()));
 
         // tradeDate 는 PH-41 전까지 기표 시각의 달력일이다(TransferExecutionService 와 같다).
         LedgerPostingContext context = new LedgerPostingContext(

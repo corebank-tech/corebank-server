@@ -90,7 +90,8 @@ public class LedgerDepositService implements LedgerDepositUseCase {
                 type.name(),
                 passbookMemo(type),
                 transferChannel,
-                executedAt));
+                executedAt,
+                executedAt.toLocalDate()));
 
         return new LedgerDepositResult(transactionNumber, balances.depositBalanceAfter());
     }
@@ -120,7 +121,8 @@ public class LedgerDepositService implements LedgerDepositUseCase {
                 type.name(),
                 passbookMemo(type),
                 transferChannel,
-                executedAt));
+                executedAt,
+                executedAt.toLocalDate()));
 
         return new LedgerDepositResult(transactionNumber, balanceAfter);
     }
