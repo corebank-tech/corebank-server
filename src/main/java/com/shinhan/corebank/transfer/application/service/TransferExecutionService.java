@@ -119,7 +119,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             return alreadyProcessed.get();
         }
 
-        // 계좌 락 획득 전 시각이므로 채번(영업일자)에만 쓴다. 락 대기로 실제 처리가 지연될 수
+        // 계좌 락 획득 전 시각이므로 채번(거래번호 달력일)에만 쓴다. 락 대기로 실제 처리가 지연될 수
         // 있어 원장·완료 기록에는 락 획득 이후 새로 캡처하는 executedAt을 쓴다.
         LocalDateTime requestedAt = LocalDateTime.now(clock);
 

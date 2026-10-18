@@ -58,7 +58,7 @@ public class ProductSubscriptionDepositService implements ProductSubscriptionDep
         LocalDate tradeDate = businessDateProvider.today();
 
         // 채번은 SequenceGenerator 안에서 REQUIRES_NEW로 독립 커밋된다 — 이 트랜잭션이 뒤에서
-        // 롤백돼도 번호만 비고(gap) 채번 행은 남는다. 영업일자 기준은 TransferExecutionService와
+        // 롤백돼도 번호만 비고(gap) 채번 행은 남는다. 거래번호 날짜(달력일)는 TransferExecutionService와
         // 동일하게 맞춘다(같은 transaction_sequence 행을 공유하므로 기준이 갈리면 안 된다).
         String transactionNumber = transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), CHANNEL);
 
