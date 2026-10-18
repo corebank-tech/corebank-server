@@ -63,7 +63,7 @@ class LoginSuccessAuditAtomicityIntegrationTest extends IntegrationTestSupport {
                 .when(recordLoginAuditPort)
                 .record(customerId, REQUEST_IP, true, LoginAuditReason.SUCCESS, CustomerRole.CUSTOMER);
 
-        assertThatThrownBy(() -> loginUseCase.login(new LoginCommand(USER_ID, RAW_PASSWORD, REQUEST_IP)))
+        assertThatThrownBy(() -> loginUseCase.login(new LoginCommand(USER_ID, RAW_PASSWORD, REQUEST_IP, null)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("audit unavailable");
 

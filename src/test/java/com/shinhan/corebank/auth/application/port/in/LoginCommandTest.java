@@ -15,7 +15,7 @@ class LoginCommandTest {
     @Test
     @DisplayName("toString은 비밀번호를 노출하지 않는다")
     void protectsPasswordInToString() {
-        LoginCommand command = new LoginCommand("user01", "SecretPassword1!", "192.168.0.10");
+        LoginCommand command = new LoginCommand("user01", "SecretPassword1!", "192.168.0.10", null);
 
         assertThat(command.toString()).doesNotContain("SecretPassword1!").contains("password=[PROTECTED]");
     }
@@ -25,7 +25,7 @@ class LoginCommandTest {
     @ValueSource(strings = {"", " ", "   "})
     @DisplayName("요청 IP가 비어 있으면 생성할 수 없다")
     void rejectsBlankRequestIp(String requestIp) {
-        assertThatThrownBy(() -> new LoginCommand("user01", "SecretPassword1!", requestIp))
+        assertThatThrownBy(() -> new LoginCommand("user01", "SecretPassword1!", requestIp, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("requestIp must not be blank");
     }
@@ -34,7 +34,7 @@ class LoginCommandTest {
     @Test
     @DisplayName("요청 IP가 45자를 초과하면 생성할 수 없다")
     void rejectsRequestIpLongerThanFortyFiveCharacters() {
-        assertThatThrownBy(() -> new LoginCommand("user01", "SecretPassword1!", "a".repeat(46)))
+        assertThatThrownBy(() -> new LoginCommand("user01", "SecretPassword1!", "a".repeat(46), null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("requestIp must not exceed 45 characters");
     }
@@ -43,7 +43,7 @@ class LoginCommandTest {
     @Test
     @DisplayName("요청 IP가 45자이면 생성할 수 있다")
     void acceptsRequestIpWithFortyFiveCharacters() {
-        LoginCommand command = new LoginCommand("user01", "SecretPassword1!", "a".repeat(45));
+        LoginCommand command = new LoginCommand("user01", "SecretPassword1!", "a".repeat(45), null);
 
         assertThat(command.requestIp()).hasSize(45);
     }
