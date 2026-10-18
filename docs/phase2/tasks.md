@@ -1144,10 +1144,10 @@ S4지만 CI/CD·문서·훈련이라 S4 규칙에 걸리지 않는다([D-05](REA
 - `spring-session-jdbc`. 세션 테이블은 Flyway로 만든다(`initialize-schema: never`, AGENTS.md 규칙 6). 만료는 관리자 30분 / 고객 10분을 유지한다([ADR-0007](../adr/0007-remove-redis.md)).
 - `SecurityContext` 직렬화를 확인하고, 로그아웃 시 세션을 삭제한다.
 - WAS 2 프로세스 로그인 유지 테스트(로컬 docker). 3-Tier에서는 10/28에 RDS 세션으로 15분 확인을 한다.
-- 비밀번호 변경 · 고객 상태 변경 시 세션 일괄 종료(`LoginPasswordChangedSessionListener` · #527)가 **다른 WAS의 세션까지** 닿는지 확인한다. 지금은 JVM 메모리 기준이다.
+- 비밀번호 변경 시 세션 일괄 종료(`LoginPasswordChangedSessionListener` · #527)가 **다른 WAS의 세션까지** 닿는지 확인한다. 고객 상태 변경 시 종료는 관리자 담당 구현과 통합해야 한다.
 - `SecurityConfig`는 PH-49a-② 위에서 고친다(10/12~).
 - **ALB 스티키 세션은 쓰지 않는다.**
-- 현황: `SecurityConfig`가 `HttpSessionSecurityContextRepository`를 쓴다.
+- 구현·검증: [JDBC 세션 외부화](ph49c_jdbc_session.md). `HttpSessionSecurityContextRepository`의 HttpSession을 Spring Session JDBC가 저장한다. PH-49a-② 관리자 로그인 연동과 AWS ALB 검증은 별도 완료가 필요하다.
 
 ### PH-92. MFA · Step-up 매트릭스
 

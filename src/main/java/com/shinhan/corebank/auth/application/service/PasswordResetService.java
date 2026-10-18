@@ -91,7 +91,7 @@ public class PasswordResetService implements IssuePasswordResetUseCase, ResetPas
         }
         request.use(now);
         requestPort.save(request);
-        // 비밀번호 재설정도 커밋된 뒤 해당 고객의 기존 로그인 세션을 모두 만료한다.
+        // 비밀번호 재설정도 커밋 전에 같은 트랜잭션에서 기존 로그인 세션을 모두 삭제한다.
         eventPublisher.publishEvent(new LoginPasswordChangedEvent(customer.customerId()));
         return new ResetPasswordResult(
                 customer.customerId(), now.atZone(clock.getZone()).toOffsetDateTime());

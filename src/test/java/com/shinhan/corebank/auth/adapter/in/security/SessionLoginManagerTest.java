@@ -14,7 +14,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,10 +22,6 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.session.SessionRegistryImpl;
-import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
-import org.springframework.security.web.authentication.session.CompositeSessionAuthenticationStrategy;
-import org.springframework.security.web.authentication.session.RegisterSessionAuthenticationStrategy;
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -38,14 +33,8 @@ class SessionLoginManagerTest {
 
     private final HttpSessionSecurityContextRepository repository = new HttpSessionSecurityContextRepository();
 
-    private final SessionRegistryImpl sessionRegistry = new SessionRegistryImpl();
-
-    private final SessionLoginManager manager = new SessionLoginManager(
-            new CompositeSessionAuthenticationStrategy(List.of(
-                    new ChangeSessionIdAuthenticationStrategy(),
-                    new RegisterSessionAuthenticationStrategy(sessionRegistry))),
-            repository,
-            FIXED_CLOCK);
+    private final SessionLoginManager manager =
+            new SessionLoginManager(new SecurityConfig().sessionAuthenticationStrategy(), repository, FIXED_CLOCK);
 
     @AfterEach
     void clearSecurityContext() {
@@ -68,9 +57,7 @@ class SessionLoginManagerTest {
         assertThat(authentication.getAuthorities()).extracting("authority").containsExactly("ROLE_CUSTOMER");
         assertThat(authentication.getCredentials()).isNull();
         assertThat(SecurityContextHolder.getContext()).isSameAs(context);
-        assertThat(sessionRegistry.getAllSessions(authentication.getPrincipal(), false))
-                .extracting("sessionId")
-                .containsExactly(request.getSession(false).getId());
+        assertThat(request.getSession(false).getMaxInactiveInterval()).isEqualTo(600);
     }
 
     @Test
@@ -115,8 +102,10 @@ class SessionLoginManagerTest {
     @DisplayName("세션 만료시간이 0 이하면 설정 오류로 처리한다")
     void rejectsNonPositiveSessionTimeout() {
         MockHttpServletRequest request = requestWithSession(0);
+        var invalidManager =
+                new SessionLoginManager(mock(SessionAuthenticationStrategy.class), repository, FIXED_CLOCK);
 
-        assertThatThrownBy(() -> manager.establishSession(
+        assertThatThrownBy(() -> invalidManager.establishSession(
                         new LoginResult(1L, "login-user", "홍길동"), request, new MockHttpServletResponse()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("세션 만료시간은 1초 이상이어야 합니다.");

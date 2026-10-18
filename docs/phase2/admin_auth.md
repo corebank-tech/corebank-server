@@ -50,11 +50,12 @@
 
 **④ 관리자 세션 30분 무조작 만료** (고객은 10분)
 
-전역 `server.servlet.session.timeout: 10m`은 **그대로 두고**, 관리자 로그인에서만 세션 생성 직후
-`HttpSession.setMaxInactiveInterval(1800)`으로 덮는다. `SessionLoginManager.establishSession()`이
-세션 생성 뒤 `getMaxInactiveInterval()`을 읽어 `sessionExpiresAt`을 계산하므로, 덮어쓰기를 그 읽기보다
-앞에 두면 응답의 만료시각도 자동으로 30분이 된다. PH-49c로 저장소가 Redis가 돼도 세션 인터페이스
-수준의 호출이라 그대로 동작한다.
+전역 `server.servlet.session.timeout: 10m`은 **그대로 둔다**. PH-49c의 세션 인증 전략이
+인증 권한 `ROLE_ADMIN`을 확인해 `HttpSession.setMaxInactiveInterval(1800)`을 적용한다.
+관리자 로그인 구현은 `SessionLoginManager`에 `ROLE_ADMIN` 인증을 전달해야 한다. 이 매니저는
+인증 전략 실행 뒤 `getMaxInactiveInterval()`을 읽어 `sessionExpiresAt`을 계산한다.
+따라서 관리자 로그인에서 만료시간을 별도로 덮어쓰지 않는다. 세션은 PH-49c의 Spring Session JDBC가
+공용 MySQL에 저장하며, 실제 관리자 API를 통한 30분 만료는 PH-49a-② 통합 시 검증한다.
 
 **⑤ `GET /customers/me`에 `role`·`permissions[]` 추가**
 
@@ -169,8 +170,9 @@ SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS 
 
 ## 6. ②가 할 일
 
-- `/admin/auth/login` 컨트롤러와 `role=ADMIN` 검증. `SessionLoginManager`에 만료 초를 넘기고 권한을
-  `ROLE_ADMIN`으로 부여한다 (현재 `CUSTOMER_ROLE = "ROLE_CUSTOMER"` 상수 자리)
+- `/admin/auth/login` 컨트롤러와 `role=ADMIN` 검증. 현재 고객 역할로 고정된
+  `SessionLoginManager`를 확장해 관리자 인증에 `ROLE_ADMIN`을 부여한다. PH-49c 인증 전략이
+  이 역할로 30분 무조작 만료를 적용하므로 만료 초를 별도로 넘기거나 덮어쓰지 않는다.
 - **`/admin/auth/login`을 `/admin/**` 규칙보다 앞에 `permitAll` + CSRF 예외로 둔다.** 안 하면 로그인
   요청 자체가 관리자 인가에 걸린다. 구현체는 필터가 아니라 `AuthorizationManager`다
 - `/admin/**` 인가: ADMIN이 아니면 403, 변경 메서드는 `*_WRITE` 검사. URL 접두어 → 권한 매핑표 작성

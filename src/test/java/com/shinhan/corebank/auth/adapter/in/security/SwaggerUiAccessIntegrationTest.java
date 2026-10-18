@@ -52,6 +52,7 @@ class SwaggerUiAccessIntegrationTest extends IntegrationTestSupport {
         mockMvc.perform(get("/api/v1/v3/api-docs").contextPath("/api/v1"))
                 .andExpect(status().isOk())
                 .andExpect(summary("/auth/login", "post", "로그인"))
+                .andExpect(summary("/auth/logout", "post", "로그아웃"))
                 .andExpect(summary("/auth/find-id", "post", "아이디 찾기"))
                 .andExpect(summary("/auth/password-reset-requests", "post", "비밀번호 재설정 인증번호 발급"))
                 .andExpect(summary("/auth/password-reset-requests/{passwordResetRequestId}", "put", "비밀번호 재설정"))

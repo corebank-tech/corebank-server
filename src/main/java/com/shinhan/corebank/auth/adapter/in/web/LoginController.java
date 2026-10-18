@@ -35,7 +35,12 @@ public class LoginController {
     private final CsrfTokenCookieIssuer csrfTokenCookieIssuer;
 
     @PostMapping("/login")
-    @Operation(operationId = "login", summary = "로그인", description = "아이디와 비밀번호를 검증하고 JSESSIONID 세션과 CSRF 쿠키를 발급한다.")
+    @Operation(
+            operationId = "login",
+            summary = "로그인",
+            description = "아이디와 비밀번호를 검증하고 JSESSIONID 세션과 CSRF 쿠키를 발급한다. "
+                    + "세션은 공용 MySQL에 저장되어 다른 WAS에서도 유지된다. 고객은 10분 무조작 시 만료된다. "
+                    + "Swagger UI에서는 로그인 후 발급된 쿠키와 X-XSRF-TOKEN을 사용한다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "로그인 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
