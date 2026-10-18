@@ -123,7 +123,7 @@
 | [PH-80](#ph-80-timeout--정정-체인--자동-재시도-금지) | TIMEOUT 추가 · 전체 머지 | S2 | 2.5 | PH-80 S1분 · P5 회차 현황 (10/6) | **10/8 머지** | #564 | 완료 |
 | [PH-99](#ph-99-이체-파이프라인-확장점seam) | `transfer.api` 입금 계약 (P2 이자·만기·해지용) | S2 | 0.5 | PH-99 | **10/16** | #595 · PR #616 | 완료 |
 | [EVT-2](#evt-2-publishevent-두-줄) | `publishEvent` 두 줄 | S2 | 0.5 | PH-32 | 10/6 | #505 | 완료 — P1이 #505에서 대신 처리 |
-| [HOOK-MERGE](#hook-merge-훅-구현체-머지) | 훅 구현체 3건 리뷰·머지 | S2 | 0.5 | PH-90 · PH-24 · PH-41 | 10/12~16 | — | 예정 |
+| [HOOK-MERGE](#hook-merge-훅-구현체-머지) | 훅 구현체 3건 리뷰·머지 | S2 | 0.5 | PH-90 · PH-24 · PH-41 | 10/12~16 | PR #615 · PR #585 · #516 | 완료 |
 | [PH-101-①](#ph-101-redis-제거-①-구현-s2--②-판정-측정-s3) | Redis 제거 1단계 — 토큰·잠금·이력 MySQL 이전 · 저장소 스위치 (D-14 예외) | S2 | 3.5 | — | dev 머지 10/15 · **릴리스 10/16** | #580 · #581 | 진행 |
 | [PH-33-②](#ph-33-대외계-①-모의-서버-s1--②-타행-이체-s3) | 타행 송신 · 조회거래 · 미결제 기표 · 격리 | S3 | 5 | PH-33-① · PH-24 | **10/23 머지** | — | 예정 |
 | [PH-36](#ph-36-장애-주입-3종--보상-트랜잭션) | 장애 주입 3종 · 보상 트랜잭션 | S3 | 2 | PH-33-② · PH-80 | — | — | 예정 |
@@ -697,13 +697,14 @@ ADM-01 검색·상세·변경 요청에 사유 코드 선택을 붙이고 `X-Acc
 
 ```
 TransferExecutionService.execute(command)                         ← 편집자: P4만
- ├─ 사전 검증 · 채번 (기존)                                          ← 채번 뒤라 거부돼도 ERROR 행이 남는다
+ ├─ 사전 검증 (기존)
+ ├─ tradeDate = businessDateProvider.today()                        ← P5 provider, P4가 대입(#516). 한 번 구해 transfer에 싣고 원장·훅 B가 같이 쓴다
+ ├─ 채번 (기존)                                                     ← 채번 뒤라 거부돼도 ERROR 행이 남는다
  ├─ [훅 A] TransferPreCheck 체인 (락 이전 · 읽기 전용 · order 순)
  │     └─ P2 PH-90 AvailableBalancePreCheck
  ├─ OTP 소비 (기존)
  ├─ requiresNewTransactionTemplate.execute {                       ← PH-80이 S2에 재작성
  │     한도 · 계좌 락 · 잔액 (기존)
- │     tradeDate = businessDateProvider.today()                   ← P5 provider, P4가 대입. 한 번 구해 원장·훅 B·transfer에 같이 쓴다
  │     원장 기표 LedgerPair (기존)
  │     [훅 B] LedgerPostingHook.afterLedger(ctx)                   ← P3 PH-24 (예외 → 롤백 = 이체 실패)
  │     publisher.publishEvent(new TransferSettled(...))           ← P1 타입, EVT-2(#505)
@@ -783,6 +784,8 @@ TransferExecutionService.execute(command)                         ← 편집자:
 ### HOOK-MERGE. 훅 구현체 머지
 
 PH-90 PreCheck → PH-24 훅 B → PH-41 tradeDate 대입 순서로 머지한다. 저하율은 따로 재지 않는다 — 세 훅이 릴리스 1에 함께 나가 운영에서 전후를 잴 수 없고, 무거운 훅 B는 [PH-24](#ph-24-gl-분개-서비스--이체-기표-훅--glapi)에서 P3가 잰다.
+
+- 현황: PH-90(PR #615) · PH-24(PR #585)는 릴리스 1에 나갔고, PH-41 대입(#516)은 릴리스 2에 나간다. 대입 경로는 이체(성공·ERROR) · 정정 · 상품가입 입금 · 예적금 입금 계약이고, 거래번호 날짜는 여전히 달력일이다. 기존 행 채우기는 #515(P5).
 
 ### PH-33. 대외계 (① 모의 서버 S1 → ② 타행 이체 S3)
 
