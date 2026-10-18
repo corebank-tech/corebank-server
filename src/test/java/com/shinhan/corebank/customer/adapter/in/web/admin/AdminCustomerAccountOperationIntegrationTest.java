@@ -3,13 +3,16 @@ package com.shinhan.corebank.customer.adapter.in.web.admin;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import com.shinhan.corebank.AdminAccountFixture;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.customer.api.AdminPermission;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,11 +21,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -35,7 +38,6 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * 안에서는 그 커밋을 확인할 수 없기 때문이다. 대신 넣은 행을 @AfterEach에서 지운다.
  */
 @AutoConfigureMockMvc
-@TestPropertySource(properties = "app.security.admin.bootstrap-customer-ids=" + AdminCustomerControllerTest.ADMIN_ID)
 @DisplayName("관리자 고객 계정 운영 DoD 통합 테스트")
 class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSupport {
 
@@ -58,6 +60,8 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
     void setUp() {
         cleanUp();
         insertCustomer(ADMIN_ID, "adm449admin", "admin@adm449.test", 0, false);
+        AdminAccountFixture.grantAdmin(
+                jdbcTemplate, ADMIN_ID, AdminPermission.CUSTOMER_READ, AdminPermission.CUSTOMER_WRITE);
         targetId = insertCustomer(null, TARGET_USER_ID, "target@adm449.test", 5, true);
     }
 
@@ -68,6 +72,7 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
                         + "(SELECT customer_id FROM customer WHERE user_id LIKE 'adm449%')",
                 ADMIN_ID);
         jdbcTemplate.update("DELETE FROM idempotency_key WHERE customer_id = ?", ADMIN_ID);
+        jdbcTemplate.update("DELETE FROM admin_permission WHERE customer_id = ?", ADMIN_ID);
         jdbcTemplate.update("DELETE FROM customer WHERE user_id LIKE 'adm449%' OR customer_id = ?", ADMIN_ID);
     }
 
@@ -179,6 +184,39 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
                 .isEqualTo(1);
     }
 
+    // 인가는 로그인 때 세션에 실린 authority 만 보므로, DB 권한 행이 거기까지 넘어오는지 실제 로그인으로 본다.
+    @Test
+    @DisplayName("관리자 세션은 DB 권한 행으로 관리자 API를 통과하고, 권한을 지우고 다시 로그인하면 막힌다")
+    void adminSessionCarriesPermissionsFromDatabase() throws Exception {
+        mockMvc.perform(get("/admin/customers").param("userId", TARGET_USER_ID).session(adminLoginSession()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"));
+
+        jdbcTemplate.update(
+                "DELETE FROM admin_permission WHERE customer_id = ? AND permission = 'CUSTOMER_READ'", ADMIN_ID);
+
+        mockMvc.perform(get("/admin/customers").param("userId", TARGET_USER_ID).session(adminLoginSession()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CMN0102"));
+    }
+
+    // 세션 ID가 로그인에서 바뀌므로 응답 뒤의 세션을 그대로 받아 다음 요청에 쓴다.
+    private MockHttpSession adminLoginSession() throws Exception {
+        MockHttpSession session = new MockHttpSession();
+        session.setMaxInactiveInterval(600);
+
+        MockHttpServletRequest loggedIn = mockMvc.perform(post("/admin/auth/login")
+                        .session(session)
+                        .contentType("application/json")
+                        .content("{\"userId\":\"adm449admin\",\"password\":\"%s\"}".formatted(ORIGINAL_PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andReturn()
+                .getRequest();
+
+        return (MockHttpSession) loggedIn.getSession(false);
+    }
+
     private ResultActions changeStatus(Long customerId, String status) throws Exception {
         return mockMvc.perform(post("/admin/customers/{id}/status", customerId)
                         .header("Idempotency-Key", UUID.randomUUID().toString())
@@ -210,11 +248,13 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
                 targetId);
     }
 
+    // 다른 테스트는 운영 업무만 보므로 로그인을 거치지 않고 같은 세션 authority 를 직접 준다.
     private RequestPostProcessor admin() {
         return authentication(UsernamePasswordAuthenticationToken.authenticated(
                 new AuthenticatedCustomer(ADMIN_ID, "adm449admin", "관리자"),
                 null,
-                AuthorityUtils.createAuthorityList("ROLE_CUSTOMER")));
+                AuthorityUtils.createAuthorityList(
+                        "ROLE_ADMIN", AdminPermission.CUSTOMER_READ.name(), AdminPermission.CUSTOMER_WRITE.name())));
     }
 
     private Long insertCustomer(Long customerId, String userId, String email, int failures, boolean locked) {

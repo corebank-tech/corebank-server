@@ -2,8 +2,8 @@ package com.shinhan.corebank.auth.adapter.in.security;
 
 import static org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher.pathPattern;
 
-import com.shinhan.corebank.auth.adapter.in.web.ClientIpResolver;
 import com.shinhan.corebank.common.filter.CorrelationIdFilter;
+import com.shinhan.corebank.customer.api.AdminPermission;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -37,12 +37,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({
-    CorsProperties.class,
-    CsrfProperties.class,
-    AdminBootstrapProperties.class,
-    AdminSessionProperties.class
-})
+@EnableConfigurationProperties({CorsProperties.class, CsrfProperties.class, AdminSessionProperties.class})
 public class SecurityConfig {
 
     // 로그인 비밀번호 해시 검증에 사용할 BCrypt Encoder
@@ -133,7 +128,6 @@ public class SecurityConfig {
             CorsConfigurationSource corsConfigurationSource,
             CookieCsrfTokenRepository csrfTokenRepository,
             CsrfTokenRequestAttributeHandler csrfTokenRequestHandler,
-            AdminBootstrapProperties adminBootstrapProperties,
             SessionRegistry sessionRegistry)
             throws Exception {
         http.addFilterBefore(new CorrelationIdFilter(), SecurityContextHolderFilter.class)
@@ -212,10 +206,23 @@ public class SecurityConfig {
                         .requestMatchers(pathPattern(HttpMethod.POST, "/admin/auth/login"))
                         .permitAll()
 
-                        // 관리자 API는 PH-49a 전까지 허용 목록의 고객만 접근 (#448 임시 가드)
-                        .requestMatchers("/admin/**")
-                        .access(new AdminBootstrapAuthorizationManager(
-                                adminBootstrapProperties, new ClientIpResolver()))
+                        // 관리자 API는 경로별 권한으로 가린다 (PH-49a-②, admin_auth.md §6). 권한 authority 는
+                        // SessionLoginManager 가 ROLE_ADMIN 로그인에만 실으므로 역할 검사를 겹치지 않는다.
+                        // 먼저 걸리는 줄이 이기므로 GET 줄을 변경 줄보다 앞에 둔다. 조회 전용 경로는
+                        // GET 줄만 두어 변경 요청이 맨 아래 denyAll 로 떨어지게 한다.
+                        .requestMatchers(pathPattern(HttpMethod.GET, "/admin/customers/**"))
+                        .hasAuthority(AdminPermission.CUSTOMER_READ.name())
+                        .requestMatchers(pathPattern("/admin/customers/**"))
+                        .hasAuthority(AdminPermission.CUSTOMER_WRITE.name())
+                        .requestMatchers(pathPattern(HttpMethod.GET, "/admin/trial-balance/**"))
+                        .hasAuthority(AdminPermission.GL_READ.name())
+                        .requestMatchers(pathPattern(HttpMethod.GET, "/admin/ledger-reconciliation/**"))
+                        .hasAuthority(AdminPermission.AUDIT_READ.name())
+
+                        // 위에 걸리지 않은 /admin 경로는 거부한다. 새 관리자 API 를 열면서 규칙을
+                        // 빠뜨려도 아무 관리자에게나 열리지 않게 한다.
+                        .requestMatchers(pathPattern("/admin/**"))
+                        .denyAll()
 
                         // 인증된 사용자만 접근 가능
                         .anyRequest()
