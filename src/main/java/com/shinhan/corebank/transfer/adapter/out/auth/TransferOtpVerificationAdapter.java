@@ -26,4 +26,23 @@ public class TransferOtpVerificationAdapter implements TransferOtpVerificationPo
                         "depositAccountNumber", depositAccountNumber,
                         "amount", amount)));
     }
+
+    @Override
+    public void verifyAndConsumeInterbank(
+            String otpAuthToken,
+            Long customerId,
+            Long withdrawalAccountId,
+            String payeeBankCode,
+            String depositAccountNumber,
+            long amount) {
+        otpAuthTokenVerifier.verifyAndConsume(new OtpAuthTokenVerification(
+                otpAuthToken,
+                customerId,
+                OtpTransactionType.IMMEDIATE_TRANSFER,
+                Map.of(
+                        "withdrawalAccountId", withdrawalAccountId,
+                        "payeeBankCode", payeeBankCode,
+                        "depositAccountNumber", depositAccountNumber,
+                        "amount", amount)));
+    }
 }

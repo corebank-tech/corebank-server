@@ -109,14 +109,21 @@ public class InterbankSocketClient implements InterbankGatewayPort {
     }
 
     private Exchange exchange(TransactionCode transactionCode, InterbankRequest request) {
-        byte[] encoded = ExternalMessageCodec.encode(ExternalMessage.request(
-                transactionCode,
-                LocalDateTime.now(clock),
-                request.bankCode(),
-                request.transactionNumber(),
-                request.accountNumber(),
-                request.amount(),
-                request.recipientMemo()));
+        byte[] encoded;
+        try {
+            encoded = ExternalMessageCodec.encode(ExternalMessage.request(
+                    transactionCode,
+                    LocalDateTime.now(clock),
+                    request.bankCode(),
+                    request.transactionNumber(),
+                    request.accountNumber(),
+                    request.amount(),
+                    request.recipientMemo()));
+        } catch (IllegalArgumentException e) {
+            // 입력 검증을 지나 왔어도 전문을 만들 수 없으면 보내지 않는다(규격 §4 — 직렬화가 마지막 관문).
+            log.error("타행 전문 생성 실패 - transactionNumber={}, cause={}", request.transactionNumber(), e.getMessage());
+            return new Exchange.NotSent();
+        }
         if (!circuitBreaker.tryAcquirePermission()) {
             return new Exchange.NotSent();
         }
