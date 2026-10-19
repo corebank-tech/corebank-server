@@ -145,6 +145,26 @@ class BalanceReaderTest {
     }
 
     @Test
+    @DisplayName("해지 기표가 7일 창 밖이어도 기준일에 열려 있던 계좌는 그날 잔액으로 포함한다")
+    void includesAccountClosedBeyondSevenDayWindow() throws SQLException {
+        insertAccount(15L, 25L, null, "DEMAND_DEPOSIT", "CLOSED");
+        insertLedger(100L, 15L, 1_000L, LocalDateTime.of(2026, 10, 10, 10, 0), D.minusDays(10));
+        insertLedger(101L, 15L, 0L, LocalDateTime.of(2026, 11, 19, 10, 0), D.plusDays(30));
+
+        assertThat(read().get(15L).balance()).isEqualTo(1_000L);
+    }
+
+    @Test
+    @DisplayName("해지 기표가 7일 창 밖이고 해지일이 기준일 이전이면 포함하지 않는다")
+    void excludesAccountClosedBeforeBaseDateEvenWhenOtherEntriesAreOutsideWindow() throws SQLException {
+        insertAccount(16L, 26L, null, "DEMAND_DEPOSIT", "CLOSED");
+        insertLedger(110L, 16L, 500L, LocalDateTime.of(2026, 10, 1, 10, 0), D.minusDays(19));
+        insertLedger(111L, 16L, 0L, LocalDateTime.of(2026, 10, 5, 10, 0), D.minusDays(15));
+
+        assertThat(read()).doesNotContainKey(16L);
+    }
+
+    @Test
     @DisplayName("원장 기표가 없는 계좌는 행을 만들지 않는다")
     void excludesAccountWithoutLedgerEntries() throws SQLException {
         insertAccount(14L, 24L, null, "DEMAND_DEPOSIT", "ACTIVE");

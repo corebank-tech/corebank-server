@@ -51,6 +51,9 @@ public final class DailyLoadService {
             mart.commit(); // T1: 시작 기록은 뒤에서 실패해도 남아야 한다.
             try {
                 List<BalanceRow> rows = readFromReplica(baseDate);
+                if (rows.isEmpty()) {
+                    throw new IllegalStateException("레플리카에서 읽은 잔액이 0건입니다. 레플리카가 아직 따라오지 못했을 수 있습니다.");
+                }
                 writer.deleteByBaseDate(mart, baseDate); // T2 시작
                 writer.insert(mart, loadBatchId, baseDate, rows, pseudonymizer);
                 long rowCount = writer.countRows(mart, baseDate);

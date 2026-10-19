@@ -27,22 +27,24 @@ public final class InfoEtlMain {
     static int run(String[] args, Map<String, String> env) {
         LocalDate baseDate;
         EtlConfig config;
+        Pseudonymizer pseudonymizer;
         try {
             baseDate = parseBaseDate(args);
             config = EtlConfig.from(env);
+            pseudonymizer = new Pseudonymizer(config.hmacKey()); // 짧은 키도 종료 코드 2로 끝낸다.
         } catch (IllegalArgumentException e) {
             LOG.log(System.Logger.Level.ERROR, e.getMessage());
             return EXIT_USAGE;
         }
 
-        // 마트 URL에 rewriteBatchedStatements=true를 붙이면 묶음 삽입이 훨씬 빨라진다.
+        String martUrl = withBatchRewrite(config.martUrl());
         DailyLoadService service = new DailyLoadService(
                 () -> open(config.replicaUrl(), config.replicaUser(), config.replicaPassword()),
-                () -> open(config.martUrl(), config.martUser(), config.martPassword()),
+                () -> open(martUrl, config.martUser(), config.martPassword()),
                 new BalanceReader(),
                 new MartBalanceWriter(),
                 new LoadBatchRepository(),
-                new Pseudonymizer(config.hmacKey()),
+                pseudonymizer,
                 Clock.system(ZoneId.of("Asia/Seoul")));
         try {
             LoadResult result = service.load(baseDate);
@@ -58,6 +60,14 @@ public final class InfoEtlMain {
             LOG.log(System.Logger.Level.ERROR, "적재 실패 - baseDate=" + baseDate, e);
             return EXIT_LOAD_FAILED;
         }
+    }
+
+    // 마트 URL에 이 옵션이 없으면 1000건 묶음 삽입이 건건이 나가 매우 느려진다.
+    static String withBatchRewrite(String url) {
+        if (url.contains("rewriteBatchedStatements=")) {
+            return url;
+        }
+        return url + (url.contains("?") ? "&" : "?") + "rewriteBatchedStatements=true";
     }
 
     static LocalDate parseBaseDate(String[] args) {

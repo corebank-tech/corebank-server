@@ -20,7 +20,7 @@ class MartBalanceWriterTest {
 
     private final MartBalanceWriter writer = new MartBalanceWriter();
     private final Pseudonymizer pseudonymizer =
-            new Pseudonymizer("writer-test-key-0001".getBytes(StandardCharsets.UTF_8));
+            new Pseudonymizer("writer-test-key-0001-0123456789abcdef".getBytes(StandardCharsets.UTF_8));
 
     @BeforeEach
     void resetMart() throws SQLException {
@@ -43,8 +43,8 @@ class MartBalanceWriterTest {
                                     + " load_batch_id FROM mart_daily_account_balance");
                     ResultSet resultSet = statement.executeQuery()) {
                 assertThat(resultSet.next()).isTrue();
-                assertThat(resultSet.getString("account_key")).isEqualTo(pseudonymizer.pseudonymize(1234567L));
-                assertThat(resultSet.getString("customer_key")).isEqualTo(pseudonymizer.pseudonymize(7654321L));
+                assertThat(resultSet.getString("account_key")).isEqualTo(pseudonymizer.accountKey(1234567L));
+                assertThat(resultSet.getString("customer_key")).isEqualTo(pseudonymizer.customerKey(7654321L));
                 assertThat(resultSet.getString("account_key")).matches("^[0-9a-f]{64}$");
                 assertThat(resultSet.getString("account_key")).doesNotContain("1234567");
                 assertThat(resultSet.getString("account_type")).isEqualTo("DEMAND_DEPOSIT");

@@ -26,7 +26,7 @@ class DailyLoadServiceTest {
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 21, 1, 0, 0);
 
     private final Pseudonymizer pseudonymizer =
-            new Pseudonymizer("service-test-key-0001".getBytes(StandardCharsets.UTF_8));
+            new Pseudonymizer("service-test-key-0001-0123456789abcdef".getBytes(StandardCharsets.UTF_8));
     private final MartBalanceWriter writer = new MartBalanceWriter();
     private final LoadBatchRepository repository = new LoadBatchRepository();
     private final DailyLoadService service = new DailyLoadService(
@@ -60,7 +60,7 @@ class DailyLoadServiceTest {
             assertThat(writer.countRows(mart, D)).isEqualTo(2L);
             assertThat(writer.sumBalance(mart, D)).isEqualTo(1_000L);
             assertThat(accountKeys(mart))
-                    .containsExactlyInAnyOrder(pseudonymizer.pseudonymize(1L), pseudonymizer.pseudonymize(2L));
+                    .containsExactlyInAnyOrder(pseudonymizer.accountKey(1L), pseudonymizer.accountKey(2L));
             try (ResultSet row = batch(mart, result.loadBatchId())) {
                 assertThat(row.getString("status")).isEqualTo("COMPLETED");
                 assertThat(row.getObject("started_at", LocalDateTime.class)).isEqualTo(NOW);
@@ -143,6 +143,28 @@ class DailyLoadServiceTest {
 
         try (Connection mart = InfoEtlTestDatabase.mart()) {
             assertThat(statusOf(mart, stale)).isEqualTo("FAILED");
+        }
+    }
+
+    @Test
+    @DisplayName("레플리카에서 읽은 잔액이 0건이면 실패 처리하고 마트의 이전 데이터는 그대로다")
+    void emptyReplicaResultKeepsPreviousLoad() throws SQLException {
+        LoadResult first = service.load(D);
+        try (Connection replica = InfoEtlTestDatabase.replica();
+                Statement statement = replica.createStatement()) {
+            statement.execute("DELETE FROM ledger_entry");
+        }
+
+        assertThatThrownBy(() -> service.load(D)).isInstanceOf(IllegalStateException.class);
+
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            assertThat(writer.countRows(mart, D)).isEqualTo(2L);
+            assertThat(writer.sumBalance(mart, D)).isEqualTo(1_000L);
+            assertThat(statusOf(mart, first.loadBatchId())).isEqualTo("COMPLETED");
+            try (ResultSet row = batch(mart, latestBatchId(mart))) {
+                assertThat(row.getString("status")).isEqualTo("FAILED");
+                assertThat(row.getString("failure_reason")).contains("0건");
+            }
         }
     }
 

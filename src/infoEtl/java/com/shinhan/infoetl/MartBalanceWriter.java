@@ -31,8 +31,8 @@ public final class MartBalanceWriter {
             int pending = 0;
             for (BalanceRow row : rows) {
                 statement.setObject(1, baseDate);
-                statement.setString(2, pseudonymizer.pseudonymize(row.accountId()));
-                statement.setString(3, pseudonymizer.pseudonymize(row.customerId()));
+                statement.setString(2, pseudonymizer.accountKey(row.accountId()));
+                statement.setString(3, pseudonymizer.customerKey(row.customerId()));
                 statement.setString(4, row.accountType());
                 statement.setObject(5, row.productId(), Types.BIGINT);
                 statement.setString(6, row.productGroup());

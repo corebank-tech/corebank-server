@@ -79,6 +79,27 @@ class InfoEtlMainTest {
         }
     }
 
+    @Test
+    @DisplayName("HMAC 키가 32바이트보다 짧으면 종료 코드 2를 돌려준다")
+    void returnsUsageExitCodeForShortKey() {
+        Map<String, String> env = env();
+        env.put("HMAC_KEY", "too-short");
+
+        assertThat(InfoEtlMain.run(new String[] {"--base-date=2026-10-20"}, env))
+                .isEqualTo(InfoEtlMain.EXIT_USAGE);
+    }
+
+    @Test
+    @DisplayName("마트 URL에 묶음 삽입 옵션이 없으면 붙이고 있으면 그대로 둔다")
+    void addsBatchRewriteOptionOnlyWhenMissing() {
+        assertThat(InfoEtlMain.withBatchRewrite("jdbc:mysql://mart:3307/mart"))
+                .isEqualTo("jdbc:mysql://mart:3307/mart?rewriteBatchedStatements=true");
+        assertThat(InfoEtlMain.withBatchRewrite("jdbc:mysql://mart:3307/mart?useSSL=false"))
+                .isEqualTo("jdbc:mysql://mart:3307/mart?useSSL=false&rewriteBatchedStatements=true");
+        assertThat(InfoEtlMain.withBatchRewrite("jdbc:mysql://mart:3307/mart?rewriteBatchedStatements=false"))
+                .isEqualTo("jdbc:mysql://mart:3307/mart?rewriteBatchedStatements=false");
+    }
+
     private static Map<String, String> env() {
         Map<String, String> env = new HashMap<>();
         env.put("REPLICA_JDBC_URL", InfoEtlTestDatabase.replicaUrl());
@@ -87,7 +108,7 @@ class InfoEtlMainTest {
         env.put("MART_JDBC_URL", InfoEtlTestDatabase.martUrl());
         env.put("MART_USER", InfoEtlTestDatabase.user());
         env.put("MART_PASSWORD", InfoEtlTestDatabase.password());
-        env.put("HMAC_KEY", "main-test-key-0001");
+        env.put("HMAC_KEY", "main-test-key-0001-0123456789abcdef");
         return env;
     }
 

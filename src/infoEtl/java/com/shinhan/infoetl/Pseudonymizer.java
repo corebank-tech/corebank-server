@@ -9,19 +9,24 @@ import javax.crypto.spec.SecretKeySpec;
 public final class Pseudonymizer {
 
     private static final String ALGORITHM = "HmacSHA256";
+    private static final int MIN_KEY_BYTES = 32;
 
     private final SecretKeySpec key;
 
     public Pseudonymizer(byte[] keyBytes) {
-        if (keyBytes == null || keyBytes.length == 0) {
-            throw new IllegalArgumentException("HMAC 키가 비어 있습니다.");
+        if (keyBytes == null || keyBytes.length < MIN_KEY_BYTES) {
+            throw new IllegalArgumentException("HMAC 키는 최소 " + MIN_KEY_BYTES + "바이트여야 합니다.");
         }
         this.key = new SecretKeySpec(keyBytes, ALGORITHM);
     }
 
-    // ID를 10진수 문자열로 바꿔 HMAC을 건다. 같은 키·ID면 항상 같은 64자리 hex라 재적재해도 키 값이 같다.
-    public String pseudonymize(long id) {
-        return hmacHex(Long.toString(id));
+    // 종류 접두어를 붙여 계좌 5번과 고객 5번이 같은 키가 되지 않게 한다. 같은 키·ID면 항상 같은 64자리 hex다.
+    public String accountKey(long accountId) {
+        return hmacHex("account:" + accountId);
+    }
+
+    public String customerKey(long customerId) {
+        return hmacHex("customer:" + customerId);
     }
 
     String hmacHex(String data) {
