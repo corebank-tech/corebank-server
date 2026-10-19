@@ -314,6 +314,41 @@ public class Account {
         this.withdrawalRegisteredAt = null;
     }
 
+    /**
+     * 영업일 기준으로 만기가 도래한 예·적금 계좌를 MATURED 상태로 전환한다.
+     *
+     * @param effectiveBusinessDate 만기 판정 기준일 (nextBusinessDay(COB_DATE))
+     * @return 이번 호출에서 상태가 변경되면 true, 이미 MATURED이면 false
+     */
+    public boolean markMatured(LocalDate effectiveBusinessDate) {
+        if (effectiveBusinessDate == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        // 요구불계좌는 만기 전이 대상이 아니다.
+        if (accountType == AccountType.DEMAND_DEPOSIT) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        }
+
+        // 동일 COB 재실행 시 중복 전이를 방지한다.
+        if (status == AccountStatus.MATURED) {
+            return false;
+        }
+
+        // ACTIVE 계좌만 만기 상태로 전이할 수 있다.
+        if (status != AccountStatus.ACTIVE) {
+            throw new BusinessException(AccountErrorCode.INVALID_ACCOUNT_STATUS);
+        }
+
+        // 만기일이 아직 도래하지 않았다면 전이를 거부한다.
+        if (maturityDate.isAfter(effectiveBusinessDate)) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        }
+
+        this.status = AccountStatus.MATURED;
+        return true;
+    }
+
     public void changeDisplayOrder(int displayOrder) {
         if (displayOrder <= 0) {
             throw new BusinessException(AccountErrorCode.INVALID_DISPLAY_ORDER);
