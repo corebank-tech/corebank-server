@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.shinhan.corebank.transfer.domain.LedgerDirection;
 import com.shinhan.corebank.transfer.domain.LedgerEntry;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,7 @@ class LedgerEntryMapperTest {
                 .channel(TransferChannel.WB)
                 .reversed(false)
                 .occurredAt(now)
+                .tradeDate(LocalDate.of(2026, 8, 10))
                 .build();
 
         // when
@@ -41,6 +43,7 @@ class LedgerEntryMapperTest {
         assertThat(entity.getAccountId()).isEqualTo(101L);
         assertThat(entity.getDirection()).isEqualTo(LedgerDirection.WITHDRAWAL);
         assertThat(entity.getChannel()).isEqualTo(TransferChannel.WB);
+        assertThat(entity.getTradeDate()).isEqualTo(LocalDate.of(2026, 8, 10));
 
         // when (toDomain)
         LedgerEntry mappedDomain = LedgerEntryMapper.toDomain(entity);
@@ -51,5 +54,6 @@ class LedgerEntryMapperTest {
         assertThat(mappedDomain.getAccountId()).isEqualTo(domain.getAccountId());
         assertThat(mappedDomain.getDirection()).isEqualTo(domain.getDirection());
         assertThat(mappedDomain.getChannel()).isEqualTo(TransferChannel.WB);
+        assertThat(mappedDomain.getTradeDate()).isEqualTo(LocalDate.of(2026, 8, 10));
     }
 }

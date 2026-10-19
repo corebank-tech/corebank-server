@@ -494,7 +494,7 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | `error_code` | `VARCHAR(10)` |  | O |  | 실패 시 오류코드 |
 | `error_message` | `VARCHAR(200)` |  | O |  | 실패 시 사유 문구 |
 | `transferred_at` | `DATETIME(6)` |  | X |  | 이체 처리 일시 |
-| `trade_date` | `DATE` |  | O |  | **거래일** — 이 이체가 귀속되는 영업일. 거래 시점의 `BusinessDateProvider.today()` 값이다. 휴일 거래는 다음 영업일이 된다([glossary](phase2/glossary.md) 7번). **마감 시작~영업일 전환 사이 거래의 거래일은 PH-43에서 정한다.** 성공·실패(ERROR) 행 모두 채운다 — 실패 행은 원장 없이 이 테이블에만 남는다. 자동·예약이체는 휴일에도 지정일에 실행되므로(REQ-AUTO-001), 휴일에 실행된 회차의 거래일도 다음 영업일이다 — 실행일(`execution_date`, 달력 날짜)과 거래일이 다를 수 있다. P4 대입 전 행은 NULL이다 |
+| `trade_date` | `DATE` |  | O |  | **거래일** — 이 이체가 귀속되는 영업일. 거래 시점의 `BusinessDateProvider.today()` 값이다. 휴일 거래는 다음 영업일이 된다([glossary](phase2/glossary.md) 7번). **마감 시작~영업일 전환 사이 거래의 거래일은 PH-43에서 정한다.** 성공·실패(ERROR) 행 모두 채운다 — 실패 행은 원장 없이 이 테이블에만 남는다. 자동·예약이체는 휴일에도 지정일에 실행되므로(REQ-AUTO-001), 휴일에 실행된 회차의 거래일도 다음 영업일이다 — 실행일(`execution_date`, 달력 날짜)과 거래일이 다를 수 있다. 정정 거래(취소정정·정상거래)는 원거래일이 아니라 정정한 날의 영업일이다. #516 대입 전 행은 NULL이다 |
 | `invalidated_at` | `DATETIME(6)` |  | O |  | 정정 체인으로 **무효화된 시각**. NULL이면 유효한 거래다. 무효화는 `status`를 바꾸지 않는다 — `status`는 처리 결과(성공·실패)이고 무효화는 그 뒤에 일어나는 별개의 사건이다. SUCCESS인 원거래만 무효화되며 한 번 무효화되면 되돌리지 않는다(PH-80) |
 | `ref_transfer_id` | `BIGINT` | **FK** | O |  | 정정 체인의 **원거래** → `transfer.transfer_id`. 취소정정·정상거래 모두 원거래를 가리키므로 원거래 하나로 체인 전체를 찾는다. 일반 거래는 NULL |
 | `correction_type` | `VARCHAR(12)` |  | O |  | 정정 체인에서의 역할. `REVERSAL`(취소정정 — 원거래와 반대 방향) / `REPOST`(정상거래 — 원래 의도한 거래). 일반 거래는 NULL. `ref_transfer_id`와 함께 있거나 함께 없다 |
@@ -542,9 +542,9 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | `reversed` | `BOOLEAN` |  | X | `FALSE` | 반대기표로 취소된 원거래인지 여부. 원본을 지우지 않고 이 값만 세운다 |
 | `reversal_id` | `BIGINT` |  | O |  | 반대기표 행이 가리키는 원거래의 `ledger_entry_id` |
 | `occurred_at` | `DATETIME(6)` | **PK** | X |  | 기표 발생 일시. RANGE 파티션 키이며 거래내역 조회의 기간 조건이 이 컬럼에 걸린다. **온라인 거래 경로(이체·상품가입 입금)는 계좌 락을 쥔 뒤 이 시각을 찍으므로, 시계가 정상적으로 흐르는 동안에는 같은 계좌의 잔액 반영 순서와 같다.** 적수·거래내역은 `occurred_at DESC, ledger_entry_id DESC` 순으로 마지막 잔액을 고른다. 락을 거치지 않고 직접 적재하는 시드(`Phase2MinimumSeedService`·`local-demo-data.sql`)는 이 계약의 대상이 아니다(#545) |
-| `trade_date` | `DATE` |  | O |  | **거래일** — 이 기표가 귀속되는 영업일. `occurred_at`(발생 시각)과 다르다. 값 규칙은 `transfer.trade_date`와 같다. **원장을 쓰는 모든 경로(이체·상품가입 입금)가 채운다.** P4 대입 전 행은 NULL이다. P6 시드(PH-60b)는 GL과 같은 거래일을 넣는다 |
+| `trade_date` | `DATE` |  | O |  | **거래일** — 이 기표가 귀속되는 영업일. `occurred_at`(발생 시각)과 다르다. 값 규칙은 `transfer.trade_date`와 같다. **원장을 쓰는 모든 경로(이체·정정·상품가입 입금·예적금 입금 계약)가 채운다.** #516 대입 전 행은 NULL이다. P6 시드(PH-60b)는 GL과 같은 거래일을 넣는다 |
 
-**`trade_date` 는 NULL 을 허용한다(Expand).** 기존 행 채우기와 `NOT NULL` 전환 여부·시점은 별도 이슈(#515)에서 정한다. 거래일로 조회하는 곳이 아직 없어 인덱스는 두지 않는다 — `gl_journal_entry` 와 같은 판단이다.
+**`trade_date` 는 NULL 을 허용한다(Expand).** `NOT NULL` 제약은 걸지 않는다 — 300만 행 파티션 테이블 재구성을 피하려고, 새 행의 필수 여부는 도메인 팩토리가 막는다(#515 A안). 기존 행 채우기는 #515에서 한다. 거래일로 조회하는 곳이 아직 없어 인덱스는 두지 않는다 — `gl_journal_entry` 와 같은 판단이다.
 
 **`trade_date` 로 거를 때는 `occurred_at` 범위도 넉넉히 같이 건다.** 파티션 키가 `occurred_at` 이라 `trade_date` 조건만 걸면 모든 파티션을 읽는다. 거래일과 발생일의 간격은 일정하지 않다 — 연휴면 며칠 뒤이고, COB 가 늦어지면 하루 앞설 수도 있다.
 
@@ -943,7 +943,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
-| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP`, `LEDGER_RECONCILIATION_BATCH`, `AUTH_TOKEN_CLEANUP`, `TERMS_VIEW_HISTORY_CLEANUP` 5행 |
+| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP`, `LEDGER_RECONCILIATION_BATCH`, `AUTH_TOKEN_CLEANUP`, `TERMS_VIEW_HISTORY_CLEANUP`, `AUTO_TRANSFER_RECONCILE` 6행 |
 | `currently_running` | `BOOLEAN` |  | X | `FALSE` | 이 배치가 지금 실행 중인지. 트리거 시작 시 `TRUE`, 종료 시(성공/실패 무관) `FALSE`로 되돌림 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각. stale(크래시로 방치됨) 판단 기준 |
 

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.DisplayName;
@@ -17,6 +18,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 @DisplayName("LedgerEntry 도메인 단위 테스트")
 class LedgerEntryTest {
+
+    private static final LocalDate TRADE_DATE = LocalDate.of(2026, 8, 12);
 
     @Nested
     @DisplayName("forCredit — 상대 고객 계좌 없는 입금 1행")
@@ -37,7 +40,8 @@ class LedgerEntryTest {
                     "INTEREST",
                     "이자",
                     TransferChannel.BT,
-                    occurredAt);
+                    occurredAt,
+                    TRADE_DATE);
 
             // then
             assertThat(entry.getLedgerEntryId()).isNull();
@@ -52,6 +56,7 @@ class LedgerEntryTest {
             assertThat(entry.getTransactionContent()).isEqualTo("이자");
             assertThat(entry.getChannel()).isEqualTo(TransferChannel.BT);
             assertThat(entry.getOccurredAt()).isEqualTo(occurredAt.truncatedTo(ChronoUnit.MICROS));
+            assertThat(entry.getTradeDate()).isEqualTo(TRADE_DATE);
         }
 
         @ParameterizedTest
@@ -66,7 +71,8 @@ class LedgerEntryTest {
                             "INTEREST",
                             "이자",
                             TransferChannel.BT,
-                            LocalDateTime.now()))
+                            LocalDateTime.now(),
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(TransferErrorCode.INVALID_AMOUNT);
@@ -80,12 +86,20 @@ class LedgerEntryTest {
             LocalDateTime now = LocalDateTime.now();
 
             assertThatThrownBy(() -> LedgerEntry.forCredit(
-                            blank, 303L, 1_020_000L, 20_000L, "INTEREST", "이자", TransferChannel.BT, now))
+                            blank, 303L, 1_020_000L, 20_000L, "INTEREST", "이자", TransferChannel.BT, now, TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
             assertThatThrownBy(() -> LedgerEntry.forCredit(
-                            "20261023BT0000000002", 303L, 1_020_000L, 20_000L, blank, "이자", TransferChannel.BT, now))
+                            "20261023BT0000000002",
+                            303L,
+                            1_020_000L,
+                            20_000L,
+                            blank,
+                            "이자",
+                            TransferChannel.BT,
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -104,12 +118,13 @@ class LedgerEntryTest {
                             "INTEREST",
                             "이자",
                             TransferChannel.BT,
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
             assertThatThrownBy(() -> LedgerEntry.forCredit(
-                            "20261023BT0000000002", 303L, 1_020_000L, 20_000L, "INTEREST", "이자", null, now))
+                            "20261023BT0000000002", 303L, 1_020_000L, 20_000L, "INTEREST", "이자", null, now, TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -121,6 +136,20 @@ class LedgerEntryTest {
                             "INTEREST",
                             "이자",
                             TransferChannel.BT,
+                            null,
+                            TRADE_DATE))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+            assertThatThrownBy(() -> LedgerEntry.forCredit(
+                            "20261023BT0000000002",
+                            303L,
+                            1_020_000L,
+                            20_000L,
+                            "INTEREST",
+                            "이자",
+                            TransferChannel.BT,
+                            now,
                             null))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")

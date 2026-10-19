@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
+import com.shinhan.corebank.business.support.BusinessDateTestFixture;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.api.DepositChannel;
@@ -14,6 +15,7 @@ import com.shinhan.corebank.transfer.api.DepositType;
 import com.shinhan.corebank.transfer.api.LedgerDepositResult;
 import com.shinhan.corebank.transfer.api.LedgerDepositUseCase;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
@@ -40,6 +42,8 @@ class LedgerDepositServiceTest extends IntegrationTestSupport {
     private static final long OPENING_LEDGER_ID_BASE = 595_000_000_000L;
     private static final long CUSTOMER_OPENING = 100_000L;
     private static final long PRINCIPAL = 1_000_000L;
+    // 달력일과 겹치지 않는 영업일 — 같으면 영업일을 읽었는지 달력일을 썼는지 구분되지 않는다.
+    private static final LocalDate BUSINESS_DATE = LocalDate.of(2032, 3, 3);
 
     @Autowired
     private LedgerDepositUseCase ledgerDepositUseCase;
@@ -54,15 +58,40 @@ class LedgerDepositServiceTest extends IntegrationTestSupport {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    @Autowired
+    private BusinessDateTestFixture businessDateTestFixture;
+
+    private LocalDate originalBusinessDate;
+
     @BeforeEach
     void setUp() {
         cleanUp();
         seed();
+        originalBusinessDate = businessDateTestFixture.currentInDb();
+        businessDateTestFixture.moveTo(BUSINESS_DATE);
     }
 
     @AfterEach
     void tearDown() {
+        businessDateTestFixture.moveTo(originalBusinessDate);
         cleanUp();
+    }
+
+    @Test
+    @DisplayName("거래일: 만기 2행과 이자 1행 모두 현재 영업일을 거래일로 갖는다")
+    void tradeDateIsBusinessDate_onTransferBetweenAndCredit() {
+        // given
+        setStatus(PRODUCT_ACCOUNT, "MATURED");
+
+        // when
+        LedgerDepositResult interest =
+                ledgerDepositUseCase.credit(PRODUCT_ACCOUNT, 20_000L, DepositType.INTEREST, DepositChannel.BT);
+        LedgerDepositResult maturity = ledgerDepositUseCase.transferBetween(
+                PRODUCT_ACCOUNT, CUSTOMER_ACCOUNT, PRINCIPAL, DepositType.MATURITY, DepositChannel.BT);
+
+        // then
+        assertThat(tradeDatesOf(interest.transactionNumber())).containsExactly(BUSINESS_DATE);
+        assertThat(tradeDatesOf(maturity.transactionNumber())).containsExactly(BUSINESS_DATE, BUSINESS_DATE);
     }
 
     @Test
@@ -312,6 +341,11 @@ class LedgerDepositServiceTest extends IntegrationTestSupport {
         // 거부되면 잔액도 원장도 그대로다
         assertThat(balanceOf(PRODUCT_ACCOUNT)).isEqualTo(PRINCIPAL);
         assertThat(balanceOf(CUSTOMER_ACCOUNT)).isEqualTo(CUSTOMER_OPENING);
+    }
+
+    private List<LocalDate> tradeDatesOf(String transactionNumber) {
+        return jdbcTemplate.queryForList(
+                "SELECT trade_date FROM ledger_entry WHERE transaction_number = ?", LocalDate.class, transactionNumber);
     }
 
     private void seed() {

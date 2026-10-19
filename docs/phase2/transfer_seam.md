@@ -20,7 +20,8 @@
 execute(command)
  ├─ 멱등성 사전조회 (SCHEDULED·AUTO)
  ├─ verifyBeforeLock      소유 · 동일계좌 · 상품유형 · 계좌비밀번호 토큰
- ├─ 채번 → created 생성    ← 여기부터 실패하면 ERROR 행을 남긴다
+ ├─ tradeDate = businessDateProvider.today()   ← 한 건에 한 번 (PH-41, #516)
+ ├─ 채번 → created 생성    ← 여기부터 실패하면 ERROR 행을 남긴다. created가 tradeDate를 싣는다
  ├─ preCheckWithoutLock   잔액·상태 스냅샷 (OTP 있는 즉시이체만)
  ├─ [훅 A] TransferPreCheck 체인 (order 오름차순)
  ├─ consumeOtpAuthToken
@@ -28,7 +29,6 @@ execute(command)
        한도 적립 → 계좌 락 → 재검증 → transfer INSERT → 잔액 UPDATE
          [자리] PH-90 재검증을 출금가능액(잔액 − 보류액) 기준으로 바꾼다
        executedAt 캡처
-         [자리] PH-41 tradeDate = businessDateProvider.today()
        원장 2행 저장
        [훅 B] LedgerPostingHook.afterLedger(ctx)
        transfer.complete
@@ -91,7 +91,7 @@ class AvailableBalancePreCheck implements TransferPreCheck {
    **훅 B는 같은 트랜잭션의 DB 쓰기만 합니다.** 롤백이 되돌리는 건 DB뿐이라 외부 호출은 아웃박스(정책 8)로 넘깁니다. 훅 B 실패 시 즉시이체는 OTP가 이미 소비돼 재인증이 필요하고, 배치 이체는 정책 1처럼 ERROR 결과가 멱등키로 남습니다.
 5. **훅 B는 `order()`가 없습니다.** 등록자가 P3 하나뿐입니다. 둘 이상이 필요해지면 P4와 순서 규칙을 먼저 정합니다.
    **훅 B는 원장이 생기는 모든 자리에서 부릅니다**(PH-24). `TransferExecutionService`(즉시·예약·자동) 외에 `ProductSubscriptionDepositService`(상품가입 초입금)와 `TransferCorrectionService`(취소정정 `REVERSAL`·정상거래는 원거래 유형)가 원장 저장 직후 부릅니다. 원장을 새로 쓰는 경로를 만들면 훅 B 호출도 함께 넣어야 합니다 — GL 은 모르는 `txType` 을 예외로 거부합니다(`GLA9009`).
-6. **tradeDate는 `executedAt` 캡처 줄에서 한 번만 구합니다.** 원장(`ledger_entry.trade_date`, #472)·훅 B 컨텍스트·transfer가 같은 값을 씁니다. 훅 B와 원장이 먼저 필요로 하므로 원장 기표보다 앞에 둡니다. 한 이체 안에서 두 번 구하면 마감 경계에서 원장과 전표의 거래일이 갈릴 수 있습니다. PH-41 전까지 훅 B에는 `executedAt`의 달력일이 들어갑니다.
+6. **tradeDate는 채번 직전에 한 번만 구해 `created`(transfer)에 싣습니다(#516).** 원장(`ledger_entry.trade_date`, #472)·훅 B 컨텍스트는 그 transfer에서 꺼내 씁니다. 락 이후(`executedAt` 캡처 줄)에서 구하면 락 이전에 실패한 ERROR 행이 거래일을 받지 못합니다. 한 이체 안에서 두 번 구하면 마감 경계에서 원장과 전표의 거래일이 갈릴 수 있습니다. 상품가입 입금·입금 계약·정정도 메서드마다 한 번만 구하고, 정정 거래는 원거래일이 아니라 정정한 날의 영업일입니다.
 7. **이벤트는 활성 트랜잭션 안에서 발행합니다.** `@TransactionalEventListener`는 트랜잭션 밖 발행을 받지 않습니다. `AFTER_COMMIT` 리스너는 두지 않습니다(README §3-3).
 8. **아웃박스 리스너는 `BEFORE_COMMIT` + `JdbcTemplate` INSERT입니다.** INSERT가 실패하면 이체도 롤백됩니다. 의도된 동작입니다.
 
