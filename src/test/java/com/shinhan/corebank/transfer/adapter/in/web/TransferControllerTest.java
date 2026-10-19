@@ -2,6 +2,7 @@ package com.shinhan.corebank.transfer.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -303,6 +304,51 @@ class TransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.amount").value(20000))
                 .andExpect(jsonPath("$.data.payeeName").value("성*향"))
                 .andExpect(jsonPath("$.data.accountNumber").value("110******222"));
+    }
+
+    // 예금주를 받지 못한 타행 건이 섞여도 상세·목록이 깨지지 않아야 한다(interbank_transfer_fe_handoff.md §7-1).
+    private void insertInterbankTimeoutTransfer() {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+            entityManager
+                    .createNativeQuery(
+                            """
+                INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id, deposit_account_number,
+                    payee_bank_code, payee_name, amount, fee, transfer_type, channel, status, transferred_at, created_at)
+                VALUES ('20260810WB0000000020', 101, NULL, '1234567890123', '004', NULL, 50000, 0, 'IMMEDIATE', 'WB',
+                    'TIMEOUT', '2026-08-10 10:00:00', NOW(6))
+            """)
+                    .executeUpdate();
+        });
+    }
+
+    @Test
+    @DisplayName("이체결과 상세 조회: 예금주가 없는 타행 건은 payeeName null, 은행코드와 13자리 마스킹 계좌번호를 반환한다")
+    void getHistoryDetail_interbankWithoutPayeeName() throws Exception {
+        insertInterbankTimeoutTransfer();
+
+        mockMvc.perform(get("/transfers/20260810WB0000000020").with(authentication(authenticationOf(1L))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("TIMEOUT"))
+                .andExpect(jsonPath("$.data.payeeName").value(nullValue()))
+                .andExpect(jsonPath("$.data.payeeBankCode").value("004"))
+                .andExpect(jsonPath("$.data.accountNumber").value("123*******123"));
+    }
+
+    @Test
+    @DisplayName("이체결과 목록 조회: 예금주가 없는 타행 건이 있어도 200 + payeeName null로 반환한다")
+    void searchHistory_interbankWithoutPayeeName() throws Exception {
+        insertInterbankTimeoutTransfer();
+
+        mockMvc.perform(get("/transfers")
+                        .with(authentication(authenticationOf(1L)))
+                        .param("withdrawalAccountId", "101")
+                        .param("fromDate", "2026-08-01")
+                        .param("toDate", "2026-08-31"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].transactionNumber").value("20260810WB0000000020"))
+                .andExpect(jsonPath("$.data.items[0].payeeName").value(nullValue()))
+                .andExpect(jsonPath("$.data.items[0].accountNumber").value("123*******123"));
     }
 
     @Test

@@ -30,7 +30,7 @@ public record TransferHistoryItemResponse(
                 item.status(),
                 item.transferredAt().atZone(KOREA_ZONE).toOffsetDateTime(),
                 MaskingUtil.maskAccountNumber(item.depositAccountNumber()),
-                MaskingUtil.maskName(item.payeeName()),
+                item.payeeName() == null ? null : MaskingUtil.maskName(item.payeeName()),
                 item.amount(),
                 item.transferType(),
                 item.channel(),

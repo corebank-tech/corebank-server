@@ -158,6 +158,7 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
                 transfer.getWithdrawalAccountId(),
                 transfer.getDepositAccountId(),
                 transfer.getDepositAccountNumber(),
+                transfer.getPayeeBankCode(),
                 transfer.getPayeeName(),
                 transfer.getAmount(),
                 transfer.getFee(),
