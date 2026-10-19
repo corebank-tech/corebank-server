@@ -143,7 +143,8 @@
 | [PH-43-②](#ph-43-cob-파이프라인) | 실행 기록(완료, #603) · 대사 정책 · 베이스라인(#556) | S2 | 3 | 정책·베이스라인만: PH-38 편입·60b 적재(PH-15 포함 여부 미정) | 미확정(순서 공지 예정) | #603 · #556 | 실행 기록만 완료 |
 | [PH-42](#ph-42-correlation-id--로그-마스킹--json-로깅) | correlation id · 로그 마스킹 · JSON 로깅 | S2 | 2.5 | — | **10/8** | — | 예정 |
 | [PH-57](#ph-57-용량-산정) | 용량 산정 표 | S2 | 0.5 | PH-60b | 60b 베이스라인 결과를 받은 뒤 | #539 | 완료 |
-| [PH-47](#ph-47-메트릭--grafana) | 메트릭 · Grafana · 알람 | S2 | 3 | PH-42 | — | — | 예정 |
+| [PH-47-①](#ph-47-메트릭--grafana) | 메트릭 골격 — Micrometer·Prometheus 연동 (애플리케이션) | S2 | 1.5 | PH-42 | — | #541 · PR #621 | 완료 |
+| [PH-47-②](#ph-47-메트릭--grafana) | Grafana 대시보드 · 알람 · actuator 노출 재설계 | S2 | 1.5 | PH-100 | 미확정(PH-100 완료 후) | #619 | 예정 |
 | [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-① | 하이브리드 연결 — 온프레미스 VM 1대 · SSM 하이브리드 등록 | S2 | 1.5 | [O-10](README.md#8-미결) | — | — | 예정 |
 | [PH-51](#ph-51-컴퓨트-계층--컷오버) | 컴퓨트 계층 · 컷오버 | S3 | 4.5 | PH-50 · PH-57 · PH-58 ACM ARN | 리허설 10/19~23 · **apply 10/26 · 컷오버 10/27** | — | 예정 |
 | [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-② | 하이브리드 연결 — Site-to-Site VPN | S3 | 1 | PH-50 · PH-100-① | 터널 **10/23** (리허설 안) → P2 | — | 예정 |
@@ -962,11 +963,22 @@ public interface CobStep {
 
 ### PH-47. 메트릭 · Grafana
 
+**① 애플리케이션 쪽 (#541, VM 무관, 지금 착수):**
+
+- Micrometer + `micrometer-registry-prometheus`. `/actuator/prometheus`는 local·test profile만 노출(prod는 ②에서 같이 켠다)
+- JVM·DB(HikariCP)·HTTP 기본 메트릭은 자동 수집. 거래(이체) 커스텀 메트릭 — `TransferExecutionService`에 Counter(`transfer.count`)·Timer(`transfer.duration`), 태그는 `result`(SUCCESS · ERROR · PROCESSING · TIMEOUT · 예외로 끝난 `EXCEPTION`)와 `replayed`(이미 처리된 회차를 다시 확인한 호출이면 true — 새 이체 건수와 섞이지 않게 구분). `transfer.duration`은 p95를 낼 수 있게 histogram을 켠다. 자동·예약이체도 같은 서비스를 거쳐가 한 곳만 계측 — **완료**
+- 관리자 화면과 겹치는 거래 메트릭 없음(10/12 확인, ADM-01~04 성격 다름)
+- 배치(COB) 커스텀 메트릭 — `CobRunnerService`에 거래와 같은 패턴으로 스텝 결과별 Counter(`cob.step.count`, 태그 `step` · `status`)·Timer(`cob.step.duration`, 태그 `step`) 추가 — **완료**(#606 머지 뒤 반영)
+- 거래 · 배치 메트릭은 서버를 시작할 때 0으로 등록한다. 처음 발생할 때 생기면 이체나 COB가 한 번도 없는 서버의 `/actuator/prometheus`에 이름이 아예 안 나온다. local · test에서 `/actuator/prometheus`가 이 메트릭을 반환하는지는 `PrometheusEndpointTest`가 확인한다
+- `http.server.requests` histogram은 시계열이 늘어 대시보드를 만드는 ②(#619)에서 정한다
+
+**② Grafana·알람 (#619, PH-100 선행, 아직 착수 불가):**
+
 - Micrometer + Prometheus. 대시보드: 거래 · 배치 · JVM · DB
 - Prometheus · Grafana는 온프레미스 부트캠프 VM의 대외·모니터링 영역에 둔다(AWS와 장애 영역 분리). VPN 너머로 WAS 8080 actuator를 `ec2_sd_configs`로 수집하고, `/actuator/**`는 ALB에서 막는다.
 - 알람 3원칙: 노이즈 억제 · 실행 가능성 · **Runbook 링크 필수**
-- actuator 노출 범위 재설계. 관리자 화면에 거래 메트릭을 중복으로 만들지 않는다.
-- **완료 기준:** 알람 발생부터 인지까지 시간을 잰다.
+- actuator 노출 범위 재설계(prod).
+- **완료 기준(① + ② 전체):** 알람 발생부터 인지까지 시간을 잰다. ①만으로는 이 기준을 못 채운다.
 - **범위 밖:** P4 PH-39(메트릭 소비 측)
 
 ### PH-51. 컴퓨트 계층 · 컷오버
