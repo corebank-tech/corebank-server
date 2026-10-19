@@ -3,6 +3,7 @@ package com.shinhan.corebank.account.adapter.out.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Assertions.entry;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
@@ -561,5 +562,43 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
                 PASSWORD_HASH,
                 LocalDateTime.of(2026, 8, 10, 10, 0),
                 null));
+    }
+
+    @Test
+    @DisplayName("만기 후보 조회 시 기준일이 없으면 거부한다")
+    void rejectNullMaturityBaseDate() {
+        assertThatThrownBy(() -> accountPersistencePort.findMaturityCandidateIdsAfter(0L, null, 500))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+    }
+
+    @Test
+    @DisplayName("만기 후보 조회 시 음수 커서를 거부한다")
+    void rejectNegativeMaturityCursor() {
+        assertThatThrownBy(() ->
+                        accountPersistencePort.findMaturityCandidateIdsAfter(-1L, LocalDate.of(2026, 10, 26), 500))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    @DisplayName("만기 후보 조회 시 0 이하 페이지 크기를 거부한다")
+    void rejectInvalidMaturityPageSize() {
+        assertThatThrownBy(
+                        () -> accountPersistencePort.findMaturityCandidateIdsAfter(0L, LocalDate.of(2026, 10, 26), 0))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.INVALID_PAGE_SIZE);
+    }
+
+    @Test
+    @DisplayName("잠금 조회 시 계좌 ID가 없으면 거부한다")
+    void rejectNullAccountIdForUpdate() {
+        assertThatThrownBy(() -> accountPersistencePort.findByAccountIdForUpdate(null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
     }
 }
