@@ -4,11 +4,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
+import com.shinhan.corebank.account.adapter.in.cob.AccountMaturityCobStep;
+import com.shinhan.corebank.account.application.port.in.AccountMaturityUseCase;
 import com.shinhan.corebank.batch.api.BatchExecutionHistoryPort;
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import com.shinhan.corebank.batch.api.BatchStepStatus;
@@ -16,6 +15,8 @@ import com.shinhan.corebank.batch.api.CobStep;
 import com.shinhan.corebank.batch.api.CobStepHaltException;
 import com.shinhan.corebank.business.api.BusinessDateAdvancer;
 import com.shinhan.corebank.business.api.BusinessDateProvider;
+import com.shinhan.corebank.transfer.adapter.in.cob.LedgerReconciliationCobStep;
+import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationBatchUseCase;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -49,7 +50,7 @@ class CobRunnerServiceTest {
     BatchExecutionHistoryPort batchExecutionHistoryPort;
 
     private CobStep stepOf(String name, int order) {
-        CobStep step = org.mockito.Mockito.mock(CobStep.class);
+        CobStep step = mock(CobStep.class);
         when(step.name()).thenReturn(name);
         when(step.order()).thenReturn(order);
         return step;
@@ -307,5 +308,45 @@ class CobRunnerServiceTest {
 
         verify(second).run(COB_DATE);
         verify(batchExecutionLockPort).release(JOB_NAME);
+    }
+
+    @Test
+    @DisplayName("COB에서 원장 대사 2번 이후 만기 감지 3번을 실행한다")
+    void run_reconciliationBeforeAccountMaturity() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+
+        LedgerReconciliationBatchUseCase reconciliationUseCase = mock(LedgerReconciliationBatchUseCase.class);
+        AccountMaturityUseCase maturityUseCase = mock(AccountMaturityUseCase.class);
+
+        CobStep maturityStep = new AccountMaturityCobStep(maturityUseCase);
+        CobStep reconciliationStep = new LedgerReconciliationCobStep(reconciliationUseCase);
+
+        // 등록 순서와 상관없이 order()로 정렬되어야 한다.
+        CobRunnerService runner = new CobRunnerService(
+                batchExecutionLockPort,
+                businessDateProvider,
+                businessDateAdvancer,
+                batchExecutionHistoryPort,
+                CLOCK,
+                List.of(maturityStep, reconciliationStep));
+
+        runner.run(COB_DATE.plusDays(10));
+
+        InOrder order = inOrder(reconciliationUseCase, maturityUseCase);
+
+        order.verify(reconciliationUseCase).runInCob(COB_DATE);
+        order.verify(maturityUseCase).runInCob(COB_DATE);
+
+        verify(batchExecutionHistoryPort)
+                .record(
+                        eq(JOB_NAME),
+                        eq("account-maturity"),
+                        eq(COB_DATE),
+                        any(),
+                        any(),
+                        eq(BatchStepStatus.SUCCESS),
+                        isNull());
     }
 }
