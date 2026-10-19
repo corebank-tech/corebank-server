@@ -66,6 +66,7 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
         Transfer original = transferLookupPort
                 .findByTransactionNumber(originalTransactionNumber)
                 .orElseThrow(() -> new BusinessException(TransferErrorCode.TRANSACTION_NOT_FOUND));
+        requireDomestic(original);
 
         LocalDateTime requestedAt = LocalDateTime.now(clock);
         // 정정은 오늘 일어난 새 거래다 — 원거래일이 아니라 지금 영업일로 한 번 읽는다(#516).
@@ -123,6 +124,7 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
         Transfer original = transferLookupPort
                 .findByTransactionNumber(originalTransactionNumber)
                 .orElseThrow(() -> new BusinessException(TransferErrorCode.TRANSACTION_NOT_FOUND));
+        requireDomestic(original);
         // 취소정정보다 정상거래가 먼저 생기면 원거래와 정상거래 금액이 둘 다 나간 상태가 된다.
         if (!original.isInvalidated()) {
             throw new BusinessException(TransferErrorCode.NOT_CORRECTABLE);
@@ -215,6 +217,13 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
     }
 
     // 동시 정정은 락 전 스냅샷으로 앞선 검사를 통과하므로, 검증보다 먼저 INSERT해 유니크 제약이 막게 한다.
+    // 타행 원거래는 받은 계좌가 당행에 없어 되돌릴 수 없다. 입금계좌 락을 잡기 전에 막는다(#654).
+    private static void requireDomestic(Transfer original) {
+        if (original.getPayeeBankCode() != null) {
+            throw new BusinessException(TransferErrorCode.NOT_CORRECTABLE);
+        }
+    }
+
     private Transfer claim(Transfer correction) {
         try {
             return transferSavePort.save(correction);

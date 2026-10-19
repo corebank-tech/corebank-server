@@ -191,6 +191,7 @@ public class Transfer {
     public void invalidate(LocalDateTime at) {
         TransferValidations.requireNonNull(at, CommonErrorCode.REQUIRED_FIELD_MISSING);
         if (this.status != ProcessResultStatus.SUCCESS
+                || this.payeeBankCode != null
                 || isInvalidated()
                 || this.correctionType == CorrectionType.REVERSAL) {
             throw new BusinessException(TransferErrorCode.NOT_CORRECTABLE);

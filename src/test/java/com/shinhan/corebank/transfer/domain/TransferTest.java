@@ -601,6 +601,18 @@ class TransferTest {
         }
 
         @Test
+        @DisplayName("성공으로 확정된 타행 건도 정정 체인으로 무효화할 수 없다 — 받은 계좌가 당행에 없다")
+        void settledInterbank_notInvalidatable() {
+            Transfer transfer = timedOutInterbank();
+            transfer.settleApproved("김민수", 950000L, createdAt.plusSeconds(1));
+
+            assertThatThrownBy(() -> transfer.invalidate(createdAt.plusDays(1)))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+        }
+
+        @Test
         @DisplayName("당행 TIMEOUT 건은 타행 확정 대상이 아니다")
         void domesticTimeout_notSettleable() {
             Transfer transfer = newProcessingTransfer();
