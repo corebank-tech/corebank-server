@@ -1,5 +1,11 @@
 package com.shinhan.infoetl;
 
+import com.shinhan.infoetl.adapter.out.jdbc.JdbcMartLoadAdapter;
+import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaBalanceAdapter;
+import com.shinhan.infoetl.application.port.in.DailyLoadUseCase;
+import com.shinhan.infoetl.application.service.DailyLoadService;
+import com.shinhan.infoetl.domain.LoadResult;
+import com.shinhan.infoetl.domain.Pseudonymizer;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -9,6 +15,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.Map;
 
+// 실행 진입점이자 조립 지점. 어댑터와 서비스를 연결하는 일만 한다.
 public final class InfoEtlMain {
 
     static final int EXIT_OK = 0;
@@ -38,16 +45,15 @@ public final class InfoEtlMain {
         }
 
         String martUrl = withBatchRewrite(config.martUrl());
-        DailyLoadService service = new DailyLoadService(
-                () -> open(config.replicaUrl(), config.replicaUser(), config.replicaPassword()),
-                () -> open(martUrl, config.martUser(), config.martPassword()),
-                new BalanceReader(),
-                new MartBalanceWriter(),
-                new LoadBatchRepository(),
-                pseudonymizer,
-                Clock.system(ZoneId.of("Asia/Seoul")));
+        DailyLoadUseCase useCase = new DailyLoadService(
+                new JdbcReplicaBalanceAdapter(
+                        () -> open(config.replicaUrl(), config.replicaUser(), config.replicaPassword())),
+                new JdbcMartLoadAdapter(
+                        () -> open(martUrl, config.martUser(), config.martPassword()),
+                        Clock.system(ZoneId.of("Asia/Seoul"))),
+                pseudonymizer);
         try {
-            LoadResult result = service.load(baseDate);
+            LoadResult result = useCase.load(baseDate);
             LOG.log(
                     System.Logger.Level.INFO,
                     "적재 완료 - baseDate={0}, rows={1}, total={2}, loadBatchId={3}",
@@ -56,7 +62,7 @@ public final class InfoEtlMain {
                     result.martBalanceTotal(),
                     result.loadBatchId());
             return EXIT_OK;
-        } catch (SQLException | RuntimeException e) {
+        } catch (RuntimeException e) {
             LOG.log(System.Logger.Level.ERROR, "적재 실패 - baseDate=" + baseDate, e);
             return EXIT_LOAD_FAILED;
         }

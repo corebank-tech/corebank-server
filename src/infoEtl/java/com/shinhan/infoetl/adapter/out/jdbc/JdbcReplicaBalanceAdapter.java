@@ -1,5 +1,8 @@
-package com.shinhan.infoetl;
+package com.shinhan.infoetl.adapter.out.jdbc;
 
+import com.shinhan.infoetl.application.port.out.EtlStorageException;
+import com.shinhan.infoetl.application.port.out.ReplicaBalancePort;
+import com.shinhan.infoetl.domain.BalanceRow;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -8,7 +11,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-public final class BalanceReader {
+public final class JdbcReplicaBalanceAdapter implements ReplicaBalancePort {
 
     // P3 설계 §3-3 잔액 쿼리. ? 세 개는 모두 기준일 D다. 해지일(close_td)은 7일 창 없이 원장 끝까지 본다.
     private static final String SQL =
@@ -37,7 +40,23 @@ public final class BalanceReader {
               AND (c.close_date IS NULL OR c.close_date >= ?)
             """;
 
-    public List<BalanceRow> read(Connection replica, LocalDate baseDate) throws SQLException {
+    private final JdbcConnectionFactory connections;
+
+    public JdbcReplicaBalanceAdapter(JdbcConnectionFactory connections) {
+        this.connections = connections;
+    }
+
+    @Override
+    public List<BalanceRow> readBalances(LocalDate baseDate) {
+        try (Connection replica = connections.open()) {
+            replica.setReadOnly(true);
+            return query(replica, baseDate);
+        } catch (SQLException e) {
+            throw new EtlStorageException("레플리카 잔액 읽기에 실패했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    private List<BalanceRow> query(Connection replica, LocalDate baseDate) throws SQLException {
         List<BalanceRow> rows = new ArrayList<>();
         try (PreparedStatement statement = replica.prepareStatement(SQL)) {
             statement.setObject(1, baseDate);

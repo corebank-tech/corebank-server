@@ -1,8 +1,14 @@
-package com.shinhan.infoetl;
+package com.shinhan.infoetl.adapter.out.jdbc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.shinhan.infoetl.InfoEtlTestDatabase;
+import com.shinhan.infoetl.ReplicaFixtures;
+import com.shinhan.infoetl.application.port.out.EtlStorageException;
+import com.shinhan.infoetl.application.service.DailyLoadService;
+import com.shinhan.infoetl.domain.LoadResult;
+import com.shinhan.infoetl.domain.Pseudonymizer;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -18,7 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-class DailyLoadServiceTest {
+class DailyLoadIntegrationTest {
 
     private static final LocalDate D = LocalDate.of(2026, 10, 20);
     // 2026-10-21 01:00 KST
@@ -30,13 +36,9 @@ class DailyLoadServiceTest {
     private final MartBalanceWriter writer = new MartBalanceWriter();
     private final LoadBatchRepository repository = new LoadBatchRepository();
     private final DailyLoadService service = new DailyLoadService(
-            InfoEtlTestDatabase::replica,
-            InfoEtlTestDatabase::mart,
-            new BalanceReader(),
-            writer,
-            repository,
-            pseudonymizer,
-            CLOCK);
+            new JdbcReplicaBalanceAdapter(InfoEtlTestDatabase::replica),
+            new JdbcMartLoadAdapter(InfoEtlTestDatabase::mart, CLOCK),
+            pseudonymizer);
 
     @BeforeEach
     void seedReplicaAndResetMart() throws SQLException {
@@ -96,7 +98,7 @@ class DailyLoadServiceTest {
         LoadResult first = service.load(D);
         dropReplicaLedger();
 
-        assertThatThrownBy(() -> service.load(D)).isInstanceOf(SQLException.class);
+        assertThatThrownBy(() -> service.load(D)).isInstanceOf(EtlStorageException.class);
 
         try (Connection mart = InfoEtlTestDatabase.mart()) {
             assertThat(writer.countRows(mart, D)).isEqualTo(2L);
@@ -119,7 +121,7 @@ class DailyLoadServiceTest {
             statement.execute("UPDATE account SET account_type = NULL WHERE account_id = 2");
         }
 
-        assertThatThrownBy(() -> service.load(D)).isInstanceOf(SQLException.class);
+        assertThatThrownBy(() -> service.load(D)).isInstanceOf(EtlStorageException.class);
 
         try (Connection mart = InfoEtlTestDatabase.mart()) {
             assertThat(writer.countRows(mart, D)).isEqualTo(2L);

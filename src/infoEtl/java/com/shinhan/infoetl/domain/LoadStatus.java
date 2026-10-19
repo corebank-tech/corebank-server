@@ -1,4 +1,4 @@
-package com.shinhan.infoetl;
+package com.shinhan.infoetl.domain;
 
 public enum LoadStatus {
     RUNNING,

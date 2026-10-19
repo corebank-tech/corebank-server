@@ -7,11 +7,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 // 레플리카 테스트 DB에 계좌·원장 행을 넣는 도구.
-final class ReplicaFixtures {
+public final class ReplicaFixtures {
 
     private ReplicaFixtures() {}
 
-    static void insertProduct(long productId, String group) throws SQLException {
+    public static void insertProduct(long productId, String group) throws SQLException {
         try (Connection connection = InfoEtlTestDatabase.replica();
                 PreparedStatement statement =
                         connection.prepareStatement("INSERT INTO product (product_id, product_group) VALUES (?, ?)")) {
@@ -21,7 +21,7 @@ final class ReplicaFixtures {
         }
     }
 
-    static void insertAccount(long accountId, long customerId, Long productId, String type, String status)
+    public static void insertAccount(long accountId, long customerId, Long productId, String type, String status)
             throws SQLException {
         try (Connection connection = InfoEtlTestDatabase.replica();
                 PreparedStatement statement = connection.prepareStatement(
@@ -36,7 +36,7 @@ final class ReplicaFixtures {
         }
     }
 
-    static void insertLedger(
+    public static void insertLedger(
             long ledgerEntryId, long accountId, long balanceAfter, LocalDateTime occurredAt, LocalDate tradeDate)
             throws SQLException {
         try (Connection connection = InfoEtlTestDatabase.replica();

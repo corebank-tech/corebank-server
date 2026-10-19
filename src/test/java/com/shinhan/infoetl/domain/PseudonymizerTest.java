@@ -1,4 +1,4 @@
-package com.shinhan.infoetl;
+package com.shinhan.infoetl.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

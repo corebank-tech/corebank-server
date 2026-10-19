@@ -1,5 +1,6 @@
-package com.shinhan.infoetl;
+package com.shinhan.infoetl.adapter.out.jdbc;
 
+import com.shinhan.infoetl.domain.MartBalanceRow;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -8,7 +9,7 @@ import java.sql.Types;
 import java.time.LocalDate;
 import java.util.List;
 
-public final class MartBalanceWriter {
+final class MartBalanceWriter {
 
     private static final int BATCH_SIZE = 1000;
 
@@ -24,15 +25,14 @@ public final class MartBalanceWriter {
         }
     }
 
-    public void insert(
-            Connection mart, long loadBatchId, LocalDate baseDate, List<BalanceRow> rows, Pseudonymizer pseudonymizer)
+    public void insert(Connection mart, long loadBatchId, LocalDate baseDate, List<MartBalanceRow> rows)
             throws SQLException {
         try (PreparedStatement statement = mart.prepareStatement(INSERT_SQL)) {
             int pending = 0;
-            for (BalanceRow row : rows) {
+            for (MartBalanceRow row : rows) {
                 statement.setObject(1, baseDate);
-                statement.setString(2, pseudonymizer.accountKey(row.accountId()));
-                statement.setString(3, pseudonymizer.customerKey(row.customerId()));
+                statement.setString(2, row.accountKey());
+                statement.setString(3, row.customerKey());
                 statement.setString(4, row.accountType());
                 statement.setObject(5, row.productId(), Types.BIGINT);
                 statement.setString(6, row.productGroup());

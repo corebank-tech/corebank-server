@@ -14,7 +14,7 @@ import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 // JVM당 MySQL 한 대에 레플리카용·마트용 DB 두 개를 만든다. 종료는 Ryuk에 맡긴다.
-final class InfoEtlTestDatabase {
+public final class InfoEtlTestDatabase {
 
     private static final MySQLContainer MYSQL = new MySQLContainer(DockerImageName.parse("mysql:8.4.10"));
 
@@ -45,15 +45,15 @@ final class InfoEtlTestDatabase {
 
     private InfoEtlTestDatabase() {}
 
-    static Connection replica() throws SQLException {
+    public static Connection replica() throws SQLException {
         return connect("replica_db");
     }
 
-    static Connection mart() throws SQLException {
+    public static Connection mart() throws SQLException {
         return connect("mart_db");
     }
 
-    static void resetReplica() throws SQLException {
+    public static void resetReplica() throws SQLException {
         try (Connection connection = replica();
                 Statement statement = connection.createStatement()) {
             for (String sql : REPLICA_DDL) {
@@ -62,7 +62,7 @@ final class InfoEtlTestDatabase {
         }
     }
 
-    static void resetMart() throws SQLException {
+    public static void resetMart() throws SQLException {
         try (Connection connection = mart();
                 Statement statement = connection.createStatement()) {
             for (String table : MART_TABLES) {
@@ -74,19 +74,19 @@ final class InfoEtlTestDatabase {
         }
     }
 
-    static String replicaUrl() {
+    public static String replicaUrl() {
         return url("replica_db");
     }
 
-    static String martUrl() {
+    public static String martUrl() {
         return url("mart_db");
     }
 
-    static String user() {
+    public static String user() {
         return "root";
     }
 
-    static String password() {
+    public static String password() {
         return MYSQL.getPassword();
     }
 

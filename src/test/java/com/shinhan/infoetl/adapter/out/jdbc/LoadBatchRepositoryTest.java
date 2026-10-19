@@ -1,7 +1,8 @@
-package com.shinhan.infoetl;
+package com.shinhan.infoetl.adapter.out.jdbc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.shinhan.infoetl.InfoEtlTestDatabase;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;

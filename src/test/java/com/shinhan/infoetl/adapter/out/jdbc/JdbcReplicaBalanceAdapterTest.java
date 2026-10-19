@@ -1,7 +1,9 @@
-package com.shinhan.infoetl;
+package com.shinhan.infoetl.adapter.out.jdbc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.shinhan.infoetl.InfoEtlTestDatabase;
+import com.shinhan.infoetl.domain.BalanceRow;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -15,11 +17,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-class BalanceReaderTest {
+class JdbcReplicaBalanceAdapterTest {
 
     private static final LocalDate D = LocalDate.of(2026, 10, 20);
 
-    private final BalanceReader reader = new BalanceReader();
+    private final JdbcReplicaBalanceAdapter adapter = new JdbcReplicaBalanceAdapter(InfoEtlTestDatabase::replica);
 
     @BeforeEach
     void resetReplica() throws SQLException {
@@ -172,11 +174,9 @@ class BalanceReaderTest {
         assertThat(read()).isEmpty();
     }
 
-    private Map<Long, BalanceRow> read() throws SQLException {
-        try (Connection replica = InfoEtlTestDatabase.replica()) {
-            List<BalanceRow> rows = reader.read(replica, D);
-            return rows.stream().collect(Collectors.toMap(BalanceRow::accountId, Function.identity()));
-        }
+    private Map<Long, BalanceRow> read() {
+        List<BalanceRow> rows = adapter.readBalances(D);
+        return rows.stream().collect(Collectors.toMap(BalanceRow::accountId, Function.identity()));
     }
 
     private void insertProduct(long productId, String group) throws SQLException {

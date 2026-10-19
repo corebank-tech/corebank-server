@@ -57,7 +57,7 @@ class InfoEtlMainTest {
 
         assertThat(exitCode).isEqualTo(InfoEtlMain.EXIT_OK);
         try (Connection mart = InfoEtlTestDatabase.mart()) {
-            assertThat(new MartBalanceWriter().countRows(mart, D)).isEqualTo(1L);
+            assertThat(countBalanceRows(mart)).isEqualTo(1L);
             assertThat(latestStatus(mart)).isEqualTo("COMPLETED");
         }
     }
@@ -75,7 +75,7 @@ class InfoEtlMainTest {
         assertThat(exitCode).isEqualTo(InfoEtlMain.EXIT_LOAD_FAILED);
         try (Connection mart = InfoEtlTestDatabase.mart()) {
             assertThat(latestStatus(mart)).isEqualTo("FAILED");
-            assertThat(new MartBalanceWriter().countRows(mart, D)).isZero();
+            assertThat(countBalanceRows(mart)).isZero();
         }
     }
 
@@ -110,6 +110,14 @@ class InfoEtlMainTest {
         env.put("MART_PASSWORD", InfoEtlTestDatabase.password());
         env.put("HMAC_KEY", "main-test-key-0001-0123456789abcdef");
         return env;
+    }
+
+    private static long countBalanceRows(Connection mart) throws SQLException {
+        try (Statement statement = mart.createStatement();
+                ResultSet resultSet = statement.executeQuery("SELECT COUNT(*) FROM mart_daily_account_balance")) {
+            resultSet.next();
+            return resultSet.getLong(1);
+        }
     }
 
     private static String latestStatus(Connection mart) throws SQLException {

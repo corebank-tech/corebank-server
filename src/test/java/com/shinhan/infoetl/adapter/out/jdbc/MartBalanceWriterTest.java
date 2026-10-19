@@ -1,8 +1,9 @@
-package com.shinhan.infoetl;
+package com.shinhan.infoetl.adapter.out.jdbc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.nio.charset.StandardCharsets;
+import com.shinhan.infoetl.InfoEtlTestDatabase;
+import com.shinhan.infoetl.domain.MartBalanceRow;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -19,8 +20,6 @@ class MartBalanceWriterTest {
     private static final LocalDate D = LocalDate.of(2026, 10, 20);
 
     private final MartBalanceWriter writer = new MartBalanceWriter();
-    private final Pseudonymizer pseudonymizer =
-            new Pseudonymizer("writer-test-key-0001-0123456789abcdef".getBytes(StandardCharsets.UTF_8));
 
     @BeforeEach
     void resetMart() throws SQLException {
@@ -28,25 +27,24 @@ class MartBalanceWriterTest {
     }
 
     @Test
-    @DisplayName("계좌·고객 키는 가명 처리되고 원래 ID는 마트에 남지 않는다")
-    void writesPseudonymizedKeys() throws SQLException {
+    @DisplayName("받은 키와 값을 그대로 마트 컬럼에 쓴다")
+    void writesGivenValues() throws SQLException {
+        String accountKey = "a".repeat(64);
+        String customerKey = "b".repeat(64);
         try (Connection mart = InfoEtlTestDatabase.mart()) {
             writer.insert(
                     mart,
                     1L,
                     D,
-                    List.of(new BalanceRow(1234567L, 7654321L, "DEMAND_DEPOSIT", null, null, 500L)),
-                    pseudonymizer);
+                    List.of(new MartBalanceRow(accountKey, customerKey, "DEMAND_DEPOSIT", null, null, 500L)));
 
             try (PreparedStatement statement = mart.prepareStatement(
                             "SELECT account_key, customer_key, account_type, product_id, product_group, balance,"
                                     + " load_batch_id FROM mart_daily_account_balance");
                     ResultSet resultSet = statement.executeQuery()) {
                 assertThat(resultSet.next()).isTrue();
-                assertThat(resultSet.getString("account_key")).isEqualTo(pseudonymizer.accountKey(1234567L));
-                assertThat(resultSet.getString("customer_key")).isEqualTo(pseudonymizer.customerKey(7654321L));
-                assertThat(resultSet.getString("account_key")).matches("^[0-9a-f]{64}$");
-                assertThat(resultSet.getString("account_key")).doesNotContain("1234567");
+                assertThat(resultSet.getString("account_key")).isEqualTo(accountKey);
+                assertThat(resultSet.getString("customer_key")).isEqualTo(customerKey);
                 assertThat(resultSet.getString("account_type")).isEqualTo("DEMAND_DEPOSIT");
                 assertThat(resultSet.getObject("product_id")).isNull();
                 assertThat(resultSet.getString("product_group")).isNull();
@@ -58,16 +56,36 @@ class MartBalanceWriterTest {
     }
 
     @Test
+    @DisplayName("상품 계좌의 상품 ID와 그룹을 쓴다")
+    void writesProductColumns() throws SQLException {
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            writer.insert(
+                    mart,
+                    1L,
+                    D,
+                    List.of(new MartBalanceRow("a".repeat(64), "b".repeat(64), "TIME_DEPOSIT", 100L, "DEPOSIT", 700L)));
+
+            try (PreparedStatement statement =
+                            mart.prepareStatement("SELECT product_id, product_group FROM mart_daily_account_balance");
+                    ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                assertThat(resultSet.getLong("product_id")).isEqualTo(100L);
+                assertThat(resultSet.getString("product_group")).isEqualTo("DEPOSIT");
+            }
+        }
+    }
+
+    @Test
     @DisplayName("지우고 다시 넣어도 건수와 합계가 같다")
     void reloadKeepsCountAndSum() throws SQLException {
-        List<BalanceRow> rows = rows(3);
+        List<MartBalanceRow> rows = rows(3);
         try (Connection mart = InfoEtlTestDatabase.mart()) {
-            writer.insert(mart, 1L, D, rows, pseudonymizer);
+            writer.insert(mart, 1L, D, rows);
             long countBefore = writer.countRows(mart, D);
             long sumBefore = writer.sumBalance(mart, D);
 
             int deleted = writer.deleteByBaseDate(mart, D);
-            writer.insert(mart, 2L, D, rows, pseudonymizer);
+            writer.insert(mart, 2L, D, rows);
 
             assertThat(deleted).isEqualTo(3);
             assertThat(writer.countRows(mart, D)).isEqualTo(countBefore).isEqualTo(3L);
@@ -80,8 +98,8 @@ class MartBalanceWriterTest {
     void deletesOnlyTargetDate() throws SQLException {
         LocalDate other = D.plusDays(1);
         try (Connection mart = InfoEtlTestDatabase.mart()) {
-            writer.insert(mart, 1L, D, rows(2), pseudonymizer);
-            writer.insert(mart, 2L, other, rows(4), pseudonymizer);
+            writer.insert(mart, 1L, D, rows(2));
+            writer.insert(mart, 2L, other, rows(4));
 
             writer.deleteByBaseDate(mart, D);
 
@@ -94,13 +112,13 @@ class MartBalanceWriterTest {
     @DisplayName("묶음 크기를 넘는 건수도 빠짐없이 넣는다")
     void insertsAcrossBatchBoundaries() throws SQLException {
         int total = 2_001;
-        List<BalanceRow> rows = rows(total);
+        List<MartBalanceRow> rows = rows(total);
         try (Connection mart = InfoEtlTestDatabase.mart()) {
-            writer.insert(mart, 1L, D, rows, pseudonymizer);
+            writer.insert(mart, 1L, D, rows);
 
             assertThat(writer.countRows(mart, D)).isEqualTo(total);
             assertThat(writer.sumBalance(mart, D))
-                    .isEqualTo(rows.stream().mapToLong(BalanceRow::balance).sum());
+                    .isEqualTo(rows.stream().mapToLong(MartBalanceRow::balance).sum());
         }
     }
 
@@ -113,10 +131,12 @@ class MartBalanceWriterTest {
         }
     }
 
-    private static List<BalanceRow> rows(int count) {
-        List<BalanceRow> rows = new ArrayList<>();
+    private static List<MartBalanceRow> rows(int count) {
+        List<MartBalanceRow> rows = new ArrayList<>();
         for (int i = 1; i <= count; i++) {
-            rows.add(new BalanceRow(i, 1_000_000L + i, "DEMAND_DEPOSIT", null, null, 100L * i));
+            String key = String.format("%064x", i);
+            rows.add(new MartBalanceRow(
+                    key, String.format("%064x", 1_000_000L + i), "DEMAND_DEPOSIT", null, null, 100L * i));
         }
         return rows;
     }

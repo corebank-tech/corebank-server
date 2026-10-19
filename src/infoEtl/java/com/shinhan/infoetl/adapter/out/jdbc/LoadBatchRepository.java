@@ -1,5 +1,6 @@
-package com.shinhan.infoetl;
+package com.shinhan.infoetl.adapter.out.jdbc;
 
+import com.shinhan.infoetl.domain.LoadStatus;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -8,7 +9,7 @@ import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-public final class LoadBatchRepository {
+final class LoadBatchRepository {
 
     private static final int FAILURE_REASON_MAX_LENGTH = 200;
 
