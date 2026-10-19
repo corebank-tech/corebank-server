@@ -125,7 +125,7 @@
 | [EVT-2](#evt-2-publishevent-두-줄) | `publishEvent` 두 줄 | S2 | 0.5 | PH-32 | 10/6 | #505 | 완료 — P1이 #505에서 대신 처리 |
 | [HOOK-MERGE](#hook-merge-훅-구현체-머지) | 훅 구현체 3건 리뷰·머지 | S2 | 0.5 | PH-90 · PH-24 · PH-41 | 10/12~16 | PR #615 · PR #585 · #516 | 완료 |
 | [PH-101-①](#ph-101-redis-제거-①-구현-s2--②-판정-측정-s3) | Redis 제거 1단계 — 토큰·잠금·이력 MySQL 이전 · 저장소 스위치 (D-14 예외) | S2 | 3.5 | — | dev 머지 10/15 · **릴리스 10/16** | #580 · #581 | 진행 |
-| [PH-33-②](#ph-33-대외계-①-모의-서버-s1--②-타행-이체-s3) | 타행 송신 · 조회거래 · 미결제 기표 · 격리 | S3 | 5 | PH-33-① · PH-24 | **10/23 머지** | — | 예정 |
+| [PH-33-②](#ph-33-대외계-①-모의-서버-s1--②-타행-이체-s3) | 타행 송신 · 조회거래 · 미결제 기표 · 격리 | S3 | 5 | PH-33-① · PH-24 | **10/23 머지** | #654 | 진행 |
 | [PH-36](#ph-36-장애-주입-3종--보상-트랜잭션) | 장애 주입 3종 · 보상 트랜잭션 | S3 | 2 | PH-33-② · PH-80 | — | — | 예정 |
 | [LOCK-TUNE](#lock-tune-락-튜닝) | 락 튜닝 | S3 | 1 | PH-30 베이스라인 · PH-80 | — | — | 예정 |
 | [PH-101-①](#ph-101-redis-제거-①-구현-s2--②-판정-측정-s3) | Redis 제거 2단계 — Redis 어댑터·의존·운영 컨테이너 삭제 (판정 통과 시) | S3 | 0.5 | PH-101-② 판정 | 판정 뒤 | #580 | 예정 |
@@ -817,10 +817,11 @@ PH-90 PreCheck → PH-24 훅 B → PH-41 tradeDate 대입 순서로 머지한다
 - **미결제타점권 기표 2패턴**: 요청 시 예수금 → 미결제타점권(`10200`), 확정 시 해소. 훅 B에서 `gl.api`를 부른다. 차대 방향은 P4가 정해 [gl_journal_patterns.md](gl_journal_patterns.md)에 적는다. **`gl_voucher.tx_type` CHECK에 타행 유형이 없으므로 새 V 파일로 CHECK를 넓힌다**(기존 마이그레이션 수정 금지).
 - Resilience4j 타임아웃·서킷브레이커 — 타행만 막고 당행은 계속 돈다.
 - 은행코드 시드 5개. 은행 목록·미결제 상태 스키마를 10/16까지 FE B-8(P3)에 넘긴다.
-    - 현황(#609): [interbank_transfer_fe_handoff.md](interbank_transfer_fe_handoff.md)로 넘겼다. 엔드포인트는 당행과 분리(`GET /transfers/banks` · `POST /transfers/interbank`)하고, 결과 상태는 `SUCCESS`·`ERROR`·`TIMEOUT`을 그대로 쓴다. 미결제는 GL 내부라 FE에 노출하지 않는다. (가칭) 오류코드 4개는 이 태스크 PR에서 오류코드 마스터에 등록하며 확정한다.
-- **이체 내역 상세 · 목록의 타행 건 마스킹**([인계 문서](interbank_transfer_fe_handoff.md) §7-1): 지금 `MaskingUtil.maskAccountNumber`는 12자리가 아니면, `maskName`은 `null`이면 예외를 던진다. 그대로 두면 타행 건이 하나라도 있는 상세 · 목록이 `CMN9999`(500)로 깨진다. 계좌번호는 §7-1 규칙(앞 · 뒤 자릿수÷4 노출)으로 넓히고, 예금주가 없는 `ERROR` · `TIMEOUT` 건은 `payeeName`을 `null`로 내린다. 같은 12자리 · 예금주 필수 전제가 `transfer.deposit_account_number` `CHAR(12)` · `payee_name` NOT NULL에도 있어 스키마 변경(Flyway · schema_reference · ERD)이 함께 필요하다. 로그 마스킹(`MaskingConverter`)도 계좌번호를 `\b\d{12}\b`로만 잡아 12자리가 아닌 타행 번호는 로그에 원문 그대로 남는다(REQ-NFR-009). 1~16자리로 넓히되, PH-42(P5)와 같은 파일이라 착수할 때 P5와 맞춘다.
+    - 현황(#609): [interbank_transfer_fe_handoff.md](interbank_transfer_fe_handoff.md)로 넘겼다. 엔드포인트는 당행과 분리(`GET /transfers/banks` · `POST /transfers/interbank`)하고, 결과 상태는 `SUCCESS`·`ERROR`·`TIMEOUT`을 그대로 쓴다. 미결제는 GL 내부라 FE에 노출하지 않는다. 오류코드 4개(`TRF0006`·`TRF0007`·`TRF0008`·`TRF0308`)는 #654에서 오류코드 마스터에 등록해 확정했다 — 가칭 `TRF0401`은 번호 구간 규칙에 맞춰 `TRF0308`이 됐다.
+- **이체 내역 상세 · 목록의 타행 건 마스킹**([인계 문서](interbank_transfer_fe_handoff.md) §7-1): 지금 `MaskingUtil.maskAccountNumber`는 12자리가 아니면, `maskName`은 `null`이면 예외를 던진다. 그대로 두면 타행 건이 하나라도 있는 상세 · 목록이 `CMN9999`(500)로 깨진다. 계좌번호는 §7-1 규칙(앞 · 뒤 자릿수÷4 노출)으로 넓히고, 예금주가 없는 `ERROR` · `TIMEOUT` 건은 `payeeName`을 `null`로 내린다. 같은 12자리 · 예금주 필수 전제가 `transfer.deposit_account_number` `CHAR(12)` · `payee_name` NOT NULL에도 있어 스키마 변경(Flyway · schema_reference · ERD)이 함께 필요하다. 로그 마스킹(`MaskingConverter`)은 계좌번호를 `\b\d{12}\b`로만 잡는다(REQ-NFR-009). **넓히지 않는다(#654)** — 1~16자리로 넓히면 금액·이체 ID·거래번호까지 가려져 로그를 쓸 수 없다. 대신 타행 코드는 계좌번호·전문 원문을 로그에 남기지 않고, 남겨야 하면 `MaskingUtil`로 가린다(응답·감사로그와 같은 호출 지점 마스킹 관행). 컨버터는 실수로 찍힌 12자리를 잡는 마지막 안전망으로 둔다.
+    - 현황(#654 PR A): 스키마 변경(`V202610192300`), `MaskingUtil.maskAccountNumber` 1~16자리, 상세·목록의 `payeeName` null · 상세 `payeeBankCode`를 넣었다.
 - 타행 확정 시점에도 `transfer.completed`가 발행된다.
-- **착수 시 P5와 확인:** 자동·예약이체 재확정 배치(`AutoTransferBatchItemProcessor`·`ScheduledTransferBatchItemProcessor`의 `reconcileStuckExecution()`)는 조회한 transfer가 SUCCESS·ERROR가 아니면 else 분기에서 회차를 ERROR로 확정한다. TIMEOUT 행이 이 분기로 오면 처리 불명이 실패로 굳는다. 지금은 회차가 당행 전용이라 오지 않지만([process_result_status_usage.md](process_result_status_usage.md) §2), 송신 연결 전에 두 else 분기와 `completeProcessing()` 예외 메시지("PROCESSING으로 미확정")를 TIMEOUT 기준으로 맞출지 P5와 정한다(PR #570 리뷰).
+- **자동·예약이체 재확정 배치는 바꾸지 않는다(#654):** `AutoTransferBatchItemProcessor`·`ScheduledTransferBatchItemProcessor`의 `reconcileStuckExecution()`은 transfer가 SUCCESS·ERROR가 아니면 else 분기에서 회차를 ERROR로 확정한다. TIMEOUT이 이 분기로 오면 처리 불명이 실패로 굳지만, 두 회차는 등록 단계부터 당행 계좌만 받아 TIMEOUT이 오지 않는다([process_result_status_usage.md](process_result_status_usage.md) §1·§2). 그래서 PH-33-②는 타행 자동·예약이체 등록을 열지 않는 것으로 전제를 지킨다. 타행 자동·예약이체를 열 때 두 else 분기와 `completeProcessing()` 예외 메시지를 함께 고친다(PR #570 리뷰).
 - **완료 기준:** 정상 흐름과 "무응답 후 조회 확인" 흐름이 돈다. 모의 서버가 무응답이어도 당행 TPS가 유지된다.
 - **범위 밖:** 미결제 정산(PH-35), 타행 수수료(`FEE = 0L` 유지)
 

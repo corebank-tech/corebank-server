@@ -125,9 +125,10 @@ erDiagram
         bigint transfer_id PK
         char transaction_number UK "YYYYMMDD + 채널2 + 일련10"
         bigint withdrawal_account_id FK
-        bigint deposit_account_id FK "원장 입금행의 근거. 1차는 당행 전용이라 NOT NULL"
-        char deposit_account_number "CHAR(12)"
-        varchar payee_name "거래 시점 스냅샷"
+        bigint deposit_account_id FK "원장 입금행의 근거. 타행 거래는 NULL"
+        varchar deposit_account_number "VARCHAR(16). 당행 12자리, 타행 1~16자리"
+        char payee_bank_code "타행 은행코드. NULL이면 당행"
+        varchar payee_name "거래 시점 스냅샷. 타행 ERROR·TIMEOUT은 NULL"
         bigint amount
         bigint fee "당행 0 고정 (POL-028)"
         varchar transfer_type "IMMEDIATE / SCHEDULED / AUTO"
@@ -484,7 +485,7 @@ erDiagram
     account ||..o{ ledger_reconciliation_mismatch : "대사 불일치 (FK 없음)"
 
     %% 같은 두 엔티티를 두 번 참조하는 관계 (중복 제거 대상이라 명시)
-    account ||--o{ transfer : "입금 계좌 (당행)"
+    account |o--o{ transfer : "입금 계좌 (당행 거래만)"
     account ||--o{ product_subscription : "초입금 출금계좌"
 
     account  ||--o{ ledger_entry : "계좌별 기표"
