@@ -26,9 +26,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 class AccountMaturityIntegrationTest extends IntegrationTestSupport {
 
-    private static final LocalDate COB_DATE = LocalDate.of(2026, 10, 23);
-    private static final LocalDate BASE_DATE = LocalDate.of(2026, 10, 26);
-    private static final LocalDateTime OPENED_AT = LocalDateTime.of(2026, 9, 1, 10, 0);
+    private static final LocalDate COB_DATE = LocalDate.of(2000, 1, 7);
+
+    private static final LocalDate BASE_DATE = LocalDate.of(2000, 1, 10);
+
+    private static final LocalDateTime OPENED_AT = LocalDateTime.of(1999, 12, 1, 10, 0);
 
     private static final String PASSWORD_HASH = "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq";
 
@@ -116,6 +118,7 @@ class AccountMaturityIntegrationTest extends IntegrationTestSupport {
         assertThat(status(ids.get(1))).isEqualTo("ACTIVE");
         assertThat(status(ids.get(2))).isEqualTo("ACTIVE");
 
+        assertNoOutsideCandidates();
         // 남은 ACTIVE 계좌만 탐색하여 처리
         maturityService.runInCob(COB_DATE);
 
@@ -143,6 +146,7 @@ class AccountMaturityIntegrationTest extends IntegrationTestSupport {
         long balanceBefore = totalBalance();
         long ledgerBefore = ledgerCount(first, last);
 
+        assertNoOutsideCandidates();
         maturityService.runInCob(COB_DATE);
 
         assertThat(status(first)).isEqualTo("MATURED");
@@ -276,5 +280,22 @@ class AccountMaturityIntegrationTest extends IntegrationTestSupport {
                 Long.class,
                 firstId,
                 lastId);
+    }
+
+    private void assertNoOutsideCandidates() {
+        Long count = jdbcTemplate.queryForObject(
+                """
+            SELECT COUNT(*)
+            FROM account
+            WHERE customer_id <> ?
+              AND status = 'ACTIVE'
+              AND account_type IN ('TIME_DEPOSIT', 'INSTALLMENT_SAVINGS')
+              AND maturity_date <= ?
+            """,
+                Long.class,
+                customerId,
+                BASE_DATE);
+
+        assertThat(count).isZero();
     }
 }
