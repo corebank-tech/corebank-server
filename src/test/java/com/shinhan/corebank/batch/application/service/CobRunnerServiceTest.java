@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -53,7 +54,7 @@ class CobRunnerServiceTest {
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     private CobStep stepOf(String name, int order) {
-        CobStep step = org.mockito.Mockito.mock(CobStep.class);
+        CobStep step = mock(CobStep.class);
         when(step.name()).thenReturn(name);
         when(step.order()).thenReturn(order);
         return step;
