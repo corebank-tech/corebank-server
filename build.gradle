@@ -23,9 +23,13 @@ sourceSets {
         compileClasspath += sourceSets.main.output
         runtimeClasspath += sourceSets.main.output
     }
+    // 정보계 ETL (PH-76). 운영 jar와 따로 빌드·실행하고, main 코드는 쓰지 않는다.
+    infoEtl {}
     test {
         compileClasspath += sourceSets.mockExternal.output
         runtimeClasspath += sourceSets.mockExternal.output
+        compileClasspath += sourceSets.infoEtl.output
+        runtimeClasspath += sourceSets.infoEtl.output
     }
 }
 
@@ -51,6 +55,28 @@ tasks.register('mockExternalJar', Jar) {
     }
 }
 
+tasks.register('runInfoEtl', JavaExec) {
+    group = 'application'
+    description = '정보계 ETL을 실행한다 (PH-76). 인자 예: --args="--base-date=2026-10-20"'
+    classpath = sourceSets.infoEtl.runtimeClasspath
+    mainClass = 'com.shinhan.infoetl.InfoEtlMain'
+}
+
+// VM에 그대로 올리는 실행 파일. MySQL 드라이버를 같이 담는다 — java -jar info-etl.jar
+tasks.register('infoEtlJar', Jar) {
+    group = 'build'
+    description = '정보계 ETL 실행 jar를 만든다 (PH-76)'
+    archiveFileName = 'info-etl.jar'
+    destinationDirectory = layout.buildDirectory.dir('info-etl')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from sourceSets.infoEtl.output
+    from { configurations.infoEtlRuntimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+    manifest {
+        attributes 'Main-Class': 'com.shinhan.infoetl.InfoEtlMain'
+    }
+}
+
 repositories {
     mavenCentral()
 }
@@ -73,6 +99,7 @@ dependencies {
     // JPA + MySQL
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     runtimeOnly 'com.mysql:mysql-connector-j'
+    infoEtlRuntimeOnly 'com.mysql:mysql-connector-j'
 
     // Redis (약관 열람 이력, TTL 기반)
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
