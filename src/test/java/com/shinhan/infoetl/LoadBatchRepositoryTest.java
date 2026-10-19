@@ -114,6 +114,34 @@ class LoadBatchRepositoryTest {
         }
     }
 
+    @Test
+    @DisplayName("기준 시각보다 오래된 RUNNING만 FAILED로 바꾸고 사유를 남긴다")
+    void failStaleRunningOnlyAffectsOldRunning() throws SQLException {
+        LocalDateTime now = LocalDateTime.of(2026, 10, 21, 10, 0, 0);
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            long stale = repository.start(mart, D, now.minusHours(7));
+            long fresh = repository.start(mart, D.plusDays(1), now.minusHours(1));
+            long completed = repository.start(mart, D.minusDays(1), now.minusHours(8));
+            repository.markCompleted(mart, completed, now.minusHours(7), 5L, 50L);
+            long failed = repository.start(mart, D.minusDays(2), now.minusHours(9));
+            repository.markFailed(mart, failed, "boom");
+
+            int changed = repository.failStaleRunning(mart, now.minusHours(6), "비정상 종료로 간주함");
+
+            assertThat(changed).isEqualTo(1);
+            assertThat(statusOf(mart, stale)).isEqualTo("FAILED");
+            assertThat(statusOf(mart, fresh)).isEqualTo("RUNNING");
+            assertThat(statusOf(mart, completed)).isEqualTo("COMPLETED");
+            assertThat(statusOf(mart, failed)).isEqualTo("FAILED");
+            try (ResultSet row = select(mart, stale)) {
+                assertThat(row.getString("failure_reason")).isEqualTo("비정상 종료로 간주함");
+            }
+            try (ResultSet row = select(mart, failed)) {
+                assertThat(row.getString("failure_reason")).isEqualTo("boom");
+            }
+        }
+    }
+
     private static ResultSet select(Connection mart, long id) throws SQLException {
         PreparedStatement statement = mart.prepareStatement("SELECT * FROM mart_load_batch WHERE load_batch_id = ?");
         statement.setLong(1, id);

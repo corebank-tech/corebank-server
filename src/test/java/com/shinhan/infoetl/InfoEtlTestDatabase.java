@@ -74,9 +74,28 @@ final class InfoEtlTestDatabase {
         }
     }
 
+    static String replicaUrl() {
+        return url("replica_db");
+    }
+
+    static String martUrl() {
+        return url("mart_db");
+    }
+
+    static String user() {
+        return "root";
+    }
+
+    static String password() {
+        return MYSQL.getPassword();
+    }
+
+    private static String url(String database) {
+        return "jdbc:mysql://" + MYSQL.getHost() + ":" + MYSQL.getMappedPort(3306) + "/" + database;
+    }
+
     private static Connection connect(String database) throws SQLException {
-        String url = "jdbc:mysql://" + MYSQL.getHost() + ":" + MYSQL.getMappedPort(3306) + "/" + database;
-        return DriverManager.getConnection(url, "root", MYSQL.getPassword());
+        return DriverManager.getConnection(url(database), user(), password());
     }
 
     // 주석 줄을 빼고 세미콜론으로 문장을 나눈다. 스키마 파일에는 문자열 안 세미콜론이 없다.

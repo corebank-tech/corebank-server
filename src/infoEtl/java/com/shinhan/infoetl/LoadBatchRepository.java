@@ -64,6 +64,18 @@ public final class LoadBatchRepository {
         }
     }
 
+    // 오래 RUNNING으로 남은 행은 프로세스가 비정상 종료한 것이므로 FAILED로 돌린다.
+    public int failStaleRunning(Connection mart, LocalDateTime startedBefore, String reason) throws SQLException {
+        try (PreparedStatement statement = mart.prepareStatement(
+                "UPDATE mart_load_batch SET status = ?, failure_reason = ? WHERE status = ? AND started_at < ?")) {
+            statement.setString(1, LoadStatus.FAILED.name());
+            statement.setString(2, truncate(reason));
+            statement.setString(3, LoadStatus.RUNNING.name());
+            statement.setObject(4, startedBefore);
+            return statement.executeUpdate();
+        }
+    }
+
     private static String truncate(String reason) {
         if (reason == null) {
             return null;
