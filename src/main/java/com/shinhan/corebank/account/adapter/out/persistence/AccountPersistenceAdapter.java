@@ -2,15 +2,12 @@ package com.shinhan.corebank.account.adapter.out.persistence;
 
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
+import com.shinhan.corebank.account.domain.AccountStatus;
+import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.SortedMap;
-import java.util.TreeMap;
+import java.time.LocalDate;
+import java.util.*;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -119,6 +116,38 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
                 .findBalancesAfter(afterAccountId, PageRequest.of(0, limit))
                 .forEach(row -> page.put(row.getAccountId(), row.getBalance()));
         return page;
+    }
+
+    @Override
+    public List<Long> findMaturityCandidateIdsAfter(long afterAccountId, LocalDate maturityBaseDate, int limit) {
+
+        if (maturityBaseDate == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        if (afterAccountId < 0) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        }
+
+        if (limit <= 0) {
+            throw new BusinessException(CommonErrorCode.INVALID_PAGE_SIZE);
+        }
+
+        return accountJpaRepository.findMaturityCandidateIdsAfter(
+                afterAccountId,
+                maturityBaseDate,
+                AccountStatus.ACTIVE,
+                Set.of(AccountType.TIME_DEPOSIT, AccountType.INSTALLMENT_SAVINGS),
+                PageRequest.of(0, limit));
+    }
+
+    @Override
+    public Optional<Account> findByAccountIdForUpdate(Long accountId) {
+        if (accountId == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        return accountJpaRepository.findByAccountIdForUpdate(accountId).map(AccountMapper::toDomain);
     }
 
     private void validateVersion(Account account, AccountJpaEntity entity) {

@@ -12,7 +12,10 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductTestFixtures;
 import jakarta.persistence.EntityManager;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -41,6 +44,9 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
 
     @Autowired
     private EntityManager entityManager;
+
+    @Autowired
+    private ProductJpaRepository productJpaRepository;
 
     private Long customerId;
 
@@ -454,6 +460,94 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(restored.getBalance()).isEqualTo(100_000L);
         assertThat(restored.getHoldAmount()).isEqualTo(30_000L);
         assertThat(restored.getAvailableBalance()).isEqualTo(70_000L);
+    }
+
+    @Test
+    @DisplayName("만기 후보 조회: ACTIVE 예금 중 기준일까지 만기된 계좌만 ID 순으로 조회한다")
+    void findMaturityCandidateIdsAfter_filtersAndPaginates() {
+        Long productId = productJpaRepository
+                .save(ProductTestFixtures.productWithCode("MAT-633-01"))
+                .getProductId();
+
+        Account first =
+                saveMaturityAccount("088200000091", productId, AccountStatus.ACTIVE, LocalDate.of(2026, 10, 24));
+
+        Account second =
+                saveMaturityAccount("088200000092", productId, AccountStatus.ACTIVE, LocalDate.of(2026, 10, 26));
+
+        saveMaturityAccount("088200000093", productId, AccountStatus.MATURED, LocalDate.of(2026, 10, 25));
+
+        saveMaturityAccount("088200000094", productId, AccountStatus.ACTIVE, LocalDate.of(2026, 10, 27));
+
+        saveDemandDeposit("088100000095", 100_000L);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        LocalDate maturityBaseDate = LocalDate.of(2026, 10, 26);
+
+        List<Long> firstPage =
+                accountPersistencePort.findMaturityCandidateIdsAfter(first.getAccountId() - 1, maturityBaseDate, 1);
+
+        List<Long> secondPage =
+                accountPersistencePort.findMaturityCandidateIdsAfter(first.getAccountId(), maturityBaseDate, 1);
+
+        List<Long> lastPage =
+                accountPersistencePort.findMaturityCandidateIdsAfter(second.getAccountId(), maturityBaseDate, 1);
+
+        assertThat(firstPage).containsExactly(first.getAccountId());
+        assertThat(secondPage).containsExactly(second.getAccountId());
+        assertThat(lastPage).isEmpty();
+    }
+
+    @Test
+    @DisplayName("잠금 조회한 계좌의 만기 상태 전이가 DB에 저장된다")
+    void findByAccountIdForUpdate_savesMaturityTransition() {
+        Long productId = productJpaRepository
+                .save(ProductTestFixtures.productWithCode("MAT-633-02"))
+                .getProductId();
+
+        Account saved =
+                saveMaturityAccount("088200000096", productId, AccountStatus.ACTIVE, LocalDate.of(2026, 10, 26));
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Account locked = accountPersistencePort
+                .findByAccountIdForUpdate(saved.getAccountId())
+                .orElseThrow();
+
+        assertThat(locked.markMatured(LocalDate.of(2026, 10, 26))).isTrue();
+
+        accountPersistencePort.save(locked);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Account restored = accountPersistencePort
+                .findByAccountIdAndCustomerId(saved.getAccountId(), customerId)
+                .orElseThrow();
+
+        assertThat(restored.getStatus()).isEqualTo(AccountStatus.MATURED);
+        assertThat(restored.getBalance()).isZero();
+        assertThat(restored.getClosedDate()).isNull();
+    }
+
+    private Account saveMaturityAccount(
+            String accountNumber, Long productId, AccountStatus status, LocalDate maturityDate) {
+
+        Account account = Account.importExisting(
+                accountNumber,
+                customerId,
+                productId,
+                AccountType.TIME_DEPOSIT,
+                0L,
+                status,
+                PASSWORD_HASH,
+                LocalDateTime.of(2026, 9, 1, 10, 0),
+                maturityDate);
+
+        return accountPersistencePort.save(account);
     }
 
     private Account saveDemandDeposit(String accountNumber, long balance) {
