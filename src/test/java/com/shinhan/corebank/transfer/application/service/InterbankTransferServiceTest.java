@@ -1,6 +1,7 @@
 package com.shinhan.corebank.transfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -9,6 +10,7 @@ import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.business.api.BusinessDateProvider;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.event.DomainEventSink;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.gl.api.JournalPostingUseCase;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.external.InterbankSocketClient;
@@ -29,6 +31,7 @@ import com.shinhan.corebank.transfer.application.port.out.TransferOtpVerificatio
 import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.config.InterbankProperties;
+import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import com.shinhan.mockexternal.MockExternalServer;
 import jakarta.persistence.EntityManager;
 import java.io.IOException;
@@ -337,11 +340,12 @@ class InterbankTransferServiceTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("목록에 없는 은행코드면 TRF0006으로 거부하고 transfer 행을 남기지 않는다")
+    @DisplayName("목록에 없는 은행코드면 요청 단계에서 TRF0006을 던지고 transfer 행을 남기지 않는다")
     void unsupportedBank_rejected() {
-        InterbankTransferResult result = service(client).execute(command("088", "1234567890123", AMOUNT));
-
-        assertThat(result.errorCode()).isEqualTo("TRF0006");
+        assertThatThrownBy(() -> service(client).execute(command("088", "1234567890123", AMOUNT)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(TransferErrorCode.UNSUPPORTED_BANK);
         assertThat(jdbcTemplate.queryForObject(
                         "SELECT COUNT(*) FROM transfer WHERE payee_bank_code IS NOT NULL", Long.class))
                 .isZero();

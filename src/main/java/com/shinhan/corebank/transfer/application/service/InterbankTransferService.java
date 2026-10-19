@@ -106,6 +106,10 @@ public class InterbankTransferService implements InterbankTransferUseCase {
 
     @Override
     public InterbankTransferResult execute(InterbankTransferCommand command) {
+        // 요청 단계 거부(400)라 결과로 바꾸지 않고 던진다(interbank_transfer_fe_handoff.md §6-2).
+        if (!interbankBankPort.isSupported(command.payeeBankCode())) {
+            throw new BusinessException(TransferErrorCode.UNSUPPORTED_BANK);
+        }
         LocalDateTime requestedAt = LocalDateTime.now(clock);
         Transfer created = null;
         Transfer pending;
@@ -162,9 +166,6 @@ public class InterbankTransferService implements InterbankTransferUseCase {
                 .findWithdrawalAccountDetail(command.withdrawalAccountId())
                 .filter(detail -> detail.customerId().equals(command.customerId()) && detail.withdrawalRegistered())
                 .orElseThrow(() -> new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_NOT_REGISTERED));
-        if (!interbankBankPort.isSupported(command.payeeBankCode())) {
-            throw new BusinessException(TransferErrorCode.UNSUPPORTED_BANK);
-        }
         // 상대 은행 장애 중이면 출금·환급 없이 바로 거부한다. 당행 이체는 이 검사를 지나지 않는다.
         if (!interbankGatewayPort.isAvailable()) {
             throw new BusinessException(TransferErrorCode.INTERBANK_NOT_PROCESSED);
