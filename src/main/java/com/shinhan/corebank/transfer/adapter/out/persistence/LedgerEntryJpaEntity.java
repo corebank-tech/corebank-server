@@ -3,6 +3,7 @@ package com.shinhan.corebank.transfer.adapter.out.persistence;
 import com.shinhan.corebank.transfer.domain.LedgerDirection;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import jakarta.persistence.*;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.*;
 
@@ -62,6 +63,10 @@ public class LedgerEntryJpaEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "channel", length = 2, nullable = false, columnDefinition = "char(2)")
     private TransferChannel channel;
+
+    // NULL 허용 — 대입(#516) 전 행이 남아 있다. 새 행의 필수 여부는 도메인 팩토리가 막는다(#515 A안).
+    @Column(name = "trade_date")
+    private LocalDate tradeDate;
 
     @Column(name = "reversed", nullable = false)
     private boolean reversed;

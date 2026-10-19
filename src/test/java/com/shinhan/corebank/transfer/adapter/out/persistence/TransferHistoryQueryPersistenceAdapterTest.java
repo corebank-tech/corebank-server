@@ -23,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class TransferHistoryQueryPersistenceAdapterTest extends IntegrationTestSupport {
 
+    private static final LocalDate TRADE_DATE = LocalDate.of(2026, 8, 12);
+
     @Autowired
     private TransferHistoryQueryPersistenceAdapter adapter;
 
@@ -88,7 +90,8 @@ class TransferHistoryQueryPersistenceAdapterTest extends IntegrationTestSupport 
                 null,
                 "출금메모",
                 "입금메모",
-                transferredAt);
+                transferredAt,
+                TRADE_DATE);
         if (status == ProcessResultStatus.SUCCESS) {
             transfer.complete(90_000L, transferredAt);
         } else if (status == ProcessResultStatus.ERROR) {
