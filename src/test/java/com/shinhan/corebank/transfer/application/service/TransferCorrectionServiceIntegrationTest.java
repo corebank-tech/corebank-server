@@ -6,6 +6,7 @@ import static org.assertj.core.groups.Tuple.tuple;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
+import com.shinhan.corebank.business.support.BusinessDateTestFixture;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
@@ -16,6 +17,7 @@ import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +50,9 @@ class TransferCorrectionServiceIntegrationTest extends IntegrationTestSupport {
     private static final String ACCOUNT_B_NUMBER = "548000000002";
     private static final long STARTING_BALANCE_A = 100_000L;
     private static final long AMOUNT = 50_000L;
+    // GL 전표 채번이 거래일별이라 다른 테스트가 쓰지 않는 영업일을 고른다.
+    private static final LocalDate ORIGINAL_DATE = LocalDate.of(2032, 3, 4);
+    private static final LocalDate CORRECTION_DATE = LocalDate.of(2032, 3, 5);
 
     @Autowired
     private TransferCorrectionService transferCorrectionService;
@@ -57,6 +62,11 @@ class TransferCorrectionServiceIntegrationTest extends IntegrationTestSupport {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private BusinessDateTestFixture businessDateTestFixture;
+
+    private LocalDate originalBusinessDate;
 
     @MockitoBean
     private OtpAuthTokenVerifier otpAuthTokenVerifier;
@@ -68,11 +78,42 @@ class TransferCorrectionServiceIntegrationTest extends IntegrationTestSupport {
     void setUp() {
         cleanUp();
         seed();
+        originalBusinessDate = businessDateTestFixture.currentInDb();
     }
 
     @AfterEach
     void tearDown() {
+        businessDateTestFixture.moveTo(originalBusinessDate);
         cleanUp();
+    }
+
+    @Test
+    @DisplayName("정정 거래의 거래일은 원거래일이 아니라 정정한 날의 영업일이다 — 원거래 행은 그대로 둔다")
+    void correction_tradeDateIsBusinessDateOfCorrection() {
+        // given: 영업일 D1에 원거래, 영업일이 D2로 넘어간 뒤 정정
+        businessDateTestFixture.moveTo(ORIGINAL_DATE);
+        TransferResult original = transfer(ACCOUNT_A, ACCOUNT_B_NUMBER, AMOUNT);
+        businessDateTestFixture.moveTo(CORRECTION_DATE);
+
+        // when
+        TransferReversalResult reversal = transferCorrectionService.reverse(original.transactionNumber());
+        TransferRepostResult repost = transferCorrectionService.repost(original.transactionNumber(), 30_000L);
+
+        // then: 원거래는 D1 그대로
+        assertThat(transferTradeDate(original.transactionNumber())).isEqualTo(ORIGINAL_DATE);
+        assertThat(ledgerTradeDates(original.transactionNumber())).containsExactly(ORIGINAL_DATE, ORIGINAL_DATE);
+
+        // then: 취소정정·정상거래는 transfer 행·원장 2행·GL 전표가 모두 D2
+        for (String correctionNumber :
+                List.of(reversal.reversalTransactionNumber(), repost.repostTransactionNumber())) {
+            assertThat(transferTradeDate(correctionNumber)).isEqualTo(CORRECTION_DATE);
+            assertThat(ledgerTradeDates(correctionNumber)).containsExactly(CORRECTION_DATE, CORRECTION_DATE);
+            assertThat(jdbcTemplate.queryForObject(
+                            "SELECT trade_date FROM gl_voucher WHERE reference_key = ?",
+                            LocalDate.class,
+                            correctionNumber))
+                    .isEqualTo(CORRECTION_DATE);
+        }
     }
 
     @Test
@@ -348,6 +389,18 @@ class TransferCorrectionServiceIntegrationTest extends IntegrationTestSupport {
         jdbcTemplate.update("DELETE FROM transfer_limit WHERE customer_id = ?", CUSTOMER_ID);
         jdbcTemplate.update("DELETE FROM account WHERE account_id IN (?, ?)", ACCOUNT_A, ACCOUNT_B);
         jdbcTemplate.update("DELETE FROM customer WHERE customer_id = ?", CUSTOMER_ID);
+        jdbcTemplate.update(
+                "DELETE FROM gl_voucher_sequence WHERE trade_date IN (?, ?)", ORIGINAL_DATE, CORRECTION_DATE);
+    }
+
+    private LocalDate transferTradeDate(String transactionNumber) {
+        return jdbcTemplate.queryForObject(
+                "SELECT trade_date FROM transfer WHERE transaction_number = ?", LocalDate.class, transactionNumber);
+    }
+
+    private List<LocalDate> ledgerTradeDates(String transactionNumber) {
+        return jdbcTemplate.queryForList(
+                "SELECT trade_date FROM ledger_entry WHERE transaction_number = ?", LocalDate.class, transactionNumber);
     }
 
     private long balanceOf(long accountId) {

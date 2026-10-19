@@ -11,7 +11,7 @@ import java.time.LocalDate;
  * @param amount            이체 금액(원)
  * @param fromAccountId     출금계좌 ID
  * @param toAccountId       입금계좌 ID
- * @param tradeDate         거래일. PH-41 전까지는 기표 시각의 달력일이다
+ * @param tradeDate         거래일(귀속 영업일). 원장 행의 trade_date와 같은 값이다
  */
 public record LedgerPostingContext(
         String transactionNumber,

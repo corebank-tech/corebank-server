@@ -5,6 +5,7 @@ import static org.mockito.Mockito.verify;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
+import com.shinhan.corebank.business.api.BusinessDateProvider;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.event.DomainEvent;
 import com.shinhan.corebank.common.event.DomainEventSink;
@@ -117,6 +118,9 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
 
     @Autowired
     private MeterRegistry meterRegistry;
+
+    @Autowired
+    private BusinessDateProvider businessDateProvider;
 
     @AfterEach
     void cleanUpCommittedData() {
@@ -446,6 +450,7 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 List.of(),
                 List.of(),
                 clock,
+                businessDateProvider,
                 transactionManager,
                 eventPublisher,
                 new SimpleMeterRegistry());
