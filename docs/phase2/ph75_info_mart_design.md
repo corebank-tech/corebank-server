@@ -19,10 +19,10 @@
 | 3 | `trade_date`가 NULL이면 `DATE(occurred_at)`으로 대체 | `transfer.api.LedgerPostingContext`의 PH-41 이전 규칙과 같음([#515](https://github.com/corebank-tech/corebank-server/issues/515)) |
 | 4 | 가입·해지 마트 = **이벤트 1건 1행**, 추가 전용 | PH-76 "전일 확정분 증분, 재적재 가능". Kimball 거래 단위 |
 | 5 | 해지 기준일 = **해지 계좌의 마지막 원장 기표 거래일** | 잔액이 0이 되는 날과 해지일이 같아진다. 전제는 §7-1 |
-| 6 | 가명 키 = **HMAC-SHA256(키, id)** 16진수. 키는 온프레미스 ETL에만 둔다 | `customer_id`는 연속 BIGINT라 키 없는 해시는 전수 대입으로 풀린다. 상태 없는 변환이라 재적재해도 같은 값 |
+| 6 | 가명 키 = **HMAC-SHA256(키, 종류 접두어 + id)** 16진수(계좌 `account:<id>`, 고객 `customer:<id>`). 키는 온프레미스 ETL에만 두고 최소 32바이트 | `customer_id`는 연속 BIGINT라 키 없는 해시는 전수 대입으로 풀린다. 접두어가 없으면 계좌 5번과 고객 5번이 같은 키가 된다. 상태 없는 변환이라 재적재해도 같은 값 |
 | 7 | 응답 `asOf` = 마지막으로 적재가 끝난 **기준일(DATE)** | 하루 한 번 마감분을 적재하므로 "어디까지 반영됐는가"의 답이 날짜 하나다. 적재 완료 시각은 운영용 |
 | 8 | PH-77 지표는 **2개**(일별 수신 잔액 추이, 상품별 가입·해지). 채널별 거래량은 뺀다 | 마트 2종과 맞춘다. ADM-03(REQ-ADM-030)이 쓰지 않는다. [D-28](README.md#d-28--1015--p3) |
-| 9 | ETL 시작 신호 = **COB 실행 기록(#371)의 D 완료 행** | 복제는 커밋 순서대로 적용되므로 그 행이 보이면 D의 COB 결과도 모두 도착해 있다 |
+| 9 | ETL 시작 신호 = **COB 실행 기록(`batch_execution_history`, #603)에서 D의 COB 완료로 판정되는 시점** | 복제는 커밋 순서대로 적용되므로 완료가 보이면 D의 COB 결과도 모두 도착해 있다. 이 테이블은 스텝당 1행이라 "완료"를 따로 나타내는 행이 없다 — 판정 규칙은 #556에서 정한다(§7-2) |
 
 ---
 
@@ -82,6 +82,7 @@ CREATE TABLE mart_load_batch (
 ```
 
 - **PII 0건.** 계좌번호·이름·원천 ID를 싣지 않습니다. 고객과 계좌는 가명 키로만 식별합니다.
+- 컬럼 주석의 `HMAC-SHA256(account_id)`·`HMAC-SHA256(customer_id)`는 결정 6의 접두어 입력(`account:<id>`, `customer:<id>`)을 줄여 쓴 것입니다.
 - **as-of 필수.** 두 마트 모두 `base_date`가 NOT NULL이고 기본키 첫 컬럼입니다. 재적재 범위가 기본키 앞부분과 같습니다.
 - **`uk_mpse_account_event`.** 계좌 하나에 가입·해지는 각각 한 번입니다(`product_subscription.uk_sub_account`). 같은 이벤트가 다른 날짜로 두 번 들어오면 DB가 막습니다. Fineract는 이 제약 없이 애플리케이션이 거르지만, `gl_voucher`와 같은 이유로 우리는 DB에서 막습니다([tasks.md PH-24](tasks.md#ph-24-gl-분개-서비스--이체-기표-훅--glapi)).
 - **잔액 행의 범위.** 첫 원장 거래일 ≤ D이고, 해지 기준일(결정 5) ≥ D인 계좌입니다. 해지일에는 0원 행이 있고 그 다음 날부터 없습니다. 원장만으로 정해지므로 재적재해도 같습니다.
@@ -95,9 +96,12 @@ CREATE TABLE mart_load_batch (
 ### 3-1. 실행 단위와 시작 조건
 
 - 한 번 실행에 기준일 D 하나를 적재합니다. `mart_load_batch`에 한 행이 생깁니다.
-- 시작 조건: 레플리카의 COB 실행 기록(#371)에 D 완료 행이 있고 D가 아직 `COMPLETED`가 아니다. 밀린 날짜는 오래된 것부터 하나씩 적재합니다. 한 날짜가 실패해도 다음 날짜로 넘어가고, 실패한 날짜는 재적재 대상으로 남습니다.
+- 시작 조건: 레플리카의 COB 실행 기록(`batch_execution_history`, #603)에서 D의 COB가 완료로 판정되고(판정 규칙은 #556, §7-2) D가 아직 `COMPLETED`가 아니다. 밀린 날짜는 오래된 것부터 하나씩 적재합니다. 한 날짜가 실패해도 다음 날짜로 넘어가고, 실패한 날짜는 재적재 대상으로 남습니다.
 - 최초 적재는 원장 첫 거래일(PH-60b, 9/1)부터 마지막 COB 완료일까지 같은 방식으로 채웁니다.
 - 10/27 복제 시작 전(덤프 기간)에는 COB 기록이 없으므로 D를 실행 인자로 받습니다.
+- 실행 방식(구현 `info-etl.jar`): 기준일 하나(`--base-date=`) 또는 기간(`--from= --to=`). 기간은 **영업일만** 대상으로 하고(주말은 요일로, 공휴일은 `holiday` 테이블로 판정) 오래된 날짜부터 처리하며, 한 날짜가 실패해도 다음 날짜로 넘어간 뒤 실패한 날짜를 모아 보고합니다. 하루만 줄 때는 요청한 날짜를 그대로 적재합니다.
+- 같은 기준일은 한 프로세스만 적재합니다(MySQL `GET_LOCK`, 기준일별 이름). 락을 못 얻으면 적재 기록도 남기지 않고 거부하며, 프로세스가 죽으면 연결이 끊겨 락이 자동으로 풀립니다.
+- 레플리카에서 읽은 잔액이 **0건이면 실패**로 처리하고 마트는 건드리지 않습니다(복제가 따라오지 못했을 때 정상 스냅샷이 지워지는 것을 막음). 가입·해지 이벤트는 그날 없을 수 있어 0건이어도 정상입니다.
 
 ### 3-2. 트랜잭션 경계
 
@@ -109,7 +113,8 @@ CREATE TABLE mart_load_batch (
 
 - 하루치가 계좌 약 15만 행이라 한 트랜잭션에 담습니다. 실패하면 롤백으로 정리됩니다. Fineract `JRNL_AGG`는 청크마다 커밋해서 실패 시 `deleteByJobExecutionId`로 지웁니다.
 - InnoDB MVCC로 조회 API는 T2 커밋 전까지 이전 데이터를 봅니다. 재적재 중에 화면이 비지 않습니다.
-- **구현 방식(Spring Batch 사용 여부, 언어, 배포 형태)은 P5가 정합니다.** 이 표의 트랜잭션 경계·적재 기록·§4 대조 규칙은 어느 방식이든 지킵니다.
+- **구현 방식은 P5가 정했습니다.** 별도 소스셋의 실행 jar(`info-etl.jar`, Spring·Spring Batch 없이 JDBC)이고 구조는 헥사고날(`domain` / `application` / `adapter.out.jdbc`)입니다. 포트 호출 하나가 연결과 트랜잭션 하나를 소유하며, 이 표의 트랜잭션 경계·적재 기록·§4 대조 규칙을 지킵니다.
+- ① 단계에서 6시간 넘게 `RUNNING`으로 남은 기록(프로세스가 ①과 ② 사이에 죽은 경우)은 `FAILED`로 정리합니다. 은행 앱의 배치 락(`BatchExecutionLockPersistenceAdapter`)과 같은 기준입니다.
 
 ### 3-3. 산출 규칙 (원천은 레플리카)
 
@@ -129,9 +134,9 @@ WITH le AS (
                             ORDER BY occurred_at DESC, ledger_entry_id DESC) AS rn
   FROM le WHERE td <= :d
 ), close_td AS (
-  SELECT le.account_id, MAX(le.td) AS close_date
-  FROM le JOIN account a ON a.account_id = le.account_id AND a.status = 'CLOSED'
-  GROUP BY le.account_id
+  SELECT l.account_id, MAX(COALESCE(l.trade_date, DATE(l.occurred_at))) AS close_date
+  FROM ledger_entry l JOIN account a ON a.account_id = l.account_id AND a.status = 'CLOSED'
+  GROUP BY l.account_id
 )
 SELECT a.account_id, a.customer_id, a.account_type, a.product_id, p.product_group, l.balance_after
 FROM last_entry l
@@ -144,7 +149,7 @@ WHERE l.rn = 1
 
 - 잔액은 금액 합계가 아니라 `balance_after`로 구합니다. 합계로 구하면 §4 원장 대조가 같은 계산을 두 번 하게 되어 아무것도 검증하지 못합니다.
 - 정렬(`occurred_at DESC, ledger_entry_id DESC`)은 적수 계산과 같습니다. 시드는 이 순서 보장의 대상이 아닙니다(#545) — §7-3.
-- `close_td`는 D + 7일 이전 기표만 봅니다. 그보다 늦게 해지된 계좌는 NULL이 되어 행에 포함되는데, 해지 전 날짜이므로 맞습니다.
+- `close_td`는 7일 창 없이 해지된 계좌의 **전체 원장**을 봅니다. 창을 쓰면 해지 기표가 창 밖인 계좌의 해지일이 "창 안 마지막 기표 날짜"로 잘못 계산되어, 기준일에 열려 있던 계좌가 누락됩니다(예: 10/10 잔액 1,000, 11/19 해지, 기준일 10/20). 해지된 계좌의 원장만 읽으므로 전체 원장을 훑지는 않습니다.
 
 **이벤트**
 
@@ -152,7 +157,7 @@ WHERE l.rn = 1
 - `CLOSE`: `account.status = 'CLOSED'`이고 `product_id IS NOT NULL`인 계좌 중 마지막 원장 행의 `td = D`.
 - 상품 코드·이름·그룹은 적재할 때 `product`에서 복사합니다.
 
-**가명 처리.** MySQL에는 HMAC 함수가 없고, SQL로 구현하면 키가 쿼리 로그·프로세스 목록에 남습니다. ETL 프로세스가 레플리카에서 읽은 행에 메모리에서 HMAC을 적용한 뒤 마트에 씁니다. 원천 ID는 마트 쪽으로 넘어가지 않습니다. 키를 바꾸면 전 기간을 재적재합니다.
+**가명 처리.** MySQL에는 HMAC 함수가 없고, SQL로 구현하면 키가 쿼리 로그·프로세스 목록에 남습니다. ETL 프로세스가 레플리카에서 읽은 행에 메모리에서 HMAC을 적용한 뒤 마트에 씁니다. 원천 ID는 마트 쪽으로 넘어가지 않습니다. 키를 바꾸면 전 기간을 재적재합니다. 해시 입력은 종류 접두어를 붙인 문자열(`account:<id>`, `customer:<id>`)이고, 가명 처리는 업무 규칙이라 ETL의 서비스 계층이 하며 마트 어댑터는 원래 ID를 받지 못합니다.
 
 ### 3-4. 읽기 전용 원칙
 
@@ -275,16 +280,17 @@ WHERE l.rn = 1
 
 ## 6. 범위 밖
 
-마감잔액 테이블, 채널별 거래량, 평잔(필요하면 §2 잔액 마트 위에 휴일을 채우는 뷰로 붙인다), 해지 유형 구분, 응답의 마감 시각(`cutoffAt` — #371 이후 필드 추가로 붙일 수 있다, PH-94).
+마감잔액 테이블, 채널별 거래량, 평잔(필요하면 §2 잔액 마트 위에 휴일을 채우는 뷰로 붙인다), 해지 유형 구분, 응답의 마감 시각(`cutoffAt` — #603 이후 필드 추가로 붙일 수 있다, PH-94).
 
 ---
 
 ## 7. 확인 대기
 
-1. **P2 — 해지 기표 전제.** 결정 5는 PH-15 만기해지·PH-16 중도해지가 예·적금 계좌 잔액을 0으로 만드는 출금 기표를 남긴다고 전제합니다. 남기지 않으면 해지 기준일 규칙을 다시 정합니다.
-2. **P5 — #371 COB 실행 기록.** 10/27 복제 시작까지 필요합니다(결정 9).
+1. **P2 — 해지 기표 전제.** 결정 5는 PH-15 만기해지·PH-16 중도해지가 예·적금 계좌 잔액을 0으로 만드는 출금 기표를 남긴다고 전제합니다. [tasks.md](tasks.md) PH-15·16의 순서(`INTEREST` 기표 → `MATURITY`/`TERMINATION`으로 전액 이체 → 상품 계좌 잔액 0원 확인 → `CLOSED`)대로면 마지막 원장 행이 잔액 0이라 이 규칙과 맞습니다. 다만 구현은 아직 없습니다(PR #647은 `ACTIVE → MATURED`까지만 한다). **`CLOSED` 전이가 구현되면 재확인합니다.** 남기지 않으면 해지 기준일 규칙을 다시 정합니다.
+2. **P5 — COB 완료 판정(#603, #556).** `batch_execution_history`는 스텝당 1행이라 "D 완료"를 나타내는 행이 없습니다. 10/27 복제 시작까지 판정 규칙(예: 러너가 마지막에 요약 행을 남김)과 soft 실패한 날을 완료로 볼지를 #556에서 정합니다. 그 전까지는 기준일을 실행 인자로 받습니다(결정 9).
 3. **P5·P3 — 시드 구간 원장 대조.** 시드는 원장 순서 보장(#545)의 대상이 아니어서 9/1~10/5 원장 대조가 실패할 수 있습니다. PH-76 덤프 첫 적재에서 확인하고, 실패면 원인을 P6에 넘깁니다.
 4. **P3 — 가명정보 가이드라인.** 결정 6은 기술적 성질로 정했습니다. 개인정보보호위원회 「가명정보 처리 가이드라인」(2026.03) 본문과 대조가 남았습니다.
+5. **P5·P3 — 이벤트 날짜 이동.** 해지 계좌의 마지막 원장 거래일(결정 5)이 재적재 사이에 늦은 기표로 옮겨지면 같은 계좌의 이벤트가 두 기준일에 생겨 `uk_mpse_account_event`와 충돌합니다. 지금은 `FAILED`로 드러내고 사유에 "그 기준일을 먼저 재적재하라"를 남깁니다. 근본 해결(이벤트 날짜를 어떻게 고정할지)은 미결입니다.
 
 ---
 
@@ -297,3 +303,10 @@ WHERE l.rn = 1
 - [Kimball Group — Fact Tables](https://www.kimballgroup.com/2008/11/fact-tables/)
 - [Oracle OFSAA — Overview of Account Summary Tables](https://docs.oracle.com/cd/E92917_01/PDF/8.0.9.0.0/FSDF_HTML/UG/Overview_of_Account_Summary_Tables.htm)
 - [BCBS 239 — Principle 3](https://blogs.sas.com/content/sascom/2014/04/21/series-bcbs-239-principle-3/)
+
+---
+
+## 변경 이력
+
+- 2026-10-15 P3 작성, P5에 인계.
+- 2026-10-19 P5가 구현([#644](https://github.com/corebank-tech/corebank-server/issues/644)·[#645](https://github.com/corebank-tech/corebank-server/issues/645))하면서 반영: 실행 기록 이슈 번호 정정(#371 → #603)과 완료 판정 미정 표기, `close_td` 7일 창 제거(창 밖 해지 계좌 누락), 가명 키 종류 접두어, 영업일 기간 적재·동시 실행 방지·잔액 0건 실패, 구현 방식 확정, 이벤트 날짜 이동 문제 추가. P3 확인 후 팀 문서로 이동.
