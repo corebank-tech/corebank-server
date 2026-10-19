@@ -37,7 +37,12 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({CorsProperties.class, CsrfProperties.class, AdminBootstrapProperties.class})
+@EnableConfigurationProperties({
+    CorsProperties.class,
+    CsrfProperties.class,
+    AdminBootstrapProperties.class,
+    AdminSessionProperties.class
+})
 public class SecurityConfig {
 
     // 로그인 비밀번호 해시 검증에 사용할 BCrypt Encoder

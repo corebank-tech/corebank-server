@@ -12,6 +12,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -42,11 +43,15 @@ class SessionLoginManagerTest {
 
     private final SessionRegistryImpl sessionRegistry = new SessionRegistryImpl();
 
+    // 운영 설정과 같은 30분을 쓴다.
+    private static final AdminSessionProperties ADMIN_SESSION = new AdminSessionProperties(Duration.ofMinutes(30));
+
     private final SessionLoginManager manager = new SessionLoginManager(
             new CompositeSessionAuthenticationStrategy(List.of(
                     new ChangeSessionIdAuthenticationStrategy(),
                     new RegisterSessionAuthenticationStrategy(sessionRegistry))),
             repository,
+            ADMIN_SESSION,
             FIXED_CLOCK);
 
     @AfterEach
@@ -132,7 +137,10 @@ class SessionLoginManagerTest {
         HttpServletRequest request = mock(HttpServletRequest.class);
         HttpServletResponse response = mock(HttpServletResponse.class);
         SessionLoginManager invalidManager = new SessionLoginManager(
-                mock(SessionAuthenticationStrategy.class), mock(SecurityContextRepository.class), FIXED_CLOCK);
+                mock(SessionAuthenticationStrategy.class),
+                mock(SecurityContextRepository.class),
+                ADMIN_SESSION,
+                FIXED_CLOCK);
         when(request.getSession(false)).thenReturn(null);
 
         assertThatThrownBy(() -> invalidManager.establishSession(
