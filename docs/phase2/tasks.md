@@ -423,7 +423,7 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 **①**
 
 - `terraform/main/modules/data`에 RDS 인스턴스·DB 서브넷 그룹·파라미터 그룹을 구성한다.
-- RDS 사양은 PH-57 용량 산정(PR #627)을 따른다.
+- RDS 사양은 [PH-57 용량 산정](ph57_capacity_plan.md)을 따른다.
     - MySQL 8.4, `db.t3.small`, Multi-AZ
     - gp3 20GiB, 스토리지 자동 확장 비활성화
     - 자동 백업 7일, 저장 암호화, 외부 접근 비활성화

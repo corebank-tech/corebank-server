@@ -33,13 +33,37 @@ resource "aws_db_parameter_group" "main" {
   parameter {
     name         = "binlog_format"
     value        = "ROW"
-    apply_method = "pending-reboot"
+    apply_method = "immediate"
   }
 
   parameter {
     name         = "innodb_buffer_pool_size"
     value        = "{DBInstanceClassMemory*3/4}"
+    apply_method = "immediate"
+  }
+
+  parameter {
+    name         = "enforce_gtid_consistency"
+    value        = "ON"
     apply_method = "pending-reboot"
+  }
+
+  parameter {
+    name         = "gtid-mode"
+    value        = "OFF_PERMISSIVE"
+    apply_method = "pending-reboot"
+  }
+
+  parameter {
+    name         = "require_secure_transport"
+    value        = "1"
+    apply_method = "immediate"
+  }
+
+  parameter {
+    name         = "log_output"
+    value        = "FILE"
+    apply_method = "immediate"
   }
 
   tags = {
@@ -75,6 +99,15 @@ resource "aws_db_instance" "main" {
   deletion_protection       = true
   skip_final_snapshot       = false
   final_snapshot_identifier = "corebank-rds-final"
+
+  engine_version             = "8.4.10"
+  auto_minor_version_upgrade = false
+
+  # AWS 설정 시간은 UTC 기준
+  backup_window      = "18:00-18:30"
+  maintenance_window = "Sun:19:00-Sun:19:30"
+
+  enabled_cloudwatch_logs_exports = ["error", "slowquery"]
 
   tags = {
     Name = "corebank-rds"

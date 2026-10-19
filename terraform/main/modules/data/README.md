@@ -49,6 +49,36 @@
 
 ※ KMS 리허설 결과, 소요 시간 및 실제 식별자는 검증 후 기록한다.
 
+### 스냅샷 사전 검증
+
+2차 계정으로 복사한 스냅샷에 대해 다음을 확인한다.
+
+```bash
+SNAPSHOT_ID="<실제 스냅샷 ID>"
+
+aws rds describe-db-snapshots \
+  --db-snapshot-identifier "$SNAPSHOT_ID" \
+  --region ap-northeast-2 \
+  --query "DBSnapshots[0].{Status:Status,AllocatedStorage:AllocatedStorage,Engine:Engine,EngineVersion:EngineVersion,Encrypted:Encrypted,KmsKeyId:KmsKeyId}" \
+  --output table
+```
+
+검증 기준:
+
+- [ ] Status = available
+- [ ] AllocatedStorage <= 20GiB
+- [ ] Engine = mysql
+- [ ] EngineVersion = Terraform에 설정된 버전
+- [ ] Encrypted = true
+- [ ] KmsKeyId = 2차 계정에서 복사에 사용한 KMS 키
+- [ ] 계정 간 복사 단계별 소요 시간 기록
+- [ ] 10/26 실제 컷오버에 사용할 스냅샷 생성 시점 확정
+- [ ] 스냅샷 이후 거래에 대한 최종 동기화 절차 확정
+
+Terraform plan 성공만으로 스냅샷 복원 가능 여부가 보장되지는 않는다.
+
+스냅샷 복원 이후에도 Terraform 실행 시 최초 복원에 사용한 동일한 snapshot_identifier를 전달한다.
+
 ## 5. Terraform 검증
 
 프로젝트의 terraform/main 디렉터리에서 실행한다.
@@ -77,6 +107,16 @@
 - 데이터 정합성 확인 후 신규 RDS로 연결 전환
 - 실패 시 기존 RDS 유지(Plan B)
 - 10/27 이후 온프레미스 MySQL 복제 구성
+- 온프레미스 MySQL 복제 연결도 TLS를 사용하도록 설정하고 검증한다.
+
+### GTID 복제 준비
+
+- 10/26: RDS 복원 후 실제 GTID 설정값을 확인한다.
+- 초기 `OFF_PERMISSIVE`는 GTID 전환 준비 상태다.
+- 10/27 복제 시작 전에 `ON_PERMISSIVE`로 전환하고 필요한 재부팅 및 트랜잭션 상태를 확인한다.
+- 익명 트랜잭션이 모두 처리된 것을 확인한 뒤 `ON` 전환 여부를 결정한다.
+- GTID 단계 변경은 Terraform 설정에 반영하고 P5와 재부팅 시간을 협의한다.
+- 온프레미스 복제 연결의 TLS 설정과 GTID 자동 위치 지정 동작을 검증한다.
 
 ## 8. 주의사항
 
@@ -85,3 +125,16 @@
 - Terraform 상태 파일과 인증 정보를 커밋하지 않는다.
 - apply 및 destroy는 P5와 협의한다.
 - RDS 삭제 보호와 최종 스냅샷 보관 비용을 고려한다.
+
+### RDS 삭제 및 정리 절차
+
+공유 Terraform 상태를 사용하므로 P5와 협의 없이 destroy하지 않는다.
+
+1. 기존 RDS 데이터 및 백업 보존 필요 여부를 확인한다.
+2. `deletion_protection = false`로 변경하고 plan/apply한다.
+3. `final_snapshot_identifier`가 기존 스냅샷 이름과
+   충돌하지 않는지 확인한다.
+4. 승인된 RDS 삭제 작업을 수행하고 최종 스냅샷 생성 여부를 확인한다.
+5. 보존 기간이 지난 스냅샷과 관련 KMS 키를 별도로 정리한다.
+
+최종 스냅샷은 RDS 삭제 후에도 저장 비용이 발생할 수 있다.
