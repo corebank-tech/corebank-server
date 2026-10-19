@@ -200,7 +200,7 @@ class AccountMaturityIntegrationTest extends IntegrationTestSupport {
                         ps.setLong(2, customerId);
                         ps.setLong(3, productId);
                         ps.setString(4, index % 2 == 0 ? "TIME_DEPOSIT" : "INSTALLMENT_SAVINGS");
-                        ps.setLong(5, 0L);
+                        ps.setLong(5, 10_000L + index);
                         ps.setString(6, status.name());
                         ps.setString(7, PASSWORD_HASH);
                         ps.setTimestamp(8, Timestamp.valueOf(OPENED_AT));
