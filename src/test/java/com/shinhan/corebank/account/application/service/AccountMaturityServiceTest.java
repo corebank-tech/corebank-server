@@ -90,20 +90,37 @@ class AccountMaturityServiceTest {
     }
 
     @Test
-    @DisplayName("상태 전이 실패는 예외를 전파하고 다음 페이지를 처리하지 않는다")
-    void runInCob_propagatesFailure() {
+    @DisplayName("청크 실패 후에도 다음 페이지를 처리하고 마지막에 실패를 보고한다")
+    void runInCob_continuesAfterFailureAndReportsError() {
         when(businessDateProvider.nextBusinessDay(COB_DATE)).thenReturn(MATURITY_BASE_DATE);
 
         when(accountPersistencePort.findMaturityCandidateIdsAfter(0L, MATURITY_BASE_DATE, 500))
                 .thenReturn(List.of(101L));
 
+        when(accountPersistencePort.findMaturityCandidateIdsAfter(101L, MATURITY_BASE_DATE, 500))
+                .thenReturn(List.of(102L));
+
+        when(accountPersistencePort.findMaturityCandidateIdsAfter(102L, MATURITY_BASE_DATE, 500))
+                .thenReturn(List.of());
         IllegalStateException failure = new IllegalStateException("test failure");
 
         when(transitionService.transition(List.of(101L), MATURITY_BASE_DATE)).thenThrow(failure);
 
-        assertThatThrownBy(() -> service.runInCob(COB_DATE)).isSameAs(failure);
+        when(transitionService.transition(List.of(102L), MATURITY_BASE_DATE)).thenReturn(1);
 
-        verify(accountPersistencePort, never()).findMaturityCandidateIdsAfter(101L, MATURITY_BASE_DATE, 500);
+        assertThatThrownBy(() -> service.runInCob(COB_DATE))
+                .isInstanceOf(BusinessException.class)
+                .hasCause(failure)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.INTERNAL_ERROR);
+
+        InOrder order = inOrder(accountPersistencePort, transitionService);
+
+        order.verify(accountPersistencePort).findMaturityCandidateIdsAfter(0L, MATURITY_BASE_DATE, 500);
+        order.verify(transitionService).transition(List.of(101L), MATURITY_BASE_DATE);
+        order.verify(accountPersistencePort).findMaturityCandidateIdsAfter(101L, MATURITY_BASE_DATE, 500);
+        order.verify(transitionService).transition(List.of(102L), MATURITY_BASE_DATE);
+        order.verify(accountPersistencePort).findMaturityCandidateIdsAfter(102L, MATURITY_BASE_DATE, 500);
     }
 
     @Test

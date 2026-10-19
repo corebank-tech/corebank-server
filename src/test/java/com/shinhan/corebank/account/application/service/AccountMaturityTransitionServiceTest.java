@@ -67,17 +67,21 @@ class AccountMaturityTransitionServiceTest {
     }
 
     @Test
-    @DisplayName("이미 만기 처리된 계좌를 재실행하면 다시 저장하지 않는다")
+    @DisplayName("이미 MATURED인 계좌를 다시 조회해도 중복 저장하지 않는다")
     void transition_idempotent() {
-        Account account = account(101L, AccountStatus.ACTIVE, AccountType.TIME_DEPOSIT, BASE_DATE);
+        Account active = account(101L, AccountStatus.ACTIVE, AccountType.TIME_DEPOSIT, BASE_DATE);
 
-        when(accountPersistencePort.findByAccountIdForUpdate(101L)).thenReturn(Optional.of(account));
+        Account matured = account(101L, AccountStatus.MATURED, AccountType.TIME_DEPOSIT, BASE_DATE);
+
+        when(accountPersistencePort.findByAccountIdForUpdate(101L))
+                .thenReturn(Optional.of(active), Optional.of(matured));
 
         assertThat(service.transition(List.of(101L), BASE_DATE)).isEqualTo(1);
 
         assertThat(service.transition(List.of(101L), BASE_DATE)).isZero();
 
-        verify(accountPersistencePort, times(1)).save(account);
+        verify(accountPersistencePort, times(1)).save(active);
+        verify(accountPersistencePort, times(2)).findByAccountIdForUpdate(101L);
     }
 
     @Test

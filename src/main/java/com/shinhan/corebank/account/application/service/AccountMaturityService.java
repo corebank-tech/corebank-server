@@ -28,12 +28,14 @@ public class AccountMaturityService implements AccountMaturityUseCase {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
 
-        // ADR-0004: COB_DATE 자체가 아니라 다음 영업일을 기준으로 만기를 판정한다.
         LocalDate maturityBaseDate = businessDateProvider.nextBusinessDay(cobDate);
 
         long afterAccountId = 0L;
         long candidateCount = 0L;
         long transitionedCount = 0L;
+        long failedCandidateCount = 0L;
+        int failedChunkCount = 0;
+        RuntimeException firstFailure = null;
 
         log.info("만기 감지 시작 - cobDate={}, maturityBaseDate={}", cobDate, maturityBaseDate);
 
@@ -45,21 +47,45 @@ public class AccountMaturityService implements AccountMaturityUseCase {
                 break;
             }
 
-            // 다음 페이지는 이번 페이지 마지막 accountId 이후부터 조회한다.
-            afterAccountId = candidateIds.get(candidateIds.size() - 1);
-
-            int transitioned = transitionService.transition(candidateIds, maturityBaseDate);
+            long firstAccountId = candidateIds.get(0);
+            long lastAccountId = candidateIds.get(candidateIds.size() - 1);
 
             candidateCount += candidateIds.size();
-            transitionedCount += transitioned;
+
+            try {
+                int transitioned = transitionService.transition(candidateIds, maturityBaseDate);
+                transitionedCount += transitioned;
+
+            } catch (RuntimeException ex) {
+                failedChunkCount++;
+                failedCandidateCount += candidateIds.size();
+
+                if (firstFailure == null) {
+                    firstFailure = ex;
+                }
+
+                log.error(
+                        "만기 감지 청크 실패 - cobDate={}, firstAccountId={}, " + "lastAccountId={}, candidateCount={}",
+                        cobDate,
+                        firstAccountId,
+                        lastAccountId,
+                        candidateIds.size(),
+                        ex);
+            }
+
+            afterAccountId = lastAccountId;
         }
 
         log.info(
-                "만기 감지 완료 - cobDate={}, maturityBaseDate={}, candidates={}, transitioned={}, skipped={}",
+                "만기 감지 종료 - cobDate={}, candidates={}, transitioned={}, " + "failedCandidates={}, failedChunks={}",
                 cobDate,
-                maturityBaseDate,
                 candidateCount,
                 transitionedCount,
-                candidateCount - transitionedCount);
+                failedCandidateCount,
+                failedChunkCount);
+
+        if (failedChunkCount > 0) {
+            throw new BusinessException(CommonErrorCode.INTERNAL_ERROR, firstFailure);
+        }
     }
 }
