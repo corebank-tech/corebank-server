@@ -993,7 +993,7 @@ public interface CobStep {
 ### PH-77. 정보계 조회 API
 
 - 일별 수신 잔액 추이, 상품별 가입/해지(`GL_READ`). 채널별 거래량은 뺐다([D-28](README.md#d-28--1015--p3)). 응답 스키마는 [info_mart.md](info_mart.md) §5다.
-- **모든 응답에 `asOf` 필드**(마지막 적재 완료 기준일, `yyyy-MM-dd`)가 있고 개인정보는 없다. p95·p99를 기록한다.
+- **모든 응답에 `asOf` 필드**(빠짐없이 적재가 끝난 마지막 기준일, `yyyy-MM-dd`. [info_mart.md](info_mart.md) §5-4)가 있고 개인정보는 없다. p95·p99를 기록한다.
 - 온프레미스 정보계 API는 VPN 안쪽에서만 받는다. 브라우저는 평소처럼 ALB → WAS로 요청하고, WAS가 세션과 `GL_READ`를 확인한 뒤 VPN으로 온프레미스 API를 부른다(`adapter/out` 어댑터). 온프레미스 API는 인터넷에 공개하지 않는다.
 - 배포 형태(corebank 이미지 + 프로필 / 별도 앱)는 착수 전에 정한다.
 
