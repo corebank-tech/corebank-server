@@ -52,7 +52,8 @@ class InterbankSocketClientTest {
                         Duration.ofMillis(500),
                         RESPONSE_TIMEOUT,
                         new InterbankProperties.CircuitBreaker(
-                                50, minimumNumberOfCalls, minimumNumberOfCalls, Duration.ofMinutes(1))),
+                                50, minimumNumberOfCalls, minimumNumberOfCalls, Duration.ofMinutes(1)),
+                        new InterbankProperties.Inquiry(Duration.ZERO, 20)),
                 CLOCK);
     }
 

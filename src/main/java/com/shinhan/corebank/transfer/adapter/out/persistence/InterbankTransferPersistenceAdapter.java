@@ -2,8 +2,11 @@ package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import com.shinhan.corebank.transfer.application.port.out.InterbankTransferPort;
 import com.shinhan.corebank.transfer.domain.Transfer;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,5 +22,13 @@ public class InterbankTransferPersistenceAdapter implements InterbankTransferPor
     @Transactional(propagation = Propagation.MANDATORY)
     public Optional<Transfer> findByTransactionNumberForUpdate(String transactionNumber) {
         return repository.findByTransactionNumberForUpdate(transactionNumber).map(TransferMapper::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Transfer> findUnsettled(LocalDateTime createdBefore, int limit) {
+        return repository.findUnsettledInterbank(createdBefore, PageRequest.of(0, limit)).stream()
+                .map(TransferMapper::toDomain)
+                .toList();
     }
 }

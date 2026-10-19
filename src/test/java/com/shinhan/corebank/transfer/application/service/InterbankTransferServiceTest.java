@@ -2,6 +2,7 @@ package com.shinhan.corebank.transfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -24,6 +25,7 @@ import com.shinhan.corebank.transfer.application.port.out.InterbankGatewayPort;
 import com.shinhan.corebank.transfer.application.port.out.InterbankOutcome;
 import com.shinhan.corebank.transfer.application.port.out.InterbankReply;
 import com.shinhan.corebank.transfer.application.port.out.InterbankRequest;
+import com.shinhan.corebank.transfer.application.port.out.InterbankTransferPort;
 import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferAuthTokenVerificationPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
@@ -90,6 +92,9 @@ class InterbankTransferServiceTest extends IntegrationTestSupport {
     private InterbankSettlementService interbankSettlementService;
 
     @Autowired
+    private InterbankTransferPort interbankTransferPort;
+
+    @Autowired
     private TransferLimitPort transferLimitPort;
 
     @Autowired
@@ -135,7 +140,8 @@ class InterbankTransferServiceTest extends IntegrationTestSupport {
                         server.port(),
                         Duration.ofMillis(500),
                         Duration.ofMillis(500),
-                        new InterbankProperties.CircuitBreaker(50, 100, 100, Duration.ofMinutes(1))),
+                        new InterbankProperties.CircuitBreaker(50, 100, 100, Duration.ofMinutes(1)),
+                        new InterbankProperties.Inquiry(Duration.ZERO, 20)),
                 clock);
         new TransactionTemplate(transactionManager)
                 .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
@@ -177,6 +183,26 @@ class InterbankTransferServiceTest extends IntegrationTestSupport {
                 eventPublisher,
                 clock,
                 transactionManager);
+    }
+
+    private InterbankInquiryService inquiryService(Duration minAge) {
+        return new InterbankInquiryService(
+                interbankTransferPort,
+                client,
+                interbankSettlementService,
+                new InterbankProperties(
+                        "127.0.0.1",
+                        server.port(),
+                        Duration.ofMillis(500),
+                        Duration.ofMillis(500),
+                        new InterbankProperties.CircuitBreaker(50, 100, 100, Duration.ofMinutes(1)),
+                        new InterbankProperties.Inquiry(minAge, 20)),
+                clock);
+    }
+
+    private String status(String transactionNumber) {
+        return jdbcTemplate.queryForObject(
+                "SELECT status FROM transfer WHERE transaction_number = ?", String.class, transactionNumber);
     }
 
     private static InterbankTransferCommand command(String bankCode, String accountNumber, long amount) {
@@ -364,5 +390,58 @@ class InterbankTransferServiceTest extends IntegrationTestSupport {
                         Long.class,
                         result.transactionNumber()))
                 .isZero();
+    }
+
+    @Test
+    @DisplayName("조회거래: 응답 대기보다 오래된 처리 불명 건을 물어 0000이면 SUCCESS로 확정한다")
+    void inquiry_settlesTimedOutTransfer() throws Exception {
+        setFault("NO_RESPONSE");
+        InterbankTransferResult result = service(client).execute(command("004", "1234567890123", AMOUNT));
+        setFault("NONE");
+
+        int settled = inquiryService(Duration.ZERO).settleUnsettled();
+
+        assertThat(settled).isEqualTo(1);
+        assertThat(status(result.transactionNumber())).isEqualTo("SUCCESS");
+        assertThat(unsettledBalance(result.transactionNumber())).isZero();
+    }
+
+    @Test
+    @DisplayName("조회거래: 조회에도 응답이 없으면 TIMEOUT 그대로 두고, 만든 지 얼마 안 된 건은 묻지 않는다")
+    void inquiry_leavesUnknownAndYoungTransfers() throws Exception {
+        setFault("NO_RESPONSE");
+        InterbankTransferResult result = service(client).execute(command("004", "1234567890123", AMOUNT));
+
+        int whileNoResponse = inquiryService(Duration.ZERO).settleUnsettled();
+        setFault("NONE");
+        int tooYoung = inquiryService(Duration.ofHours(1)).settleUnsettled();
+
+        assertThat(whileNoResponse).isZero();
+        assertThat(tooYoung).isZero();
+        assertThat(status(result.transactionNumber())).isEqualTo("TIMEOUT");
+        assertThat(balance()).isEqualTo(INITIAL_BALANCE - AMOUNT);
+    }
+
+    @Test
+    @DisplayName("출금 뒤 전문을 보내기 전에 죽었다면, 조회거래가 3001(원거래 미수신)을 받아 출금을 되돌리고 ERROR로 확정한다")
+    void inquiry_refundsWhenOriginalNeverArrived() {
+        // 송신 직전 서버가 죽은 상황 — 전문은 나가지 않았고 1단계가 커밋한 TIMEOUT만 남는다.
+        InterbankGatewayPort crashedBeforeSend = mock(InterbankGatewayPort.class);
+        when(crashedBeforeSend.isAvailable()).thenReturn(true);
+        when(crashedBeforeSend.send(any())).thenReturn(InterbankReply.of(InterbankOutcome.UNKNOWN, null));
+        InterbankTransferResult result = service(crashedBeforeSend).execute(command("004", "1234567890123", AMOUNT));
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.TIMEOUT);
+
+        int settled = inquiryService(Duration.ZERO).settleUnsettled();
+
+        assertThat(settled).isEqualTo(1);
+        assertThat(status(result.transactionNumber())).isEqualTo("ERROR");
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT error_code FROM transfer WHERE transaction_number = ?",
+                        String.class,
+                        result.transactionNumber()))
+                .isEqualTo("TRF0308");
+        assertThat(balance()).isEqualTo(INITIAL_BALANCE);
+        assertThat(unsettledBalance(result.transactionNumber())).isZero();
     }
 }

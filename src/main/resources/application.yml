@@ -92,6 +92,12 @@ app:
       sliding-window-size: 20
       minimum-number-of-calls: 10
       wait-duration-in-open-state: 30s
+    # 처리 불명 건 조회거래. 응답 대기보다 충분히 지난 건만 묻는다 — 아직 응답을 기다리는 건에 3001을 받지 않게 한다
+    inquiry:
+      min-age: 30s
+      fixed-delay: 60s
+      # 스케줄러 스레드가 2개라(#604) 한 번에 묻는 건수를 묶어 다른 스케줄을 오래 막지 않는다
+      batch-size: 20
   interest:
     income-tax-rate: "0.14"
     local-tax-ratio: "0.10"
