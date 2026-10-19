@@ -188,6 +188,7 @@ SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS 
 | `role`·`permissions[]` | `CustomerInfoResponse` |
 | 감사 actor role | `LoginAuditAdapter` — detail 의 `role` 키 |
 | 감사 요구 역할 | `LoginAuditAdapter` — detail 의 `requiredRole` 키. 실패 응답이 고객 로그인과 같아(결정 ③) 이것 없이는 어느 경로로 두드렸는지 가릴 수 없다. 고객 로그인은 `ANY` (PR #639 리뷰) |
+| 로그아웃 감사 | `LogoutAuditEventListener` — Spring Security 의 `LogoutSuccessEvent` 를 받아 `LOGOUT` 으로 남긴다 |
 | S0 임시 가드 | 제거 완료 |
 
 ### 권한 매핑표
@@ -212,7 +213,9 @@ SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS 
 
 ### 남은 것
 
-- 로그아웃 감사 — `AuditEventType` 에 이벤트 자체가 없다. ②는 로그인만 했고, 담당 태스크는 아직 없다
+- **세션 만료(무조작 30분) 로그아웃은 감사에 남지 않는다.** `LogoutSuccessEvent` 는 명시적 로그아웃에만
+  온다. 필요해지면 `HttpSessionDestroyedEvent`(`SecurityConfig` 에 `HttpSessionEventPublisher` 가 있다)로
+  별건 처리한다 — 어느 REQ 도 요구하지 않아 ② 범위에 넣지 않았다
 - 권한 부여·회수 API 와 `role=CUSTOMER` 인데 권한 행이 있는 모순 제약 — PH-49b.
   **회수는 권한 행만 지우면 이미 로그인한 세션에 반영되지 않는다.** 즉시 끊어야 하면 `SessionRegistry`
   (`SecurityConfig` 에 빈이 있다)로 그 관리자의 세션을 함께 만료시킨다
