@@ -7,7 +7,13 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import java.time.LocalDate;
-import java.util.*;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -137,7 +143,7 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
                 afterAccountId,
                 maturityBaseDate,
                 AccountStatus.ACTIVE,
-                Set.of(AccountType.TIME_DEPOSIT, AccountType.INSTALLMENT_SAVINGS),
+                AccountType.maturityEligibleTypes(),
                 PageRequest.of(0, limit));
     }
 

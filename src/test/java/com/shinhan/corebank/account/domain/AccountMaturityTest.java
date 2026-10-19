@@ -75,7 +75,7 @@ class AccountMaturityTest {
         assertThatThrownBy(() -> account.markMatured(MATURITY_DATE.minusDays(1)))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
-                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+                        .isEqualTo(AccountErrorCode.MATURITY_DATE_NOT_REACHED));
 
         assertThat(account.getStatus()).isEqualTo(AccountStatus.ACTIVE);
     }

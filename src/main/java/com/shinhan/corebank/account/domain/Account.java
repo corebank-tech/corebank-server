@@ -325,9 +325,9 @@ public class Account {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
 
-        // 요구불계좌는 만기 전이 대상이 아니다.
-        if (accountType == AccountType.DEMAND_DEPOSIT) {
-            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        // 만기 대상이 아닌 계좌 유형은 전이할 수 없다.
+        if (!accountType.isMaturityEligible()) {
+            throw new BusinessException(AccountErrorCode.MATURITY_UNSUPPORTED_ACCOUNT_TYPE);
         }
 
         // 동일 COB 재실행 시 중복 전이를 방지한다.
@@ -341,8 +341,8 @@ public class Account {
         }
 
         // 만기일이 아직 도래하지 않았다면 전이를 거부한다.
-        if (maturityDate.isAfter(effectiveBusinessDate)) {
-            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        if (maturityDate == null || maturityDate.isAfter(effectiveBusinessDate)) {
+            throw new BusinessException(AccountErrorCode.MATURITY_DATE_NOT_REACHED);
         }
 
         this.status = AccountStatus.MATURED;
