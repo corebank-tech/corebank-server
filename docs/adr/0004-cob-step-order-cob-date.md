@@ -35,12 +35,13 @@ PH-43 COB 파이프라인 착수 전 설계 검토(9/28~29)에서, "영업일 �
   이 ADR의 범위가 아니다** — #556(실행 기록·재시작) 설계에서 정한다. 배치 실행 기록
   테이블 자체는 #603에서 먼저 만들었다. 이 ADR이
   고정하는 건 "전환이 첫 스텝"이라는 순서와, 그 뒤에 오는 스텝들이 받는 날짜의 **의미**뿐이다.
-- 2번 스텝부터는 `CobStep.run(LocalDate businessDate)`에 **`COB_DATE` 값**을 넘긴다 —
-  "오늘 영업일"이 아니라 "지금 마감 중인 영업일"이라는 뜻이다. **스텝 구현체(P4 대사,
-  P2 만기감지)는 이 파라미터를 "이미 전환된 새 영업일"로 오해하면 틀린 날짜를
-  기준으로 원장을 맞춰보게 된다.**
-- 만기감지(PH-15)처럼 다음 영업일에 어떤 상태여야 하는지 판단하는 스텝은 `nextBusinessDay(COB_DATE)`를 기준일로 사용한다. 
-  `CobStep.run(businessDate)`에 전달되는 값 자체는 그대로 `COB_DATE`이며, PH-16 휴면 전환에도 동일한 기준을 적용한다.
+- 2번 스텝부터는 `CobStep.run(LocalDate businessDate)`에 **`COB_DATE` 값**을 넘긴다.
+  이 값은 영업일 전환 이후의 새 영업일이 아니라 마감 대상 영업일이다.
+  P4 원장 대사 스텝은 `COB_DATE`를 기준으로 처리한다.
+- P2 만기 감지(PH-15)처럼 다음 영업일에 어떤 상태여야 하는지 판단하는 스텝은
+  `BusinessDateProvider.nextBusinessDay(COB_DATE)`를 기준일로 사용한다.
+  `CobStep.run(businessDate)`에 전달되는 값 자체는 그대로 `COB_DATE`이며,
+  PH-16 휴면 전환에도 동일한 기준을 적용한다.
 - `BusinessDateAdvancer.advanceFrom()`의 기존 가드(호출 시점 기준 미래 영업일 마감 거부,
   `businessDate.isAfter(LocalDate.now(clock))`)는 그대로 유지한다 — 이 가드가 "영업일
   전환이 첫 스텝"이라는 전제와 맞는 유일한 조건이다. 자정 후 COB로 바뀌면 `<`로
