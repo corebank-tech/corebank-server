@@ -23,4 +23,10 @@ public interface LedgerSavePort {
      * 2행 경로({@link #save})와 섞이지 않게 메서드를 나눴다.
      */
     void saveCredit(LedgerEntry credit);
+
+    /** 상대 고객 계좌 없는 출금 1행을 저장한다(타행이체 송신). {@link LedgerEntry#forDebit}으로 만든 것만 받는다. */
+    void saveDebit(LedgerEntry debit);
+
+    /** 원 출금 행에 reversed를 세우고 되돌림 입금 1행을 저장한다. 이미 되돌린 출금이면 TRF0305로 거부한다. */
+    void saveRefund(LedgerEntry refund, LedgerEntry originalDebit);
 }
