@@ -22,6 +22,8 @@ public class Transfer {
     private Long withdrawalAccountId;
     private Long depositAccountId;
     private String depositAccountNumber;
+    // NULL이면 당행 거래다. 타행 거래는 depositAccountId가 없다(#654).
+    private String payeeBankCode;
     private String payeeName;
     private long amount;
     private long fee;
@@ -91,6 +93,47 @@ public class Transfer {
                 .sourceType(sourceType)
                 .sourceId(sourceId)
                 .executionDate(executionDate)
+                .myPassbookMemo(myPassbookMemo)
+                .recipientPassbookMemo(recipientPassbookMemo)
+                .transferredAt(now)
+                .createdAt(now)
+                .tradeDate(tradeDate)
+                .build();
+    }
+
+    // 타행 이체 생성. 입금계좌 ID는 없고 예금주는 응답으로 받으며, 타행 예약·자동이체는 범위 밖이라 즉시이체로 고정한다.
+    public static Transfer createInterbank(
+            String transactionNumber,
+            Long withdrawalAccountId,
+            String payeeBankCode,
+            String depositAccountNumber,
+            long amount,
+            long fee,
+            TransferChannel channel,
+            String myPassbookMemo,
+            String recipientPassbookMemo,
+            LocalDateTime now,
+            LocalDate tradeDate) {
+        TransferValidations.requireNonNull(withdrawalAccountId, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonBlank(transactionNumber, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonBlank(payeeBankCode, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonBlank(depositAccountNumber, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonNull(channel, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonNull(now, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonNull(tradeDate, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requirePositiveAmount(amount);
+        TransferValidations.requireNonNegativeFee(fee);
+
+        return Transfer.builder()
+                .transactionNumber(transactionNumber)
+                .withdrawalAccountId(withdrawalAccountId)
+                .payeeBankCode(payeeBankCode)
+                .depositAccountNumber(depositAccountNumber)
+                .amount(amount)
+                .fee(fee)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(channel)
+                .status(ProcessResultStatus.PROCESSING)
                 .myPassbookMemo(myPassbookMemo)
                 .recipientPassbookMemo(recipientPassbookMemo)
                 .transferredAt(now)
