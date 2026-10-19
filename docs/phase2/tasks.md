@@ -62,7 +62,7 @@
 | [FE #139](#fe-139-matured-정책표) | MATURED 정책표 | S1 | 0.5 | PH-10 | — | FE #139 | 예정 |
 | [PH-12](#ph-12-이자-계산기--절사-규칙) | 이자 계산기 · 절사 규칙 | S2 | 3.5 | PH-11 | **10/16** | #623 | 완료 |
 | [PH-90](#ph-90-원장잔액--출금가능액-분리--transferprecheck) | 원장잔액·출금가능액 분리 + `TransferPreCheck` | S2 | 3 | PH-87 · PH-99 | **10/16** (P4 머지) | — | 예정 |
-| [PH-70-①](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | `modules/data` Terraform plan — RDS | S2 | 1.5 | PH-50 | — | — | 예정 |
+| [PH-70-①](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | `modules/data` Terraform plan — RDS | S2 | 1.5 | PH-50 | **10/21** (코드·plan) | #650 | 진행 중 |
 | [PH-15](#ph-15-만기--감지--matured-전이--원리금--만기해지-api) | 만기 — 감지 · MATURED · 원리금 · 만기해지 API | S3 | 3.5 | PH-12 · PH-10 · PH-43 · 입금 계약(PH-99) | **10/23** | #419 | 예정 |
 | [PH-14](#ph-14-이자-지급--원천징수) | 이자 지급 · 원천징수 | S3 | 1.5 | PH-12 · PH-24 · 입금 계약(PH-99) | — | — | 예정 |
 | [PH-13](#ph-13-적수-집계-sql-전환--재측정) | 적수 집계 SQL 전환 · 재측정 | S3 | 1.5 | PH-11 | — | — | 예정 |
@@ -422,10 +422,18 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 
 **①**
 
-- RDS MySQL 1개(Multi-AZ), 파라미터 그룹(KST, 슬로우쿼리 로그, `binlog_format = ROW`), 자동 백업 7일, 저장 암호화
-- ElastiCache는 만들지 않는다([ADR-0007](../adr/0007-remove-redis.md)). 세션은 RDS에 둔다([PH-49c](#ph-49c-세션-외부화)).
-- 서브넷과 SG는 PH-50 출력값을 참조한다.
-- 기존 RDS 스냅샷을 복원하는 방식이다. `terraform import` 절차 1장을 쓰고 `plan`을 통과시킨다.
+- `terraform/main/modules/data`에 RDS 인스턴스·DB 서브넷 그룹·파라미터 그룹을 구성한다.
+- RDS 사양은 PH-57 용량 산정(PR #627)을 따른다.
+    - MySQL 8.4, `db.t3.small`, Multi-AZ
+    - gp3 20GiB, 스토리지 자동 확장 비활성화
+    - 자동 백업 7일, 저장 암호화, 외부 접근 비활성화
+- 파라미터 그룹: KST, 슬로우쿼리 로그, `binlog_format = ROW`, `innodb_buffer_pool_size = {DBInstanceClassMemory*3/4}`.
+  `max_connections`는 기본값을 유지한다.
+- 서브넷과 SG는 PH-50의 Terraform 출력값을 참조한다.
+- 2차 AWS 계정 소유의 복사된 RDS 스냅샷을 `snapshot_identifier`로 전달받아 복원한다.
+- 수동 복원한 RDS를 Terraform에 편입할 경우에만 `terraform import`를 수행한다.
+- 상세 설정과 실행 절차는 `terraform/main/modules/data/README.md`에 작성한다.
+- **완료 기준:** `terraform validate` 및 `terraform plan` 통과. 실제 `apply`와 RDS 복원은 PH-70-②에서 10/26에 진행한다.
 
 **②**
 
