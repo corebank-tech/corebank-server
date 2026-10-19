@@ -983,9 +983,9 @@ public interface CobStep {
 ### PH-76. 정보계 ETL
 
 - **PH-76은 10/21까지 덤프 적재로 먼저 진행한다**(P5 공지). PH-77은 10/28 그대로이고, 10/26~27은 컷오버라 측정과 적재 확인을 하지 않는다.
-- **온프레미스 독립 작업이다.** COB 스텝이 아니다([D-25](README.md#d-25--927--리드-제안팀-회의-확인-대기)). 레플리카에 복제된 COB 실행 기록(`batch_execution_history`, #603)에 해당 영업일 행이 보이면 시작한다. 복제는 커밋 순서대로 적용되므로, 그 행이 보이면 그 영업일 원장도 모두 도착해 있다(병렬 복제면 `replica_preserve_commit_order = ON`). 조건은 [info_mart.md](info_mart.md) §3-1이다.
+- **온프레미스 독립 작업이다.** COB 스텝이 아니다([D-25](README.md#d-25--927--리드-제안팀-회의-확인-대기)). 자동 적재는 #556이 원천 `business_date_cutoff`와 date-fence를 구현한 뒤에만 켠다. 레플리카의 `business_date_cutoff(base_date=D, status=CLOSED)`가 유일한 시작 신호이고, `batch_execution_history`(#603)는 관측용이라 신호로 쓰지 않는다. cutoff는 D 거래를 모두 drain한 뒤 영업일 전환과 같은 원천 트랜잭션으로 커밋되어야 하며, 복제는 `replica_preserve_commit_order = ON`으로 그 순서를 보존한다. 상세 조건은 [info_mart.md](info_mart.md) §3-0~§3-1이다.
 - 레플리카는 10/27 복제 시작(P2 PH-70-②) 뒤에 생긴다. 그 전에는 온프레미스 MySQL에 덤프를 적재해 개발하고, 10/27에 원본을 레플리카로 바꾼다. **Plan B:** 복제가 늦으면 덤프 적재로 시연한다.
-- 마트 2종을 온프레미스 MySQL에 적재한다. 전일 확정분 증분이고 재적재가 가능하며, **PII는 적재하지 않는다.** 스키마 · 트랜잭션 경계 · 대조 규칙은 [info_mart.md](info_mart.md) §2~§4를 따른다. 구현은 별도 jar(`info-etl.jar`), Spring 없이 JDBC다(#644). 잔액 적재 #644, 이벤트 · 기간 적재 #645, 대조 · PII 검증 · 적재 시간 측정 #646.
+- 마트 2종을 온프레미스 MySQL에 적재한다. 전일 확정분 증분이고 재적재가 가능하며, **PII는 적재하지 않는다.** 스키마 · 트랜잭션 경계 · 대조 규칙은 [info_mart.md](info_mart.md) §2~§4를 따른다. 이벤트 적재 전에는 P2가 가입·해지 때의 논리 영업일을 `subscription_trade_date`·`closed_trade_date`로 저장해야 한다(§3-0·§3-3). 구현은 별도 jar(`info-etl.jar`), Spring 없이 JDBC다(#644). 잔액 적재 #644, 이벤트 · 기간 적재 #645, 대조 · PII 검증 · 적재 시간 측정 #646.
 - 덤프 기간에는 기준일을 실행 인자로 받는다. 거래일이 NULL인 원장은 [#515](https://github.com/corebank-tech/corebank-server/issues/515) 채우기 규칙으로 대체한다.
 - 마트는 레플리카와 **다른 MySQL 인스턴스**에 둔다(같은 VM의 다른 포트 가능). 레플리카의 `super_read_only`가 인스턴스 전체에 걸리기 때문이다. 가명 키(HMAC)의 키는 ETL에만 둔다.
 - 적재 실패는 soft다. 300만 원장 적재 시간을 기록하고, 마트 합계 = 원장 합계를 P3와 함께 검증한다.
