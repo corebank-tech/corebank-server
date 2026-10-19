@@ -6,6 +6,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
+import com.shinhan.corebank.business.api.BusinessDateProvider;
+import com.shinhan.corebank.business.support.BusinessDateTestFixture;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
@@ -53,6 +55,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 class TransferExecutionServiceHookTest extends IntegrationTestSupport {
 
+    // 달력일(테스트 실행일)과 겹치지 않는 영업일 — 같으면 영업일을 읽었는지 달력일을 썼는지 구분되지 않는다.
+    private static final LocalDate BUSINESS_DATE = LocalDate.of(2026, 11, 2);
+
     @Autowired
     private EntityManager entityManager;
 
@@ -92,6 +97,14 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
     @Autowired
     private Clock clock;
 
+    @Autowired
+    private BusinessDateProvider businessDateProvider;
+
+    @Autowired
+    private BusinessDateTestFixture businessDateTestFixture;
+
+    private LocalDate originalBusinessDate;
+
     @MockitoBean
     private OtpAuthTokenVerifier otpAuthTokenVerifier;
 
@@ -100,10 +113,17 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
 
     @BeforeEach
     void seed() {
+        originalBusinessDate = businessDateTestFixture.currentInDb();
+        businessDateTestFixture.moveTo(BUSINESS_DATE);
         // 다른 테스트 클래스가 남긴 고객 1의 한도 사용액 행이 롤백 검증을 오염시키지 않게 먼저 비운다.
         cleanUpCommittedData();
         new TransactionTemplate(transactionManager)
                 .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+    }
+
+    @AfterEach
+    void restoreBusinessDate() {
+        businessDateTestFixture.moveTo(originalBusinessDate);
     }
 
     @AfterEach
@@ -208,7 +228,6 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
             transactionActive.add(TransactionSynchronizationManager.isActualTransactionActive());
         };
         TransferExecutionService service = serviceWith(List.of(), List.of(capturing));
-        LocalDate before = LocalDate.now(clock);
 
         TransferResult result = service.execute(immediateCommand(30000L));
 
@@ -221,7 +240,38 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
         assertThat(context.amount()).isEqualTo(30000L);
         assertThat(context.fromAccountId()).isEqualTo(101L);
         assertThat(context.toAccountId()).isEqualTo(202L);
-        assertThat(context.tradeDate()).isBetween(before, LocalDate.now(clock));
+        assertThat(context.tradeDate()).isEqualTo(BUSINESS_DATE);
+    }
+
+    @Test
+    @DisplayName("[거래일] 성공 이체는 transfer 행·원장 2행·훅 B가 모두 같은 영업일을 거래일로 갖는다")
+    void success_tradeDateIsBusinessDate_onTransferLedgerAndHook() {
+        List<LocalDate> hookTradeDates = new ArrayList<>();
+        TransferExecutionService service =
+                serviceWith(List.of(), List.of(context -> hookTradeDates.add(context.tradeDate())));
+
+        TransferResult result = service.execute(immediateCommand(30000L));
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(transferTradeDate(result.transactionNumber())).isEqualTo(BUSINESS_DATE);
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT trade_date FROM ledger_entry WHERE transaction_number = ?",
+                        LocalDate.class,
+                        result.transactionNumber()))
+                .containsExactly(BUSINESS_DATE, BUSINESS_DATE);
+        assertThat(hookTradeDates).containsExactly(BUSINESS_DATE);
+    }
+
+    @Test
+    @DisplayName("[거래일] 실패(ERROR) 이체 행도 원장 없이 같은 영업일을 거래일로 갖는다")
+    void failure_errorRowHasBusinessDateAsTradeDate() {
+        TransferExecutionService service =
+                serviceWith(List.of(recordingPreCheck(1, new ArrayList<>(), true)), List.of());
+
+        TransferResult result = service.execute(immediateCommand(30000L));
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(transferTradeDate(result.transactionNumber())).isEqualTo(BUSINESS_DATE);
     }
 
     private TransferExecutionService serviceWith(
@@ -238,6 +288,7 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
                 preChecks,
                 ledgerPostingHooks,
                 clock,
+                businessDateProvider,
                 transactionManager,
                 eventPublisher);
     }
@@ -287,6 +338,11 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
         return jdbcTemplate.queryForList(
                 "SELECT status FROM transfer WHERE withdrawal_account_id = 101 AND deposit_account_id = 202",
                 String.class);
+    }
+
+    private LocalDate transferTradeDate(String transactionNumber) {
+        return jdbcTemplate.queryForObject(
+                "SELECT trade_date FROM transfer WHERE transaction_number = ?", LocalDate.class, transactionNumber);
     }
 
     private long balanceOf(long accountId) {

@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
+import com.shinhan.corebank.business.api.BusinessDateProvider;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
@@ -21,6 +22,7 @@ import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +58,7 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
     private final LedgerSavePort ledgerSavePort;
     private final List<LedgerPostingHook> ledgerPostingHooks;
     private final Clock clock;
+    private final BusinessDateProvider businessDateProvider;
 
     @Override
     @Transactional
@@ -65,6 +68,8 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
                 .orElseThrow(() -> new BusinessException(TransferErrorCode.TRANSACTION_NOT_FOUND));
 
         LocalDateTime requestedAt = LocalDateTime.now(clock);
+        // 정정은 오늘 일어난 새 거래다 — 원거래일이 아니라 지금 영업일로 한 번 읽는다(#516).
+        LocalDate tradeDate = businessDateProvider.today();
         String transactionNumber = transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), CHANNEL);
 
         // 돈은 원거래 입금계좌(payee)에서 원거래 출금계좌로 돌아간다. 락은 lockForTransfer가 ID 오름차순으로 잡는다.
@@ -75,7 +80,7 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
         LocalDateTime executedAt = LocalDateTime.now(clock);
 
         original.invalidate(executedAt);
-        Transfer reversal = claimReversal(original, locked, transactionNumber, executedAt);
+        Transfer reversal = claimReversal(original, locked, transactionNumber, executedAt, tradeDate);
         requireActiveAccounts(locked);
         if (locked.withdrawal().balance() < original.getAmount()) {
             throw new BusinessException(TransferErrorCode.REVERSAL_INSUFFICIENT_BALANCE);
@@ -96,7 +101,8 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
                         balances.withdrawalBalanceAfter(),
                         balances.depositBalanceAfter(),
                         CHANNEL,
-                        executedAt),
+                        executedAt,
+                        tradeDate),
                 originalLedger);
         runLedgerPostingHooks(new LedgerPostingContext(
                 transactionNumber,
@@ -104,7 +110,7 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
                 original.getAmount(),
                 original.getDepositAccountId(),
                 original.getWithdrawalAccountId(),
-                executedAt.toLocalDate()));
+                tradeDate));
         reversal.complete(balances.withdrawalBalanceAfter(), executedAt);
         transferSavePort.save(reversal);
 
@@ -123,12 +129,14 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
         }
 
         LocalDateTime requestedAt = LocalDateTime.now(clock);
+        // 정정은 오늘 일어난 새 거래다 — 원거래일이 아니라 지금 영업일로 한 번 읽는다(#516).
+        LocalDate tradeDate = businessDateProvider.today();
         String transactionNumber = transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), CHANNEL);
         LockedAccountsForTransfer locked =
                 accountLockPort.lockForTransfer(original.getWithdrawalAccountId(), original.getDepositAccountId());
         LocalDateTime executedAt = LocalDateTime.now(clock);
 
-        Transfer repost = claimRepost(original, correctedAmount, transactionNumber, executedAt);
+        Transfer repost = claimRepost(original, correctedAmount, transactionNumber, executedAt, tradeDate);
         requireActiveAccounts(locked);
         if (locked.withdrawal().balance() < correctedAmount) {
             throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
@@ -147,21 +155,22 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
                 original.getMyPassbookMemo(),
                 original.getRecipientPassbookMemo(),
                 CHANNEL,
-                executedAt));
+                executedAt,
+                tradeDate));
         runLedgerPostingHooks(new LedgerPostingContext(
                 transactionNumber,
                 original.getTransferType().ledgerTransactionType(),
                 correctedAmount,
                 original.getWithdrawalAccountId(),
                 original.getDepositAccountId(),
-                executedAt.toLocalDate()));
+                tradeDate));
         repost.complete(balances.withdrawalBalanceAfter(), executedAt);
         transferSavePort.save(repost);
 
         return new TransferRepostResult(transactionNumber, original.getTransactionNumber(), correctedAmount);
     }
 
-    // [훅 B] 기표 트랜잭션 안이라 훅 예외는 정정 전체를 롤백한다. tradeDate 는 PH-41 전까지 기표 시각의 달력일이다.
+    // [훅 B] 기표 트랜잭션 안이라 훅 예외는 정정 전체를 롤백한다.
     private void runLedgerPostingHooks(LedgerPostingContext context) {
         for (LedgerPostingHook hook : ledgerPostingHooks) {
             hook.afterLedger(context);
@@ -170,7 +179,11 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
 
     // 정상거래는 원래 하려던 거래라 예금주명·통장 메모를 원거래 스냅샷 그대로 쓴다.
     private Transfer claimRepost(
-            Transfer original, long correctedAmount, String transactionNumber, LocalDateTime executedAt) {
+            Transfer original,
+            long correctedAmount,
+            String transactionNumber,
+            LocalDateTime executedAt,
+            LocalDate tradeDate) {
         Transfer repost = Transfer.create(
                 transactionNumber,
                 original.getWithdrawalAccountId(),
@@ -186,7 +199,8 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
                 null,
                 original.getMyPassbookMemo(),
                 original.getRecipientPassbookMemo(),
-                executedAt);
+                executedAt,
+                tradeDate);
         repost.linkToOriginal(CorrectionType.REPOST, original.getTransferId());
         return claim(repost);
     }
@@ -210,7 +224,11 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
     }
 
     private Transfer claimReversal(
-            Transfer original, LockedAccountsForTransfer locked, String transactionNumber, LocalDateTime executedAt) {
+            Transfer original,
+            LockedAccountsForTransfer locked,
+            String transactionNumber,
+            LocalDateTime executedAt,
+            LocalDate tradeDate) {
         String refundAccountNumber = locked.deposit().accountNumber();
         String refundAccountHolder = accountLockPort
                 .resolvePayeeByAccountNumber(refundAccountNumber)
@@ -232,7 +250,8 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
                 null,
                 REVERSAL_MEMO,
                 REVERSAL_MEMO,
-                executedAt);
+                executedAt,
+                tradeDate);
         reversal.linkToOriginal(CorrectionType.REVERSAL, original.getTransferId());
         return claim(reversal);
     }

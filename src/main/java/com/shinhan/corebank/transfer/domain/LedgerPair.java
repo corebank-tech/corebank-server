@@ -3,6 +3,7 @@ package com.shinhan.corebank.transfer.domain;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import lombok.AccessLevel;
@@ -38,7 +39,8 @@ public class LedgerPair {
             String myPassbookMemo,
             String recipientPassbookMemo,
             TransferChannel channel,
-            LocalDateTime occurredAt) {
+            LocalDateTime occurredAt,
+            LocalDate tradeDate) {
         TransferValidations.requireNonNull(transferId, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requireNonBlank(transactionType, CommonErrorCode.REQUIRED_FIELD_MISSING);
 
@@ -55,6 +57,7 @@ public class LedgerPair {
                 recipientPassbookMemo,
                 channel,
                 occurredAt,
+                tradeDate,
                 null,
                 null);
     }
@@ -75,7 +78,8 @@ public class LedgerPair {
             String myPassbookMemo,
             String recipientPassbookMemo,
             TransferChannel channel,
-            LocalDateTime occurredAt) {
+            LocalDateTime occurredAt,
+            LocalDate tradeDate) {
         return create(
                 null,
                 transactionNumber,
@@ -89,6 +93,7 @@ public class LedgerPair {
                 recipientPassbookMemo,
                 channel,
                 occurredAt,
+                tradeDate,
                 null,
                 null);
     }
@@ -107,7 +112,8 @@ public class LedgerPair {
             String transactionType,
             String passbookMemo,
             TransferChannel channel,
-            LocalDateTime occurredAt) {
+            LocalDateTime occurredAt,
+            LocalDate tradeDate) {
         TransferValidations.requireNonBlank(transactionType, CommonErrorCode.REQUIRED_FIELD_MISSING);
 
         return create(
@@ -123,6 +129,7 @@ public class LedgerPair {
                 passbookMemo,
                 channel,
                 occurredAt,
+                tradeDate,
                 null,
                 null);
     }
@@ -139,7 +146,8 @@ public class LedgerPair {
             long payeeBalanceAfter,
             long originalWithdrawalAccountBalanceAfter,
             TransferChannel channel,
-            LocalDateTime occurredAt) {
+            LocalDateTime occurredAt,
+            LocalDate tradeDate) {
         TransferValidations.requireNonNull(reversalTransferId, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requireNonNull(
                 originalWithdrawal.getLedgerEntryId(), CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -163,6 +171,7 @@ public class LedgerPair {
                 REVERSAL_MEMO,
                 channel,
                 occurredAt,
+                tradeDate,
                 originalDeposit.getLedgerEntryId(),
                 originalWithdrawal.getLedgerEntryId());
     }
@@ -181,10 +190,12 @@ public class LedgerPair {
             String recipientPassbookMemo,
             TransferChannel channel,
             LocalDateTime occurredAt,
+            LocalDate tradeDate,
             Long withdrawalReversalId,
             Long depositReversalId) {
         TransferValidations.requireAccountIdsPresent(withdrawalAccountId, depositAccountId);
         TransferValidations.requireNonNull(occurredAt, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonNull(tradeDate, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requireNonBlank(transactionNumber, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requireNonNull(channel, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requirePositiveAmount(amount);
@@ -206,6 +217,7 @@ public class LedgerPair {
                 .reversed(false)
                 .reversalId(withdrawalReversalId)
                 .occurredAt(truncatedOccurredAt)
+                .tradeDate(tradeDate)
                 .build();
 
         // 입금 1행 (DEPOSIT, 양수 금액)
@@ -222,6 +234,7 @@ public class LedgerPair {
                 .reversed(false)
                 .reversalId(depositReversalId)
                 .occurredAt(truncatedOccurredAt)
+                .tradeDate(tradeDate)
                 .build();
         return new LedgerPair(withdrawal, deposit);
     }

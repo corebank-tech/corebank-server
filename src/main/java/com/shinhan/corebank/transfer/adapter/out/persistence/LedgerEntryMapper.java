@@ -28,6 +28,7 @@ public class LedgerEntryMapper {
                 .channel(domain.getChannel())
                 .reversed(domain.isReversed())
                 .reversalId(domain.getReversalId())
+                .tradeDate(domain.getTradeDate())
                 .build();
     }
 
@@ -51,6 +52,7 @@ public class LedgerEntryMapper {
                 .channel(entity.getChannel())
                 .reversed(entity.isReversed())
                 .reversalId(entity.getReversalId())
+                .tradeDate(entity.getTradeDate())
                 .build();
     }
 }
