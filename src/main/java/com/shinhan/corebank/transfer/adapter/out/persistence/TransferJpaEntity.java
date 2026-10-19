@@ -91,6 +91,10 @@ public class TransferJpaEntity {
     @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime createdAt;
 
+    // NULL 허용 — 대입(#516) 전 행이 남아 있다. 새 행의 필수 여부는 도메인 팩토리가 막는다(#515 A안).
+    @Column(name = "trade_date")
+    private LocalDate tradeDate;
+
     @Column(name = "invalidated_at", columnDefinition = "DATETIME(6)")
     private LocalDateTime invalidatedAt;
 

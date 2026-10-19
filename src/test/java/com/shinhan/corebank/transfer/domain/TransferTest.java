@@ -19,6 +19,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 @DisplayName("Transfer 도메인 단위 테스트")
 class TransferTest {
 
+    private static final LocalDate TRADE_DATE = LocalDate.of(2026, 8, 12);
+
     private static Transfer newProcessingTransfer() {
         return Transfer.create(
                 "20260809WB0000000001",
@@ -35,7 +37,8 @@ class TransferTest {
                 null,
                 "출금메모",
                 "입금메모",
-                LocalDateTime.of(2026, 8, 9, 12, 0, 0));
+                LocalDateTime.of(2026, 8, 9, 12, 0, 0),
+                TRADE_DATE);
     }
 
     @Nested
@@ -73,7 +76,8 @@ class TransferTest {
                     null,
                     "출금메모",
                     "입금메모",
-                    now);
+                    now,
+                    TRADE_DATE);
 
             // then
             assertThat(transfer).isNotNull();
@@ -84,6 +88,32 @@ class TransferTest {
             assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
             assertThat(transfer.getCreatedAt()).isEqualTo(now);
             assertThat(transfer.getTransferredAt()).isEqualTo(now);
+            assertThat(transfer.getTradeDate()).isEqualTo(TRADE_DATE);
+        }
+
+        @Test
+        @DisplayName("거래일(tradeDate)이 null이면 BusinessException(REQUIRED_FIELD_MISSING) 예외가 발생한다")
+        void throwsExceptionWhenTradeDateIsNull() {
+            assertThatThrownBy(() -> Transfer.create(
+                            "20260809WB0000000001",
+                            101L,
+                            202L,
+                            "110222222222",
+                            "성춘향",
+                            10000L,
+                            0L,
+                            TransferType.IMMEDIATE,
+                            TransferChannel.WB,
+                            null,
+                            null,
+                            null,
+                            "출금메모",
+                            "입금메모",
+                            LocalDateTime.now(),
+                            null))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
 
         @Test
@@ -109,7 +139,8 @@ class TransferTest {
                     executionDate,
                     "출금메모",
                     "입금메모",
-                    now);
+                    now,
+                    TRADE_DATE);
 
             // then
             assertThat(transfer.getExecutionDate()).isEqualTo(executionDate);
@@ -138,7 +169,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(TransferErrorCode.INVALID_AMOUNT);
@@ -167,7 +199,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.INVALID_INPUT);
@@ -195,7 +228,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -223,7 +257,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -251,7 +286,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
@@ -281,7 +317,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -311,7 +348,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -341,7 +379,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -369,7 +408,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -397,7 +437,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -422,7 +463,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            null))
+                            null,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -453,7 +495,8 @@ class TransferTest {
                     null,
                     "출금메모",
                     "입금메모",
-                    createdAt);
+                    createdAt,
+                    TRADE_DATE);
 
             LocalDateTime completedAt = createdAt.plusSeconds(5);
 

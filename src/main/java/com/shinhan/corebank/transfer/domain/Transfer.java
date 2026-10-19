@@ -37,6 +37,8 @@ public class Transfer {
     private String errorCode;
     private String errorMessage;
     private LocalDateTime transferredAt;
+    // 거래일(귀속 영업일). 실패 행도 원장 없이 이 값을 갖는다(#516).
+    private LocalDate tradeDate;
     private LocalDateTime createdAt;
     // 정정 체인(PH-80). 무효화는 status와 별개 — 성공했던 이력을 지우지 않고 무효가 된 시각만 더한다.
     private LocalDateTime invalidatedAt;
@@ -61,7 +63,8 @@ public class Transfer {
             LocalDate executionDate,
             String myPassbookMemo,
             String recipientPassbookMemo,
-            LocalDateTime now) {
+            LocalDateTime now,
+            LocalDate tradeDate) {
         TransferValidations.requireAccountIdsPresent(withdrawalAccountId, depositAccountId);
         TransferValidations.requireNonBlank(transactionNumber, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requireNonBlank(depositAccountNumber, CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -69,6 +72,7 @@ public class Transfer {
         TransferValidations.requireNonNull(transferType, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requireNonNull(channel, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requireNonNull(now, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonNull(tradeDate, CommonErrorCode.REQUIRED_FIELD_MISSING);
         TransferValidations.requirePositiveAmount(amount);
         TransferValidations.requireNonNegativeFee(fee);
         TransferValidations.requireDifferentAccounts(withdrawalAccountId, depositAccountId);
@@ -91,6 +95,7 @@ public class Transfer {
                 .recipientPassbookMemo(recipientPassbookMemo)
                 .transferredAt(now)
                 .createdAt(now)
+                .tradeDate(tradeDate)
                 .build();
     }
 

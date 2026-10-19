@@ -9,6 +9,7 @@ import com.shinhan.corebank.transfer.domain.LedgerPair;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import jakarta.persistence.EntityManager;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -19,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Transactional
 class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
+
+    private static final LocalDate TRADE_DATE = LocalDate.of(2026, 8, 12);
 
     @Autowired
     private LedgerEntryJpaRepository ledgerEntryJpaRepository;
@@ -83,7 +86,8 @@ class LedgerEntryJpaRepositoryTest extends IntegrationTestSupport {
                 "이체출금",
                 "이체입금",
                 TransferChannel.WB,
-                LocalDateTime.of(2026, 8, 9, 12, 0, 0));
+                LocalDateTime.of(2026, 8, 9, 12, 0, 0),
+                TRADE_DATE);
 
         LedgerEntryJpaEntity withdrawalEntity = LedgerEntryMapper.toEntity(pair.getWithdrawalEntry()).toBuilder()
                 .ledgerEntryId(ledgerEntryIdGenerator.nextId())
