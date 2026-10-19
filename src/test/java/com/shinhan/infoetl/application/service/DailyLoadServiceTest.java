@@ -3,9 +3,11 @@ package com.shinhan.infoetl.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.shinhan.infoetl.application.port.out.AsOfCalculator;
 import com.shinhan.infoetl.application.port.out.EtlStorageException;
 import com.shinhan.infoetl.application.port.out.MartLoadPort;
 import com.shinhan.infoetl.application.port.out.ReplicaBalancePort;
+import com.shinhan.infoetl.application.port.out.ReplicaCalendarPort;
 import com.shinhan.infoetl.domain.BalanceRow;
 import com.shinhan.infoetl.domain.LoadResult;
 import com.shinhan.infoetl.domain.MartBalanceRow;
@@ -14,7 +16,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -26,6 +30,7 @@ class DailyLoadServiceTest {
     private final Pseudonymizer pseudonymizer =
             new Pseudonymizer("service-unit-key-0001-0123456789abcdef".getBytes(StandardCharsets.UTF_8));
     private final FakeMartLoadPort martPort = new FakeMartLoadPort();
+    private final FakeCalendar calendar = new FakeCalendar();
 
     @Test
     @DisplayName("읽은 행을 가명 키로 바꿔 한 번에 넘기고 결과를 돌려준다")
@@ -33,7 +38,7 @@ class DailyLoadServiceTest {
         FakeReplica replica = new FakeReplica(List.of(
                 new BalanceRow(1L, 11L, "DEMAND_DEPOSIT", null, null, 300L),
                 new BalanceRow(2L, 12L, "TIME_DEPOSIT", 100L, "DEPOSIT", 700L)));
-        DailyLoadService service = new DailyLoadService(replica, martPort, pseudonymizer);
+        DailyLoadService service = new DailyLoadService(replica, calendar, martPort, pseudonymizer);
 
         LoadResult result = service.load(D);
 
@@ -54,7 +59,7 @@ class DailyLoadServiceTest {
     @Test
     @DisplayName("시작할 때 6시간을 오래된 RUNNING 기준으로 넘긴다")
     void passesStaleThresholdWhenStarting() {
-        new DailyLoadService(new FakeReplica(oneRow()), martPort, pseudonymizer).load(D);
+        new DailyLoadService(new FakeReplica(oneRow()), calendar, martPort, pseudonymizer).load(D);
 
         assertThat(martPort.startedStaleAfter).isEqualTo(Duration.ofHours(6));
         assertThat(martPort.startedBaseDate).isEqualTo(D);
@@ -63,7 +68,7 @@ class DailyLoadServiceTest {
     @Test
     @DisplayName("읽은 결과가 0건이면 마트에 쓰지 않고 실패로 기록한다")
     void emptyReadFailsWithoutPublishing() {
-        DailyLoadService service = new DailyLoadService(new FakeReplica(List.of()), martPort, pseudonymizer);
+        DailyLoadService service = new DailyLoadService(new FakeReplica(List.of()), calendar, martPort, pseudonymizer);
 
         assertThatThrownBy(() -> service.load(D)).isInstanceOf(IllegalStateException.class);
 
@@ -80,6 +85,7 @@ class DailyLoadServiceTest {
                 baseDate -> {
                     throw failure;
                 },
+                calendar,
                 martPort,
                 pseudonymizer);
 
@@ -94,7 +100,7 @@ class DailyLoadServiceTest {
     @DisplayName("마트 쓰기가 실패하면 실패로 기록하고 예외를 그대로 던진다")
     void publishFailureIsRecordedAndRethrown() {
         martPort.publishFailure = new EtlStorageException("쓰기 실패", new RuntimeException("boom"));
-        DailyLoadService service = new DailyLoadService(new FakeReplica(oneRow()), martPort, pseudonymizer);
+        DailyLoadService service = new DailyLoadService(new FakeReplica(oneRow()), calendar, martPort, pseudonymizer);
 
         assertThatThrownBy(() -> service.load(D)).isSameAs(martPort.publishFailure);
 
@@ -106,15 +112,65 @@ class DailyLoadServiceTest {
     void recordingFailureDoesNotHideOriginalException() {
         martPort.publishFailure = new EtlStorageException("쓰기 실패", new RuntimeException("boom"));
         martPort.failFailure = new EtlStorageException("기록 실패", new RuntimeException("down"));
-        DailyLoadService service = new DailyLoadService(new FakeReplica(oneRow()), martPort, pseudonymizer);
+        DailyLoadService service = new DailyLoadService(new FakeReplica(oneRow()), calendar, martPort, pseudonymizer);
 
         assertThatThrownBy(() -> service.load(D))
                 .isSameAs(martPort.publishFailure)
                 .hasSuppressedException(martPort.failFailure);
     }
 
+    @Test
+    @DisplayName("주말을 기준일로 주면 적재 기록도 남기지 않고 거부한다")
+    void weekendBaseDateIsRejectedWithoutAnyRecord() {
+        DailyLoadService service = new DailyLoadService(new FakeReplica(oneRow()), calendar, martPort, pseudonymizer);
+
+        assertThatThrownBy(() -> service.load(LocalDate.of(2026, 10, 24)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("영업일");
+
+        assertThat(martPort.startedBaseDate).isNull();
+        assertThat(martPort.published).isNull();
+        assertThat(martPort.failedReasons).isEmpty();
+    }
+
+    @Test
+    @DisplayName("공휴일을 기준일로 주면 거부한다")
+    void holidayBaseDateIsRejected() {
+        calendar.holidays = Set.of(D);
+        DailyLoadService service = new DailyLoadService(new FakeReplica(oneRow()), calendar, martPort, pseudonymizer);
+
+        assertThatThrownBy(() -> service.load(D)).isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(martPort.startedBaseDate).isNull();
+    }
+
+    @Test
+    @DisplayName("T2에서 완료된 날짜 범위의 휴일로 asOf를 계산해 결과에 담는다")
+    void computesAsOfFromCompletedDatesInsideTheLoad() {
+        martPort.completedBeforeLoad = Set.of(LocalDate.of(2026, 10, 15), LocalDate.of(2026, 10, 16));
+        calendar.holidays = Set.of(LocalDate.of(2026, 10, 19)); // 10-17,18은 주말, 10-19는 공휴일
+        DailyLoadService service = new DailyLoadService(new FakeReplica(oneRow()), calendar, martPort, pseudonymizer);
+
+        LoadResult result = service.load(D);
+
+        assertThat(result.asOfDate()).isEqualTo(D);
+        assertThat(calendar.lastRange).containsExactly(LocalDate.of(2026, 10, 15), D);
+    }
+
     private static List<BalanceRow> oneRow() {
         return List.of(new BalanceRow(1L, 11L, "DEMAND_DEPOSIT", null, null, 300L));
+    }
+
+    private static final class FakeCalendar implements ReplicaCalendarPort {
+
+        Set<LocalDate> holidays = Set.of();
+        List<LocalDate> lastRange;
+
+        @Override
+        public Set<LocalDate> readHolidays(LocalDate from, LocalDate to) {
+            this.lastRange = List.of(from, to);
+            return holidays;
+        }
     }
 
     private record FakeReplica(List<BalanceRow> rows) implements ReplicaBalancePort {
@@ -134,6 +190,7 @@ class DailyLoadServiceTest {
         final List<String> failedReasons = new ArrayList<>();
         RuntimeException publishFailure;
         RuntimeException failFailure;
+        Set<LocalDate> completedBeforeLoad = Set.of();
 
         @Override
         public long start(LocalDate baseDate, Duration staleAfter) {
@@ -143,16 +200,20 @@ class DailyLoadServiceTest {
         }
 
         @Override
-        public LoadResult publish(long loadBatchId, LocalDate baseDate, List<MartBalanceRow> rows) {
+        public LoadResult publish(
+                long loadBatchId, LocalDate baseDate, List<MartBalanceRow> rows, AsOfCalculator asOfCalculator) {
             if (publishFailure != null) {
                 throw publishFailure;
             }
             this.published = rows;
+            Set<LocalDate> completed = new HashSet<>(completedBeforeLoad);
+            completed.add(baseDate);
             return new LoadResult(
                     loadBatchId,
                     baseDate,
                     rows.size(),
-                    rows.stream().mapToLong(MartBalanceRow::balance).sum());
+                    rows.stream().mapToLong(MartBalanceRow::balance).sum(),
+                    asOfCalculator.calculate(completed));
         }
 
         @Override

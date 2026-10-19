@@ -1,7 +1,9 @@
 package com.shinhan.infoetl;
 
+import com.shinhan.infoetl.adapter.out.jdbc.JdbcConnectionFactory;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcMartLoadAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaBalanceAdapter;
+import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaCalendarAdapter;
 import com.shinhan.infoetl.application.port.in.DailyLoadUseCase;
 import com.shinhan.infoetl.application.service.DailyLoadService;
 import com.shinhan.infoetl.domain.LoadResult;
@@ -45,9 +47,10 @@ public final class InfoEtlMain {
         }
 
         String martUrl = withBatchRewrite(config.martUrl());
+        JdbcConnectionFactory replica = () -> open(config.replicaUrl(), config.replicaUser(), config.replicaPassword());
         DailyLoadUseCase useCase = new DailyLoadService(
-                new JdbcReplicaBalanceAdapter(
-                        () -> open(config.replicaUrl(), config.replicaUser(), config.replicaPassword())),
+                new JdbcReplicaBalanceAdapter(replica),
+                new JdbcReplicaCalendarAdapter(replica),
                 new JdbcMartLoadAdapter(
                         () -> open(martUrl, config.martUser(), config.martPassword()),
                         Clock.system(ZoneId.of("Asia/Seoul"))),
@@ -56,10 +59,11 @@ public final class InfoEtlMain {
             LoadResult result = useCase.load(baseDate);
             LOG.log(
                     System.Logger.Level.INFO,
-                    "적재 완료 - baseDate={0}, rows={1}, total={2}, loadBatchId={3}",
+                    "적재 완료 - baseDate={0}, rows={1}, total={2}, asOf={3}, loadBatchId={4}",
                     result.baseDate(),
                     result.balanceRowCount(),
                     result.martBalanceTotal(),
+                    result.asOfDate(),
                     result.loadBatchId());
             return EXIT_OK;
         } catch (RuntimeException e) {

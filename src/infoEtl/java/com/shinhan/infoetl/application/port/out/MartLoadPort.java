@@ -11,8 +11,8 @@ public interface MartLoadPort {
     // staleAfter보다 오래 RUNNING인 기록을 FAILED로 정리하고 새 RUNNING 기록을 남긴다. 이 호출은 뒤 단계가 실패해도 남는다.
     long start(LocalDate baseDate, Duration staleAfter);
 
-    // 기준일의 기존 행 삭제, 삽입, 완료 표시를 한 트랜잭션으로 반영한다. 실패하면 모두 되돌린다.
-    LoadResult publish(long loadBatchId, LocalDate baseDate, List<MartBalanceRow> rows);
+    // 기준일의 기존 행 삭제, 삽입, asOf 계산과 완료 표시를 한 트랜잭션으로 반영한다. 실패하면 모두 되돌린다.
+    LoadResult publish(long loadBatchId, LocalDate baseDate, List<MartBalanceRow> rows, AsOfCalculator asOfCalculator);
 
     void fail(long loadBatchId, String reason);
 }

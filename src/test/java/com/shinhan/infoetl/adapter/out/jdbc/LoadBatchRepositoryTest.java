@@ -1,6 +1,7 @@
 package com.shinhan.infoetl.adapter.out.jdbc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.infoetl.InfoEtlTestDatabase;
 import java.sql.Connection;
@@ -47,7 +48,7 @@ class LoadBatchRepositoryTest {
         try (Connection mart = InfoEtlTestDatabase.mart()) {
             long id = repository.start(mart, D, STARTED);
 
-            repository.markCompleted(mart, id, COMPLETED, 150_000L, 1_523_400_000_000L);
+            repository.markCompleted(mart, id, COMPLETED, 150_000L, 1_523_400_000_000L, D);
 
             try (ResultSet row = select(mart, id)) {
                 assertThat(row.getString("status")).isEqualTo("COMPLETED");
@@ -55,6 +56,55 @@ class LoadBatchRepositoryTest {
                 assertThat(row.getLong("balance_row_count")).isEqualTo(150_000L);
                 assertThat(row.getLong("mart_balance_total")).isEqualTo(1_523_400_000_000L);
             }
+        }
+    }
+
+    @Test
+    @DisplayName("완료하면 asOf 날짜도 기록한다")
+    void markCompletedRecordsAsOfDate() throws SQLException {
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            long id = repository.start(mart, D, STARTED);
+
+            repository.markCompleted(mart, id, COMPLETED, 10L, 100L, D.minusDays(3));
+
+            try (ResultSet row = select(mart, id)) {
+                assertThat(row.getObject("as_of_date", LocalDate.class)).isEqualTo(D.minusDays(3));
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("RUNNING이 아닌 배치는 완료 처리하지 않고 상태를 그대로 둔다")
+    void markCompletedRejectsBatchThatIsNotRunning() throws SQLException {
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            long staleFailed = repository.start(mart, D, STARTED.minusHours(7));
+            repository.failStaleRunning(mart, STARTED, "비정상 종료로 간주함");
+
+            assertThatThrownBy(() -> repository.markCompleted(mart, staleFailed, COMPLETED, 10L, 100L, D))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("RUNNING");
+
+            try (ResultSet row = select(mart, staleFailed)) {
+                assertThat(row.getString("status")).isEqualTo("FAILED");
+                assertThat(row.getObject("completed_at")).isNull();
+                assertThat(row.getObject("as_of_date")).isNull();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("완료된 기준일만 중복 없이 돌려준다")
+    void completedBaseDatesOnlyContainsCompleted() throws SQLException {
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            long first = repository.start(mart, D, STARTED);
+            repository.markCompleted(mart, first, COMPLETED, 10L, 100L, D);
+            long replaced = repository.start(mart, D, STARTED);
+            repository.markCompleted(mart, replaced, COMPLETED, 10L, 100L, D);
+            long failed = repository.start(mart, D.plusDays(1), STARTED);
+            repository.markFailed(mart, failed, "boom");
+            repository.start(mart, D.plusDays(2), STARTED);
+
+            assertThat(repository.completedBaseDates(mart)).containsExactly(D);
         }
     }
 
@@ -78,13 +128,13 @@ class LoadBatchRepositoryTest {
     void replacePreviousOnlyAffectsSameDateCompleted() throws SQLException {
         try (Connection mart = InfoEtlTestDatabase.mart()) {
             long previous = repository.start(mart, D, STARTED);
-            repository.markCompleted(mart, previous, COMPLETED, 10L, 100L);
+            repository.markCompleted(mart, previous, COMPLETED, 10L, 100L, D);
             long failed = repository.start(mart, D, STARTED);
             repository.markFailed(mart, failed, "boom");
             long otherDate = repository.start(mart, D.plusDays(1), STARTED);
-            repository.markCompleted(mart, otherDate, COMPLETED, 10L, 100L);
+            repository.markCompleted(mart, otherDate, COMPLETED, 10L, 100L, D);
             long current = repository.start(mart, D, STARTED);
-            repository.markCompleted(mart, current, COMPLETED, 12L, 120L);
+            repository.markCompleted(mart, current, COMPLETED, 12L, 120L, D);
 
             int replaced = repository.replacePrevious(mart, D, current);
 
@@ -101,7 +151,7 @@ class LoadBatchRepositoryTest {
     void replacedRowKeepsItsRecordedTotals() throws SQLException {
         try (Connection mart = InfoEtlTestDatabase.mart()) {
             long previous = repository.start(mart, D, STARTED);
-            repository.markCompleted(mart, previous, COMPLETED, 10L, 100L);
+            repository.markCompleted(mart, previous, COMPLETED, 10L, 100L, D);
             long current = repository.start(mart, D, STARTED);
 
             repository.replacePrevious(mart, D, current);
@@ -123,7 +173,7 @@ class LoadBatchRepositoryTest {
             long stale = repository.start(mart, D, now.minusHours(7));
             long fresh = repository.start(mart, D.plusDays(1), now.minusHours(1));
             long completed = repository.start(mart, D.minusDays(1), now.minusHours(8));
-            repository.markCompleted(mart, completed, now.minusHours(7), 5L, 50L);
+            repository.markCompleted(mart, completed, now.minusHours(7), 5L, 50L, D);
             long failed = repository.start(mart, D.minusDays(2), now.minusHours(9));
             repository.markFailed(mart, failed, "boom");
 

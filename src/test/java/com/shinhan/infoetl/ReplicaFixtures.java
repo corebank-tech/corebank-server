@@ -21,6 +21,16 @@ public final class ReplicaFixtures {
         }
     }
 
+    public static void insertHoliday(LocalDate date, String name) throws SQLException {
+        try (Connection connection = InfoEtlTestDatabase.replica();
+                PreparedStatement statement =
+                        connection.prepareStatement("INSERT INTO holiday (holiday_date, holiday_name) VALUES (?, ?)")) {
+            statement.setObject(1, date);
+            statement.setString(2, name);
+            statement.executeUpdate();
+        }
+    }
+
     public static void insertAccount(long accountId, long customerId, Long productId, String type, String status)
             throws SQLException {
         try (Connection connection = InfoEtlTestDatabase.replica();
