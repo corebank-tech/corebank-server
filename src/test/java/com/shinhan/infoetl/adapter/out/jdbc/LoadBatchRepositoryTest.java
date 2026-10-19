@@ -47,12 +47,13 @@ class LoadBatchRepositoryTest {
         try (Connection mart = InfoEtlTestDatabase.mart()) {
             long id = repository.start(mart, D, STARTED);
 
-            repository.markCompleted(mart, id, COMPLETED, 150_000L, 1_523_400_000_000L);
+            repository.markCompleted(mart, id, COMPLETED, 150_000L, 321L, 1_523_400_000_000L);
 
             try (ResultSet row = select(mart, id)) {
                 assertThat(row.getString("status")).isEqualTo("COMPLETED");
                 assertThat(row.getObject("completed_at", LocalDateTime.class)).isEqualTo(COMPLETED);
                 assertThat(row.getLong("balance_row_count")).isEqualTo(150_000L);
+                assertThat(row.getLong("event_row_count")).isEqualTo(321L);
                 assertThat(row.getLong("mart_balance_total")).isEqualTo(1_523_400_000_000L);
             }
         }
@@ -78,13 +79,13 @@ class LoadBatchRepositoryTest {
     void replacePreviousOnlyAffectsSameDateCompleted() throws SQLException {
         try (Connection mart = InfoEtlTestDatabase.mart()) {
             long previous = repository.start(mart, D, STARTED);
-            repository.markCompleted(mart, previous, COMPLETED, 10L, 100L);
+            repository.markCompleted(mart, previous, COMPLETED, 10L, 0L, 100L);
             long failed = repository.start(mart, D, STARTED);
             repository.markFailed(mart, failed, "boom");
             long otherDate = repository.start(mart, D.plusDays(1), STARTED);
-            repository.markCompleted(mart, otherDate, COMPLETED, 10L, 100L);
+            repository.markCompleted(mart, otherDate, COMPLETED, 10L, 0L, 100L);
             long current = repository.start(mart, D, STARTED);
-            repository.markCompleted(mart, current, COMPLETED, 12L, 120L);
+            repository.markCompleted(mart, current, COMPLETED, 12L, 0L, 120L);
 
             int replaced = repository.replacePrevious(mart, D, current);
 
@@ -101,7 +102,7 @@ class LoadBatchRepositoryTest {
     void replacedRowKeepsItsRecordedTotals() throws SQLException {
         try (Connection mart = InfoEtlTestDatabase.mart()) {
             long previous = repository.start(mart, D, STARTED);
-            repository.markCompleted(mart, previous, COMPLETED, 10L, 100L);
+            repository.markCompleted(mart, previous, COMPLETED, 10L, 0L, 100L);
             long current = repository.start(mart, D, STARTED);
 
             repository.replacePrevious(mart, D, current);
@@ -123,7 +124,7 @@ class LoadBatchRepositoryTest {
             long stale = repository.start(mart, D, now.minusHours(7));
             long fresh = repository.start(mart, D.plusDays(1), now.minusHours(1));
             long completed = repository.start(mart, D.minusDays(1), now.minusHours(8));
-            repository.markCompleted(mart, completed, now.minusHours(7), 5L, 50L);
+            repository.markCompleted(mart, completed, now.minusHours(7), 5L, 0L, 50L);
             long failed = repository.start(mart, D.minusDays(2), now.minusHours(9));
             repository.markFailed(mart, failed, "boom");
 

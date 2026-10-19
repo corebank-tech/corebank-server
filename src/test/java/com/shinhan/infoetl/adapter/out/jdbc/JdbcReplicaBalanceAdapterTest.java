@@ -3,6 +3,7 @@ package com.shinhan.infoetl.adapter.out.jdbc;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.infoetl.InfoEtlTestDatabase;
+import com.shinhan.infoetl.ReplicaFixtures;
 import com.shinhan.infoetl.domain.BalanceRow;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -26,7 +27,7 @@ class JdbcReplicaBalanceAdapterTest {
     @BeforeEach
     void resetReplica() throws SQLException {
         InfoEtlTestDatabase.resetReplica();
-        insertProduct(100L, "DEPOSIT");
+        ReplicaFixtures.insertProduct(100L, "DEPOSIT");
     }
 
     @Test
@@ -177,16 +178,6 @@ class JdbcReplicaBalanceAdapterTest {
     private Map<Long, BalanceRow> read() {
         List<BalanceRow> rows = adapter.readBalances(D);
         return rows.stream().collect(Collectors.toMap(BalanceRow::accountId, Function.identity()));
-    }
-
-    private void insertProduct(long productId, String group) throws SQLException {
-        try (Connection connection = InfoEtlTestDatabase.replica();
-                PreparedStatement statement =
-                        connection.prepareStatement("INSERT INTO product (product_id, product_group) VALUES (?, ?)")) {
-            statement.setLong(1, productId);
-            statement.setString(2, group);
-            statement.executeUpdate();
-        }
     }
 
     private void insertAccount(long accountId, long customerId, Long productId, String type, String status)

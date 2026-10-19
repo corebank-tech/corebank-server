@@ -1,12 +1,14 @@
 package com.shinhan.infoetl.adapter.out.jdbc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.infoetl.InfoEtlTestDatabase;
 import com.shinhan.infoetl.ReplicaFixtures;
 import com.shinhan.infoetl.application.port.out.EtlStorageException;
 import com.shinhan.infoetl.application.service.DailyLoadService;
+import com.shinhan.infoetl.domain.LoadAlreadyRunningException;
 import com.shinhan.infoetl.domain.LoadResult;
 import com.shinhan.infoetl.domain.Pseudonymizer;
 import java.nio.charset.StandardCharsets;
@@ -37,7 +39,9 @@ class DailyLoadIntegrationTest {
     private final LoadBatchRepository repository = new LoadBatchRepository();
     private final DailyLoadService service = new DailyLoadService(
             new JdbcReplicaBalanceAdapter(InfoEtlTestDatabase::replica),
+            new JdbcReplicaEventAdapter(InfoEtlTestDatabase::replica),
             new JdbcMartLoadAdapter(InfoEtlTestDatabase::mart, CLOCK),
+            new JdbcLoadLockAdapter(InfoEtlTestDatabase::mart),
             pseudonymizer);
 
     @BeforeEach
@@ -168,6 +172,55 @@ class DailyLoadIntegrationTest {
                 assertThat(row.getString("failure_reason")).contains("0건");
             }
         }
+    }
+
+    @Test
+    @DisplayName("가입과 해지 이벤트가 잔액과 함께 가명 키로 마트에 들어간다")
+    void loadsEventsTogetherWithBalances() throws SQLException {
+        ReplicaFixtures.insertSubscription(10L, 12L, 100L, 2L, "SUCCESS", "TX00000000000000010");
+        ReplicaFixtures.insertSubscriptionDepositLedger(
+                10L, 2L, "TX00000000000000010", LocalDateTime.of(2026, 10, 20, 9, 5), D);
+        ReplicaFixtures.insertAccount(300L, 31L, 100L, "TIME_DEPOSIT", "CLOSED");
+        ReplicaFixtures.insertLedgerDetailed(
+                30L,
+                300L,
+                "TX00000000000000030",
+                "WITHDRAWAL",
+                0L,
+                "TERMINATION",
+                LocalDateTime.of(2026, 10, 20, 9, 6),
+                D);
+
+        LoadResult result = service.load(D);
+
+        assertThat(result.eventRowCount()).isEqualTo(2L);
+        try (Connection mart = InfoEtlTestDatabase.mart();
+                Statement statement = mart.createStatement();
+                ResultSet resultSet = statement.executeQuery(
+                        "SELECT event_type, account_key FROM mart_product_subscription_event ORDER BY event_type")) {
+            assertThat(resultSet.next()).isTrue();
+            assertThat(resultSet.getString("event_type")).isEqualTo("CLOSE");
+            assertThat(resultSet.getString("account_key")).isEqualTo(pseudonymizer.accountKey(300L));
+            assertThat(resultSet.next()).isTrue();
+            assertThat(resultSet.getString("event_type")).isEqualTo("SUBSCRIBE");
+            assertThat(resultSet.getString("account_key")).isEqualTo(pseudonymizer.accountKey(2L));
+        }
+    }
+
+    @Test
+    @DisplayName("같은 기준일을 다른 프로세스가 잡고 있으면 적재 기록도 남기지 않고 거부한다")
+    void rejectsWhenAnotherProcessHoldsTheLock() throws SQLException {
+        try (var held = new JdbcLoadLockAdapter(InfoEtlTestDatabase::mart).acquire(D)) {
+            assertThatThrownBy(() -> service.load(D)).isInstanceOf(LoadAlreadyRunningException.class);
+        }
+
+        try (Connection mart = InfoEtlTestDatabase.mart();
+                Statement statement = mart.createStatement();
+                ResultSet resultSet = statement.executeQuery("SELECT COUNT(*) FROM mart_load_batch")) {
+            resultSet.next();
+            assertThat(resultSet.getLong(1)).isZero();
+        }
+        assertThatCode(() -> service.load(D)).doesNotThrowAnyException();
     }
 
     private static void dropReplicaLedger() throws SQLException {

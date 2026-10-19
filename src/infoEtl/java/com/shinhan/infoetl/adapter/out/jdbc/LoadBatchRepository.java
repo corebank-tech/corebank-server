@@ -29,16 +29,22 @@ final class LoadBatchRepository {
     }
 
     public void markCompleted(
-            Connection mart, long loadBatchId, LocalDateTime completedAt, long balanceRowCount, long martBalanceTotal)
+            Connection mart,
+            long loadBatchId,
+            LocalDateTime completedAt,
+            long balanceRowCount,
+            long eventRowCount,
+            long martBalanceTotal)
             throws SQLException {
         try (PreparedStatement statement =
                 mart.prepareStatement("UPDATE mart_load_batch SET status = ?, completed_at = ?, balance_row_count = ?,"
-                        + " mart_balance_total = ? WHERE load_batch_id = ?")) {
+                        + " event_row_count = ?, mart_balance_total = ? WHERE load_batch_id = ?")) {
             statement.setString(1, LoadStatus.COMPLETED.name());
             statement.setObject(2, completedAt);
             statement.setLong(3, balanceRowCount);
-            statement.setLong(4, martBalanceTotal);
-            statement.setLong(5, loadBatchId);
+            statement.setLong(4, eventRowCount);
+            statement.setLong(5, martBalanceTotal);
+            statement.setLong(6, loadBatchId);
             statement.executeUpdate();
         }
     }

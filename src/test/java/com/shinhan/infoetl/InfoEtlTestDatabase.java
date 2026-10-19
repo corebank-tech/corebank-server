@@ -22,12 +22,21 @@ public final class InfoEtlTestDatabase {
             "DROP TABLE IF EXISTS ledger_entry",
             "DROP TABLE IF EXISTS account",
             "DROP TABLE IF EXISTS product",
+            "DROP TABLE IF EXISTS product_subscription",
+            "DROP TABLE IF EXISTS holiday",
             "CREATE TABLE ledger_entry (ledger_entry_id BIGINT NOT NULL, account_id BIGINT NOT NULL,"
-                    + " balance_after BIGINT NOT NULL, occurred_at DATETIME(6) NOT NULL, trade_date DATE NULL,"
+                    + " transaction_number CHAR(20) NULL, direction VARCHAR(10) NULL,"
+                    + " balance_after BIGINT NOT NULL, transaction_type VARCHAR(32) NULL,"
+                    + " occurred_at DATETIME(6) NOT NULL, trade_date DATE NULL,"
                     + " PRIMARY KEY (ledger_entry_id, occurred_at))",
             "CREATE TABLE account (account_id BIGINT NOT NULL PRIMARY KEY, customer_id BIGINT NOT NULL,"
                     + " product_id BIGINT NULL, account_type VARCHAR(24) NOT NULL, status VARCHAR(12) NOT NULL)",
-            "CREATE TABLE product (product_id BIGINT NOT NULL PRIMARY KEY, product_group VARCHAR(12) NOT NULL)");
+            "CREATE TABLE product (product_id BIGINT NOT NULL PRIMARY KEY, product_code VARCHAR(20) NOT NULL,"
+                    + " product_name VARCHAR(100) NOT NULL, product_group VARCHAR(12) NOT NULL)",
+            "CREATE TABLE product_subscription (subscription_id BIGINT NOT NULL PRIMARY KEY,"
+                    + " customer_id BIGINT NOT NULL, product_id BIGINT NOT NULL, account_id BIGINT NULL,"
+                    + " status VARCHAR(12) NOT NULL, transaction_number CHAR(20) NULL)",
+            "CREATE TABLE holiday (holiday_date DATE NOT NULL PRIMARY KEY, holiday_name VARCHAR(50) NOT NULL)");
 
     private static final List<String> MART_TABLES =
             List.of("mart_daily_account_balance", "mart_product_subscription_event", "mart_load_batch");
