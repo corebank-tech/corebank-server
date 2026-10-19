@@ -453,6 +453,7 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 - 영업일 기준 만기 감지 → `ACTIVE → MATURED`. `batch.api.CobStep` 구현체로 등록하고, 체인 자리는 [PH-43](#ph-43-cob-파이프라인)이 정한다. 스텝은 자기 트랜잭션을 연다.
 - `AccountMatured` 이벤트 발행(PH-32 타입, 2차 알림 소비 없음)
 - 만기해지 API: 원리금 계산(PH-12) → 출금계좌 입금(PH-99의 `transfer.api` 입금 계약) → CLOSED. `LedgerPair`는 transfer 내부라 직접 쓰지 않는다.
+- **만기해지 날짜 검증(후속 PH-15 필수):** COB에서 `nextBusinessDay(COB_DATE)` 기준으로 `MATURED` 선전환하더라도, 실제 만기해지 시 `MATURED` 상태와 `maturity_date <= 달력상 현재일(KST)`을 모두 확인한다. 계좌 잠금 이후에도 날짜 조건을 재검증하며, 계약 만기일 이전에는 만기 원리금 지급을 허용하지 않는다.
 - 만기해지 시 이자가 있으면 `INTEREST`로 세후이자를 상품 계좌에 기표한 뒤 `MATURITY`로 원리금 전액을 고객 계좌에 이체한다. 상품 계좌 잔액 0원을 확인한 뒤 동일 트랜잭션에서 `CLOSED`로 전이한다. 기표·조회 순서는 [transfer_seam.md](transfer_seam.md) §8을 따르며, 원장 합계 정합성은 PH-15 통합 테스트에서 검증한다.
 - 계좌 상세 응답에 `maturityDate`·`status=MATURED`를 추가한다(Expand → B-3).
 - 만기 처리 단건 비용을 재서 P5 COB 시간에 합산한다.
