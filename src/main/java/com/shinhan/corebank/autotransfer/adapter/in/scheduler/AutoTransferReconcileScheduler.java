@@ -27,7 +27,9 @@ public class AutoTransferReconcileScheduler {
     private final BatchExecutionLockPort batchExecutionLockPort;
     private final Clock clock;
 
-    // 메인 배치(00:10)와 겹치지 않는 시각에 2시간마다. 토큰정리(:15)·멱등키정리(:00)와도 안 겹침.
+    // 짝수 시 :30에 2시간마다. 같은 시각에 도는 다른 스케줄러: 영업일 보정(00:00), 메인 배치(00:10),
+    // 멱등키 정리(매시 :00), 토큰 정리(매시 :15), 약관 열람 이력 정리(매시 :45), COB(23:30).
+    // 이 중 :30에 도는 것은 COB(23:30)뿐인데, 이 스케줄은 짝수 시(00~22)에만 돌아 겹치지 않는다.
     @Scheduled(cron = "0 30 */2 * * *", zone = "Asia/Seoul")
     public void reconcile() {
         if (batchExecutionLockPort.isRunning(DAILY_TRANSFER_BATCH_JOB_NAME)) {
