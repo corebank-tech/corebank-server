@@ -19,7 +19,7 @@
 | 3 | `trade_date`가 NULL이면 `DATE(occurred_at)`이 영업일이면 그날, 아니면 다음 영업일로 대체 | [#515](https://github.com/corebank-tech/corebank-server/issues/515) 기존 행 채우기 규칙과 같음. 채우기 전후에 재적재해도 날짜가 같다 |
 | 4 | 가입·해지 마트 = **이벤트 1건 1행**, 추가 전용 | PH-76 "전일 확정분 증분, 재적재 가능". Kimball 거래 단위 |
 | 5 | 해지 기준일 = **해지 계좌의 마지막 원장 기표 거래일** | 잔액이 0이 되는 날과 해지일이 같아진다. 전제는 §7-1 |
-| 6 | 가명 키 = **HMAC-SHA256(키, `종류:id`)** 16진수(`account:5`, `customer:5`). 키는 온프레미스 ETL에만 둔다 | `customer_id`는 연속 BIGINT라 키 없는 해시는 전수 대입으로 풀린다. 종류 접두어가 없으면 같은 숫자의 계좌 키와 고객 키가 같아진다. 상태 없는 변환이라 재적재해도 같은 값 |
+| 6 | 가명 키 = **HMAC-SHA256(키, id)** 16진수. 키는 온프레미스 ETL에만 둔다 | `customer_id`는 연속 BIGINT라 키 없는 해시는 전수 대입으로 풀린다. 상태 없는 변환이라 재적재해도 같은 값 |
 | 7 | 응답 `asOf` = 첫 적재일부터 **빠짐없이 `COMPLETED`인 마지막 기준일(DATE)** | 하루 한 번 마감분을 적재하므로 "어디까지 빠짐없이 반영됐는가"의 답이 날짜 하나다. 이벤트 마트는 날짜별 추가라 중간에 실패한 날이 있으면 뒤 날짜의 누계가 비므로 가장 늦은 `COMPLETED`를 쓰지 않는다(BCBS 239 원칙 4 완전성). 적재 완료 시각은 운영용 |
 | 8 | PH-77 지표는 **2개**(일별 수신 잔액 추이, 상품별 가입·해지). 채널별 거래량은 뺀다 | 마트 2종과 맞춘다. ADM-03(REQ-ADM-030)이 쓰지 않는다. [D-28](README.md#d-28--1015--p3) |
 | 9 | ETL 시작 신호 = **COB 실행 기록(`batch_execution_history`, #603)에 D 행이 생김** | 영업일 전환이 COB 첫 동작이라([ADR-0004](../adr/0004-cob-step-order-cob-date.md)) 그 행이 보이면 `trade_date ≤ D` 원장은 더 늘지 않는다. 복제는 커밋 순서대로 적용된다 |
@@ -34,8 +34,8 @@
 -- ① 일별 계좌잔액 (계좌 × 기준일, 일별 스냅샷)
 CREATE TABLE mart_daily_account_balance (
     base_date      DATE                          NOT NULL COMMENT '거래일 기준 마감일 = as-of',
-    account_key    CHAR(64) CHARACTER SET ascii  NOT NULL COMMENT 'HMAC-SHA256(account:{account_id}) hex',
-    customer_key   CHAR(64) CHARACTER SET ascii  NOT NULL COMMENT 'HMAC-SHA256(customer:{customer_id}) hex',
+    account_key    CHAR(64) CHARACTER SET ascii  NOT NULL COMMENT 'HMAC-SHA256(account_id) hex',
+    customer_key   CHAR(64) CHARACTER SET ascii  NOT NULL COMMENT 'HMAC-SHA256(customer_id) hex',
     account_type   VARCHAR(24)                   NOT NULL COMMENT 'DEMAND_DEPOSIT / TIME_DEPOSIT / INSTALLMENT_SAVINGS',
     product_id     BIGINT                            NULL COMMENT '입출금계좌는 NULL',
     product_group  VARCHAR(12)                       NULL COMMENT 'SAVINGS / DEPOSIT. 입출금계좌는 NULL',
@@ -129,12 +129,9 @@ WITH le AS (
                             ORDER BY occurred_at DESC, ledger_entry_id DESC) AS rn
   FROM le WHERE td <= :d
 ), close_td AS (
-  -- 7일 창 없이 해지 계좌의 원장 전체를 본다
-  SELECT e.account_id,
-         MAX(COALESCE(e.trade_date, /* 영업일로 올림 */ DATE(e.occurred_at))) AS close_date
-  FROM ledger_entry e
-  JOIN account a ON a.account_id = e.account_id AND a.status = 'CLOSED'
-  GROUP BY e.account_id
+  SELECT le.account_id, MAX(le.td) AS close_date
+  FROM le JOIN account a ON a.account_id = le.account_id AND a.status = 'CLOSED'
+  GROUP BY le.account_id
 )
 SELECT a.account_id, a.customer_id, a.account_type, a.product_id, p.product_group, l.balance_after
 FROM last_entry l
@@ -147,15 +144,15 @@ WHERE l.rn = 1
 
 - 잔액은 금액 합계가 아니라 `balance_after`로 구합니다. 합계로 구하면 §4 원장 대조가 같은 계산을 두 번 하게 되어 아무것도 검증하지 못합니다.
 - 정렬(`occurred_at DESC, ledger_entry_id DESC`)은 적수 계산과 같습니다. 시드는 이 순서 보장의 대상이 아닙니다(#545) — §7-3.
-- `close_td`만 7일 창 없이 해지 계좌의 원장 전체를 봅니다. 창 안에서 구하면 D + 7일 뒤에 해지된 계좌의 해지일이 창 안 마지막 기표 날짜로 잡혀, 해지 전인 D의 잔액 행이 빠지고 원장 대조가 `FAILED`가 됩니다(P5가 PH-76 구현 중 발견).
+- `close_td`는 D + 7일 이전 기표만 봅니다. 그보다 늦게 해지된 계좌는 NULL이 되어 행에 포함되는데, 해지 전 날짜이므로 맞습니다.
 
 **이벤트**
 
 - `SUBSCRIBE`: `product_subscription.status = 'SUCCESS'`이고 `영업일로 올림(DATE(subscribed_at)) = D`. 정기적금은 가입 때 초입금을 기표하지 않으므로(`transaction_number` NULL, `ProductSubscriptionExecuteService`) 원장에 잇지 않고 상품군과 무관하게 가입 실행 시각을 씁니다. 영업일 전환 뒤 마감 중에 들어온 정기예금 가입은 초입금 원장의 거래일과 하루 어긋날 수 있습니다(§6).
-- `CLOSE`: `account.status = 'CLOSED'`이고 `product_id IS NOT NULL`인 계좌 중 위 `close_td`(원장 전체 기준)의 `close_date = D`. 7일 창 안에서 구하면 실제 해지보다 이른 날에 CLOSE 행이 생기고, 실제 해지일 적재 때 `uk_mpse_account_event`에 걸려 `FAILED`가 됩니다.
+- `CLOSE`: `account.status = 'CLOSED'`이고 `product_id IS NOT NULL`인 계좌 중 마지막 원장 행의 `td = D`.
 - 상품 코드·이름·그룹은 적재할 때 `product`에서 복사합니다.
 
-**가명 처리.** MySQL에는 HMAC 함수가 없고, SQL로 구현하면 키가 쿼리 로그·프로세스 목록에 남습니다. ETL 프로세스가 레플리카에서 읽은 행에 메모리에서 HMAC을 적용한 뒤 마트에 씁니다. 입력은 `account:{account_id}`, `customer:{customer_id}` 문자열입니다(결정 6). 원천 ID는 마트 쪽으로 넘어가지 않습니다. 키를 바꾸면 전 기간을 재적재합니다.
+**가명 처리.** MySQL에는 HMAC 함수가 없고, SQL로 구현하면 키가 쿼리 로그·프로세스 목록에 남습니다. ETL 프로세스가 레플리카에서 읽은 행에 메모리에서 HMAC을 적용한 뒤 마트에 씁니다. 원천 ID는 마트 쪽으로 넘어가지 않습니다. 키를 바꾸면 전 기간을 재적재합니다.
 
 ### 3-4. 읽기 전용 원칙
 
