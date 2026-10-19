@@ -114,7 +114,7 @@ class RangeLoadServiceTest {
             if (failure != null) {
                 throw failure;
             }
-            return new LoadResult(1L, baseDate, 1L, 0L, 100L);
+            return new LoadResult(1L, baseDate, 1L, 0L, 100L, baseDate);
         }
     }
 }

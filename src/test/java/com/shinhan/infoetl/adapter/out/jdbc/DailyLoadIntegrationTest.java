@@ -10,6 +10,7 @@ import com.shinhan.infoetl.application.port.out.EtlStorageException;
 import com.shinhan.infoetl.application.service.DailyLoadService;
 import com.shinhan.infoetl.domain.LoadAlreadyRunningException;
 import com.shinhan.infoetl.domain.LoadResult;
+import com.shinhan.infoetl.domain.MartBalanceRow;
 import com.shinhan.infoetl.domain.Pseudonymizer;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -28,7 +29,9 @@ import org.junit.jupiter.api.Test;
 
 class DailyLoadIntegrationTest {
 
-    private static final LocalDate D = LocalDate.of(2026, 10, 20);
+    private static final LocalDate D = LocalDate.of(2026, 10, 20); // 화
+    private static final LocalDate MON = LocalDate.of(2026, 10, 19);
+    private static final LocalDate WED = LocalDate.of(2026, 10, 21);
     // 2026-10-21 01:00 KST
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-20T16:00:00Z"), ZoneId.of("Asia/Seoul"));
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 21, 1, 0, 0);
@@ -40,6 +43,7 @@ class DailyLoadIntegrationTest {
     private final DailyLoadService service = new DailyLoadService(
             new JdbcReplicaBalanceAdapter(InfoEtlTestDatabase::replica),
             new JdbcReplicaEventAdapter(InfoEtlTestDatabase::replica),
+            new JdbcReplicaCalendarAdapter(InfoEtlTestDatabase::replica),
             new JdbcMartLoadAdapter(InfoEtlTestDatabase::mart, CLOCK),
             new JdbcLoadLockAdapter(InfoEtlTestDatabase::mart),
             pseudonymizer);
@@ -221,6 +225,120 @@ class DailyLoadIntegrationTest {
             assertThat(resultSet.getLong(1)).isZero();
         }
         assertThatCode(() -> service.load(D)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("레플리카가 그대로면 재적재해도 건수와 합계, 행이 같다")
+    void reloadWithUnchangedReplicaKeepsCountsAndTotals() throws SQLException {
+        LoadResult first = service.load(D);
+        java.util.List<String> keysBefore;
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            keysBefore = accountKeys(mart);
+        }
+
+        LoadResult second = service.load(D);
+
+        assertThat(second.balanceRowCount()).isEqualTo(first.balanceRowCount());
+        assertThat(second.martBalanceTotal()).isEqualTo(first.martBalanceTotal());
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            assertThat(writer.countRows(mart, D)).isEqualTo(first.balanceRowCount());
+            assertThat(writer.sumBalance(mart, D)).isEqualTo(first.martBalanceTotal());
+            assertThat(accountKeys(mart)).containsExactlyInAnyOrderElementsOf(keysBefore);
+            assertThat(statusOf(mart, first.loadBatchId())).isEqualTo("REPLACED");
+            assertThat(statusOf(mart, second.loadBatchId())).isEqualTo("COMPLETED");
+        }
+    }
+
+    @Test
+    @DisplayName("첫 적재의 asOf는 기준일이고 적재 기록에도 남는다")
+    void firstLoadAsOfIsTheBaseDate() throws SQLException {
+        LoadResult result = service.load(D);
+
+        assertThat(result.asOfDate()).isEqualTo(D);
+        try (Connection mart = InfoEtlTestDatabase.mart();
+                ResultSet row = batch(mart, result.loadBatchId())) {
+            assertThat(row.getObject("as_of_date", LocalDate.class)).isEqualTo(D);
+        }
+    }
+
+    @Test
+    @DisplayName("영업일이 이어서 적재되면 asOf도 따라 올라간다")
+    void asOfAdvancesWithContiguousLoads() throws SQLException {
+        ReplicaFixtures.insertLedger(50L, 1L, 250L, LocalDateTime.of(2026, 10, 19, 9, 0), MON);
+
+        LoadResult monday = service.load(MON);
+        LoadResult tuesday = service.load(D);
+
+        assertThat(monday.asOfDate()).isEqualTo(MON);
+        assertThat(tuesday.asOfDate()).isEqualTo(D);
+    }
+
+    @Test
+    @DisplayName("중간 영업일이 비면 asOf는 머물고 그 날을 적재하면 뒤 날짜까지 따라잡는다")
+    void asOfStopsAtGapAndCatchesUpOnBackfill() throws SQLException {
+        ReplicaFixtures.insertLedger(50L, 1L, 250L, LocalDateTime.of(2026, 10, 19, 9, 0), MON);
+        ReplicaFixtures.insertLedger(60L, 1L, 800L, LocalDateTime.of(2026, 10, 21, 9, 0), WED);
+
+        service.load(MON);
+        LoadResult wednesday = service.load(WED);
+        LoadResult tuesday = service.load(D);
+
+        assertThat(wednesday.asOfDate()).isEqualTo(MON);
+        assertThat(tuesday.asOfDate()).isEqualTo(WED);
+    }
+
+    @Test
+    @DisplayName("빈 날이 공휴일이면 asOf는 멈추지 않는다")
+    void asOfSkipsHolidayInsteadOfStopping() throws SQLException {
+        ReplicaFixtures.insertHoliday(D, "임시공휴일");
+        ReplicaFixtures.insertLedger(50L, 1L, 250L, LocalDateTime.of(2026, 10, 19, 9, 0), MON);
+        ReplicaFixtures.insertLedger(60L, 1L, 800L, LocalDateTime.of(2026, 10, 21, 9, 0), WED);
+
+        service.load(MON);
+        LoadResult wednesday = service.load(WED);
+
+        assertThat(wednesday.asOfDate()).isEqualTo(WED);
+    }
+
+    @Test
+    @DisplayName("주말을 기준일로 주면 거부하고 마트에 적재 기록도 남기지 않는다")
+    void weekendBaseDateLeavesNoTrace() throws SQLException {
+        assertThatThrownBy(() -> service.load(LocalDate.of(2026, 10, 24))).isInstanceOf(IllegalArgumentException.class);
+
+        try (Connection mart = InfoEtlTestDatabase.mart();
+                Statement statement = mart.createStatement();
+                ResultSet resultSet = statement.executeQuery("SELECT COUNT(*) FROM mart_load_batch")) {
+            resultSet.next();
+            assertThat(resultSet.getLong(1)).isZero();
+        }
+    }
+
+    @Test
+    @DisplayName("정리되어 FAILED가 된 배치가 뒤늦게 끝나도 완료로 덮이지 않고 쓴 행도 롤백된다")
+    void lateFinishOfCleanedUpBatchIsRolledBack() throws SQLException {
+        LoadResult first = service.load(D);
+        JdbcMartLoadAdapter martAdapter = new JdbcMartLoadAdapter(InfoEtlTestDatabase::mart, CLOCK);
+        long slow = martAdapter.start(D, java.time.Duration.ofHours(6));
+        try (Connection mart = InfoEtlTestDatabase.mart();
+                PreparedStatement statement =
+                        mart.prepareStatement("UPDATE mart_load_batch SET started_at = ? WHERE load_batch_id = ?")) {
+            statement.setObject(1, NOW.minusHours(7));
+            statement.setLong(2, slow);
+            statement.executeUpdate();
+        }
+        martAdapter.start(D.plusDays(1), java.time.Duration.ofHours(6)); // 다른 프로세스의 시작이 slow를 정리한다
+        java.util.List<MartBalanceRow> lateRows = java.util.List.of(new MartBalanceRow(
+                pseudonymizer.accountKey(9L), pseudonymizer.customerKey(19L), "DEMAND_DEPOSIT", null, null, 5L));
+
+        assertThatThrownBy(() -> martAdapter.publish(slow, D, lateRows, java.util.List.of(), dates -> D))
+                .isInstanceOf(IllegalStateException.class);
+
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            assertThat(statusOf(mart, slow)).isEqualTo("FAILED");
+            assertThat(statusOf(mart, first.loadBatchId())).isEqualTo("COMPLETED");
+            assertThat(writer.countRows(mart, D)).isEqualTo(2L);
+            assertThat(writer.sumBalance(mart, D)).isEqualTo(1_000L);
+        }
     }
 
     private static void dropReplicaLedger() throws SQLException {

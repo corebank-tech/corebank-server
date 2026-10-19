@@ -8,6 +8,8 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 final class LoadBatchRepository {
 
@@ -28,25 +30,47 @@ final class LoadBatchRepository {
         }
     }
 
+    // RUNNING인 배치만 완료로 바꾼다. 이미 FAILED로 정리된 배치가 늦게 끝나도 COMPLETED로 덮지 않는다.
     public void markCompleted(
             Connection mart,
             long loadBatchId,
             LocalDateTime completedAt,
             long balanceRowCount,
             long eventRowCount,
-            long martBalanceTotal)
+            long martBalanceTotal,
+            LocalDate asOfDate)
             throws SQLException {
         try (PreparedStatement statement =
                 mart.prepareStatement("UPDATE mart_load_batch SET status = ?, completed_at = ?, balance_row_count = ?,"
-                        + " event_row_count = ?, mart_balance_total = ? WHERE load_batch_id = ?")) {
+                        + " event_row_count = ?, mart_balance_total = ?, as_of_date = ?"
+                        + " WHERE load_batch_id = ? AND status = ?")) {
             statement.setString(1, LoadStatus.COMPLETED.name());
             statement.setObject(2, completedAt);
             statement.setLong(3, balanceRowCount);
             statement.setLong(4, eventRowCount);
             statement.setLong(5, martBalanceTotal);
-            statement.setLong(6, loadBatchId);
-            statement.executeUpdate();
+            statement.setObject(6, asOfDate);
+            statement.setLong(7, loadBatchId);
+            statement.setString(8, LoadStatus.RUNNING.name());
+            if (statement.executeUpdate() != 1) {
+                throw new IllegalStateException("RUNNING 상태가 아니어서 완료 처리하지 못했습니다. loadBatchId=" + loadBatchId);
+            }
         }
+    }
+
+    // 이미 COMPLETED인 모든 기준일. asOf 연속성은 이 집합으로 판정한다.
+    public Set<LocalDate> completedBaseDates(Connection mart) throws SQLException {
+        Set<LocalDate> dates = new HashSet<>();
+        try (PreparedStatement statement =
+                mart.prepareStatement("SELECT DISTINCT base_date FROM mart_load_batch WHERE status = ?")) {
+            statement.setString(1, LoadStatus.COMPLETED.name());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    dates.add(resultSet.getObject(1, LocalDate.class));
+                }
+            }
+        }
+        return dates;
     }
 
     public void markFailed(Connection mart, long loadBatchId, String reason) throws SQLException {

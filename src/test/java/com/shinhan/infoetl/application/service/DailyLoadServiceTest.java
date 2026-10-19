@@ -3,11 +3,13 @@ package com.shinhan.infoetl.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.shinhan.infoetl.application.port.out.AsOfCalculator;
 import com.shinhan.infoetl.application.port.out.EtlStorageException;
 import com.shinhan.infoetl.application.port.out.LoadLock;
 import com.shinhan.infoetl.application.port.out.LoadLockPort;
 import com.shinhan.infoetl.application.port.out.MartLoadPort;
 import com.shinhan.infoetl.application.port.out.ReplicaBalancePort;
+import com.shinhan.infoetl.application.port.out.ReplicaCalendarPort;
 import com.shinhan.infoetl.application.port.out.ReplicaEventPort;
 import com.shinhan.infoetl.domain.BalanceRow;
 import com.shinhan.infoetl.domain.EventType;
@@ -21,7 +23,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -34,6 +38,7 @@ class DailyLoadServiceTest {
             new Pseudonymizer("service-unit-key-0001-0123456789abcdef".getBytes(StandardCharsets.UTF_8));
     private final FakeMartLoadPort martPort = new FakeMartLoadPort();
     private final FakeLock lockPort = new FakeLock();
+    private final FakeCalendar calendar = new FakeCalendar();
 
     @Test
     @DisplayName("읽은 행을 가명 키로 바꿔 한 번에 넘기고 결과를 돌려준다")
@@ -131,6 +136,7 @@ class DailyLoadServiceTest {
                     throw failure;
                 },
                 baseDate -> List.of(),
+                calendar,
                 martPort,
                 lockPort,
                 pseudonymizer);
@@ -186,24 +192,76 @@ class DailyLoadServiceTest {
         FakeLock failingLock = new FakeLock();
         martPort.publishFailure = new EtlStorageException("쓰기 실패", new RuntimeException("boom"));
         DailyLoadService failing = new DailyLoadService(
-                baseDate -> oneBalance(), baseDate -> List.of(), martPort, failingLock, pseudonymizer);
+                baseDate -> oneBalance(), baseDate -> List.of(), calendar, martPort, failingLock, pseudonymizer);
         assertThatThrownBy(() -> failing.load(D)).isInstanceOf(EtlStorageException.class);
         assertThat(failingLock.released).isTrue();
+    }
+
+    @Test
+    @DisplayName("주말을 기준일로 주면 락도 적재 기록도 남기지 않고 거부한다")
+    void weekendBaseDateIsRejectedWithoutAnyRecord() {
+        DailyLoadService service = service(oneBalance(), List.of());
+
+        assertThatThrownBy(() -> service.load(LocalDate.of(2026, 10, 24)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("영업일");
+
+        assertThat(martPort.startedBaseDate).isNull();
+        assertThat(martPort.publishedBalances).isNull();
+        assertThat(martPort.failedReasons).isEmpty();
+        assertThat(lockPort.acquired).isFalse();
+    }
+
+    @Test
+    @DisplayName("공휴일을 기준일로 주면 거부한다")
+    void holidayBaseDateIsRejected() {
+        calendar.holidays = Set.of(D);
+        DailyLoadService service = service(oneBalance(), List.of());
+
+        assertThatThrownBy(() -> service.load(D)).isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(martPort.startedBaseDate).isNull();
+    }
+
+    @Test
+    @DisplayName("T2에서 완료된 날짜 범위의 휴일로 asOf를 계산해 결과에 담는다")
+    void computesAsOfFromCompletedDatesInsideTheLoad() {
+        martPort.completedBeforeLoad = Set.of(LocalDate.of(2026, 10, 15), LocalDate.of(2026, 10, 16));
+        calendar.holidays = Set.of(LocalDate.of(2026, 10, 19)); // 10-17,18은 주말, 10-19는 공휴일
+        DailyLoadService service = service(oneBalance(), List.of());
+
+        LoadResult result = service.load(D);
+
+        assertThat(result.asOfDate()).isEqualTo(D);
+        assertThat(calendar.lastRange).containsExactly(LocalDate.of(2026, 10, 15), D);
     }
 
     private DailyLoadService service(List<BalanceRow> balances, List<SubscriptionEventRow> events) {
         ReplicaBalancePort balancePort = baseDate -> balances;
         ReplicaEventPort eventPort = baseDate -> events;
-        return new DailyLoadService(balancePort, eventPort, martPort, lockPort, pseudonymizer);
+        return new DailyLoadService(balancePort, eventPort, calendar, martPort, lockPort, pseudonymizer);
     }
 
     private static List<BalanceRow> oneBalance() {
         return List.of(new BalanceRow(1L, 11L, "DEMAND_DEPOSIT", null, null, 300L));
     }
 
+    private static final class FakeCalendar implements ReplicaCalendarPort {
+
+        Set<LocalDate> holidays = Set.of();
+        List<LocalDate> lastRange;
+
+        @Override
+        public Set<LocalDate> readHolidays(LocalDate from, LocalDate to) {
+            this.lastRange = List.of(from, to);
+            return holidays;
+        }
+    }
+
     private static final class FakeLock implements LoadLockPort {
 
         boolean busy;
+        boolean acquired;
         boolean released;
 
         @Override
@@ -211,6 +269,7 @@ class DailyLoadServiceTest {
             if (busy) {
                 throw new LoadAlreadyRunningException(baseDate);
             }
+            acquired = true;
             released = false;
             return () -> released = true;
         }
@@ -224,6 +283,7 @@ class DailyLoadServiceTest {
         Duration startedStaleAfter;
         List<MartBalanceRow> publishedBalances;
         List<MartEventRow> publishedEvents;
+        Set<LocalDate> completedBeforeLoad = Set.of();
         final List<String> failedReasons = new ArrayList<>();
         RuntimeException publishFailure;
         RuntimeException failFailure;
@@ -237,18 +297,25 @@ class DailyLoadServiceTest {
 
         @Override
         public LoadResult publish(
-                long loadBatchId, LocalDate baseDate, List<MartBalanceRow> balances, List<MartEventRow> events) {
+                long loadBatchId,
+                LocalDate baseDate,
+                List<MartBalanceRow> balances,
+                List<MartEventRow> events,
+                AsOfCalculator asOfCalculator) {
             if (publishFailure != null) {
                 throw publishFailure;
             }
             this.publishedBalances = balances;
             this.publishedEvents = events;
+            Set<LocalDate> completed = new HashSet<>(completedBeforeLoad);
+            completed.add(baseDate);
             return new LoadResult(
                     loadBatchId,
                     baseDate,
                     balances.size(),
                     events.size(),
-                    balances.stream().mapToLong(MartBalanceRow::balance).sum());
+                    balances.stream().mapToLong(MartBalanceRow::balance).sum(),
+                    asOfCalculator.calculate(completed));
         }
 
         @Override

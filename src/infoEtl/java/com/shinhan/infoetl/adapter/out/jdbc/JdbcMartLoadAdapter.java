@@ -1,5 +1,6 @@
 package com.shinhan.infoetl.adapter.out.jdbc;
 
+import com.shinhan.infoetl.application.port.out.AsOfCalculator;
 import com.shinhan.infoetl.application.port.out.EtlStorageException;
 import com.shinhan.infoetl.application.port.out.MartLoadPort;
 import com.shinhan.infoetl.domain.LoadResult;
@@ -11,7 +12,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 // 포트 호출 하나가 연결과 트랜잭션 하나를 소유한다. 서비스는 Connection을 보지 못한다.
 public final class JdbcMartLoadAdapter implements MartLoadPort {
@@ -45,7 +48,11 @@ public final class JdbcMartLoadAdapter implements MartLoadPort {
 
     @Override
     public LoadResult publish(
-            long loadBatchId, LocalDate baseDate, List<MartBalanceRow> balances, List<MartEventRow> events) {
+            long loadBatchId,
+            LocalDate baseDate,
+            List<MartBalanceRow> balances,
+            List<MartEventRow> events,
+            AsOfCalculator asOfCalculator) {
         return inTransaction("마트 적재에 실패했습니다", mart -> {
             balanceWriter.deleteByBaseDate(mart, baseDate);
             eventWriter.deleteByBaseDate(mart, baseDate);
@@ -55,8 +62,11 @@ public final class JdbcMartLoadAdapter implements MartLoadPort {
             long eventCount = eventWriter.countRows(mart, baseDate);
             long balanceTotal = balanceWriter.sumBalance(mart, baseDate);
             repository.replacePrevious(mart, baseDate, loadBatchId);
-            repository.markCompleted(mart, loadBatchId, now(), balanceCount, eventCount, balanceTotal);
-            return new LoadResult(loadBatchId, baseDate, balanceCount, eventCount, balanceTotal);
+            Set<LocalDate> completed = new HashSet<>(repository.completedBaseDates(mart));
+            completed.add(baseDate); // 이번 배치는 아직 RUNNING이라 조회에 안 잡힌다.
+            LocalDate asOf = asOfCalculator.calculate(completed);
+            repository.markCompleted(mart, loadBatchId, now(), balanceCount, eventCount, balanceTotal, asOf);
+            return new LoadResult(loadBatchId, baseDate, balanceCount, eventCount, balanceTotal, asOf);
         });
     }
 

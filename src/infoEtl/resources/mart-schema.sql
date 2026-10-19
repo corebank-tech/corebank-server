@@ -1,8 +1,8 @@
 -- ① 일별 계좌잔액 (계좌 × 기준일, 일별 스냅샷)
 CREATE TABLE mart_daily_account_balance (
     base_date      DATE                          NOT NULL COMMENT '거래일 기준 마감일 = as-of',
-    account_key    CHAR(64) CHARACTER SET ascii  NOT NULL COMMENT 'HMAC-SHA256(account_id) hex',
-    customer_key   CHAR(64) CHARACTER SET ascii  NOT NULL COMMENT 'HMAC-SHA256(customer_id) hex',
+    account_key    CHAR(64) CHARACTER SET ascii  NOT NULL COMMENT 'HMAC-SHA256(account:{account_id}) hex',
+    customer_key   CHAR(64) CHARACTER SET ascii  NOT NULL COMMENT 'HMAC-SHA256(customer:{customer_id}) hex',
     account_type   VARCHAR(24)                   NOT NULL COMMENT 'DEMAND_DEPOSIT / TIME_DEPOSIT / INSTALLMENT_SAVINGS',
     product_id     BIGINT                            NULL COMMENT '입출금계좌는 NULL',
     product_group  VARCHAR(12)                       NULL COMMENT 'SAVINGS / DEPOSIT. 입출금계좌는 NULL',
@@ -42,6 +42,7 @@ CREATE TABLE mart_load_batch (
     gl_compare_from_date   DATE             NULL COMMENT '직전 COMPLETED base_date (D′). 첫 적재면 NULL → GL 대조 생략',
     mart_balance_movement  BIGINT           NULL COMMENT 'mart_balance_total(D) - mart_balance_total(D′)',
     gl_deposit_movement    BIGINT           NULL COMMENT 'GL 20100 (대변 합계 - 차변 합계), D′ < trade_date <= D',
+    as_of_date             DATE             NULL COMMENT 'COMPLETED 로 커밋할 때 계산한 연속 워터마크(§5-4). API 의 asOf 출처',
     failure_reason         VARCHAR(200)     NULL,
     PRIMARY KEY (load_batch_id),
     KEY ix_mlb_date_status (base_date, status)

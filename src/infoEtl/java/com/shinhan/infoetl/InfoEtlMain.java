@@ -59,15 +59,17 @@ public final class InfoEtlMain {
         String martUrl = withBatchRewrite(config.martUrl());
         JdbcConnectionFactory replica = () -> open(config.replicaUrl(), config.replicaUser(), config.replicaPassword());
         JdbcConnectionFactory mart = () -> open(martUrl, config.martUser(), config.martPassword());
+        JdbcReplicaCalendarAdapter calendar = new JdbcReplicaCalendarAdapter(replica);
         DailyLoadUseCase daily = new DailyLoadService(
                 new JdbcReplicaBalanceAdapter(replica),
                 new JdbcReplicaEventAdapter(replica),
+                calendar,
                 new JdbcMartLoadAdapter(mart, Clock.system(ZoneId.of("Asia/Seoul"))),
                 new JdbcLoadLockAdapter(mart),
                 pseudonymizer);
         try {
             if (command.range()) {
-                RangeLoadUseCase rangeLoad = new RangeLoadService(daily, new JdbcReplicaCalendarAdapter(replica));
+                RangeLoadUseCase rangeLoad = new RangeLoadService(daily, calendar);
                 return report(rangeLoad.loadRange(command.from(), command.to()));
             }
             logLoaded(daily.load(command.from()));
@@ -94,11 +96,12 @@ public final class InfoEtlMain {
     private static void logLoaded(LoadResult result) {
         LOG.log(
                 System.Logger.Level.INFO,
-                "적재 완료 - baseDate={0}, balances={1}, events={2}, total={3}, loadBatchId={4}",
+                "적재 완료 - baseDate={0}, balances={1}, events={2}, total={3}, asOf={4}, loadBatchId={5}",
                 result.baseDate(),
                 result.balanceRowCount(),
                 result.eventRowCount(),
                 result.martBalanceTotal(),
+                result.asOfDate(),
                 result.loadBatchId());
     }
 

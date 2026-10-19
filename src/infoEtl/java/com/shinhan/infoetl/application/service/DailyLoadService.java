@@ -5,8 +5,11 @@ import com.shinhan.infoetl.application.port.out.LoadLock;
 import com.shinhan.infoetl.application.port.out.LoadLockPort;
 import com.shinhan.infoetl.application.port.out.MartLoadPort;
 import com.shinhan.infoetl.application.port.out.ReplicaBalancePort;
+import com.shinhan.infoetl.application.port.out.ReplicaCalendarPort;
 import com.shinhan.infoetl.application.port.out.ReplicaEventPort;
+import com.shinhan.infoetl.domain.AsOfWatermark;
 import com.shinhan.infoetl.domain.BalanceRow;
+import com.shinhan.infoetl.domain.BusinessCalendar;
 import com.shinhan.infoetl.domain.LoadResult;
 import com.shinhan.infoetl.domain.MartBalanceRow;
 import com.shinhan.infoetl.domain.MartEventRow;
@@ -14,7 +17,9 @@ import com.shinhan.infoetl.domain.Pseudonymizer;
 import com.shinhan.infoetl.domain.SubscriptionEventRow;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 public final class DailyLoadService implements DailyLoadUseCase {
 
@@ -23,6 +28,7 @@ public final class DailyLoadService implements DailyLoadUseCase {
 
     private final ReplicaBalancePort replicaPort;
     private final ReplicaEventPort eventPort;
+    private final ReplicaCalendarPort calendarPort;
     private final MartLoadPort martLoadPort;
     private final LoadLockPort lockPort;
     private final Pseudonymizer pseudonymizer;
@@ -30,11 +36,13 @@ public final class DailyLoadService implements DailyLoadUseCase {
     public DailyLoadService(
             ReplicaBalancePort replicaPort,
             ReplicaEventPort eventPort,
+            ReplicaCalendarPort calendarPort,
             MartLoadPort martLoadPort,
             LoadLockPort lockPort,
             Pseudonymizer pseudonymizer) {
         this.replicaPort = replicaPort;
         this.eventPort = eventPort;
+        this.calendarPort = calendarPort;
         this.martLoadPort = martLoadPort;
         this.lockPort = lockPort;
         this.pseudonymizer = pseudonymizer;
@@ -42,6 +50,7 @@ public final class DailyLoadService implements DailyLoadUseCase {
 
     @Override
     public LoadResult load(LocalDate baseDate) {
+        requireBusinessDay(baseDate); // 잔액 행은 영업일에만 있다. 휴일은 락도 적재 기록도 없이 거부한다.
         try (LoadLock ignored = lockPort.acquire(baseDate)) { // 같은 기준일을 두 프로세스가 동시에 적재하지 않게 한다.
             long loadBatchId = martLoadPort.start(baseDate, STALE_RUNNING_AFTER); // T1: 뒤에서 실패해도 남아야 한다.
             try {
@@ -55,12 +64,26 @@ public final class DailyLoadService implements DailyLoadUseCase {
                         loadBatchId,
                         baseDate,
                         balances.stream().map(this::toMartBalanceRow).toList(),
-                        events.stream().map(this::toMartEventRow).toList()); // T2
+                        events.stream().map(this::toMartEventRow).toList(),
+                        this::asOf); // T2
             } catch (RuntimeException e) {
                 recordFailure(loadBatchId, e); // T3
                 throw e;
             }
         }
+    }
+
+    private void requireBusinessDay(LocalDate baseDate) {
+        if (!new BusinessCalendar(calendarPort.readHolidays(baseDate, baseDate)).isBusinessDay(baseDate)) {
+            throw new IllegalArgumentException("영업일이 아닌 기준일은 적재할 수 없습니다: " + baseDate);
+        }
+    }
+
+    // T2 안에서 불린다. 완료된 날짜 범위의 휴일만 읽어 연속성을 판정한다.
+    private LocalDate asOf(Set<LocalDate> completedBaseDates) {
+        BusinessCalendar calendar = new BusinessCalendar(
+                calendarPort.readHolidays(Collections.min(completedBaseDates), Collections.max(completedBaseDates)));
+        return AsOfWatermark.compute(completedBaseDates, calendar);
     }
 
     // 개인정보를 가리는 것은 업무 규칙이라 서비스가 한다. 어댑터는 원래 ID를 받지 못한다.

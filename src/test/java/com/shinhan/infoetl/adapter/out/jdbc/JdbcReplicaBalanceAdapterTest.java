@@ -168,6 +168,60 @@ class JdbcReplicaBalanceAdapterTest {
     }
 
     @Test
+    @DisplayName("토요일에 발생한 거래일 NULL 기표는 다음 월요일 거래로 본다")
+    void rollsNullTradeDateOnWeekendToNextBusinessDay() throws SQLException {
+        insertAccount(30L, 40L, null, "DEMAND_DEPOSIT", "ACTIVE");
+        insertLedger(200L, 30L, 100L, LocalDateTime.of(2026, 10, 17, 10, 0), null);
+
+        assertThat(readOn(LocalDate.of(2026, 10, 18))).doesNotContainKey(30L);
+        assertThat(readOn(LocalDate.of(2026, 10, 19)).get(30L).balance()).isEqualTo(100L);
+    }
+
+    @Test
+    @DisplayName("평일 공휴일에 발생한 거래일 NULL 기표는 다음 영업일 거래로 본다")
+    void rollsNullTradeDateOnWeekdayHolidayToNextBusinessDay() throws SQLException {
+        ReplicaFixtures.insertHoliday(LocalDate.of(2026, 10, 21), "임시공휴일");
+        insertAccount(31L, 41L, null, "DEMAND_DEPOSIT", "ACTIVE");
+        insertLedger(201L, 31L, 100L, LocalDateTime.of(2026, 10, 21, 10, 0), null);
+
+        assertThat(readOn(LocalDate.of(2026, 10, 21))).doesNotContainKey(31L);
+        assertThat(readOn(LocalDate.of(2026, 10, 22)).get(31L).balance()).isEqualTo(100L);
+    }
+
+    @Test
+    @DisplayName("공휴일과 주말이 이어지면 연휴가 끝난 첫 영업일로 올린다")
+    void rollsAcrossHolidayAndWeekendChain() throws SQLException {
+        ReplicaFixtures.insertHoliday(LocalDate.of(2026, 10, 23), "임시공휴일");
+        insertAccount(32L, 42L, null, "DEMAND_DEPOSIT", "ACTIVE");
+        insertLedger(202L, 32L, 100L, LocalDateTime.of(2026, 10, 23, 10, 0), null);
+
+        assertThat(readOn(LocalDate.of(2026, 10, 25))).doesNotContainKey(32L);
+        assertThat(readOn(LocalDate.of(2026, 10, 26)).get(32L).balance()).isEqualTo(100L);
+    }
+
+    @Test
+    @DisplayName("영업일에 발생한 거래일 NULL 기표는 올리지 않고 그날 거래로 본다")
+    void keepsNullTradeDateOnBusinessDay() throws SQLException {
+        insertAccount(33L, 43L, null, "DEMAND_DEPOSIT", "ACTIVE");
+        insertLedger(203L, 33L, 100L, LocalDateTime.of(2026, 10, 20, 10, 0), null);
+
+        assertThat(readOn(LocalDate.of(2026, 10, 19))).doesNotContainKey(33L);
+        assertThat(readOn(D).get(33L).balance()).isEqualTo(100L);
+    }
+
+    @Test
+    @DisplayName("휴일에 기표된 해지 0원 행은 다음 영업일에 해지일을 갖고 그날 0원 행으로 나온다")
+    void closingEntryOnWeekendIsClosedOnNextBusinessDay() throws SQLException {
+        insertAccount(34L, 44L, 100L, "TIME_DEPOSIT", "CLOSED");
+        insertLedger(204L, 34L, 1_000L, LocalDateTime.of(2026, 10, 15, 10, 0), LocalDate.of(2026, 10, 15));
+        insertLedger(205L, 34L, 0L, LocalDateTime.of(2026, 10, 17, 10, 0), null);
+
+        assertThat(readOn(LocalDate.of(2026, 10, 16)).get(34L).balance()).isEqualTo(1_000L);
+        assertThat(readOn(LocalDate.of(2026, 10, 19)).get(34L).balance()).isZero();
+        assertThat(readOn(D)).doesNotContainKey(34L);
+    }
+
+    @Test
     @DisplayName("원장 기표가 없는 계좌는 행을 만들지 않는다")
     void excludesAccountWithoutLedgerEntries() throws SQLException {
         insertAccount(14L, 24L, null, "DEMAND_DEPOSIT", "ACTIVE");
@@ -176,7 +230,11 @@ class JdbcReplicaBalanceAdapterTest {
     }
 
     private Map<Long, BalanceRow> read() {
-        List<BalanceRow> rows = adapter.readBalances(D);
+        return readOn(D);
+    }
+
+    private Map<Long, BalanceRow> readOn(LocalDate baseDate) {
+        List<BalanceRow> rows = adapter.readBalances(baseDate);
         return rows.stream().collect(Collectors.toMap(BalanceRow::accountId, Function.identity()));
     }
 
