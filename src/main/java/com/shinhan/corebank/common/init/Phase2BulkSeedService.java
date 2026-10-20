@@ -553,9 +553,11 @@ public class Phase2BulkSeedService {
                     subscription_id, customer_id, product_id, account_id, withdrawal_account_id,
                     subscription_amount, term_months, payment_day, base_rate, preferential_rate,
                     applied_rate, maturity_handling, expected_maturity_amount, status,
-                    transaction_number, opened_date, maturity_date, subscribed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, ?, 'TRANSFER', ?, 'SUCCESS', ?, ?, ?, ?)
+                    transaction_number, opened_date, maturity_date, subscribed_at, subscription_trade_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, ?, 'TRANSFER', ?, 'SUCCESS', ?, ?, ?, ?, ?)
                 """;
+        Set<LocalDate> holidays =
+                new java.util.HashSet<>(jdbc.queryForList("SELECT holiday_date FROM holiday", LocalDate.class));
         batchSeeds(seeds, spec.jdbcBatchSize(), sql, (statement, seed) -> {
             statement.setLong(1, spec.subscriptionIdStart() + seed.index());
             statement.setLong(2, spec.customerIdStart() + seed.customerIndex());
@@ -577,7 +579,17 @@ public class Phase2BulkSeedService {
             statement.setDate(13, Date.valueOf(seed.tradeDate()));
             statement.setDate(14, Date.valueOf(seed.maturityDate()));
             setTimestamp(statement, 15, seed.occurredAt());
+            statement.setDate(16, Date.valueOf(businessDayOnOrAfter(seed.tradeDate(), holidays)));
         });
+    }
+
+    // 가입 논리 영업일은 영업일 값이라, 달력 날짜가 주말·holiday면 다음 영업일로 올린다(백필 규칙과 같다).
+    private static LocalDate businessDayOnOrAfter(LocalDate date, Set<LocalDate> holidays) {
+        LocalDate day = date;
+        while (day.getDayOfWeek().getValue() >= 6 || holidays.contains(day)) {
+            day = day.plusDays(1);
+        }
+        return day;
     }
 
     private long expectedMaturityAmount(SubscriptionSeed seed) {

@@ -25,6 +25,7 @@ final class ProductSubscriptionMapper {
                 .openedDate(entity.getOpenedDate())
                 .maturityDate(entity.getMaturityDate())
                 .subscribedAt(entity.getSubscribedAt())
+                .subscriptionTradeDate(entity.getSubscriptionTradeDate())
                 .build();
     }
 
@@ -48,6 +49,7 @@ final class ProductSubscriptionMapper {
                 .openedDate(domain.getOpenedDate())
                 .maturityDate(domain.getMaturityDate())
                 .subscribedAt(domain.getSubscribedAt())
+                .subscriptionTradeDate(domain.getSubscriptionTradeDate())
                 .build();
     }
 }
