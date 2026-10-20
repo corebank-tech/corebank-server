@@ -20,6 +20,7 @@ import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.web.server.autoconfigure.ServerProperties;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.Authentication;
@@ -46,12 +47,16 @@ class SessionLoginManagerTest {
     // 운영 설정과 같은 30분을 쓴다.
     private static final AdminSessionProperties ADMIN_SESSION = new AdminSessionProperties(Duration.ofMinutes(30));
 
+    // 고객 만료시간의 정본인 server.servlet.session.timeout 이다. 운영 설정과 같은 10분을 쓴다.
+    private static final ServerProperties SERVER = serverPropertiesWith(Duration.ofMinutes(10));
+
     private final SessionLoginManager manager = new SessionLoginManager(
             new CompositeSessionAuthenticationStrategy(List.of(
                     new ChangeSessionIdAuthenticationStrategy(),
                     new RegisterSessionAuthenticationStrategy(sessionRegistry))),
             repository,
             ADMIN_SESSION,
+            SERVER,
             FIXED_CLOCK);
 
     @AfterEach
@@ -93,9 +98,9 @@ class SessionLoginManagerTest {
     }
 
     @Test
-    @DisplayName("실제 세션 timeout으로 세션 만료시각을 계산한다")
-    void calculatesExpirationFromSessionTimeout() {
-        MockHttpServletRequest request = requestWithSession(600);
+    @DisplayName("고객 세션은 전역 timeout 으로 만료시각을 계산한다")
+    void calculatesExpirationFromGlobalTimeout() {
+        MockHttpServletRequest request = requestWithSession(60);
 
         OffsetDateTime sessionExpiresAt = manager.establishSession(
                 new LoginResult(1L, "login-user", "홍길동", CustomerRole.CUSTOMER),
@@ -105,7 +110,7 @@ class SessionLoginManagerTest {
         assertThat(sessionExpiresAt).isEqualTo(OffsetDateTime.parse("2026-08-16T10:10:00+09:00"));
     }
 
-    // 전역 timeout 은 고객 기준 10분이다. 관리자만 세션 생성 직후 30분으로 덮는다.
+    // 전역 timeout 은 고객 기준 10분이고, 관리자는 전용 설정인 30분을 받는다.
     @Test
     @DisplayName("관리자 세션은 전역 timeout 을 30분으로 덮고 만료시각도 30분 뒤를 준다")
     void overridesSessionTimeoutForAdmin() {
@@ -140,6 +145,7 @@ class SessionLoginManagerTest {
                 mock(SessionAuthenticationStrategy.class),
                 mock(SecurityContextRepository.class),
                 ADMIN_SESSION,
+                SERVER,
                 FIXED_CLOCK);
         when(request.getSession(false)).thenReturn(null);
 
@@ -149,17 +155,52 @@ class SessionLoginManagerTest {
                 .hasMessage("로그인 세션이 생성되지 않았습니다.");
     }
 
+    // 전역 설정이 0 이면 만료되지 않는 세션이 되므로, 세션을 만들기 전에 막아야 한다.
     @Test
-    @DisplayName("세션 만료시간이 0 이하면 설정 오류로 처리한다")
-    void rejectsNonPositiveSessionTimeout() {
-        MockHttpServletRequest request = requestWithSession(0);
+    @DisplayName("전역 timeout 이 0 이하면 세션을 만들지 않고 설정 오류로 처리한다")
+    void rejectsNonPositiveGlobalTimeout() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        SessionLoginManager invalidManager = new SessionLoginManager(
+                mock(SessionAuthenticationStrategy.class),
+                mock(SecurityContextRepository.class),
+                ADMIN_SESSION,
+                serverPropertiesWith(Duration.ZERO),
+                FIXED_CLOCK);
 
-        assertThatThrownBy(() -> manager.establishSession(
+        assertThatThrownBy(() -> invalidManager.establishSession(
                         new LoginResult(1L, "login-user", "홍길동", CustomerRole.CUSTOMER),
                         request,
                         new MockHttpServletResponse()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("세션 만료시간은 1초 이상이어야 합니다.");
+        assertThat(request.getSession(false)).isNull();
+    }
+
+    // 리뷰 지적(PR #639). ChangeSessionIdAuthenticationStrategy 는 세션 ID만 바꾸므로, 관리자 세션에서
+    // 로그아웃 없이 고객으로 다시 로그인하면 관리자 만료시간(30분)이 고객 세션에 남을 수 있다.
+    @Test
+    @DisplayName("관리자 세션에서 고객으로 다시 로그인하면 만료시간이 고객 기준으로 돌아온다")
+    void restoresCustomerTimeoutOnReloginAsCustomer() {
+        MockHttpServletRequest request = requestWithSession(60);
+
+        manager.establishSession(
+                new LoginResult(1L, "admin-user", "관리자", CustomerRole.ADMIN), request, new MockHttpServletResponse());
+
+        assertThat(request.getSession(false).getMaxInactiveInterval()).isEqualTo(1800);
+
+        OffsetDateTime sessionExpiresAt = manager.establishSession(
+                new LoginResult(2L, "login-user", "홍길동", CustomerRole.CUSTOMER),
+                request,
+                new MockHttpServletResponse());
+
+        assertThat(request.getSession(false).getMaxInactiveInterval()).isEqualTo(600);
+        assertThat(sessionExpiresAt).isEqualTo(OffsetDateTime.parse("2026-08-16T10:10:00+09:00"));
+    }
+
+    private static ServerProperties serverPropertiesWith(Duration sessionTimeout) {
+        ServerProperties serverProperties = new ServerProperties();
+        serverProperties.getServlet().getSession().setTimeout(sessionTimeout);
+        return serverProperties;
     }
 
     private MockHttpServletRequest requestWithSession(int timeoutSeconds) {
