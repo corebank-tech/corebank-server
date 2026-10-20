@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 40개 테이블(37개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 41개 테이블(38개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -103,6 +103,17 @@ erDiagram
         date closed_trade_date "해지 논리 영업일 (정보계 CLOSE 기준)"
         datetime last_transaction_at "DATETIME(6)"
         bigint version "낙관적 락"
+    }
+
+    account_status_history {
+          bigint history_id PK "AUTO_INCREMENT"
+          bigint account_id "FK 없음. 계좌 정리 후에도 이력 보존"
+          varchar previous_status "VARCHAR(12)"
+          varchar new_status "VARCHAR(12)"
+          date maturity_date "NULL 허용. 계약 만기일"
+          date effective_business_date "NULL 허용. 상태 전이 기준 영업일"
+          datetime changed_at "DATETIME(6)"
+          varchar trigger_type "VARCHAR(20). COB"
     }
 
     account_number_sequence {

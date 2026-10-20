@@ -699,6 +699,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | 내 통장 표시내용 | `myPassbookMemo` | `memoOut`, `withdrawalMemo`, `senderPrintContent` |
 | 받는 분 통장 표시내용 | `recipientPassbookMemo` | `memoIn`, `depositMemo`, `receiverPrintContent` |
 | 조회 기준 일시 | `asOf` | — |
+| 계약 만기일 | `maturityDate` | `maturityAt`, `expirationDate` |
 | 거래 후 잔액 | `balanceAfter` | 이체 상세는 `balanceAfter`, 즉시이체 실행은 `withdrawalBalanceAfter` |
 | 출금계좌 표시명 | `withdrawalAccountName` | 이체결과 조회에서 사용 중, 마스터 미등록 |
 | 약관 식별자 타입 | `termsId` — Long / String 확정 | 회원가입 String, 상품 약관 Long |

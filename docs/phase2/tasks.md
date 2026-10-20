@@ -60,7 +60,7 @@
 | [PH-12](#ph-12-이자-계산기--절사-규칙) | 이자 계산기 · 절사 규칙 | S2 | 3.5 | PH-11 | **10/16** | #623 | 완료 |
 | [PH-90](#ph-90-원장잔액--출금가능액-분리--transferprecheck) | 원장잔액·출금가능액 분리 + `TransferPreCheck` | S2 | 3 | PH-87 · PH-99 | **10/16** (P4 머지) | — | 예정 |
 | [PH-70-①](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | `modules/data` Terraform plan — RDS | S2 | 1.5 | PH-50 | **10/21** (코드·plan) | #650 | 완료 |
-| [PH-15](#ph-15-만기--감지--matured-전이--원리금--만기해지-api) | 만기 — 감지 · MATURED · 원리금 · 만기해지 API | S3 | 3.5 | PH-12 · PH-10 · PH-43 · 입금 계약(PH-99) | **10/23** | #419 · #633 | 만기 감지 구현 완료  |
+| [PH-15](#ph-15-만기--감지--matured-전이--원리금--만기해지-api) | 만기 — 감지 · MATURED · 원리금 · 만기해지 API | S3 | 3.5 | PH-12 · PH-10 · PH-43 · 입금 계약(PH-99) | **10/23** | #419 · #633 · #671 | 만기 감지 · 이벤트·감사 이력·상세 API 구현 완료  |
 | [PH-14](#ph-14-이자-지급--원천징수) | 이자 지급 · 원천징수 | S3 | 1.5 | PH-12 · PH-24 · 입금 계약(PH-99) | — | — | 예정 |
 | [PH-13](#ph-13-적수-집계-sql-전환--재측정) | 적수 집계 SQL 전환 · 재측정 | S3 | 1.5 | PH-11 | — | — | 예정 |
 | [PH-16](#ph-16-중도해지--휴면-전환--해지-시-자원-정리) | 중도해지 · 휴면 전환 · 해지 시 자원 정리 | S3 | 4 | PH-15 · PH-43 · 입금 계약(PH-99) · #467 | 휴면 스텝 통합 **10/30** | — | 예정 |
@@ -186,7 +186,7 @@
 
 ### PH-32. 도메인 이벤트 발행 골격
 
-- 이벤트 클래스 — `TransferCompleted(transactionNumber, sourceType, amount, fromAccountId, toAccountId, occurredAt)` · `TransferFailed(...)` · `SubscriptionOpened(...)` · `AccountMatured(...)`. (#505에서 이체는 `TransferSettled` 하나로 합쳤다 — 성공·실패는 `status`, 이체 종류는 `txType`.) `AccountMatured`는 타입만 정의하고 2차에는 소비하지 않는다. 이름은 과거형이고, Reference Key는 거래번호다.
+- 이벤트 클래스 — `TransferCompleted(transactionNumber, sourceType, amount, fromAccountId, toAccountId, occurredAt)` · `TransferFailed(...)` · `SubscriptionOpened(...)` · `AccountMatured(...)`. (#505에서 이체는 `TransferSettled` 하나로 합쳤다 — 성공·실패는 `status`, 이체 종류는 `txType`.) `AccountMatured`는 PH-15(#671)에서 `account.api` 타입 정의 및 `ACTIVE → MATURED` 전이 시 발행하며, 2차에는 소비하지 않는다. `refId`는 `accountId`이고, 현재 `notification.ref_id` 유형에는 해당하지 않는다(P1 협의).
 - `@TransactionalEventListener(phase = BEFORE_COMMIT)` 리스너 자리와 **JdbcTemplate INSERT 규약**을 문서로 남긴다. 규칙은 [README §3-3](README.md#3-3-이벤트아웃박스)을 따른다.
 - `publishEvent` 자리와 페이로드는 P4와 합의한다. 자리 표시는 PH-99(10/2)가 하고, 두 줄은 EVT-2(10/6)가 넣는다.
 - 테스트: BEFORE_COMMIT 리스너 INSERT가 커밋에 실리는지 통합 테스트(PH-99 골격 위), 리스너 예외 시 롤백을 테스트로 고정.
@@ -447,15 +447,22 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 - 만기해지 API: 원리금 계산(PH-12) → 출금계좌 입금(PH-99의 `transfer.api` 입금 계약) → CLOSED. `LedgerPair`는 transfer 내부라 직접 쓰지 않는다.
 - **만기해지 날짜 검증(후속 PH-15 필수):** COB에서 `nextBusinessDay(COB_DATE)` 기준으로 `MATURED` 선전환하더라도, 실제 만기해지 시 `MATURED` 상태와 `maturity_date <= 달력상 현재일(KST)`을 모두 확인한다. 계좌 잠금 이후에도 날짜 조건을 재검증하며, 계약 만기일 이전에는 만기 원리금 지급을 허용하지 않는다.
 - 만기해지 시 이자가 있으면 `INTEREST`로 세후이자를 상품 계좌에 기표한 뒤 `MATURITY`로 원리금 전액을 고객 계좌에 이체한다. 상품 계좌 잔액 0원을 확인한 뒤 동일 트랜잭션에서 `CLOSED`로 전이한다. 기표·조회 순서는 [transfer_seam.md](transfer_seam.md) §8을 따르며, 원장 합계 정합성은 PH-15 통합 테스트에서 검증한다.
-- 계좌 상세 응답에 `maturityDate`·`status=MATURED`를 추가한다(Expand → B-3).
+- 기존 계좌 상세 API(`GET /api/v1/accounts/{accountId}`)에 nullable `maturityDate`를 추가한다(Expand → FE B-3). 계좌 상태는 기존 `status` 필드로 `MATURED`를 반환한다.
 - 만기 처리 단건 비용을 재서 P5 COB 시간에 합산한다.
 - **범위 밖:** 만기후이율(MATURED 이후 이자 없음)
 - **완료 기준:** 원리금 오차 0. MATURED 계좌가 신규 거래 대상에서 빠진다.
 - **진행 현황(2026-10-19, #633):** 만기 감지 COB 스텝(`order=3`)과 `ACTIVE → MATURED` 상태 전이 구현. `nextBusinessDay(COB_DATE)` 기준 만기 대상 조회, keyset 페이지 처리, 청크별 트랜잭션 및 재실행 멱등성 검증을 포함한다.
 - **만기 감지 상태 정책(#633):** `ACTIVE` 예·적금만 자동으로 `MATURED`로 전이한다.
   `SUSPENDED`·`DORMANT` 계좌는 현재 상태를 유지하며, 만기일이 지났더라도 이번 COB 스텝의 조회 대상에는 포함하지 않는다. 정지·휴면 해제 이후 만기 처리 방식은 PH-16에서 확정한다.
-- **후속 작업:** `AccountMatured` 이벤트 발행, 이자·원리금 지급, 만기해지 API 및 `MATURED → CLOSED` 전이. PH-15 전체 완료와 구분한다.
-- **후속 감사 추적:** `AccountMatured` 이벤트 연동 시 계좌별 상태 전이 이력을 추적할 수 있도록 전이 전·후 상태, 전이 기준일, 처리 시각과 계좌 식별 정보를 기록하는 방식을 함께 설계한다.
+- **진행 현황(2026-10-20, #671):** `AccountMatured` 이벤트 발행, 계좌 상태 전이 감사 이력 저장, 계좌 상세 API `maturityDate` 확장을 구현 중이다.
+  - `AccountMatured`는 `account.api`의 `DomainEvent` 구현체이며, `refId = accountId`, `status = SUCCESS`, `errorCode = null`을 사용한다(P1 협의).
+  - 실제 `ACTIVE → MATURED` 전이(`markMatured() == true`)에서만 `ApplicationEventPublisher`로 이벤트를 발행한다. 기존 `MATURED` 계좌 재처리 시 이벤트를 다시 발행하지 않는다.
+  - 별도 `account_status_history` 테이블에 변경 전·후 상태, 계약 만기일, 만기 전이 기준일, 실제 처리 시각, 발생 원인(`COB`)을 기록한다.
+  - 계좌 상태 변경·감사 이력 저장·이벤트 발행은 같은 청크 트랜잭션 안에서 처리한다.
+  - Spring Modulith 전환(#437)을 기다리지 않고 기존 이벤트 발행 계약을 사용한다. 2차에는 `AccountMatured` 알림 소비자를 구현하지 않는다.
+  - 계좌 상세 응답에 nullable `maturityDate`를 추가하고, 기존 `status` 필드 및 응답 구조는 유지한다(Expand).
+
+- **후속 PH-15 작업:** 만기 원리금 계산·이자 및 세금 기표·고객 계좌로 원리금 이동·만기해지 API·`MATURED → CLOSED` 전이. 실제 만기해지는 계좌 잠금 이후에도 `maturity_date <= 달력상 현재일(KST)`를 재검증한다. #671 완료와 PH-15 전체 완료는 구분한다.
 
 ### PH-14. 이자 지급 · 원천징수
 

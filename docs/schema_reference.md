@@ -66,6 +66,7 @@
 | 38 | `batch_execution_history` | 배치 스텝 실행 기록 | P5 | 8  |
 | 39 | `ledger_reconciliation_mismatch` | 원장-잔액 대사 불일치 목록 | P4 | 6  |
 | 40 | `admin_permission` | 관리자 권한 | P1 | 3  |
+| 41 | `account_status_history` | 계좌 상태 전이 이력 | P2 | 8 |
 
 ---
 
@@ -395,6 +396,32 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | `ck_account_withdrawal_type`          | `withdrawal_registered = FALSE OR account_type = 'DEMAND_DEPOSIT'`                                                                                   | 출금계좌 등록은 입출금계좌에만 허용한다.                             |
 | `ck_account_withdrawal_registered_at` | 미등록이면 `withdrawal_registered_at IS NULL`<br>등록이면 `withdrawal_registered_at IS NOT NULL`                                                              | 출금계좌 등록 여부와 등록 일시의 존재 여부가 일치해야 한다.                 |
 | `ck_account_closed_date`              | `CLOSED`이면 `closed_date IS NOT NULL AND closed_date >= opened_date`<br>`CLOSED`가 아니면 `closed_date IS NULL`                                           | 해지 계좌에는 개설일 이후의 해지일이 있어야 하며, 미해지 계좌에는 해지일이 없어야 한다. |
+
+---
+
+## `account_status_history`
+
+> 계좌 상태 전이 감사 이력 (PH-15, #671)
+
+계좌 상태 변경 시 전이 전·후 상태와 처리 시각을 기록하는 append-only 테이블이다. 현재는 COB의 `ACTIVE → MATURED` 전이만 기록한다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `history_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 이력 식별자 |
+| `account_id` | `BIGINT` | INDEX | X | | 상태가 변경된 계좌 ID |
+| `previous_status` | `VARCHAR(12)` | | X | | 변경 전 계좌 상태 (`ACTIVE`) |
+| `new_status` | `VARCHAR(12)` | | X | | 변경 후 계좌 상태 (`MATURED`) |
+| `maturity_date` | `DATE` | | O | | 계약 만기일 |
+| `effective_business_date` | `DATE` | | O | | COB에서 계산한 만기 전이 기준일 |
+| `changed_at` | `DATETIME(6)` | INDEX | X | | 실제 상태 전이 처리 시각 |
+| `trigger_type` | `VARCHAR(20)` | | X | | 전이 발생 원인 (`COB`) |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| PRIMARY | `PRIMARY` | `history_id` |
+| INDEX | `ix_account_status_history_account_time` | `account_id, changed_at` |
 
 ---
 
