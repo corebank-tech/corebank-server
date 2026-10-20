@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 40개 테이블(37개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 41개 테이블(37개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개 + `business_date_cutoff` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -426,6 +426,12 @@ erDiagram
         date business_date "현재 영업일. 기동 시 오늘로 맞춤"
         datetime created_at "DATETIME(6)"
         datetime updated_at "DATETIME(6). 마지막 전환 시각"
+    }
+    business_date_cutoff {
+        bigint business_date_cutoff_id PK
+        date base_date UK "마감된 영업일. (base_date, status) UNIQUE"
+        varchar status UK "VARCHAR(10). CLOSED"
+        datetime closed_at "DATETIME(6). 마감 시각(KST)"
     }
     holiday {
         date holiday_date PK "주말 제외 공휴일만. 주말은 요일로 판정"
