@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202610192301__insert_bank_code_common_code.sql
+-- V202610201221__insert_bank_code_common_code.sql
 -- 공통코드 (P4, PH-33-② / #654)
 --
 -- 타행이체 은행 목록(GET /transfers/banks). code는 전문 기관코드 3자리다(fixed_length_message_spec.md §2).

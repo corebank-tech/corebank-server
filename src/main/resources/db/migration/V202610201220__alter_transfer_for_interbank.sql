@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202610192300__alter_transfer_for_interbank.sql
+-- V202610201220__alter_transfer_for_interbank.sql
 -- P4 (PH-33-② / #654)
 --
 -- transfer에 타행 거래를 담는다(fixed_length_message_spec.md §6).
