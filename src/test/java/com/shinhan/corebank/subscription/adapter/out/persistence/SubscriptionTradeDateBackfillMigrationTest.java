@@ -10,6 +10,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +28,7 @@ class SubscriptionTradeDateBackfillMigrationTest extends IntegrationTestSupport 
             "db/migration/V202610201210__add_trade_date_to_product_subscription_and_account.sql";
     private static final long ID_BASE = 9_664_000_000L;
     private static final LocalDate TEST_HOLIDAY = LocalDate.of(2099, 1, 7); // 수
+    private static final LocalDate TEST_HOLIDAY_AFTER_WEEKEND = LocalDate.of(2099, 1, 12); // 토·일 다음 월
 
     @Autowired
     private DataSource dataSource;
@@ -36,17 +38,20 @@ class SubscriptionTradeDateBackfillMigrationTest extends IntegrationTestSupport 
 
     @BeforeEach
     void setUp() {
-        jdbcTemplate.update("DELETE FROM holiday WHERE holiday_date = ?", TEST_HOLIDAY);
-        jdbcTemplate.update(
-                "INSERT INTO holiday (holiday_date, holiday_name, created_at, updated_at) VALUES (?, '백필 테스트', NOW(6), NOW(6))",
-                TEST_HOLIDAY);
+        for (LocalDate holiday : List.of(TEST_HOLIDAY, TEST_HOLIDAY_AFTER_WEEKEND)) {
+            jdbcTemplate.update("DELETE FROM holiday WHERE holiday_date = ?", holiday);
+            jdbcTemplate.update(
+                    "INSERT INTO holiday (holiday_date, holiday_name, created_at, updated_at) VALUES (?, '백필 테스트', NOW(6), NOW(6))",
+                    holiday);
+        }
     }
 
     @AfterEach
     void tearDown() {
         jdbcTemplate.update(
                 "DELETE FROM product_subscription WHERE subscription_id BETWEEN ? AND ?", ID_BASE, ID_BASE + 99);
-        jdbcTemplate.update("DELETE FROM holiday WHERE holiday_date = ?", TEST_HOLIDAY);
+        jdbcTemplate.update(
+                "DELETE FROM holiday WHERE holiday_date IN (?, ?)", TEST_HOLIDAY, TEST_HOLIDAY_AFTER_WEEKEND);
     }
 
     @Test
@@ -56,6 +61,7 @@ class SubscriptionTradeDateBackfillMigrationTest extends IntegrationTestSupport 
         insert(2, LocalDateTime.of(2099, 1, 3, 10, 0)); // 토 → 월
         insert(3, LocalDateTime.of(2099, 1, 7, 9, 0)); // 수(휴일) → 목
         insert(4, LocalDateTime.of(2099, 1, 4, 9, 0)); // 일 → 월
+        insert(6, LocalDateTime.of(2099, 1, 10, 9, 0)); // 토(다음 일, 월이 휴일) → 화
 
         runBackfill();
 
@@ -63,6 +69,7 @@ class SubscriptionTradeDateBackfillMigrationTest extends IntegrationTestSupport 
         assertThat(tradeDateOf(2)).isEqualTo(LocalDate.of(2099, 1, 5));
         assertThat(tradeDateOf(3)).isEqualTo(LocalDate.of(2099, 1, 8));
         assertThat(tradeDateOf(4)).isEqualTo(LocalDate.of(2099, 1, 5));
+        assertThat(tradeDateOf(6)).isEqualTo(LocalDate.of(2099, 1, 13));
     }
 
     @Test
