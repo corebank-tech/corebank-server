@@ -1,6 +1,7 @@
 package com.shinhan.infoetl.adapter.out.jdbc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.infoetl.InfoEtlTestDatabase;
 import com.shinhan.infoetl.ReplicaFixtures;
@@ -223,6 +224,18 @@ class JdbcReplicaBalanceAdapterTest {
         assertThat(readOn(LocalDate.of(2026, 10, 16)).get(34L).balance()).isEqualTo(1_000L);
         assertThat(readOn(LocalDate.of(2026, 10, 19)).get(34L).balance()).isZero();
         assertThat(readOn(D)).doesNotContainKey(34L);
+    }
+
+    @Test
+    @DisplayName("해지인데 해지 논리 영업일이 없는 계좌가 있으면 원천 계약 위반으로 거부한다")
+    void rejectsClosedAccountWithoutClosedTradeDate() throws SQLException {
+        insertAccount(40L, 50L, 100L, "TIME_DEPOSIT", "CLOSED");
+        insertLedger(300L, 40L, 0L, LocalDateTime.of(2026, 10, 19, 10, 0), D.minusDays(1));
+
+        assertThatThrownBy(this::read)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("accountId=[40]")
+                .hasMessageContaining("closed_trade_date");
     }
 
     @Test

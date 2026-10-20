@@ -84,7 +84,7 @@ public final class JdbcMartLoadAdapter implements MartLoadPort {
         });
     }
 
-    // 같은 계좌의 이벤트가 이미 다른 기준일에 있으면(예: 해지 계좌의 마지막 원장 거래일이 옮겨진 경우) 안내를 남긴다.
+    // 같은 계좌의 이벤트가 이미 다른 기준일에 있으면(예: 원천의 가입·해지 논리 영업일이 사후에 바뀐 경우) 안내를 남긴다.
     private void insertEvents(Connection mart, long loadBatchId, LocalDate baseDate, List<MartEventRow> events)
             throws SQLException {
         try {

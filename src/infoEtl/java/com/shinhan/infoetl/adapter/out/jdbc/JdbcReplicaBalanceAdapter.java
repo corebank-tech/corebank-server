@@ -37,6 +37,15 @@ public final class JdbcReplicaBalanceAdapter implements ReplicaBalancePort {
             """
                     .formatted(TradeDateSql.OFFSETS, TradeDateSql.of("x"));
 
+    // 해지(CLOSED)인데 해지 논리 영업일이 없으면 잔액에 남고 CLOSE도 빠지므로 원천 계약 위반으로 드러낸다(설계 §3-0, §7-5).
+    private static final String CLOSED_WITHOUT_TRADE_DATE_SQL =
+            """
+            SELECT account_id FROM account
+            WHERE status = 'CLOSED' AND closed_trade_date IS NULL
+            ORDER BY account_id
+            LIMIT 5
+            """;
+
     private final JdbcConnectionFactory connections;
 
     public JdbcReplicaBalanceAdapter(JdbcConnectionFactory connections) {
@@ -47,9 +56,24 @@ public final class JdbcReplicaBalanceAdapter implements ReplicaBalancePort {
     public List<BalanceRow> readBalances(LocalDate baseDate) {
         try (Connection replica = connections.open()) {
             replica.setReadOnly(true);
+            requireClosedAccountsHaveTradeDate(replica);
             return query(replica, baseDate);
         } catch (SQLException e) {
             throw new EtlStorageException("레플리카 잔액 읽기에 실패했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    private void requireClosedAccountsHaveTradeDate(Connection replica) throws SQLException {
+        List<Long> accountIds = new ArrayList<>();
+        try (PreparedStatement statement = replica.prepareStatement(CLOSED_WITHOUT_TRADE_DATE_SQL);
+                ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                accountIds.add(resultSet.getLong(1));
+            }
+        }
+        if (!accountIds.isEmpty()) {
+            throw new IllegalStateException(
+                    "해지 논리 영업일(closed_trade_date)이 없는 해지 계좌가 있습니다(원천 계약 위반): accountId=" + accountIds);
         }
     }
 
