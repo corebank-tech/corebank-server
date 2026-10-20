@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -37,6 +39,17 @@ class AdminSessionPropertiesTest {
                 .getFailure()
                 // 어떤 바인딩 실패가 아니라 이 필드의 검증 실패여야 한다 — 원인 사슬까지 본다.
                 .hasStackTraceContaining("sessionTimeout"));
+    }
+
+    // 0 이하는 만료 없는 세션이 되고, Integer.MAX_VALUE 초를 넘으면 초 단위 int 로 깎이면서
+    // 설정한 적 없는 값이 된다. 둘 다 로그인 때가 아니라 기동에서 막혀야 한다.
+    @ParameterizedTest(name = "session-timeout={0}")
+    @ValueSource(strings = {"0m", "-1m", "24856d"})
+    @DisplayName("session-timeout 이 1초~Integer.MAX_VALUE 초 밖이면 기동에 실패한다")
+    void failsStartupWhenOutOfRange(String sessionTimeout) {
+        contextRunner
+                .withPropertyValues("app.security.admin.session-timeout=" + sessionTimeout)
+                .run(context -> assertThat(context).hasFailed().getFailure().hasStackTraceContaining("sessionTimeout"));
     }
 
     @Configuration(proxyBeanMethods = false)
