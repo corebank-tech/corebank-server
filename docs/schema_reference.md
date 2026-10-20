@@ -35,7 +35,7 @@
 | 7 | `product_rate_tier` | 상품 기간별 금리 | P3 | 3  |
 | 8 | `product_preferential_rate` | 상품 우대금리 | P3 | 4  |
 | 9 | `product_terms` | 상품-약관 연결 | P3 | 2  |
-| 10 | `account` | 계좌 | P2 | 22 |
+| 10 | `account` | 계좌 | P2 | 23 |
 | 11 | `account_number_sequence` | 계좌번호 채번 규칙 | P2 | 8  |
 | 12 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4  |
 | 13 | `transfer` | 이체 거래 | P4 | 25 |
@@ -45,7 +45,7 @@
 | 17 | `transfer_limit` | 이체한도 | P1 | 5  |
 | 18 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 5  |
 | 19 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 6  |
-| 20 | `product_subscription` | 상품가입 | P3 | 18 |
+| 20 | `product_subscription` | 상품가입 | P3 | 19 |
 | 21 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5  |
 | 22 | `scheduled_transfer` | 예약이체 | P3 | 17 |
 | 23 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
