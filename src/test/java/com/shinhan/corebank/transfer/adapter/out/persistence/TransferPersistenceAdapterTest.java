@@ -209,6 +209,32 @@ class TransferPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("은행코드가 있는 타행 행은 입금계좌 ID를 가질 수 없다 (ck_transfer_payee_account)")
+    void save_interbankTransferWithDepositAccountId_rejectedByCheck() {
+        Transfer transfer = Transfer.builder()
+                .transactionNumber("20260812WB0000000005")
+                .withdrawalAccountId(101L)
+                .depositAccountId(202L)
+                .depositAccountNumber("1234567890123")
+                .payeeBankCode("004")
+                .amount(10000L)
+                .fee(0L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .status(ProcessResultStatus.ERROR)
+                .transferredAt(LocalDateTime.now())
+                .createdAt(LocalDateTime.now())
+                .tradeDate(TRADE_DATE)
+                .build();
+
+        assertThatThrownBy(() -> {
+                    adapter.save(transfer);
+                    entityManager.flush();
+                })
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
     @DisplayName("은행코드가 없는 당행 행은 예금주 없이 저장할 수 없다 (ck_transfer_payee_name)")
     void save_domesticTransferWithoutPayeeName_rejectedByCheck() {
         Transfer transfer = Transfer.builder()
