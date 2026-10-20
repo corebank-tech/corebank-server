@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.shinhan.corebank.auth.application.port.in.LoginCommand;
 import com.shinhan.corebank.auth.application.port.in.LoginResult;
@@ -181,7 +182,7 @@ class LoginServiceTest {
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);
         assertThat(exception.getAttemptResult()).contains(attemptResult);
         verify(loginCustomerPort, never()).recordLoginFailure(1L);
-        verify(loginSuccessProcessor, never()).process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER);
+        verifyNoInteractions(loginSuccessProcessor);
         verify(recordLoginAuditPort)
                 .record(1L, REQUEST_IP, false, LoginAuditReason.INVALID_CREDENTIALS, CustomerRole.CUSTOMER);
     }
@@ -216,7 +217,7 @@ class LoginServiceTest {
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);
         assertThat(exception.getAttemptResult()).contains(attemptResult);
         verify(loginAttemptProcessor).process(4);
-        verify(loginSuccessProcessor, never()).process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER);
+        verifyNoInteractions(loginSuccessProcessor);
         verify(recordLoginAuditPort)
                 .record(1L, REQUEST_IP, false, LoginAuditReason.INVALID_CREDENTIALS, CustomerRole.CUSTOMER);
     }
