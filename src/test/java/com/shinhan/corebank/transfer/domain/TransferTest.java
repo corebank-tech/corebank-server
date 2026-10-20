@@ -472,6 +472,72 @@ class TransferTest {
     }
 
     @Nested
+    @DisplayName("createInterbank 타행 이체 팩토리")
+    class CreateInterbankTest {
+
+        private Transfer createInterbank(String payeeBankCode, String depositAccountNumber) {
+            return Transfer.createInterbank(
+                    "20261023WB0000000123",
+                    101L,
+                    payeeBankCode,
+                    depositAccountNumber,
+                    50000L,
+                    0L,
+                    TransferChannel.WB,
+                    "생활비",
+                    "홍길동",
+                    LocalDateTime.of(2026, 10, 23, 10, 30, 15),
+                    TRADE_DATE);
+        }
+
+        @Test
+        @DisplayName("입금계좌 ID와 예금주 없이 은행코드를 가진 PROCESSING 즉시이체로 생성된다")
+        void createsInterbankTransferWithoutDepositAccountIdAndPayeeName() {
+            Transfer transfer = createInterbank("004", "1234567890123456");
+
+            assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
+            assertThat(transfer.getPayeeBankCode()).isEqualTo("004");
+            assertThat(transfer.getDepositAccountNumber()).isEqualTo("1234567890123456");
+            assertThat(transfer.getDepositAccountId()).isNull();
+            assertThat(transfer.getPayeeName()).isNull();
+            assertThat(transfer.getTransferType()).isEqualTo(TransferType.IMMEDIATE);
+            assertThat(transfer.getSourceType()).isNull();
+            assertThat(transfer.getTradeDate()).isEqualTo(TRADE_DATE);
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {" "})
+        @DisplayName("은행코드가 비어 있으면 REQUIRED_FIELD_MISSING")
+        void rejectsBlankBankCode(String payeeBankCode) {
+            assertThatThrownBy(() -> createInterbank(payeeBankCode, "1234567890123"))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        @Test
+        @DisplayName("금액이 0이면 INVALID_AMOUNT")
+        void rejectsZeroAmount() {
+            assertThatThrownBy(() -> Transfer.createInterbank(
+                            "20261023WB0000000123",
+                            101L,
+                            "004",
+                            "1234567890123",
+                            0L,
+                            0L,
+                            TransferChannel.WB,
+                            null,
+                            null,
+                            LocalDateTime.of(2026, 10, 23, 10, 30, 15),
+                            TRADE_DATE))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_AMOUNT);
+        }
+    }
+
+    @Nested
     @DisplayName("complete 이체 완료 메서드")
     class CompleteTest {
 

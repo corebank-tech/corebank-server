@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 37개 비즈니스 테이블 + 3개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`) · 340개 컬럼
+**대상**: 37개 비즈니스 테이블 + 3개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`) · 341개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -38,7 +38,7 @@
 | 10 | `account` | 계좌 | P2 | 23 |
 | 11 | `account_number_sequence` | 계좌번호 채번 규칙 | P2 | 8  |
 | 12 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4  |
-| 13 | `transfer` | 이체 거래 | P4 | 25 |
+| 13 | `transfer` | 이체 거래 | P4 | 26 |
 | 14 | `ledger_entry` | 원장 | P4 | 14 |
 | 15 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1  |
 | 16 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6  |
@@ -473,14 +473,17 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 
 즉시·예약·자동이체 3종이 모두 이 테이블 1행으로 수렴한다. 예약·자동은 `source_type`·`source_id`로 원본을 역추적한다. `status = ERROR`인 행은 원장 기표가 0행이다. 예약·자동이체는 `uk_transfer_source_execution_date`(`source_type, source_id, execution_date`)로 같은 회차의 중복 실행을 상태(SUCCESS/ERROR)와 무관하게 DB 레벨에서 막는다 — 즉시이체는 세 컬럼 모두 NULL이라 이 제약의 영향을 받지 않는다(MySQL은 NULL을 서로 다른 값으로 취급).
 
+**타행이체(PH-33-②)도 이 테이블에 남는다.** `payee_bank_code`가 있으면 타행, NULL이면 당행이다. 타행은 수취 계좌가 당행 `account`에 없어 `deposit_account_id`가 NULL이고, 예금주는 상대 은행 응답(SUCCESS)으로만 받아 `ERROR`·`TIMEOUT` 건은 `payee_name`도 NULL이다. 당행 행은 `ck_transfer_payee_account`·`ck_transfer_payee_name`이 지금처럼 두 값을 강제한다. 타행 예약·자동이체는 없다(즉시이체만).
+
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
 | `transfer_id` | `BIGINT` | **PK** | X |  | 이체 거래 내부 식별자. 대외 식별자는 `transaction_number` |
 | `transaction_number` | `CHAR(20)` | **UK** | X |  | 대외 거래 식별자. `YYYYMMDD`(8) + 채널(2) + 일련(10) = 20자. 이체 상세 조회의 경로 변수이자 원장 2행을 잇는 키 |
 | `withdrawal_account_id` | `BIGINT` | **FK** | X |  | 출금계좌 → `account.account_id` |
-| `deposit_account_id` | `BIGINT` | **FK** | X |  | 입금계좌. 원장 입금 행의 `account_id` 근거. 1차는 당행 전용이라 항상 값이 있다 → `account.account_id` |
-| `deposit_account_number` | `CHAR(12)` |  | X |  | 입금 계좌번호. 타행 확장을 대비해 번호도 함께 보관한다 |
-| `payee_name` | `VARCHAR(50)` |  | X |  | 입금계좌 예금주명. **거래 시점 스냅샷**이라 이후 상대 정보가 바뀌어도 남는다 |
+| `deposit_account_id` | `BIGINT` | **FK** | O |  | 입금계좌. 원장 입금 행의 `account_id` 근거 → `account.account_id`. 당행 거래는 항상 값이 있고, 타행 거래는 NULL이다(수취 계좌가 당행에 없다) |
+| `deposit_account_number` | `VARCHAR(16)` |  | X |  | 입금 계좌번호. 숫자만. 당행 12자리, 타행 1~16자리(전문 계좌번호 칸, [전문 규격](phase2/fixed_length_message_spec.md) §2) |
+| `payee_bank_code` | `CHAR(3)` |  | O |  | 타행 입금 은행코드(`common_code` `BANK_CODE`, 전문 기관코드). **NULL이면 당행 거래**다 |
+| `payee_name` | `VARCHAR(50)` |  | O |  | 입금계좌 예금주명. **거래 시점 스냅샷**이라 이후 상대 정보가 바뀌어도 남는다. 당행은 항상 있고, 타행은 SUCCESS 응답이 돌려준 이름이며 `ERROR`·`TIMEOUT`이면 NULL이다 |
 | `amount` | `BIGINT` |  | X |  | 이체금액 |
 | `fee` | `BIGINT` |  | X | `0` | 수수료. 당행 이체는 0으로 고정 |
 | `transfer_type` | `VARCHAR(12)` |  | X |  | 이체 종류. `IMMEDIATE`(즉시) / `SCHEDULED`(예약) / `AUTO`(자동) |
@@ -516,7 +519,9 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | --- | --- |
 | `ck_transfer_amount` | `amount > 0` |
 | `ck_transfer_fee` | `fee >= 0` |
-| `ck_transfer_selfsend` | `withdrawal_account_id <> deposit_account_id` |
+| `ck_transfer_selfsend` | `withdrawal_account_id <> deposit_account_id` — 타행은 `deposit_account_id`가 NULL이라 해당 없음 |
+| `ck_transfer_payee_account` | `(payee_bank_code IS NULL) = (deposit_account_id IS NOT NULL)` — 당행은 입금계좌 ID 필수, 타행은 없음 |
+| `ck_transfer_payee_name` | `payee_bank_code IS NOT NULL OR payee_name IS NOT NULL` — 당행은 예금주 필수 |
 | `ck_transfer_correction_type` | `correction_type IN ('REVERSAL', 'REPOST')` |
 | `ck_transfer_correction_ref` | `(correction_type IS NULL) = (ref_transfer_id IS NULL)` — 반쪽 정정 금지 |
 
