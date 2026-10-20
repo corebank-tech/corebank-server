@@ -13,12 +13,12 @@ import java.util.List;
 
 public final class JdbcReplicaBalanceAdapter implements ReplicaBalancePort {
 
-    // P3 설계 §3-3 잔액 쿼리. ? 두 개는 모두 기준일 D다. 발생일 상한 없이 거래일이 D 이하인 원장을 모두 본다.
+    // P3 설계 §3-3 잔액 쿼리. ? 두 개는 모두 기준일 D다. 발생일 상한 없이 거래일이 D 이하인 원장을 모두 보고,
+    // 해지 계좌는 해지 논리 영업일(closed_trade_date)이 D보다 이전이면 거른다. 원장과의 일치 검사는 이벤트 읽기에서 한다.
     private static final String SQL =
             """
-            WITH RECURSIVE offsets(n) AS (
-              SELECT 0 UNION ALL SELECT n + 1 FROM offsets WHERE n < 30
-            ), le AS (
+            WITH RECURSIVE %s,
+            le AS (
               SELECT x.account_id, x.balance_after, x.occurred_at, x.ledger_entry_id,
                      %s AS td
               FROM ledger_entry x
@@ -27,20 +27,15 @@ public final class JdbcReplicaBalanceAdapter implements ReplicaBalancePort {
                      ROW_NUMBER() OVER (PARTITION BY account_id
                                         ORDER BY occurred_at DESC, ledger_entry_id DESC) AS rn
               FROM le WHERE td <= ?
-            ), close_td AS (
-              SELECT l.account_id, MAX(%s) AS close_date
-              FROM ledger_entry l JOIN account a ON a.account_id = l.account_id AND a.status = 'CLOSED'
-              GROUP BY l.account_id
             )
             SELECT a.account_id, a.customer_id, a.account_type, a.product_id, p.product_group, l.balance_after
             FROM last_entry l
             JOIN account a ON a.account_id = l.account_id
             LEFT JOIN product p ON p.product_id = a.product_id
-            LEFT JOIN close_td c ON c.account_id = a.account_id
             WHERE l.rn = 1
-              AND (c.close_date IS NULL OR c.close_date >= ?)
+              AND (a.closed_trade_date IS NULL OR a.closed_trade_date >= ?)
             """
-                    .formatted(TradeDateSql.of("x"), TradeDateSql.of("l"));
+                    .formatted(TradeDateSql.OFFSETS, TradeDateSql.of("x"));
 
     private final JdbcConnectionFactory connections;
 
