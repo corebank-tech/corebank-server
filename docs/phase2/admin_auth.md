@@ -178,4 +178,7 @@ SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS 
   `SecurityConfig` 인가 한 줄·`application.yml`의 `app.security.admin.bootstrap-customer-ids`·
   관련 테스트 3건·`SecurityConfigTest` 관리자 3건 재작성
 - `CustomerJpaEntity` 매핑과 `CustomerInfoResponse` 필드 추가
-- 관리자 로그인·로그아웃 감사로그에 actor role 포함(`AuditEventType.LOGIN`)
+- 관리자 로그인·로그아웃 감사로그에 actor role 포함(`AuditEventType.LOGIN`).
+  **요구 역할도 `detail.requiredRole`로 함께 남긴다** — 실패 응답이 고객 로그인과 같아서(결정 ③)
+  이것이 없으면 어느 경로로 두드렸는지 사후에 가릴 수 없다. 계정을 못 찾은 실패는 actor role이
+  `UNKNOWN`이고, 역할을 가리지 않는 고객 로그인은 요구 역할이 `ANY`다 (PR #639 리뷰 반영)

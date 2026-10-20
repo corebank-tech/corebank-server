@@ -21,7 +21,7 @@ public class LoginSuccessProcessor {
 
     @Transactional
     public LoginSuccessUpdateResult process(
-            Long customerId, LocalDateTime loginAt, String requestIp, CustomerRole role) {
+            Long customerId, LocalDateTime loginAt, String requestIp, CustomerRole role, CustomerRole requiredRole) {
         Objects.requireNonNull(customerId, "customerId must not be null");
         Objects.requireNonNull(loginAt, "loginAt must not be null");
         Objects.requireNonNull(requestIp, "requestIp must not be null");
@@ -32,7 +32,7 @@ public class LoginSuccessProcessor {
             return updateResult;
         }
 
-        recordLoginAuditPort.record(customerId, requestIp, true, LoginAuditReason.SUCCESS, role);
+        recordLoginAuditPort.record(customerId, requestIp, true, LoginAuditReason.SUCCESS, role, requiredRole);
 
         return LoginSuccessUpdateResult.COMPLETED;
     }
