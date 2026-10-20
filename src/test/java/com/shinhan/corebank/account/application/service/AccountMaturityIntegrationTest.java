@@ -2,8 +2,13 @@ package com.shinhan.corebank.account.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.reset;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.account.adapter.out.persistence.AccountStatusHistoryPersistenceAdapter;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.business.api.BusinessDateProvider;
@@ -16,6 +21,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -23,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 class AccountMaturityIntegrationTest extends IntegrationTestSupport {
 
@@ -52,6 +59,9 @@ class AccountMaturityIntegrationTest extends IntegrationTestSupport {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @MockitoSpyBean
+    private AccountStatusHistoryPersistenceAdapter historyAdapter;
+
     private Long customerId;
     private Long productId;
 
@@ -69,11 +79,22 @@ class AccountMaturityIntegrationTest extends IntegrationTestSupport {
     @AfterEach
     void tearDown() {
         if (customerId != null) {
+            jdbcTemplate.update(
+                    """
+                    DELETE h
+                    FROM account_status_history h
+                    JOIN account a ON a.account_id = h.account_id
+                    WHERE a.customer_id = ?
+                    """,
+                    customerId);
+
             jdbcTemplate.update("DELETE FROM account WHERE customer_id = ?", customerId);
         }
+
         if (productId != null) {
             productJpaRepository.deleteById(productId);
         }
+
         if (customerId != null) {
             customerTestFixture.deleteCustomer(customerId);
         }
@@ -95,11 +116,19 @@ class AccountMaturityIntegrationTest extends IntegrationTestSupport {
         assertThat(status(first)).isEqualTo("ACTIVE");
         assertThat(status(second)).isEqualTo("ACTIVE");
 
+        // [추가] 실패한 청크에는 감사 이력도 남지 않아야 한다.
+        assertThat(historyCount(first)).isZero();
+        assertThat(historyCount(second)).isZero();
+
         // 재실행하면 남아 있는 두 계좌가 정상 전이된다.
         assertThat(transitionService.transition(ids, BASE_DATE)).isEqualTo(2);
 
         assertThat(status(first)).isEqualTo("MATURED");
         assertThat(status(second)).isEqualTo("MATURED");
+
+        // [추가] 정상 전이된 계좌에는 이력이 각각 1건 남는다.
+        assertThat(historyCount(first)).isEqualTo(1L);
+        assertThat(historyCount(second)).isEqualTo(1L);
     }
 
     @Test
@@ -110,6 +139,9 @@ class AccountMaturityIntegrationTest extends IntegrationTestSupport {
         // 첫 청크는 정상 커밋
         assertThat(transitionService.transition(List.of(ids.get(0)), BASE_DATE)).isEqualTo(1);
 
+        // [추가] 정상 커밋된 청크의 이력은 유지된다.
+        assertThat(historyCount(ids.get(0))).isEqualTo(1L);
+
         // 다음 청크는 첫 계좌를 변경한 뒤 실패
         assertThatThrownBy(() -> transitionService.transition(List.of(ids.get(1), Long.MAX_VALUE), BASE_DATE))
                 .isInstanceOf(RuntimeException.class);
@@ -118,13 +150,25 @@ class AccountMaturityIntegrationTest extends IntegrationTestSupport {
         assertThat(status(ids.get(1))).isEqualTo("ACTIVE");
         assertThat(status(ids.get(2))).isEqualTo("ACTIVE");
 
+        // [추가] 실패한 청크의 이력은 롤백된다.
+        assertThat(historyCount(ids.get(0))).isEqualTo(1L);
+        assertThat(historyCount(ids.get(1))).isZero();
+        assertThat(historyCount(ids.get(2))).isZero();
+
         assertNoOutsideCandidates();
+
         // 남은 ACTIVE 계좌만 탐색하여 처리
         maturityService.runInCob(COB_DATE);
 
         assertThat(status(ids.get(0))).isEqualTo("MATURED");
         assertThat(status(ids.get(1))).isEqualTo("MATURED");
         assertThat(status(ids.get(2))).isEqualTo("MATURED");
+
+        // [추가] 재실행 후 모든 계좌에 이력이 정확히 1건씩 존재한다.
+        assertThat(historyCount(ids.get(0))).isEqualTo(1L);
+        assertThat(historyCount(ids.get(1))).isEqualTo(1L);
+        assertThat(historyCount(ids.get(2))).isEqualTo(1L);
+        assertThat(totalHistoryCount()).isEqualTo(3L);
     }
 
     @Test
@@ -137,7 +181,6 @@ class AccountMaturityIntegrationTest extends IntegrationTestSupport {
 
         // 미래 만기 계좌와 이미 만기된 계좌는 제외 여부를 확인한다.
         List<Long> futureIds = insertAccounts(1, BASE_DATE.plusDays(1), AccountStatus.ACTIVE);
-
         List<Long> maturedIds = insertAccounts(1, BASE_DATE, AccountStatus.MATURED);
 
         Long first = dueIds.get(0);
@@ -157,6 +200,13 @@ class AccountMaturityIntegrationTest extends IntegrationTestSupport {
         // 신규 만기 501개 + 기존 MATURED 1개
         assertThat(countByStatus("MATURED")).isEqualTo(502L);
 
+        // [추가] 실제 전이된 501개 계좌에 대해서만 이력이 생성된다.
+        assertThat(totalHistoryCount()).isEqualTo(501L);
+        assertThat(historyCount(first)).isEqualTo(1L);
+        assertThat(historyCount(last)).isEqualTo(1L);
+        assertThat(historyCount(futureIds.get(0))).isZero();
+        assertThat(historyCount(maturedIds.get(0))).isZero();
+
         long firstVersion = version(first);
         long lastVersion = version(last);
 
@@ -167,9 +217,61 @@ class AccountMaturityIntegrationTest extends IntegrationTestSupport {
         assertThat(version(first)).isEqualTo(firstVersion);
         assertThat(version(last)).isEqualTo(lastVersion);
 
+        // [추가] 재실행해도 이력 건수가 증가하지 않는다.
+        assertThat(totalHistoryCount()).isEqualTo(501L);
+        assertThat(historyCount(first)).isEqualTo(1L);
+        assertThat(historyCount(last)).isEqualTo(1L);
+
         // 만기 감지는 상태만 바꾼다. 잔액과 원장은 그대로다.
         assertThat(totalBalance()).isEqualTo(balanceBefore);
         assertThat(ledgerCount(first, last)).isEqualTo(ledgerBefore);
+    }
+
+    @Test
+    @DisplayName("감사 이력 저장 실패 시 청크 전체의 상태 변경과 이력이 롤백된다")
+    void transition_rollsBackWhenHistorySaveFails() {
+        List<Long> ids = insertAccounts(2, BASE_DATE, AccountStatus.ACTIVE);
+
+        Long first = ids.get(0);
+        Long second = ids.get(1);
+
+        AtomicInteger saveCount = new AtomicInteger();
+
+        // 두 번째 계좌의 감사 이력까지 실제 저장한 후 예외 발생
+        doAnswer(invocation -> {
+                    Object result = invocation.callRealMethod();
+
+                    if (saveCount.incrementAndGet() == 2) {
+                        throw new IllegalStateException("감사 이력 저장 실패 테스트");
+                    }
+
+                    return result;
+                })
+                .when(historyAdapter)
+                .recordMaturity(anyLong(), any(), any(), any());
+
+        // 감사 이력 저장 실패
+        assertThatThrownBy(() -> transitionService.transition(ids, BASE_DATE)).isInstanceOf(RuntimeException.class);
+
+        // 두 계좌의 상태 변경이 모두 롤백됐는지 검증
+        assertThat(status(first)).isEqualTo("ACTIVE");
+        assertThat(status(second)).isEqualTo("ACTIVE");
+
+        // 실제 INSERT된 감사 이력도 롤백됐는지 검증
+        assertThat(historyCount(first)).isZero();
+        assertThat(historyCount(second)).isZero();
+
+        // 실패 주입 제거
+        reset(historyAdapter);
+
+        // 재실행 시 정상 처리되는지 검증
+        assertThat(transitionService.transition(ids, BASE_DATE)).isEqualTo(2);
+
+        assertThat(status(first)).isEqualTo("MATURED");
+        assertThat(status(second)).isEqualTo("MATURED");
+
+        assertThat(historyCount(first)).isEqualTo(1L);
+        assertThat(historyCount(second)).isEqualTo(1L);
     }
 
     private List<Long> insertAccounts(int count, LocalDate maturityDate, AccountStatus status) {
@@ -297,5 +399,28 @@ class AccountMaturityIntegrationTest extends IntegrationTestSupport {
                 BASE_DATE);
 
         assertThat(count).isZero();
+    }
+
+    private long historyCount(Long accountId) {
+        return jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM account_status_history
+                WHERE account_id = ?
+                """,
+                Long.class,
+                accountId);
+    }
+
+    private long totalHistoryCount() {
+        return jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM account_status_history h
+                JOIN account a ON a.account_id = h.account_id
+                WHERE a.customer_id = ?
+                """,
+                Long.class,
+                customerId);
     }
 }
