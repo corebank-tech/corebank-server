@@ -1081,7 +1081,7 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 | `voucher_no` | `VARCHAR(20)` | **PK** | X |  | 전표번호. 영업일 + 유형 + 일련 |
 | `trade_date` | `DATE` |  | X |  | 이 전표가 귀속되는 영업일 |
 | `tx_type` | `VARCHAR(24)` |  | X |  | `OPENING` / `TRANSFER` / `PRODUCT_SUBSCRIPTION` / `INTEREST` / `REVERSAL` / `INTERBANK_TRANSFER`(타행 송신 요청) / `INTERBANK_SETTLEMENT`(타행 확정 해소) |
-| `reference_key` | `VARCHAR(40)` |  | X |  | 원 거래번호. 원장 `transaction_number` 와 같은 값이고 개시 전표는 `OPENING-{yyyyMMdd}`. 원장과 전표를 1:1 로 잇는다(PH-24) |
+| `reference_key` | `VARCHAR(40)` |  | X |  | 원 거래번호. 원장 `transaction_number` 와 같은 값이고 개시 전표는 `OPENING-{yyyyMMdd}`. 원장과 전표를 1:1 로 잇는다(PH-24). 타행이체만 한 거래번호에 `INTERBANK_TRANSFER`·`INTERBANK_SETTLEMENT` 두 전표가 붙는다(`gl_journal_patterns.md` §3-5) |
 | `description` | `VARCHAR(200)` |  | O |  | 적요 |
 | `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
 
