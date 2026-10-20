@@ -28,7 +28,13 @@ class LoginAuditAdapterTest {
     @Test
     @DisplayName("로그인 실패를 LOGIN 이벤트와 사유·actor role 로 기록한다")
     void recordsLoginFailureWithoutSensitiveData() {
-        adapter.record(1L, "192.168.0.10", false, LoginAuditReason.INVALID_CREDENTIALS, CustomerRole.CUSTOMER, null);
+        adapter.record(
+                1L,
+                "192.168.0.10",
+                false,
+                LoginAuditReason.INVALID_CREDENTIALS,
+                CustomerRole.CUSTOMER,
+                CustomerRole.CUSTOMER);
 
         verify(auditLogService)
                 .record(
@@ -37,14 +43,15 @@ class LoginAuditAdapterTest {
                         AuditEventType.LOGIN,
                         "192.168.0.10",
                         false,
-                        Map.of("reason", "INVALID_CREDENTIALS", "role", "CUSTOMER", "requiredRole", "ANY"));
+                        Map.of("reason", "INVALID_CREDENTIALS", "role", "CUSTOMER", "requiredRole", "CUSTOMER"));
     }
 
     // 로그인 성공도 공통 LOGIN 이벤트로 기록
     @Test
     @DisplayName("로그인 성공을 LOGIN 이벤트와 성공 사유로 기록한다")
     void recordsLoginSuccess() {
-        adapter.record(1L, "192.168.0.10", true, LoginAuditReason.SUCCESS, CustomerRole.CUSTOMER, null);
+        adapter.record(
+                1L, "192.168.0.10", true, LoginAuditReason.SUCCESS, CustomerRole.CUSTOMER, CustomerRole.CUSTOMER);
 
         verify(auditLogService)
                 .record(
@@ -53,7 +60,7 @@ class LoginAuditAdapterTest {
                         AuditEventType.LOGIN,
                         "192.168.0.10",
                         true,
-                        Map.of("reason", "SUCCESS", "role", "CUSTOMER", "requiredRole", "ANY"));
+                        Map.of("reason", "SUCCESS", "role", "CUSTOMER", "requiredRole", "CUSTOMER"));
     }
 
     // 계정을 못 찾은 실패에서도 관리자 경로 시도였는지 남아야 보안 모니터링에 쓸 수 있다.

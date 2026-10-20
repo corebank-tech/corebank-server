@@ -48,6 +48,11 @@
 **실패 응답은 고객 로그인과 같은 `ATH0101`** 이다. 아이디 없음 · 비밀번호 틀림 · **고객 계정의 관리자
 로그인 시도** 셋 다 같은 응답이어서, 관리자 계정의 존재가 드러나지 않는다(AGENTS 규칙 4 · REQ-NFR-017).
 
+**`POST /auth/login`은 반대로 `role=CUSTOMER`만 통과한다**(PR #639 리뷰 반영). 고객 경로가 역할을
+가리지 않으면 관리자가 그 문으로 들어와 `GET /customers/me`의 `role`·`permissions[]`를 읽을 수 있어,
+위 응답 통일이 지키려던 것이 그대로 새어 나간다. 두 경로가 서로를 거절해야 경로 분리가 경계가 된다.
+실패 응답은 역시 `ATH0101`이다.
+
 **④ 관리자 세션 30분 무조작 만료** (고객은 10분)
 
 전역 `server.servlet.session.timeout: 10m`은 **그대로 두고**, 관리자 로그인에서만 세션 생성 직후
@@ -151,6 +156,10 @@ SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS 
 ```
 
 `JSESSIONID`·CSRF 쿠키는 고객 로그인과 같이 발급되고, 로그아웃은 기존 `POST /auth/logout`을 쓴다.
+
+> **FE #136 주의** — ②부터 **관리자는 `POST /auth/login`으로 로그인되지 않는다**(결정 ③). 훅을
+> `/admin/auth/login`으로 바꾸기 전까지 관리자 로그인이 `ATH0101`로 막히므로, ② 머지와 훅 교체를
+> 같이 붙여야 한다.
 
 **`GET /api/v1/customers/me`** — 기존 응답에 두 필드가 붙는다.
 

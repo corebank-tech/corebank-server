@@ -71,7 +71,7 @@ class LoginControllerTest {
         OffsetDateTime sessionExpiresAt = OffsetDateTime.parse("2026-08-16T01:10:00Z");
 
         given(clientIpResolver.resolve(any(HttpServletRequest.class))).willReturn("203.0.113.10");
-        given(loginUseCase.login(new LoginCommand("login-user", PASSWORD, "203.0.113.10", null)))
+        given(loginUseCase.login(new LoginCommand("login-user", PASSWORD, "203.0.113.10", CustomerRole.CUSTOMER)))
                 .willReturn(loginResult);
         given(sessionLoginManager.establishSession(
                         any(LoginResult.class), any(HttpServletRequest.class), any(HttpServletResponse.class)))

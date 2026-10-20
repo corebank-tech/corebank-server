@@ -43,11 +43,12 @@ class LoginSuccessProcessorTest {
         given(loginCustomerPort.recordLoginSuccess(1L, LOGIN_AT, REQUEST_IP))
                 .willReturn(LoginSuccessUpdateResult.COMPLETED);
 
-        LoginSuccessUpdateResult result = processor.process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER, null);
+        LoginSuccessUpdateResult result =
+                processor.process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER, CustomerRole.CUSTOMER);
 
         assertThat(result).isEqualTo(LoginSuccessUpdateResult.COMPLETED);
         verify(recordLoginAuditPort)
-                .record(1L, REQUEST_IP, true, LoginAuditReason.SUCCESS, CustomerRole.CUSTOMER, null);
+                .record(1L, REQUEST_IP, true, LoginAuditReason.SUCCESS, CustomerRole.CUSTOMER, CustomerRole.CUSTOMER);
     }
 
     // 동시 잠금 결과에는 성공 감사를 기록하지 않음
@@ -57,11 +58,12 @@ class LoginSuccessProcessorTest {
         given(loginCustomerPort.recordLoginSuccess(1L, LOGIN_AT, REQUEST_IP))
                 .willReturn(LoginSuccessUpdateResult.ACCOUNT_LOCKED);
 
-        LoginSuccessUpdateResult result = processor.process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER, null);
+        LoginSuccessUpdateResult result =
+                processor.process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER, CustomerRole.CUSTOMER);
 
         assertThat(result).isEqualTo(LoginSuccessUpdateResult.ACCOUNT_LOCKED);
         verify(recordLoginAuditPort, never())
-                .record(1L, REQUEST_IP, true, LoginAuditReason.SUCCESS, CustomerRole.CUSTOMER, null);
+                .record(1L, REQUEST_IP, true, LoginAuditReason.SUCCESS, CustomerRole.CUSTOMER, CustomerRole.CUSTOMER);
     }
 
     // 이용정지 결과에도 성공 감사를 기록하지 않음
@@ -71,11 +73,12 @@ class LoginSuccessProcessorTest {
         given(loginCustomerPort.recordLoginSuccess(1L, LOGIN_AT, REQUEST_IP))
                 .willReturn(LoginSuccessUpdateResult.ACCOUNT_SUSPENDED);
 
-        LoginSuccessUpdateResult result = processor.process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER, null);
+        LoginSuccessUpdateResult result =
+                processor.process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER, CustomerRole.CUSTOMER);
 
         assertThat(result).isEqualTo(LoginSuccessUpdateResult.ACCOUNT_SUSPENDED);
         verify(recordLoginAuditPort, never())
-                .record(1L, REQUEST_IP, true, LoginAuditReason.SUCCESS, CustomerRole.CUSTOMER, null);
+                .record(1L, REQUEST_IP, true, LoginAuditReason.SUCCESS, CustomerRole.CUSTOMER, CustomerRole.CUSTOMER);
     }
 
     // 성공 감사 저장 오류를 호출자에게 전파해 트랜잭션 롤백을 유도
@@ -86,9 +89,10 @@ class LoginSuccessProcessorTest {
                 .willReturn(LoginSuccessUpdateResult.COMPLETED);
         doThrow(new IllegalStateException("audit unavailable"))
                 .when(recordLoginAuditPort)
-                .record(1L, REQUEST_IP, true, LoginAuditReason.SUCCESS, CustomerRole.CUSTOMER, null);
+                .record(1L, REQUEST_IP, true, LoginAuditReason.SUCCESS, CustomerRole.CUSTOMER, CustomerRole.CUSTOMER);
 
-        assertThatThrownBy(() -> processor.process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER, null))
+        assertThatThrownBy(
+                        () -> processor.process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER, CustomerRole.CUSTOMER))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("audit unavailable");
     }
