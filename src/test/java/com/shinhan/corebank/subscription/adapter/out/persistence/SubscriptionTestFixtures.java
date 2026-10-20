@@ -49,6 +49,7 @@ public final class SubscriptionTestFixtures {
                 .openedDate(LocalDate.of(2026, 8, 1))
                 .maturityDate(LocalDate.of(2027, 8, 1))
                 .subscribedAt(LocalDateTime.of(2026, 8, 1, 10, 30, 0))
+                .subscriptionTradeDate(LocalDate.of(2026, 8, 3))
                 .build();
     }
 
@@ -73,6 +74,7 @@ public final class SubscriptionTestFixtures {
                 .openedDate(LocalDate.of(2026, 8, 1))
                 .maturityDate(LocalDate.of(2027, 8, 1))
                 .subscribedAt(LocalDateTime.of(2026, 8, 1, 10, 30, 0))
+                .subscriptionTradeDate(LocalDate.of(2026, 8, 3))
                 .build();
     }
 

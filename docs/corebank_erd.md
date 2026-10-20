@@ -100,6 +100,7 @@ erDiagram
         datetime opened_date
         date maturity_date
         datetime closed_date
+        date closed_trade_date "해지 논리 영업일 (정보계 CLOSE 기준)"
         datetime last_transaction_at "DATETIME(6)"
         bigint version "낙관적 락"
     }
@@ -259,6 +260,7 @@ erDiagram
         date opened_date
         date maturity_date
         datetime subscribed_at "DATETIME(6)"
+        date subscription_trade_date "가입 논리 영업일 (정보계 SUBSCRIBE 기준)"
     }
     subscription_terms_agreement {
         bigint subscription_id PK

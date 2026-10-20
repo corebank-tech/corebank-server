@@ -136,6 +136,14 @@ class Phase2BulkSeedServiceIntegrationTest extends IntegrationTestSupport {
                 .isZero();
         assertThat(
                         count(
+                                "SELECT COUNT(*) FROM product_subscription WHERE subscription_id BETWEEN 110000001 AND 110000200 AND (subscription_trade_date IS NULL OR WEEKDAY(subscription_trade_date) >= 5 OR subscription_trade_date IN (SELECT holiday_date FROM holiday))"))
+                .isZero();
+        assertThat(
+                        count(
+                                "SELECT COUNT(*) FROM product_subscription WHERE subscription_id BETWEEN 110000001 AND 110000200 AND subscription_trade_date < opened_date"))
+                .isZero();
+        assertThat(
+                        count(
                                 "SELECT COUNT(*) FROM transfer seeded JOIN ledger_entry withdrawal ON withdrawal.transfer_id=seeded.transfer_id AND withdrawal.direction='WITHDRAWAL' WHERE seeded.transfer_id BETWEEN 60000001 AND 60000100 AND seeded.withdrawal_balance_after<>withdrawal.balance_after"))
                 .isZero();
         assertThat(
