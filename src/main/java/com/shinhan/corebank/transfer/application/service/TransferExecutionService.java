@@ -31,12 +31,16 @@ import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -61,6 +65,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class TransferExecutionService implements TransferExecutionUseCase {
 
     private static final long FEE = 0L; // 당행 이체 수수료 0 고정 (POL-028)
+    // doExecute()가 예외를 던져 결과를 못 만든 호출. 태그 값을 고정해 두려고 상수로 둔다.
+    private static final String RESULT_EXCEPTION = "EXCEPTION";
 
     private final AccountLockPort accountLockPort;
     private final TransferLimitPort transferLimitPort;
@@ -76,6 +82,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private final BusinessDateProvider businessDateProvider;
     private final TransactionTemplate requiresNewTransactionTemplate;
     private final ApplicationEventPublisher eventPublisher;
+    private final MeterRegistry meterRegistry;
 
     public TransferExecutionService(
             AccountLockPort accountLockPort,
@@ -91,7 +98,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             Clock clock,
             BusinessDateProvider businessDateProvider,
             PlatformTransactionManager transactionManager,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            MeterRegistry meterRegistry) {
         this.accountLockPort = accountLockPort;
         this.transferLimitPort = transferLimitPort;
         this.transferAuthTokenVerificationPort = transferAuthTokenVerificationPort;
@@ -110,12 +118,63 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
         this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.eventPublisher = eventPublisher;
+        this.meterRegistry = meterRegistry;
+        registerTransferMetrics();
+    }
+
+    // 처음 발생할 때 생기는 메트릭은 이체가 한 번도 없으면 /actuator/prometheus에 아예 안 나온다.
+    // 태그 값이 고정돼 있으니 시작할 때 0으로 만들어 둔다.
+    private void registerTransferMetrics() {
+        for (ProcessResultStatus status : ProcessResultStatus.values()) {
+            registerTransferMetrics(status.name());
+        }
+        registerTransferMetrics(RESULT_EXCEPTION);
+    }
+
+    private void registerTransferMetrics(String result) {
+        for (boolean replayed : new boolean[] {false, true}) {
+            transferTimer(result, replayed);
+            transferCounter(result, replayed);
+        }
+    }
+
+    private Timer transferTimer(String result, boolean replayed) {
+        return Timer.builder("transfer.duration")
+                .description("이체 처리 소요시간")
+                .tag("result", result)
+                .tag("replayed", String.valueOf(replayed))
+                .register(meterRegistry);
+    }
+
+    private Counter transferCounter(String result, boolean replayed) {
+        return Counter.builder("transfer.count")
+                .description("이체 처리 결과별 건수. replayed=true는 이미 처리된 회차를 다시 확인한 호출이라 새 이체가 아니다")
+                .tag("result", result)
+                .tag("replayed", String.valueOf(replayed))
+                .register(meterRegistry);
     }
 
     @Override
     public TransferResult execute(TransferCommand command) {
+        Timer.Sample sample = Timer.start(meterRegistry);
+        AtomicBoolean replayed = new AtomicBoolean(false);
+        // doExecute()가 예외를 던지면 아래 대입이 일어나지 않아 EXCEPTION으로 남는다.
+        String result = RESULT_EXCEPTION;
+        try {
+            TransferResult transferResult = doExecute(command, replayed);
+            result = transferResult.status().name();
+            return transferResult;
+        } finally {
+            sample.stop(transferTimer(result, replayed.get()));
+            transferCounter(result, replayed.get()).increment();
+        }
+    }
+
+    // replayed: 이미 처리된 회차의 기존 결과를 돌려주는 경로면 true로 바꾼다(메트릭 구분용).
+    private TransferResult doExecute(TransferCommand command, AtomicBoolean replayed) {
         Optional<TransferResult> alreadyProcessed = findAlreadyProcessedResult(command);
         if (alreadyProcessed.isPresent()) {
+            replayed.set(true);
             return alreadyProcessed.get();
         }
 
@@ -158,7 +217,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                         .errorMessage(e.getMessage())
                         .build();
             }
-            return failTransfer(command, created, e.getErrorCode().getCode(), e.getMessage(), e);
+            return failTransfer(command, created, e.getErrorCode().getCode(), e.getMessage(), e, replayed);
         } catch (DataIntegrityViolationException e) {
             // 사전조회 이후 동시에 들어온 다른 execute() 호출이 같은 sourceId+executionDate로
             // 먼저 커밋했을 가능성을 재조회로 확인한다. REQUIRES_NEW로 새 스냅샷을 떠야 하는
@@ -169,6 +228,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             // 넘어가 다른 RuntimeException과 동일하게 ERROR로 확정한다.
             Optional<TransferResult> existing = requeryExistingResult(command);
             if (existing.isPresent()) {
+                replayed.set(true);
                 return existing.get();
             }
             // 재조회가 비었다는 건 이 unique 충돌이 멱등성 제약이 아니었다는 뜻이다(FK/CHECK 등) -
@@ -395,7 +455,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 created,
                 CommonErrorCode.INTERNAL_ERROR.getCode(),
                 CommonErrorCode.INTERNAL_ERROR.getMessage(),
-                cause);
+                cause,
+                new AtomicBoolean()); // 반환값을 쓰지 않고 예외를 다시 던지는 경로라 재생 표시는 필요 없다
     }
 
     // execute()가 REQUIRES_NEW로 새 스냅샷을 떠야 상대가 이미 커밋한 sourceId+executionDate
@@ -427,7 +488,12 @@ public class TransferExecutionService implements TransferExecutionUseCase {
      * 어느 쪽 원인도 로그에서 유실되지 않게 한다.
      */
     private TransferResult failTransfer(
-            TransferCommand command, Transfer created, String errorCode, String errorMessage, RuntimeException cause) {
+            TransferCommand command,
+            Transfer created,
+            String errorCode,
+            String errorMessage,
+            RuntimeException cause,
+            AtomicBoolean replayed) {
         created.fail(errorCode, errorMessage);
         try {
             requiresNewTransactionTemplate.executeWithoutResult(status -> {
@@ -441,6 +507,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             // 그대로 전파돼, 재시도한 호출자가 예외를 정상적인 execute() 결과 대신 받게 된다.
             Optional<TransferResult> existing = requeryExistingResult(command);
             if (existing.isPresent()) {
+                replayed.set(true);
                 return existing.get();
             }
             cause.addSuppressed(recordingFailure);

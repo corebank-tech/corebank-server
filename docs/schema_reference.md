@@ -35,7 +35,7 @@
 | 7 | `product_rate_tier` | 상품 기간별 금리 | P3 | 3  |
 | 8 | `product_preferential_rate` | 상품 우대금리 | P3 | 4  |
 | 9 | `product_terms` | 상품-약관 연결 | P3 | 2  |
-| 10 | `account` | 계좌 | P2 | 22 |
+| 10 | `account` | 계좌 | P2 | 23 |
 | 11 | `account_number_sequence` | 계좌번호 채번 규칙 | P2 | 8  |
 | 12 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4  |
 | 13 | `transfer` | 이체 거래 | P4 | 25 |
@@ -45,7 +45,7 @@
 | 17 | `transfer_limit` | 이체한도 | P1 | 5  |
 | 18 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 5  |
 | 19 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 6  |
-| 20 | `product_subscription` | 상품가입 | P3 | 18 |
+| 20 | `product_subscription` | 상품가입 | P3 | 19 |
 | 21 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5  |
 | 22 | `scheduled_transfer` | 예약이체 | P3 | 17 |
 | 23 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
@@ -365,6 +365,7 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | `opened_date`              | `DATETIME(6)` |        | X    |          | 계좌 개설일                                                                            |
 | `maturity_date`            | `DATE`        |        | O    |          | 만기일. 예·적금 계좌만 값이 있다                                                               |
 | `closed_date`              | `DATETIME(6)` |        | O    |          | 해지일.                                                                              |
+| `closed_trade_date`        | `DATE`        |        | O    |          | 해지 논리 영업일. 해지 트랜잭션이 읽은 `BusinessDateProvider.today()`. 정보계 CLOSE 이벤트 기준일이며 해지 구현(PH-15·16)이 채운다 |
 | `last_transaction_at`      | `DATETIME(6)` |        | O    |          | 최근 거래 일시. 전체 계좌 조회의 `lastTransactionAt`                                           |
 | `version`                  | `BIGINT`      |        | X    | `0`      | 낙관적 락 버전. 배치·조회 경로의 갱신 충돌을 잡는다 (이체 실행 경로는 비관적 락)                                  |
 | `created_at`               | `DATETIME(6)` |        | X    |          | 행 생성 일시. JPA Auditing이 KST 기준으로 자동 설정                                             |
@@ -722,6 +723,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | `opened_date` | `DATE` |  | O |  | 개설일 |
 | `maturity_date` | `DATE` |  | O |  | 만기일 |
 | `subscribed_at` | `DATETIME(6)` |  | X |  | 가입 실행 일시 |
+| `subscription_trade_date` | `DATE` |  | O |  | 가입 논리 영업일. 가입 트랜잭션이 읽은 `BusinessDateProvider.today()`. 정보계 SUBSCRIBE 이벤트 기준일. 기존 행은 가입 시각을 영업일로 올려 채웠다 |
 
 **인덱스**
 
@@ -943,7 +945,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
-| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP`, `LEDGER_RECONCILIATION_BATCH`, `AUTH_TOKEN_CLEANUP`, `TERMS_VIEW_HISTORY_CLEANUP` 5행 |
+| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP`, `LEDGER_RECONCILIATION_BATCH`, `AUTH_TOKEN_CLEANUP`, `TERMS_VIEW_HISTORY_CLEANUP`, `AUTO_TRANSFER_RECONCILE`, `SCHEDULED_TRANSFER_RECONCILE` 7행 |
 | `currently_running` | `BOOLEAN` |  | X | `FALSE` | 이 배치가 지금 실행 중인지. 트리거 시작 시 `TRUE`, 종료 시(성공/실패 무관) `FALSE`로 되돌림 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각. stale(크래시로 방치됨) 판단 기준 |
 

@@ -553,8 +553,8 @@ public class Phase2BulkSeedService {
                     subscription_id, customer_id, product_id, account_id, withdrawal_account_id,
                     subscription_amount, term_months, payment_day, base_rate, preferential_rate,
                     applied_rate, maturity_handling, expected_maturity_amount, status,
-                    transaction_number, opened_date, maturity_date, subscribed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, ?, 'TRANSFER', ?, 'SUCCESS', ?, ?, ?, ?)
+                    transaction_number, opened_date, maturity_date, subscribed_at, subscription_trade_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, ?, 'TRANSFER', ?, 'SUCCESS', ?, ?, ?, ?, ?)
                 """;
         batchSeeds(seeds, spec.jdbcBatchSize(), sql, (statement, seed) -> {
             statement.setLong(1, spec.subscriptionIdStart() + seed.index());
@@ -577,6 +577,7 @@ public class Phase2BulkSeedService {
             statement.setDate(13, Date.valueOf(seed.tradeDate()));
             statement.setDate(14, Date.valueOf(seed.maturityDate()));
             setTimestamp(statement, 15, seed.occurredAt());
+            statement.setDate(16, Date.valueOf(seed.tradeDate()));
         });
     }
 

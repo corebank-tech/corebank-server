@@ -10,6 +10,7 @@ import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
+import com.shinhan.corebank.business.api.BusinessDateProvider;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaEntity;
@@ -68,6 +69,9 @@ class ProductSubscriptionExecuteConcurrencyIntegrationTest extends IntegrationTe
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private BusinessDateProvider businessDateProvider;
 
     @Autowired
     private CustomerTestFixture customerTestFixture;
@@ -171,6 +175,19 @@ class ProductSubscriptionExecuteConcurrencyIntegrationTest extends IntegrationTe
                 customerId,
                 withdrawalAccountId);
         assertThat(openedAccountCount).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("정기적금 가입에 성공하면 초입금 원장이 없어도 가입 논리 영업일이 현재 영업일로 저장된다")
+    void execute_savingsSubscription_storesSubscriptionTradeDate() {
+        ProductSubscriptionExecuteResult result = productSubscriptionExecuteUseCase.execute(buildCommand());
+
+        LocalDate stored = jdbcTemplate.queryForObject(
+                "SELECT subscription_trade_date FROM product_subscription WHERE subscription_id = ?",
+                LocalDate.class,
+                result.subscriptionId());
+        assertThat(result.transactionNumber()).isNull();
+        assertThat(stored).isEqualTo(businessDateProvider.today());
     }
 
     private Future<ExecutionOutcome> submitExecute(CountDownLatch anyFinished) {

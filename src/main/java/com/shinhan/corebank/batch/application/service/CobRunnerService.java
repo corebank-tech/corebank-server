@@ -8,6 +8,9 @@ import com.shinhan.corebank.batch.api.CobStepHaltException;
 import com.shinhan.corebank.batch.application.port.in.CobRunnerUseCase;
 import com.shinhan.corebank.business.api.BusinessDateAdvancer;
 import com.shinhan.corebank.business.api.BusinessDateProvider;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -29,6 +32,7 @@ public class CobRunnerService implements CobRunnerUseCase {
     private final BusinessDateAdvancer businessDateAdvancer;
     private final BatchExecutionHistoryPort batchExecutionHistoryPort;
     private final Clock clock;
+    private final MeterRegistry meterRegistry;
     private final List<CobStep> steps;
 
     public CobRunnerService(
@@ -37,15 +41,44 @@ public class CobRunnerService implements CobRunnerUseCase {
             BusinessDateAdvancer businessDateAdvancer,
             BatchExecutionHistoryPort batchExecutionHistoryPort,
             Clock clock,
+            MeterRegistry meterRegistry,
             List<CobStep> steps) {
         this.batchExecutionLockPort = batchExecutionLockPort;
         this.businessDateProvider = businessDateProvider;
         this.businessDateAdvancer = businessDateAdvancer;
         this.batchExecutionHistoryPort = batchExecutionHistoryPort;
         this.clock = clock;
+        this.meterRegistry = meterRegistry;
         this.steps =
                 steps.stream().sorted(Comparator.comparingInt(CobStep::order)).collect(Collectors.toList());
         rejectDuplicateOrder(this.steps);
+        registerStepMetrics();
+    }
+
+    // 처음 발생할 때 생기는 메트릭은 COB가 한 번도 안 돈 서버의 /actuator/prometheus에 아예 안 나온다.
+    // 스텝 이름과 상태는 고정이니 시작할 때 0으로 만들어 둔다.
+    private void registerStepMetrics() {
+        for (CobStep step : steps) {
+            stepTimer(step.name());
+            for (BatchStepStatus status : BatchStepStatus.values()) {
+                stepCounter(step.name(), status);
+            }
+        }
+    }
+
+    private Timer stepTimer(String stepName) {
+        return Timer.builder("cob.step.duration")
+                .description("COB 스텝 처리 소요시간")
+                .tag("step", stepName)
+                .register(meterRegistry);
+    }
+
+    private Counter stepCounter(String stepName, BatchStepStatus status) {
+        return Counter.builder("cob.step.count")
+                .description("COB 스텝 처리 결과별 건수")
+                .tag("step", stepName)
+                .tag("status", status.name())
+                .register(meterRegistry);
     }
 
     @Override
@@ -73,6 +106,7 @@ public class CobRunnerService implements CobRunnerUseCase {
 
         for (CobStep step : steps) {
             LocalDateTime startedAt = LocalDateTime.now(clock);
+            Timer.Sample sample = Timer.start(meterRegistry);
             BatchStepStatus status;
             String failureReason = null;
             boolean halt = false;
@@ -91,6 +125,8 @@ public class CobRunnerService implements CobRunnerUseCase {
                 status = BatchStepStatus.FAILURE;
                 failureReason = e.getMessage();
             }
+            sample.stop(stepTimer(step.name()));
+            stepCounter(step.name(), status).increment();
             // 기록은 스텝 try/catch 바깥에서 한 번만 하되, 기록(관측용) 자체의 실패가 나머지 스텝을 막지 않게 별도로 감싼다.
             try {
                 batchExecutionHistoryPort.record(

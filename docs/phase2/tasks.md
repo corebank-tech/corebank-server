@@ -61,8 +61,8 @@
 | [FE #139](#fe-139-matured-정책표) | MATURED 정책표 | S1 | 0.5 | PH-10 | — | FE #139 | 예정 |
 | [PH-12](#ph-12-이자-계산기--절사-규칙) | 이자 계산기 · 절사 규칙 | S2 | 3.5 | PH-11 | **10/16** | #623 | 완료 |
 | [PH-90](#ph-90-원장잔액--출금가능액-분리--transferprecheck) | 원장잔액·출금가능액 분리 + `TransferPreCheck` | S2 | 3 | PH-87 · PH-99 | **10/16** (P4 머지) | — | 예정 |
-| [PH-70-①](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | `modules/data` Terraform plan — RDS | S2 | 1.5 | PH-50 | — | — | 예정 |
-| [PH-15](#ph-15-만기--감지--matured-전이--원리금--만기해지-api) | 만기 — 감지 · MATURED · 원리금 · 만기해지 API | S3 | 3.5 | PH-12 · PH-10 · PH-43 · 입금 계약(PH-99) | **10/23** | #419 | 예정 |
+| [PH-70-①](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | `modules/data` Terraform plan — RDS | S2 | 1.5 | PH-50 | **10/21** (코드·plan) | #650 | 완료 |
+| [PH-15](#ph-15-만기--감지--matured-전이--원리금--만기해지-api) | 만기 — 감지 · MATURED · 원리금 · 만기해지 API | S3 | 3.5 | PH-12 · PH-10 · PH-43 · 입금 계약(PH-99) | **10/23** | #419 · #633 | 만기 감지 구현 완료  |
 | [PH-14](#ph-14-이자-지급--원천징수) | 이자 지급 · 원천징수 | S3 | 1.5 | PH-12 · PH-24 · 입금 계약(PH-99) | — | — | 예정 |
 | [PH-13](#ph-13-적수-집계-sql-전환--재측정) | 적수 집계 SQL 전환 · 재측정 | S3 | 1.5 | PH-11 | — | — | 예정 |
 | [PH-16](#ph-16-중도해지--휴면-전환--해지-시-자원-정리) | 중도해지 · 휴면 전환 · 해지 시 자원 정리 | S3 | 4 | PH-15 · PH-43 · 입금 계약(PH-99) · #467 | 휴면 스텝 통합 **10/30** | — | 예정 |
@@ -142,8 +142,9 @@
 | [PH-43-①](#ph-43-cob-파이프라인) | COB 러너 · `CobStep` 인터페이스 · hard 중단 신호 | S2 | 1.5 | PH-40 | 인터페이스 10/6 | #536 · #537 · #600 | 완료 |
 | [PH-43-②](#ph-43-cob-파이프라인) | 실행 기록(완료, #603) · 대사 정책 · 베이스라인(#556) | S2 | 3 | 정책·베이스라인만: PH-38 편입·60b 적재(PH-15 포함 여부 미정) | 미확정(순서 공지 예정) | #603 · #556 | 실행 기록만 완료 |
 | [PH-42](#ph-42-correlation-id--로그-마스킹--json-로깅) | correlation id · 로그 마스킹 · JSON 로깅 | S2 | 2.5 | — | **10/8** | — | 예정 |
-| [PH-57](#ph-57-용량-산정) | 용량 산정 표 | S2 | 0.5 | PH-60b | 60b 베이스라인 결과를 받은 뒤 | — | 예정 |
-| [PH-47](#ph-47-메트릭--grafana) | 메트릭 · Grafana · 알람 | S2 | 3 | PH-42 | — | — | 예정 |
+| [PH-57](#ph-57-용량-산정) | 용량 산정 표 | S2 | 0.5 | PH-60b | 60b 베이스라인 결과를 받은 뒤 | #539 | 완료 |
+| [PH-47-①](#ph-47-메트릭--grafana) | 메트릭 골격 — Micrometer·Prometheus 연동 (애플리케이션) | S2 | 1.5 | PH-42 | — | #541 · PR #621 | 완료 |
+| [PH-47-②](#ph-47-메트릭--grafana) | Grafana 대시보드 · 알람 · actuator 노출 재설계 | S2 | 1.5 | PH-100 | 미확정(PH-100 완료 후) | #619 | 예정 |
 | [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-① | 하이브리드 연결 — 온프레미스 VM 1대 · SSM 하이브리드 등록 | S2 | 1.5 | [O-10](README.md#8-미결) | — | — | 예정 |
 | [PH-51](#ph-51-컴퓨트-계층--컷오버) | 컴퓨트 계층 · 컷오버 | S3 | 4.5 | PH-50 · PH-57 · PH-58 ACM ARN | 리허설 10/19~23 · **apply 10/26 · 컷오버 10/27** | — | 예정 |
 | [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-② | 하이브리드 연결 — Site-to-Site VPN | S3 | 1 | PH-50 · PH-100-① | 터널 **10/23** (리허설 안) → P2 | — | 예정 |
@@ -430,10 +431,18 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 
 **①**
 
-- RDS MySQL 1개(Multi-AZ), 파라미터 그룹(KST, 슬로우쿼리 로그, `binlog_format = ROW`), 자동 백업 7일, 저장 암호화
-- ElastiCache는 만들지 않는다([ADR-0007](../adr/0007-remove-redis.md)). 세션은 RDS에 둔다([PH-49c](#ph-49c-세션-외부화)).
-- 서브넷과 SG는 PH-50 출력값을 참조한다.
-- 기존 RDS 스냅샷을 복원하는 방식이다. `terraform import` 절차 1장을 쓰고 `plan`을 통과시킨다.
+- `terraform/main/modules/data`에 RDS 인스턴스·DB 서브넷 그룹·파라미터 그룹을 구성한다.
+- RDS 사양은 [PH-57 용량 산정](ph57_capacity_plan.md)을 따른다.
+    - MySQL 8.4, `db.t3.small`, Multi-AZ
+    - gp3 20GiB, 스토리지 자동 확장 비활성화
+    - 자동 백업 7일, 저장 암호화, 외부 접근 비활성화
+- 파라미터 그룹: KST, 슬로우쿼리 로그, `binlog_format = ROW`, `innodb_buffer_pool_size = {DBInstanceClassMemory*3/4}`.
+  `max_connections`는 기본값을 유지한다.
+- 서브넷과 SG는 PH-50의 Terraform 출력값을 참조한다.
+- 2차 AWS 계정 소유의 복사된 RDS 스냅샷을 `snapshot_identifier`로 전달받아 복원한다.
+- 수동 복원한 RDS를 Terraform에 편입할 경우에만 `terraform import`를 수행한다.
+- 상세 설정과 실행 절차는 `terraform/main/modules/data/README.md`에 작성한다.
+- **완료 기준:** `terraform validate` 및 `terraform plan` 통과. 실제 `apply`와 RDS 복원은 PH-70-②에서 10/26에 진행한다.
 
 **②**
 
@@ -453,11 +462,17 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 - 영업일 기준 만기 감지 → `ACTIVE → MATURED`. `batch.api.CobStep` 구현체로 등록하고, 체인 자리는 [PH-43](#ph-43-cob-파이프라인)이 정한다. 스텝은 자기 트랜잭션을 연다.
 - `AccountMatured` 이벤트 발행(PH-32 타입, 2차 알림 소비 없음)
 - 만기해지 API: 원리금 계산(PH-12) → 출금계좌 입금(PH-99의 `transfer.api` 입금 계약) → CLOSED. `LedgerPair`는 transfer 내부라 직접 쓰지 않는다.
+- **만기해지 날짜 검증(후속 PH-15 필수):** COB에서 `nextBusinessDay(COB_DATE)` 기준으로 `MATURED` 선전환하더라도, 실제 만기해지 시 `MATURED` 상태와 `maturity_date <= 달력상 현재일(KST)`을 모두 확인한다. 계좌 잠금 이후에도 날짜 조건을 재검증하며, 계약 만기일 이전에는 만기 원리금 지급을 허용하지 않는다.
 - 만기해지 시 이자가 있으면 `INTEREST`로 세후이자를 상품 계좌에 기표한 뒤 `MATURITY`로 원리금 전액을 고객 계좌에 이체한다. 상품 계좌 잔액 0원을 확인한 뒤 동일 트랜잭션에서 `CLOSED`로 전이한다. 기표·조회 순서는 [transfer_seam.md](transfer_seam.md) §8을 따르며, 원장 합계 정합성은 PH-15 통합 테스트에서 검증한다.
 - 계좌 상세 응답에 `maturityDate`·`status=MATURED`를 추가한다(Expand → B-3).
 - 만기 처리 단건 비용을 재서 P5 COB 시간에 합산한다.
 - **범위 밖:** 만기후이율(MATURED 이후 이자 없음)
 - **완료 기준:** 원리금 오차 0. MATURED 계좌가 신규 거래 대상에서 빠진다.
+- **진행 현황(2026-10-19, #633):** 만기 감지 COB 스텝(`order=3`)과 `ACTIVE → MATURED` 상태 전이 구현. `nextBusinessDay(COB_DATE)` 기준 만기 대상 조회, keyset 페이지 처리, 청크별 트랜잭션 및 재실행 멱등성 검증을 포함한다.
+- **만기 감지 상태 정책(#633):** `ACTIVE` 예·적금만 자동으로 `MATURED`로 전이한다.
+  `SUSPENDED`·`DORMANT` 계좌는 현재 상태를 유지하며, 만기일이 지났더라도 이번 COB 스텝의 조회 대상에는 포함하지 않는다. 정지·휴면 해제 이후 만기 처리 방식은 PH-16에서 확정한다.
+- **후속 작업:** `AccountMatured` 이벤트 발행, 이자·원리금 지급, 만기해지 API 및 `MATURED → CLOSED` 전이. PH-15 전체 완료와 구분한다.
+- **후속 감사 추적:** `AccountMatured` 이벤트 연동 시 계좌별 상태 전이 이력을 추적할 수 있도록 전이 전·후 상태, 전이 기준일, 처리 시각과 계좌 식별 정보를 기록하는 방식을 함께 설계한다.
 
 ### PH-14. 이자 지급 · 원천징수
 
@@ -958,13 +973,26 @@ public interface CobStep {
 
 원장 300만·분개 600만·이체 행 크기로 스토리지, 목표 TPS, 인스턴스 타입을 표 1장에 정리한다. 여유를 일부러 적게 잡는다(병목이 드러나야 개선 서사가 선다).
 
+- 현황(#539): [ph57_capacity_plan.md](ph57_capacity_plan.md) — WAS t3.small × 2(CPU 크레딧 unlimited 명시) · RDS db.t3.small Multi-AZ · gp3 20GiB(자동 확장 없음) · 버퍼 풀 `{DBInstanceClassMemory*3/4}` 명시 · 온프레미스 VM `/` 여유 20GB 이상. 이 사양의 기대 처리량은 약 10 TPS(1대 실측 약 5 TPS × 2, 선형 가정 상한)이고 서비스 목표 300 TPS는 BCrypt 위치를 고친 뒤의 목표다.
+
 ### PH-47. 메트릭 · Grafana
+
+**① 애플리케이션 쪽 (#541, VM 무관, 지금 착수):**
+
+- Micrometer + `micrometer-registry-prometheus`. `/actuator/prometheus`는 local·test profile만 노출(prod는 ②에서 같이 켠다)
+- JVM·DB(HikariCP)·HTTP 기본 메트릭은 자동 수집. 거래(이체) 커스텀 메트릭 — `TransferExecutionService`에 Counter(`transfer.count`)·Timer(`transfer.duration`), 태그는 `result`(SUCCESS · ERROR · PROCESSING · TIMEOUT · 예외로 끝난 `EXCEPTION`)와 `replayed`(이미 처리된 회차를 다시 확인한 호출이면 true — 새 이체 건수와 섞이지 않게 구분). `transfer.duration`은 p95를 낼 수 있게 histogram을 켠다. 자동·예약이체도 같은 서비스를 거쳐가 한 곳만 계측 — **완료**
+- 관리자 화면과 겹치는 거래 메트릭 없음(10/12 확인, ADM-01~04 성격 다름)
+- 배치(COB) 커스텀 메트릭 — `CobRunnerService`에 거래와 같은 패턴으로 스텝 결과별 Counter(`cob.step.count`, 태그 `step` · `status`)·Timer(`cob.step.duration`, 태그 `step`) 추가 — **완료**(#606 머지 뒤 반영)
+- 거래 · 배치 메트릭은 서버를 시작할 때 0으로 등록한다. 처음 발생할 때 생기면 이체나 COB가 한 번도 없는 서버의 `/actuator/prometheus`에 이름이 아예 안 나온다. local · test에서 `/actuator/prometheus`가 이 메트릭을 반환하는지는 `PrometheusEndpointTest`가 확인한다
+- `http.server.requests` histogram은 시계열이 늘어 대시보드를 만드는 ②(#619)에서 정한다
+
+**② Grafana·알람 (#619, PH-100 선행, 아직 착수 불가):**
 
 - Micrometer + Prometheus. 대시보드: 거래 · 배치 · JVM · DB
 - Prometheus · Grafana는 온프레미스 부트캠프 VM의 대외·모니터링 영역에 둔다(AWS와 장애 영역 분리). VPN 너머로 WAS 8080 actuator를 `ec2_sd_configs`로 수집하고, `/actuator/**`는 ALB에서 막는다.
 - 알람 3원칙: 노이즈 억제 · 실행 가능성 · **Runbook 링크 필수**
-- actuator 노출 범위 재설계. 관리자 화면에 거래 메트릭을 중복으로 만들지 않는다.
-- **완료 기준:** 알람 발생부터 인지까지 시간을 잰다.
+- actuator 노출 범위 재설계(prod).
+- **완료 기준(① + ② 전체):** 알람 발생부터 인지까지 시간을 잰다. ①만으로는 이 기준을 못 채운다.
 - **범위 밖:** P4 PH-39(메트릭 소비 측)
 
 ### PH-51. 컴퓨트 계층 · 컷오버
