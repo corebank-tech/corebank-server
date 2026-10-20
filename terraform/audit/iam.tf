@@ -40,6 +40,6 @@ data "aws_iam_policy_document" "audit_writer" {
 
 resource "aws_iam_policy" "audit_writer" {
   name        = "corebank-audit-writer"
-  description = "Audit object read/write without deletion or governance bypass"
+  description = "Audit object read/write without governance retention bypass"
   policy      = data.aws_iam_policy_document.audit_writer.json
 }

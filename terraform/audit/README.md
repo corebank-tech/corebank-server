@@ -128,7 +128,7 @@ terraform apply
 - `terraform validate`: 성공
 - 최초 생성 대상: 6개
 - IAM 정책 변경 적용: `0 added, 1 changed, 0 destroyed`
-- 최종 `terraform plan`: `No changes` (IAM 정책 최종 수정 후 재확인 필요)
+- 최종 `terraform plan` (2026-10-20): `No changes`
 
 ### AWS CLI 검증
 
@@ -168,7 +168,6 @@ aws iam list-entities-for-policy \
 - 권한 보완 후 재적용 과정에서 감사 버킷 삭제 및 동일 이름 재생성이 1회 발생했다.
 - 이후 리소스 설정 검증과 Terraform 상태 일치 확인에 성공했다.
 - IAM 정책은 P1 요청에 따라 검증용 `DeleteObjectVersion` 권한을 추가하여 재적용했다.
-- 최종 IAM 정책 수정 후 `terraform plan` 재확인 결과는 별도로 기록한다.
 
 ## 7. 팀 연동 및 남은 검증
 
@@ -208,3 +207,30 @@ S3 Object Lock은 보존기간 중인 객체 버전의 삭제를 제한한다.
 - 해당 버킷의 마지막 적재 및 삭제 계획을 P1·P5와 사전에 합의한다.
 
 관련 근거: `docs/phase2/README.md` D-08 · D-11 · §3-8
+
+### Destroy 실행 주체 및 권한
+
+- 실행 담당: P5 (PH-55)
+- 실제 AWS IAM 실행 주체: PH-55에서 확정 및 기록
+- 운영 WAS의 `corebank-audit-writer` 정책은 destroy에 사용하지 않는다.
+
+**기본 원칙: 보존기간이 지난 뒤에만 destroy한다.**
+
+1. P1의 감사 로그 적재를 중지한다.
+2. 객체의 각 버전에 설정된 보존 만료일을 확인한다.
+3. 모든 객체 버전의 보존기간이 지난 뒤 `terraform/audit`에서 destroy한다.
+4. 삭제 마커 및 객체 버전의 잔존 여부를 확인한다.
+
+P5의 destroy 실행 주체에는 S3 버킷·객체 버전 조회와 삭제에 필요한
+권한(`s3:ListBucketVersions`, `s3:DeleteObject`,
+`s3:DeleteObjectVersion`, `s3:DeleteBucket` 등)이 필요하다.
+실제 부여 여부는 PH-55에서 검증한다.
+
+현재 `s3:BypassGovernanceRetention`은 운영 WAS 적재 정책에 없으며,
+P5의 destroy 실행 주체에 부여되었는지도 확인되지 않았다.
+
+보존기간 중 강제 삭제가 필요한 예외 상황에서는 별도 승인된
+destroy 주체에만 `s3:BypassGovernanceRetention`을 부여하는 방안을
+P5와 협의한다. 일반 destroy에서는 사용하지 않는다.
+
+`force_destroy = true`는 Object Lock의 보존 제한을 무시하는 설정이 아니다.
