@@ -72,4 +72,6 @@ public class ProductSubscriptionJpaEntity {
 
     @Column(nullable = false)
     private LocalDateTime subscribedAt;
+
+    private LocalDate subscriptionTradeDate;
 }
