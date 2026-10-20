@@ -67,7 +67,7 @@
 | [PH-18](#ph-18-개인정보-컬럼-암호화) | 개인정보 컬럼 암호화 | S3 | 2 | — | — | — | 예정 |
 | [PH-70-②](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | RDS 복원 · 컷오버 (DB 쪽) · 온프레미스 binlog 복제 | S3 | 3 | PH-70-① · PH-51 · 복제: PH-100-② | **10/26 apply · 10/27 전환 · 복제 시작** | — | 예정 |
 | [PH-58](#ph-58-엣지-계층) | 엣지 — WAF · Route53 · ACM · CloudFront | S3 | 1.5 | ACM: 가비아 DNS 권한 · WAF 연결: PH-51 | **ACM ARN → P5 10/16 (S2 말)** | — | 예정 |
-| [PH-72](#ph-72-접근통제-인프라) | 접근통제 — IAM · Secrets Manager · CloudTrail · Object Lock 버킷 | S3 | 2.5 | 버킷: 없음 · 나머지: PH-51 | **Object Lock 버킷 10/21** | — | 예정 |
+| [PH-72](#ph-72-접근통제-인프라) | 접근통제 — IAM · Secrets Manager · CloudTrail · Object Lock 버킷 | S3 | 2.5 | 버킷: 없음 · 나머지: PH-51 | **Object Lock 버킷 10/21** | #660 | Object Lock 버킷·IAM 정책 적용 완료, WAS 역할 연결 대기 · 나머지 예정 |
 | [FE C-1](#fe-c-1-잔액출금가능액-라벨-분리) | 잔액/출금가능액 라벨 분리 (+#139 실연동) | S3 | 1 | PH-90 · FE C-6 | 10/21~ | — | 예정 |
 | [FE B-3](#fe-b-3-만기-안내) | 만기 안내 | S3 | 0.5 | PH-15 | — | — | 예정 |
 | [PH-19b](#ph-19b-생명주기-최종-검증--리포트) | 생명주기 최종 검증 · 15만 계좌 전수 대조 · 리포트 | S4 | 2.5 | 전 태스크 | 11/6 | — | 예정 |
@@ -506,6 +506,17 @@ IAM 경계는 [D-11](README.md#d-11--920--p2p5)을 따른다. P5는 인스턴스
 - **S3 Object Lock 버킷 + 적재용 IAM — GOVERNANCE 모드 · 보존 1일. 10/21까지 먼저 apply한다.** S3 버킷은 VPC·컴퓨트와 무관하다. 컷오버(10/27) 뒤로 미루면 P1 PH-82가 S3 마지막 3일에 몰리고, S4는 코드 금지라 넘길 곳이 없다. 나머지 IAM·Secrets Manager·CloudTrail은 PH-51 뒤다.
 - destroy 대비 설정: Secrets Manager는 `recovery_window_in_days = 0`, CloudTrail·Object Lock 버킷은 `force_destroy = true`로 둔다. 이유와 순서는 [README §3-8](README.md#3-8-3-tier-수명과-destroy)
 - **완료 기준:** AI 자격증명으로 쓰기를 시도하면 거부된다. 앱 비밀값이 Secrets Manager에서 읽힌다. Object Lock 객체 삭제가 거부된다(검증은 P1 PH-82). SSH 0은 PH-51 몫이다.
+
+**PH-72-① 진행 현황 (2026-10-20, #660)**
+
+- `terraform/audit/` 독립 루트 모듈 및 별도 S3 state(`audit/terraform.tfstate`) 구성.
+- 2차 AWS 계정에 Object Lock 감사 버킷(`corebank-audit-worm-853900964665`) 적용 완료.
+- GOVERNANCE 1일, Versioning Enabled, 퍼블릭 접근 차단, AES256 암호화 확인.
+- 적재용 IAM 정책(`corebank-audit-writer`) 생성 및 `audit/lock-test/*`에 검증용 `s3:DeleteObjectVersion`, `s3:GetObjectVersion`, `s3:GetObjectRetention` 권한 반영. `s3:BypassGovernanceRetention`은 부여하지 않음.
+- P1 협의 완료: `audit/` 접두사, 감사로그·개인정보 접근로그 하위 경로 분리, AWS WAS 직접 적재.
+- **P5 연동:** 독립 state 운영 및 PH-55 별도 destroy 포함 합의 완료. WAS 역할에 정책 연결은 PH-51 apply 이후 10/26 예정.
+- **P1 검증:** PH-82 구현은 10/28까지 머지 예정, 실제 WAS 역할을 통한 적재·삭제·변조 거부 검증은 10/30부터 진행. 검증 완료 후 임시 IAM 권한 제거.
+- 사람·CI·AI IAM, Secrets Manager, CloudTrail 등 PH-72 잔여 작업은 PH-51 이후 진행.
 
 ### FE C-1. 잔액/출금가능액 라벨 분리
 
