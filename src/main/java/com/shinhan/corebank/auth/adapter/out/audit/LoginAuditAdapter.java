@@ -16,12 +16,24 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class LoginAuditAdapter implements RecordLoginAuditPort {
 
+    private static final String UNKNOWN_ACTOR_ROLE = "UNKNOWN";
+    private static final String ANY_REQUIRED_ROLE = "ANY";
+
     private final AuditLogService auditLogService;
 
     @Override
-    public void record(Long customerId, String requestIp, boolean success, LoginAuditReason reason, CustomerRole role) {
+    public void record(
+            Long customerId,
+            String requestIp,
+            boolean success,
+            LoginAuditReason reason,
+            CustomerRole role,
+            CustomerRole requiredRole) {
         // Map.of 는 null 을 받지 않는다. 계정을 못 찾은 실패는 role 이 없으므로 UNKNOWN 으로 남긴다.
-        String actorRole = role == null ? "UNKNOWN" : role.name();
+        String actorRole = role == null ? UNKNOWN_ACTOR_ROLE : role.name();
+
+        // 고객 로그인은 역할을 가리지 않아 요구 역할이 없다. 관리자 경로 시도와 구분되게 ANY 로 남긴다.
+        String requiredRoleName = requiredRole == null ? ANY_REQUIRED_ROLE : requiredRole.name();
 
         auditLogService.record(
                 customerId,
@@ -29,6 +41,6 @@ public class LoginAuditAdapter implements RecordLoginAuditPort {
                 AuditEventType.LOGIN,
                 requestIp,
                 success,
-                Map.of("reason", reason.name(), "role", actorRole));
+                Map.of("reason", reason.name(), "role", actorRole, "requiredRole", requiredRoleName));
     }
 }

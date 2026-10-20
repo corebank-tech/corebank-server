@@ -61,7 +61,7 @@ class LoginSuccessAuditAtomicityIntegrationTest extends IntegrationTestSupport {
     void rollsBackLoginStateWhenSuccessAuditFails() {
         doThrow(new IllegalStateException("audit unavailable"))
                 .when(recordLoginAuditPort)
-                .record(customerId, REQUEST_IP, true, LoginAuditReason.SUCCESS, CustomerRole.CUSTOMER);
+                .record(customerId, REQUEST_IP, true, LoginAuditReason.SUCCESS, CustomerRole.CUSTOMER, null);
 
         assertThatThrownBy(() -> loginUseCase.login(new LoginCommand(USER_ID, RAW_PASSWORD, REQUEST_IP, null)))
                 .isInstanceOf(IllegalStateException.class)
