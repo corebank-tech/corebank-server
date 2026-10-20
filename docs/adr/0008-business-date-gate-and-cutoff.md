@@ -19,7 +19,7 @@ ADR-0004는 영업일 전환을 COB 첫 스텝으로 두어 "전환 직후 새 �
 5. **ETL은 레플리카에서 `business_date_cutoff(D, CLOSED)`가 보여야 D를 시작한다.** 복제는 `replica_preserve_commit_order = ON`이다. cutoff보다 앞서 커밋된 원장은 모두 D 이하이고, cutoff 뒤 새 거래는 다음 영업일이다.
 6. **gate는 원장·이벤트를 쓰는 가장 안쪽 트랜잭션에서만 잡는다.** gate를 쥔 트랜잭션이 `REQUIRES_NEW`로 연 트랜잭션에서 다시 잡지 않는다. 바깥 공유 락, COB 배타 대기, 안쪽 공유 대기가 겹치면 바깥이 안쪽을 애플리케이션에서 기다려 DB가 교착을 감지하지 못한다.
 7. **락 순서는 모든 경로에서 "날짜 락 → 계좌 락"이다.**
-8. **거래일을 `BusinessDateProvider.today()`로 따로 읽지 않는다.** `today()`는 락 없는 읽기라 트랜잭션 스냅샷을 쓰므로 gate 값과 다를 수 있다. 호출자가 거래일을 저장해야 하면 기표 결과의 `tradeDate`를 쓴다(`LedgerDepositResult`, `ProductSubscriptionDepositResult`). `BusinessDateGateArchitectureTest`가 `business`·`batch` 밖의 `today()` 호출을 막는다.
+8. **거래일을 `BusinessDateProvider.today()`로 따로 읽지 않는다.** `today()`는 락 없는 읽기라 트랜잭션 스냅샷을 쓰므로 gate 값과 다를 수 있다. 거래일을 저장해야 하는 호출자는 같은 트랜잭션에서 gate를 직접 부르고(재호출은 첫 값을 돌려준다), 기표를 다른 서비스에 맡겨 직접 부를 수 없는 경우에만 기표 결과의 `tradeDate`를 쓴다(`LedgerDepositResult`). `BusinessDateGateArchitectureTest`가 `business`·`batch` 밖의 `today()` 호출을 막는다.
 
 ## 검토한 대안
 

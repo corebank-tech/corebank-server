@@ -1,7 +1,5 @@
 package com.shinhan.corebank.transfer.application.port.in;
 
-import java.time.LocalDate;
-
 /**
  * 상품가입(정기예금) 초입금 기표 유스케이스.
  *
@@ -25,7 +23,6 @@ public interface ProductSubscriptionDepositUseCase {
      */
     record ProductSubscriptionDepositCommand(Long withdrawalAccountId, Long depositAccountId, long amount) {}
 
-    /** @param tradeDate 기표에 쓴 거래일. 가입의 거래일을 저장할 때는 today() 가 아니라 이 값을 쓴다 */
     record ProductSubscriptionDepositResult(
-            String transactionNumber, long withdrawalBalanceAfter, long depositBalanceAfter, LocalDate tradeDate) {}
+            String transactionNumber, long withdrawalBalanceAfter, long depositBalanceAfter) {}
 }

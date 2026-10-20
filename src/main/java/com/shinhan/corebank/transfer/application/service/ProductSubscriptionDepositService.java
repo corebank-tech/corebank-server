@@ -105,6 +105,6 @@ public class ProductSubscriptionDepositService implements ProductSubscriptionDep
         }
 
         return new ProductSubscriptionDepositResult(
-                transactionNumber, balances.withdrawalBalanceAfter(), balances.depositBalanceAfter(), tradeDate);
+                transactionNumber, balances.withdrawalBalanceAfter(), balances.depositBalanceAfter());
     }
 }
