@@ -235,6 +235,23 @@ class DailyLoadIntegrationTest {
     }
 
     @Test
+    @DisplayName("첫 적재일이 실패하면 뒤 날짜가 완료돼도 asOf는 null이고, 첫 적재일을 재적재하면 따라잡는다")
+    void failedFirstLoadDayHoldsBackTheWatermark() throws SQLException {
+        ReplicaFixtures.insertLedger(60L, 1L, 800L, LocalDateTime.of(2026, 10, 20, 9, 0), D);
+        JdbcMartLoadAdapter martAdapter = new JdbcMartLoadAdapter(InfoEtlTestDatabase::mart, CLOCK);
+        long monday = martAdapter.start(MON, java.time.Duration.ofHours(6));
+        martAdapter.fail(monday, "boom");
+
+        LoadResult tuesday = service.load(D);
+        assertThat(tuesday.asOfDate()).isNull();
+
+        ReplicaFixtures.insertLedger(50L, 1L, 250L, LocalDateTime.of(2026, 10, 19, 9, 0), MON);
+        LoadResult mondayRetry = service.load(MON);
+
+        assertThat(mondayRetry.asOfDate()).isEqualTo(D);
+    }
+
+    @Test
     @DisplayName("빈 날이 공휴일이면 asOf는 멈추지 않는다")
     void asOfSkipsHolidayInsteadOfStopping() throws SQLException {
         ReplicaFixtures.insertHoliday(D, "임시공휴일");
@@ -277,7 +294,7 @@ class DailyLoadIntegrationTest {
         java.util.List<MartBalanceRow> lateRows = java.util.List.of(new MartBalanceRow(
                 pseudonymizer.accountKey(9L), pseudonymizer.customerKey(19L), "DEMAND_DEPOSIT", null, null, 5L));
 
-        assertThatThrownBy(() -> martAdapter.publish(slow, D, lateRows, dates -> D))
+        assertThatThrownBy(() -> martAdapter.publish(slow, D, lateRows, (firstLoadDate, dates) -> D))
                 .isInstanceOf(IllegalStateException.class);
 
         try (Connection mart = InfoEtlTestDatabase.mart()) {

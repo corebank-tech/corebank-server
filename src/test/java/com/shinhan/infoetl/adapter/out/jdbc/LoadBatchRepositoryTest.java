@@ -109,6 +109,34 @@ class LoadBatchRepositoryTest {
     }
 
     @Test
+    @DisplayName("첫 기준일은 상태와 무관하게 가장 이른 적재 기록의 날짜다")
+    void firstBaseDateIgnoresStatus() throws SQLException {
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            long failed = repository.start(mart, D, STARTED);
+            repository.markFailed(mart, failed, "boom");
+            long completed = repository.start(mart, D.plusDays(1), STARTED);
+            repository.markCompleted(mart, completed, COMPLETED, 10L, 100L, D.plusDays(1));
+
+            assertThat(repository.firstBaseDate(mart)).isEqualTo(D);
+        }
+    }
+
+    @Test
+    @DisplayName("asOf가 null이어도 완료 처리하고 as_of_date를 NULL로 남긴다")
+    void markCompletedAllowsNullAsOf() throws SQLException {
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            long id = repository.start(mart, D, STARTED);
+
+            repository.markCompleted(mart, id, COMPLETED, 10L, 100L, null);
+
+            try (ResultSet row = select(mart, id)) {
+                assertThat(row.getString("status")).isEqualTo("COMPLETED");
+                assertThat(row.getObject("as_of_date", LocalDate.class)).isNull();
+            }
+        }
+    }
+
+    @Test
     @DisplayName("실패하면 FAILED와 사유를 기록하고 200자를 넘는 사유는 자른다")
     void markFailedTruncatesLongReason() throws SQLException {
         try (Connection mart = InfoEtlTestDatabase.mart()) {

@@ -6,6 +6,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Types;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -46,12 +47,25 @@ final class LoadBatchRepository {
             statement.setObject(2, completedAt);
             statement.setLong(3, balanceRowCount);
             statement.setLong(4, martBalanceTotal);
-            statement.setObject(5, asOfDate);
+            if (asOfDate == null) {
+                statement.setNull(5, Types.DATE);
+            } else {
+                statement.setObject(5, asOfDate);
+            }
             statement.setLong(6, loadBatchId);
             statement.setString(7, LoadStatus.RUNNING.name());
             if (statement.executeUpdate() != 1) {
                 throw new IllegalStateException("RUNNING 상태가 아니어서 완료 처리하지 못했습니다. loadBatchId=" + loadBatchId);
             }
+        }
+    }
+
+    // 상태와 무관하게 마트에 처음 기록된 기준일. asOf 연속성의 시작점이다.
+    public LocalDate firstBaseDate(Connection mart) throws SQLException {
+        try (PreparedStatement statement = mart.prepareStatement("SELECT MIN(base_date) FROM mart_load_batch");
+                ResultSet resultSet = statement.executeQuery()) {
+            resultSet.next();
+            return resultSet.getObject(1, LocalDate.class);
         }
     }
 

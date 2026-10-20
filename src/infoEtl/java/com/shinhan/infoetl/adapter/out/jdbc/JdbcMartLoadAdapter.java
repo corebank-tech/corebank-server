@@ -51,9 +51,10 @@ public final class JdbcMartLoadAdapter implements MartLoadPort {
             long rowCount = writer.countRows(mart, baseDate);
             long balanceTotal = writer.sumBalance(mart, baseDate);
             repository.replacePrevious(mart, baseDate, loadBatchId);
+            LocalDate firstLoadDate = repository.firstBaseDate(mart);
             Set<LocalDate> completed = new HashSet<>(repository.completedBaseDates(mart));
             completed.add(baseDate); // 이번 배치는 아직 RUNNING이라 조회에 안 잡힌다.
-            LocalDate asOf = asOfCalculator.calculate(completed);
+            LocalDate asOf = asOfCalculator.calculate(firstLoadDate, completed);
             repository.markCompleted(mart, loadBatchId, now(), rowCount, balanceTotal, asOf);
             return new LoadResult(loadBatchId, baseDate, rowCount, balanceTotal, asOf);
         });

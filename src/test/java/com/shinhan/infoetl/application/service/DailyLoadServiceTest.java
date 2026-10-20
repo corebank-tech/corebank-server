@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -213,7 +214,7 @@ class DailyLoadServiceTest {
                     baseDate,
                     rows.size(),
                     rows.stream().mapToLong(MartBalanceRow::balance).sum(),
-                    asOfCalculator.calculate(completed));
+                    asOfCalculator.calculate(Collections.min(completed), completed));
         }
 
         @Override
