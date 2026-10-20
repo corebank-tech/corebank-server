@@ -529,10 +529,10 @@ IAM 경계는 [D-11](README.md#d-11--920--p2p5)을 따른다. P5는 인스턴스
 - `terraform/audit/` 독립 루트 모듈 및 별도 S3 state(`audit/terraform.tfstate`) 구성.
 - 2차 AWS 계정에 Object Lock 감사 버킷(`corebank-audit-worm-853900964665`) 적용 완료.
 - GOVERNANCE 1일, Versioning Enabled, 퍼블릭 접근 차단, AES256 암호화 확인.
-- 적재용 IAM 정책(`corebank-audit-writer`) 생성 및 `audit/lock-test/*`에 검증용 `s3:DeleteObjectVersion` 권한 반영. `s3:BypassGovernanceRetention`은 부여하지 않음.
+- 적재용 IAM 정책(`corebank-audit-writer`) 생성 및 `audit/lock-test/*`에 검증용 `s3:DeleteObjectVersion`, `s3:GetObjectVersion`, `s3:GetObjectRetention` 권한 반영. `s3:BypassGovernanceRetention`은 부여하지 않음.
 - P1 협의 완료: `audit/` 접두사, 감사로그·개인정보 접근로그 하위 경로 분리, AWS WAS 직접 적재.
-- **남은 연동:** P5 WAS IAM 역할에 정책 연결, 독립 state 및 destroy 절차 확인.
-- **검증 분리:** 실제 객체 적재와 Object Lock 삭제·변조 거부 검증은 P1 PH-82에서 수행.
+- **P5 연동:** 독립 state 운영 및 PH-55 별도 destroy 포함 합의 완료. WAS 역할에 정책 연결은 PH-51 apply 이후 10/26 예정.
+- **P1 검증:** PH-82 구현은 10/28까지 머지 예정, 실제 WAS 역할을 통한 적재·삭제·변조 거부 검증은 10/30부터 진행. 검증 완료 후 임시 IAM 권한 제거.
 - 사람·CI·AI IAM, Secrets Manager, CloudTrail 등 PH-72 잔여 작업은 PH-51 이후 진행.
 
 ### FE C-1. 잔액/출금가능액 라벨 분리
