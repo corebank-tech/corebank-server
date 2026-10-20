@@ -102,8 +102,9 @@ CREATE TABLE mart_load_batch (
 1. date-fence는 **날짜와 무관한 단일 gate** 하나입니다. 날짜별 fence는 두지 않습니다. 어느 날짜의 fence를 잡을지 정하려면 D를 먼저 읽어야 해서 순환하기 때문입니다.
 2. 모든 원장 생성, 상품가입, 계좌해지 경로는 **gate 공유 락 획득과 D 읽기를 한 연산으로** 수행합니다(예: `acquireSharedAndReadBusinessDate()`). 이 연산 밖에서 `BusinessDateProvider.today()`로 거래일을 따로 읽지 않습니다. 읽은 거래일은 원장과 이벤트 원천 컬럼에 같이 저장합니다.
 3. 이 연산은 원장·이벤트를 쓰는 원천 트랜잭션 **안에서** 호출하고, gate는 그 트랜잭션의 commit/rollback까지 유지합니다. 지금 트랜잭션 밖에서 거래일을 읽는 경로(예: `TransferExecutionService`는 `REQUIRES_NEW` 기표 트랜잭션을 열기 전에 `today()`를 읽는다)는 #556에서 기표 트랜잭션 안으로 옮깁니다.
-4. COB 전환은 같은 gate의 배타 락을 잡아 이미 D를 읽은 거래를 모두 commit/rollback할 때까지 기다립니다. 그 상태에서 `BUSINESS_DATE`를 다음 영업일로 전환하고, 원천 `business_date_cutoff`에 `(base_date=D, status=CLOSED, closed_at)`을 **같은 트랜잭션으로** 기록한 뒤 락을 풉니다.
-5. 레플리카는 `replica_preserve_commit_order = ON`으로 이 커밋 순서를 보존합니다. ETL은 레플리카에서 `business_date_cutoff.status = 'CLOSED'`인 D만 시작합니다. cutoff가 없거나 실패면 ETL도 시작하지 않습니다.
+4. gate는 원장·이벤트를 쓰는 가장 안쪽 트랜잭션에서만 잡습니다. gate를 잡은 트랜잭션이 `REQUIRES_NEW`로 연 트랜잭션에서 gate를 다시 잡지 않습니다. 바깥이 공유 락을 쥔 채 COB 배타 락이 기다리면 안쪽 공유 요청이 그 뒤에 서고, 바깥은 안쪽을 애플리케이션에서 기다리므로 DB가 교착을 감지하지 못합니다. 이런 중첩 구조가 이미 있습니다(자동이체·예약이체 배치의 `completeProcessing` → `TransferExecutionService.postLedger`). 지금은 바깥이 영업일을 읽지 않아 해당하지 않습니다.
+5. COB 전환은 같은 gate의 배타 락을 잡아 이미 D를 읽은 거래를 모두 commit/rollback할 때까지 기다립니다. 그 상태에서 `BUSINESS_DATE`를 다음 영업일로 전환하고, 원천 `business_date_cutoff`에 `(base_date=D, status=CLOSED, closed_at)`을 **같은 트랜잭션으로** 기록한 뒤 락을 풉니다.
+6. 레플리카는 `replica_preserve_commit_order = ON`으로 이 커밋 순서를 보존합니다. ETL은 레플리카에서 `business_date_cutoff.status = 'CLOSED'`인 D만 시작합니다. cutoff가 없거나 실패면 ETL도 시작하지 않습니다.
 
 이 계약으로 cutoff보다 앞서 커밋된 행은 모두 D 이하이고, cutoff 뒤에 커밋되는 새 거래는 다음 영업일입니다. 단순 대기 시간, COB 스텝 상태, 실행 기록 행으로 이를 대체하지 않습니다.
 
@@ -132,7 +133,7 @@ CREATE TABLE mart_load_batch (
 
 ### 3-3. 산출 규칙 (원천은 레플리카)
 
-공통으로 원장 행의 거래일은 `td = COALESCE(trade_date, NEXT_BUSINESS_DAY_OR_SELF(DATE(occurred_at)))`입니다(결정 3). `NEXT_BUSINESS_DAY_OR_SELF`는 SQL 내장 함수가 아닌 의사 함수이며, PH-76 구현은 `BusinessDateProviderService`와 동일하게 주말과 `holiday` 테이블을 조회해 반드시 이를 적용합니다. 파티션 키가 `occurred_at`이라 `occurred_at < D + INTERVAL 7 DAY`를 함께 겁니다 — 거래일은 발생일보다 늦거나 COB가 자정을 넘기면 하루 앞설 수 있습니다([schema_reference.md](../schema_reference.md) `ledger_entry`).
+공통으로 원장 행의 거래일은 `td = COALESCE(trade_date, NEXT_BUSINESS_DAY_OR_SELF(DATE(occurred_at)))`입니다(결정 3). `NEXT_BUSINESS_DAY_OR_SELF`는 SQL 내장 함수가 아닌 의사 함수이며, PH-76 구현은 `BusinessDateProviderService`와 동일하게 주말과 `holiday` 테이블을 조회해 반드시 이를 적용합니다. `occurred_at`에는 상한을 걸지 않고 `td <= D`만으로 거릅니다. 거래일과 발생일의 간격은 일정하지 않아서([schema_reference.md](../schema_reference.md) `ledger_entry`), COB가 멈춘 동안에는 거래일이 D인 원장의 발생일이 며칠씩 뒤로 밀릴 수 있기 때문입니다. 거래일이 D 이하인 원장은 모두 cutoff 전에 커밋되므로(§3-0) 뒤늦게 도착하는 원장을 위한 재적재 규칙은 따로 두지 않습니다. 과거 날짜 재적재가 D 이후 파티션까지 읽는 비용은 §3-5 증분 방식에서 줄입니다.
 
 **잔액**
 
@@ -141,14 +142,13 @@ WITH le AS (
   SELECT account_id, balance_after, occurred_at, ledger_entry_id,
          COALESCE(trade_date, NEXT_BUSINESS_DAY_OR_SELF(DATE(occurred_at))) AS td
   FROM ledger_entry
-  WHERE occurred_at < :d + INTERVAL 7 DAY
 ), last_entry AS (
   SELECT account_id, balance_after,
          ROW_NUMBER() OVER (PARTITION BY account_id
                             ORDER BY occurred_at DESC, ledger_entry_id DESC) AS rn
   FROM le WHERE td <= :d
 ), close_td AS (
-  -- 7일 창 없이 해지 계좌의 원장 전체를 본다
+  -- 해지 계좌의 원장 전체를 본다
   SELECT e.account_id,
          MAX(COALESCE(e.trade_date, NEXT_BUSINESS_DAY_OR_SELF(DATE(e.occurred_at)))) AS last_ledger_date
   FROM ledger_entry e
