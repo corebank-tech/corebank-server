@@ -14,6 +14,7 @@ public record AccountDetailResult(
         long ledgerBalance,
         long availableBalance,
         LocalDate openedDate,
+        LocalDate maturityDate,
         AccountStatus status,
         int passwordFailureCount,
         boolean passwordLocked) {}

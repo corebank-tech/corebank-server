@@ -32,14 +32,26 @@ terraform/
     modules/
       network/       VPC·서브넷·NAT·라우팅·SG (P5, plan 완료)
       compute/        자리만 (ALB·ASG, PH-51)
-      data/           자리만 (RDS, P2 담당)
+      data/           RDS MySQL 8.4 · DB 서브넷 그룹 · 파라미터 그룹 (P2, plan 완료)
 ```
 
 ## 지금 상태
 
 - `network` 모듈: plan 통과(28개 리소스), **apply는 아직 안 함**
-- 실제 apply는 S3 스프린트(10/19~23 리허설 → 10/26 본 apply)에 진행
-- 지금은 코드만 보고 `modules/data`를 짜면 됨 — 실제 ID 값은 apply 후에 채워짐
+- `data` 모듈: RDS·DB 서브넷 그룹·파라미터 그룹 구현, plan 통과
+- 통합 Terraform plan: 31 to add, 0 to change, 0 to destroy
+- 실제 apply는 10/26, DNS 컷오버는 10/27 예정
+
+
+## 데이터 계층 (P2, PH-70)
+
+- RDS MySQL 8.4, Multi-AZ, gp3 20GiB
+- DB 서브넷 그룹 및 파라미터 그룹 관리
+- 기존 RDS 스냅샷 복원 방식
+- 10/21 Terraform plan 완료, 10/26 apply 예정
+
+설정 및 복원 절차: [PH-70 RDS Terraform](main/modules/data/README.md)
+
 
 ## P2가 쓸 출력값
 

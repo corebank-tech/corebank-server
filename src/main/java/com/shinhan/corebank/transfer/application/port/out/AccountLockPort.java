@@ -64,4 +64,10 @@ public interface AccountLockPort {
      * last_transaction_at은 갱신하지 않는다 — 이자는 고객 거래가 아니라 휴면 판정을 늦추면 안 된다(Fineract도 뺀다).
      */
     long applyCredit(LockedAccount locked, long amount);
+
+    /**
+     * lockForCredit으로 잡은 계좌에서 amount를 빼고 출금 후 잔액을 반환한다(타행이체 송신). 고객 거래라
+     * last_transaction_at도 갱신한다. 잔액 검증은 호출자가 락으로 읽은 잔액으로 먼저 한다.
+     */
+    long applyDebit(LockedAccount locked, long amount, LocalDateTime executedAt);
 }

@@ -6,24 +6,34 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.shinhan.corebank.account.api.AccountMatured;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
+import com.shinhan.corebank.account.application.port.out.AccountStatusHistoryPort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 class AccountMaturityTransitionServiceTest {
@@ -34,6 +44,15 @@ class AccountMaturityTransitionServiceTest {
 
     @Mock
     AccountPersistencePort accountPersistencePort;
+
+    @Mock
+    AccountStatusHistoryPort accountStatusHistoryPort;
+
+    @Mock
+    ApplicationEventPublisher eventPublisher;
+
+    @Spy
+    Clock clock = Clock.fixed(Instant.parse("2026-10-26T01:00:00Z"), ZoneId.of("Asia/Seoul"));
 
     @InjectMocks
     AccountMaturityTransitionService service;
@@ -64,6 +83,22 @@ class AccountMaturityTransitionServiceTest {
 
         verify(accountPersistencePort).save(due);
         verify(accountPersistencePort, times(1)).save(any(Account.class));
+        verify(accountStatusHistoryPort)
+                .recordMaturity(101L, BASE_DATE, BASE_DATE, LocalDateTime.of(2026, 10, 26, 10, 0));
+
+        ArgumentCaptor<AccountMatured> eventCaptor = ArgumentCaptor.forClass(AccountMatured.class);
+
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+
+        AccountMatured event = eventCaptor.getValue();
+
+        assertThat(event.refId()).isEqualTo(101L);
+        assertThat(event.accountId()).isEqualTo(101L);
+        assertThat(event.customerId()).isEqualTo(1L);
+        assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(event.errorCode()).isNull();
+        assertThat(event.maturityDate()).isEqualTo(BASE_DATE);
+        assertThat(event.maturityBaseDate()).isEqualTo(BASE_DATE);
     }
 
     @Test
@@ -82,6 +117,10 @@ class AccountMaturityTransitionServiceTest {
 
         verify(accountPersistencePort, times(1)).save(active);
         verify(accountPersistencePort, times(2)).findByAccountIdForUpdate(101L);
+        verify(accountStatusHistoryPort, times(1))
+                .recordMaturity(101L, BASE_DATE, BASE_DATE, LocalDateTime.of(2026, 10, 26, 10, 0));
+
+        verify(eventPublisher, times(1)).publishEvent(any(AccountMatured.class));
     }
 
     @Test
@@ -95,6 +134,7 @@ class AccountMaturityTransitionServiceTest {
                 .isEqualTo(CommonErrorCode.INTERNAL_ERROR);
 
         verify(accountPersistencePort, never()).save(any(Account.class));
+        verifyNoInteractions(accountStatusHistoryPort, eventPublisher);
     }
 
     private Account account(Long accountId, AccountStatus status, AccountType type, LocalDate maturityDate) {

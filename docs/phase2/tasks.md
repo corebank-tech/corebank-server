@@ -38,11 +38,9 @@
 | 리드 | FE 리드 조율 | S2 | 0.5 | — | — | — | — |
 | [PH-04](#ph-04-알림-조회-api--마스킹-통일) | 알림 조회 API · 마스킹 통일 | S3 | 3 | PH-01 | — | #390 #391 #392 #410 | 예정 |
 | [PH-96-②](#ph-96-transactional-outbox-①-발행측릴레이-s2--②-구독-s3) | 아웃박스 구독 — 알림 4종 | S3 | 1.5 | PH-96-① · PH-04 | — | #393 #394 #395 #396 | 예정 |
-| [PH-06](#ph-06-지연이체-서비스) | 지연이체 서비스 | S3 | 4 | PH-40 · PH-99 · PH-80 · [O-09](README.md#8-미결) | — | — | 예정 |
 | [PH-08](#ph-08-레이트리밋) | 레이트리밋 (로그인·OTP·이체) | S3 | 3.5 | — | — | #332 | 예정 |
 | [PH-49b](#ph-49b-직무분리-부여회수--maker-checker--step-up-표기) | 직무분리 부여/회수 · maker-checker · Step-up 표기 | S3 | 3 | PH-49a-② · PH-92 | — | — | 예정 |
 | [PH-82](#ph-82-worm-감사-저장소--무결성-해시) | WORM 감사 저장소 · 무결성 해시 | S3 | 2.5 | PH-72 버킷 (10/21) · PH-89 · 해시 컬럼 위치 P4 합의 | — | — | 예정 |
-| [FE B-9](#fe-b-9-timeout-화면--재시도-차단) | TIMEOUT 화면 — 재시도 차단 | S3 | 0.5 | PH-80 (10/8) | — | — | 예정 |
 | [FE C-7](#fe-c-7-알림함-실연동) | 알림함 실연동 | S3 | 0.5 | PH-04 | — | — | 예정 |
 | [FE C-5](#fe-c-5-correlation-id-헤더-전파) | correlation id 헤더 전파 | S3 | 0.5 | PH-42 | — | — | 예정 |
 | [PH-101-②](#ph-101-redis-제거-①-구현-s2--②-판정-측정-s3) | Redis 제거 판정 측정 (A'/B') · PH-30 기준선 교체 | S3 | 0.5 | PH-101-① 릴리스 · PH-60b 적재 | 릴리스 1 + 60b 적재 뒤, LOCK-TUNE 전 · **10/22** | #593 | 예정 |
@@ -61,15 +59,15 @@
 | [FE #139](#fe-139-matured-정책표) | MATURED 정책표 | S1 | 0.5 | PH-10 | — | FE #139 | 예정 |
 | [PH-12](#ph-12-이자-계산기--절사-규칙) | 이자 계산기 · 절사 규칙 | S2 | 3.5 | PH-11 | **10/16** | #623 | 완료 |
 | [PH-90](#ph-90-원장잔액--출금가능액-분리--transferprecheck) | 원장잔액·출금가능액 분리 + `TransferPreCheck` | S2 | 3 | PH-87 · PH-99 | **10/16** (P4 머지) | — | 예정 |
-| [PH-70-①](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | `modules/data` Terraform plan — RDS | S2 | 1.5 | PH-50 | — | — | 예정 |
-| [PH-15](#ph-15-만기--감지--matured-전이--원리금--만기해지-api) | 만기 — 감지 · MATURED · 원리금 · 만기해지 API | S3 | 3.5 | PH-12 · PH-10 · PH-43 · 입금 계약(PH-99) | **10/23** | #419 · #633 | 만기 감지 구현 중 |
+| [PH-70-①](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | `modules/data` Terraform plan — RDS | S2 | 1.5 | PH-50 | **10/21** (코드·plan) | #650 | 완료 |
+| [PH-15](#ph-15-만기--감지--matured-전이--원리금--만기해지-api) | 만기 — 감지 · MATURED · 원리금 · 만기해지 API | S3 | 3.5 | PH-12 · PH-10 · PH-43 · 입금 계약(PH-99) | **10/23** | #419 · #633 · #671 | 만기 감지 · 이벤트·감사 이력·상세 API 구현 완료  |
 | [PH-14](#ph-14-이자-지급--원천징수) | 이자 지급 · 원천징수 | S3 | 1.5 | PH-12 · PH-24 · 입금 계약(PH-99) | — | — | 예정 |
 | [PH-13](#ph-13-적수-집계-sql-전환--재측정) | 적수 집계 SQL 전환 · 재측정 | S3 | 1.5 | PH-11 | — | — | 예정 |
 | [PH-16](#ph-16-중도해지--휴면-전환--해지-시-자원-정리) | 중도해지 · 휴면 전환 · 해지 시 자원 정리 | S3 | 4 | PH-15 · PH-43 · 입금 계약(PH-99) · #467 | 휴면 스텝 통합 **10/30** | — | 예정 |
 | [PH-18](#ph-18-개인정보-컬럼-암호화) | 개인정보 컬럼 암호화 | S3 | 2 | — | — | — | 예정 |
 | [PH-70-②](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | RDS 복원 · 컷오버 (DB 쪽) · 온프레미스 binlog 복제 | S3 | 3 | PH-70-① · PH-51 · 복제: PH-100-② | **10/26 apply · 10/27 전환 · 복제 시작** | — | 예정 |
 | [PH-58](#ph-58-엣지-계층) | 엣지 — WAF · Route53 · ACM · CloudFront | S3 | 1.5 | ACM: 가비아 DNS 권한 · WAF 연결: PH-51 | **ACM ARN → P5 10/16 (S2 말)** | — | 예정 |
-| [PH-72](#ph-72-접근통제-인프라) | 접근통제 — IAM · Secrets Manager · CloudTrail · Object Lock 버킷 | S3 | 2.5 | 버킷: 없음 · 나머지: PH-51 | **Object Lock 버킷 10/21** | — | 예정 |
+| [PH-72](#ph-72-접근통제-인프라) | 접근통제 — IAM · Secrets Manager · CloudTrail · Object Lock 버킷 | S3 | 2.5 | 버킷: 없음 · 나머지: PH-51 | **Object Lock 버킷 10/21** | #660 | Object Lock 버킷·IAM 정책 적용 완료, WAS 역할 연결 대기 · 나머지 예정 |
 | [FE C-1](#fe-c-1-잔액출금가능액-라벨-분리) | 잔액/출금가능액 라벨 분리 (+#139 실연동) | S3 | 1 | PH-90 · FE C-6 | 10/21~ | — | 예정 |
 | [FE B-3](#fe-b-3-만기-안내) | 만기 안내 | S3 | 0.5 | PH-15 | — | — | 예정 |
 | [PH-19b](#ph-19b-생명주기-최종-검증--리포트) | 생명주기 최종 검증 · 15만 계좌 전수 대조 · 리포트 | S4 | 2.5 | 전 태스크 | 11/6 | — | 예정 |
@@ -88,7 +86,7 @@
 | PM | 기획 리드 (주 0.5일 상한) | S1 | 0.5 | — | — | — | — |
 | [PH-24](#ph-24-gl-분개-서비스--이체-기표-훅--glapi) | GL 분개 서비스 · 이체 기표 훅 · `gl.api` | S2 | 4.5 | PH-21 · PH-99 | 시그니처 9/30 · PR 10/12 · **머지 10/14** | — | 진행 |
 | [PH-28](#ph-28-시산표-api--베이스라인) | 시산표 API · 베이스라인 | S2 | 2.5 | 베이스라인: PH-60b · API: PH-24 | 베이스라인: 60b 적재 뒤 · API 10/16 | — | 진행 |
-| [PH-75](#ph-75-정보계-마트-설계) | 정보계 마트 설계 | S2 | 1 | PH-40 | **10/16** → P5 | — | 예정 |
+| [PH-75](#ph-75-정보계-마트-설계) | 정보계 마트 설계 | S2 | 1 | PH-40 | **10/16** → P5 | — | 완료 |
 | [FE #136](#fe-136-관리자-세션-정책--로그인-훅-교체) | 관리자 세션 정책 · 로그인 훅 교체 | S2 | 0.25 | PH-49a-② | 10/16 릴리스 전 | FE #136 · PR #162 | 진행 |
 | PM | 기획 리드 | S2 | 0.5 | — | — | — | — |
 | [GL-IDX](#gl-idx-시산표-인덱스-개선) | 시산표 인덱스 개선 · 재측정 | S3 | 1 | PH-28 | — | — | 예정 |
@@ -98,6 +96,7 @@
 | [FE C-2](#fe-c-2-영업일거래일-표기) | 영업일·거래일 표기 | S3 | 0.25 | PH-40 | — | — | 예정 |
 | [FE ADM-04](#fe-adm-04-대사-불일치-목록-130-①) | 대사 불일치 목록 (#130-①) | S3 | 0.5 | PH-38 목록 API | — | FE #130 | 예정 |
 | [FE B-8](#fe-b-8-타행이체-입력결과) | 타행이체 입력·결과 | S3 | 1 | PH-33-② | 10/26~29 | — | 예정 |
+| [FE B-9](#fe-b-9-timeout-화면--재시도-차단) | TIMEOUT 화면 — 재시도 차단 (P1에서 이관, [D-29](README.md#d-29--1020--리드)) | S3 | 0.5 | PH-80 (10/8) | — | — | 예정 |
 | [FE 조회 사유](#fe-조회-사유-입력) | 관리자 조회 사유 입력 (#127 · ADM-01) | S3 | 0.5 | PH-89 | — | — | 예정 |
 | PM | 기획 리드 | S3 | 1 | — | — | — | — |
 | [PH-09](#ph-09-uat-시나리오-실행) | UAT 시나리오 실행 | S4 | 1 | 10/30 배포본 | — | — | 예정 |
@@ -125,10 +124,11 @@
 | [EVT-2](#evt-2-publishevent-두-줄) | `publishEvent` 두 줄 | S2 | 0.5 | PH-32 | 10/6 | #505 | 완료 — P1이 #505에서 대신 처리 |
 | [HOOK-MERGE](#hook-merge-훅-구현체-머지) | 훅 구현체 3건 리뷰·머지 | S2 | 0.5 | PH-90 · PH-24 · PH-41 | 10/12~16 | PR #615 · PR #585 · #516 | 완료 |
 | [PH-101-①](#ph-101-redis-제거-①-구현-s2--②-판정-측정-s3) | Redis 제거 1단계 — 토큰·잠금·이력 MySQL 이전 · 저장소 스위치 (D-14 예외) | S2 | 3.5 | — | dev 머지 10/15 · **릴리스 10/16** | #580 · #581 | 진행 |
-| [PH-33-②](#ph-33-대외계-①-모의-서버-s1--②-타행-이체-s3) | 타행 송신 · 조회거래 · 미결제 기표 · 격리 | S3 | 5 | PH-33-① · PH-24 | **10/23 머지** | — | 예정 |
+| [PH-33-②](#ph-33-대외계-①-모의-서버-s1--②-타행-이체-s3) | 타행 송신 · 조회거래 · 미결제 기표 · 격리 | S3 | 5 | PH-33-① · PH-24 | **10/23 머지** | #654 | 진행 |
 | [PH-36](#ph-36-장애-주입-3종--보상-트랜잭션) | 장애 주입 3종 · 보상 트랜잭션 | S3 | 2 | PH-33-② · PH-80 | — | — | 예정 |
 | [LOCK-TUNE](#lock-tune-락-튜닝) | 락 튜닝 | S3 | 1 | PH-30 베이스라인 · PH-80 | — | — | 예정 |
 | [PH-101-①](#ph-101-redis-제거-①-구현-s2--②-판정-측정-s3) | Redis 제거 2단계 — Redis 어댑터·의존·운영 컨테이너 삭제 (판정 통과 시) | S3 | 0.5 | PH-101-② 판정 | 판정 뒤 | #580 | 예정 |
+| [PH-06](#ph-06-지연이체-서비스) | 지연이체 서비스 (P1에서 이관, D-14 예외 [D-29](README.md#d-29--1020--리드)) | S3 | 4 | PH-40 · PH-99 · PH-80 · [O-09](README.md#8-미결) | — | — | 예정 |
 | [PH-36b](#ph-36b-최종-측정--리포트) | 최종 측정 · 정합성+성능 리포트 | S4 | 3 | PH-30 재측정 | 11/6 | — | 예정 |
 
 ### P5 — COB · 영업일 · 네트워크/컴퓨트 · 정보계 ETL·조회 API · 운영
@@ -148,7 +148,7 @@
 | [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-① | 하이브리드 연결 — 온프레미스 VM 1대 · SSM 하이브리드 등록 | S2 | 1.5 | [O-10](README.md#8-미결) | — | — | 예정 |
 | [PH-51](#ph-51-컴퓨트-계층--컷오버) | 컴퓨트 계층 · 컷오버 | S3 | 4.5 | PH-50 · PH-57 · PH-58 ACM ARN | 리허설 10/19~23 · **apply 10/26 · 컷오버 10/27** | — | 예정 |
 | [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-② | 하이브리드 연결 — Site-to-Site VPN | S3 | 1 | PH-50 · PH-100-① | 터널 **10/23** (리허설 안) → P2 | — | 예정 |
-| [PH-76](#ph-76-정보계-etl) | 정보계 ETL | S3 | 2.5 | PH-75 · PH-43 · 원본: PH-70-② 복제 | — | — | 예정 |
+| [PH-76](#ph-76-정보계-etl) | 정보계 ETL | S3 | 2.5 | PH-75 · PH-43 · #603(완료) · 원본: PH-70-② 복제 | — | #644 · PR #649 · #645 · #646 | 진행 |
 | [PH-77](#ph-77-정보계-조회-api) | 정보계 조회 API | S3 | 1.5 | PH-76 | **10/28** | — | 예정 |
 | [PH-45](#ph-45-cob-병렬화--365) | 청크 → 병렬 스텝 · 실패 격리 · #365 | S3 | 3 | PH-43 | — | #365 | 예정 |
 | [PH-56](#ph-56-was-스케일아웃-비선형성-실증) | WAS 스케일아웃 비선형성 실증 | S4 | 1.5 | PH-51 · PH-30 · PH-49c | — | — | 예정 |
@@ -186,7 +186,7 @@
 
 ### PH-32. 도메인 이벤트 발행 골격
 
-- 이벤트 클래스 — `TransferCompleted(transactionNumber, sourceType, amount, fromAccountId, toAccountId, occurredAt)` · `TransferFailed(...)` · `SubscriptionOpened(...)` · `AccountMatured(...)`. (#505에서 이체는 `TransferSettled` 하나로 합쳤다 — 성공·실패는 `status`, 이체 종류는 `txType`.) `AccountMatured`는 타입만 정의하고 2차에는 소비하지 않는다. 이름은 과거형이고, Reference Key는 거래번호다.
+- 이벤트 클래스 — `TransferCompleted(transactionNumber, sourceType, amount, fromAccountId, toAccountId, occurredAt)` · `TransferFailed(...)` · `SubscriptionOpened(...)` · `AccountMatured(...)`. (#505에서 이체는 `TransferSettled` 하나로 합쳤다 — 성공·실패는 `status`, 이체 종류는 `txType`.) `AccountMatured`는 PH-15(#671)에서 `account.api` 타입 정의 및 `ACTIVE → MATURED` 전이 시 발행하며, 2차에는 소비하지 않는다. `refId`는 `accountId`이고, 현재 `notification.ref_id` 유형에는 해당하지 않는다(P1 협의).
 - `@TransactionalEventListener(phase = BEFORE_COMMIT)` 리스너 자리와 **JdbcTemplate INSERT 규약**을 문서로 남긴다. 규칙은 [README §3-3](README.md#3-3-이벤트아웃박스)을 따른다.
 - `publishEvent` 자리와 페이로드는 P4와 합의한다. 자리 표시는 PH-99(10/2)가 하고, 두 줄은 EVT-2(10/6)가 넣는다.
 - 테스트: BEFORE_COMMIT 리스너 INSERT가 커밋에 실리는지 통합 테스트(PH-99 골격 위), 리스너 예외 시 롤백을 테스트로 고정.
@@ -312,18 +312,6 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 - 알림 20건 조회 쿼리 1~2개(fetch join)
 - **완료 기준:** 마스킹 미적용 0. 미읽음 조회 p95·p99 기록.
 
-### PH-06. 지연이체 서비스
-
-전자금융감독규정상 필수 제공 서비스다. 입금계좌 지정(PH-07)은 2차에 없다([D-06](README.md#d-06--918--리드)).
-
-- 고객별 설정(on/off · 기준금액 · 지연시간)
-- 지연 대기 이체를 예약으로 처리한다(P5 예약이체 배치 재사용 검토)
-    - **즉시이체를 보류로 돌리는 자리가 PH-99 seam에 없다.** 훅 A는 읽기 전용이라 보류로 바꿀 수 없다. 컨트롤러 단에서 예약이체로 위임할지, P4와 새 훅을 합의할지는 [O-09](README.md#8-미결)에서 정한다. `execute()`를 직접 고치지 않는다.
-- 지연 중 취소
-- 대상 판정과 안내(남은 취소 가능 시간을 응답에)
-- **완료 기준:** 기준금액 이상 이체가 지정 시간 후 입금된다. 취소가 동작한다.
-- **범위 밖:** FE B-6(지연이체 화면)
-
 ### PH-08. 레이트리밋
 
 #332 대응이다. 반복 요청으로 계정 존재 여부를 구분할 수 있다는 문제다.
@@ -351,11 +339,6 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 - 거래 레코드에 SHA-256 해시 컬럼을 두고, 검증 배치가 불일치 리포트를 낸다.
 - **삭제·수정 거부 검증 시나리오는 P1이 한다.**
 - **완료 기준:** 보존기간 안에 객체 삭제를 시도하면 거부된다.
-
-### FE B-9. TIMEOUT 화면 — 재시도 차단
-
-즉시이체 화면(P1 소유). PH-80이 10/8에 넘기는 TIMEOUT 응답 스키마를 쓴다. TIMEOUT이면 재시도 버튼을 막는다. **B-8과 같은 디렉터리라 파일 경계는 P1이 정하고 P3에 알린다.**
-**완료 기준:** 이체 결과가 TIMEOUT이면 "처리 결과 확인 중" 안내가 뜨고 재시도·재이체 버튼이 없다. SUCCESS·ERROR 화면은 그대로다.
 
 ### FE C-7. 알림함 실연동
 
@@ -431,10 +414,18 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 
 **①**
 
-- RDS MySQL 1개(Multi-AZ), 파라미터 그룹(KST, 슬로우쿼리 로그, `binlog_format = ROW`), 자동 백업 7일, 저장 암호화
-- ElastiCache는 만들지 않는다([ADR-0007](../adr/0007-remove-redis.md)). 세션은 RDS에 둔다([PH-49c](#ph-49c-세션-외부화)).
-- 서브넷과 SG는 PH-50 출력값을 참조한다.
-- 기존 RDS 스냅샷을 복원하는 방식이다. `terraform import` 절차 1장을 쓰고 `plan`을 통과시킨다.
+- `terraform/main/modules/data`에 RDS 인스턴스·DB 서브넷 그룹·파라미터 그룹을 구성한다.
+- RDS 사양은 [PH-57 용량 산정](ph57_capacity_plan.md)을 따른다.
+    - MySQL 8.4, `db.t3.small`, Multi-AZ
+    - gp3 20GiB, 스토리지 자동 확장 비활성화
+    - 자동 백업 7일, 저장 암호화, 외부 접근 비활성화
+- 파라미터 그룹: KST, 슬로우쿼리 로그, `binlog_format = ROW`, `innodb_buffer_pool_size = {DBInstanceClassMemory*3/4}`.
+  `max_connections`는 기본값을 유지한다.
+- 서브넷과 SG는 PH-50의 Terraform 출력값을 참조한다.
+- 2차 AWS 계정 소유의 복사된 RDS 스냅샷을 `snapshot_identifier`로 전달받아 복원한다.
+- 수동 복원한 RDS를 Terraform에 편입할 경우에만 `terraform import`를 수행한다.
+- 상세 설정과 실행 절차는 `terraform/main/modules/data/README.md`에 작성한다.
+- **완료 기준:** `terraform validate` 및 `terraform plan` 통과. 실제 `apply`와 RDS 복원은 PH-70-②에서 10/26에 진행한다.
 
 **②**
 
@@ -456,15 +447,22 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 - 만기해지 API: 원리금 계산(PH-12) → 출금계좌 입금(PH-99의 `transfer.api` 입금 계약) → CLOSED. `LedgerPair`는 transfer 내부라 직접 쓰지 않는다.
 - **만기해지 날짜 검증(후속 PH-15 필수):** COB에서 `nextBusinessDay(COB_DATE)` 기준으로 `MATURED` 선전환하더라도, 실제 만기해지 시 `MATURED` 상태와 `maturity_date <= 달력상 현재일(KST)`을 모두 확인한다. 계좌 잠금 이후에도 날짜 조건을 재검증하며, 계약 만기일 이전에는 만기 원리금 지급을 허용하지 않는다.
 - 만기해지 시 이자가 있으면 `INTEREST`로 세후이자를 상품 계좌에 기표한 뒤 `MATURITY`로 원리금 전액을 고객 계좌에 이체한다. 상품 계좌 잔액 0원을 확인한 뒤 동일 트랜잭션에서 `CLOSED`로 전이한다. 기표·조회 순서는 [transfer_seam.md](transfer_seam.md) §8을 따르며, 원장 합계 정합성은 PH-15 통합 테스트에서 검증한다.
-- 계좌 상세 응답에 `maturityDate`·`status=MATURED`를 추가한다(Expand → B-3).
+- 기존 계좌 상세 API(`GET /api/v1/accounts/{accountId}`)에 nullable `maturityDate`를 추가한다(Expand → FE B-3). 계좌 상태는 기존 `status` 필드로 `MATURED`를 반환한다.
 - 만기 처리 단건 비용을 재서 P5 COB 시간에 합산한다.
 - **범위 밖:** 만기후이율(MATURED 이후 이자 없음)
 - **완료 기준:** 원리금 오차 0. MATURED 계좌가 신규 거래 대상에서 빠진다.
 - **진행 현황(2026-10-19, #633):** 만기 감지 COB 스텝(`order=3`)과 `ACTIVE → MATURED` 상태 전이 구현. `nextBusinessDay(COB_DATE)` 기준 만기 대상 조회, keyset 페이지 처리, 청크별 트랜잭션 및 재실행 멱등성 검증을 포함한다.
 - **만기 감지 상태 정책(#633):** `ACTIVE` 예·적금만 자동으로 `MATURED`로 전이한다.
   `SUSPENDED`·`DORMANT` 계좌는 현재 상태를 유지하며, 만기일이 지났더라도 이번 COB 스텝의 조회 대상에는 포함하지 않는다. 정지·휴면 해제 이후 만기 처리 방식은 PH-16에서 확정한다.
-- **후속 작업:** `AccountMatured` 이벤트 발행, 이자·원리금 지급, 만기해지 API 및 `MATURED → CLOSED` 전이. PH-15 전체 완료와 구분한다.
-- **후속 감사 추적:** `AccountMatured` 이벤트 연동 시 계좌별 상태 전이 이력을 추적할 수 있도록 전이 전·후 상태, 전이 기준일, 처리 시각과 계좌 식별 정보를 기록하는 방식을 함께 설계한다.
+- **진행 현황(2026-10-20, #671):** `AccountMatured` 이벤트 발행, 계좌 상태 전이 감사 이력 저장, 계좌 상세 API `maturityDate` 확장을 구현 중이다.
+  - `AccountMatured`는 `account.api`의 `DomainEvent` 구현체이며, `refId = accountId`, `status = SUCCESS`, `errorCode = null`을 사용한다(P1 협의).
+  - 실제 `ACTIVE → MATURED` 전이(`markMatured() == true`)에서만 `ApplicationEventPublisher`로 이벤트를 발행한다. 기존 `MATURED` 계좌 재처리 시 이벤트를 다시 발행하지 않는다.
+  - 별도 `account_status_history` 테이블에 변경 전·후 상태, 계약 만기일, 만기 전이 기준일, 실제 처리 시각, 발생 원인(`COB`)을 기록한다.
+  - 계좌 상태 변경·감사 이력 저장·이벤트 발행은 같은 청크 트랜잭션 안에서 처리한다.
+  - Spring Modulith 전환(#437)을 기다리지 않고 기존 이벤트 발행 계약을 사용한다. 2차에는 `AccountMatured` 알림 소비자를 구현하지 않는다.
+  - 계좌 상세 응답에 nullable `maturityDate`를 추가하고, 기존 `status` 필드 및 응답 구조는 유지한다(Expand).
+
+- **후속 PH-15 작업:** 만기 원리금 계산·이자 및 세금 기표·고객 계좌로 원리금 이동·만기해지 API·`MATURED → CLOSED` 전이. 실제 만기해지는 계좌 잠금 이후에도 `maturity_date <= 달력상 현재일(KST)`를 재검증한다. #671 완료와 PH-15 전체 완료는 구분한다.
 
 ### PH-14. 이자 지급 · 원천징수
 
@@ -516,6 +514,17 @@ IAM 경계는 [D-11](README.md#d-11--920--p2p5)을 따른다. P5는 인스턴스
 - destroy 대비 설정: Secrets Manager는 `recovery_window_in_days = 0`, CloudTrail·Object Lock 버킷은 `force_destroy = true`로 둔다. 이유와 순서는 [README §3-8](README.md#3-8-3-tier-수명과-destroy)
 - **완료 기준:** AI 자격증명으로 쓰기를 시도하면 거부된다. 앱 비밀값이 Secrets Manager에서 읽힌다. Object Lock 객체 삭제가 거부된다(검증은 P1 PH-82). SSH 0은 PH-51 몫이다.
 
+**PH-72-① 진행 현황 (2026-10-20, #660)**
+
+- `terraform/audit/` 독립 루트 모듈 및 별도 S3 state(`audit/terraform.tfstate`) 구성.
+- 2차 AWS 계정에 Object Lock 감사 버킷(`corebank-audit-worm-853900964665`) 적용 완료.
+- GOVERNANCE 1일, Versioning Enabled, 퍼블릭 접근 차단, AES256 암호화 확인.
+- 적재용 IAM 정책(`corebank-audit-writer`) 생성 및 `audit/lock-test/*`에 검증용 `s3:DeleteObjectVersion`, `s3:GetObjectVersion`, `s3:GetObjectRetention` 권한 반영. `s3:BypassGovernanceRetention`은 부여하지 않음.
+- P1 협의 완료: `audit/` 접두사, 감사로그·개인정보 접근로그 하위 경로 분리, AWS WAS 직접 적재.
+- **P5 연동:** 독립 state 운영 및 PH-55 별도 destroy 포함 합의 완료. WAS 역할에 정책 연결은 PH-51 apply 이후 10/26 예정.
+- **P1 검증:** PH-82 구현은 10/28까지 머지 예정, 실제 WAS 역할을 통한 적재·삭제·변조 거부 검증은 10/30부터 진행. 검증 완료 후 임시 IAM 권한 제거.
+- 사람·CI·AI IAM, Secrets Manager, CloudTrail 등 PH-72 잔여 작업은 PH-51 이후 진행.
+
 ### FE C-1. 잔액/출금가능액 라벨 분리
 
 PH-90 매핑표로 화면별 PR을 낸다. 이체 화면은 P1이 머지하고, 대시보드·계좌 화면은 P2가 머지한다. **C-6(P3) 다음에 한다.**
@@ -542,7 +551,7 @@ S4지만 신규 API가 아니라 문서화·측정·훈련이다.
 - 백업과 DR 구분 문서 1장
 - **RDS 강제 페일오버 1회**: 전환 시간과 거래 실패 건수. 이 항목은 P2만 한다.
 - 스냅샷 복구 훈련 1회, Failback 절차, SPOF 점검표
-- **온프레미스 전환 리허설 1회**([D-25](README.md#d-25--927--리드-제안팀-회의-확인-대기)): 레플리카 승격 → 온프레미스 계정계 API 기동 → 가비아 DNS 전환. 전환 시간과 유실 구간을 기록한다. 전환 중 세션 저장소와 AWS 복귀 절차는 리허설 전에 정한다.
+- **온프레미스 전환 리허설 1회**([D-25](README.md#d-25--927--리드-제안1020-팀-확정)): 레플리카 승격 → 온프레미스 계정계 API 기동 → 가비아 DNS 전환. 전환 시간과 유실 구간을 기록한다. 전환 중 세션 저장소와 AWS 복귀 절차는 리허설 전에 정한다.
 - **완료 기준:** 측정한 복구 시간이 Tier별 RTO 안에 드는지 판정한다.
 
 ## 2-3. P3 태스크 상세
@@ -634,13 +643,14 @@ public enum JournalDirection { DEBIT, CREDIT }   // gl.domain 에서 gl.api 로 
 
 ### PH-75. 정보계 마트 설계
 
-- 마트 2종: `mart_daily_account_balance`(일별 계정잔액), `mart_product_subscription`(상품별 가입·해지)
-    - **as-of 컬럼 필수, PII 컬럼 없음**(고객은 가명 ID)
-- 적재 주기, 읽기 전용 원칙, 정합성 기준(마트 합계 = 원장 합계)
-- 마트는 온프레미스 MySQL에 둔다([D-25](README.md#d-25--927--리드-제안팀-회의-확인-대기)). 적재는 P5 PH-76이 한다.
+- **산출물: [info_mart.md](info_mart.md)** — 스키마 · 적재 규칙 · 정합성 대조 · 조회 API 계약의 정본
+- 마트 2종: `mart_daily_account_balance`(계좌 × 거래일 일별 잔액), `mart_product_subscription_event`(상품 가입·해지 이벤트)
+    - **as-of 컬럼 필수, PII 컬럼 없음**(고객·계좌는 HMAC 가명 키)
+- 적재 주기, 읽기 전용 원칙, 정합성 기준(마트 합계 = 원장 합계, 증감 = GL `20100` 증감)
+- 마트는 온프레미스 MySQL에 둔다([D-25](README.md#d-25--927--리드-제안1020-팀-확정)). 적재는 P5 PH-76이 한다.
 - 조회 API 스키마 초안을 P5 PH-77과 FE ADM-03에 넘긴다.
 - **10/16에 넘긴다.** P5가 10/26~27 컷오버 사이에 PH-76·77을 소화해야 해서 10/21에서 앞당겼다.
-- **범위 밖:** 마감잔액 테이블
+- **범위 밖:** 마감잔액 테이블, 채널별 거래량([D-28](README.md#d-28--1015--p3))
 
 ### GL-IDX. 시산표 인덱스 개선
 
@@ -677,6 +687,11 @@ AI로 불일치 목록을 뽑고 고친다. **C-1보다 먼저 한다.**
 
 은행 선택 · TIMEOUT 안내. 미결제는 회계(GL) 내부 기표라 화면에 나오지 않는다. 은행 목록·요청·응답 스키마는 [interbank_transfer_fe_handoff.md](interbank_transfer_fe_handoff.md)다(PH-33, #609). 편집권도 넘겨받았고 PR·머지는 P3가 한다.
 **완료 기준:** 모의 대외계 정상 응답이면 완료 화면, 무응답이면 TIMEOUT 안내(재시도 버튼 없음)가 뜬다. 은행 목록은 서버 응답에서 온다.
+
+### FE B-9. TIMEOUT 화면 — 재시도 차단
+
+즉시이체 화면. PH-80이 10/8에 넘긴 TIMEOUT 응답 스키마를 쓴다. TIMEOUT이면 재시도 버튼을 막는다. B-8과 같은 디렉터리라 B-8과 함께 맡는다.
+**완료 기준:** 이체 결과가 TIMEOUT이면 "처리 결과 확인 중" 안내가 뜨고 재시도·재이체 버튼이 없다. SUCCESS·ERROR 화면은 그대로다.
 
 ### FE 조회 사유 입력
 
@@ -786,7 +801,7 @@ TransferExecutionService.execute(command)                         ← 편집자:
     - **P5가 10/6에 주는 "회차 상태 사용 현황 + 배치 회차는 TIMEOUT을 쓰지 않는다" 문서를 PR 본문 근거로 단다. PR 리뷰는 P5가 한다.**
 - 원거래를 **INVALID**로 표기하고 `ref_transfer_id`를 둔다. 정정 체인은 원거래 INVALID → 취소정정 INSERT → 정상거래 INSERT다(DELETE 0건).
 - 상태 역행 금지 검증, 자동 재시도 금지 규약 문서와 리뷰 체크 항목
-- TIMEOUT 응답 스키마를 10/8까지 FE B-9(P1)에 넘긴다.
+- TIMEOUT 응답 스키마를 10/8까지 FE B-9에 넘긴다.
 - **완료 기준:** 정정 시나리오가 DELETE 없이 끝난다. 체인을 따라 과거를 재구성할 수 있다.
 - 현황: S1분 완료(#548). 정정 체인·재시도 금지 규약의 정본은 [transfer_correction.md](transfer_correction.md)다. INVALID는 `status` 값이 아니라 `transfer.invalidated_at`(무효화 시각)으로 표기한다 — `ProcessResultStatus`는 건드리지 않았다. S2분(#564): `ProcessResultStatus.TIMEOUT`(`isConfirmed()` false) · `Transfer.timeout()` · `transfer.status` 주석과 공통코드 · TIMEOUT 응답 스키마(`TransferResponse` `@Schema`)를 넣었다. 조회거래로 확정하는 전이는 PH-33-②다.
 
@@ -817,10 +832,12 @@ PH-90 PreCheck → PH-24 훅 B → PH-41 tradeDate 대입 순서로 머지한다
 - **미결제타점권 기표 2패턴**: 요청 시 예수금 → 미결제타점권(`10200`), 확정 시 해소. 훅 B에서 `gl.api`를 부른다. 차대 방향은 P4가 정해 [gl_journal_patterns.md](gl_journal_patterns.md)에 적는다. **`gl_voucher.tx_type` CHECK에 타행 유형이 없으므로 새 V 파일로 CHECK를 넓힌다**(기존 마이그레이션 수정 금지).
 - Resilience4j 타임아웃·서킷브레이커 — 타행만 막고 당행은 계속 돈다.
 - 은행코드 시드 5개. 은행 목록·미결제 상태 스키마를 10/16까지 FE B-8(P3)에 넘긴다.
-    - 현황(#609): [interbank_transfer_fe_handoff.md](interbank_transfer_fe_handoff.md)로 넘겼다. 엔드포인트는 당행과 분리(`GET /transfers/banks` · `POST /transfers/interbank`)하고, 결과 상태는 `SUCCESS`·`ERROR`·`TIMEOUT`을 그대로 쓴다. 미결제는 GL 내부라 FE에 노출하지 않는다. (가칭) 오류코드 4개는 이 태스크 PR에서 오류코드 마스터에 등록하며 확정한다.
-- **이체 내역 상세 · 목록의 타행 건 마스킹**([인계 문서](interbank_transfer_fe_handoff.md) §7-1): 지금 `MaskingUtil.maskAccountNumber`는 12자리가 아니면, `maskName`은 `null`이면 예외를 던진다. 그대로 두면 타행 건이 하나라도 있는 상세 · 목록이 `CMN9999`(500)로 깨진다. 계좌번호는 §7-1 규칙(앞 · 뒤 자릿수÷4 노출)으로 넓히고, 예금주가 없는 `ERROR` · `TIMEOUT` 건은 `payeeName`을 `null`로 내린다. 같은 12자리 · 예금주 필수 전제가 `transfer.deposit_account_number` `CHAR(12)` · `payee_name` NOT NULL에도 있어 스키마 변경(Flyway · schema_reference · ERD)이 함께 필요하다. 로그 마스킹(`MaskingConverter`)도 계좌번호를 `\b\d{12}\b`로만 잡아 12자리가 아닌 타행 번호는 로그에 원문 그대로 남는다(REQ-NFR-009). 1~16자리로 넓히되, PH-42(P5)와 같은 파일이라 착수할 때 P5와 맞춘다.
+    - 현황(#609): [interbank_transfer_fe_handoff.md](interbank_transfer_fe_handoff.md)로 넘겼다. 엔드포인트는 당행과 분리(`GET /transfers/banks` · `POST /transfers/interbank`)하고, 결과 상태는 `SUCCESS`·`ERROR`·`TIMEOUT`을 그대로 쓴다. 미결제는 GL 내부라 FE에 노출하지 않는다. 오류코드 4개(`TRF0006`·`TRF0007`·`TRF0008`·`TRF0308`)는 #654에서 오류코드 마스터에 등록해 확정했다 — 가칭 `TRF0401`은 번호 구간 규칙에 맞춰 `TRF0308`이 됐다.
+- **이체 내역 상세 · 목록의 타행 건 마스킹**([인계 문서](interbank_transfer_fe_handoff.md) §7-1): 지금 `MaskingUtil.maskAccountNumber`는 12자리가 아니면, `maskName`은 `null`이면 예외를 던진다. 그대로 두면 타행 건이 하나라도 있는 상세 · 목록이 `CMN9999`(500)로 깨진다. 계좌번호는 §7-1 규칙(앞 · 뒤 자릿수÷4 노출)으로 넓히고, 예금주가 없는 `ERROR` · `TIMEOUT` 건은 `payeeName`을 `null`로 내린다. 같은 12자리 · 예금주 필수 전제가 `transfer.deposit_account_number` `CHAR(12)` · `payee_name` NOT NULL에도 있어 스키마 변경(Flyway · schema_reference · ERD)이 함께 필요하다. 로그 마스킹(`MaskingConverter`)은 계좌번호를 `\b\d{12}\b`로만 잡는다(REQ-NFR-009). **넓히지 않는다(#654)** — 1~16자리로 넓히면 금액·이체 ID·거래번호까지 가려져 로그를 쓸 수 없다. 대신 타행 코드는 계좌번호·전문 원문을 로그에 남기지 않고, 남겨야 하면 `MaskingUtil`로 가린다(응답·감사로그와 같은 호출 지점 마스킹 관행). 컨버터는 실수로 찍힌 12자리를 잡는 마지막 안전망으로 둔다.
+    - 현황(#654 PR A): 스키마 변경(`V202610201220`), `MaskingUtil.maskAccountNumber` 1~16자리, 상세·목록의 `payeeName` null · 상세 `payeeBankCode`를 넣었다.
+    - 현황(#654 PR B): 송신(1단계 출금·TIMEOUT 커밋 → 송신 → 2단계 확정), 조회거래 스케줄러, 미결제 2패턴([gl_journal_patterns.md](gl_journal_patterns.md) §3-5), Resilience4j 서킷브레이커, `POST /transfers/interbank` · `GET /transfers/banks`. 실패 확정 시 이체한도는 되돌리지 않는다 — `limit.api`에 계약이 없어 #657로 남겼다. **배포 환경에 모의 대외기관(B 단계, [mock_external_server.md](mock_external_server.md) §5)이 있어야 dev·운영에서 타행이체가 돈다.**
 - 타행 확정 시점에도 `transfer.completed`가 발행된다.
-- **착수 시 P5와 확인:** 자동·예약이체 재확정 배치(`AutoTransferBatchItemProcessor`·`ScheduledTransferBatchItemProcessor`의 `reconcileStuckExecution()`)는 조회한 transfer가 SUCCESS·ERROR가 아니면 else 분기에서 회차를 ERROR로 확정한다. TIMEOUT 행이 이 분기로 오면 처리 불명이 실패로 굳는다. 지금은 회차가 당행 전용이라 오지 않지만([process_result_status_usage.md](process_result_status_usage.md) §2), 송신 연결 전에 두 else 분기와 `completeProcessing()` 예외 메시지("PROCESSING으로 미확정")를 TIMEOUT 기준으로 맞출지 P5와 정한다(PR #570 리뷰).
+- **자동·예약이체 재확정 배치는 바꾸지 않는다(#654):** `AutoTransferBatchItemProcessor`·`ScheduledTransferBatchItemProcessor`의 `reconcileStuckExecution()`은 transfer가 SUCCESS·ERROR가 아니면 else 분기에서 회차를 ERROR로 확정한다. TIMEOUT이 이 분기로 오면 처리 불명이 실패로 굳지만, 두 회차는 등록 단계부터 당행 계좌만 받아 TIMEOUT이 오지 않는다([process_result_status_usage.md](process_result_status_usage.md) §1·§2). 그래서 PH-33-②는 타행 자동·예약이체 등록을 열지 않는 것으로 전제를 지킨다. 타행 자동·예약이체를 열 때 두 else 분기와 `completeProcessing()` 예외 메시지를 함께 고친다(PR #570 리뷰).
 - **완료 기준:** 정상 흐름과 "무응답 후 조회 확인" 흐름이 돈다. 모의 서버가 무응답이어도 당행 TPS가 유지된다.
 - **범위 밖:** 미결제 정산(PH-35), 타행 수수료(`FEE = 0L` 유지)
 
@@ -835,11 +852,24 @@ PH-90 PreCheck → PH-24 훅 B → PH-41 tradeDate 대입 순서로 머지한다
 
 P1 PH-30 결과(데드락률 · p99)를 근거로 락 범위나 조회 순서를 1~2건 조정한다. S4 재측정은 P1에 요청한다. S4는 코드 금지라 이 작업은 S3에 남는다.
 
+### PH-06. 지연이체 서비스
+
+전자금융감독규정상 필수 제공 서비스다. 입금계좌 지정(PH-07)은 2차에 없다([D-06](README.md#d-06--918--리드)).
+
+- 고객별 설정(on/off · 기준금액 · 지연시간)
+- 지연 대기 이체를 예약으로 처리한다(P5 예약이체 배치 재사용 검토)
+    - **즉시이체를 보류로 돌리는 자리가 PH-99 seam에 없다.** 훅 A는 읽기 전용이라 보류로 바꿀 수 없다. 컨트롤러 단에서 예약이체로 위임할지, 새 훅을 둘지는 [O-09](README.md#8-미결)에서 정한다. 새 훅을 두면 P4가 `execute()`에 호출 자리를 연결한다.
+- 지연 중 취소
+- 대상 판정과 안내(남은 취소 가능 시간을 응답에)
+- **완료 기준:** 기준금액 이상 이체가 지정 시간 후 입금된다. 취소가 동작한다.
+- **범위 밖:** FE B-6(지연이체 화면)
+
 ### PH-36b. 최종 측정 · 리포트
 
 - P1에서 단일 EC2 재측정 수치를 받는다.
 - 3-Tier TPS·p99 **한 줄**(컷오버 실패 시 Plan B)
 - `execute()` 순환복잡도 재측정(반나절)
+- 지연이체 정상 지급률(PH-06)
 - 정합성+성능 리포트
 
 ### PH-101. Redis 제거 (① 구현 S2 → ② 판정 측정 S3)
@@ -941,7 +971,7 @@ public interface CobStep {
 > 마감 대상으로 쓴다. 상세는 [ADR-0004](../adr/0004-cob-step-order-cob-date.md).
 
 - **파티션 생성 호출 스텝은 없다**([#379 규격](#379-규격-전달)).
-- **정보계 ETL은 COB 스텝이 아니다.** 온프레미스에서 따로 돈다([PH-76](#ph-76-정보계-etl), [D-25](README.md#d-25--927--리드-제안팀-회의-확인-대기)).
+- **정보계 ETL은 COB 스텝이 아니다.** 온프레미스에서 따로 돈다([PH-76](#ph-76-정보계-etl), [D-25](README.md#d-25--927--리드-제안1020-팀-확정)).
 - 러너: 전용 `CobScheduler`(23:30)가 `CobRunnerUseCase`를 호출하고, `CobRunnerService`가 스텝을 순서대로 부르며 `BatchExecutionLockPort`로 단일 실행한다. 스텝이 `CobStepHaltException`을 던지면 남은 스텝을 생략하고 즉시 중단한다(#600) — 단, 영업일 전환은 스텝 루프 밖이라 되돌리지 않는다.
 - 대사 정책: 불일치 ≤ 임계(예: 10)면 soft(리포트·로그), 초과면 hard(마감 중단, `CobStepHaltException`으로 표현, #600). **실제로 hard를 던지기 전에 #556의 `COB_DATE` 저장·실패 스텝 재실행이 먼저 갖춰져야 한다** — 재시작은 러너(P5) 소유이고(P5.md), 그 전까지 halt는 복구 수단이 없다. PH-38 편입 시점에는 hard 분기를 soft로만 두고, #556 완료 뒤 별도로 켠다.
 - 배치 실행 기록 테이블(#603, 완료·PR #606): job · step · 영업일 · 시작/종료 · 상태 · 실패 사유. **조회 API는 범위 밖**이다. **스텝 내용과 무관한 러너 인프라라 대사·만기감지 스텝을 안 기다리고 바로 착수했다.** **이 테이블은 관측용 append-only 기록일 뿐, #556 재시작의 신뢰 가능한 체크포인트로 보장하지 않는다 — 기록 저장 실패는 무시하고 배치를 계속 진행한다(PR #606 셀프리뷰, vsopsw R2). #556에서 재시작 메커니즘을 설계할 때 이 기록을 그대로 쓸지, 별도 체크포인트를 둘지 다시 정한다.**
@@ -990,7 +1020,7 @@ public interface CobStep {
 ### PH-51. 컴퓨트 계층 · 컷오버
 
 - ALB(2AZ) + 대상그룹. 헬스체크는 `/actuator/health`이고, QA 시드 검증이 헬스체크를 죽이지 않게 한다(#439·#445).
-- WAS ASG: 시작 템플릿, min 2 / max 2(AZ별 1대). 내비게이션 API(P6)는 각 WAS에 함께 뜬다. util 노드는 없다([D-25](README.md#d-25--927--리드-제안팀-회의-확인-대기)).
+- WAS ASG: 시작 템플릿, min 2 / max 2(AZ별 1대). 내비게이션 API(P6)는 각 WAS에 함께 뜬다. util 노드는 없다([D-25](README.md#d-25--927--리드-제안1020-팀-확정)).
 - IAM은 인스턴스 프로파일 1개(WAS)와 SSM Agent·Session Manager 접속 기반까지다. 온프레미스 SSM 하이브리드 역할은 PH-100이 맡는다. 나머지 IAM은 P2 PH-72가 맡는다([D-11](README.md#d-11--920--p2p5)).
 - 현행 SSM 배포 스크립트(#440 반영분)를 이관한다.
 - HTTPS 리스너는 P2가 넘기는 ACM certificate ARN으로 만든다.
@@ -1001,16 +1031,18 @@ public interface CobStep {
 
 ### PH-76. 정보계 ETL
 
-- **10/28 PH-77까지 가려면 PH-76은 10/19~23 리허설과 병행한다**(10/26~27은 컷오버).
-- **온프레미스 독립 작업이다.** COB 스텝이 아니다([D-25](README.md#d-25--927--리드-제안팀-회의-확인-대기)). 레플리카에 복제된 COB 실행 기록에서 해당 영업일 완료 행이 보이면 시작한다. 복제는 커밋 순서대로 적용되므로, 그 행이 보이면 COB 결과도 모두 도착해 있다(병렬 복제면 `replica_preserve_commit_order = ON`).
+- **PH-76은 10/21까지 덤프 적재로 먼저 진행한다**(P5 공지). PH-77은 10/28 그대로이고, 10/26~27은 컷오버라 측정과 적재 확인을 하지 않는다.
+- **온프레미스 독립 작업이다.** COB 스텝이 아니다([D-25](README.md#d-25--927--리드-제안1020-팀-확정)). 자동 적재는 #556이 원천 `business_date_cutoff`와 date-fence를 구현한 뒤에만 켠다. 레플리카의 `business_date_cutoff(base_date=D, status=CLOSED)`가 유일한 시작 신호이고, `batch_execution_history`(#603)는 관측용이라 신호로 쓰지 않는다. cutoff는 D 거래를 모두 drain한 뒤 영업일 전환과 같은 원천 트랜잭션으로 커밋되어야 하며, 복제는 `replica_preserve_commit_order = ON`으로 그 순서를 보존한다. 상세 조건은 [info_mart.md](info_mart.md) §3-0~§3-1이다.
 - 레플리카는 10/27 복제 시작(P2 PH-70-②) 뒤에 생긴다. 그 전에는 온프레미스 MySQL에 덤프를 적재해 개발하고, 10/27에 원본을 레플리카로 바꾼다. **Plan B:** 복제가 늦으면 덤프 적재로 시연한다.
-- 마트 2종을 온프레미스 MySQL에 적재한다. 전일 확정분 증분이고 재적재가 가능하며, **PII는 적재하지 않는다.**
+- 마트 2종을 온프레미스 MySQL에 적재한다. 전일 확정분 증분이고 재적재가 가능하며, **PII는 적재하지 않는다.** 스키마 · 트랜잭션 경계 · 대조 규칙은 [info_mart.md](info_mart.md) §2~§4를 따른다. 이벤트 적재 전에는 P2가 가입·해지 때의 논리 영업일을 `subscription_trade_date`·`closed_trade_date`로 저장해야 한다(§3-0·§3-3). 구현은 별도 jar(`info-etl.jar`), Spring 없이 JDBC다(#644). 잔액 적재 #644, 이벤트 · 기간 적재 #645, 대조 · PII 검증 · 적재 시간 측정 #646.
+- 덤프 기간에는 기준일을 실행 인자로 받는다. 거래일이 NULL인 원장은 [#515](https://github.com/corebank-tech/corebank-server/issues/515) 채우기 규칙으로 대체한다.
+- 마트는 레플리카와 **다른 MySQL 인스턴스**에 둔다(같은 VM의 다른 포트 가능). 레플리카의 `super_read_only`가 인스턴스 전체에 걸리기 때문이다. 가명 키(HMAC)의 키는 ETL에만 둔다.
 - 적재 실패는 soft다. 300만 원장 적재 시간을 기록하고, 마트 합계 = 원장 합계를 P3와 함께 검증한다.
 
 ### PH-77. 정보계 조회 API
 
-- 일별 수신 잔액 추이, 상품별 가입/해지, 채널별 거래량(`GL_READ`)
-- **모든 응답에 `asOf` 필드**가 있고 개인정보는 없다. p95·p99를 기록한다.
+- 일별 수신 잔액 추이, 상품별 가입/해지(`GL_READ`). 채널별 거래량은 뺐다([D-28](README.md#d-28--1015--p3)). 응답 스키마는 [info_mart.md](info_mart.md) §5다.
+- **모든 응답에 `asOf` 필드**(빠짐없이 적재가 끝난 마지막 기준일, `yyyy-MM-dd`. [info_mart.md](info_mart.md) §5-4)가 있고 개인정보는 없다. p95·p99를 기록한다.
 - 온프레미스 정보계 API는 VPN 안쪽에서만 받는다. 브라우저는 평소처럼 ALB → WAS로 요청하고, WAS가 세션과 `GL_READ`를 확인한 뒤 VPN으로 온프레미스 API를 부른다(`adapter/out` 어댑터). 온프레미스 API는 인터넷에 공개하지 않는다.
 - 배포 형태(corebank 이미지 + 프로필 / 별도 앱)는 착수 전에 정한다.
 
@@ -1039,7 +1071,7 @@ S4지만 CI/CD·문서·훈련이라 S4 규칙에 걸리지 않는다([D-05](REA
 
 ### PH-100. 하이브리드 연결 (① 온프레미스 VM S2 → ② VPN 연결 S3)
 
-온프레미스는 신한DS 자체 서버다([D-25](README.md#d-25--927--리드-제안팀-회의-확인-대기)).
+온프레미스는 신한DS 자체 서버다([D-25](README.md#d-25--927--리드-제안1020-팀-확정)).
 
 **①**
 

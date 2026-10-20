@@ -688,6 +688,20 @@ class AccountControllerTest extends IntegrationTestSupport {
                 .getTransactions(any(), any(), any(), any(), any(), any(), any(), anyInt(), anyInt(), anyBoolean());
     }
 
+    @Test
+    @DisplayName("요구불계좌 상세 조회 시 만기일을 null로 반환한다")
+    void getAccountDetailReturnsNullMaturityDate() throws Exception {
+        Long customerId = customerTestFixture.createCustomer();
+
+        Account account = createAccount(customerId, "088100000049", null);
+
+        mockMvc.perform(get("/accounts/{accountId}", account.getAccountId())
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.accountId").value(account.getAccountId()))
+                .andExpect(jsonPath("$.data.maturityDate").value(org.hamcrest.Matchers.nullValue()));
+    }
+
     private Account createDemandDepositAccount(
             Long customerId,
             String accountNumber,

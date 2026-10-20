@@ -49,6 +49,29 @@ public class LedgerPersistenceAdapter implements LedgerSavePort, LedgerLookupPor
     }
 
     @Override
+    @Transactional
+    public void saveDebit(LedgerEntry debit) {
+        saveEntry(debit);
+    }
+
+    // 표시를 먼저 세워 이미 되돌린 출금이면 입금을 넣기 전에 멈춘다.
+    @Override
+    @Transactional
+    public void saveRefund(LedgerEntry refund, LedgerEntry originalDebit) {
+        markReversed(originalDebit);
+        saveEntry(refund);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<LedgerEntry> findInterbankDebit(String transactionNumber) {
+        return repository.findByTransactionNumber(transactionNumber).stream()
+                .map(LedgerEntryMapper::toDomain)
+                .filter(entry -> entry.getDirection() == LedgerDirection.WITHDRAWAL && entry.getReversalId() == null)
+                .findFirst();
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Optional<PostedLedgerPair> findPostedPair(String transactionNumber) {
         List<LedgerEntry> entries = repository.findByTransactionNumber(transactionNumber).stream()

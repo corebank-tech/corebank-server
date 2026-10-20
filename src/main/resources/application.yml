@@ -79,6 +79,26 @@ app:
       temp-signup-ttl: 30m
     email-verification:
       code-ttl: 3m
+  # 타행 전문 송신 (PH-33-②). 주소는 배포 단계마다 다르다(mock_external_server.md §5) — APP_INTERBANK_HOST·APP_INTERBANK_PORT
+  interbank:
+    host: 127.0.0.1
+    port: 9300
+    connect-timeout: 1s
+    # 처리 불명(TIMEOUT) 기준. 넘으면 실패로 확정하지 않고 조회거래로 결과를 확인한다
+    response-timeout: 3s
+    # 상대 은행 장애 때 타행만 빠르게 거부해 당행 이체 스레드를 지킨다
+    circuit-breaker:
+      failure-rate-threshold: 50
+      sliding-window-size: 20
+      minimum-number-of-calls: 10
+      wait-duration-in-open-state: 30s
+    # 처리 불명 건 조회거래. 응답 대기보다 충분히 지난 건만 묻는다 — 아직 응답을 기다리는 건에 3001을 받지 않게 한다
+    inquiry:
+      min-age: 30s
+      fixed-delay: 60s
+      # 스케줄러 스레드가 2개라(#604) 한 번에 묻는 건수를 묶어 다른 스케줄을 오래 막지 않는다
+      # 한 건 최대 4초(연결 1초 + 응답 3초) × 15건 = 1분
+      batch-size: 15
   interest:
     income-tax-rate: "0.14"
     local-tax-ratio: "0.10"
