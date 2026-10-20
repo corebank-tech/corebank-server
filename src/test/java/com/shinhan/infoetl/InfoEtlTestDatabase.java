@@ -36,7 +36,7 @@ public final class InfoEtlTestDatabase {
                     + " product_name VARCHAR(100) NOT NULL, product_group VARCHAR(12) NOT NULL)",
             "CREATE TABLE product_subscription (subscription_id BIGINT NOT NULL PRIMARY KEY,"
                     + " customer_id BIGINT NOT NULL, product_id BIGINT NOT NULL, account_id BIGINT NULL,"
-                    + " status VARCHAR(12) NOT NULL, subscription_trade_date DATE NULL)",
+                    + " status VARCHAR(12) NOT NULL, subscribed_at DATETIME(6) NULL, subscription_trade_date DATE NULL)",
             "CREATE TABLE holiday (holiday_date DATE NOT NULL PRIMARY KEY, holiday_name VARCHAR(50) NOT NULL)");
 
     private static final List<String> MART_TABLES =

@@ -114,6 +114,29 @@ public final class ReplicaFixtures {
         }
     }
 
+    // COB 경계처럼 가입 시각의 달력 날짜와 논리 영업일이 다른 가입을 만든다.
+    public static void insertSubscriptionAt(
+            long subscriptionId,
+            long customerId,
+            long productId,
+            Long accountId,
+            LocalDateTime subscribedAt,
+            LocalDate subscriptionTradeDate)
+            throws SQLException {
+        try (Connection connection = InfoEtlTestDatabase.replica();
+                PreparedStatement statement = connection.prepareStatement(
+                        "INSERT INTO product_subscription (subscription_id, customer_id, product_id, account_id,"
+                                + " status, subscribed_at, subscription_trade_date) VALUES (?, ?, ?, ?, 'SUCCESS', ?, ?)")) {
+            statement.setLong(1, subscriptionId);
+            statement.setLong(2, customerId);
+            statement.setLong(3, productId);
+            statement.setObject(4, accountId);
+            statement.setObject(5, subscribedAt);
+            statement.setObject(6, subscriptionTradeDate);
+            statement.executeUpdate();
+        }
+    }
+
     public static void insertClosedAccount(
             long accountId, long customerId, Long productId, String type, LocalDate closedTradeDate)
             throws SQLException {

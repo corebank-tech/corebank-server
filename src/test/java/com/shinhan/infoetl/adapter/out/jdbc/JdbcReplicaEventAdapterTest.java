@@ -60,6 +60,19 @@ class JdbcReplicaEventAdapterTest {
     }
 
     @Test
+    @DisplayName("COB 전환 뒤 마감 중에 들어온 가입은 달력 날짜가 아니라 논리 영업일의 SUBSCRIBE로 읽는다")
+    void readsSubscriptionAfterCobRolloverOnLogicalBusinessDay() throws SQLException {
+        // 10/19 23:40에 가입했지만 COB가 이미 영업일을 10/20으로 넘긴 뒤라 논리 영업일은 10/20이다.
+        ReplicaFixtures.insertAccount(201L, 21L, 100L, "TIME_DEPOSIT", "ACTIVE");
+        ReplicaFixtures.insertSubscriptionAt(10L, 21L, 100L, 201L, LocalDateTime.of(2026, 10, 19, 23, 40), D);
+
+        assertThat(adapter.readSubscriptionEvents(D))
+                .extracting(SubscriptionEventRow::accountId)
+                .containsExactly(201L);
+        assertThat(adapter.readSubscriptionEvents(D.minusDays(1))).isEmpty();
+    }
+
+    @Test
     @DisplayName("가입 논리 영업일이 다른 날이거나 비어 있으면 읽지 않는다")
     void ignoresSubscriptionOnOtherOrMissingDate() throws SQLException {
         subscribe(10L, 21L, 201L, "SUCCESS", D.minusDays(1));
