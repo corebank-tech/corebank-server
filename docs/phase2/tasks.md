@@ -995,7 +995,7 @@ public interface CobStep {
 - 현행 SSM 배포 스크립트(#440 반영분)를 이관한다.
 - HTTPS 리스너는 P2가 넘기는 ACM certificate ARN으로 만든다.
 - **출력값 → P2 (10/26 apply 직후):** ALB ARN · 리스너 ARN · ALB DNS name · ALB zone ID
-- 일정: 10/19~23 리허설 → 10/26 apply → P2 RDS 복원 → SG 교차 검증 → 10/27 DNS 전환. 기존 EC2는 11/18 발표까지 유지한다([D-29](README.md#d-29--1020--리드)).
+- 일정: 10/19~23 리허설 → 10/26 apply → P2 RDS 복원 → SG 교차 검증 → 10/27 DNS 전환. 기존 EC2는 11/6까지 유지한다.
 - **Plan B:** EC2를 유지하고 구축 진행률을 리포트한다.
 - **완료 기준:** 프라이빗 서브넷에서 인터넷에 직접 접근할 수 없다. 앱이 3-Tier에서 돈다.
 
