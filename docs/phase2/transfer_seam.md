@@ -91,6 +91,7 @@ class AvailableBalancePreCheck implements TransferPreCheck {
    **훅 B는 같은 트랜잭션의 DB 쓰기만 합니다.** 롤백이 되돌리는 건 DB뿐이라 외부 호출은 아웃박스(정책 8)로 넘깁니다. 훅 B 실패 시 즉시이체는 OTP가 이미 소비돼 재인증이 필요하고, 배치 이체는 정책 1처럼 ERROR 결과가 멱등키로 남습니다.
 5. **훅 B는 `order()`가 없습니다.** 등록자가 P3 하나뿐입니다. 둘 이상이 필요해지면 P4와 순서 규칙을 먼저 정합니다.
    **훅 B는 원장이 생기는 모든 자리에서 부릅니다**(PH-24). `TransferExecutionService`(즉시·예약·자동) 외에 `ProductSubscriptionDepositService`(상품가입 초입금)와 `TransferCorrectionService`(취소정정 `REVERSAL`·정상거래는 원거래 유형)가 원장 저장 직후 부릅니다. 원장을 새로 쓰는 경로를 만들면 훅 B 호출도 함께 넣어야 합니다 — GL 은 모르는 `txType` 을 예외로 거부합니다(`GLA9009`).
+   **예외: 타행이체(PH-33-②, #654)는 `execute()`를 지나지 않고 훅 B 도 부르지 않습니다.** 상대 계좌가 당행에 없어 원장이 1행이고 분개가 예수금↔미결제타점권이라, 이자처럼 `InterbankTransferService` 가 같은 트랜잭션에서 `gl.api` 를 직접 부릅니다([분개 패턴표](gl_journal_patterns.md) §3-5). 훅 A(`TransferPreCheck`)는 타행도 지납니다.
 6. **tradeDate는 채번 직전에 한 번만 구해 `created`(transfer)에 싣습니다(#516).** 원장(`ledger_entry.trade_date`, #472)·훅 B 컨텍스트는 그 transfer에서 꺼내 씁니다. 락 이후(`executedAt` 캡처 줄)에서 구하면 락 이전에 실패한 ERROR 행이 거래일을 받지 못합니다. 한 이체 안에서 두 번 구하면 마감 경계에서 원장과 전표의 거래일이 갈릴 수 있습니다. 상품가입 입금·입금 계약·정정도 메서드마다 한 번만 구하고, 정정 거래는 원거래일이 아니라 정정한 날의 영업일입니다.
 7. **이벤트는 활성 트랜잭션 안에서 발행합니다.** `@TransactionalEventListener`는 트랜잭션 밖 발행을 받지 않습니다. `AFTER_COMMIT` 리스너는 두지 않습니다(README §3-3).
 8. **아웃박스 리스너는 `BEFORE_COMMIT` + `JdbcTemplate` INSERT입니다.** INSERT가 실패하면 이체도 롤백됩니다. 의도된 동작입니다.

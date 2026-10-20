@@ -538,6 +538,94 @@ class TransferTest {
     }
 
     @Nested
+    @DisplayName("타행 처리 불명 확정 (settleApproved · settleFailed)")
+    class SettleInterbankTest {
+
+        private final LocalDateTime createdAt = LocalDateTime.of(2026, 10, 23, 10, 30, 15);
+
+        private Transfer timedOutInterbank() {
+            Transfer transfer = Transfer.createInterbank(
+                    "20261023WB0000000123",
+                    101L,
+                    "004",
+                    "1234567890123",
+                    50000L,
+                    0L,
+                    TransferChannel.WB,
+                    null,
+                    "홍길동",
+                    createdAt,
+                    TRADE_DATE);
+            transfer.timeout();
+            return transfer;
+        }
+
+        @Test
+        @DisplayName("TIMEOUT 타행 건을 성공으로 확정하면 예금주·출금 후 잔액·확정 시각이 채워진다")
+        void settleApproved_fillsPayeeAndBalance() {
+            Transfer transfer = timedOutInterbank();
+            LocalDateTime settledAt = createdAt.plusSeconds(1);
+
+            transfer.settleApproved("김민수", 950000L, settledAt);
+
+            assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(transfer.getPayeeName()).isEqualTo("김민수");
+            assertThat(transfer.getWithdrawalBalanceAfter()).isEqualTo(950000L);
+            assertThat(transfer.getTransferredAt()).isEqualTo(settledAt);
+            assertThat(transfer.isUnsettledInterbank()).isFalse();
+        }
+
+        @Test
+        @DisplayName("TIMEOUT 타행 건을 실패로 확정하면 예금주 없이 오류코드가 남는다")
+        void settleFailed_keepsPayeeEmpty() {
+            Transfer transfer = timedOutInterbank();
+
+            transfer.settleFailed("TRF0201", "입금계좌를 찾을 수 없습니다.");
+
+            assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(transfer.getErrorCode()).isEqualTo("TRF0201");
+            assertThat(transfer.getPayeeName()).isNull();
+        }
+
+        @Test
+        @DisplayName("이미 확정된 건은 다시 확정할 수 없다 — 조회거래가 두 번 와도 상태가 바뀌지 않는다")
+        void settleTwice_rejected() {
+            Transfer transfer = timedOutInterbank();
+            transfer.settleApproved("김민수", 950000L, createdAt.plusSeconds(1));
+
+            assertThatThrownBy(() -> transfer.settleFailed("TRF0308", "상대 은행에서 이체를 처리하지 못했습니다."))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
+            assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
+        }
+
+        @Test
+        @DisplayName("성공으로 확정된 타행 건도 정정 체인으로 무효화할 수 없다 — 받은 계좌가 당행에 없다")
+        void settledInterbank_notInvalidatable() {
+            Transfer transfer = timedOutInterbank();
+            transfer.settleApproved("김민수", 950000L, createdAt.plusSeconds(1));
+
+            assertThatThrownBy(() -> transfer.invalidate(createdAt.plusDays(1)))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+        }
+
+        @Test
+        @DisplayName("당행 TIMEOUT 건은 타행 확정 대상이 아니다")
+        void domesticTimeout_notSettleable() {
+            Transfer transfer = newProcessingTransfer();
+            transfer.timeout();
+
+            assertThatThrownBy(() -> transfer.settleApproved("성춘향", 0L, createdAt))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
+        }
+    }
+
+    @Nested
     @DisplayName("complete 이체 완료 메서드")
     class CompleteTest {
 
