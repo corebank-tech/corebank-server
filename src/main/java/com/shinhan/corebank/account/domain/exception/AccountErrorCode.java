@@ -11,6 +11,8 @@ public enum AccountErrorCode implements ErrorCode {
     WITHDRAWAL_ACCOUNT_UNREGISTRATION_RESTRICTED("ACC0302", 409, "예약이체 또는 자동이체가 등록된 출금계좌는 삭제할 수 없습니다."),
     ACCOUNT_NUMBER_SEQUENCE_EXHAUSTED("ACC0303", 409, "발급 가능한 계좌번호가 모두 사용되었습니다."),
     DUPLICATE_EXISTING_ACCOUNT("ACC0304", 409, "이미 등록된 기존 은행 계좌입니다."),
+    MATURITY_UNSUPPORTED_ACCOUNT_TYPE("ACC0305", 409, "만기 전이 대상이 아닌 계좌입니다."),
+    MATURITY_DATE_NOT_REACHED("ACC0306", 409, "만기일이 도래하지 않았습니다."),
     ACCOUNT_NUMBER_SEQUENCE_NOT_FOUND("ACC9001", 500, "계좌번호 발급 처리 중 오류가 발생했습니다.");
 
     private final String code;

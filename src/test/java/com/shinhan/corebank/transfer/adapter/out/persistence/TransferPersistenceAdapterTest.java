@@ -19,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class TransferPersistenceAdapterTest extends IntegrationTestSupport {
 
+    private static final LocalDate TRADE_DATE = LocalDate.of(2026, 8, 12);
+
     @Autowired
     private TransferPersistenceAdapter adapter;
 
@@ -52,7 +54,8 @@ class TransferPersistenceAdapterTest extends IntegrationTestSupport {
                 null,
                 "이체출금",
                 "이체입금",
-                LocalDateTime.now());
+                LocalDateTime.now(),
+                TRADE_DATE);
 
         // when
         Transfer saved = adapter.save(transfer);
@@ -68,6 +71,8 @@ class TransferPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(found.getTransferId()).isEqualTo(saved.getTransferId());
         assertThat(found.getWithdrawalAccountId()).isEqualTo(101L);
         assertThat(found.getDepositAccountId()).isEqualTo(202L);
+        assertThat(found.getTradeDate()).isEqualTo(TRADE_DATE);
+        assertThat(TransferMapper.toDomain(found).getTradeDate()).isEqualTo(TRADE_DATE);
     }
 
     @Test
@@ -90,7 +95,8 @@ class TransferPersistenceAdapterTest extends IntegrationTestSupport {
                 executionDate,
                 "이체출금",
                 "이체입금",
-                LocalDateTime.now());
+                LocalDateTime.now(),
+                TRADE_DATE);
 
         // when
         Transfer saved = adapter.save(transfer);
@@ -123,7 +129,8 @@ class TransferPersistenceAdapterTest extends IntegrationTestSupport {
                 null,
                 "이체출금",
                 "이체입금",
-                LocalDateTime.now());
+                LocalDateTime.now(),
+                TRADE_DATE);
         Transfer saved = adapter.save(transfer);
         saved.complete(90000L, LocalDateTime.now());
 

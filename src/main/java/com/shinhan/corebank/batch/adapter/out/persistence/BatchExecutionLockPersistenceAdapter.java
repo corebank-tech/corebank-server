@@ -52,9 +52,11 @@ public class BatchExecutionLockPersistenceAdapter implements BatchExecutionLockP
 
     @Override
     public boolean isRunning(String jobName) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        // tryAcquire와 같은 기준 - 크래시로 release()가 누락된 오래된 락은 실행 중으로 보지 않는다.
         return batchExecutionLockJpaRepository
                 .findById(jobName)
-                .map(BatchExecutionLockJpaEntity::isCurrentlyRunning)
+                .map(lock -> lock.isCurrentlyRunning() && !lock.isStale(now, STALE_THRESHOLD))
                 .orElse(false);
     }
 }
