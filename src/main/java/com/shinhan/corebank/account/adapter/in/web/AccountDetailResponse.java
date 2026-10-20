@@ -19,6 +19,8 @@ public record AccountDetailResponse(
         @Schema(description = "출금가능액(원). ACTIVE 계좌는 원장잔액에서 보류액을 차감하며 그 외 상태는 0", example = "70000")
                 long availableBalance,
         @Schema(description = "계좌 개설일", example = "2025-03-10") LocalDate openedDate,
+        @Schema(description = "계약 만기일. 만기일이 없는 계좌는 null", example = "2026-10-26", nullable = true)
+                LocalDate maturityDate,
         @Schema(description = "계좌 상태", example = "ACTIVE") AccountStatus status,
         @Schema(description = "계좌비밀번호 연속 오류 횟수", example = "2") int passwordFailureCount,
         @Schema(description = "계좌비밀번호 잠금 여부", example = "false") boolean passwordLocked) {
@@ -35,6 +37,7 @@ public record AccountDetailResponse(
                 result.ledgerBalance(),
                 result.availableBalance(),
                 result.openedDate(),
+                result.maturityDate(),
                 result.status(),
                 result.passwordFailureCount(),
                 result.passwordLocked());
