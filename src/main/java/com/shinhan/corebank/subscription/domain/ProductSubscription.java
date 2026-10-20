@@ -30,4 +30,5 @@ public class ProductSubscription {
     private LocalDate openedDate;
     private LocalDate maturityDate;
     private LocalDateTime subscribedAt;
+    private LocalDate subscriptionTradeDate;
 }
