@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.batch.adapter.in.scheduler.CobScheduler;
 import com.shinhan.corebank.batch.api.BatchExecutionHistoryPort;
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import com.shinhan.corebank.batch.api.CobStep;
@@ -21,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 
 // 락만 실제 행으로 검증한다(#637) — 실제 영업일·스텝은 공유 테스트 DB의 영업일을 넘기므로 대역으로 둔다.
 class CobRunnerServiceLockIntegrationTest extends IntegrationTestSupport {
@@ -33,6 +35,9 @@ class CobRunnerServiceLockIntegrationTest extends IntegrationTestSupport {
 
     @Autowired
     Clock clock;
+
+    @Autowired
+    ApplicationContext applicationContext;
 
     @Test
     @DisplayName("Flyway가 넣은 COB 락 행으로 락을 잡은 채 스텝을 실행하고, 끝나면 락을 반납한다")
@@ -67,5 +72,11 @@ class CobRunnerServiceLockIntegrationTest extends IntegrationTestSupport {
         verify(step).run(COB_DATE);
         assertThat(lockHeldDuringStep).isTrue();
         assertThat(batchExecutionLockPort.isRunning(JOB_NAME)).isFalse();
+    }
+
+    @Test
+    @DisplayName("test 프로필에서는 23:30 COB 스케줄러를 등록하지 않는다")
+    void testProfile_doesNotRegisterCobScheduler() {
+        assertThat(applicationContext.getBeansOfType(CobScheduler.class)).isEmpty();
     }
 }
