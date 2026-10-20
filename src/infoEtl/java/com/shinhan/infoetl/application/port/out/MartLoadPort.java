@@ -8,6 +8,8 @@ import java.util.List;
 
 public interface MartLoadPort {
 
+    boolean isCompleted(LocalDate baseDate);
+
     // staleAfter보다 오래 RUNNING인 기록을 FAILED로 정리하고 새 RUNNING 기록을 남긴다. 이 호출은 뒤 단계가 실패해도 남는다.
     long start(LocalDate baseDate, Duration staleAfter);
 

@@ -34,6 +34,11 @@ public final class JdbcMartLoadAdapter implements MartLoadPort {
     }
 
     @Override
+    public boolean isCompleted(LocalDate baseDate) {
+        return inTransaction("마트 적재 이력 조회에 실패했습니다", mart -> repository.isCompleted(mart, baseDate));
+    }
+
+    @Override
     public long start(LocalDate baseDate, Duration staleAfter) {
         return inTransaction("마트 적재 시작 기록에 실패했습니다", mart -> {
             repository.failStaleRunning(

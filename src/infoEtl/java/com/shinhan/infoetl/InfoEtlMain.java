@@ -15,6 +15,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
+import java.util.Arrays;
 import java.util.Map;
 
 // 실행 진입점이자 조립 지점. 어댑터와 서비스를 연결하는 일만 한다.
@@ -26,6 +27,7 @@ public final class InfoEtlMain {
 
     private static final System.Logger LOG = System.getLogger(InfoEtlMain.class.getName());
     private static final String BASE_DATE_ARGUMENT = "--base-date=";
+    private static final String REBUILD_ARGUMENT = "--rebuild";
 
     private InfoEtlMain() {}
 
@@ -56,7 +58,7 @@ public final class InfoEtlMain {
                         Clock.system(ZoneId.of("Asia/Seoul"))),
                 pseudonymizer);
         try {
-            LoadResult result = useCase.load(baseDate);
+            LoadResult result = useCase.load(baseDate, Arrays.asList(args).contains(REBUILD_ARGUMENT));
             LOG.log(
                     System.Logger.Level.INFO,
                     "적재 완료 - baseDate={0}, rows={1}, total={2}, asOf={3}, loadBatchId={4}",

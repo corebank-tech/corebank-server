@@ -38,8 +38,11 @@ public final class DailyLoadService implements DailyLoadUseCase {
     }
 
     @Override
-    public LoadResult load(LocalDate baseDate) {
+    public LoadResult load(LocalDate baseDate, boolean rebuild) {
         requireBusinessDay(baseDate); // 잔액 행은 영업일에만 있다. 휴일은 적재 기록도 남기지 않고 거부한다.
+        if (!rebuild && martLoadPort.isCompleted(baseDate)) {
+            throw new IllegalArgumentException("이미 적재가 끝난 기준일입니다. 다시 만들려면 --rebuild를 함께 주세요: " + baseDate);
+        }
         long loadBatchId = martLoadPort.start(baseDate, STALE_RUNNING_AFTER); // T1: 시작 기록은 뒤에서 실패해도 남아야 한다.
         try {
             List<BalanceRow> rows = replicaPort.readBalances(baseDate);

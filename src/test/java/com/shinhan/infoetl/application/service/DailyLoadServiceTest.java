@@ -146,6 +146,28 @@ class DailyLoadServiceTest {
     }
 
     @Test
+    @DisplayName("이미 COMPLETED인 기준일은 rebuild 없이는 거부하고 적재 기록도 남기지 않는다")
+    void completedBaseDateRequiresRebuild() {
+        martPort.completedBeforeLoad = Set.of(D);
+        DailyLoadService service = new DailyLoadService(new FakeReplica(oneRow()), calendar, martPort, pseudonymizer);
+
+        assertThatThrownBy(() -> service.load(D)).isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(martPort.startedBaseDate).isNull();
+    }
+
+    @Test
+    @DisplayName("rebuild를 주면 COMPLETED인 기준일도 다시 적재한다")
+    void rebuildReloadsCompletedBaseDate() {
+        martPort.completedBeforeLoad = Set.of(D);
+        DailyLoadService service = new DailyLoadService(new FakeReplica(oneRow()), calendar, martPort, pseudonymizer);
+
+        service.load(D, true);
+
+        assertThat(martPort.startedBaseDate).isEqualTo(D);
+    }
+
+    @Test
     @DisplayName("T2에서 완료된 날짜 범위의 휴일로 asOf를 계산해 결과에 담는다")
     void computesAsOfFromCompletedDatesInsideTheLoad() {
         martPort.completedBeforeLoad = Set.of(LocalDate.of(2026, 10, 15), LocalDate.of(2026, 10, 16));
@@ -192,6 +214,11 @@ class DailyLoadServiceTest {
         RuntimeException publishFailure;
         RuntimeException failFailure;
         Set<LocalDate> completedBeforeLoad = Set.of();
+
+        @Override
+        public boolean isCompleted(LocalDate baseDate) {
+            return completedBeforeLoad.contains(baseDate);
+        }
 
         @Override
         public long start(LocalDate baseDate, Duration staleAfter) {

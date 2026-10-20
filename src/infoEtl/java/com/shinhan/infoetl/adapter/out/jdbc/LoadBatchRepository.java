@@ -60,6 +60,17 @@ final class LoadBatchRepository {
         }
     }
 
+    public boolean isCompleted(Connection mart, LocalDate baseDate) throws SQLException {
+        try (PreparedStatement statement =
+                mart.prepareStatement("SELECT 1 FROM mart_load_batch WHERE base_date = ? AND status = ? LIMIT 1")) {
+            statement.setObject(1, baseDate);
+            statement.setString(2, LoadStatus.COMPLETED.name());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
+            }
+        }
+    }
+
     // 상태와 무관하게 마트에 처음 기록된 기준일. asOf 연속성의 시작점이다.
     public LocalDate firstBaseDate(Connection mart) throws SQLException {
         try (PreparedStatement statement = mart.prepareStatement("SELECT MIN(base_date) FROM mart_load_batch");
