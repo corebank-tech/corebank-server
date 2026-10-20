@@ -13,14 +13,6 @@ import java.util.List;
 
 public final class JdbcReplicaBalanceAdapter implements ReplicaBalancePort {
 
-    // 거래일이 NULL이면 발생일을 영업일로 올린다(결정 3). 주말이거나 holiday에 있는 날은 건너뛰며 연휴는 31일을 넘지 않는다고 본다.
-    private static String tradeDate(String alias) {
-        String occurredDate = "DATE(" + alias + ".occurred_at)";
-        return "COALESCE(" + alias + ".trade_date, (SELECT MIN(" + occurredDate + " + INTERVAL o.n DAY) FROM offsets o"
-                + " WHERE WEEKDAY(" + occurredDate + " + INTERVAL o.n DAY) < 5"
-                + " AND " + occurredDate + " + INTERVAL o.n DAY NOT IN (SELECT holiday_date FROM holiday)))";
-    }
-
     // P3 설계 §3-3 잔액 쿼리. ? 두 개는 모두 기준일 D다. 발생일 상한 없이 거래일이 D 이하인 원장을 모두 본다.
     private static final String SQL =
             """
@@ -48,7 +40,7 @@ public final class JdbcReplicaBalanceAdapter implements ReplicaBalancePort {
             WHERE l.rn = 1
               AND (c.close_date IS NULL OR c.close_date >= ?)
             """
-                    .formatted(tradeDate("x"), tradeDate("l"));
+                    .formatted(TradeDateSql.of("x"), TradeDateSql.of("l"));
 
     private final JdbcConnectionFactory connections;
 

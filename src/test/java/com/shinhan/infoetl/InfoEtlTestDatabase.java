@@ -30,12 +30,13 @@ public final class InfoEtlTestDatabase {
                     + " occurred_at DATETIME(6) NOT NULL, trade_date DATE NULL,"
                     + " PRIMARY KEY (ledger_entry_id, occurred_at))",
             "CREATE TABLE account (account_id BIGINT NOT NULL PRIMARY KEY, customer_id BIGINT NOT NULL,"
-                    + " product_id BIGINT NULL, account_type VARCHAR(24) NOT NULL, status VARCHAR(12) NOT NULL)",
+                    + " product_id BIGINT NULL, account_type VARCHAR(24) NOT NULL, status VARCHAR(12) NOT NULL,"
+                    + " closed_trade_date DATE NULL)",
             "CREATE TABLE product (product_id BIGINT NOT NULL PRIMARY KEY, product_code VARCHAR(20) NOT NULL,"
                     + " product_name VARCHAR(100) NOT NULL, product_group VARCHAR(12) NOT NULL)",
             "CREATE TABLE product_subscription (subscription_id BIGINT NOT NULL PRIMARY KEY,"
                     + " customer_id BIGINT NOT NULL, product_id BIGINT NOT NULL, account_id BIGINT NULL,"
-                    + " status VARCHAR(12) NOT NULL, transaction_number CHAR(20) NULL)",
+                    + " status VARCHAR(12) NOT NULL, subscription_trade_date DATE NULL)",
             "CREATE TABLE holiday (holiday_date DATE NOT NULL PRIMARY KEY, holiday_name VARCHAR(50) NOT NULL)");
 
     private static final List<String> MART_TABLES =

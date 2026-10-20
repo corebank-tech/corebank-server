@@ -181,10 +181,8 @@ class DailyLoadIntegrationTest {
     @Test
     @DisplayName("가입과 해지 이벤트가 잔액과 함께 가명 키로 마트에 들어간다")
     void loadsEventsTogetherWithBalances() throws SQLException {
-        ReplicaFixtures.insertSubscription(10L, 12L, 100L, 2L, "SUCCESS", "TX00000000000000010");
-        ReplicaFixtures.insertSubscriptionDepositLedger(
-                10L, 2L, "TX00000000000000010", LocalDateTime.of(2026, 10, 20, 9, 5), D);
-        ReplicaFixtures.insertAccount(300L, 31L, 100L, "TIME_DEPOSIT", "CLOSED");
+        ReplicaFixtures.insertSubscription(10L, 12L, 100L, 2L, "SUCCESS", D);
+        ReplicaFixtures.insertClosedAccount(300L, 31L, 100L, "TIME_DEPOSIT", D);
         ReplicaFixtures.insertLedgerDetailed(
                 30L,
                 300L,
@@ -208,6 +206,35 @@ class DailyLoadIntegrationTest {
             assertThat(resultSet.next()).isTrue();
             assertThat(resultSet.getString("event_type")).isEqualTo("SUBSCRIBE");
             assertThat(resultSet.getString("account_key")).isEqualTo(pseudonymizer.accountKey(2L));
+        }
+    }
+
+    @Test
+    @DisplayName("해지 거래일이 원장과 다르면 적재가 FAILED로 끝나고 이전 마트 데이터는 그대로다")
+    void closeTradeDateMismatchFailsAndKeepsPreviousLoad() throws SQLException {
+        LoadResult first = service.load(D);
+        ReplicaFixtures.insertClosedAccount(300L, 31L, 100L, "TIME_DEPOSIT", D);
+        ReplicaFixtures.insertLedgerDetailed(
+                30L,
+                300L,
+                "TX00000000000000030",
+                "WITHDRAWAL",
+                0L,
+                "TERMINATION",
+                LocalDateTime.of(2026, 10, 21, 9, 6),
+                D.plusDays(1));
+
+        assertThatThrownBy(() -> service.load(D, true))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("원천 계약 위반");
+
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            assertThat(statusOf(mart, first.loadBatchId())).isEqualTo("COMPLETED");
+            assertThat(writer.countRows(mart, D)).isEqualTo(2L);
+            try (ResultSet row = batch(mart, latestBatchId(mart))) {
+                assertThat(row.getString("status")).isEqualTo("FAILED");
+                assertThat(row.getString("failure_reason")).contains("원천 계약 위반");
+            }
         }
     }
 

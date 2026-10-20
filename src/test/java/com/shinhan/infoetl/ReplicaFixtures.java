@@ -64,20 +64,6 @@ public final class ReplicaFixtures {
             statement.executeUpdate();
         }
     }
-    // 가입 초입금 원장 기표(상품 계좌 쪽 입금 행)를 거래번호와 함께 넣는다.
-    public static void insertSubscriptionDepositLedger(
-            long ledgerEntryId, long accountId, String transactionNumber, LocalDateTime occurredAt, LocalDate tradeDate)
-            throws SQLException {
-        insertLedgerDetailed(
-                ledgerEntryId,
-                accountId,
-                transactionNumber,
-                "DEPOSIT",
-                1_000L,
-                "PRODUCT_SUBSCRIPTION",
-                occurredAt,
-                tradeDate);
-    }
 
     public static void insertLedgerDetailed(
             long ledgerEntryId,
@@ -112,18 +98,34 @@ public final class ReplicaFixtures {
             long productId,
             Long accountId,
             String status,
-            String transactionNumber)
+            LocalDate subscriptionTradeDate)
             throws SQLException {
         try (Connection connection = InfoEtlTestDatabase.replica();
                 PreparedStatement statement = connection.prepareStatement(
                         "INSERT INTO product_subscription (subscription_id, customer_id, product_id, account_id,"
-                                + " status, transaction_number) VALUES (?, ?, ?, ?, ?, ?)")) {
+                                + " status, subscription_trade_date) VALUES (?, ?, ?, ?, ?, ?)")) {
             statement.setLong(1, subscriptionId);
             statement.setLong(2, customerId);
             statement.setLong(3, productId);
             statement.setObject(4, accountId);
             statement.setString(5, status);
-            statement.setString(6, transactionNumber);
+            statement.setObject(6, subscriptionTradeDate);
+            statement.executeUpdate();
+        }
+    }
+
+    public static void insertClosedAccount(
+            long accountId, long customerId, Long productId, String type, LocalDate closedTradeDate)
+            throws SQLException {
+        try (Connection connection = InfoEtlTestDatabase.replica();
+                PreparedStatement statement = connection.prepareStatement(
+                        "INSERT INTO account (account_id, customer_id, product_id, account_type, status,"
+                                + " closed_trade_date) VALUES (?, ?, ?, ?, 'CLOSED', ?)")) {
+            statement.setLong(1, accountId);
+            statement.setLong(2, customerId);
+            statement.setObject(3, productId);
+            statement.setString(4, type);
+            statement.setObject(5, closedTradeDate);
             statement.executeUpdate();
         }
     }
