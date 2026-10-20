@@ -85,18 +85,22 @@ class JdbcReplicaBalanceAdapterTest {
     }
 
     @Test
-    @DisplayName("발생 시각이 기준일 7일 뒤 이후인 기표는 읽지 않는다")
-    void ignoresEntriesBeyondSevenDayWindow() throws SQLException {
+    @DisplayName("발생일이 기준일보다 7일 넘게 늦어도 거래일이 기준일 이하면 잔액에 반영한다")
+    void includesEntriesWhoseOccurredAtIsFarBeyondBaseDate() throws SQLException {
         insertAccount(7L, 17L, null, "DEMAND_DEPOSIT", "ACTIVE");
         insertLedger(50L, 7L, 10L, LocalDateTime.of(2026, 10, 19, 10, 0), D.minusDays(1));
-        insertLedger(51L, 7L, 99L, LocalDateTime.of(2026, 10, 27, 0, 0), D);
+        insertLedger(51L, 7L, 99L, LocalDateTime.of(2026, 10, 30, 0, 0), D);
         insertAccount(8L, 18L, null, "DEMAND_DEPOSIT", "ACTIVE");
         insertLedger(52L, 8L, 77L, LocalDateTime.of(2026, 10, 26, 23, 0), D);
+        insertAccount(9L, 19L, null, "DEMAND_DEPOSIT", "ACTIVE");
+        insertLedger(53L, 9L, 5L, LocalDateTime.of(2026, 10, 19, 10, 0), D.minusDays(1));
+        insertLedger(54L, 9L, 6L, LocalDateTime.of(2026, 10, 30, 0, 0), D.plusDays(1));
 
         Map<Long, BalanceRow> rows = read();
 
-        assertThat(rows.get(7L).balance()).isEqualTo(10L);
+        assertThat(rows.get(7L).balance()).isEqualTo(99L);
         assertThat(rows.get(8L).balance()).isEqualTo(77L);
+        assertThat(rows.get(9L).balance()).isEqualTo(5L);
     }
 
     @Test
@@ -148,8 +152,8 @@ class JdbcReplicaBalanceAdapterTest {
     }
 
     @Test
-    @DisplayName("해지 기표가 7일 창 밖이어도 기준일에 열려 있던 계좌는 그날 잔액으로 포함한다")
-    void includesAccountClosedBeyondSevenDayWindow() throws SQLException {
+    @DisplayName("해지 기표가 기준일보다 한참 뒤여도 기준일에 열려 있던 계좌는 그날 잔액으로 포함한다")
+    void includesAccountClosedLongAfterBaseDate() throws SQLException {
         insertAccount(15L, 25L, null, "DEMAND_DEPOSIT", "CLOSED");
         insertLedger(100L, 15L, 1_000L, LocalDateTime.of(2026, 10, 10, 10, 0), D.minusDays(10));
         insertLedger(101L, 15L, 0L, LocalDateTime.of(2026, 11, 19, 10, 0), D.plusDays(30));
@@ -158,8 +162,8 @@ class JdbcReplicaBalanceAdapterTest {
     }
 
     @Test
-    @DisplayName("해지 기표가 7일 창 밖이고 해지일이 기준일 이전이면 포함하지 않는다")
-    void excludesAccountClosedBeforeBaseDateEvenWhenOtherEntriesAreOutsideWindow() throws SQLException {
+    @DisplayName("해지 기표가 기준일보다 한참 뒤이고 해지일이 기준일 이전이면 포함하지 않는다")
+    void excludesAccountClosedBeforeBaseDateEvenWhenOtherEntriesComeLater() throws SQLException {
         insertAccount(16L, 26L, null, "DEMAND_DEPOSIT", "CLOSED");
         insertLedger(110L, 16L, 500L, LocalDateTime.of(2026, 10, 1, 10, 0), D.minusDays(19));
         insertLedger(111L, 16L, 0L, LocalDateTime.of(2026, 10, 5, 10, 0), D.minusDays(15));
