@@ -62,11 +62,12 @@ public class LoginService implements LoginUseCase {
             throw handlePasswordMismatch(loginCustomer, command.requestIp(), command.requiredRole());
         }
 
-        // 역할이 맞지 않아도 비밀번호가 틀렸을 때와 같은 응답을 준다.
-        // 관리자 계정의 존재가 드러나지 않게 하려는 것이다(admin_auth.md ③ · REQ-NFR-017).
-        // 실패 횟수는 올리지 않는다 — 비밀번호는 맞았고, 고객이 경로를 잘못 고른 것만으로
+        // 두 경로가 서로를 거절한다 — 고객 계정은 관리자 경로를, 관리자 계정은 고객 경로를 못 쓴다.
+        // 역할이 맞지 않아도 비밀번호가 틀렸을 때와 같은 응답을 주어 관리자 계정의 존재가
+        // 드러나지 않게 한다(admin_auth.md ③ · REQ-NFR-017).
+        // 실패 횟수는 올리지 않는다 — 비밀번호는 맞았고, 경로를 잘못 고른 것만으로
         // 계정이 잠기면 안 된다. 존재하지 않는 아이디와 같은 「최초 실패」 모양만 만든다.
-        if (command.requiredRole() != null && loginCustomer.getRole() != command.requiredRole()) {
+        if (loginCustomer.getRole() != command.requiredRole()) {
             recordFailureAudit(
                     loginCustomer.getCustomerId(),
                     command.requestIp(),

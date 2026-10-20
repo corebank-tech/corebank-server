@@ -2,6 +2,7 @@ package com.shinhan.corebank.auth.adapter.in.web;
 
 import com.shinhan.corebank.adapter.in.web.exception.ErrorResponse;
 import com.shinhan.corebank.common.response.ApiResponse;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -46,8 +47,9 @@ public class LoginController {
             @Valid @RequestBody LoginRequest loginRequest,
             HttpServletRequest servletRequest,
             HttpServletResponse servletResponse) {
-        // 고객 로그인은 역할을 가리지 않는다.
-        return ApiResponse.success(
-                loginSessionIssuer.authenticateAndIssueSession(loginRequest, null, servletRequest, servletResponse));
+        // 관리자는 이 문으로 들어오지 못한다. 역할을 가리지 않으면 /admin/auth/login 의 응답 통일이
+        // 의미를 잃는다 — 이 경로로 로그인해 GET /customers/me 를 보면 관리자인지 알 수 있기 때문이다.
+        return ApiResponse.success(loginSessionIssuer.authenticateAndIssueSession(
+                loginRequest, CustomerRole.CUSTOMER, servletRequest, servletResponse));
     }
 }

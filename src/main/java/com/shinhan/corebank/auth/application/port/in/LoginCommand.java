@@ -4,7 +4,8 @@ import com.shinhan.corebank.customer.api.CustomerRole;
 import java.util.Objects;
 
 // 로그인 검증에 필요한 아이디, 비밀번호와 요청 IP.
-// requiredRole 은 그 경로가 요구하는 계정 구분이다 — null 이면 역할을 가리지 않는다(고객 로그인).
+// requiredRole 은 그 경로가 요구하는 계정 구분이다. 고객 로그인은 CUSTOMER, 관리자 로그인은 ADMIN 이고,
+// 역할을 가리지 않는 경로는 두지 않는다 — 그러면 관리자가 고객 문으로 들어와 경로 분리가 무의미해진다.
 public record LoginCommand(String userId, String password, String requestIp, CustomerRole requiredRole) {
 
     private static final int MAX_REQUEST_IP_LENGTH = 45;
@@ -13,6 +14,7 @@ public record LoginCommand(String userId, String password, String requestIp, Cus
         Objects.requireNonNull(userId, "userId must not be null");
         Objects.requireNonNull(password, "password must not be null");
         Objects.requireNonNull(requestIp, "requestIp must not be null");
+        Objects.requireNonNull(requiredRole, "requiredRole must not be null");
 
         if (requestIp.isBlank()) {
             throw new IllegalArgumentException("requestIp must not be blank");

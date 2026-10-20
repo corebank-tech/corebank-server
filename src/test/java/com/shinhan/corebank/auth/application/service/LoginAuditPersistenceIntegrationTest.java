@@ -55,7 +55,8 @@ class LoginAuditPersistenceIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("로그인 성공은 민감정보 없이 LOGIN 성공 감사로 저장된다")
     void persistsSuccessfulLoginAudit() {
-        LoginResult result = loginUseCase.login(new LoginCommand(USER_ID, RAW_PASSWORD, REQUEST_IP, null));
+        LoginResult result =
+                loginUseCase.login(new LoginCommand(USER_ID, RAW_PASSWORD, REQUEST_IP, CustomerRole.CUSTOMER));
 
         assertThat(result.customerId()).isEqualTo(customerId);
 
@@ -64,7 +65,7 @@ class LoginAuditPersistenceIntegrationTest extends IntegrationTestSupport {
         assertThat(audit.eventType()).isEqualTo("LOGIN");
         assertThat(audit.result()).isEqualTo("SUCCESS");
         assertThat(audit.reason()).isEqualTo("SUCCESS");
-        assertThat(audit.requiredRole()).isEqualTo("ANY");
+        assertThat(audit.requiredRole()).isEqualTo("CUSTOMER");
         assertSensitiveDataNotRecorded(audit.detail());
     }
 
@@ -73,7 +74,7 @@ class LoginAuditPersistenceIntegrationTest extends IntegrationTestSupport {
     @DisplayName("로그인 실패는 민감정보 없이 LOGIN 실패 감사로 저장된다")
     void persistsFailedLoginAudit() {
         LoginFailedException exception = catchThrowableOfType(
-                () -> loginUseCase.login(new LoginCommand(USER_ID, WRONG_PASSWORD, REQUEST_IP, null)),
+                () -> loginUseCase.login(new LoginCommand(USER_ID, WRONG_PASSWORD, REQUEST_IP, CustomerRole.CUSTOMER)),
                 LoginFailedException.class);
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);
@@ -83,7 +84,7 @@ class LoginAuditPersistenceIntegrationTest extends IntegrationTestSupport {
         assertThat(audit.eventType()).isEqualTo("LOGIN");
         assertThat(audit.result()).isEqualTo("FAILURE");
         assertThat(audit.reason()).isEqualTo("INVALID_CREDENTIALS");
-        assertThat(audit.requiredRole()).isEqualTo("ANY");
+        assertThat(audit.requiredRole()).isEqualTo("CUSTOMER");
         assertSensitiveDataNotRecorded(audit.detail());
     }
 
