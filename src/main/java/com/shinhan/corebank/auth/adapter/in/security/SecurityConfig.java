@@ -31,6 +31,7 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.session.HttpSessionEventPublisher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -39,6 +40,36 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @EnableWebSecurity
 @EnableConfigurationProperties({CorsProperties.class, CsrfProperties.class, AdminSessionProperties.class})
 public class SecurityConfig {
+
+    // 공개이면서 CSRF 검사까지 빼는 경로. 공개여선 안 되는 CSRF 예외는 별도 목록을 둔다.
+    private static final RequestMatcher[] PUBLIC_CSRF_EXCLUDED = {
+        pathPattern(HttpMethod.POST, "/auth/login"),
+        pathPattern(HttpMethod.POST, "/admin/auth/login"),
+        pathPattern(HttpMethod.POST, "/auth/find-id"),
+        pathPattern(HttpMethod.POST, "/auth/terms/check"),
+        pathPattern(HttpMethod.POST, "/auth/verify-account"),
+        pathPattern(HttpMethod.POST, "/auth/check-id"),
+        pathPattern(HttpMethod.POST, "/auth/signup/validate"),
+        pathPattern(HttpMethod.POST, "/auth/signup/complete"),
+        pathPattern(HttpMethod.POST, "/auth/email-verifications"),
+        pathPattern(HttpMethod.POST, "/auth/email-verifications/{emailVerificationId}/verify"),
+        pathPattern(HttpMethod.POST, "/auth/password-reset-requests"),
+        pathPattern(HttpMethod.PUT, "/auth/password-reset-requests/{passwordResetRequestId}"),
+        pathPattern(HttpMethod.GET, "/actuator/health")
+    };
+
+    // 공개하되 CSRF 보호는 유지하는 경로.
+    private static final RequestMatcher[] PUBLIC_CSRF_PROTECTED = {
+        pathPattern(HttpMethod.GET, "/products"),
+        pathPattern(HttpMethod.GET, "/products/*"),
+        pathPattern(HttpMethod.GET, "/auth/terms"),
+        pathPattern(HttpMethod.GET, "/auth/signup/confirm-info")
+    };
+
+    // Swagger-UI/API 문서. "/**" 가 확장자 붙은 형제 경로를 못 잡아 진입 경로를 따로 적는다.
+    private static final String[] SWAGGER_ENDPOINTS = {
+        "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/v3/api-docs.yaml"
+    };
 
     // 로그인 비밀번호 해시 검증에 사용할 BCrypt Encoder
     @Bean
@@ -136,75 +167,21 @@ public class SecurityConfig {
                 .csrf(csrf -> {
                     csrf.csrfTokenRepository(csrfTokenRepository);
                     csrf.csrfTokenRequestHandler(csrfTokenRequestHandler);
-                    csrf.ignoringRequestMatchers(
-                            pathPattern(HttpMethod.POST, "/auth/login"),
-                            pathPattern(HttpMethod.POST, "/admin/auth/login"),
-                            pathPattern(HttpMethod.POST, "/auth/find-id"),
-                            pathPattern(HttpMethod.POST, "/auth/terms/check"),
-                            pathPattern(HttpMethod.POST, "/auth/verify-account"),
-                            pathPattern(HttpMethod.POST, "/auth/check-id"),
-                            pathPattern(HttpMethod.POST, "/auth/signup/validate"),
-                            pathPattern(HttpMethod.POST, "/auth/signup/complete"),
-                            pathPattern(HttpMethod.POST, "/auth/email-verifications"),
-                            pathPattern(HttpMethod.POST, "/auth/email-verifications/{emailVerificationId}/verify"),
-                            pathPattern(HttpMethod.POST, "/auth/password-reset-requests"),
-                            pathPattern(HttpMethod.PUT, "/auth/password-reset-requests/{passwordResetRequestId}"),
-                            pathPattern(HttpMethod.GET, "/actuator/health"));
+                    csrf.ignoringRequestMatchers(PUBLIC_CSRF_EXCLUDED);
                 })
                 .authorizeHttpRequests(authorize -> authorize
 
-                        // 로그인 없이 조회할 수 있도록 공개
-                        .requestMatchers(HttpMethod.GET, "/actuator/health")
+                        // 공개 경로. CSRF 설정과 같은 상수를 써서 두 설정이 어긋나지 않게 한다.
+                        .requestMatchers(PUBLIC_CSRF_EXCLUDED)
                         .permitAll()
-                        // 목록/상세는 공개, 약관 열람은 이력 기록(누가 봤는지)이 필요해 인증을 요구한다.
-                        // /products/**(다단계 와일드카드) 대신 세그먼트를 명시해 두 규칙이 겹치지 않게 해서,
-                        // 아래 순서가 바뀌어도 약관 열람 경로가 실수로 permitAll에 흡수되지 않는다.
-                        .requestMatchers(HttpMethod.GET, "/products")
+                        .requestMatchers(PUBLIC_CSRF_PROTECTED)
                         .permitAll()
-                        .requestMatchers(HttpMethod.GET, "/products/*")
+                        .requestMatchers(SWAGGER_ENDPOINTS)
                         .permitAll()
-                        .requestMatchers(HttpMethod.GET, "/products/*/terms/*")
+
+                        // 약관 열람만 인증을 요구한다 — 누가 봤는지 이력을 남겨야 한다.
+                        .requestMatchers(pathPattern(HttpMethod.GET, "/products/*/terms/*"))
                         .authenticated()
-                        .requestMatchers(HttpMethod.POST, "/auth/login")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/find-id")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.GET, "/auth/terms")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/terms/check")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/verify-account")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/check-id")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/signup/validate")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.GET, "/auth/signup/confirm-info")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/signup/complete")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/email-verifications")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/email-verifications/{emailVerificationId}/verify")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/password-reset-requests")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.PUT, "/auth/password-reset-requests/{passwordResetRequestId}")
-                        .permitAll()
-
-                        // Swagger-UI/API 문서는 인증 없이 접근 가능하도록 공개
-                        // "/swagger-ui.html"은 springdoc 기본 진입 경로(SwaggerWelcomeWebMvc)로,
-                        // "/swagger-ui/**"에 매칭되지 않아 별도로 permitAll 해야 함
-                        // "/v3/api-docs.yaml"도 마찬가지로 "/v3/api-docs/**"에 매칭되지 않는다 —
-                        // "/**"는 슬래시로 구분된 하위 경로만 받고 확장자가 붙은 형제 경로는 못 잡는다
-                        .requestMatchers(
-                                "/swagger-ui.html", "/swagger-ui/**",
-                                "/v3/api-docs/**", "/v3/api-docs.yaml")
-                        .permitAll()
-
-                        // 로그인 요청 자체가 관리자 인가에 걸리지 않도록 /admin/** 보다 앞에 둔다.
-                        .requestMatchers(pathPattern(HttpMethod.POST, "/admin/auth/login"))
-                        .permitAll()
 
                         // 관리자 API는 경로별 권한으로 가린다 (PH-49a-②, admin_auth.md §6). 권한 authority 는
                         // SessionLoginManager 가 ROLE_ADMIN 로그인에만 실으므로 역할 검사를 겹치지 않는다.
