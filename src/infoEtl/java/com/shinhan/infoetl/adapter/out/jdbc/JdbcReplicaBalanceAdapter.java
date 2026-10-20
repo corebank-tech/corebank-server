@@ -21,7 +21,7 @@ public final class JdbcReplicaBalanceAdapter implements ReplicaBalancePort {
                 + " AND " + occurredDate + " + INTERVAL o.n DAY NOT IN (SELECT holiday_date FROM holiday)))";
     }
 
-    // P3 설계 §3-3 잔액 쿼리. ? 세 개는 모두 기준일 D다. 해지일(close_td)은 7일 창 없이 원장 끝까지 본다.
+    // P3 설계 §3-3 잔액 쿼리. ? 두 개는 모두 기준일 D다. 발생일 상한 없이 거래일이 D 이하인 원장을 모두 본다.
     private static final String SQL =
             """
             WITH RECURSIVE offsets(n) AS (
@@ -30,7 +30,6 @@ public final class JdbcReplicaBalanceAdapter implements ReplicaBalancePort {
               SELECT x.account_id, x.balance_after, x.occurred_at, x.ledger_entry_id,
                      %s AS td
               FROM ledger_entry x
-              WHERE x.occurred_at < ? + INTERVAL 7 DAY
             ), last_entry AS (
               SELECT account_id, balance_after,
                      ROW_NUMBER() OVER (PARTITION BY account_id
@@ -72,7 +71,6 @@ public final class JdbcReplicaBalanceAdapter implements ReplicaBalancePort {
         try (PreparedStatement statement = replica.prepareStatement(SQL)) {
             statement.setObject(1, baseDate);
             statement.setObject(2, baseDate);
-            statement.setObject(3, baseDate);
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
                     long productId = resultSet.getLong(4);

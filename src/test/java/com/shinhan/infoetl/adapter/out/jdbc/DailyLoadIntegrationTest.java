@@ -87,7 +87,7 @@ class DailyLoadIntegrationTest {
         LoadResult first = service.load(D);
         ReplicaFixtures.insertLedger(3L, 1L, 450L, LocalDateTime.of(2026, 10, 20, 18, 0), D);
 
-        LoadResult second = service.load(D);
+        LoadResult second = service.load(D, true);
 
         assertThat(second.loadBatchId()).isNotEqualTo(first.loadBatchId());
         assertThat(second.balanceRowCount()).isEqualTo(2L);
@@ -106,7 +106,7 @@ class DailyLoadIntegrationTest {
         LoadResult first = service.load(D);
         dropReplicaLedger();
 
-        assertThatThrownBy(() -> service.load(D)).isInstanceOf(EtlStorageException.class);
+        assertThatThrownBy(() -> service.load(D, true)).isInstanceOf(EtlStorageException.class);
 
         try (Connection mart = InfoEtlTestDatabase.mart()) {
             assertThat(writer.countRows(mart, D)).isEqualTo(2L);
@@ -129,7 +129,7 @@ class DailyLoadIntegrationTest {
             statement.execute("UPDATE account SET account_type = NULL WHERE account_id = 2");
         }
 
-        assertThatThrownBy(() -> service.load(D)).isInstanceOf(EtlStorageException.class);
+        assertThatThrownBy(() -> service.load(D, true)).isInstanceOf(EtlStorageException.class);
 
         try (Connection mart = InfoEtlTestDatabase.mart()) {
             assertThat(writer.countRows(mart, D)).isEqualTo(2L);
@@ -165,7 +165,7 @@ class DailyLoadIntegrationTest {
             statement.execute("DELETE FROM ledger_entry");
         }
 
-        assertThatThrownBy(() -> service.load(D)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> service.load(D, true)).isInstanceOf(IllegalStateException.class);
 
         try (Connection mart = InfoEtlTestDatabase.mart()) {
             assertThat(writer.countRows(mart, D)).isEqualTo(2L);
@@ -236,7 +236,7 @@ class DailyLoadIntegrationTest {
             keysBefore = accountKeys(mart);
         }
 
-        LoadResult second = service.load(D);
+        LoadResult second = service.load(D, true);
 
         assertThat(second.balanceRowCount()).isEqualTo(first.balanceRowCount());
         assertThat(second.martBalanceTotal()).isEqualTo(first.martBalanceTotal());
@@ -288,6 +288,66 @@ class DailyLoadIntegrationTest {
     }
 
     @Test
+    @DisplayName("첫 적재일이 실패하면 뒤 날짜가 완료돼도 asOf는 null이고, 첫 적재일을 재적재하면 따라잡는다")
+    void failedFirstLoadDayHoldsBackTheWatermark() throws SQLException {
+        ReplicaFixtures.insertLedger(60L, 1L, 800L, LocalDateTime.of(2026, 10, 20, 9, 0), D);
+        JdbcMartLoadAdapter martAdapter = new JdbcMartLoadAdapter(InfoEtlTestDatabase::mart, CLOCK);
+        long monday = martAdapter.start(MON, java.time.Duration.ofHours(6));
+        martAdapter.fail(monday, "boom");
+
+        LoadResult tuesday = service.load(D);
+        assertThat(tuesday.asOfDate()).isNull();
+
+        ReplicaFixtures.insertLedger(50L, 1L, 250L, LocalDateTime.of(2026, 10, 19, 9, 0), MON);
+        LoadResult mondayRetry = service.load(MON);
+
+        assertThat(mondayRetry.asOfDate()).isEqualTo(D);
+    }
+
+    @Test
+    @DisplayName("COMPLETED인 기준일은 rebuild 없이 거부되고 마트는 그대로이며, rebuild를 주면 다시 만든다")
+    void completedBaseDateNeedsRebuildFlag() throws SQLException {
+        LoadResult first = service.load(D);
+
+        assertThatThrownBy(() -> service.load(D)).isInstanceOf(IllegalArgumentException.class);
+
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            assertThat(statusOf(mart, first.loadBatchId())).isEqualTo("COMPLETED");
+            assertThat(repository.firstBaseDate(mart)).isEqualTo(D);
+        }
+        LoadResult rebuilt = service.load(D, true);
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            assertThat(statusOf(mart, first.loadBatchId())).isEqualTo("REPLACED");
+            assertThat(statusOf(mart, rebuilt.loadBatchId())).isEqualTo("COMPLETED");
+        }
+    }
+
+    @Test
+    @DisplayName("재적재가 T2에서 실패하면 이전 행과 COMPLETED 배치, asOf가 그대로 남는다")
+    void failedRebuildInsideLoadKeepsPreviousDataAndAsOf() throws SQLException {
+        LoadResult first = service.load(D);
+        JdbcMartLoadAdapter martAdapter = new JdbcMartLoadAdapter(InfoEtlTestDatabase::mart, CLOCK);
+        long rebuild = martAdapter.start(D, java.time.Duration.ofHours(6));
+        java.util.List<MartBalanceRow> newRows = java.util.List.of(new MartBalanceRow(
+                pseudonymizer.accountKey(9L), pseudonymizer.customerKey(19L), "DEMAND_DEPOSIT", null, null, 5L));
+
+        assertThatThrownBy(
+                        () -> martAdapter.publish(rebuild, D, newRows, java.util.List.of(), (firstLoadDate, dates) -> {
+                            throw new IllegalStateException("asOf 계산 중 실패");
+                        }))
+                .isInstanceOf(IllegalStateException.class);
+
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            assertThat(writer.countRows(mart, D)).isEqualTo(2L);
+            assertThat(writer.sumBalance(mart, D)).isEqualTo(1_000L);
+            assertThat(statusOf(mart, first.loadBatchId())).isEqualTo("COMPLETED");
+            try (ResultSet row = batch(mart, first.loadBatchId())) {
+                assertThat(row.getObject("as_of_date", LocalDate.class)).isEqualTo(D);
+            }
+        }
+    }
+
+    @Test
     @DisplayName("빈 날이 공휴일이면 asOf는 멈추지 않는다")
     void asOfSkipsHolidayInsteadOfStopping() throws SQLException {
         ReplicaFixtures.insertHoliday(D, "임시공휴일");
@@ -330,7 +390,8 @@ class DailyLoadIntegrationTest {
         java.util.List<MartBalanceRow> lateRows = java.util.List.of(new MartBalanceRow(
                 pseudonymizer.accountKey(9L), pseudonymizer.customerKey(19L), "DEMAND_DEPOSIT", null, null, 5L));
 
-        assertThatThrownBy(() -> martAdapter.publish(slow, D, lateRows, java.util.List.of(), dates -> D))
+        assertThatThrownBy(
+                        () -> martAdapter.publish(slow, D, lateRows, java.util.List.of(), (firstLoadDate, dates) -> D))
                 .isInstanceOf(IllegalStateException.class);
 
         try (Connection mart = InfoEtlTestDatabase.mart()) {

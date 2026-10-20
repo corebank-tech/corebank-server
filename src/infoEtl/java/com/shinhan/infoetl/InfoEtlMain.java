@@ -20,6 +20,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
+import java.util.Arrays;
 import java.util.Map;
 
 // 실행 진입점이자 조립 지점. 어댑터와 서비스를 연결하는 일만 한다.
@@ -35,7 +36,9 @@ public final class InfoEtlMain {
     private static final String TO_ARGUMENT = "--to=";
 
     // 하루만 적재하면 from == to == baseDate이고 range가 false다.
-    record LoadCommand(LocalDate from, LocalDate to, boolean range) {}
+    record LoadCommand(LocalDate from, LocalDate to, boolean range, boolean rebuild) {}
+
+    private static final String REBUILD_ARGUMENT = "--rebuild";
 
     private InfoEtlMain() {}
 
@@ -60,19 +63,20 @@ public final class InfoEtlMain {
         JdbcConnectionFactory replica = () -> open(config.replicaUrl(), config.replicaUser(), config.replicaPassword());
         JdbcConnectionFactory mart = () -> open(martUrl, config.martUser(), config.martPassword());
         JdbcReplicaCalendarAdapter calendar = new JdbcReplicaCalendarAdapter(replica);
+        JdbcMartLoadAdapter martLoad = new JdbcMartLoadAdapter(mart, Clock.system(ZoneId.of("Asia/Seoul")));
         DailyLoadUseCase daily = new DailyLoadService(
                 new JdbcReplicaBalanceAdapter(replica),
                 new JdbcReplicaEventAdapter(replica),
                 calendar,
-                new JdbcMartLoadAdapter(mart, Clock.system(ZoneId.of("Asia/Seoul"))),
+                martLoad,
                 new JdbcLoadLockAdapter(mart),
                 pseudonymizer);
         try {
             if (command.range()) {
-                RangeLoadUseCase rangeLoad = new RangeLoadService(daily, calendar);
+                RangeLoadUseCase rangeLoad = new RangeLoadService(daily, calendar, martLoad);
                 return report(rangeLoad.loadRange(command.from(), command.to()));
             }
-            logLoaded(daily.load(command.from()));
+            logLoaded(daily.load(command.from(), command.rebuild()));
             return EXIT_OK;
         } catch (RuntimeException e) {
             LOG.log(System.Logger.Level.ERROR, "적재 실패 - " + command, e);
@@ -87,8 +91,9 @@ public final class InfoEtlMain {
                         System.Logger.Level.ERROR, "적재 실패 - baseDate={0}, reason={1}", day.baseDate(), day.reason()));
         LOG.log(
                 System.Logger.Level.INFO,
-                "기간 적재 종료 - 성공 {0}일, 실패 {1}일",
+                "기간 적재 종료 - 성공 {0}일, 이미 완료되어 건너뜀 {1}일, 실패 {2}일",
                 result.loaded().size(),
+                result.skipped().size(),
                 result.failed().size());
         return result.hasFailures() ? EXIT_LOAD_FAILED : EXIT_OK;
     }
@@ -121,9 +126,13 @@ public final class InfoEtlMain {
         if (hasBase && (hasFrom || hasTo)) {
             throw new IllegalArgumentException("--base-date와 --from/--to는 함께 쓸 수 없습니다.");
         }
+        boolean rebuild = Arrays.asList(args).contains(REBUILD_ARGUMENT);
+        if (rebuild && !hasBase) {
+            throw new IllegalArgumentException("--rebuild는 --base-date와 함께 써야 합니다.");
+        }
         if (hasBase) {
             LocalDate baseDate = parseBaseDate(args);
-            return new LoadCommand(baseDate, baseDate, false);
+            return new LoadCommand(baseDate, baseDate, false, rebuild);
         }
         if (hasFrom && hasTo) {
             LocalDate from = parseDate(args, FROM_ARGUMENT);
@@ -131,7 +140,7 @@ public final class InfoEtlMain {
             if (from.isAfter(to)) {
                 throw new IllegalArgumentException("--from은 --to보다 늦을 수 없습니다.");
             }
-            return new LoadCommand(from, to, true);
+            return new LoadCommand(from, to, true, false);
         }
         if (hasFrom || hasTo) {
             throw new IllegalArgumentException("--from과 --to는 함께 줘야 합니다.");

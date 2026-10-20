@@ -49,9 +49,12 @@ public final class DailyLoadService implements DailyLoadUseCase {
     }
 
     @Override
-    public LoadResult load(LocalDate baseDate) {
+    public LoadResult load(LocalDate baseDate, boolean rebuild) {
         requireBusinessDay(baseDate); // 잔액 행은 영업일에만 있다. 휴일은 락도 적재 기록도 없이 거부한다.
         try (LoadLock ignored = lockPort.acquire(baseDate)) { // 같은 기준일을 두 프로세스가 동시에 적재하지 않게 한다.
+            if (!rebuild && martLoadPort.isCompleted(baseDate)) {
+                throw new IllegalArgumentException("이미 적재가 끝난 기준일입니다. 다시 만들려면 --rebuild를 함께 주세요: " + baseDate);
+            }
             long loadBatchId = martLoadPort.start(baseDate, STALE_RUNNING_AFTER); // T1: 뒤에서 실패해도 남아야 한다.
             try {
                 List<BalanceRow> balances = replicaPort.readBalances(baseDate);
@@ -79,11 +82,11 @@ public final class DailyLoadService implements DailyLoadUseCase {
         }
     }
 
-    // T2 안에서 불린다. 완료된 날짜 범위의 휴일만 읽어 연속성을 판정한다.
-    private LocalDate asOf(Set<LocalDate> completedBaseDates) {
-        BusinessCalendar calendar = new BusinessCalendar(
-                calendarPort.readHolidays(Collections.min(completedBaseDates), Collections.max(completedBaseDates)));
-        return AsOfWatermark.compute(completedBaseDates, calendar);
+    // T2 안에서 불린다. 첫 적재일부터 완료된 마지막 날짜까지의 휴일만 읽어 연속성을 판정한다.
+    private LocalDate asOf(LocalDate firstLoadDate, Set<LocalDate> completedBaseDates) {
+        BusinessCalendar calendar =
+                new BusinessCalendar(calendarPort.readHolidays(firstLoadDate, Collections.max(completedBaseDates)));
+        return AsOfWatermark.compute(firstLoadDate, completedBaseDates, calendar);
     }
 
     // 개인정보를 가리는 것은 업무 규칙이라 서비스가 한다. 어댑터는 원래 ID를 받지 못한다.

@@ -38,6 +38,11 @@ public final class JdbcMartLoadAdapter implements MartLoadPort {
     }
 
     @Override
+    public boolean isCompleted(LocalDate baseDate) {
+        return inTransaction("마트 적재 이력 조회에 실패했습니다", mart -> repository.isCompleted(mart, baseDate));
+    }
+
+    @Override
     public long start(LocalDate baseDate, Duration staleAfter) {
         return inTransaction("마트 적재 시작 기록에 실패했습니다", mart -> {
             repository.failStaleRunning(
@@ -62,9 +67,10 @@ public final class JdbcMartLoadAdapter implements MartLoadPort {
             long eventCount = eventWriter.countRows(mart, baseDate);
             long balanceTotal = balanceWriter.sumBalance(mart, baseDate);
             repository.replacePrevious(mart, baseDate, loadBatchId);
+            LocalDate firstLoadDate = repository.firstBaseDate(mart);
             Set<LocalDate> completed = new HashSet<>(repository.completedBaseDates(mart));
             completed.add(baseDate); // 이번 배치는 아직 RUNNING이라 조회에 안 잡힌다.
-            LocalDate asOf = asOfCalculator.calculate(completed);
+            LocalDate asOf = asOfCalculator.calculate(firstLoadDate, completed);
             repository.markCompleted(mart, loadBatchId, now(), balanceCount, eventCount, balanceTotal, asOf);
             return new LoadResult(loadBatchId, baseDate, balanceCount, eventCount, balanceTotal, asOf);
         });

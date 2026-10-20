@@ -6,6 +6,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Types;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -49,12 +50,36 @@ final class LoadBatchRepository {
             statement.setLong(3, balanceRowCount);
             statement.setLong(4, eventRowCount);
             statement.setLong(5, martBalanceTotal);
-            statement.setObject(6, asOfDate);
+            if (asOfDate == null) {
+                statement.setNull(6, Types.DATE);
+            } else {
+                statement.setObject(6, asOfDate);
+            }
             statement.setLong(7, loadBatchId);
             statement.setString(8, LoadStatus.RUNNING.name());
             if (statement.executeUpdate() != 1) {
                 throw new IllegalStateException("RUNNING 상태가 아니어서 완료 처리하지 못했습니다. loadBatchId=" + loadBatchId);
             }
+        }
+    }
+
+    public boolean isCompleted(Connection mart, LocalDate baseDate) throws SQLException {
+        try (PreparedStatement statement =
+                mart.prepareStatement("SELECT 1 FROM mart_load_batch WHERE base_date = ? AND status = ? LIMIT 1")) {
+            statement.setObject(1, baseDate);
+            statement.setString(2, LoadStatus.COMPLETED.name());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
+            }
+        }
+    }
+
+    // 상태와 무관하게 마트에 처음 기록된 기준일. asOf 연속성의 시작점이다.
+    public LocalDate firstBaseDate(Connection mart) throws SQLException {
+        try (PreparedStatement statement = mart.prepareStatement("SELECT MIN(base_date) FROM mart_load_batch");
+                ResultSet resultSet = statement.executeQuery()) {
+            resultSet.next();
+            return resultSet.getObject(1, LocalDate.class);
         }
     }
 

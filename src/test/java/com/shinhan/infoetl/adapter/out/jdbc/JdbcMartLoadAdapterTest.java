@@ -43,7 +43,11 @@ class JdbcMartLoadAdapterTest {
         long id = adapter.start(D, Duration.ofHours(6));
 
         LoadResult result = adapter.publish(
-                id, D, List.of(balance('a', 300L), balance('b', 700L)), List.of(event('a')), dates -> D);
+                id,
+                D,
+                List.of(balance('a', 300L), balance('b', 700L)),
+                List.of(event('a')),
+                (firstLoadDate, dates) -> D);
 
         assertThat(result.balanceRowCount()).isEqualTo(2L);
         assertThat(result.eventRowCount()).isEqualTo(1L);
@@ -68,7 +72,7 @@ class JdbcMartLoadAdapterTest {
     void publishesBalancesWithoutEvents() {
         long id = adapter.start(D, Duration.ofHours(6));
 
-        LoadResult result = adapter.publish(id, D, List.of(balance('a', 300L)), List.of(), dates -> D);
+        LoadResult result = adapter.publish(id, D, List.of(balance('a', 300L)), List.of(), (firstLoadDate, dates) -> D);
 
         assertThat(result.balanceRowCount()).isEqualTo(1L);
         assertThat(result.eventRowCount()).isZero();
@@ -78,10 +82,12 @@ class JdbcMartLoadAdapterTest {
     @DisplayName("재적재하면 같은 기준일의 이벤트도 새 값으로 교체한다")
     void reloadReplacesEvents() throws SQLException {
         long first = adapter.start(D, Duration.ofHours(6));
-        adapter.publish(first, D, List.of(balance('a', 300L)), List.of(event('a'), event('b')), dates -> D);
+        adapter.publish(
+                first, D, List.of(balance('a', 300L)), List.of(event('a'), event('b')), (firstLoadDate, dates) -> D);
         long second = adapter.start(D, Duration.ofHours(6));
 
-        LoadResult result = adapter.publish(second, D, List.of(balance('a', 300L)), List.of(event('c')), dates -> D);
+        LoadResult result = adapter.publish(
+                second, D, List.of(balance('a', 300L)), List.of(event('c')), (firstLoadDate, dates) -> D);
 
         assertThat(result.eventRowCount()).isEqualTo(1L);
         try (Connection mart = InfoEtlTestDatabase.mart()) {
@@ -94,11 +100,12 @@ class JdbcMartLoadAdapterTest {
     void eventDateConflictFailsWithGuidanceAndRollsBack() throws SQLException {
         LocalDate earlier = D.minusDays(3);
         long firstId = adapter.start(earlier, Duration.ofHours(6));
-        adapter.publish(firstId, earlier, List.of(balance('a', 100L)), List.of(event('a')), dates -> D);
+        adapter.publish(
+                firstId, earlier, List.of(balance('a', 100L)), List.of(event('a')), (firstLoadDate, dates) -> D);
         long secondId = adapter.start(D, Duration.ofHours(6));
 
-        assertThatThrownBy(() ->
-                        adapter.publish(secondId, D, List.of(balance('a', 300L)), List.of(event('a')), dates -> D))
+        assertThatThrownBy(() -> adapter.publish(
+                        secondId, D, List.of(balance('a', 300L)), List.of(event('a')), (firstLoadDate, dates) -> D))
                 .isInstanceOf(EtlStorageException.class)
                 .hasMessageContaining("먼저 재적재");
 

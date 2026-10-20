@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -224,6 +225,28 @@ class DailyLoadServiceTest {
     }
 
     @Test
+    @DisplayName("이미 COMPLETED인 기준일은 rebuild 없이는 거부하고 적재 기록도 남기지 않는다")
+    void completedBaseDateRequiresRebuild() {
+        martPort.completedBeforeLoad = Set.of(D);
+        DailyLoadService service = service(oneBalance(), List.of());
+
+        assertThatThrownBy(() -> service.load(D)).isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(martPort.startedBaseDate).isNull();
+    }
+
+    @Test
+    @DisplayName("rebuild를 주면 COMPLETED인 기준일도 다시 적재한다")
+    void rebuildReloadsCompletedBaseDate() {
+        martPort.completedBeforeLoad = Set.of(D);
+        DailyLoadService service = service(oneBalance(), List.of());
+
+        service.load(D, true);
+
+        assertThat(martPort.startedBaseDate).isEqualTo(D);
+    }
+
+    @Test
     @DisplayName("T2에서 완료된 날짜 범위의 휴일로 asOf를 계산해 결과에 담는다")
     void computesAsOfFromCompletedDatesInsideTheLoad() {
         martPort.completedBeforeLoad = Set.of(LocalDate.of(2026, 10, 15), LocalDate.of(2026, 10, 16));
@@ -289,6 +312,11 @@ class DailyLoadServiceTest {
         RuntimeException failFailure;
 
         @Override
+        public boolean isCompleted(LocalDate baseDate) {
+            return completedBeforeLoad.contains(baseDate);
+        }
+
+        @Override
         public long start(LocalDate baseDate, Duration staleAfter) {
             this.startedBaseDate = baseDate;
             this.startedStaleAfter = staleAfter;
@@ -315,7 +343,7 @@ class DailyLoadServiceTest {
                     balances.size(),
                     events.size(),
                     balances.stream().mapToLong(MartBalanceRow::balance).sum(),
-                    asOfCalculator.calculate(completed));
+                    asOfCalculator.calculate(Collections.min(completed), completed));
         }
 
         @Override

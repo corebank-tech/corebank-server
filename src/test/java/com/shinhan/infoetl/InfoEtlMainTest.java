@@ -115,6 +115,20 @@ class InfoEtlMainTest {
     }
 
     @Test
+    @DisplayName("--rebuild는 --base-date와 함께일 때만 켜지고 기간 적재에는 쓸 수 없다")
+    void rebuildOnlyWithBaseDate() {
+        assertThat(InfoEtlMain.parseCommand(new String[] {"--base-date=2026-10-20"})
+                        .rebuild())
+                .isFalse();
+        assertThat(InfoEtlMain.parseCommand(new String[] {"--base-date=2026-10-20", "--rebuild"})
+                        .rebuild())
+                .isTrue();
+        assertThatThrownBy(() ->
+                        InfoEtlMain.parseCommand(new String[] {"--from=2026-10-19", "--to=2026-10-21", "--rebuild"}))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     @DisplayName("기준일과 기간을 섞거나 기간 인자가 하나뿐이거나 순서가 뒤집히면 거부한다")
     void rejectsInvalidCombinations() {
         assertThatThrownBy(() -> InfoEtlMain.parseCommand(
