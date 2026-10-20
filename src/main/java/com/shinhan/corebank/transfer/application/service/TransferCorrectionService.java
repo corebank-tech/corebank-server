@@ -1,6 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
-import com.shinhan.corebank.business.api.BusinessDateProvider;
+import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
@@ -58,7 +58,7 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
     private final LedgerSavePort ledgerSavePort;
     private final List<LedgerPostingHook> ledgerPostingHooks;
     private final Clock clock;
-    private final BusinessDateProvider businessDateProvider;
+    private final BusinessDateGate businessDateGate;
 
     @Override
     @Transactional
@@ -69,7 +69,7 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
 
         LocalDateTime requestedAt = LocalDateTime.now(clock);
         // 정정은 오늘 일어난 새 거래다 — 원거래일이 아니라 지금 영업일로 한 번 읽는다(#516).
-        LocalDate tradeDate = businessDateProvider.today();
+        LocalDate tradeDate = businessDateGate.acquireSharedAndReadBusinessDate();
         String transactionNumber = transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), CHANNEL);
 
         // 돈은 원거래 입금계좌(payee)에서 원거래 출금계좌로 돌아간다. 락은 lockForTransfer가 ID 오름차순으로 잡는다.
@@ -130,7 +130,7 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
 
         LocalDateTime requestedAt = LocalDateTime.now(clock);
         // 정정은 오늘 일어난 새 거래다 — 원거래일이 아니라 지금 영업일로 한 번 읽는다(#516).
-        LocalDate tradeDate = businessDateProvider.today();
+        LocalDate tradeDate = businessDateGate.acquireSharedAndReadBusinessDate();
         String transactionNumber = transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), CHANNEL);
         LockedAccountsForTransfer locked =
                 accountLockPort.lockForTransfer(original.getWithdrawalAccountId(), original.getDepositAccountId());
