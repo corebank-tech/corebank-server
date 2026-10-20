@@ -59,13 +59,7 @@ class EtlGrantsTest {
         try (Connection connection = open(InfoEtlTestDatabase.replicaUrl(), "etl_replica_reader");
                 Statement statement = connection.createStatement()) {
             for (String table : new String[] {
-                "ledger_entry",
-                "account",
-                "product",
-                "product_subscription",
-                "gl_journal_entry",
-                "batch_execution_history",
-                "holiday"
+                "ledger_entry", "account", "product", "product_subscription", "gl_journal_entry", "holiday"
             }) {
                 statement.executeQuery("SELECT COUNT(*) FROM " + table).close();
             }
@@ -87,6 +81,10 @@ class EtlGrantsTest {
                     .isInstanceOf(SQLException.class)
                     .hasMessageContaining("denied");
             assertThatThrownBy(() -> statement.executeQuery("SELECT * FROM customer"))
+                    .isInstanceOf(SQLException.class)
+                    .hasMessageContaining("denied");
+            // 시작 신호는 business_date_cutoff뿐이라 관측용 실행 기록은 읽을 이유가 없다(설계 §3-4).
+            assertThatThrownBy(() -> statement.executeQuery("SELECT * FROM batch_execution_history"))
                     .isInstanceOf(SQLException.class)
                     .hasMessageContaining("denied");
         }
