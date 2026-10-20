@@ -216,7 +216,6 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
         }
     }
 
-    // 동시 정정은 락 전 스냅샷으로 앞선 검사를 통과하므로, 검증보다 먼저 INSERT해 유니크 제약이 막게 한다.
     // 타행 원거래는 받은 계좌가 당행에 없어 되돌릴 수 없다. 입금계좌 락을 잡기 전에 막는다(#654).
     private static void requireDomestic(Transfer original) {
         if (original.getPayeeBankCode() != null) {
@@ -224,6 +223,7 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
         }
     }
 
+    // 동시 정정은 락 전 스냅샷으로 앞선 검사를 통과하므로, 검증보다 먼저 INSERT해 유니크 제약이 막게 한다.
     private Transfer claim(Transfer correction) {
         try {
             return transferSavePort.save(correction);
