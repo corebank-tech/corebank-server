@@ -104,15 +104,15 @@ erDiagram
         datetime last_transaction_at "DATETIME(6)"
         bigint version "낙관적 락"
     }
-    
-    account_status_history { 
-          bigint history_id PK "AUTO_INCREMENT" 
-          bigint account_id "FK 없음. 계좌 정리 후에도 이력 보존" 
-          varchar previous_status "VARCHAR(12)" 
-          varchar new_status "VARCHAR(12)" 
-          date maturity_date "NULL 허용. 계약 만기일" 
-          date effective_business_date "NULL 허용. 상태 전이 기준 영업일" 
-          datetime changed_at "DATETIME(6)" 
+
+    account_status_history {
+          bigint history_id PK "AUTO_INCREMENT"
+          bigint account_id "FK 없음. 계좌 정리 후에도 이력 보존"
+          varchar previous_status "VARCHAR(12)"
+          varchar new_status "VARCHAR(12)"
+          date maturity_date "NULL 허용. 계약 만기일"
+          date effective_business_date "NULL 허용. 상태 전이 기준 영업일"
+          datetime changed_at "DATETIME(6)"
           varchar trigger_type "VARCHAR(20). COB"
     }
 
