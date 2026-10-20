@@ -53,14 +53,22 @@ S3 Object Lock 버킷 (P2 관리)
 
 `corebank-audit-writer`는 실제 감사 로그를 적재하는 애플리케이션용 정책이다.
 
+**운영 권한**
 - `audit/*`: `s3:PutObject`, `s3:GetObject`
 - 버킷 조회: `s3:ListBucket`
-- `audit/lock-test/*`: `s3:DeleteObjectVersion` 추가 허용
-- 미부여: `s3:BypassGovernanceRetention`, `s3:DeleteObject`, 일반 감사 로그의 `s3:DeleteObjectVersion`
 
-`DeleteObjectVersion`은 P1 PH-82에서 IAM 권한 부족과 Object Lock에 의한 삭제 거부를 구분하기 위한 검증용 권한이다.
+**PH-82 검증용 임시 권한**
+- 대상 경로: `audit/lock-test/*`
+- `s3:DeleteObjectVersion`: IAM 권한 부족이 아닌 Object Lock에 의한 삭제 거부 확인
+- `s3:GetObjectVersion`: 덮어쓰기 이후 원본 버전의 내용이 유지되는지 확인
+- `s3:GetObjectRetention`: GOVERNANCE 모드 및 보존 만료일 확인
+- `s3:ListBucketVersions`는 사용하지 않음. `versionId`는 업로드 응답에서 확보
 
-검증용 경로에만 허용해 보존기간이 만료된 실제 감사 로그를 적재 역할에서 삭제할 수 없도록 한다.
+**권한 제한 및 제거 계획**
+- `s3:BypassGovernanceRetention`, `s3:DeleteObject`는 부여하지 않음.
+- 일반 감사 로그 경로에는 `s3:DeleteObjectVersion`을 부여하지 않음.
+- 검증용 삭제·조회 권한은 `audit/lock-test/*`에만 허용함.
+- P1 PH-82 검증 완료 후 검증용 IAM Statement 전체를 제거할 예정임.
 
 **주의:** GOVERNANCE 모드에서는 보존 우회 권한이 있는 주체가 명시적으로 우회할 수 있다. 일반 적재 역할에는 해당 권한을 부여하지 않는다.
 
@@ -173,25 +181,73 @@ aws iam list-entities-for-policy \
 
 ### P1 — PH-82
 
-확정:
-- `audit/` 경로 사용
-- 감사 로그 및 개인정보 접근로그는 하위 경로로 분리
-- AWS WAS에서 S3로 직접 적재
-- `audit/lock-test/*`에 검증용 버전 삭제 권한 부여
-- 보존 우회 권한은 부여하지 않음
+**연동 방식 확정**
 
-P1 검증 범위:
-- 실제 감사 객체 적재
-- 객체 버전 ID 지정 삭제 시도
-- 보존기간 중 Object Lock 삭제 거부 확인
+- 적재 경로: `audit/`
+- 감사 로그와 개인정보 접근로그는 하위 경로로 분리하며, 세부 경로는 PH-82에서 확정한다.
+- AWS WAS에서 S3로 직접 업로드한다.
+- 별도 검증용 IAM 주체 및 사전 검증은 진행하지 않는다.
+
+**Object Lock 검증 권한**
+
+`audit/lock-test/*`에만 다음 권한을 임시로 부여한다.
+
+- `s3:DeleteObjectVersion`: IAM 권한 부족이 아닌 Object Lock에 의한 삭제 거부 확인
+- `s3:GetObjectVersion`: 동일 키에 덮어쓴 뒤 기존 객체 버전의 내용이 유지되는지 확인
+- `s3:GetObjectRetention`: GOVERNANCE 모드 및 보존 만료일 확인
+
+`versionId`는 업로드 응답에서 확보하므로 `s3:ListBucketVersions`는 필요하지 않다.
+
+`s3:BypassGovernanceRetention`은 부여하지 않는다.
+
+**구현 및 검증 일정**
+
+- **10/28까지:** 해시 컬럼·검증 배치·목 버킷 적재 어댑터를 `dev`에 머지
+- **10/30부터:** 실제 AWS WAS IAM 역할로 S3 객체 적재 및 Object Lock 통합 검증
+
+**P1 검증 범위**
+
+- 실제 감사 객체 적재 성공 확인
+- 특정 `versionId`의 삭제 거부 확인
+- 동일 키 재업로드 후 원본 버전의 내용 유지 확인
+- Object Lock 보존 모드 및 만료일 조회
 - 감사 로그 무결성 검증
+
+Object Lock은 동일 키에 새 버전을 업로드하는 것까지 차단하지 않는다.
+따라서 기존 버전의 보존 여부와 내용 무결성을 검증한다.
 
 ### P5 — PH-51 / PH-55
 
-확인 및 연동 필요:
-- WAS IAM 역할에 `corebank-audit-writer` 정책 연결
-- `terraform/audit`의 독립 state 운영 확인
-- 최종 destroy 대상 및 순서에 audit 스택 포함
+**합의 완료**
+
+- PH-51의 WAS 인스턴스 프로파일 역할에 `corebank-audit-writer` 정책을 연결한다.
+- `terraform/audit/`의 독립 state(`audit/terraform.tfstate`) 운영에 동의했다.
+- PH-55 destroy 절차에 audit 스택의 별도 destroy를 포함한다.
+
+**예정 작업**
+
+- **10/26:** PH-51 apply로 WAS IAM 역할 생성 후 `corebank-audit-writer` 정책 연결
+- IAM 정책 연결 완료 후 P2에 결과 공유
+- **PH-55:** audit 스택의 별도 destroy 절차 및 실행 권한 확인
+
+### P2 — PH-72-① 후속
+
+**완료**
+
+- S3 Object Lock 버킷 및 적재용 IAM 정책 생성·적용
+- GOVERNANCE 1일, Versioning, 퍼블릭 접근 차단, AES256 암호화 확인
+- P1 요청에 따른 Object Lock 검증용 IAM 권한 반영
+- `terraform/audit/` 독립 state 구성
+- 최종 `terraform plan`: `No changes`
+
+**남은 작업**
+
+- 10/26 이후 P5의 WAS IAM 정책 연결 결과 확인
+- P1의 PH-82 통합 검증 결과 확인
+- **PH-82 검증 완료 후:** `audit/lock-test/*`의 검증 전용 IAM Statement 제거 및 Terraform 재적용
+- 검증용 권한 제거 후 `terraform plan`으로 최종 상태 확인
+
+사람·CI·AI IAM 분리, Secrets Manager, CloudTrail 등 PH-72의 나머지 작업은 별도로 진행한다.
 
 ## 8. Destroy 주의사항
 

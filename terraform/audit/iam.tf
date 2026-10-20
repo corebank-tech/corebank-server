@@ -25,11 +25,13 @@ data "aws_iam_policy_document" "audit_writer" {
   }
 
   statement {
-    sid    = "VerifyObjectLockVersionDeletion"
+    sid    = "VerifyObjectLockProtection"
     effect = "Allow"
 
     actions = [
-      "s3:DeleteObjectVersion"
+      "s3:DeleteObjectVersion",
+      "s3:GetObjectVersion",
+      "s3:GetObjectRetention"
     ]
 
     resources = [
