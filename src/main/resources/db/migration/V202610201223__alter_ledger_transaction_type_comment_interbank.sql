@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202610192303__alter_ledger_transaction_type_comment_interbank.sql
+-- V202610201223__alter_ledger_transaction_type_comment_interbank.sql
 -- 타행이체 기표 유형 반영 (P4, PH-33-② / #654)
 --
 -- transaction_type은 CHECK 없이 주석으로만 값을 관리하므로 주석만 바꾼다.

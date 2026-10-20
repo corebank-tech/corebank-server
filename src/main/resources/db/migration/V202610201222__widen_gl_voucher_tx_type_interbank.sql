@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202610192302__widen_gl_voucher_tx_type_interbank.sql
+-- V202610201222__widen_gl_voucher_tx_type_interbank.sql
 -- 타행 미결제 전표 유형 (P4, PH-33-② / #654)
 --
 -- 타행이체 미결제 2패턴(gl_journal_patterns.md §3-5)의 전표 유형을 CHECK에 더한다.

@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202610192304__add_transfer_status_created_at_index.sql
+-- V202610201224__add_transfer_status_created_at_index.sql
 -- P4 (PH-33-② / #654)
 --
 -- 조회거래 스케줄러가 1분마다 처리 불명(TIMEOUT) 타행 건을 찾는다. transfer는 운영 300만 행 규모라
