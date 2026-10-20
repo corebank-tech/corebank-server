@@ -9,6 +9,7 @@ import com.shinhan.corebank.transfer.config.InterbankProperties;
 import com.shinhan.mockexternal.MockExternalServer;
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -131,6 +132,42 @@ class InterbankSocketClientTest {
         assertThat(elapsedMillis).isGreaterThanOrEqualTo(RESPONSE_TIMEOUT.toMillis());
         assertThat(inquired.outcome()).isEqualTo(InterbankOutcome.APPROVED);
         assertThat(inquired.payeeName()).isEqualTo("김민수");
+    }
+
+    @Test
+    @DisplayName("응답이 조금씩 나눠 와 전문 전체 수신이 응답 대기 시간을 넘으면 그때 끊고 UNKNOWN이다")
+    void send_responseTrickledPastTimeout_isUnknown() throws Exception {
+        // 조각 사이 간격(100ms)은 응답 대기(500ms)보다 짧고, 다 받는 데는 1초가 걸린다
+        try (ServerSocket relay = trickleRelay(10, Duration.ofMillis(100))) {
+            long start = System.nanoTime();
+            InterbankReply reply = client(relay.getLocalPort(), 100).send(request("1234567890123"));
+            long elapsedMillis = (System.nanoTime() - start) / 1_000_000;
+
+            assertThat(reply.outcome()).isEqualTo(InterbankOutcome.UNKNOWN);
+            assertThat(elapsedMillis).isBetween(RESPONSE_TIMEOUT.toMillis(), 900L);
+        }
+    }
+
+    // 요청은 모의 대외기관에 그대로 넘기고, 받은 응답은 chunks 조각으로 나눠 gap마다 흘려보낸다.
+    private ServerSocket trickleRelay(int chunks, Duration gap) throws IOException {
+        ServerSocket relay = new ServerSocket(0);
+        Thread.ofVirtual().start(() -> {
+            try (Socket inbound = relay.accept();
+                    Socket upstream = new Socket("127.0.0.1", server.port())) {
+                upstream.getOutputStream()
+                        .write(inbound.getInputStream().readNBytes(ExternalMessageCodec.MESSAGE_LENGTH));
+                byte[] response = upstream.getInputStream().readNBytes(ExternalMessageCodec.MESSAGE_LENGTH);
+                int chunkSize = (response.length + chunks - 1) / chunks;
+                for (int offset = 0; offset < response.length; offset += chunkSize) {
+                    Thread.sleep(gap);
+                    inbound.getOutputStream().write(response, offset, Math.min(chunkSize, response.length - offset));
+                    inbound.getOutputStream().flush();
+                }
+            } catch (IOException | InterruptedException ignored) {
+                // 클라이언트가 먼저 끊으면 쓰기가 실패한다 — 이 테스트가 기대하는 경우다
+            }
+        });
+        return relay;
     }
 
     @Test

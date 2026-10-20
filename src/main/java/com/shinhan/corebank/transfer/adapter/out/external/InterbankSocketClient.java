@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -148,10 +149,10 @@ public class InterbankSocketClient implements InterbankGatewayPort {
                 log.warn("타행 연결 실패 - transactionNumber={}, cause={}", serialNumber, e.toString());
                 return new Exchange.NotSent();
             }
-            socket.setSoTimeout((int) properties.responseTimeout().toMillis());
             socket.getOutputStream().write(encoded);
             socket.getOutputStream().flush();
-            byte[] response = readMessage(socket.getInputStream());
+            byte[] response = readMessage(
+                    socket, System.nanoTime() + properties.responseTimeout().toNanos());
             if (response == null) {
                 return new Exchange.NoReply();
             }
@@ -172,23 +173,36 @@ public class InterbankSocketClient implements InterbankGatewayPort {
     }
 
     // 다 받기 전에 끊기면(EOF) 받지 않은 것으로 본다(규격 §1).
-    private static byte[] readMessage(InputStream in) throws IOException {
-        byte[] lengthField = in.readNBytes(LENGTH_FIELD);
-        if (lengthField.length < LENGTH_FIELD) {
+    private static byte[] readMessage(Socket socket, long deadline) throws IOException {
+        byte[] message = new byte[ExternalMessageCodec.MESSAGE_LENGTH];
+        if (!readFully(socket, message, 0, LENGTH_FIELD, deadline)) {
             return null;
         }
-        int bodyLength = Integer.parseInt(new String(lengthField, StandardCharsets.US_ASCII));
+        int bodyLength = Integer.parseInt(new String(message, 0, LENGTH_FIELD, StandardCharsets.US_ASCII));
         if (LENGTH_FIELD + bodyLength != ExternalMessageCodec.MESSAGE_LENGTH) {
             return null;
         }
-        byte[] body = in.readNBytes(bodyLength);
-        if (body.length < bodyLength) {
-            return null;
+        return readFully(socket, message, LENGTH_FIELD, bodyLength, deadline) ? message : null;
+    }
+
+    // soTimeout은 read() 한 번의 상한이라, 남은 시간으로 매번 다시 걸어 전문 전체 수신을 응답 대기 시간 안에 묶는다.
+    private static boolean readFully(Socket socket, byte[] buffer, int offset, int length, long deadline)
+            throws IOException {
+        InputStream in = socket.getInputStream();
+        int end = offset + length;
+        while (offset < end) {
+            long remainingMillis = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
+            if (remainingMillis <= 0) {
+                throw new SocketTimeoutException("응답 대기 시간 초과");
+            }
+            socket.setSoTimeout((int) remainingMillis);
+            int read = in.read(buffer, offset, end - offset);
+            if (read < 0) {
+                return false;
+            }
+            offset += read;
         }
-        byte[] message = new byte[ExternalMessageCodec.MESSAGE_LENGTH];
-        System.arraycopy(lengthField, 0, message, 0, LENGTH_FIELD);
-        System.arraycopy(body, 0, message, LENGTH_FIELD, bodyLength);
-        return message;
+        return true;
     }
 
     private sealed interface Exchange {
