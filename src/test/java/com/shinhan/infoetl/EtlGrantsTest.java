@@ -8,6 +8,7 @@ import com.shinhan.infoetl.adapter.out.jdbc.JdbcMartLoadAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaBalanceAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaCalendarAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaEventAdapter;
+import com.shinhan.infoetl.application.service.CutoffPolicy;
 import com.shinhan.infoetl.application.service.DailyLoadService;
 import com.shinhan.infoetl.domain.LoadResult;
 import com.shinhan.infoetl.domain.Pseudonymizer;
@@ -140,6 +141,7 @@ class EtlGrantsTest {
                 new JdbcReplicaBalanceAdapter(() -> open(replicaUrl, "etl_replica_reader")),
                 new JdbcReplicaEventAdapter(() -> open(replicaUrl, "etl_replica_reader")),
                 new JdbcReplicaCalendarAdapter(() -> open(replicaUrl, "etl_replica_reader")),
+                CutoffPolicy.disabled(),
                 new JdbcMartLoadAdapter(() -> open(martUrl, "etl_mart_writer"), Clock.system(ZoneId.of("Asia/Seoul"))),
                 new JdbcLoadLockAdapter(() -> open(martUrl, "etl_mart_writer")),
                 new Pseudonymizer(TestKeys.bytes("g")));

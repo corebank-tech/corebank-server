@@ -11,8 +11,10 @@ import com.shinhan.infoetl.application.port.out.LoadLockPort;
 import com.shinhan.infoetl.application.port.out.MartLoadPort;
 import com.shinhan.infoetl.application.port.out.ReplicaBalancePort;
 import com.shinhan.infoetl.application.port.out.ReplicaCalendarPort;
+import com.shinhan.infoetl.application.port.out.ReplicaCutoffPort;
 import com.shinhan.infoetl.application.port.out.ReplicaEventPort;
 import com.shinhan.infoetl.domain.BalanceRow;
+import com.shinhan.infoetl.domain.CutoffMissingException;
 import com.shinhan.infoetl.domain.EventType;
 import com.shinhan.infoetl.domain.LoadAlreadyRunningException;
 import com.shinhan.infoetl.domain.LoadResult;
@@ -39,6 +41,7 @@ class DailyLoadServiceTest {
     private final FakeMartLoadPort martPort = new FakeMartLoadPort();
     private final FakeLock lockPort = new FakeLock();
     private final FakeCalendar calendar = new FakeCalendar();
+    private CutoffPolicy cutoffPolicy = CutoffPolicy.disabled();
 
     @Test
     @DisplayName("읽은 행을 가명 키로 바꿔 한 번에 넘기고 결과를 돌려준다")
@@ -137,6 +140,7 @@ class DailyLoadServiceTest {
                 },
                 baseDate -> List.of(),
                 calendar,
+                cutoffPolicy,
                 martPort,
                 lockPort,
                 pseudonymizer);
@@ -192,7 +196,13 @@ class DailyLoadServiceTest {
         FakeLock failingLock = new FakeLock();
         martPort.publishFailure = new EtlStorageException("쓰기 실패", new RuntimeException("boom"));
         DailyLoadService failing = new DailyLoadService(
-                baseDate -> oneBalance(), baseDate -> List.of(), calendar, martPort, failingLock, pseudonymizer);
+                baseDate -> oneBalance(),
+                baseDate -> List.of(),
+                calendar,
+                cutoffPolicy,
+                martPort,
+                failingLock,
+                pseudonymizer);
         assertThatThrownBy(() -> failing.load(D)).isInstanceOf(EtlStorageException.class);
         assertThat(failingLock.released).isTrue();
     }
@@ -246,6 +256,68 @@ class DailyLoadServiceTest {
     }
 
     @Test
+    @DisplayName("경계일 이후 기준일인데 cutoff가 없으면 락도 적재 기록도 남기지 않고 거부한다")
+    void missingCutoffAfterBoundaryIsRejectedWithoutAnyRecord() {
+        cutoffPolicy = CutoffPolicy.enabled(D, new FakeCutoff());
+
+        assertThatThrownBy(() -> service(oneBalance(), List.of()).load(D)).isInstanceOf(CutoffMissingException.class);
+
+        assertThat(martPort.startedBaseDate).isNull();
+        assertThat(lockPort.acquired).isFalse();
+    }
+
+    @Test
+    @DisplayName("경계일 이후 기준일이라도 cutoff가 있으면 적재한다")
+    void closedCutoffAfterBoundaryLoads() {
+        cutoffPolicy = CutoffPolicy.enabled(D, new FakeCutoff(D));
+
+        service(oneBalance(), List.of()).load(D);
+
+        assertThat(martPort.startedBaseDate).isEqualTo(D);
+    }
+
+    @Test
+    @DisplayName("경계일 이전 기준일은 cutoff가 없어도 적재한다")
+    void beforeBoundaryLoadsWithoutCutoff() {
+        cutoffPolicy = CutoffPolicy.enabled(D.plusDays(1), new FakeCutoff());
+
+        service(oneBalance(), List.of()).load(D);
+
+        assertThat(martPort.startedBaseDate).isEqualTo(D);
+    }
+
+    @Test
+    @DisplayName("--rebuild로 다시 만들 때도 경계일 이후 cutoff가 필요하다")
+    void rebuildAfterBoundaryAlsoNeedsCutoff() {
+        martPort.completedBeforeLoad = Set.of(D);
+        cutoffPolicy = CutoffPolicy.enabled(D, new FakeCutoff());
+
+        assertThatThrownBy(() -> service(oneBalance(), List.of()).load(D, true))
+                .isInstanceOf(CutoffMissingException.class);
+
+        assertThat(martPort.startedBaseDate).isNull();
+    }
+
+    private static final class FakeCutoff implements ReplicaCutoffPort {
+
+        private final Set<LocalDate> closed;
+
+        FakeCutoff(LocalDate... closedDates) {
+            this.closed = Set.of(closedDates);
+        }
+
+        @Override
+        public boolean isClosed(LocalDate baseDate) {
+            return closed.contains(baseDate);
+        }
+
+        @Override
+        public java.util.Optional<LocalDate> latestClosedDate() {
+            return closed.stream().max(LocalDate::compareTo);
+        }
+    }
+
+    @Test
     @DisplayName("T2에서 완료된 날짜 범위의 휴일로 asOf를 계산해 결과에 담는다")
     void computesAsOfFromCompletedDatesInsideTheLoad() {
         martPort.completedBeforeLoad = Set.of(LocalDate.of(2026, 10, 15), LocalDate.of(2026, 10, 16));
@@ -261,7 +333,7 @@ class DailyLoadServiceTest {
     private DailyLoadService service(List<BalanceRow> balances, List<SubscriptionEventRow> events) {
         ReplicaBalancePort balancePort = baseDate -> balances;
         ReplicaEventPort eventPort = baseDate -> events;
-        return new DailyLoadService(balancePort, eventPort, calendar, martPort, lockPort, pseudonymizer);
+        return new DailyLoadService(balancePort, eventPort, calendar, cutoffPolicy, martPort, lockPort, pseudonymizer);
     }
 
     private static List<BalanceRow> oneBalance() {

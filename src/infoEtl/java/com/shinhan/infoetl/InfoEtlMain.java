@@ -5,9 +5,11 @@ import com.shinhan.infoetl.adapter.out.jdbc.JdbcLoadLockAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcMartLoadAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaBalanceAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaCalendarAdapter;
+import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaCutoffAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaEventAdapter;
 import com.shinhan.infoetl.application.port.in.DailyLoadUseCase;
 import com.shinhan.infoetl.application.port.in.RangeLoadUseCase;
+import com.shinhan.infoetl.application.service.CutoffPolicy;
 import com.shinhan.infoetl.application.service.DailyLoadService;
 import com.shinhan.infoetl.application.service.RangeLoadService;
 import com.shinhan.infoetl.domain.LoadResult;
@@ -64,10 +66,15 @@ public final class InfoEtlMain {
         JdbcConnectionFactory mart = () -> open(martUrl, config.martUser(), config.martPassword());
         JdbcReplicaCalendarAdapter calendar = new JdbcReplicaCalendarAdapter(replica);
         JdbcMartLoadAdapter martLoad = new JdbcMartLoadAdapter(mart, Clock.system(ZoneId.of("Asia/Seoul")));
+        JdbcReplicaCutoffAdapter cutoff = new JdbcReplicaCutoffAdapter(replica);
+        CutoffPolicy cutoffPolicy = config.cutoffBoundary() == null
+                ? CutoffPolicy.disabled()
+                : CutoffPolicy.enabled(config.cutoffBoundary(), cutoff);
         DailyLoadUseCase daily = new DailyLoadService(
                 new JdbcReplicaBalanceAdapter(replica),
                 new JdbcReplicaEventAdapter(replica),
                 calendar,
+                cutoffPolicy,
                 martLoad,
                 new JdbcLoadLockAdapter(mart),
                 pseudonymizer);
