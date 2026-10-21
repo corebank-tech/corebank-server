@@ -6,7 +6,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
-import com.shinhan.corebank.business.api.BusinessDateProvider;
+import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.business.support.BusinessDateTestFixture;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
@@ -100,7 +100,7 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
     private Clock clock;
 
     @Autowired
-    private BusinessDateProvider businessDateProvider;
+    private BusinessDateGate businessDateGate;
 
     @Autowired
     private BusinessDateTestFixture businessDateTestFixture;
@@ -336,7 +336,7 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
                 preChecks,
                 ledgerPostingHooks,
                 clock,
-                businessDateProvider,
+                businessDateGate,
                 transactionManager,
                 eventPublisher,
                 registry);

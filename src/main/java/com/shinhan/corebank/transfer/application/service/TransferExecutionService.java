@@ -1,6 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
-import com.shinhan.corebank.business.api.BusinessDateProvider;
+import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
@@ -68,6 +68,9 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     // doExecute()가 예외를 던져 결과를 못 만든 호출. 태그 값을 고정해 두려고 상수로 둔다.
     private static final String RESULT_EXCEPTION = "EXCEPTION";
 
+    // 채번 뒤 기표 전까지 들고 다니는 값. 거래일은 gate를 쥔 트랜잭션 안에서 읽어야 해서 Transfer는 거기서 만든다.
+    private record Draft(ResolvedPayee payee, String transactionNumber, LocalDateTime requestedAt) {}
+
     private final AccountLockPort accountLockPort;
     private final TransferLimitPort transferLimitPort;
     private final TransferAuthTokenVerificationPort transferAuthTokenVerificationPort;
@@ -79,7 +82,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private final List<TransferPreCheck> transferPreChecks;
     private final List<LedgerPostingHook> ledgerPostingHooks;
     private final Clock clock;
-    private final BusinessDateProvider businessDateProvider;
+    private final BusinessDateGate businessDateGate;
     private final TransactionTemplate requiresNewTransactionTemplate;
     private final ApplicationEventPublisher eventPublisher;
     private final MeterRegistry meterRegistry;
@@ -96,7 +99,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             List<TransferPreCheck> transferPreChecks,
             List<LedgerPostingHook> ledgerPostingHooks,
             Clock clock,
-            BusinessDateProvider businessDateProvider,
+            BusinessDateGate businessDateGate,
             PlatformTransactionManager transactionManager,
             ApplicationEventPublisher eventPublisher,
             MeterRegistry meterRegistry) {
@@ -114,7 +117,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 .toList();
         this.ledgerPostingHooks = List.copyOf(ledgerPostingHooks);
         this.clock = clock;
-        this.businessDateProvider = businessDateProvider;
+        this.businessDateGate = businessDateGate;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
         this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.eventPublisher = eventPublisher;
@@ -183,24 +186,21 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         LocalDateTime requestedAt = LocalDateTime.now(clock);
 
         // 사전 검증도 이 try 안에 넣어 항상 TransferResult를 반환한다 — 호출자는 예외를 안 던진다고 가정한다.
-        Transfer created = null;
+        Draft draft = null;
         try {
             ResolvedPayee payee = verifyBeforeLock(command);
 
-            // 한 건에 한 번만 읽어 transfer에 싣는다 — 원장·훅 B·ERROR 행이 같은 거래일을 갖게(#516).
-            LocalDate tradeDate = businessDateProvider.today();
             String transactionNumber =
                     transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), command.channel());
 
-            // 실패해도 ERROR로 남길 수 있도록, DB에 아직 저장되지 않은(transferId=null) 상태로
-            // 들고 있는다. 아래 트랜잭션이 실패해 롤백되더라도 이 자바 객체 자체는 영향받지 않는다.
-            created = newTransfer(command, payee, transactionNumber, requestedAt, tradeDate);
+            // 실패해도 ERROR로 남길 수 있도록 채번 직후부터 들고 있는다. Transfer는 기표·ERROR 트랜잭션이 거래일과 함께 만든다.
+            draft = new Draft(payee, transactionNumber, requestedAt);
 
             preCheckWithoutLock(command, payee);
             runTransferPreChecks(command);
             consumeOtpAuthToken(command);
 
-            Transfer completed = postLedger(command, payee, created, transactionNumber);
+            Transfer completed = postLedger(command, draft);
 
             return TransferResult.builder()
                     .status(completed.getStatus())
@@ -209,15 +209,15 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                     .withdrawalBalanceAfter(completed.getWithdrawalBalanceAfter())
                     .build();
         } catch (BusinessException e) {
-            // created가 없으면(payee 해석·채번 전 실패) 남길 행 자체가 없으니 결과만 만든다.
-            if (created == null) {
+            // draft가 없으면(payee 해석·채번 전 실패) 남길 행 자체가 없으니 결과만 만든다.
+            if (draft == null) {
                 return TransferResult.builder()
                         .status(ProcessResultStatus.ERROR)
                         .errorCode(e.getErrorCode().getCode())
                         .errorMessage(e.getMessage())
                         .build();
             }
-            return failTransfer(command, created, e.getErrorCode().getCode(), e.getMessage(), e, replayed);
+            return failTransfer(command, draft, e.getErrorCode().getCode(), e.getMessage(), e, replayed);
         } catch (DataIntegrityViolationException e) {
             // 사전조회 이후 동시에 들어온 다른 execute() 호출이 같은 sourceId+executionDate로
             // 먼저 커밋했을 가능성을 재조회로 확인한다. REQUIRES_NEW로 새 스냅샷을 떠야 하는
@@ -234,10 +234,10 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             // 재조회가 비었다는 건 이 unique 충돌이 멱등성 제약이 아니었다는 뜻이다(FK/CHECK 등) -
             // 일반 RuntimeException과 동일하게 ERROR로 확정 기록하되 예외는 그대로 전파해 호출자가
             // 이를 정상적인 이체 실패로 오인하지 않게 한다.
-            recordInternalError(command, created, e);
+            recordInternalError(command, draft, e);
             throw e;
         } catch (RuntimeException e) {
-            recordInternalError(command, created, e);
+            recordInternalError(command, draft, e);
             throw e;
         }
     }
@@ -291,18 +291,13 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         return payee;
     }
 
-    private Transfer newTransfer(
-            TransferCommand command,
-            ResolvedPayee payee,
-            String transactionNumber,
-            LocalDateTime requestedAt,
-            LocalDate tradeDate) {
+    private Transfer newTransfer(TransferCommand command, Draft draft, LocalDate tradeDate) {
         return Transfer.create(
-                transactionNumber,
+                draft.transactionNumber(),
                 command.withdrawalAccountId(),
-                payee.accountId(),
+                draft.payee().accountId(),
                 command.depositAccountNumber(),
-                payee.payeeName(),
+                draft.payee().payeeName(),
                 command.amount(),
                 FEE,
                 command.transferType(),
@@ -312,7 +307,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 command.executionDate(),
                 command.myPassbookMemo(),
                 command.recipientPassbookMemo(),
-                requestedAt,
+                draft.requestedAt(),
                 tradeDate);
     }
 
@@ -320,7 +315,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     // 성공 시 즉시 소비되는 자원이라, 통과 못 할 게 뻔한 요청이 OTP부터 태우지 않도록
     // 락 획득 전에 미리 걸러낸다. 락이 없어 최종 판정은 아니며, 락 획득 후 재검증(postLedger
     // 안)이 최종 권위를 갖는다 — 이 사전 체크를 통과했어도 그 사이 상태가 바뀌면 거기서 다시
-    // 걸린다. created 확정 이후에 호출하는 이유: 여기서 실패해도 다른 락 안쪽 실패와 동일하게
+    // 걸린다. draft 확정 이후에 호출하는 이유: 여기서 실패해도 다른 락 안쪽 실패와 동일하게
     // failTransfer()로 ERROR 행을 남겨야 한다.
     private void preCheckWithoutLock(TransferCommand command, ResolvedPayee payee) {
         if (command.otpAuthToken() == null) {
@@ -341,7 +336,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         }
     }
 
-    // [훅 A] PH-99 사전검증. OTP·한도를 소모하기 전, ERROR 행을 남길 수 있는 created 확정 뒤 자리다.
+    // [훅 A] PH-99 사전검증. OTP·한도를 소모하기 전, ERROR 행을 남길 수 있는 draft 확정 뒤 자리다.
     private void runTransferPreChecks(TransferCommand command) {
         TransferPreCheckContext context =
                 new TransferPreCheckContext(command.customerId(), command.withdrawalAccountId(), command.amount());
@@ -365,9 +360,14 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     }
 
     // 기표 트랜잭션. 한도 예약부터 원장 2행·완료 기록까지가 한 단위로 커밋된다.
-    private Transfer postLedger(
-            TransferCommand command, ResolvedPayee payee, Transfer createdTransfer, String transactionNumber) {
+    private Transfer postLedger(TransferCommand command, Draft draft) {
+        ResolvedPayee payee = draft.payee();
+        String transactionNumber = draft.transactionNumber();
         return requiresNewTransactionTemplate.execute(status -> {
+            // 가장 먼저 gate를 잡는다(gate → 한도 → 계좌). 한 건에 한 번만 읽어 transfer에 싣는다 — 원장·훅 B·완료 기록이 같은 거래일을 갖게(#516).
+            LocalDate tradeDate = businessDateGate.acquireSharedAndReadBusinessDate();
+            Transfer createdTransfer = newTransfer(command, draft, tradeDate);
+
             // 한도 락을 계좌 락보다 먼저 획득한다(P1-P4 합의: 한도 → 계좌 순서). 위반 시
             // LMT0002/LMT0003을 던진다 — 여기서 예외가 나면 아래 계좌 락은 아예 시도되지 않는다.
             transferLimitPort.checkAndReserve(command.customerId(), command.amount());
@@ -445,14 +445,14 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         }
     }
 
-    // 채번 전에 터졌으면(created == null) 남길 행 자체가 없다.
-    private void recordInternalError(TransferCommand command, Transfer created, RuntimeException cause) {
-        if (created == null) {
+    // 채번 전에 터졌으면(draft == null) 남길 행 자체가 없다.
+    private void recordInternalError(TransferCommand command, Draft draft, RuntimeException cause) {
+        if (draft == null) {
             return;
         }
         failTransfer(
                 command,
-                created,
+                draft,
                 CommonErrorCode.INTERNAL_ERROR.getCode(),
                 CommonErrorCode.INTERNAL_ERROR.getMessage(),
                 cause,
@@ -489,14 +489,16 @@ public class TransferExecutionService implements TransferExecutionUseCase {
      */
     private TransferResult failTransfer(
             TransferCommand command,
-            Transfer created,
+            Draft draft,
             String errorCode,
             String errorMessage,
             RuntimeException cause,
             AtomicBoolean replayed) {
-        created.fail(errorCode, errorMessage);
         try {
             requiresNewTransactionTemplate.executeWithoutResult(status -> {
+                // 롤백된 기표 트랜잭션의 거래일을 쓰지 않고, 이 트랜잭션에서 gate로 읽는다.
+                Transfer created = newTransfer(command, draft, businessDateGate.acquireSharedAndReadBusinessDate());
+                created.fail(errorCode, errorMessage);
                 Transfer failed = transferSavePort.save(created);
                 publishSettled(command, failed, LocalDateTime.now(clock));
             });
@@ -521,7 +523,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
 
         return TransferResult.builder()
                 .status(ProcessResultStatus.ERROR)
-                .transactionNumber(created.getTransactionNumber())
+                .transactionNumber(draft.transactionNumber())
                 .errorCode(errorCode)
                 .errorMessage(errorMessage)
                 .build();
