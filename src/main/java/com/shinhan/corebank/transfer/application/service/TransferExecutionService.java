@@ -315,7 +315,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     // 성공 시 즉시 소비되는 자원이라, 통과 못 할 게 뻔한 요청이 OTP부터 태우지 않도록
     // 락 획득 전에 미리 걸러낸다. 락이 없어 최종 판정은 아니며, 락 획득 후 재검증(postLedger
     // 안)이 최종 권위를 갖는다 — 이 사전 체크를 통과했어도 그 사이 상태가 바뀌면 거기서 다시
-    // 걸린다. created 확정 이후에 호출하는 이유: 여기서 실패해도 다른 락 안쪽 실패와 동일하게
+    // 걸린다. draft 확정 이후에 호출하는 이유: 여기서 실패해도 다른 락 안쪽 실패와 동일하게
     // failTransfer()로 ERROR 행을 남겨야 한다.
     private void preCheckWithoutLock(TransferCommand command, ResolvedPayee payee) {
         if (command.otpAuthToken() == null) {
@@ -336,7 +336,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         }
     }
 
-    // [훅 A] PH-99 사전검증. OTP·한도를 소모하기 전, ERROR 행을 남길 수 있는 created 확정 뒤 자리다.
+    // [훅 A] PH-99 사전검증. OTP·한도를 소모하기 전, ERROR 행을 남길 수 있는 draft 확정 뒤 자리다.
     private void runTransferPreChecks(TransferCommand command) {
         TransferPreCheckContext context =
                 new TransferPreCheckContext(command.customerId(), command.withdrawalAccountId(), command.amount());
@@ -445,7 +445,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         }
     }
 
-    // 채번 전에 터졌으면(created == null) 남길 행 자체가 없다.
+    // 채번 전에 터졌으면(draft == null) 남길 행 자체가 없다.
     private void recordInternalError(TransferCommand command, Draft draft, RuntimeException cause) {
         if (draft == null) {
             return;

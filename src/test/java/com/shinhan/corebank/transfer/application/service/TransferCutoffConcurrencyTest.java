@@ -53,10 +53,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/**
- * 이체가 계좌 락을 기다리는 사이 영업일 전환이 시도되는 경합을 확인한다 (#662, #648 재현).
- * 락 대기와 커밋 순서가 검증 대상이라 @Transactional을 두지 않는다.
- */
+// 이체가 계좌 락을 기다리는 사이 영업일 전환이 시도되는 경합(#662, #648). 락 대기가 검증 대상이라 @Transactional을 두지 않는다.
 @DisplayName("영업일 cutoff — 이체가 계좌 락을 기다리는 사이의 영업일 전환")
 class TransferCutoffConcurrencyTest extends IntegrationTestSupport {
 
