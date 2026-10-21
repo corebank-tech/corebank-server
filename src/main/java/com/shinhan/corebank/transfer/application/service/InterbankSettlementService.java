@@ -1,6 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
-import com.shinhan.corebank.business.api.BusinessDateProvider;
+import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.ErrorCode;
 import com.shinhan.corebank.common.util.MaskingUtil;
@@ -41,7 +41,7 @@ public class InterbankSettlementService {
     private final LedgerLookupPort ledgerLookupPort;
     private final LedgerSavePort ledgerSavePort;
     private final JournalPostingUseCase journalPostingUseCase;
-    private final BusinessDateProvider businessDateProvider;
+    private final BusinessDateGate businessDateGate;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
     private final TransactionTemplate requiresNewTransactionTemplate;
@@ -53,7 +53,7 @@ public class InterbankSettlementService {
             LedgerLookupPort ledgerLookupPort,
             LedgerSavePort ledgerSavePort,
             JournalPostingUseCase journalPostingUseCase,
-            BusinessDateProvider businessDateProvider,
+            BusinessDateGate businessDateGate,
             ApplicationEventPublisher eventPublisher,
             Clock clock,
             PlatformTransactionManager transactionManager) {
@@ -63,7 +63,7 @@ public class InterbankSettlementService {
         this.ledgerLookupPort = ledgerLookupPort;
         this.ledgerSavePort = ledgerSavePort;
         this.journalPostingUseCase = journalPostingUseCase;
-        this.businessDateProvider = businessDateProvider;
+        this.businessDateGate = businessDateGate;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
@@ -87,7 +87,7 @@ public class InterbankSettlementService {
                 .orElseThrow(() -> new IllegalStateException(
                         "타행 출금 원장이 없습니다 - transactionNumber = " + transfer.getTransactionNumber()));
         // 확정한 날의 영업일로 해소 전표를 세운다(정정 거래와 같은 규칙, transfer_seam.md 정책 6).
-        LocalDate tradeDate = businessDateProvider.today();
+        LocalDate tradeDate = businessDateGate.acquireSharedAndReadBusinessDate();
         LocalDateTime now = LocalDateTime.now(clock);
 
         if (reply.outcome() == InterbankOutcome.APPROVED) {

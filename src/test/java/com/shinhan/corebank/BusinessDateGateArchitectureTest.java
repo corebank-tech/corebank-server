@@ -12,15 +12,10 @@ import com.tngtech.archunit.lang.ArchRule;
 @AnalyzeClasses(packages = "com.shinhan.corebank", importOptions = ImportOption.DoNotIncludeTests.class)
 class BusinessDateGateArchitectureTest {
 
-    // InterbankTransferService·InterbankSettlementService 는 #662 에서 gate 로 옮기면 이 예외를 지운다
     @ArchTest
     static final ArchRule todayIsOnlyReadByBusinessAndBatch = noClasses()
             .that()
             .resideOutsideOfPackages("..business..", "..batch..")
-            .and()
-            .haveSimpleNameNotStartingWith("InterbankTransferService")
-            .and()
-            .haveSimpleNameNotStartingWith("InterbankSettlementService")
             .should()
             .callMethod(BusinessDateProvider.class, "today")
             .because("거래일은 BusinessDateGate.acquireSharedAndReadBusinessDate() 로만 읽는다");
