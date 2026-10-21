@@ -1,6 +1,5 @@
 package com.shinhan.corebank.otp.adapter.out.persistence;
 
-import com.shinhan.corebank.common.ephemeralstore.ConditionalOnJdbcEphemeralStore;
 import com.shinhan.corebank.otp.application.port.out.OtpIssueLockPort;
 import java.time.Clock;
 import java.time.Duration;
@@ -19,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
  * 이미 잡힌 잠금은 기다리지 않고 빈 값을 돌려준다 — 대기가 DB 커넥션 점유로 번지지 않게 하려는 것이다.
  */
 @Component
-@ConditionalOnJdbcEphemeralStore
 @RequiredArgsConstructor
 public class OtpIssueLockPersistenceAdapter implements OtpIssueLockPort {
 

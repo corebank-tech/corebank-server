@@ -3,7 +3,6 @@ package com.shinhan.corebank.signup.adapter.out.persistence;
 import com.shinhan.corebank.common.authtoken.AuthTokenPurpose;
 import com.shinhan.corebank.common.authtoken.AuthTokenStore;
 import com.shinhan.corebank.common.authtoken.AuthTokenStore.Source;
-import com.shinhan.corebank.common.ephemeralstore.ConditionalOnJdbcEphemeralStore;
 import com.shinhan.corebank.signup.application.port.out.SignupTokenTransitionPort;
 import com.shinhan.corebank.signup.domain.model.TempSignupTokenPayload;
 import java.time.Duration;
@@ -14,7 +13,6 @@ import org.springframework.stereotype.Component;
 
 // 선행 인증 토큰 소비와 tempSignupToken 발급을 한 트랜잭션으로 처리한다.
 @Component
-@ConditionalOnJdbcEphemeralStore
 @RequiredArgsConstructor
 public class SignupTokenTransitionPersistenceAdapter implements SignupTokenTransitionPort {
 

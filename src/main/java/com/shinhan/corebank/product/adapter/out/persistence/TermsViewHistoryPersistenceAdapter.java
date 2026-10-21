@@ -1,6 +1,5 @@
 package com.shinhan.corebank.product.adapter.out.persistence;
 
-import com.shinhan.corebank.common.ephemeralstore.ConditionalOnJdbcEphemeralStore;
 import com.shinhan.corebank.product.application.port.out.TermsView;
 import com.shinhan.corebank.product.application.port.out.TermsViewHistoryPort;
 import java.time.Clock;
@@ -13,7 +12,6 @@ import org.springframework.stereotype.Component;
 
 // 상품 약관 열람 이력을 MySQL에 기록하고 열람 후 30분 동안 인정한다.
 @Component
-@ConditionalOnJdbcEphemeralStore
 @RequiredArgsConstructor
 public class TermsViewHistoryPersistenceAdapter implements TermsViewHistoryPort {
 
