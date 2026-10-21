@@ -129,9 +129,9 @@ flowchart TB
 
 ### 3-4. 관리자 인증·감사
 
-- **모델:** `customer.role` + `permissions` CSV. 권한은 고정 5종(`GL_READ · GL_WRITE · CUSTOMER_READ · CUSTOMER_WRITE · AUDIT_READ`)이다. 로그인은 `/admin/auth/login`으로 분리하고, 관리자 세션은 30분이다. 상세는 [PH-49a](tasks.md#ph-49a-관리자-인증-①-결정스키마-102--②-구현-108).
+- **모델:** `customer.role` + `admin_permission` 조인 테이블. 권한은 고정 5종(`GL_READ · GL_WRITE · CUSTOMER_READ · CUSTOMER_WRITE · AUDIT_READ`)이다. 로그인은 `/admin/auth/login`으로 분리하고, 관리자 세션은 30분이다. 상세는 [PH-49a](tasks.md#ph-49a-관리자-인증-①-결정스키마-102--②-구현-108).
 - **화면별 권한:** ADM-01 `CUSTOMER_*` · ADM-02 `GL_READ` · ADM-03 정보계 `GL_READ` · ADM-04 대사 `AUDIT_READ`
-- **S0 임시 가드(#448)는 prod에 배포하지 않는다.** PH-49a-②(10/8)가 걷어낸다.
+- **S0 임시 가드(#448)는 PR #652에서 제거됐다.** `/admin/**`는 권한별 인가로 보호한다. 운영 적용 여부는 배포 이미지에서 확인한다.
 - **조회 사유:** 고객 개인정보 조회·변경 API에는 `X-Access-Reason` 헤더(enum 4종)가 필수다. 규약 표는 [PH-89](tasks.md#ph-89-감사-5w--조회-감사--조회-사유-강제)에 있다.
 - 관리자 변경은 전부 기존 `AuditLog`를 거친다. 감사 IP는 신뢰 프록시 기준으로 기록한다(#458).
 
