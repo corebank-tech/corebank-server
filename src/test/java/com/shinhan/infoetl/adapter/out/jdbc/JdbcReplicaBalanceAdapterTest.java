@@ -1,6 +1,7 @@
 package com.shinhan.infoetl.adapter.out.jdbc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.infoetl.InfoEtlTestDatabase;
 import com.shinhan.infoetl.ReplicaFixtures;
@@ -27,7 +28,7 @@ class JdbcReplicaBalanceAdapterTest {
     @BeforeEach
     void resetReplica() throws SQLException {
         InfoEtlTestDatabase.resetReplica();
-        insertProduct(100L, "DEPOSIT");
+        ReplicaFixtures.insertProduct(100L, "DEPOSIT");
     }
 
     @Test
@@ -106,7 +107,7 @@ class JdbcReplicaBalanceAdapterTest {
     @Test
     @DisplayName("해지일이 기준일이면 0원 행을 포함한다")
     void includesClosedAccountOnClosingDay() throws SQLException {
-        insertAccount(9L, 19L, 100L, "TIME_DEPOSIT", "CLOSED");
+        ReplicaFixtures.insertClosedAccount(9L, 19L, 100L, "TIME_DEPOSIT", D);
         insertLedger(60L, 9L, 1_000L, LocalDateTime.of(2026, 10, 19, 10, 0), D.minusDays(1));
         insertLedger(61L, 9L, 0L, LocalDateTime.of(2026, 10, 20, 15, 0), D);
 
@@ -116,7 +117,7 @@ class JdbcReplicaBalanceAdapterTest {
     @Test
     @DisplayName("해지일이 기준일보다 앞이면 행을 만들지 않는다")
     void excludesAccountClosedBeforeBaseDate() throws SQLException {
-        insertAccount(10L, 20L, 100L, "TIME_DEPOSIT", "CLOSED");
+        ReplicaFixtures.insertClosedAccount(10L, 20L, 100L, "TIME_DEPOSIT", D.minusDays(1));
         insertLedger(70L, 10L, 1_000L, LocalDateTime.of(2026, 10, 17, 10, 0), D.minusDays(3));
         insertLedger(71L, 10L, 0L, LocalDateTime.of(2026, 10, 19, 10, 0), D.minusDays(1));
 
@@ -126,7 +127,7 @@ class JdbcReplicaBalanceAdapterTest {
     @Test
     @DisplayName("해지일이 기준일보다 뒤면 기준일 시점의 잔액으로 포함한다")
     void includesAccountClosedAfterBaseDateWithBalanceAtBaseDate() throws SQLException {
-        insertAccount(11L, 21L, 100L, "TIME_DEPOSIT", "CLOSED");
+        ReplicaFixtures.insertClosedAccount(11L, 21L, 100L, "TIME_DEPOSIT", D.plusDays(2));
         insertLedger(80L, 11L, 1_000L, LocalDateTime.of(2026, 10, 19, 10, 0), D.minusDays(1));
         insertLedger(81L, 11L, 0L, LocalDateTime.of(2026, 10, 22, 10, 0), D.plusDays(2));
 
@@ -152,9 +153,9 @@ class JdbcReplicaBalanceAdapterTest {
     }
 
     @Test
-    @DisplayName("해지 기표가 기준일보다 한참 뒤여도 기준일에 열려 있던 계좌는 그날 잔액으로 포함한다")
+    @DisplayName("해지 논리 영업일이 기준일보다 한참 뒤여도 기준일에 열려 있던 계좌는 그날 잔액으로 포함한다")
     void includesAccountClosedLongAfterBaseDate() throws SQLException {
-        insertAccount(15L, 25L, null, "DEMAND_DEPOSIT", "CLOSED");
+        ReplicaFixtures.insertClosedAccount(15L, 25L, null, "DEMAND_DEPOSIT", D.plusDays(30));
         insertLedger(100L, 15L, 1_000L, LocalDateTime.of(2026, 10, 10, 10, 0), D.minusDays(10));
         insertLedger(101L, 15L, 0L, LocalDateTime.of(2026, 11, 19, 10, 0), D.plusDays(30));
 
@@ -162,9 +163,9 @@ class JdbcReplicaBalanceAdapterTest {
     }
 
     @Test
-    @DisplayName("해지 기표가 기준일보다 한참 뒤이고 해지일이 기준일 이전이면 포함하지 않는다")
+    @DisplayName("해지 논리 영업일이 기준일 이전이면 다른 기표가 뒤에 있어도 포함하지 않는다")
     void excludesAccountClosedBeforeBaseDateEvenWhenOtherEntriesComeLater() throws SQLException {
-        insertAccount(16L, 26L, null, "DEMAND_DEPOSIT", "CLOSED");
+        ReplicaFixtures.insertClosedAccount(16L, 26L, null, "DEMAND_DEPOSIT", D.minusDays(15));
         insertLedger(110L, 16L, 500L, LocalDateTime.of(2026, 10, 1, 10, 0), D.minusDays(19));
         insertLedger(111L, 16L, 0L, LocalDateTime.of(2026, 10, 5, 10, 0), D.minusDays(15));
 
@@ -214,15 +215,27 @@ class JdbcReplicaBalanceAdapterTest {
     }
 
     @Test
-    @DisplayName("휴일에 기표된 해지 0원 행은 다음 영업일에 해지일을 갖고 그날 0원 행으로 나온다")
+    @DisplayName("휴일에 기표된 해지는 해지 논리 영업일(다음 영업일)에 0원 행으로 나오고 그 뒤에는 나오지 않는다")
     void closingEntryOnWeekendIsClosedOnNextBusinessDay() throws SQLException {
-        insertAccount(34L, 44L, 100L, "TIME_DEPOSIT", "CLOSED");
+        ReplicaFixtures.insertClosedAccount(34L, 44L, 100L, "TIME_DEPOSIT", LocalDate.of(2026, 10, 19));
         insertLedger(204L, 34L, 1_000L, LocalDateTime.of(2026, 10, 15, 10, 0), LocalDate.of(2026, 10, 15));
         insertLedger(205L, 34L, 0L, LocalDateTime.of(2026, 10, 17, 10, 0), null);
 
         assertThat(readOn(LocalDate.of(2026, 10, 16)).get(34L).balance()).isEqualTo(1_000L);
         assertThat(readOn(LocalDate.of(2026, 10, 19)).get(34L).balance()).isZero();
         assertThat(readOn(D)).doesNotContainKey(34L);
+    }
+
+    @Test
+    @DisplayName("해지인데 해지 논리 영업일이 없는 계좌가 있으면 원천 계약 위반으로 거부한다")
+    void rejectsClosedAccountWithoutClosedTradeDate() throws SQLException {
+        insertAccount(40L, 50L, 100L, "TIME_DEPOSIT", "CLOSED");
+        insertLedger(300L, 40L, 0L, LocalDateTime.of(2026, 10, 19, 10, 0), D.minusDays(1));
+
+        assertThatThrownBy(this::read)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("accountId=[40]")
+                .hasMessageContaining("closed_trade_date");
     }
 
     @Test
@@ -240,16 +253,6 @@ class JdbcReplicaBalanceAdapterTest {
     private Map<Long, BalanceRow> readOn(LocalDate baseDate) {
         List<BalanceRow> rows = adapter.readBalances(baseDate);
         return rows.stream().collect(Collectors.toMap(BalanceRow::accountId, Function.identity()));
-    }
-
-    private void insertProduct(long productId, String group) throws SQLException {
-        try (Connection connection = InfoEtlTestDatabase.replica();
-                PreparedStatement statement =
-                        connection.prepareStatement("INSERT INTO product (product_id, product_group) VALUES (?, ?)")) {
-            statement.setLong(1, productId);
-            statement.setString(2, group);
-            statement.executeUpdate();
-        }
     }
 
     private void insertAccount(long accountId, long customerId, Long productId, String type, String status)

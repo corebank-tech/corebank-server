@@ -100,6 +100,86 @@ class InfoEtlMainTest {
                 .isEqualTo("jdbc:mysql://mart:3307/mart?rewriteBatchedStatements=false");
     }
 
+    @Test
+    @DisplayName("하루짜리 인자와 기간 인자를 구분해서 읽는다")
+    void parsesSingleAndRangeCommands() {
+        InfoEtlMain.LoadCommand single = InfoEtlMain.parseCommand(new String[] {"--base-date=2026-10-20"});
+        assertThat(single.range()).isFalse();
+        assertThat(single.from()).isEqualTo(D);
+        assertThat(single.to()).isEqualTo(D);
+
+        InfoEtlMain.LoadCommand range = InfoEtlMain.parseCommand(new String[] {"--from=2026-10-19", "--to=2026-10-21"});
+        assertThat(range.range()).isTrue();
+        assertThat(range.from()).isEqualTo(LocalDate.of(2026, 10, 19));
+        assertThat(range.to()).isEqualTo(LocalDate.of(2026, 10, 21));
+    }
+
+    @Test
+    @DisplayName("--rebuild는 --base-date와 함께일 때만 켜지고 기간 적재에는 쓸 수 없다")
+    void rebuildOnlyWithBaseDate() {
+        assertThat(InfoEtlMain.parseCommand(new String[] {"--base-date=2026-10-20"})
+                        .rebuild())
+                .isFalse();
+        assertThat(InfoEtlMain.parseCommand(new String[] {"--base-date=2026-10-20", "--rebuild"})
+                        .rebuild())
+                .isTrue();
+        assertThatThrownBy(() ->
+                        InfoEtlMain.parseCommand(new String[] {"--from=2026-10-19", "--to=2026-10-21", "--rebuild"}))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("기준일과 기간을 섞거나 기간 인자가 하나뿐이거나 순서가 뒤집히면 거부한다")
+    void rejectsInvalidCombinations() {
+        assertThatThrownBy(() -> InfoEtlMain.parseCommand(
+                        new String[] {"--base-date=2026-10-20", "--from=2026-10-19", "--to=2026-10-21"}))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> InfoEtlMain.parseCommand(new String[] {"--from=2026-10-19"}))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> InfoEtlMain.parseCommand(new String[] {"--to=2026-10-19"}))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> InfoEtlMain.parseCommand(new String[] {"--from=2026-10-21", "--to=2026-10-19"}))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> InfoEtlMain.parseCommand(new String[] {"--from=2026-13-01", "--to=2026-10-19"}))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> InfoEtlMain.parseCommand(new String[0])).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("섞어 쓴 인자는 종료 코드 2를 돌려준다")
+    void mixedArgumentsReturnUsageExitCode() {
+        assertThat(InfoEtlMain.run(
+                        new String[] {"--base-date=2026-10-20", "--from=2026-10-19", "--to=2026-10-21"}, env()))
+                .isEqualTo(InfoEtlMain.EXIT_USAGE);
+    }
+
+    @Test
+    @DisplayName("기간 적재는 주말과 공휴일을 건너뛰고 영업일만 마트에 넣고 종료 코드 0을 돌려준다")
+    void rangeLoadSkipsNonBusinessDays() throws SQLException {
+        ReplicaFixtures.insertLedger(5L, 1L, 100L, LocalDateTime.of(2026, 10, 16, 9, 0), LocalDate.of(2026, 10, 16));
+        ReplicaFixtures.insertHoliday(LocalDate.of(2026, 10, 21), "임시 공휴일");
+
+        int exitCode = InfoEtlMain.run(new String[] {"--from=2026-10-17", "--to=2026-10-22"}, env());
+
+        assertThat(exitCode).isEqualTo(InfoEtlMain.EXIT_OK);
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            assertThat(loadedBaseDates(mart))
+                    .containsExactly(LocalDate.of(2026, 10, 19), D, LocalDate.of(2026, 10, 22));
+        }
+    }
+
+    @Test
+    @DisplayName("기간 중 하루라도 실패하면 나머지는 적재하고 종료 코드 1을 돌려준다")
+    void rangeLoadReturnsFailureCodeButKeepsLoadingOthers() throws SQLException {
+        // 10/19는 그날까지의 원장이 없어 잔액이 0건이라 실패하고, 10/20·21은 적재된다.
+        int exitCode = InfoEtlMain.run(new String[] {"--from=2026-10-19", "--to=2026-10-21"}, env());
+
+        assertThat(exitCode).isEqualTo(InfoEtlMain.EXIT_LOAD_FAILED);
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            assertThat(loadedBaseDates(mart)).containsExactly(D, LocalDate.of(2026, 10, 21));
+        }
+    }
+
     private static Map<String, String> env() {
         Map<String, String> env = new HashMap<>();
         env.put("REPLICA_JDBC_URL", InfoEtlTestDatabase.replicaUrl());
@@ -110,6 +190,18 @@ class InfoEtlMainTest {
         env.put("MART_PASSWORD", InfoEtlTestDatabase.password());
         env.put("HMAC_KEY", "main-test-key-0001-0123456789abcdef");
         return env;
+    }
+
+    private static java.util.List<LocalDate> loadedBaseDates(Connection mart) throws SQLException {
+        java.util.List<LocalDate> dates = new java.util.ArrayList<>();
+        try (Statement statement = mart.createStatement();
+                ResultSet resultSet = statement.executeQuery(
+                        "SELECT DISTINCT base_date FROM mart_daily_account_balance ORDER BY base_date")) {
+            while (resultSet.next()) {
+                dates.add(resultSet.getObject(1, LocalDate.class));
+            }
+        }
+        return dates;
     }
 
     private static long countBalanceRows(Connection mart) throws SQLException {
