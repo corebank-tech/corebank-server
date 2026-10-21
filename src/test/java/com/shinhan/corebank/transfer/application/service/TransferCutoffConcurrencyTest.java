@@ -235,6 +235,55 @@ class TransferCutoffConcurrencyTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("타행 이체 출금이 계좌 락을 기다리는 동안 영업일 전환은 출금이 끝나길 기다리고, 출금은 전환 전 영업일로 기표된다")
+    void interbankDebitWaitingForAccountLockBlocksBusinessDateAdvance() throws Exception {
+        InterbankGatewayPort gateway = mock(InterbankGatewayPort.class);
+        when(gateway.isAvailable()).thenReturn(true);
+        // 응답을 못 받아 TIMEOUT 으로 남는다 — 이 테스트의 대상은 확정이 아니라 출금(debitAndHold)이다
+        when(gateway.send(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(InterbankReply.of(InterbankOutcome.UNKNOWN, null));
+
+        Future<?> lockHolder = holdWithdrawalAccountLock();
+        Future<InterbankTransferResult> execute =
+                executor.submit(() -> interbankService(gateway).execute(interbankCommand()));
+        awaitGateHeldByOthers();
+
+        Future<LocalDate> advance = executor.submit(() -> advancer.advanceFrom(BASE));
+        sleepQuietly(500);
+        assertThat(advance.isDone()).isFalse();
+        assertThat(execute.isDone()).isFalse();
+
+        releaseAccountLock.countDown();
+        lockHolder.get(30, SECONDS);
+        InterbankTransferResult result = execute.get(60, SECONDS);
+        assertThat(advance.get(60, SECONDS)).isEqualTo(next);
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.TIMEOUT);
+        String transactionNumber = result.transactionNumber();
+        assertThat(jdbc.queryForObject(
+                        "SELECT trade_date FROM transfer WHERE transaction_number = ?",
+                        LocalDate.class,
+                        transactionNumber))
+                .isEqualTo(BASE);
+        // 출금 1행
+        assertThat(jdbc.queryForList(
+                        "SELECT trade_date FROM ledger_entry WHERE transaction_number = ?",
+                        LocalDate.class,
+                        transactionNumber))
+                .containsExactly(BASE);
+        assertThat(jdbc.queryForList(
+                        "SELECT trade_date FROM gl_voucher WHERE reference_key = ?",
+                        LocalDate.class,
+                        transactionNumber))
+                .isNotEmpty()
+                .containsOnly(BASE);
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM business_date_cutoff WHERE base_date = ?", Integer.class, BASE))
+                .isEqualTo(1);
+        assertThat(fixture.currentInDb()).isEqualTo(next);
+    }
+
+    @Test
     @DisplayName("타행 이체 확정이 계좌 락을 기다리는 동안 영업일 전환은 확정이 끝나길 기다리고, 환급은 전환 전 영업일로 기표된다")
     void interbankSettlementWaitingForAccountLockBlocksBusinessDateAdvance() throws Exception {
         InterbankGatewayPort gateway = mock(InterbankGatewayPort.class);
