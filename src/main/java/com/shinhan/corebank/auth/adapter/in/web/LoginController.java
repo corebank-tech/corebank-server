@@ -49,8 +49,8 @@ public class LoginController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "500",
-                description = "`CMN9999` 서버 오류 — 로그인이 완료되지 않음",
-                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+                description = "세션 저장 실패 등 서버 오류 — 로그인 실패. 필터에서 발생한 오류의 응답 본문 형식은 보장하지 않음",
+                content = @Content)
     })
     public ApiResponse<LoginResponse> login(
             @Valid @RequestBody LoginRequest loginRequest,
