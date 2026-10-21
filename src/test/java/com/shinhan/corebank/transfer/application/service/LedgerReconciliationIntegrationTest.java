@@ -2,6 +2,7 @@ package com.shinhan.corebank.transfer.application.service;
 
 import static java.time.format.DateTimeFormatter.BASIC_ISO_DATE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.transfer.adapter.out.persistence.LedgerEntryIdGenerator;
@@ -9,8 +10,11 @@ import com.shinhan.corebank.transfer.adapter.out.persistence.LedgerEntryJpaEntit
 import com.shinhan.corebank.transfer.adapter.out.persistence.LedgerEntryJpaRepository;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
 import com.shinhan.corebank.transfer.application.port.in.LedgerFullReconciliationUseCase;
+import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationBatchUseCase;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationMismatch;
+import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationMismatchQueryUseCase.LedgerReconciliationMismatchView;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationUseCase;
+import com.shinhan.corebank.transfer.application.port.out.LedgerReconciliationMismatchPort;
 import com.shinhan.corebank.transfer.domain.LedgerDirection;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import jakarta.persistence.EntityManager;
@@ -19,6 +23,7 @@ import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 // LedgerReconciliationService -> LedgerReconciliationPort/AccountBalanceSnapshotPort -> 실제 DB까지
@@ -34,6 +39,12 @@ class LedgerReconciliationIntegrationTest extends IntegrationTestSupport {
 
     @Autowired
     private LedgerFullReconciliationUseCase ledgerFullReconciliationUseCase;
+
+    @Autowired
+    private LedgerReconciliationBatchUseCase ledgerReconciliationBatchUseCase;
+
+    @Autowired
+    private LedgerReconciliationMismatchPort ledgerReconciliationMismatchPort;
 
     @Autowired
     private LedgerEntryJpaRepository ledgerEntryJpaRepository;
@@ -89,6 +100,40 @@ class LedgerReconciliationIntegrationTest extends IntegrationTestSupport {
                 .contains(
                         new LedgerReconciliationMismatch(101L, 100000L, 107000L),
                         new LedgerReconciliationMismatch(202L, 100000L, 107000L));
+    }
+
+    @Test
+    @DisplayName("COB 대사가 끝나면 그 영업일의 불일치가 계좌별 1행으로 테이블에 남는다(#613)")
+    void runInCob_savesMismatchesForCobDate() {
+        // given — 위 휴면 시나리오와 같이 계좌 101·202의 잔액만 원장보다 7,000원 많다
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        saveEntry(101L, LedgerDirection.DEPOSIT, 100000L, DORMANT_POSTED_AT);
+        saveEntry(202L, LedgerDirection.DEPOSIT, 100000L, DORMANT_POSTED_AT);
+        entityManager.flush();
+        entityManager
+                .createNativeQuery("UPDATE account SET balance = balance + 7000 WHERE account_id IN (101, 202)")
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        ledgerReconciliationBatchUseCase.runInCob(DATE);
+        entityManager.flush();
+        entityManager.clear();
+
+        // then — 다른 시드 계좌가 섞일 수 있어 포함 여부로 본다
+        var saved = ledgerReconciliationMismatchPort
+                .findByBusinessDate(DATE, PageRequest.of(0, 100))
+                .getContent();
+        assertThat(saved)
+                .extracting(
+                        LedgerReconciliationMismatchView::accountId,
+                        LedgerReconciliationMismatchView::ledgerBalance,
+                        LedgerReconciliationMismatchView::accountBalance)
+                .contains(tuple(101L, 100000L, 107000L), tuple(202L, 100000L, 107000L));
+        assertThat(saved)
+                .extracting(LedgerReconciliationMismatchView::accountId)
+                .doesNotHaveDuplicates();
     }
 
     private void saveEntry(Long accountId, LedgerDirection direction, long amount) {
