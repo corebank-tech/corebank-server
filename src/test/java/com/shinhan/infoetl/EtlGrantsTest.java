@@ -59,7 +59,13 @@ class EtlGrantsTest {
         try (Connection connection = open(InfoEtlTestDatabase.replicaUrl(), "etl_replica_reader");
                 Statement statement = connection.createStatement()) {
             for (String table : new String[] {
-                "ledger_entry", "account", "product", "product_subscription", "gl_journal_entry", "holiday"
+                "ledger_entry",
+                "account",
+                "product",
+                "product_subscription",
+                "gl_journal_entry",
+                "holiday",
+                "business_date_cutoff"
             }) {
                 statement.executeQuery("SELECT COUNT(*) FROM " + table).close();
             }
@@ -75,6 +81,9 @@ class EtlGrantsTest {
                     .isInstanceOf(SQLException.class)
                     .hasMessageContaining("denied");
             assertThatThrownBy(() -> statement.execute("DELETE FROM ledger_entry"))
+                    .isInstanceOf(SQLException.class)
+                    .hasMessageContaining("denied");
+            assertThatThrownBy(() -> statement.execute("DELETE FROM business_date_cutoff"))
                     .isInstanceOf(SQLException.class)
                     .hasMessageContaining("denied");
             assertThatThrownBy(() -> statement.execute("INSERT INTO holiday VALUES ('2026-12-25', '성탄절')"))
