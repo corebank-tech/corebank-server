@@ -135,7 +135,7 @@ class EtlGrantsTest {
                 new JdbcReplicaCalendarAdapter(() -> open(replicaUrl, "etl_replica_reader")),
                 new JdbcMartLoadAdapter(() -> open(martUrl, "etl_mart_writer"), Clock.system(ZoneId.of("Asia/Seoul"))),
                 new JdbcLoadLockAdapter(() -> open(martUrl, "etl_mart_writer")),
-                new Pseudonymizer("grants-test-key-0001-0123456789abcdef".getBytes(StandardCharsets.UTF_8)));
+                new Pseudonymizer(TestKeys.bytes("g")));
 
         LoadResult result = service.load(D);
 

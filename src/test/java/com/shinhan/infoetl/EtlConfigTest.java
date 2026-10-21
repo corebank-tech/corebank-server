@@ -3,7 +3,6 @@ package com.shinhan.infoetl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -19,7 +18,7 @@ class EtlConfigTest {
         env.put("MART_JDBC_URL", "jdbc:mysql://mart:3307/mart");
         env.put("MART_USER", "etl_writer");
         env.put("MART_PASSWORD", "mart-secret-pw");
-        env.put("HMAC_KEY", "hmac-secret-key");
+        env.put("HMAC_KEY", TestKeys.text("c"));
         return env;
     }
 
@@ -32,7 +31,7 @@ class EtlConfigTest {
         assertThat(config.replicaUser()).isEqualTo("etl_reader");
         assertThat(config.martUrl()).isEqualTo("jdbc:mysql://mart:3307/mart");
         assertThat(config.martUser()).isEqualTo("etl_writer");
-        assertThat(config.hmacKey()).isEqualTo("hmac-secret-key".getBytes(StandardCharsets.UTF_8));
+        assertThat(config.hmacKey()).isEqualTo(TestKeys.bytes("c"));
     }
 
     @Test
@@ -59,7 +58,7 @@ class EtlConfigTest {
         assertThatThrownBy(() -> EtlConfig.from(env))
                 .hasMessageNotContaining("replica-secret-pw")
                 .hasMessageNotContaining("mart-secret-pw")
-                .hasMessageNotContaining("hmac-secret-key");
+                .hasMessageNotContaining(TestKeys.text("c"));
     }
 
     @Test
@@ -70,7 +69,7 @@ class EtlConfigTest {
         assertThat(text)
                 .doesNotContain("replica-secret-pw")
                 .doesNotContain("mart-secret-pw")
-                .doesNotContain("hmac-secret-key")
+                .doesNotContain(TestKeys.text("c"))
                 .contains("jdbc:mysql://replica:3306/corebank");
     }
 }

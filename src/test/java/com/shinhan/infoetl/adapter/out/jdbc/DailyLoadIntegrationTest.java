@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.infoetl.InfoEtlTestDatabase;
 import com.shinhan.infoetl.ReplicaFixtures;
+import com.shinhan.infoetl.TestKeys;
 import com.shinhan.infoetl.application.port.out.EtlStorageException;
 import com.shinhan.infoetl.application.service.DailyLoadService;
 import com.shinhan.infoetl.domain.LedgerMismatchException;
@@ -13,7 +14,6 @@ import com.shinhan.infoetl.domain.LoadAlreadyRunningException;
 import com.shinhan.infoetl.domain.LoadResult;
 import com.shinhan.infoetl.domain.MartBalanceRow;
 import com.shinhan.infoetl.domain.Pseudonymizer;
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -37,8 +37,7 @@ class DailyLoadIntegrationTest {
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-20T16:00:00Z"), ZoneId.of("Asia/Seoul"));
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 21, 1, 0, 0);
 
-    private final Pseudonymizer pseudonymizer =
-            new Pseudonymizer("service-test-key-0001-0123456789abcdef".getBytes(StandardCharsets.UTF_8));
+    private final Pseudonymizer pseudonymizer = new Pseudonymizer(TestKeys.bytes("s"));
     private final MartBalanceWriter writer = new MartBalanceWriter();
     private final LoadBatchRepository repository = new LoadBatchRepository();
     private final DailyLoadService service = new DailyLoadService(
