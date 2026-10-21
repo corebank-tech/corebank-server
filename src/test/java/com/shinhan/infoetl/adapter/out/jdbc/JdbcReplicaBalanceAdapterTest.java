@@ -239,6 +239,35 @@ class JdbcReplicaBalanceAdapterTest {
     }
 
     @Test
+    @DisplayName("원장이 있는 입출금 해지 계좌도 해지 논리 영업일이 없으면 거부한다")
+    void rejectsClosedDemandAccountWithLedgerButWithoutClosedTradeDate() throws SQLException {
+        insertAccount(41L, 51L, null, "DEMAND_DEPOSIT", "CLOSED");
+        insertLedger(301L, 41L, 500L, LocalDateTime.of(2026, 10, 19, 10, 0), D.minusDays(1));
+
+        assertThatThrownBy(this::read).isInstanceOf(IllegalStateException.class).hasMessageContaining("accountId=[41]");
+    }
+
+    @Test
+    @DisplayName("원장 없는 상품 해지 계좌도 해지 논리 영업일이 없으면 CLOSE가 빠지므로 거부한다")
+    void rejectsClosedProductAccountWithoutLedgerAndClosedTradeDate() throws SQLException {
+        insertAccount(42L, 52L, 100L, "TIME_DEPOSIT", "CLOSED");
+
+        assertThatThrownBy(this::read).isInstanceOf(IllegalStateException.class).hasMessageContaining("accountId=[42]");
+    }
+
+    @Test
+    @DisplayName("원장이 없는 입출금 해지 계좌는 잔액 행도 CLOSE도 만들지 않으므로 해지 논리 영업일이 없어도 통과한다")
+    void allowsClosedDemandAccountWithoutLedgerAndClosedTradeDate() throws SQLException {
+        insertAccount(43L, 53L, null, "DEMAND_DEPOSIT", "CLOSED"); // QA 시드 K3와 같은 모양
+        insertAccount(44L, 54L, null, "DEMAND_DEPOSIT", "ACTIVE");
+        insertLedger(302L, 44L, 700L, LocalDateTime.of(2026, 10, 19, 10, 0), D.minusDays(1));
+
+        Map<Long, BalanceRow> rows = read();
+
+        assertThat(rows).containsOnlyKeys(44L);
+    }
+
+    @Test
     @DisplayName("원장 기표가 없는 계좌는 행을 만들지 않는다")
     void excludesAccountWithoutLedgerEntries() throws SQLException {
         insertAccount(14L, 24L, null, "DEMAND_DEPOSIT", "ACTIVE");

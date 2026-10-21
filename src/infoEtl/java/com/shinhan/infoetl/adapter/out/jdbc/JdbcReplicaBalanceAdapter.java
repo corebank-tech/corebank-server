@@ -37,12 +37,15 @@ public final class JdbcReplicaBalanceAdapter implements ReplicaBalancePort {
             """
                     .formatted(TradeDateSql.OFFSETS, TradeDateSql.of("x"));
 
-    // 해지(CLOSED)인데 해지 논리 영업일이 없으면 잔액에 남고 CLOSE도 빠지므로 원천 계약 위반으로 드러낸다(설계 §3-0, §7-5).
+    // 해지(CLOSED)인데 해지 논리 영업일이 없으면 잔액에 남거나 CLOSE가 빠지므로 원천 계약 위반으로 드러낸다(설계 §3-0, §7-5).
+    // 잔액 행은 원장이 있는 계좌에만, CLOSE 이벤트는 상품 계좌에만 생기므로 둘 다 아닌 해지 계좌(원장 없는 입출금계좌)는 통과시킨다.
     private static final String CLOSED_WITHOUT_TRADE_DATE_SQL =
             """
-            SELECT account_id FROM account
-            WHERE status = 'CLOSED' AND closed_trade_date IS NULL
-            ORDER BY account_id
+            SELECT a.account_id FROM account a
+            WHERE a.status = 'CLOSED' AND a.closed_trade_date IS NULL
+              AND (a.product_id IS NOT NULL
+                   OR EXISTS (SELECT 1 FROM ledger_entry l WHERE l.account_id = a.account_id))
+            ORDER BY a.account_id
             LIMIT 5
             """;
 
