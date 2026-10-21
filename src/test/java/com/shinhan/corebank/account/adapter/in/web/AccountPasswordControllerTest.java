@@ -23,7 +23,6 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import jakarta.persistence.EntityManager;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -264,7 +263,7 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
     void replaysResponseWithoutConsumingNewTokens() throws Exception {
         Long customerId = customerTestFixture.createCustomer();
         Account account = saveAccount(customerId, 0);
-        String idempotencyKey = uuidOf("replay-with-new-tokens");
+        String idempotencyKey = UUID.randomUUID().toString();
 
         MvcResult first = performPasswordChange(
                 customerId, account.getAccountId(), idempotencyKey, "first-otp-token", "first-password-token");
@@ -299,7 +298,7 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
         mockMvc.perform(put("/accounts/{accountId}/password", account.getAccountId())
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
-                        .header("Idempotency-Key", uuidOf("confirmation-mismatch"))
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(changeRequest("otp-token", "password-token", "5678", "1234")))
                 .andExpect(status().isBadRequest())
@@ -315,7 +314,7 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
 
         mockMvc.perform(put("/accounts/{accountId}/password", 1L)
                         .with(csrf())
-                        .header("Idempotency-Key", uuidOf("blocked-request"))
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(request))
                 .andExpect(status().isUnauthorized());
@@ -324,7 +323,7 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
         Account account = saveAccount(customerId, 0);
         mockMvc.perform(put("/accounts/{accountId}/password", account.getAccountId())
                         .with(authentication(authenticationOf(customerId)))
-                        .header("Idempotency-Key", uuidOf("missing-csrf"))
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(request))
                 .andExpect(status().isForbidden());
@@ -338,17 +337,6 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.code").value("CMN0002"));
 
         verifyNoInteractions(changeAuthVerificationPort);
-    }
-
-    // 멱등키는 UUID v4 형식이면 되므로 이름에서 만든다. 소스에 UUID 리터럴을 두면 gitleaks가 키로 오탐한다.
-    private static String uuidOf(String name) {
-        byte[] bytes = UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8))
-                .toString()
-                .replace("-", "")
-                .getBytes(StandardCharsets.UTF_8);
-        String hex = new String(bytes, StandardCharsets.UTF_8);
-        return hex.substring(0, 8) + "-" + hex.substring(8, 12) + "-4" + hex.substring(13, 16) + "-8"
-                + hex.substring(17, 20) + "-" + hex.substring(20, 32);
     }
 
     // 동일 계좌 변경 요청을 다른 토큰으로 재시도할 수 있도록 공통 요청을 수행한다.
