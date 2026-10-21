@@ -1,7 +1,9 @@
 package com.shinhan.corebank.auth.adapter.in.security;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -12,9 +14,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.shinhan.corebank.auth.adapter.in.web.ClientIpResolver;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
-import com.shinhan.corebank.auth.application.port.in.RecordLogoutAuditUseCase;
+import com.shinhan.corebank.common.audit.AuditEventType;
+import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.customer.api.AdminPermission;
-import com.shinhan.corebank.customer.api.CustomerRole;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,7 +46,7 @@ class LogoutAuditEventListenerTest {
     MockMvc mockMvc;
 
     @MockitoBean
-    RecordLogoutAuditUseCase recordLogoutAuditUseCase;
+    AuditLogService auditLogService;
 
     @Test
     @DisplayName("관리자 로그아웃을 요청 IP와 ADMIN 역할로 감사에 남긴다")
@@ -55,7 +58,7 @@ class LogoutAuditEventListenerTest {
                         .with(csrf()))
                 .andExpect(status().isOk());
 
-        verify(recordLogoutAuditUseCase).recordLogout(7L, "10.0.0.7", CustomerRole.ADMIN);
+        verify(auditLogService).record(7L, null, AuditEventType.LOGOUT, "10.0.0.7", true, Map.of("role", "ADMIN"));
     }
 
     @Test
@@ -67,7 +70,7 @@ class LogoutAuditEventListenerTest {
                         .with(csrf()))
                 .andExpect(status().isOk());
 
-        verify(recordLogoutAuditUseCase).recordLogout(1L, "127.0.0.1", CustomerRole.CUSTOMER);
+        verify(auditLogService).record(1L, null, AuditEventType.LOGOUT, "127.0.0.1", true, Map.of("role", "CUSTOMER"));
     }
 
     // 세션은 이미 끊긴 뒤라 감사 저장이 실패해도 사용자는 로그아웃 응답을 받아야 한다.
@@ -75,8 +78,8 @@ class LogoutAuditEventListenerTest {
     @DisplayName("감사 저장이 실패해도 로그아웃 응답은 200 이다")
     void keepsLogoutResponseWhenAuditFails() throws Exception {
         doThrow(new IllegalStateException("감사 저장 실패"))
-                .when(recordLogoutAuditUseCase)
-                .recordLogout(anyLong(), anyString(), any(CustomerRole.class));
+                .when(auditLogService)
+                .record(anyLong(), any(), any(AuditEventType.class), anyString(), anyBoolean(), anyMap());
 
         mockMvc.perform(post("/auth/logout")
                         .session(new MockHttpSession())
