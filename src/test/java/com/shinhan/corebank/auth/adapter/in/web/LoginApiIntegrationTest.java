@@ -17,6 +17,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Base64;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -110,7 +111,7 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
         HttpResponse<String> protectedResponse = httpClient.send(
                 HttpRequest.newBuilder(uri("/accounts")).GET().build(), HttpResponse.BodyHandlers.ofString());
         assertThat(protectedResponse.statusCode()).isEqualTo(401);
-        assertThat(objectMapper.readTree(protectedResponse.body()).get("code").asText())
+        assertThat(objectMapper.readTree(protectedResponse.body()).get("code").asString())
                 .isEqualTo("CMN0101");
         assertThat(httpClient
                         .send(loginRequest(RAW_PASSWORD), HttpResponse.BodyHandlers.ofString())
@@ -199,6 +200,12 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
                 });
         assertThat(currentSessionId).isNotEqualTo(previousSessionId);
         assertThat(currentCsrfToken()).isNotEqualTo(previousCsrfToken);
+        // 고객 기본 만료시간도 실제 JDBC 세션 행에 저장되는지 확인한다.
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT MAX_INACTIVE_INTERVAL FROM SPRING_SESSION WHERE SESSION_ID = ?",
+                        Integer.class,
+                        storedSessionId()))
+                .isEqualTo(600);
         assertThat(body.get("code").asText()).isEqualTo("0000");
         assertThat(body.get("data").get("customerId").asLong()).isEqualTo(customerId);
         assertThat(body.get("data").get("userName").asText()).isEqualTo("로그인고객");
@@ -219,6 +226,52 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
 
         assertThat(protectedResponse.statusCode()).isEqualTo(200);
         assertThat(protectedBody.get("code").asText()).isEqualTo("0000");
+    }
+
+    @Test
+    @DisplayName("관리자 로그인은 30분 세션을 JDBC에 저장하고 다음 요청에서 복원한다")
+    void adminLoginPersistsThirtyMinuteJdbcSession() throws Exception {
+        jdbcTemplate.update("UPDATE customer SET role = 'ADMIN' WHERE customer_id = ?", customerId);
+        String body = """
+                {"userId":"%s","password":"%s"}
+                """
+                .formatted(USER_ID, RAW_PASSWORD);
+        Instant requestedAt = Instant.now();
+
+        // 실제 관리자 로그인 응답과 JDBC 행을 함께 확인해 두 PR의 결합을 검증한다.
+        HttpResponse<String> loginResponse = httpClient.send(
+                HttpRequest.newBuilder(uri("/admin/auth/login"))
+                        .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                        .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        Instant respondedAt = Instant.now();
+
+        assertThat(loginResponse.statusCode()).isEqualTo(200);
+        String sessionId = storedSessionId();
+        Integer inactiveSeconds = jdbcTemplate.queryForObject(
+                "SELECT MAX_INACTIVE_INTERVAL FROM SPRING_SESSION WHERE SESSION_ID = ?", Integer.class, sessionId);
+        assertThat(inactiveSeconds).isEqualTo(1800);
+        String principalName = jdbcTemplate.queryForObject(
+                "SELECT PRINCIPAL_NAME FROM SPRING_SESSION WHERE SESSION_ID = ?", String.class, sessionId);
+        assertThat(principalName).isEqualTo(customerId.toString());
+
+        JsonNode responseBody = objectMapper.readTree(loginResponse.body());
+        Instant expiresAt = OffsetDateTime.parse(
+                        responseBody.get("data").get("sessionExpiresAt").asString())
+                .toInstant();
+        assertThat(expiresAt).isBetween(requestedAt.plusSeconds(1800), respondedAt.plusSeconds(1800));
+
+        HttpResponse<String> protectedResponse = httpClient.send(
+                HttpRequest.newBuilder(uri("/customers/me")).GET().build(),
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertThat(protectedResponse.statusCode()).isEqualTo(200);
+        assertThat(objectMapper
+                        .readTree(protectedResponse.body())
+                        .get("data")
+                        .get("role")
+                        .asString())
+                .isEqualTo("ADMIN");
     }
 
     @Test
@@ -489,6 +542,11 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
                 .map(HttpCookie::getValue)
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("JSESSIONID 쿠키가 존재하지 않습니다."));
+    }
+
+    private String storedSessionId() {
+        // Spring Session 쿠키의 Base64 값을 DB의 UUID 세션 ID로 변환한다.
+        return new String(Base64.getUrlDecoder().decode(currentSessionId()), StandardCharsets.UTF_8);
     }
 
     private String currentCsrfToken() {

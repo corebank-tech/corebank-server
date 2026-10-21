@@ -6,9 +6,9 @@ PH-101은 일회성 토큰·잠금·약관 이력의 저장소 변경이고, PH-
 `app.ephemeral-store.provider`와 Redis 구현은 수정하지 않는다. Spring Session JDBC는 공용 MySQL을 사용한다.
 `JSESSIONID` 쿠키 이름과 기존 로그인·CSRF·로그아웃 API를 유지한다.
 
-PH-49c는 고객 세션 기본값 10분을 Spring Session JDBC에 적용한다. 현재 브랜치에는 관리자 로그인 API와
-`app.security.admin.session-timeout` 설정이 없다. PH-49a-②(PR #639)와 통합하면 관리자 로그인에서
-`SessionLoginManager`가 30분을 적용한다. 통합 후 실제 관리자 로그인 API로 무조작 만료를 검증한다.
+PH-49c는 고객 세션 기본값 10분을 Spring Session JDBC에 적용한다. PH-49a-②(PR #639)의
+`SessionLoginManager`는 관리자 로그인에서 `app.security.admin.session-timeout: 30m`을 적용한다.
+두 변경을 통합하면 역할별 로그인 세션을 같은 JDBC 테이블에 저장한다.
 
 ## 저장과 종료
 
@@ -41,7 +41,8 @@ Docker가 실행된 환경에서 다음을 실행한다.
 기존 `LoginApiIntegrationTest`는 세션 고정 공격 방지, 고객 비밀번호 변경·재설정, 로그아웃·CSRF 회귀를 검증한다. 손상된 인증 속성의 401·재로그인, 로그인 저장 실패의 비성공 응답, 세션 삭제 실패 시 변경 API의 비성공 응답도 검증한다.
 `LoginPasswordChangeSessionFailureIntegrationTest`는 실제 변경 서비스에서 세션 삭제 실패 시 비밀번호와 감사 기록이 롤백되는지 검증한다.
 `LoginApiIntegrationTest`는 고객 로그인에 세션 기본값 10분이 적용되는지 검증한다.
-관리자 30분과 `sessionExpiresAt`은 PH-49a-②(PR #639)의 로그인 테스트를 통합해 검증한다.
+관리자 로그인에 대해서는 실제 HTTP 응답의 `sessionExpiresAt`, JDBC 세션 행의 1800초·고객 PK,
+다음 보호 API 요청의 인증 복원을 함께 검증한다.
 JaCoCo 기본 HTML/XML 리포트는 `build/reports/jacoco/test/`에 생성한다.
 자식 WAS JVM은 기본 JaCoCo 대상이 아니므로 그 코드 실행을 커버리지에 포함했다고 보고하지 않는다.
 
@@ -66,7 +67,7 @@ JaCoCo 기본 HTML/XML 리포트는 `build/reports/jacoco/test/`에 생성한다
 - 최초 전환 시 이전 메모리 세션은 이전하지 않으므로 재로그인이 필요하다. 구버전·신버전 혼합 롤링 중 세션 호환을 가정하지 않는다.
 - 두 WAS는 같은 DB·세션 스키마·호환 가능한 인증 클래스와 쿠키 설정을 사용해야 한다.
 - 운영 app_user에는 세션 두 테이블의 SELECT/INSERT/UPDATE/DELETE 권한, Flyway 계정에는 DDL 권한이 필요하다.
-- 관리자 로그인 API는 PH-49a-② 담당자 구현과 통합해 실제 30분 만료를 종단 검증한다. 관리자 조치 시 세션 종료는 별도 담당 작업이다.
+- 관리자 30분 만료 정책은 PH-49a-②가, 세션의 JDBC 저장은 PH-49c가 맡는다. 관리자 조치 시 세션 종료는 별도 담당 작업이다.
 - 로컬 두 JVM 검증은 AWS ALB·서브넷·AZ 장애 전환 검증을 대체하지 않는다. 실제 인프라가 준비되면 별도 검증한다.
 
 ## 운영 성능 재측정 계획

@@ -9,6 +9,7 @@ import com.shinhan.corebank.auth.application.port.in.LoginCommand;
 import com.shinhan.corebank.auth.application.port.in.LoginUseCase;
 import com.shinhan.corebank.auth.application.port.out.RecordLoginAuditPort;
 import com.shinhan.corebank.auth.domain.model.LoginAuditReason;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,9 +61,16 @@ class LoginSuccessAuditAtomicityIntegrationTest extends IntegrationTestSupport {
     void rollsBackLoginStateWhenSuccessAuditFails() {
         doThrow(new IllegalStateException("audit unavailable"))
                 .when(recordLoginAuditPort)
-                .record(customerId, REQUEST_IP, true, LoginAuditReason.SUCCESS);
+                .record(
+                        customerId,
+                        REQUEST_IP,
+                        true,
+                        LoginAuditReason.SUCCESS,
+                        CustomerRole.CUSTOMER,
+                        CustomerRole.CUSTOMER);
 
-        assertThatThrownBy(() -> loginUseCase.login(new LoginCommand(USER_ID, RAW_PASSWORD, REQUEST_IP)))
+        assertThatThrownBy(() ->
+                        loginUseCase.login(new LoginCommand(USER_ID, RAW_PASSWORD, REQUEST_IP, CustomerRole.CUSTOMER)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("audit unavailable");
 

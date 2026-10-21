@@ -1,12 +1,8 @@
 package com.shinhan.corebank.auth.adapter.in.web;
 
 import com.shinhan.corebank.adapter.in.web.exception.ErrorResponse;
-import com.shinhan.corebank.auth.adapter.in.security.CsrfTokenCookieIssuer;
-import com.shinhan.corebank.auth.adapter.in.security.SessionLoginManager;
-import com.shinhan.corebank.auth.application.port.in.LoginCommand;
-import com.shinhan.corebank.auth.application.port.in.LoginResult;
-import com.shinhan.corebank.auth.application.port.in.LoginUseCase;
 import com.shinhan.corebank.common.response.ApiResponse;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -15,7 +11,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -29,10 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "인증", description = "로그인과 세션 인증 API")
 public class LoginController {
 
-    private final LoginUseCase loginUseCase;
-    private final ClientIpResolver clientIpResolver;
-    private final SessionLoginManager sessionLoginManager;
-    private final CsrfTokenCookieIssuer csrfTokenCookieIssuer;
+    private final LoginSessionIssuer loginSessionIssuer;
 
     @PostMapping("/login")
     @Operation(
@@ -64,18 +56,9 @@ public class LoginController {
             @Valid @RequestBody LoginRequest loginRequest,
             HttpServletRequest servletRequest,
             HttpServletResponse servletResponse) {
-        String requestIp = clientIpResolver.resolve(servletRequest);
-
-        LoginResult loginResult =
-                loginUseCase.login(new LoginCommand(loginRequest.userId(), loginRequest.password(), requestIp));
-
-        OffsetDateTime sessionExpiresAt =
-                sessionLoginManager.establishSession(loginResult, servletRequest, servletResponse);
-
-        csrfTokenCookieIssuer.rotate(servletRequest, servletResponse);
-
-        LoginResponse response = new LoginResponse(loginResult.customerId(), loginResult.userName(), sessionExpiresAt);
-
-        return ApiResponse.success(response);
+        // 관리자는 이 문으로 들어오지 못한다. 역할을 가리지 않으면 /admin/auth/login 의 응답 통일이
+        // 의미를 잃는다 — 이 경로로 로그인해 GET /customers/me 를 보면 관리자인지 알 수 있기 때문이다.
+        return ApiResponse.success(loginSessionIssuer.authenticateAndIssueSession(
+                loginRequest, CustomerRole.CUSTOMER, servletRequest, servletResponse));
     }
 }

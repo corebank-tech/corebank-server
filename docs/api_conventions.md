@@ -832,7 +832,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | --- | --- | --- |
 | 세션 | `JSESSIONID` 쿠키, HttpOnly·Secure·SameSite=Lax | REQ-NFR-006 |
 | 저장소 | Spring Session JDBC, 모든 WAS가 같은 MySQL 세션 테이블 사용 | PH-49c |
-| 타임아웃 | 고객 10분·`ROLE_ADMIN` 30분 무조작 만료 정책은 PH-49c에서 구현. 관리자 로그인 API와 종단 검증은 PH-49a-②에서 통합 | POL-001 · ADR-0007 |
+| 타임아웃 | 고객 10분은 `server.servlet.session.timeout`, 관리자 30분은 PH-49a-②의 `app.security.admin.session-timeout`에서 적용한다. PH-49c는 두 세션을 JDBC에 저장한다 | POL-001 · ADR-0007 |
 | 로그인 시 세션ID 재발급 | 세션 고정 공격 방지 | REQ-NFR-006 |
 | 로그인 비밀번호 변경 | 변경 성공 시 해당 고객의 현재 세션을 포함한 모든 로그인 세션을 무효화하고 새 비밀번호로 재로그인 | 보안 정책 |
 | 소유 검증 | 자원 접근 시 세션 고객의 소유 여부를 서버에서 검증. 클라이언트가 보낸 고객ID를 신뢰하지 않음 | REQ-NFR-007 |

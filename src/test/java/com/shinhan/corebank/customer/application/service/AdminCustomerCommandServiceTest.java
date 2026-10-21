@@ -16,6 +16,7 @@ import com.shinhan.corebank.common.audit.AuditLogJpaEntity;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerOperationCommand;
 import com.shinhan.corebank.customer.application.port.in.AdminPasswordResetResult;
 import com.shinhan.corebank.customer.application.port.in.AdminStatusChangeResult;
@@ -257,6 +258,7 @@ class AdminCustomerCommandServiceTest {
                 loginFailureCount,
                 accountLocked,
                 CustomerStatus.ACTIVE,
+                CustomerRole.CUSTOMER,
                 null,
                 null,
                 null,
