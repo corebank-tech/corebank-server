@@ -47,8 +47,7 @@ public class BusinessDateAdvanceService implements BusinessDateAdvancer {
                 .findBusinessDateForUpdate(BusinessDateType.BUSINESS_DATE)
                 .orElseThrow(() -> new BusinessException(CommonErrorCode.BUSINESS_DATE_NOT_FOUND));
         if (current.equals(next)) {
-            // 배타 락을 잡았으니 D 를 읽은 거래는 이미 끝났다 — cutoff 없이 넘어간 예전 영업일도 여기서 채운다
-            businessDateCutoffPort.recordClosed(businessDate, LocalDateTime.now(clock));
+            // 도입 이전에 넘어간 영업일의 cutoff 는 만들지 않는다 — 경계일 이전에는 cutoff 가 없다
             return next;
         }
         throw new BusinessException(CommonErrorCode.CONCURRENT_MODIFICATION);

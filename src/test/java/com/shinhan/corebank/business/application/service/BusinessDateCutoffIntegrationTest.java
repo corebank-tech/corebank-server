@@ -106,14 +106,14 @@ class BusinessDateCutoffIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("cutoff 없이 넘어간 예전 영업일도 재실행하면 채워진다")
-    void rerunBackfillsMissingCutoff() {
+    @DisplayName("cutoff 없이 넘어간 예전 영업일을 재실행해도 행을 만들지 않는다")
+    void rerunDoesNotBackfillMissingCutoff() {
         fixture.moveTo(next);
         assertThat(cutoffDates()).isEmpty();
 
         advancer.advanceFrom(BASE);
 
-        assertThat(cutoffDates()).containsExactly(BASE);
+        assertThat(cutoffDates()).isEmpty();
         assertThat(fixture.currentInDb()).isEqualTo(next);
     }
 
