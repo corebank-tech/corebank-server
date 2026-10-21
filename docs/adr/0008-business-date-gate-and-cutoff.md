@@ -15,7 +15,7 @@ ADR-0004는 영업일 전환을 COB 첫 스텝으로 두어 "전환 직후 새 �
 1. **gate는 날짜와 무관한 단일 gate다.** 새 테이블 없이 기존 `business_date`의 `BUSINESS_DATE` 행을 쓴다. 날짜별 fence는 두지 않는다 — 어느 날짜의 fence를 잡을지 정하려면 D를 먼저 읽어야 해서 순환한다.
 2. **거래는 `BusinessDateGate.acquireSharedAndReadBusinessDate()`로 거래일을 읽는다.** 그 행을 `SELECT ... FOR SHARE`로 읽고 트랜잭션이 끝날 때까지 공유 락을 쥔다. 락 획득과 D 읽기는 한 연산이다. 트랜잭션 밖에서 부르면 예외다(락이 읽자마자 풀리기 때문).
 3. **같은 트랜잭션에서 다시 부르면 첫 값을 돌려준다.** 한 거래의 거래일은 하나다(#516). 값은 스레드가 아니라 트랜잭션 동기화 객체에 붙여, `REQUIRES_NEW`로 중단·재개될 때 바깥 값이 안쪽으로 새지 않게 한다.
-4. **COB 전환은 같은 행의 배타 락으로 진행 중 거래를 기다린다(drain).** `advanceFrom`과 `catchUpTo`의 UPDATE가 배타 락이고, 같은 트랜잭션에서 `business_date_cutoff(base_date=D, status=CLOSED, closed_at)`을 남긴다. 기준일마다 CLOSED 행은 하나이며 기록은 멱등이다. `catchUpTo`가 영업일을 건너뛰면 떠나는 날과 건너뛴 영업일 모두 기록한다(건너뛴 날은 원장이 비어 있다).
+4. **COB 전환은 같은 행의 배타 락으로 진행 중 거래를 기다린다(drain).** `advanceFrom`과 `catchUpTo`의 UPDATE가 배타 락이고, 같은 트랜잭션에서 `business_date_cutoff(base_date=D, status=CLOSED, closed_at)`을 남긴다. 기준일마다 CLOSED 행은 하나이며 기록은 멱등이다. `catchUpTo`가 영업일을 건너뛰면 떠나는 날과 건너뛴 영업일 모두 기록한다(건너뛴 날은 원장이 비어 있다). 도입 이전 날짜에는 행이 없고, 도입 이후의 모든 영업일에는 행이 있다. 가동 중단으로 건너뛴 영업일도 영업일 전환과 같은 트랜잭션에서 남긴다. 건너뛴 날의 CLOSED도 의미가 참이다. 따라잡기 UPDATE는 떠나는 날의 배타 락으로 진행 중 거래를 기다리고, 중간 날들은 서버가 멈춰 거래가 없었으며, 이후 거래는 모두 새 영업일을 읽는다.
 5. **ETL은 레플리카에서 `business_date_cutoff(D, CLOSED)`가 보여야 D를 시작한다.** 복제는 `replica_preserve_commit_order = ON`이다. cutoff보다 앞서 커밋된 원장은 모두 D 이하이고, cutoff 뒤 새 거래는 다음 영업일이다.
 6. **gate는 원장·이벤트를 쓰는 가장 안쪽 트랜잭션에서만 잡는다.** gate를 쥔 트랜잭션이 `REQUIRES_NEW`로 연 트랜잭션에서 다시 잡지 않는다. 바깥 공유 락, COB 배타 대기, 안쪽 공유 대기가 겹치면 바깥이 안쪽을 애플리케이션에서 기다려 DB가 교착을 감지하지 못한다.
 7. **락 순서는 모든 경로에서 "날짜 락 → 계좌 락"이다.**
@@ -49,5 +49,6 @@ D를 알아야 fence를 고를 수 있어 순환한다. 기각(결정 1).
 - 중첩(결정 6)을 어기면 안쪽 요청이 대기 중인 전환 뒤에 서서 락 대기 시간 초과로만 끝난다(같은 테스트로 확인). 코드로 중첩을 감지하기 어려우므로 리뷰와 테스트로 막는다. 호출자가 `REQUIRES_NEW` 안에서 gate를 쓰는 서비스(`LedgerDepositService` 등)를 부르면 중첩이 된다.
 - gate를 쥔 시간이 길수록 전환이 길게 기다리고, 그동안 새 거래도 줄을 선다. gate는 가능한 한 늦게 잡되 계좌 락보다는 앞에서 잡는다.
 - `TransferExecutionService`와 타행이체(`InterbankTransferService`·`InterbankSettlementService`)는 거래일을 `today()`로 읽는다. **cutoff 보장은 #662가 머지된 뒤 이체 경로까지 성립한다.** 그 전까지 이 클래스들만 ArchUnit 예외다.
+- cutoff 경계일은 #556과 #662가 둘 다 운영 배포된 뒤 첫 COB가 마감한 D이고, ETL 설정값으로 받는다(#668). 건너뛴 날을 CLOSED 대신 SKIPPED 행으로 남기자는 이견이 나오면 `status`만 바꿔 대응할 수 있다.
 - 이 변경 이전의 영업일에는 cutoff가 없다. 최초 적재 처리는 [info_mart.md](../phase2/info_mart.md) §3-1을 따른다.
 - `COB_DATE`의 영구 저장과 실패 스텝부터의 재실행은 이 결정의 범위가 아니다(#663). ADR-0004가 #556으로 미뤄 둔 그 결정은 #663이 이어받는다.
