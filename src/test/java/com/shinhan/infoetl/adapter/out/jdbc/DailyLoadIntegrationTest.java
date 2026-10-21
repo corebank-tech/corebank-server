@@ -9,6 +9,7 @@ import com.shinhan.infoetl.ReplicaFixtures;
 import com.shinhan.infoetl.TestKeys;
 import com.shinhan.infoetl.application.port.out.EtlStorageException;
 import com.shinhan.infoetl.application.service.DailyLoadService;
+import com.shinhan.infoetl.domain.LedgerMismatchException;
 import com.shinhan.infoetl.domain.LoadAlreadyRunningException;
 import com.shinhan.infoetl.domain.LoadResult;
 import com.shinhan.infoetl.domain.MartBalanceRow;
@@ -42,6 +43,7 @@ class DailyLoadIntegrationTest {
     private final DailyLoadService service = new DailyLoadService(
             new JdbcReplicaBalanceAdapter(InfoEtlTestDatabase::replica),
             new JdbcReplicaEventAdapter(InfoEtlTestDatabase::replica),
+            new JdbcReplicaReconciliationAdapter(InfoEtlTestDatabase::replica),
             new JdbcReplicaCalendarAdapter(InfoEtlTestDatabase::replica),
             new JdbcMartLoadAdapter(InfoEtlTestDatabase::mart, CLOCK),
             new JdbcLoadLockAdapter(InfoEtlTestDatabase::mart),
@@ -238,6 +240,80 @@ class DailyLoadIntegrationTest {
     }
 
     @Test
+    @DisplayName("원장 합계와 마트 잔액 합계가 같으면 원장 합계를 적재 기록에 남긴다")
+    void ledgerTotalIsRecordedWhenItMatches() throws SQLException {
+        LoadResult result = service.load(D);
+
+        try (Connection mart = InfoEtlTestDatabase.mart();
+                ResultSet row = batch(mart, result.loadBatchId())) {
+            assertThat(row.getLong("ledger_total")).isEqualTo(1_000L);
+            assertThat(row.getLong("mart_balance_total")).isEqualTo(1_000L);
+            assertThat(row.getObject("gl_compare_from_date")).isNull();
+        }
+    }
+
+    @Test
+    @DisplayName("원장 합계가 마트 잔액 합계와 다르면 롤백하고 FAILED와 두 합계를 남기며 asOf는 직전 날짜에 머문다")
+    void ledgerMismatchFailsAndRollsBack() throws SQLException {
+        ReplicaFixtures.insertLedger(50L, 1L, 250L, LocalDateTime.of(2026, 10, 19, 9, 0), MON);
+        LoadResult monday = service.load(MON);
+        try (Connection replica = InfoEtlTestDatabase.replica();
+                Statement statement = replica.createStatement()) {
+            statement.executeUpdate("UPDATE ledger_entry SET amount = amount + 5 WHERE ledger_entry_id = 1");
+        }
+
+        assertThatThrownBy(() -> service.load(D)).isInstanceOf(LedgerMismatchException.class);
+
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            assertThat(writer.countRows(mart, D)).isZero();
+            try (ResultSet row = batch(mart, latestBatchId(mart))) {
+                assertThat(row.getString("status")).isEqualTo("FAILED");
+                assertThat(row.getLong("ledger_total")).isEqualTo(1_005L);
+                assertThat(row.getLong("mart_balance_total")).isEqualTo(1_000L);
+                assertThat(row.getString("failure_reason")).contains("LedgerMismatchException");
+            }
+            assertThat(statusOf(mart, monday.loadBatchId())).isEqualTo("COMPLETED");
+        }
+    }
+
+    @Test
+    @DisplayName("GL 증감이 마트 증감과 같으면 직전 완료일과 두 증감을 남긴다")
+    void glComparisonRecordsMatchingMovement() throws SQLException {
+        ReplicaFixtures.insertLedger(50L, 1L, 250L, LocalDateTime.of(2026, 10, 19, 9, 0), MON);
+        service.load(MON);
+        ReplicaFixtures.insertGlEntry("20100", "CREDIT", 800L, D);
+        ReplicaFixtures.insertGlEntry("20100", "DEBIT", 50L, D);
+        ReplicaFixtures.insertGlEntry("10100", "DEBIT", 99_999L, D);
+
+        LoadResult tuesday = service.load(D);
+
+        try (Connection mart = InfoEtlTestDatabase.mart();
+                ResultSet row = batch(mart, tuesday.loadBatchId())) {
+            assertThat(row.getString("status")).isEqualTo("COMPLETED");
+            assertThat(row.getObject("gl_compare_from_date", LocalDate.class)).isEqualTo(MON);
+            assertThat(row.getLong("mart_balance_movement")).isEqualTo(750L);
+            assertThat(row.getLong("gl_deposit_movement")).isEqualTo(750L);
+        }
+    }
+
+    @Test
+    @DisplayName("GL 증감이 마트 증감과 달라도 COMPLETED로 커밋하고 두 증감을 그대로 남긴다")
+    void glMismatchStillCompletesAndRecordsDifference() throws SQLException {
+        ReplicaFixtures.insertLedger(50L, 1L, 250L, LocalDateTime.of(2026, 10, 19, 9, 0), MON);
+        service.load(MON);
+        ReplicaFixtures.insertGlEntry("20100", "CREDIT", 700L, D);
+
+        LoadResult tuesday = service.load(D);
+
+        try (Connection mart = InfoEtlTestDatabase.mart();
+                ResultSet row = batch(mart, tuesday.loadBatchId())) {
+            assertThat(row.getString("status")).isEqualTo("COMPLETED");
+            assertThat(row.getLong("mart_balance_movement")).isEqualTo(750L);
+            assertThat(row.getLong("gl_deposit_movement")).isEqualTo(700L);
+        }
+    }
+
+    @Test
     @DisplayName("같은 기준일을 다른 프로세스가 잡고 있으면 적재 기록도 남기지 않고 거부한다")
     void rejectsWhenAnotherProcessHoldsTheLock() throws SQLException {
         try (var held = new JdbcLoadLockAdapter(InfoEtlTestDatabase::mart).acquire(D)) {
@@ -357,8 +433,8 @@ class DailyLoadIntegrationTest {
         java.util.List<MartBalanceRow> newRows = java.util.List.of(new MartBalanceRow(
                 pseudonymizer.accountKey(9L), pseudonymizer.customerKey(19L), "DEMAND_DEPOSIT", null, null, 5L));
 
-        assertThatThrownBy(
-                        () -> martAdapter.publish(rebuild, D, newRows, java.util.List.of(), (firstLoadDate, dates) -> {
+        assertThatThrownBy(() -> publishMatching(
+                        martAdapter, rebuild, D, newRows, java.util.List.of(), (firstLoadDate, dates) -> {
                             throw new IllegalStateException("asOf 계산 중 실패");
                         }))
                 .isInstanceOf(IllegalStateException.class);
@@ -416,8 +492,8 @@ class DailyLoadIntegrationTest {
         java.util.List<MartBalanceRow> lateRows = java.util.List.of(new MartBalanceRow(
                 pseudonymizer.accountKey(9L), pseudonymizer.customerKey(19L), "DEMAND_DEPOSIT", null, null, 5L));
 
-        assertThatThrownBy(
-                        () -> martAdapter.publish(slow, D, lateRows, java.util.List.of(), (firstLoadDate, dates) -> D))
+        assertThatThrownBy(() -> publishMatching(
+                        martAdapter, slow, D, lateRows, java.util.List.of(), (firstLoadDate, dates) -> D))
                 .isInstanceOf(IllegalStateException.class);
 
         try (Connection mart = InfoEtlTestDatabase.mart()) {
@@ -466,5 +542,17 @@ class DailyLoadIntegrationTest {
         try (ResultSet row = batch(mart, id)) {
             return row.getString("status");
         }
+    }
+
+    // 원장 합계는 넣는 잔액 합계와 같게, GL 증감은 0으로 둔다.
+    private static LoadResult publishMatching(
+            JdbcMartLoadAdapter adapter,
+            long loadBatchId,
+            LocalDate baseDate,
+            java.util.List<MartBalanceRow> balances,
+            java.util.List<com.shinhan.infoetl.domain.MartEventRow> events,
+            com.shinhan.infoetl.application.port.out.AsOfCalculator asOfCalculator) {
+        long ledgerTotal = balances.stream().mapToLong(MartBalanceRow::balance).sum();
+        return adapter.publish(loadBatchId, baseDate, balances, events, ledgerTotal, (from, to) -> 0L, asOfCalculator);
     }
 }
