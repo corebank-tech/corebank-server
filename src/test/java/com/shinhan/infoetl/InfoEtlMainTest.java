@@ -129,6 +129,18 @@ class InfoEtlMainTest {
     }
 
     @Test
+    @DisplayName("--verify-pii는 단독으로만 쓸 수 있다")
+    void verifyPiiOnlyAlone() {
+        assertThat(InfoEtlMain.parseCommand(new String[] {"--verify-pii"}).verifyPii())
+                .isTrue();
+        assertThatThrownBy(() -> InfoEtlMain.parseCommand(new String[] {"--verify-pii", "--base-date=2026-10-20"}))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(InfoEtlMain.parseCommand(new String[] {"--base-date=2026-10-20"})
+                        .verifyPii())
+                .isFalse();
+    }
+
+    @Test
     @DisplayName("기준일과 기간을 섞거나 기간 인자가 하나뿐이거나 순서가 뒤집히면 거부한다")
     void rejectsInvalidCombinations() {
         assertThatThrownBy(() -> InfoEtlMain.parseCommand(

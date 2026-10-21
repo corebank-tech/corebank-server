@@ -9,9 +9,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-// 공통 감사 로그에 로그인 성공·실패를 기록하는 Adapter
-//
-// 로그아웃은 여기에 없다 — 로그아웃 감사 기록 자체가 아직 만들어지지 않았다.
+// 공통 감사 로그에 로그인 성공·실패를 기록하는 Adapter. 로그아웃은 LogoutAuditEventListener 가 맡는다.
 @Component
 @RequiredArgsConstructor
 public class LoginAuditAdapter implements RecordLoginAuditPort {
