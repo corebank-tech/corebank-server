@@ -24,7 +24,7 @@ class LoginPasswordChangedSessionListenerTest {
 
     @Test
     @DisplayName("삭제 실패를 전파해 비밀번호 변경 트랜잭션도 롤백한다")
-    void keepsOtherCustomerSessions() {
+    void propagatesInvalidationFailure() {
         doThrow(new DataAccessResourceFailureException("unavailable"))
                 .when(invalidator)
                 .invalidateAll(1L);

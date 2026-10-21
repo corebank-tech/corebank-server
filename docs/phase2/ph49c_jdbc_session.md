@@ -6,9 +6,9 @@ PH-101은 일회성 토큰·잠금·약관 이력의 저장소 변경이고, PH-
 `app.ephemeral-store.provider`와 Redis 구현은 수정하지 않는다. Spring Session JDBC는 공용 MySQL을 사용한다.
 `JSESSIONID` 쿠키 이름과 기존 로그인·CSRF·로그아웃 API를 유지한다.
 
-PH-49c는 고객 인증 세션에 10분, `ROLE_ADMIN` 인증 세션에 30분 무조작 만료 정책을 적용한다.
-관리자 로그인 API는 PH-49a-② 담당이 구현한다. 현재는 역할별 정책을 단위 테스트로 검증하고,
-실제 관리자 로그인 API를 통한 종단 검증은 해당 작업과 통합할 때 수행한다.
+PH-49c는 고객 세션 기본값 10분을 Spring Session JDBC에 적용한다. PH-49a-②(PR #639)의
+`SessionLoginManager`가 관리자 로그인에 `app.security.admin.session-timeout: 30m`을 적용한다.
+두 PR 통합 후 실제 관리자 로그인 API로 30분 무조작 만료를 검증한다.
 
 ## 저장과 종료
 
@@ -16,8 +16,10 @@ PH-49c는 고객 인증 세션에 10분, `ROLE_ADMIN` 인증 세션에 30분 무
 - 세션 시각은 Spring Session 표준인 epoch 밀리초이며 업무 테이블의 KST 벽시각과 구분한다.
 - `AuthenticatedCustomer`는 Serializable·Principal을 구현하고 `getName()`은 고객 PK 문자열이다.
 - 세션에 비밀번호·OTP 원문을 넣지 않는다. 직렬화 인증 객체의 스키마 변경은 배포 호환성을 검토한다.
+- 이전 배포의 세션 속성을 역직렬화할 수 없으면 인증정보 없는 세션으로 처리해 보호 API가 401을 반환한다. 고객은 다시 로그인할 수 있다.
+- 로그인 세션 저장이 실패하면 로그인 API는 200을 반환하지 않는다. 비밀번호 변경 중 세션 삭제가 실패하면 변경·감사 기록을 롤백한다.
 - JVM `SessionRegistryImpl`과 메모리 만료 플래그를 제거한다. 다음 요청은 DB 삭제·만료 여부로 인증한다.
-- 비밀번호 변경 이벤트는 BEFORE_COMMIT에 JDBC 삭제를 실행한다. 세션 삭제 실패 시 업무도 롤백된다.
+- 비밀번호 변경 이벤트는 BEFORE_COMMIT에 JDBC 삭제를 실행한다. 삭제는 기존 업무 트랜잭션을 필수로 요구하며, 실패 시 비밀번호·감사 기록도 롤백된다.
 - 로그아웃은 해당 세션만 삭제한다.
 - 만료 행 정리는 매분 실행한다. 정리 이전에도 만료한 세션으로 인증할 수 없다.
 - 이미 진행 중인 요청을 강제로 취소하는 기능은 아니다. 변경 커밋 후 시작한 새 요청의 세션 거부를 검증한다.
@@ -27,7 +29,7 @@ PH-49c는 고객 인증 세션에 10분, `ROLE_ADMIN` 인증 세션에 30분 무
 Docker가 실행된 환경에서 다음을 실행한다.
 
 ```powershell
-.\gradlew.bat test --tests '*JdbcSessionIntegrationTest' --tests '*LoginApiIntegrationTest' --tests '*RoleSessionTimeoutStrategyTest'
+.\gradlew.bat test --tests '*JdbcSessionIntegrationTest' --tests '*LoginApiIntegrationTest' --tests '*SessionLoginManagerTest' --tests '*LoginPasswordChangeSessionFailureIntegrationTest' --tests '*SwaggerUiAccessIntegrationTest'
 ```
 
 `JdbcSessionIntegrationTest`는 실제 MySQL에서 인증 객체 직렬화·고객 PK 검색·만료·속성 삭제·커밋/롤백을 검증한다.
@@ -36,8 +38,10 @@ Docker가 실행된 환경에서 다음을 실행한다.
 비밀번호 변경 후 두 세션 거부, A 종료 후 B 로그인 유지, 무조작 만료 연장과 만료 거부를 확인한다.
 자식 프로세스는 테스트 종료 시 정리하고 로그는 `build/reports/dual-was/`에 저장한다.
 
-기존 `LoginApiIntegrationTest`는 세션 고정 공격 방지, 고객 비밀번호 변경·재설정, 로그아웃·CSRF 회귀를 검증한다.
-`RoleSessionTimeoutStrategyTest`는 요청 경로와 무관하게 고객 10분·관리자 30분 정책이 적용되는지 검증한다.
+기존 `LoginApiIntegrationTest`는 세션 고정 공격 방지, 고객 비밀번호 변경·재설정, 로그아웃·CSRF 회귀를 검증한다. 손상된 인증 속성의 401·재로그인, 로그인 저장 실패의 비성공 응답, 세션 삭제 실패 시 변경 API의 비성공 응답도 검증한다.
+`LoginPasswordChangeSessionFailureIntegrationTest`는 실제 변경 서비스에서 세션 삭제 실패 시 비밀번호와 감사 기록이 롤백되는지 검증한다.
+`LoginApiIntegrationTest`는 고객 로그인에 세션 기본값 10분이 적용되는지 검증한다.
+관리자 30분과 `sessionExpiresAt`은 PH-49a-②(PR #639)의 로그인 테스트를 통합해 검증한다.
 JaCoCo 기본 HTML/XML 리포트는 `build/reports/jacoco/test/`에 생성한다.
 자식 WAS JVM은 기본 JaCoCo 대상이 아니므로 그 코드 실행을 커버리지에 포함했다고 보고하지 않는다.
 

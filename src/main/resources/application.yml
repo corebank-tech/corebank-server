@@ -9,12 +9,10 @@ server:
         same-site: lax
 spring:
   session:
-    timeout: 10m
+    timeout: ${server.servlet.session.timeout}
     jdbc:
       # 세션 DDL은 Flyway만 실행하고 만료 행은 매분 정리한다.
       initialize-schema: never
-      table-name: SPRING_SESSION
-      cleanup-cron: '0 * * * * *'
   application:
     name: corebank
   jpa:

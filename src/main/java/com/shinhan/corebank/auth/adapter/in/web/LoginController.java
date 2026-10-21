@@ -54,6 +54,10 @@ public class LoginController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "`ATH0102` 로그인 비밀번호 오류 횟수 초과로 계정 잠금 · `ATH0106` 관리자 이용정지 계정(비밀번호가 일치할 때만 반환)",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "500",
+                description = "`CMN9999` 서버 오류 — 로그인이 완료되지 않음",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ApiResponse<LoginResponse> login(

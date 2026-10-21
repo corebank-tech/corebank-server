@@ -18,7 +18,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
-import org.springframework.security.web.authentication.session.CompositeSessionAuthenticationStrategy;
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
@@ -46,11 +45,10 @@ public class SecurityConfig {
         return new HttpSessionSecurityContextRepository();
     }
 
-    // 로그인 시 세션 ID를 바꾸고 인증 역할에 맞는 무조작 만료시간을 적용한다.
+    // 로그인 시 세션 ID를 바꾸고 만료시간은 세션 기본값과 관리자 로그인 정책에 맡긴다.
     @Bean
     public SessionAuthenticationStrategy sessionAuthenticationStrategy() {
-        return new CompositeSessionAuthenticationStrategy(
-                List.of(new ChangeSessionIdAuthenticationStrategy(), new RoleSessionTimeoutStrategy()));
+        return new ChangeSessionIdAuthenticationStrategy();
     }
 
     @Bean

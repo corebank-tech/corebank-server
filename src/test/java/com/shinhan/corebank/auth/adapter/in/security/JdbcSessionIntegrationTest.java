@@ -20,6 +20,7 @@ import org.springframework.security.web.context.HttpSessionSecurityContextReposi
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.Session;
 import org.springframework.session.jdbc.JdbcIndexedSessionRepository;
+import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -104,8 +105,11 @@ class JdbcSessionIntegrationTest extends IntegrationTestSupport {
             assertThat(repository.findById(second.getId())).isNull();
             assertThat(repository.findById(other.getId())).isNotNull();
         } finally {
-            invalidator.invalidateAll(638003L);
-            invalidator.invalidateAll(638004L);
+            var transaction = new TransactionTemplate(transactionManager);
+            transaction.executeWithoutResult(status -> {
+                invalidator.invalidateAll(638003L);
+                invalidator.invalidateAll(638004L);
+            });
         }
     }
 
@@ -119,12 +123,17 @@ class JdbcSessionIntegrationTest extends IntegrationTestSupport {
                 status.setRollbackOnly();
             });
             assertThat(repository.findById(session.getId())).isNotNull();
-            invalidator.invalidateAll(638005L);
-            invalidator.invalidateAll(638005L);
+            var transaction = new TransactionTemplate(transactionManager);
+            transaction.executeWithoutResult(status -> {
+                invalidator.invalidateAll(638005L);
+                invalidator.invalidateAll(638005L);
+            });
             assertThat(repository.findById(session.getId())).isNull();
-            assertThatThrownBy(() -> invalidator.invalidateAll(null)).isInstanceOf(NullPointerException.class);
+            assertThatThrownBy(() -> transaction.executeWithoutResult(status -> invalidator.invalidateAll(null)))
+                    .isInstanceOf(NullPointerException.class);
         } finally {
-            invalidator.invalidateAll(638005L);
+            new TransactionTemplate(transactionManager)
+                    .executeWithoutResult(status -> invalidator.invalidateAll(638005L));
         }
     }
 
@@ -133,10 +142,16 @@ class JdbcSessionIntegrationTest extends IntegrationTestSupport {
         var session = authenticatedSession(638006L);
         repository.save(session);
         var inFlight = repository.findById(session.getId());
-        invalidator.invalidateAll(638006L);
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> invalidator.invalidateAll(638006L));
         inFlight.setLastAccessedTime(Instant.now());
         repository.save(inFlight);
         assertThat(repository.findById(session.getId())).isNull();
+    }
+
+    @Test
+    void deletionRequiresCallerTransaction() {
+        assertThatThrownBy(() -> invalidator.invalidateAll(638007L))
+                .isInstanceOf(IllegalTransactionStateException.class);
     }
 
     private Session authenticatedSession(long customerId) {
