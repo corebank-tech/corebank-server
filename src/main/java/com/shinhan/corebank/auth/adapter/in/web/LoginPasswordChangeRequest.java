@@ -7,19 +7,19 @@ public record LoginPasswordChangeRequest(
         @Schema(
                         description = "현재 로그인 비밀번호",
                         example = "Current1!",
-                        writeOnly = true,
+                        accessMode = Schema.AccessMode.WRITE_ONLY,
                         requiredMode = Schema.RequiredMode.REQUIRED)
                 String currentPassword,
         @Schema(
                         description = "신규 로그인 비밀번호(8~15자, 영문자·숫자·특수문자 포함 및 금칙 규칙 적용)",
                         example = "NewPass8!x",
-                        writeOnly = true,
+                        accessMode = Schema.AccessMode.WRITE_ONLY,
                         requiredMode = Schema.RequiredMode.REQUIRED)
                 String newPassword,
         @Schema(
                         description = "신규 로그인 비밀번호 확인",
                         example = "NewPass8!x",
-                        writeOnly = true,
+                        accessMode = Schema.AccessMode.WRITE_ONLY,
                         requiredMode = Schema.RequiredMode.REQUIRED)
                 String newPasswordConfirm) {
 
