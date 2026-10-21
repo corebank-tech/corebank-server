@@ -37,4 +37,9 @@ public class BusinessDatePersistenceAdapter implements BusinessDateQueryPort, Bu
     public Optional<LocalDate> findBusinessDateForUpdate(BusinessDateType type) {
         return businessDateRepository.findByDateTypeForUpdate(type).map(BusinessDateJpaEntity::getBusinessDate);
     }
+
+    @Override
+    public Optional<LocalDate> findBusinessDateForShare(BusinessDateType type) {
+        return businessDateRepository.findBusinessDateForShare(type.name());
+    }
 }

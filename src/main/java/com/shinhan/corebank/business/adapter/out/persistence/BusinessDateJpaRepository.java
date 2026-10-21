@@ -28,6 +28,10 @@ public interface BusinessDateJpaRepository extends JpaRepository<BusinessDateJpa
             @Param("newDate") LocalDate newDate,
             @Param("now") LocalDateTime now);
 
+    // 엔티티가 아니라 값만 읽는다 — 영속성 컨텍스트에 이미 올라온 옛 값이 돌아오지 않게 한다
+    @Query(value = "SELECT business_date FROM business_date WHERE date_type = :type FOR SHARE", nativeQuery = true)
+    Optional<LocalDate> findBusinessDateForShare(@Param("type") String type);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT b FROM BusinessDateJpaEntity b WHERE b.dateType = :type")
     Optional<BusinessDateJpaEntity> findByDateTypeForUpdate(@Param("type") BusinessDateType type);

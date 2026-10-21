@@ -2,6 +2,7 @@
 
 - 상태: 수락됨 (2026-10-03)
 - 관련: PH-43(#537), `docs/personal/phase2/PH-43_COB_설계변경.md`(9/28~29 검토)
+- 보완: [ADR-0008](0008-business-date-gate-and-cutoff.md)이 진행 중 거래까지 포함해 전환 경계를 보장한다
 
 ## 맥락
 
