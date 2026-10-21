@@ -730,18 +730,18 @@ ADM-01 검색·상세·변경 요청에 사유 코드 선택을 붙이고 `X-Acc
 ```
 TransferExecutionService.execute(command)                         ← 편집자: P4만
  ├─ 사전 검증 (기존)
- ├─ tradeDate = businessDateProvider.today()                        ← P5 provider, P4가 대입(#516). 한 번 구해 transfer에 싣고 원장·훅 B가 같이 쓴다
  ├─ 채번 (기존)                                                     ← 채번 뒤라 거부돼도 ERROR 행이 남는다
  ├─ [훅 A] TransferPreCheck 체인 (락 이전 · 읽기 전용 · order 순)
  │     └─ P2 PH-90 AvailableBalancePreCheck
  ├─ OTP 소비 (기존)
  ├─ requiresNewTransactionTemplate.execute {                       ← PH-80이 S2에 재작성
+ │     tradeDate = BusinessDateGate.acquireSharedAndReadBusinessDate()  ← 가장 먼저(gate → 한도 → 계좌). 한 번 구해 transfer에 싣고 원장·훅 B가 같이 쓴다(#516, #662)
  │     한도 · 계좌 락 · 잔액 (기존)
  │     원장 기표 LedgerPair (기존)
  │     [훅 B] LedgerPostingHook.afterLedger(ctx)                   ← P3 PH-24 (예외 → 롤백 = 이체 실패)
  │     publisher.publishEvent(new TransferSettled(...))           ← P1 타입, EVT-2(#505)
  │   }
- └─ failTransfer() REQUIRES_NEW { ERROR 저장; publishEvent(new TransferSettled(...)) }
+ └─ failTransfer() REQUIRES_NEW { tradeDate = gate로 읽기; ERROR 저장; publishEvent(new TransferSettled(...)) }
 
 [BEFORE_COMMIT 리스너 — P1 PH-96] 아웃박스 INSERT (JdbcTemplate). 예외 → 원본 롤백
 ```

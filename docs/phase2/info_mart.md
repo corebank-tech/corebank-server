@@ -101,7 +101,7 @@ CREATE TABLE mart_load_batch (
 
 1. date-fence는 **날짜와 무관한 단일 gate** 하나입니다. 날짜별 fence는 두지 않습니다. 어느 날짜의 fence를 잡을지 정하려면 D를 먼저 읽어야 해서 순환하기 때문입니다.
 2. 모든 원장 생성, 상품가입, 계좌해지 경로는 **gate 공유 락 획득과 D 읽기를 한 연산으로** 수행합니다(예: `acquireSharedAndReadBusinessDate()`). 이 연산 밖에서 `BusinessDateProvider.today()`로 거래일을 따로 읽지 않습니다. 읽은 거래일은 원장과 이벤트 원천 컬럼에 같이 저장합니다. 거래일을 저장하는 호출자는 같은 트랜잭션에서 이 연산을 직접 부릅니다(같은 트랜잭션의 재호출은 첫 값을 돌려줍니다). 기표를 다른 서비스에 맡겨 직접 부를 수 없을 때만 그 기표 결과의 `tradeDate`를 씁니다.
-3. 이 연산은 원장·이벤트를 쓰는 원천 트랜잭션 **안에서** 호출하고, gate는 그 트랜잭션의 commit/rollback까지 유지합니다. 지금 트랜잭션 밖에서 거래일을 읽는 경로(예: `TransferExecutionService`는 `REQUIRES_NEW` 기표 트랜잭션을 열기 전에 `today()`를 읽는다)는 #662에서 기표 트랜잭션 안으로 옮깁니다. 그 전까지 이체 경로는 cutoff 보장 밖입니다.
+3. 이 연산은 원장·이벤트를 쓰는 원천 트랜잭션 **안에서** 호출하고, gate는 그 트랜잭션의 commit/rollback까지 유지합니다. 트랜잭션 밖에서 거래일을 읽던 이체 경로(`TransferExecutionService`, `InterbankTransferService`, `InterbankSettlementService`)도 #662에서 기표·확정 트랜잭션 안으로 옮겼습니다.
 4. gate는 원장·이벤트를 쓰는 가장 안쪽 트랜잭션에서만 잡습니다. gate를 잡은 트랜잭션이 `REQUIRES_NEW`로 연 트랜잭션에서 gate를 다시 잡지 않습니다. 바깥이 공유 락을 쥔 채 COB 배타 락이 기다리면 안쪽 공유 요청이 그 뒤에 서고, 바깥은 안쪽을 애플리케이션에서 기다리므로 DB가 교착을 감지하지 못합니다. 이런 중첩 구조가 이미 있습니다(자동이체·예약이체 배치의 `completeProcessing` → `TransferExecutionService.postLedger`). 지금은 바깥이 영업일을 읽지 않아 해당하지 않습니다. 락 순서(날짜 락 → 계좌 락)를 어기면 전환이 실패할 수 있고, 전환이 실패하면 그 영업일의 cutoff가 남지 않으므로 ETL도 시작하지 않습니다. 락 순서 위반 시 교착 희생자와 재시도 정책은 ADR-0008 결과를 따릅니다.
 5. COB 전환은 같은 gate의 배타 락을 잡아 이미 D를 읽은 거래를 모두 commit/rollback할 때까지 기다립니다. 그 상태에서 `BUSINESS_DATE`를 다음 영업일로 전환하고, 원천 `business_date_cutoff`에 `(base_date=D, status=CLOSED, closed_at)`을 **같은 트랜잭션으로** 기록한 뒤 락을 풉니다. 영업일을 바꾸는 경로는 COB 전환(`advanceFrom`)과 달력 따라잡기(`catchUpTo`) 둘이고, 둘 다 같은 트랜잭션으로 cutoff를 남깁니다. `catchUpTo`가 영업일을 건너뛰면 떠나는 날과 건너뛴 영업일 모두 남기고, 건너뛴 날은 원장이 비어 있습니다. 도입 이전 날짜에는 행이 없고, 도입 이후의 모든 영업일에는 행이 있습니다. 가동 중단으로 건너뛴 영업일도 영업일 전환과 같은 트랜잭션에서 남깁니다. 건너뛴 날의 CLOSED도 의미가 참인 이유는, 따라잡기 UPDATE가 떠나는 날의 배타 락으로 진행 중 거래를 기다리고, 중간 날들은 서버가 멈춰 거래가 없었으며, 이후 거래는 모두 새 영업일을 읽기 때문입니다.
 6. 레플리카는 `replica_preserve_commit_order = ON`으로 이 커밋 순서를 보존합니다. ETL은 레플리카에서 `business_date_cutoff.status = 'CLOSED'`인 D만 시작합니다. cutoff가 없거나 실패면 ETL도 시작하지 않습니다.
@@ -308,7 +308,7 @@ WHERE l.rn = 1
 ## 7. 확인 대기
 
 1. **P2 — 생명주기 거래일.** PH-76 전에 `product_subscription.subscription_trade_date`와 `account.closed_trade_date`를 추가하고, 가입·해지 트랜잭션이 §3-0 gate 연산으로 읽은 거래일을 각각 저장합니다(`today()`로 따로 읽지 않습니다). 예·적금 해지는 잔액을 0으로 만드는 출금 기표도 남기고 그 원장의 `trade_date`가 `closed_trade_date`와 같은지 PH-76에서 검증합니다. 원장이 없는 첫 납입 전 해지도 `closed_trade_date`로 CLOSE 이벤트를 만들므로 제외하지 않습니다.
-2. **P5 — 원천 마감 cutoff.** 구현됨(PR #670). 단일 gate와 `business_date_cutoff`를 구현했고 원장·상품가입·정정 경로를 gate로 옮겼습니다. 이체 실행 경로는 #662에서 옮기며, 그때까지 이체가 포함된 영업일은 cutoff 보장 밖입니다. #603의 `batch_execution_history`는 관측용으로 유지하되 ETL 시작 조건에는 쓰지 않습니다.
+2. **P5 — 원천 마감 cutoff.** 구현됨(PR #670). 단일 gate와 `business_date_cutoff`를 구현했고 원장·상품가입·정정 경로를 gate로 옮겼습니다. 이체 실행 경로도 #662에서 옮겼습니다. #603의 `batch_execution_history`는 관측용으로 유지하되 ETL 시작 조건에는 쓰지 않습니다.
 3. **P5·P3 — 시드 구간 원장 대조.** 시드는 원장 순서 보장(#545)의 대상이 아니어서 9/1~10/5 원장 대조가 실패할 수 있습니다. PH-76 덤프 첫 적재에서 확인하고, 실패면 원인을 P6에 넘깁니다.
 4. **P3 — 가명정보 가이드라인.** 결정 6은 기술적 성질로 정했습니다. 개인정보보호위원회 「가명정보 처리 가이드라인」(2026.03) 본문과 대조가 남았습니다.
 5. **P3·P5 — 해지 이벤트 날짜 이동.** `closed_trade_date`가 불변이므로 늦은 원장 기표가 와도 CLOSE 이벤트 날짜는 움직이지 않습니다. 재적재 시 같은 `(account_key, CLOSE)`를 해당 기준일 행 교체로 처리합니다. 해지 출금 원장의 거래일이 `closed_trade_date`와 다르면 원장 대조와 별도로 `FAILED`로 드러내고 원천 계약 위반으로 처리합니다.
