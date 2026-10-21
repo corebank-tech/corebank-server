@@ -342,7 +342,7 @@ k6 run -e BASE_URL=https://<측정 대상>/api/v1 -e RATE=<수준> -e DURATION=3
 
 ## 7. PH-24 훅 B 전후 — 2026-10-19~20 로컬
 
-> **훅을 켜면 견딤 구간(5~13/s)에서 이체 지연 중앙값이 건당 3~16ms 늘고, 처리량과 최대 안정 처리량은 그대로다.**
+> **훅을 켜면 견딤 구간(5~13/s)에서 이체 지연 중앙값이 건당 2.6~15.6ms 늘고, 처리량과 최대 안정 처리량은 그대로다.**
 > 포화 구간(15/s)은 회차 간 편차가 ON/OFF 차이보다 커서 판정하지 못했다.
 
 훅은 릴리스 1에 함께 나가 운영에서는 전후를 잴 수 없다. 그래서 [tasks.md PH-24](tasks.md#ph-24-gl-분개-서비스--이체-기표-훅--glapi)대로 P3가 로컬에서 쟀다.
@@ -358,15 +358,37 @@ k6 run -e BASE_URL=https://<측정 대상>/api/v1 -e RATE=<수준> -e DURATION=3
 대상 코드: dev 764101e9 bootJar 1개
   ON  = 그대로
   OFF = 같은 jar에서 GlLedgerPostingHook.class만 뺌 (LedgerPostingHook 구현체 0개, 훅 커밋 adae0637 이전과 같은 상태)
-측정 대상: MacBook(Apple Silicon) JVM -Xmx1g, local 프로필(SQL 로그 끔), Hikari 10 · connection-timeout 3s (운영과 같음)
+측정 대상: MacBook(Apple Silicon) JVM -Xms1g -Xmx1g, local 프로필 + 아래 명령의 덮어쓰기
+  (SQL 로그 끔, Hikari 10 · connection-timeout 3s · max-lifetime 570s — 운영과 같음. local 기본값은 timeout 30s)
 DB: Docker MySQL 8.4.10, 버퍼 풀 128MB · binlog 켬 · sync_binlog=1 (운영 RDS db.t4g.micro와 같은 값)
 부하 생성: 같은 Mac의 k6 1.7.1 (harness.md §7 권장과 다름, ON/OFF에 같은 조건)
-데이터 규모: PH-60 + PH-60b 로컬 적재 — 고객 6만 · 계좌 18만 · 원장 650만 · 전표 323만 · 분개 647만
+데이터 규모: PH-60 + PH-60b 누적 로컬 적재, 적재 직후 실측 — 고객 60,000 · 계좌 180,000 · 이체 3,135,000
+          · 원장 6,500,000 · 전표 3,235,001 · 분개 6,470,002
 수준: 5 · 10 · 13 · 15 /s 고정 (사전 탐색: ON 10/s 견딤, 15/s 열화)
-회차: 수준마다 OFF/ON 3회씩 ABBA 교차 · 1회 3분 · 앱 재기동마다 30초 워밍업 버림
+회차: 수준마다 6회, 실행 순서 OFF1 → ON1 → ON2 → OFF2 → OFF3 → ON3 · 1회 3분
+      · 회차마다 앱을 새로 띄우고 같은 수준 30초 워밍업을 버림
+판정: 수준 판정(견딤·열화·포화)은 §3과 같이 회차 중앙값 지표로 한다. 회차별 판정은 표에 함께 둔다
 ```
 
 커밋 adae0637 앞뒤를 따로 빌드하지 않은 이유: 그 뒤에 들어온 채번 풀 수정(61da2b5f)이 빠져 배포된 훅의 비용이 아니게 된다.
+
+재현 명령이다. DB는 PH-60(`ph60_minimum_seed.md`)과 PH-60b(`ph60b_bulk_seed.md` §9)를 적재한 MySQL을 3307로 띄운 상태다.
+두 시드 모두 `--spring.profiles.active=local,phase2-seed`로 돌렸다(`phase2-seed` 단독은 `AccountStatusPort` 빈이 없어 기동 실패).
+
+```bash
+./gradlew bootJar -x test
+cp build/libs/corebank-0.0.1-SNAPSHOT.jar hook-on.jar
+cp build/libs/corebank-0.0.1-SNAPSHOT.jar hook-off.jar
+zip -d hook-off.jar 'BOOT-INF/classes/com/shinhan/corebank/gl/adapter/in/transfer/GlLedgerPostingHook*.class'
+
+# 회차마다 VARIANT=on|off 로 띄우고, 워밍업(DURATION=30s) 한 번 뒤 harness.md §6 명령(DURATION=3m)을 BASE_URL=http://localhost:18080/api/v1 로 돌린다
+java -Xms1g -Xmx1g -jar hook-${VARIANT}.jar \
+  --spring.profiles.active=local --server.port=18080 \
+  --spring.datasource.url='jdbc:mysql://localhost:3307/minicore?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true' \
+  --spring.datasource.username=root --spring.datasource.password=localpw \
+  --spring.datasource.hikari.connection-timeout=3000 --spring.datasource.hikari.max-lifetime=570000 \
+  --spring.jpa.show-sql=false --logging.level.org.hibernate.SQL=info
+```
 
 ### 7-3. 수준별 결과
 
@@ -399,30 +421,41 @@ DB: Docker MySQL 8.4.10, 버퍼 풀 128MB · binlog 켬 · sync_binlog=1 (운영
 
 | 수준 | OFF med | ON med | 차이 | OFF 성공/s | ON 성공/s |
 |---:|---:|---:|---:|---:|---:|
-| 5/s | 45ms | 48ms | **+3ms** (+6%) | 5.01 | 5.01 |
-| 10/s | 55ms | 63ms | **+8ms** (+14%) | 10.01 | 10.01 |
-| 13/s | 63ms | 79ms | **+16ms** (+25%) | 13.01 | 13.01 |
+| 5/s | 45.1ms | 47.8ms | **+2.6ms** (+5.9%) | 5.01 | 5.01 |
+| 10/s | 55.4ms | 63.4ms | **+8.0ms** (+14.4%) | 10.01 | 10.01 |
+| 13/s | 62.9ms | 78.5ms | **+15.6ms** (+24.8%) | 13.01 | 13.01 |
 | 15/s | 4,377ms | 5,247ms | 판정 불가 | 11.99 | 10.02 |
 
-회차 중앙값이다. 튀는 회차(5/s OFF 2회차, 13/s 1회차의 OFF와 ON)가 있어 평균을 쓰지 않았다.
+회차 중앙값이다. 튀는 회차(5/s OFF 2회차, 13/s 1회차의 OFF와 ON)가 있어 평균을 쓰지 않았다. 차이와 퍼센트는 반올림 전 값으로 계산했다.
 
 | 정합성 (전 회차 종료 후) | 결과 |
 |---|---|
 | ON 회차 성공 이체 수 = 전표 수 | 일치 (15/s ON 6,236 = 6,236) |
 | OFF 회차 전표 | 0 |
-| 차대변 불일치 전표 · 원장 짝 깨짐 · harness 계좌 잔액 ≠ 원장 합계 | 0 · 0 · 0 |
+| 차대변 불일치 전표 | 0 |
+| `verify_integrity.sql` 원장 짝 · 잔액 오차 · 한도 적립 합 ≠ 실제 이체액 | 0 · 0 · 0 (10/19~20 전체, 이체 53,365건 중 성공 52,562건) |
+
+한도 적립은 하루 누계(`transfer_limit_daily_usage`)와 비교하므로 ON과 OFF 회차를 나눠 볼 수 없다. 두 날 모두 ON과 OFF가 섞인 하루 전체로 검사했다.
+
+15/s 포화의 근거다. 앱 로그 건수는 워밍업 30초를 포함하고, HTTP 실패와 유실은 측정 3분 기준이다.
+
+| 15/s 회차 | 풀 대기 초과 (Hikari) | 처리되지 않은 예외 | HTTP 실패 | 유실 |
+|---|---:|---:|---:|---:|
+| OFF 1 · 2 · 3 | 124 · 869 · 1,399 | 55 · 397 · 662 | 67 · 405 · 583 | 108 · 138 · 133 |
+| ON 1 · 2 · 3 | 1,773 · 3,620 · 20 | 804 · 1,674 · 9 | 772 · 1,574 · 0 | 126 · 164 · 38 |
+
+HTTP 실패가 난 회차는 같은 규모의 풀 대기 초과와 처리되지 않은 예외를 함께 남겼다. 유실은 풀 대기 초과 없이도 난다 — 15/s ON 3회차(풀 대기 초과 20, HTTP 실패 0, 유실 38)와 13/s OFF 1회차(풀 대기 초과 0, 유실 14)는 지연이 늘어 k6 VU 200개가 모두 묶인 경우다.
 
 ### 7-4. 결론
 
 | 항목 | 내용 |
 |---|---|
-| **어디까지 견뎠나** | ON과 OFF 모두 **13/s**(3회 중 2회 견딤). 최대 안정 처리량 변화 없음 |
-| **어디서부터 이슈인가** | ON과 OFF 모두 15/s에서 3회 전부 포화. 원인은 둘 다 Hikari 풀 대기 초과로 같다 |
-| **저하율** | 견딤 구간 지연 중앙값 +3~16ms(+6~25%). p95·p99는 같은 변형끼리의 회차 편차보다 차이가 작아 판정 불가 |
+| **어디까지 견뎠나** | ON과 OFF 모두 **13/s**(회차 중앙값 p95 OFF 315ms · ON 218ms, 유실 0). 최대 안정 처리량 변화 없음 |
+| **어디서부터 이슈인가** | ON과 OFF 모두 15/s에서 3회 전부 포화. 에러는 Hikari 풀 대기 초과에서, 유실은 지연 증가에서 온다(위 근거 표) |
+| **저하율** | 견딤 구간 지연 중앙값 +2.6~15.6ms(+5.9~24.8%). p95·p99는 같은 변형끼리의 회차 편차보다 차이가 작아 판정 불가 |
 | **포화 구간** | 15/s 성공/s 중앙값 OFF 11.99 → ON 10.02(−16%)이지만 ON 범위가 5.34~14.79로 OFF 범위(11.03~14.03)를 덮는다. 3쌍 중 2쌍에서 ON이 낮았다 |
+| **어떻게 개선할 것인가** | 해당 없음. 이 측정은 훅의 비용을 재는 것이고 훅 자체는 개선 대상이 아니다. 15/s 풀 포화는 훅과 무관하게 OFF에서도 나므로 풀 조정(#531)과 LOCK-TUNE 몫이다 |
 | **상용 기준** | 훅은 견딤 구간의 처리량을 깎지 않아 **충족**. 로컬 절대값은 운영과 달라 옮길 수 있는 것은 건당 추가 ms와 상대 비교뿐이다 |
-
-원본 요약 JSON과 실행 스크립트는 저장소 밖(P3 로컬)에 있다. 다시 재려면 §7-2 조건으로 `harness.md` §6 명령을 수준마다 돌린다.
 
 ---
 
