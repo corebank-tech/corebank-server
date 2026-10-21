@@ -28,9 +28,9 @@
 
 ```bash
 # 1) 레플리카 역할 DB와 마트 역할 DB
-docker run -d --name etl-bench-replica -e MYSQL_ROOT_PASSWORD=pw -e MYSQL_DATABASE=minicore -p 3317:3306 \
+docker run -d --name etl-bench-replica -e MYSQL_ROOT_PASSWORD=pw -e MYSQL_DATABASE=minicore -p 127.0.0.1:3317:3306 \
   mysql:8.4.10 --skip-log-bin --innodb-buffer-pool-size=1G --max-allowed-packet=256M --innodb-flush-log-at-trx-commit=2
-docker run -d --name etl-bench-mart -e MYSQL_ROOT_PASSWORD=pw -e MYSQL_DATABASE=info_mart -p 3318:3306 \
+docker run -d --name etl-bench-mart -e MYSQL_ROOT_PASSWORD=pw -e MYSQL_DATABASE=info_mart -p 127.0.0.1:3318:3306 \
   mysql:8.4.10 --skip-log-bin --innodb-buffer-pool-size=1G --max-allowed-packet=256M --innodb-flush-log-at-trx-commit=2
 
 # 2) 레플리카에 시드 적재 (최소 시드 → 대량 시드 순서, 각각 별도 실행)
