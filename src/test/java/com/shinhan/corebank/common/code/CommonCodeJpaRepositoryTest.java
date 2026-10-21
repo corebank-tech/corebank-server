@@ -38,6 +38,21 @@ class CommonCodeJpaRepositoryTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("타행 은행코드는 당행 088 없이 5개가 은행코드 오름차순으로 들어 있다")
+    void bankCodes_fiveInterbankBanksWithoutOwnBank() {
+        List<CommonCodeJpaEntity> result = repository.findByCodeGroupAndUseYnOrderBySortOrderAsc("BANK_CODE", "Y");
+
+        assertThat(result)
+                .extracting(CommonCodeJpaEntity::getCode, CommonCodeJpaEntity::getCodeName)
+                .containsExactly(
+                        tuple("004", "KB국민은행"),
+                        tuple("011", "NH농협은행"),
+                        tuple("020", "우리은행"),
+                        tuple("081", "하나은행"),
+                        tuple("090", "카카오뱅크"));
+    }
+
+    @Test
     @DisplayName("같은 code 값이 서로 다른 codeGroup 에 속해도 복합키로 구분된다")
     void sameCodeAcrossDifferentGroups_isDistinguishedByCompositeKey() {
         CommonCodeJpaEntity processResultSuccess =

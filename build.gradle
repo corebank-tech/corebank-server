@@ -122,6 +122,9 @@ dependencies {
     // Swagger / OpenAPI UI
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
 
+    // 타행 송신 서킷브레이커 (PH-33-②). Boot 4라 스타터 대신 순수 모듈만 쓴다
+    implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.4.0'
+
     // JSON 구조화 로깅 (PH-42)
     implementation 'net.logstash.logback:logstash-logback-encoder:8.0'
 

@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class MaskingUtilTest {
 
@@ -24,10 +26,25 @@ class MaskingUtilTest {
                 .withMessageNotContaining(raw);
     }
 
+    @ParameterizedTest(name = "{0} -> {1}")
+    @CsvSource({
+        "1234567890123456, 1234********3456",
+        "1234567890123, 123*******123",
+        "110123456877, 110******877",
+        "1234567890, 12******90",
+        "1234, 1**4",
+        "123, ***",
+        "1, *"
+    })
+    @DisplayName("타행 계좌번호는 자릿수÷4만큼 앞·뒤를 남기고 자릿수는 그대로 둔다 (인계 문서 §7-1)")
+    void interbankAccountNumber_masksByQuarterLength(String raw, String expected) {
+        assertThat(MaskingUtil.maskAccountNumber(raw)).isEqualTo(expected);
+    }
+
     @Test
-    @DisplayName("길이가 맞지 않는 계좌번호도 예외 메시지에 원문이 포함되지 않는다")
+    @DisplayName("16자리를 넘는 계좌번호도 예외 메시지에 원문이 포함되지 않는다")
     void wrongLengthAccountNumber_exceptionMessage_doesNotContainRawInput() {
-        String raw = "1234567890123";
+        String raw = "12345678901234567";
 
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> MaskingUtil.maskAccountNumber(raw))

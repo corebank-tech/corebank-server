@@ -3,14 +3,14 @@ package com.shinhan.infoetl.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.nio.charset.StandardCharsets;
+import com.shinhan.infoetl.TestKeys;
 import java.util.Arrays;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class PseudonymizerTest {
 
-    private static final byte[] KEY = "test-key-for-pseudonymizer-0001-abcdef".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] KEY = TestKeys.bytes("p");
 
     @Test
     @DisplayName("RFC 4231 공개 테스트 벡터(케이스 6)와 결과가 같다")
@@ -71,8 +71,7 @@ class PseudonymizerTest {
     @DisplayName("키가 다르면 같은 ID도 값이 다르다")
     void differsByKey() {
         String withKeyA = new Pseudonymizer(KEY).accountKey(1L);
-        String withKeyB =
-                new Pseudonymizer("another-key-for-pseudonymizer-xyz".getBytes(StandardCharsets.UTF_8)).accountKey(1L);
+        String withKeyB = new Pseudonymizer(TestKeys.bytes("q")).accountKey(1L);
 
         assertThat(withKeyA).isNotEqualTo(withKeyB);
     }

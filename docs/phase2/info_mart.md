@@ -4,7 +4,7 @@
 > 바꾸려면 P3과 P5가 이 문서를 먼저 고칩니다.
 >
 > **1차 대상**: P5 [PH-76](tasks.md#ph-76-정보계-etl)(ETL)·[PH-77](tasks.md#ph-77-정보계-조회-api)(조회 API), FE ADM-03.
-> 용어(영업일·거래일)는 [glossary.md](glossary.md)를 따릅니다. 인프라 배치는 [D-25](README.md#d-25--927--리드-제안팀-회의-확인-대기)입니다.
+> 용어(영업일·거래일)는 [glossary.md](glossary.md)를 따릅니다. 인프라 배치는 [D-25](README.md#d-25--927--리드-제안1020-팀-확정)입니다.
 >
 > 마트는 온프레미스 MySQL에 있습니다. 그래서 이 레포의 Flyway·[schema_reference.md](../schema_reference.md)·ERD에는 넣지 않고, DDL은 §2가 정본입니다.
 
