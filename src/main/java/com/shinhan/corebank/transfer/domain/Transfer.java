@@ -22,6 +22,8 @@ public class Transfer {
     private Long withdrawalAccountId;
     private Long depositAccountId;
     private String depositAccountNumber;
+    // NULL이면 당행 거래다. 타행 거래는 depositAccountId가 없다(#654).
+    private String payeeBankCode;
     private String payeeName;
     private long amount;
     private long fee;
@@ -99,6 +101,47 @@ public class Transfer {
                 .build();
     }
 
+    // 타행 이체 생성. 입금계좌 ID는 없고 예금주는 응답으로 받으며, 타행 예약·자동이체는 범위 밖이라 즉시이체로 고정한다.
+    public static Transfer createInterbank(
+            String transactionNumber,
+            Long withdrawalAccountId,
+            String payeeBankCode,
+            String depositAccountNumber,
+            long amount,
+            long fee,
+            TransferChannel channel,
+            String myPassbookMemo,
+            String recipientPassbookMemo,
+            LocalDateTime now,
+            LocalDate tradeDate) {
+        TransferValidations.requireNonNull(withdrawalAccountId, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonBlank(transactionNumber, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonBlank(payeeBankCode, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonBlank(depositAccountNumber, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonNull(channel, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonNull(now, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requireNonNull(tradeDate, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        TransferValidations.requirePositiveAmount(amount);
+        TransferValidations.requireNonNegativeFee(fee);
+
+        return Transfer.builder()
+                .transactionNumber(transactionNumber)
+                .withdrawalAccountId(withdrawalAccountId)
+                .payeeBankCode(payeeBankCode)
+                .depositAccountNumber(depositAccountNumber)
+                .amount(amount)
+                .fee(fee)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(channel)
+                .status(ProcessResultStatus.PROCESSING)
+                .myPassbookMemo(myPassbookMemo)
+                .recipientPassbookMemo(recipientPassbookMemo)
+                .transferredAt(now)
+                .createdAt(now)
+                .tradeDate(tradeDate)
+                .build();
+    }
+
     // 이체 완료 처리 (완료 시각으로 transferredAt 갱신)
     public void complete(long withdrawalBalanceAfter, LocalDateTime completedAt) {
         requireProcessing();
@@ -122,10 +165,33 @@ public class Transfer {
         this.status = ProcessResultStatus.TIMEOUT;
     }
 
+    // 처리 불명 타행 건을 상대 은행 응답대로 확정한다. 이미 확정된 건은 바꾸지 않는다(PH-80 역행 금지).
+    public void settleApproved(String payeeName, long withdrawalBalanceAfter, LocalDateTime settledAt) {
+        requireUnsettledInterbank();
+        TransferValidations.requireNonNull(settledAt, CommonErrorCode.REQUIRED_FIELD_MISSING);
+        this.status = ProcessResultStatus.SUCCESS;
+        this.payeeName = payeeName;
+        this.withdrawalBalanceAfter = withdrawalBalanceAfter;
+        this.transferredAt = settledAt;
+    }
+
+    // 출금을 되돌린 뒤 부른다. 예금주는 받지 못했으므로 비워 둔 채 확정한다.
+    public void settleFailed(String errorCode, String errorMessage) {
+        requireUnsettledInterbank();
+        this.status = ProcessResultStatus.ERROR;
+        this.errorCode = errorCode;
+        this.errorMessage = errorMessage;
+    }
+
+    public boolean isUnsettledInterbank() {
+        return this.payeeBankCode != null && this.status == ProcessResultStatus.TIMEOUT;
+    }
+
     // 정정 체인의 원거래로 무효화한다. 돈이 움직인 확정 거래만 대상이고, 취소의 취소와 재무효화는 막는다.
     public void invalidate(LocalDateTime at) {
         TransferValidations.requireNonNull(at, CommonErrorCode.REQUIRED_FIELD_MISSING);
         if (this.status != ProcessResultStatus.SUCCESS
+                || this.payeeBankCode != null
                 || isInvalidated()
                 || this.correctionType == CorrectionType.REVERSAL) {
             throw new BusinessException(TransferErrorCode.NOT_CORRECTABLE);
@@ -146,6 +212,12 @@ public class Transfer {
 
     public boolean isInvalidated() {
         return this.invalidatedAt != null;
+    }
+
+    private void requireUnsettledInterbank() {
+        if (!isUnsettledInterbank()) {
+            throw new BusinessException(TransferErrorCode.INVALID_STATUS_TRANSITION);
+        }
     }
 
     // 커밋 전 과도 상태(PROCESSING)에서만 확정으로 전이 가능. 이미 확정된 이체는 재변경 금지.

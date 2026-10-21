@@ -359,6 +359,32 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("applyDebit은 잠근 계좌에서 금액을 빼 출금 후 잔액을 돌려주고, 고객 거래라 last_transaction_at을 갱신한다")
+    void applyDebit_subtractsAmount_andUpdatesLastTransactionAt() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        LockedAccount locked = adapter.lockForCredit(101L);
+        LocalDateTime executedAt = LocalDateTime.of(2026, 10, 23, 10, 30, 15);
+
+        // when
+        long balanceAfter = adapter.applyDebit(locked, 30000L, executedAt);
+        entityManager.flush();
+        entityManager.clear();
+
+        // then
+        long balance = ((Number) entityManager
+                        .createNativeQuery("SELECT balance FROM account WHERE account_id = 101")
+                        .getSingleResult())
+                .longValue();
+        LocalDateTime lastTransactionAt = (LocalDateTime) entityManager
+                .createNativeQuery("SELECT last_transaction_at FROM account WHERE account_id = 101")
+                .getSingleResult();
+        assertThat(balanceAfter).isEqualTo(balance);
+        assertThat(balance).isEqualTo(locked.balance() - 30000L);
+        assertThat(lastTransactionAt).isEqualTo(executedAt);
+    }
+
+    @Test
     @DisplayName("applyCredit은 잠근 계좌에 금액을 더해 입금 후 잔액을 돌려주고, 이자는 고객 거래가 아니라 last_transaction_at은 그대로 둔다")
     void applyCredit_addsAmount_andKeepsLastTransactionAt() {
         // given

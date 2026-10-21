@@ -125,6 +125,13 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
         return entity.getBalance();
     }
 
+    @Override
+    public long applyDebit(LockedAccount locked, long amount, LocalDateTime executedAt) {
+        AccountLockJpaEntity entity = findForUpdate(locked.accountId());
+        entity.debit(amount, executedAt);
+        return entity.getBalance();
+    }
+
     private AccountLockJpaEntity findForUpdate(Long accountId) {
         return repository
                 .findByAccountIdForUpdate(accountId)

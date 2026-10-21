@@ -7,6 +7,8 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
+import com.shinhan.corebank.transfer.application.port.in.InterbankBankQueryUseCase;
+import com.shinhan.corebank.transfer.application.port.in.InterbankTransferUseCase;
 import com.shinhan.corebank.transfer.application.port.in.PayeeInquiryUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryPage;
@@ -22,6 +24,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -51,6 +54,8 @@ public class TransferController {
     private final CurrentCustomerProvider currentCustomerProvider;
     private final IdempotentRequestExecutor idempotentRequestExecutor;
     private final TransferHistoryQueryUseCase transferHistoryQueryUseCase;
+    private final InterbankTransferUseCase interbankTransferUseCase;
+    private final InterbankBankQueryUseCase interbankBankQueryUseCase;
 
     @PostMapping
     @Operation(
@@ -102,6 +107,67 @@ public class TransferController {
                 new TypeReference<>() {},
                 () -> ApiResponse.success(TransferResponse.from(
                         transferExecutionUseCase.execute(request.toCommand(customerId, authToken, otpAuthToken)))));
+    }
+
+    @PostMapping("/interbank")
+    @Operation(
+            operationId = "executeInterbankTransfer",
+            summary = "타행이체 실행",
+            description =
+                    """
+            다른 은행 계좌로 이체한다. 당행 이체(POST /transfers)와 계좌번호 검증·OTP 대조 데이터가 달라 따로 둔다. \
+            OTP 발급 때 transactionData에 payeeBankCode를 더한다. 동일한 Idempotency-Key와 동일한 요청 내용으로 \
+            재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "200",
+            description =
+                    """
+            이체 요청이 처리됨. 결과는 응답 본문의 status로 본다. status=TIMEOUT이면 상대 은행 응답이 없어 처리 불명이다 — \
+            다시 보내지 않는다(상대가 이미 입금했을 수 있다). 결과는 서버가 조회거래로 확인하고 이체 상세에서 다시 본다. \
+            status=ERROR면 errorCode에 `TRF0001` · `TRF0304` · `TRF0303`/`LMT0001` · `LMT0002` · `LMT0003` · \
+            `OTP0101` · `OTP0102` · `TRF0201`(상대 은행에 수취 계좌 없음) · `TRF0301`(수취 계좌 거래 불가) · \
+            `TRF0308`(상대 은행이 처리하지 못함 — 출금했으면 되돌린 뒤 확정) 중 하나가 담긴다.""")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description =
+                        "`TRF0003` 이체금액 형식 · `TRF0005` 통장 표시내용 길이 · `TRF0006` 지원하지 않는 은행 · `TRF0007` 타행 계좌번호 형식 · `TRF0008` 보낼 수 없는 문자",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "`CMN0301`/`CMN0302` 멱등키 충돌",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<ApiResponse<InterbankTransferResponse>> executeInterbank(
+            @Parameter(description = "멱등키. 동일 키로 재요청 시 재처리 없이 저장된 응답을 반환", required = true)
+                    @RequestHeader("Idempotency-Key")
+                    String idempotencyKey,
+            @Parameter(description = "계좌 비밀번호 인증 완료 후 발급되는 1회성 인증 토큰", required = true)
+                    @RequestHeader("Account-Password-Auth-Token")
+                    String authToken,
+            @Parameter(description = "OTP 인증 완료 후 발급되는 1회성 인증 토큰", required = true) @RequestHeader("Otp-Auth-Token")
+                    String otpAuthToken,
+            @RequestBody InterbankTransferRequest request) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
+        return idempotentRequestExecutor.execute(
+                idempotencyKey,
+                customerId,
+                "POST /transfers/interbank",
+                interbankFingerprint(customerId, request),
+                new TypeReference<>() {},
+                () -> ApiResponse.success(InterbankTransferResponse.from(
+                        interbankTransferUseCase.execute(request.toCommand(customerId, authToken, otpAuthToken)))));
+    }
+
+    @GetMapping("/banks")
+    @Operation(
+            operationId = "getInterbankBanks",
+            summary = "타행이체 은행 목록",
+            description = "타행이체로 보낼 수 있는 은행을 은행코드 오름차순으로 돌려준다. 당행(088)은 없다.")
+    public ApiResponse<List<InterbankBankResponse>> getInterbankBanks() {
+        return ApiResponse.success(interbankBankQueryUseCase.findAll().stream()
+                .map(InterbankBankResponse::from)
+                .toList());
     }
 
     @GetMapping("/payee")
@@ -273,6 +339,19 @@ public class TransferController {
         } catch (IllegalArgumentException e) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT, "status 값이 올바르지 않습니다.");
         }
+    }
+
+    // 당행과 같은 이유로 인증 토큰은 빼고, 은행코드를 더한다.
+    private Map<String, Object> interbankFingerprint(Long customerId, InterbankTransferRequest request) {
+        Map<String, Object> fingerprint = new LinkedHashMap<>();
+        fingerprint.put("customerId", customerId);
+        fingerprint.put("withdrawalAccountId", request.withdrawalAccountId());
+        fingerprint.put("payeeBankCode", request.payeeBankCode());
+        fingerprint.put("depositAccountNumber", request.depositAccountNumber());
+        fingerprint.put("amount", request.amount());
+        fingerprint.put("myPassbookMemo", request.myPassbookMemo());
+        fingerprint.put("recipientPassbookMemo", request.recipientPassbookMemo());
+        return fingerprint;
     }
 
     // 멱등키 해시는 인증 토큰을 제외한 지문으로 계산한다(AutoTransferController와 동일 이유) —

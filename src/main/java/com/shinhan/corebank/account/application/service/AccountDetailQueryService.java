@@ -46,6 +46,7 @@ public class AccountDetailQueryService implements AccountDetailQueryUseCase {
                 account.getBalance(),
                 account.getAvailableBalance(),
                 account.getOpenedDate().toLocalDate(),
+                account.getMaturityDate(),
                 account.getStatus(),
                 account.getPasswordFailureCount(),
                 account.isPasswordLocked());

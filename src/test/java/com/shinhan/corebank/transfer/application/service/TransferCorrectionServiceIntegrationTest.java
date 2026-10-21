@@ -155,6 +155,31 @@ class TransferCorrectionServiceIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("타행 이체는 받은 계좌가 당행에 없어 되돌릴 수 없다 — TRF0305로 거부하고 원거래는 그대로다 (#654)")
+    void reverseInterbank_throws() {
+        // given
+        jdbcTemplate.update(
+                """
+                INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id, deposit_account_number,
+                    payee_bank_code, payee_name, amount, fee, transfer_type, channel, status, transferred_at, created_at)
+                VALUES ('20320304WB0000054899', ?, NULL, '1234567890123', '004', '김민수', ?, 0, 'IMMEDIATE', 'WB',
+                    'SUCCESS', NOW(6), NOW(6))
+                """,
+                ACCOUNT_A,
+                AMOUNT);
+
+        // when & then
+        assertThatThrownBy(() -> transferCorrectionService.reverse("20320304WB0000054899"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT invalidated_at IS NULL FROM transfer WHERE transaction_number = '20320304WB0000054899'",
+                        Boolean.class))
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("이미 되돌린 이체를 다시 되돌리면 TRF0305로 거부되고 아무것도 바뀌지 않는다")
     void reverseTwice_throws() {
         // given
