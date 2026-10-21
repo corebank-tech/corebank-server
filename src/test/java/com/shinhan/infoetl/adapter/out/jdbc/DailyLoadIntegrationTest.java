@@ -277,6 +277,22 @@ class DailyLoadIntegrationTest {
     }
 
     @Test
+    @DisplayName("원장이 그날 하나도 없는 영업일(가동 중단으로 건너뛴 날)도 누적 잔액으로 적재되어 잔액 0건 규칙에 걸리지 않는다")
+    void dayWithoutAnyLedgerEntryOfItsOwnLoadsCarriedBalances() throws SQLException {
+        // 기본 픽스처의 원장은 D(화)에만 있다. 수요일은 그날 기표가 없다.
+        service.load(D);
+
+        LoadResult wednesday = service.load(WED);
+
+        assertThat(wednesday.balanceRowCount()).isEqualTo(2L);
+        assertThat(wednesday.martBalanceTotal()).isEqualTo(1_000L);
+        try (Connection mart = InfoEtlTestDatabase.mart();
+                ResultSet row = batch(mart, wednesday.loadBatchId())) {
+            assertThat(row.getString("status")).isEqualTo("COMPLETED");
+        }
+    }
+
+    @Test
     @DisplayName("자동 모드: cutoff가 없는 영업일은 실패로 모으고 뒤 날짜는 계속 적재하며 asOf는 빠진 날 앞에 머문다")
     void autoLoadContinuesPastDayWithoutCutoff() throws SQLException {
         ReplicaFixtures.insertLedger(50L, 1L, 250L, LocalDateTime.of(2026, 10, 19, 9, 0), MON);
