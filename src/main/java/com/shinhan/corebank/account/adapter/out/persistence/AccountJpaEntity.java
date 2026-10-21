@@ -80,6 +80,9 @@ public class AccountJpaEntity extends BaseEntity {
     @Column(name = "closed_date", columnDefinition = "DATETIME(6)")
     private LocalDateTime closedDate;
 
+    @Column(name = "closed_trade_date")
+    private LocalDate closedTradeDate;
+
     @Column(name = "last_transaction_at", columnDefinition = "DATETIME(6)")
     private LocalDateTime lastTransactionAt;
 

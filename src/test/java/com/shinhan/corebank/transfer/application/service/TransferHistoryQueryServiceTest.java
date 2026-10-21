@@ -42,6 +42,8 @@ import org.springframework.data.domain.Pageable;
 @ExtendWith(MockitoExtension.class)
 class TransferHistoryQueryServiceTest {
 
+    private static final LocalDate TRADE_DATE = LocalDate.of(2026, 8, 12);
+
     @Mock
     TransferHistoryQueryPort transferHistoryQueryPort;
 
@@ -317,7 +319,8 @@ class TransferHistoryQueryServiceTest {
                 null,
                 "출금메모",
                 "입금메모",
-                LocalDateTime.of(2026, 8, 10, 9, 0));
+                LocalDateTime.of(2026, 8, 10, 9, 0),
+                TRADE_DATE);
         transfer.complete(90_000L, LocalDateTime.of(2026, 8, 10, 9, 0));
 
         when(transferHistoryQueryPort.search(
@@ -379,7 +382,8 @@ class TransferHistoryQueryServiceTest {
                 null,
                 "출금메모",
                 "입금메모",
-                LocalDateTime.of(2026, 8, 10, 9, 0));
+                LocalDateTime.of(2026, 8, 10, 9, 0),
+                TRADE_DATE);
         transfer.complete(90_000L, LocalDateTime.of(2026, 8, 10, 9, 0));
         when(transferLookupPort.findByTransactionNumber("20260810IT0000000001")).thenReturn(Optional.of(transfer));
         when(accountLockPort.findWithdrawalAccountDetail(WITHDRAWAL_ACCOUNT_ID))
@@ -409,7 +413,8 @@ class TransferHistoryQueryServiceTest {
                 null,
                 "출금메모",
                 "입금메모",
-                LocalDateTime.of(2026, 8, 10, 9, 0));
+                LocalDateTime.of(2026, 8, 10, 9, 0),
+                TRADE_DATE);
         transfer.complete(90_000L, LocalDateTime.of(2026, 8, 10, 9, 0));
         when(transferLookupPort.findByTransactionNumber("20260810IT0000000001")).thenReturn(Optional.of(transfer));
         stubOwnership(CUSTOMER_ID, WITHDRAWAL_ACCOUNT_ID);

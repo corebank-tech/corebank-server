@@ -18,8 +18,8 @@ P4는 TIMEOUT과 정정 체인을, P5는 영업일을 만든다. 이름이 트�
 | 3 | **적수** | `accumulatedDailyBalance` | 이자 계산 기간 동안 **매일의 일말 원장잔액을 모두 더한 값**이다. 잔액이 기간 내내 같을 때만 `잔액 × 일수`와 같다 — 예: 1일차 100원, 2~3일차 120원이면 적수는 340원이다. 일수 계산 방식은 **실일수/365**를 사용한다. **원장에서 즉시 집계한 계산 결과**이며, 원장 기표나 별도 일잔액 테이블이 아니다 | P2 PH-11·PH-13 이자 계산, 만기·해지 원리금 | 없음. P2 PH-11에서 생긴다 |
 | 4 | **전표** | `voucher` (번호 `voucherNo`) | 거래 1건이 회계 장부에 남긴 기표 단위다. 분개 여러 줄을 담고, **전표 하나 안에서 차변 합계와 대변 합계가 같아야** 한다. 번호는 거래일(귀속 영업일) + 유형 + 일련번호다. 형식은 [gl_journal_patterns.md](gl_journal_patterns.md) §1 | P3 GL(`gl_voucher`), P4 이체 기표 훅, P2 이자 분개, P6 시드 | 없음. #451·#452에서 생긴다 |
 | 5 | **분개** | `journalEntry` | 전표 안의 한 줄이다. 계정과목 하나와 차변 또는 대변 한쪽의 금액(원 단위 정수)을 가진다 | P3 GL(`gl_journal_entry`), 시산표, 결함 주입 탐지 | 없음. #451·#452에서 생긴다 |
-| 6 | **영업일** | `businessDate` | 시스템 시각과 분리된 **논리 업무일자**다. COB 마지막 스텝에서 다음 영업일로 전환된다. `business.api.BusinessDateProvider`가 유일한 출처이고, `LocalDate.now()`로 대신하지 않는다 | P5 COB(`CobStep.run(businessDate)`), P2 만기 감지·적수 일수, P3 전표번호 | 없음. P5 PH-40(10/2)에서 생긴다 |
-| 7 | **거래일** | `tradeDate` | 거래 한 건이 **귀속되는 영업일**이다. 발생 시각(`occurredAt`)과 다르다 — 휴일이나 마감 뒤에 발생한 거래는 다음 영업일이 거래일이다 | `transfer.trade_date`, `ledger_entry.trade_date`, GL 분개 집계 기준일 | 없음. 원장에는 발생 시각 `occurredAt`만 있다. P5 PH-41이 컬럼을 추가하고 P4가 값을 넣는다(10/16) |
+| 6 | **영업일** | `businessDate` | 시스템 시각과 분리된 **논리 업무일자**다. COB 첫 스텝에서 다음 영업일로 전환된다(이전 영업일은 `COB_DATE`로 이후 스텝에 넘긴다, [ADR-0004](../adr/0004-cob-step-order-cob-date.md)). `business.api.BusinessDateProvider`가 유일한 출처이고, `LocalDate.now()`로 대신하지 않는다 | P5 COB(`CobStep.run(businessDate)`), P2 만기 감지·적수 일수, P3 전표번호 | 없음. P5 PH-40(10/2)에서 생긴다 |
+| 7 | **거래일** | `tradeDate` | 거래 한 건이 **귀속되는 영업일**이다. 발생 시각(`occurredAt`)과 다르다 — 휴일이나 마감 뒤에 발생한 거래는 다음 영업일이 거래일이다 | `transfer.trade_date`, `ledger_entry.trade_date`, GL 분개 집계 기준일 | P5 PH-41이 컬럼을 추가했고(#472), P4가 이체·정정·상품가입 입금·예적금 입금 계약에서 영업일 gate(`BusinessDateGate`)로 읽은 값을 넣는다(#516, #556). 대입 전 행은 NULL이고 채우기는 #515 |
 | 8 | **만기** | `MATURED` | 예·적금 계좌의 만기일이 영업일 기준으로 도래해 `ACTIVE`에서 전이된 상태다. 신규 거래 대상에서 빠진다. 만기 이후에는 이자가 붙지 않는다(2차 고정) | `AccountStatus`, P2 PH-15 만기 감지, FE #139 | `AccountStatus.MATURED` (PH-10 #419에서 추가) |
 | 9 | **처리 불명** | `TIMEOUT` | 대외 전문에 응답이 없어 **상대 은행이 처리했는지 알 수 없는** 상태다. 실패(`ERROR`)가 아니다. 자동 재시도하지 않고 조회거래로 확정한다 | `transfer.status`, P4 PH-80·PH-33, FE B-9 | `ProcessResultStatus.TIMEOUT`, `Transfer.timeout()`, 공통코드 `PROCESS_RESULT_STATUS`/`TIMEOUT` "처리 불명" (#564). `PROCESSING`의 대체가 아니라 **커밋되는 행 상태**다 — 다만 `isConfirmed()`는 false라 자동·예약이체 배치가 ERROR로 굳히지 않는다. 자동·예약이체 회차는 TIMEOUT을 쓰지 않는다([process_result_status_usage.md](process_result_status_usage.md)) |
 | 10 | **조회거래** | `inquiry` (전문) | 원거래의 실제 처리 결과를 상대 은행에 **다시 묻는 전문**이다. 원장을 바꾸지 않는다. "정정"이 아니다 | P4 PH-33 타행 이체 | 없음 |
@@ -48,5 +48,5 @@ P4는 TIMEOUT과 정정 체인을, P5는 영업일을 만든다. 이름이 트�
 | `balanceAfter` | 거래후잔액 |
 
 세 라벨은 FE에 이미 있는 표기를 그대로 정본으로 삼았다. 다만 거래내역 화면은 원장잔액을 "계좌잔액"이라고 쓰고 있어서 C-6에서 맞춘다.
-`MATURED`·`TIMEOUT`의 화면 라벨은 FE #139(P2)와 B-9(P1)에서 정한 뒤 이 표에 추가한다.
+`MATURED`·`TIMEOUT`의 화면 라벨은 FE #139(P2)와 B-9(P3)에서 정한 뒤 이 표에 추가한다.
 라벨을 새로 붙이거나 바꾸는 작업은 C-6(P3)과 C-1(P2)이 이 표를 기준으로 한다.

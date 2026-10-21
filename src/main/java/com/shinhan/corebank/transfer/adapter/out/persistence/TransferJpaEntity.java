@@ -32,13 +32,18 @@ public class TransferJpaEntity {
     @Column(name = "withdrawal_account_id", nullable = false)
     private Long withdrawalAccountId;
 
-    @Column(name = "deposit_account_id", nullable = false)
+    // 타행 거래는 NULL이다 — 수취 계좌가 당행 account에 없다(#654).
+    @Column(name = "deposit_account_id")
     private Long depositAccountId;
 
-    @Column(name = "deposit_account_number", length = 12, nullable = false)
+    @Column(name = "deposit_account_number", length = 16, nullable = false)
     private String depositAccountNumber;
 
-    @Column(name = "payee_name", length = 50, nullable = false)
+    // NULL이면 당행 거래다.
+    @Column(name = "payee_bank_code", length = 3, columnDefinition = "char(3)")
+    private String payeeBankCode;
+
+    @Column(name = "payee_name", length = 50)
     private String payeeName;
 
     @Column(name = "amount", nullable = false)
@@ -90,6 +95,10 @@ public class TransferJpaEntity {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime createdAt;
+
+    // NULL 허용 — 대입(#516) 전 행이 남아 있다. 새 행의 필수 여부는 도메인 팩토리가 막는다(#515 A안).
+    @Column(name = "trade_date")
+    private LocalDate tradeDate;
 
     @Column(name = "invalidated_at", columnDefinition = "DATETIME(6)")
     private LocalDateTime invalidatedAt;

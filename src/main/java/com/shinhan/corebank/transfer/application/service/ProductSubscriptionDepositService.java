@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
+import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
@@ -15,6 +16,7 @@ import com.shinhan.corebank.transfer.domain.LedgerPair;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -46,14 +48,17 @@ public class ProductSubscriptionDepositService implements ProductSubscriptionDep
     private final LedgerSavePort ledgerSavePort;
     private final List<LedgerPostingHook> ledgerPostingHooks;
     private final Clock clock;
+    private final BusinessDateGate businessDateGate;
 
     @Override
     @Transactional
     public ProductSubscriptionDepositResult deposit(ProductSubscriptionDepositCommand command) {
         LocalDateTime requestedAt = LocalDateTime.now(clock);
+        // 한 번만 읽어 원장 2행과 훅 B에 같이 넘긴다(#516).
+        LocalDate tradeDate = businessDateGate.acquireSharedAndReadBusinessDate();
 
         // 채번은 SequenceGenerator 안에서 REQUIRES_NEW로 독립 커밋된다 — 이 트랜잭션이 뒤에서
-        // 롤백돼도 번호만 비고(gap) 채번 행은 남는다. 영업일자 기준은 TransferExecutionService와
+        // 롤백돼도 번호만 비고(gap) 채번 행은 남는다. 거래번호 날짜(달력일)는 TransferExecutionService와
         // 동일하게 맞춘다(같은 transaction_sequence 행을 공유하므로 기준이 갈리면 안 된다).
         String transactionNumber = transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), CHANNEL);
 
@@ -85,16 +90,16 @@ public class ProductSubscriptionDepositService implements ProductSubscriptionDep
                 PASSBOOK_MEMO,
                 PASSBOOK_MEMO,
                 CHANNEL,
-                executedAt));
+                executedAt,
+                tradeDate));
 
-        // tradeDate 는 PH-41 전까지 기표 시각의 달력일이다(TransferExecutionService 와 같다).
         LedgerPostingContext context = new LedgerPostingContext(
                 transactionNumber,
                 LEDGER_TYPE,
                 command.amount(),
                 command.withdrawalAccountId(),
                 command.depositAccountId(),
-                executedAt.toLocalDate());
+                tradeDate);
         for (LedgerPostingHook hook : ledgerPostingHooks) {
             hook.afterLedger(context);
         }

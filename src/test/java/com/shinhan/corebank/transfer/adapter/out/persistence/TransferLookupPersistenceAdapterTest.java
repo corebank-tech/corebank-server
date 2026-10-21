@@ -22,6 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class TransferLookupPersistenceAdapterTest extends IntegrationTestSupport {
 
+    private static final LocalDate TRADE_DATE = LocalDate.of(2026, 8, 12);
+
     @Autowired
     private TransferLookupPersistenceAdapter lookupAdapter;
 
@@ -56,7 +58,8 @@ class TransferLookupPersistenceAdapterTest extends IntegrationTestSupport {
                 executionDate,
                 "이체출금",
                 "이체입금",
-                LocalDateTime.of(2026, 8, 20, 9, 0, 0));
+                LocalDateTime.of(2026, 8, 20, 9, 0, 0),
+                TRADE_DATE);
         transfer.complete(90000L, LocalDateTime.of(2026, 8, 20, 9, 0, 1));
         saveAdapter.save(transfer);
         entityManager.flush();
@@ -102,7 +105,8 @@ class TransferLookupPersistenceAdapterTest extends IntegrationTestSupport {
                 null,
                 "이체출금",
                 "이체입금",
-                LocalDateTime.of(2026, 8, 20, 10, 0, 0));
+                LocalDateTime.of(2026, 8, 20, 10, 0, 0),
+                TRADE_DATE);
         transfer.complete(85000L, LocalDateTime.of(2026, 8, 20, 10, 0, 1));
         saveAdapter.save(transfer);
         entityManager.flush();

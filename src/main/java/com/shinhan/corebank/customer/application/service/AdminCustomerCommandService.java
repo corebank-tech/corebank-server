@@ -4,6 +4,7 @@ import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerCommandUseCase;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerOperationCommand;
 import com.shinhan.corebank.customer.application.port.in.AdminPasswordResetResult;
@@ -66,6 +67,8 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
         String passwordHash = passwordEncoder.encode(temporaryPassword);
 
         Customer customer = findTargetForUpdate(command, AuditEventType.LOGIN_PASSWORD_RESET_BY_ADMIN);
+        rejectAdminTarget(customer, command, AuditEventType.LOGIN_PASSWORD_RESET_BY_ADMIN);
+
         Map<String, Object> changes = new LinkedHashMap<>();
         // "password" 키는 AuditLogJpaEntity가 금지하므로 값 없이 바뀌었다는 표시만 남긴다.
         changes.put("passwordChanged", true);
@@ -110,6 +113,15 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
 
         if (command.adminCustomerId().equals(command.targetCustomerId())) {
             recordFailure(command, eventType, "SELF_TARGET");
+            throw new BusinessException(CommonErrorCode.FORBIDDEN);
+        }
+    }
+
+    // 관리자를 대상으로 초기화하면 임시 비밀번호를 알게 되어 그 계정을 가져갈 수 있다. 직무분리가
+    // 서려면 관리자끼리는 서로의 비밀번호를 건드리지 못해야 한다(#448 제거 체크리스트).
+    private void rejectAdminTarget(Customer target, AdminCustomerOperationCommand command, AuditEventType eventType) {
+        if (target.getRole() == CustomerRole.ADMIN) {
+            recordFailure(command, eventType, "ADMIN_TARGET");
             throw new BusinessException(CommonErrorCode.FORBIDDEN);
         }
     }

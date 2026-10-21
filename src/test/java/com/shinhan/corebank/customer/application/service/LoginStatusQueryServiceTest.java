@@ -9,6 +9,7 @@ import com.shinhan.corebank.account.application.port.in.AccountOverviewQueryUseC
 import com.shinhan.corebank.account.application.port.in.AccountOverviewResult;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import com.shinhan.corebank.customer.application.port.in.LoginStatusResult;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
@@ -101,6 +102,7 @@ class LoginStatusQueryServiceTest {
                 0,
                 false,
                 CustomerStatus.ACTIVE,
+                CustomerRole.CUSTOMER,
                 LocalDateTime.of(2026, 3, 10, 11, 0),
                 lastLoginIp,
                 previousLoginAt,

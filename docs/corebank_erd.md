@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 40개 테이블(37개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 42개 테이블(38개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개 + `business_date_cutoff` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -100,8 +100,20 @@ erDiagram
         datetime opened_date
         date maturity_date
         datetime closed_date
+        date closed_trade_date "해지 논리 영업일 (정보계 CLOSE 기준)"
         datetime last_transaction_at "DATETIME(6)"
         bigint version "낙관적 락"
+    }
+
+    account_status_history {
+          bigint history_id PK "AUTO_INCREMENT"
+          bigint account_id "FK 없음. 계좌 정리 후에도 이력 보존"
+          varchar previous_status "VARCHAR(12)"
+          varchar new_status "VARCHAR(12)"
+          date maturity_date "NULL 허용. 계약 만기일"
+          date effective_business_date "NULL 허용. 상태 전이 기준 영업일"
+          datetime changed_at "DATETIME(6)"
+          varchar trigger_type "VARCHAR(20). COB"
     }
 
     account_number_sequence {
@@ -125,9 +137,10 @@ erDiagram
         bigint transfer_id PK
         char transaction_number UK "YYYYMMDD + 채널2 + 일련10"
         bigint withdrawal_account_id FK
-        bigint deposit_account_id FK "원장 입금행의 근거. 1차는 당행 전용이라 NOT NULL"
-        char deposit_account_number "CHAR(12)"
-        varchar payee_name "거래 시점 스냅샷"
+        bigint deposit_account_id FK "원장 입금행의 근거. 타행 거래는 NULL"
+        varchar deposit_account_number "VARCHAR(16). 당행 12자리, 타행 1~16자리"
+        char payee_bank_code "타행 은행코드. NULL이면 당행"
+        varchar payee_name "거래 시점 스냅샷. 타행 ERROR·TIMEOUT은 NULL"
         bigint amount
         bigint fee "당행 0 고정 (POL-028)"
         varchar transfer_type "IMMEDIATE / SCHEDULED / AUTO"
@@ -155,7 +168,7 @@ erDiagram
         varchar direction "DEPOSIT / WITHDRAWAL"
         bigint amount "양수만. 방향은 direction 이 표현"
         bigint balance_after "기표 직후 잔액"
-        varchar transaction_type "OPENING / IMMEDIATE_TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / MATURITY / TERMINATION / REVERSAL"
+        varchar transaction_type "OPENING / IMMEDIATE_TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / MATURITY / TERMINATION / REVERSAL / INTERBANK_TRANSFER"
         varchar transaction_content "통장 표시내용"
         char channel "WB / BT"
         boolean reversed
@@ -258,6 +271,7 @@ erDiagram
         date opened_date
         date maturity_date
         datetime subscribed_at "DATETIME(6)"
+        date subscription_trade_date "가입 논리 영업일 (정보계 SUBSCRIBE 기준)"
     }
     subscription_terms_agreement {
         bigint subscription_id PK
@@ -397,7 +411,7 @@ erDiagram
     gl_voucher {
         varchar voucher_no PK "VARCHAR(20). yyyyMMdd-TTT-NNNNNN. gl_voucher_sequence 가 채번"
         date trade_date "귀속 영업일"
-        varchar tx_type "OPENING / TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / REVERSAL"
+        varchar tx_type "OPENING / TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / REVERSAL / INTERBANK_TRANSFER / INTERBANK_SETTLEMENT"
         varchar reference_key UK "VARCHAR(40). 원 거래번호. (tx_type, reference_key) 유일"
         varchar description "VARCHAR(200). 적요"
         datetime created_at "DATETIME(6). 전표는 수정하지 않아 updated_at 없음"
@@ -426,6 +440,12 @@ erDiagram
         date business_date "현재 영업일. 기동 시 오늘로 맞춤"
         datetime created_at "DATETIME(6)"
         datetime updated_at "DATETIME(6). 마지막 전환 시각"
+    }
+    business_date_cutoff {
+        bigint business_date_cutoff_id PK
+        date base_date UK "마감된 영업일. (base_date, status) UNIQUE"
+        varchar status UK "VARCHAR(10). CLOSED"
+        datetime closed_at "DATETIME(6). 마감 시각(KST)"
     }
     holiday {
         date holiday_date PK "주말 제외 공휴일만. 주말은 요일로 판정"
@@ -484,7 +504,7 @@ erDiagram
     account ||..o{ ledger_reconciliation_mismatch : "대사 불일치 (FK 없음)"
 
     %% 같은 두 엔티티를 두 번 참조하는 관계 (중복 제거 대상이라 명시)
-    account ||--o{ transfer : "입금 계좌 (당행)"
+    account |o--o{ transfer : "입금 계좌 (당행 거래만)"
     account ||--o{ product_subscription : "초입금 출금계좌"
 
     account  ||--o{ ledger_entry : "계좌별 기표"
@@ -509,7 +529,7 @@ erDiagram
 - **soft / hard**: 불일치 건수가 임계(`app.ledger-reconciliation.cob-hard-threshold`, 기본 10) 이하면
   soft(`LEDGER_RECONCILIATION_SOFT` WARN), 초과면 hard(`LEDGER_RECONCILIATION_HARD` ERROR)다. hard는
   원래 `CobStepHaltException`으로 마감을 멈출 자리지만, 영업일 전환 뒤라 멈추면 복구할 수단이 없어
-  #556(`COB_DATE` 저장·실패 스텝 재실행) 전까지는 로그만 남기고 다음 스텝으로 넘어간다(#600).
+  #663(`COB_DATE` 저장·실패 스텝 재실행) 전까지는 로그만 남기고 다음 스텝으로 넘어간다(#600).
   soft/hard는 **마감을 계속할지**의 판단이지 경보 심각도가 아니다 — 원장 불일치는 1건이어도 사고라
   건별 `LEDGER_RECONCILIATION_MISMATCH`는 soft/hard와 무관하게 항상 ERROR다.
 - **전수 대사 (#468)**: 원장을 거치지 않고 잔액만 틀어진 휴면 계좌까지 잡도록 **전 계좌**를

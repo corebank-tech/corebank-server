@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
+import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.api.DepositChannel;
@@ -18,6 +19,7 @@ import com.shinhan.corebank.transfer.domain.LedgerPair;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
@@ -51,6 +53,7 @@ public class LedgerDepositService implements LedgerDepositUseCase {
     private final TransferSequencePort transferSequencePort;
     private final LedgerSavePort ledgerSavePort;
     private final Clock clock;
+    private final BusinessDateGate businessDateGate;
 
     @Override
     @Transactional
@@ -59,6 +62,7 @@ public class LedgerDepositService implements LedgerDepositUseCase {
         requirePositiveAmount(amount);
         requireType(type, TRANSFER_BETWEEN_TYPES);
         TransferChannel transferChannel = toTransferChannel(channel);
+        LocalDate tradeDate = businessDateGate.acquireSharedAndReadBusinessDate();
         String transactionNumber = nextTransactionNumber(transferChannel);
 
         LockedAccountsForTransfer locked = accountLockPort.lockForTransfer(fromAccountId, toAccountId);
@@ -90,9 +94,10 @@ public class LedgerDepositService implements LedgerDepositUseCase {
                 type.name(),
                 passbookMemo(type),
                 transferChannel,
-                executedAt));
+                executedAt,
+                tradeDate));
 
-        return new LedgerDepositResult(transactionNumber, balances.depositBalanceAfter());
+        return new LedgerDepositResult(transactionNumber, balances.depositBalanceAfter(), tradeDate);
     }
 
     @Override
@@ -101,6 +106,7 @@ public class LedgerDepositService implements LedgerDepositUseCase {
         requirePositiveAmount(amount);
         requireType(type, CREDIT_TYPES);
         TransferChannel transferChannel = toTransferChannel(channel);
+        LocalDate tradeDate = businessDateGate.acquireSharedAndReadBusinessDate();
         String transactionNumber = nextTransactionNumber(transferChannel);
 
         LockedAccount locked = accountLockPort.lockForCredit(accountId);
@@ -120,9 +126,10 @@ public class LedgerDepositService implements LedgerDepositUseCase {
                 type.name(),
                 passbookMemo(type),
                 transferChannel,
-                executedAt));
+                executedAt,
+                tradeDate));
 
-        return new LedgerDepositResult(transactionNumber, balanceAfter);
+        return new LedgerDepositResult(transactionNumber, balanceAfter, tradeDate);
     }
 
     // 원장 팩토리도 막지만, 그때는 이미 채번·락을 마친 뒤라 앞에서 먼저 거른다.

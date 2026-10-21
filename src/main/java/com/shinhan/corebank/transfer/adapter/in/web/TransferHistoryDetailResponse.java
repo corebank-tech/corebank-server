@@ -13,11 +13,13 @@ import java.time.ZoneId;
 // balanceAfter: withdrawalBalanceAfter는 즉시이체 실행 응답(TransferResponse)만의 예외이고 이체 상세는 balanceAfter로 확정(§6-4)
 // executedAt은 §6-1(REQ-CMN-016)대로 오프셋 포함 ISO-8601로 내려간다 - 도메인 Transfer.transferredAt은
 // LocalDateTime(KST 암묵)이라 응답 경계에서 KST 오프셋을 붙인다
+// payeeBankCode는 타행 건만 채워지고 상세에만 있다(interbank_transfer_fe_handoff.md §7-1)
 public record TransferHistoryDetailResponse(
         String transactionNumber,
         ProcessResultStatus status,
         String accountNumber,
         String payeeName,
+        String payeeBankCode,
         long amount,
         long fee,
         TransferType transferType,
@@ -35,7 +37,8 @@ public record TransferHistoryDetailResponse(
                 detail.transactionNumber(),
                 detail.status(),
                 MaskingUtil.maskAccountNumber(detail.depositAccountNumber()),
-                MaskingUtil.maskName(detail.payeeName()),
+                detail.payeeName() == null ? null : MaskingUtil.maskName(detail.payeeName()),
+                detail.payeeBankCode(),
                 detail.amount(),
                 detail.fee(),
                 detail.transferType(),
