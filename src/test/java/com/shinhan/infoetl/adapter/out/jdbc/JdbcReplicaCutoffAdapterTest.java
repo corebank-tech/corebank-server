@@ -25,8 +25,10 @@ class JdbcReplicaCutoffAdapterTest {
     @DisplayName("CLOSED 행이 있는 날짜만 마감된 것으로 본다")
     void isClosedOnlyForCutoffRows() throws SQLException {
         ReplicaFixtures.insertCutoff(D);
+        ReplicaFixtures.insertCutoff(D.plusDays(1), "OPEN");
 
         assertThat(adapter.isClosed(D)).isTrue();
+        assertThat(adapter.isClosed(D.plusDays(1))).isFalse();
         assertThat(adapter.isClosed(D.plusDays(3))).isFalse();
         assertThat(adapter.isClosed(D.minusDays(1))).isFalse();
     }
@@ -39,6 +41,7 @@ class JdbcReplicaCutoffAdapterTest {
         ReplicaFixtures.insertCutoff(D);
         ReplicaFixtures.insertCutoff(D.plusDays(3));
         ReplicaFixtures.insertCutoff(D.minusDays(1));
+        ReplicaFixtures.insertCutoff(D.plusDays(10), "OPEN");
 
         assertThat(adapter.latestClosedDate()).contains(D.plusDays(3));
     }

@@ -165,6 +165,21 @@ class InfoEtlMainTest {
     }
 
     @Test
+    @DisplayName("경계일 cutoff가 있으면 --auto는 그 날짜를 적재한다")
+    void autoWithCutoffLoadsBoundaryDate() throws SQLException {
+        ReplicaFixtures.insertCutoff(D);
+        Map<String, String> env = env();
+        env.put("ETL_CUTOFF_BOUNDARY_DATE", D.toString());
+
+        int exitCode = InfoEtlMain.run(new String[] {"--auto"}, env);
+
+        assertThat(exitCode).isEqualTo(InfoEtlMain.EXIT_OK);
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            assertThat(countBalanceRows(mart)).isEqualTo(1L);
+        }
+    }
+
+    @Test
     @DisplayName("기준일과 기간을 섞거나 기간 인자가 하나뿐이거나 순서가 뒤집히면 거부한다")
     void rejectsInvalidCombinations() {
         assertThatThrownBy(() -> InfoEtlMain.parseCommand(

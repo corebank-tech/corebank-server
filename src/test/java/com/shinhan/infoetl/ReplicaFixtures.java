@@ -154,10 +154,15 @@ public final class ReplicaFixtures {
     }
 
     public static void insertCutoff(LocalDate baseDate) throws SQLException {
+        insertCutoff(baseDate, "CLOSED");
+    }
+
+    public static void insertCutoff(LocalDate baseDate, String status) throws SQLException {
         try (Connection connection = InfoEtlTestDatabase.replica();
                 PreparedStatement statement = connection.prepareStatement(
-                        "INSERT INTO business_date_cutoff (base_date, status, closed_at) VALUES (?, 'CLOSED', NOW(6))")) {
+                        "INSERT INTO business_date_cutoff (base_date, status, closed_at) VALUES (?, ?, NOW(6))")) {
             statement.setObject(1, baseDate);
+            statement.setString(2, status);
             statement.executeUpdate();
         }
     }
