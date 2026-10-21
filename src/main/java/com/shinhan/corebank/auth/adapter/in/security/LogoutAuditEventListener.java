@@ -29,7 +29,9 @@ public class LogoutAuditEventListener {
 
     private static final Logger log = LoggerFactory.getLogger(LogoutAuditEventListener.class);
 
-    private static final String ADMIN_AUTHORITY = "ROLE_ADMIN";
+    // SessionLoginManager 가 "ROLE_" + role.name() 으로 싣는다. 같은 enum 을 기준으로 적어 역할 이름이
+    // 바뀌면 함께 바뀌게 한다 — 어긋나도 예외가 없어 로그아웃 감사가 조용히 CUSTOMER 로만 남는다.
+    private static final String ADMIN_AUTHORITY = "ROLE_" + CustomerRole.ADMIN.name();
 
     private final RecordLogoutAuditUseCase recordLogoutAuditUseCase;
     private final ClientIpResolver clientIpResolver;
