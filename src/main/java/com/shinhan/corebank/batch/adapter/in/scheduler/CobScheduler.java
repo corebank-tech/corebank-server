@@ -5,10 +5,13 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+// 테스트 JVM이 23:30에 떠 있으면 실제 COB가 공유 테스트 DB의 영업일을 넘기므로 끈다 (#637)
 @Component
+@Profile("!test")
 @RequiredArgsConstructor
 public class CobScheduler {
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
