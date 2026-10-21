@@ -10,8 +10,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.shinhan.corebank.AdminAccountFixture;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.customer.api.AdminPermission;
 import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
@@ -24,7 +26,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,7 +34,6 @@ import org.springframework.transaction.annotation.Transactional;
 // AdminCustomerAccountOperationIntegrationTest가 맡는다. 두 클래스는 같은 설정이라 컨텍스트를 공유한다.
 @AutoConfigureMockMvc
 @Transactional
-@TestPropertySource(properties = "app.security.admin.bootstrap-customer-ids=" + AdminCustomerControllerTest.ADMIN_ID)
 @DisplayName("관리자 고객 계정 운영 API")
 class AdminCustomerControllerTest extends IntegrationTestSupport {
 
@@ -51,6 +51,8 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
     @BeforeEach
     void setUp() {
         insertCustomer(ADMIN_ID, "adm449admin", "관리자", "admin@adm449.test", 0, false);
+        AdminAccountFixture.grantAdmin(
+                entityManager, ADMIN_ID, AdminPermission.CUSTOMER_READ, AdminPermission.CUSTOMER_WRITE);
         lockedId = insertCustomer(null, "adm449locked", "홍길동", "locked@adm449.test", 5, true);
         otherId = insertCustomer(null, "adm449other", "김철수", "other@adm449.test", 2, false);
     }
@@ -276,7 +278,8 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
         return authentication(UsernamePasswordAuthenticationToken.authenticated(
                 new AuthenticatedCustomer(ADMIN_ID, "adm449admin", "관리자"),
                 null,
-                AuthorityUtils.createAuthorityList("ROLE_CUSTOMER")));
+                AuthorityUtils.createAuthorityList(
+                        "ROLE_ADMIN", AdminPermission.CUSTOMER_READ.name(), AdminPermission.CUSTOMER_WRITE.name())));
     }
 
     private Long insertCustomer(
