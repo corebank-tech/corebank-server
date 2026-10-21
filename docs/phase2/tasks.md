@@ -1038,6 +1038,7 @@ public interface CobStep {
 - 덤프 기간에는 기준일을 실행 인자로 받는다. 거래일이 NULL인 원장은 [#515](https://github.com/corebank-tech/corebank-server/issues/515) 채우기 규칙으로 대체한다.
 - 마트는 레플리카와 **다른 MySQL 인스턴스**에 둔다(같은 VM의 다른 포트 가능). 레플리카의 `super_read_only`가 인스턴스 전체에 걸리기 때문이다. 가명 키(HMAC)의 키는 ETL에만 둔다.
 - 적재 실패는 soft다. 300만 원장 적재 시간을 기록하고, 마트 합계 = 원장 합계를 P3와 함께 검증한다.
+- 첫 적재 측정 결과는 [ph76_etl_first_load.md](ph76_etl_first_load.md)에 기록한다. 로컬 기준선은 10/21에 기록했고, 최종 VM 재측정은 VM을 받은 뒤 같은 문서에 추가한다.
 
 ### PH-77. 정보계 조회 API
 
