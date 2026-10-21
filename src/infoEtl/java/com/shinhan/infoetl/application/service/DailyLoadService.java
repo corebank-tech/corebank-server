@@ -7,9 +7,11 @@ import com.shinhan.infoetl.application.port.out.MartLoadPort;
 import com.shinhan.infoetl.application.port.out.ReplicaBalancePort;
 import com.shinhan.infoetl.application.port.out.ReplicaCalendarPort;
 import com.shinhan.infoetl.application.port.out.ReplicaEventPort;
+import com.shinhan.infoetl.application.port.out.ReplicaReconciliationPort;
 import com.shinhan.infoetl.domain.AsOfWatermark;
 import com.shinhan.infoetl.domain.BalanceRow;
 import com.shinhan.infoetl.domain.BusinessCalendar;
+import com.shinhan.infoetl.domain.LedgerMismatchException;
 import com.shinhan.infoetl.domain.LoadResult;
 import com.shinhan.infoetl.domain.MartBalanceRow;
 import com.shinhan.infoetl.domain.MartEventRow;
@@ -28,6 +30,7 @@ public final class DailyLoadService implements DailyLoadUseCase {
 
     private final ReplicaBalancePort replicaPort;
     private final ReplicaEventPort eventPort;
+    private final ReplicaReconciliationPort reconciliationPort;
     private final ReplicaCalendarPort calendarPort;
     private final MartLoadPort martLoadPort;
     private final LoadLockPort lockPort;
@@ -36,12 +39,14 @@ public final class DailyLoadService implements DailyLoadUseCase {
     public DailyLoadService(
             ReplicaBalancePort replicaPort,
             ReplicaEventPort eventPort,
+            ReplicaReconciliationPort reconciliationPort,
             ReplicaCalendarPort calendarPort,
             MartLoadPort martLoadPort,
             LoadLockPort lockPort,
             Pseudonymizer pseudonymizer) {
         this.replicaPort = replicaPort;
         this.eventPort = eventPort;
+        this.reconciliationPort = reconciliationPort;
         this.calendarPort = calendarPort;
         this.martLoadPort = martLoadPort;
         this.lockPort = lockPort;
@@ -63,11 +68,14 @@ public final class DailyLoadService implements DailyLoadUseCase {
                 }
                 // 가입·해지 이벤트는 그날 없을 수 있어서 0건이어도 정상이다.
                 List<SubscriptionEventRow> events = eventPort.readSubscriptionEvents(baseDate);
+                long ledgerTotal = reconciliationPort.readLedgerTotal(baseDate);
                 return martLoadPort.publish(
                         loadBatchId,
                         baseDate,
                         balances.stream().map(this::toMartBalanceRow).toList(),
                         events.stream().map(this::toMartEventRow).toList(),
+                        ledgerTotal,
+                        reconciliationPort::readGlDepositMovement,
                         this::asOf); // T2
             } catch (RuntimeException e) {
                 recordFailure(loadBatchId, e); // T3
@@ -113,7 +121,13 @@ public final class DailyLoadService implements DailyLoadUseCase {
 
     private void recordFailure(long loadBatchId, RuntimeException cause) {
         try {
-            martLoadPort.fail(loadBatchId, cause.getClass().getSimpleName() + ": " + cause.getMessage());
+            String reason = cause.getClass().getSimpleName() + ": " + cause.getMessage();
+            if (cause instanceof LedgerMismatchException mismatch) {
+                martLoadPort.failLedgerMismatch(
+                        loadBatchId, reason, mismatch.ledgerTotal(), mismatch.martBalanceTotal());
+            } else {
+                martLoadPort.fail(loadBatchId, reason);
+            }
         } catch (RuntimeException recordingFailure) {
             cause.addSuppressed(recordingFailure);
         }

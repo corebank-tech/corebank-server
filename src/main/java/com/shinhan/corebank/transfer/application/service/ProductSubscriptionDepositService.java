@@ -1,6 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
-import com.shinhan.corebank.business.api.BusinessDateProvider;
+import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
@@ -48,14 +48,14 @@ public class ProductSubscriptionDepositService implements ProductSubscriptionDep
     private final LedgerSavePort ledgerSavePort;
     private final List<LedgerPostingHook> ledgerPostingHooks;
     private final Clock clock;
-    private final BusinessDateProvider businessDateProvider;
+    private final BusinessDateGate businessDateGate;
 
     @Override
     @Transactional
     public ProductSubscriptionDepositResult deposit(ProductSubscriptionDepositCommand command) {
         LocalDateTime requestedAt = LocalDateTime.now(clock);
         // 한 번만 읽어 원장 2행과 훅 B에 같이 넘긴다(#516).
-        LocalDate tradeDate = businessDateProvider.today();
+        LocalDate tradeDate = businessDateGate.acquireSharedAndReadBusinessDate();
 
         // 채번은 SequenceGenerator 안에서 REQUIRES_NEW로 독립 커밋된다 — 이 트랜잭션이 뒤에서
         // 롤백돼도 번호만 비고(gap) 채번 행은 남는다. 거래번호 날짜(달력일)는 TransferExecutionService와

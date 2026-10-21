@@ -36,7 +36,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.core.type.TypeReference;
 
-// 관리자 고객 계정 운영(#449, #450, PH-97). /admin/** 인가는 SecurityConfig의 임시 허용 목록(#448)이 맡는다.
+// 관리자 고객 계정 운영(#449, #450, PH-97). 인가는 SecurityConfig 의 경로별 권한 매핑이 맡는다.
 @RestController
 @RequestMapping("/admin/customers")
 @RequiredArgsConstructor
@@ -74,7 +74,7 @@ public class AdminCustomerController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "`CMN0102` 관리자 허용 목록 밖",
+                description = "`CMN0102` 권한 없음",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ApiResponse<PageResponse<AdminCustomerSummaryResponse>> search(
@@ -113,7 +113,7 @@ public class AdminCustomerController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "`CMN0102` 관리자 허용 목록 밖",
+                description = "`CMN0102` 권한 없음",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
@@ -139,7 +139,7 @@ public class AdminCustomerController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "`CMN0102` 자기 자신 대상 또는 관리자 허용 목록 밖",
+                description = "`CMN0102` 자기 자신 또는 다른 관리자 대상, 또는 권한 없음",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
@@ -190,7 +190,7 @@ public class AdminCustomerController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "`CMN0102` 자기 자신 대상 또는 관리자 허용 목록 밖",
+                description = "`CMN0102` 자기 자신 또는 다른 관리자 대상, 또는 권한 없음",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
@@ -241,7 +241,7 @@ public class AdminCustomerController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "`CMN0102` 자기 자신 대상 또는 관리자 허용 목록 밖",
+                description = "`CMN0102` 자기 자신 또는 다른 관리자 대상, 또는 권한 없음",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",

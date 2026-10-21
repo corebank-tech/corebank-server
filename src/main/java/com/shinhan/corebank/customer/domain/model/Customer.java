@@ -1,5 +1,6 @@
 package com.shinhan.corebank.customer.domain.model;
 
+import com.shinhan.corebank.customer.api.CustomerRole;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.time.LocalDate;
@@ -27,6 +28,7 @@ public class Customer {
     private int loginFailureCount;
     private boolean accountLocked;
     private CustomerStatus status;
+    private final CustomerRole role;
     private LocalDateTime lastLoginAt;
     private String lastLoginIp;
     private LocalDateTime previousLoginAt;
@@ -57,6 +59,7 @@ public class Customer {
                 0,
                 false,
                 CustomerStatus.ACTIVE,
+                CustomerRole.CUSTOMER,
                 null,
                 null,
                 null,
@@ -79,6 +82,7 @@ public class Customer {
             int loginFailureCount,
             boolean accountLocked,
             CustomerStatus status,
+            CustomerRole role,
             LocalDateTime lastLoginAt,
             String lastLoginIp,
             LocalDateTime previousLoginAt,
@@ -101,6 +105,7 @@ public class Customer {
                 loginFailureCount,
                 accountLocked,
                 status,
+                role,
                 lastLoginAt,
                 lastLoginIp,
                 previousLoginAt,

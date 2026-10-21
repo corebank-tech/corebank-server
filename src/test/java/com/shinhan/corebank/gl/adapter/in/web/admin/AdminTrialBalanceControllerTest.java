@@ -5,35 +5,35 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.shinhan.corebank.AdminAccountFixture;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.customer.api.AdminPermission;
 import com.shinhan.corebank.gl.adapter.out.persistence.GlVoucherPersistenceAdapter;
 import com.shinhan.corebank.gl.api.GlTxType;
 import com.shinhan.corebank.gl.domain.JournalEntry;
 import com.shinhan.corebank.gl.domain.Voucher;
 import com.shinhan.corebank.gl.domain.VoucherNumber;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
-// 허용 목록 값을 AdminCustomerControllerTest 와 같게 둬 Spring 컨텍스트를 공유한다.
 @AutoConfigureMockMvc
 @Transactional
-@TestPropertySource(
-        properties = "app.security.admin.bootstrap-customer-ids=" + AdminTrialBalanceControllerTest.ADMIN_ID)
 @DisplayName("관리자 시산표 API")
 class AdminTrialBalanceControllerTest extends IntegrationTestSupport {
 
-    static final long ADMIN_ID = 944900001L;
+    private static final long ADMIN_ID = 944920001L;
 
     // 시드와 다른 GL 테스트와 겹치지 않는 거래일 대역.
     private static final LocalDate DAY = LocalDate.of(2031, 2, 10);
@@ -43,6 +43,15 @@ class AdminTrialBalanceControllerTest extends IntegrationTestSupport {
 
     @Autowired
     GlVoucherPersistenceAdapter voucherPersistenceAdapter;
+
+    @Autowired
+    EntityManager entityManager;
+
+    // 새 인가는 customer.role 과 admin_permission 행을 읽는다 — 허용 목록(#448) 자리를 이것이 대신한다.
+    @BeforeEach
+    void grantAdminPermission() {
+        AdminAccountFixture.createAdmin(entityManager, ADMIN_ID, AdminPermission.GL_READ);
+    }
 
     @Test
     @DisplayName("200 · 0000 으로 FE TrialBalanceResult 필드명 그대로 내려준다")
@@ -99,8 +108,8 @@ class AdminTrialBalanceControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("허용 목록 밖 고객은 403 CMN0102")
-    void rejectsCustomerOutsideAllowList() throws Exception {
+    @DisplayName("관리자가 아닌 고객은 403 CMN0102")
+    void rejectsNonAdminCustomer() throws Exception {
         mockMvc.perform(get("/admin/trial-balance")
                         .param("fromDate", "2031-02-01")
                         .param("toDate", "2031-02-28")
@@ -109,8 +118,13 @@ class AdminTrialBalanceControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.code").value("CMN0102"));
     }
 
+    // 인가는 로그인 때 세션에 실린 authority 만 본다 — 실제 로그인까지 잇는 검증은
+    // AdminCustomerAccountOperationIntegrationTest 가 맡는다.
     private RequestPostProcessor admin() {
-        return customer(ADMIN_ID);
+        return authentication(UsernamePasswordAuthenticationToken.authenticated(
+                new AuthenticatedCustomer(ADMIN_ID, "ph28admin", "관리자"),
+                null,
+                AuthorityUtils.createAuthorityList("ROLE_ADMIN", AdminPermission.GL_READ.name())));
     }
 
     private RequestPostProcessor customer(long customerId) {

@@ -63,6 +63,36 @@ public final class ReplicaFixtures {
             statement.setObject(5, tradeDate);
             statement.executeUpdate();
         }
+        recomputeAmounts(accountId);
+    }
+
+    // 원장 대조가 맞도록 기표 금액·방향을 계좌의 balance_after 변화에서 다시 계산한다(어떤 순서로 넣어도 일관되게).
+    private static void recomputeAmounts(long accountId) throws SQLException {
+        try (Connection connection = InfoEtlTestDatabase.replica();
+                PreparedStatement statement =
+                        connection.prepareStatement("UPDATE ledger_entry l JOIN (SELECT ledger_entry_id, occurred_at,"
+                                + " balance_after - LAG(balance_after, 1, 0) OVER (ORDER BY occurred_at, ledger_entry_id)"
+                                + " AS delta FROM ledger_entry WHERE account_id = ?) d"
+                                + " ON d.ledger_entry_id = l.ledger_entry_id AND d.occurred_at = l.occurred_at"
+                                + " SET l.direction = CASE WHEN d.delta >= 0 THEN 'DEPOSIT' ELSE 'WITHDRAWAL' END,"
+                                + " l.amount = ABS(d.delta) WHERE l.account_id = ?")) {
+            statement.setLong(1, accountId);
+            statement.setLong(2, accountId);
+            statement.executeUpdate();
+        }
+    }
+
+    public static void insertGlEntry(String accountCode, String drCr, long amount, LocalDate tradeDate)
+            throws SQLException {
+        try (Connection connection = InfoEtlTestDatabase.replica();
+                PreparedStatement statement = connection.prepareStatement(
+                        "INSERT INTO gl_journal_entry (account_code, dr_cr, amount, trade_date) VALUES (?, ?, ?, ?)")) {
+            statement.setString(1, accountCode);
+            statement.setString(2, drCr);
+            statement.setLong(3, amount);
+            statement.setObject(4, tradeDate);
+            statement.executeUpdate();
+        }
     }
 
     public static void insertLedgerDetailed(
@@ -90,6 +120,7 @@ public final class ReplicaFixtures {
             statement.setObject(8, tradeDate);
             statement.executeUpdate();
         }
+        recomputeAmounts(accountId);
     }
 
     public static void insertSubscription(

@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.shinhan.corebank.auth.application.port.in.LoginCommand;
 import com.shinhan.corebank.auth.application.port.in.LoginResult;
@@ -21,6 +22,7 @@ import com.shinhan.corebank.auth.domain.exception.LoginFailedException;
 import com.shinhan.corebank.auth.domain.model.LoginAttemptResult;
 import com.shinhan.corebank.auth.domain.model.LoginAuditReason;
 import com.shinhan.corebank.auth.domain.model.LoginCustomer;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -88,7 +90,8 @@ class LoginServiceTest {
         assertThat(exception.getAttemptResult()).contains(decoyResult);
         verify(passwordHashVerifierPort).matches(eq(RAW_PASSWORD), anyString());
         verify(loginCustomerPort, never()).recordLoginFailure(1L);
-        verify(recordLoginAuditPort).record(null, REQUEST_IP, false, LoginAuditReason.INVALID_CREDENTIALS);
+        verify(recordLoginAuditPort)
+                .record(null, REQUEST_IP, false, LoginAuditReason.INVALID_CREDENTIALS, null, CustomerRole.CUSTOMER);
     }
 
     // 이미 잠긴 계정은 비밀번호 검증과 실패 횟수 갱신을 생략
@@ -104,7 +107,14 @@ class LoginServiceTest {
         assertThat(exception.getAttemptResult()).isEmpty();
         verify(passwordHashVerifierPort, never()).matches(anyString(), anyString());
         verify(loginCustomerPort, never()).recordLoginFailure(1L);
-        verify(recordLoginAuditPort).record(1L, REQUEST_IP, false, LoginAuditReason.ACCOUNT_LOCKED);
+        verify(recordLoginAuditPort)
+                .record(
+                        1L,
+                        REQUEST_IP,
+                        false,
+                        LoginAuditReason.ACCOUNT_LOCKED,
+                        CustomerRole.CUSTOMER,
+                        CustomerRole.CUSTOMER);
     }
 
     // 비밀번호가 일치하면 로그인 상태와 성공 감사를 기록
@@ -114,12 +124,13 @@ class LoginServiceTest {
         LoginCommand command = loginCommand();
         given(loginCustomerPort.findByUserId(command.userId())).willReturn(Optional.of(loginCustomer(2, false)));
         given(passwordHashVerifierPort.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
-        given(loginSuccessProcessor.process(1L, LOGIN_AT, REQUEST_IP)).willReturn(LoginSuccessUpdateResult.COMPLETED);
+        given(loginSuccessProcessor.process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER, CustomerRole.CUSTOMER))
+                .willReturn(LoginSuccessUpdateResult.COMPLETED);
 
         LoginResult result = service.login(command);
 
-        assertThat(result).isEqualTo(new LoginResult(1L, "user01", "홍길동"));
-        verify(loginSuccessProcessor).process(1L, LOGIN_AT, REQUEST_IP);
+        assertThat(result).isEqualTo(new LoginResult(1L, "user01", "홍길동", CustomerRole.CUSTOMER));
+        verify(loginSuccessProcessor).process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER, CustomerRole.CUSTOMER);
         verify(loginCustomerPort, never()).recordLoginFailure(1L);
     }
 
@@ -130,14 +141,21 @@ class LoginServiceTest {
         LoginCommand command = loginCommand();
         given(loginCustomerPort.findByUserId(command.userId())).willReturn(Optional.of(loginCustomer(4, false)));
         given(passwordHashVerifierPort.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
-        given(loginSuccessProcessor.process(1L, LOGIN_AT, REQUEST_IP))
+        given(loginSuccessProcessor.process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER, CustomerRole.CUSTOMER))
                 .willReturn(LoginSuccessUpdateResult.ACCOUNT_LOCKED);
 
         LoginFailedException exception = catchThrowableOfType(() -> service.login(command), LoginFailedException.class);
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.ACCOUNT_LOCKED);
         assertThat(exception.getAttemptResult()).isEmpty();
-        verify(recordLoginAuditPort).record(1L, REQUEST_IP, false, LoginAuditReason.ACCOUNT_LOCKED);
+        verify(recordLoginAuditPort)
+                .record(
+                        1L,
+                        REQUEST_IP,
+                        false,
+                        LoginAuditReason.ACCOUNT_LOCKED,
+                        CustomerRole.CUSTOMER,
+                        CustomerRole.CUSTOMER);
     }
 
     // 비밀번호가 맞은 이용정지 계정은 정지 오류를 반환하고 실패 감사를 남김
@@ -147,15 +165,65 @@ class LoginServiceTest {
         LoginCommand command = loginCommand();
         given(loginCustomerPort.findByUserId(command.userId())).willReturn(Optional.of(loginCustomer(0, false)));
         given(passwordHashVerifierPort.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
-        given(loginSuccessProcessor.process(1L, LOGIN_AT, REQUEST_IP))
+        given(loginSuccessProcessor.process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER, CustomerRole.CUSTOMER))
                 .willReturn(LoginSuccessUpdateResult.ACCOUNT_SUSPENDED);
 
         LoginFailedException exception = catchThrowableOfType(() -> service.login(command), LoginFailedException.class);
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.ACCOUNT_SUSPENDED);
         assertThat(exception.getAttemptResult()).isEmpty();
-        verify(recordLoginAuditPort).record(1L, REQUEST_IP, false, LoginAuditReason.ACCOUNT_SUSPENDED);
+        verify(recordLoginAuditPort)
+                .record(
+                        1L,
+                        REQUEST_IP,
+                        false,
+                        LoginAuditReason.ACCOUNT_SUSPENDED,
+                        CustomerRole.CUSTOMER,
+                        CustomerRole.CUSTOMER);
         verify(loginCustomerPort, never()).recordLoginFailure(1L);
+    }
+
+    // 관리자 경로에 고객 계정이 오면 비밀번호가 맞아도 거절한다. 비밀번호 불일치와 구분되면
+    // 어떤 아이디가 관리자인지 드러나므로 응답을 같은 모양으로 맞추고, 경로를 잘못 고른 것만으로
+    // 계정이 잠기지 않게 실패 횟수도 올리지 않는다.
+    @Test
+    @DisplayName("관리자 경로에 고객 계정이 오면 ATH0101을 주고 실패 횟수를 올리지 않는다")
+    void rejectsCustomerOnAdminPath() {
+        LoginCommand command = adminLoginCommand();
+        LoginAttemptResult attemptResult = new LoginAttemptResult(1, 4);
+        given(loginCustomerPort.findByUserId(command.userId())).willReturn(Optional.of(loginCustomer(0, false)));
+        given(passwordHashVerifierPort.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
+        given(loginAttemptProcessor.process(1)).willReturn(attemptResult);
+
+        LoginFailedException exception = catchThrowableOfType(LoginFailedException.class, () -> service.login(command));
+
+        assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);
+        assertThat(exception.getAttemptResult()).contains(attemptResult);
+        verify(loginCustomerPort, never()).recordLoginFailure(1L);
+        verifyNoInteractions(loginSuccessProcessor);
+        verify(recordLoginAuditPort)
+                .record(
+                        1L,
+                        REQUEST_IP,
+                        false,
+                        LoginAuditReason.INVALID_CREDENTIALS,
+                        CustomerRole.CUSTOMER,
+                        CustomerRole.ADMIN);
+    }
+
+    @Test
+    @DisplayName("관리자 경로에 관리자 계정이 오면 통과한다")
+    void permitsAdminOnAdminPath() {
+        LoginCommand command = adminLoginCommand();
+        given(loginCustomerPort.findByUserId(command.userId())).willReturn(Optional.of(adminLoginCustomer()));
+        given(passwordHashVerifierPort.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
+        given(loginSuccessProcessor.process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.ADMIN, CustomerRole.ADMIN))
+                .willReturn(LoginSuccessUpdateResult.COMPLETED);
+
+        LoginResult result = service.login(command);
+
+        assertThat(result.role()).isEqualTo(CustomerRole.ADMIN);
+        verify(loginSuccessProcessor).process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.ADMIN, CustomerRole.ADMIN);
     }
 
     // 잠금 전 비밀번호 불일치는 저장된 최신 횟수와 잔여 횟수를 노출
@@ -174,8 +242,15 @@ class LoginServiceTest {
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);
         assertThat(exception.getAttemptResult()).contains(attemptResult);
         verify(loginAttemptProcessor).process(4);
-        verify(loginSuccessProcessor, never()).process(1L, LOGIN_AT, REQUEST_IP);
-        verify(recordLoginAuditPort).record(1L, REQUEST_IP, false, LoginAuditReason.INVALID_CREDENTIALS);
+        verifyNoInteractions(loginSuccessProcessor);
+        verify(recordLoginAuditPort)
+                .record(
+                        1L,
+                        REQUEST_IP,
+                        false,
+                        LoginAuditReason.INVALID_CREDENTIALS,
+                        CustomerRole.CUSTOMER,
+                        CustomerRole.CUSTOMER);
     }
 
     // 다섯 번째 실패는 횟수 데이터를 노출하지 않고 계정 잠금으로 처리
@@ -192,7 +267,14 @@ class LoginServiceTest {
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.ACCOUNT_LOCKED);
         assertThat(exception.getAttemptResult()).isEmpty();
         verify(loginAttemptProcessor, never()).process(5);
-        verify(recordLoginAuditPort).record(1L, REQUEST_IP, false, LoginAuditReason.ACCOUNT_LOCKED);
+        verify(recordLoginAuditPort)
+                .record(
+                        1L,
+                        REQUEST_IP,
+                        false,
+                        LoginAuditReason.ACCOUNT_LOCKED,
+                        CustomerRole.CUSTOMER,
+                        CustomerRole.CUSTOMER);
     }
 
     // 감사 저장 장애가 비밀번호 불일치 오류를 내부 오류로 바꾸지 않음
@@ -207,7 +289,13 @@ class LoginServiceTest {
         given(loginAttemptProcessor.process(4)).willReturn(attemptResult);
         doThrow(new IllegalStateException("audit unavailable"))
                 .when(recordLoginAuditPort)
-                .record(1L, REQUEST_IP, false, LoginAuditReason.INVALID_CREDENTIALS);
+                .record(
+                        1L,
+                        REQUEST_IP,
+                        false,
+                        LoginAuditReason.INVALID_CREDENTIALS,
+                        CustomerRole.CUSTOMER,
+                        CustomerRole.CUSTOMER);
 
         LoginFailedException exception = catchThrowableOfType(() -> service.login(command), LoginFailedException.class);
 
@@ -223,7 +311,13 @@ class LoginServiceTest {
         given(loginCustomerPort.findByUserId(command.userId())).willReturn(Optional.of(loginCustomer(5, true)));
         doThrow(new IllegalStateException("audit unavailable"))
                 .when(recordLoginAuditPort)
-                .record(1L, REQUEST_IP, false, LoginAuditReason.ACCOUNT_LOCKED);
+                .record(
+                        1L,
+                        REQUEST_IP,
+                        false,
+                        LoginAuditReason.ACCOUNT_LOCKED,
+                        CustomerRole.CUSTOMER,
+                        CustomerRole.CUSTOMER);
 
         LoginFailedException exception = catchThrowableOfType(() -> service.login(command), LoginFailedException.class);
 
@@ -232,10 +326,19 @@ class LoginServiceTest {
     }
 
     private LoginCommand loginCommand() {
-        return new LoginCommand("user01", RAW_PASSWORD, REQUEST_IP);
+        return new LoginCommand("user01", RAW_PASSWORD, REQUEST_IP, CustomerRole.CUSTOMER);
+    }
+
+    private LoginCommand adminLoginCommand() {
+        return new LoginCommand("user01", RAW_PASSWORD, REQUEST_IP, CustomerRole.ADMIN);
+    }
+
+    private LoginCustomer adminLoginCustomer() {
+        return new LoginCustomer(1L, "user01", PASSWORD_HASH, "홍길동", 0, false, CustomerRole.ADMIN);
     }
 
     private LoginCustomer loginCustomer(int failureCount, boolean accountLocked) {
-        return new LoginCustomer(1L, "user01", PASSWORD_HASH, "홍길동", failureCount, accountLocked);
+        return new LoginCustomer(
+                1L, "user01", PASSWORD_HASH, "홍길동", failureCount, accountLocked, CustomerRole.CUSTOMER);
     }
 }

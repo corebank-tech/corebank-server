@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 41개 테이블(38개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 42개 테이블(38개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개 + `business_date_cutoff` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -441,6 +441,12 @@ erDiagram
         datetime created_at "DATETIME(6)"
         datetime updated_at "DATETIME(6). 마지막 전환 시각"
     }
+    business_date_cutoff {
+        bigint business_date_cutoff_id PK
+        date base_date UK "마감된 영업일. (base_date, status) UNIQUE"
+        varchar status UK "VARCHAR(10). CLOSED"
+        datetime closed_at "DATETIME(6). 마감 시각(KST)"
+    }
     holiday {
         date holiday_date PK "주말 제외 공휴일만. 주말은 요일로 판정"
         varchar holiday_name "VARCHAR(50)"
@@ -523,7 +529,7 @@ erDiagram
 - **soft / hard**: 불일치 건수가 임계(`app.ledger-reconciliation.cob-hard-threshold`, 기본 10) 이하면
   soft(`LEDGER_RECONCILIATION_SOFT` WARN), 초과면 hard(`LEDGER_RECONCILIATION_HARD` ERROR)다. hard는
   원래 `CobStepHaltException`으로 마감을 멈출 자리지만, 영업일 전환 뒤라 멈추면 복구할 수단이 없어
-  #556(`COB_DATE` 저장·실패 스텝 재실행) 전까지는 로그만 남기고 다음 스텝으로 넘어간다(#600).
+  #663(`COB_DATE` 저장·실패 스텝 재실행) 전까지는 로그만 남기고 다음 스텝으로 넘어간다(#600).
   soft/hard는 **마감을 계속할지**의 판단이지 경보 심각도가 아니다 — 원장 불일치는 1건이어도 사고라
   건별 `LEDGER_RECONCILIATION_MISMATCH`는 soft/hard와 무관하게 항상 ERROR다.
 - **전수 대사 (#468)**: 원장을 거치지 않고 잔액만 틀어진 휴면 계좌까지 잡도록 **전 계좌**를

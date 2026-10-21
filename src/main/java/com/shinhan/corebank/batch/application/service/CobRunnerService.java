@@ -11,6 +11,7 @@ import com.shinhan.corebank.business.api.BusinessDateProvider;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -20,12 +21,16 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
 @Service
 public class CobRunnerService implements CobRunnerUseCase {
     private static final Logger log = LoggerFactory.getLogger(CobRunnerService.class);
     private static final String JOB_NAME = "COB";
+    private static final int ADVANCE_MAX_ATTEMPTS = 3;
+    private static final long ADVANCE_RETRY_BACKOFF_MILLIS = 500;
+    private static final String DEADLOCK_SQL_STATE = "40001";
 
     private final BatchExecutionLockPort batchExecutionLockPort;
     private final BusinessDateProvider businessDateProvider;
@@ -101,7 +106,7 @@ public class CobRunnerService implements CobRunnerUseCase {
             return;
         }
 
-        LocalDate nextBusinessDate = businessDateAdvancer.advanceFrom(cobDate);
+        LocalDate nextBusinessDate = advanceWithRetry(cobDate);
         log.info("COB 시작 - cobDate={}, nextBusinessDate={}", cobDate, nextBusinessDate);
 
         for (CobStep step : steps) {
@@ -139,6 +144,40 @@ public class CobRunnerService implements CobRunnerUseCase {
             }
         }
         log.info("COB 종료 - cobDate={}", cobDate);
+    }
+
+    // 교착으로 쫓겨난 전환만 다시 한다(대기 시간 초과는 새 거래가 줄 선 채 반복되므로 바로 던진다) — 매 시도가 새 트랜잭션이어야 하므로 @Transactional 바깥인 러너에서 감싼다
+    private LocalDate advanceWithRetry(LocalDate cobDate) {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return businessDateAdvancer.advanceFrom(cobDate);
+            } catch (PessimisticLockingFailureException e) {
+                if (!isDeadlock(e) || attempt >= ADVANCE_MAX_ATTEMPTS) {
+                    throw e;
+                }
+                log.warn("영업일 전환이 교착으로 실패해 재시도 - attempt={}, cobDate={}", attempt, cobDate, e);
+                sleepBeforeRetry(attempt);
+            }
+        }
+    }
+
+    // 교착과 대기 시간 초과는 예외 타입이 같아서 원인 SQLException 의 SQLState(40001)로 가른다
+    private static boolean isDeadlock(Throwable e) {
+        for (Throwable cause = e; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sql && DEADLOCK_SQL_STATE.equals(sql.getSQLState())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void sleepBeforeRetry(int attempt) {
+        try {
+            Thread.sleep(ADVANCE_RETRY_BACKOFF_MILLIS * attempt);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("영업일 전환 재시도 대기 중 인터럽트", e);
+        }
     }
 
     private static void rejectDuplicateOrder(List<CobStep> steps) {

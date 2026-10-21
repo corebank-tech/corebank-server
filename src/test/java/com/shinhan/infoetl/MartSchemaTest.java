@@ -102,6 +102,17 @@ class MartSchemaTest {
                         "mart_daily_account_balance", "mart_product_subscription_event", "mart_load_batch");
     }
 
+    @Test
+    @DisplayName("PII 검증의 컬럼 화이트리스트는 적용한 마트 DDL의 컬럼과 정확히 같다")
+    void whitelistMatchesAppliedSchema() throws SQLException {
+        for (var entry : com.shinhan.infoetl.domain.MartSchemaWhitelist.COLUMNS.entrySet()) {
+            List<String> actualNames = columns(entry.getKey()).stream()
+                    .map(column -> column.substring(0, column.indexOf(' ')))
+                    .toList();
+            assertThat(actualNames).isEqualTo(entry.getValue());
+        }
+    }
+
     private static List<String> columns(String table) throws SQLException {
         List<String> result = new ArrayList<>();
         try (Connection connection = InfoEtlTestDatabase.mart();

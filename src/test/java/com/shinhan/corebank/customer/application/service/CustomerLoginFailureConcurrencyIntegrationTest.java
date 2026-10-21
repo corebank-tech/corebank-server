@@ -11,6 +11,7 @@ import com.shinhan.corebank.auth.domain.exception.AuthErrorCode;
 import com.shinhan.corebank.auth.domain.exception.LoginFailedException;
 import com.shinhan.corebank.auth.domain.model.LoginAttemptResult;
 import com.shinhan.corebank.customer.api.CustomerAuthenticationFacade;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import com.shinhan.corebank.customer.api.LoginFailureState;
 import com.shinhan.corebank.customer.api.RecordLoginFailureCommand;
 import java.util.List;
@@ -93,7 +94,8 @@ class CustomerLoginFailureConcurrencyIntegrationTest extends IntegrationTestSupp
     @DisplayName("ATH0101 예외가 발생해도 실패 횟수와 다른 고객 필드가 유지된다")
     void persistsFailureStateBeforeThrowingLoginException() {
         LoginFailedException exception = catchThrowableOfType(
-                () -> loginUseCase.login(new LoginCommand(USER_ID, "WrongPassword1!", "192.168.0.10")),
+                () -> loginUseCase.login(
+                        new LoginCommand(USER_ID, "WrongPassword1!", "192.168.0.10", CustomerRole.CUSTOMER)),
                 LoginFailedException.class);
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);

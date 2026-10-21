@@ -147,6 +147,7 @@ public class CustomerAuthenticationService implements CustomerAuthenticationFaca
                 customer.getPasswordHash(),
                 customer.getUserName(),
                 customer.getLoginFailureCount(),
-                customer.isAccountLocked());
+                customer.isAccountLocked(),
+                customer.getRole());
     }
 }

@@ -8,7 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
-import com.shinhan.corebank.business.api.BusinessDateProvider;
+import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.event.DomainEventSink;
 import com.shinhan.corebank.common.exception.BusinessException;
@@ -119,7 +119,7 @@ class InterbankTransferServiceTest extends IntegrationTestSupport {
     private List<TransferPreCheck> transferPreChecks;
 
     @Autowired
-    private BusinessDateProvider businessDateProvider;
+    private BusinessDateGate businessDateGate;
 
     @Autowired
     private ApplicationEventPublisher eventPublisher;
@@ -179,7 +179,7 @@ class InterbankTransferServiceTest extends IntegrationTestSupport {
                 ledgerSavePort,
                 journalPostingUseCase,
                 transferPreChecks,
-                businessDateProvider,
+                businessDateGate,
                 eventPublisher,
                 clock,
                 transactionManager);

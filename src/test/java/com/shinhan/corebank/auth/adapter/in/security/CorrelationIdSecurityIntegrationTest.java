@@ -14,11 +14,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 // CorrelationIdFilter가 Security 체인보다 먼저 동작해 401 응답에도 헤더를 싣는지 확인한다(PR #560 리뷰)
 @WebMvcTest(controllers = SecurityTestController.class)
-@TestPropertySource(
-        properties = {
-            "app.security.cors.allowed-origins=http://localhost:5173,https://www.corebank.cloud",
-            "app.security.admin.bootstrap-customer-ids=7"
-        })
+@TestPropertySource(properties = {"app.security.cors.allowed-origins=http://localhost:5173,https://www.corebank.cloud"})
 @Import({
     SecurityTestController.class,
     SecurityConfig.class,
