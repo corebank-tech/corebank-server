@@ -3,10 +3,13 @@ package com.shinhan.corebank.auth.adapter.in.security;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.auth.application.port.in.LoginResult;
+import com.shinhan.corebank.customer.api.AdminPermission;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import com.shinhan.corebank.customer.api.CustomerRole;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -16,6 +19,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,8 +47,15 @@ class SessionLoginManagerTest {
     // 고객 만료시간의 정본인 server.servlet.session.timeout 이다. 운영 설정과 같은 10분을 쓴다.
     private static final ServerProperties SERVER = serverPropertiesWith(Duration.ofMinutes(10));
 
+    private final AdminPermissionFacade adminPermissionFacade = mock(AdminPermissionFacade.class);
+
     private final SessionLoginManager manager = new SessionLoginManager(
-            new SecurityConfig().sessionAuthenticationStrategy(), repository, ADMIN_SESSION, SERVER, FIXED_CLOCK);
+            new SecurityConfig().sessionAuthenticationStrategy(),
+            repository,
+            adminPermissionFacade,
+            ADMIN_SESSION,
+            SERVER,
+            FIXED_CLOCK);
 
     @AfterEach
     void clearSecurityContext() {
@@ -68,6 +79,7 @@ class SessionLoginManagerTest {
         assertThat(authentication.getCredentials()).isNull();
         assertThat(SecurityContextHolder.getContext()).isSameAs(context);
         assertThat(request.getSession(false).getMaxInactiveInterval()).isEqualTo(600);
+        verifyNoInteractions(adminPermissionFacade);
     }
 
     @Test
@@ -108,17 +120,20 @@ class SessionLoginManagerTest {
         assertThat(sessionExpiresAt).isEqualTo(OffsetDateTime.parse("2026-08-16T10:30:00+09:00"));
     }
 
+    // 인가는 이 authority 만 보므로, 권한 행이 여기 실리지 않으면 관리자 API 가 전부 막힌다.
     @Test
-    @DisplayName("관리자는 ROLE_ADMIN 권한으로 인증된다")
-    void grantsAdminAuthority() {
+    @DisplayName("관리자는 ROLE_ADMIN 과 부여된 권한을 authority 로 받는다")
+    void grantsAdminAuthorityWithPermissions() {
         MockHttpServletRequest request = requestWithSession(600);
+        when(adminPermissionFacade.findPermissions(1L))
+                .thenReturn(List.of(AdminPermission.GL_READ, AdminPermission.CUSTOMER_READ));
 
         manager.establishSession(
                 new LoginResult(1L, "admin-user", "관리자", CustomerRole.ADMIN), request, new MockHttpServletResponse());
 
         assertThat(SecurityContextHolder.getContext().getAuthentication().getAuthorities())
                 .extracting(GrantedAuthority::getAuthority)
-                .containsExactly("ROLE_ADMIN");
+                .containsExactly("ROLE_ADMIN", "GL_READ", "CUSTOMER_READ");
     }
 
     @Test
@@ -129,6 +144,7 @@ class SessionLoginManagerTest {
         SessionLoginManager invalidManager = new SessionLoginManager(
                 mock(SessionAuthenticationStrategy.class),
                 mock(SecurityContextRepository.class),
+                adminPermissionFacade,
                 ADMIN_SESSION,
                 SERVER,
                 FIXED_CLOCK);
@@ -148,6 +164,7 @@ class SessionLoginManagerTest {
         SessionLoginManager invalidManager = new SessionLoginManager(
                 mock(SessionAuthenticationStrategy.class),
                 mock(SecurityContextRepository.class),
+                adminPermissionFacade,
                 ADMIN_SESSION,
                 serverPropertiesWith(Duration.ZERO),
                 FIXED_CLOCK);

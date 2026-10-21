@@ -13,20 +13,12 @@ import java.util.List;
 
 public final class JdbcReplicaBalanceAdapter implements ReplicaBalancePort {
 
-    // 거래일이 NULL이면 발생일을 영업일로 올린다(결정 3). 주말이거나 holiday에 있는 날은 건너뛰며 연휴는 31일을 넘지 않는다고 본다.
-    private static String tradeDate(String alias) {
-        String occurredDate = "DATE(" + alias + ".occurred_at)";
-        return "COALESCE(" + alias + ".trade_date, (SELECT MIN(" + occurredDate + " + INTERVAL o.n DAY) FROM offsets o"
-                + " WHERE WEEKDAY(" + occurredDate + " + INTERVAL o.n DAY) < 5"
-                + " AND " + occurredDate + " + INTERVAL o.n DAY NOT IN (SELECT holiday_date FROM holiday)))";
-    }
-
-    // P3 설계 §3-3 잔액 쿼리. ? 두 개는 모두 기준일 D다. 발생일 상한 없이 거래일이 D 이하인 원장을 모두 본다.
+    // P3 설계 §3-3 잔액 쿼리. ? 두 개는 모두 기준일 D다. 발생일 상한 없이 거래일이 D 이하인 원장을 모두 보고,
+    // 해지 계좌는 해지 논리 영업일(closed_trade_date)이 D보다 이전이면 거른다. 원장과의 일치 검사는 이벤트 읽기에서 한다.
     private static final String SQL =
             """
-            WITH RECURSIVE offsets(n) AS (
-              SELECT 0 UNION ALL SELECT n + 1 FROM offsets WHERE n < 30
-            ), le AS (
+            WITH RECURSIVE %s,
+            le AS (
               SELECT x.account_id, x.balance_after, x.occurred_at, x.ledger_entry_id,
                      %s AS td
               FROM ledger_entry x
@@ -35,20 +27,27 @@ public final class JdbcReplicaBalanceAdapter implements ReplicaBalancePort {
                      ROW_NUMBER() OVER (PARTITION BY account_id
                                         ORDER BY occurred_at DESC, ledger_entry_id DESC) AS rn
               FROM le WHERE td <= ?
-            ), close_td AS (
-              SELECT l.account_id, MAX(%s) AS close_date
-              FROM ledger_entry l JOIN account a ON a.account_id = l.account_id AND a.status = 'CLOSED'
-              GROUP BY l.account_id
             )
             SELECT a.account_id, a.customer_id, a.account_type, a.product_id, p.product_group, l.balance_after
             FROM last_entry l
             JOIN account a ON a.account_id = l.account_id
             LEFT JOIN product p ON p.product_id = a.product_id
-            LEFT JOIN close_td c ON c.account_id = a.account_id
             WHERE l.rn = 1
-              AND (c.close_date IS NULL OR c.close_date >= ?)
+              AND (a.closed_trade_date IS NULL OR a.closed_trade_date >= ?)
             """
-                    .formatted(tradeDate("x"), tradeDate("l"));
+                    .formatted(TradeDateSql.OFFSETS, TradeDateSql.of("x"));
+
+    // 해지(CLOSED)인데 해지 논리 영업일이 없으면 잔액에 남거나 CLOSE가 빠지므로 원천 계약 위반으로 드러낸다(설계 §3-0, §7-5).
+    // 잔액 행은 원장이 있는 계좌에만, CLOSE 이벤트는 상품 계좌에만 생기므로 둘 다 아닌 해지 계좌(원장 없는 입출금계좌)는 통과시킨다.
+    private static final String CLOSED_WITHOUT_TRADE_DATE_SQL =
+            """
+            SELECT a.account_id FROM account a
+            WHERE a.status = 'CLOSED' AND a.closed_trade_date IS NULL
+              AND (a.product_id IS NOT NULL
+                   OR EXISTS (SELECT 1 FROM ledger_entry l WHERE l.account_id = a.account_id))
+            ORDER BY a.account_id
+            LIMIT 5
+            """;
 
     private final JdbcConnectionFactory connections;
 
@@ -60,9 +59,24 @@ public final class JdbcReplicaBalanceAdapter implements ReplicaBalancePort {
     public List<BalanceRow> readBalances(LocalDate baseDate) {
         try (Connection replica = connections.open()) {
             replica.setReadOnly(true);
+            requireClosedAccountsHaveTradeDate(replica);
             return query(replica, baseDate);
         } catch (SQLException e) {
             throw new EtlStorageException("레플리카 잔액 읽기에 실패했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    private void requireClosedAccountsHaveTradeDate(Connection replica) throws SQLException {
+        List<Long> accountIds = new ArrayList<>();
+        try (PreparedStatement statement = replica.prepareStatement(CLOSED_WITHOUT_TRADE_DATE_SQL);
+                ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                accountIds.add(resultSet.getLong(1));
+            }
+        }
+        if (!accountIds.isEmpty()) {
+            throw new IllegalStateException(
+                    "해지 논리 영업일(closed_trade_date)이 없는 해지 계좌가 있습니다(원천 계약 위반): accountId=" + accountIds);
         }
     }
 

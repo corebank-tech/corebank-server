@@ -5,7 +5,7 @@ import com.shinhan.corebank.account.application.port.in.ProductAccountOpeningCom
 import com.shinhan.corebank.account.application.port.in.ProductAccountOpeningUseCase;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.domain.exception.AccountPasswordErrorCode;
-import com.shinhan.corebank.business.api.BusinessDateProvider;
+import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.ErrorCode;
@@ -61,7 +61,7 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
     private final SaveTermsAgreementPort saveTermsAgreementPort;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
-    private final BusinessDateProvider businessDateProvider;
+    private final BusinessDateGate businessDateGate;
     private final ApplicationEventPublisher eventPublisher;
 
     // 권장 순서: 소비 없는 검증(비밀번호 확인·상품조회·중복가입·validate())을 전부 먼저 끝내고,
@@ -129,8 +129,8 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
         }
 
         LocalDateTime now = LocalDateTime.now(clock);
-        // 정보계 SUBSCRIBE 기준일. 마감 경계 보장(gate)은 #556에서 이 읽기를 교체한다.
-        LocalDate subscriptionTradeDate = businessDateProvider.today();
+        // 정보계 SUBSCRIBE 기준일. 정기예금은 초입금 기표가 이미 잡은 gate 값을, 정기적금은 여기서 잡은 값을 같은 트랜잭션에서 얻는다.
+        LocalDate subscriptionTradeDate = businessDateGate.acquireSharedAndReadBusinessDate();
         ProductSubscription saved = saveProductSubscriptionPort.save(ProductSubscription.builder()
                 .customerId(command.customerId())
                 .productId(command.productId())

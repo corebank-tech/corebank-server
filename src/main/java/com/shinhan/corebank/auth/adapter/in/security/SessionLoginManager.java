@@ -2,6 +2,8 @@ package com.shinhan.corebank.auth.adapter.in.security;
 
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.auth.application.port.in.LoginResult;
+import com.shinhan.corebank.customer.api.AdminPermission;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import com.shinhan.corebank.customer.api.CustomerRole;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -9,11 +11,14 @@ import jakarta.servlet.http.HttpSession;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Objects;
+import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.web.server.autoconfigure.ServerProperties;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,13 +26,14 @@ import org.springframework.security.web.authentication.session.SessionAuthentica
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.stereotype.Component;
 
-// 로그인 성공 고객을 Spring Security 인증 세션으로 저장
+// 로그인 성공 고객을 Spring Security 인증 세션으로 저장. 관리자는 권한까지 authority 로 싣는다
 @Component
 @RequiredArgsConstructor
 public class SessionLoginManager {
 
     private final SessionAuthenticationStrategy sessionAuthenticationStrategy;
     private final SecurityContextRepository securityContextRepository;
+    private final AdminPermissionFacade adminPermissionFacade;
     private final AdminSessionProperties adminSessionProperties;
     private final ServerProperties serverProperties;
     private final Clock clock;
@@ -49,10 +55,8 @@ public class SessionLoginManager {
         AuthenticatedCustomer principal =
                 new AuthenticatedCustomer(loginResult.customerId(), loginResult.userId(), loginResult.userName());
 
-        Authentication authentication = UsernamePasswordAuthenticationToken.authenticated(
-                principal,
-                null,
-                AuthorityUtils.createAuthorityList("ROLE_" + loginResult.role().name()));
+        Authentication authentication =
+                UsernamePasswordAuthenticationToken.authenticated(principal, null, authoritiesOf(loginResult));
 
         // 기존 세션이 있으면 인증정보 저장 전에 세션 ID를 변경
         sessionAuthenticationStrategy.onAuthentication(authentication, request, response);
@@ -86,5 +90,25 @@ public class SessionLoginManager {
         }
 
         return serverProperties.getServlet().getSession().getTimeout();
+    }
+
+    /**
+     * 관리자 권한을 로그인 때 한 번 읽어 세션 authority 로 싣는다. 인가는 SecurityConfig 의
+     * {@code hasAuthority} 가 이것만 보므로 요청마다 DB 를 읽지 않는다.
+     *
+     * <p>권한 회수 후 기존 세션을 즉시 끊으려면 JDBC 세션 무효화 계약을 사용한다.
+     */
+    private List<GrantedAuthority> authoritiesOf(LoginResult loginResult) {
+        String roleAuthority = "ROLE_" + loginResult.role().name();
+
+        if (loginResult.role() != CustomerRole.ADMIN) {
+            return AuthorityUtils.createAuthorityList(roleAuthority);
+        }
+
+        Stream<String> permissionAuthorities = adminPermissionFacade.findPermissions(loginResult.customerId()).stream()
+                .map(AdminPermission::name);
+
+        return AuthorityUtils.createAuthorityList(
+                Stream.concat(Stream.of(roleAuthority), permissionAuthorities).toList());
     }
 }

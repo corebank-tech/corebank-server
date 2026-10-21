@@ -5,35 +5,34 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.shinhan.corebank.AdminAccountFixture;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.customer.api.AdminPermission;
 import com.shinhan.corebank.transfer.adapter.out.persistence.LedgerReconciliationMismatchPersistenceAdapter;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationMismatch;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
-// 허용 목록 값은 AdminCustomerControllerTest와 같다 — 같은 설정이라 스프링 컨텍스트를 공유한다.
 @AutoConfigureMockMvc
 @Transactional
-@TestPropertySource(
-        properties = "app.security.admin.bootstrap-customer-ids=" + AdminLedgerReconciliationControllerTest.ADMIN_ID)
 @DisplayName("관리자 대사 불일치 목록 API")
 class AdminLedgerReconciliationControllerTest extends IntegrationTestSupport {
 
-    static final long ADMIN_ID = 944900001L;
-    private static final long NON_ADMIN_ID = 944900002L;
+    private static final long ADMIN_ID = 944930001L;
+    private static final long NON_ADMIN_ID = 944930002L;
     private static final String URL = "/admin/ledger-reconciliation/mismatches";
 
     // 시드·다른 테스트와 겹치지 않는 전용 대역
@@ -51,12 +50,18 @@ class AdminLedgerReconciliationControllerTest extends IntegrationTestSupport {
     @Autowired
     EntityManager entityManager;
 
+    // 새 인가는 customer.role 과 admin_permission 행을 읽는다 — 허용 목록(#448) 자리를 이것이 대신한다.
+    @BeforeEach
+    void grantAdminPermission() {
+        AdminAccountFixture.createAdmin(entityManager, ADMIN_ID, AdminPermission.AUDIT_READ);
+    }
+
     @Test
     @DisplayName("영업일을 주면 그날 불일치를 §6-5 페이지 형식으로, 시각은 +09:00으로 내려준다")
     void returnsMismatchesOfRequestedDate() throws Exception {
         saveSample();
 
-        mockMvc.perform(get(URL).param("businessDate", "2099-02-03").with(customer(ADMIN_ID)))
+        mockMvc.perform(get(URL).param("businessDate", "2099-02-03").with(admin()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data.page").value(0))
@@ -75,7 +80,7 @@ class AdminLedgerReconciliationControllerTest extends IntegrationTestSupport {
     void defaultsToLatestDate() throws Exception {
         saveSample();
 
-        mockMvc.perform(get(URL).with(customer(ADMIN_ID)))
+        mockMvc.perform(get(URL).with(admin()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalCount").value(1))
                 .andExpect(jsonPath("$.data.items[0].businessDate").value("2099-02-04"))
@@ -97,7 +102,7 @@ class AdminLedgerReconciliationControllerTest extends IntegrationTestSupport {
 
         mockMvc.perform(get(URL).param("businessDate", "2099-02-03")
                         .param("all", "true")
-                        .with(customer(ADMIN_ID)))
+                        .with(admin()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data.page").value(0))
@@ -111,14 +116,14 @@ class AdminLedgerReconciliationControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("기록이 없는 영업일은 items가 빈 배열이다")
     void emptyDate_returnsEmptyItems() throws Exception {
-        mockMvc.perform(get(URL).param("businessDate", "2099-03-01").with(customer(ADMIN_ID)))
+        mockMvc.perform(get(URL).param("businessDate", "2099-03-01").with(admin()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalCount").value(0))
                 .andExpect(jsonPath("$.data.items").isEmpty());
     }
 
     @Test
-    @DisplayName("허용 목록 밖 고객은 403 CMN0102")
+    @DisplayName("관리자가 아닌 고객은 403 CMN0102")
     void nonAdmin_forbidden() throws Exception {
         mockMvc.perform(get(URL).with(customer(NON_ADMIN_ID)))
                 .andExpect(status().isForbidden())
@@ -128,7 +133,7 @@ class AdminLedgerReconciliationControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("날짜 형식이 틀리면 400 CMN0001")
     void invalidDate_badRequest() throws Exception {
-        mockMvc.perform(get(URL).param("businessDate", "2099-13-01").with(customer(ADMIN_ID)))
+        mockMvc.perform(get(URL).param("businessDate", "2099-13-01").with(admin()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0001"));
     }
@@ -136,7 +141,7 @@ class AdminLedgerReconciliationControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("지원하지 않는 페이지 크기는 400 CMN0005")
     void invalidPageSize_badRequest() throws Exception {
-        mockMvc.perform(get(URL).param("size", "7").with(customer(ADMIN_ID)))
+        mockMvc.perform(get(URL).param("size", "7").with(admin()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0005"));
     }
@@ -152,6 +157,15 @@ class AdminLedgerReconciliationControllerTest extends IntegrationTestSupport {
                 LocalDateTime.of(2099, 2, 4, 23, 31, 5));
         entityManager.flush();
         entityManager.clear();
+    }
+
+    // 인가는 로그인 때 세션에 실린 authority 만 본다 — 실제 로그인까지 잇는 검증은
+    // AdminCustomerAccountOperationIntegrationTest 가 맡는다.
+    private RequestPostProcessor admin() {
+        return authentication(UsernamePasswordAuthenticationToken.authenticated(
+                new AuthenticatedCustomer(ADMIN_ID, "ph38admin", "관리자"),
+                null,
+                AuthorityUtils.createAuthorityList("ROLE_ADMIN", AdminPermission.AUDIT_READ.name())));
     }
 
     private RequestPostProcessor customer(long customerId) {

@@ -183,7 +183,6 @@ class LoginServiceTest {
         verify(loginCustomerPort, never()).recordLoginFailure(1L);
     }
 
-    // 잠금 전 비밀번호 불일치는 저장된 최신 횟수와 잔여 횟수를 노출
     // 관리자 경로에 고객 계정이 오면 비밀번호가 맞아도 거절한다. 비밀번호 불일치와 구분되면
     // 어떤 아이디가 관리자인지 드러나므로 응답을 같은 모양으로 맞추고, 경로를 잘못 고른 것만으로
     // 계정이 잠기지 않게 실패 횟수도 올리지 않는다.
@@ -196,7 +195,7 @@ class LoginServiceTest {
         given(passwordHashVerifierPort.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
         given(loginAttemptProcessor.process(1)).willReturn(attemptResult);
 
-        LoginFailedException exception = catchThrowableOfType(() -> service.login(command), LoginFailedException.class);
+        LoginFailedException exception = catchThrowableOfType(LoginFailedException.class, () -> service.login(command));
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);
         assertThat(exception.getAttemptResult()).contains(attemptResult);
@@ -227,6 +226,7 @@ class LoginServiceTest {
         verify(loginSuccessProcessor).process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.ADMIN, CustomerRole.ADMIN);
     }
 
+    // 잠금 전 비밀번호 불일치는 저장된 최신 횟수와 잔여 횟수를 노출
     @Test
     @DisplayName("비밀번호 불일치 4회는 최신 횟수와 잔여 횟수로 ATH0101을 반환한다")
     void invalidCredentialsBeforeLock() {

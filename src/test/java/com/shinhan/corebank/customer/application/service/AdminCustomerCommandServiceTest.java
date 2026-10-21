@@ -146,6 +146,21 @@ class AdminCustomerCommandServiceTest {
     }
 
     @Test
+    @DisplayName("다른 관리자를 대상으로 초기화하면 CMN0102로 거부하고 비밀번호를 저장하지 않는다")
+    void rejectsAdminTarget() {
+        given(customerPersistencePort.findByIdForUpdate(TARGET_ID)).willReturn(Optional.of(adminCustomer()));
+
+        assertThatThrownBy(() -> service.resetPassword(command(TARGET_ID)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.FORBIDDEN);
+
+        verify(customerPersistencePort, never()).updatePasswordResetByAdmin(any());
+        Map<String, Object> detail = captureDetail(AuditEventType.LOGIN_PASSWORD_RESET_BY_ADMIN, false);
+        assertThat(detail).containsEntry("targetCustomerId", TARGET_ID).containsEntry("reason", "ADMIN_TARGET");
+    }
+
+    @Test
     @DisplayName("대상 고객이 없으면 ATH0201로 거부하고 실패 감사를 남긴다")
     void rejectsMissingTarget() {
         given(customerPersistencePort.findByIdForUpdate(TARGET_ID)).willReturn(Optional.empty());
@@ -242,6 +257,31 @@ class AdminCustomerCommandServiceTest {
 
     private AdminCustomerOperationCommand command(Long targetCustomerId) {
         return new AdminCustomerOperationCommand(ADMIN_ID, targetCustomerId, REQUEST_IP);
+    }
+
+    // 대상이 관리자인 경우. role 만 다르고 나머지는 일반 고객 픽스처와 같다.
+    private Customer adminCustomer() {
+        LocalDateTime joinedAt = LocalDateTime.of(2026, 1, 1, 9, 0);
+        return Customer.restore(
+                TARGET_ID,
+                "adm449peer",
+                null,
+                "$2a$10$oldHash",
+                "관리자",
+                LocalDate.of(1990, 1, 1),
+                "peer@adm449.test",
+                "01012345678",
+                0,
+                false,
+                CustomerStatus.ACTIVE,
+                CustomerRole.ADMIN,
+                null,
+                null,
+                null,
+                null,
+                joinedAt,
+                joinedAt,
+                joinedAt);
     }
 
     private Customer customer(int loginFailureCount, boolean accountLocked) {

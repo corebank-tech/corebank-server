@@ -100,10 +100,10 @@ CREATE TABLE mart_load_batch (
 자동 적재 전에 원천 DB에 아래 계약을 구현합니다(#556, 원천 스키마·거래 경로 변경은 별도 PR에서 Flyway·`schema_reference.md`·ERD를 함께 갱신).
 
 1. date-fence는 **날짜와 무관한 단일 gate** 하나입니다. 날짜별 fence는 두지 않습니다. 어느 날짜의 fence를 잡을지 정하려면 D를 먼저 읽어야 해서 순환하기 때문입니다.
-2. 모든 원장 생성, 상품가입, 계좌해지 경로는 **gate 공유 락 획득과 D 읽기를 한 연산으로** 수행합니다(예: `acquireSharedAndReadBusinessDate()`). 이 연산 밖에서 `BusinessDateProvider.today()`로 거래일을 따로 읽지 않습니다. 읽은 거래일은 원장과 이벤트 원천 컬럼에 같이 저장합니다.
-3. 이 연산은 원장·이벤트를 쓰는 원천 트랜잭션 **안에서** 호출하고, gate는 그 트랜잭션의 commit/rollback까지 유지합니다. 지금 트랜잭션 밖에서 거래일을 읽는 경로(예: `TransferExecutionService`는 `REQUIRES_NEW` 기표 트랜잭션을 열기 전에 `today()`를 읽는다)는 #556에서 기표 트랜잭션 안으로 옮깁니다.
-4. gate는 원장·이벤트를 쓰는 가장 안쪽 트랜잭션에서만 잡습니다. gate를 잡은 트랜잭션이 `REQUIRES_NEW`로 연 트랜잭션에서 gate를 다시 잡지 않습니다. 바깥이 공유 락을 쥔 채 COB 배타 락이 기다리면 안쪽 공유 요청이 그 뒤에 서고, 바깥은 안쪽을 애플리케이션에서 기다리므로 DB가 교착을 감지하지 못합니다. 이런 중첩 구조가 이미 있습니다(자동이체·예약이체 배치의 `completeProcessing` → `TransferExecutionService.postLedger`). 지금은 바깥이 영업일을 읽지 않아 해당하지 않습니다.
-5. COB 전환은 같은 gate의 배타 락을 잡아 이미 D를 읽은 거래를 모두 commit/rollback할 때까지 기다립니다. 그 상태에서 `BUSINESS_DATE`를 다음 영업일로 전환하고, 원천 `business_date_cutoff`에 `(base_date=D, status=CLOSED, closed_at)`을 **같은 트랜잭션으로** 기록한 뒤 락을 풉니다.
+2. 모든 원장 생성, 상품가입, 계좌해지 경로는 **gate 공유 락 획득과 D 읽기를 한 연산으로** 수행합니다(예: `acquireSharedAndReadBusinessDate()`). 이 연산 밖에서 `BusinessDateProvider.today()`로 거래일을 따로 읽지 않습니다. 읽은 거래일은 원장과 이벤트 원천 컬럼에 같이 저장합니다. 거래일을 저장하는 호출자는 같은 트랜잭션에서 이 연산을 직접 부릅니다(같은 트랜잭션의 재호출은 첫 값을 돌려줍니다). 기표를 다른 서비스에 맡겨 직접 부를 수 없을 때만 그 기표 결과의 `tradeDate`를 씁니다.
+3. 이 연산은 원장·이벤트를 쓰는 원천 트랜잭션 **안에서** 호출하고, gate는 그 트랜잭션의 commit/rollback까지 유지합니다. 지금 트랜잭션 밖에서 거래일을 읽는 경로(예: `TransferExecutionService`는 `REQUIRES_NEW` 기표 트랜잭션을 열기 전에 `today()`를 읽는다)는 #662에서 기표 트랜잭션 안으로 옮깁니다. 그 전까지 이체 경로는 cutoff 보장 밖입니다.
+4. gate는 원장·이벤트를 쓰는 가장 안쪽 트랜잭션에서만 잡습니다. gate를 잡은 트랜잭션이 `REQUIRES_NEW`로 연 트랜잭션에서 gate를 다시 잡지 않습니다. 바깥이 공유 락을 쥔 채 COB 배타 락이 기다리면 안쪽 공유 요청이 그 뒤에 서고, 바깥은 안쪽을 애플리케이션에서 기다리므로 DB가 교착을 감지하지 못합니다. 이런 중첩 구조가 이미 있습니다(자동이체·예약이체 배치의 `completeProcessing` → `TransferExecutionService.postLedger`). 지금은 바깥이 영업일을 읽지 않아 해당하지 않습니다. 락 순서(날짜 락 → 계좌 락)를 어기면 전환이 실패할 수 있고, 전환이 실패하면 그 영업일의 cutoff가 남지 않으므로 ETL도 시작하지 않습니다. 락 순서 위반 시 교착 희생자와 재시도 정책은 ADR-0008 결과를 따릅니다.
+5. COB 전환은 같은 gate의 배타 락을 잡아 이미 D를 읽은 거래를 모두 commit/rollback할 때까지 기다립니다. 그 상태에서 `BUSINESS_DATE`를 다음 영업일로 전환하고, 원천 `business_date_cutoff`에 `(base_date=D, status=CLOSED, closed_at)`을 **같은 트랜잭션으로** 기록한 뒤 락을 풉니다. 영업일을 바꾸는 경로는 COB 전환(`advanceFrom`)과 달력 따라잡기(`catchUpTo`) 둘이고, 둘 다 같은 트랜잭션으로 cutoff를 남깁니다. `catchUpTo`가 영업일을 건너뛰면 떠나는 날과 건너뛴 영업일 모두 남기고, 건너뛴 날은 원장이 비어 있습니다. 도입 이전 날짜에는 행이 없고, 도입 이후의 모든 영업일에는 행이 있습니다. 가동 중단으로 건너뛴 영업일도 영업일 전환과 같은 트랜잭션에서 남깁니다. 건너뛴 날의 CLOSED도 의미가 참인 이유는, 따라잡기 UPDATE가 떠나는 날의 배타 락으로 진행 중 거래를 기다리고, 중간 날들은 서버가 멈춰 거래가 없었으며, 이후 거래는 모두 새 영업일을 읽기 때문입니다.
 6. 레플리카는 `replica_preserve_commit_order = ON`으로 이 커밋 순서를 보존합니다. ETL은 레플리카에서 `business_date_cutoff.status = 'CLOSED'`인 D만 시작합니다. cutoff가 없거나 실패면 ETL도 시작하지 않습니다.
 
 이 계약으로 cutoff보다 앞서 커밋된 행은 모두 D 이하이고, cutoff 뒤에 커밋되는 새 거래는 다음 영업일입니다. 단순 대기 시간, COB 스텝 상태, 실행 기록 행으로 이를 대체하지 않습니다.
@@ -111,9 +111,12 @@ CREATE TABLE mart_load_batch (
 ### 3-1. 실행 단위와 시작 조건
 
 - 한 번 실행에 기준일 D 하나를 적재합니다. `mart_load_batch`에 한 행이 생깁니다.
-- 시작 조건: 레플리카의 `business_date_cutoff`에 `base_date = D`, `status = 'CLOSED'` 행이 있고 D가 아직 `COMPLETED`가 아니다(§3-0). 밀린 날짜는 오래된 것부터 하나씩 적재합니다. 한 날짜가 실패해도 다음 날짜로 넘어가고, 실패한 날짜는 재적재 대상으로 남습니다. 공개 기준(`asOf`)은 실패한 날짜 앞에 머물고(§5-4), 그 날짜를 재적재하면 이미 적재된 뒤 날짜까지 한 번에 따라잡습니다.
-- 이미 `COMPLETED`인 D는 자동으로 다시 적재하지 않고, 수동 재적재 모드(예: `--rebuild D`, 인자 이름은 P5가 정한다)로만 다시 만듭니다. ① `business_date_cutoff(D, CLOSED)`는 여전히 필수입니다. ② 기존 상태와 무관하게 T1에서 새 `RUNNING` 배치를 만듭니다. ③ T2에서 D의 마트 행을 원자적으로 교체하고 ④ 이전 배치를 `REPLACED`로 바꾸고 ⑤ `as_of_date`를 다시 계산합니다(§3-2, §5-4). 키 교체(§3-3), 컬럼 추가(§2), 해지 이벤트 교체(§7-5)가 이 경로를 씁니다. 실패하면 T2가 롤백되어 이전 `COMPLETED` 배치와 마트 행이 그대로 남습니다.
-- 최초 적재는 원장 첫 거래일(PH-60b, 9/1)부터 마지막 COB 완료일까지 같은 방식으로 채웁니다.
+- 시작 조건: 레플리카의 `business_date_cutoff`에 `base_date = D`, `status = 'CLOSED'` 행이 있고 D가 아직 `COMPLETED`가 아니다(§3-0). 단, 아래 경계일보다 앞선 D는 cutoff 행 없이 시작합니다. 밀린 날짜는 오래된 것부터 하나씩 적재합니다. 한 날짜가 실패해도 다음 날짜로 넘어가고, 실패한 날짜는 재적재 대상으로 남습니다. 공개 기준(`asOf`)은 실패한 날짜 앞에 머물고(§5-4), 그 날짜를 재적재하면 이미 적재된 뒤 날짜까지 한 번에 따라잡습니다.
+- **cutoff 경계일.** 운영에서 #556과 #662가 둘 다 배포된 뒤 첫 COB가 마감한 영업일 D입니다(#668 설정값). 경계일보다 앞선 D는 cutoff 없이 적재와 재적재를 허용합니다. 이미 지난 날이라 D를 읽은 거래가 늦게 커밋될 일이 없기 때문입니다. 경계일 이후의 D는 cutoff가 없으면 COB 전환이 실패한 것으로 보고 시작하지 않습니다.
+    - 경계일은 `MIN(base_date)`로 계산하지 않고 ETL 설정값으로 고정합니다. 행이 없는 날짜가 경계일 이전 날짜인지 전환이 실패한 날짜인지는 행만 봐서는 구분할 수 없습니다.
+    - 경계일 이전 날짜의 cutoff 행은 만들지 않습니다. gate가 실제로 기다린 적 없는 날에 CLOSED 신호를 남기게 되기 때문입니다. Fineract도 COB 마감 표시(`m_loan.last_closed_business_date`)를 추가하면서 과거 값을 채우지 않았고, 표시가 없는 계좌는 다음 COB부터 합류시키되 밀린 날짜 따라잡기에서는 뺍니다(§8).
+- 이미 `COMPLETED`인 D는 자동으로 다시 적재하지 않고, 수동 재적재 모드(예: `--rebuild D`, 인자 이름은 P5가 정한다)로만 다시 만듭니다. ① 경계일 이후의 D는 `business_date_cutoff(D, CLOSED)`가 여전히 필수입니다. ② 기존 상태와 무관하게 T1에서 새 `RUNNING` 배치를 만듭니다. ③ T2에서 D의 마트 행을 원자적으로 교체하고 ④ 이전 배치를 `REPLACED`로 바꾸고 ⑤ `as_of_date`를 다시 계산합니다(§3-2, §5-4). 키 교체(§3-3), 컬럼 추가(§2), 해지 이벤트 교체(§7-5)가 이 경로를 씁니다. 실패하면 T2가 롤백되어 이전 `COMPLETED` 배치와 마트 행이 그대로 남습니다.
+- 최초 적재는 원장 첫 거래일(PH-60b, 9/1)부터 마지막 COB 완료일까지 같은 방식으로 채웁니다. 경계일 이전 날짜는 cutoff 없이 적재합니다.
 - 10/27 복제 시작 전(덤프 기간)에는 레플리카가 없으므로 D를 실행 인자로 받습니다.
 - 기간 적재(`--from`·`--to`)는 위 순서대로 영업일만 돌고(주말은 요일, 공휴일은 `holiday`), 끝나면 실패한 날짜를 모아 보고합니다.
 - 같은 기준일은 한 프로세스만 적재합니다. MySQL `GET_LOCK`을 기준일별로 잡고, 프로세스가 죽으면 연결이 끊기며 풀립니다. `GET_LOCK`은 연결 단위라 실행하는 동안 락 전용 연결 하나를 열어 둡니다(포트 호출마다 여는 연결로 잡으면 T1이 끝날 때 풀립니다).
@@ -171,8 +174,8 @@ WHERE l.rn = 1
 
 **이벤트**
 
-- `SUBSCRIBE`: `product_subscription.status = 'SUCCESS'`이고 `subscription_trade_date = D`. `subscription_trade_date`는 가입 트랜잭션이 date-fence 안에서 읽은 `BusinessDateProvider.today()`를 저장한 값입니다. 정기예금 초입금 원장과 정기적금의 `transaction_number = NULL` 여부에 의존하지 않습니다.
-- `CLOSE`: `account.status = 'CLOSED'`이고 `product_id IS NOT NULL`, `closed_trade_date = D`인 계좌입니다. `closed_trade_date`는 해지 트랜잭션이 date-fence 안에서 저장한 거래일입니다. 첫 납입 전 해지에도 동일하게 CLOSE 행이 생깁니다.
+- `SUBSCRIBE`: `product_subscription.status = 'SUCCESS'`이고 `subscription_trade_date = D`. `subscription_trade_date`는 가입 트랜잭션이 gate 연산(`acquireSharedAndReadBusinessDate()`)으로 읽은 거래일을 저장한 값입니다. 정기예금 초입금 원장과 정기적금의 `transaction_number = NULL` 여부에 의존하지 않습니다.
+- `CLOSE`: `account.status = 'CLOSED'`이고 `product_id IS NOT NULL`, `closed_trade_date = D`인 계좌입니다. `closed_trade_date`는 해지 트랜잭션이 gate 연산으로 읽은 거래일(해지 출금 원장의 `trade_date`와 같은 값)을 저장한 값입니다. 첫 납입 전 해지에도 동일하게 CLOSE 행이 생깁니다.
 - 상품 코드·이름·그룹은 적재할 때 `product`에서 복사합니다.
 
 **가명 처리.** MySQL에는 HMAC 함수가 없고, SQL로 구현하면 키가 쿼리 로그·프로세스 목록에 남습니다. ETL 프로세스가 레플리카에서 읽은 행에 메모리에서 HMAC을 적용한 뒤 마트에 씁니다. 입력은 `account:{account_id}`, `customer:{customer_id}` 문자열입니다(결정 6). 원천 ID는 마트 쪽으로 넘어가지 않습니다. 키를 바꾸면 전 기간을 재적재합니다.
@@ -181,7 +184,7 @@ WHERE l.rn = 1
 
 | 대상 | 규칙 |
 |---|---|
-| 레플리카 | `super_read_only = ON`. ETL 계정은 `ledger_entry`·`account`·`product`·`product_subscription`·`gl_journal_entry`·`business_date_cutoff`에 `SELECT`만 |
+| 레플리카 | `super_read_only = ON`. ETL 계정은 `ledger_entry`·`account`·`product`·`product_subscription`·`gl_journal_entry`·`holiday`(영업일 판정, §3-3)·`business_date_cutoff`에 `SELECT`만 |
 | 마트 | 쓰기는 ETL 계정만. 정보계 API 계정은 `SELECT`만 |
 | 방향 | 마트에서 계정계로 되돌려 쓰지 않는다 |
 | 배치 | **마트는 레플리카와 다른 MySQL 인스턴스에 둔다**(같은 VM의 다른 포트 가능). `super_read_only`는 인스턴스 전체에 걸린다 |
@@ -304,8 +307,8 @@ WHERE l.rn = 1
 
 ## 7. 확인 대기
 
-1. **P2 — 생명주기 거래일.** PH-76 전에 `product_subscription.subscription_trade_date`와 `account.closed_trade_date`를 추가하고, 가입·해지 트랜잭션이 §3-0 date-fence 안에서 읽은 `BusinessDateProvider.today()`를 각각 저장합니다. 예·적금 해지는 잔액을 0으로 만드는 출금 기표도 남기고 그 원장의 `trade_date`가 `closed_trade_date`와 같은지 PH-76에서 검증합니다. 원장이 없는 첫 납입 전 해지도 `closed_trade_date`로 CLOSE 이벤트를 만들므로 제외하지 않습니다.
-2. **P5 — 원천 마감 cutoff.** #556에서 §3-0 date-fence(단일 gate, 락 획득과 D 읽기를 한 연산으로)와 `business_date_cutoff`를 구현하고, 트랜잭션 밖에서 거래일을 읽는 기존 경로를 원천 트랜잭션 안으로 옮깁니다. #603의 `batch_execution_history`는 관측용으로 유지하되 ETL 시작 조건에는 쓰지 않습니다.
+1. **P2 — 생명주기 거래일.** PH-76 전에 `product_subscription.subscription_trade_date`와 `account.closed_trade_date`를 추가하고, 가입·해지 트랜잭션이 §3-0 gate 연산으로 읽은 거래일을 각각 저장합니다(`today()`로 따로 읽지 않습니다). 예·적금 해지는 잔액을 0으로 만드는 출금 기표도 남기고 그 원장의 `trade_date`가 `closed_trade_date`와 같은지 PH-76에서 검증합니다. 원장이 없는 첫 납입 전 해지도 `closed_trade_date`로 CLOSE 이벤트를 만들므로 제외하지 않습니다.
+2. **P5 — 원천 마감 cutoff.** 구현됨(PR #670). 단일 gate와 `business_date_cutoff`를 구현했고 원장·상품가입·정정 경로를 gate로 옮겼습니다. 이체 실행 경로는 #662에서 옮기며, 그때까지 이체가 포함된 영업일은 cutoff 보장 밖입니다. #603의 `batch_execution_history`는 관측용으로 유지하되 ETL 시작 조건에는 쓰지 않습니다.
 3. **P5·P3 — 시드 구간 원장 대조.** 시드는 원장 순서 보장(#545)의 대상이 아니어서 9/1~10/5 원장 대조가 실패할 수 있습니다. PH-76 덤프 첫 적재에서 확인하고, 실패면 원인을 P6에 넘깁니다.
 4. **P3 — 가명정보 가이드라인.** 결정 6은 기술적 성질로 정했습니다. 개인정보보호위원회 「가명정보 처리 가이드라인」(2026.03) 본문과 대조가 남았습니다.
 5. **P3·P5 — 해지 이벤트 날짜 이동.** `closed_trade_date`가 불변이므로 늦은 원장 기표가 와도 CLOSE 이벤트 날짜는 움직이지 않습니다. 재적재 시 같은 `(account_key, CLOSE)`를 해당 기준일 행 교체로 처리합니다. 해지 출금 원장의 거래일이 `closed_trade_date`와 다르면 원장 대조와 별도로 `FAILED`로 드러내고 원천 계약 위반으로 처리합니다.
@@ -318,6 +321,7 @@ WHERE l.rn = 1
     - `UpdateTrialBalanceDetailsTasklet`, `JournalEntryRepository.findTrialBalanceLinesForDate` — GL 계정 × 거래일 잔액, 현재 영업일 제외
     - `0200_add_journal_entry_aggregation_tables.xml`, `JournalEntryAggregationJobListener`, `JournalEntryAggregationTrackingTasklet`, `JournalEntryAggregationJobReader` — 행마다 실행 ID, 실패 시 실행 ID로 삭제, 성공만 추적 기록, 집계 기준일 = 분개 업무일
     - `SavingsAccountTransaction.updateCumulativeBalanceAndDates` — 계좌 잔액은 구간 방식(`balance_end_date_derived`)
+    - `0074_add_last_cob_business_date_column_to_loan.xml`, `RetrieveAllNonClosedIdServiceImpl.retrieveLoanCOBPartitions` — 마감 표시 컬럼은 과거 값 없이 추가, 정기 COB는 NULL 포함, 따라잡기는 NULL 제외
 - [Kimball Group — Fact Tables](https://www.kimballgroup.com/2008/11/fact-tables/)
 - [Oracle OFSAA — Overview of Account Summary Tables](https://docs.oracle.com/cd/E92917_01/PDF/8.0.9.0.0/FSDF_HTML/UG/Overview_of_Account_Summary_Tables.htm)
 - [BCBS 239 — Principle 3](https://blogs.sas.com/content/sascom/2014/04/21/series-bcbs-239-principle-3/)
