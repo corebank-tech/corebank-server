@@ -1,6 +1,6 @@
 package com.shinhan.corebank.gl.application.service;
 
-import com.shinhan.corebank.business.api.BusinessDateProvider;
+import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.gl.api.GlTxType;
@@ -47,19 +47,21 @@ public class GlIntegrityCheckService implements GlIntegrityCheckUseCase {
 
     private final LedgerTransactionReadPort ledgerTransactionReadPort;
     private final GlIntegrityQueryPort glIntegrityQueryPort;
-    private final BusinessDateProvider businessDateProvider;
+    private final BusinessDateGate businessDateGate;
+    private final TransactionTemplate transactionTemplate;
     private final TransactionTemplate readOnlyTransactionTemplate;
     private final int chunkSize;
 
     public GlIntegrityCheckService(
             LedgerTransactionReadPort ledgerTransactionReadPort,
             GlIntegrityQueryPort glIntegrityQueryPort,
-            BusinessDateProvider businessDateProvider,
+            BusinessDateGate businessDateGate,
             PlatformTransactionManager transactionManager,
             @Value("${app.gl-integrity-check.chunk-size:1000}") int chunkSize) {
         this.ledgerTransactionReadPort = ledgerTransactionReadPort;
         this.glIntegrityQueryPort = glIntegrityQueryPort;
-        this.businessDateProvider = businessDateProvider;
+        this.businessDateGate = businessDateGate;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.readOnlyTransactionTemplate = new TransactionTemplate(transactionManager);
         this.readOnlyTransactionTemplate.setReadOnly(true);
         this.chunkSize = chunkSize;
@@ -71,7 +73,7 @@ public class GlIntegrityCheckService implements GlIntegrityCheckUseCase {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
         long startedAt = System.nanoTime();
-        boolean closedTradeDate = tradeDate.isBefore(businessDateProvider.today());
+        boolean closedTradeDate = tradeDate.isBefore(readBusinessDate());
         Long voucherCount = readOnlyTransactionTemplate.execute(
                 status -> glIntegrityQueryPort.countVouchers(tradeDate, LedgerVoucherTypes.RECONCILED_VOUCHER_TYPES));
         UnbalancedVouchers unbalanced = readOnlyTransactionTemplate.execute(
@@ -109,6 +111,15 @@ public class GlIntegrityCheckService implements GlIntegrityCheckUseCase {
                 report.orphanVoucherCountFinal(),
                 (System.nanoTime() - startedAt) / 1_000_000);
         return report;
+    }
+
+    /**
+     * 현재 영업일을 gate 로 읽는다(ADR-0008 결정 8). 공유 락은 이 짧은 트랜잭션이 끝나면 풀리므로 대사 동안 COB 전환을 막지
+     * 않는다. 이 트랜잭션은 원장을 쓰지 않으니 gate 중첩(결정 6)도 생기지 않는다. 전환이 배타 락으로 기다리는 중이면 그
+     * 뒤에 서서 새 영업일을 읽는다.
+     */
+    private LocalDate readBusinessDate() {
+        return transactionTemplate.execute(status -> businessDateGate.acquireSharedAndReadBusinessDate());
     }
 
     /** 청크 하나를 대사하고 마지막 거래번호를 돌려준다. 더 읽을 거래가 없으면 {@code null}. */

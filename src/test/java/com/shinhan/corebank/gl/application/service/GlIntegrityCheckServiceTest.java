@@ -9,7 +9,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import com.shinhan.corebank.business.api.BusinessDateProvider;
+import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.gl.api.GlTxType;
@@ -53,13 +53,13 @@ class GlIntegrityCheckServiceTest {
     PlatformTransactionManager transactionManager;
 
     @Mock
-    BusinessDateProvider businessDateProvider;
+    BusinessDateGate businessDateGate;
 
     GlIntegrityCheckService service;
 
     @BeforeEach
     void setUp() {
-        service = new GlIntegrityCheckService(ledgerPort, glPort, businessDateProvider, transactionManager, CHUNK_SIZE);
+        service = new GlIntegrityCheckService(ledgerPort, glPort, businessDateGate, transactionManager, CHUNK_SIZE);
     }
 
     @Test
@@ -106,7 +106,7 @@ class GlIntegrityCheckServiceTest {
     @Test
     @DisplayName("불일치 목록은 100건까지만 담고 건수는 전체를 센다")
     void capsListButCountsAll() {
-        service = new GlIntegrityCheckService(ledgerPort, glPort, businessDateProvider, transactionManager, 1_000);
+        service = new GlIntegrityCheckService(ledgerPort, glPort, businessDateGate, transactionManager, 1_000);
         List<LedgerTransaction> chunk = new ArrayList<>();
         IntStream.range(0, 150).forEach(i -> chunk.add(tx("T%03d".formatted(i), "AUTO_TRANSFER", 10L)));
         givenBusinessDateAndVoucherCount(DAY.plusDays(1), 0L);
@@ -188,7 +188,7 @@ class GlIntegrityCheckServiceTest {
     }
 
     private void givenBusinessDateAndVoucherCount(LocalDate businessDate, long voucherCount) {
-        given(businessDateProvider.today()).willReturn(businessDate);
+        given(businessDateGate.acquireSharedAndReadBusinessDate()).willReturn(businessDate);
         given(glPort.countVouchers(eq(DAY), anyCollection())).willReturn(voucherCount);
     }
 
