@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202610201230__create_business_date_cutoff.sql
+-- V202610211230__create_business_date_cutoff.sql
 -- 영업일 마감 cutoff (P5, #556)
 --
 -- COB가 영업일 D를 넘길 때 BUSINESS_DATE 전환과 같은 트랜잭션으로 CLOSED 행을 남긴다.

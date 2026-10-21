@@ -1,16 +1,18 @@
 package com.shinhan.infoetl.adapter.out.jdbc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.infoetl.InfoEtlTestDatabase;
 import com.shinhan.infoetl.ReplicaFixtures;
+import com.shinhan.infoetl.TestKeys;
 import com.shinhan.infoetl.application.port.out.EtlStorageException;
 import com.shinhan.infoetl.application.service.DailyLoadService;
+import com.shinhan.infoetl.domain.LoadAlreadyRunningException;
 import com.shinhan.infoetl.domain.LoadResult;
 import com.shinhan.infoetl.domain.MartBalanceRow;
 import com.shinhan.infoetl.domain.Pseudonymizer;
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -34,14 +36,15 @@ class DailyLoadIntegrationTest {
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-20T16:00:00Z"), ZoneId.of("Asia/Seoul"));
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 21, 1, 0, 0);
 
-    private final Pseudonymizer pseudonymizer =
-            new Pseudonymizer("service-test-key-0001-0123456789abcdef".getBytes(StandardCharsets.UTF_8));
+    private final Pseudonymizer pseudonymizer = new Pseudonymizer(TestKeys.bytes("s"));
     private final MartBalanceWriter writer = new MartBalanceWriter();
     private final LoadBatchRepository repository = new LoadBatchRepository();
     private final DailyLoadService service = new DailyLoadService(
             new JdbcReplicaBalanceAdapter(InfoEtlTestDatabase::replica),
+            new JdbcReplicaEventAdapter(InfoEtlTestDatabase::replica),
             new JdbcReplicaCalendarAdapter(InfoEtlTestDatabase::replica),
             new JdbcMartLoadAdapter(InfoEtlTestDatabase::mart, CLOCK),
+            new JdbcLoadLockAdapter(InfoEtlTestDatabase::mart),
             pseudonymizer);
 
     @BeforeEach
@@ -175,6 +178,82 @@ class DailyLoadIntegrationTest {
     }
 
     @Test
+    @DisplayName("가입과 해지 이벤트가 잔액과 함께 가명 키로 마트에 들어간다")
+    void loadsEventsTogetherWithBalances() throws SQLException {
+        ReplicaFixtures.insertSubscription(10L, 12L, 100L, 2L, "SUCCESS", D);
+        ReplicaFixtures.insertClosedAccount(300L, 31L, 100L, "TIME_DEPOSIT", D);
+        ReplicaFixtures.insertLedgerDetailed(
+                30L,
+                300L,
+                "TX00000000000000030",
+                "WITHDRAWAL",
+                0L,
+                "TERMINATION",
+                LocalDateTime.of(2026, 10, 20, 9, 6),
+                D);
+
+        LoadResult result = service.load(D);
+
+        assertThat(result.eventRowCount()).isEqualTo(2L);
+        try (Connection mart = InfoEtlTestDatabase.mart();
+                Statement statement = mart.createStatement();
+                ResultSet resultSet = statement.executeQuery(
+                        "SELECT event_type, account_key FROM mart_product_subscription_event ORDER BY event_type")) {
+            assertThat(resultSet.next()).isTrue();
+            assertThat(resultSet.getString("event_type")).isEqualTo("CLOSE");
+            assertThat(resultSet.getString("account_key")).isEqualTo(pseudonymizer.accountKey(300L));
+            assertThat(resultSet.next()).isTrue();
+            assertThat(resultSet.getString("event_type")).isEqualTo("SUBSCRIBE");
+            assertThat(resultSet.getString("account_key")).isEqualTo(pseudonymizer.accountKey(2L));
+        }
+    }
+
+    @Test
+    @DisplayName("해지 거래일이 원장과 다르면 적재가 FAILED로 끝나고 이전 마트 데이터는 그대로다")
+    void closeTradeDateMismatchFailsAndKeepsPreviousLoad() throws SQLException {
+        LoadResult first = service.load(D);
+        ReplicaFixtures.insertClosedAccount(300L, 31L, 100L, "TIME_DEPOSIT", D);
+        ReplicaFixtures.insertLedgerDetailed(
+                30L,
+                300L,
+                "TX00000000000000030",
+                "WITHDRAWAL",
+                0L,
+                "TERMINATION",
+                LocalDateTime.of(2026, 10, 21, 9, 6),
+                D.plusDays(1));
+
+        assertThatThrownBy(() -> service.load(D, true))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("원천 계약 위반");
+
+        try (Connection mart = InfoEtlTestDatabase.mart()) {
+            assertThat(statusOf(mart, first.loadBatchId())).isEqualTo("COMPLETED");
+            assertThat(writer.countRows(mart, D)).isEqualTo(2L);
+            try (ResultSet row = batch(mart, latestBatchId(mart))) {
+                assertThat(row.getString("status")).isEqualTo("FAILED");
+                assertThat(row.getString("failure_reason")).contains("원천 계약 위반");
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("같은 기준일을 다른 프로세스가 잡고 있으면 적재 기록도 남기지 않고 거부한다")
+    void rejectsWhenAnotherProcessHoldsTheLock() throws SQLException {
+        try (var held = new JdbcLoadLockAdapter(InfoEtlTestDatabase::mart).acquire(D)) {
+            assertThatThrownBy(() -> service.load(D)).isInstanceOf(LoadAlreadyRunningException.class);
+        }
+
+        try (Connection mart = InfoEtlTestDatabase.mart();
+                Statement statement = mart.createStatement();
+                ResultSet resultSet = statement.executeQuery("SELECT COUNT(*) FROM mart_load_batch")) {
+            resultSet.next();
+            assertThat(resultSet.getLong(1)).isZero();
+        }
+        assertThatCode(() -> service.load(D)).doesNotThrowAnyException();
+    }
+
+    @Test
     @DisplayName("레플리카가 그대로면 재적재해도 건수와 합계, 행이 같다")
     void reloadWithUnchangedReplicaKeepsCountsAndTotals() throws SQLException {
         LoadResult first = service.load(D);
@@ -278,9 +357,10 @@ class DailyLoadIntegrationTest {
         java.util.List<MartBalanceRow> newRows = java.util.List.of(new MartBalanceRow(
                 pseudonymizer.accountKey(9L), pseudonymizer.customerKey(19L), "DEMAND_DEPOSIT", null, null, 5L));
 
-        assertThatThrownBy(() -> martAdapter.publish(rebuild, D, newRows, (firstLoadDate, dates) -> {
-                    throw new IllegalStateException("asOf 계산 중 실패");
-                }))
+        assertThatThrownBy(
+                        () -> martAdapter.publish(rebuild, D, newRows, java.util.List.of(), (firstLoadDate, dates) -> {
+                            throw new IllegalStateException("asOf 계산 중 실패");
+                        }))
                 .isInstanceOf(IllegalStateException.class);
 
         try (Connection mart = InfoEtlTestDatabase.mart()) {
@@ -336,7 +416,8 @@ class DailyLoadIntegrationTest {
         java.util.List<MartBalanceRow> lateRows = java.util.List.of(new MartBalanceRow(
                 pseudonymizer.accountKey(9L), pseudonymizer.customerKey(19L), "DEMAND_DEPOSIT", null, null, 5L));
 
-        assertThatThrownBy(() -> martAdapter.publish(slow, D, lateRows, (firstLoadDate, dates) -> D))
+        assertThatThrownBy(
+                        () -> martAdapter.publish(slow, D, lateRows, java.util.List.of(), (firstLoadDate, dates) -> D))
                 .isInstanceOf(IllegalStateException.class);
 
         try (Connection mart = InfoEtlTestDatabase.mart()) {
