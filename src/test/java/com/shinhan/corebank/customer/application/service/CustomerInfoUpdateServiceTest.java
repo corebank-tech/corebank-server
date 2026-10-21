@@ -141,7 +141,7 @@ class CustomerInfoUpdateServiceTest {
 
     // 기대 오류코드와 실제 BusinessException을 비교한다.
     private void assertError(UpdateCustomerInfoCommand command, Object expectedErrorCode) {
-        BusinessException exception = catchThrowableOfType(() -> service.update(command), BusinessException.class);
+        BusinessException exception = catchThrowableOfType(BusinessException.class, () -> service.update(command));
         assertThat(exception.getErrorCode()).isEqualTo(expectedErrorCode);
     }
 

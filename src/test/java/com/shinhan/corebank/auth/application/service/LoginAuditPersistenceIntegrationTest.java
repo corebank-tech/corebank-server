@@ -74,8 +74,8 @@ class LoginAuditPersistenceIntegrationTest extends IntegrationTestSupport {
     @DisplayName("로그인 실패는 민감정보 없이 LOGIN 실패 감사로 저장된다")
     void persistsFailedLoginAudit() {
         LoginFailedException exception = catchThrowableOfType(
-                () -> loginUseCase.login(new LoginCommand(USER_ID, WRONG_PASSWORD, REQUEST_IP, CustomerRole.CUSTOMER)),
-                LoginFailedException.class);
+                LoginFailedException.class,
+                () -> loginUseCase.login(new LoginCommand(USER_ID, WRONG_PASSWORD, REQUEST_IP, CustomerRole.CUSTOMER)));
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);
 

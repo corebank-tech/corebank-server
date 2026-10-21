@@ -121,7 +121,7 @@ class AccountPasswordChangeServiceTest {
     @DisplayName("신규 비밀번호 확인값이 다르면 APW0002이고 인증 토큰을 소비하지 않는다")
     void rejectsPasswordConfirmationMismatch() {
         BusinessException exception =
-                catchThrowableOfType(() -> service.change(command("5678", "1234")), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.change(command("5678", "1234")));
 
         assertThat(exception.getErrorCode()).isEqualTo(AccountPasswordErrorCode.NEW_PASSWORD_CONFIRM_MISMATCH);
         verifyNoInteractions(accountPersistencePort, authVerificationPort, passwordEncoder);
@@ -131,7 +131,7 @@ class AccountPasswordChangeServiceTest {
     @DisplayName("신규 비밀번호가 숫자 4자리가 아니면 CMN0001이다")
     void rejectsInvalidPasswordFormat() {
         BusinessException exception =
-                catchThrowableOfType(() -> service.change(command("12ab", "12ab")), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.change(command("12ab", "12ab")));
 
         assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT);
         verifyNoInteractions(authVerificationPort);
@@ -144,7 +144,7 @@ class AccountPasswordChangeServiceTest {
                 .thenReturn(Optional.empty());
 
         BusinessException exception =
-                catchThrowableOfType(() -> service.change(command("5678", "5678")), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.change(command("5678", "5678")));
 
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.ACCOUNT_NOT_FOUND_OR_FORBIDDEN);
         verifyNoInteractions(authVerificationPort, passwordEncoder);
@@ -164,7 +164,7 @@ class AccountPasswordChangeServiceTest {
                 .thenReturn(Optional.of(account));
 
         BusinessException exception =
-                catchThrowableOfType(() -> service.change(command("5678", "5678")), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.change(command("5678", "5678")));
 
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.INVALID_ACCOUNT_STATUS);
         verifyNoInteractions(authVerificationPort, passwordEncoder);
@@ -188,7 +188,7 @@ class AccountPasswordChangeServiceTest {
                 .verifyOtpToken("otp-token", CUSTOMER_ID, ACCOUNT_ID);
 
         RuntimeException exception =
-                catchThrowableOfType(() -> service.change(command("5678", "5678")), RuntimeException.class);
+                catchThrowableOfType(RuntimeException.class, () -> service.change(command("5678", "5678")));
 
         assertThat(exception).hasMessage("OTP 인증 실패");
         assertThat(account.getPasswordHash()).isEqualTo(OLD_HASH);
@@ -213,7 +213,7 @@ class AccountPasswordChangeServiceTest {
                 .thenReturn(Optional.empty());
 
         BusinessException exception =
-                catchThrowableOfType(() -> service.change(command("5678", "5678")), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.change(command("5678", "5678")));
 
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.ACCOUNT_NOT_FOUND_OR_FORBIDDEN);
         verify(authVerificationPort).verifyAccountPasswordToken("password-token", CUSTOMER_ID, ACCOUNT_ID);
@@ -246,7 +246,7 @@ class AccountPasswordChangeServiceTest {
                 .thenReturn(Optional.of(suspendedAccount));
 
         BusinessException exception =
-                catchThrowableOfType(() -> service.change(command("5678", "5678")), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.change(command("5678", "5678")));
 
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.INVALID_ACCOUNT_STATUS);
         verify(passwordEncoder).encode("5678");
