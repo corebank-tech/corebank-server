@@ -10,6 +10,7 @@ env:
   JAVA_DISTRIBUTION: 'corretto'
   DOCKER_IMAGE_NAME: 'corebank-server'
   CONTAINER_NAME: 'corebank-server'
+  MOCK_EXTERNAL_IMAGE_NAME: 'corebank-mock-external'
   SERVER_PORT: '8080'
   AWS_DEFAULT_REGION: 'ap-northeast-2'
 
@@ -47,6 +48,10 @@ jobs:
       - name: Build and test with Gradle
         run: ./gradlew build
 
+      # build에 포함되지 않는 모의 대외기관 실행 jar (타행이체 B 단계 컨테이너용, #697)
+      - name: Build mock external jar
+        run: ./gradlew mockExternalJar
+
       - name: Upload coverage report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -61,6 +66,13 @@ jobs:
         with:
           name: corebank-jar
           path: build/libs/*SNAPSHOT.jar
+          retention-days: 1
+
+      - name: Upload mock external artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mock-external-jar
+          path: build/mock-external/mock-external.jar
           retention-days: 1
 
   # -------------------------------------------------------------------------
@@ -117,6 +129,12 @@ jobs:
           name: corebank-jar
           path: build/libs/
 
+      - name: Download mock external artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mock-external-jar
+          path: build/mock-external/
+
       # Docker Buildx 설정 (멀티 플랫폼 및 GHA 캐시 사용 지원)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -139,6 +157,17 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # 타행이체 모의 대외기관 이미지 (B 단계, #697). 컷오버 뒤에는 같은 이미지를 온프레미스 VM에서 띄운다.
+      - name: Build and push mock external image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.mock-external
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.MOCK_EXTERNAL_IMAGE_NAME }}:latest
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.MOCK_EXTERNAL_IMAGE_NAME }}:${{ github.sha }}
 
       # 0) repo 디버깅 스텝
       - name: Debug OIDC subject
