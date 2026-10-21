@@ -94,8 +94,8 @@ class LoginAuditPersistenceIntegrationTest extends IntegrationTestSupport {
     @DisplayName("관리자 경로 실패는 요구 역할을 ADMIN 으로 저장한다")
     void persistsRequiredRoleForAdminPath() {
         LoginFailedException exception = catchThrowableOfType(
-                () -> loginUseCase.login(new LoginCommand(USER_ID, RAW_PASSWORD, REQUEST_IP, CustomerRole.ADMIN)),
-                LoginFailedException.class);
+                LoginFailedException.class,
+                () -> loginUseCase.login(new LoginCommand(USER_ID, RAW_PASSWORD, REQUEST_IP, CustomerRole.ADMIN)));
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);
 
