@@ -13,6 +13,7 @@ import com.shinhan.corebank.AdminAccountFixture;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.customer.api.AdminPermission;
+import jakarta.servlet.http.Cookie;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +22,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
@@ -188,33 +188,38 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
     @Test
     @DisplayName("관리자 세션은 DB 권한 행으로 관리자 API를 통과하고, 권한을 지우고 다시 로그인하면 막힌다")
     void adminSessionCarriesPermissionsFromDatabase() throws Exception {
-        mockMvc.perform(get("/admin/customers").param("userId", TARGET_USER_ID).session(adminLoginSession()))
+        mockMvc.perform(get("/admin/customers").param("userId", TARGET_USER_ID).cookie(adminLoginCookie()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"));
 
         jdbcTemplate.update(
                 "DELETE FROM admin_permission WHERE customer_id = ? AND permission = 'CUSTOMER_READ'", ADMIN_ID);
 
-        mockMvc.perform(get("/admin/customers").param("userId", TARGET_USER_ID).session(adminLoginSession()))
+        mockMvc.perform(get("/admin/customers").param("userId", TARGET_USER_ID).cookie(adminLoginCookie()))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CMN0102"));
     }
 
-    // 세션 ID가 로그인에서 바뀌므로 응답 뒤의 세션을 그대로 받아 다음 요청에 쓴다.
-    private MockHttpSession adminLoginSession() throws Exception {
+    // JDBC 세션은 응답 쿠키로 식별하므로 다음 요청에 실제 발급된 쿠키를 전달한다.
+    private Cookie adminLoginCookie() throws Exception {
         MockHttpSession session = new MockHttpSession();
         session.setMaxInactiveInterval(600);
 
-        MockHttpServletRequest loggedIn = mockMvc.perform(post("/admin/auth/login")
+        Cookie[] cookies = mockMvc.perform(post("/admin/auth/login")
                         .session(session)
                         .contentType("application/json")
                         .content("{\"userId\":\"adm449admin\",\"password\":\"%s\"}".formatted(ORIGINAL_PASSWORD)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andReturn()
-                .getRequest();
+                .getResponse()
+                .getCookies();
 
-        return (MockHttpSession) loggedIn.getSession(false);
+        return java.util.Arrays.stream(cookies)
+                .filter(cookie ->
+                        cookie.getName().equals("SESSION") || cookie.getName().equals("JSESSIONID"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("관리자 로그인 응답에 세션 쿠키가 없습니다."));
     }
 
     private ResultActions changeStatus(Long customerId, String status) throws Exception {
