@@ -7,8 +7,10 @@ import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaBalanceAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaCalendarAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaCutoffAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaEventAdapter;
+import com.shinhan.infoetl.application.port.in.AutoLoadUseCase;
 import com.shinhan.infoetl.application.port.in.DailyLoadUseCase;
 import com.shinhan.infoetl.application.port.in.RangeLoadUseCase;
+import com.shinhan.infoetl.application.service.AutoLoadService;
 import com.shinhan.infoetl.application.service.CutoffPolicy;
 import com.shinhan.infoetl.application.service.DailyLoadService;
 import com.shinhan.infoetl.application.service.RangeLoadService;
@@ -38,9 +40,16 @@ public final class InfoEtlMain {
     private static final String TO_ARGUMENT = "--to=";
 
     // 하루만 적재하면 from == to == baseDate이고 range가 false다.
-    record LoadCommand(LocalDate from, LocalDate to, boolean range, boolean rebuild) {}
+    // --auto는 날짜 없이 경계일부터 가장 최근 cutoff까지 밀린 날짜를 적재한다.
+    record LoadCommand(LocalDate from, LocalDate to, boolean range, boolean rebuild, boolean auto) {
+
+        static LoadCommand automatic() {
+            return new LoadCommand(null, null, false, false, true);
+        }
+    }
 
     private static final String REBUILD_ARGUMENT = "--rebuild";
+    private static final String AUTO_ARGUMENT = "--auto";
 
     private InfoEtlMain() {}
 
@@ -56,6 +65,9 @@ public final class InfoEtlMain {
             command = parseCommand(args);
             config = EtlConfig.from(env);
             pseudonymizer = new Pseudonymizer(config.hmacKey()); // 짧은 키도 종료 코드 2로 끝낸다.
+            if (command.auto() && config.cutoffBoundary() == null) {
+                throw new IllegalArgumentException("--auto에는 ETL_CUTOFF_BOUNDARY_DATE(yyyy-MM-dd) 환경변수가 필요합니다.");
+            }
         } catch (IllegalArgumentException e) {
             LOG.log(System.Logger.Level.ERROR, e.getMessage());
             return EXIT_USAGE;
@@ -79,8 +91,12 @@ public final class InfoEtlMain {
                 new JdbcLoadLockAdapter(mart),
                 pseudonymizer);
         try {
+            RangeLoadUseCase rangeLoad = new RangeLoadService(daily, calendar, martLoad);
+            if (command.auto()) {
+                AutoLoadUseCase autoLoad = new AutoLoadService(rangeLoad, cutoff, config.cutoffBoundary());
+                return report(autoLoad.loadPending());
+            }
             if (command.range()) {
-                RangeLoadUseCase rangeLoad = new RangeLoadService(daily, calendar, martLoad);
                 return report(rangeLoad.loadRange(command.from(), command.to()));
             }
             logLoaded(daily.load(command.from(), command.rebuild()));
@@ -127,6 +143,12 @@ public final class InfoEtlMain {
 
     // --base-date= 하나, 또는 --from= 과 --to= 둘. 섞어 쓰면 거부한다.
     static LoadCommand parseCommand(String[] args) {
+        if (Arrays.asList(args).contains(AUTO_ARGUMENT)) {
+            if (args.length != 1) {
+                throw new IllegalArgumentException("--auto는 다른 인자와 함께 쓸 수 없습니다.");
+            }
+            return LoadCommand.automatic();
+        }
         boolean hasBase = hasArgument(args, BASE_DATE_ARGUMENT);
         boolean hasFrom = hasArgument(args, FROM_ARGUMENT);
         boolean hasTo = hasArgument(args, TO_ARGUMENT);
@@ -139,7 +161,7 @@ public final class InfoEtlMain {
         }
         if (hasBase) {
             LocalDate baseDate = parseBaseDate(args);
-            return new LoadCommand(baseDate, baseDate, false, rebuild);
+            return new LoadCommand(baseDate, baseDate, false, rebuild, false);
         }
         if (hasFrom && hasTo) {
             LocalDate from = parseDate(args, FROM_ARGUMENT);
@@ -147,7 +169,7 @@ public final class InfoEtlMain {
             if (from.isAfter(to)) {
                 throw new IllegalArgumentException("--from은 --to보다 늦을 수 없습니다.");
             }
-            return new LoadCommand(from, to, true, false);
+            return new LoadCommand(from, to, true, false, false);
         }
         if (hasFrom || hasTo) {
             throw new IllegalArgumentException("--from과 --to는 함께 줘야 합니다.");

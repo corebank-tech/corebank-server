@@ -8,13 +8,17 @@ import com.shinhan.infoetl.InfoEtlTestDatabase;
 import com.shinhan.infoetl.ReplicaFixtures;
 import com.shinhan.infoetl.TestKeys;
 import com.shinhan.infoetl.application.port.out.EtlStorageException;
+import com.shinhan.infoetl.application.service.AutoLoadService;
 import com.shinhan.infoetl.application.service.CutoffPolicy;
 import com.shinhan.infoetl.application.service.DailyLoadService;
+import com.shinhan.infoetl.application.service.RangeLoadService;
 import com.shinhan.infoetl.domain.CutoffMissingException;
+import com.shinhan.infoetl.domain.FailedDay;
 import com.shinhan.infoetl.domain.LoadAlreadyRunningException;
 import com.shinhan.infoetl.domain.LoadResult;
 import com.shinhan.infoetl.domain.MartBalanceRow;
 import com.shinhan.infoetl.domain.Pseudonymizer;
+import com.shinhan.infoetl.domain.RangeLoadResult;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -270,6 +274,28 @@ class DailyLoadIntegrationTest {
         LoadResult result = guarded.load(MON);
 
         assertThat(result.baseDate()).isEqualTo(MON);
+    }
+
+    @Test
+    @DisplayName("자동 모드: cutoff가 없는 영업일은 실패로 모으고 뒤 날짜는 계속 적재하며 asOf는 빠진 날 앞에 머문다")
+    void autoLoadContinuesPastDayWithoutCutoff() throws SQLException {
+        ReplicaFixtures.insertLedger(50L, 1L, 250L, LocalDateTime.of(2026, 10, 19, 9, 0), MON);
+        ReplicaFixtures.insertLedger(60L, 1L, 800L, LocalDateTime.of(2026, 10, 21, 9, 0), WED);
+        ReplicaFixtures.insertCutoff(MON);
+        ReplicaFixtures.insertCutoff(WED); // 화요일(D) cutoff는 없다 = COB 전환 실패
+        JdbcReplicaCutoffAdapter cutoff = new JdbcReplicaCutoffAdapter(InfoEtlTestDatabase::replica);
+        DailyLoadService guarded = serviceWith(CutoffPolicy.enabled(MON, cutoff));
+        RangeLoadService range = new RangeLoadService(
+                guarded,
+                new JdbcReplicaCalendarAdapter(InfoEtlTestDatabase::replica),
+                new JdbcMartLoadAdapter(InfoEtlTestDatabase::mart, CLOCK));
+
+        RangeLoadResult result = new AutoLoadService(range, cutoff, MON).loadPending();
+
+        assertThat(result.loaded()).extracting(LoadResult::baseDate).containsExactly(MON, WED);
+        assertThat(result.failed()).extracting(FailedDay::baseDate).containsExactly(D);
+        assertThat(result.failed().get(0).reason()).contains("CutoffMissingException");
+        assertThat(result.loaded().get(1).asOfDate()).isEqualTo(MON);
     }
 
     private DailyLoadService serviceWith(CutoffPolicy policy) {

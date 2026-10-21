@@ -129,6 +129,42 @@ class InfoEtlMainTest {
     }
 
     @Test
+    @DisplayName("--auto는 단독으로만 쓸 수 있다")
+    void autoOnlyAlone() {
+        assertThat(InfoEtlMain.parseCommand(new String[] {"--auto"}).auto()).isTrue();
+        assertThat(InfoEtlMain.parseCommand(new String[] {"--base-date=2026-10-20"})
+                        .auto())
+                .isFalse();
+        assertThatThrownBy(() -> InfoEtlMain.parseCommand(new String[] {"--auto", "--base-date=2026-10-20"}))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> InfoEtlMain.parseCommand(new String[] {"--auto", "--rebuild"}))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("경계일 환경변수 없이 --auto를 주면 사용법 오류로 끝난다")
+    void autoWithoutBoundaryIsUsageError() {
+        assertThat(InfoEtlMain.run(new String[] {"--auto"}, env())).isEqualTo(InfoEtlMain.EXIT_USAGE);
+    }
+
+    @Test
+    @DisplayName("경계일이 있고 cutoff가 아직 없으면 --auto는 아무것도 적재하지 않고 정상 종료한다")
+    void autoWithoutCutoffLoadsNothing() throws SQLException {
+        Map<String, String> env = env();
+        env.put("ETL_CUTOFF_BOUNDARY_DATE", "2026-10-20");
+
+        int exitCode = InfoEtlMain.run(new String[] {"--auto"}, env);
+
+        assertThat(exitCode).isEqualTo(InfoEtlMain.EXIT_OK);
+        try (Connection mart = InfoEtlTestDatabase.mart();
+                Statement statement = mart.createStatement();
+                ResultSet batches = statement.executeQuery("SELECT COUNT(*) FROM mart_load_batch")) {
+            batches.next();
+            assertThat(batches.getLong(1)).isZero();
+        }
+    }
+
+    @Test
     @DisplayName("기준일과 기간을 섞거나 기간 인자가 하나뿐이거나 순서가 뒤집히면 거부한다")
     void rejectsInvalidCombinations() {
         assertThatThrownBy(() -> InfoEtlMain.parseCommand(
