@@ -174,7 +174,8 @@ class BusinessDateCutoffIntegrationTest extends IntegrationTestSupport {
         CountDownLatch observerStarted = new CountDownLatch(1);
         Future<?> observer = executor.submit(() -> {
             observerStarted.countDown();
-            while (visibleAtCutoff.get() == null) {
+            // 전환이 실패해도 tearDown 의 shutdownNow 인터럽트로 끝나게 한다
+            while (visibleAtCutoff.get() == null && !Thread.currentThread().isInterrupted()) {
                 tx.executeWithoutResult(status -> {
                     Integer closed = jdbc.queryForObject(
                             "SELECT COUNT(*) FROM business_date_cutoff WHERE base_date = ?", Integer.class, BASE);
