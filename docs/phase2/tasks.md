@@ -783,7 +783,7 @@ TransferExecutionService.execute(command)                         ← 편집자:
 
 - **불일치 저장 테이블** — Flyway + `schema_reference.md` + ERD. 목록 API와 FE ADM-04가 읽을 데이터다.
 - 불일치 목록 조회 API(관리자, `AUDIT_READ`)
-    - 현황(#613): 테이블 `ledger_reconciliation_mismatch`(영업일 `COB_DATE`별, 같은 영업일 재대사는 교체)와 `GET /admin/ledger-reconciliation/mismatches`(영업일 생략 시 최근 영업일, `all=true`는 100건 상한)를 넣었다. 권한은 아직 `/admin/**` 임시 가드(#448)이고 `AUDIT_READ`는 PH-49a 머지 때 붙인다. COB 대사 스텝에서 저장을 부르는 연결은 #605 머지 뒤 후속 PR이다 — 그 전까지 테이블은 비어 있다.
+    - 현황(#613): 테이블 `ledger_reconciliation_mismatch`(영업일 `COB_DATE`별, 같은 영업일 재대사는 교체)와 `GET /admin/ledger-reconciliation/mismatches`(영업일 생략 시 최근 영업일, `all=true`는 100건 상한)를 넣었다. 권한은 아직 `/admin/**` 임시 가드(#448)이고 `AUDIT_READ`는 PH-49a 머지 때 붙인다. COB 대사 스텝(`runInCob`)이 soft/hard 판정 **전에** 그 영업일 불일치를 저장한다 — hard로 마감을 멈춰도 그날 목록은 남는다. 0건이면 그날 행을 비우고, 락을 못 잡아 건너뛴 날은 저장도 삭제도 하지 않는다. 저장이 실패하면 러너로 전파한다.
 - 300만 원장 대사 시간 베이스라인(60b 적재 뒤, [D-27](README.md#d-27--109--팀-합의)). 전수 대사 경로(#468)로 잰다.
 - **`CobStep` 편입** — P5 인터페이스(10/6)가 들어오면 독립 스케줄러를 대사 스텝 구현체로 옮긴다. 등록 주체는 P4이고, soft/hard 임계는 P5가 정한다.
     - 현황(#604): `LedgerReconciliationCobStep`(`order=2`)이 전수 대사를 돌리고 독립 스케줄(02:00 증분 · 일 03:00 전수)은 없앴다. 증분 대사는 기표 시각 기준이라 COB 안에서 23:30~24:00·주말 거래를 놓쳐 쓰지 않는다. 임계는 `app.ledger-reconciliation.cob-hard-threshold`(기본 10). **hard도 #556 전까지는 로그만 남긴다**(#600) — #556 완료 뒤 P4가 `CobStepHaltException`을 켠다. `run()`·`runFull()`과 같은 대사 락을 잡고(못 잡으면 `LEDGER_RECONCILIATION_SKIPPED` ERROR), COB가 길어져도 00:10 자동이체가 밀리지 않게 스케줄러 스레드 풀을 2로 늘렸다(`spring.task.scheduling.pool.size`).
