@@ -207,6 +207,9 @@ jobs:
                 - FLYWAY_USER=FLYWAY_USER_PLACEHOLDER
                 - FLYWAY_PASSWORD=FLYWAY_PASSWORD_PLACEHOLDER
                 - REDIS_HOST=corebank-redis
+                # 타행이체 모의 대외기관 (B 단계, #697). 위치는 설정값뿐이라 컷오버 뒤에는 VM 주소로만 바꾼다.
+                - APP_INTERBANK_HOST=mock-external
+                - APP_INTERBANK_PORT=9300
                 - CORS_ALLOWED_ORIGINS=CORS_ALLOWED_ORIGINS_PLACEHOLDER
               healthcheck:
                 test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/api/v1/actuator/health || exit 1"]
@@ -234,6 +237,20 @@ jobs:
               networks:
                 - corebank-net
 
+            # 타행이체 모의 대외기관 (호스트 포트 미노출, 장애 스위치 9301도 내부 네트워크 전용). 재시작하면 장부가 비워진다.
+            mock-external:
+              image: DOCKER_USERNAME_PLACEHOLDER/MOCK_EXTERNAL_IMAGE_PLACEHOLDER:TAG_PLACEHOLDER
+              container_name: corebank-mock-external
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD-SHELL", "wget -q --spider http://localhost:9301/health || exit 1"]
+                interval: 5s
+                timeout: 3s
+                retries: 10
+                start_period: 5s
+              networks:
+                - corebank-net
+
           networks:
             corebank-net:
               driver: bridge
@@ -242,6 +259,7 @@ jobs:
           # 환경 변수 및 태그 실제 값으로 치환
           sed -i "s|DOCKER_USERNAME_PLACEHOLDER|${{ secrets.DOCKER_USERNAME }}|g" docker-compose.yml
           sed -i "s|DOCKER_IMAGE_PLACEHOLDER|${{ env.DOCKER_IMAGE_NAME }}|g" docker-compose.yml
+          sed -i "s|MOCK_EXTERNAL_IMAGE_PLACEHOLDER|${{ env.MOCK_EXTERNAL_IMAGE_NAME }}|g" docker-compose.yml
           sed -i "s|TAG_PLACEHOLDER|${{ github.sha }}|g" docker-compose.yml
           sed -i "s|CONTAINER_NAME_PLACEHOLDER|${{ env.CONTAINER_NAME }}|g" docker-compose.yml
           sed -i "s|SERVER_PORT_PLACEHOLDER|${{ env.SERVER_PORT }}|g" docker-compose.yml
