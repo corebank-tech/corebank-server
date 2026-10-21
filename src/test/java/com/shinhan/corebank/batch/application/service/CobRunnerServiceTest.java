@@ -20,6 +20,7 @@ import com.shinhan.corebank.batch.api.CobStepHaltException;
 import com.shinhan.corebank.business.api.BusinessDateAdvancer;
 import com.shinhan.corebank.business.api.BusinessDateProvider;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -139,6 +140,10 @@ class CobRunnerServiceTest {
         verify(batchExecutionLockPort).release(JOB_NAME);
     }
 
+    private static CannotAcquireLockException deadlock() {
+        return new CannotAcquireLockException("deadlock", new SQLException("deadlock", "40001", 1213));
+    }
+
     private CobRunnerService serviceWith(CobStep step) {
         return new CobRunnerService(
                 batchExecutionLockPort,
@@ -156,8 +161,8 @@ class CobRunnerServiceTest {
         when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
         when(businessDateProvider.today()).thenReturn(COB_DATE);
         when(businessDateAdvancer.advanceFrom(COB_DATE))
-                .thenThrow(new CannotAcquireLockException("deadlock"))
-                .thenThrow(new CannotAcquireLockException("deadlock"))
+                .thenThrow(deadlock())
+                .thenThrow(deadlock())
                 .thenReturn(NEXT_BUSINESS_DATE);
         CobStep step = stepOf("step", 1);
 
@@ -173,7 +178,7 @@ class CobRunnerServiceTest {
     void run_advanceKeepsLosingLockConflict_givesUpAfterThreeAttempts() {
         when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
         when(businessDateProvider.today()).thenReturn(COB_DATE);
-        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenThrow(new CannotAcquireLockException("deadlock"));
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenThrow(deadlock());
         CobStep step = stepOf("step", 1);
         CobRunnerService service = serviceWith(step);
 
@@ -181,6 +186,25 @@ class CobRunnerServiceTest {
                 .isInstanceOf(PessimisticLockingFailureException.class);
 
         verify(businessDateAdvancer, times(3)).advanceFrom(COB_DATE);
+        verify(step, never()).run(any());
+        verify(batchExecutionLockPort).release(JOB_NAME);
+    }
+
+    @Test
+    @DisplayName("락 대기 시간 초과는 다시 시도하지 않고 바로 던진다")
+    void run_advanceLockWaitTimeout_isNotRetried() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE))
+                .thenThrow(new CannotAcquireLockException(
+                        "timeout", new SQLException("lock wait timeout", "HY000", 1205)));
+        CobStep step = stepOf("step", 1);
+        CobRunnerService service = serviceWith(step);
+
+        assertThatThrownBy(() -> service.run(COB_DATE.plusDays(10)))
+                .isInstanceOf(PessimisticLockingFailureException.class);
+
+        verify(businessDateAdvancer, times(1)).advanceFrom(COB_DATE);
         verify(step, never()).run(any());
         verify(batchExecutionLockPort).release(JOB_NAME);
     }

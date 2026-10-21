@@ -45,7 +45,7 @@ D를 알아야 fence를 고를 수 있어 순환한다. 기각(결정 1).
 
 ## 결과
 
-- **락 순서를 어기면 피해자는 어긴 거래가 아니라 COB 전환이다.** 계좌 락을 먼저 잡고 gate를 부르면 교착이 나고, InnoDB는 변경량이 가장 적은 쪽을 희생시키는데 전환 UPDATE가 한 줄이라 가장 가볍다(`BusinessDateGateIntegrationTest`로 확인). 그래서 규칙 7과 8은 COB를 지키는 규칙이다. 이를 완화하려고 `CobRunnerService`가 락 충돌로 쫓겨난 전환을 최대 3번 재시도한다.
+- **락 순서를 어기면 피해자는 어긴 거래가 아니라 COB 전환이다.** 계좌 락을 먼저 잡고 gate를 부르면 교착이 나고, InnoDB는 변경량이 가장 적은 쪽을 희생시키는데 전환 UPDATE가 한 줄이라 가장 가볍다(`BusinessDateGateIntegrationTest`로 확인). 그래서 규칙 7과 8은 COB를 지키는 규칙이다. 이를 완화하려고 `CobRunnerService`가 교착으로 쫓겨난 전환을 최대 3번 재시도한다(대기 시간 초과는 새 거래가 줄 선 채 반복되므로 재시도하지 않는다).
 - 중첩(결정 6)을 어기면 안쪽 요청이 대기 중인 전환 뒤에 서서 락 대기 시간 초과로만 끝난다(같은 테스트로 확인). 코드로 중첩을 감지하기 어려우므로 리뷰와 테스트로 막는다. 호출자가 `REQUIRES_NEW` 안에서 gate를 쓰는 서비스(`LedgerDepositService` 등)를 부르면 중첩이 된다.
 - gate를 쥔 시간이 길수록 전환이 길게 기다리고, 그동안 새 거래도 줄을 선다. gate는 가능한 한 늦게 잡되 계좌 락보다는 앞에서 잡는다.
 - `TransferExecutionService`와 타행이체(`InterbankTransferService`·`InterbankSettlementService`)는 거래일을 `today()`로 읽는다. **cutoff 보장은 #662가 머지된 뒤 이체 경로까지 성립한다.** 그 전까지 이 클래스들만 ArchUnit 예외다.
