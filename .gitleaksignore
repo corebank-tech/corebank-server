@@ -1,0 +1,10 @@
+# 테스트에 있던 가짜 키·멱등키 UUID 리터럴이 머지된 커밋 이력에 남아 있어 `gitleaks git`(이력 전체)이 계속 탐지한다.
+# 실제 비밀이 아니며 현재 트리에서는 제거했다(#676). 지문(커밋:파일:규칙:줄)이 정확히 일치하는 건만 무시하고 새로 생기는 탐지는 그대로 잡는다.
+# 정보계 ETL 테스트의 가짜 HMAC 키 3건 + AccountPasswordControllerTest의 멱등키 UUID 4건.
+ce004a854be45819367457490030b10e34b39943:src/test/java/com/shinhan/infoetl/PseudonymizerTest.java:generic-api-key:12
+d6802cf216fc7248dbcab52589d93ddad8775b85:src/test/java/com/shinhan/infoetl/PseudonymizerTest.java:generic-api-key:13
+d6802cf216fc7248dbcab52589d93ddad8775b85:src/test/java/com/shinhan/infoetl/InfoEtlMainTest.java:generic-api-key:111
+cf03f5b5bf3d14997fbcda745d89c17a1f118759:src/test/java/com/shinhan/corebank/account/adapter/in/web/AccountPasswordControllerTest.java:generic-api-key:261
+cf03f5b5bf3d14997fbcda745d89c17a1f118759:src/test/java/com/shinhan/corebank/account/adapter/in/web/AccountPasswordControllerTest.java:generic-api-key:296
+cf03f5b5bf3d14997fbcda745d89c17a1f118759:src/test/java/com/shinhan/corebank/account/adapter/in/web/AccountPasswordControllerTest.java:generic-api-key:312
+cf03f5b5bf3d14997fbcda745d89c17a1f118759:src/test/java/com/shinhan/corebank/account/adapter/in/web/AccountPasswordControllerTest.java:generic-api-key:321
