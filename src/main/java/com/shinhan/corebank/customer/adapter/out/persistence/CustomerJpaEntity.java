@@ -1,6 +1,7 @@
 package com.shinhan.corebank.customer.adapter.out.persistence;
 
 import com.shinhan.corebank.common.entity.BaseEntity;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -63,6 +64,10 @@ public class CustomerJpaEntity extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 12)
     private CustomerStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", nullable = false, length = 12)
+    private CustomerRole role;
 
     @Column(name = "last_login_at", columnDefinition = "DATETIME(6)")
     private LocalDateTime lastLoginAt;

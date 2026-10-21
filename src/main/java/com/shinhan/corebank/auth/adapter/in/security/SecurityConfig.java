@@ -37,7 +37,12 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({CorsProperties.class, CsrfProperties.class, AdminBootstrapProperties.class})
+@EnableConfigurationProperties({
+    CorsProperties.class,
+    CsrfProperties.class,
+    AdminBootstrapProperties.class,
+    AdminSessionProperties.class
+})
 public class SecurityConfig {
 
     // 로그인 비밀번호 해시 검증에 사용할 BCrypt Encoder
@@ -139,6 +144,7 @@ public class SecurityConfig {
                     csrf.csrfTokenRequestHandler(csrfTokenRequestHandler);
                     csrf.ignoringRequestMatchers(
                             pathPattern(HttpMethod.POST, "/auth/login"),
+                            pathPattern(HttpMethod.POST, "/admin/auth/login"),
                             pathPattern(HttpMethod.POST, "/auth/find-id"),
                             pathPattern(HttpMethod.POST, "/auth/terms/check"),
                             pathPattern(HttpMethod.POST, "/auth/verify-account"),
@@ -200,6 +206,10 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/swagger-ui.html", "/swagger-ui/**",
                                 "/v3/api-docs/**", "/v3/api-docs.yaml")
+                        .permitAll()
+
+                        // 로그인 요청 자체가 관리자 인가에 걸리지 않도록 /admin/** 보다 앞에 둔다.
+                        .requestMatchers(pathPattern(HttpMethod.POST, "/admin/auth/login"))
                         .permitAll()
 
                         // 관리자 API는 PH-49a 전까지 허용 목록의 고객만 접근 (#448 임시 가드)
