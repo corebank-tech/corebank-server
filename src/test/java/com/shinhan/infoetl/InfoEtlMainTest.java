@@ -108,7 +108,7 @@ class InfoEtlMainTest {
         env.put("MART_JDBC_URL", InfoEtlTestDatabase.martUrl());
         env.put("MART_USER", InfoEtlTestDatabase.user());
         env.put("MART_PASSWORD", InfoEtlTestDatabase.password());
-        env.put("HMAC_KEY", "main-test-key-0001-0123456789abcdef");
+        env.put("HMAC_KEY", TestKeys.text("m"));
         return env;
     }
 

@@ -3,6 +3,7 @@ package com.shinhan.infoetl.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.shinhan.infoetl.TestKeys;
 import com.shinhan.infoetl.application.port.out.AsOfCalculator;
 import com.shinhan.infoetl.application.port.out.EtlStorageException;
 import com.shinhan.infoetl.application.port.out.MartLoadPort;
@@ -12,7 +13,6 @@ import com.shinhan.infoetl.domain.BalanceRow;
 import com.shinhan.infoetl.domain.LoadResult;
 import com.shinhan.infoetl.domain.MartBalanceRow;
 import com.shinhan.infoetl.domain.Pseudonymizer;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -28,8 +28,7 @@ class DailyLoadServiceTest {
 
     private static final LocalDate D = LocalDate.of(2026, 10, 20);
 
-    private final Pseudonymizer pseudonymizer =
-            new Pseudonymizer("service-unit-key-0001-0123456789abcdef".getBytes(StandardCharsets.UTF_8));
+    private final Pseudonymizer pseudonymizer = new Pseudonymizer(TestKeys.bytes("u"));
     private final FakeMartLoadPort martPort = new FakeMartLoadPort();
     private final FakeCalendar calendar = new FakeCalendar();
 
