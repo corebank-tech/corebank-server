@@ -73,6 +73,26 @@ class PiiVerificationServiceTest {
         assertThat(new PiiVerificationService(inspection).verify().passed()).isTrue();
     }
 
+    @Test
+    @DisplayName("키 컬럼이 문자열이 아닌 타입으로 바뀌면 값 검사를 피하지 못하고 위반이다")
+    void nonStringKeyColumnIsViolation() {
+        inspection.changeType("mart_daily_account_balance", "account_key", "varbinary");
+
+        assertThat(new PiiVerificationService(inspection).verify().violations())
+                .anyMatch(
+                        v -> v.contains("키 컬럼이 문자열 타입이 아닙니다") && v.contains("account_key") && v.contains("varbinary"));
+    }
+
+    @Test
+    @DisplayName("text로 바뀐 컬럼도 값을 검사한다")
+    void textColumnIsStillScanned() {
+        inspection.changeType("mart_product_subscription_event", "product_name", "text");
+        inspection.matching.put("mart_product_subscription_event.product_name", 1L);
+
+        assertThat(new PiiVerificationService(inspection).verify().violations())
+                .anyMatch(v -> v.contains("계좌번호 형식") && v.contains("product_name"));
+    }
+
     private static final class FakeInspection implements MartInspectionPort {
 
         final Map<String, List<MartColumn>> columns = new LinkedHashMap<>();
@@ -85,6 +105,11 @@ class PiiVerificationServiceTest {
                 names.forEach(name -> list.add(new MartColumn(name, typeOf(name))));
                 columns.put(table, list);
             });
+        }
+
+        void changeType(String table, String name, String dataType) {
+            List<MartColumn> list = columns.get(table);
+            list.replaceAll(column -> column.name().equals(name) ? new MartColumn(name, dataType) : column);
         }
 
         private static String typeOf(String name) {

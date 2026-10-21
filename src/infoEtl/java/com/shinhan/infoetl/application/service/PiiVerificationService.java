@@ -60,6 +60,9 @@ public final class PiiVerificationService implements PiiVerifyUseCase {
         long scanned = 0;
         for (MartColumn column : columns) {
             if (!column.isString()) {
+                if (column.isKey()) {
+                    violations.add("키 컬럼이 문자열 타입이 아닙니다: " + table + "." + column.name() + " " + column.dataType());
+                }
                 continue;
             }
             scanned++;
