@@ -44,10 +44,54 @@
 1. 1차 계정에서 고객 관리형 KMS 키 생성
 2. 기존 수동 스냅샷을 해당 키로 암호화하여 복사
 3. 2차 계정에 KMS 사용 권한 및 스냅샷 공유
-4. 2차 계정에서 자체 KMS 키로 스냅샷 복사
+4. 2차 계정에서 해당 계정의 KMS 키로 스냅샷 복사 (이번 리허설은 AWS 관리형 `alias/aws/rds` 사용)
 5. 복사된 스냅샷의 상태와 엔진 버전 확인
 
-※ KMS 리허설 결과, 소요 시간 및 실제 식별자는 검증 후 기록한다.
+### 2026-10-21 복제 리허설 결과
+
+**목적:** AWS 계정 간 암호화 RDS 스냅샷 복제 가능 여부 및 소요 시간 측정
+
+#### 복제 경로
+
+- 원본: `corebank-after-ph60b-20261010`
+- 1차 계정 공유용: `corebank-share-20261021`
+- 2차 계정 복사본: `corebank-import-20261021`
+- 리전: ap-northeast-2
+- 엔진: MySQL 8.4.10
+- 할당 스토리지: 20 GiB
+
+#### 복제 시간 (RDS 이벤트 기준, KST)
+
+| 단계 | 시작 | 완료 | 소요 시간 |
+|---|---|---|---|
+| 1차 계정 내부 복사 | 10:50:12.671 | 10:51:14.799 | 62.128초 |
+| 2차 계정 복사 | 12:24:49.763 | 12:25:51.722 | 61.959초 |
+| 합계 | - | - | **124.087초** |
+
+- 시간은 RDS Started/Finished copy 이벤트 기준이다.
+- 합계는 두 복사 구간의 소요 시간을 더한 값이다.
+- IAM/KMS 권한 설정 및 수동 대기 시간은 합계에 포함하지 않는다.
+
+#### 검증 결과
+
+- 공유 스냅샷을 2차 계정에서 조회 성공
+- 2차 계정 복사본 상태: available
+- 진행률: 100%
+- 암호화: 활성화
+- 대상 KMS: 2차 계정의 `alias/aws/rds` (AWS 관리형 키)
+  - 해당 키는 고객이 직접 삭제하거나 키 정책을 변경할 수 없으며, 리허설 종료 후 정리 대상이 아니다.
+- 2차 계정 복사본의 직접 원본 (`SourceDBSnapshotIdentifier`):
+  `arn:aws:rds:ap-northeast-2:883218392320:snapshot:corebank-share-20261021`
+- 최초 원본: `corebank-after-ph60b-20261010`
+- 복제 관계: `corebank-import-20261021` ← `corebank-share-20261021` ← `corebank-after-ph60b-20261010`
+- 실제 RDS 복원 및 데이터 정합성 검증은 미수행
+
+#### 후속 작업
+
+- 10/26 Terraform apply 및 RDS 복원
+- 실제 이전에 사용할 최신 스냅샷과 이후 변경분의
+  동기화 절차 확정
+- 복원 후 DB 연결 및 데이터 정합성 검증
 
 ### 스냅샷 사전 검증
 
@@ -65,13 +109,13 @@ aws rds describe-db-snapshots \
 
 검증 기준:
 
-- [ ] Status = available
-- [ ] AllocatedStorage <= 20GiB
-- [ ] Engine = mysql
-- [ ] EngineVersion = Terraform에 설정된 버전
-- [ ] Encrypted = true
-- [ ] KmsKeyId = 2차 계정에서 복사에 사용한 KMS 키
-- [ ] 계정 간 복사 단계별 소요 시간 기록
+- [x] Status = available
+- [x] AllocatedStorage <= 20GiB
+- [x] Engine = mysql
+- [x] EngineVersion = Terraform에 설정된 버전
+- [x] Encrypted = true
+- [x] KmsKeyId = 2차 계정에서 복사에 사용한 KMS 키
+- [x] 계정 간 복사 단계별 소요 시간 기록
 - [ ] 10/26 실제 컷오버에 사용할 스냅샷 생성 시점 확정
 - [ ] 스냅샷 이후 거래에 대한 최종 동기화 절차 확정
 
@@ -135,6 +179,8 @@ Terraform plan 성공만으로 스냅샷 복원 가능 여부가 보장되지는
 3. `final_snapshot_identifier`가 기존 스냅샷 이름과
    충돌하지 않는지 확인한다.
 4. 승인된 RDS 삭제 작업을 수행하고 최종 스냅샷 생성 여부를 확인한다.
-5. 보존 기간이 지난 스냅샷과 관련 KMS 키를 별도로 정리한다.
+5. 보존 기간이 지난 스냅샷을 정리한다.
+   스냅샷 암호화에 사용한 고객 관리형 KMS 키는 더 이상 참조하는 스냅샷이나 리소스가 없는지 확인한 뒤 별도 정리한다. 
+   AWS 관리형 `alias/aws/rds`는 직접 삭제할 수 없으므로 정리 대상에서 제외한다.
 
 최종 스냅샷은 RDS 삭제 후에도 저장 비용이 발생할 수 있다.
