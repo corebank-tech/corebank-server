@@ -181,7 +181,7 @@ WHERE l.rn = 1
 
 | 대상 | 규칙 |
 |---|---|
-| 레플리카 | `super_read_only = ON`. ETL 계정은 `ledger_entry`·`account`·`product`·`product_subscription`·`gl_journal_entry`·`business_date_cutoff`에 `SELECT`만 |
+| 레플리카 | `super_read_only = ON`. ETL 계정은 `ledger_entry`·`account`·`product`·`product_subscription`·`gl_journal_entry`·`holiday`(영업일 판정, §3-3)·`business_date_cutoff`에 `SELECT`만 |
 | 마트 | 쓰기는 ETL 계정만. 정보계 API 계정은 `SELECT`만 |
 | 방향 | 마트에서 계정계로 되돌려 쓰지 않는다 |
 | 배치 | **마트는 레플리카와 다른 MySQL 인스턴스에 둔다**(같은 VM의 다른 포트 가능). `super_read_only`는 인스턴스 전체에 걸린다 |

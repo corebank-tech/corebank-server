@@ -37,23 +37,26 @@ final class LoadBatchRepository {
             long loadBatchId,
             LocalDateTime completedAt,
             long balanceRowCount,
+            long eventRowCount,
             long martBalanceTotal,
             LocalDate asOfDate)
             throws SQLException {
         try (PreparedStatement statement =
                 mart.prepareStatement("UPDATE mart_load_batch SET status = ?, completed_at = ?, balance_row_count = ?,"
-                        + " mart_balance_total = ?, as_of_date = ? WHERE load_batch_id = ? AND status = ?")) {
+                        + " event_row_count = ?, mart_balance_total = ?, as_of_date = ?"
+                        + " WHERE load_batch_id = ? AND status = ?")) {
             statement.setString(1, LoadStatus.COMPLETED.name());
             statement.setObject(2, completedAt);
             statement.setLong(3, balanceRowCount);
-            statement.setLong(4, martBalanceTotal);
+            statement.setLong(4, eventRowCount);
+            statement.setLong(5, martBalanceTotal);
             if (asOfDate == null) {
-                statement.setNull(5, Types.DATE);
+                statement.setNull(6, Types.DATE);
             } else {
-                statement.setObject(5, asOfDate);
+                statement.setObject(6, asOfDate);
             }
-            statement.setLong(6, loadBatchId);
-            statement.setString(7, LoadStatus.RUNNING.name());
+            statement.setLong(7, loadBatchId);
+            statement.setString(8, LoadStatus.RUNNING.name());
             if (statement.executeUpdate() != 1) {
                 throw new IllegalStateException("RUNNING 상태가 아니어서 완료 처리하지 못했습니다. loadBatchId=" + loadBatchId);
             }

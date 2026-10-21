@@ -3,9 +3,11 @@ package com.shinhan.infoetl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.shinhan.infoetl.adapter.out.jdbc.JdbcLoadLockAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcMartLoadAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaBalanceAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaCalendarAdapter;
+import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaEventAdapter;
 import com.shinhan.infoetl.application.service.DailyLoadService;
 import com.shinhan.infoetl.domain.LoadResult;
 import com.shinhan.infoetl.domain.Pseudonymizer;
@@ -57,13 +59,7 @@ class EtlGrantsTest {
         try (Connection connection = open(InfoEtlTestDatabase.replicaUrl(), "etl_replica_reader");
                 Statement statement = connection.createStatement()) {
             for (String table : new String[] {
-                "ledger_entry",
-                "account",
-                "product",
-                "product_subscription",
-                "gl_journal_entry",
-                "batch_execution_history",
-                "holiday"
+                "ledger_entry", "account", "product", "product_subscription", "gl_journal_entry", "holiday"
             }) {
                 statement.executeQuery("SELECT COUNT(*) FROM " + table).close();
             }
@@ -85,6 +81,10 @@ class EtlGrantsTest {
                     .isInstanceOf(SQLException.class)
                     .hasMessageContaining("denied");
             assertThatThrownBy(() -> statement.executeQuery("SELECT * FROM customer"))
+                    .isInstanceOf(SQLException.class)
+                    .hasMessageContaining("denied");
+            // 시작 신호는 business_date_cutoff뿐이라 관측용 실행 기록은 읽을 이유가 없다(설계 §3-4).
+            assertThatThrownBy(() -> statement.executeQuery("SELECT * FROM batch_execution_history"))
                     .isInstanceOf(SQLException.class)
                     .hasMessageContaining("denied");
         }
@@ -129,9 +129,11 @@ class EtlGrantsTest {
         String martUrl = InfoEtlTestDatabase.martUrl();
         DailyLoadService service = new DailyLoadService(
                 new JdbcReplicaBalanceAdapter(() -> open(replicaUrl, "etl_replica_reader")),
+                new JdbcReplicaEventAdapter(() -> open(replicaUrl, "etl_replica_reader")),
                 new JdbcReplicaCalendarAdapter(() -> open(replicaUrl, "etl_replica_reader")),
                 new JdbcMartLoadAdapter(() -> open(martUrl, "etl_mart_writer"), Clock.system(ZoneId.of("Asia/Seoul"))),
-                new Pseudonymizer("grants-test-key-0001-0123456789abcdef".getBytes(StandardCharsets.UTF_8)));
+                new JdbcLoadLockAdapter(() -> open(martUrl, "etl_mart_writer")),
+                new Pseudonymizer(TestKeys.bytes("g")));
 
         LoadResult result = service.load(D);
 
