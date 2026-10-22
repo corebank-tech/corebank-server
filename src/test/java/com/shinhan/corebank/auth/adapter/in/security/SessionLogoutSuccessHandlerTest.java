@@ -33,8 +33,8 @@ class SessionLogoutSuccessHandlerTest {
 
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(response.getCharacterEncoding()).isEqualTo(StandardCharsets.UTF_8.name());
-        assertThat(body.get("code").asText()).isEqualTo("0000");
-        assertThat(body.get("message").asText()).isEqualTo("로그아웃되었습니다.");
+        assertThat(body.get("code").asString()).isEqualTo("0000");
+        assertThat(body.get("message").asString()).isEqualTo("로그아웃되었습니다.");
         assertThat(body.get("data").isNull()).isTrue();
         assertCachePreventionHeaders(response);
     }
@@ -49,7 +49,7 @@ class SessionLogoutSuccessHandlerTest {
         JsonNode body = objectMapper.readTree(response.getContentAsByteArray());
 
         assertThat(response.getStatus()).isEqualTo(401);
-        assertThat(body.get("code").asText()).isEqualTo("CMN0101");
+        assertThat(body.get("code").asString()).isEqualTo("CMN0101");
         assertThat(body.get("data").isNull()).isTrue();
         assertCachePreventionHeaders(response);
     }
