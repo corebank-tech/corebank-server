@@ -77,7 +77,7 @@
 
 ## `SPRING_SESSION` / `SPRING_SESSION_ATTRIBUTES` (PH-49c)
 
-Spring Session JDBC 표준 스키마. Flyway `V202610180900`으로만 생성하며 JPA 엔티티를 만들지 않는다.
+Spring Session JDBC 표준 스키마. Flyway `V202610221420`으로만 생성하며 JPA 엔티티를 만들지 않는다.
 세션의 시각은 프레임워크 계약에 따라 **UTC epoch 밀리초 BIGINT**이고 업무 테이블의 KST DATETIME(6) 규약의 예외다.
 
 | 테이블 | 컬럼 | 타입 | 키·NULL | 의미 |
