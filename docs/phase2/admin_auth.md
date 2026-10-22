@@ -203,6 +203,7 @@ SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS 
 |---|---|---|
 | `/admin/customers` | `CUSTOMER_READ` | `CUSTOMER_WRITE` |
 | `/admin/trial-balance` | `GL_READ` | — (조회 전용) |
+| `/admin/gl/integrity-check` | `GL_READ` | — (조회 전용) |
 | `/admin/ledger-reconciliation` | `AUDIT_READ` | — (조회 전용) |
 
 조회 전용 경로는 GET 규칙만 두어 변경 요청이 맨 아래 `denyAll` 로 떨어진다. 쓰기 권한을 미리

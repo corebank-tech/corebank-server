@@ -2,7 +2,7 @@
 # PH-28b 60b 오탐 기준선. 깨끗한 60b 위에서 거래일마다 GL 정합성 점검과 시산표를 한 번씩 호출해 결과를 TSV로 남긴다.
 #
 # 읽기만 한다. 결함을 주입하지 않는다. 탐지율은 GlIntegrityCheckFaultDetectionTest 행렬이 정본이다.
-# 앱은 local 프로필로 측정 DB에 붙여 띄우고, 로그인한 계정의 customer_id를 ADMIN_BOOTSTRAP_CUSTOMER_IDS로 넘긴다.
+# 앱은 local 프로필로 측정 DB에 붙여 띄운다. GL_READ 권한이 있는 관리자로 관리자 로그인을 한다(admin_auth.md §6).
 #
 # 사용: BASE_URL=http://localhost:18080/api/v1 ADMIN_ID=adminreader ADMIN_PW='Admin1234!' \
 #       ./run_baseline.sh 2026-09-01 2026-10-05 > baseline.tsv
@@ -15,7 +15,7 @@ JAR=$(mktemp)
 trap 'rm -f "$JAR"' EXIT
 
 curl -sf -c "$JAR" -H 'Content-Type: application/json' \
-  -d "{\"userId\":\"${ADMIN_ID:?}\",\"password\":\"${ADMIN_PW:?}\"}" "$BASE_URL/auth/login" > /dev/null
+  -d "{\"userId\":\"${ADMIN_ID:?}\",\"password\":\"${ADMIN_PW:?}\"}" "$BASE_URL/admin/auth/login" > /dev/null
 
 printf 'tradeDate\tchecked\texcluded\tunbalanced\tmismatch\torphan\torphanFinal\tclean\ttrialBalanced\tcheckMs\n'
 day=$FROM

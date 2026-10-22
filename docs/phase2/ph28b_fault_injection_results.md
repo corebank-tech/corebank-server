@@ -102,9 +102,8 @@ SEED="--spring.profiles.active=local,phase2-seed --spring.main.web-application-t
 java -jar build/libs/corebank-0.0.1-SNAPSHOT.jar $SEED --app.phase2-seed.minimum.execute=true
 java -jar build/libs/corebank-0.0.1-SNAPSHOT.jar $SEED --app.phase2-seed.bulk.execute=true
 
-# 관리자 계정을 먼저 넣고 그 customer_id로 /admin/** 허용 목록을 연다
-docker exec -i ph28b-perf-mysql mysql -uroot -plocalpw minicore < src/main/resources/db/seed/local-admin-accounts.sql
-ADMIN_BOOTSTRAP_CUSTOMER_IDS=<adminreader customer_id> java -Xms1g -Xmx1g -jar build/libs/corebank-0.0.1-SNAPSHOT.jar \
+# local 프로필이 GL_READ 권한을 가진 adminreader 관리자 계정을 넣는다
+java -Xms1g -Xmx1g -jar build/libs/corebank-0.0.1-SNAPSHOT.jar \
   --spring.profiles.active=local --server.port=18080 --spring.datasource.url="$URL" \
   --spring.datasource.username=root --spring.datasource.password=localpw
 

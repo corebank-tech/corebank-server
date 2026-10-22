@@ -5,15 +5,19 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.shinhan.corebank.AdminAccountFixture;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.customer.api.AdminPermission;
 import com.shinhan.corebank.gl.adapter.out.persistence.GlVoucherPersistenceAdapter;
 import com.shinhan.corebank.gl.api.GlTxType;
 import com.shinhan.corebank.gl.domain.JournalEntry;
 import com.shinhan.corebank.gl.domain.Voucher;
 import com.shinhan.corebank.gl.domain.VoucherNumber;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,20 +25,17 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
-// 허용 목록 값을 AdminTrialBalanceControllerTest 와 같게 둬 Spring 컨텍스트를 공유한다.
 @AutoConfigureMockMvc
 @Transactional
-@TestPropertySource(
-        properties = "app.security.admin.bootstrap-customer-ids=" + AdminGlIntegrityCheckControllerTest.ADMIN_ID)
 @DisplayName("관리자 GL 정합성 점검 API")
 class AdminGlIntegrityCheckControllerTest extends IntegrationTestSupport {
 
-    static final long ADMIN_ID = 944900001L;
+    private static final long ADMIN_ID = 944920002L;
+    private static final long AUDITOR_ID = 944920003L;
 
     // 시드와 다른 테스트와 겹치지 않는 거래일·원장 ID 대역(2031-06).
     private static final LocalDate DAY = LocalDate.of(2031, 6, 10);
@@ -47,6 +48,16 @@ class AdminGlIntegrityCheckControllerTest extends IntegrationTestSupport {
 
     @Autowired
     JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    EntityManager entityManager;
+
+    // 인가는 customer.role 과 admin_permission 행을 읽는다(admin_auth.md §6).
+    @BeforeEach
+    void grantAdminPermission() {
+        AdminAccountFixture.createAdmin(entityManager, ADMIN_ID, AdminPermission.GL_READ);
+        AdminAccountFixture.createAdmin(entityManager, AUDITOR_ID, AdminPermission.AUDIT_READ);
+    }
 
     @Test
     @DisplayName("200 · 0000 으로 두 점검 결과와 건수를 내려준다")
@@ -116,8 +127,13 @@ class AdminGlIntegrityCheckControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("허용 목록 밖 고객은 403 CMN0102")
-    void rejectsCustomerOutsideAllowList() throws Exception {
+    @DisplayName("GL_READ 가 없는 관리자와 관리자가 아닌 고객은 403 CMN0102")
+    void rejectsWithoutGlRead() throws Exception {
+        mockMvc.perform(get("/admin/gl/integrity-check")
+                        .param("tradeDate", "2031-06-10")
+                        .with(admin(AUDITOR_ID, AdminPermission.AUDIT_READ)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CMN0102"));
         mockMvc.perform(get("/admin/gl/integrity-check")
                         .param("tradeDate", "2031-06-10")
                         .with(customer(944900999L)))
@@ -141,8 +157,17 @@ class AdminGlIntegrityCheckControllerTest extends IntegrationTestSupport {
                 DAY);
     }
 
+    // 인가는 로그인 때 세션에 실린 authority 만 본다. 실제 로그인까지 잇는 검증은
+    // AdminCustomerAccountOperationIntegrationTest 가 맡는다.
     private RequestPostProcessor admin() {
-        return customer(ADMIN_ID);
+        return admin(ADMIN_ID, AdminPermission.GL_READ);
+    }
+
+    private RequestPostProcessor admin(long customerId, AdminPermission permission) {
+        return authentication(UsernamePasswordAuthenticationToken.authenticated(
+                new AuthenticatedCustomer(customerId, "ph28badmin", "관리자"),
+                null,
+                AuthorityUtils.createAuthorityList("ROLE_ADMIN", permission.name())));
     }
 
     private RequestPostProcessor customer(long customerId) {

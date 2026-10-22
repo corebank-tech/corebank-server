@@ -17,8 +17,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-// 관리자 GL 정합성 점검(PH-28b). /admin/** 인가는 SecurityConfig 의 임시 허용 목록(#448)이 맡는다 —
-// PH-49a 역할 기반 인가가 들어오면 GL_READ 로 바꾼다. 개인정보가 없어 조회 사유(PH-89)는 받지 않는다.
+// 관리자 GL 정합성 점검(PH-28b). 인가는 SecurityConfig 의 경로별 권한 매핑이 GL_READ 로 판정한다.
+// 개인정보가 없어 조회 사유(PH-89)는 받지 않는다.
 @RestController
 @RequestMapping("/admin/gl/integrity-check")
 @RequiredArgsConstructor
@@ -53,7 +53,7 @@ public class AdminGlIntegrityCheckController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "`CMN0102` 관리자 허용 목록 밖",
+                description = "`CMN0102` 권한 없음",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ApiResponse<GlIntegrityCheckResponse> check(
