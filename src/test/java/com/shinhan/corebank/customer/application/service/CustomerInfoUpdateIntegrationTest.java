@@ -27,7 +27,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 
-@DisplayName("고객정보 변경 MySQL·Redis 통합 테스트")
+@DisplayName("고객정보 변경 MySQL 통합 테스트")
 class CustomerInfoUpdateIntegrationTest extends IntegrationTestSupport {
 
     private static final AtomicLong SEQUENCE = new AtomicLong();
@@ -55,7 +55,7 @@ class CustomerInfoUpdateIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("인증된 이메일과 휴대폰 번호를 저장하고 Redis 토큰을 소비한다")
+    @DisplayName("인증된 이메일과 휴대폰 번호를 저장하고 인증 토큰을 소비한다")
     void updatesContactInfoAndConsumesEmailToken() {
         long sequence = SEQUENCE.incrementAndGet();
         Long customerId = insertCustomer(sequence);
@@ -99,7 +99,7 @@ class CustomerInfoUpdateIntegrationTest extends IntegrationTestSupport {
         assertThat(emailVerificationTokenPort.find(token)).isPresent();
     }
 
-    // 실제 Redis에 이메일 인증 완료 토큰을 저장한다.
+    // 실제 토큰 저장소에 이메일 인증 완료 토큰을 저장한다.
     private void saveEmailToken(String token, String email, EmailVerificationPurpose purpose) {
         emailTokens.add(token);
         emailVerificationTokenPort.save(

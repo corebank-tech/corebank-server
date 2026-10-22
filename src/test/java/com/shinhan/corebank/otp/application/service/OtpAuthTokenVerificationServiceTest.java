@@ -64,8 +64,8 @@ class OtpAuthTokenVerificationServiceTest {
     }
 
     @Test
-    @DisplayName("Redis 페이로드 고객이 세션 고객과 다르면 OTP0101을 반환한다")
-    void redisCustomerMismatchReturnsInvalidToken() {
+    @DisplayName("저장된 페이로드 고객이 세션 고객과 다르면 OTP0101을 반환한다")
+    void storedCustomerMismatchReturnsInvalidToken() {
         Map<String, Object> data = Map.of("amount", 100_000L);
         when(tokenStorePort.find("OTP_AUTH_test")).thenReturn(Optional.of(payload(2L)));
 
@@ -82,7 +82,7 @@ class OtpAuthTokenVerificationServiceTest {
     }
 
     @Test
-    @DisplayName("DB 요청 고객이 세션 및 Redis 고객과 다르면 OTP0101을 반환한다")
+    @DisplayName("DB 요청 고객이 세션 및 저장된 페이로드 고객과 다르면 OTP0101을 반환한다")
     void databaseCustomerMismatchReturnsInvalidToken() {
         Map<String, Object> data = Map.of("amount", 100_000L);
         when(tokenStorePort.find("OTP_AUTH_test")).thenReturn(Optional.of(payload(1L)));

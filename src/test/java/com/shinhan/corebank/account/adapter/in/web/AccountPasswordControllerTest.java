@@ -42,7 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-// 계좌상세 및 계좌비밀번호 검증 API의 실제 DB·Redis 계약을 검증한다.
+// 계좌상세 및 계좌비밀번호 검증 API의 실제 DB 계약을 검증한다.
 @AutoConfigureMockMvc
 @Transactional
 class AccountPasswordControllerTest extends IntegrationTestSupport {
