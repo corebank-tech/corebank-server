@@ -121,10 +121,12 @@ flowchart TB
 
 ### 3-3. 이벤트·아웃박스
 
-1. BEFORE_COMMIT 리스너가 아웃박스에 적재한다. **INSERT가 실패하면 원본 이체도 롤백된다.** 의도된 동작이다.
-2. 리스너는 **`JdbcTemplate`로 INSERT**한다. JPA `persist`는 플러시 순서 때문에 실리지 않을 수 있다.
-3. 실패 이벤트는 `failTransfer()`의 REQUIRES_NEW 안에서 발행한다. **`AFTER_COMMIT` 리스너는 없다.**
-4. 릴레이는 `BatchExecutionLockPort`(ADR-0003)로 단일 인스턴스에서만 돈다.
+> 1·2·4와 3의 「`AFTER_COMMIT` 리스너는 없다」는 [D-32](#d-32--1019--p1)([ADR-0010](../adr/0010-outbox-spring-modulith-event-publication-registry.md))로 바뀌었다. 아웃박스는 Spring Modulith Event Publication Registry다.
+
+1. 발행 기록(`EVENT_PUBLICATION`)은 라이브러리가 업무 트랜잭션 안에서 남긴다. **업무와 기록이 같은 커밋에 실리고, 업무가 롤백되면 기록도 남지 않는다.**
+2. 구독자는 **AFTER_COMMIT 리스너**다. 이 리스너가 있어야 기록이 남고, 성공하면 기록이 지워진다.
+3. 실패 이벤트는 `failTransfer()`의 REQUIRES_NEW 안에서 발행한다.
+4. 재전달은 `IncompleteEventPublications` 재제출로 한다. At-Least-Once라 구독 측 멱등이 필요하다.
 5. 알림 유형은 기존 4종 그대로다. 만기·휴면·보안 알림은 없다.
 
 ### 3-4. 관리자 인증·감사
@@ -493,6 +495,13 @@ S3 작업의 머지 기한을 나눈다. 인프라 예외는 P2와 P5가, PH-45�
 - 10/23 범위 판정: S1과 S2 이월은 PH-01(3)과 PH-89(2.5)로 5.5인일이다(PH-96-① PR #703이 10/22에 머지된다는 전제). 5인일을 넘지만 범위는 줄이지 않는다. P1 S3 작업과 함께 위처럼 릴리스 3 기한으로 나눠 담는다.
 
 ---
+
+### D-32 · 10/19 · P1
+
+아웃박스를 직접 만들지 않고 Spring Modulith Event Publication Registry로 구현한다([ADR-0010](../adr/0010-outbox-spring-modulith-event-publication-registry.md), [#437](https://github.com/corebank-tech/corebank-server/issues/437)). [ADR-0005](../adr/0005-no-spring-batch-mq-api-gateway.md)의 「MQ 대신 아웃박스」는 그대로이고 구현 방법만 바뀐다.
+
+- §3-3의 BEFORE_COMMIT `JdbcTemplate` INSERT와 `BatchExecutionLockPort` 릴레이를 대체한다. 구독자는 AFTER_COMMIT 리스너이고, 재전달은 재제출 API로 한다.
+- 인일과 담당은 바뀌지 않는다. PH-96-② 실패 처리 단계는 [tasks.md](tasks.md#ph-96-transactional-outbox-①-발행측릴레이-s2--②-구독-s3)에 적었다.
 
 ## 8. 미결
 
