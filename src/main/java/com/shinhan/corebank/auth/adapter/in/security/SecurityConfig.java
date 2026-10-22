@@ -171,6 +171,8 @@ public class SecurityConfig {
                         .hasAuthority(AdminPermission.CUSTOMER_WRITE.name())
                         .requestMatchers(pathPattern(HttpMethod.GET, "/admin/trial-balance/**"))
                         .hasAuthority(AdminPermission.GL_READ.name())
+                        .requestMatchers(pathPattern(HttpMethod.GET, "/admin/info/**"))
+                        .hasAuthority(AdminPermission.GL_READ.name())
                         .requestMatchers(pathPattern(HttpMethod.GET, "/admin/gl/integrity-check/**"))
                         .hasAuthority(AdminPermission.GL_READ.name())
                         .requestMatchers(pathPattern(HttpMethod.GET, "/admin/ledger-reconciliation/**"))
