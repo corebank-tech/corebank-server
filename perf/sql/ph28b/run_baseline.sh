@@ -29,5 +29,6 @@ while [[ "$day" < "$TO" || "$day" == "$TO" ]]; do
               (.excludedTransactionCounts | to_entries | map("\(.key)=\(.value)") | join(",")),
               .unbalancedVoucherCount, .ledgerVoucherMismatchCount, .orphanVoucherCount,
               .orphanVoucherCountFinal, .clean, $balanced, $ms ] | @tsv' <<<"$check"
-  day=$(date -j -v+1d -f %Y-%m-%d "$day" +%Y-%m-%d)
+  # macOS와 리눅스의 date 옵션이 달라 이미 쓰는 perl로 다음 날을 구한다
+  day=$(perl -MTime::Piece -MTime::Seconds -e 'print((Time::Piece->strptime($ARGV[0], "%Y-%m-%d") + ONE_DAY)->ymd)' "$day")
 done
