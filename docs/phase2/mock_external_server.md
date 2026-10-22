@@ -74,6 +74,16 @@ curl 'http://<주소>:9301/faults'                                  # 지금 모
 - 스위치는 서버 전체에 걸린다. 조회거래에도 똑같이 적용되므로, "무응답 → 조회" 흐름은 조회 전에 `NONE`으로 되돌린다.
 - 알 수 없는 `mode`는 `400`으로 거부하고 스위치를 바꾸지 않는다.
 
+**EC2(B 단계)에서는** 9301을 호스트에 열지 않았고 이미지에 `curl`이 없다. 컨테이너 안에서 `wget`으로 켠다.
+
+```bash
+docker exec corebank-mock-external wget -qO- --post-data='' 'http://localhost:9301/faults?mode=NO_RESPONSE'
+docker exec corebank-mock-external wget -qO- --post-data='' 'http://localhost:9301/faults?mode=NONE'   # 되돌림
+docker exec corebank-mock-external wget -qO- 'http://localhost:9301/faults'                            # 지금 모드
+```
+
+- **장부는 메모리에만 있어 컨테이너를 다시 만들면 비워진다.** 장애 테스트 중에 `main`이 배포되면 "무응답 → 조회" 흐름이 깨진다.
+
 ## 5. P5에 넘기는 실행 계약
 
 온프레미스 부트캠프 VM의 대외·모니터링 영역([README.md D-25](README.md#d-25--927--리드-제안1020-팀-확정), [PH-100](tasks.md#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3))에 띄울 때 필요한 것은 아래가 전부다. 코드를 볼 필요는 없다.

@@ -1,0 +1,6 @@
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+COPY build/mock-external/mock-external.jar mock-external.jar
+ENV JAVA_TOOL_OPTIONS="-Duser.timezone=Asia/Seoul -Xmx128m"
+EXPOSE 9300 9301
+ENTRYPOINT ["java","-jar","mock-external.jar","--bind=0.0.0.0","--port=9300","--admin-port=9301"]

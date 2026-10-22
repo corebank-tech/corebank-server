@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 42개 테이블(38개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개 + `business_date_cutoff` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 43개 테이블(39개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개 + `business_date_cutoff` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -9,7 +9,7 @@
 erDiagram
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 28개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
+    %% MySQL 8.4 / 43개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -114,6 +114,18 @@ erDiagram
           date effective_business_date "NULL 허용. 상태 전이 기준 영업일"
           datetime changed_at "DATETIME(6)"
           varchar trigger_type "VARCHAR(20). COB"
+    }
+
+    interest_payment {
+        bigint interest_payment_id PK "AUTO_INCREMENT"
+        bigint account_id UK "계좌당 이자 지급 최대 1회, 물리적 FK 없음"
+        varchar payment_reason "MATURITY / TERMINATION"
+        bigint gross_amount "세전이자"
+        bigint tax_amount "원천징수 세금"
+        bigint net_amount "세후이자"
+        char transaction_number UK "CHAR(20), NULL 허용"
+        date trade_date "원장 거래일, NULL 허용"
+        datetime paid_at "DATETIME(6), KST"
     }
 
     account_number_sequence {
@@ -482,6 +494,7 @@ erDiagram
     customer ||--o{ product_subscription : "가입"
     product ||--o{ product_subscription : "가입대상"
     account ||--o| product_subscription : "개설계좌"
+    account ||..o| interest_payment : "이자 지급 이력 (논리 관계, FK 없음)"
     product_subscription ||--o{ subscription_terms_agreement : "약관동의"
     terms ||--o{ subscription_terms_agreement : "약관동의"
     customer ||--o{ scheduled_transfer : "예약"
