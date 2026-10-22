@@ -1,8 +1,11 @@
 package com.shinhan.corebank.subscription.adapter.out.persistence;
 
+import com.shinhan.corebank.subscription.api.InterestPaymentReason;
 import com.shinhan.corebank.subscription.application.port.out.InterestPaymentHistoryPort.InterestPaymentRecord;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -27,8 +30,9 @@ public class InterestPaymentJpaEntity {
     @Column(name = "account_id", nullable = false)
     private Long accountId;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "payment_reason", nullable = false, length = 12)
-    private String paymentReason;
+    private InterestPaymentReason paymentReason;
 
     @Column(name = "gross_amount", nullable = false)
     private Long grossAmount;
@@ -53,7 +57,7 @@ public class InterestPaymentJpaEntity {
         InterestPaymentJpaEntity entity = new InterestPaymentJpaEntity();
 
         entity.accountId = payment.accountId();
-        entity.paymentReason = payment.reason().name();
+        entity.paymentReason = payment.reason();
         entity.grossAmount = payment.gross();
         entity.taxAmount = payment.tax();
         entity.netAmount = payment.net();
