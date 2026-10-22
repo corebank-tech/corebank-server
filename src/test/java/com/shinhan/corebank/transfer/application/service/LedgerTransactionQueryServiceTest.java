@@ -40,7 +40,7 @@ class LedgerTransactionQueryServiceTest {
     private LedgerTransactionQueryService service;
 
     @Test
-    @DisplayName("직전 날이 영업일이면 발생 시각과 거래번호 범위를 거래일부터 2일 뒤 전까지로 좁혀 포트에 넘긴다")
+    @DisplayName("직전 날이 영업일이면 발생 시각과 거래번호 범위를 그 영업일부터 거래일 2일 뒤 전까지로 좁혀 포트에 넘긴다")
     void narrowsRangeToTradeDateAfterBusinessDay() {
         // 2026-10-08(목). 직전 날 10/7(수)은 영업일이다.
         LocalDate thursday = LocalDate.of(2026, 10, 8);
@@ -49,9 +49,9 @@ class LedgerTransactionQueryServiceTest {
                 List.of(new LedgerTransactionSummary("20261008WB0000000001", "IMMEDIATE_TRANSFER", thursday, 1_000L));
         given(port.findByTradeDate(
                         thursday,
-                        LocalDateTime.of(2026, 10, 8, 0, 0),
+                        LocalDateTime.of(2026, 10, 7, 0, 0),
                         LocalDateTime.of(2026, 10, 10, 0, 0),
-                        "20261008",
+                        "20261007",
                         "20261010",
                         "",
                         100))
@@ -61,7 +61,7 @@ class LedgerTransactionQueryServiceTest {
     }
 
     @Test
-    @DisplayName("연휴 뒤 거래일이면 직전 영업일 다음 날부터 읽어 연휴 중 발생한 거래를 포함한다")
+    @DisplayName("연휴 뒤 거래일이면 직전 영업일부터 읽어 그날 COB 뒤 거래와 연휴 중 거래를 포함한다")
     void startsAfterPreviousBusinessDayAcrossHolidays() {
         // TRADE_DATE 2026-10-05(월). 10/3(토, 개천절)과 10/4(일)은 휴일, 10/2(금)은 영업일이다.
         given(businessDateProvider.isBusinessDay(LocalDate.of(2026, 10, 4))).willReturn(false);
@@ -69,9 +69,9 @@ class LedgerTransactionQueryServiceTest {
         given(businessDateProvider.isBusinessDay(LocalDate.of(2026, 10, 2))).willReturn(true);
         given(port.findByTradeDate(
                         TRADE_DATE,
-                        LocalDateTime.of(2026, 10, 3, 0, 0),
+                        LocalDateTime.of(2026, 10, 2, 0, 0),
                         LocalDateTime.of(2026, 10, 7, 0, 0),
-                        "20261003",
+                        "20261002",
                         "20261007",
                         "",
                         100))

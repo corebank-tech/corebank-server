@@ -70,10 +70,33 @@ class LedgerTransactionQueryIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("주말에 발생한 거래와 COB 가 늦어 다음 날 발생한 거래도 그 거래일로 읽는다")
-    void includesWeekendAndLateCobTransactions() {
-        // 2031-04-14 는 월요일이다. 토요일 4/12 에 요청한 거래는 거래번호가 4/12 로 시작하고 거래일은 4/14 다.
+    @DisplayName("COB 뒤 자정 전에 발생한 거래는 다음 거래일로 읽는다")
+    void includesTransactionsAfterCobBeforeMidnight() {
+        // COB 는 23:30 에 영업일을 넘긴다. 4/15(화) 23:40 거래는 4/15 로 채번되고 거래일은 4/16(수)이다.
+        LocalDate wednesday = TRADE_DATE.plusDays(1);
+        insertPair(
+                "20310415WB0000000002",
+                "IMMEDIATE_TRANSFER",
+                1_000L,
+                wednesday,
+                at(TRADE_DATE, 23).plusMinutes(40));
+
+        assertThat(query.findByTradeDate(wednesday, null, 100))
+                .extracting(LedgerTransactionSummary::transactionNumber)
+                .containsExactly("20310415WB0000000002");
+    }
+
+    @Test
+    @DisplayName("금요일 COB 뒤 거래, 주말 거래, COB 가 자정을 넘겨 다음 날 발생한 거래를 모두 월요일 거래일로 읽는다")
+    void includesFridayAfterCobWeekendAndLateCobTransactions() {
+        // 2031-04-14 는 월요일이다. 직전 영업일은 4/11(금)이다.
         LocalDate monday = LocalDate.of(2031, 4, 14);
+        insertPair(
+                "20310411WB0000000001",
+                "IMMEDIATE_TRANSFER",
+                3_000L,
+                monday,
+                at(LocalDate.of(2031, 4, 11), 23).plusMinutes(40));
         insertPair("20310412WB0000000001", "SCHEDULED_TRANSFER", 1_000L, monday, at(LocalDate.of(2031, 4, 12), 9));
         insertPair(
                 "20310415WB0000000001",
@@ -84,7 +107,7 @@ class LedgerTransactionQueryIntegrationTest extends IntegrationTestSupport {
 
         assertThat(query.findByTradeDate(monday, null, 100))
                 .extracting(LedgerTransactionSummary::transactionNumber)
-                .containsExactly("20310412WB0000000001", "20310415WB0000000001");
+                .containsExactly("20310411WB0000000001", "20310412WB0000000001", "20310415WB0000000001");
     }
 
     @Test
