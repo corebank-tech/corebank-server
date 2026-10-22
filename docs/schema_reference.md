@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 39개 비즈니스 테이블 + 5개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`) · 375개 컬럼
+**대상**: 39개 비즈니스 테이블 + 7개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`) · 테이블 목록 기준 385개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -69,11 +69,36 @@
 | 41 | `account_status_history` | 계좌 상태 전이 이력 | P2 | 8 |
 | 42 | `business_date_cutoff` | 영업일 마감 cutoff | P5 | 4  |
 | 43 | `interest_payment` | 예적금 이자 지급 이력 | P2 | 9 |
-| 44 | `cob_checkpoint` | COB 재시작 체크포인트 | P5 | 5 |
+| 44 | `SPRING_SESSION` | 공용 HTTP 세션 | P6 | 7 |
+| 45 | `SPRING_SESSION_ATTRIBUTES` | 직렬화된 세션 속성 | P6 | 3 |
+| 46 | `cob_checkpoint` | COB 재시작 체크포인트 | P5 | 5 |
 
 ---
 
 # 1. 고객 · 인증 — P6
+
+## `SPRING_SESSION` / `SPRING_SESSION_ATTRIBUTES` (PH-49c)
+
+Spring Session JDBC 표준 스키마. Flyway `V202610221420`으로만 생성하며 JPA 엔티티를 만들지 않는다.
+세션의 시각은 프레임워크 계약에 따라 **UTC epoch 밀리초 BIGINT**이고 업무 테이블의 KST DATETIME(6) 규약의 예외다.
+
+| 테이블 | 컬럼 | 타입 | 키·NULL | 의미 |
+|---|---|---|---|---|
+| SPRING_SESSION | PRIMARY_ID | CHAR(36) | PK, NOT NULL | 내부 세션 행 UUID |
+| SPRING_SESSION | SESSION_ID | CHAR(36) | UK, NOT NULL | 쿠키로 연결하는 세션 ID |
+| SPRING_SESSION | CREATION_TIME | BIGINT | NOT NULL | 생성 epoch ms |
+| SPRING_SESSION | LAST_ACCESS_TIME | BIGINT | NOT NULL | 마지막 접근 epoch ms |
+| SPRING_SESSION | MAX_INACTIVE_INTERVAL | INT | NOT NULL | 무조작 만료 초: 고객 600, 관리자 1800(PH-49a-② 로그인 정책) |
+| SPRING_SESSION | EXPIRY_TIME | BIGINT | INDEX, NOT NULL | 만료 epoch ms |
+| SPRING_SESSION | PRINCIPAL_NAME | VARCHAR(100) | INDEX, NULL 허용 | 인증 고객 PK 문자열, 익명 세션은 NULL |
+| SPRING_SESSION_ATTRIBUTES | SESSION_PRIMARY_ID | CHAR(36) | 복합 PK·FK, NOT NULL | PRIMARY_ID 참조, ON DELETE CASCADE |
+| SPRING_SESSION_ATTRIBUTES | ATTRIBUTE_NAME | VARCHAR(200) | 복합 PK, NOT NULL | SPRING_SECURITY_CONTEXT 등 속성 이름 |
+| SPRING_SESSION_ATTRIBUTES | ATTRIBUTE_BYTES | BLOB | NOT NULL | 직렬화한 속성 값 |
+
+인덱스: `SPRING_SESSION_IX1(SESSION_ID)` UNIQUE, `SPRING_SESSION_IX2(EXPIRY_TIME)`,
+`SPRING_SESSION_IX3(PRINCIPAL_NAME)`. PRINCIPAL_NAME은 고객 FK가 아닌 프레임워크 검색 인덱스다.
+로그아웃은 해당 세션만 삭제하고 고객 비밀번호 변경은 고객 PK로 모든 세션을 삭제한다.
+세션 삭제는 해당 업무 트랜잭션에 참여하므로 업무 롤백 시 함께 롤백한다. 만료 행 정리는 매분이며 인증 만료는 즉시 적용된다.
 
 ## `customer`
 
@@ -1151,7 +1176,7 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 | --- | --- | --- | --- | --- | --- |
 | `voucher_no` | `VARCHAR(20)` | **PK** | X |  | 전표번호. 영업일 + 유형 + 일련 |
 | `trade_date` | `DATE` |  | X |  | 이 전표가 귀속되는 영업일 |
-| `tx_type` | `VARCHAR(24)` |  | X |  | `OPENING` / `TRANSFER` / `PRODUCT_SUBSCRIPTION` / `INTEREST` / `REVERSAL` / `INTERBANK_TRANSFER`(타행 송신 요청) / `INTERBANK_SETTLEMENT`(타행 확정 해소) |
+| `tx_type` | `VARCHAR(24)` |  | X |  | `OPENING` / `TRANSFER` / `PRODUCT_SUBSCRIPTION` / `INTEREST` / `REVERSAL` / `INTERBANK_TRANSFER`(타행 송신 요청) / `INTERBANK_SETTLEMENT`(타행 확정 해소) / `MATURITY`(만기해지 원리금 이체) / `TERMINATION`(중도해지 원리금 이체) |
 | `reference_key` | `VARCHAR(40)` |  | X |  | 원 거래번호. 원장 `transaction_number` 와 같은 값이고 개시 전표는 `OPENING-{yyyyMMdd}`. 원장과 전표를 1:1 로 잇는다(PH-24). 타행이체만 한 거래번호에 `INTERBANK_TRANSFER`·`INTERBANK_SETTLEMENT` 두 전표가 붙는다(`gl_journal_patterns.md` §3-5) |
 | `description` | `VARCHAR(200)` |  | O |  | 적요 |
 | `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
@@ -1160,7 +1185,7 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 
 | 이름 | 내용 | 이유 |
 | --- | --- | --- |
-| `ck_gl_voucher_tx_type` | 7개 유형 중 하나 | `REVERSAL` 은 정정 체인 취소정정(PH-24). `INTERBANK_TRANSFER`·`INTERBANK_SETTLEMENT` 는 타행 미결제 2패턴([분개 패턴표](phase2/gl_journal_patterns.md) §3-5, PH-33-②). 두 전표는 같은 원 거래번호를 참조 키로 쓴다 |
+| `ck_gl_voucher_tx_type` | 9개 유형 중 하나 | `REVERSAL` 은 정정 체인 취소정정(PH-24). `INTERBANK_TRANSFER`·`INTERBANK_SETTLEMENT` 는 타행 미결제 2패턴([분개 패턴표](phase2/gl_journal_patterns.md) §3-5, PH-33-②). 두 전표는 같은 원 거래번호를 참조 키로 쓴다. `MATURITY`·`TERMINATION` 은 예적금 원리금 이체(분개 패턴표 §3-7, #713) |
 
 **인덱스**
 

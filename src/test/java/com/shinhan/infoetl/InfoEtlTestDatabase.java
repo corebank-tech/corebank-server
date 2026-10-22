@@ -24,6 +24,7 @@ public final class InfoEtlTestDatabase {
             "DROP TABLE IF EXISTS product",
             "DROP TABLE IF EXISTS product_subscription",
             "DROP TABLE IF EXISTS holiday",
+            "DROP TABLE IF EXISTS business_date_cutoff",
             "DROP TABLE IF EXISTS gl_journal_entry",
             "CREATE TABLE ledger_entry (ledger_entry_id BIGINT NOT NULL, account_id BIGINT NOT NULL,"
                     + " transaction_number CHAR(20) NULL, direction VARCHAR(10) NULL,"
@@ -39,6 +40,9 @@ public final class InfoEtlTestDatabase {
                     + " customer_id BIGINT NOT NULL, product_id BIGINT NOT NULL, account_id BIGINT NULL,"
                     + " status VARCHAR(12) NOT NULL, subscribed_at DATETIME(6) NULL, subscription_trade_date DATE NULL)",
             "CREATE TABLE holiday (holiday_date DATE NOT NULL PRIMARY KEY, holiday_name VARCHAR(50) NOT NULL)",
+            "CREATE TABLE business_date_cutoff (business_date_cutoff_id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,"
+                    + " base_date DATE NOT NULL, status VARCHAR(10) NOT NULL, closed_at DATETIME(6) NOT NULL,"
+                    + " UNIQUE KEY uk_cutoff (base_date, status))",
             "CREATE TABLE gl_journal_entry (journal_entry_id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,"
                     + " account_code CHAR(5) NOT NULL, dr_cr VARCHAR(6) NOT NULL, amount BIGINT NOT NULL,"
                     + " trade_date DATE NOT NULL)");

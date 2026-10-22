@@ -1,15 +1,30 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 44개 테이블(39개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개 + `business_date_cutoff` 1개 + `cob_checkpoint` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 46개 테이블(39개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트 5개 + Spring Session 2개), [스키마 목록](schema_reference.md#테이블-목록) 기준 385개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT.
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
 
 ```mermaid
 erDiagram
+    SPRING_SESSION {
+        char PRIMARY_ID PK "CHAR(36)"
+        char SESSION_ID UK "CHAR(36)"
+        bigint CREATION_TIME "epoch ms"
+        bigint LAST_ACCESS_TIME "epoch ms"
+        int MAX_INACTIVE_INTERVAL "seconds"
+        bigint EXPIRY_TIME "epoch ms, INDEX"
+        varchar PRINCIPAL_NAME "VARCHAR(100), 고객 PK 문자열, INDEX"
+    }
+    SPRING_SESSION_ATTRIBUTES {
+        char SESSION_PRIMARY_ID PK,FK "CHAR(36)"
+        varchar ATTRIBUTE_NAME PK "VARCHAR(200)"
+        blob ATTRIBUTE_BYTES "직렬화 속성"
+    }
+    SPRING_SESSION ||--o{ SPRING_SESSION_ATTRIBUTES : "ON DELETE CASCADE"
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 44개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
+    %% MySQL 8.4 / 46개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -423,7 +438,7 @@ erDiagram
     gl_voucher {
         varchar voucher_no PK "VARCHAR(20). yyyyMMdd-TTT-NNNNNN. gl_voucher_sequence 가 채번"
         date trade_date "귀속 영업일"
-        varchar tx_type "OPENING / TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / REVERSAL / INTERBANK_TRANSFER / INTERBANK_SETTLEMENT"
+        varchar tx_type "OPENING / TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / REVERSAL / INTERBANK_TRANSFER / INTERBANK_SETTLEMENT / MATURITY / TERMINATION"
         varchar reference_key UK "VARCHAR(40). 원 거래번호. (tx_type, reference_key) 유일"
         varchar description "VARCHAR(200). 적요"
         datetime created_at "DATETIME(6). 전표는 수정하지 않아 updated_at 없음"

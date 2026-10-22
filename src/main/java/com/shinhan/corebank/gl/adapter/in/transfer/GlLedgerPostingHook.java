@@ -6,6 +6,7 @@ import com.shinhan.corebank.gl.api.JournalDirection;
 import com.shinhan.corebank.gl.api.JournalLine;
 import com.shinhan.corebank.gl.api.JournalPostingUseCase;
 import com.shinhan.corebank.gl.api.JournalRequest;
+import com.shinhan.corebank.gl.domain.LedgerVoucherTypes;
 import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
@@ -39,13 +40,9 @@ public class GlLedgerPostingHook implements LedgerPostingHook {
                         new JournalLine(DEPOSIT_ACCOUNT, JournalDirection.CREDIT, context.amount()))));
     }
 
-    // 원장 transaction_type 값이 들어온다(LedgerPostingContext).
+    // 원장 transaction_type 값이 들어온다(LedgerPostingContext). 매핑은 원장↔전표 대사와 같이 쓴다(LedgerVoucherTypes).
     private static GlTxType toGlTxType(String ledgerTransactionType) {
-        return switch (ledgerTransactionType) {
-            case "IMMEDIATE_TRANSFER", "SCHEDULED_TRANSFER", "AUTO_TRANSFER" -> GlTxType.TRANSFER;
-            case "PRODUCT_SUBSCRIPTION" -> GlTxType.PRODUCT_SUBSCRIPTION;
-            case "REVERSAL" -> GlTxType.REVERSAL;
-            case null, default -> throw new BusinessException(GlErrorCode.UNSUPPORTED_LEDGER_TX_TYPE);
-        };
+        return LedgerVoucherTypes.voucherTypeOf(ledgerTransactionType)
+                .orElseThrow(() -> new BusinessException(GlErrorCode.UNSUPPORTED_LEDGER_TX_TYPE));
     }
 }

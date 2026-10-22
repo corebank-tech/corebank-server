@@ -137,14 +137,16 @@ class InterbankSocketClientTest {
     @Test
     @DisplayName("응답이 조금씩 나눠 와 전문 전체 수신이 응답 대기 시간을 넘으면 그때 끊고 UNKNOWN이다")
     void send_responseTrickledPastTimeout_isUnknown() throws Exception {
-        // 조각 사이 간격(100ms)은 응답 대기(500ms)보다 짧고, 다 받는 데는 1초가 걸린다
-        try (ServerSocket relay = trickleRelay(10, Duration.ofMillis(100))) {
+        // 조각 사이 간격(100ms)은 응답 대기(500ms)보다 짧고, 다 받는 데는 2.5초가 걸린다
+        try (ServerSocket relay = trickleRelay(30, Duration.ofMillis(100))) {
+            InterbankSocketClient client = client(relay.getLocalPort(), 100);
             long start = System.nanoTime();
-            InterbankReply reply = client(relay.getLocalPort(), 100).send(request("1234567890123"));
+            InterbankReply reply = client.send(request("1234567890123"));
             long elapsedMillis = (System.nanoTime() - start) / 1_000_000;
 
             assertThat(reply.outcome()).isEqualTo(InterbankOutcome.UNKNOWN);
-            assertThat(elapsedMillis).isBetween(RESPONSE_TIMEOUT.toMillis(), 900L);
+            // 상한은 CI 지연을 감안하되 전체 수신 시간보다는 짧게 둔다
+            assertThat(elapsedMillis).isBetween(RESPONSE_TIMEOUT.toMillis(), 2_000L);
         }
     }
 

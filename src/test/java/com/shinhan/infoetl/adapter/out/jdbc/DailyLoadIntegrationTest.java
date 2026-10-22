@@ -8,12 +8,18 @@ import com.shinhan.infoetl.InfoEtlTestDatabase;
 import com.shinhan.infoetl.ReplicaFixtures;
 import com.shinhan.infoetl.TestKeys;
 import com.shinhan.infoetl.application.port.out.EtlStorageException;
+import com.shinhan.infoetl.application.service.AutoLoadService;
+import com.shinhan.infoetl.application.service.CutoffPolicy;
 import com.shinhan.infoetl.application.service.DailyLoadService;
+import com.shinhan.infoetl.application.service.RangeLoadService;
+import com.shinhan.infoetl.domain.CutoffMissingException;
+import com.shinhan.infoetl.domain.FailedDay;
 import com.shinhan.infoetl.domain.LedgerMismatchException;
 import com.shinhan.infoetl.domain.LoadAlreadyRunningException;
 import com.shinhan.infoetl.domain.LoadResult;
 import com.shinhan.infoetl.domain.MartBalanceRow;
 import com.shinhan.infoetl.domain.Pseudonymizer;
+import com.shinhan.infoetl.domain.RangeLoadResult;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -45,6 +51,7 @@ class DailyLoadIntegrationTest {
             new JdbcReplicaEventAdapter(InfoEtlTestDatabase::replica),
             new JdbcReplicaReconciliationAdapter(InfoEtlTestDatabase::replica),
             new JdbcReplicaCalendarAdapter(InfoEtlTestDatabase::replica),
+            CutoffPolicy.disabled(),
             new JdbcMartLoadAdapter(InfoEtlTestDatabase::mart, CLOCK),
             new JdbcLoadLockAdapter(InfoEtlTestDatabase::mart),
             pseudonymizer);
@@ -240,6 +247,54 @@ class DailyLoadIntegrationTest {
     }
 
     @Test
+    @DisplayName("경계일 이후 기준일은 cutoff가 없으면 마트에 아무 기록도 남기지 않고 거부하고, 생기면 적재한다")
+    void afterBoundaryNeedsCutoffInReplica() throws SQLException {
+        DailyLoadService guarded =
+                serviceWith(CutoffPolicy.enabled(D, new JdbcReplicaCutoffAdapter(InfoEtlTestDatabase::replica)));
+
+        assertThatThrownBy(() -> guarded.load(D)).isInstanceOf(CutoffMissingException.class);
+        try (Connection mart = InfoEtlTestDatabase.mart();
+                Statement statement = mart.createStatement();
+                ResultSet batches = statement.executeQuery("SELECT COUNT(*) FROM mart_load_batch")) {
+            batches.next();
+            assertThat(batches.getLong(1)).isZero();
+        }
+
+        ReplicaFixtures.insertCutoff(D);
+        LoadResult result = guarded.load(D);
+
+        assertThat(result.balanceRowCount()).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("경계일 이전 기준일은 레플리카에 cutoff가 없어도 적재한다")
+    void beforeBoundaryLoadsWithoutCutoff() throws SQLException {
+        ReplicaFixtures.insertLedger(50L, 1L, 250L, LocalDateTime.of(2026, 10, 19, 9, 0), MON);
+        DailyLoadService guarded =
+                serviceWith(CutoffPolicy.enabled(D, new JdbcReplicaCutoffAdapter(InfoEtlTestDatabase::replica)));
+
+        LoadResult result = guarded.load(MON);
+
+        assertThat(result.baseDate()).isEqualTo(MON);
+    }
+
+    @Test
+    @DisplayName("원장이 그날 하나도 없는 영업일(가동 중단으로 건너뛴 날)도 누적 잔액으로 적재되어 잔액 0건 규칙에 걸리지 않는다")
+    void dayWithoutAnyLedgerEntryOfItsOwnLoadsCarriedBalances() throws SQLException {
+        // 기본 픽스처의 원장은 D(화)에만 있다. 수요일은 그날 기표가 없다.
+        service.load(D);
+
+        LoadResult wednesday = service.load(WED);
+
+        assertThat(wednesday.balanceRowCount()).isEqualTo(2L);
+        assertThat(wednesday.martBalanceTotal()).isEqualTo(1_000L);
+        try (Connection mart = InfoEtlTestDatabase.mart();
+                ResultSet row = batch(mart, wednesday.loadBatchId())) {
+            assertThat(row.getString("status")).isEqualTo("COMPLETED");
+        }
+    }
+
+    @Test
     @DisplayName("원장 합계와 마트 잔액 합계가 같으면 원장 합계를 적재 기록에 남긴다")
     void ledgerTotalIsRecordedWhenItMatches() throws SQLException {
         LoadResult result = service.load(D);
@@ -311,6 +366,40 @@ class DailyLoadIntegrationTest {
             assertThat(row.getLong("mart_balance_movement")).isEqualTo(750L);
             assertThat(row.getLong("gl_deposit_movement")).isEqualTo(700L);
         }
+    }
+
+    @Test
+    @DisplayName("자동 모드: cutoff가 없는 영업일은 실패로 모으고 뒤 날짜는 계속 적재하며 asOf는 빠진 날 앞에 머문다")
+    void autoLoadContinuesPastDayWithoutCutoff() throws SQLException {
+        ReplicaFixtures.insertLedger(50L, 1L, 250L, LocalDateTime.of(2026, 10, 19, 9, 0), MON);
+        ReplicaFixtures.insertLedger(60L, 1L, 800L, LocalDateTime.of(2026, 10, 21, 9, 0), WED);
+        ReplicaFixtures.insertCutoff(MON);
+        ReplicaFixtures.insertCutoff(WED); // 화요일(D) cutoff는 없다 = COB 전환 실패
+        JdbcReplicaCutoffAdapter cutoff = new JdbcReplicaCutoffAdapter(InfoEtlTestDatabase::replica);
+        DailyLoadService guarded = serviceWith(CutoffPolicy.enabled(MON, cutoff));
+        RangeLoadService range = new RangeLoadService(
+                guarded,
+                new JdbcReplicaCalendarAdapter(InfoEtlTestDatabase::replica),
+                new JdbcMartLoadAdapter(InfoEtlTestDatabase::mart, CLOCK));
+
+        RangeLoadResult result = new AutoLoadService(range, cutoff, MON).loadPending();
+
+        assertThat(result.loaded()).extracting(LoadResult::baseDate).containsExactly(MON, WED);
+        assertThat(result.failed()).extracting(FailedDay::baseDate).containsExactly(D);
+        assertThat(result.failed().get(0).reason()).contains("CutoffMissingException");
+        assertThat(result.loaded().get(1).asOfDate()).isEqualTo(MON);
+    }
+
+    private DailyLoadService serviceWith(CutoffPolicy policy) {
+        return new DailyLoadService(
+                new JdbcReplicaBalanceAdapter(InfoEtlTestDatabase::replica),
+                new JdbcReplicaEventAdapter(InfoEtlTestDatabase::replica),
+                new JdbcReplicaReconciliationAdapter(InfoEtlTestDatabase::replica),
+                new JdbcReplicaCalendarAdapter(InfoEtlTestDatabase::replica),
+                policy,
+                new JdbcMartLoadAdapter(InfoEtlTestDatabase::mart, CLOCK),
+                new JdbcLoadLockAdapter(InfoEtlTestDatabase::mart),
+                pseudonymizer);
     }
 
     @Test
