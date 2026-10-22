@@ -27,6 +27,9 @@ class CobCheckpointPersistenceAdapterIntegrationTest extends IntegrationTestSupp
     CobCheckpointPort cobCheckpointPort;
 
     @Autowired
+    CobCheckpointJpaRepository cobCheckpointJpaRepository;
+
+    @Autowired
     JdbcTemplate jdbcTemplate;
 
     @BeforeEach
@@ -81,10 +84,12 @@ class CobCheckpointPersistenceAdapterIntegrationTest extends IntegrationTestSupp
 
         assertThat(statusOf("a")).isEqualTo("SUCCESS");
         assertThat(statusOf("b")).isEqualTo("PENDING");
-        LocalDateTime updatedAt = jdbcTemplate.queryForObject(
-                "SELECT updated_at FROM cob_checkpoint WHERE cob_date = ? AND step_name = 'a'",
-                LocalDateTime.class,
-                COB_DATE);
+        // JdbcTemplate 원시값은 JVM 시간대가 KST가 아닐 때(CI는 UTC) Hibernate가 옮긴 만큼 어긋나므로 JPA로 읽는다
+        LocalDateTime updatedAt = cobCheckpointJpaRepository.findAll().stream()
+                .filter(c -> c.getCobDate().equals(COB_DATE) && c.getStepName().equals("a"))
+                .findFirst()
+                .orElseThrow()
+                .getUpdatedAt();
         assertThat(updatedAt).isEqualTo(NOW.plusMinutes(1));
     }
 

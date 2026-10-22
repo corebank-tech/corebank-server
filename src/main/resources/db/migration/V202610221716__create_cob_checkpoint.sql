@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202610221215__create_cob_checkpoint.sql
+-- V202610221716__create_cob_checkpoint.sql
 -- COB 재시작 체크포인트 (P5, #663)
 --
 -- CobRunnerService가 마감 대상 영업일(COB_DATE)과 스텝별 완료 여부를 남긴다.
