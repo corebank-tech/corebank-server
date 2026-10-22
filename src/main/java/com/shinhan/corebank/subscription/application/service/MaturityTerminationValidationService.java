@@ -9,6 +9,7 @@ import com.shinhan.corebank.product.api.InterestCalculationMode;
 import com.shinhan.corebank.product.api.ProductInterestPolicyQueryUseCase;
 import com.shinhan.corebank.subscription.api.MaturityTerminationCommand;
 import com.shinhan.corebank.subscription.application.port.out.ProductSubscriptionQueryPort;
+import com.shinhan.corebank.subscription.domain.MaturityHandling;
 import com.shinhan.corebank.subscription.domain.ProductSubscription;
 import com.shinhan.corebank.subscription.domain.exception.SubscriptionErrorCode;
 import java.math.BigDecimal;
@@ -45,6 +46,10 @@ public class MaturityTerminationValidationService {
 
         if (subscription.getStatus() != ProcessResultStatus.SUCCESS) {
             throw new BusinessException(SubscriptionErrorCode.SUBSCRIPTION_NOT_COMPLETED);
+        }
+
+        if (subscription.getMaturityHandling() != MaturityHandling.TRANSFER) {
+            throw new BusinessException(SubscriptionErrorCode.MATURITY_RENEW_UNSUPPORTED);
         }
 
         // 2. 실제 해지일 기준으로 상품 계좌 검증
