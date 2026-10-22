@@ -108,23 +108,42 @@ class AdminInfoControllerTest extends IntegrationTestSupport {
     @DisplayName("응답 필드 이름은 설계서 §5-2 · §5-3 과 같고 고객 식별자·가명 키 필드가 없다(REQ-ADM-033)")
     void responseFieldNamesFollowDesign() {
         assertThat(names(DepositBalancesResponse.class)).containsExactly("asOf", "items");
-        assertThat(names(DepositBalancesResponse.Item.class)).containsExactly("baseDate", "totalBalance");
+        assertThat(names(DepositBalancesResponse.DepositBalanceItem.class)).containsExactly("baseDate", "totalBalance");
         assertThat(names(ProductSubscriptionsResponse.class))
                 .containsExactly("asOf", "month", "subscribedCount", "closedCount", "items");
-        assertThat(names(ProductSubscriptionsResponse.Item.class))
+        assertThat(names(ProductSubscriptionsResponse.ProductSubscriptionItem.class))
                 .containsExactly(
                         "productId", "productCode", "productName", "productGroup", "subscribedCount", "closedCount");
         List<String> all = List.of(
                         DepositBalancesResponse.class,
-                        DepositBalancesResponse.Item.class,
+                        DepositBalancesResponse.DepositBalanceItem.class,
                         ProductSubscriptionsResponse.class,
-                        ProductSubscriptionsResponse.Item.class)
+                        ProductSubscriptionsResponse.ProductSubscriptionItem.class)
                 .stream()
                 .flatMap(type -> names(type).stream())
                 .toList();
         assertThat(all)
                 .noneMatch(name -> name.toLowerCase().contains("customer")
                         || name.toLowerCase().contains("key"));
+    }
+
+    @Test
+    @DisplayName("Swagger 문서에 두 경로가 operationId 와 함께 노출된다")
+    void swaggerDocumentExposesBothPaths() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/admin/info/deposit-balances'].get.operationId")
+                        .value("getAdminInfoDepositBalances"))
+                .andExpect(jsonPath("$.paths['/admin/info/product-subscriptions'].get.operationId")
+                        .value("getAdminInfoProductSubscriptions"))
+                // 두 응답의 항목 스키마가 같은 이름으로 겹치면 FE 코드 생성이 한쪽 모양을 잃는다
+                .andExpect(jsonPath("$.components.schemas.DepositBalanceItem.properties.baseDate")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.DepositBalanceItem.properties.totalBalance")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.ProductSubscriptionItem.properties.productCode")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.Item").doesNotExist());
     }
 
     @Test

@@ -9,19 +9,20 @@ import java.util.List;
 public record DepositBalancesResponse(
         @Schema(description = "적재가 빠짐없이 끝난 마지막 기준일. 적재 이력이 없으면 null", example = "2026-10-28", nullable = true)
                 LocalDate asOf,
-        @Schema(description = "asOf 이하의 COMPLETED 영업일 잔액. 휴일은 없다") List<Item> items) {
+        @Schema(description = "asOf 이하의 COMPLETED 영업일 잔액. 휴일은 없다") List<DepositBalanceItem> items) {
 
-    public record Item(
+    public record DepositBalanceItem(
             @Schema(description = "기준일", example = "2026-10-01") LocalDate baseDate,
             @Schema(description = "그날 총 수신 잔액(원)", example = "1523400000000") long totalBalance) {
 
-        static Item from(DepositBalanceTrend.Point point) {
-            return new Item(point.baseDate(), point.totalBalance());
+        static DepositBalanceItem from(DepositBalanceTrend.Point point) {
+            return new DepositBalanceItem(point.baseDate(), point.totalBalance());
         }
     }
 
     static DepositBalancesResponse from(DepositBalanceTrend trend) {
         return new DepositBalancesResponse(
-                trend.asOf(), trend.items().stream().map(Item::from).toList());
+                trend.asOf(),
+                trend.items().stream().map(DepositBalanceItem::from).toList());
     }
 }

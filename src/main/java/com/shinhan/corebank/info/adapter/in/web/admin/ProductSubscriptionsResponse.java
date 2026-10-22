@@ -13,9 +13,9 @@ public record ProductSubscriptionsResponse(
                 String month,
         @Schema(description = "그 달 전체 가입 건수. 적재 이력이 없으면 null", example = "120", nullable = true) Long subscribedCount,
         @Schema(description = "그 달 전체 해지 건수. 적재 이력이 없으면 null", example = "5", nullable = true) Long closedCount,
-        @Schema(description = "상품별 가입·해지 건수") List<Item> items) {
+        @Schema(description = "상품별 가입·해지 건수") List<ProductSubscriptionItem> items) {
 
-    public record Item(
+    public record ProductSubscriptionItem(
             @Schema(description = "상품 ID", example = "3") long productId,
             @Schema(description = "상품 코드", example = "DEP-12M") String productCode,
             @Schema(description = "상품명. 상품별로 가장 최근에 적재된 스냅샷", example = "쏠편한 정기예금") String productName,
@@ -23,8 +23,8 @@ public record ProductSubscriptionsResponse(
             @Schema(description = "가입 건수", example = "80") long subscribedCount,
             @Schema(description = "해지 건수", example = "3") long closedCount) {
 
-        static Item from(ProductSubscriptionSummary.Line line) {
-            return new Item(
+        static ProductSubscriptionItem from(ProductSubscriptionSummary.Line line) {
+            return new ProductSubscriptionItem(
                     line.productId(),
                     line.productCode(),
                     line.productName(),
@@ -40,6 +40,6 @@ public record ProductSubscriptionsResponse(
                 summary.month() == null ? null : summary.month().toString(),
                 summary.subscribedCount(),
                 summary.closedCount(),
-                summary.items().stream().map(Item::from).toList());
+                summary.items().stream().map(ProductSubscriptionItem::from).toList());
     }
 }
