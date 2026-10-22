@@ -42,6 +42,21 @@ class InfoResponseMappingTest {
     }
 
     @Test
+    @DisplayName("적재 이력 없음 생성 메서드는 asOf·건수를 null 로, 항목을 비워 두고 달만 유지한다")
+    void noLoadHistoryFactoriesLeaveCountsNull() {
+        DepositBalanceTrend trend = DepositBalanceTrend.noLoadHistory();
+        ProductSubscriptionSummary summary = ProductSubscriptionSummary.noLoadHistory(YearMonth.of(2026, 10));
+
+        assertThat(trend.asOf()).isNull();
+        assertThat(trend.items()).isEmpty();
+        assertThat(summary.asOf()).isNull();
+        assertThat(summary.month()).isEqualTo(YearMonth.of(2026, 10));
+        assertThat(summary.subscribedCount()).isNull();
+        assertThat(summary.closedCount()).isNull();
+        assertThat(summary.items()).isEmpty();
+    }
+
+    @Test
     @DisplayName("상품별 가입·해지를 달은 yyyy-MM 문자열로, 항목은 상품 필드 그대로 옮긴다")
     void mapsProductSubscriptionSummary() {
         ProductSubscriptionSummary summary = new ProductSubscriptionSummary(

@@ -8,6 +8,10 @@ import java.util.List;
 public record ProductSubscriptionSummary(
         LocalDate asOf, YearMonth month, Long subscribedCount, Long closedCount, List<Line> items) {
 
+    public static ProductSubscriptionSummary noLoadHistory(YearMonth month) {
+        return new ProductSubscriptionSummary(null, month, null, null, List.of());
+    }
+
     public record Line(
             long productId,
             String productCode,
