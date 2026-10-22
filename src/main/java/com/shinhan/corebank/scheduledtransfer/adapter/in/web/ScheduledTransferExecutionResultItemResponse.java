@@ -4,6 +4,7 @@ import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultItem;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 // executedAt은 실제 실행(확정)시각(api_conventions.md §6-4) - SUCCESS/FAILED만 채워짐
@@ -18,6 +19,11 @@ public record ScheduledTransferExecutionResultItemResponse(
         @Schema(description = "예금주명 (마스킹, 예: 홍*동)") String payeeName,
         @Schema(description = "이체금액") Long amount,
         @Schema(description = "거래번호. SUCCESS/FAILED만 채워짐", nullable = true) String transactionNumber,
+        @Schema(
+                        description = "거래일. 이 회차가 만든 이체가 귀속되는 영업일이라 휴일에 실행되면 executedAt 날짜의 다음 영업일이다. "
+                                + "CANCELED와 이체를 만들기 전에 실패한 FAILED는 비어 있다",
+                        nullable = true)
+                LocalDate tradeDate,
         @Schema(description = "실패 사유. status=SUCCESS일 때는 비어있음", nullable = true) String failureReason) {
     public static ScheduledTransferExecutionResultItemResponse from(ScheduledTransferExecutionResultItem item) {
         return new ScheduledTransferExecutionResultItemResponse(
@@ -30,6 +36,7 @@ public record ScheduledTransferExecutionResultItemResponse(
                 MaskingUtil.maskName(item.payeeName()),
                 item.amount(),
                 item.transactionNumber(),
+                item.tradeDate(),
                 item.failureReason());
     }
 }

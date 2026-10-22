@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferExecutionResultItem;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ class ScheduledTransferExecutionResultItemResponseTest {
                 "홍길동",
                 300_000L,
                 transactionNumber,
+                null,
                 failureReason);
     }
 
@@ -72,6 +74,7 @@ class ScheduledTransferExecutionResultItemResponseTest {
                 "홍길동",
                 300_000L,
                 null,
+                null,
                 null);
 
         ScheduledTransferExecutionResultItemResponse response =
@@ -79,5 +82,28 @@ class ScheduledTransferExecutionResultItemResponseTest {
 
         assertThat(response.executedAt()).isNull();
         assertThat(response.canceledAt()).isEqualTo(LocalDateTime.of(2026, 8, 4, 15, 0));
+    }
+
+    @Test
+    @DisplayName("거래일은 실행 시각과 별개로 그대로 전달된다 — 토요일 실행 회차의 거래일은 월요일")
+    void passesThroughTradeDate() {
+        ScheduledTransferExecutionResultItem saturdayItem = new ScheduledTransferExecutionResultItem(
+                7003L,
+                ScheduledTransferStatus.SUCCESS,
+                LocalDateTime.of(2026, 8, 8, 0, 10),
+                null,
+                "110123456789",
+                "110987654321",
+                "홍길동",
+                300_000L,
+                "20260808BT0000000001",
+                LocalDate.of(2026, 8, 10),
+                null);
+
+        ScheduledTransferExecutionResultItemResponse response =
+                ScheduledTransferExecutionResultItemResponse.from(saturdayItem);
+
+        assertThat(response.executedAt().toLocalDate()).isEqualTo(LocalDate.of(2026, 8, 8));
+        assertThat(response.tradeDate()).isEqualTo(LocalDate.of(2026, 8, 10));
     }
 }
