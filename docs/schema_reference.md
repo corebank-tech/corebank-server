@@ -30,7 +30,7 @@
 | 2 | `terms` | 약관 | P6 | 10 |
 | 3 | `customer_terms_agreement` | 회원가입 약관 동의 | P6 | 4  |
 | 4 | `verification_request` | 인증 요청 | P6 | 13 |
-| 5 | `notification` | 알림 | P6 | 9  |
+| 5 | `notification` | 알림 | P1 | 9  |
 | 6 | `product` | 상품 | P3 | 25 |
 | 7 | `product_rate_tier` | 상품 기간별 금리 | P3 | 3  |
 | 8 | `product_preferential_rate` | 상품 우대금리 | P3 | 4  |
@@ -76,7 +76,7 @@
 
 ---
 
-# 1. 고객 · 인증 — P6
+# 1. 고객 · 인증 — P6 (`admin_permission` · `notification`은 P1)
 
 ## `SPRING_SESSION` / `SPRING_SESSION_ATTRIBUTES` (PH-49c)
 
@@ -261,8 +261,8 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | --- | --- | --- | --- | --- | --- |
 | `notification_id` | `BIGINT` | **PK** | X |  | 알림 내부 식별자. 읽음 처리 API의 경로 변수 |
 | `customer_id` | `BIGINT` | **FK** | X |  | 수신 고객 → `customer.customer_id` |
-| `type` | `VARCHAR(24)` |  | X |  | 알림을 발생시킨 업무 구분. `TRANSFER`(즉시이체) / `SCHEDULED_TRANSFER`(예약이체) / `AUTO_TRANSFER`(자동이체) / `PRODUCT_SUBSCRIPTION`(상품가입) |
-| `ref_id` | `BIGINT` |  | O |  | 다형 참조: TRANSFER->transfer.transfer_id / SCHEDULED_TRANSFER->scheduled_transfer_id / AUTO_TRANSFER->auto_transfer_execution.execution_id / PRODUCT_SUBSCRIPTION->subscription_id |
+| `type` | `VARCHAR(24)` | **UK** | X |  | 알림을 발생시킨 업무 구분. `TRANSFER`(즉시 · 타행이체) / `SCHEDULED_TRANSFER`(예약이체) / `AUTO_TRANSFER`(자동이체) / `PRODUCT_SUBSCRIPTION`(상품가입) |
+| `ref_id` | `BIGINT` | **UK** | O |  | 다형 참조: TRANSFER->transfer.transfer_id / SCHEDULED_TRANSFER->scheduled_transfer_id / AUTO_TRANSFER->auto_transfer_execution.execution_id / PRODUCT_SUBSCRIPTION->subscription_id |
 | `title` | `VARCHAR(100)` |  | X |  | 알림 제목. 목록 화면의 한 줄 요약 |
 | `content` | `VARCHAR(500)` |  | X |  | 알림 본문 문구 |
 | `is_read` | `BOOLEAN` |  | X | `FALSE` | 읽음 여부. 미읽음 건수 조회의 집계 대상 |
@@ -274,6 +274,7 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | 종류 | 이름 | 컬럼 |
 | --- | --- | --- |
 | INDEX | `ix_noti_customer` | `customer_id, is_read, occurred_at DESC` |
+| UNIQUE | `uk_noti_type_ref` | `type, ref_id` — 구독자가 같은 이벤트를 두 번 받아도 알림은 1건(#706) |
 
 ---
 
