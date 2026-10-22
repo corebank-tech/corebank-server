@@ -215,9 +215,9 @@ SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS 
 
 ### 남은 것
 
-- **세션 만료(무조작 30분) 로그아웃은 감사에 남지 않는다.** `LogoutSuccessEvent` 는 명시적 로그아웃에만
-  온다. 필요해지면 `HttpSessionDestroyedEvent`(`SecurityConfig` 에 `HttpSessionEventPublisher` 가 있다)로
-  별건 처리한다 — 어느 REQ 도 요구하지 않아 ② 범위에 넣지 않았다
+- **세션 만료(무조작 30분) 로그아웃은 감사에 남지 않는다.** `LogoutSuccessEvent`는 명시적 로그아웃에만
+  온다. 만료 감사가 필요하면 Spring Session JDBC의 만료 감지와 감사 기록 경로를 별도로 설계한다.
+  `SecurityConfig`에는 `HttpSessionEventPublisher`가 없다 — 어느 REQ도 요구하지 않아 ② 범위에 넣지 않았다.
 - 권한 부여·회수 API 와 `role=CUSTOMER` 인데 권한 행이 있는 모순 제약 — PH-49b.
   **회수는 권한 행만 지우면 이미 로그인한 세션에 반영되지 않는다.** 즉시 끊어야 하면
   `CustomerSessionInvalidator`로 해당 관리자의 JDBC 세션을 함께 삭제한다.
