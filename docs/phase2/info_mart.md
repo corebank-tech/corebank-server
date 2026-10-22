@@ -283,7 +283,7 @@ WHERE l.rn = 1
 |---|---|
 | `asOf` | 첫 적재 기준일부터 영업일마다 `COMPLETED` 배치가 빠짐없이 있는 마지막 날짜(`yyyy-MM-dd`). 중간에 `COMPLETED` 배치가 없는 영업일(`FAILED`이거나 적재되지 않은 날)이 있으면 그 전날에 머문다. 이미 `COMPLETED`인 날짜의 재적재가 실패해도 이전 `COMPLETED` 배치가 남으므로 `asOf`는 뒤로 가지 않는다. ETL이 T2에서 `holiday`로 계산해 `as_of_date`에 남기고, API는 `completed_at`이 가장 늦은 `COMPLETED` 행의 `as_of_date`를 읽는다. 두 API가 같은 값을 쓴다. 다른 날짜를 동시에 적재하면 서로의 커밋을 못 봐 실제보다 이른 값이 남을 수 있고, 다음 적재에서 바로잡힌다 |
 | 적재 이력 없음 | `200` + `"0000"`, `asOf: null`, 값은 `null`이나 빈 배열. FE는 값 대신 안내를 띄운다(REQ-ADM-032) |
-| 정보계 API 연결 실패 | 오류코드로 응답. 접두어(예: `INF`)와 HTTP 상태는 P5가 [api_conventions.md](../api_conventions.md) §2·§3-2에 따라 등록 |
+| 정보계 API 연결 실패 | 오류코드로 응답. `INF9001`(500)로 [api_conventions.md](../api_conventions.md) §4-15에 등록했다 |
 | PII | 고객 식별자·가명 키를 응답에 넣지 않는다(REQ-ADM-033) |
 | 금액 | 원 단위 정수 |
 
