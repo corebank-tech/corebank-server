@@ -18,7 +18,7 @@
 ./gradlew test                                     # 전체 — 단위·Testcontainers·ArchUnit
 ./gradlew test --tests "*ArchitectureTest"         # 아키텍처 규칙만
 ./gradlew spotlessApply                            # 커밋 전 필수. CI의 spotlessCheck가 막는다
-docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·Redis)
+docker compose up -d minicore-mysql                 # 로컬 인프라 (MySQL)
 ./gradlew bootRun                                  # Flyway 마이그레이션 후 기동
 ```
 
@@ -111,8 +111,7 @@ docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·R
 
 | 문서 | 언제 여는가 |
 |---|---|
-| [otp_integration_guide.md](docs/otp_integration_guide.md) | OTP는 Redis·Entity 직접 참조 없이 `otp.api`로만 호출 |
-| [redis_setup_guide.md](docs/redis_setup_guide.md) | Redis 로컬·배포 셋업 (약관 열람 이력 TTL 30분) |
+| [otp_integration_guide.md](docs/otp_integration_guide.md) | OTP는 저장소·Entity 직접 참조 없이 `otp.api`로만 호출 |
 | [product_api_fe_handoff.md](docs/product_api_fe_handoff.md) | 상품 API의 FE 인계 계약 — 실제 요청·응답 예시 |
 
 **협업 · 검증**

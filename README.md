@@ -14,7 +14,7 @@
 | Language | Java 21 |
 | Framework | Spring Boot 4.0.7, Spring Web MVC, Spring Security, Validation |
 | Persistence | Spring Data JPA, Querydsl, MySQL, Flyway |
-| Cache / Infra | Redis, Docker Compose |
+| Infra | Docker Compose |
 | Test | JUnit 5, Testcontainers(MySQL), ArchUnit |
 | Ops | Spring Boot Actuator, GitHub Actions |
 | Build | Gradle |
@@ -77,7 +77,7 @@ src/main/java/com/shinhan/corebank/
 ### Prerequisites
 
 - Java 21 (Gradle 데몬이 `gradle/gradle-daemon-jvm.properties`로 21에 고정됩니다)
-- Docker / Docker Compose (MySQL · Redis)
+- Docker / Docker Compose (MySQL)
 - [gitleaks](https://github.com/gitleaks/gitleaks) (커밋 전 자격증명 검사용, pre-commit 훅에서 사용)
 
   ```bash
@@ -99,8 +99,8 @@ clone 후 한 번만 실행합니다. `core.hooksPath`를 `.githooks`로 설정�
 ### Run
 
 ```bash
-# 1. 인프라 기동 (MySQL, Redis)
-docker compose up -d minicore-mysql minicore-redis
+# 1. 인프라 기동 (MySQL)
+docker compose up -d minicore-mysql
 
 # 2. 스키마 마이그레이션 + 애플리케이션 실행
 ./gradlew bootRun
@@ -157,7 +157,6 @@ Flyway로 스키마를 버전 관리합니다. 마이그레이션 파일은
 | [team_collaboration_guide.md](docs/team_collaboration_guide.md) | 브랜치 · PR · 코드리뷰 |
 | [team_db_setup_guide.md](docs/team_db_setup_guide.md) | 로컬 DB 세팅 |
 | [team_db_architecture_guide.md](docs/team_db_architecture_guide.md) | DB 아키텍처 |
-| [redis_setup_guide.md](docs/redis_setup_guide.md) | Redis 세팅 |
 | [otp_integration_guide.md](docs/otp_integration_guide.md) | OTP 연동 |
 
 ### 코드 포맷
