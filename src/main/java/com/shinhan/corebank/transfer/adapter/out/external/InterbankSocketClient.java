@@ -14,7 +14,10 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -26,6 +29,8 @@ import org.springframework.stereotype.Component;
 public class InterbankSocketClient implements InterbankGatewayPort {
 
     private static final int LENGTH_FIELD = 4;
+    private static final String PAYEE_INQUIRY_SERIAL_MARK = "PQ";
+    private static final long PAYEE_INQUIRY_SERIAL_BOUND = 10_000_000_000L;
 
     private final InterbankProperties properties;
     private final Clock clock;
@@ -83,6 +88,46 @@ public class InterbankSocketClient implements InterbankGatewayPort {
                 reply.responseCode(),
                 reply.outcome());
         return reply;
+    }
+
+    @Override
+    public InterbankReply inquirePayee(String bankCode, String accountNumber) {
+        String serialNumber = payeeInquirySerial();
+        Exchange exchange = exchange(
+                TransactionCode.PAYEE_INQUIRY, new InterbankRequest(bankCode, serialNumber, accountNumber, 0L, null));
+        InterbankReply reply =
+                switch (exchange) {
+                    case Exchange.NotSent notSent -> InterbankReply.of(InterbankOutcome.NOT_PROCESSED, null);
+                    case Exchange.NoReply noReply -> InterbankReply.of(InterbankOutcome.UNKNOWN, null);
+                    case Exchange.Replied replied -> payeeInquiryReply(replied.response());
+                };
+        log.info(
+                "타행 수취인 조회 - serialNumber={}, bankCode={}, responseCode={}, outcome={}",
+                serialNumber,
+                bankCode,
+                reply.responseCode(),
+                reply.outcome());
+        return reply;
+    }
+
+    // 사전 조회는 원거래가 없어 일련번호를 따로 만든다. 거래번호를 채번하면 transfer에 없는 번호가 생긴다(#680).
+    // 한 연결에 요청 1건이라 응답이 섞이지 않으므로 날짜 + 난수로 충분하다.
+    private String payeeInquirySerial() {
+        return LocalDate.now(clock).format(DateTimeFormatter.BASIC_ISO_DATE)
+                + PAYEE_INQUIRY_SERIAL_MARK
+                + "%010d".formatted(ThreadLocalRandom.current().nextLong(PAYEE_INQUIRY_SERIAL_BOUND));
+    }
+
+    // 규격 §3 수취인 조회(PYE001) 열. 예금주를 확인한 경우와 계좌 사유 둘만 구분하고 나머지는 확인 못 함이다.
+    private static InterbankReply payeeInquiryReply(ExternalMessage response) {
+        ResponseCode code = response.responseCode();
+        return switch (code) {
+            case APPROVED -> new InterbankReply(InterbankOutcome.APPROVED, response.payeeName(), code.code());
+            case ACCOUNT_NOT_FOUND -> InterbankReply.of(InterbankOutcome.ACCOUNT_NOT_FOUND, code.code());
+            case ACCOUNT_UNAVAILABLE -> InterbankReply.of(InterbankOutcome.ACCOUNT_UNAVAILABLE, code.code());
+            case MALFORMED_MESSAGE, DUPLICATE, ORIGINAL_NOT_RECEIVED, SYSTEM_ERROR ->
+                InterbankReply.of(InterbankOutcome.NOT_PROCESSED, code.code());
+        };
     }
 
     // 규격 §3 이체(TRF001) 열. 2001(중복)은 입금 여부를 알 수 없어 확정하지 않는다.

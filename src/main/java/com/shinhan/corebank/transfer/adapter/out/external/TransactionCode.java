@@ -5,7 +5,8 @@ import java.util.Arrays;
 /** 거래코드 (규격 §2 헤더 3번). */
 public enum TransactionCode {
     TRANSFER("TRF001"),
-    INQUIRY("INQ001");
+    INQUIRY("INQ001"),
+    PAYEE_INQUIRY("PYE001");
 
     private final String code;
 

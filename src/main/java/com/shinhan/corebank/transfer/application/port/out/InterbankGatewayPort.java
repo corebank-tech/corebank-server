@@ -11,4 +11,10 @@ public interface InterbankGatewayPort {
 
     /** 조회거래(INQ001)로 원거래 결과를 묻는다. 보내지 못했거나 조회가 실패하면 UNKNOWN이다. */
     InterbankReply inquire(InterbankRequest request);
+
+    /**
+     * 수취인 사전 조회(PYE001)로 예금주를 묻는다. 돈이 움직이지 않아 처리 불명이 없다 — 0000·1001·1002 밖의 응답과 보내지 못한 경우는
+     * NOT_PROCESSED, 응답을 못 받았으면 UNKNOWN이다.
+     */
+    InterbankReply inquirePayee(String bankCode, String accountNumber);
 }

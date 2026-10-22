@@ -27,6 +27,7 @@ final class MockBank {
         return switch (request.transactionCode()) {
             case TRANSFER -> transfer(request, now);
             case INQUIRY -> inquire(request, now);
+            case PAYEE_INQUIRY -> inquirePayee(request, now);
         };
     }
 
@@ -48,6 +49,12 @@ final class MockBank {
             return request.toResponse(ResponseCode.ORIGINAL_NOT_RECEIVED, null, now);
         }
         return request.toResponse(original, payeeName(original), now);
+    }
+
+    // 돈이 움직이지 않으니 장부에 남기지 않는다. 같은 일련번호로 다시 물어도 2001이 아니다.
+    private ExternalMessage inquirePayee(ExternalMessage request, LocalDateTime now) {
+        ResponseCode result = decide(request.accountNumber());
+        return request.toResponse(result, payeeName(result), now);
     }
 
     private static ResponseCode decide(String accountNumber) {
