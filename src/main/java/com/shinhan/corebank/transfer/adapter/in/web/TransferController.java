@@ -8,6 +8,7 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.transfer.application.port.in.InterbankBankQueryUseCase;
+import com.shinhan.corebank.transfer.application.port.in.InterbankPayeeInquiryUseCase;
 import com.shinhan.corebank.transfer.application.port.in.InterbankTransferUseCase;
 import com.shinhan.corebank.transfer.application.port.in.PayeeInquiryUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
@@ -56,6 +57,7 @@ public class TransferController {
     private final TransferHistoryQueryUseCase transferHistoryQueryUseCase;
     private final InterbankTransferUseCase interbankTransferUseCase;
     private final InterbankBankQueryUseCase interbankBankQueryUseCase;
+    private final InterbankPayeeInquiryUseCase interbankPayeeInquiryUseCase;
 
     @PostMapping
     @Operation(
@@ -187,6 +189,41 @@ public class TransferController {
             @Parameter(description = "조회할 입금계좌번호 (하이픈 없이)", required = true, example = "11012345678901") @RequestParam
                     String accountNumber) {
         return ApiResponse.success(PayeeResponse.from(payeeInquiryUseCase.inquire(accountNumber)));
+    }
+
+    @GetMapping("/interbank/payee")
+    @Operation(
+            operationId = "getInterbankTransferPayee",
+            summary = "타행 수취인(예금주) 조회",
+            description =
+                    """
+            타행이체 전에 상대 은행에 입금계좌의 예금주명을 묻는다. 당행 조회(GET /transfers/payee)와 달리 \
+            상대 은행 전문을 보내므로 응답 대기 시간만큼 걸릴 수 있다. 조회에 실패하면(오류 응답 전부) 이체 화면은 \
+            다음 단계로 넘어가지 않는다 — 이름 없이 진행하는 경로는 없다.""")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "`CMN0002` 필수값 누락 · `TRF0006` 지원하지 않는 은행 · `TRF0007` 타행 계좌번호 형식",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "`TRF0201` 상대 은행에 입금계좌가 없음",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "`TRF0301` 입금계좌 거래 불가(정지·해지) · `TRF0309` 상대 은행에서 예금주를 확인하지 못함" + "(무응답 · 상대 장애 · 서킷 열림)",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ApiResponse<InterbankPayeeResponse> inquireInterbankPayee(
+            @Parameter(description = "받는 은행코드. GET /transfers/banks 목록의 bankCode", required = true, example = "004")
+                    @RequestParam
+                    String bankCode,
+            @Parameter(description = "입금계좌번호. 숫자만 1~16자리, 하이픈 없이", required = true, example = "1234567890123")
+                    @RequestParam
+                    String accountNumber) {
+        return ApiResponse.success(
+                InterbankPayeeResponse.from(interbankPayeeInquiryUseCase.inquire(bankCode, accountNumber)));
     }
 
     @GetMapping
