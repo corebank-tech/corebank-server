@@ -70,21 +70,21 @@ class LedgerTransactionQueryIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("연휴 앞에 발생한 거래와 COB 가 늦어 다음 날 발생한 거래도 그 거래일로 읽는다")
-    void includesHolidayAndLateCobTransactions() {
-        LocalDate holidayStart = TRADE_DATE.minusDays(5);
-        insertPair("20310410WB0000000001", "SCHEDULED_TRANSFER", 1_000L, TRADE_DATE, at(holidayStart, 9));
-        LocalDate nextDay = TRADE_DATE.plusDays(1);
+    @DisplayName("주말에 발생한 거래와 COB 가 늦어 다음 날 발생한 거래도 그 거래일로 읽는다")
+    void includesWeekendAndLateCobTransactions() {
+        // 2031-04-14 는 월요일이다. 토요일 4/12 에 요청한 거래는 거래번호가 4/12 로 시작하고 거래일은 4/14 다.
+        LocalDate monday = LocalDate.of(2031, 4, 14);
+        insertPair("20310412WB0000000001", "SCHEDULED_TRANSFER", 1_000L, monday, at(LocalDate.of(2031, 4, 12), 9));
         insertPair(
-                "20310416WB0000000001",
+                "20310415WB0000000001",
                 "AUTO_TRANSFER",
                 2_000L,
-                TRADE_DATE,
-                at(nextDay, 0).plusMinutes(30));
+                monday,
+                at(monday.plusDays(1), 0).plusMinutes(30));
 
-        assertThat(query.findByTradeDate(TRADE_DATE, null, 100))
+        assertThat(query.findByTradeDate(monday, null, 100))
                 .extracting(LedgerTransactionSummary::transactionNumber)
-                .containsExactly("20310410WB0000000001", "20310416WB0000000001");
+                .containsExactly("20310412WB0000000001", "20310415WB0000000001");
     }
 
     @Test
