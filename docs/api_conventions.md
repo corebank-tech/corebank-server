@@ -193,6 +193,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `LMT` | 이체한도 | P1 | REQ-TRSF-010~013·024·025·029 |
 | `AUT` | 자동이체 | **P5** | REQ-AUTO |
 | `GLA` | 회계 원장(GL) | P3 | 2차 PH-21 |
+| `INF` | 정보계 조회 | **P5** | REQ-ADM-030~033 |
 
 **배정 원칙**
 
@@ -443,6 +444,14 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `GLA9007` | 500 | 전표의 참조 키가 없습니다. | 기표 요청에 원 거래번호가 빠짐(PH-24) |
 | `GLA9008` | 500 | 이미 기표된 거래입니다. | 같은 `(tx_type, reference_key)` 재기표. 원장까지 롤백된다(PH-24) |
 | `GLA9009` | 500 | 분개 패턴이 없는 거래유형입니다. | 훅 B 로 패턴표에 없는 원장 거래유형이 들어옴. 이체가 롤백된다(PH-24) |
+
+### 4-15. `INF` 정보계 조회 — P5
+
+관리자 정보계 조회(`/admin/info/**`, PH-77)에서 쓴다. 마트는 온프레미스에 있고 WAS가 VPN으로 정보계 API를 불러서 읽는다([info_mart.md](phase2/info_mart.md) §5). 연결 문제는 사용자 입력이 아니라 서버 쪽 사정이라 `500`이다.
+
+| 코드 | HTTP | 메시지 | 의미 |
+| --- | --- | --- | --- |
+| `INF9001` | 500 | 정보계 API에 연결하지 못했습니다. | WAS가 온프레미스 정보계 API에 닿지 못함(VPN 단절·타임아웃·상대 서버 오류). 구현은 PH-77 ②(#704) |
 
 ---
 
