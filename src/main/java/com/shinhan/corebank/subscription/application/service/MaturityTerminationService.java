@@ -5,6 +5,11 @@ import com.shinhan.corebank.account.api.MaturityAccountSettlementUseCase;
 import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.gl.api.GlTxType;
+import com.shinhan.corebank.gl.api.JournalDirection;
+import com.shinhan.corebank.gl.api.JournalLine;
+import com.shinhan.corebank.gl.api.JournalPostingUseCase;
+import com.shinhan.corebank.gl.api.JournalRequest;
 import com.shinhan.corebank.subscription.api.InterestPaymentCommand;
 import com.shinhan.corebank.subscription.api.InterestPaymentReason;
 import com.shinhan.corebank.subscription.api.InterestPaymentResult;
@@ -21,6 +26,7 @@ import com.shinhan.corebank.transfer.api.LedgerDepositUseCase;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +44,7 @@ public class MaturityTerminationService implements MaturityTerminationUseCase {
     private final LedgerDepositUseCase ledgerDepositUseCase;
     private final MaturityAccountQueryUseCase maturityAccountQueryUseCase;
     private final MaturityTerminationPasswordVerificationPort passwordVerificationPort;
+    private final JournalPostingUseCase journalPostingUseCase;
     private final Clock clock;
 
     @Override
@@ -101,6 +108,15 @@ public class MaturityTerminationService implements MaturityTerminationUseCase {
         // 7. 계좌 잠금 이후 수취 계좌 소유권 및 등록 상태 재검증
         // 실패하면 지금까지 수행한 이자 지급과 원리금 이체도 롤백된다.
         maturityAccountQueryUseCase.requireWithdrawalDestinationForUpdate(withdrawalAccountId, command.customerId());
+
+        // MATURITY 원리금 원장과 같은 거래번호·거래일로 GL 전표 기표
+        journalPostingUseCase.post(new JournalRequest(
+                GlTxType.MATURITY,
+                transfer.transactionNumber(),
+                transfer.tradeDate(),
+                List.of(
+                        new JournalLine("20100", JournalDirection.DEBIT, totalTransferred),
+                        new JournalLine("20100", JournalDirection.CREDIT, totalTransferred))));
 
         // 8. 상품 계좌 최신 상태 조회 및 CLOSED 전이
         LocalDateTime closedAt = LocalDateTime.now(clock.withZone(KST));

@@ -18,6 +18,11 @@ import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.exception.ErrorCode;
+import com.shinhan.corebank.gl.api.GlTxType;
+import com.shinhan.corebank.gl.api.JournalDirection;
+import com.shinhan.corebank.gl.api.JournalLine;
+import com.shinhan.corebank.gl.api.JournalPostingUseCase;
+import com.shinhan.corebank.gl.api.JournalRequest;
 import com.shinhan.corebank.product.api.InterestCalculationMode;
 import com.shinhan.corebank.subscription.api.InterestPaymentCommand;
 import com.shinhan.corebank.subscription.api.InterestPaymentReason;
@@ -94,6 +99,9 @@ class MaturityTerminationServiceTest {
     @Mock
     private MaturityTerminationPasswordVerificationPort passwordVerificationPort;
 
+    @Mock
+    private JournalPostingUseCase journalPostingUseCase;
+
     private MaturityTerminationService service;
 
     @BeforeEach
@@ -109,6 +117,7 @@ class MaturityTerminationServiceTest {
                 ledgerDepositUseCase,
                 maturityAccountQueryUseCase,
                 passwordVerificationPort,
+                journalPostingUseCase,
                 clock);
     }
 
@@ -140,6 +149,7 @@ class MaturityTerminationServiceTest {
                 interestPaymentUseCase,
                 settlementUseCase,
                 ledgerDepositUseCase,
+                journalPostingUseCase,
                 maturityAccountQueryUseCase);
 
         order.verify(businessDateGate).acquireSharedAndReadBusinessDate();
@@ -157,8 +167,23 @@ class MaturityTerminationServiceTest {
                 .transferBetween(
                         ACCOUNT_ID, WITHDRAWAL_ACCOUNT_ID, TOTAL_TRANSFERRED, DepositType.MATURITY, DepositChannel.WB);
 
+        ArgumentCaptor<JournalRequest> journalCaptor = ArgumentCaptor.forClass(JournalRequest.class);
+
         order.verify(maturityAccountQueryUseCase)
                 .requireWithdrawalDestinationForUpdate(WITHDRAWAL_ACCOUNT_ID, CUSTOMER_ID);
+
+        order.verify(journalPostingUseCase).post(journalCaptor.capture());
+
+        JournalRequest journal = journalCaptor.getValue();
+
+        assertThat(journal.txType()).isEqualTo(GlTxType.MATURITY);
+        assertThat(journal.referenceKey()).isEqualTo(TRANSACTION_NUMBER);
+        assertThat(journal.tradeDate()).isEqualTo(TRADE_DATE);
+
+        assertThat(journal.lines())
+                .containsExactly(
+                        new JournalLine("20100", JournalDirection.DEBIT, TOTAL_TRANSFERRED),
+                        new JournalLine("20100", JournalDirection.CREDIT, TOTAL_TRANSFERRED));
 
         order.verify(settlementUseCase).closeMatured(ACCOUNT_ID, CUSTOMER_ID, CLOSED_AT, TRADE_DATE);
 
@@ -328,6 +353,34 @@ class MaturityTerminationServiceTest {
         assertThatThrownBy(() -> service.terminate(COMMAND))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("계좌 종료 저장 실패");
+    }
+
+    @Test
+    @DisplayName("MATURITY GL 기표 실패 시 계좌 종료를 실행하지 않고 예외를 전파한다")
+    void terminate_maturityGlFailure() {
+        // given
+        // 사전검증, 이자 지급, 원리금 잔액 조회까지 정상 처리
+        stubBeforeTransfer(validated(InterestCalculationMode.SIMPLE), normalInterest(), TOTAL_TRANSFERRED);
+
+        // MATURITY 원리금 이체 성공
+        stubTransfer(TOTAL_TRANSFERRED, validTransfer());
+
+        // GL 전표 기표 시 실패 발생
+        doThrow(new IllegalStateException("MATURITY GL 실패"))
+                .when(journalPostingUseCase)
+                .post(any(JournalRequest.class));
+
+        // when & then
+        assertThatThrownBy(() -> service.terminate(COMMAND))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("MATURITY GL 실패");
+
+        // 원리금 전표 기표까지 도달했는지 확인
+        verify(journalPostingUseCase).post(any(JournalRequest.class));
+
+        // 수취 계좌 재검증은 완료됐고, GL 실패 이후 CLOSED 전이는 실행되지 않아야 한다.
+        verify(maturityAccountQueryUseCase).requireWithdrawalDestinationForUpdate(WITHDRAWAL_ACCOUNT_ID, CUSTOMER_ID);
+        verify(settlementUseCase, never()).closeMatured(any(), any(), any(), any());
     }
 
     @Test

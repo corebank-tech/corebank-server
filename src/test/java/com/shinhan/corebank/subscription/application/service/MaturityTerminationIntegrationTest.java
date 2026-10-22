@@ -2,6 +2,7 @@ package com.shinhan.corebank.subscription.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -122,31 +123,35 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
 
     @AfterEach
     void tearDown() {
-        // GL 분개를 전표보다 먼저 삭제한다.
+        // 1. GL 분개 삭제
         jdbcTemplate.update(
                 """
-                DELETE FROM gl_journal_entry
-                WHERE voucher_no IN (
-                    SELECT voucher_no
-                    FROM gl_voucher
-                    WHERE trade_date = ?
-                      AND tx_type = 'INTEREST'
-                )
-                """,
+        DELETE FROM gl_journal_entry
+        WHERE voucher_no IN (
+            SELECT voucher_no
+            FROM gl_voucher
+            WHERE trade_date = ?
+              AND tx_type IN ('INTEREST', 'MATURITY')
+        )
+        """,
                 BUSINESS_DATE);
 
+        // 2. GL 전표 삭제
         jdbcTemplate.update(
                 """
-                DELETE FROM gl_voucher
-                WHERE trade_date = ? AND tx_type = 'INTEREST'
-                """,
+        DELETE FROM gl_voucher
+        WHERE trade_date = ?
+          AND tx_type IN ('INTEREST', 'MATURITY')
+        """,
                 BUSINESS_DATE);
 
+        // 3. GL 전표번호 시퀀스 삭제
         jdbcTemplate.update(
                 """
-                DELETE FROM gl_voucher_sequence
-                WHERE trade_date = ? AND tx_type = 'INTEREST'
-                """,
+        DELETE FROM gl_voucher_sequence
+        WHERE trade_date = ?
+          AND tx_type IN ('INTEREST', 'MATURITY')
+        """,
                 BUSINESS_DATE);
 
         jdbcTemplate.update("DELETE FROM interest_payment WHERE account_id = ?", PRODUCT_ACCOUNT_ID);
@@ -246,6 +251,59 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
         assertThat(countInterestHistory()).isEqualTo(1L);
         assertThat(countInterestVoucher()).isEqualTo(1L);
 
+        // 1. 만기해지 상품 계좌의 실제 출금 원장 조회
+        Map<String, Object> maturityWithdrawal = jdbcTemplate.queryForMap(
+                """
+        SELECT transaction_number, trade_date, amount
+        FROM ledger_entry
+        WHERE account_id = ?
+          AND transaction_type = 'MATURITY'
+          AND direction = 'WITHDRAWAL'
+        """,
+                PRODUCT_ACCOUNT_ID);
+
+        String maturityTxNo = (String) maturityWithdrawal.get("transaction_number");
+
+        long maturityAmount = ((Number) maturityWithdrawal.get("amount")).longValue();
+
+        LocalDate maturityTradeDate = ((java.sql.Date) maturityWithdrawal.get("trade_date")).toLocalDate();
+
+        // 2. MATURITY 원장 거래번호로 GL 전표 조회
+        Map<String, Object> maturityVoucher = jdbcTemplate.queryForMap(
+                """
+        SELECT voucher_no, tx_type, reference_key, trade_date
+        FROM gl_voucher
+        WHERE tx_type = 'MATURITY'
+          AND reference_key = ?
+        """,
+                maturityTxNo);
+
+        String voucherNo = (String) maturityVoucher.get("voucher_no");
+
+        assertThat(voucherNo).matches("\\d{8}-MAT-\\d{6}");
+        assertThat(maturityVoucher.get("tx_type")).isEqualTo("MATURITY");
+        assertThat(maturityVoucher.get("reference_key")).isEqualTo(maturityTxNo);
+
+        assertThat(((java.sql.Date) maturityVoucher.get("trade_date")).toLocalDate())
+                .isEqualTo(maturityTradeDate);
+
+        // 3. MATURITY 전표 분개 2행 확인
+        List<Map<String, Object>> maturityJournal = jdbcTemplate.queryForList(
+                """
+        SELECT account_code, dr_cr, amount
+        FROM gl_journal_entry
+        WHERE voucher_no = ?
+        ORDER BY line_no
+        """,
+                voucherNo);
+
+        assertThat(maturityJournal)
+                .extracting(row -> row.get("account_code"), row -> row.get("dr_cr"), row -> ((Number) row.get("amount"))
+                        .longValue())
+                .containsExactly(tuple("20100", "DEBIT", maturityAmount), tuple("20100", "CREDIT", maturityAmount));
+
+        assertThat(countMaturityVoucher()).isEqualTo(1L);
+
         // 원장 합계와 실제 계좌 잔액 정합성
         assertThat(ledgerSumOf(PRODUCT_ACCOUNT_ID)).isZero();
         assertThat(ledgerSumOf(WITHDRAWAL_ACCOUNT_ID)).isEqualTo(expectedTransferred);
@@ -289,6 +347,8 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
 
         assertThatThrownBy(() -> terminationUseCase.terminate(command()))
                 .isInstanceOf(com.shinhan.corebank.common.exception.BusinessException.class);
+
+        assertThat(countMaturityVoucher()).isEqualTo(1L);
 
         assertThat(countInterestLedger()).isEqualTo(1L);
         assertThat(countMaturityLedger()).isEqualTo(2L);
@@ -345,6 +405,8 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
         assertThat(ledgerSumOf(PRODUCT_ACCOUNT_ID)).isEqualTo(PRINCIPAL);
 
         assertThat(countClosureHistory()).isZero();
+
+        assertThat(countMaturityVoucher()).isZero();
     }
 
     @Test
@@ -473,6 +535,8 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
             // 동시 요청 두 건 중 실제 CLOSED 전이는 한 번만 기록되어야 한다.
             assertThat(countClosureHistory()).isEqualTo(1L);
 
+            assertThat(countMaturityVoucher()).isEqualTo(1L);
+
         } finally {
             start.countDown();
             executor.shutdownNow();
@@ -497,6 +561,8 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(SubscriptionErrorCode.MATURITY_RENEW_UNSUPPORTED);
+
+        assertThat(countMaturityVoucher()).isZero();
 
         assertThat(balanceOf(PRODUCT_ACCOUNT_ID)).isEqualTo(PRINCIPAL);
 
@@ -559,6 +625,8 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
         assertThat(account.get("status")).isEqualTo("MATURED");
         assertThat(account.get("closed_date")).isNull();
         assertThat(account.get("closed_trade_date")).isNull();
+
+        assertThat(countMaturityVoucher()).isZero();
     }
 
     private MaturityTerminationCommand command() {
@@ -720,5 +788,17 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
             """,
                 Long.class,
                 PRODUCT_ACCOUNT_ID);
+    }
+
+    private long countMaturityVoucher() {
+        return jdbcTemplate.queryForObject(
+                """
+            SELECT COUNT(*)
+            FROM gl_voucher
+            WHERE trade_date = ?
+              AND tx_type = 'MATURITY'
+            """,
+                Long.class,
+                BUSINESS_DATE);
     }
 }
