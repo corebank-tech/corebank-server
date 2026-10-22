@@ -7,6 +7,7 @@ GRANT SELECT ON minicore.product TO 'etl_replica_reader'@'%';
 GRANT SELECT ON minicore.product_subscription TO 'etl_replica_reader'@'%';
 GRANT SELECT ON minicore.gl_journal_entry TO 'etl_replica_reader'@'%';
 GRANT SELECT ON minicore.holiday TO 'etl_replica_reader'@'%';
+GRANT SELECT ON minicore.business_date_cutoff TO 'etl_replica_reader'@'%';
 -- 마트(info_mart): 쓰기는 ETL 계정만, 정보계 API 계정은 읽기만. 둘 다 DDL 권한은 없다.
 CREATE USER IF NOT EXISTS 'etl_mart_writer'@'%' IDENTIFIED BY 'CHANGE_ME';
 GRANT SELECT, INSERT, UPDATE, DELETE ON info_mart.* TO 'etl_mart_writer'@'%';

@@ -9,6 +9,7 @@ import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaBalanceAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaCalendarAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaEventAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaReconciliationAdapter;
+import com.shinhan.infoetl.application.service.CutoffPolicy;
 import com.shinhan.infoetl.application.service.DailyLoadService;
 import com.shinhan.infoetl.domain.LoadResult;
 import com.shinhan.infoetl.domain.Pseudonymizer;
@@ -60,7 +61,13 @@ class EtlGrantsTest {
         try (Connection connection = open(InfoEtlTestDatabase.replicaUrl(), "etl_replica_reader");
                 Statement statement = connection.createStatement()) {
             for (String table : new String[] {
-                "ledger_entry", "account", "product", "product_subscription", "gl_journal_entry", "holiday"
+                "ledger_entry",
+                "account",
+                "product",
+                "product_subscription",
+                "gl_journal_entry",
+                "holiday",
+                "business_date_cutoff"
             }) {
                 statement.executeQuery("SELECT COUNT(*) FROM " + table).close();
             }
@@ -76,6 +83,9 @@ class EtlGrantsTest {
                     .isInstanceOf(SQLException.class)
                     .hasMessageContaining("denied");
             assertThatThrownBy(() -> statement.execute("DELETE FROM ledger_entry"))
+                    .isInstanceOf(SQLException.class)
+                    .hasMessageContaining("denied");
+            assertThatThrownBy(() -> statement.execute("DELETE FROM business_date_cutoff"))
                     .isInstanceOf(SQLException.class)
                     .hasMessageContaining("denied");
             assertThatThrownBy(() -> statement.execute("INSERT INTO holiday VALUES ('2026-12-25', '성탄절')"))
@@ -133,6 +143,7 @@ class EtlGrantsTest {
                 new JdbcReplicaEventAdapter(() -> open(replicaUrl, "etl_replica_reader")),
                 new JdbcReplicaReconciliationAdapter(() -> open(replicaUrl, "etl_replica_reader")),
                 new JdbcReplicaCalendarAdapter(() -> open(replicaUrl, "etl_replica_reader")),
+                CutoffPolicy.disabled(),
                 new JdbcMartLoadAdapter(() -> open(martUrl, "etl_mart_writer"), Clock.system(ZoneId.of("Asia/Seoul"))),
                 new JdbcLoadLockAdapter(() -> open(martUrl, "etl_mart_writer")),
                 new Pseudonymizer(TestKeys.bytes("g")));

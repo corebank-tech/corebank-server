@@ -23,6 +23,30 @@ class EtlConfigTest {
     }
 
     @Test
+    @DisplayName("경계일 환경변수가 없으면 null이고 있으면 날짜로 읽는다")
+    void readsOptionalCutoffBoundary() {
+        assertThat(EtlConfig.from(fullEnv()).cutoffBoundary()).isNull();
+
+        Map<String, String> env = fullEnv();
+        env.put("ETL_CUTOFF_BOUNDARY_DATE", "2026-10-23");
+        assertThat(EtlConfig.from(env).cutoffBoundary()).isEqualTo(java.time.LocalDate.of(2026, 10, 23));
+
+        env.put("ETL_CUTOFF_BOUNDARY_DATE", "  ");
+        assertThat(EtlConfig.from(env).cutoffBoundary()).isNull();
+    }
+
+    @Test
+    @DisplayName("경계일 형식이 잘못되면 환경변수 이름과 함께 거부한다")
+    void rejectsMalformedCutoffBoundary() {
+        Map<String, String> env = fullEnv();
+        env.put("ETL_CUTOFF_BOUNDARY_DATE", "10/23");
+
+        assertThatThrownBy(() -> EtlConfig.from(env))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ETL_CUTOFF_BOUNDARY_DATE");
+    }
+
+    @Test
     @DisplayName("환경변수가 모두 있으면 설정을 읽는다")
     void readsAllValues() {
         EtlConfig config = EtlConfig.from(fullEnv());
