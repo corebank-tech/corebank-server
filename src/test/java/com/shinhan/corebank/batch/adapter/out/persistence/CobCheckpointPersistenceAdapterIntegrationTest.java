@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.batch.application.port.out.CobCheckpointPort;
+import com.shinhan.corebank.batch.application.port.out.CobCheckpointPort.IncompleteCob;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -30,7 +32,7 @@ class CobCheckpointPersistenceAdapterIntegrationTest extends IntegrationTestSupp
     @BeforeEach
     @AfterEach
     void cleanUp() {
-        jdbcTemplate.update("DELETE FROM cob_checkpoint WHERE cob_date = ?", COB_DATE);
+        jdbcTemplate.update("DELETE FROM cob_checkpoint WHERE cob_date IN (?, ?)", COB_DATE, COB_DATE.plusDays(1));
     }
 
     private String statusOf(String stepName) {
@@ -92,5 +94,31 @@ class CobCheckpointPersistenceAdapterIntegrationTest extends IntegrationTestSupp
         cobCheckpointPort.markSuccess(COB_DATE, "missing", NOW);
 
         assertThat(rowCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("findIncomplete는 PENDING이 남은 날짜만 오래된 순으로, 남은 스텝 이름과 함께 돌려준다")
+    void findIncomplete_returnsPendingDatesOldestFirst() {
+        LocalDate later = COB_DATE.plusDays(1);
+        cobCheckpointPort.initialize(later, List.of("a", "b"), NOW);
+        cobCheckpointPort.initialize(COB_DATE, List.of("a", "b"), NOW);
+        cobCheckpointPort.markSuccess(COB_DATE, "a", NOW);
+
+        List<IncompleteCob> result = cobCheckpointPort.findIncomplete(List.of("a", "b"));
+
+        assertThat(result)
+                .filteredOn(c -> c.cobDate().equals(COB_DATE) || c.cobDate().equals(later))
+                .containsExactly(new IncompleteCob(COB_DATE, Set.of("b")), new IncompleteCob(later, Set.of("a", "b")));
+    }
+
+    @Test
+    @DisplayName("findIncomplete는 모든 스텝이 SUCCESS인 날짜와 알려지지 않은 스텝의 PENDING은 돌려주지 않는다")
+    void findIncomplete_ignoresCompletedDatesAndUnknownSteps() {
+        cobCheckpointPort.initialize(COB_DATE, List.of("a", "removed-step"), NOW);
+        cobCheckpointPort.markSuccess(COB_DATE, "a", NOW);
+
+        List<IncompleteCob> result = cobCheckpointPort.findIncomplete(List.of("a"));
+
+        assertThat(result).noneMatch(c -> c.cobDate().equals(COB_DATE));
     }
 }

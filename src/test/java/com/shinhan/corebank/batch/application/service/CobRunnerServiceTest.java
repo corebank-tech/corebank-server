@@ -18,6 +18,7 @@ import com.shinhan.corebank.batch.api.BatchStepStatus;
 import com.shinhan.corebank.batch.api.CobStep;
 import com.shinhan.corebank.batch.api.CobStepHaltException;
 import com.shinhan.corebank.batch.application.port.out.CobCheckpointPort;
+import com.shinhan.corebank.batch.application.port.out.CobCheckpointPort.IncompleteCob;
 import com.shinhan.corebank.business.api.BusinessDateAdvancer;
 import com.shinhan.corebank.business.api.BusinessDateProvider;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -27,6 +28,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -646,6 +648,134 @@ class CobRunnerServiceTest {
 
         verify(first).run(COB_DATE);
         verify(second).run(COB_DATE);
+        verify(batchExecutionLockPort).release(JOB_NAME);
+    }
+
+    private static final LocalDate OLD_COB_DATE = LocalDate.of(2026, 10, 1);
+
+    private static IncompleteCob incomplete(LocalDate cobDate, String... pendingStepNames) {
+        return new IncompleteCob(cobDate, Set.of(pendingStepNames));
+    }
+
+    @Test
+    @DisplayName("미완료 날짜는 저장된 날짜로 PENDING 스텝만 실행하고, 이미 끝난 스텝과 전환은 다시 하지 않는다 (#663)")
+    void run_resume_runsOnlyPendingStepsWithStoredDate() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+        CobStep first = stepOf("first", 1);
+        CobStep second = stepOf("second", 2);
+        when(cobCheckpointPort.findIncomplete(any())).thenReturn(List.of(incomplete(OLD_COB_DATE, "second")));
+
+        serviceWith(first, second).run(COB_DATE.plusDays(10));
+
+        verify(second).run(OLD_COB_DATE);
+        verify(first, never()).run(OLD_COB_DATE);
+        verify(businessDateAdvancer, never()).advanceFrom(OLD_COB_DATE);
+        verify(cobCheckpointPort).markSuccess(eq(OLD_COB_DATE), eq("second"), any());
+    }
+
+    @Test
+    @DisplayName("전환 행이 PENDING이면 저장된 날짜로 전환을 다시 부르고 SUCCESS로 바꾼 뒤 스텝을 이어간다 (#663)")
+    void run_resume_advancePending_callsAdvanceWithStoredDate() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+        when(businessDateAdvancer.advanceFrom(OLD_COB_DATE)).thenReturn(COB_DATE);
+        CobStep step = stepOf("step", 1);
+        when(cobCheckpointPort.findIncomplete(any()))
+                .thenReturn(List.of(incomplete(OLD_COB_DATE, ADVANCE_STEP, "step")));
+
+        serviceWith(step).run(COB_DATE.plusDays(10));
+
+        InOrder inOrder = inOrder(businessDateAdvancer, cobCheckpointPort, step);
+        inOrder.verify(businessDateAdvancer).advanceFrom(OLD_COB_DATE);
+        inOrder.verify(cobCheckpointPort).markSuccess(eq(OLD_COB_DATE), eq(ADVANCE_STEP), any());
+        inOrder.verify(step).run(OLD_COB_DATE);
+    }
+
+    @Test
+    @DisplayName("재개가 끝까지 성공하면 같은 실행에서 오늘 COB도 이어서 돈다 (#663)")
+    void run_resumeSucceeds_thenStartsNewCob() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+        CobStep step = stepOf("step", 1);
+        when(cobCheckpointPort.findIncomplete(any())).thenReturn(List.of(incomplete(OLD_COB_DATE, "step")));
+
+        serviceWith(step).run(COB_DATE.plusDays(10));
+
+        InOrder inOrder = inOrder(step, businessDateAdvancer);
+        inOrder.verify(step).run(OLD_COB_DATE);
+        inOrder.verify(businessDateAdvancer).advanceFrom(COB_DATE);
+        inOrder.verify(step).run(COB_DATE);
+    }
+
+    @Test
+    @DisplayName("재개 중 스텝이 예외로 실패해도 오늘 COB는 진행한다 (#663)")
+    void run_resumeStepFails_stillStartsNewCob() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+        CobStep step = stepOf("step", 1);
+        org.mockito.Mockito.doThrow(new RuntimeException("실패")).when(step).run(OLD_COB_DATE);
+        when(cobCheckpointPort.findIncomplete(any())).thenReturn(List.of(incomplete(OLD_COB_DATE, "step")));
+
+        serviceWith(step).run(COB_DATE.plusDays(10));
+
+        verify(step).run(COB_DATE);
+        verify(cobCheckpointPort, never()).markSuccess(eq(OLD_COB_DATE), eq("step"), any());
+    }
+
+    @Test
+    @DisplayName("재개 중 스텝이 HALTED되면 이후 날짜와 오늘 COB를 시작하지 않고 락은 반납한다 (#663)")
+    void run_resumeStepHalts_doesNotStartNewCobOrLaterDates() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        CobStep step = stepOf("step", 1);
+        org.mockito.Mockito.doThrow(new CobStepHaltException("중단")).when(step).run(OLD_COB_DATE);
+        LocalDate laterDate = OLD_COB_DATE.plusDays(1);
+        when(cobCheckpointPort.findIncomplete(any()))
+                .thenReturn(List.of(incomplete(OLD_COB_DATE, "step"), incomplete(laterDate, "step")));
+
+        serviceWith(step).run(COB_DATE.plusDays(10));
+
+        verify(step, never()).run(laterDate);
+        verify(step, never()).run(COB_DATE);
+        verify(businessDateAdvancer, never()).advanceFrom(any());
+        verify(batchExecutionLockPort).release(JOB_NAME);
+    }
+
+    @Test
+    @DisplayName("미완료 날짜가 여럿이면 오래된 날짜부터 재개한다 (#663)")
+    void run_resumeMultipleDates_oldestFirst() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+        CobStep step = stepOf("step", 1);
+        LocalDate laterDate = OLD_COB_DATE.plusDays(1);
+        when(cobCheckpointPort.findIncomplete(any()))
+                .thenReturn(List.of(incomplete(OLD_COB_DATE, "step"), incomplete(laterDate, "step")));
+
+        serviceWith(step).run(COB_DATE.plusDays(10));
+
+        InOrder inOrder = inOrder(step);
+        inOrder.verify(step).run(OLD_COB_DATE);
+        inOrder.verify(step).run(laterDate);
+        inOrder.verify(step).run(COB_DATE);
+    }
+
+    @Test
+    @DisplayName("체크포인트 조회가 실패해도 재개 없이 오늘 COB는 진행한다 (#663)")
+    void run_findIncompleteThrows_stillStartsNewCob() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+        CobStep step = stepOf("step", 1);
+        when(cobCheckpointPort.findIncomplete(any())).thenThrow(new RuntimeException("DB 순단"));
+
+        serviceWith(step).run(COB_DATE.plusDays(10));
+
+        verify(step).run(COB_DATE);
         verify(batchExecutionLockPort).release(JOB_NAME);
     }
 }

@@ -7,6 +7,7 @@ import com.shinhan.corebank.batch.api.CobStep;
 import com.shinhan.corebank.batch.api.CobStepHaltException;
 import com.shinhan.corebank.batch.application.port.in.CobRunnerUseCase;
 import com.shinhan.corebank.batch.application.port.out.CobCheckpointPort;
+import com.shinhan.corebank.batch.application.port.out.CobCheckpointPort.IncompleteCob;
 import com.shinhan.corebank.business.api.BusinessDateAdvancer;
 import com.shinhan.corebank.business.api.BusinessDateProvider;
 import io.micrometer.core.instrument.Counter;
@@ -107,6 +108,43 @@ public class CobRunnerService implements CobRunnerUseCase {
     }
 
     private void runSteps(LocalDate calendarDate) {
+        if (!resumeIncomplete()) {
+            log.error("미완료 COB 재개 중 마감이 중단돼 이번 COB는 시작하지 않음");
+            return;
+        }
+        startNewCob(calendarDate);
+    }
+
+    // 오래된 날짜부터 이어서 실행한다. 저장된 cobDate를 쓰고 today()는 보지 않는다. HALTED면 false
+    private boolean resumeIncomplete() {
+        for (IncompleteCob incomplete : findIncompleteSafely()) {
+            LocalDate cobDate = incomplete.cobDate();
+            log.info("미완료 COB 재개 - cobDate={}, pending={}", cobDate, incomplete.pendingStepNames());
+            if (incomplete.pendingStepNames().contains(ADVANCE_STEP_NAME)) {
+                advanceWithRetry(cobDate);
+                markCheckpointSuccess(cobDate, ADVANCE_STEP_NAME);
+            }
+            for (CobStep step : steps) {
+                if (incomplete.pendingStepNames().contains(step.name())
+                        && executeStep(cobDate, step) == BatchStepStatus.HALTED) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    // 조회가 실패해도 마감은 막지 않는다 - 이어서 할 일을 모른 채 새 COB로 진행한다
+    private List<IncompleteCob> findIncompleteSafely() {
+        try {
+            return cobCheckpointPort.findIncomplete(checkpointStepNames());
+        } catch (Exception e) {
+            log.error("COB 체크포인트 조회 실패 - 미완료 재개 없이 진행", e);
+            return List.of();
+        }
+    }
+
+    private void startNewCob(LocalDate calendarDate) {
         LocalDate cobDate = businessDateProvider.today();
         if (cobDate.isAfter(calendarDate)) {
             log.info("영업일이 달력보다 미래라 COB를 건너뜀 - businessDate={}, calendarDate={}", cobDate, calendarDate);
@@ -119,50 +157,57 @@ public class CobRunnerService implements CobRunnerUseCase {
         log.info("COB 시작 - cobDate={}, nextBusinessDate={}", cobDate, nextBusinessDate);
 
         for (CobStep step : steps) {
-            LocalDateTime startedAt = LocalDateTime.now(clock);
-            Timer.Sample sample = Timer.start(meterRegistry);
-            BatchStepStatus status;
-            String failureReason = null;
-            boolean halt = false;
-            try {
-                log.info("COB 스텝 시작 - name={}, order={}", step.name(), step.order());
-                step.run(cobDate);
-                log.info("COB 스텝 종료 - name={}", step.name());
-                status = BatchStepStatus.SUCCESS;
-            } catch (CobStepHaltException e) {
-                log.error("COB 스텝이 마감 중단을 요청함 - name={}, cobDate={}, 이후 스텝 생략", step.name(), cobDate, e);
-                status = BatchStepStatus.HALTED;
-                failureReason = e.getMessage();
-                halt = true;
-            } catch (Exception e) {
-                log.error("COB 스텝 실패 - name={}, cobDate={}", step.name(), cobDate, e);
-                status = BatchStepStatus.FAILURE;
-                failureReason = e.getMessage();
-            }
-            sample.stop(stepTimer(step.name()));
-            stepCounter(step.name(), status).increment();
-            // 기록은 스텝 try/catch 바깥에서 한 번만 하되, 기록(관측용) 자체의 실패가 나머지 스텝을 막지 않게 별도로 감싼다.
-            try {
-                batchExecutionHistoryPort.record(
-                        JOB_NAME, step.name(), cobDate, startedAt, LocalDateTime.now(clock), status, failureReason);
-            } catch (Exception e) {
-                log.error("COB 스텝 실행 기록 저장 실패 - name={}, cobDate={}, status={}", step.name(), cobDate, status, e);
-            }
-            if (status == BatchStepStatus.SUCCESS) {
-                markCheckpointSuccess(cobDate, step.name());
-            }
-            if (halt) {
+            if (executeStep(cobDate, step) == BatchStepStatus.HALTED) {
                 break;
             }
         }
         log.info("COB 종료 - cobDate={}", cobDate);
     }
 
-    // 날짜를 못 남겨도 마감 자체는 막지 않는다 - 3번 시도하고 안 되면 이번 날짜만 이어서 실행할 수 없다
-    private void initializeCheckpointWithRetry(LocalDate cobDate) {
+    private BatchStepStatus executeStep(LocalDate cobDate, CobStep step) {
+        LocalDateTime startedAt = LocalDateTime.now(clock);
+        Timer.Sample sample = Timer.start(meterRegistry);
+        BatchStepStatus status;
+        String failureReason = null;
+        try {
+            log.info("COB 스텝 시작 - name={}, order={}", step.name(), step.order());
+            step.run(cobDate);
+            log.info("COB 스텝 종료 - name={}", step.name());
+            status = BatchStepStatus.SUCCESS;
+        } catch (CobStepHaltException e) {
+            log.error("COB 스텝이 마감 중단을 요청함 - name={}, cobDate={}, 이후 스텝 생략", step.name(), cobDate, e);
+            status = BatchStepStatus.HALTED;
+            failureReason = e.getMessage();
+        } catch (Exception e) {
+            log.error("COB 스텝 실패 - name={}, cobDate={}", step.name(), cobDate, e);
+            status = BatchStepStatus.FAILURE;
+            failureReason = e.getMessage();
+        }
+        sample.stop(stepTimer(step.name()));
+        stepCounter(step.name(), status).increment();
+        // 기록은 스텝 try/catch 바깥에서 한 번만 하되, 기록(관측용) 자체의 실패가 나머지 스텝을 막지 않게 별도로 감싼다.
+        try {
+            batchExecutionHistoryPort.record(
+                    JOB_NAME, step.name(), cobDate, startedAt, LocalDateTime.now(clock), status, failureReason);
+        } catch (Exception e) {
+            log.error("COB 스텝 실행 기록 저장 실패 - name={}, cobDate={}, status={}", step.name(), cobDate, status, e);
+        }
+        if (status == BatchStepStatus.SUCCESS) {
+            markCheckpointSuccess(cobDate, step.name());
+        }
+        return status;
+    }
+
+    private List<String> checkpointStepNames() {
         List<String> stepNames = new ArrayList<>();
         stepNames.add(ADVANCE_STEP_NAME);
         steps.forEach(step -> stepNames.add(step.name()));
+        return stepNames;
+    }
+
+    // 날짜를 못 남겨도 마감 자체는 막지 않는다 - 3번 시도하고 안 되면 이번 날짜만 이어서 실행할 수 없다
+    private void initializeCheckpointWithRetry(LocalDate cobDate) {
+        List<String> stepNames = checkpointStepNames();
         for (int attempt = 1; attempt <= CHECKPOINT_MAX_ATTEMPTS; attempt++) {
             try {
                 cobCheckpointPort.initialize(cobDate, stepNames, LocalDateTime.now(clock));
