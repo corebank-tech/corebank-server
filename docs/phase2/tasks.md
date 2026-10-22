@@ -150,8 +150,8 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 | [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-① | 하이브리드 연결 — 온프레미스 VM 1대 · SSM 하이브리드 등록 | S2 | 1.5 | [O-10](README.md#8-미결) | — | — | 예정 |
 | [PH-51](#ph-51-컴퓨트-계층--컷오버) | 컴퓨트 계층 · 컷오버 | S3 | 4.5 | PH-50 · PH-57 · PH-58 ACM ARN | 리허설 10/19~23 · **apply 10/26 · 컷오버 10/27** | — | 예정 |
 | [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-② | 하이브리드 연결 — Site-to-Site VPN | S3 | 1 | PH-50 · PH-100-① | 터널 **10/23** (리허설 안) → P2 | — | 예정 |
-| [PH-76](#ph-76-정보계-etl) | 정보계 ETL | S3 | 2.5 | PH-75 · PH-43 · #603(완료) · 원본: PH-70-② 복제 | 10/27 복제 시작 뒤 · PH-77(10/28) 전 | #644 · PR #649 · #645 · #646 | 진행 |
-| [PH-77](#ph-77-정보계-조회-api) | 정보계 조회 API | S3 | 1.5 | PH-76 | **10/28** | — | 예정 |
+| [PH-76](#ph-76-정보계-etl) | 정보계 ETL | S3 | 2.5 | PH-75 · PH-43 · #603(완료) · 원본: PH-70-② 복제 | 10/27 복제 시작 뒤 · PH-77(10/28) 전 | #644 · #645 · #646 · #664 · #668 · PR #649 · #665 · #669 · #674 | 진행 |
+| [PH-77](#ph-77-정보계-조회-api) | 정보계 조회 API | S3 | 1.5 | PH-76 | **10/28** | #675 | 예정 |
 | [PH-45](#ph-45-cob-병렬화--365) | 청크 → 병렬 스텝 · 실패 격리 · #365 | S3 | 3 | PH-43 | PH-43 60b 베이스라인 뒤(릴리스 3) | #365 · PR #635 · #631 · PR #636 | 예정 |
 | [PH-56](#ph-56-was-스케일아웃-비선형성-실증) | WAS 스케일아웃 비선형성 실증 | S4 | 1.5 | PH-51 · PH-30 · PH-49c | — | — | 예정 |
 | [PH-55](#ph-55-배포-파이프라인--destroy-리허설) | 배포 파이프라인 · 환경 3단계 · 권한 분리 · destroy 리허설 | S4 | 4 | PH-51 | — | — | 예정 |
@@ -241,7 +241,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 - 관리자 로그인·로그아웃 감사로그: `AuditEventType.LOGIN`에 actor role을 포함한다.
 - 권한 매핑: 정보계(ADM-03·PH-77)는 `GL_READ`([D-09](README.md#d-09--923--리드)), 대사 불일치(ADM-04·PH-38 목록)는 `AUDIT_READ`
 - **완료 기준:** 조회 전용 ADMIN이 PH-97 변경 API를 호출하면 403이 난다. FE 관리자 채널이 실 응답으로 돈다.
-- 현황: `customer`에 role·permissions 컬럼 없음. 코드의 `/admin/**`은 임시 가드(#448, PR #455 머지)만 있다.
+- 현황: `customer.role`·`admin_permission` 은 `#561`(PR #572) 머지 완료. `/admin/**` 인가와 S0 임시 가드 제거는 `#573` 에서 한다.
 
 ### PH-03. API 문서 전수 점검 (① 측정 S1 → ② 0 마감 S4)
 
@@ -730,18 +730,18 @@ ADM-01 검색·상세·변경 요청에 사유 코드 선택을 붙이고 `X-Acc
 ```
 TransferExecutionService.execute(command)                         ← 편집자: P4만
  ├─ 사전 검증 (기존)
- ├─ tradeDate = businessDateProvider.today()                        ← P5 provider, P4가 대입(#516). 한 번 구해 transfer에 싣고 원장·훅 B가 같이 쓴다
  ├─ 채번 (기존)                                                     ← 채번 뒤라 거부돼도 ERROR 행이 남는다
  ├─ [훅 A] TransferPreCheck 체인 (락 이전 · 읽기 전용 · order 순)
  │     └─ P2 PH-90 AvailableBalancePreCheck
  ├─ OTP 소비 (기존)
  ├─ requiresNewTransactionTemplate.execute {                       ← PH-80이 S2에 재작성
+ │     tradeDate = BusinessDateGate.acquireSharedAndReadBusinessDate()  ← 가장 먼저(gate → 한도 → 계좌). 한 번 구해 transfer에 싣고 원장·훅 B가 같이 쓴다(#516, #662)
  │     한도 · 계좌 락 · 잔액 (기존)
  │     원장 기표 LedgerPair (기존)
  │     [훅 B] LedgerPostingHook.afterLedger(ctx)                   ← P3 PH-24 (예외 → 롤백 = 이체 실패)
  │     publisher.publishEvent(new TransferSettled(...))           ← P1 타입, EVT-2(#505)
  │   }
- └─ failTransfer() REQUIRES_NEW { ERROR 저장; publishEvent(new TransferSettled(...)) }
+ └─ failTransfer() REQUIRES_NEW { tradeDate = gate로 읽기; ERROR 저장; publishEvent(new TransferSettled(...)) }
 
 [BEFORE_COMMIT 리스너 — P1 PH-96] 아웃박스 INSERT (JdbcTemplate). 예외 → 원본 롤백
 ```
@@ -783,7 +783,7 @@ TransferExecutionService.execute(command)                         ← 편집자:
 
 - **불일치 저장 테이블** — Flyway + `schema_reference.md` + ERD. 목록 API와 FE ADM-04가 읽을 데이터다.
 - 불일치 목록 조회 API(관리자, `AUDIT_READ`)
-    - 현황(#613): 테이블 `ledger_reconciliation_mismatch`(영업일 `COB_DATE`별, 같은 영업일 재대사는 교체)와 `GET /admin/ledger-reconciliation/mismatches`(영업일 생략 시 최근 영업일, `all=true`는 100건 상한)를 넣었다. 권한은 아직 `/admin/**` 임시 가드(#448)이고 `AUDIT_READ`는 PH-49a 머지 때 붙인다. COB 대사 스텝에서 저장을 부르는 연결은 #605 머지 뒤 후속 PR이다 — 그 전까지 테이블은 비어 있다.
+    - 현황(#613): 테이블 `ledger_reconciliation_mismatch`(영업일 `COB_DATE`별, 같은 영업일 재대사는 교체)와 `GET /admin/ledger-reconciliation/mismatches`(영업일 생략 시 최근 영업일, `all=true`는 100건 상한)를 넣었다. 권한은 `#573` 이 `AUDIT_READ` 로 붙인다. COB 대사 스텝에서 저장을 부르는 연결은 #605 머지 뒤 후속 PR이다 — 그 전까지 테이블은 비어 있다.
 - 300만 원장 대사 시간 베이스라인(60b 적재 뒤, [D-27](README.md#d-27--109--팀-합의)). 전수 대사 경로(#468)로 잰다.
 - **`CobStep` 편입** — P5 인터페이스(10/6)가 들어오면 독립 스케줄러를 대사 스텝 구현체로 옮긴다. 등록 주체는 P4이고, soft/hard 임계는 P5가 정한다.
     - 현황(#604): `LedgerReconciliationCobStep`(`order=2`)이 전수 대사를 돌리고 독립 스케줄(02:00 증분 · 일 03:00 전수)은 없앴다. 증분 대사는 기표 시각 기준이라 COB 안에서 23:30~24:00·주말 거래를 놓쳐 쓰지 않는다. 임계는 `app.ledger-reconciliation.cob-hard-threshold`(기본 10). **hard도 #663 전까지는 로그만 남긴다**(#600) — #663 완료 뒤 P4가 `CobStepHaltException`을 켠다. `run()`·`runFull()`과 같은 대사 락을 잡고(못 잡으면 `LEDGER_RECONCILIATION_SKIPPED` ERROR), COB가 길어져도 00:10 자동이체가 밀리지 않게 스케줄러 스레드 풀을 2로 늘렸다(`spring.task.scheduling.pool.size`).
@@ -1036,10 +1036,11 @@ public interface CobStep {
 - **PH-76은 10/21까지 덤프 적재로 먼저 진행한다**(P5 공지). PH-77은 10/28 그대로이고, 10/26~27은 컷오버라 측정과 적재 확인을 하지 않는다.
 - **온프레미스 독립 작업이다.** COB 스텝이 아니다([D-25](README.md#d-25--927--리드-제안1020-팀-확정)). 자동 적재는 #556이 원천 `business_date_cutoff`와 date-fence를 구현한 뒤에만 켠다. 레플리카의 `business_date_cutoff(base_date=D, status=CLOSED)`가 유일한 시작 신호이고, `batch_execution_history`(#603)는 관측용이라 신호로 쓰지 않는다. cutoff는 D 거래를 모두 drain한 뒤 영업일 전환과 같은 원천 트랜잭션으로 커밋되어야 하며, 복제는 `replica_preserve_commit_order = ON`으로 그 순서를 보존한다. 상세 조건은 [info_mart.md](info_mart.md) §3-0~§3-1이다.
 - 레플리카는 10/27 복제 시작(P2 PH-70-②) 뒤에 생긴다. 그 전에는 온프레미스 MySQL에 덤프를 적재해 개발하고, 10/27에 원본을 레플리카로 바꾼다. **Plan B:** 복제가 늦으면 덤프 적재로 시연한다.
-- 마트 2종을 온프레미스 MySQL에 적재한다. 전일 확정분 증분이고 재적재가 가능하며, **PII는 적재하지 않는다.** 스키마 · 트랜잭션 경계 · 대조 규칙은 [info_mart.md](info_mart.md) §2~§4를 따른다. 이벤트 적재 전에는 P2가 가입·해지 때의 논리 영업일을 `subscription_trade_date`·`closed_trade_date`로 저장해야 한다(§3-0·§3-3). 구현은 별도 jar(`info-etl.jar`), Spring 없이 JDBC다(#644). 잔액 적재 #644, 이벤트 · 기간 적재 #645, 대조 · PII 검증 · 적재 시간 측정 #646.
+- 마트 2종을 온프레미스 MySQL에 적재한다. 전일 확정분 증분이고 재적재가 가능하며, **PII는 적재하지 않는다.** 스키마 · 트랜잭션 경계 · 대조 규칙은 [info_mart.md](info_mart.md) §2~§4를 따른다. 이벤트 적재 전에는 P2가 가입·해지 때의 논리 영업일을 `subscription_trade_date`·`closed_trade_date`로 저장해야 한다(§3-0·§3-3). 구현은 별도 jar(`info-etl.jar`), Spring 없이 JDBC다(#644). 잔액 적재 #644, 이벤트 · 기간 적재 #645, 대조 · PII 검증 · 적재 시간 측정 #646, 자동 시작(cutoff 감지) #668. 원천 컬럼은 #664(PR #665)로 추가됐고 `closed_trade_date`는 해지 구현(PH-15·16)이 채운다.
 - 덤프 기간에는 기준일을 실행 인자로 받는다. 거래일이 NULL인 원장은 [#515](https://github.com/corebank-tech/corebank-server/issues/515) 채우기 규칙으로 대체한다.
 - 마트는 레플리카와 **다른 MySQL 인스턴스**에 둔다(같은 VM의 다른 포트 가능). 레플리카의 `super_read_only`가 인스턴스 전체에 걸리기 때문이다. 가명 키(HMAC)의 키는 ETL에만 둔다.
 - 적재 실패는 soft다. 300만 원장 적재 시간을 기록하고, 마트 합계 = 원장 합계를 P3와 함께 검증한다.
+- 첫 적재 측정 결과는 [ph76_etl_first_load.md](ph76_etl_first_load.md)에 기록한다. 로컬 기준선은 10/21에 기록했고, 최종 VM 재측정은 VM을 받은 뒤 같은 문서에 추가한다.
 
 ### PH-77. 정보계 조회 API
 

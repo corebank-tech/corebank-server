@@ -1,6 +1,6 @@
 package com.shinhan.corebank.transfer.application.service;
 
-import com.shinhan.corebank.business.api.BusinessDateProvider;
+import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
@@ -49,6 +49,9 @@ public class InterbankTransferService implements InterbankTransferUseCase {
     private static final long FEE = 0L; // 타행 수수료는 범위 밖이라 0 고정 (tasks.md PH-33-②)
     private static final TransferChannel CHANNEL = TransferChannel.WB;
 
+    // 채번 뒤 출금 전까지 들고 다니는 값. 거래일은 gate를 쥔 트랜잭션 안에서 읽어야 해서 Transfer는 거기서 만든다.
+    private record Draft(String transactionNumber, LocalDateTime requestedAt) {}
+
     private final AccountLockPort accountLockPort;
     private final InterbankBankPort interbankBankPort;
     private final InterbankGatewayPort interbankGatewayPort;
@@ -61,7 +64,7 @@ public class InterbankTransferService implements InterbankTransferUseCase {
     private final LedgerSavePort ledgerSavePort;
     private final JournalPostingUseCase journalPostingUseCase;
     private final List<TransferPreCheck> transferPreChecks;
-    private final BusinessDateProvider businessDateProvider;
+    private final BusinessDateGate businessDateGate;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
     private final TransactionTemplate requiresNewTransactionTemplate;
@@ -79,7 +82,7 @@ public class InterbankTransferService implements InterbankTransferUseCase {
             LedgerSavePort ledgerSavePort,
             JournalPostingUseCase journalPostingUseCase,
             List<TransferPreCheck> transferPreChecks,
-            BusinessDateProvider businessDateProvider,
+            BusinessDateGate businessDateGate,
             ApplicationEventPublisher eventPublisher,
             Clock clock,
             PlatformTransactionManager transactionManager) {
@@ -97,7 +100,7 @@ public class InterbankTransferService implements InterbankTransferUseCase {
         this.transferPreChecks = transferPreChecks.stream()
                 .sorted(Comparator.comparingInt(TransferPreCheck::order))
                 .toList();
-        this.businessDateProvider = businessDateProvider;
+        this.businessDateGate = businessDateGate;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
@@ -111,25 +114,13 @@ public class InterbankTransferService implements InterbankTransferUseCase {
             throw new BusinessException(TransferErrorCode.UNSUPPORTED_BANK);
         }
         LocalDateTime requestedAt = LocalDateTime.now(clock);
-        Transfer created = null;
+        Draft draft = null;
         Transfer pending;
         try {
             verifyBeforeNumbering(command);
 
-            LocalDate tradeDate = businessDateProvider.today();
             String transactionNumber = transferSequencePort.nextTransactionNumber(requestedAt.toLocalDate(), CHANNEL);
-            created = Transfer.createInterbank(
-                    transactionNumber,
-                    command.withdrawalAccountId(),
-                    command.payeeBankCode(),
-                    command.depositAccountNumber(),
-                    command.amount(),
-                    FEE,
-                    CHANNEL,
-                    command.myPassbookMemo(),
-                    command.recipientPassbookMemo(),
-                    requestedAt,
-                    tradeDate);
+            draft = new Draft(transactionNumber, requestedAt);
 
             preCheckWithoutLock(command);
             runTransferPreChecks(command);
@@ -141,9 +132,9 @@ public class InterbankTransferService implements InterbankTransferUseCase {
                     command.depositAccountNumber(),
                     command.amount());
 
-            pending = debitAndHold(command, created);
+            pending = debitAndHold(command, draft);
         } catch (BusinessException e) {
-            if (created == null) {
+            if (draft == null) {
                 return InterbankTransferResult.builder()
                         .status(ProcessResultStatus.ERROR)
                         .payeeBankCode(command.payeeBankCode())
@@ -151,9 +142,9 @@ public class InterbankTransferService implements InterbankTransferUseCase {
                         .errorMessage(e.getMessage())
                         .build();
             }
-            return toResult(failBeforeSend(command, created, e.getErrorCode().getCode(), e.getMessage()));
+            return toResult(failBeforeSend(command, draft, e.getErrorCode().getCode(), e.getMessage()));
         } catch (RuntimeException e) {
-            recordInternalError(command, created, e);
+            recordInternalError(command, draft, e);
             throw e;
         }
 
@@ -198,8 +189,10 @@ public class InterbankTransferService implements InterbankTransferUseCase {
     }
 
     // 1단계. 한도 적립 → 출금계좌 락 → 재검증 → 출금 → 원장 1행 → 미결제 전표 → TIMEOUT으로 커밋.
-    private Transfer debitAndHold(InterbankTransferCommand command, Transfer created) {
+    private Transfer debitAndHold(InterbankTransferCommand command, Draft draft) {
         return requiresNewTransactionTemplate.execute(status -> {
+            // 가장 먼저 gate를 잡는다(gate → 한도 → 계좌). 한 건에 한 번만 읽어 transfer에 싣는다 — 원장·전표가 같은 거래일을 갖게(#516).
+            Transfer created = newTransfer(command, draft, businessDateGate.acquireSharedAndReadBusinessDate());
             transferLimitPort.checkAndReserve(command.customerId(), command.amount());
 
             LockedAccount locked = accountLockPort.lockForCredit(command.withdrawalAccountId());
@@ -256,9 +249,11 @@ public class InterbankTransferService implements InterbankTransferUseCase {
 
     // 출금 전 실패. 1단계가 롤백돼 행이 없으므로 ERROR 행을 새로 남긴다(당행 failTransfer와 같다).
     private Transfer failBeforeSend(
-            InterbankTransferCommand command, Transfer created, String errorCode, String errorMessage) {
-        created.fail(errorCode, errorMessage);
+            InterbankTransferCommand command, Draft draft, String errorCode, String errorMessage) {
         return requiresNewTransactionTemplate.execute(status -> {
+            // 롤백된 1단계의 거래일을 쓰지 않고, 이 트랜잭션에서 gate로 읽는다.
+            Transfer created = newTransfer(command, draft, businessDateGate.acquireSharedAndReadBusinessDate());
+            created.fail(errorCode, errorMessage);
             Transfer failed = transferSavePort.save(created);
             eventPublisher.publishEvent(TransferSettled.builder()
                     .customerId(command.customerId())
@@ -274,19 +269,34 @@ public class InterbankTransferService implements InterbankTransferUseCase {
     }
 
     // 내부 오류도 ERROR 행을 남기되, 남기다 실패한 원인은 원래 예외에 붙여 둘 다 로그에 남긴다.
-    private void recordInternalError(InterbankTransferCommand command, Transfer created, RuntimeException cause) {
-        if (created == null) {
+    private void recordInternalError(InterbankTransferCommand command, Draft draft, RuntimeException cause) {
+        if (draft == null) {
             return;
         }
         try {
             failBeforeSend(
                     command,
-                    created,
+                    draft,
                     CommonErrorCode.INTERNAL_ERROR.getCode(),
                     CommonErrorCode.INTERNAL_ERROR.getMessage());
         } catch (RuntimeException recordingFailure) {
             cause.addSuppressed(recordingFailure);
         }
+    }
+
+    private Transfer newTransfer(InterbankTransferCommand command, Draft draft, LocalDate tradeDate) {
+        return Transfer.createInterbank(
+                draft.transactionNumber(),
+                command.withdrawalAccountId(),
+                command.payeeBankCode(),
+                command.depositAccountNumber(),
+                command.amount(),
+                FEE,
+                CHANNEL,
+                command.myPassbookMemo(),
+                command.recipientPassbookMemo(),
+                draft.requestedAt(),
+                tradeDate);
     }
 
     private static InterbankTransferResult toResult(Transfer transfer) {

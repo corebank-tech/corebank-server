@@ -2,19 +2,23 @@ package com.shinhan.infoetl;
 
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcConnectionFactory;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcLoadLockAdapter;
+import com.shinhan.infoetl.adapter.out.jdbc.JdbcMartInspectionAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcMartLoadAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaBalanceAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaCalendarAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaCutoffAdapter;
 import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaEventAdapter;
+import com.shinhan.infoetl.adapter.out.jdbc.JdbcReplicaReconciliationAdapter;
 import com.shinhan.infoetl.application.port.in.AutoLoadUseCase;
 import com.shinhan.infoetl.application.port.in.DailyLoadUseCase;
 import com.shinhan.infoetl.application.port.in.RangeLoadUseCase;
 import com.shinhan.infoetl.application.service.AutoLoadService;
 import com.shinhan.infoetl.application.service.CutoffPolicy;
 import com.shinhan.infoetl.application.service.DailyLoadService;
+import com.shinhan.infoetl.application.service.PiiVerificationService;
 import com.shinhan.infoetl.application.service.RangeLoadService;
 import com.shinhan.infoetl.domain.LoadResult;
+import com.shinhan.infoetl.domain.PiiVerificationResult;
 import com.shinhan.infoetl.domain.Pseudonymizer;
 import com.shinhan.infoetl.domain.RangeLoadResult;
 import java.sql.Connection;
@@ -41,15 +45,21 @@ public final class InfoEtlMain {
 
     // 하루만 적재하면 from == to == baseDate이고 range가 false다.
     // --auto는 날짜 없이 경계일부터 가장 최근 cutoff까지 밀린 날짜를 적재한다.
-    record LoadCommand(LocalDate from, LocalDate to, boolean range, boolean rebuild, boolean auto) {
+    record LoadCommand(LocalDate from, LocalDate to, boolean range, boolean rebuild, boolean auto, boolean verifyPii) {
 
         static LoadCommand automatic() {
-            return new LoadCommand(null, null, false, false, true);
+            return new LoadCommand(null, null, false, false, true, false);
+        }
+
+        // --verify-pii는 날짜 없이 마트만 검사한다.
+        static LoadCommand pii() {
+            return new LoadCommand(null, null, false, false, false, true);
         }
     }
 
     private static final String REBUILD_ARGUMENT = "--rebuild";
     private static final String AUTO_ARGUMENT = "--auto";
+    private static final String VERIFY_PII_ARGUMENT = "--verify-pii";
 
     private InfoEtlMain() {}
 
@@ -82,15 +92,19 @@ public final class InfoEtlMain {
         CutoffPolicy cutoffPolicy = config.cutoffBoundary() == null
                 ? CutoffPolicy.disabled()
                 : CutoffPolicy.enabled(config.cutoffBoundary(), cutoff);
-        DailyLoadUseCase daily = new DailyLoadService(
+        DailyLoadUseCase daily = new TimedDailyLoad(new DailyLoadService(
                 new JdbcReplicaBalanceAdapter(replica),
                 new JdbcReplicaEventAdapter(replica),
+                new JdbcReplicaReconciliationAdapter(replica),
                 calendar,
                 cutoffPolicy,
                 martLoad,
                 new JdbcLoadLockAdapter(mart),
-                pseudonymizer);
+                pseudonymizer));
         try {
+            if (command.verifyPii()) {
+                return reportPii(new PiiVerificationService(new JdbcMartInspectionAdapter(mart)).verify());
+            }
             RangeLoadUseCase rangeLoad = new RangeLoadService(daily, calendar, martLoad);
             if (command.auto()) {
                 AutoLoadUseCase autoLoad = new AutoLoadService(rangeLoad, cutoff, config.cutoffBoundary());
@@ -105,6 +119,17 @@ public final class InfoEtlMain {
             LOG.log(System.Logger.Level.ERROR, "적재 실패 - " + command, e);
             return EXIT_LOAD_FAILED;
         }
+    }
+
+    private static int reportPii(PiiVerificationResult result) {
+        result.violations().forEach(violation -> LOG.log(System.Logger.Level.ERROR, "PII 검증 위반 - {0}", violation));
+        LOG.log(
+                System.Logger.Level.INFO,
+                "PII 검증 {0} - 문자열 컬럼 {1}개 검사, 위반 {2}건",
+                result.passed() ? "통과" : "실패",
+                result.scannedColumns(),
+                result.violations().size());
+        return result.passed() ? EXIT_OK : EXIT_LOAD_FAILED;
     }
 
     private static int report(RangeLoadResult result) {
@@ -143,6 +168,12 @@ public final class InfoEtlMain {
 
     // --base-date= 하나, 또는 --from= 과 --to= 둘. 섞어 쓰면 거부한다.
     static LoadCommand parseCommand(String[] args) {
+        if (Arrays.asList(args).contains(VERIFY_PII_ARGUMENT)) {
+            if (args.length != 1) {
+                throw new IllegalArgumentException("--verify-pii는 다른 인자와 함께 쓸 수 없습니다.");
+            }
+            return LoadCommand.pii();
+        }
         if (Arrays.asList(args).contains(AUTO_ARGUMENT)) {
             if (args.length != 1) {
                 throw new IllegalArgumentException("--auto는 다른 인자와 함께 쓸 수 없습니다.");
@@ -161,7 +192,7 @@ public final class InfoEtlMain {
         }
         if (hasBase) {
             LocalDate baseDate = parseBaseDate(args);
-            return new LoadCommand(baseDate, baseDate, false, rebuild, false);
+            return new LoadCommand(baseDate, baseDate, false, rebuild, false, false);
         }
         if (hasFrom && hasTo) {
             LocalDate from = parseDate(args, FROM_ARGUMENT);
@@ -169,7 +200,7 @@ public final class InfoEtlMain {
             if (from.isAfter(to)) {
                 throw new IllegalArgumentException("--from은 --to보다 늦을 수 없습니다.");
             }
-            return new LoadCommand(from, to, true, false, false);
+            return new LoadCommand(from, to, true, false, false, false);
         }
         if (hasFrom || hasTo) {
             throw new IllegalArgumentException("--from과 --to는 함께 줘야 합니다.");

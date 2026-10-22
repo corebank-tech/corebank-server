@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.shinhan.infoetl.TestKeys;
 import com.shinhan.infoetl.application.port.out.AsOfCalculator;
 import com.shinhan.infoetl.application.port.out.EtlStorageException;
+import com.shinhan.infoetl.application.port.out.GlMovementReader;
 import com.shinhan.infoetl.application.port.out.LoadLock;
 import com.shinhan.infoetl.application.port.out.LoadLockPort;
 import com.shinhan.infoetl.application.port.out.MartLoadPort;
@@ -13,9 +14,11 @@ import com.shinhan.infoetl.application.port.out.ReplicaBalancePort;
 import com.shinhan.infoetl.application.port.out.ReplicaCalendarPort;
 import com.shinhan.infoetl.application.port.out.ReplicaCutoffPort;
 import com.shinhan.infoetl.application.port.out.ReplicaEventPort;
+import com.shinhan.infoetl.application.port.out.ReplicaReconciliationPort;
 import com.shinhan.infoetl.domain.BalanceRow;
 import com.shinhan.infoetl.domain.CutoffMissingException;
 import com.shinhan.infoetl.domain.EventType;
+import com.shinhan.infoetl.domain.LedgerMismatchException;
 import com.shinhan.infoetl.domain.LoadAlreadyRunningException;
 import com.shinhan.infoetl.domain.LoadResult;
 import com.shinhan.infoetl.domain.MartBalanceRow;
@@ -42,6 +45,7 @@ class DailyLoadServiceTest {
     private final FakeLock lockPort = new FakeLock();
     private final FakeCalendar calendar = new FakeCalendar();
     private CutoffPolicy cutoffPolicy = CutoffPolicy.disabled();
+    private final FakeReconciliation reconciliation = new FakeReconciliation();
 
     @Test
     @DisplayName("읽은 행을 가명 키로 바꿔 한 번에 넘기고 결과를 돌려준다")
@@ -139,6 +143,7 @@ class DailyLoadServiceTest {
                     throw failure;
                 },
                 baseDate -> List.of(),
+                reconciliation,
                 calendar,
                 cutoffPolicy,
                 martPort,
@@ -198,6 +203,7 @@ class DailyLoadServiceTest {
         DailyLoadService failing = new DailyLoadService(
                 baseDate -> oneBalance(),
                 baseDate -> List.of(),
+                reconciliation,
                 calendar,
                 cutoffPolicy,
                 martPort,
@@ -298,6 +304,58 @@ class DailyLoadServiceTest {
         assertThat(martPort.startedBaseDate).isNull();
     }
 
+    @Test
+    @DisplayName("레플리카에서 읽은 원장 합계를 마트 반영에 넘기고 GL 증감 읽기도 연결한다")
+    void passesLedgerTotalAndGlReaderToPublish() {
+        reconciliation.ledgerTotal = 300L;
+        reconciliation.glMovement = 42L;
+        service(oneBalance(), List.of()).load(D);
+
+        assertThat(martPort.publishedLedgerTotal).isEqualTo(300L);
+        assertThat(martPort.publishedGlReader.readDepositMovement(D.minusDays(1), D))
+                .isEqualTo(42L);
+        assertThat(reconciliation.glFrom).isEqualTo(D.minusDays(1));
+        assertThat(reconciliation.glTo).isEqualTo(D);
+    }
+
+    @Test
+    @DisplayName("원장 대조에 실패하면 두 합계와 함께 실패로 기록하고 예외를 그대로 던진다")
+    void ledgerMismatchIsRecordedWithTotals() {
+        LedgerMismatchException mismatch = new LedgerMismatchException(1_000L, 900L);
+        martPort.publishFailure = mismatch;
+
+        assertThatThrownBy(() -> service(oneBalance(), List.of()).load(D)).isSameAs(mismatch);
+
+        assertThat(martPort.mismatchLedgerTotal).isEqualTo(1_000L);
+        assertThat(martPort.mismatchMartTotal).isEqualTo(900L);
+        assertThat(martPort.mismatchReason).contains("LedgerMismatchException");
+        assertThat(martPort.failedReasons).isEmpty();
+    }
+
+    @Test
+    @DisplayName("T2에서 완료된 날짜 범위의 휴일로 asOf를 계산해 결과에 담는다")
+    void computesAsOfFromCompletedDatesInsideTheLoad() {
+        martPort.completedBeforeLoad = Set.of(LocalDate.of(2026, 10, 15), LocalDate.of(2026, 10, 16));
+        calendar.holidays = Set.of(LocalDate.of(2026, 10, 19)); // 10-17,18은 주말, 10-19는 공휴일
+        DailyLoadService service = service(oneBalance(), List.of());
+
+        LoadResult result = service.load(D);
+
+        assertThat(result.asOfDate()).isEqualTo(D);
+        assertThat(calendar.lastRange).containsExactly(LocalDate.of(2026, 10, 15), D);
+    }
+
+    private DailyLoadService service(List<BalanceRow> balances, List<SubscriptionEventRow> events) {
+        ReplicaBalancePort balancePort = baseDate -> balances;
+        ReplicaEventPort eventPort = baseDate -> events;
+        return new DailyLoadService(
+                balancePort, eventPort, reconciliation, calendar, cutoffPolicy, martPort, lockPort, pseudonymizer);
+    }
+
+    private static List<BalanceRow> oneBalance() {
+        return List.of(new BalanceRow(1L, 11L, "DEMAND_DEPOSIT", null, null, 300L));
+    }
+
     private static final class FakeCutoff implements ReplicaCutoffPort {
 
         private final Set<LocalDate> closed;
@@ -317,27 +375,24 @@ class DailyLoadServiceTest {
         }
     }
 
-    @Test
-    @DisplayName("T2에서 완료된 날짜 범위의 휴일로 asOf를 계산해 결과에 담는다")
-    void computesAsOfFromCompletedDatesInsideTheLoad() {
-        martPort.completedBeforeLoad = Set.of(LocalDate.of(2026, 10, 15), LocalDate.of(2026, 10, 16));
-        calendar.holidays = Set.of(LocalDate.of(2026, 10, 19)); // 10-17,18은 주말, 10-19는 공휴일
-        DailyLoadService service = service(oneBalance(), List.of());
+    private static final class FakeReconciliation implements ReplicaReconciliationPort {
 
-        LoadResult result = service.load(D);
+        long ledgerTotal = 300L;
+        long glMovement = 0L;
+        LocalDate glFrom;
+        LocalDate glTo;
 
-        assertThat(result.asOfDate()).isEqualTo(D);
-        assertThat(calendar.lastRange).containsExactly(LocalDate.of(2026, 10, 15), D);
-    }
+        @Override
+        public long readLedgerTotal(LocalDate baseDate) {
+            return ledgerTotal;
+        }
 
-    private DailyLoadService service(List<BalanceRow> balances, List<SubscriptionEventRow> events) {
-        ReplicaBalancePort balancePort = baseDate -> balances;
-        ReplicaEventPort eventPort = baseDate -> events;
-        return new DailyLoadService(balancePort, eventPort, calendar, cutoffPolicy, martPort, lockPort, pseudonymizer);
-    }
-
-    private static List<BalanceRow> oneBalance() {
-        return List.of(new BalanceRow(1L, 11L, "DEMAND_DEPOSIT", null, null, 300L));
+        @Override
+        public long readGlDepositMovement(LocalDate fromExclusive, LocalDate toInclusive) {
+            glFrom = fromExclusive;
+            glTo = toInclusive;
+            return glMovement;
+        }
     }
 
     private static final class FakeCalendar implements ReplicaCalendarPort {
@@ -377,6 +432,11 @@ class DailyLoadServiceTest {
         Duration startedStaleAfter;
         List<MartBalanceRow> publishedBalances;
         List<MartEventRow> publishedEvents;
+        Long publishedLedgerTotal;
+        GlMovementReader publishedGlReader;
+        String mismatchReason;
+        Long mismatchLedgerTotal;
+        Long mismatchMartTotal;
         Set<LocalDate> completedBeforeLoad = Set.of();
         final List<String> failedReasons = new ArrayList<>();
         RuntimeException publishFailure;
@@ -400,7 +460,11 @@ class DailyLoadServiceTest {
                 LocalDate baseDate,
                 List<MartBalanceRow> balances,
                 List<MartEventRow> events,
+                long ledgerTotal,
+                GlMovementReader glMovementReader,
                 AsOfCalculator asOfCalculator) {
+            this.publishedLedgerTotal = ledgerTotal;
+            this.publishedGlReader = glMovementReader;
             if (publishFailure != null) {
                 throw publishFailure;
             }
@@ -415,6 +479,13 @@ class DailyLoadServiceTest {
                     events.size(),
                     balances.stream().mapToLong(MartBalanceRow::balance).sum(),
                     asOfCalculator.calculate(Collections.min(completed), completed));
+        }
+
+        @Override
+        public void failLedgerMismatch(long loadBatchId, String reason, long ledgerTotal, long martBalanceTotal) {
+            this.mismatchReason = reason;
+            this.mismatchLedgerTotal = ledgerTotal;
+            this.mismatchMartTotal = martBalanceTotal;
         }
 
         @Override

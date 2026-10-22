@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import com.shinhan.corebank.customer.application.port.out.CustomerAdminQueryPort;
 import com.shinhan.corebank.customer.application.port.out.CustomerAdminView;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
@@ -178,6 +179,7 @@ class CustomerAdminQueryPersistenceAdapterTest extends IntegrationTestSupport {
                 failures,
                 locked,
                 CustomerStatus.ACTIVE,
+                CustomerRole.CUSTOMER,
                 null,
                 null,
                 null,

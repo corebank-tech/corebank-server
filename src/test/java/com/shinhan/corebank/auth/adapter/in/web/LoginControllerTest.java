@@ -23,6 +23,7 @@ import com.shinhan.corebank.auth.application.port.in.LoginResult;
 import com.shinhan.corebank.auth.application.port.in.LoginUseCase;
 import com.shinhan.corebank.auth.domain.exception.LoginFailedException;
 import com.shinhan.corebank.auth.domain.model.LoginAttemptResult;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.OffsetDateTime;
@@ -36,6 +37,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = LoginController.class)
 @Import({
+    LoginSessionIssuer.class,
     SecurityConfig.class,
     SessionAuthenticationEntryPoint.class,
     SessionAccessDeniedHandler.class,
@@ -64,12 +66,12 @@ class LoginControllerTest {
     @Test
     @DisplayName("로그인 성공 시 고객정보와 세션 만료시각을 반환한다")
     void logsInSuccessfully() throws Exception {
-        LoginResult loginResult = new LoginResult(1L, "login-user", "홍길동");
+        LoginResult loginResult = new LoginResult(1L, "login-user", "홍길동", CustomerRole.CUSTOMER);
 
         OffsetDateTime sessionExpiresAt = OffsetDateTime.parse("2026-08-16T01:10:00Z");
 
         given(clientIpResolver.resolve(any(HttpServletRequest.class))).willReturn("203.0.113.10");
-        given(loginUseCase.login(new LoginCommand("login-user", PASSWORD, "203.0.113.10")))
+        given(loginUseCase.login(new LoginCommand("login-user", PASSWORD, "203.0.113.10", CustomerRole.CUSTOMER)))
                 .willReturn(loginResult);
         given(sessionLoginManager.establishSession(
                         any(LoginResult.class), any(HttpServletRequest.class), any(HttpServletResponse.class)))

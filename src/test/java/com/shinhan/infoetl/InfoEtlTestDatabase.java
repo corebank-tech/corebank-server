@@ -25,9 +25,10 @@ public final class InfoEtlTestDatabase {
             "DROP TABLE IF EXISTS product_subscription",
             "DROP TABLE IF EXISTS holiday",
             "DROP TABLE IF EXISTS business_date_cutoff",
+            "DROP TABLE IF EXISTS gl_journal_entry",
             "CREATE TABLE ledger_entry (ledger_entry_id BIGINT NOT NULL, account_id BIGINT NOT NULL,"
                     + " transaction_number CHAR(20) NULL, direction VARCHAR(10) NULL,"
-                    + " balance_after BIGINT NOT NULL, transaction_type VARCHAR(32) NULL,"
+                    + " amount BIGINT NOT NULL DEFAULT 0, balance_after BIGINT NOT NULL, transaction_type VARCHAR(32) NULL,"
                     + " occurred_at DATETIME(6) NOT NULL, trade_date DATE NULL,"
                     + " PRIMARY KEY (ledger_entry_id, occurred_at))",
             "CREATE TABLE account (account_id BIGINT NOT NULL PRIMARY KEY, customer_id BIGINT NOT NULL,"
@@ -41,7 +42,10 @@ public final class InfoEtlTestDatabase {
             "CREATE TABLE holiday (holiday_date DATE NOT NULL PRIMARY KEY, holiday_name VARCHAR(50) NOT NULL)",
             "CREATE TABLE business_date_cutoff (business_date_cutoff_id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,"
                     + " base_date DATE NOT NULL, status VARCHAR(10) NOT NULL, closed_at DATETIME(6) NOT NULL,"
-                    + " UNIQUE KEY uk_cutoff (base_date, status))");
+                    + " UNIQUE KEY uk_cutoff (base_date, status))",
+            "CREATE TABLE gl_journal_entry (journal_entry_id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,"
+                    + " account_code CHAR(5) NOT NULL, dr_cr VARCHAR(6) NOT NULL, amount BIGINT NOT NULL,"
+                    + " trade_date DATE NOT NULL)");
 
     private static final List<String> MART_TABLES =
             List.of("mart_daily_account_balance", "mart_product_subscription_event", "mart_load_batch");

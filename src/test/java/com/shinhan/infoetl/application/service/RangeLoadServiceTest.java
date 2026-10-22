@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.shinhan.infoetl.application.port.in.DailyLoadUseCase;
 import com.shinhan.infoetl.application.port.out.AsOfCalculator;
 import com.shinhan.infoetl.application.port.out.EtlStorageException;
+import com.shinhan.infoetl.application.port.out.GlMovementReader;
 import com.shinhan.infoetl.application.port.out.MartLoadPort;
 import com.shinhan.infoetl.domain.FailedDay;
 import com.shinhan.infoetl.domain.LoadAlreadyRunningException;
@@ -140,7 +141,14 @@ class RangeLoadServiceTest {
                     LocalDate baseDate,
                     List<MartBalanceRow> balances,
                     List<MartEventRow> events,
+                    long ledgerTotal,
+                    GlMovementReader glMovementReader,
                     AsOfCalculator asOfCalculator) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public void failLedgerMismatch(long loadBatchId, String reason, long ledgerTotal, long martBalanceTotal) {
                 throw new UnsupportedOperationException();
             }
 
