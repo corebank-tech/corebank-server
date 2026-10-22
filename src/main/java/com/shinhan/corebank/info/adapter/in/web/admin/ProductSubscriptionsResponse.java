@@ -9,9 +9,10 @@ import java.util.List;
 public record ProductSubscriptionsResponse(
         @Schema(description = "적재가 빠짐없이 끝난 마지막 기준일. 적재 이력이 없으면 null", example = "2026-10-28", nullable = true)
                 LocalDate asOf,
-        @Schema(description = "집계한 달(yyyy-MM)", example = "2026-10") String month,
-        @Schema(description = "그 달 전체 가입 건수", example = "120") long subscribedCount,
-        @Schema(description = "그 달 전체 해지 건수", example = "5") long closedCount,
+        @Schema(description = "집계한 달(yyyy-MM). 요청하지 않았고 적재 이력도 없으면 null", example = "2026-10", nullable = true)
+                String month,
+        @Schema(description = "그 달 전체 가입 건수. 적재 이력이 없으면 null", example = "120", nullable = true) Long subscribedCount,
+        @Schema(description = "그 달 전체 해지 건수. 적재 이력이 없으면 null", example = "5", nullable = true) Long closedCount,
         @Schema(description = "상품별 가입·해지 건수") List<Item> items) {
 
     public record Item(
@@ -36,7 +37,7 @@ public record ProductSubscriptionsResponse(
     static ProductSubscriptionsResponse from(ProductSubscriptionSummary summary) {
         return new ProductSubscriptionsResponse(
                 summary.asOf(),
-                summary.month().toString(),
+                summary.month() == null ? null : summary.month().toString(),
                 summary.subscribedCount(),
                 summary.closedCount(),
                 summary.items().stream().map(Item::from).toList());

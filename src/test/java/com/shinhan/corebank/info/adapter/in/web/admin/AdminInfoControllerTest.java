@@ -1,5 +1,7 @@
 package com.shinhan.corebank.info.adapter.in.web.admin;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -10,6 +12,9 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.customer.api.AdminPermission;
 import jakarta.persistence.EntityManager;
+import java.lang.reflect.RecordComponent;
+import java.util.Arrays;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,7 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @AutoConfigureMockMvc
 @Transactional
-@DisplayName("관리자 정보계 조회 API (스텁)")
+@DisplayName("관리자 정보계 조회 API (적재 이력 없음 스텁)")
 class AdminInfoControllerTest extends IntegrationTestSupport {
 
     // 시드·다른 관리자 테스트와 겹치지 않게 이슈 번호 대역을 쓴다.
@@ -41,67 +46,85 @@ class AdminInfoControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("일별 수신 잔액 추이는 200 · 0000 으로 설계서 §5-2 필드명 그대로 내려준다")
-    void returnsDepositBalancesInDesignShape() throws Exception {
+    @DisplayName("일별 수신 잔액 추이는 적재 이력이 없으면 200 · 0000 · asOf null · 빈 배열이다(REQ-ADM-032)")
+    void depositBalancesWithoutLoadHistory() throws Exception {
         mockMvc.perform(get("/admin/info/deposit-balances").with(admin(AdminPermission.GL_READ)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
-                .andExpect(jsonPath("$.data.asOf").value("2026-10-28"))
-                .andExpect(jsonPath("$.data.items.length()").value(2))
-                .andExpect(jsonPath("$.data.items[0].baseDate").value("2026-10-01"))
-                .andExpect(jsonPath("$.data.items[0].totalBalance").value(1_523_400_000_000L))
-                .andExpect(jsonPath("$.data.items[1].baseDate").value("2026-10-02"));
+                .andExpect(jsonPath("$.data.asOf").value(nullValue()))
+                .andExpect(jsonPath("$.data.items").isArray())
+                .andExpect(jsonPath("$.data.items").isEmpty());
     }
 
     @Test
-    @DisplayName("기간 인자를 줘도 같은 모양으로 200 이다")
+    @DisplayName("기간 인자를 줘도 같은 응답으로 200 이다")
     void acceptsOptionalPeriod() throws Exception {
         mockMvc.perform(get("/admin/info/deposit-balances")
                         .param("from", "2026-10-01")
                         .param("to", "2026-10-28")
                         .with(admin(AdminPermission.GL_READ)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items.length()").value(2));
+                .andExpect(jsonPath("$.data.asOf").value(nullValue()))
+                .andExpect(jsonPath("$.data.items").isEmpty());
     }
 
     @Test
-    @DisplayName("상품별 가입·해지는 200 · 0000 으로 설계서 §5-3 필드명 그대로 내려준다")
-    void returnsProductSubscriptionsInDesignShape() throws Exception {
+    @DisplayName("상품별 가입·해지는 적재 이력이 없으면 건수 null · 빈 배열이고 요청한 달을 그대로 돌려준다")
+    void productSubscriptionsWithoutLoadHistory() throws Exception {
         mockMvc.perform(get("/admin/info/product-subscriptions")
                         .param("month", "2026-10")
                         .with(admin(AdminPermission.GL_READ)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
-                .andExpect(jsonPath("$.data.asOf").value("2026-10-28"))
+                .andExpect(jsonPath("$.data.asOf").value(nullValue()))
                 .andExpect(jsonPath("$.data.month").value("2026-10"))
-                .andExpect(jsonPath("$.data.subscribedCount").value(120))
-                .andExpect(jsonPath("$.data.closedCount").value(5))
-                .andExpect(jsonPath("$.data.items[0].productId").value(3))
-                .andExpect(jsonPath("$.data.items[0].productCode").value("DEP-12M"))
-                .andExpect(jsonPath("$.data.items[0].productName").value("쏠편한 정기예금"))
-                .andExpect(jsonPath("$.data.items[0].productGroup").value("DEPOSIT"))
-                .andExpect(jsonPath("$.data.items[0].subscribedCount").value(80))
-                .andExpect(jsonPath("$.data.items[0].closedCount").value(3));
+                .andExpect(jsonPath("$.data.subscribedCount").value(nullValue()))
+                .andExpect(jsonPath("$.data.closedCount").value(nullValue()))
+                .andExpect(jsonPath("$.data.items").isEmpty());
     }
 
     @Test
-    @DisplayName("month 를 생략해도 200 이다")
+    @DisplayName("month 를 생략하면 month 도 null 이다")
     void productSubscriptionsWithoutMonth() throws Exception {
         mockMvc.perform(get("/admin/info/product-subscriptions").with(admin(AdminPermission.GL_READ)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.month").value("2026-10"));
+                .andExpect(jsonPath("$.data.month").value(nullValue()));
     }
 
     @Test
-    @DisplayName("응답에 고객 식별자·가명 키 필드가 없다(REQ-ADM-033)")
-    void responsesHaveNoPersonalFields() throws Exception {
-        for (String path : new String[] {"/admin/info/deposit-balances", "/admin/info/product-subscriptions"}) {
-            mockMvc.perform(get(path).with(admin(AdminPermission.GL_READ)))
-                    .andExpect(jsonPath("$.data.items[0].customerId").doesNotExist())
-                    .andExpect(jsonPath("$.data.items[0].customerKey").doesNotExist())
-                    .andExpect(jsonPath("$.data.items[0].accountKey").doesNotExist())
-                    .andExpect(jsonPath("$.data.customerId").doesNotExist());
-        }
+    @DisplayName("날짜·달 형식이 틀리면 400 CMN0001")
+    void rejectsMalformedParameters() throws Exception {
+        mockMvc.perform(get("/admin/info/deposit-balances").param("from", "abc").with(admin(AdminPermission.GL_READ)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
+        mockMvc.perform(get("/admin/info/product-subscriptions")
+                        .param("month", "2026-13")
+                        .with(admin(AdminPermission.GL_READ)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
+    }
+
+    @Test
+    @DisplayName("응답 필드 이름은 설계서 §5-2 · §5-3 과 같고 고객 식별자·가명 키 필드가 없다(REQ-ADM-033)")
+    void responseFieldNamesFollowDesign() {
+        assertThat(names(DepositBalancesResponse.class)).containsExactly("asOf", "items");
+        assertThat(names(DepositBalancesResponse.Item.class)).containsExactly("baseDate", "totalBalance");
+        assertThat(names(ProductSubscriptionsResponse.class))
+                .containsExactly("asOf", "month", "subscribedCount", "closedCount", "items");
+        assertThat(names(ProductSubscriptionsResponse.Item.class))
+                .containsExactly(
+                        "productId", "productCode", "productName", "productGroup", "subscribedCount", "closedCount");
+        List<String> all = List.of(
+                        DepositBalancesResponse.class,
+                        DepositBalancesResponse.Item.class,
+                        ProductSubscriptionsResponse.class,
+                        ProductSubscriptionsResponse.Item.class)
+                .stream()
+                .flatMap(type -> names(type).stream())
+                .toList();
+        assertThat(all)
+                .noneMatch(name -> name.toLowerCase().contains("customer")
+                        || name.toLowerCase().contains("key"));
     }
 
     @Test
@@ -128,6 +151,12 @@ class AdminInfoControllerTest extends IntegrationTestSupport {
         mockMvc.perform(get("/admin/info/deposit-balances"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("CMN0101"));
+    }
+
+    private static List<String> names(Class<?> record) {
+        return Arrays.stream(record.getRecordComponents())
+                .map(RecordComponent::getName)
+                .toList();
     }
 
     private RequestPostProcessor admin(AdminPermission permission) {

@@ -20,8 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-// 관리자 정보계 조회(PH-77, ADM-03). 인가는 SecurityConfig 의 경로별 권한 매핑이 GL_READ 로 판정한다.
-// 개인정보가 없어 조회 사유(X-Access-Reason)는 받지 않는다(POL-A09).
+// 관리자 정보계 조회(PH-77, ADM-03). 인가는 SecurityConfig 의 경로별 GL_READ 매핑이 판정하고 조회 사유는 받지 않는다(POL-A09).
 @RestController
 @RequestMapping("/admin/info")
 @RequiredArgsConstructor
@@ -38,7 +37,7 @@ public class AdminInfoController {
                     """
                     asOf 이하의 COMPLETED 영업일별 총 수신 잔액을 돌려준다. from·to 를 생략하면 asOf 부터 거슬러 30일이고 최대 범위는 1년이다.
                     적재 이력이 없으면 200 + asOf null + 빈 배열이다.
-                    **현재는 마트를 읽지 않고 설계서 예시값을 돌려주는 임시 응답이다(PH-77 ①).**
+                    **마트가 준비되기 전에는 적재 이력 없음 응답(asOf null, 빈 목록)을 돌려준다(PH-77 ①).**
                     """)
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
@@ -76,7 +75,7 @@ public class AdminInfoController {
                     """
                     month(yyyy-MM)에 속한 달의 상품별 가입·해지 건수를 돌려준다. month 를 생략하면 asOf 가 속한 달이다.
                     상품명은 상품별로 가장 최근에 적재된 스냅샷이다. 고객 식별자와 가명 키는 응답에 없다.
-                    **현재는 마트를 읽지 않고 설계서 예시값을 돌려주는 임시 응답이다(PH-77 ①).**
+                    **마트가 준비되기 전에는 적재 이력 없음 응답(asOf null, 빈 목록)을 돌려준다(PH-77 ①).**
                     """)
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
