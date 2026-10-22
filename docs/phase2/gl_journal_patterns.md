@@ -18,7 +18,7 @@ yyyyMMdd-TTT-NNNNNN        예) 20260922-TRF-000123
 | 조각 | 내용 |
 |---|---|
 | `yyyyMMdd` | **거래일**(`trade_date`). 발생 시각이 아니라 귀속 영업일입니다 |
-| `TTT` | 전표유형 3자 — `OPN` / `TRF` / `SUB` / `INT` / `REV` / `IBT` / `IBS` |
+| `TTT` | 전표유형 3자 — `OPN` / `TRF` / `SUB` / `INT` / `REV` / `IBT` / `IBS` / `MAT` / `TRM` |
 | `NNNNNN` | **(거래일, 유형)당 1부터** 증가하는 6자리 0채움 일련번호 |
 
 전체 19자입니다(`voucher_no VARCHAR(20)`).
@@ -231,6 +231,30 @@ GL 거래일을 별도로 조회하거나 달력 날짜로 계산하지 않는�
 
 **PH-60b 시드 생성기는 이자 지급 전표를 생성하지 않는다.** 이 패턴은 실제 이자 지급 경로에서 사용하며, PH-60b의 기존 시드 패턴 범위는 변경하지 않는다.
 
+### 3-7. 예·적금 원리금 이체 — `MATURITY` / `MAT` · `TERMINATION` / `TRM` (PH-15·PH-16, #713)
+
+만기해지(PH-15)와 중도해지(PH-16)는 `transfer.api.LedgerDepositUseCase.transferBetween()` 으로 상품 계좌의
+원리금을 고객 계좌로 옮깁니다. `ledger_entry` 에 `MATURITY` 또는 `TERMINATION` 2행이 남고 전표 1건이 대응합니다.
+
+| line_no | 계정 | dr_cr | 금액 |
+|---|---|---|---|
+| 1 | `20100` 예수금 | DEBIT | 이체금액 (상품 계좌 측) |
+| 2 | `20100` 예수금 | CREDIT | 이체금액 (고객 계좌 측) |
+
+- **계정 구성은 3-2 와 같고 `tx_type` 만 다릅니다.** 3-3 상품가입과 같은 이유입니다. 원장 `transaction_type` 과
+  전표 유형이 1:1 로 맞아야 전표번호만으로 고객 이체와 해지를 구분할 수 있습니다.
+- 금액은 `transferBetween()` 에 넘긴 원리금(원금과 세후이자의 합)입니다. 세전이자와 원천세는 3-6 `INT` 전표가
+  이미 나눴으므로 이 전표에서 다시 나누지 않습니다.
+- `reference_key` 는 `transferBetween()` 이 돌려준 `LedgerDepositResult.transactionNumber`, `trade_date` 는 같은
+  결과의 `tradeDate` 입니다. 이자 전표는 `credit()` 의 거래번호를 쓰므로, 해지 1건에 `INT` 와 `MAT`(또는 `TRM`)
+  두 전표가 서로 다른 키로 붙습니다.
+- 해지 서비스가 `gl.api.JournalPostingUseCase.post()` 를 직접 부릅니다. 입금 계약은 훅 B 를 부르지 않습니다
+  ([transfer_seam.md](transfer_seam.md) §8 정책 2). `post()` 는 `MANDATORY` 라 이자 지급, 원리금 이체, `CLOSED`
+  전이와 같은 트랜잭션에서 부릅니다.
+- 이 전표가 빠지면 §5 (7) 이 그 원장 거래를 전표 없는 거래로 잡습니다.
+- **범위 밖:** 중도해지 수수료 분개. 수수료를 떼면 `40200` 수수료수익 줄이 필요하므로 PH-16 이 수수료 처리를
+  확정할 때 이 절에 더합니다. PH-60b 시드 생성기는 이 전표를 만들지 않습니다.
+
 ---
 
 ## 4. 적재 순서
@@ -270,7 +294,7 @@ GROUP BY voucher_no HAVING COUNT(*) < 2;
 
 -- (4) 전표번호 형식 위반 — 0행이어야 한다
 SELECT voucher_no FROM gl_voucher
-WHERE voucher_no NOT REGEXP '^[0-9]{8}-(OPN|TRF|SUB|INT|REV|IBT|IBS)-[0-9]{6}$';
+WHERE voucher_no NOT REGEXP '^[0-9]{8}-(OPN|TRF|SUB|INT|REV|IBT|IBS|MAT|TRM)-[0-9]{6}$';
 
 -- (5) 거래일이 전표번호의 날짜와 다른 전표 — 0행이어야 한다
 SELECT voucher_no, trade_date FROM gl_voucher
@@ -287,6 +311,8 @@ WHERE SUBSTRING(voucher_no, 10, 3) <> CASE tx_type
     WHEN 'REVERSAL'             THEN 'REV'
     WHEN 'INTERBANK_TRANSFER'   THEN 'IBT'
     WHEN 'INTERBANK_SETTLEMENT' THEN 'IBS'
+    WHEN 'MATURITY'             THEN 'MAT'
+    WHEN 'TERMINATION'          THEN 'TRM'
     ELSE ''
 END;
 
@@ -319,3 +345,4 @@ WHERE le.transaction_type <> 'OPENING'
 | 2026-10-01 | PH-21 구현 — 차대변 DB 제약을 걸지 않기로 결정(§2), 채번 카운터 `gl_voucher_sequence`(§1) |
 | 2026-10-07 | PH-24 — 참조 키 규칙(§2-7), 취소정정 패턴(§3-4), 검증 SQL (7). `product_gl_mapping` 은 예수금 분리 시 도입 |
 | 2026-10-20 | PH-33-② (#654) — 타행이체 미결제 2패턴(§3-5, `IBT`·`IBS`), 검증 SQL (4)·(6) 유형 추가, 참조 키 1:1 규칙(§2-7)에 타행 예외 |
+| 2026-10-22 | #713 — 예적금 원리금 이체 패턴(§3-7, `MAT`·`TRM`), 검증 SQL (4)·(6) 유형 추가 |
