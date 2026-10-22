@@ -82,6 +82,11 @@ public final class InfoEtlMain {
             LOG.log(System.Logger.Level.ERROR, e.getMessage());
             return EXIT_USAGE;
         }
+        if (config.cutoffBoundary() == null && !command.verifyPii()) {
+            LOG.log(
+                    System.Logger.Level.WARNING,
+                    "ETL_CUTOFF_BOUNDARY_DATE가 없어 cutoff 확인 없이 적재합니다. 경계일 이후 기준일도 마감 여부를 보지 않습니다.");
+        }
 
         String martUrl = withBatchRewrite(config.martUrl());
         JdbcConnectionFactory replica = () -> open(config.replicaUrl(), config.replicaUser(), config.replicaPassword());
