@@ -35,7 +35,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 | [FE-SNAP](#fe-snap-codegen-스냅샷) | codegen 스냅샷 | S1 | 0.5 | — | — | FE PR #171 | 완료 |
 | 리드 | FE 리드 조율 | S1 | 0.5 | — | — | — | — |
 | [PH-49a-②](#ph-49a-관리자-인증-①-결정스키마-102--②-구현-108) | 관리자 인증 구현 | S2 | 3 | PH-49a-① | **PR #639·#652 머지(10/21)** | #573 · PR #639 · PR #652 · PR #655 | 완료 |
-| [PH-96-①](#ph-96-transactional-outbox-①-발행측릴레이-s2--②-구독-s3) | Transactional Outbox — 발행측 · 릴레이 | S2 | 4 | PH-32 · PH-99 · EVT-2 | 유실 재현 10/8 | #437 | 예정 |
+| [PH-96-①](#ph-96-transactional-outbox-①-발행측릴레이-s2--②-구독-s3) | Transactional Outbox — 발행측 · 릴레이 | S2 | 4 | PH-32 · PH-99 · EVT-2 | 유실 재현 10/8 | #437 · PR #703 | 완료 |
 | [PH-89](#ph-89-감사-5w--조회-감사--조회-사유-강제) | 감사 5W · 조회 감사 · 조회 사유 강제 | S2 | 2.5 | PH-49a-② | **10/26** | #458 | 예정 |
 | 리드 | FE 리드 조율 | S2 | 0.5 | — | — | — | — |
 | [PH-04](#ph-04-알림-조회-api--마스킹-통일) | 알림 조회 API · 마스킹 통일 | S3 | 3 | PH-01 | **10/28** | #390 #391 #392 #410 | 예정 |
@@ -262,16 +262,32 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 
 **①**
 
-- `outbox` 테이블(Flyway + `schema_reference.md` + ERD): id · event_type · reference_key · payload(JSON) · status(NEW/SENT/FAILED) · retry_count · created_at
-- BEFORE_COMMIT 리스너가 **JdbcTemplate INSERT**로 같은 커밋에 적재한다.
-- 릴레이: 기존 스케줄러가 5초 주기로 폴링한다. At-Least-Once이고, 3회 실패하면 FAILED(DLQ 역할)다. `BatchExecutionLockPort`로 단일 인스턴스에서만 실행한다(S3 말부터 WAS 2대).
-- `notification.api.OutboxEventHandler`와 멱등 키(reference_key + event_type 유니크)
-- 개선 전 수치(10/8): AFTER_COMMIT을 흉내 내 리스너에서 강제 종료시키고 유실을 1회 재현해 기록한다.
+> 10/19 [ADR-0010](../adr/0010-outbox-spring-modulith-event-publication-registry.md)로 구현 방법을 바꿨다. `outbox` 테이블을 직접 만들지 않고 Spring Modulith Event Publication Registry를 쓴다.
+
+- `EVENT_PUBLICATION` 테이블(Flyway + `schema_reference.md` + ERD) — 업무와 같은 커밋에 AFTER_COMMIT 리스너마다 1행이 남는다.
+- 리스너가 성공하면 행을 지운다(`completion-mode=delete`). **남은 행 = 아직 전달되지 않은 이벤트**다.
+- 재전달은 재제출 API로 한다(At-Least-Once). 멱등은 구독 측(②)에서 잡는다.
+- **현황:** #437 완료 (PR #703) — 개선 전 · 후 수치는 [ADR-0010 §검증](../adr/0010-outbox-spring-modulith-event-publication-registry.md#검증).
 
 **②**
 
 - 즉시 · 타행이체는 [PH-01](#ph-01-알림-도메인-인수--영속성) #706에 함께 들어간다. 예약 · 자동이체 회차 #707 · 상품가입 #708 · 구독 실패 처리 #709. #393~#396을 현재 아웃박스 설계(PR #703) 기준으로 다시 쓴 이슈다.
-- 구독 멱등(두 번째 수신은 no-op). 알림 실패는 릴레이 재시도로만 처리되고 이체에 영향을 주지 않는다.
+- 구독자는 AFTER_COMMIT 리스너다. 두 번째 수신은 no-op이고, 알림 실패는 이체에 영향을 주지 않는다.
+- **멱등 키는 업무 키(이벤트 종류 + `refId`)다.** 발행 기록은 지워지고 구독자는 그 ID를 받지 않는다. `refId`가 무엇을 가리키는지는 각 이벤트 주석에 있다.
+- **이체 행이 생긴 예약 · 자동이체는 `TransferSettled`로 발행되고 `refId = transfer_id`다.** `notification.ref_id` 규약(예약 → `scheduled_transfer_id`, 자동 → `execution_id`)과 다르므로, 알림에 어느 ID를 담을지 여기서 정한다.
+- auth `LoginPasswordChangedSessionListener`는 #641(PH-49c)에서 BEFORE_COMMIT으로 바뀌어 발행 기록 대상이 아니다. 재제출은 다른 WAS의 메모리 세션까지 끊는 복구 수단이 아니다([ADR-0010](../adr/0010-outbox-spring-modulith-event-publication-registry.md) 결과).
+
+실패 처리는 「즉시 재시도 → 주기 재제출 → 상한 초과는 포기 · 알림 → 수동 재처리」 순이고, 단계마다 프레임워크 기능을 쓴다.
+
+| 단계 | 쓰는 기능 | 손으로 짜나? |
+|---|---|---|
+| 구독 실행 | `@ApplicationModuleListener` — 비동기 · `REQUIRES_NEW` · AFTER_COMMIT | ❌ |
+| 즉시 재시도 | `@Retryable` + `@EnableResilientMethods`(Spring Framework 7) | ❌ 설정값만 |
+| 주기 재제출 | `IncompleteEventPublications.resubmitIncompletePublications(ResubmissionOptions)` — 재제출 횟수(`completionAttempts`)가 상한을 넘은 건은 필터로 빼서 포기한다(행은 남는다) | 스케줄 메서드 1개 |
+| 재기동 후 전달 | `republish-outstanding-events-on-restart`와 주기 재제출 중 하나 — 다중 인스턴스 중복을 보고 고른다 | ❌ |
+| 멈춘 발행 정리 | `spring.modulith.events.staleness.*` — `PUBLISHED` · `PROCESSING` · `RESUBMITTED`에서 오래 멈춘 발행(처리 중 프로세스가 죽은 건 등)을 `FAILED`로 바꿔 재제출 대상에 넣는다 | ❌ 설정값만 |
+| 포기 건 알림 | 재제출 횟수가 상한을 넘은 건수를 ERROR 로그와 지표로 | 조회 1개 |
+| 수동 재처리 | `FailedEventPublications.resubmit(ResubmissionOptions)` — 원인을 고친 뒤 운영자가 `FAILED` 건을 다시 보낸다 | 호출 1줄 |
 
 **완료 기준:** 발행 직후 프로세스를 죽여도 재기동 후 전달된다. 4종 이벤트마다 알림 1건이 생긴다. 중복 발행해도 1건이다.
 
@@ -761,7 +777,7 @@ TransferExecutionService.execute(command)                         ← 편집자:
  │   }
  └─ failTransfer() REQUIRES_NEW { tradeDate = gate로 읽기; ERROR 저장; publishEvent(new TransferSettled(...)) }
 
-[BEFORE_COMMIT 리스너 — P1 PH-96] 아웃박스 INSERT (JdbcTemplate). 예외 → 원본 롤백
+[Spring Modulith — P1 PH-96] 구독 AFTER_COMMIT 리스너(PH-96-②)마다 EVENT_PUBLICATION 1행을 같은 커밋에 남긴다 (ADR-0010)
 ```
 
 | 훅 | 인터페이스 | 등록자 | 트랜잭션 |
