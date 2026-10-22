@@ -729,4 +729,17 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                         .getSingleResult())
                 .longValue();
     }
+
+    @Test
+    @DisplayName("API 문서의 예약이체 처리결과 항목에 거래일(tradeDate)이 날짜 형식·null 허용으로 노출된다 (#679)")
+    void apiDocs_exposesTradeDateOnExecutionResultItem() throws Exception {
+        mockMvc.perform(get("/api/v1/v3/api-docs").contextPath("/api/v1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferExecutionResultItemResponse']"
+                                + "['properties']['tradeDate']['format']")
+                        .value("date"))
+                .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferExecutionResultItemResponse']"
+                                + "['properties']['tradeDate']['type']")
+                        .value(hasItem("null")));
+    }
 }
