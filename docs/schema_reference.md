@@ -430,18 +430,19 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 
 > 계좌 상태 전이 감사 이력 (PH-15, #671)
 
-계좌 상태 변경 시 전이 전·후 상태와 처리 시각을 기록하는 append-only 테이블이다. 현재는 COB의 `ACTIVE → MATURED` 전이만 기록한다.
+계좌 상태 변경 시 전이 전·후 상태와 처리 시각을 기록하는 append-only 테이블이다.
+COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED → CLOSED` 전이를 기록한다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
 | `history_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 이력 식별자 |
 | `account_id` | `BIGINT` | INDEX | X | | 상태가 변경된 계좌 ID |
-| `previous_status` | `VARCHAR(12)` | | X | | 변경 전 계좌 상태 (`ACTIVE`) |
-| `new_status` | `VARCHAR(12)` | | X | | 변경 후 계좌 상태 (`MATURED`) |
+| `previous_status` | `VARCHAR(12)` | | X | | 변경 전 계좌 상태. 만기 전이는 `ACTIVE`, 만기해지는 `MATURED` |
+| `new_status` | `VARCHAR(12)` | | X | | 변경 후 계좌 상태. 만기 전이는 `MATURED`, 만기해지는 `CLOSED` |
 | `maturity_date` | `DATE` | | O | | 계약 만기일 |
-| `effective_business_date` | `DATE` | | O | | COB에서 계산한 만기 전이 기준일 |
+| `effective_business_date` | `DATE` | | O | | 만기 전이는 COB에서 계산한 만기 전이 기준일, 만기해지는 MATURITY 출금 원장의 실제 거래일(`tradeDate`) |
 | `changed_at` | `DATETIME(6)` | INDEX | X | | 실제 상태 전이 처리 시각 |
-| `trigger_type` | `VARCHAR(20)` | | X | | 전이 발생 원인 (`COB`) |
+| `trigger_type` | `VARCHAR(20)` | | X | | 전이 발생 원인. `COB`(배치 만기 전이) / `CUSTOMER`(고객 요청 만기해지) |
 
 **인덱스**
 
