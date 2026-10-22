@@ -16,6 +16,7 @@ import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.business.support.BusinessDateTestFixture;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductTestFixtures;
 import com.shinhan.corebank.subscription.adapter.out.persistence.InterestPaymentPersistenceAdapter;
@@ -27,6 +28,7 @@ import com.shinhan.corebank.subscription.api.MaturityTerminationUseCase;
 import com.shinhan.corebank.subscription.application.port.out.MaturityTerminationPasswordVerificationPort;
 import com.shinhan.corebank.subscription.domain.MaturityHandling;
 import com.shinhan.corebank.subscription.domain.exception.SubscriptionErrorCode;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -84,6 +86,9 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
 
     @Autowired
     private ProductSubscriptionJpaRepository subscriptionRepository;
+
+    @Autowired
+    private EntityManager entityManager;
 
     // 정상 처리에서는 실제 메서드를 실행한다.
     // 롤백 테스트에서만 closeMatured 실패를 주입한다.
@@ -334,8 +339,20 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
         assertThat(((java.sql.Date) history.get("effective_business_date")).toLocalDate())
                 .isEqualTo(result.tradeDate());
 
-        assertThat((LocalDateTime) history.get("changed_at"))
-                .isCloseTo(result.closedAt(), within(1, ChronoUnit.MICROS));
+        LocalDateTime storedChangedAt = entityManager
+                .createQuery(
+                        """
+                        SELECT h.changedAt
+                        FROM AccountStatusHistoryJpaEntity h
+                        WHERE h.accountId = :accountId
+                          AND h.previousStatus = 'MATURED'
+                          AND h.newStatus = 'CLOSED'
+                        """,
+                        LocalDateTime.class)
+                .setParameter("accountId", PRODUCT_ACCOUNT_ID)
+                .getSingleResult();
+
+        assertThat(storedChangedAt).isCloseTo(result.closedAt(), within(1, ChronoUnit.MICROS));
 
         assertThat(history.get("trigger_type")).isEqualTo("CUSTOMER");
     }
@@ -627,6 +644,32 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
         assertThat(account.get("closed_trade_date")).isNull();
 
         assertThat(countMaturityVoucher()).isZero();
+    }
+
+    @Test
+    @DisplayName("정기예금 계약 원금 불일치 시 이자 지급과 만기해지가 모두 롤백된다")
+    void terminate_principalMismatchRollsBack() {
+        // 계약 원금은 100만 원이고, 실제 잔액에 1원 불일치를 주입한다.
+        jdbcTemplate.update("UPDATE account SET balance = balance + 1 WHERE account_id = ?", PRODUCT_ACCOUNT_ID);
+
+        assertThatThrownBy(() -> terminationUseCase.terminate(command()))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INTERNAL_ERROR));
+
+        assertThat(balanceOf(PRODUCT_ACCOUNT_ID)).isEqualTo(PRINCIPAL + 1);
+        assertThat(balanceOf(WITHDRAWAL_ACCOUNT_ID)).isZero();
+
+        assertThat(countInterestLedger()).isZero();
+        assertThat(countMaturityLedger()).isZero();
+        assertThat(countInterestHistory()).isZero();
+        assertThat(countInterestVoucher()).isZero();
+        assertThat(countMaturityVoucher()).isZero();
+        assertThat(countClosureHistory()).isZero();
+
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT status FROM account WHERE account_id = ?", String.class, PRODUCT_ACCOUNT_ID))
+                .isEqualTo("MATURED");
     }
 
     private MaturityTerminationCommand command() {

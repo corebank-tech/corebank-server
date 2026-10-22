@@ -70,8 +70,11 @@ public class MaturityTerminationController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
-                description = "`PRD0302` 이자 중복 지급 · `PRD0304` 지급 원리금 0원 · "
-                        + "`PRD0305` 자동 재예치 미지원 · `CMN0301`/`CMN0302` 멱등키 충돌",
+                description = "`PRD0302` 이자 중복 지급 · `PRD0303` 가입 처리 미완료 · "
+                        + "`PRD0304` 지급 원리금 0원 · `PRD0305` 자동 재예치 미지원 · "
+                        + "`ACC0301` 계좌 상태 불일치 · `ACC0305` 만기해지 미지원 계좌 · "
+                        + "`ACC0306` 실제 만기일 미도래 · `ACC0307` 잔액 남음 · "
+                        + "`CMN0301`/`CMN0302` 멱등키 충돌",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<ApiResponse<MaturityTerminationResponse>> terminate(

@@ -17,6 +17,7 @@ import com.shinhan.corebank.product.api.InterestCalculationMode;
 import com.shinhan.corebank.product.api.ProductInterestPolicyQueryUseCase;
 import com.shinhan.corebank.subscription.api.MaturityTerminationCommand;
 import com.shinhan.corebank.subscription.application.port.out.ProductSubscriptionQueryPort;
+import com.shinhan.corebank.subscription.domain.MaturityHandling;
 import com.shinhan.corebank.subscription.domain.ProductSubscription;
 import com.shinhan.corebank.subscription.domain.exception.SubscriptionErrorCode;
 import java.math.BigDecimal;
@@ -79,6 +80,8 @@ class MaturityTerminationValidationServiceTest {
 
         assertThat(result.accountId()).isEqualTo(ACCOUNT_ID);
         assertThat(result.withdrawalAccountId()).isEqualTo(WITHDRAWAL_ACCOUNT_ID);
+        assertThat(result.subscriptionAmount()).isEqualTo(1_000_000L);
+        assertThat(result.timeDeposit()).isTrue();
         assertThat(result.openedDate()).isEqualTo(OPENED_DATE);
         assertThat(result.maturityDate()).isEqualTo(MATURITY_DATE);
         assertThat(result.annualRate()).isEqualByComparingTo(RATE);
@@ -168,7 +171,7 @@ class MaturityTerminationValidationServiceTest {
         stubValidSubscription();
 
         when(maturityAccountQueryUseCase.requireMatured(ACCOUNT_ID, CUSTOMER_ID, MATURITY_DATE))
-                .thenReturn(new MaturityAccountView(ACCOUNT_ID, 999L, MATURITY_DATE));
+                .thenReturn(new MaturityAccountView(ACCOUNT_ID, 999L, MATURITY_DATE, true));
 
         assertError(COMMAND, SubscriptionErrorCode.SUBSCRIPTION_ACCOUNT_NOT_FOUND);
     }
@@ -179,7 +182,7 @@ class MaturityTerminationValidationServiceTest {
         stubValidSubscription();
 
         when(maturityAccountQueryUseCase.requireMatured(ACCOUNT_ID, CUSTOMER_ID, MATURITY_DATE))
-                .thenReturn(new MaturityAccountView(ACCOUNT_ID, PRODUCT_ID, MATURITY_DATE.minusDays(1)));
+                .thenReturn(new MaturityAccountView(ACCOUNT_ID, PRODUCT_ID, MATURITY_DATE.minusDays(1), true));
 
         assertError(COMMAND, SubscriptionErrorCode.SUBSCRIPTION_ACCOUNT_NOT_FOUND);
     }
@@ -308,6 +311,8 @@ class MaturityTerminationValidationServiceTest {
                 .productId(productId)
                 .withdrawalAccountId(withdrawalAccountId)
                 .status(status)
+                .subscriptionAmount(1_000_000L)
+                .maturityHandling(MaturityHandling.TRANSFER)
                 .openedDate(openedDate)
                 .maturityDate(maturityDate)
                 .appliedRate(rate)
@@ -316,7 +321,7 @@ class MaturityTerminationValidationServiceTest {
 
     private void stubValidProductAccount() {
         when(maturityAccountQueryUseCase.requireMatured(ACCOUNT_ID, CUSTOMER_ID, MATURITY_DATE))
-                .thenReturn(new MaturityAccountView(ACCOUNT_ID, PRODUCT_ID, MATURITY_DATE));
+                .thenReturn(new MaturityAccountView(ACCOUNT_ID, PRODUCT_ID, MATURITY_DATE, true));
     }
 
     private void stubCalculationMode(InterestCalculationMode mode) {
