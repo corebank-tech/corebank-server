@@ -55,11 +55,12 @@
 
 **④ 관리자 세션 30분 무조작 만료** (고객은 10분)
 
-전역 `server.servlet.session.timeout: 10m`은 **그대로 두고**, 관리자 로그인에서만 세션 생성 직후
-`HttpSession.setMaxInactiveInterval(1800)`으로 덮는다. `SessionLoginManager.establishSession()`이
-세션 생성 뒤 `getMaxInactiveInterval()`을 읽어 `sessionExpiresAt`을 계산하므로, 덮어쓰기를 그 읽기보다
-앞에 두면 응답의 만료시각도 자동으로 30분이 된다. PH-49c로 저장소가 Redis가 돼도 세션 인터페이스
-수준의 호출이라 그대로 동작한다.
+전역 `server.servlet.session.timeout: 10m`과 PH-49c의 `spring.session.timeout`은 고객 세션의
+기본값이다. PH-49a-②(PR #639)의 `SessionLoginManager`는 관리자 로그인에
+`app.security.admin.session-timeout: 30m`을 적용하고 `ROLE_ADMIN` 인증을 저장한다.
+이 매니저는 역할별 만료시간을 세션에 적용하고 같은 값으로 `sessionExpiresAt`을 계산한다.
+PH-49c의 Spring Session JDBC는 세션을 공용 MySQL에 저장한다. 두 변경을 통합한
+`LoginApiIntegrationTest`는 관리자 로그인 응답의 만료시각과 JDBC 세션 행의 1800초를 검증한다.
 
 **⑤ `GET /customers/me`에 `role`·`permissions[]` 추가**
 
@@ -183,6 +184,7 @@ SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS 
 | 관리자 로그인 | `AdminLoginController` — `POST /admin/auth/login` |
 | `role=ADMIN` 검증 | `LoginService` — 비밀번호 확인 **뒤**. 틀리면 `ATH0101` |
 | 세션 30분 | `SessionLoginManager` — 역할에 맞는 만료시간을 세션보다 먼저 정해 매번 덮어쓴다. 관리자는 `app.security.admin.session-timeout`, 고객은 전역 `server.servlet.session.timeout` |
+| 세션 저장소 | PH-49c의 Spring Session JDBC — 고객·관리자 세션을 공용 MySQL의 `SPRING_SESSION`에 저장한다 |
 | 세션 권한 | `SessionLoginManager` — 로그인 때 권한 행을 읽어 `GrantedAuthority` 로 싣는다 |
 | `/admin/**` 인가 | `SecurityConfig` 의 `requestMatchers` + `hasAuthority` — 커스텀 매니저 없음 |
 | `role`·`permissions[]` | `CustomerInfoResponse` |
@@ -213,9 +215,9 @@ SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS 
 
 ### 남은 것
 
-- **세션 만료(무조작 30분) 로그아웃은 감사에 남지 않는다.** `LogoutSuccessEvent` 는 명시적 로그아웃에만
-  온다. 필요해지면 `HttpSessionDestroyedEvent`(`SecurityConfig` 에 `HttpSessionEventPublisher` 가 있다)로
-  별건 처리한다 — 어느 REQ 도 요구하지 않아 ② 범위에 넣지 않았다
+- **세션 만료(무조작 30분) 로그아웃은 감사에 남지 않는다.** `LogoutSuccessEvent`는 명시적 로그아웃에만
+  온다. 만료 감사가 필요하면 Spring Session JDBC의 만료 감지와 감사 기록 경로를 별도로 설계한다.
+  `SecurityConfig`에는 `HttpSessionEventPublisher`가 없다 — 어느 REQ도 요구하지 않아 ② 범위에 넣지 않았다.
 - 권한 부여·회수 API 와 `role=CUSTOMER` 인데 권한 행이 있는 모순 제약 — PH-49b.
-  **회수는 권한 행만 지우면 이미 로그인한 세션에 반영되지 않는다.** 즉시 끊어야 하면 `SessionRegistry`
-  (`SecurityConfig` 에 빈이 있다)로 그 관리자의 세션을 함께 만료시킨다
+  **회수는 권한 행만 지우면 이미 로그인한 세션에 반영되지 않는다.** 즉시 끊어야 하면
+  `CustomerSessionInvalidator`로 해당 관리자의 JDBC 세션을 함께 삭제한다.

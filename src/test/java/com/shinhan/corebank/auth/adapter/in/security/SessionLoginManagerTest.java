@@ -30,10 +30,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.session.SessionRegistryImpl;
-import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
-import org.springframework.security.web.authentication.session.CompositeSessionAuthenticationStrategy;
-import org.springframework.security.web.authentication.session.RegisterSessionAuthenticationStrategy;
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -51,14 +47,10 @@ class SessionLoginManagerTest {
     // 고객 만료시간의 정본인 server.servlet.session.timeout 이다. 운영 설정과 같은 10분을 쓴다.
     private static final ServerProperties SERVER = serverPropertiesWith(Duration.ofMinutes(10));
 
-    private final SessionRegistryImpl sessionRegistry = new SessionRegistryImpl();
-
     private final AdminPermissionFacade adminPermissionFacade = mock(AdminPermissionFacade.class);
 
     private final SessionLoginManager manager = new SessionLoginManager(
-            new CompositeSessionAuthenticationStrategy(List.of(
-                    new ChangeSessionIdAuthenticationStrategy(),
-                    new RegisterSessionAuthenticationStrategy(sessionRegistry))),
+            new SecurityConfig().sessionAuthenticationStrategy(),
             repository,
             adminPermissionFacade,
             ADMIN_SESSION,
@@ -86,9 +78,7 @@ class SessionLoginManagerTest {
         assertThat(authentication.getAuthorities()).extracting("authority").containsExactly("ROLE_CUSTOMER");
         assertThat(authentication.getCredentials()).isNull();
         assertThat(SecurityContextHolder.getContext()).isSameAs(context);
-        assertThat(sessionRegistry.getAllSessions(authentication.getPrincipal(), false))
-                .extracting("sessionId")
-                .containsExactly(request.getSession(false).getId());
+        assertThat(request.getSession(false).getMaxInactiveInterval()).isEqualTo(600);
         verifyNoInteractions(adminPermissionFacade);
     }
 

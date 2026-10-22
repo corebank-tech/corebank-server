@@ -35,7 +35,7 @@ Spring Security 기본 설정(`anyRequest().authenticated()`)을 그대로 두�
 
 위 네 경로만 `permitAll`이고, 인증 대상 API는 유효한 로그인 세션이 필요하다. Swagger UI에서 아래 순서로 같은 origin의 API를 호출한다.
 
-1. `POST /auth/login`을 실행해 로그인한다. 성공하면 브라우저에 `JSESSIONID`와 `XSRF-TOKEN` 쿠키가 발급된다.
+1. `POST /auth/login`을 실행해 로그인한다. 성공하면 브라우저에 `JSESSIONID`와 `XSRF-TOKEN` 쿠키가 발급된다. PH-49c부터 세션은 공용 MySQL에 저장된다. WAS A의 `http://localhost:8080/api/v1/swagger-ui/index.html`에서 로그인한 뒤 **새 탭으로** WAS B의 `http://localhost:8081/api/v1/swagger-ui/index.html`을 열어 `/customers/me`를 조회한다. 각 Swagger UI에서는 자기 포트의 서버를 선택한다([검증 절차](phase2/ph49c_jdbc_session.md)).
 2. 조회 API는 로그인 세션 쿠키가 자동으로 전달되므로 바로 실행한다.
 3. 상태 변경 API는 `application.yml`의 `springdoc.swagger-ui.csrf.enabled=true` 설정에 따라 Swagger UI가 `XSRF-TOKEN` 쿠키 값을 `X-XSRF-TOKEN` 헤더로 전달한다.
 

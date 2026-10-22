@@ -1,9 +1,15 @@
 package com.shinhan.corebank.auth.api;
 
+import java.io.Serial;
+import java.io.Serializable;
+import java.security.Principal;
 import java.util.Objects;
 
 // 인증된 고객의 세션 정보를 생성
-public final class AuthenticatedCustomer {
+public final class AuthenticatedCustomer implements Principal, Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private final Long customerId;
     private final String userId;
@@ -17,6 +23,12 @@ public final class AuthenticatedCustomer {
 
     public Long customerId() {
         return customerId;
+    }
+
+    // 변경 가능한 이름 대신 고객 PK를 JDBC 세션의 검색 키로 사용한다.
+    @Override
+    public String getName() {
+        return customerId.toString();
     }
 
     public String userId() {
