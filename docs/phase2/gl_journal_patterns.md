@@ -243,11 +243,11 @@ GL 거래일을 별도로 조회하거나 달력 날짜로 계산하지 않는�
 
 - **계정 구성은 3-2 와 같고 `tx_type` 만 다릅니다.** 3-3 상품가입과 같은 이유입니다. 원장 `transaction_type` 과
   전표 유형이 1:1 로 맞아야 전표번호만으로 고객 이체와 해지를 구분할 수 있습니다.
-- 금액은 `transferBetween()` 에 넘긴 원리금(원금과 세후이자의 합)입니다. 세전이자와 원천세는 3-6 `INT` 전표가
-  이미 나눴으므로 이 전표에서 다시 나누지 않습니다.
+- 금액은 `transferBetween()` 에 넘긴 원리금(원금과 세후이자의 합)입니다. 세전이자가 있으면 3-6 `INT` 전표가
+  세전이자와 원천세를 이미 나눴으므로 이 전표에서 다시 나누지 않습니다.
 - `reference_key` 는 `transferBetween()` 이 돌려준 `LedgerDepositResult.transactionNumber`, `trade_date` 는 같은
-  결과의 `tradeDate` 입니다. 이자 전표는 `credit()` 의 거래번호를 쓰므로, 해지 1건에 `INT` 와 `MAT`(또는 `TRM`)
-  두 전표가 서로 다른 키로 붙습니다.
+  결과의 `tradeDate` 입니다. 이자 전표는 `credit()` 의 거래번호를 쓰므로, `INT` 전표가 생긴 해지 건에는 `INT` 와
+  `MAT`(또는 `TRM`) 두 전표가 서로 다른 키로 붙습니다. 세전이자가 0원이면 `INT` 전표 없이 이 전표만 남습니다(3-6).
 - 해지 서비스가 `gl.api.JournalPostingUseCase.post()` 를 직접 부릅니다. 입금 계약은 훅 B 를 부르지 않습니다
   ([transfer_seam.md](transfer_seam.md) §8 정책 2). `post()` 는 `MANDATORY` 라 이자 지급, 원리금 이체, `CLOSED`
   전이와 같은 트랜잭션에서 부릅니다.

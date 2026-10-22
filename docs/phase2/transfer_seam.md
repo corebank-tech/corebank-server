@@ -127,7 +127,7 @@ public interface LedgerDepositUseCase {
     // 은행 → 계좌, 원장 1행(상대편은 GL 전표). 이자
     LedgerDepositResult credit(long accountId, long amount, DepositType type, DepositChannel channel);
 }
-record LedgerDepositResult(String transactionNumber, long depositBalanceAfter) {}
+record LedgerDepositResult(String transactionNumber, long depositBalanceAfter, LocalDate tradeDate) {}
 ```
 
 | 메서드 | `type` | 원장 | 돈이 빠지는 계좌 | 돈이 들어가는 계좌 |
