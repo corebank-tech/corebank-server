@@ -53,6 +53,16 @@ class InterbankPayeeInquiryServiceTest {
         assertThat(result.payeeName()).isEqualTo("김민수");
     }
 
+    @Test
+    @DisplayName("0000이어도 예금주 칸이 비어 있으면 이름을 확인하지 못한 것이라 TRF0309다")
+    void approvedWithoutName_unverified() {
+        when(interbankBankPort.isSupported(BANK)).thenReturn(true);
+        when(interbankGatewayPort.inquirePayee(BANK, ACCOUNT))
+                .thenReturn(new InterbankReply(InterbankOutcome.APPROVED, null, "0000"));
+
+        assertErrorCode(() -> service.inquire(BANK, ACCOUNT), TransferErrorCode.INTERBANK_PAYEE_UNVERIFIED);
+    }
+
     @ParameterizedTest(name = "{0} → {1}")
     @CsvSource({
         "ACCOUNT_NOT_FOUND, PAYEE_NOT_FOUND",

@@ -36,10 +36,18 @@ public class InterbankPayeeInquiryService implements InterbankPayeeInquiryUseCas
         InterbankReply reply = interbankGatewayPort.inquirePayee(bankCode, accountNumber);
         // 무응답·상대 장애·서킷 열림은 FE가 같은 안내로 [다음]을 막으므로 하나로 묶는다(TRF0308과 같은 방식).
         return switch (reply.outcome()) {
-            case APPROVED -> new InterbankPayeeInquiryResult(reply.payeeName());
+            case APPROVED -> approved(reply.payeeName());
             case ACCOUNT_NOT_FOUND -> throw new BusinessException(TransferErrorCode.PAYEE_NOT_FOUND);
             case ACCOUNT_UNAVAILABLE -> throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
             case NOT_PROCESSED, UNKNOWN -> throw new BusinessException(TransferErrorCode.INTERBANK_PAYEE_UNVERIFIED);
         };
+    }
+
+    // 정상 응답이어도 예금주 칸이 비었으면 이름을 확인하지 못한 것이다
+    private static InterbankPayeeInquiryResult approved(String payeeName) {
+        if (payeeName == null || payeeName.isBlank()) {
+            throw new BusinessException(TransferErrorCode.INTERBANK_PAYEE_UNVERIFIED);
+        }
+        return new InterbankPayeeInquiryResult(payeeName);
     }
 }
