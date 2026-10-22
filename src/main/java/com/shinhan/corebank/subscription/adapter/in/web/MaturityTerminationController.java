@@ -53,7 +53,8 @@ public class MaturityTerminationController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "만기해지 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "`CMN0001` 계좌 ID 또는 멱등키 형식 오류 · `CMN0002` 멱등키 누락",
+                description = "`CMN0001` 계좌 ID 또는 멱등키 형식 오류 · "
+                        + "`CMN0002` Idempotency-Key 또는 Account-Password-Auth-Token 헤더 누락",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
