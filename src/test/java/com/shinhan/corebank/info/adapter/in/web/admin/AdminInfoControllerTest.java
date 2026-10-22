@@ -183,7 +183,10 @@ class AdminInfoControllerTest extends IntegrationTestSupport {
                         .exists())
                 .andExpect(jsonPath("$.components.schemas.ProductSubscriptionItem.properties.productCode")
                         .exists())
-                .andExpect(jsonPath("$.components.schemas.Item").doesNotExist());
+                .andExpect(jsonPath("$.components.schemas.Item").doesNotExist())
+                // 달 형식이 틀리면 실제로 400 이 나가므로 FE 코드 생성이 알 수 있게 문서에 있어야 한다
+                .andExpect(jsonPath("$.paths['/admin/info/product-subscriptions'].get.responses['400']")
+                        .exists());
     }
 
     @Test

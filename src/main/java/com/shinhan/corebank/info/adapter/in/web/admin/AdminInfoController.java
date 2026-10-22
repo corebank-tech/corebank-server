@@ -59,7 +59,7 @@ public class AdminInfoController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ApiResponse<DepositBalancesResponse> depositBalances(
-            @Parameter(description = "조회 시작일(포함). 생략하면 asOf 부터 30일", example = "2026-10-01")
+            @Parameter(description = "조회 시작일(포함). 생략하면 asOf 부터 거슬러 30일", example = "2026-10-01")
                     @RequestParam(required = false)
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
                     LocalDate from,
@@ -83,6 +83,10 @@ public class AdminInfoController {
                     """)
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "`CMN0001` 달 형식 오류(yyyy-MM)",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
