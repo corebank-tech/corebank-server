@@ -12,6 +12,7 @@ import com.shinhan.corebank.batch.adapter.in.scheduler.CobScheduler;
 import com.shinhan.corebank.batch.api.BatchExecutionHistoryPort;
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import com.shinhan.corebank.batch.api.CobStep;
+import com.shinhan.corebank.batch.application.port.out.CobCheckpointPort;
 import com.shinhan.corebank.business.api.BusinessDateAdvancer;
 import com.shinhan.corebank.business.api.BusinessDateProvider;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -63,6 +64,7 @@ class CobRunnerServiceLockIntegrationTest extends IntegrationTestSupport {
                 businessDateProvider,
                 businessDateAdvancer,
                 mock(BatchExecutionHistoryPort.class),
+                mock(CobCheckpointPort.class),
                 clock,
                 new SimpleMeterRegistry(),
                 List.of(step));

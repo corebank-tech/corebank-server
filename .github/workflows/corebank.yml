@@ -210,6 +210,8 @@ jobs:
                 # 타행이체 모의 대외기관 (B 단계, #697). 위치는 설정값뿐이라 컷오버 뒤에는 VM 주소로만 바꾼다.
                 - APP_INTERBANK_HOST=mock-external
                 - APP_INTERBANK_PORT=9300
+                # COB 원장 대사 hard 임계 (#663). 불일치가 이 건수를 넘으면 마감이 멈춘다. 릴리스 2의 첫 대사 결과를 본 뒤 낮춘다.
+                - APP_LEDGER_RECONCILIATION_COB_HARD_THRESHOLD=1000
                 - CORS_ALLOWED_ORIGINS=CORS_ALLOWED_ORIGINS_PLACEHOLDER
               healthcheck:
                 test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/api/v1/actuator/health || exit 1"]
