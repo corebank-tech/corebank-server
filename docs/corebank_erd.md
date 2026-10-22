@@ -438,7 +438,7 @@ erDiagram
     gl_voucher {
         varchar voucher_no PK "VARCHAR(20). yyyyMMdd-TTT-NNNNNN. gl_voucher_sequence 가 채번"
         date trade_date "귀속 영업일"
-        varchar tx_type "OPENING / TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / REVERSAL / INTERBANK_TRANSFER / INTERBANK_SETTLEMENT"
+        varchar tx_type "OPENING / TRANSFER / PRODUCT_SUBSCRIPTION / INTEREST / REVERSAL / INTERBANK_TRANSFER / INTERBANK_SETTLEMENT / MATURITY / TERMINATION"
         varchar reference_key UK "VARCHAR(40). 원 거래번호. (tx_type, reference_key) 유일"
         varchar description "VARCHAR(200). 적요"
         datetime created_at "DATETIME(6). 전표는 수정하지 않아 updated_at 없음"
