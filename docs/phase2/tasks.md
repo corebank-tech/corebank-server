@@ -206,7 +206,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 - 요청받아 추가로 재는 것: P4 LOCK-TUNE 전/후. 훅은 릴리스 1에 함께 나가 운영에서 전후를 잴 수 없으므로 [PH-24](#ph-24-gl-분개-서비스--이체-기표-훅--glapi) 저하율은 P3가 로컬에서 잰다. 이 재실행은 S2~S3에 일어나지만 인일은 S1 4일과 S4 0.5일에 포함한다.
 - S4: 같은 harness·같은 구간으로 재실행한다. 잔액 오차 N → 0. 잔액 기준은 P2 PH-90과 맞춘다.
 - **기한:** harness 10/2(PH-56·LOCK-TUNE이 기다린다), 개선 전 수치 10/8.
-- **기준선 후속 결정:** 10/5·10/6 측정(#530 · #567)은 병목 진단(CPU 포화)과 정합성 기록으로 남긴다. [PH-101-②](#ph-101-redis-제거-①-구현-s2--②-판정-측정-s3)의 B'는 PH-49c 적용 전 Redis 제거 판정 수치다([ADR-0007](../adr/0007-remove-redis.md)). PR #641이 10/23 릴리스 2에 포함되면 P6이 10/26 전에 `provider=jdbc`로 재측정한다([PH-49c 측정 계획](ph49c_jdbc_session.md#운영-성능-재측정-계획)). 성능 개선이 아직 배포되지 않고 비교 조건이 맞을 때 이 값을 S4와 비교할 새 개선 전 기준선으로 제안한다. `harness_results.md`에는 기존 절을 지우지 않고 A'·B' 결과와 기준선 결정을 구분해 기록한다. 판정 요약은 [harness_results.md §8](harness_results.md), 근거와 회차별 원자료는 [ph101_redis_removal_results.md](ph101_redis_removal_results.md)에 있다.
+- **기준선 후속 결정:** 10/5·10/6 측정(#530 · #567)은 병목 진단(CPU 포화)과 정합성 기록으로 남긴다. [PH-101-②](#ph-101-redis-제거-①-구현-s2--②-판정-측정-s3)의 B'는 PH-49c 적용 전 Redis 제거 판정 수치다([ADR-0007](../adr/0007-remove-redis.md)). PR #641이 10/23 릴리스 2에 포함되면 P6이 10/26 전에 `provider=jdbc`로 재측정한다([PH-49c 측정 계획](ph49c_jdbc_session.md#운영-성능-재측정-계획)). 성능 개선이 아직 배포되지 않고 비교 조건이 맞을 때 이 값을 S4와 비교할 새 개선 전 기준선으로 제안한다. `harness_results.md`에는 기존 절을 지우지 않고 A'·B' 결과와 기준선 결정을 구분해 기록한다. 판정 요약은 [harness_results.md §8](harness_results.md#8-기준선-교체--2026-10-1620-redis-모드-제거-판정-ph-101-②), 근거와 회차별 원자료는 [ph101_redis_removal_results.md](ph101_redis_removal_results.md)에 있다.
 - 현황: 부하 스크립트 `perf/k6/load.js`와 검증 SQL `perf/sql/verify_integrity.sql`이 있다. k6 실행·측정 환경의 준비 여부는 별도로 확인한다.
 
 ### PH-01. 알림 도메인 인수 · 영속성
