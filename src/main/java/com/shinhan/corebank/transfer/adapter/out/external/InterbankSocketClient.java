@@ -191,11 +191,11 @@ public class InterbankSocketClient implements InterbankGatewayPort {
         InputStream in = socket.getInputStream();
         int end = offset + length;
         while (offset < end) {
-            long remainingMillis = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
-            if (remainingMillis <= 0) {
+            long remainingNanos = deadline - System.nanoTime();
+            if (remainingNanos <= 0) {
                 throw new SocketTimeoutException("응답 대기 시간 초과");
             }
-            socket.setSoTimeout((int) remainingMillis);
+            socket.setSoTimeout(soTimeoutMillis(remainingNanos));
             int read = in.read(buffer, offset, end - offset);
             if (read < 0) {
                 return false;
@@ -203,6 +203,11 @@ public class InterbankSocketClient implements InterbankGatewayPort {
             offset += read;
         }
         return true;
+    }
+
+    // 올림한다. 내리면 1ms 미만이 남았을 때 마감 전에 끊고, 0은 soTimeout에서 무한 대기라 쓸 수 없다(#724).
+    static int soTimeoutMillis(long remainingNanos) {
+        return (int) TimeUnit.NANOSECONDS.toMillis(remainingNanos + 999_999);
     }
 
     private sealed interface Exchange {
