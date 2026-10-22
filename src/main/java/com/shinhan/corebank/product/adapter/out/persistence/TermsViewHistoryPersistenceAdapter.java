@@ -33,4 +33,9 @@ public class TermsViewHistoryPersistenceAdapter implements TermsViewHistoryPort 
     public Optional<TermsView> find(Long customerId, Long termsId) {
         return repository.findUsable(customerId, termsId, LocalDateTime.now(clock));
     }
+
+    @Override
+    public int deleteExpired(int limit) {
+        return repository.deleteExpiredBatch(LocalDateTime.now(clock), limit);
+    }
 }
