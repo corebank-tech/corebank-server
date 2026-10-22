@@ -92,6 +92,46 @@ class AdminInfoControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("시작일이 종료일보다 늦으면 400 CMN0003")
+    void rejectsReversedPeriod() throws Exception {
+        mockMvc.perform(get("/admin/info/deposit-balances")
+                        .param("from", "2026-10-10")
+                        .param("to", "2026-10-09")
+                        .with(admin(AdminPermission.GL_READ)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0003"));
+    }
+
+    @Test
+    @DisplayName("조회기간이 365일을 넘으면 400 CMN0004 이고 365일 정확히는 통과한다")
+    void enforcesMaximumPeriod() throws Exception {
+        mockMvc.perform(get("/admin/info/deposit-balances")
+                        .param("from", "2025-10-01")
+                        .param("to", "2026-10-02")
+                        .with(admin(AdminPermission.GL_READ)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0004"));
+        mockMvc.perform(get("/admin/info/deposit-balances")
+                        .param("from", "2025-10-01")
+                        .param("to", "2026-10-01")
+                        .with(admin(AdminPermission.GL_READ)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("from 이나 to 하나만 주면 기본값 규칙(#704)이 정해질 때까지 통과한다")
+    void singleBoundIsAccepted() throws Exception {
+        mockMvc.perform(get("/admin/info/deposit-balances")
+                        .param("from", "2020-01-01")
+                        .with(admin(AdminPermission.GL_READ)))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/admin/info/deposit-balances")
+                        .param("to", "2026-10-01")
+                        .with(admin(AdminPermission.GL_READ)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @DisplayName("날짜·달 형식이 틀리면 400 CMN0001")
     void rejectsMalformedParameters() throws Exception {
         mockMvc.perform(get("/admin/info/deposit-balances").param("from", "abc").with(admin(AdminPermission.GL_READ)))

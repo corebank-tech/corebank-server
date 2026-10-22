@@ -1,10 +1,13 @@
 package com.shinhan.corebank.info.application.service;
 
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.info.application.port.in.DepositBalancesQuery;
 import com.shinhan.corebank.info.application.port.in.InfoQueryUseCase;
 import com.shinhan.corebank.info.application.port.in.ProductSubscriptionsQuery;
 import com.shinhan.corebank.info.domain.DepositBalanceTrend;
 import com.shinhan.corebank.info.domain.ProductSubscriptionSummary;
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
@@ -12,13 +15,29 @@ import org.springframework.stereotype.Service;
 @Service
 public class StubInfoQueryService implements InfoQueryUseCase {
 
+    private static final int MAX_RANGE_DAYS = 365;
+
     @Override
     public DepositBalanceTrend depositBalances(DepositBalancesQuery query) {
+        validatePeriod(query.from(), query.to());
         return new DepositBalanceTrend(null, List.of());
     }
 
     @Override
     public ProductSubscriptionSummary productSubscriptions(ProductSubscriptionsQuery query) {
         return new ProductSubscriptionSummary(null, query.month(), null, null, List.of());
+    }
+
+    // 기간 상한은 마트 조회와 무관한 입력 규칙이라 스텁에서도 막는다(CMN0003·CMN0004). 하나만 준 경우는 asOf 기본값이 필요해 #704에서 정한다.
+    private static void validatePeriod(LocalDate from, LocalDate to) {
+        if (from == null || to == null) {
+            return;
+        }
+        if (from.isAfter(to)) {
+            throw new BusinessException(CommonErrorCode.INVALID_DATE_RANGE);
+        }
+        if (from.plusDays(MAX_RANGE_DAYS).isBefore(to)) {
+            throw new BusinessException(CommonErrorCode.DATE_RANGE_EXCEEDED);
+        }
     }
 }
