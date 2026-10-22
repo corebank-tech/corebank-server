@@ -183,7 +183,8 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `ATH` | 인증·회원 | P6 | REQ-AUTH |
 | `OTP` | OTP 거래인증 | P6 | REQ-OTP |
 | `APW` | 계좌비밀번호 | P6 | REQ-ACCT-006~009 |
-| `MYP` | 마이페이지·알림 | P6 | REQ-MYPG |
+| `MYP` (`MYP00xx`) | 마이페이지 | P6 | REQ-MYPG |
+| `MYP` (`MYP02xx`) | 알림 | P1 | REQ-MYPG |
 | `ACC` | 계좌 | P2 | REQ-ACCT-001~005·010~015 |
 | `INQ` | 조회(계좌·거래내역) | P2 | REQ-INQR |
 | `PRD` | 상품·상품가입 | P3 | REQ-PRDT |
@@ -302,6 +303,8 @@ public record ApiResponse<T>(String code, String message, T data) {
 | --- | --- | --- | --- |
 | `MYP0001` | 400 | 휴대폰 번호 형식이 올바르지 않습니다. | 고객정보 변경 시 형식 위반 |
 | `MYP0201` | 404 | 알림을 찾을 수 없습니다. | `notificationId` 없음 |
+
+> 알림 코드(`MYP02xx`)는 P1이 맡습니다. 고객정보 변경(`MYP00xx`)은 P6 그대로입니다.
 
 ### 4-6. `ACC` 계좌 — P2
 
@@ -583,13 +586,13 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 > 폐기: `TRANSFER`, `PRODUCT_SIGN`, `LIMIT_CHANGE`, `ACC_REGISTER`, `PROFILE_CHANGE` (기존 OTP 발급 명세의 약어)
 
-> `AdminPermission`은 5종 고정입니다. 값을 늘리면 `/admin/**` 권한 매핑표(PH-49a-②)와 부여·회수 API(PH-49b)를 함께 고쳐야 합니다.
+> `CustomerRole` · `AdminPermission`은 관리자 인증(PH-49a, P1)이 맡습니다. `AdminPermission`은 5종 고정입니다. 값을 늘리면 `/admin/**` 권한 매핑표(PH-49a-②)와 부여·회수 API(PH-49b)를 함께 고쳐야 합니다.
 
-### 5-9. 알림 — P6
+### 5-9. 알림 — P1
 
 | Enum | 값 | 의미 |
 | --- | --- | --- |
-| `NotificationType` | `TRANSFER` | 즉시이체 결과 |
+| `NotificationType` | `TRANSFER` | 즉시 · 타행이체 결과 |
 |  | `SCHEDULED_TRANSFER` | 예약이체 결과 |
 |  | `AUTO_TRANSFER` | 자동이체 결과 |
 |  | `PRODUCT_SUBSCRIPTION` | 상품가입 결과 |
