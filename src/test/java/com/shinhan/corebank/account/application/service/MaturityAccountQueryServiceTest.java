@@ -41,6 +41,7 @@ class MaturityAccountQueryServiceTest {
         assertThat(result.accountId()).isEqualTo(ACCOUNT_ID);
         assertThat(result.productId()).isEqualTo(10L);
         assertThat(result.maturityDate()).isEqualTo(MATURITY_DATE);
+        assertThat(result.timeDeposit()).isTrue();
     }
 
     @Test
@@ -91,6 +92,16 @@ class MaturityAccountQueryServiceTest {
         assertError(
                 () -> service.requireWithdrawalDestination(ACCOUNT_ID, CUSTOMER_ID),
                 AccountErrorCode.ACCOUNT_NOT_FOUND_OR_FORBIDDEN);
+    }
+
+    @Test
+    void requireMatured_installmentSavings() {
+        stub(new MaturityAccountSnapshot(
+                ACCOUNT_ID, 10L, AccountType.INSTALLMENT_SAVINGS, AccountStatus.MATURED, MATURITY_DATE, false));
+
+        var result = service.requireMatured(ACCOUNT_ID, CUSTOMER_ID, MATURITY_DATE);
+
+        assertThat(result.timeDeposit()).isFalse();
     }
 
     private void stub(MaturityAccountSnapshot account) {

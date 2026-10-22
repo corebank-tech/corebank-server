@@ -396,6 +396,44 @@ class MaturityTerminationServiceTest {
         verify(settlementUseCase, never()).closeMatured(any(), any(), any(), any());
     }
 
+    @Test
+    @DisplayName("정기예금 실제 원금이 계약 원금과 다르면 이체와 계좌 종료를 거부한다")
+    void terminate_principalMismatch() {
+        // 계약 원금은 100만 원이지만 실제 원금이 1원 더 많다.
+        stubBeforeTransfer(validated(InterestCalculationMode.SIMPLE), normalInterest(), TOTAL_TRANSFERRED + 1);
+
+        assertError(COMMAND, CommonErrorCode.INTERNAL_ERROR);
+
+        verifyNoInteractions(ledgerDepositUseCase, journalPostingUseCase);
+        verify(settlementUseCase, never()).closeMatured(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("정기적금은 가입 납입액과 누적 원금이 달라도 단순 비교로 거부하지 않는다")
+    void terminate_installmentDoesNotCompareInitialAmount() {
+        long additionalPayments = 500_000L;
+        long totalTransferred = TOTAL_TRANSFERRED + additionalPayments;
+
+        var validated = new MaturityTerminationValidationService.Validated(
+                ACCOUNT_ID,
+                WITHDRAWAL_ACCOUNT_ID,
+                OPENED_DATE,
+                MATURITY_DATE,
+                RATE,
+                InterestCalculationMode.SIMPLE,
+                PRINCIPAL,
+                false);
+
+        stubBeforeTransfer(validated, normalInterest(), totalTransferred);
+
+        stubTransfer(totalTransferred, new LedgerDepositResult(TRANSACTION_NUMBER, totalTransferred, TRADE_DATE));
+
+        MaturityTerminationResult result = service.terminate(COMMAND);
+
+        assertThat(result.principal()).isEqualTo(PRINCIPAL + additionalPayments);
+        assertThat(result.totalTransferred()).isEqualTo(totalTransferred);
+    }
+
     private void assertError(MaturityTerminationCommand command, ErrorCode expectedErrorCode) {
 
         assertThatThrownBy(() -> service.terminate(command))
@@ -406,7 +444,7 @@ class MaturityTerminationServiceTest {
 
     private static MaturityTerminationValidationService.Validated validated(InterestCalculationMode mode) {
         return new MaturityTerminationValidationService.Validated(
-                ACCOUNT_ID, WITHDRAWAL_ACCOUNT_ID, OPENED_DATE, MATURITY_DATE, RATE, mode);
+                ACCOUNT_ID, WITHDRAWAL_ACCOUNT_ID, OPENED_DATE, MATURITY_DATE, RATE, mode, PRINCIPAL, true);
     }
 
     private static InterestPaymentResult normalInterest() {

@@ -45,7 +45,11 @@ public class MaturityAccountQueryService implements MaturityAccountQueryUseCase 
             throw new BusinessException(AccountErrorCode.MATURITY_DATE_NOT_REACHED);
         }
 
-        return new MaturityAccountView(account.accountId(), account.productId(), account.maturityDate());
+        return new MaturityAccountView(
+                account.accountId(),
+                account.productId(),
+                account.maturityDate(),
+                account.accountType() == AccountType.TIME_DEPOSIT);
     }
 
     @Override

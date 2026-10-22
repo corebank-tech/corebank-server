@@ -97,6 +97,15 @@ public class MaturityTerminationService implements MaturityTerminationUseCase {
 
         long principal = totalTransferred - interest.net();
 
+        // 정기예금은 가입 당시 계약 원금과 실제 원금이 일치해야 한다.
+        // 정기적금은 회차별 납입 구조이므로 단순 비교 대상에서 제외한다.
+        if (validated.timeDeposit()
+                && (validated.subscriptionAmount() == null
+                        || validated.subscriptionAmount() <= 0
+                        || principal != validated.subscriptionAmount())) {
+            throw new BusinessException(CommonErrorCode.INTERNAL_ERROR);
+        }
+
         // 6. 상품 계좌 -> 고객 수취 계좌로 원리금 전액 이체
         LedgerDepositResult transfer = ledgerDepositUseCase.transferBetween(
                 accountId, withdrawalAccountId, totalTransferred, DepositType.MATURITY, DepositChannel.WB);

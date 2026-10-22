@@ -96,7 +96,9 @@ public class MaturityTerminationValidationService {
                 subscription.getOpenedDate(),
                 account.maturityDate(),
                 subscription.getAppliedRate(),
-                calculationMode);
+                calculationMode,
+                subscription.getSubscriptionAmount(),
+                account.timeDeposit());
     }
 
     private static void validateCommand(MaturityTerminationCommand command) {
@@ -115,5 +117,7 @@ public class MaturityTerminationValidationService {
             LocalDate openedDate,
             LocalDate maturityDate,
             BigDecimal annualRate,
-            InterestCalculationMode calculationMode) {}
+            InterestCalculationMode calculationMode,
+            Long subscriptionAmount,
+            boolean timeDeposit) {}
 }
