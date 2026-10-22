@@ -1,7 +1,7 @@
 # ADR-0010. 아웃박스는 Spring Modulith Event Publication Registry로 구현한다
 
 - 상태: 수락됨 (2026-10-21)
-- 관련: 이슈 #437(PH-96-①) · #393~#396(PH-96-②) · #436(PH-32), PR #505,
+- 관련: 이슈 #437(PH-96-①) · #706~#709(PH-96-②) · #436(PH-32), PR #505,
   [ADR-0005](0005-no-spring-batch-mq-api-gateway.md) §2 · [ADR-0003](0003-batch-api-for-cross-domain-lock-reuse.md),
   `docs/phase2/README.md` §3-3 · `tasks.md` §PH-96
 
