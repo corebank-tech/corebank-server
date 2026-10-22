@@ -1,17 +1,17 @@
 -- PH-28b GL 정합성 점검 쿼리의 실행계획. 거래가 가장 많은 2026-09-25 기준이다. 읽기만 한다.
 -- 문장은 LedgerTransactionQueryPersistenceAdapter와 GlIntegrityQueryAdapter의 상수와 같고, 바인드 값만 리터럴로 풀었다.
 
--- 1. 원장 거래 첫 청크. 발생 시각 창은 [직전 영업일 다음 날, T+2일)이고 거래번호 접두 범위도 같다.
---    측정 DB 휴일 테이블에서 9/24~9/26이 추석 연휴라 직전 영업일은 9/23, 하한은 9/24다.
+-- 1. 원장 거래 첫 청크. 발생 시각 창은 [직전 영업일, T+2일)이고 거래번호 접두 범위도 같다.
+--    측정 DB 휴일 테이블에서 9/24~9/26이 추석 연휴라 직전 영업일이자 하한은 9/23이다.
 EXPLAIN ANALYZE
 SELECT le.transaction_number    AS transaction_number,
        MIN(le.transaction_type) AS transaction_type,
        MIN(le.amount)           AS amount
 FROM ledger_entry le
 WHERE le.trade_date = '2026-09-25'
-  AND le.occurred_at >= '2026-09-24 00:00:00'
+  AND le.occurred_at >= '2026-09-23 00:00:00'
   AND le.occurred_at <  '2026-09-27 00:00:00'
-  AND le.transaction_number >= '20260924'
+  AND le.transaction_number >= '20260923'
   AND le.transaction_number <  '20260927'
   AND le.transaction_number >  ''
   AND le.transaction_type NOT IN ('OPENING', 'QA_SEED_INITIAL')

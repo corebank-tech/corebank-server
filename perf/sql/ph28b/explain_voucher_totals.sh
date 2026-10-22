@@ -9,8 +9,8 @@ keys=$(mysql_exec <<'SQL' | awk '{printf "%s'\''%s'\''", (NR>1?",":""), $1}'
 SELECT le.transaction_number
 FROM ledger_entry le
 WHERE le.trade_date = '2026-09-25'
-  AND le.occurred_at >= '2026-09-24 00:00:00' AND le.occurred_at < '2026-09-27 00:00:00'
-  AND le.transaction_number >= '20260924' AND le.transaction_number < '20260927'
+  AND le.occurred_at >= '2026-09-23 00:00:00' AND le.occurred_at < '2026-09-27 00:00:00'
+  AND le.transaction_number >= '20260923' AND le.transaction_number < '20260927'
   AND le.transaction_type NOT IN ('OPENING', 'QA_SEED_INITIAL')
 GROUP BY le.transaction_number
 ORDER BY le.transaction_number
