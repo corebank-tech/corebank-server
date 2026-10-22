@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -12,6 +13,7 @@ import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.account.api.MaturityAccountQueryUseCase;
 import com.shinhan.corebank.account.api.MaturityAccountSettlementUseCase;
+import com.shinhan.corebank.account.domain.exception.AccountPasswordErrorCode;
 import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
@@ -23,6 +25,7 @@ import com.shinhan.corebank.subscription.api.InterestPaymentResult;
 import com.shinhan.corebank.subscription.api.InterestPaymentUseCase;
 import com.shinhan.corebank.subscription.api.MaturityTerminationCommand;
 import com.shinhan.corebank.subscription.api.MaturityTerminationResult;
+import com.shinhan.corebank.subscription.application.port.out.MaturityTerminationPasswordVerificationPort;
 import com.shinhan.corebank.subscription.domain.exception.SubscriptionErrorCode;
 import com.shinhan.corebank.transfer.api.DepositChannel;
 import com.shinhan.corebank.transfer.api.DepositType;
@@ -65,8 +68,10 @@ class MaturityTerminationServiceTest {
     private static final long TOTAL_TRANSFERRED = 1_025_380L;
 
     private static final String TRANSACTION_NUMBER = "20261022WB0000000001";
+    private static final String AUTH_TOKEN = "test-account-password-token";
 
-    private static final MaturityTerminationCommand COMMAND = new MaturityTerminationCommand(CUSTOMER_ID, ACCOUNT_ID);
+    private static final MaturityTerminationCommand COMMAND =
+            new MaturityTerminationCommand(CUSTOMER_ID, ACCOUNT_ID, AUTH_TOKEN);
 
     @Mock
     private BusinessDateGate businessDateGate;
@@ -86,6 +91,9 @@ class MaturityTerminationServiceTest {
     @Mock
     private MaturityAccountQueryUseCase maturityAccountQueryUseCase;
 
+    @Mock
+    private MaturityTerminationPasswordVerificationPort passwordVerificationPort;
+
     private MaturityTerminationService service;
 
     @BeforeEach
@@ -100,6 +108,7 @@ class MaturityTerminationServiceTest {
                 settlementUseCase,
                 ledgerDepositUseCase,
                 maturityAccountQueryUseCase,
+                passwordVerificationPort,
                 clock);
     }
 
@@ -127,6 +136,7 @@ class MaturityTerminationServiceTest {
         InOrder order = inOrder(
                 businessDateGate,
                 validationService,
+                passwordVerificationPort,
                 interestPaymentUseCase,
                 settlementUseCase,
                 ledgerDepositUseCase,
@@ -135,6 +145,9 @@ class MaturityTerminationServiceTest {
         order.verify(businessDateGate).acquireSharedAndReadBusinessDate();
 
         order.verify(validationService).validate(COMMAND);
+
+        order.verify(passwordVerificationPort)
+                .verifyAndConsumeAccountPasswordToken("test-account-password-token", CUSTOMER_ID, ACCOUNT_ID);
 
         order.verify(interestPaymentUseCase).pay(captor.capture());
 
@@ -158,6 +171,41 @@ class MaturityTerminationServiceTest {
         assertThat(interestCommand.calculationMode()).isEqualTo(InterestPaymentCommand.CalculationMode.SIMPLE);
         assertThat(interestCommand.channel()).isEqualTo(DepositChannel.WB);
         assertThat(interestCommand.reason()).isEqualTo(InterestPaymentReason.MATURITY);
+    }
+
+    @Test
+    @DisplayName("계좌비밀번호 인증 토큰이 무효하면 이자 지급과 원리금 이체를 실행하지 않는다")
+    void terminate_invalidPasswordToken() {
+        // given
+        // 사전검증은 통과시키고 인증 단계에서만 실패하도록 설정한다.
+        // 인증 직후 예외가 발생하므로 Validated의 실제 필드값은 사용되지 않는다.
+        MaturityTerminationValidationService.Validated validated =
+                mock(MaturityTerminationValidationService.Validated.class);
+
+        when(validationService.validate(COMMAND)).thenReturn(validated);
+
+        doThrow(new BusinessException(AccountPasswordErrorCode.INVALID_AUTH_TOKEN))
+                .when(passwordVerificationPort)
+                .verifyAndConsumeAccountPasswordToken(
+                        COMMAND.accountPasswordAuthToken(), COMMAND.customerId(), COMMAND.accountId());
+
+        // when & then
+        assertThatThrownBy(() -> service.terminate(COMMAND))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(
+                                exception.getErrorCode().getCode())
+                        .isEqualTo("APW0102"));
+
+        // 사전검증까지는 정상적으로 실행된다.
+        verify(validationService).validate(COMMAND);
+
+        // 계좌비밀번호 인증 토큰 검증이 실행된다.
+        verify(passwordVerificationPort)
+                .verifyAndConsumeAccountPasswordToken(
+                        COMMAND.accountPasswordAuthToken(), COMMAND.customerId(), COMMAND.accountId());
+
+        // 인증 실패 후 금융 처리는 전혀 실행되지 않아야 한다.
+        verifyNoInteractions(
+                interestPaymentUseCase, ledgerDepositUseCase, maturityAccountQueryUseCase, settlementUseCase);
     }
 
     @Test

@@ -23,6 +23,7 @@ import com.shinhan.corebank.subscription.adapter.out.persistence.ProductSubscrip
 import com.shinhan.corebank.subscription.api.MaturityTerminationCommand;
 import com.shinhan.corebank.subscription.api.MaturityTerminationResult;
 import com.shinhan.corebank.subscription.api.MaturityTerminationUseCase;
+import com.shinhan.corebank.subscription.application.port.out.MaturityTerminationPasswordVerificationPort;
 import com.shinhan.corebank.subscription.domain.MaturityHandling;
 import com.shinhan.corebank.subscription.domain.exception.SubscriptionErrorCode;
 import java.math.BigDecimal;
@@ -44,6 +45,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.util.AopTestUtils;
 
@@ -93,6 +95,9 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
 
     @MockitoSpyBean
     private AccountStatusHistoryPersistenceAdapter historyAdapter;
+
+    @MockitoBean
+    private MaturityTerminationPasswordVerificationPort passwordVerificationPort;
 
     private Long customerId;
     private Long productId;
@@ -557,7 +562,7 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
     }
 
     private MaturityTerminationCommand command() {
-        return new MaturityTerminationCommand(customerId, PRODUCT_ACCOUNT_ID);
+        return new MaturityTerminationCommand(customerId, PRODUCT_ACCOUNT_ID, "test-account-password-token");
     }
 
     private record TerminationAttempt(MaturityTerminationResult result, RuntimeException error) {}

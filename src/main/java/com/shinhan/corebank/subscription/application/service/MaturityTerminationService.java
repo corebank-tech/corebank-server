@@ -12,6 +12,7 @@ import com.shinhan.corebank.subscription.api.InterestPaymentUseCase;
 import com.shinhan.corebank.subscription.api.MaturityTerminationCommand;
 import com.shinhan.corebank.subscription.api.MaturityTerminationResult;
 import com.shinhan.corebank.subscription.api.MaturityTerminationUseCase;
+import com.shinhan.corebank.subscription.application.port.out.MaturityTerminationPasswordVerificationPort;
 import com.shinhan.corebank.subscription.domain.exception.SubscriptionErrorCode;
 import com.shinhan.corebank.transfer.api.DepositChannel;
 import com.shinhan.corebank.transfer.api.DepositType;
@@ -36,6 +37,7 @@ public class MaturityTerminationService implements MaturityTerminationUseCase {
     private final MaturityAccountSettlementUseCase settlementUseCase;
     private final LedgerDepositUseCase ledgerDepositUseCase;
     private final MaturityAccountQueryUseCase maturityAccountQueryUseCase;
+    private final MaturityTerminationPasswordVerificationPort passwordVerificationPort;
     private final Clock clock;
 
     @Override
@@ -47,6 +49,9 @@ public class MaturityTerminationService implements MaturityTerminationUseCase {
 
         // 2. 만기해지 가능 여부 및 가입 당시 계약 조건 검증
         MaturityTerminationValidationService.Validated validated = validationService.validate(command);
+
+        passwordVerificationPort.verifyAndConsumeAccountPasswordToken(
+                command.accountPasswordAuthToken(), command.customerId(), command.accountId());
 
         Long accountId = validated.accountId();
         Long withdrawalAccountId = validated.withdrawalAccountId();
