@@ -272,9 +272,7 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
                 .isEqualTo(result.tradeDate());
 
         assertThat((LocalDateTime) history.get("changed_at"))
-          .isCloseTo(
-                  result.closedAt(),
-                  within(1, ChronoUnit.MICROS));
+                .isCloseTo(result.closedAt(), within(1, ChronoUnit.MICROS));
 
         assertThat(history.get("trigger_type")).isEqualTo("CUSTOMER");
     }
@@ -310,11 +308,7 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
 
         doThrow(new IllegalStateException("CLOSED 전이 실패 주입"))
                 .when(targetSpy)
-                .closeMatured(
-                        eq(PRODUCT_ACCOUNT_ID),
-                        eq(customerId),
-                        any(LocalDateTime.class),
-                        eq(BUSINESS_DATE));
+                .closeMatured(eq(PRODUCT_ACCOUNT_ID), eq(customerId), any(LocalDateTime.class), eq(BUSINESS_DATE));
 
         assertThatThrownBy(() -> terminationUseCase.terminate(command()))
                 .isInstanceOf(IllegalStateException.class)
