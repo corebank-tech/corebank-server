@@ -17,6 +17,7 @@ import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import com.shinhan.corebank.batch.api.BatchStepStatus;
 import com.shinhan.corebank.batch.api.CobStep;
 import com.shinhan.corebank.batch.api.CobStepHaltException;
+import com.shinhan.corebank.batch.application.port.out.CobCheckpointPort;
 import com.shinhan.corebank.business.api.BusinessDateAdvancer;
 import com.shinhan.corebank.business.api.BusinessDateProvider;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -55,6 +56,9 @@ class CobRunnerServiceTest {
     @Mock
     BatchExecutionHistoryPort batchExecutionHistoryPort;
 
+    @Mock
+    CobCheckpointPort cobCheckpointPort;
+
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     private CobStep stepOf(String name, int order) {
@@ -80,6 +84,7 @@ class CobRunnerServiceTest {
                 businessDateProvider,
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
+                cobCheckpointPort,
                 CLOCK,
                 meterRegistry,
                 List.of(third, first, second));
@@ -106,6 +111,7 @@ class CobRunnerServiceTest {
                 businessDateProvider,
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
+                cobCheckpointPort,
                 CLOCK,
                 meterRegistry,
                 List.of(step));
@@ -129,6 +135,7 @@ class CobRunnerServiceTest {
                 businessDateProvider,
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
+                cobCheckpointPort,
                 CLOCK,
                 meterRegistry,
                 List.of(step));
@@ -144,15 +151,16 @@ class CobRunnerServiceTest {
         return new CannotAcquireLockException("deadlock", new SQLException("deadlock", "40001", 1213));
     }
 
-    private CobRunnerService serviceWith(CobStep step) {
+    private CobRunnerService serviceWith(CobStep... steps) {
         return new CobRunnerService(
                 batchExecutionLockPort,
                 businessDateProvider,
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
+                cobCheckpointPort,
                 CLOCK,
                 meterRegistry,
-                List.of(step));
+                List.of(steps));
     }
 
     @Test
@@ -235,6 +243,7 @@ class CobRunnerServiceTest {
                         businessDateProvider,
                         businessDateAdvancer,
                         batchExecutionHistoryPort,
+                        cobCheckpointPort,
                         CLOCK,
                         meterRegistry,
                         List.of(a, b)))
@@ -260,6 +269,7 @@ class CobRunnerServiceTest {
                 businessDateProvider,
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
+                cobCheckpointPort,
                 CLOCK,
                 meterRegistry,
                 List.of(first, second));
@@ -289,6 +299,7 @@ class CobRunnerServiceTest {
                 businessDateProvider,
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
+                cobCheckpointPort,
                 CLOCK,
                 meterRegistry,
                 List.of(first, second));
@@ -313,6 +324,7 @@ class CobRunnerServiceTest {
                 businessDateProvider,
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
+                cobCheckpointPort,
                 CLOCK,
                 meterRegistry,
                 List.of(step));
@@ -339,6 +351,7 @@ class CobRunnerServiceTest {
                 businessDateProvider,
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
+                cobCheckpointPort,
                 CLOCK,
                 meterRegistry,
                 List.of(step));
@@ -366,6 +379,7 @@ class CobRunnerServiceTest {
                 businessDateProvider,
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
+                cobCheckpointPort,
                 CLOCK,
                 meterRegistry,
                 List.of(first, second));
@@ -398,6 +412,7 @@ class CobRunnerServiceTest {
                 businessDateProvider,
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
+                cobCheckpointPort,
                 CLOCK,
                 meterRegistry,
                 List.of(step));
@@ -434,6 +449,7 @@ class CobRunnerServiceTest {
                 businessDateProvider,
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
+                cobCheckpointPort,
                 CLOCK,
                 meterRegistry,
                 List.of(step));
@@ -465,6 +481,7 @@ class CobRunnerServiceTest {
                 businessDateProvider,
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
+                cobCheckpointPort,
                 CLOCK,
                 meterRegistry,
                 List.of(first, second));
@@ -494,6 +511,7 @@ class CobRunnerServiceTest {
                 businessDateProvider,
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
+                cobCheckpointPort,
                 CLOCK,
                 meterRegistry,
                 List.of(first, second));
@@ -521,12 +539,112 @@ class CobRunnerServiceTest {
                 businessDateProvider,
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
+                cobCheckpointPort,
                 CLOCK,
                 meterRegistry,
                 List.of(first, second));
 
         service.run(COB_DATE.plusDays(10));
 
+        verify(second).run(COB_DATE);
+        verify(batchExecutionLockPort).release(JOB_NAME);
+    }
+
+    private static final String ADVANCE_STEP = "business-date-advance";
+
+    @Test
+    @DisplayName("전환 전에 전환·스텝 행을 PENDING으로 남기고, 전환과 스텝이 성공할 때마다 SUCCESS로 바꾼다 (#663)")
+    void run_savesCheckpointBeforeAdvance_andMarksSuccessAsEachStepFinishes() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+        CobStep first = stepOf("first", 1);
+        CobStep second = stepOf("second", 2);
+
+        serviceWith(first, second).run(COB_DATE.plusDays(10));
+
+        InOrder inOrder = inOrder(cobCheckpointPort, businessDateAdvancer, first, second);
+        inOrder.verify(cobCheckpointPort).initialize(eq(COB_DATE), eq(List.of(ADVANCE_STEP, "first", "second")), any());
+        inOrder.verify(businessDateAdvancer).advanceFrom(COB_DATE);
+        inOrder.verify(cobCheckpointPort).markSuccess(eq(COB_DATE), eq(ADVANCE_STEP), any());
+        inOrder.verify(first).run(COB_DATE);
+        inOrder.verify(cobCheckpointPort).markSuccess(eq(COB_DATE), eq("first"), any());
+        inOrder.verify(second).run(COB_DATE);
+        inOrder.verify(cobCheckpointPort).markSuccess(eq(COB_DATE), eq("second"), any());
+    }
+
+    @Test
+    @DisplayName("실패하거나 중단된 스텝은 SUCCESS로 바꾸지 않는다 (#663)")
+    void run_failedOrHaltedStep_isNotMarkedSuccess() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+        CobStep failing = stepOf("failing", 1);
+        CobStep halting = stepOf("halting", 2);
+        CobStep skipped = stepOf("skipped", 3);
+        org.mockito.Mockito.doThrow(new RuntimeException("실패")).when(failing).run(COB_DATE);
+        org.mockito.Mockito.doThrow(new CobStepHaltException("중단"))
+                .when(halting)
+                .run(COB_DATE);
+
+        serviceWith(failing, halting, skipped).run(COB_DATE.plusDays(10));
+
+        verify(cobCheckpointPort).markSuccess(eq(COB_DATE), eq(ADVANCE_STEP), any());
+        verify(cobCheckpointPort, never()).markSuccess(any(), eq("failing"), any());
+        verify(cobCheckpointPort, never()).markSuccess(any(), eq("halting"), any());
+        verify(cobCheckpointPort, never()).markSuccess(any(), eq("skipped"), any());
+    }
+
+    @Test
+    @DisplayName("체크포인트 초기화가 3번 다 실패해도 영업일 전환과 스텝은 그대로 실행한다 (#663)")
+    void run_checkpointInitializeKeepsFailing_stillAdvancesAndRunsSteps() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+        org.mockito.Mockito.doThrow(new RuntimeException("DB 순단"))
+                .when(cobCheckpointPort)
+                .initialize(any(), any(), any());
+        CobStep step = stepOf("step", 1);
+
+        serviceWith(step).run(COB_DATE.plusDays(10));
+
+        verify(cobCheckpointPort, times(3)).initialize(any(), any(), any());
+        verify(businessDateAdvancer).advanceFrom(COB_DATE);
+        verify(step).run(COB_DATE);
+        verify(batchExecutionLockPort).release(JOB_NAME);
+    }
+
+    @Test
+    @DisplayName("체크포인트 초기화가 한 번 실패해도 다시 시도해 성공하면 거기서 멈춘다 (#663)")
+    void run_checkpointInitializeFailsOnce_retriesAndStopsAfterSuccess() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+        org.mockito.Mockito.doThrow(new RuntimeException("DB 순단"))
+                .doNothing()
+                .when(cobCheckpointPort)
+                .initialize(any(), any(), any());
+
+        serviceWith(stepOf("step", 1)).run(COB_DATE.plusDays(10));
+
+        verify(cobCheckpointPort, times(2)).initialize(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("SUCCESS 표시 저장이 실패해도 이후 스텝은 계속 실행된다 (#663)")
+    void run_markSuccessThrows_doesNotAbortRemainingSteps() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+        org.mockito.Mockito.doThrow(new RuntimeException("DB 순단"))
+                .when(cobCheckpointPort)
+                .markSuccess(any(), any(), any());
+        CobStep first = stepOf("first", 1);
+        CobStep second = stepOf("second", 2);
+
+        serviceWith(first, second).run(COB_DATE.plusDays(10));
+
+        verify(first).run(COB_DATE);
         verify(second).run(COB_DATE);
         verify(batchExecutionLockPort).release(JOB_NAME);
     }
