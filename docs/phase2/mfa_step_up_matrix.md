@@ -31,30 +31,32 @@
 
 `미충족`은 현재 구현을 고장으로 판정한다는 뜻이 아니라, **독립된 2요소가 입증되지 않았음**을 뜻한다. `해당 없음`은 시스템 실행 건에 사용자 재인증을 새로 요구하지 않는다는 뜻이다.
 
-| 업무·판정 시점 | 현재 요구하는 검증 | 독립 2요소 | Step-up 정의 및 미달 구간 |
-|---|---|---|---|
-| 고객 로그인 | 로그인 비밀번호 → 고객 세션 | **미충족:** 지식 1종 | 로그인 자체를 MFA 대상으로 삼을지는 별도 정책 결정이다. 현재 고객 로그인에 독립 소유·생체 요소는 없다. |
-| 즉시이체 실행 | 고객 세션 + 계좌비밀번호 토큰 + 해당 거래내용에 묶인 OTP 토큰 | **미충족:** 지식 + Mock OTP | **Step-up 대상.** 이체 실행 전에 두 토큰을 검증·소비하지만 독립 소유 요소가 없다. [TransferController](../../src/main/java/com/shinhan/corebank/transfer/adapter/in/web/TransferController.java), [TransferCommand](../../src/main/java/com/shinhan/corebank/transfer/application/port/in/TransferCommand.java), [TransferExecutionService](../../src/main/java/com/shinhan/corebank/transfer/application/service/TransferExecutionService.java) |
-| 예약·자동이체 등록 | 고객 세션 + 계좌비밀번호 토큰 + 등록 내용에 묶인 OTP 토큰 | **미충족:** 지식 + Mock OTP | **Step-up 대상.** 장래 출금 지시를 만드는 시점에 추가 인증 절차는 있으나 독립 소유 요소가 없다. [ScheduledTransferCommandService](../../src/main/java/com/shinhan/corebank/scheduledtransfer/application/service/ScheduledTransferCommandService.java), [AutoTransferCommandService](../../src/main/java/com/shinhan/corebank/autotransfer/application/service/AutoTransferCommandService.java) |
-| 예약이체 취소·자동이체 변경/해지 | 고객 세션 + 계좌비밀번호 토큰 + 해당 변경·취소 내용에 묶인 OTP 토큰 | **미충족:** 지식 + Mock OTP | **Step-up 대상.** 예약 지시를 취소하거나 자동이체 조건·상태를 바꾸는 고객 행위. [ScheduledTransferCommandService](../../src/main/java/com/shinhan/corebank/scheduledtransfer/application/service/ScheduledTransferCommandService.java), [AutoTransferCommandService](../../src/main/java/com/shinhan/corebank/autotransfer/application/service/AutoTransferCommandService.java) |
-| 예약·자동이체 배치 실행 | 앞서 등록된 지시에 따른 시스템 실행. 실행 시 고객 세션·인증 토큰 없음 | **해당 없음:** 고객의 새 승인 행위가 아님 | 등록 시점의 인증을 근거로 실행한다. 배치 회차마다 고객 OTP를 요구한다는 뜻이 아니다. [TransferCommand](../../src/main/java/com/shinhan/corebank/transfer/application/port/in/TransferCommand.java) |
-| 관리자 조회 API | 현재 `/admin/**` 임시 고객 ID 허용 목록; PH-49a-② 역할·권한 구현 대기 | **미충족/구현 대기** | 기본 정책은 관리자 권한·세션 확인. 조회마다 Step-up을 붙이는 결정은 이 문서에 없다. [SecurityConfig](../../src/main/java/com/shinhan/corebank/auth/adapter/in/security/SecurityConfig.java) |
-| 관리자 고객 변경·GL 변경·권한 부여/회수 API | 현재 임시 가드. 권한별 변경 API는 PH-49a-②·PH-49b 계약을 따른다. | **미충족/구현 대기** | **Step-up 요구 구간으로 표기.** `CUSTOMER_WRITE`, `GL_WRITE` 및 권한 부여·회수 등 상태 변경 전. URL·메서드별 최종 표기와 감사로그는 PH-49b 담당. [admin_auth.md](admin_auth.md), [tasks.md](tasks.md#ph-49b-직무분리-부여회수--maker-checker--step-up-표기) |
+| 업무·판정 시점 | 현재 요구하는 검증 | 독립 2요소 | Step-up 정책 | 현재 미달 사유 | 근거 |
+|---|---|---|---|---|---|
+| 고객 로그인 | 로그인 비밀번호 → 고객 세션 | **미충족:** 지식 1종 | 로그인 자체의 MFA 적용 여부는 별도 결정 | 독립 소유·생체 요소 없음 | [LoginController](../../src/main/java/com/shinhan/corebank/auth/adapter/in/web/LoginController.java) |
+| 즉시이체 실행 | 고객 세션 + 계좌비밀번호 토큰 + 거래내용에 묶인 OTP 토큰 | **미충족:** 지식 + Mock OTP | 실행 직전 Step-up 대상 | 두 토큰을 검증·소비하지만 독립 소유 요소 없음 | [TransferController](../../src/main/java/com/shinhan/corebank/transfer/adapter/in/web/TransferController.java), [TransferCommand](../../src/main/java/com/shinhan/corebank/transfer/application/port/in/TransferCommand.java), [TransferExecutionService](../../src/main/java/com/shinhan/corebank/transfer/application/service/TransferExecutionService.java) |
+| 예약·자동이체 등록 | 고객 세션 + 계좌비밀번호 토큰 + 등록 내용에 묶인 OTP 토큰 | **미충족:** 지식 + Mock OTP | 장래 출금 지시 등록 시 Step-up 대상 | 추가 검증 절차는 있지만 독립 소유 요소 없음 | [ScheduledTransferCommandService](../../src/main/java/com/shinhan/corebank/scheduledtransfer/application/service/ScheduledTransferCommandService.java), [AutoTransferCommandService](../../src/main/java/com/shinhan/corebank/autotransfer/application/service/AutoTransferCommandService.java) |
+| 예약이체 취소·자동이체 변경/해지 | 고객 세션 + 계좌비밀번호 토큰 + 변경·취소 내용에 묶인 OTP 토큰 | **미충족:** 지식 + Mock OTP | 지시 취소·조건 변경·해지 시 Step-up 대상 | 독립 소유 요소 없음 | [ScheduledTransferCommandService](../../src/main/java/com/shinhan/corebank/scheduledtransfer/application/service/ScheduledTransferCommandService.java), [AutoTransferCommandService](../../src/main/java/com/shinhan/corebank/autotransfer/application/service/AutoTransferCommandService.java) |
+| 상품가입·이체한도 변경·계좌비밀번호 변경·출금계좌 등록 | 고객 세션 + 계좌비밀번호 토큰 + 업무 내용에 묶인 OTP 토큰 | **미충족:** 지식 + Mock OTP | 초입금 출금·한도 변경·비밀번호 변경·출금계좌 등록 시 Step-up 대상 | 네 업무 모두 토큰을 소비하지만 Mock OTP가 독립 소유를 증명하지 못함. 특히 한도 변경의 고객 기준 계좌비밀번호 토큰도 별도 요소가 아님 | [ProductSubscriptionController](../../src/main/java/com/shinhan/corebank/subscription/adapter/in/web/ProductSubscriptionController.java), [TransferLimitCommandService](../../src/main/java/com/shinhan/corebank/limit/application/service/TransferLimitCommandService.java), [AccountPasswordChangeService](../../src/main/java/com/shinhan/corebank/account/application/service/AccountPasswordChangeService.java), [WithdrawalAccountRegisterService](../../src/main/java/com/shinhan/corebank/account/application/service/WithdrawalAccountRegisterService.java), [OtpTransactionType](../../src/main/java/com/shinhan/corebank/otp/api/OtpTransactionType.java) |
+| 예약·자동이체 배치 실행 | 등록된 지시에 따른 시스템 실행. 고객 세션·인증 토큰 없음 | **해당 없음:** 새 고객 승인 행위 아님 | 배치 회차마다 고객 Step-up을 요구하지 않음 | 등록 시점의 인증을 근거로 실행 | [TransferCommand](../../src/main/java/com/shinhan/corebank/transfer/application/port/in/TransferCommand.java) |
+| 관리자 조회 API | 관리자 로그인 세션 + 경로별 `CUSTOMER_READ`·`GL_READ`·`AUDIT_READ` 권한 | **미충족:** 로그인 비밀번호 1종 | 조회마다 추가 Step-up을 요구하지 않음 | `GET /admin/customers`, `GET /admin/trial-balance`, `GET /admin/ledger-reconciliation/mismatches`가 구현됨. 행위 직전 추가 인증 없음 | [SecurityConfig](../../src/main/java/com/shinhan/corebank/auth/adapter/in/security/SecurityConfig.java), [AdminCustomerController](../../src/main/java/com/shinhan/corebank/customer/adapter/in/web/admin/AdminCustomerController.java), [AdminTrialBalanceController](../../src/main/java/com/shinhan/corebank/gl/adapter/in/web/admin/AdminTrialBalanceController.java), [AdminLedgerReconciliationController](../../src/main/java/com/shinhan/corebank/transfer/adapter/in/web/admin/AdminLedgerReconciliationController.java) |
+| 관리자 고객 변경 API | 관리자 로그인 세션 + `CUSTOMER_WRITE` 권한 | **미충족:** 로그인 비밀번호 1종 | 고객 상태 변경 전 Step-up 요구 구간 | `POST /admin/customers/{customerId}/unlock`, `/status`, `/password-reset`이 구현됐으나 실행 직전 재인증 없음 | [AdminCustomerController](../../src/main/java/com/shinhan/corebank/customer/adapter/in/web/admin/AdminCustomerController.java), [SecurityConfig](../../src/main/java/com/shinhan/corebank/auth/adapter/in/security/SecurityConfig.java) |
+| 관리자 GL 변경·권한 부여/회수 API | 해당 변경 API 미구현 | **판정 보류:** 실행 경로 없음 | `GL_WRITE` 변경과 권한 부여·회수 전 Step-up 요구 구간 | 권한 Enum·인가 계약은 있지만 변경 API와 Step-up 검증 경로는 아직 없음 | [admin_auth.md](admin_auth.md), [tasks.md](tasks.md#ph-49b-직무분리-부여회수--maker-checker--step-up-표기) |
 
 예약이체의 등록·취소와 자동이체의 등록·변경·해지는 해당 동작의 거래정보로 OTP를 검증한다. 반면 배치 실행은 고객이 그때 다시 요청한 이체가 아니다. 이 차이를 무시하고 배치 실행을 `2요소 충족` 또는 `OTP 누락`으로 표시하지 않는다.
 
 ## 4. PH-49b에 넘길 표기 계약
 
-PH-49b는 이 문서의 관리자 행을 받아 **관리자 변경 API가 Step-up 요구 대상임을 표시**한다. 표시는 `Step-up 필요`라는 정책 요구를 나타내며 `Step-up 검증 완료`나 `MFA 적용 완료`를 뜻하지 않는다. 현재 `/admin/**` 임시 가드와 향후 `*_WRITE` 권한 검사는 **접근 권한** 판정이며, 행위 직전 재인증의 대체물이 아니다.
+PH-49b는 이 문서의 관리자 행을 받아 **관리자 변경 API가 Step-up 요구 대상임을 표시**한다. 표시는 `Step-up 필요`라는 정책 요구를 나타내며 `Step-up 검증 완료`나 `MFA 적용 완료`를 뜻하지 않는다. 현재의 경로별 권한 검사와 향후 추가될 `GL_WRITE`·권한 부여/회수 API의 인가는 **접근 권한** 판정이며, 행위 직전 재인증의 대체물이 아니다.
 
 | 관리 행위 | 관련 권한·계약 | PH-49b 표기 |
 |---|---|---|
-| 고객 잠금해제·비밀번호 초기화·상태 변경 | `CUSTOMER_WRITE` ([admin_auth.md](admin_auth.md)) | `Step-up 필요` |
+| `POST /admin/customers/{customerId}/unlock` · `POST /admin/customers/{customerId}/status` · `POST /admin/customers/{customerId}/password-reset` | `CUSTOMER_WRITE` ([AdminCustomerController](../../src/main/java/com/shinhan/corebank/customer/adapter/in/web/admin/AdminCustomerController.java)) | `Step-up 필요` |
 | GL·전표·분개 변경 | `GL_WRITE` ([admin_auth.md](admin_auth.md)) | `Step-up 필요` |
 | 관리자 권한 부여·회수 | PH-49b 부여·회수 API ([tasks.md](tasks.md#ph-49b-직무분리-부여회수--maker-checker--step-up-표기)) | `Step-up 필요` |
 | 고객·GL·감사 조회 | `CUSTOMER_READ`·`GL_READ`·`AUDIT_READ` | 이 매트릭스만으로 추가 Step-up을 요구하지 않음 |
 
-관리자 API의 실제 경로·메서드는 PH-49a-②/PH-49b 구현과 함께 확정한다. 기존 코드에 없는 관리자 인증 완료 상태나 새 응답 필드를 이 문서가 정의하지 않는다. 권한 검사, 감사로그, maker-checker는 Step-up과 서로 다른 통제다.
+고객 변경 API의 위 경로·메서드는 현재 구현 기준이다. GL 변경·권한 부여/회수 API의 실제 경로·메서드는 담당 구현과 함께 확정한다. 기존 코드에 없는 Step-up 완료 상태나 새 응답 필드를 이 문서가 정의하지 않는다. 권한 검사, 감사로그, maker-checker는 Step-up과 서로 다른 통제다.
 
 ## 5. 후속 구현 때 다시 판정할 조건
 
@@ -63,4 +65,4 @@ PH-49b는 이 문서의 관리자 행을 받아 **관리자 변경 API가 Step-u
 3. 관리자 변경 API에는 권한 확인과 별도로, Step-up을 실제로 검증하는 경로가 들어간 뒤에만 `적용 완료`를 표시한다. PH-49b의 정책 표기만으로 차단 기능이 구현된 것은 아니다.
 4. 구현 후에는 같은 세션에서 두 비밀번호만 입력한 경우, Mock OTP 번호를 같은 응답에서 읽은 경우, 다른 거래용 OTP 토큰을 제출한 경우, 만료·재사용 토큰을 제출한 경우를 구분해 재검증한다.
 
-이 문서의 사실 판정은 현재 브랜치의 코드와 설정 기준이다. PH-49a-② 관리자 인증과 PH-49b 권한 API가 들어오면 관리자 행을 다시 대조한다.
+이 문서의 사실 판정은 `dev` 커밋 `83948e97`(2026-10-22)을 합친 코드와 설정 기준이다. 이후 PH-49b 권한 부여/회수 API가 들어오면 관리자 행을 다시 대조한다.
