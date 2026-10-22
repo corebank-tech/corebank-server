@@ -102,6 +102,7 @@ public class AccountJpaEntity extends BaseEntity {
         this.withdrawalRegistered = account.isWithdrawalRegistered();
         this.withdrawalRegisteredAt = account.getWithdrawalRegisteredAt();
         this.closedDate = account.getClosedDate();
+        this.closedTradeDate = account.getClosedTradeDate();
         this.lastTransactionAt = account.getLastTransactionAt();
     }
 
