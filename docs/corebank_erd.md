@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 43개 테이블(39개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개 + `business_date_cutoff` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
+> **DBMS**: MySQL 8.4 / 44개 테이블(39개 비즈니스 테이블 + `ledger_entry_id_sequence` 1개 + `batch_execution_lock` 1개 + `batch_execution_history` 1개 + `business_date_cutoff` 1개 + `cob_checkpoint` 1개) / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약)
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -9,7 +9,7 @@
 erDiagram
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 43개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
+    %% MySQL 8.4 / 44개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -458,6 +458,13 @@ erDiagram
         date base_date UK "마감된 영업일. (base_date, status) UNIQUE"
         varchar status UK "VARCHAR(10). CLOSED"
         datetime closed_at "DATETIME(6). 마감 시각(KST)"
+    }
+    cob_checkpoint {
+        bigint cob_checkpoint_id PK
+        date cob_date UK "마감 대상 영업일(COB_DATE). (cob_date, step_name) UNIQUE"
+        varchar step_name UK "CobStep.name(). 영업일 전환은 business-date-advance"
+        varchar status "VARCHAR(10). PENDING / SUCCESS"
+        datetime updated_at "DATETIME(6). 마지막 상태 변경(KST)"
     }
     holiday {
         date holiday_date PK "주말 제외 공휴일만. 주말은 요일로 판정"

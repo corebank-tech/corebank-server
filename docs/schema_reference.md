@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 39개 비즈니스 테이블 + 4개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`) · 370개 컬럼
+**대상**: 39개 비즈니스 테이블 + 5개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`) · 375개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -69,6 +69,7 @@
 | 41 | `account_status_history` | 계좌 상태 전이 이력 | P2 | 8 |
 | 42 | `business_date_cutoff` | 영업일 마감 cutoff | P5 | 4  |
 | 43 | `interest_payment` | 예적금 이자 지급 이력 | P2 | 9 |
+| 44 | `cob_checkpoint` | COB 재시작 체크포인트 | P5 | 5 |
 
 ---
 
@@ -1277,6 +1278,26 @@ COB의 영업일 전환(`advanceFrom`)과 달력 따라잡기(`catchUpTo`)가 `B
 | 구분 | 인덱스 | 컬럼 |
 | --- | --- | --- |
 | UNIQUE | `uk_business_date_cutoff_date_status` | `base_date, status` |
+
+---
+
+## `cob_checkpoint`
+
+> COB 재시작 체크포인트 (#663)
+
+`CobRunnerService`가 새 COB를 시작할 때, 영업일을 넘기기 전에 마감 대상 영업일(`COB_DATE`)의 영업일 전환 행과 등록된 스텝 행을 모두 `PENDING`으로 남기고, 전환과 스텝이 끝날 때마다 `SUCCESS`로 바꾼다. 가장 최근 `cob_date`에 `SUCCESS`가 아닌 행이나 빠진 스텝이 있으면 다음 `run()`이 그 날짜의 그 스텝부터 이어서 실행한다. `batch_execution_history`는 관측용이라 재시작 근거로 쓰지 않고, `business_date_cutoff`는 달력 따라잡기도 기록하므로 `COB_DATE`의 근거가 아니다. 다른 테이블과 FK는 없다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `cob_checkpoint_id` | `BIGINT` | **PK** | X |  | 내부 식별자 (AUTO_INCREMENT) |
+| `cob_date` | `DATE` | **UK** | X |  | 마감 대상 영업일(ADR-0004 `COB_DATE`) |
+| `step_name` | `VARCHAR(100)` | **UK** | X |  | `CobStep.name()`. 영업일 전환은 `business-date-advance` |
+| `status` | `VARCHAR(10)` |  | X |  | `PENDING` / `SUCCESS` |
+| `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각(KST, 애플리케이션이 채움) |
+
+| 구분 | 인덱스 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_cob_checkpoint_date_step` | `cob_date, step_name` |
 
 ---
 
