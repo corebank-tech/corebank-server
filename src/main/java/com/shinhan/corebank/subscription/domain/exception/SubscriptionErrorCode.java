@@ -7,6 +7,7 @@ public enum SubscriptionErrorCode implements ErrorCode {
     SUBSCRIPTION_ACCOUNT_NOT_FOUND("PRD9003", 500, "가입 건에 연결된 계좌 정보를 찾을 수 없습니다."),
     ALREADY_SUBSCRIBED("PRD0301", 409, "이미 가입한 상품입니다."),
     INTEREST_ALREADY_PAID("PRD0302", 409, "이미 이자가 지급된 계좌입니다."),
+    SUBSCRIPTION_NOT_COMPLETED("PRD0303", 409, "가입 처리가 완료되지 않은 계좌입니다."),
     PRODUCT_LOCK_TARGET_NOT_FOUND("PRD9002", 500, "가입 처리 중 상품 정보를 확인할 수 없습니다.");
 
     private final String code;
