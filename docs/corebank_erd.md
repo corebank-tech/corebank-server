@@ -548,8 +548,8 @@ erDiagram
   남는다(경보 채널 연동은 미정 — 현재는 로그 기반).
 - **soft / hard**: 불일치 건수가 임계(`app.ledger-reconciliation.cob-hard-threshold`, 기본 10) 이하면
   soft(`LEDGER_RECONCILIATION_SOFT` WARN), 초과면 hard(`LEDGER_RECONCILIATION_HARD` ERROR)다. hard는
-  원래 `CobStepHaltException`으로 마감을 멈출 자리지만, 영업일 전환 뒤라 멈추면 복구할 수단이 없어
-  #663(`COB_DATE` 저장·실패 스텝 재실행) 전까지는 로그만 남기고 다음 스텝으로 넘어간다(#600).
+  `CobStepHaltException`으로 마감을 멈춘다. 영업일 전환 뒤에 멈춰도 `cob_checkpoint`가 `COB_DATE`와 남은
+  스텝을 기억해서, 다음 COB가 같은 날짜로 대사부터 다시 한다(#600, #663).
   soft/hard는 **마감을 계속할지**의 판단이지 경보 심각도가 아니다 — 원장 불일치는 1건이어도 사고라
   건별 `LEDGER_RECONCILIATION_MISMATCH`는 soft/hard와 무관하게 항상 ERROR다.
 - **전수 대사 (#468)**: 원장을 거치지 않고 잔액만 틀어진 휴면 계좌까지 잡도록 **전 계좌**를

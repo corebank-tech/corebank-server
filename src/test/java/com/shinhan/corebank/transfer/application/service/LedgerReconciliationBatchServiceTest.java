@@ -18,6 +18,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
+import com.shinhan.corebank.batch.api.CobStepHaltException;
 import com.shinhan.corebank.transfer.application.port.in.LedgerFullReconciliationUseCase;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationMismatch;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationUseCase;
@@ -165,7 +166,7 @@ class LedgerReconciliationBatchServiceTest {
                 .when(ledgerReconciliationMismatchPort)
                 .replaceForBusinessDate(DATE, found, DETECTED_AT);
 
-        service().runInCob(DATE);
+        assertThatThrownBy(() -> service().runInCob(DATE)).isInstanceOf(CobStepHaltException.class);
 
         verify(ledgerReconciliationMismatchPort).replaceForBusinessDate(DATE, found, DETECTED_AT);
         assertThat(judgeLogsAtSave).isEmpty();
@@ -224,18 +225,21 @@ class LedgerReconciliationBatchServiceTest {
     }
 
     @Test
-    @DisplayName("COB 대사 불일치가 임계를 넘으면(hard) HARD를 ERROR로 남기되 #556 전까지는 마감 중단 예외를 던지지 않는다(#600)")
-    void runInCob_mismatchesOverThreshold_hard_logsErrorWithoutHalting() {
+    @DisplayName("COB 대사 불일치가 임계를 넘으면(hard) HARD를 ERROR로 남기고 CobStepHaltException으로 마감을 중단하며 락은 반납한다(#663)")
+    void runInCob_mismatchesOverThreshold_hard_throwsHalt_andReleasesLock() {
         when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
         when(ledgerFullReconciliationUseCase.reconcileAll()).thenReturn(mismatches(COB_HARD_THRESHOLD + 1));
 
-        assertThatCode(() -> service().runInCob(DATE)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> service().runInCob(DATE))
+                .isInstanceOf(CobStepHaltException.class)
+                .hasMessageContaining("cobDate=" + DATE);
 
         assertThat(logsWith(HARD_MARKER))
                 .singleElement()
                 .extracting(ILoggingEvent::getLevel)
                 .isEqualTo(Level.ERROR);
         assertThat(logsWith(SOFT_MARKER)).isEmpty();
+        verify(batchExecutionLockPort).release(JOB_NAME);
     }
 
     @Test
