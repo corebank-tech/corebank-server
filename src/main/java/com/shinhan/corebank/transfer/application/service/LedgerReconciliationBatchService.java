@@ -5,8 +5,11 @@ import com.shinhan.corebank.transfer.application.port.in.LedgerFullReconciliatio
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationBatchUseCase;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationMismatch;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationUseCase;
+import com.shinhan.corebank.transfer.application.port.out.LedgerReconciliationMismatchPort;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,6 +27,8 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
     private final LedgerReconciliationUseCase ledgerReconciliationUseCase;
     private final LedgerFullReconciliationUseCase ledgerFullReconciliationUseCase;
     private final BatchExecutionLockPort batchExecutionLockPort;
+    private final LedgerReconciliationMismatchPort ledgerReconciliationMismatchPort;
+    private final Clock clock;
     private final Duration dailyBatchWaitPollInterval;
     private final Duration dailyBatchMaxWait;
     private final int cobHardThreshold;
@@ -32,6 +37,8 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
             LedgerReconciliationUseCase ledgerReconciliationUseCase,
             LedgerFullReconciliationUseCase ledgerFullReconciliationUseCase,
             BatchExecutionLockPort batchExecutionLockPort,
+            LedgerReconciliationMismatchPort ledgerReconciliationMismatchPort,
+            Clock clock,
             @Value("${app.ledger-reconciliation.daily-batch-wait-poll-interval:PT1M}")
                     Duration dailyBatchWaitPollInterval,
             @Value("${app.ledger-reconciliation.daily-batch-max-wait:PT1H}") Duration dailyBatchMaxWait,
@@ -39,6 +46,8 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
         this.ledgerReconciliationUseCase = ledgerReconciliationUseCase;
         this.ledgerFullReconciliationUseCase = ledgerFullReconciliationUseCase;
         this.batchExecutionLockPort = batchExecutionLockPort;
+        this.ledgerReconciliationMismatchPort = ledgerReconciliationMismatchPort;
+        this.clock = clock;
         this.dailyBatchWaitPollInterval = dailyBatchWaitPollInterval;
         this.dailyBatchMaxWait = dailyBatchMaxWait;
         this.cobHardThreshold = cobHardThreshold;
@@ -71,7 +80,10 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
             return;
         }
         try {
-            judgeCobMismatches(cobDate, ledgerFullReconciliationUseCase.reconcileAll());
+            List<LedgerReconciliationMismatch> mismatches = ledgerFullReconciliationUseCase.reconcileAll();
+            // hard로 마감을 멈춰도 그날 목록이 남도록 판정보다 먼저 저장한다
+            ledgerReconciliationMismatchPort.replaceForBusinessDate(cobDate, mismatches, LocalDateTime.now(clock));
+            judgeCobMismatches(cobDate, mismatches);
         } finally {
             batchExecutionLockPort.release(JOB_NAME);
         }

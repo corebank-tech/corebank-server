@@ -1,6 +1,8 @@
 package com.shinhan.infoetl;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -12,7 +14,10 @@ public record EtlConfig(
         String martUrl,
         String martUser,
         String martPassword,
-        byte[] hmacKey) {
+        byte[] hmacKey,
+        LocalDate cutoffBoundary) { // cutoffBoundary는 선택이다. 없으면 cutoff를 확인하지 않는다.
+
+    private static final String BOUNDARY_NAME = "ETL_CUTOFF_BOUNDARY_DATE";
 
     private static final List<String> REQUIRED = List.of(
             "REPLICA_JDBC_URL",
@@ -42,7 +47,19 @@ public record EtlConfig(
                 env.get("MART_JDBC_URL"),
                 env.get("MART_USER"),
                 env.get("MART_PASSWORD"),
-                env.get("HMAC_KEY").getBytes(StandardCharsets.UTF_8));
+                env.get("HMAC_KEY").getBytes(StandardCharsets.UTF_8),
+                parseBoundary(env.get(BOUNDARY_NAME)));
+    }
+
+    private static LocalDate parseBoundary(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value.trim());
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException(BOUNDARY_NAME + "는 yyyy-MM-dd 형식이어야 합니다.", e);
+        }
     }
 
     // record 기본 toString은 비밀번호와 키를 그대로 찍는다. 로그에 새지 않도록 주소만 남긴다.

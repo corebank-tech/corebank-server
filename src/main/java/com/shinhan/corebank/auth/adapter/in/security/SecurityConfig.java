@@ -7,7 +7,6 @@ import com.shinhan.corebank.customer.api.AdminPermission;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.boot.web.servlet.ServletListenerRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -15,22 +14,16 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.session.SessionRegistry;
-import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
-import org.springframework.security.web.authentication.session.CompositeSessionAuthenticationStrategy;
-import org.springframework.security.web.authentication.session.RegisterSessionAuthenticationStrategy;
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
-import org.springframework.security.web.session.HttpSessionEventPublisher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -83,24 +76,10 @@ public class SecurityConfig {
         return new HttpSessionSecurityContextRepository();
     }
 
-    // 실제 인증정보는 HttpSession에 두고, 고객별 활성 세션을 찾기 위한 메타데이터만 별도로 관리한다.
+    // 로그인 시 세션 ID를 바꾸고 만료시간은 세션 기본값과 관리자 로그인 정책에 맡긴다.
     @Bean
-    public SessionRegistry sessionRegistry() {
-        return new SessionRegistryImpl();
-    }
-
-    // 로그아웃·타임아웃으로 HttpSession이 종료되면 SessionRegistry의 메타데이터도 제거한다.
-    @Bean
-    public ServletListenerRegistrationBean<HttpSessionEventPublisher> httpSessionEventPublisher() {
-        return new ServletListenerRegistrationBean<>(new HttpSessionEventPublisher());
-    }
-
-    // 기존 로그인 흐름의 세션 ID 변경 뒤, 같은 고객의 세션을 찾을 수 있도록 새 ID를 색인한다.
-    @Bean
-    public SessionAuthenticationStrategy sessionAuthenticationStrategy(SessionRegistry sessionRegistry) {
-        return new CompositeSessionAuthenticationStrategy(List.of(
-                new ChangeSessionIdAuthenticationStrategy(),
-                new RegisterSessionAuthenticationStrategy(sessionRegistry)));
+    public SessionAuthenticationStrategy sessionAuthenticationStrategy() {
+        return new ChangeSessionIdAuthenticationStrategy();
     }
 
     @Bean
@@ -158,8 +137,7 @@ public class SecurityConfig {
             SessionLogoutSuccessHandler logoutSuccessHandler,
             CorsConfigurationSource corsConfigurationSource,
             CookieCsrfTokenRepository csrfTokenRepository,
-            CsrfTokenRequestAttributeHandler csrfTokenRequestHandler,
-            SessionRegistry sessionRegistry)
+            CsrfTokenRequestAttributeHandler csrfTokenRequestHandler)
             throws Exception {
         http.addFilterBefore(new CorrelationIdFilter(), SecurityContextHolderFilter.class)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
@@ -195,6 +173,8 @@ public class SecurityConfig {
                         .hasAuthority(AdminPermission.GL_READ.name())
                         .requestMatchers(pathPattern(HttpMethod.GET, "/admin/info/**"))
                         .hasAuthority(AdminPermission.GL_READ.name())
+                        .requestMatchers(pathPattern(HttpMethod.GET, "/admin/gl/integrity-check/**"))
+                        .hasAuthority(AdminPermission.GL_READ.name())
                         .requestMatchers(pathPattern(HttpMethod.GET, "/admin/ledger-reconciliation/**"))
                         .hasAuthority(AdminPermission.AUDIT_READ.name())
 
@@ -211,14 +191,8 @@ public class SecurityConfig {
                         exception.authenticationEntryPoint(entryPoint).accessDeniedHandler(deniedHandler))
                 // HttpSession 생성 방식, 세션 고정 공격 방지 정책을 설정
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
-                        .sessionFixation(fixation -> fixation.changeSessionId())
-                        // 동시 로그인 수는 제한하지 않고 비밀번호 변경으로 만료된 세션만 다음 요청에서 차단한다.
-                        .maximumSessions(-1)
-                        .sessionRegistry(sessionRegistry)
-                        .expiredSessionStrategy(event -> entryPoint.commence(
-                                event.getRequest(),
-                                event.getResponse(),
-                                new AuthenticationException("로그인 비밀번호 변경으로 세션이 만료되었습니다.") {})))
+                        // JDBC에서 삭제·만료된 세션은 SessionRepositoryFilter가 다음 요청부터 거부한다.
+                        .sessionFixation(fixation -> fixation.changeSessionId()))
                 // CSRF 검사를 유지하고 CsrfLogoutHandler가 XSRF-TOKEN을 Path=/로 폐기한다.
                 .logout(logout -> logout.logoutRequestMatcher(pathPattern(HttpMethod.POST, "/auth/logout"))
                         .invalidateHttpSession(true)

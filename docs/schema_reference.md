@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 37개 비즈니스 테이블 + 4개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`) · 345개 컬럼
+**대상**: 39개 비즈니스 테이블 + 6개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`) · 테이블 목록 기준 380개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -31,10 +31,10 @@
 | 3 | `customer_terms_agreement` | 회원가입 약관 동의 | P6 | 4  |
 | 4 | `verification_request` | 인증 요청 | P6 | 13 |
 | 5 | `notification` | 알림 | P6 | 9  |
-| 6 | `product` | 상품 | P3 | 22 |
+| 6 | `product` | 상품 | P3 | 25 |
 | 7 | `product_rate_tier` | 상품 기간별 금리 | P3 | 3  |
 | 8 | `product_preferential_rate` | 상품 우대금리 | P3 | 4  |
-| 9 | `product_terms` | 상품-약관 연결 | P3 | 2  |
+| 9 | `product_terms` | 상품-약관 연결 | P3 | 3  |
 | 10 | `account` | 계좌 | P2 | 23 |
 | 11 | `account_number_sequence` | 계좌번호 채번 규칙 | P2 | 8  |
 | 12 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4  |
@@ -47,7 +47,7 @@
 | 19 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 6  |
 | 20 | `product_subscription` | 상품가입 | P3 | 19 |
 | 21 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5  |
-| 22 | `scheduled_transfer` | 예약이체 | P3 | 17 |
+| 22 | `scheduled_transfer` | 예약이체 | P3 | 18 |
 | 23 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
 | 24 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8  |
 | 25 | `idempotency_key` | 멱등키 | P5 | 9  |
@@ -68,10 +68,36 @@
 | 40 | `admin_permission` | 관리자 권한 | P1 | 3  |
 | 41 | `account_status_history` | 계좌 상태 전이 이력 | P2 | 8 |
 | 42 | `business_date_cutoff` | 영업일 마감 cutoff | P5 | 4  |
+| 43 | `interest_payment` | 예적금 이자 지급 이력 | P2 | 9 |
+| 44 | `SPRING_SESSION` | 공용 HTTP 세션 | P6 | 7 |
+| 45 | `SPRING_SESSION_ATTRIBUTES` | 직렬화된 세션 속성 | P6 | 3 |
 
 ---
 
 # 1. 고객 · 인증 — P6
+
+## `SPRING_SESSION` / `SPRING_SESSION_ATTRIBUTES` (PH-49c)
+
+Spring Session JDBC 표준 스키마. Flyway `V202610221420`으로만 생성하며 JPA 엔티티를 만들지 않는다.
+세션의 시각은 프레임워크 계약에 따라 **UTC epoch 밀리초 BIGINT**이고 업무 테이블의 KST DATETIME(6) 규약의 예외다.
+
+| 테이블 | 컬럼 | 타입 | 키·NULL | 의미 |
+|---|---|---|---|---|
+| SPRING_SESSION | PRIMARY_ID | CHAR(36) | PK, NOT NULL | 내부 세션 행 UUID |
+| SPRING_SESSION | SESSION_ID | CHAR(36) | UK, NOT NULL | 쿠키로 연결하는 세션 ID |
+| SPRING_SESSION | CREATION_TIME | BIGINT | NOT NULL | 생성 epoch ms |
+| SPRING_SESSION | LAST_ACCESS_TIME | BIGINT | NOT NULL | 마지막 접근 epoch ms |
+| SPRING_SESSION | MAX_INACTIVE_INTERVAL | INT | NOT NULL | 무조작 만료 초: 고객 600, 관리자 1800(PH-49a-② 로그인 정책) |
+| SPRING_SESSION | EXPIRY_TIME | BIGINT | INDEX, NOT NULL | 만료 epoch ms |
+| SPRING_SESSION | PRINCIPAL_NAME | VARCHAR(100) | INDEX, NULL 허용 | 인증 고객 PK 문자열, 익명 세션은 NULL |
+| SPRING_SESSION_ATTRIBUTES | SESSION_PRIMARY_ID | CHAR(36) | 복합 PK·FK, NOT NULL | PRIMARY_ID 참조, ON DELETE CASCADE |
+| SPRING_SESSION_ATTRIBUTES | ATTRIBUTE_NAME | VARCHAR(200) | 복합 PK, NOT NULL | SPRING_SECURITY_CONTEXT 등 속성 이름 |
+| SPRING_SESSION_ATTRIBUTES | ATTRIBUTE_BYTES | BLOB | NOT NULL | 직렬화한 속성 값 |
+
+인덱스: `SPRING_SESSION_IX1(SESSION_ID)` UNIQUE, `SPRING_SESSION_IX2(EXPIRY_TIME)`,
+`SPRING_SESSION_IX3(PRINCIPAL_NAME)`. PRINCIPAL_NAME은 고객 FK가 아닌 프레임워크 검색 인덱스다.
+로그아웃은 해당 세션만 삭제하고 고객 비밀번호 변경은 고객 PK로 모든 세션을 삭제한다.
+세션 삭제는 해당 업무 트랜잭션에 참여하므로 업무 롤백 시 함께 롤백한다. 만료 행 정리는 매분이며 인증 만료는 즉시 적용된다.
 
 ## `customer`
 
@@ -423,6 +449,45 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | --- | --- | --- |
 | PRIMARY | `PRIMARY` | `history_id` |
 | INDEX | `ix_account_status_history_account_time` | `account_id, changed_at` |
+
+---
+
+## `interest_payment`
+
+> 예적금 이자 지급 이력 (PH-14, #687)
+
+예적금 만기해지 또는 중도해지 시 계산된 이자와 원천세, 실제 원장 기표 결과를 기록한다.
+
+한 계좌에 대해 이자 지급 이력은 최대 1건이다. `account_id`의 UNIQUE 제약으로 중복 지급을 방지하며, 원장·GL·계좌 해지 처리와 동일한 트랜잭션에서 저장한다.
+
+세후이자가 0원이면 원장을 기표하지 않지만 지급 이력은 남긴다. 이 경우 `transaction_number`와 `trade_date`는 NULL이다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `interest_payment_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 이자 지급 이력 식별자 |
+| `account_id` | `BIGINT` | **UK** | X | | 지급 대상 상품 계좌 ID. 계좌당 이자 지급 1회 보장. 물리적 FK 없음 |
+| `payment_reason` | `VARCHAR(12)` | | X | | 지급 사유. `MATURITY`(만기해지) / `TERMINATION`(중도해지) |
+| `gross_amount` | `BIGINT` | | X | | 세전이자. 원 단위 정수 |
+| `tax_amount` | `BIGINT` | | X | | 원천징수 세금 합계. 원 단위 정수 |
+| `net_amount` | `BIGINT` | | X | | 세후이자. `gross_amount - tax_amount` |
+| `transaction_number` | `CHAR(20)` | **UK** | O | | `INTEREST` 원장 기표 거래번호. 지급액 0원이면 NULL |
+| `trade_date` | `DATE` | | O | | 이자 원장 거래일. `LedgerDepositResult.tradeDate` 사용. 지급액 0원이면 NULL |
+| `paid_at` | `DATETIME(6)` | | X | | 이자 지급 처리 일시 (KST) |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| PRIMARY | `PRIMARY` | `interest_payment_id` |
+| UNIQUE | `uk_interest_payment_account` | `account_id` |
+| UNIQUE | `uk_interest_payment_tx` | `transaction_number` |
+
+**CHECK 제약**
+
+| 이름 | 조건 | 설명 |
+| --- | --- | --- |
+| `ck_interest_payment_amount` | `gross_amount >= 0 AND tax_amount >= 0 AND tax_amount <= gross_amount AND net_amount = gross_amount - tax_amount` | 세전이자·세금·세후이자 정합성 |
+| `ck_interest_payment_ledger` | `net_amount = 0`이면 거래번호·거래일 모두 NULL, `net_amount > 0`이면 모두 NOT NULL | 실제 원장 기표 여부와 거래 식별자 일치 |
 
 ---
 
@@ -1110,7 +1175,7 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 | --- | --- | --- | --- | --- | --- |
 | `voucher_no` | `VARCHAR(20)` | **PK** | X |  | 전표번호. 영업일 + 유형 + 일련 |
 | `trade_date` | `DATE` |  | X |  | 이 전표가 귀속되는 영업일 |
-| `tx_type` | `VARCHAR(24)` |  | X |  | `OPENING` / `TRANSFER` / `PRODUCT_SUBSCRIPTION` / `INTEREST` / `REVERSAL` / `INTERBANK_TRANSFER`(타행 송신 요청) / `INTERBANK_SETTLEMENT`(타행 확정 해소) |
+| `tx_type` | `VARCHAR(24)` |  | X |  | `OPENING` / `TRANSFER` / `PRODUCT_SUBSCRIPTION` / `INTEREST` / `REVERSAL` / `INTERBANK_TRANSFER`(타행 송신 요청) / `INTERBANK_SETTLEMENT`(타행 확정 해소) / `MATURITY`(만기해지 원리금 이체) / `TERMINATION`(중도해지 원리금 이체) |
 | `reference_key` | `VARCHAR(40)` |  | X |  | 원 거래번호. 원장 `transaction_number` 와 같은 값이고 개시 전표는 `OPENING-{yyyyMMdd}`. 원장과 전표를 1:1 로 잇는다(PH-24). 타행이체만 한 거래번호에 `INTERBANK_TRANSFER`·`INTERBANK_SETTLEMENT` 두 전표가 붙는다(`gl_journal_patterns.md` §3-5) |
 | `description` | `VARCHAR(200)` |  | O |  | 적요 |
 | `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
@@ -1119,7 +1184,7 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 
 | 이름 | 내용 | 이유 |
 | --- | --- | --- |
-| `ck_gl_voucher_tx_type` | 7개 유형 중 하나 | `REVERSAL` 은 정정 체인 취소정정(PH-24). `INTERBANK_TRANSFER`·`INTERBANK_SETTLEMENT` 는 타행 미결제 2패턴([분개 패턴표](phase2/gl_journal_patterns.md) §3-5, PH-33-②). 두 전표는 같은 원 거래번호를 참조 키로 쓴다 |
+| `ck_gl_voucher_tx_type` | 9개 유형 중 하나 | `REVERSAL` 은 정정 체인 취소정정(PH-24). `INTERBANK_TRANSFER`·`INTERBANK_SETTLEMENT` 는 타행 미결제 2패턴([분개 패턴표](phase2/gl_journal_patterns.md) §3-5, PH-33-②). 두 전표는 같은 원 거래번호를 참조 키로 쓴다. `MATURITY`·`TERMINATION` 은 예적금 원리금 이체(분개 패턴표 §3-7, #713) |
 
 **인덱스**
 

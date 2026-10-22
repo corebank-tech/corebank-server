@@ -141,6 +141,8 @@ dependencies {
 
     //세션·인증 필터
     implementation 'org.springframework.boot:spring-boot-starter-security'
+    // 로그인 HttpSession을 모든 WAS가 공유하는 MySQL에 저장한다 (PH-49c).
+    implementation 'org.springframework.boot:spring-boot-starter-session-jdbc'
 
     // 박싱 동일성 검사 (#358)
     errorprone 'com.google.errorprone:error_prone_core:2.49.0'
@@ -166,6 +168,8 @@ tasks.named('test') {
     forkEvery = 0
     systemProperty 'junit.jupiter.execution.parallel.enabled', 'false'
     systemProperty 'spring.test.context.cache.maxSize', '4'
+    // PH-49c 테스트가 같은 MySQL에 연결한 독립 WAS JVM 두 개를 실행한다.
+    systemProperty 'corebank.test.application-classpath', sourceSets.main.runtimeClasspath.asPath
     finalizedBy tasks.named('jacocoTestReport')
 }
 
