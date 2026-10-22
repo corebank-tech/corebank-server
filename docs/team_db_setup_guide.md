@@ -150,3 +150,16 @@ class AccountServiceTest extends IntegrationTestSupport {
 
 **Q2. 로그, DB, JVM 시스템 시간이 전부 같은 시각으로 보입니다. 정상인가요?**  
 - **정상입니다.** 2026-08-19부로 DB 저장 및 서버 JVM 시스템 시간을 **KST(Asia/Seoul)**로 통일하고, 기존에 있던 UTC 저장·KST 로그변환 과정을 없앴습니다(#179). `Dockerfile`(`-Duser.timezone=Asia/Seoul`), `application.yml`(`hibernate.jdbc.time_zone`), JDBC URL(`connectionTimeZone`), `JpaAuditingConfig`의 `Clock` 빈이 모두 Asia/Seoul 기준으로 맞춰져 있어 변환 없이 그대로 KST로 저장·표시됩니다. 컨테이너나 JVM에 `TZ=UTC`를 넣지 마시길 바랍니다.
+
+**Q3. CI에서 테스트가 깨졌는데 왜 깨졌는지 안 보입니다.**  
+- **어디서 보나**: PR의 `Build & Test (CI)` 잡 로그에서 `FAILED`를 검색합니다. 그 바로 아래에 assertion 메시지와 실제 값이 찍힙니다(`build.gradle`의 `testLogging { exceptionFormat = 'full' }`, #724).
+  ```
+  SomethingTest > 테스트 이름 FAILED
+      java.lang.AssertionError:
+      Expecting actual:
+        2512L
+      to be between:
+        [500L, 2000L]
+          at com.shinhan.corebank...SomethingTest.method(SomethingTest.java:149)
+  ```
+- **로컬에서는 통과하는데 CI에서만 가끔 깨지면**: 재실행하기 전에 위 메시지를 이슈에 먼저 남겨 주세요. 재실행해서 통과하면 실패한 시도의 기록을 찾기 어려워지고, 원인을 좁힐 근거가 그 값뿐인 경우가 많습니다.
