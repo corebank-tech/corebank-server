@@ -193,7 +193,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 - `publishEvent` 자리와 페이로드는 P4와 합의한다. 자리 표시는 PH-99(10/2)가 하고, 두 줄은 EVT-2(10/6)가 넣는다.
 - 테스트: BEFORE_COMMIT 리스너 INSERT가 커밋에 실리는지 통합 테스트(PH-99 골격 위), 리스너 예외 시 롤백을 테스트로 고정.
 - **완료 기준:** 롤백되면 이벤트가 발행되지 않는다. 리스너 INSERT가 커밋된다.
-- 현황: `ApplicationEventPublisher`·`@TransactionalEventListener` 사용처 0건.
+- **현황:** #436 완료 (PR #505) — 이체 발행을 엔진 한 곳으로 모았고 EVT-2 를 대신한다.
 
 ### PH-30. k6 harness · 이체 TPS · 동시성 정합성 (S1 베이스라인 · S4 재측정)
 
@@ -241,7 +241,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 - 관리자 로그인·로그아웃 감사로그: `AuditEventType.LOGIN`에 actor role을 포함한다.
 - 권한 매핑: 정보계(ADM-03·PH-77)는 `GL_READ`([D-09](README.md#d-09--923--리드)), 대사 불일치(ADM-04·PH-38 목록)는 `AUDIT_READ`
 - **완료 기준:** 조회 전용 ADMIN이 PH-97 변경 API를 호출하면 403이 난다. FE 관리자 채널이 실 응답으로 돈다.
-- 현황: `customer.role`·`admin_permission`은 Issue #561(PR #572), 관리자 로그인·30분 정책은 Issue #573의 PR #639, `/admin/**` 권한별 인가·S0 임시 가드 제거는 같은 이슈의 PR #652로 머지됐다. 로그아웃 감사와 FE 관리자 로그인 훅의 완료 여부는 별도로 확인한다([admin_auth.md](admin_auth.md) §6).
+- 현황: `customer.role`·`admin_permission`은 Issue #561(PR #572), 관리자 로그인·30분 정책은 Issue #573의 PR #639, `/admin/**` 권한별 인가·S0 임시 가드 제거는 같은 이슈의 PR #652로 머지됐다. 로그아웃 감사는 같은 이슈의 PR #655로 머지됐다(10/21). FE 관리자 로그인 훅의 완료 여부는 별도로 확인한다([admin_auth.md](admin_auth.md) §6).
 
 ### PH-03. API 문서 전수 점검 (① 측정 S1 → ② 0 마감 S4)
 
