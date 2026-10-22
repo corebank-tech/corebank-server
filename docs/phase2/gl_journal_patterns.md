@@ -300,7 +300,7 @@ WHERE le.transaction_type <> 'OPENING'
 
 `trade_date` 복제본 불일치는 복합 FK 가 막으므로 별도 쿼리가 필요 없습니다.
 
-운영 데이터에서는 `GET /admin/gl/integrity-check?tradeDate=`가 거래일 단위로 같은 점검을 합니다. (1)과 (3)은 차대변 불일치 전표로, (7)은 원장 전표 대사와 고아 전표 수로 나옵니다. 대사 대상 유형과 한계는 [ADR-0009](../adr/0009-gl-integrity-controls.md)를 봅니다.
+운영 데이터에서는 `GET /admin/gl/integrity-check?tradeDate=`가 거래일 단위로 이 중 일부를 대신합니다. (1)과 (3)은 차대변 불일치 전표로 나오고, (7)은 ADR-0009의 대사 대상 유형에 한해 원장 전표 대사와 고아 전표 수로 나옵니다. 고아 전표는 건수만 나옵니다. (2), (4), (5), (6)과 대사 대상이 아닌 유형의 (7)은 이 API가 하지 않으므로 위 SQL로 계속 점검합니다. 대사 대상 유형과 한계는 [ADR-0009](../adr/0009-gl-integrity-controls.md)를 봅니다.
 
 ---
 
@@ -320,5 +320,5 @@ WHERE le.transaction_type <> 'OPENING'
 | 2026-09-27 | PR #491 리뷰 반영 — 거래·전표·분개 수 명시, 개시 전표 1번 ≥ 2번 전제, 검증 SQL (6) 추가 |
 | 2026-10-01 | PH-21 구현 — 차대변 DB 제약을 걸지 않기로 결정(§2), 채번 카운터 `gl_voucher_sequence`(§1) |
 | 2026-10-07 | PH-24 — 참조 키 규칙(§2-7), 취소정정 패턴(§3-4), 검증 SQL (7). `product_gl_mapping` 은 예수금 분리 시 도입 |
-| 2026-10-21 | PH-28b — §5 검증 SQL을 운영에서 대신하는 `GET /admin/gl/integrity-check` 안내 추가 |
+| 2026-10-21 | PH-28b — §5의 (1), (3)과 대사 대상 유형의 (7)을 거래일 단위로 점검하는 `GET /admin/gl/integrity-check` 안내 추가. 나머지는 SQL로 계속 점검 |
 | 2026-10-20 | PH-33-② (#654) — 타행이체 미결제 2패턴(§3-5, `IBT`·`IBS`), 검증 SQL (4)·(6) 유형 추가, 참조 키 1:1 규칙(§2-7)에 타행 예외 |
