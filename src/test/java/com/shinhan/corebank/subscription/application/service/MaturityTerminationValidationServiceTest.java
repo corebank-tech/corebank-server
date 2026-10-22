@@ -45,7 +45,8 @@ class MaturityTerminationValidationServiceTest {
 
     private static final BigDecimal RATE = new BigDecimal("3.70");
 
-    private static final MaturityTerminationCommand COMMAND = new MaturityTerminationCommand(CUSTOMER_ID, ACCOUNT_ID);
+    private static final MaturityTerminationCommand COMMAND =
+            new MaturityTerminationCommand(CUSTOMER_ID, ACCOUNT_ID, "test-account-password-token");
 
     @Mock
     private ProductSubscriptionQueryPort subscriptionQueryPort;
@@ -111,7 +112,9 @@ class MaturityTerminationValidationServiceTest {
     @Test
     @DisplayName("계좌 ID가 0이면 입력 오류를 반환한다")
     void validate_invalidAccountId() {
-        assertError(new MaturityTerminationCommand(CUSTOMER_ID, 0L), CommonErrorCode.INVALID_INPUT);
+        assertError(
+                new MaturityTerminationCommand(CUSTOMER_ID, 0L, "test-account-password-token"),
+                CommonErrorCode.INVALID_INPUT);
 
         verifyNoInteractions(subscriptionQueryPort, maturityAccountQueryUseCase, productInterestPolicyQueryUseCase);
     }
@@ -119,7 +122,9 @@ class MaturityTerminationValidationServiceTest {
     @Test
     @DisplayName("고객 ID가 null이면 필수 입력 오류를 반환한다")
     void validate_nullCustomerId() {
-        assertError(new MaturityTerminationCommand(null, ACCOUNT_ID), CommonErrorCode.REQUIRED_FIELD_MISSING);
+        assertError(
+                new MaturityTerminationCommand(null, ACCOUNT_ID, "test-account-password-token"),
+                CommonErrorCode.REQUIRED_FIELD_MISSING);
     }
 
     @Test
