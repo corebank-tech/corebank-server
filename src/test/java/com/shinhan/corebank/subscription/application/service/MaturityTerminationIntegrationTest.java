@@ -672,6 +672,143 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
                 .isEqualTo("MATURED");
     }
 
+    @Test
+    @DisplayName("정기적금 3회 납입 원금이 일치하면 정상 만기해지한다")
+    void terminate_installmentMultiplePayments() {
+        prepareInstallmentAccount(300_000L);
+
+        insertInstallmentLedger(
+                1, LocalDateTime.of(2026, 3, 1, 9, 0), "AUTO_TRANSFER", "DEPOSIT", 100_000L, 100_000L, false, null);
+
+        insertInstallmentLedger(
+                2, LocalDateTime.of(2026, 4, 1, 9, 0), "AUTO_TRANSFER", "DEPOSIT", 100_000L, 200_000L, false, null);
+
+        insertInstallmentLedger(
+                3, LocalDateTime.of(2026, 5, 1, 9, 0), "AUTO_TRANSFER", "DEPOSIT", 100_000L, 300_000L, false, null);
+
+        MaturityTerminationResult result = terminationUseCase.terminate(command());
+
+        assertThat(result.principal()).isEqualTo(300_000L);
+        assertThat(result.netInterest()).isPositive();
+        assertThat(result.totalTransferred()).isEqualTo(300_000L + result.netInterest());
+
+        assertThat(balanceOf(PRODUCT_ACCOUNT_ID)).isZero();
+        assertThat(balanceOf(WITHDRAWAL_ACCOUNT_ID)).isEqualTo(result.totalTransferred());
+
+        assertThat(countInterestLedger()).isEqualTo(1L);
+        assertThat(countMaturityLedger()).isEqualTo(2L);
+        assertThat(countInterestVoucher()).isEqualTo(1L);
+        assertThat(countMaturityVoucher()).isEqualTo(1L);
+        assertThat(countClosureHistory()).isEqualTo(1L);
+
+        assertThat(ledgerSumOf(PRODUCT_ACCOUNT_ID)).isZero();
+
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT status FROM account WHERE account_id = ?", String.class, PRODUCT_ACCOUNT_ID))
+                .isEqualTo("CLOSED");
+    }
+
+    @Test
+    @DisplayName("정기적금 미납과 지연 납입이 있어도 실제 원금 기준으로 지급한다")
+    void terminate_installmentMissingAndLatePayment() {
+        prepareInstallmentAccount(200_000L);
+
+        // 정상 첫 회차
+        insertInstallmentLedger(
+                1, LocalDateTime.of(2026, 3, 1, 9, 0), "AUTO_TRANSFER", "DEPOSIT", 100_000L, 100_000L, false, null);
+
+        // 4월 회차 미납, 5월에 뒤늦게 추가 납입
+        insertInstallmentLedger(
+                2, LocalDateTime.of(2026, 5, 20, 9, 0), "AUTO_TRANSFER", "DEPOSIT", 100_000L, 200_000L, false, null);
+
+        MaturityTerminationResult result = terminationUseCase.terminate(command());
+
+        assertThat(result.principal()).isEqualTo(200_000L);
+        assertThat(result.totalTransferred()).isEqualTo(200_000L + result.netInterest());
+
+        assertThat(balanceOf(PRODUCT_ACCOUNT_ID)).isZero();
+        assertThat(ledgerSumOf(PRODUCT_ACCOUNT_ID)).isZero();
+        assertThat(countMaturityLedger()).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("정기적금 취소정정과 재기표 후 순원금으로 만기해지한다")
+    void terminate_installmentReversalAndRepost() {
+        prepareInstallmentAccount(170_000L);
+
+        insertInstallmentLedger(
+                1, LocalDateTime.of(2026, 3, 1, 9, 0), "AUTO_TRANSFER", "DEPOSIT", 100_000L, 100_000L, false, null);
+
+        long originalId = insertInstallmentLedger(
+                2, LocalDateTime.of(2026, 4, 1, 9, 0), "AUTO_TRANSFER", "DEPOSIT", 100_000L, 200_000L, true, null);
+
+        // 잘못된 납입 10만 원을 반대 방향 원장으로 되돌림
+        insertInstallmentLedger(
+                3, LocalDateTime.of(2026, 4, 2, 9, 0), "REVERSAL", "WITHDRAWAL", 100_000L, 100_000L, false, originalId);
+
+        // 올바른 금액 7만 원 재기표
+        insertInstallmentLedger(
+                4, LocalDateTime.of(2026, 4, 3, 9, 0), "AUTO_TRANSFER", "DEPOSIT", 70_000L, 170_000L, false, null);
+
+        MaturityTerminationResult result = terminationUseCase.terminate(command());
+
+        assertThat(result.principal()).isEqualTo(170_000L);
+        assertThat(balanceOf(PRODUCT_ACCOUNT_ID)).isZero();
+        assertThat(balanceOf(WITHDRAWAL_ACCOUNT_ID)).isEqualTo(result.totalTransferred());
+
+        assertThat(ledgerSumOf(PRODUCT_ACCOUNT_ID)).isZero();
+        assertThat(countMaturityLedger()).isEqualTo(2L);
+        assertThat(countClosureHistory()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("정기적금 원금이 1원 불일치하면 이자 지급과 만기해지를 모두 롤백한다")
+    void terminate_installmentPrincipalMismatchRollsBack() {
+        // 실제 원장 원금은 30만 원, 계좌 캐시 잔액은 300,001원
+        prepareInstallmentAccount(300_001L);
+
+        insertInstallmentLedger(
+                1, LocalDateTime.of(2026, 3, 1, 9, 0), "AUTO_TRANSFER", "DEPOSIT", 100_000L, 100_000L, false, null);
+
+        insertInstallmentLedger(
+                2, LocalDateTime.of(2026, 4, 1, 9, 0), "AUTO_TRANSFER", "DEPOSIT", 100_000L, 200_000L, false, null);
+
+        insertInstallmentLedger(
+                3, LocalDateTime.of(2026, 5, 1, 9, 0), "AUTO_TRANSFER", "DEPOSIT", 100_000L, 300_000L, false, null);
+
+        assertThatThrownBy(() -> terminationUseCase.terminate(command()))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INTERNAL_ERROR));
+
+        // 최초 잔액과 불일치 상태는 그대로 유지
+        assertThat(balanceOf(PRODUCT_ACCOUNT_ID)).isEqualTo(300_001L);
+        assertThat(ledgerSumOf(PRODUCT_ACCOUNT_ID)).isEqualTo(300_000L);
+        assertThat(balanceOf(WITHDRAWAL_ACCOUNT_ID)).isZero();
+
+        // 이자 지급과 원리금 이체가 DB에 남지 않아야 함
+        assertThat(countInterestLedger()).isZero();
+        assertThat(countInterestHistory()).isZero();
+        assertThat(countInterestVoucher()).isZero();
+
+        assertThat(countMaturityLedger()).isZero();
+        assertThat(countMaturityVoucher()).isZero();
+        assertThat(countClosureHistory()).isZero();
+
+        // 계좌 종료가 발생하지 않아야 함
+        Map<String, Object> account = jdbcTemplate.queryForMap(
+                """
+            SELECT status, closed_date, closed_trade_date
+            FROM account
+            WHERE account_id = ?
+            """,
+                PRODUCT_ACCOUNT_ID);
+
+        assertThat(account.get("status")).isEqualTo("MATURED");
+        assertThat(account.get("closed_date")).isNull();
+        assertThat(account.get("closed_trade_date")).isNull();
+    }
+
     private MaturityTerminationCommand command() {
         return new MaturityTerminationCommand(customerId, PRODUCT_ACCOUNT_ID, "test-account-password-token");
     }
@@ -741,6 +878,44 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
                 PRODUCT_ACCOUNT_ID,
                 PRINCIPAL,
                 PRINCIPAL);
+    }
+
+    private void prepareInstallmentAccount(long balance) {
+        // 기본 픽스처의 정기예금 상품을 정기적금 상품으로 변경
+        jdbcTemplate.update(
+                """
+            UPDATE product
+            SET product_group = 'SAVINGS',
+                deposit_type = 'INSTALLMENT',
+                product_name = '정기적금'
+            WHERE product_id = ?
+            """,
+                productId);
+
+        // 정기적금의 subscription_amount는 회차별 약정 납입액
+        jdbcTemplate.update(
+                """
+            UPDATE product_subscription
+            SET subscription_amount = 100000
+            WHERE account_id = ?
+            """,
+                PRODUCT_ACCOUNT_ID);
+
+        // 정기예금의 기본 OPENING 원장 제거
+        jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id = ?", PRODUCT_ACCOUNT_ID);
+
+        jdbcTemplate.update(
+                """
+            UPDATE account
+            SET account_type = 'INSTALLMENT_SAVINGS',
+                balance = ?
+            WHERE account_id = ?
+            """,
+                balance,
+                PRODUCT_ACCOUNT_ID);
+
+        // JdbcTemplate로 변경한 데이터와 JPA 캐시 불일치 방지
+        entityManager.clear();
     }
 
     private void seedSubscription() {
@@ -843,5 +1018,52 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
             """,
                 Long.class,
                 BUSINESS_DATE);
+    }
+
+    private long insertInstallmentLedger(
+            int sequence,
+            LocalDateTime occurredAt,
+            String transactionType,
+            String direction,
+            long amount,
+            long balanceAfter,
+            boolean reversed,
+            Long reversalId) {
+
+        long ledgerId = OPENING_LEDGER_ID + sequence;
+
+        String transactionNumber = String.format(
+                "%04d%02d%02dBT%010d",
+                occurredAt.getYear(), occurredAt.getMonthValue(), occurredAt.getDayOfMonth(), sequence);
+
+        jdbcTemplate.update(
+                """
+            INSERT INTO ledger_entry (
+                ledger_entry_id, account_id, transfer_id,
+                transaction_number, direction, amount,
+                balance_after, transaction_type,
+                transaction_content, channel,
+                reversed, reversal_id, occurred_at, trade_date
+            ) VALUES (
+                ?, ?, NULL,
+                ?, ?, ?,
+                ?, ?,
+                '적금납입', 'BT',
+                ?, ?, ?, ?
+            )
+            """,
+                ledgerId,
+                PRODUCT_ACCOUNT_ID,
+                transactionNumber,
+                direction,
+                amount,
+                balanceAfter,
+                transactionType,
+                reversed,
+                reversalId,
+                occurredAt,
+                occurredAt.toLocalDate());
+
+        return ledgerId;
     }
 }

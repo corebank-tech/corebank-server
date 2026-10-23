@@ -23,6 +23,7 @@ import com.shinhan.corebank.transfer.api.DepositChannel;
 import com.shinhan.corebank.transfer.api.DepositType;
 import com.shinhan.corebank.transfer.api.LedgerDepositResult;
 import com.shinhan.corebank.transfer.api.LedgerDepositUseCase;
+import com.shinhan.corebank.transfer.api.LedgerPrincipalBalanceQuery;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -45,6 +46,7 @@ public class MaturityTerminationService implements MaturityTerminationUseCase {
     private final MaturityAccountQueryUseCase maturityAccountQueryUseCase;
     private final MaturityTerminationPasswordVerificationPort passwordVerificationPort;
     private final JournalPostingUseCase journalPostingUseCase;
+    private final LedgerPrincipalBalanceQuery ledgerPrincipalBalanceQuery;
     private final Clock clock;
 
     @Override
@@ -97,13 +99,20 @@ public class MaturityTerminationService implements MaturityTerminationUseCase {
 
         long principal = totalTransferred - interest.net();
 
-        // 정기예금은 가입 당시 계약 원금과 실제 원금이 일치해야 한다.
-        // 정기적금은 회차별 납입 구조이므로 단순 비교 대상에서 제외한다.
-        if (validated.timeDeposit()
-                && (validated.subscriptionAmount() == null
-                        || validated.subscriptionAmount() <= 0
-                        || principal != validated.subscriptionAmount())) {
-            throw new BusinessException(CommonErrorCode.INTERNAL_ERROR);
+        if (validated.timeDeposit()) {
+            // 정기예금: 가입 당시 계약 원금과 비교
+            if (validated.subscriptionAmount() == null
+                    || validated.subscriptionAmount() <= 0
+                    || principal != validated.subscriptionAmount()) {
+                throw new BusinessException(CommonErrorCode.INTERNAL_ERROR);
+            }
+        } else {
+            // 정기적금: 실제 원장상 누적 원금과 비교
+            long ledgerPrincipal = ledgerPrincipalBalanceQuery.sumNetAmountExcludingInterest(accountId);
+
+            if (ledgerPrincipal < 0 || principal != ledgerPrincipal) {
+                throw new BusinessException(CommonErrorCode.INTERNAL_ERROR);
+            }
         }
 
         // 6. 상품 계좌 -> 고객 수취 계좌로 원리금 전액 이체
