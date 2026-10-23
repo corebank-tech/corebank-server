@@ -38,4 +38,7 @@ public interface AccountPersistencePort {
     // 만기 상태 변경 직전에 최신 계좌 상태를 잠금 조회한다.
     // 반드시 트랜잭션 안에서 호출해야 한다.
     Optional<Account> findByAccountIdForUpdate(Long accountId);
+
+    // 만기해지 사전 검증용. JPA 관리 엔티티를 올리지 않는다.
+    Optional<MaturityAccountSnapshot> findMaturityAccountSnapshot(Long accountId, Long customerId);
 }

@@ -13,6 +13,7 @@ public enum AccountErrorCode implements ErrorCode {
     DUPLICATE_EXISTING_ACCOUNT("ACC0304", 409, "이미 등록된 기존 은행 계좌입니다."),
     MATURITY_UNSUPPORTED_ACCOUNT_TYPE("ACC0305", 409, "만기 전이 대상이 아닌 계좌입니다."),
     MATURITY_DATE_NOT_REACHED("ACC0306", 409, "만기일이 도래하지 않았습니다."),
+    MATURITY_BALANCE_NOT_ZERO("ACC0307", 409, "잔액이 남아 있는 계좌는 만기해지할 수 없습니다."),
     ACCOUNT_NUMBER_SEQUENCE_NOT_FOUND("ACC9001", 500, "계좌번호 발급 처리 중 오류가 발생했습니다.");
 
     private final String code;

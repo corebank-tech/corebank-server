@@ -1,5 +1,6 @@
 package com.shinhan.corebank.account.adapter.out.persistence;
 
+import com.shinhan.corebank.account.application.port.out.MaturityAccountSnapshot;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
 import jakarta.persistence.LockModeType;
@@ -80,6 +81,25 @@ public interface AccountJpaRepository extends JpaRepository<AccountJpaEntity, Lo
         WHERE a.accountId = :accountId
         """)
     Optional<AccountJpaEntity> findByAccountIdForUpdate(@Param("accountId") Long accountId);
+
+    // 만기해지 사전 검증에 필요한 컬럼만 조회한다.
+    // AccountJpaEntity를 영속성 컨텍스트에 올리지 않는다.
+    @Query(
+            """
+    SELECT new com.shinhan.corebank.account.application.port.out.MaturityAccountSnapshot(
+        a.accountId,
+        a.productId,
+        a.accountType,
+        a.status,
+        a.maturityDate,
+        a.withdrawalRegistered
+    )
+    FROM AccountJpaEntity a
+    WHERE a.accountId = :accountId
+      AND a.customerId = :customerId
+    """)
+    Optional<MaturityAccountSnapshot> findMaturityAccountSnapshot(
+            @Param("accountId") Long accountId, @Param("customerId") Long customerId);
 
     interface AccountBalanceProjection {
         Long getAccountId();
