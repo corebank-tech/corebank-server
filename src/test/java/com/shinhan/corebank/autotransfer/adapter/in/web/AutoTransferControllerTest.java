@@ -23,8 +23,10 @@ import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import jakarta.persistence.EntityManager;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.TemporalAdjusters;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -571,6 +573,35 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("휴일에 실행된 회차의 tradeDate는 그 회차 이체 행의 거래일이고, 이체 행이 없는 실패 회차는 비어 있다 (#679)")
+    void searchExecutionHistory_tradeDateComesFromTransferRowOfSameExecution() throws Exception {
+        AutoTransferJpaEntity saved =
+                autoTransferJpaRepository.save(autoTransfer(accountId, "110000000053", AutoTransferStatus.NORMAL, 10));
+        entityManager.flush();
+        LocalDate saturday = LocalDate.now().minusWeeks(1).with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY));
+        LocalDate monday = saturday.plusDays(2);
+        // 실패 회차를 먼저 저장해 성공 회차의 executionId가 autoTransferId와 겹치지 않게 한다(키 혼동 검출)
+        AutoTransferExecutionJpaEntity error = autoTransferExecutionJpaRepository.save(
+                execution(saved, saturday.minusDays(1), ProcessResultStatus.ERROR, 10000L, null, "잔액부족"));
+        AutoTransferExecutionJpaEntity success = autoTransferExecutionJpaRepository.save(
+                execution(saved, saturday, ProcessResultStatus.SUCCESS, 10000L, "20260801BT9679000002", null));
+        entityManager.flush();
+        insertTransfer(saved.getAutoTransferId(), saturday, monday, "20260801BT9679000002");
+        entityManager.clear();
+
+        mockMvc.perform(get("/auto-transfers/executions")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("withdrawalAccountId", String.valueOf(accountId))
+                        .param("fromDate", saturday.minusDays(1).toString())
+                        .param("toDate", saturday.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[?(@.executionId == %d)].tradeDate", success.getExecutionId())
+                        .value(monday.toString()))
+                .andExpect(jsonPath("$.data.items[?(@.executionId == %d)].tradeDate", error.getExecutionId())
+                        .value(hasItem(nullValue())));
+    }
+
+    @Test
     @DisplayName("다른 고객의 출금계좌ID로 결과조회하면 빈 목록을 반환한다 (타 고객 접근 차단)")
     void searchExecutionHistory_otherCustomersWithdrawalAccount_returnsEmpty() throws Exception {
         Long otherCustomerId = insertCustomer();
@@ -1109,6 +1140,27 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
         return OBJECT_MAPPER.writeValueAsString(body);
     }
 
+    // transfer 도메인 내부를 참조하지 않도록 이체 행은 SQL로 넣는다
+    private void insertTransfer(
+            Long autoTransferId, LocalDate executionDate, LocalDate tradeDate, String transactionNumber) {
+        entityManager
+                .createNativeQuery(
+                        "INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id, deposit_account_number, "
+                                + "payee_name, amount, fee, transfer_type, channel, status, source_type, source_id, "
+                                + "execution_date, transferred_at, trade_date, created_at) "
+                                + "VALUES (:transactionNumber, :withdrawalAccountId, :depositAccountId, '110000000053', '홍길동', 10000, 0, "
+                                + "'AUTO', 'BT', 'SUCCESS', 'AUTO', :sourceId, :executionDate, "
+                                + ":transferredAt, :tradeDate, NOW())")
+                .setParameter("transactionNumber", transactionNumber)
+                .setParameter("withdrawalAccountId", accountId)
+                .setParameter("depositAccountId", insertAccount(customerId))
+                .setParameter("sourceId", autoTransferId)
+                .setParameter("executionDate", executionDate)
+                .setParameter("transferredAt", executionDate.atTime(0, 10))
+                .setParameter("tradeDate", tradeDate)
+                .executeUpdate();
+    }
+
     private Long insertCustomer() {
         // 한 테스트 안에서 두 번째 고객을 만들 때 System.nanoTime()이 짧은 간격에선 값이 겹칠 수 있어 카운터로 유일성을 보장한다.
         // (user_id는 VARCHAR(20), email은 UNIQUE)
@@ -1154,5 +1206,18 @@ class AutoTransferControllerTest extends IntegrationTestSupport {
                         .createNativeQuery("SELECT LAST_INSERT_ID()")
                         .getSingleResult())
                 .longValue();
+    }
+
+    @Test
+    @DisplayName("API 문서의 자동이체 처리결과 항목에 거래일(tradeDate)이 날짜 형식·null 허용으로 노출된다 (#679)")
+    void apiDocs_exposesTradeDateOnExecutionResultItem() throws Exception {
+        mockMvc.perform(get("/api/v1/v3/api-docs").contextPath("/api/v1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferExecutionHistoryItemResponse']"
+                                + "['properties']['tradeDate']['format']")
+                        .value("date"))
+                .andExpect(jsonPath("$['components']['schemas']['AutoTransferExecutionHistoryItemResponse']"
+                                + "['properties']['tradeDate']['type']")
+                        .value(hasItem("null")));
     }
 }

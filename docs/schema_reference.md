@@ -606,7 +606,7 @@ COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED →
 | UNIQUE | `uk_transfer_txno` | `transaction_number` |
 | INDEX | `ix_transfer_wacc` | `withdrawal_account_id, transferred_at DESC` |
 | INDEX | `ix_transfer_status_created` | `status, created_at` — 조회거래 스케줄러가 1분마다 처리 불명(TIMEOUT) 타행 건을 찾는다(PH-33-②) |
-| UNIQUE | `uk_transfer_source_execution_date` | `source_type, source_id, execution_date` |
+| UNIQUE | `uk_transfer_source_execution_date` | `source_type, source_id, execution_date` — 예약·자동이체 처리결과의 거래일 조회(`transfer.api.TransferTradeDateQuery`, #679)도 이 인덱스로 읽는다 |
 | UNIQUE | `uk_transfer_correction` | `ref_transfer_id, correction_type` — 원거래 하나에 취소정정·정상거래는 각각 1건. 동시 정정을 DB가 막는다 |
 
 **CHECK 제약**

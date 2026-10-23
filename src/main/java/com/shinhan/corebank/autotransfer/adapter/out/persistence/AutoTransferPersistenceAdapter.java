@@ -124,6 +124,8 @@ public class AutoTransferPersistenceAdapter
                 .select(Projections.constructor(
                         AutoTransferExecutionHistoryRow.class,
                         autoTransferExecutionJpaEntity.executionId,
+                        autoTransferJpaEntity.autoTransferId,
+                        autoTransferExecutionJpaEntity.executionDate,
                         autoTransferExecutionJpaEntity.status,
                         autoTransferExecutionJpaEntity.executedAt,
                         autoTransferJpaEntity.withdrawalAccountId,
