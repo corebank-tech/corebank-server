@@ -101,20 +101,19 @@ public class AutoTransferBatchItemProcessor {
         }
         autoTransferExecutionPersistencePort.save(processingExecution, autoTransfer.getAutoTransferId());
 
-        // 거래번호가 있으면 이체 엔진이 돈이 움직인 트랜잭션 안에서 이미 TransferSettled 를 발행했다(#436).
-        // 거래번호가 없는 건 transfer 행이 생기기 전의 사전검증 실패뿐이라 엔진이 발행하지 못하므로, 회차
-        // 기록과 함께 여기서 발행한다. refId 는 등록 ID 가 아니라 회차 ID 다.
-        if (result.isPreValidationFailure()) {
-            eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
-                    .customerId(autoTransfer.getCustomerId())
-                    .refId(processingExecution.getExecutionId())
-                    .status(result.status())
-                    .errorCode(result.errorCode())
-                    .occurredAt(LocalDateTime.now(clock))
-                    .amount(processingExecution.getAmount())
-                    .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
-                    .build());
-        }
+        // 결과와 상관없이 회차 확정마다 회차 기록과 함께 발행한다(#707). refId 는 등록 ID 가 아니라 회차 ID 다.
+        // 이체 엔진도 transfer 행이 생기면 TransferSettled 를 내지만 refId 가 transfer_id 라, 회차 ID 로 남겨야
+        // 하는 알림은 이 이벤트로만 받는다. 회차 저장은 조건부가 아니라 재확정과 겹치면 둘 다 발행할 수 있고,
+        // 그때는 구독자가 업무 키로 멱등하게 받는다(AutoTransferExecutionSettled 계약).
+        eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
+                .customerId(autoTransfer.getCustomerId())
+                .refId(processingExecution.getExecutionId())
+                .status(result.status())
+                .errorCode(result.errorCode())
+                .occurredAt(LocalDateTime.now(clock))
+                .amount(processingExecution.getAmount())
+                .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
+                .build());
 
         autoTransfer.advanceNextExecutionDate();
         if (autoTransfer.getNextExecutionDate().isAfter(autoTransfer.getEndDate())) {
@@ -178,18 +177,17 @@ public class AutoTransferBatchItemProcessor {
             return;
         }
 
-        // transfer 행이 없으면 이체 엔진이 발행하지 못했고, completeProcessing() 의 사전검증 실패 발행도 함께
-        // 롤백된 건이다. 재확정이 겹치면 가드에서 return 해도 트랜잭션은 커밋되므로 가드를 통과한 뒤에만 발행한다.
-        if (hasNoTransferRow) {
-            eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
-                    .customerId(autoTransfer.getCustomerId())
-                    .refId(execution.getExecutionId())
-                    .status(ProcessResultStatus.ERROR)
-                    .occurredAt(LocalDateTime.now(clock))
-                    .amount(execution.getAmount())
-                    .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
-                    .build());
-        }
+        // 재확정도 결과와 상관없이 확정마다 발행한다(#707). 재확정이 겹치면 가드에서 return 해도 트랜잭션은
+        // 커밋되므로 가드를 통과한 뒤에만 발행한다. 실패 코드는 transfer 행에서 다시 읽지 않는다 — 알림은 코드가
+        // 없으면 기본 실패 문구를 쓴다.
+        eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
+                .customerId(autoTransfer.getCustomerId())
+                .refId(execution.getExecutionId())
+                .status(execution.getStatus())
+                .occurredAt(LocalDateTime.now(clock))
+                .amount(execution.getAmount())
+                .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
+                .build());
 
         if (execution.getStatus() == ProcessResultStatus.ERROR) {
             List<AutoTransferExecution> recent = autoTransferExecutionPersistencePort.findRecentByAutoTransferId(
