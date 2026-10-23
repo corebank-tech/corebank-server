@@ -50,6 +50,7 @@ public class InterbankSocketClient implements InterbankGatewayPort {
                         .build());
     }
 
+    // getState()는 OPEN→HALF_OPEN 전이를 일으키지 않는다. 이체는 여기서 막히니 전이는 조회거래·수취인 조회의 송신이 일으킨다.
     @Override
     public boolean isAvailable() {
         CircuitBreaker.State state = circuitBreaker.getState();
