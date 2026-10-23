@@ -21,7 +21,7 @@ public record ScheduledTransferExecutionResultItemResponse(
         @Schema(description = "거래번호. SUCCESS/FAILED만 채워짐", nullable = true) String transactionNumber,
         @Schema(
                         description = "거래일. 이 회차가 만든 이체가 귀속되는 영업일이라 휴일에 실행되면 executedAt 날짜의 다음 영업일이다. "
-                                + "CANCELED와 이체를 만들기 전에 실패한 FAILED는 비어 있다",
+                                + "CANCELED, 이체를 만들기 전에 실패한 FAILED, 거래일 대입(#516) 전에 실행된 회차(SUCCESS 포함)는 비어 있다",
                         nullable = true)
                 LocalDate tradeDate,
         @Schema(description = "실패 사유. status=SUCCESS일 때는 비어있음", nullable = true) String failureReason) {

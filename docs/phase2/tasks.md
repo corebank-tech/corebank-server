@@ -697,7 +697,7 @@ AI로 불일치 목록을 뽑고 고친다. **C-1보다 먼저 한다.**
 
 예약·자동이체 화면에 **거래일만** 표기한다. 로그인 훅 교체는 FE #136(P3)이다.
 **완료 기준:** 예약·자동이체 화면의 일자 라벨이 glossary의 "거래일"이고, 값이 서버 `tradeDate`와 같다.
-서버 값은 `GET /scheduled-transfers/executions`·`GET /auto-transfers/executions` 항목의 `tradeDate`다(#679). 그 회차가 만든 이체 행의 거래일이라 휴일 실행 회차는 `executedAt` 날짜와 다르다. 이체 행이 없는 회차(취소, 이체 전 실패, 자동이체의 "관리자에게 문의해주세요" 행)는 비어 있다.
+서버 값은 `GET /scheduled-transfers/executions`·`GET /auto-transfers/executions` 항목의 `tradeDate`다(#679). 그 회차가 만든 이체 행의 거래일이라 휴일 실행 회차는 `executedAt` 날짜와 다르다. 이체 행이 없는 회차(취소, 이체 전 실패, 자동이체의 "관리자에게 문의해주세요" 행)는 비어 있다. 거래일 대입(#516) 전에 실행된 회차는 SUCCESS여도 비어 있다 — 기존 행 채우기(#515) 전까지다.
 
 ### FE ADM-04. 대사 불일치 목록 (#130-①)
 
