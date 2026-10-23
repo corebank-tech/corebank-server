@@ -3,6 +3,7 @@ package com.shinhan.corebank.notification.adapter.in.event;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.notification.application.port.in.NotificationCommandUseCase;
 import com.shinhan.corebank.notification.application.port.in.dto.NotificationTransferResultCommand;
+import com.shinhan.corebank.notification.domain.NotificationType;
 import com.shinhan.corebank.transfer.api.TransferSettled;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -41,7 +42,8 @@ public class NotificationTransferSettledListener {
         }
         notificationCommandUseCase.createTransferResultNotification(NotificationTransferResultCommand.builder()
                 .customerId(event.customerId())
-                .transferId(event.refId())
+                .type(NotificationType.TRANSFER)
+                .refId(event.refId())
                 .isSucceeded(event.status() == ProcessResultStatus.SUCCESS)
                 .errorCode(event.errorCode())
                 .amount(event.amount())
