@@ -7,7 +7,7 @@ import java.util.regex.Pattern;
  * 타행 이체 전문 한 장 (docs/phase2/fixed_length_message_spec.md §2). 바이트 변환은 ExternalMessageCodec이 한다.
  *
  * @param bankCode 상대 기관(수신 은행) 코드 3자리. 요청·응답 모두 같은 값이다
- * @param serialNumber 원거래의 transfer.transaction_number. 조회거래도 원거래 번호를 싣는다
+ * @param serialNumber 원거래의 transfer.transaction_number. 조회거래도 원거래 번호를 싣는다. 수취인 조회는 원거래가 없어 따로 만든다
  * @param responseCode 요청이면 null
  * @param payeeName 상대 기관이 확인한 수취인 이름. 요청이면 null
  * @param memo 받는 분 통장 표시. 없으면 null

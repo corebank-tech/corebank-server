@@ -14,7 +14,10 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -26,6 +29,8 @@ import org.springframework.stereotype.Component;
 public class InterbankSocketClient implements InterbankGatewayPort {
 
     private static final int LENGTH_FIELD = 4;
+    private static final String PAYEE_INQUIRY_SERIAL_MARK = "PQ";
+    private static final long PAYEE_INQUIRY_SERIAL_BOUND = 10_000_000_000L;
 
     private final InterbankProperties properties;
     private final Clock clock;
@@ -45,6 +50,7 @@ public class InterbankSocketClient implements InterbankGatewayPort {
                         .build());
     }
 
+    // getState()는 OPEN→HALF_OPEN 전이를 일으키지 않는다. 이체는 여기서 막히니 전이는 조회거래·수취인 조회의 송신이 일으킨다.
     @Override
     public boolean isAvailable() {
         CircuitBreaker.State state = circuitBreaker.getState();
@@ -85,6 +91,46 @@ public class InterbankSocketClient implements InterbankGatewayPort {
         return reply;
     }
 
+    @Override
+    public InterbankReply inquirePayee(String bankCode, String accountNumber) {
+        String serialNumber = payeeInquirySerial();
+        Exchange exchange = exchange(
+                TransactionCode.PAYEE_INQUIRY, new InterbankRequest(bankCode, serialNumber, accountNumber, 0L, null));
+        InterbankReply reply =
+                switch (exchange) {
+                    case Exchange.NotSent notSent -> InterbankReply.of(InterbankOutcome.NOT_PROCESSED, null);
+                    case Exchange.NoReply noReply -> InterbankReply.of(InterbankOutcome.UNKNOWN, null);
+                    case Exchange.Replied replied -> payeeInquiryReply(replied.response());
+                };
+        log.info(
+                "타행 수취인 조회 - serialNumber={}, bankCode={}, responseCode={}, outcome={}",
+                serialNumber,
+                bankCode,
+                reply.responseCode(),
+                reply.outcome());
+        return reply;
+    }
+
+    // 사전 조회는 원거래가 없어 일련번호를 따로 만든다. 거래번호를 채번하면 transfer에 없는 번호가 생긴다(#680).
+    // 한 연결에 요청 1건이라 응답이 섞이지 않으므로 날짜 + 난수로 충분하다.
+    private String payeeInquirySerial() {
+        return LocalDate.now(clock).format(DateTimeFormatter.BASIC_ISO_DATE)
+                + PAYEE_INQUIRY_SERIAL_MARK
+                + "%010d".formatted(ThreadLocalRandom.current().nextLong(PAYEE_INQUIRY_SERIAL_BOUND));
+    }
+
+    // 규격 §3 수취인 조회(PYE001) 열. 예금주를 확인한 경우와 계좌 사유 둘만 구분하고 나머지는 확인 못 함이다.
+    private static InterbankReply payeeInquiryReply(ExternalMessage response) {
+        ResponseCode code = response.responseCode();
+        return switch (code) {
+            case APPROVED -> new InterbankReply(InterbankOutcome.APPROVED, response.payeeName(), code.code());
+            case ACCOUNT_NOT_FOUND -> InterbankReply.of(InterbankOutcome.ACCOUNT_NOT_FOUND, code.code());
+            case ACCOUNT_UNAVAILABLE -> InterbankReply.of(InterbankOutcome.ACCOUNT_UNAVAILABLE, code.code());
+            case MALFORMED_MESSAGE, DUPLICATE, ORIGINAL_NOT_RECEIVED, SYSTEM_ERROR ->
+                InterbankReply.of(InterbankOutcome.NOT_PROCESSED, code.code());
+        };
+    }
+
     // 규격 §3 이체(TRF001) 열. 2001(중복)은 입금 여부를 알 수 없어 확정하지 않는다.
     private static InterbankReply transferReply(ExternalMessage response) {
         ResponseCode code = response.responseCode();
@@ -122,7 +168,7 @@ public class InterbankSocketClient implements InterbankGatewayPort {
                     request.recipientMemo()));
         } catch (IllegalArgumentException e) {
             // 입력 검증을 지나 왔어도 전문을 만들 수 없으면 보내지 않는다(규격 §4 — 직렬화가 마지막 관문).
-            log.error("타행 전문 생성 실패 - transactionNumber={}, cause={}", request.transactionNumber(), e.getMessage());
+            log.error("타행 전문 생성 실패 - serialNumber={}, cause={}", request.transactionNumber(), e.getMessage());
             return new Exchange.NotSent();
         }
         if (!circuitBreaker.tryAcquirePermission()) {
@@ -146,7 +192,7 @@ public class InterbankSocketClient implements InterbankGatewayPort {
                         properties.connectTimeout().toMillis());
             } catch (IOException e) {
                 // 연결 전이라 상대 은행은 이 전문을 받지 못했다.
-                log.warn("타행 연결 실패 - transactionNumber={}, cause={}", serialNumber, e.toString());
+                log.warn("타행 연결 실패 - serialNumber={}, cause={}", serialNumber, e.toString());
                 return new Exchange.NotSent();
             }
             socket.getOutputStream().write(encoded);
@@ -161,13 +207,13 @@ public class InterbankSocketClient implements InterbankGatewayPort {
             if (decoded.kind() != MessageKind.RESPONSE
                     || !serialNumber.equals(decoded.serialNumber())
                     || decoded.transactionCode() != transactionCode) {
-                log.warn("타행 응답 불일치 - transactionNumber={}", serialNumber);
+                log.warn("타행 응답 불일치 - serialNumber={}", serialNumber);
                 return new Exchange.NoReply();
             }
             return new Exchange.Replied(decoded);
         } catch (IOException | IllegalArgumentException e) {
             // 보낸 뒤의 실패라 상대가 처리했을 수 있다 — 처리 불명이다.
-            log.warn("타행 응답 수신 실패 - transactionNumber={}, cause={}", serialNumber, e.toString());
+            log.warn("타행 응답 수신 실패 - serialNumber={}, cause={}", serialNumber, e.toString());
             return new Exchange.NoReply();
         }
     }
