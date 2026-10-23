@@ -24,8 +24,10 @@ import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledT
 import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledTransferJpaRepository;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import jakarta.persistence.EntityManager;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.TemporalAdjusters;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -351,6 +353,34 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                 // 실행일시는 executedAt으로 확정한다(api_conventions.md §6-4) - scheduledDate(예정일)로 회귀하지 않도록 필드명을 고정
                 .andExpect(jsonPath("$.data.items[0].executedAt").exists())
                 .andExpect(jsonPath("$.data.items[0].scheduledDate").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("휴일 예정 회차의 tradeDate는 그 회차 이체 행의 거래일이고, 이체 전에 실패한 회차는 비어 있다 (#679)")
+    void searchExecutionResults_tradeDateComesFromTransferRowOfSameExecution() throws Exception {
+        LocalDate saturday = LocalDate.now().minusWeeks(1).with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY));
+        LocalDate monday = saturday.plusDays(2);
+        ScheduledTransferJpaEntity success = scheduledTransferJpaRepository.save(terminalScheduledTransfer(
+                accountId, ScheduledTransferStatus.SUCCESS, saturday, 10_000L, "20260801BT9679000001", null));
+        ScheduledTransferJpaEntity failed = scheduledTransferJpaRepository.save(terminalScheduledTransfer(
+                accountId, ScheduledTransferStatus.FAILED, saturday, 20_000L, null, "출금계좌 상태 오류"));
+        entityManager.flush();
+        insertTransfer(success.getScheduledTransferId(), saturday, monday, "20260801BT9679000001");
+        entityManager.clear();
+
+        mockMvc.perform(get("/scheduled-transfers/executions")
+                        .with(authentication(authenticationOf(customerId)))
+                        .param("fromDate", saturday.toString())
+                        .param("toDate", LocalDate.now().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(
+                                "$.data.items[?(@.scheduledTransferId == %d)].tradeDate",
+                                success.getScheduledTransferId())
+                        .value(monday.toString()))
+                .andExpect(jsonPath(
+                                "$.data.items[?(@.scheduledTransferId == %d)].tradeDate",
+                                failed.getScheduledTransferId())
+                        .value(hasItem(nullValue())));
     }
 
     @Test
@@ -688,6 +718,27 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                 .registeredAt(LocalDateTime.now().minusDays(30))
                 .executedAt(LocalDateTime.now())
                 .build();
+    }
+
+    // transfer 도메인 내부를 참조하지 않도록 이체 행은 SQL로 넣는다
+    private void insertTransfer(
+            Long scheduledTransferId, LocalDate executionDate, LocalDate tradeDate, String transactionNumber) {
+        entityManager
+                .createNativeQuery(
+                        "INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id, deposit_account_number, "
+                                + "payee_name, amount, fee, transfer_type, channel, status, source_type, source_id, "
+                                + "execution_date, transferred_at, trade_date, created_at) "
+                                + "VALUES (:transactionNumber, :withdrawalAccountId, :depositAccountId, '110987654321', '홍길동', 10000, 0, "
+                                + "'SCHEDULED', 'BT', 'SUCCESS', 'SCHEDULED', :sourceId, :executionDate, "
+                                + ":transferredAt, :tradeDate, NOW())")
+                .setParameter("transactionNumber", transactionNumber)
+                .setParameter("withdrawalAccountId", accountId)
+                .setParameter("depositAccountId", insertAccount(customerId))
+                .setParameter("sourceId", scheduledTransferId)
+                .setParameter("executionDate", executionDate)
+                .setParameter("transferredAt", executionDate.atTime(0, 10))
+                .setParameter("tradeDate", tradeDate)
+                .executeUpdate();
     }
 
     private Long insertCustomer() {
