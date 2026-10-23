@@ -167,7 +167,7 @@ public class InterbankSocketClient implements InterbankGatewayPort {
                     request.recipientMemo()));
         } catch (IllegalArgumentException e) {
             // 입력 검증을 지나 왔어도 전문을 만들 수 없으면 보내지 않는다(규격 §4 — 직렬화가 마지막 관문).
-            log.error("타행 전문 생성 실패 - transactionNumber={}, cause={}", request.transactionNumber(), e.getMessage());
+            log.error("타행 전문 생성 실패 - serialNumber={}, cause={}", request.transactionNumber(), e.getMessage());
             return new Exchange.NotSent();
         }
         if (!circuitBreaker.tryAcquirePermission()) {
@@ -191,7 +191,7 @@ public class InterbankSocketClient implements InterbankGatewayPort {
                         properties.connectTimeout().toMillis());
             } catch (IOException e) {
                 // 연결 전이라 상대 은행은 이 전문을 받지 못했다.
-                log.warn("타행 연결 실패 - transactionNumber={}, cause={}", serialNumber, e.toString());
+                log.warn("타행 연결 실패 - serialNumber={}, cause={}", serialNumber, e.toString());
                 return new Exchange.NotSent();
             }
             socket.getOutputStream().write(encoded);
@@ -206,13 +206,13 @@ public class InterbankSocketClient implements InterbankGatewayPort {
             if (decoded.kind() != MessageKind.RESPONSE
                     || !serialNumber.equals(decoded.serialNumber())
                     || decoded.transactionCode() != transactionCode) {
-                log.warn("타행 응답 불일치 - transactionNumber={}", serialNumber);
+                log.warn("타행 응답 불일치 - serialNumber={}", serialNumber);
                 return new Exchange.NoReply();
             }
             return new Exchange.Replied(decoded);
         } catch (IOException | IllegalArgumentException e) {
             // 보낸 뒤의 실패라 상대가 처리했을 수 있다 — 처리 불명이다.
-            log.warn("타행 응답 수신 실패 - transactionNumber={}, cause={}", serialNumber, e.toString());
+            log.warn("타행 응답 수신 실패 - serialNumber={}, cause={}", serialNumber, e.toString());
             return new Exchange.NoReply();
         }
     }
