@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 39개 비즈니스 테이블 + 6개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`) · 테이블 목록 기준 380개 컬럼
+**대상**: 39개 비즈니스 테이블 + 7개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 389개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -71,6 +71,7 @@
 | 43 | `interest_payment` | 예적금 이자 지급 이력 | P2 | 9 |
 | 44 | `SPRING_SESSION` | 공용 HTTP 세션 | P6 | 7 |
 | 45 | `SPRING_SESSION_ATTRIBUTES` | 직렬화된 세션 속성 | P6 | 3 |
+| 46 | `EVENT_PUBLICATION` | 이벤트 발행 기록 (Spring Modulith) | P1 | 9 |
 
 ---
 
@@ -1131,6 +1132,34 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | 종류 | 이름 | 컬럼 |
 | --- | --- | --- |
 | INDEX | `ix_terms_view_history_expires` | `expires_at` |
+
+---
+
+## `EVENT_PUBLICATION`
+
+> 이벤트 발행 기록 — 아웃박스 (PH-96, #437). Spring Modulith Event Publication Registry가 소유한다
+
+업무 트랜잭션 안에서 발행된 이벤트를 받을 AFTER_COMMIT 리스너마다 1행을 같은 커밋으로 남긴다. 리스너가 성공하면 행을 지운다(`spring.modulith.events.completion-mode=delete`). 그래서 **남아 있는 행이 곧 아직 전달되지 않은 이벤트**다. 커밋 직후 리스너가 실패하거나 프로세스가 죽어도 행이 남아 다시 전달할 수 있다.
+
+DDL은 `spring-modulith-events-jdbc` 2.0.8의 `schemas/v2/schema-mysql.sql`을 그대로 옮겼다. **테이블·컬럼명이 대문자**인 것은 라이브러리가 이 이름으로 조회하기 때문이고, **시각이 `TIMESTAMP(6)`**(2038-01-19까지)인 것은 원본 DDL을 바꾸지 않았기 때문이다([ADR-0010](adr/0010-outbox-spring-modulith-event-publication-registry.md)). 행은 애플리케이션이 직접 쓰지 않고 라이브러리만 쓴다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `ID` | `VARCHAR(36)` | **PK** | X |  | 발행 기록 식별자 (UUID) |
+| `LISTENER_ID` | `VARCHAR(512)` |  | X |  | 이벤트를 받을 리스너 메서드 식별자 |
+| `EVENT_TYPE` | `VARCHAR(512)` |  | X |  | 이벤트 클래스 전체 이름 |
+| `SERIALIZED_EVENT` | `VARCHAR(4000)` |  | X |  | Jackson으로 직렬화한 이벤트 JSON |
+| `PUBLICATION_DATE` | `TIMESTAMP(6)` |  | X |  | 발행 시각 |
+| `COMPLETION_DATE` | `TIMESTAMP(6)` |  | O | `NULL` | 완료 시각. `delete` 모드에서는 완료 시 행이 지워져 쓰이지 않는다 |
+| `STATUS` | `VARCHAR(20)` |  | O |  | `PUBLISHED` / `PROCESSING` / `COMPLETED` / `FAILED` / `RESUBMITTED` |
+| `COMPLETION_ATTEMPTS` | `INT` |  | O |  | 전달 시도 횟수 |
+| `LAST_RESUBMISSION_DATE` | `TIMESTAMP(6)` |  | O | `NULL` | 마지막 재제출 시각 |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| INDEX | `EVENT_PUBLICATION_BY_COMPLETION_DATE_IDX` | `COMPLETION_DATE` |
 
 ---
 
