@@ -99,20 +99,18 @@ public class ScheduledTransferBatchItemProcessor {
 
         recordAudit(scheduledTransfer, date, result.status() == ProcessResultStatus.SUCCESS, result.errorCode());
 
-        // 거래번호가 있으면 이체 엔진이 돈이 움직인 트랜잭션 안에서 이미 TransferSettled 를 발행했다(#436).
-        // 거래번호가 없는 건 transfer 행이 생기기 전의 사전검증 실패뿐이고, 엔진이 발행하지 못하므로 여기서
-        // 실행 기록과 함께 발행한다.
-        if (result.isPreValidationFailure()) {
-            eventPublisher.publishEvent(ScheduledTransferSettled.builder()
-                    .customerId(scheduledTransfer.getCustomerId())
-                    .refId(scheduledTransfer.getScheduledTransferId())
-                    .status(result.status())
-                    .errorCode(result.errorCode())
-                    .occurredAt(executedAt)
-                    .amount(scheduledTransfer.getAmount())
-                    .counterpartyName(MaskingUtil.maskName(scheduledTransfer.getPayeeName()))
-                    .build());
-        }
+        // 결과와 상관없이 예약 건 확정마다 발행한다(#707). 이체 엔진도 transfer 행이 생기면 TransferSettled 를
+        // 내지만 refId 가 transfer_id 라, 예약 건 ID 로 남겨야 하는 알림은 이 이벤트로만 받는다.
+        // 가드를 통과한 쪽만 여기에 오므로 재확정과 겹쳐도 한 번만 나간다.
+        eventPublisher.publishEvent(ScheduledTransferSettled.builder()
+                .customerId(scheduledTransfer.getCustomerId())
+                .refId(scheduledTransfer.getScheduledTransferId())
+                .status(result.status())
+                .errorCode(result.errorCode())
+                .occurredAt(executedAt)
+                .amount(scheduledTransfer.getAmount())
+                .counterpartyName(MaskingUtil.maskName(scheduledTransfer.getPayeeName()))
+                .build());
     }
 
     // transfer 테이블에 실제 거래가 있었는지만 확인해서 확정 (PROCESSING에 멈춘 건 재확정)
@@ -148,24 +146,20 @@ public class ScheduledTransferBatchItemProcessor {
             return;
         }
 
-        recordAudit(
-                scheduledTransfer,
-                scheduledTransfer.getScheduledDate(),
-                scheduledTransfer.getStatus() == ScheduledTransferStatus.SUCCESS,
-                null);
+        boolean isSucceeded = scheduledTransfer.getStatus() == ScheduledTransferStatus.SUCCESS;
+        recordAudit(scheduledTransfer, scheduledTransfer.getScheduledDate(), isSucceeded, null);
 
-        // transfer 행이 없으면 이체 엔진이 발행하지 못했고, completeProcessing() 의 사전검증 실패 발행도 함께
-        // 롤백된 건이다. 재확정이 겹치면 가드에서 return 해도 트랜잭션은 커밋되므로 가드를 통과한 뒤에만 발행한다.
-        if (hasNoTransferRow) {
-            eventPublisher.publishEvent(ScheduledTransferSettled.builder()
-                    .customerId(scheduledTransfer.getCustomerId())
-                    .refId(scheduledTransfer.getScheduledTransferId())
-                    .status(ProcessResultStatus.ERROR)
-                    .occurredAt(now)
-                    .amount(scheduledTransfer.getAmount())
-                    .counterpartyName(MaskingUtil.maskName(scheduledTransfer.getPayeeName()))
-                    .build());
-        }
+        // 재확정도 결과와 상관없이 확정마다 발행한다(#707). 정상 확정이 커밋되지 못한 건이라 그쪽 발행은 함께
+        // 롤백됐다. 재확정이 겹치면 가드에서 return 해도 트랜잭션은 커밋되므로 가드를 통과한 뒤에만 발행한다.
+        // 실패 코드는 transfer 행에서 다시 읽지 않는다 — 알림은 코드가 없으면 기본 실패 문구를 쓴다.
+        eventPublisher.publishEvent(ScheduledTransferSettled.builder()
+                .customerId(scheduledTransfer.getCustomerId())
+                .refId(scheduledTransfer.getScheduledTransferId())
+                .status(isSucceeded ? ProcessResultStatus.SUCCESS : ProcessResultStatus.ERROR)
+                .occurredAt(now)
+                .amount(scheduledTransfer.getAmount())
+                .counterpartyName(MaskingUtil.maskName(scheduledTransfer.getPayeeName()))
+                .build());
     }
 
     private void recordAudit(ScheduledTransfer scheduledTransfer, LocalDate date, boolean succeeded, String errorCode) {
