@@ -36,6 +36,7 @@ import com.shinhan.corebank.transfer.api.DepositChannel;
 import com.shinhan.corebank.transfer.api.DepositType;
 import com.shinhan.corebank.transfer.api.LedgerDepositResult;
 import com.shinhan.corebank.transfer.api.LedgerDepositUseCase;
+import com.shinhan.corebank.transfer.api.LedgerPrincipalBalanceQuery;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -102,6 +103,9 @@ class MaturityTerminationServiceTest {
     @Mock
     private JournalPostingUseCase journalPostingUseCase;
 
+    @Mock
+    private LedgerPrincipalBalanceQuery ledgerPrincipalBalanceQuery;
+
     private MaturityTerminationService service;
 
     @BeforeEach
@@ -118,6 +122,7 @@ class MaturityTerminationServiceTest {
                 maturityAccountQueryUseCase,
                 passwordVerificationPort,
                 journalPostingUseCase,
+                ledgerPrincipalBalanceQuery,
                 clock);
     }
 
@@ -426,12 +431,41 @@ class MaturityTerminationServiceTest {
 
         stubBeforeTransfer(validated, normalInterest(), totalTransferred);
 
+        when(ledgerPrincipalBalanceQuery.sumNetAmountExcludingInterest(ACCOUNT_ID))
+                .thenReturn(PRINCIPAL + additionalPayments);
+
         stubTransfer(totalTransferred, new LedgerDepositResult(TRANSACTION_NUMBER, totalTransferred, TRADE_DATE));
 
         MaturityTerminationResult result = service.terminate(COMMAND);
 
         assertThat(result.principal()).isEqualTo(PRINCIPAL + additionalPayments);
         assertThat(result.totalTransferred()).isEqualTo(totalTransferred);
+    }
+
+    @Test
+    @DisplayName("정기적금 실제 원금과 원장 합계가 다르면 만기해지를 거부한다")
+    void terminate_installmentPrincipalMismatch() {
+        var validated = new MaturityTerminationValidationService.Validated(
+                ACCOUNT_ID,
+                WITHDRAWAL_ACCOUNT_ID,
+                OPENED_DATE,
+                MATURITY_DATE,
+                RATE,
+                InterestCalculationMode.SIMPLE,
+                PRINCIPAL,
+                false);
+
+        stubBeforeTransfer(validated, normalInterest(), TOTAL_TRANSFERRED);
+
+        // 실제 원장 원금은 계약 원금과 1원 차이가 있다.
+        when(ledgerPrincipalBalanceQuery.sumNetAmountExcludingInterest(ACCOUNT_ID))
+                .thenReturn(PRINCIPAL - 1);
+
+        assertError(COMMAND, CommonErrorCode.INTERNAL_ERROR);
+
+        verifyNoInteractions(ledgerDepositUseCase, journalPostingUseCase);
+
+        verify(settlementUseCase, never()).closeMatured(any(), any(), any(), any());
     }
 
     private void assertError(MaturityTerminationCommand command, ErrorCode expectedErrorCode) {

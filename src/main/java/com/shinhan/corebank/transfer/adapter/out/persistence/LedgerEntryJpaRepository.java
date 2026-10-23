@@ -70,6 +70,25 @@ public interface LedgerEntryJpaRepository extends JpaRepository<LedgerEntryJpaEn
         """)
     List<AccountLedgerSumProjection> sumSignedAmountByAccountIds(@Param("accountIds") Collection<Long> accountIds);
 
+    /**
+     * 이자 거래를 제외한 계좌별 원장 순합계.
+     * 취소된 원거래와 반대기표를 모두 포함해 순효과를 계산한다.
+     */
+    @Query(
+            """
+    SELECT COALESCE(SUM(
+        CASE
+            WHEN l.direction = com.shinhan.corebank.transfer.domain.LedgerDirection.DEPOSIT
+            THEN l.amount
+            ELSE -l.amount
+        END
+    ), 0)
+    FROM LedgerEntryJpaEntity l
+    WHERE l.accountId = :accountId
+      AND l.transactionType <> :interestType
+    """)
+    Long sumNetAmountExcludingInterest(@Param("accountId") Long accountId, @Param("interestType") String interestType);
+
     interface AccountLedgerSumProjection {
         Long getAccountId();
 
