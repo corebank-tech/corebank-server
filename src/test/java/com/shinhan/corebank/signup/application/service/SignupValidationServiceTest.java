@@ -305,18 +305,18 @@ class SignupValidationServiceTest {
     }
 
     @Test
-    @DisplayName("Redis 전환 실패는 성공 응답으로 바뀌지 않는다")
-    void propagatesRedisTransitionFailure() {
+    @DisplayName("토큰 전환 실패는 성공 응답으로 바뀌지 않는다")
+    void propagatesTokenTransitionFailure() {
         ValidateSignupCommand command = initialCommand();
         givenInitialProofs(command);
         given(passwordEncoder.encode(command.userPassword())).willReturn("hash");
         given(tokenGeneratorPort.generateTempSignupToken()).willReturn("TEMP_SIGNUP_new");
         given(transitionPort.replaceInitialTokensWithTemp(any(), any(), any(), any(), any(), any(), any()))
-                .willThrow(new IllegalStateException("redis down"));
+                .willThrow(new IllegalStateException("store down"));
 
         assertThatThrownBy(() -> service.validate(command))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("redis down");
+                .hasMessage("store down");
     }
 
     @Test

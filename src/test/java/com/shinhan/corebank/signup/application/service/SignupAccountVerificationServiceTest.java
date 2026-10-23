@@ -157,17 +157,17 @@ class SignupAccountVerificationServiceTest {
     }
 
     @Test
-    @DisplayName("Redis 저장 실패 시 유효하지 않은 토큰을 성공으로 반환하지 않는다")
-    void doesNotReturnTokenWhenRedisSaveFails() {
+    @DisplayName("토큰 저장 실패 시 유효하지 않은 토큰을 성공으로 반환하지 않는다")
+    void doesNotReturnTokenWhenTokenSaveFails() {
         givenVerification(ExistingBankAccountVerification.verified("BANK_CUSTOMER_001", "BANK_ACCOUNT_001"));
         given(authTokenGeneratorPort.generateAccountAuthToken()).willReturn(TOKEN);
-        org.mockito.Mockito.doThrow(new IllegalStateException("redis down"))
+        org.mockito.Mockito.doThrow(new IllegalStateException("store down"))
                 .when(accountAuthTokenPort)
                 .save(eq(TOKEN), any(), eq(ACCOUNT_AUTH_TTL));
 
         assertThatThrownBy(() -> service.verify(COMMAND))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("redis down");
+                .hasMessage("store down");
     }
 
     private void givenVerification(ExistingBankAccountVerification verification) {

@@ -190,7 +190,7 @@ class SignupCompletionServiceTest {
         given(profilePort.findByCustomerId("BANK_CUSTOMER_001")).willReturn(Optional.of(profile()));
         given(accountsPort.findAllByCustomerId("BANK_CUSTOMER_001")).willReturn(accounts());
         given(transactionService.register(any(), any())).willReturn(new RegisteredCustomer(101L, "honggildong"));
-        doThrow(new IllegalStateException("Redis failure")).when(tokenClaimPort).complete(eq(TOKEN), any());
+        doThrow(new IllegalStateException("store failure")).when(tokenClaimPort).complete(eq(TOKEN), any());
 
         var result = service.complete(new CompleteSignupCommand(TOKEN));
 

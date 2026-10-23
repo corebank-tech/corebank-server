@@ -35,7 +35,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 | [FE-SNAP](#fe-snap-codegen-스냅샷) | codegen 스냅샷 | S1 | 0.5 | — | — | FE PR #171 | 완료 |
 | 리드 | FE 리드 조율 | S1 | 0.5 | — | — | — | — |
 | [PH-49a-②](#ph-49a-관리자-인증-①-결정스키마-102--②-구현-108) | 관리자 인증 구현 | S2 | 3 | PH-49a-① | **PR #639·#652 머지(10/21)** | #573 · PR #639 · PR #652 · PR #655 | 완료 |
-| [PH-96-①](#ph-96-transactional-outbox-①-발행측릴레이-s2--②-구독-s3) | Transactional Outbox — 발행측 · 릴레이 | S2 | 4 | PH-32 · PH-99 · EVT-2 | 유실 재현 10/8 | #437 | 예정 |
+| [PH-96-①](#ph-96-transactional-outbox-①-발행측릴레이-s2--②-구독-s3) | Transactional Outbox — 발행측 · 릴레이 | S2 | 4 | PH-32 · PH-99 · EVT-2 | 유실 재현 10/8 | #437 · PR #703 | 완료 |
 | [PH-89](#ph-89-감사-5w--조회-감사--조회-사유-강제) | 감사 5W · 조회 감사 · 조회 사유 강제 | S2 | 2.5 | PH-49a-② | **10/26** | #458 | 예정 |
 | 리드 | FE 리드 조율 | S2 | 0.5 | — | — | — | — |
 | [PH-04](#ph-04-알림-조회-api--마스킹-통일) | 알림 조회 API · 마스킹 통일 | S3 | 3 | PH-01 | **10/28** | #390 #391 #392 #410 | 예정 |
@@ -63,7 +63,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 | [PH-12](#ph-12-이자-계산기--절사-규칙) | 이자 계산기 · 절사 규칙 | S2 | 3.5 | PH-11 | **10/16** | #623 | 완료 |
 | [PH-90](#ph-90-원장잔액--출금가능액-분리--transferprecheck) | 원장잔액·출금가능액 분리 + `TransferPreCheck` | S2 | 3 | PH-87 · PH-99 | **10/16** (P4 머지) | — | 진행 — P2 구현 완료, #521 통합 검증 대기 |
 | [PH-70-①](#ph-70-rds-①-modulesdata-plan-s2--②-복원컷오버-s3) | `modules/data` Terraform plan — RDS | S2 | 1.5 | PH-50 | **10/21** (코드·plan) | #650 | 완료 |
-| [PH-15](#ph-15-만기--감지--matured-전이--원리금--만기해지-api) | 만기 — 감지 · MATURED · 원리금 · 만기해지 API | S3 | 3.5 | PH-12 · PH-10 · PH-43 · 입금 계약(PH-99) | **10/21** | #419 · #633 · #671 | 만기 감지 · 이벤트·감사 이력·상세 API 구현 완료  |
+| [PH-15](#ph-15-만기--감지--matured-전이--원리금--만기해지-api) | 만기 — 감지 · MATURED · 원리금 · 만기해지 API | S3 | 3.5 | PH-12 · PH-10 · PH-43 · 입금 계약(PH-99) | **10/21** | #419 · #685 | 진행 — 만기해지 구현·전체 테스트 통과, 최종 정합성 검증·COB 측정 대기 |
 | [PH-14](#ph-14-이자-지급--원천징수) | 이자 지급 · 원천징수 | S3 | 1.5 | PH-12 · PH-24 · 입금 계약(PH-99) | **10/21** | #687 | 완료 |
 | [PH-13](#ph-13-적수-집계-sql-전환--재측정) | 적수 집계 SQL 전환 · 재측정 | S3 | 1.5 | PH-11 | PH-11 15만 베이스라인 뒤(릴리스 3) | — | 예정 |
 | [PH-16](#ph-16-중도해지--휴면-전환--해지-시-자원-정리) | 중도해지 · 휴면 전환 · 해지 시 자원 정리 | S3 | 4 | PH-15 · PH-43 · 입금 계약(PH-99) · #467 | 중도해지: #467 · PH-15 해지 API 머지 직후(릴리스 2 마감 10/22) · 휴면 스텝 통합 **10/30** | — | 예정 |
@@ -125,11 +125,11 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 | [PH-99](#ph-99-이체-파이프라인-확장점seam) | `transfer.api` 입금 계약 (P2 이자·만기·해지용) | S2 | 0.5 | PH-99 | **10/16** | #595 · PR #616 | 완료 |
 | [EVT-2](#evt-2-publishevent-두-줄) | `publishEvent` 두 줄 | S2 | 0.5 | PH-32 | 10/6 | #505 | 완료 — P1이 #505에서 대신 처리 |
 | [HOOK-MERGE](#hook-merge-훅-구현체-머지) | 훅 구현체 3건 리뷰·머지 | S2 | 0.5 | PH-90 · PH-24 · PH-41 | 10/12~16 | PR #615 · PR #585 · #516 | 완료 |
-| [PH-101-①](#ph-101-redis-제거-①-구현-s2--②-판정-측정-s3) | Redis 제거 1단계 — 토큰·잠금·이력 MySQL 이전 · 저장소 스위치 (D-14 예외) | S2 | 3.5 | — | dev 머지 10/15 · **릴리스 10/16** | #580 · #581 | 진행 |
+| [PH-101-①](#ph-101-redis-제거-①-구현-s2--②-판정-측정-s3) | Redis 제거 1단계 — 토큰·잠금·이력 MySQL 이전 · 저장소 스위치 (D-14 예외) | S2 | 3.5 | — | dev 머지 10/15 · **릴리스 10/16** | #580 · #581 | 완료 |
 | [PH-33-②](#ph-33-대외계-①-모의-서버-s1--②-타행-이체-s3) | 타행 송신 · 조회거래 · 미결제 기표 · 격리 | S3 | 5 | PH-33-① · PH-24 | **10/21 머지** | #654 | 진행 |
 | [PH-36](#ph-36-장애-주입-3종--보상-트랜잭션) | 장애 주입 3종 · 보상 트랜잭션 | S3 | 2 | PH-33-② · PH-80 | PH-33-② 머지 직후(릴리스 2 마감 10/22) | — | 예정 |
 | [LOCK-TUNE](#lock-tune-락-튜닝) | 락 튜닝 | S3 | 1 | PH-30 베이스라인 · PH-80 | PH-101-② 측정 뒤 | — | 예정 |
-| [PH-101-①](#ph-101-redis-제거-①-구현-s2--②-판정-측정-s3) | Redis 제거 2단계 — Redis 어댑터·의존·운영 컨테이너 삭제 (판정 통과 시) | S3 | 0.5 | PH-101-② 판정 | 판정 뒤 | #580 | 예정 |
+| [PH-101-①](#ph-101-redis-제거-①-구현-s2--②-판정-측정-s3) | Redis 제거 2단계 — Redis 어댑터·의존·운영 컨테이너 삭제 (판정 통과 시) | S3 | 0.5 | PH-101-② 판정 | 판정 뒤 | #580 · PR #710 | 완료 |
 | [PH-06](#ph-06-지연이체-서비스) | 지연이체 서비스 (P1에서 이관, D-14 예외 [D-29](README.md#d-29--1020--리드)) | S3 | 4 | PH-40 · PH-99 · PH-80 · [O-09](README.md#8-미결) | O-09 결정 뒤(10/21 가능 여부 P4 확인) | — | 예정 |
 | [PH-36b](#ph-36b-최종-측정--리포트) | 최종 측정 · 정합성+성능 리포트 | S4 | 3 | PH-30 재측정 | 11/6 | — | 예정 |
 
@@ -151,7 +151,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 | [PH-51](#ph-51-컴퓨트-계층--컷오버) | 컴퓨트 계층 · 컷오버 | S3 | 4.5 | PH-50 · PH-57 · PH-58 ACM ARN | 리허설 10/19~23 · **apply 10/26 · 컷오버 10/27** | — | 예정 |
 | [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-② | 하이브리드 연결 — Site-to-Site VPN | S3 | 1 | PH-50 · PH-100-① | 터널 **10/23** (리허설 안) → P2 | — | 예정 |
 | [PH-76](#ph-76-정보계-etl) | 정보계 ETL | S3 | 2.5 | PH-75 · PH-43 · #603(완료) · 원본: PH-70-② 복제 | 10/27 복제 시작 뒤 · PH-77(10/28) 전 | #644 · #645 · #646 · #664 · #668 · PR #649 · #665 · #669 · #674 | 진행 |
-| [PH-77](#ph-77-정보계-조회-api) | 정보계 조회 API | S3 | 1.5 | PH-76 | **10/28** | #675 | 예정 |
+| [PH-77](#ph-77-정보계-조회-api) | 정보계 조회 API | S3 | 1.5 | PH-76 | **10/28** | #675 · #704 | 진행 (① Swagger 스텁) |
 | [PH-45](#ph-45-cob-병렬화--365) | 청크 → 병렬 스텝 · 실패 격리 · #365 | S3 | 3 | PH-43 | PH-43 60b 베이스라인 뒤(릴리스 3) | #365 · PR #635 · #631 · PR #636 | 예정 |
 | [PH-56](#ph-56-was-스케일아웃-비선형성-실증) | WAS 스케일아웃 비선형성 실증 | S4 | 1.5 | PH-51 · PH-30 · PH-49c | — | — | 예정 |
 | [PH-55](#ph-55-배포-파이프라인--destroy-리허설) | 배포 파이프라인 · 환경 3단계 · 권한 분리 · destroy 리허설 | S4 | 4 | PH-51 | — | — | 예정 |
@@ -262,16 +262,32 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 
 **①**
 
-- `outbox` 테이블(Flyway + `schema_reference.md` + ERD): id · event_type · reference_key · payload(JSON) · status(NEW/SENT/FAILED) · retry_count · created_at
-- BEFORE_COMMIT 리스너가 **JdbcTemplate INSERT**로 같은 커밋에 적재한다.
-- 릴레이: 기존 스케줄러가 5초 주기로 폴링한다. At-Least-Once이고, 3회 실패하면 FAILED(DLQ 역할)다. `BatchExecutionLockPort`로 단일 인스턴스에서만 실행한다(S3 말부터 WAS 2대).
-- `notification.api.OutboxEventHandler`와 멱등 키(reference_key + event_type 유니크)
-- 개선 전 수치(10/8): AFTER_COMMIT을 흉내 내 리스너에서 강제 종료시키고 유실을 1회 재현해 기록한다.
+> 10/19 [ADR-0010](../adr/0010-outbox-spring-modulith-event-publication-registry.md)로 구현 방법을 바꿨다. `outbox` 테이블을 직접 만들지 않고 Spring Modulith Event Publication Registry를 쓴다.
+
+- `EVENT_PUBLICATION` 테이블(Flyway + `schema_reference.md` + ERD) — 업무와 같은 커밋에 AFTER_COMMIT 리스너마다 1행이 남는다.
+- 리스너가 성공하면 행을 지운다(`completion-mode=delete`). **남은 행 = 아직 전달되지 않은 이벤트**다.
+- 재전달은 재제출 API로 한다(At-Least-Once). 멱등은 구독 측(②)에서 잡는다.
+- **현황:** #437 완료 (PR #703) — 개선 전 · 후 수치는 [ADR-0010 §검증](../adr/0010-outbox-spring-modulith-event-publication-registry.md#검증).
 
 **②**
 
 - 즉시 · 타행이체는 [PH-01](#ph-01-알림-도메인-인수--영속성) #706에 함께 들어간다. 예약 · 자동이체 회차 #707 · 상품가입 #708 · 구독 실패 처리 #709. #393~#396을 현재 아웃박스 설계(PR #703) 기준으로 다시 쓴 이슈다.
-- 구독 멱등(두 번째 수신은 no-op). 알림 실패는 릴레이 재시도로만 처리되고 이체에 영향을 주지 않는다.
+- 구독자는 AFTER_COMMIT 리스너다. 두 번째 수신은 no-op이고, 알림 실패는 이체에 영향을 주지 않는다.
+- **멱등 키는 업무 키(이벤트 종류 + `refId`)다.** 발행 기록은 지워지고 구독자는 그 ID를 받지 않는다. `refId`가 무엇을 가리키는지는 각 이벤트 주석에 있다.
+- **이체 행이 생긴 예약 · 자동이체는 `TransferSettled`로 발행되고 `refId = transfer_id`다.** `notification.ref_id` 규약(예약 → `scheduled_transfer_id`, 자동 → `execution_id`)과 다르므로, 알림에 어느 ID를 담을지 여기서 정한다.
+- auth `LoginPasswordChangedSessionListener`는 #641(PH-49c)에서 BEFORE_COMMIT으로 바뀌어 발행 기록 대상이 아니다. 재제출은 다른 WAS의 메모리 세션까지 끊는 복구 수단이 아니다([ADR-0010](../adr/0010-outbox-spring-modulith-event-publication-registry.md) 결과).
+
+실패 처리는 「즉시 재시도 → 주기 재제출 → 상한 초과는 포기 · 알림 → 수동 재처리」 순이고, 단계마다 프레임워크 기능을 쓴다.
+
+| 단계 | 쓰는 기능 | 손으로 짜나? |
+|---|---|---|
+| 구독 실행 | `@ApplicationModuleListener` — 비동기 · `REQUIRES_NEW` · AFTER_COMMIT | ❌ |
+| 즉시 재시도 | `@Retryable` + `@EnableResilientMethods`(Spring Framework 7) | ❌ 설정값만 |
+| 주기 재제출 | `IncompleteEventPublications.resubmitIncompletePublications(ResubmissionOptions)` — 재제출 횟수(`completionAttempts`)가 상한을 넘은 건은 필터로 빼서 포기한다(행은 남는다) | 스케줄 메서드 1개 |
+| 재기동 후 전달 | `republish-outstanding-events-on-restart`와 주기 재제출 중 하나 — 다중 인스턴스 중복을 보고 고른다 | ❌ |
+| 멈춘 발행 정리 | `spring.modulith.events.staleness.*` — `PUBLISHED` · `PROCESSING` · `RESUBMITTED`에서 오래 멈춘 발행(처리 중 프로세스가 죽은 건 등)을 `FAILED`로 바꿔 재제출 대상에 넣는다 | ❌ 설정값만 |
+| 포기 건 알림 | 재제출 횟수가 상한을 넘은 건수를 ERROR 로그와 지표로 | 조회 1개 |
+| 수동 재처리 | `FailedEventPublications.resubmit(ResubmissionOptions)` — 원인을 고친 뒤 운영자가 `FAILED` 건을 다시 보낸다 | 호출 1줄 |
 
 **완료 기준:** 발행 직후 프로세스를 죽여도 재기동 후 전달된다. 4종 이벤트마다 알림 1건이 생긴다. 중복 발행해도 1건이다.
 
@@ -445,27 +461,58 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 
 ### PH-15. 만기 — 감지 · MATURED 전이 · 원리금 · 만기해지 API
 
-- 영업일 기준 만기 감지 → `ACTIVE → MATURED`. `batch.api.CobStep` 구현체로 등록하고, 체인 자리는 [PH-43](#ph-43-cob-파이프라인)이 정한다. 스텝은 자기 트랜잭션을 연다.
-- `AccountMatured` 이벤트 발행(PH-32 타입, 2차 알림 소비 없음)
-- 만기해지 API: 원리금 계산(PH-12) → 출금계좌 입금(PH-99의 `transfer.api` 입금 계약) → CLOSED. `LedgerPair`는 transfer 내부라 직접 쓰지 않는다.
-- **만기해지 날짜 검증(후속 PH-15 필수):** COB에서 `nextBusinessDay(COB_DATE)` 기준으로 `MATURED` 선전환하더라도, 실제 만기해지 시 `MATURED` 상태와 `maturity_date <= 달력상 현재일(KST)`을 모두 확인한다. 계좌 잠금 이후에도 날짜 조건을 재검증하며, 계약 만기일 이전에는 만기 원리금 지급을 허용하지 않는다.
-- 만기해지 시 이자가 있으면 `INTEREST`로 세후이자를 상품 계좌에 기표한 뒤 `MATURITY`로 원리금 전액을 고객 계좌에 이체한다. 상품 계좌 잔액 0원을 확인한 뒤 동일 트랜잭션에서 `CLOSED`로 전이한다. 기표·조회 순서는 [transfer_seam.md](transfer_seam.md) §8을 따르며, 원장 합계 정합성은 PH-15 통합 테스트에서 검증한다.
-- 기존 계좌 상세 API(`GET /api/v1/accounts/{accountId}`)에 nullable `maturityDate`를 추가한다(Expand → FE B-3). 계좌 상태는 기존 `status` 필드로 `MATURED`를 반환한다.
-- 만기 처리 단건 비용을 재서 P5 COB 시간에 합산한다.
-- **범위 밖:** 만기후이율(MATURED 이후 이자 없음)
-- **완료 기준:** 원리금 오차 0. MATURED 계좌가 신규 거래 대상에서 빠진다.
-- **진행 현황(2026-10-19, #633):** 만기 감지 COB 스텝(`order=3`)과 `ACTIVE → MATURED` 상태 전이 구현. `nextBusinessDay(COB_DATE)` 기준 만기 대상 조회, keyset 페이지 처리, 청크별 트랜잭션 및 재실행 멱등성 검증을 포함한다.
-- **만기 감지 상태 정책(#633):** `ACTIVE` 예·적금만 자동으로 `MATURED`로 전이한다.
-  `SUSPENDED`·`DORMANT` 계좌는 현재 상태를 유지하며, 만기일이 지났더라도 이번 COB 스텝의 조회 대상에는 포함하지 않는다. 정지·휴면 해제 이후 만기 처리 방식은 PH-16에서 확정한다.
-- **진행 현황(2026-10-20, #671):** `AccountMatured` 이벤트 발행, 계좌 상태 전이 감사 이력 저장, 계좌 상세 API `maturityDate` 확장을 구현 중이다.
-  - `AccountMatured`는 `account.api`의 `DomainEvent` 구현체이며, `refId = accountId`, `status = SUCCESS`, `errorCode = null`을 사용한다(P1 협의).
-  - 실제 `ACTIVE → MATURED` 전이(`markMatured() == true`)에서만 `ApplicationEventPublisher`로 이벤트를 발행한다. 기존 `MATURED` 계좌 재처리 시 이벤트를 다시 발행하지 않는다.
-  - 별도 `account_status_history` 테이블에 변경 전·후 상태, 계약 만기일, 만기 전이 기준일, 실제 처리 시각, 발생 원인(`COB`)을 기록한다.
-  - 계좌 상태 변경·감사 이력 저장·이벤트 발행은 같은 청크 트랜잭션 안에서 처리한다.
-  - Spring Modulith 전환(#437)을 기다리지 않고 기존 이벤트 발행 계약을 사용한다. 2차에는 `AccountMatured` 알림 소비자를 구현하지 않는다.
-  - 계좌 상세 응답에 nullable `maturityDate`를 추가하고, 기존 `status` 필드 및 응답 구조는 유지한다(Expand).
+**목적:** COB에서 만기도래 예·적금 계좌를 `MATURED`로 전환하고, 고객 요청 시 원리금을 출금계좌로 지급한 뒤 상품 계좌를 `CLOSED`로 종료한다.
 
-- **후속 PH-15 작업:** 만기 원리금 계산·이자 및 세금 기표·고객 계좌로 원리금 이동·만기해지 API·`MATURED → CLOSED` 전이. 실제 만기해지는 계좌 잠금 이후에도 `maturity_date <= 달력상 현재일(KST)`를 재검증한다. #671 완료와 PH-15 전체 완료는 구분한다.
+#### 1. 만기 감지 및 상태 전이 (#633)
+
+- `batch.api.CobStep`의 `order=3` 만기 감지 스텝에서 `nextBusinessDay(COB_DATE)`를 기준으로 만기 대상을 조회한다. 체인 순서는 [PH-43](#ph-43-cob-파이프라인) 계약을 따른다.
+- `ACTIVE` 예·적금 계좌만 `ACTIVE → MATURED`로 전이한다. `SUSPENDED`·`DORMANT` 계좌는 기존 상태를 유지하며, 정지·휴면 해제 이후 처리 정책은 PH-16에서 확정한다.
+- keyset 페이지 조회와 청크별 트랜잭션을 사용한다. 동일 영업일 재실행 시 이미 `MATURED`인 계좌는 중복 전이하지 않는다.
+- 실제 상태 전이(`markMatured() == true`)에서만 `AccountMatured` 이벤트를 발행한다. 이벤트는 `account.api`의 `DomainEvent` 구현체이며 `refId=accountId`, `status=SUCCESS`, `errorCode=null`을 사용한다.
+- `account_status_history`에 변경 전·후 상태, 계약 만기일, 전이 기준 영업일, 처리 시각, 발생 원인(`COB`)을 기록한다.
+- 상태 변경·감사 이력 저장·이벤트 발행은 같은 청크 트랜잭션에서 처리한다. 2차에서는 `AccountMatured` 알림 소비자를 구현하지 않는다.
+
+#### 2. 계좌 조회 및 FE 연동 (#671)
+
+- `GET /api/v1/accounts/{accountId}` 응답에 nullable `maturityDate`를 추가하고, 기존 `status` 필드로 `MATURED` 상태를 반환한다.
+- 기존 응답 구조를 유지하는 Expand 방식으로 적용한다.
+- FE B-3은 `status`와 `maturityDate`를 이용해 만기 안내를 표시한다. 실제 해지 가능 여부는 서버의 만기해지 검증 결과를 기준으로 판단한다.
+
+#### 3. 고객 만기해지 API (#685)
+
+- **엔드포인트:** `POST /api/v1/accounts/{accountId}/maturity-termination`. 로그인 세션, CSRF, `Idempotency-Key`, `Account-Password-Auth-Token`이 필요하다.
+- **인증:** 해지할 상품 계좌의 비밀번호를 `POST /api/v1/accounts/{accountId}/password/verify`로 검증하여 300초 유효한 일회용 인증 토큰을 발급받는다. 고객·계좌에 묶인 토큰을 만기해지 서비스에서 검증·소비한다. OTP는 이번 범위에 포함하지 않는다.
+- **사전 조건:** 가입 상태 `SUCCESS`, 고객 소유 예·적금 계좌의 `MATURED` 상태와 `maturity_date <= KST 달력상 현재일`을 확인한다. 가입 당시 지정한 수취 계좌는 본인 소유의 `ACTIVE` 입출금 계좌이며 출금계좌로 등록돼 있어야 한다. 종료 시 상품 계좌를 잠금 조회하여 만기일·상태·잔액 조건을 재검증한다.
+- **만기 처리 방식:** `maturity_handling=TRANSFER`만 지원한다. `RENEW`(자동 재예치)는 거부하며 재예치 처리는 후속 작업으로 분리한다.
+- **처리 순서:** 영업일 gate 획득 → 사전 검증 → 비밀번호 인증 토큰 검증·소비 → PH-14 `InterestPaymentUseCase.pay()`로 이자 계산·지급(세후이자가 있으면 `INTEREST` 원장 및 `INT` GL 기표) → 상품 계좌의 최신 잔액 조회 → `LedgerDepositUseCase.transferBetween(..., MATURITY, ...)`로 원리금 전액 이체 → 잠금 후 수취 계좌 소유권·상태·출금계좌 등록 여부 재검증 → `MATURITY` GL 전표 기표 → 상품 계좌 잠금 조회 및 만기일·상태·잔액 0 재검증 → `MATURED → CLOSED` 전이 및 감사 이력(`trigger_type=CUSTOMER`) 저장.
+- **원금 계산:** 이자 지급 후 조회한 상품 계좌의 실제 잔액에서 세후이자를 차감하여 원금을 산출한다. 최종 이체금액은 원금과 세후이자의 합계다.
+- **정기예금 원금 정합성(#685):** 이자 지급 후 실제 계좌 잔액에서 세후이자를 차감한 원금이 가입 당시 `product_subscription.subscription_amount`와 일치하는지 검증한다. 계약 원금이 누락·비정상적이거나 금액이 불일치하면 이체 전에 `CMN` 내부 정합성 오류로 거부하고 같은 트랜잭션의 이자 지급을 롤백한다.
+- **정기적금 원금 정합성(후속 검증):** `subscription_amount`는 가입 시 약정한 납입액으로, 여러 회차의 누적 납입 원금과 같지 않다. 따라서 정기예금의 계약 원금 단순 비교를 적용하지 않는다. 정기적금은 실제 납입 원장의 입금·출금·정정 내역을 기준으로 누적 원금을 산출하고, 이자 지급 후 잔액에서 세후이자를 차감한 원금과 대조해야 한다. 미납·지연 납입 및 정정 거래를 포함한 검증과 통합 테스트는 미완료 후속 작업으로 관리한다.
+- **원장 계약:** PH-99의 `transfer.api.LedgerDepositUseCase`를 사용하며 `LedgerPair`를 직접 생성하지 않는다. 만기해지 원장은 상품 계좌 출금 1행과 고객 계좌 입금 1행, 총 2행이다. 기표·조회 순서는 [transfer_seam.md](transfer_seam.md) §8을 따른다.
+- **GL 계약(#714):** `GlTxType.MATURITY`(`MAT`)로 차변 `20100` 예수금과 대변 `20100` 예수금에 원리금 이체금액을 동일하게 기표한다. `referenceKey`와 `tradeDate`는 `transferBetween()` 결과의 `transactionNumber()`·`tradeDate()`를 그대로 사용한다. 세전이자와 원천세는 별도 `INT` 전표에서 처리하며 `MAT` 전표에 중복 기표하지 않는다.
+- **트랜잭션:** 이자 지급·원리금 이체·GL 기표·계좌 종료·감사 이력을 동일 트랜잭션에서 처리한다. 금융 처리 실패 시 변경사항을 롤백한다. 계좌비밀번호 토큰 소비는 별도 저장소 정책을 따르므로 실패 후 재인증이 필요할 수 있다.
+- **멱등성:** 동일 멱등키·동일 요청의 완료 결과는 최초 응답을 재생한다. 다른 키로 재요청하더라도 계좌 상태와 이자 지급 이력을 이용해 중복 지급을 방지한다.
+
+#### 4. 검증 및 완료 조건
+
+- [x] COB 만기 감지·`ACTIVE → MATURED` 전이·청크 처리·재실행 멱등성 검증 (#633).
+- [x] `AccountMatured` 이벤트 발행, 상태 전이 감사 이력, 계좌 상세 `maturityDate` 확장 (#671).
+- [x] 고객 만기해지 API, 계좌비밀번호 인증, `RENEW` 거부, 원리금 이체 및 `MATURED → CLOSED` 전이 구현 (#685).
+- [x] PH-14 이자 지급 계약 재사용 및 #714의 `MATURITY` GL 기표 계약 반영.
+- [x] 2026-10-22 만기해지 서비스 단위 테스트 12개·DB 통합 테스트 6개 통과. 정상 지급·`MATURITY` 분개, 중복·동시 요청의 단일 지급, 계좌 종료·감사 이력 실패 시 롤백, `RENEW` 거부를 검증했다.
+- [x] 2026-10-23 전체 `./gradlew test` 통과(실패 0건). 검증 결과는 #685 PR에 기록.
+- [ ] 정기적금 실제 납입 원장 기준 누적 원금 정합성 검증. 다회 납입·미납·지연 납입·정정 거래 시나리오 테스트 및 결과 기록.
+- [ ] 원리금 계산 오차 0원 및 `MATURED` 계좌의 일반 신규 거래 제한 최종 검증 결과 기록.
+- [ ] 만기 감지 단건 처리 비용 측정 및 P5 COB 전체 처리 시간에 합산.
+
+#### 5. 범위 밖 및 후속 작업
+
+- `MATURED` 이후 만기후이율 적용 및 추가 이자 지급은 이번 범위에 포함하지 않는다.
+- `RENEW` 자동 재예치, 정지·휴면 해제 후 만기 처리 정책은 별도 후속 작업에서 다룬다.
+- FE 연동 계약은 [PH-15 만기해지 API 인계 문서](maturity_termination_fe_handoff.md)를 따른다.
+- FE B-3 화면 연동 완료 여부는 BE PH-15 구현과 별도로 관리한다.
+
+**진행 현황(2026-10-22):** #633·#671 기반 기능 구현 완료. #685 만기해지·원리금 지급·GL 연동 구현 및 서비스 단위 테스트 12개, DB 통합 테스트 6개, 전체 `./gradlew test` 통과. 원리금 최종 정합성 검증과 COB 단건 비용 측정은 후속으로 남아 있다.
 
 ### PH-14. 이자 지급 · 원천징수
 
@@ -761,7 +808,7 @@ TransferExecutionService.execute(command)                         ← 편집자:
  │   }
  └─ failTransfer() REQUIRES_NEW { tradeDate = gate로 읽기; ERROR 저장; publishEvent(new TransferSettled(...)) }
 
-[BEFORE_COMMIT 리스너 — P1 PH-96] 아웃박스 INSERT (JdbcTemplate). 예외 → 원본 롤백
+[Spring Modulith — P1 PH-96] 구독 AFTER_COMMIT 리스너(PH-96-②)마다 EVENT_PUBLICATION 1행을 같은 커밋에 남긴다 (ADR-0010)
 ```
 
 | 훅 | 인터페이스 | 등록자 | 트랜잭션 |
@@ -1065,7 +1112,9 @@ public interface CobStep {
 - 일별 수신 잔액 추이, 상품별 가입/해지(`GL_READ`). 채널별 거래량은 뺐다([D-28](README.md#d-28--1015--p3)). 응답 스키마는 [info_mart.md](info_mart.md) §5다.
 - **모든 응답에 `asOf` 필드**(빠짐없이 적재가 끝난 마지막 기준일, `yyyy-MM-dd`. [info_mart.md](info_mart.md) §5-4)가 있고 개인정보는 없다. p95·p99를 기록한다.
 - 온프레미스 정보계 API는 VPN 안쪽에서만 받는다. 브라우저는 평소처럼 ALB → WAS로 요청하고, WAS가 세션과 `GL_READ`를 확인한 뒤 VPN으로 온프레미스 API를 부른다(`adapter/out` 어댑터). 온프레미스 API는 인터넷에 공개하지 않는다.
-- 배포 형태(corebank 이미지 + 프로필 / 별도 앱)는 착수 전에 정한다.
+- 배포 형태(corebank 이미지 + 프로필 / 별도 앱)는 ②(#704) 착수 전에 정한다.
+- **둘로 나눠 진행한다.** ① Swagger 스텁(#675, 10/28): 두 경로를 열고 마트가 준비되기 전에는 적재 이력 없음 응답(`asOf` null, 빈 목록)을 돌려준다. 입력 기간 규칙(`CMN0003`·`CMN0004`)은 스텁에서도 적용한다. ② 마트 조회와 온프레미스 정보계 API(#704): 마트 환경(#691)과 VM(#698)이 선행이다.
+- VPN은 새 계정의 VPC에만 연결되고 기존 계정의 EC2는 터널 밖이다(10/22 확인). WAS → 온프레미스 정보계 API의 실제 호출 확인은 컷오버(10/27) 이후 새 구조의 WAS에서만 한다.
 
 ### PH-45. COB 병렬화 · #365
 

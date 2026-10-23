@@ -3,6 +3,7 @@
 - 상태: 수락됨 (2026-10-06)
 - 관련: 이슈 #540(PH-85), `docs/phase2/mentor_proposal.md` 범위 결정, `docs/phase2/tasks.md`
   §PH-85·PH-96·PH-51, PR #543·#557(CobStep·러너), PR #505(아웃박스 발행측 골격)
+- 보완: [ADR-0010](0010-outbox-spring-modulith-event-publication-registry.md)이 §2 아웃박스의 구현 방법을 Spring Modulith Event Publication Registry로 바꾼다
 - 번호: 0004는 COB 스텝 순서 결정(P5.md, 10/3)이 먼저 썼고, domain-contract-surface(#495,
   D-26)는 아직 미작성이라 0006으로 넘어간다 — 세 ADR 번호 충돌 정리는 PR #563 코멘트 참고
 

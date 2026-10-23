@@ -37,13 +37,13 @@ CREATE DATABASE IF NOT EXISTS minicore_ph60
 Git Bash:
 
 ```bash
-./gradlew bootRun --args='--spring.profiles.active=phase2-seed --app.phase2-seed.minimum.execute=true --spring.datasource.url=jdbc:mysql://localhost:3306/minicore_ph60?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true --spring.datasource.username=root --spring.datasource.password=localpw --spring.jpa.hibernate.ddl-auto=validate --spring.data.redis.host=localhost --spring.main.web-application-type=none --spring.task.scheduling.enabled=false --spring.devtools.restart.enabled=false'
+./gradlew bootRun --args='--spring.profiles.active=phase2-seed --app.phase2-seed.minimum.execute=true --spring.datasource.url=jdbc:mysql://localhost:3306/minicore_ph60?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true --spring.datasource.username=root --spring.datasource.password=localpw --spring.jpa.hibernate.ddl-auto=validate --spring.main.web-application-type=none --spring.task.scheduling.enabled=false --spring.devtools.restart.enabled=false'
 ```
 
 Windows PowerShell:
 
 ```powershell
-.\gradlew.bat bootRun --args="--spring.profiles.active=phase2-seed --app.phase2-seed.minimum.execute=true --spring.datasource.url=jdbc:mysql://localhost:3306/minicore_ph60?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true --spring.datasource.username=root --spring.datasource.password=localpw --spring.jpa.hibernate.ddl-auto=validate --spring.data.redis.host=localhost --spring.main.web-application-type=none --spring.task.scheduling.enabled=false --spring.devtools.restart.enabled=false"
+.\gradlew.bat bootRun --args="--spring.profiles.active=phase2-seed --app.phase2-seed.minimum.execute=true --spring.datasource.url=jdbc:mysql://localhost:3306/minicore_ph60?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true --spring.datasource.username=root --spring.datasource.password=localpw --spring.jpa.hibernate.ddl-auto=validate --spring.main.web-application-type=none --spring.task.scheduling.enabled=false --spring.devtools.restart.enabled=false"
 ```
 
 Git Bash에서는 JDBC URL의 `&`가 셸 명령 구분자로 해석되지 않도록 `--args` 전체를 작은따옴표로 감싼다. 위 `root`와 `localpw`는 `compose.yaml`의 기본 로컬 계정 기준이며, 로컬 설정을 바꿨다면 실제 값으로 교체한다.
@@ -173,7 +173,7 @@ P6는 시드와 실행 절차를 넘기고, 운영 실행자는 실제 적재 �
 
 1. FE·QA·다른 트랙과 점검 시간을 합의하고, 적재 중에는 성능 측정이나 대량 테스트를 실행하지 않는다.
 2. `/home/ubuntu/corebank/docker-compose.yml`의 `corebank-server.image`가 main에 배포한 이미지 태그인지 확인한다.
-3. 같은 Compose 서비스에 운영 RDS·Flyway·Redis 접속 환경변수가 들어 있는지 확인한다. 일회성 컨테이너는 이 값을 그대로 상속하므로 DB 비밀번호를 명령행에 직접 적지 않는다.
+3. 같은 Compose 서비스에 운영 RDS·Flyway 접속 환경변수가 들어 있는지 확인한다. 일회성 컨테이너는 이 값을 그대로 상속하므로 DB 비밀번호를 명령행에 직접 적지 않는다.
 4. 실행 직전 RDS 자동 백업 또는 수동 스냅샷의 완료 상태를 확인한다.
 5. 운영 DB에 접속해 아래 현재 건수 쿼리를 실행하고 결과를 작업 기록에 남긴다. 처음 적재한다면 모두 `0`이어야 한다. 하나라도 `0`이 아니면 이전 실행 여부부터 확인하고 바로 재실행하지 않는다.
 

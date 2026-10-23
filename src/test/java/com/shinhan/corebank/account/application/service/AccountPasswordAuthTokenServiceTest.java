@@ -48,7 +48,7 @@ class AccountPasswordAuthTokenServiceTest {
     }
 
     @Test
-    @DisplayName("고객 기준 검증 입력값이 없으면 Redis를 호출하지 않는다")
+    @DisplayName("고객 기준 검증 입력값이 없으면 토큰 저장소를 호출하지 않는다")
     void rejectsMissingCustomerVerificationInput() {
         assertInvalidToken(() -> service.verifyAndConsume((String) null, 1L));
         assertInvalidToken(() -> service.verifyAndConsume(" ", 1L));

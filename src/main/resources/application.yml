@@ -32,15 +32,16 @@ spring:
       pool:
         # COB(23:30)가 대사로 길어져도 00:10 자동이체 등 다른 @Scheduled가 같은 스레드를 기다리지 않게 한다 (#604)
         size: 2
-  data:
-    redis:
-      port: 6379
+  modulith:
+    events:
+      # 리스너가 성공하면 발행 기록을 지운다. 남아 있는 행이 곧 아직 전달되지 않은 이벤트다 (#437)
+      completion-mode: delete
+      jdbc:
+        schema-initialization:
+          # EVENT_PUBLICATION 은 Flyway 가 만든다
+          enabled: false
 
 management:
-  health:
-    redis:
-      # provider=jdbc면 Redis가 내려가도 UP이어야 한다. redis일 때만 RedisEphemeralStoreHealthConfiguration이 넣는다.
-      enabled: false
   metrics:
     distribution:
       percentiles-histogram:
@@ -56,11 +57,6 @@ springdoc:
       header-name: X-XSRF-TOKEN
 
 app:
-  # 일회성 토큰·OTP 발급 잠금·약관 열람 이력 저장소 (#580). jdbc(MySQL) | redis
-  # PH-101-② 측정 A'/B' 전환과 장애 시 복귀용. 환경 변수는 APP_EPHEMERALSTORE_PROVIDER.
-  # 바꾸면 이전 저장소에 발급된 토큰(최대 30분)은 쓸 수 없어 진행 중이던 사용자는 인증을 다시 받는다.
-  ephemeral-store:
-    provider: jdbc
   security:
     admin:
       # 관리자 세션 무조작 만료. 고객은 server.servlet.session.timeout(10m)을 그대로 쓴다 (admin_auth.md ④).

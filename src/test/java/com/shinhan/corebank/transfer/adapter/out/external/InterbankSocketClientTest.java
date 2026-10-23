@@ -177,6 +177,14 @@ class InterbankSocketClientTest {
         assertThat(notSent.outcome()).isEqualTo(InterbankOutcome.NOT_PROCESSED);
     }
 
+    // 내림하면 1ms 미만이 남았을 때 0이 되어 마감 전에 끊는다 — CI에서 499ms로 깨진 원인(#724)
+    @ParameterizedTest(name = "남은 {0}ns → {1}ms")
+    @CsvSource({"1, 1", "600000, 1", "1000000, 1", "1000001, 2", "499600000, 500"})
+    @DisplayName("소켓 대기 시간은 남은 시간을 올림해 마감 전에 끝나지 않는다")
+    void soTimeoutMillis_roundsUpSoReadNeverEndsBeforeDeadline(long remainingNanos, int expectedMillis) {
+        assertThat(InterbankSocketClient.soTimeoutMillis(remainingNanos)).isEqualTo(expectedMillis);
+    }
+
     // 요청은 모의 대외기관에 그대로 넘기고, 받은 응답은 chunks 조각으로 나눠 gap마다 흘려보낸다.
     private ServerSocket trickleRelay(int chunks, Duration gap) throws IOException {
         ServerSocket relay = new ServerSocket(0);

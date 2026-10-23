@@ -206,7 +206,6 @@ jobs:
                 - DB_PASSWORD=DB_PASSWORD_PLACEHOLDER
                 - FLYWAY_USER=FLYWAY_USER_PLACEHOLDER
                 - FLYWAY_PASSWORD=FLYWAY_PASSWORD_PLACEHOLDER
-                - REDIS_HOST=corebank-redis
                 # 타행이체 모의 대외기관 (B 단계, #697). 위치는 설정값뿐이라 컷오버 뒤에는 VM 주소로만 바꾼다.
                 - APP_INTERBANK_HOST=mock-external
                 - APP_INTERBANK_PORT=9300
@@ -217,23 +216,6 @@ jobs:
                 timeout: 5s
                 retries: 12
                 start_period: 600s  # 릴리스 1 gl_voucher 마이그레이션(#585)용 임시 상향, 배포 뒤 60s로 복귀 (#629)
-              networks:
-                - corebank-net
-              depends_on:
-                corebank-redis:
-                  condition: service_healthy
-
-            # 약관 열람 이력 TTL 저장용 Redis (내부 네트워크 전용, 포트 미노출)
-            corebank-redis:
-              image: redis:7.4
-              container_name: corebank-redis
-              restart: unless-stopped
-              healthcheck:
-                test: ["CMD", "redis-cli", "ping"]
-                interval: 5s
-                timeout: 3s
-                retries: 10
-                start_period: 5s
               networks:
                 - corebank-net
 

@@ -178,7 +178,7 @@ class SignupTermsServiceTest {
     }
 
     @Test
-    @DisplayName("검증 실패 시 토큰을 생성하거나 Redis에 저장하지 않는다")
+    @DisplayName("검증 실패 시 토큰을 생성하거나 저장하지 않는다")
     void doesNotIssueTokenWhenValidationFails() {
         assertThatThrownBy(() -> signupTermsService.checkTermsAgreement(
                         command(agreement("1", "v1.0", true, true), agreement("2", "v1.0", false, true))))
