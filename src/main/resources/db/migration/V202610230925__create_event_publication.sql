@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202610212013__create_event_publication.sql
+-- V202610230925__create_event_publication.sql
 -- 대상 테이블: EVENT_PUBLICATION (신규, 소유 P1)
 --
 -- 주의: Flyway 적용 후에는 이 파일을 수정하지 마십시오 (체크섬 불변).
