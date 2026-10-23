@@ -4,7 +4,7 @@
 
 OTP 인증이 필요한 업무 모듈은 OTP의 토큰 저장소, JPA Entity 및 내부 Service를 직접 참조하지 않습니다.
 
-> **토큰 저장소 (#580).** `otpAuthToken`·`accountPasswordAuthToken`은 MySQL `auth_token` 테이블에 토큰 원문 대신 SHA-256 해시로 저장합니다. 기본값은 `app.ephemeral-store.provider=jdbc`이고, PH-101-② 판정 전까지만 `redis`로 바꿔 예전 Redis 저장소로 되돌릴 수 있습니다(환경 변수 `APP_EPHEMERALSTORE_PROVIDER`). 판정을 통과하면 Redis 구현은 지웁니다.
+> **토큰 저장소 (#580).** `otpAuthToken`·`accountPasswordAuthToken`은 MySQL `auth_token` 테이블에 토큰 원문 대신 SHA-256 해시로 저장합니다.
 
 각 업무 모듈의 OTP Adapter에서 `otp.api`가 공개한 다음 타입만 사용합니다.
 ```java
@@ -18,7 +18,6 @@ import com.shinhan.corebank.otp.api.OtpTransactionType;
 ```text
 otp.domain.model.OtpAuthTokenPayload
 otp.application.port.out.OtpAuthTokenStorePort
-otp.adapter.out.redis.OtpAuthTokenRedisAdapter
 otp.adapter.out.persistence.*
 ```
 
@@ -126,7 +125,7 @@ otpAuthTokenVerifier.verifyAndConsume(
 - 업무가 커밋되면 토큰은 다시 쓸 수 없습니다. 같은 토큰으로 동시에 들어온 요청은 행 잠금으로 줄을 서고, 한 건만 성공합니다.
 - 트랜잭션 밖에서 소비하는 업무(예: 즉시이체)는 소비가 바로 커밋됩니다. 그 뒤 실패하면 토큰은 돌아오지 않으므로 인증을 다시 받아야 합니다.
 
-소비된 토큰을 저장소에 **손으로 다시 넣는 보상 처리는 쓰지 않습니다.** 토큰 재사용과 동시성 위험을 만들기 때문입니다. 위의 롤백은 DB 트랜잭션이 소비를 되돌리는 것이라 보상 처리가 아닙니다. `provider=redis`로 되돌린 동안에는 Redis 소비가 트랜잭션에 묶이지 않아, 롤백돼도 소비된 토큰이 돌아오지 않습니다(#580 이전 동작).
+소비된 토큰을 저장소에 **손으로 다시 넣는 보상 처리는 쓰지 않습니다.** 토큰 재사용과 동시성 위험을 만들기 때문입니다. 위의 롤백은 DB 트랜잭션이 소비를 되돌리는 것이라 보상 처리가 아닙니다.
 
 ---
 

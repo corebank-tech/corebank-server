@@ -59,7 +59,7 @@ public class OtpIssueService implements IssueOtpUseCase {
             if (remainingNanos <= 0) {
                 break;
             }
-            // 동일 고객의 동시 요청이 Redis를 고정 간격으로 두드리지 않도록
+            // 동일 고객의 동시 요청이 잠금 테이블을 고정 간격으로 두드리지 않도록
             // 최대 200ms의 지수 backoff와 jitter를 적용한다.
             long waitNanos = Math.min(remainingNanos, jitteredWaitNanos(retryIntervalNanos));
             LockSupport.parkNanos(waitNanos);

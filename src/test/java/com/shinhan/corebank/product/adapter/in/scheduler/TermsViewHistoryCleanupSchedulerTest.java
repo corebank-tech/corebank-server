@@ -1,8 +1,9 @@
-package com.shinhan.corebank.product.adapter.out.persistence;
+package com.shinhan.corebank.product.adapter.in.scheduler;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.product.adapter.out.persistence.TermsViewHistoryPersistenceAdapter;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.AfterEach;

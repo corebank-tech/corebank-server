@@ -62,7 +62,7 @@ public class AuthTokenStore {
         return repository.findPayload(tokenHash, purpose).map(json -> deserialize(json, payloadType));
     }
 
-    // Redis Lua의 문자열 비교와 같다. payload 컬럼이 utf8mb4_bin이라 대소문자까지 구분한다.
+    // 저장 값과 바이트 단위로 같아야 일치한다. payload 컬럼이 utf8mb4_bin이라 대소문자까지 구분한다.
     @Transactional
     public boolean consumeIfMatches(AuthTokenPurpose purpose, String token, Object expectedPayload) {
         if (isBlank(token)) {

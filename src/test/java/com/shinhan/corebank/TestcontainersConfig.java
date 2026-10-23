@@ -1,6 +1,5 @@
 package com.shinhan.corebank;
 
-import org.springframework.boot.data.redis.autoconfigure.DataRedisConnectionDetails;
 import org.springframework.boot.jdbc.autoconfigure.JdbcConnectionDetails;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -30,16 +29,6 @@ class TestcontainersConfig {
             @Override
             public String getPassword() {
                 return namespace.password();
-            }
-        };
-    }
-
-    @Bean
-    DataRedisConnectionDetails redisConnectionDetails(SharedTestContainers.Namespace namespace) {
-        return new DataRedisConnectionDetails() {
-            @Override
-            public Standalone getStandalone() {
-                return Standalone.of(namespace.redisHost(), namespace.redisPort(), namespace.redisDatabase());
             }
         };
     }
