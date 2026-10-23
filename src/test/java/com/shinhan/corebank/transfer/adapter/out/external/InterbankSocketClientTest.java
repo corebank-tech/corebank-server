@@ -137,15 +137,25 @@ class InterbankSocketClientTest {
     @Test
     @DisplayName("응답이 조금씩 나눠 와 전문 전체 수신이 응답 대기 시간을 넘으면 그때 끊고 UNKNOWN이다")
     void send_responseTrickledPastTimeout_isUnknown() throws Exception {
-        // 조각 사이 간격(100ms)은 응답 대기(500ms)보다 짧고, 다 받는 데는 1초가 걸린다
-        try (ServerSocket relay = trickleRelay(10, Duration.ofMillis(100))) {
+        // 조각 사이 간격(100ms)은 응답 대기(500ms)보다 짧고, 다 받는 데는 2.5초가 걸린다
+        try (ServerSocket relay = trickleRelay(30, Duration.ofMillis(100))) {
+            InterbankSocketClient client = client(relay.getLocalPort(), 100);
             long start = System.nanoTime();
-            InterbankReply reply = client(relay.getLocalPort(), 100).send(request("1234567890123"));
+            InterbankReply reply = client.send(request("1234567890123"));
             long elapsedMillis = (System.nanoTime() - start) / 1_000_000;
 
             assertThat(reply.outcome()).isEqualTo(InterbankOutcome.UNKNOWN);
-            assertThat(elapsedMillis).isBetween(RESPONSE_TIMEOUT.toMillis(), 900L);
+            // 상한은 CI 지연을 감안하되 전체 수신 시간보다는 짧게 둔다
+            assertThat(elapsedMillis).isBetween(RESPONSE_TIMEOUT.toMillis(), 2_000L);
         }
+    }
+
+    // 내림하면 1ms 미만이 남았을 때 0이 되어 마감 전에 끊는다 — CI에서 499ms로 깨진 원인(#724)
+    @ParameterizedTest(name = "남은 {0}ns → {1}ms")
+    @CsvSource({"1, 1", "600000, 1", "1000000, 1", "1000001, 2", "499600000, 500"})
+    @DisplayName("소켓 대기 시간은 남은 시간을 올림해 마감 전에 끝나지 않는다")
+    void soTimeoutMillis_roundsUpSoReadNeverEndsBeforeDeadline(long remainingNanos, int expectedMillis) {
+        assertThat(InterbankSocketClient.soTimeoutMillis(remainingNanos)).isEqualTo(expectedMillis);
     }
 
     // 요청은 모의 대외기관에 그대로 넘기고, 받은 응답은 chunks 조각으로 나눠 gap마다 흘려보낸다.

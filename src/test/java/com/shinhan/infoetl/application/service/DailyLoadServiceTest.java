@@ -12,9 +12,11 @@ import com.shinhan.infoetl.application.port.out.LoadLockPort;
 import com.shinhan.infoetl.application.port.out.MartLoadPort;
 import com.shinhan.infoetl.application.port.out.ReplicaBalancePort;
 import com.shinhan.infoetl.application.port.out.ReplicaCalendarPort;
+import com.shinhan.infoetl.application.port.out.ReplicaCutoffPort;
 import com.shinhan.infoetl.application.port.out.ReplicaEventPort;
 import com.shinhan.infoetl.application.port.out.ReplicaReconciliationPort;
 import com.shinhan.infoetl.domain.BalanceRow;
+import com.shinhan.infoetl.domain.CutoffMissingException;
 import com.shinhan.infoetl.domain.EventType;
 import com.shinhan.infoetl.domain.LedgerMismatchException;
 import com.shinhan.infoetl.domain.LoadAlreadyRunningException;
@@ -42,6 +44,7 @@ class DailyLoadServiceTest {
     private final FakeMartLoadPort martPort = new FakeMartLoadPort();
     private final FakeLock lockPort = new FakeLock();
     private final FakeCalendar calendar = new FakeCalendar();
+    private CutoffPolicy cutoffPolicy = CutoffPolicy.disabled();
     private final FakeReconciliation reconciliation = new FakeReconciliation();
 
     @Test
@@ -142,6 +145,7 @@ class DailyLoadServiceTest {
                 baseDate -> List.of(),
                 reconciliation,
                 calendar,
+                cutoffPolicy,
                 martPort,
                 lockPort,
                 pseudonymizer);
@@ -201,6 +205,7 @@ class DailyLoadServiceTest {
                 baseDate -> List.of(),
                 reconciliation,
                 calendar,
+                cutoffPolicy,
                 martPort,
                 failingLock,
                 pseudonymizer);
@@ -257,6 +262,49 @@ class DailyLoadServiceTest {
     }
 
     @Test
+    @DisplayName("경계일 이후 기준일인데 cutoff가 없으면 락도 적재 기록도 남기지 않고 거부한다")
+    void missingCutoffAfterBoundaryIsRejectedWithoutAnyRecord() {
+        cutoffPolicy = CutoffPolicy.enabled(D, new FakeCutoff());
+
+        assertThatThrownBy(() -> service(oneBalance(), List.of()).load(D)).isInstanceOf(CutoffMissingException.class);
+
+        assertThat(martPort.startedBaseDate).isNull();
+        assertThat(lockPort.acquired).isFalse();
+    }
+
+    @Test
+    @DisplayName("경계일 이후 기준일이라도 cutoff가 있으면 적재한다")
+    void closedCutoffAfterBoundaryLoads() {
+        cutoffPolicy = CutoffPolicy.enabled(D, new FakeCutoff(D));
+
+        service(oneBalance(), List.of()).load(D);
+
+        assertThat(martPort.startedBaseDate).isEqualTo(D);
+    }
+
+    @Test
+    @DisplayName("경계일 이전 기준일은 cutoff가 없어도 적재한다")
+    void beforeBoundaryLoadsWithoutCutoff() {
+        cutoffPolicy = CutoffPolicy.enabled(D.plusDays(1), new FakeCutoff());
+
+        service(oneBalance(), List.of()).load(D);
+
+        assertThat(martPort.startedBaseDate).isEqualTo(D);
+    }
+
+    @Test
+    @DisplayName("--rebuild로 다시 만들 때도 경계일 이후 cutoff가 필요하다")
+    void rebuildAfterBoundaryAlsoNeedsCutoff() {
+        martPort.completedBeforeLoad = Set.of(D);
+        cutoffPolicy = CutoffPolicy.enabled(D, new FakeCutoff());
+
+        assertThatThrownBy(() -> service(oneBalance(), List.of()).load(D, true))
+                .isInstanceOf(CutoffMissingException.class);
+
+        assertThat(martPort.startedBaseDate).isNull();
+    }
+
+    @Test
     @DisplayName("레플리카에서 읽은 원장 합계를 마트 반영에 넘기고 GL 증감 읽기도 연결한다")
     void passesLedgerTotalAndGlReaderToPublish() {
         reconciliation.ledgerTotal = 300L;
@@ -301,11 +349,30 @@ class DailyLoadServiceTest {
         ReplicaBalancePort balancePort = baseDate -> balances;
         ReplicaEventPort eventPort = baseDate -> events;
         return new DailyLoadService(
-                balancePort, eventPort, reconciliation, calendar, martPort, lockPort, pseudonymizer);
+                balancePort, eventPort, reconciliation, calendar, cutoffPolicy, martPort, lockPort, pseudonymizer);
     }
 
     private static List<BalanceRow> oneBalance() {
         return List.of(new BalanceRow(1L, 11L, "DEMAND_DEPOSIT", null, null, 300L));
+    }
+
+    private static final class FakeCutoff implements ReplicaCutoffPort {
+
+        private final Set<LocalDate> closed;
+
+        FakeCutoff(LocalDate... closedDates) {
+            this.closed = Set.of(closedDates);
+        }
+
+        @Override
+        public boolean isClosed(LocalDate baseDate) {
+            return closed.contains(baseDate);
+        }
+
+        @Override
+        public java.util.Optional<LocalDate> latestClosedDate() {
+            return closed.stream().max(LocalDate::compareTo);
+        }
     }
 
     private static final class FakeReconciliation implements ReplicaReconciliationPort {

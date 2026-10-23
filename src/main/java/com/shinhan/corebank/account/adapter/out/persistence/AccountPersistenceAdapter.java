@@ -1,6 +1,7 @@
 package com.shinhan.corebank.account.adapter.out.persistence;
 
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
+import com.shinhan.corebank.account.application.port.out.MaturityAccountSnapshot;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
@@ -80,6 +81,11 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
         entity.updatePasswordState(account);
 
         return AccountMapper.toDomain(accountJpaRepository.saveAndFlush(entity));
+    }
+
+    @Override
+    public Optional<MaturityAccountSnapshot> findMaturityAccountSnapshot(Long accountId, Long customerId) {
+        return accountJpaRepository.findMaturityAccountSnapshot(accountId, customerId);
     }
 
     private Account saveNewAccount(Account account) {

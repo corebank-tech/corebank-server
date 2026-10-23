@@ -627,4 +627,78 @@ class AccountTest {
         // then
         assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
     }
+
+    @Test
+    @DisplayName("만기 원리금 이체 후 계좌를 CLOSED로 전이하고 거래일을 저장한다")
+    void closeMatured_success() {
+        Account account = maturityAccount(0L, AccountStatus.MATURED);
+
+        LocalDateTime closedAt = LocalDateTime.of(2026, 10, 22, 9, 0);
+        LocalDate tradeDate = LocalDate.of(2026, 10, 21);
+
+        account.closeMatured(closedAt, tradeDate);
+
+        assertThat(account.getStatus()).isEqualTo(AccountStatus.CLOSED);
+        assertThat(account.getClosedDate()).isEqualTo(closedAt);
+        assertThat(account.getClosedTradeDate()).isEqualTo(tradeDate);
+        assertThat(account.getBalance()).isZero();
+    }
+
+    @Test
+    @DisplayName("MATURED가 아닌 계좌는 만기해지할 수 없다")
+    void closeMatured_rejectsActiveAccount() {
+        Account account = maturityAccount(0L, AccountStatus.ACTIVE);
+
+        assertThatThrownBy(() -> account.closeMatured(LocalDateTime.of(2026, 10, 22, 9, 0), LocalDate.of(2026, 10, 22)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AccountErrorCode.INVALID_ACCOUNT_STATUS));
+    }
+
+    @Test
+    @DisplayName("원리금 잔액이 남으면 만기해지를 거부한다")
+    void closeMatured_rejectsRemainingBalance() {
+        Account account = maturityAccount(10_000L, AccountStatus.MATURED);
+
+        assertThatThrownBy(() -> account.closeMatured(LocalDateTime.of(2026, 10, 22, 9, 0), LocalDate.of(2026, 10, 22)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AccountErrorCode.MATURITY_BALANCE_NOT_ZERO));
+    }
+
+    @Test
+    @DisplayName("계약 만기일 전에 만기해지할 수 없다")
+    void closeMatured_rejectsBeforeMaturityDate() {
+        Account account = maturityAccount(0L, AccountStatus.MATURED);
+
+        assertThatThrownBy(() -> account.closeMatured(LocalDateTime.of(2026, 10, 20, 9, 0), LocalDate.of(2026, 10, 20)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(AccountErrorCode.MATURITY_DATE_NOT_REACHED));
+    }
+
+    private Account maturityAccount(long balance, AccountStatus status) {
+        return Account.reconstitute(
+                11L,
+                "088200000001",
+                CUSTOMER_ID,
+                10L,
+                AccountType.TIME_DEPOSIT,
+                balance,
+                status,
+                PASSWORD_HASH,
+                0,
+                false,
+                null,
+                null,
+                false,
+                null,
+                LocalDateTime.of(2026, 1, 1, 10, 0),
+                LocalDate.of(2026, 10, 21),
+                null,
+                null,
+                VERSION,
+                CREATED_AT,
+                UPDATED_AT);
+    }
 }

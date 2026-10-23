@@ -96,8 +96,7 @@ public class SessionLoginManager {
      * 관리자 권한을 로그인 때 한 번 읽어 세션 authority 로 싣는다. 인가는 SecurityConfig 의
      * {@code hasAuthority} 가 이것만 보므로 요청마다 DB 를 읽지 않는다.
      *
-     * <p>대신 권한을 거둬도 이미 로그인한 세션에서는 유지된다. 즉시 끊어야 하면 권한 행만 지우지 말고
-     * SessionRegistry 로 그 관리자의 세션을 만료시킨다.
+     * <p>권한 회수 후 기존 세션을 즉시 끊으려면 JDBC 세션 무효화 계약을 사용한다.
      */
     private List<GrantedAuthority> authoritiesOf(LoginResult loginResult) {
         String roleAuthority = "ROLE_" + loginResult.role().name();

@@ -20,7 +20,11 @@ public enum GlTxType {
     /** 타행이체 송신 요청(PH-33-②). 예수금을 미결제타점권으로 옮긴다. */
     INTERBANK_TRANSFER("IBT"),
     /** 타행이체 확정 해소. 송신 요청 전표와 같은 거래번호를 참조 키로 쓴다. */
-    INTERBANK_SETTLEMENT("IBS");
+    INTERBANK_SETTLEMENT("IBS"),
+    /** 만기해지 원리금 이체(PH-15). 상품 계좌에서 고객 계좌로 옮긴 원장 거래번호를 참조 키로 쓴다. */
+    MATURITY("MAT"),
+    /** 중도해지 원리금 이체(PH-16). 상품 계좌에서 고객 계좌로 옮긴 원장 거래번호를 참조 키로 쓴다. */
+    TERMINATION("TRM");
 
     /** 전표번호 가운데 3자리. docs/phase2/gl_journal_patterns.md §1. */
     private final String voucherCode;

@@ -27,4 +27,6 @@ public interface ProductSubscriptionJpaRepository extends JpaRepository<ProductS
             """)
     List<ProductSubscriptionJpaEntity> findAllByCustomerIdAndProductIdForUpdate(
             @Param("customerId") Long customerId, @Param("productId") Long productId);
+
+    Optional<ProductSubscriptionJpaEntity> findByAccountIdAndCustomerId(Long accountId, Long customerId);
 }

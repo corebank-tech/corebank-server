@@ -67,7 +67,7 @@ public class LoginPasswordChangeService implements ChangeLoginPasswordUseCase {
 
         auditLogService.record(
                 customer.customerId(), null, AuditEventType.LOGIN_PASSWORD_CHANGE, command.requestIp(), true, Map.of());
-        // 롤백 시 세션을 유지하도록 AFTER_COMMIT 리스너가 처리할 이벤트만 발행한다.
+        // BEFORE_COMMIT 리스너가 같은 트랜잭션에서 세션을 삭제하므로 롤백 시 세션도 유지된다.
         eventPublisher.publishEvent(new LoginPasswordChangedEvent(customer.customerId()));
         return new ChangeLoginPasswordResult(
                 customer.customerId(), now.atZone(clock.getZone()).toOffsetDateTime());
