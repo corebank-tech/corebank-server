@@ -85,9 +85,9 @@ public interface LedgerEntryJpaRepository extends JpaRepository<LedgerEntryJpaEn
     ), 0)
     FROM LedgerEntryJpaEntity l
     WHERE l.accountId = :accountId
-      AND l.transactionType <> 'INTEREST'
+      AND l.transactionType <> :interestType
     """)
-    Long sumNetAmountExcludingInterest(@Param("accountId") Long accountId);
+    Long sumNetAmountExcludingInterest(@Param("accountId") Long accountId, @Param("interestType") String interestType);
 
     interface AccountLedgerSumProjection {
         Long getAccountId();

@@ -108,6 +108,9 @@ public class MaturityTerminationService implements MaturityTerminationUseCase {
             }
         } else {
             // 정기적금: 실제 원장상 누적 원금과 비교
+            // 현재는 만기 시 1회 이자 지급을 전제한다.
+            // 중간 이자 지급을 지원하면 과거 INTEREST 누적액도
+            // 실제 원금 산출에서 제외하도록 계산식을 변경해야 한다.
             long ledgerPrincipal = ledgerPrincipalBalanceQuery.sumNetAmountExcludingInterest(accountId);
 
             if (ledgerPrincipal < 0 || principal != ledgerPrincipal) {
