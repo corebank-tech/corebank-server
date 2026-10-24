@@ -28,6 +28,14 @@ public class ProductSubscriptionPersistenceAdapter
     }
 
     @Override
+    public Optional<ProductSubscription> findByAccountIdAndCustomerId(Long accountId, Long customerId) {
+
+        return productSubscriptionJpaRepository
+                .findByAccountIdAndCustomerId(accountId, customerId)
+                .map(ProductSubscriptionMapper::toDomain);
+    }
+
+    @Override
     public ProductSubscription save(ProductSubscription subscription) {
         ProductSubscriptionJpaEntity saved =
                 productSubscriptionJpaRepository.save(ProductSubscriptionMapper.toEntity(subscription));

@@ -14,4 +14,6 @@ public final class CustomerAuthenticationData {
     private final String userName;
     private final int loginFailureCount;
     private final boolean accountLocked;
+    // 계정 구분. 문자열로 넘기면 호출하는 쪽이 오타를 컴파일에서 못 잡는다.
+    private final CustomerRole role;
 }

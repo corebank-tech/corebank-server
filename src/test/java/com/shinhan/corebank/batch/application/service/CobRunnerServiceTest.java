@@ -1,11 +1,14 @@
 package com.shinhan.corebank.batch.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -16,6 +19,8 @@ import com.shinhan.corebank.batch.api.CobStep;
 import com.shinhan.corebank.batch.api.CobStepHaltException;
 import com.shinhan.corebank.business.api.BusinessDateAdvancer;
 import com.shinhan.corebank.business.api.BusinessDateProvider;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -27,6 +32,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.PessimisticLockingFailureException;
 
 @ExtendWith(MockitoExtension.class)
 class CobRunnerServiceTest {
@@ -48,8 +55,10 @@ class CobRunnerServiceTest {
     @Mock
     BatchExecutionHistoryPort batchExecutionHistoryPort;
 
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+
     private CobStep stepOf(String name, int order) {
-        CobStep step = org.mockito.Mockito.mock(CobStep.class);
+        CobStep step = mock(CobStep.class);
         when(step.name()).thenReturn(name);
         when(step.order()).thenReturn(order);
         return step;
@@ -72,6 +81,7 @@ class CobRunnerServiceTest {
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
                 CLOCK,
+                meterRegistry,
                 List.of(third, first, second));
 
         service.run(COB_DATE.plusDays(10));
@@ -97,6 +107,7 @@ class CobRunnerServiceTest {
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
                 CLOCK,
+                meterRegistry,
                 List.of(step));
 
         service.run(COB_DATE);
@@ -119,12 +130,97 @@ class CobRunnerServiceTest {
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
                 CLOCK,
+                meterRegistry,
                 List.of(step));
 
         service.run(COB_DATE.minusDays(1));
 
         verify(businessDateAdvancer, never()).advanceFrom(any());
         verify(step, never()).run(any());
+        verify(batchExecutionLockPort).release(JOB_NAME);
+    }
+
+    private static CannotAcquireLockException deadlock() {
+        return new CannotAcquireLockException("deadlock", new SQLException("deadlock", "40001", 1213));
+    }
+
+    private CobRunnerService serviceWith(CobStep step) {
+        return new CobRunnerService(
+                batchExecutionLockPort,
+                businessDateProvider,
+                businessDateAdvancer,
+                batchExecutionHistoryPort,
+                CLOCK,
+                meterRegistry,
+                List.of(step));
+    }
+
+    @Test
+    @DisplayName("영업일 전환이 락 충돌로 쫓겨나면 다시 시도하고, 성공하면 스텝을 이어서 실행한다")
+    void run_advanceLosesLockConflict_retriesThenRunsSteps() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE))
+                .thenThrow(deadlock())
+                .thenThrow(deadlock())
+                .thenReturn(NEXT_BUSINESS_DATE);
+        CobStep step = stepOf("step", 1);
+
+        serviceWith(step).run(COB_DATE.plusDays(10));
+
+        verify(businessDateAdvancer, times(3)).advanceFrom(COB_DATE);
+        verify(step).run(COB_DATE);
+        verify(batchExecutionLockPort).release(JOB_NAME);
+    }
+
+    @Test
+    @DisplayName("락 충돌이 계속되면 3번째에서 포기하고 스텝은 실행하지 않지만 락은 반납한다")
+    void run_advanceKeepsLosingLockConflict_givesUpAfterThreeAttempts() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenThrow(deadlock());
+        CobStep step = stepOf("step", 1);
+        CobRunnerService service = serviceWith(step);
+
+        assertThatThrownBy(() -> service.run(COB_DATE.plusDays(10)))
+                .isInstanceOf(PessimisticLockingFailureException.class);
+
+        verify(businessDateAdvancer, times(3)).advanceFrom(COB_DATE);
+        verify(step, never()).run(any());
+        verify(batchExecutionLockPort).release(JOB_NAME);
+    }
+
+    @Test
+    @DisplayName("락 대기 시간 초과는 다시 시도하지 않고 바로 던진다")
+    void run_advanceLockWaitTimeout_isNotRetried() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE))
+                .thenThrow(new CannotAcquireLockException(
+                        "timeout", new SQLException("lock wait timeout", "HY000", 1205)));
+        CobStep step = stepOf("step", 1);
+        CobRunnerService service = serviceWith(step);
+
+        assertThatThrownBy(() -> service.run(COB_DATE.plusDays(10)))
+                .isInstanceOf(PessimisticLockingFailureException.class);
+
+        verify(businessDateAdvancer, times(1)).advanceFrom(COB_DATE);
+        verify(step, never()).run(any());
+        verify(batchExecutionLockPort).release(JOB_NAME);
+    }
+
+    @Test
+    @DisplayName("락 충돌이 아닌 예외는 다시 시도하지 않고 바로 던진다")
+    void run_advanceThrowsOtherException_isNotRetried() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenThrow(new IllegalStateException("future date"));
+        CobStep step = stepOf("step", 1);
+        CobRunnerService service = serviceWith(step);
+
+        assertThatThrownBy(() -> service.run(COB_DATE.plusDays(10))).isInstanceOf(IllegalStateException.class);
+
+        verify(businessDateAdvancer, times(1)).advanceFrom(COB_DATE);
         verify(batchExecutionLockPort).release(JOB_NAME);
     }
 
@@ -140,6 +236,7 @@ class CobRunnerServiceTest {
                         businessDateAdvancer,
                         batchExecutionHistoryPort,
                         CLOCK,
+                        meterRegistry,
                         List.of(a, b)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("order 중복");
@@ -164,6 +261,7 @@ class CobRunnerServiceTest {
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
                 CLOCK,
+                meterRegistry,
                 List.of(first, second));
 
         service.run(COB_DATE.plusDays(10));
@@ -192,6 +290,7 @@ class CobRunnerServiceTest {
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
                 CLOCK,
+                meterRegistry,
                 List.of(first, second));
 
         service.run(COB_DATE.plusDays(10));
@@ -215,6 +314,7 @@ class CobRunnerServiceTest {
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
                 CLOCK,
+                meterRegistry,
                 List.of(step));
 
         service.run(COB_DATE.plusDays(10));
@@ -240,6 +340,7 @@ class CobRunnerServiceTest {
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
                 CLOCK,
+                meterRegistry,
                 List.of(step));
 
         service.run(COB_DATE.plusDays(10));
@@ -266,6 +367,7 @@ class CobRunnerServiceTest {
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
                 CLOCK,
+                meterRegistry,
                 List.of(first, second));
 
         service.run(COB_DATE.plusDays(10));
@@ -281,6 +383,125 @@ class CobRunnerServiceTest {
                         eq("불일치 임계 초과"));
         verify(batchExecutionHistoryPort, never())
                 .record(eq(JOB_NAME), eq("second"), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("스텝이 성공하면 step·SUCCESS 태그로 카운터·소요시간이 1건씩 쌓인다 (#541)")
+    void run_stepSucceeds_recordsStepMetrics() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+
+        CobStep step = stepOf("step", 1);
+        CobRunnerService service = new CobRunnerService(
+                batchExecutionLockPort,
+                businessDateProvider,
+                businessDateAdvancer,
+                batchExecutionHistoryPort,
+                CLOCK,
+                meterRegistry,
+                List.of(step));
+
+        service.run(COB_DATE.plusDays(10));
+
+        assertThat(meterRegistry
+                        .get("cob.step.count")
+                        .tags("step", "step", "status", "SUCCESS")
+                        .counter()
+                        .count())
+                .isEqualTo(1.0);
+        assertThat(meterRegistry
+                        .get("cob.step.duration")
+                        .tag("step", "step")
+                        .timer()
+                        .count())
+                .isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("스텝이 실패(soft)하면 FAILURE 태그로 카운터가 쌓인다 (#541)")
+    void run_stepFails_recordsFailureMetric() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+
+        CobStep step = stepOf("step", 1);
+        org.mockito.Mockito.doThrow(new IllegalStateException("boom"))
+                .when(step)
+                .run(COB_DATE);
+        CobRunnerService service = new CobRunnerService(
+                batchExecutionLockPort,
+                businessDateProvider,
+                businessDateAdvancer,
+                batchExecutionHistoryPort,
+                CLOCK,
+                meterRegistry,
+                List.of(step));
+
+        service.run(COB_DATE.plusDays(10));
+
+        assertThat(meterRegistry
+                        .get("cob.step.count")
+                        .tags("step", "step", "status", "FAILURE")
+                        .counter()
+                        .count())
+                .isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("스텝이 중단(hard)되면 중단된 스텝만 HALTED 태그로 카운터가 쌓이고, 생략된 스텝은 0으로 남는다 (#541)")
+    void run_stepHalts_recordsHaltedMetric_forHaltedStepOnly() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+
+        CobStep first = stepOf("first", 1);
+        CobStep second = stepOf("second", 2);
+        org.mockito.Mockito.doThrow(new CobStepHaltException("불일치 임계 초과"))
+                .when(first)
+                .run(COB_DATE);
+        CobRunnerService service = new CobRunnerService(
+                batchExecutionLockPort,
+                businessDateProvider,
+                businessDateAdvancer,
+                batchExecutionHistoryPort,
+                CLOCK,
+                meterRegistry,
+                List.of(first, second));
+
+        service.run(COB_DATE.plusDays(10));
+
+        assertThat(meterRegistry
+                        .get("cob.step.count")
+                        .tags("step", "first", "status", "HALTED")
+                        .counter()
+                        .count())
+                .isEqualTo(1.0);
+        assertThat(meterRegistry.find("cob.step.count").tags("step", "second").counters().stream()
+                        .mapToDouble(counter -> counter.count())
+                        .sum())
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("COB가 한 번도 안 돌아도 스텝 × 상태 3종의 카운터와 스텝별 타이머가 0으로 등록돼 있다 (#541)")
+    void constructor_registersStepMetricsAtZero() {
+        CobStep first = stepOf("first", 1);
+        CobStep second = stepOf("second", 2);
+
+        new CobRunnerService(
+                batchExecutionLockPort,
+                businessDateProvider,
+                businessDateAdvancer,
+                batchExecutionHistoryPort,
+                CLOCK,
+                meterRegistry,
+                List.of(first, second));
+
+        assertThat(meterRegistry.find("cob.step.count").counters()).hasSize(6);
+        assertThat(meterRegistry.find("cob.step.duration").timers()).hasSize(2);
+        assertThat(meterRegistry.find("cob.step.count").counters())
+                .allSatisfy(counter -> assertThat(counter.count()).isZero());
     }
 
     @Test
@@ -301,6 +522,7 @@ class CobRunnerServiceTest {
                 businessDateAdvancer,
                 batchExecutionHistoryPort,
                 CLOCK,
+                meterRegistry,
                 List.of(first, second));
 
         service.run(COB_DATE.plusDays(10));

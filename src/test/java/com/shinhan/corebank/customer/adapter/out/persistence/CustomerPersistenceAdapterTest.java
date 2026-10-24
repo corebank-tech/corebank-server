@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
 import com.shinhan.corebank.customer.domain.model.CustomerStatus;
@@ -52,6 +53,8 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 3,
                 false,
                 CustomerStatus.ACTIVE,
+                // 컬럼 기본값이 CUSTOMER 라서, 기본값과 다른 ADMIN 으로 저장해야 role 매핑 누락이 조회에서 드러난다.
+                CustomerRole.ADMIN,
                 lastLoginAt,
                 "127.0.0.1",
                 previousLoginAt,
@@ -80,6 +83,7 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(foundCustomer.getPhoneNumber()).isEqualTo("01012345678");
         assertThat(foundCustomer.getLoginFailureCount()).isEqualTo(3);
         assertThat(foundCustomer.isAccountLocked()).isFalse();
+        assertThat(foundCustomer.getRole()).isEqualTo(CustomerRole.ADMIN);
         assertThat(foundCustomer.getLastLoginAt()).isEqualTo(lastLoginAt);
         assertThat(foundCustomer.getLastLoginIp()).isEqualTo("127.0.0.1");
         assertThat(foundCustomer.getPreviousLoginAt()).isEqualTo(previousLoginAt);
@@ -363,6 +367,7 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 3,
                 false,
                 CustomerStatus.ACTIVE,
+                CustomerRole.CUSTOMER,
                 LocalDateTime.of(2026, 8, 10, 9, 0),
                 "127.0.0.1",
                 LocalDateTime.of(2026, 8, 9, 9, 0),
@@ -386,6 +391,7 @@ class CustomerPersistenceAdapterTest extends IntegrationTestSupport {
                 0,
                 false,
                 CustomerStatus.ACTIVE,
+                CustomerRole.CUSTOMER,
                 null,
                 null,
                 null,

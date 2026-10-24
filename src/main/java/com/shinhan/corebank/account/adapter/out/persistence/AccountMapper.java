@@ -26,6 +26,7 @@ public final class AccountMapper {
                 .openedDate(domain.getOpenedDate())
                 .maturityDate(domain.getMaturityDate())
                 .closedDate(domain.getClosedDate())
+                .closedTradeDate(domain.getClosedTradeDate())
                 .lastTransactionAt(domain.getLastTransactionAt())
                 .version(domain.getVersion())
                 .build();
@@ -51,6 +52,7 @@ public final class AccountMapper {
                 entity.getOpenedDate(),
                 entity.getMaturityDate(),
                 entity.getClosedDate(),
+                entity.getClosedTradeDate(),
                 entity.getLastTransactionAt(),
                 entity.getVersion(),
                 entity.getCreatedAt(),

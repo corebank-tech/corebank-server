@@ -12,6 +12,7 @@ import com.shinhan.corebank.transfer.domain.LedgerPair;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import jakarta.persistence.EntityManager;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Transactional
 class LedgerPersistenceAdapterTest extends IntegrationTestSupport {
+
+    private static final LocalDate TRADE_DATE = LocalDate.of(2026, 8, 12);
 
     @Autowired
     private LedgerPersistenceAdapter adapter;
@@ -47,7 +50,8 @@ class LedgerPersistenceAdapterTest extends IntegrationTestSupport {
                 "이체출금",
                 "이체입금",
                 TransferChannel.WB,
-                LocalDateTime.now());
+                LocalDateTime.now(),
+                TRADE_DATE);
 
         // when
         adapter.save(pair);
@@ -75,6 +79,9 @@ class LedgerPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(deposit.getBalanceAfter()).isEqualTo(110000L);
         assertThat(withdrawal.getTransferId()).isEqualTo(500L);
         assertThat(deposit.getTransferId()).isEqualTo(500L);
+        assertThat(withdrawal.getTradeDate()).isEqualTo(TRADE_DATE);
+        assertThat(deposit.getTradeDate()).isEqualTo(TRADE_DATE);
+        assertThat(LedgerEntryMapper.toDomain(withdrawal).getTradeDate()).isEqualTo(TRADE_DATE);
     }
 
     private static final String ORIGINAL_TXNO = "20260812WB0000000548";
@@ -93,7 +100,8 @@ class LedgerPersistenceAdapterTest extends IntegrationTestSupport {
                 "이체출금",
                 "이체입금",
                 TransferChannel.WB,
-                ORIGINAL_AT));
+                ORIGINAL_AT,
+                TRADE_DATE));
         entityManager.flush();
         entityManager.clear();
     }
@@ -107,7 +115,8 @@ class LedgerPersistenceAdapterTest extends IntegrationTestSupport {
                 100000L,
                 100000L,
                 TransferChannel.BT,
-                ORIGINAL_AT.plusDays(1));
+                ORIGINAL_AT.plusDays(1),
+                TRADE_DATE);
     }
 
     @Test
@@ -190,7 +199,8 @@ class LedgerPersistenceAdapterTest extends IntegrationTestSupport {
                 "INTEREST",
                 "이자",
                 TransferChannel.BT,
-                LocalDateTime.of(2026, 10, 23, 3, 0));
+                LocalDateTime.of(2026, 10, 23, 3, 0),
+                TRADE_DATE);
 
         // when
         adapter.saveCredit(credit);
@@ -208,5 +218,87 @@ class LedgerPersistenceAdapterTest extends IntegrationTestSupport {
         assertThat(saved.getAmount()).isEqualTo(20000L);
         assertThat(saved.getBalanceAfter()).isEqualTo(120000L);
         assertThat(saved.getTransactionType()).isEqualTo("INTEREST");
+        assertThat(saved.getTradeDate()).isEqualTo(TRADE_DATE);
+    }
+
+    private LedgerEntry interbankDebit(String transactionNumber) {
+        return LedgerEntry.forDebit(
+                900L,
+                transactionNumber,
+                101L,
+                50000L,
+                50000L,
+                "INTERBANK_TRANSFER",
+                "생활비",
+                TransferChannel.WB,
+                LocalDateTime.of(2026, 10, 23, 10, 30, 15),
+                TRADE_DATE);
+    }
+
+    @Test
+    @DisplayName("타행 출금 1행을 저장하면 거래번호로 그 출금 행을 찾는다")
+    void saveDebit_thenFindInterbankDebit() {
+        adapter.saveDebit(interbankDebit("20261023WB0000000201"));
+        entityManager.flush();
+        entityManager.clear();
+
+        LedgerEntry found = adapter.findInterbankDebit("20261023WB0000000201").orElseThrow();
+
+        assertThat(found.getDirection()).isEqualTo(LedgerDirection.WITHDRAWAL);
+        assertThat(found.getAccountId()).isEqualTo(101L);
+        assertThat(found.getTransferId()).isEqualTo(900L);
+        assertThat(found.getLedgerEntryId()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("되돌림은 원 출금에 reversed를 세우고 reversal_id로 원 출금을 가리키는 입금 1행을 남긴다")
+    void saveRefund_marksOriginalReversed_andLinksRefund() {
+        adapter.saveDebit(interbankDebit("20261023WB0000000202"));
+        entityManager.flush();
+        entityManager.clear();
+        LedgerEntry original =
+                adapter.findInterbankDebit("20261023WB0000000202").orElseThrow();
+
+        adapter.saveRefund(
+                LedgerEntry.forRefund(original, 100000L, "타행이체반환", LocalDateTime.of(2026, 10, 23, 10, 40), TRADE_DATE),
+                original);
+        entityManager.flush();
+        entityManager.clear();
+
+        List<LedgerEntryJpaEntity> entries = repository.findByTransactionNumber("20261023WB0000000202");
+        LedgerEntryJpaEntity debit = entries.stream()
+                .filter(e -> e.getDirection() == LedgerDirection.WITHDRAWAL)
+                .findFirst()
+                .orElseThrow();
+        LedgerEntryJpaEntity refund = entries.stream()
+                .filter(e -> e.getDirection() == LedgerDirection.DEPOSIT)
+                .findFirst()
+                .orElseThrow();
+        assertThat(entries).hasSize(2);
+        assertThat(debit.isReversed()).isTrue();
+        assertThat(refund.getReversalId()).isEqualTo(debit.getLedgerEntryId());
+        assertThat(refund.getAccountId()).isEqualTo(101L);
+        assertThat(refund.getAmount()).isEqualTo(50000L);
+        assertThat(adapter.findInterbankDebit("20261023WB0000000202")).isPresent();
+    }
+
+    @Test
+    @DisplayName("이미 되돌린 출금을 다시 되돌리면 TRF0305로 거부한다")
+    void saveRefund_twice_rejected() {
+        adapter.saveDebit(interbankDebit("20261023WB0000000203"));
+        entityManager.flush();
+        entityManager.clear();
+        LedgerEntry original =
+                adapter.findInterbankDebit("20261023WB0000000203").orElseThrow();
+        LedgerEntry refund =
+                LedgerEntry.forRefund(original, 100000L, "타행이체반환", LocalDateTime.of(2026, 10, 23, 10, 40), TRADE_DATE);
+        adapter.saveRefund(refund, original);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThatThrownBy(() -> adapter.saveRefund(refund, original))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
     }
 }

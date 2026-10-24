@@ -1,5 +1,6 @@
 package com.shinhan.corebank.auth.domain.model;
 
+import com.shinhan.corebank.customer.api.CustomerRole;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -14,4 +15,5 @@ public final class LoginCustomer {
     private final String userName;
     private final int loginFailureCount;
     private final boolean accountLocked;
+    private final CustomerRole role;
 }

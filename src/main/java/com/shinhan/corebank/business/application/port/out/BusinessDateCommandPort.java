@@ -11,4 +11,7 @@ public interface BusinessDateCommandPort {
 
     // 락을 거는 읽기 — REPEATABLE READ 스냅샷이 아니라 커밋된 최신 값을 본다
     Optional<LocalDate> findBusinessDateForUpdate(BusinessDateType type);
+
+    // 공유 락을 거는 읽기 — 커밋된 최신 값을 보고, 트랜잭션이 끝날 때까지 COB 의 전환 UPDATE 를 막는다
+    Optional<LocalDate> findBusinessDateForShare(BusinessDateType type);
 }

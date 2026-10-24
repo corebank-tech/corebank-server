@@ -83,7 +83,7 @@ public class SignupCompletionService implements CompleteSignupUseCase {
         try {
             tokenClaimPort.complete(command.tempSignupToken(), claimId);
         } catch (RuntimeException exception) {
-            // MySQL 가입 트랜잭션은 이미 커밋됐다. Redis 정리 실패를 가입 실패로
+            // MySQL 가입 트랜잭션은 이미 커밋됐다. 토큰 정리 실패를 가입 실패로
             // 전파하면 멱등 예약이 삭제돼 성공 응답을 재생할 수 없으므로 만료에 맡긴다.
             log.error("가입 완료 후 임시 회원가입 토큰 정리에 실패했습니다.", exception);
         }

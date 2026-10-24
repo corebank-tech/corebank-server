@@ -20,8 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-// 관리자 대사 불일치 목록(PH-38, FE ADM-04). /admin/** 인가는 SecurityConfig의 임시 허용 목록(#448)이 맡는다.
-// AUDIT_READ 권한은 PH-49a(#572)가 들어오면 붙인다.
+// 관리자 대사 불일치 목록(PH-38, FE ADM-04). 인가는 SecurityConfig 의 경로별 권한 매핑이 AUDIT_READ 로 판정한다.
 @RestController
 @RequestMapping("/admin/ledger-reconciliation")
 @RequiredArgsConstructor
@@ -51,7 +50,7 @@ public class AdminLedgerReconciliationController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "`CMN0102` 관리자 허용 목록 밖",
+                description = "`CMN0102` 권한 없음",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ApiResponse<PageResponse<LedgerReconciliationMismatchResponse>> getMismatches(

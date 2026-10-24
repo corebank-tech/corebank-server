@@ -18,7 +18,7 @@ yyyyMMdd-TTT-NNNNNN        예) 20260922-TRF-000123
 | 조각 | 내용 |
 |---|---|
 | `yyyyMMdd` | **거래일**(`trade_date`). 발생 시각이 아니라 귀속 영업일입니다 |
-| `TTT` | 전표유형 3자 — `OPN` / `TRF` / `SUB` / `INT` / `REV` |
+| `TTT` | 전표유형 3자 — `OPN` / `TRF` / `SUB` / `INT` / `REV` / `IBT` / `IBS` / `MAT` / `TRM` |
 | `NNNNNN` | **(거래일, 유형)당 1부터** 증가하는 6자리 0채움 일련번호 |
 
 전체 19자입니다(`voucher_no VARCHAR(20)`).
@@ -52,7 +52,8 @@ yyyyMMdd-TTT-NNNNNN        예) 20260922-TRF-000123
 6. 금액은 **원 단위 정수**입니다(`BIGINT`).
 7. **`reference_key` 에 원 거래번호를 넣습니다**(PH-24). 원장 2행이 공유하는 `transaction_number` 이고,
    개시 전표는 `OPENING-{yyyyMMdd}` 입니다. `UNIQUE (tx_type, reference_key)` 라 같은 거래를 두 번 기표하면
-   INSERT 가 거부됩니다. 이 키로 원장과 전표를 1:1 로 잇습니다(§5 (7)).
+   INSERT 가 거부됩니다. 이 키로 원장과 전표를 1:1 로 잇습니다(§5 (7)). **예외는 타행이체**입니다 — 원 거래번호
+   하나에 송신 요청 `IBT` 와 확정 해소 `IBS` 두 전표가 붙고, 유형이 달라 유일 제약에 걸리지 않습니다(§3-5).
 
 **1번(차대변 일치)은 DB 제약으로 걸지 않습니다**(PH-21 결정). 서버는 전표 도메인(`gl.domain.Voucher`)이
 저장 전에 거부하고(`GLA9001`), 저장된 뒤의 불일치는 §5 검증 SQL 로 찾습니다. 이유는 셋입니다.
@@ -129,15 +130,130 @@ yyyyMMdd-TTT-NNNNNN        예) 20260922-TRF-000123
 계정 구성은 3-2 와 같습니다. **원 전표를 지우거나 고치지 않고** 새 전표를 세웁니다. 참조 키는 원거래가
 아니라 취소정정 거래 자신의 거래번호입니다. 정상거래(`REPOST`)는 보통 이체와 같아 3-2 `TRF` 로 기표합니다.
 
-### 3-5. 아직 확정되지 않은 패턴
+### 3-5. 타행이체 미결제 2패턴 — `INTERBANK_TRANSFER` / `IBT` · `INTERBANK_SETTLEMENT` / `IBS`
 
-| 패턴 | 소유 | 시점 | 상태 |
+타행이체(PH-33-②, #654)는 상대 은행 응답을 받기 전에 고객 계좌에서 먼저 출금합니다. 결과가 정해질 때까지 그 돈을
+`10200` 미결제타점권에 묶어 두고, 확정되면 비웁니다. `ledger_entry` 에는 고객 계좌 출금 1행만 남고(상대 계좌가
+당행에 없다), 실패로 확정되면 같은 거래번호로 되돌림 입금 1행이 붙습니다.
+
+**송신 요청 (`IBT`)** — 출금과 같은 트랜잭션
+
+| line_no | 계정 | dr_cr | 금액 |
 |---|---|---|---|
-| 이자 지급 2줄 | **P2** (PH-14) | S2 | 미확정. 차 `50100` 이자비용 / 대 `20100` 예수금, 그리고 차 `20100` 예수금 / 대 `20200` 원천세예수금 두 줄 구조로 예정 |
-| 타행 미결제 2패턴 | **P4** (PH-33) | S2 말~S3 | 미확정. `10200` 미결제타점권의 차대 방향을 P4 가 정합니다 |
+| 1 | `20100` 예수금 | DEBIT | 이체금액 (고객 출금) |
+| 2 | `10200` 미결제타점권 | CREDIT | 이체금액 |
 
-**PH-60b 는 이 둘을 만들지 않습니다.** `tx_type` CHECK 에 `INTEREST` 는 있지만 패턴이 확정되지
-않았고, 타행 미결제는 유형 자체가 아직 없습니다(추가하려면 새 V 파일로 CHECK 를 넓혀야 합니다).
+**확정 해소 (`IBS`)** — 성공이면 결제로, 실패면 고객 예수금으로 되돌린다
+
+| 결과 | line_no | 계정 | dr_cr | 금액 |
+|---|---|---|---|---|
+| 성공 | 1 | `10200` 미결제타점권 | DEBIT | 이체금액 |
+| 성공 | 2 | `10100` 현금및현금성자산 | CREDIT | 이체금액 (상대 은행에 결제) |
+| 실패 | 1 | `10200` 미결제타점권 | DEBIT | 이체금액 |
+| 실패 | 2 | `20100` 예수금 | CREDIT | 이체금액 (고객에게 되돌림) |
+
+- 두 전표 모두 **원 거래번호를 참조 키로** 씁니다. 유형이 달라 `(tx_type, reference_key)` 유일 제약에 걸리지 않습니다.
+- 처리 불명(TIMEOUT)인 동안은 `IBT` 만 있어 `10200` 이 대변 잔액입니다. 확정되면 그 거래의 `10200` 순잔액이 0이
+  됩니다. **`10200` 의 남은 대변 잔액 = 아직 확정되지 않은 타행 송신 금액 합계**입니다.
+- 해소 전표의 거래일은 원거래일이 아니라 **확정한 날의 영업일**입니다(정정 거래와 같은 규칙). 조회거래가 다음 날
+  확정하면 두 전표의 거래일이 다릅니다.
+- `10200` 은 정상잔액이 차변인 자산 계정인데 여기서는 대변으로 먼저 쌓였다가 0이 되는 정산 계정으로 씁니다.
+  2차 계정과목 15개에 내국환 채무 계정이 없어 tasks.md 의 지정대로 `10200` 을 썼습니다.
+- 송신 요청은 이체 확장점의 훅 B 가 아니라 타행 서비스가 `gl.api` 를 직접 부릅니다(이자 PH-14 와 같은 방식).
+
+### 3-6. 예·적금 이자 지급 — `INTEREST` / `INT` (PH-14, #687)
+
+PH-15 만기해지와 PH-16 중도해지에서 공통으로 사용하는 이자 지급 분개 패턴이다.
+
+이자·원천세 금액은 PH-12의 `InterestResult(gross, tax, net, appliedRate)`를 그대로 사용한다.
+
+- `gross`: 세전이자
+- `tax`: 원천징수 세금 합계(소득세 + 지방소득세)
+- `net`: 실제 지급할 세후이자
+- 정합식: `gross = tax + net`
+
+**원장 기표**
+
+`net > 0`이면 `LedgerDepositUseCase.credit(accountId, net, INTEREST, channel)`로 상품 계좌에 세후이자를 입금한다.
+
+- 원장 `ledger_entry`: 입금(`DEPOSIT`) 1행
+- 원장 `transaction_type`: `INTEREST`
+- 원장 입금액: `net`
+- GL 전표 유형: `GlTxType.INTEREST` (`INT`)
+- GL `reference_key`: `LedgerDepositResult.transactionNumber`
+- GL `trade_date`: `LedgerDepositResult.tradeDate`
+
+GL 거래일을 별도로 조회하거나 달력 날짜로 계산하지 않는다.
+
+**GL 분개 — 일반과세 이자 지급**
+
+원천세가 있는 경우 전표 1건에 분개 4행을 기록한다.
+
+| line_no | 계정 | dr_cr | 금액 |
+|---|---|---|---|
+| 1 | `50100` 이자비용 | DEBIT | `gross` |
+| 2 | `20100` 예수금 | CREDIT | `gross` |
+| 3 | `20100` 예수금 | DEBIT | `tax` |
+| 4 | `20200` 원천세예수금 | CREDIT | `tax` |
+
+첫 두 행은 은행의 세전 이자비용과 고객 예금채무 증가를 나타낸다.
+나머지 두 행은 고객 예금채무 일부를 원천세 납부채무로 전환한다.
+
+차변 합계와 대변 합계는 모두 `gross + tax`로 일치한다.
+
+**예시 — 세전이자 10,000원**
+
+| 항목 | 금액 |
+|---|---:|
+| 세전이자 (`gross`) | 10,000원 |
+| 소득세 (14%, 10원 미만 절사) | 1,400원 |
+| 지방소득세 (소득세의 10%, 10원 미만 절사) | 140원 |
+| 원천세 합계 (`tax`) | 1,540원 |
+| 상품 계좌 입금액 (`net`) | 8,460원 |
+
+이 경우 예수금(`20100`) 순증가는 8,460원이고, 원천세예수금(`20200`) 증가는 1,540원이다.
+
+**0원 및 소액 처리**
+
+- `gross = 0`이면 원장과 GL을 기표하지 않지만 `interest_payment` 지급 이력은 1건 저장한다.
+- `gross > 0`, `tax = 0`이면 위 표의 1~2행만 기표한다. 0원 세금 분개를 생성하지 않는다.
+- `gross > 0`, `net = 0`은 현재 지급 서비스에서 오류로 거부한다.
+- 지급액이 0원이어서 원장을 생성하지 않은 경우 이력의 `transaction_number`, `trade_date`는 NULL이다.
+
+**트랜잭션 및 중복 방지**
+
+- `InterestPaymentUseCase.pay()`는 호출자 트랜잭션 안에서만 실행한다(`MANDATORY`).
+- 원장 입금, GL 전표, `interest_payment` 이력을 같은 트랜잭션에서 처리한다.
+- 원장·GL·이력 저장 또는 후속 해지 처리가 실패하면 모두 롤백한다.
+- `interest_payment.account_id`의 UNIQUE 제약으로 계좌당 이자 지급을 최대 1회로 제한한다.
+- 중복 지급은 `PRD0302`로 거부한다. 요청별 멱등키만으로 중복 지급을 판단하지 않는다.
+- PH-15·PH-16은 이 지급 계약을 재사용하고, 이후 원리금 이체 및 `CLOSED` 전이를 동일 트랜잭션에서 수행한다.
+
+**PH-60b 시드 생성기는 이자 지급 전표를 생성하지 않는다.** 이 패턴은 실제 이자 지급 경로에서 사용하며, PH-60b의 기존 시드 패턴 범위는 변경하지 않는다.
+
+### 3-7. 예·적금 원리금 이체 — `MATURITY` / `MAT` · `TERMINATION` / `TRM` (PH-15·PH-16, #713)
+
+만기해지(PH-15)와 중도해지(PH-16)는 `transfer.api.LedgerDepositUseCase.transferBetween()` 으로 상품 계좌의
+원리금을 고객 계좌로 옮깁니다. `ledger_entry` 에 `MATURITY` 또는 `TERMINATION` 2행이 남고 전표 1건이 대응합니다.
+
+| line_no | 계정 | dr_cr | 금액 |
+|---|---|---|---|
+| 1 | `20100` 예수금 | DEBIT | 이체금액 (상품 계좌 측) |
+| 2 | `20100` 예수금 | CREDIT | 이체금액 (고객 계좌 측) |
+
+- **계정 구성은 3-2 와 같고 `tx_type` 만 다릅니다.** 3-3 상품가입과 같은 이유입니다. 원장 `transaction_type` 과
+  전표 유형이 1:1 로 맞아야 전표번호만으로 고객 이체와 해지를 구분할 수 있습니다.
+- 금액은 `transferBetween()` 에 넘긴 원리금(원금과 세후이자의 합)입니다. 세전이자가 있으면 3-6 `INT` 전표가
+  세전이자와 원천세를 이미 나눴으므로 이 전표에서 다시 나누지 않습니다.
+- `reference_key` 는 `transferBetween()` 이 돌려준 `LedgerDepositResult.transactionNumber`, `trade_date` 는 같은
+  결과의 `tradeDate` 입니다. 이자 전표는 `credit()` 의 거래번호를 쓰므로, `INT` 전표가 생긴 해지 건에는 `INT` 와
+  `MAT`(또는 `TRM`) 두 전표가 서로 다른 키로 붙습니다. 세전이자가 0원이면 `INT` 전표 없이 이 전표만 남습니다(3-6).
+- 해지 서비스가 `gl.api.JournalPostingUseCase.post()` 를 직접 부릅니다. 입금 계약은 훅 B 를 부르지 않습니다
+  ([transfer_seam.md](transfer_seam.md) §8 정책 2). `post()` 는 `MANDATORY` 라 이자 지급, 원리금 이체, `CLOSED`
+  전이와 같은 트랜잭션에서 부릅니다.
+- 이 전표가 빠지면 §5 (7) 이 그 원장 거래를 전표 없는 거래로 잡습니다.
+- **범위 밖:** 중도해지 수수료 분개. 수수료를 떼면 `40200` 수수료수익 줄이 필요하므로 PH-16 이 수수료 처리를
+  확정할 때 이 절에 더합니다. PH-60b 시드 생성기는 이 전표를 만들지 않습니다.
 
 ---
 
@@ -178,7 +294,7 @@ GROUP BY voucher_no HAVING COUNT(*) < 2;
 
 -- (4) 전표번호 형식 위반 — 0행이어야 한다
 SELECT voucher_no FROM gl_voucher
-WHERE voucher_no NOT REGEXP '^[0-9]{8}-(OPN|TRF|SUB|INT|REV)-[0-9]{6}$';
+WHERE voucher_no NOT REGEXP '^[0-9]{8}-(OPN|TRF|SUB|INT|REV|IBT|IBS|MAT|TRM)-[0-9]{6}$';
 
 -- (5) 거래일이 전표번호의 날짜와 다른 전표 — 0행이어야 한다
 SELECT voucher_no, trade_date FROM gl_voucher
@@ -193,6 +309,10 @@ WHERE SUBSTRING(voucher_no, 10, 3) <> CASE tx_type
     WHEN 'PRODUCT_SUBSCRIPTION' THEN 'SUB'
     WHEN 'INTEREST'             THEN 'INT'
     WHEN 'REVERSAL'             THEN 'REV'
+    WHEN 'INTERBANK_TRANSFER'   THEN 'IBT'
+    WHEN 'INTERBANK_SETTLEMENT' THEN 'IBS'
+    WHEN 'MATURITY'             THEN 'MAT'
+    WHEN 'TERMINATION'          THEN 'TRM'
     ELSE ''
 END;
 
@@ -205,6 +325,8 @@ WHERE le.transaction_type <> 'OPENING'
 ```
 
 `trade_date` 복제본 불일치는 복합 FK 가 막으므로 별도 쿼리가 필요 없습니다.
+
+운영 데이터에서는 `GET /admin/gl/integrity-check?tradeDate=`가 거래일 단위로 이 중 일부를 대신합니다. (1)과 (3)은 차대변 불일치 전표로 나오고, (7)은 ADR-0009의 대사 대상 유형에 한해 원장 전표 대사와 고아 전표 수로 나옵니다. 고아 전표는 건수만 나옵니다. (2), (4), (5), (6)과 대사 대상이 아닌 유형의 (7)은 이 API가 하지 않으므로 위 SQL로 계속 점검합니다. 대사 대상 유형과 한계는 [ADR-0009](../adr/0009-gl-integrity-controls.md)를 봅니다.
 
 ---
 
@@ -224,3 +346,6 @@ WHERE le.transaction_type <> 'OPENING'
 | 2026-09-27 | PR #491 리뷰 반영 — 거래·전표·분개 수 명시, 개시 전표 1번 ≥ 2번 전제, 검증 SQL (6) 추가 |
 | 2026-10-01 | PH-21 구현 — 차대변 DB 제약을 걸지 않기로 결정(§2), 채번 카운터 `gl_voucher_sequence`(§1) |
 | 2026-10-07 | PH-24 — 참조 키 규칙(§2-7), 취소정정 패턴(§3-4), 검증 SQL (7). `product_gl_mapping` 은 예수금 분리 시 도입 |
+| 2026-10-21 | PH-28b — §5의 (1), (3)과 대사 대상 유형의 (7)을 거래일 단위로 점검하는 `GET /admin/gl/integrity-check` 안내 추가. 나머지는 SQL로 계속 점검 |
+| 2026-10-20 | PH-33-② (#654) — 타행이체 미결제 2패턴(§3-5, `IBT`·`IBS`), 검증 SQL (4)·(6) 유형 추가, 참조 키 1:1 규칙(§2-7)에 타행 예외 |
+| 2026-10-22 | #713 — 예적금 원리금 이체 패턴(§3-7, `MAT`·`TRM`), 검증 SQL (4)·(6) 유형 추가 |

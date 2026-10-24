@@ -256,7 +256,7 @@ class EmailVerificationServiceTest {
                 now.minusMinutes(1));
     }
 
-    // 이메일 변경 토큰 검증에 사용할 Redis payload를 생성한다.
+    // 이메일 변경 토큰 검증에 사용할 저장 payload를 생성한다.
     private EmailVerificationTokenPayload emailChangePayload(String email) {
         return new EmailVerificationTokenPayload(
                 email, EmailVerificationPurpose.EMAIL_CHANGE, LocalDateTime.now(clock));

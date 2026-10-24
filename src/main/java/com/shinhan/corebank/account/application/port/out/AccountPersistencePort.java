@@ -1,6 +1,7 @@
 package com.shinhan.corebank.account.application.port.out;
 
 import com.shinhan.corebank.account.domain.Account;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -30,4 +31,14 @@ public interface AccountPersistencePort {
 
     // afterAccountId보다 큰 계좌를 account_id 오름차순으로 최대 limit개. 비어 있으면 끝이다.
     SortedMap<Long, Long> findBalancesAfter(long afterAccountId, int limit);
+
+    // 만기 감지용 keyset 페이지. 조건에 맞는 계좌 ID만 조회한다.
+    List<Long> findMaturityCandidateIdsAfter(long afterAccountId, LocalDate maturityBaseDate, int limit);
+
+    // 만기 상태 변경 직전에 최신 계좌 상태를 잠금 조회한다.
+    // 반드시 트랜잭션 안에서 호출해야 한다.
+    Optional<Account> findByAccountIdForUpdate(Long accountId);
+
+    // 만기해지 사전 검증용. JPA 관리 엔티티를 올리지 않는다.
+    Optional<MaturityAccountSnapshot> findMaturityAccountSnapshot(Long accountId, Long customerId);
 }

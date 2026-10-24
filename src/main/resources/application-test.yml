@@ -10,3 +10,9 @@ spring:
       # 작으면 일부 스레드가 커넥션을 기다리다 Future#get(30s) 타임아웃이 나는데, 이게 실제
       # 데드락 회귀인지 커넥션 풀 대기인지 구분할 수 없어 워커 수와 맞춰 명시한다.
       maximum-pool-size: 16
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus

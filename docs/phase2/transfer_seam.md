@@ -20,15 +20,15 @@
 execute(command)
  ├─ 멱등성 사전조회 (SCHEDULED·AUTO)
  ├─ verifyBeforeLock      소유 · 동일계좌 · 상품유형 · 계좌비밀번호 토큰
- ├─ 채번 → created 생성    ← 여기부터 실패하면 ERROR 행을 남긴다
+ ├─ 채번 → draft 보관      ← 여기부터 실패하면 ERROR 행을 남긴다. Transfer는 거래일을 읽은 트랜잭션이 만든다
  ├─ preCheckWithoutLock   잔액·상태 스냅샷 (OTP 있는 즉시이체만)
  ├─ [훅 A] TransferPreCheck 체인 (order 오름차순)
  ├─ consumeOtpAuthToken
  └─ postLedger — REQUIRES_NEW 트랜잭션 {
+       tradeDate = BusinessDateGate.acquireSharedAndReadBusinessDate() → Transfer 생성   ← 가장 먼저, 한 건에 한 번 (PH-41, #516, #662)
        한도 적립 → 계좌 락 → 재검증 → transfer INSERT → 잔액 UPDATE
          [자리] PH-90 재검증을 출금가능액(잔액 − 보류액) 기준으로 바꾼다
        executedAt 캡처
-         [자리] PH-41 tradeDate = businessDateProvider.today()
        원장 2행 저장
        [훅 B] LedgerPostingHook.afterLedger(ctx)
        transfer.complete
@@ -36,6 +36,7 @@ execute(command)
        publishEvent(TransferSettled)   ← 즉시·예약·자동 모두. P1 #505, 이후 P4 소유
     }
  실패 시 failTransfer() — REQUIRES_NEW {
+       tradeDate = gate로 읽기 → Transfer 생성
        ERROR 행 저장
        publishEvent(TransferSettled)   ← status=ERROR
     }
@@ -47,7 +48,7 @@ execute(command)
 |---|---|---|---|---|
 | 훅 A | `TransferPreCheck { int order(); void check(TransferPreCheckContext) }` | P2 PH-90 | 없음. 락 이전, 읽기 전용 | `BusinessException` → 이체 ERROR 확정. OTP·한도 소모 없음. 계좌비밀번호 토큰은 `verifyBeforeLock`에서 이미 소비돼 재시도 시 재인증 필요 |
 | 훅 B | `LedgerPostingHook { void afterLedger(LedgerPostingContext) }` | P3 PH-24 | 원장을 기표한 트랜잭션 안. 이체는 REQUIRES_NEW, 상품가입·정정은 호출자 트랜잭션 | 원장·잔액·한도 적립까지 롤백 → 이체 ERROR 확정. 상품가입·정정은 예외가 호출자에게 전파된다 |
-| tradeDate | `business.api.BusinessDateProvider` | 제공 P5 PH-41, 대입 P4 | 같은 트랜잭션 | — |
+| tradeDate | `business.api.BusinessDateGate` | 제공 P5 PH-41·#556, 대입 P4 | 기표·ERROR 기록 트랜잭션 안 | — |
 | 확정 이벤트 | `TransferSettled` — 성공·실패를 `status`로, 이체 종류를 `txType`으로 구분 | 타입·페이로드 P1 PH-32. 발행 코드는 P1이 #505에서 넣었고(EVT-2 대신) | 성공은 기표 REQUIRES_NEW 안, 실패는 `failTransfer()` REQUIRES_NEW 안 | 리스너 예외 → 이체 롤백 |
 
 transfer 행이 생기기 전의 사전검증 실패는 엔진이 발행하지 않습니다. 즉시이체는 고객이 API 응답으로 오류를 받고, 예약·자동이체는 배치가 거래번호 없는 결과일 때와 재확정이 transfer 행을 찾지 못했을 때만 `ScheduledTransferSettled`·`AutoTransferExecutionSettled`를 발행합니다.
@@ -91,7 +92,9 @@ class AvailableBalancePreCheck implements TransferPreCheck {
    **훅 B는 같은 트랜잭션의 DB 쓰기만 합니다.** 롤백이 되돌리는 건 DB뿐이라 외부 호출은 아웃박스(정책 8)로 넘깁니다. 훅 B 실패 시 즉시이체는 OTP가 이미 소비돼 재인증이 필요하고, 배치 이체는 정책 1처럼 ERROR 결과가 멱등키로 남습니다.
 5. **훅 B는 `order()`가 없습니다.** 등록자가 P3 하나뿐입니다. 둘 이상이 필요해지면 P4와 순서 규칙을 먼저 정합니다.
    **훅 B는 원장이 생기는 모든 자리에서 부릅니다**(PH-24). `TransferExecutionService`(즉시·예약·자동) 외에 `ProductSubscriptionDepositService`(상품가입 초입금)와 `TransferCorrectionService`(취소정정 `REVERSAL`·정상거래는 원거래 유형)가 원장 저장 직후 부릅니다. 원장을 새로 쓰는 경로를 만들면 훅 B 호출도 함께 넣어야 합니다 — GL 은 모르는 `txType` 을 예외로 거부합니다(`GLA9009`).
-6. **tradeDate는 `executedAt` 캡처 줄에서 한 번만 구합니다.** 원장(`ledger_entry.trade_date`, #472)·훅 B 컨텍스트·transfer가 같은 값을 씁니다. 훅 B와 원장이 먼저 필요로 하므로 원장 기표보다 앞에 둡니다. 한 이체 안에서 두 번 구하면 마감 경계에서 원장과 전표의 거래일이 갈릴 수 있습니다. PH-41 전까지 훅 B에는 `executedAt`의 달력일이 들어갑니다.
+   **예외: 타행이체(PH-33-②, #654)는 `execute()`를 지나지 않고 훅 B 도 부르지 않습니다.** 상대 계좌가 당행에 없어 원장이 1행이고 분개가 예수금↔미결제타점권이라, 이자처럼 `InterbankTransferService` 가 같은 트랜잭션에서 `gl.api` 를 직접 부릅니다([분개 패턴표](gl_journal_patterns.md) §3-5). 훅 A(`TransferPreCheck`)는 타행도 지납니다.
+6. **tradeDate는 기표 트랜잭션 맨 앞에서 gate로 한 번만 읽어 transfer에 싣습니다(#516, #662).** 트랜잭션 밖에서 `today()`로 미리 읽으면 락을 기다리는 사이 영업일이 넘어가 전환 뒤에 이전 영업일로 커밋됩니다(#648). 원장(`ledger_entry.trade_date`, #472)·훅 B 컨텍스트는 그 transfer에서 꺼내 씁니다. 락 순서는 gate → 한도 → 계좌입니다. 한 이체 안에서 두 번 구하면 마감 경계에서 원장과 전표의 거래일이 갈릴 수 있습니다(같은 트랜잭션의 재호출은 첫 값을 돌려줍니다).
+   **ERROR 행의 거래일도 `failTransfer()` 트랜잭션이 gate로 읽습니다.** 롤백된 기표 트랜잭션의 값을 쓰지 않으므로, 기표 실패와 기록 사이에 영업일이 넘어가면 ERROR 행은 다음 영업일을 받을 수 있습니다(원장이 없어 cutoff 보장과 무관). gate 대기가 락 대기 시간을 넘겨 기록까지 실패하면 ERROR 행 없이 예외가 전파됩니다. 상품가입 입금·입금 계약·정정도 메서드마다 한 번만 구하고, 정정 거래는 원거래일이 아니라 정정한 날의 영업일입니다.
 7. **이벤트는 활성 트랜잭션 안에서 발행합니다.** `@TransactionalEventListener`는 트랜잭션 밖 발행을 받지 않습니다. `AFTER_COMMIT` 리스너는 두지 않습니다(README §3-3).
 8. **아웃박스 리스너는 `BEFORE_COMMIT` + `JdbcTemplate` INSERT입니다.** INSERT가 실패하면 이체도 롤백됩니다. 의도된 동작입니다.
 
@@ -124,7 +127,7 @@ public interface LedgerDepositUseCase {
     // 은행 → 계좌, 원장 1행(상대편은 GL 전표). 이자
     LedgerDepositResult credit(long accountId, long amount, DepositType type, DepositChannel channel);
 }
-record LedgerDepositResult(String transactionNumber, long depositBalanceAfter) {}
+record LedgerDepositResult(String transactionNumber, long depositBalanceAfter, LocalDate tradeDate) {}
 ```
 
 | 메서드 | `type` | 원장 | 돈이 빠지는 계좌 | 돈이 들어가는 계좌 |

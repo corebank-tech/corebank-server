@@ -23,9 +23,13 @@ sourceSets {
         compileClasspath += sourceSets.main.output
         runtimeClasspath += sourceSets.main.output
     }
+    // 정보계 ETL (PH-76). 운영 jar와 따로 빌드·실행하고, main 코드는 쓰지 않는다.
+    infoEtl {}
     test {
         compileClasspath += sourceSets.mockExternal.output
         runtimeClasspath += sourceSets.mockExternal.output
+        compileClasspath += sourceSets.infoEtl.output
+        runtimeClasspath += sourceSets.infoEtl.output
     }
 }
 
@@ -51,12 +55,40 @@ tasks.register('mockExternalJar', Jar) {
     }
 }
 
+tasks.register('runInfoEtl', JavaExec) {
+    group = 'application'
+    description = '정보계 ETL을 실행한다 (PH-76). 인자 예: --args="--base-date=2026-10-20"'
+    classpath = sourceSets.infoEtl.runtimeClasspath
+    mainClass = 'com.shinhan.infoetl.InfoEtlMain'
+}
+
+// VM에 그대로 올리는 실행 파일. MySQL 드라이버를 같이 담는다 — java -jar info-etl.jar
+tasks.register('infoEtlJar', Jar) {
+    group = 'build'
+    description = '정보계 ETL 실행 jar를 만든다 (PH-76)'
+    archiveFileName = 'info-etl.jar'
+    destinationDirectory = layout.buildDirectory.dir('info-etl')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from sourceSets.infoEtl.output
+    from { configurations.infoEtlRuntimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+    manifest {
+        attributes 'Main-Class': 'com.shinhan.infoetl.InfoEtlMain'
+    }
+}
+
 repositories {
     mavenCentral()
 }
 
 ext {
     queryDslVersion = '7.1'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom 'org.springframework.modulith:spring-modulith-bom:2.0.8'
+    }
 }
 
 dependencies {
@@ -70,12 +102,13 @@ dependencies {
     testAnnotationProcessor 'org.projectlombok:lombok'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
+    // Prometheus 포맷으로 메트릭 노출 (PH-47-①, #541)
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
     // JPA + MySQL
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     runtimeOnly 'com.mysql:mysql-connector-j'
-
-    // Redis (약관 열람 이력, TTL 기반)
-    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    infoEtlRuntimeOnly 'com.mysql:mysql-connector-j'
 
     // Querydsl (OpenFeign 포크, io.github.openfeign.querydsl)
     implementation "io.github.openfeign.querydsl:querydsl-jpa:${queryDslVersion}"
@@ -92,8 +125,14 @@ dependencies {
     // Swagger / OpenAPI UI
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
 
+    // 타행 송신 서킷브레이커 (PH-33-②). Boot 4라 스타터 대신 순수 모듈만 쓴다
+    implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.4.0'
+
     // JSON 구조화 로깅 (PH-42)
     implementation 'net.logstash.logback:logstash-logback-encoder:8.0'
+
+    // 이벤트 발행 기록 — 아웃박스 (PH-96, #437)
+    implementation 'org.springframework.modulith:spring-modulith-starter-jdbc'
 
     // 테스트
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
@@ -108,6 +147,8 @@ dependencies {
 
     //세션·인증 필터
     implementation 'org.springframework.boot:spring-boot-starter-security'
+    // 로그인 HttpSession을 모든 WAS가 공유하는 MySQL에 저장한다 (PH-49c).
+    implementation 'org.springframework.boot:spring-boot-starter-session-jdbc'
 
     // 박싱 동일성 검사 (#358)
     errorprone 'com.google.errorprone:error_prone_core:2.49.0'
@@ -133,6 +174,12 @@ tasks.named('test') {
     forkEvery = 0
     systemProperty 'junit.jupiter.execution.parallel.enabled', 'false'
     systemProperty 'spring.test.context.cache.maxSize', '4'
+    // PH-49c 테스트가 같은 MySQL에 연결한 독립 WAS JVM 두 개를 실행한다.
+    systemProperty 'corebank.test.application-classpath', sourceSets.main.runtimeClasspath.asPath
+    // #724: 기본값(SHORT)은 실패 줄 번호만 찍어 CI 로그에 실제 값이 안 남는다
+    testLogging {
+        exceptionFormat = 'full'
+    }
     finalizedBy tasks.named('jacocoTestReport')
 }
 

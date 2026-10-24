@@ -7,6 +7,7 @@ import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferExecuti
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryAggregate;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryQueryPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryRow;
+import com.shinhan.corebank.autotransfer.application.port.out.TransferTradeDatePort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
@@ -18,6 +19,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -37,6 +39,7 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
     private final AutoTransferExecutionHistoryQueryPort autoTransferExecutionHistoryQueryPort;
+    private final TransferTradeDatePort transferTradeDatePort;
     private final Clock clock;
 
     @Override
@@ -66,11 +69,13 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
         // 합성 행(관리자 문의)을 페이지 조회에도 섞어야 해서 DB 페이징에 맡기지 않고 조회기간
         // 전체를 가져와 여기서 직접 정렬·페이징한다 — G-05 화면은 all=true를 보낼 방법이 없어
         // pageable.isUnpaged()에서만 동작하던 기존 구현은 실제로는 한 번도 실행되지 않았다(#442 리뷰)
-        List<AutoTransferExecutionHistoryItem> realItems = autoTransferExecutionHistoryQueryPort
+        List<AutoTransferExecutionHistoryRow> rows = autoTransferExecutionHistoryQueryPort
                 .search(customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate, Pageable.unpaged())
-                .getContent()
-                .stream()
-                .map(this::toItem)
+                .getContent();
+        // 휴일 실행 회차는 executedAt 날짜와 거래일이 달라 이체 행에서 한 번에 읽어 붙인다(#679)
+        Map<Long, LocalDate> tradeDates = transferTradeDatePort.findTradeDates(rows);
+        List<AutoTransferExecutionHistoryItem> realItems = rows.stream()
+                .map(row -> toItem(row, tradeDates.get(row.executionId())))
                 .toList();
         AutoTransferExecutionHistoryAggregate aggregate = autoTransferExecutionHistoryQueryPort.summarize(
                 customerId, withdrawalAccountId, resolvedFromDate, resolvedToDate);
@@ -86,7 +91,7 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
     }
 
     // 어댑터가 준 Row(out) → Controller가 쓸 Item(in)으로 변환
-    private AutoTransferExecutionHistoryItem toItem(AutoTransferExecutionHistoryRow row) {
+    private AutoTransferExecutionHistoryItem toItem(AutoTransferExecutionHistoryRow row, LocalDate tradeDate) {
         return new AutoTransferExecutionHistoryItem(
                 row.executionId(),
                 row.status(),
@@ -97,6 +102,7 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
                 row.amount(),
                 row.cycleMonths(),
                 row.myPassbookMemo(),
+                tradeDate,
                 row.failureReason());
     }
 
@@ -175,6 +181,7 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
                 autoTransfer.getAmount(),
                 autoTransfer.getCycleMonths(),
                 autoTransfer.getMyPassbookMemo(),
+                null,
                 "관리자에게 문의해주세요");
     }
 

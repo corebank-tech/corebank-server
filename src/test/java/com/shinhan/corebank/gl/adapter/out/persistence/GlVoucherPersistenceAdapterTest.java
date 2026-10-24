@@ -126,6 +126,54 @@ class GlVoucherPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("타행 송신(IBT)·해소(IBS) 전표는 같은 거래번호를 참조 키로 함께 저장된다 (#654)")
+    void savesInterbankTransferAndSettlementWithSameReferenceKey() {
+        String referenceKey = "20990106WB0000000060";
+
+        adapter.save(Voucher.create(
+                new VoucherNumber(TRADE_DATE, GlTxType.INTERBANK_TRANSFER, 1),
+                referenceKey,
+                null,
+                List.of(JournalEntry.debit("20100", 50_000L), JournalEntry.credit("10200", 50_000L))));
+        adapter.save(Voucher.create(
+                new VoucherNumber(TRADE_DATE, GlTxType.INTERBANK_SETTLEMENT, 1),
+                referenceKey,
+                null,
+                List.of(JournalEntry.debit("10200", 50_000L), JournalEntry.credit("10100", 50_000L))));
+
+        List<Map<String, Object>> vouchers = jdbcTemplate.queryForList(
+                "SELECT voucher_no, tx_type FROM gl_voucher WHERE reference_key = ? ORDER BY voucher_no", referenceKey);
+        assertThat(vouchers)
+                .extracting(row -> row.get("voucher_no"), row -> row.get("tx_type"))
+                .containsExactly(
+                        tuple("20990106-IBS-000001", "INTERBANK_SETTLEMENT"),
+                        tuple("20990106-IBT-000001", "INTERBANK_TRANSFER"));
+    }
+
+    @Test
+    @DisplayName("만기해지(MAT)와 중도해지(TRM) 전표가 전표 유형 CHECK를 통과해 저장된다 (#713)")
+    void savesMaturityAndTerminationVouchers() {
+        adapter.save(Voucher.create(
+                new VoucherNumber(TRADE_DATE, GlTxType.MATURITY, 1),
+                "20990106BT0000000070",
+                null,
+                List.of(JournalEntry.debit("20100", 1_008_460L), JournalEntry.credit("20100", 1_008_460L))));
+        adapter.save(Voucher.create(
+                new VoucherNumber(TRADE_DATE, GlTxType.TERMINATION, 1),
+                "20990106WB0000000071",
+                null,
+                List.of(JournalEntry.debit("20100", 500_000L), JournalEntry.credit("20100", 500_000L))));
+
+        List<Map<String, Object>> vouchers = jdbcTemplate.queryForList(
+                "SELECT voucher_no, tx_type FROM gl_voucher WHERE trade_date = ? AND tx_type IN ('MATURITY', 'TERMINATION')"
+                        + " ORDER BY voucher_no",
+                TRADE_DATE);
+        assertThat(vouchers)
+                .extracting(row -> row.get("voucher_no"), row -> row.get("tx_type"))
+                .containsExactly(tuple("20990106-MAT-000001", "MATURITY"), tuple("20990106-TRM-000001", "TERMINATION"));
+    }
+
+    @Test
     @DisplayName("전표와 분개 줄이 줄 번호·거래일과 함께 저장된다")
     void savesVoucherWithNumberedLines() {
         Voucher transfer = Voucher.create(

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.shinhan.corebank.customer.api.CustomerAuthenticationData;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import com.shinhan.corebank.customer.api.LoginFailureState;
 import com.shinhan.corebank.customer.api.LoginSuccessState;
 import com.shinhan.corebank.customer.api.PasswordResetCustomerData;
@@ -343,6 +344,7 @@ class CustomerAuthenticationServiceTest {
                 loginFailureCount,
                 accountLocked,
                 CustomerStatus.ACTIVE,
+                CustomerRole.CUSTOMER,
                 lastLoginAt,
                 lastLoginIp,
                 previousLoginAt,

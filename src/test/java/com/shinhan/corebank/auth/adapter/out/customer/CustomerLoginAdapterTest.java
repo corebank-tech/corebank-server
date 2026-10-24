@@ -9,6 +9,7 @@ import com.shinhan.corebank.auth.application.port.out.LoginSuccessUpdateResult;
 import com.shinhan.corebank.auth.domain.model.LoginCustomer;
 import com.shinhan.corebank.customer.api.CustomerAuthenticationData;
 import com.shinhan.corebank.customer.api.CustomerAuthenticationFacade;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import com.shinhan.corebank.customer.api.LoginFailureState;
 import com.shinhan.corebank.customer.api.LoginSuccessState;
 import com.shinhan.corebank.customer.api.RecordLoginFailureCommand;
@@ -41,7 +42,8 @@ class CustomerLoginAdapterTest {
     @Test
     @DisplayName("로그인 아이디로 LoginCustomer를 조회한다")
     void findByUserId() {
-        CustomerAuthenticationData data = new CustomerAuthenticationData(1L, "user01", "passwordHash", "홍길동", 2, false);
+        CustomerAuthenticationData data =
+                new CustomerAuthenticationData(1L, "user01", "passwordHash", "홍길동", 2, false, CustomerRole.CUSTOMER);
 
         given(customerAuthenticationFacade.findByUserId("user01")).willReturn(Optional.of(data));
 

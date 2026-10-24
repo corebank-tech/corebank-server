@@ -46,9 +46,21 @@ class SecurityTestController {
         return ApiResponse.success("updated");
     }
 
-    @GetMapping("/admin/test")
-    ApiResponse<String> admin() {
+    // SecurityConfig 의 /admin 규칙에 있는 접두어를 써야 인가가 판정된다.
+    @GetMapping("/admin/customers/test")
+    ApiResponse<String> adminRead() {
         return ApiResponse.success("admin");
+    }
+
+    @PostMapping("/admin/customers/test")
+    ApiResponse<String> adminWrite() {
+        return ApiResponse.success("admin-write");
+    }
+
+    // 매핑표에 없는 접두어. 권한을 정하지 않은 경로가 열리지 않는지 본다.
+    @GetMapping("/admin/unmapped/test")
+    ApiResponse<String> adminUnmapped() {
+        return ApiResponse.success("unmapped");
     }
 
     @GetMapping("/actuator/health")

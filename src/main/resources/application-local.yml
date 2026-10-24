@@ -16,9 +16,6 @@ spring:
     show-sql: true
   flyway:
     clean-disabled: true
-  data:
-    redis:
-      host: localhost
 
 logging:
   level:
@@ -32,3 +29,9 @@ app:
     cors:
       allowed-origins:
         - http://localhost:5173
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus

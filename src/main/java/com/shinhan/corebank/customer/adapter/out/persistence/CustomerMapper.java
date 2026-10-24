@@ -24,6 +24,7 @@ public class CustomerMapper {
                 entity.getLoginFailureCount(),
                 entity.isAccountLocked(),
                 entity.getStatus(),
+                entity.getRole(),
                 entity.getLastLoginAt(),
                 entity.getLastLoginIp(),
                 entity.getPreviousLoginAt(),
@@ -49,6 +50,7 @@ public class CustomerMapper {
                 .loginFailureCount(customer.getLoginFailureCount())
                 .accountLocked(customer.isAccountLocked())
                 .status(customer.getStatus())
+                .role(customer.getRole())
                 .lastLoginAt(customer.getLastLoginAt())
                 .lastLoginIp(customer.getLastLoginIp())
                 .previousLoginAt(customer.getPreviousLoginAt())

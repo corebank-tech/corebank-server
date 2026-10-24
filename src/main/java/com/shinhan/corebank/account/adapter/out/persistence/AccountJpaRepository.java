@@ -1,6 +1,10 @@
 package com.shinhan.corebank.account.adapter.out.persistence;
 
+import com.shinhan.corebank.account.application.port.out.MaturityAccountSnapshot;
+import com.shinhan.corebank.account.domain.AccountStatus;
+import com.shinhan.corebank.account.domain.AccountType;
 import jakarta.persistence.LockModeType;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -50,6 +54,52 @@ public interface AccountJpaRepository extends JpaRepository<AccountJpaEntity, Lo
         ORDER BY a.accountId
         """)
     List<AccountBalanceProjection> findBalancesAfter(@Param("afterAccountId") long afterAccountId, Pageable pageable);
+
+    // 만기 후보를 계좌 ID 순으로 페이지 조회한다. 이 조회에서는 락을 잡지 않는다.
+    @Query(
+            """
+        SELECT a.accountId
+        FROM AccountJpaEntity a
+        WHERE a.accountId > :afterAccountId
+          AND a.status = :status
+          AND a.accountType IN :accountTypes
+          AND a.maturityDate <= :maturityBaseDate
+        ORDER BY a.accountId
+        """)
+    List<Long> findMaturityCandidateIdsAfter(
+            @Param("afterAccountId") long afterAccountId,
+            @Param("maturityBaseDate") LocalDate maturityBaseDate,
+            @Param("status") AccountStatus status,
+            @Param("accountTypes") Collection<AccountType> accountTypes,
+            Pageable pageable);
+
+    // 상태 전이 직전에 최신 계좌 정보를 읽고 변경이 끝날 때까지 잠근다.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        SELECT a
+        FROM AccountJpaEntity a
+        WHERE a.accountId = :accountId
+        """)
+    Optional<AccountJpaEntity> findByAccountIdForUpdate(@Param("accountId") Long accountId);
+
+    // 만기해지 사전 검증에 필요한 컬럼만 조회한다.
+    // AccountJpaEntity를 영속성 컨텍스트에 올리지 않는다.
+    @Query(
+            """
+    SELECT new com.shinhan.corebank.account.application.port.out.MaturityAccountSnapshot(
+        a.accountId,
+        a.productId,
+        a.accountType,
+        a.status,
+        a.maturityDate,
+        a.withdrawalRegistered
+    )
+    FROM AccountJpaEntity a
+    WHERE a.accountId = :accountId
+      AND a.customerId = :customerId
+    """)
+    Optional<MaturityAccountSnapshot> findMaturityAccountSnapshot(
+            @Param("accountId") Long accountId, @Param("customerId") Long customerId);
 
     interface AccountBalanceProjection {
         Long getAccountId();

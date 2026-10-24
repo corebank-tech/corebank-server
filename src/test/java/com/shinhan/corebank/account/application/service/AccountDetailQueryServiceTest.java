@@ -43,6 +43,7 @@ class AccountDetailQueryServiceTest {
         assertThat(result.balance()).isEqualTo(1_500_000L);
         assertThat(result.availableBalance()).isEqualTo(1_500_000L);
         assertThat(result.asOf().getOffset()).isEqualTo(ZoneOffset.ofHours(9));
+        assertThat(result.maturityDate()).isNull();
         verifyNoInteractions(productQueryUseCase);
     }
 
@@ -87,6 +88,7 @@ class AccountDetailQueryServiceTest {
 
         // then
         assertThat(result.accountName()).isEqualTo("신한 정기예금");
+        assertThat(result.maturityDate()).isEqualTo(LocalDate.of(2026, 3, 10));
 
         verify(productQueryUseCase).findProductNames(Set.of(20L));
         verify(productQueryUseCase, never()).getDetail(20L);

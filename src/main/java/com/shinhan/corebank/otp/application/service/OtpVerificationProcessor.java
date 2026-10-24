@@ -60,7 +60,7 @@ public class OtpVerificationProcessor {
         requestPort.save(request);
 
         String otpAuthToken = tokenGeneratorPort.generateAuthToken();
-        // Redis 저장 실패 시 검증 완료 DB 변경도 함께 롤백되도록 처리 트랜잭션 안에서 저장한다.
+        // 토큰 저장 실패 시 검증 완료 DB 변경도 함께 롤백되도록 처리 트랜잭션 안에서 저장한다.
         authTokenStorePort.save(
                 otpAuthToken,
                 new OtpAuthTokenPayload(request.verificationRequestId(), request.customerId()),

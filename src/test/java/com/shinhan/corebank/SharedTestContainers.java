@@ -4,18 +4,15 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
-// 실행 간 영구 재사용 없이 JVM당 MySQL·Redis 한 쌍만 시작하고 종료는 Ryuk에 맡긴다.
+// 실행 간 영구 재사용 없이 JVM당 MySQL 하나만 시작하고 종료는 Ryuk에 맡긴다.
 final class SharedTestContainers {
 
-    private static final int REDIS_DATABASES = 512;
     private static SharedTestContainers sharedInstance;
     private final AtomicInteger namespaceSequence = new AtomicInteger();
     private final MySQLContainer mysql;
-    private final GenericContainer<?> redis;
 
     private SharedTestContainers() {
         mysql = new MySQLContainer(DockerImageName.parse("mysql:8.4.10"))
@@ -29,19 +26,8 @@ final class SharedTestContainers {
                         "--default-time-zone=+09:00")
                 .withLabel("com.shinhan.corebank.test-infrastructure", "shared")
                 .withStartupTimeout(Duration.ofMinutes(3));
-        redis = new GenericContainer<>(DockerImageName.parse("redis:7.4"))
-                .withExposedPorts(6379)
-                .withCommand("redis-server", "--databases", Integer.toString(REDIS_DATABASES))
-                .withLabel("com.shinhan.corebank.test-infrastructure", "shared")
-                .withStartupTimeout(Duration.ofMinutes(2));
 
         mysql.start();
-        try {
-            redis.start();
-        } catch (RuntimeException failure) {
-            mysql.stop();
-            throw failure;
-        }
     }
 
     static synchronized SharedTestContainers instance() {
@@ -53,10 +39,6 @@ final class SharedTestContainers {
 
     Namespace newNamespace() {
         int index = namespaceSequence.incrementAndGet();
-        if (index >= REDIS_DATABASES) {
-            throw new IllegalStateException("테스트 컨텍스트 수가 Redis 격리 DB 한도를 초과했습니다.");
-        }
-
         String database = "corebank_test_" + index;
         try (var connection = DriverManager.getConnection(mysql.getJdbcUrl(), "root", mysql.getPassword());
                 var statement = connection.createStatement()) {
@@ -69,13 +51,9 @@ final class SharedTestContainers {
         return new Namespace(
                 mysql.getJdbcUrl().replace("/" + mysql.getDatabaseName(), "/" + database),
                 mysql.getUsername(),
-                mysql.getPassword(),
-                redis.getHost(),
-                redis.getMappedPort(6379),
-                index);
+                mysql.getPassword());
     }
 
-    // 컨텍스트별 DB 스키마와 Redis DB를 분리해 독립 커밋 및 TTL 데이터의 교차 오염을 막는다.
-    record Namespace(
-            String jdbcUrl, String username, String password, String redisHost, int redisPort, int redisDatabase) {}
+    // 컨텍스트별 DB 스키마를 분리해 독립 커밋 데이터의 교차 오염을 막는다.
+    record Namespace(String jdbcUrl, String username, String password) {}
 }

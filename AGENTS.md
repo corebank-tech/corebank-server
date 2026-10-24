@@ -18,7 +18,7 @@
 ./gradlew test                                     # 전체 — 단위·Testcontainers·ArchUnit
 ./gradlew test --tests "*ArchitectureTest"         # 아키텍처 규칙만
 ./gradlew spotlessApply                            # 커밋 전 필수. CI의 spotlessCheck가 막는다
-docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·Redis)
+docker compose up -d minicore-mysql                 # 로컬 인프라 (MySQL)
 ./gradlew bootRun                                  # Flyway 마이그레이션 후 기동
 ```
 
@@ -92,7 +92,7 @@ docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·R
 | [hexagonal_architecture_guide.md](docs/hexagonal_architecture_guide.md) | 패키지 배치·레이어 책임·요청이 DB까지 가는 흐름 |
 | [api_conventions.md](docs/api_conventions.md) | 공통 응답·HTTP 상태·오류코드 마스터·Enum·필드명 |
 | [error_handling_guide.md](docs/error_handling_guide.md) | `ErrorCode`/`BusinessException` 구현, 도메인 오류코드 추가 |
-| [adr/](docs/adr/) | 되돌리기 어려운 설계 결정 — 0001 상품가입 검증, 0002 도메인 간 계좌 조회, 0003 `batch.api` 도메인 간 락 재사용, 0004 COB 스텝 순서, 0005 Spring Batch·MQ·Gateway 미도입, 0006 도메인 간 계약면, 0007 Redis 제거 |
+| [adr/](docs/adr/) | 되돌리기 어려운 설계 결정 — 0001 상품가입 검증, 0002 도메인 간 계좌 조회, 0003 `batch.api` 도메인 간 락 재사용, 0004 COB 스텝 순서, 0005 Spring Batch·MQ·Gateway 미도입, 0006 도메인 간 계약면, 0007 Redis 제거, 0008 영업일 gate·cutoff, 0009 GL 정합성 통제, 0010 아웃박스 Spring Modulith |
 | [phase2/README.md](docs/phase2/README.md) · [tasks.md](docs/phase2/tasks.md) | 2차 계획 정본 — 태스크 ID(PH-xx) 착수 전, 소유자·기한·트랙 간 계약 확인 |
 | [phase2/glossary.md](docs/phase2/glossary.md) | 2차 핵심 용어(PH-87) — 새 필드·Enum·화면 라벨 이름을 정하기 전 |
 
@@ -111,8 +111,7 @@ docker compose up -d minicore-mysql minicore-redis  # 로컬 인프라 (MySQL·R
 
 | 문서 | 언제 여는가 |
 |---|---|
-| [otp_integration_guide.md](docs/otp_integration_guide.md) | OTP는 Redis·Entity 직접 참조 없이 `otp.api`로만 호출 |
-| [redis_setup_guide.md](docs/redis_setup_guide.md) | Redis 로컬·배포 셋업 (약관 열람 이력 TTL 30분) |
+| [otp_integration_guide.md](docs/otp_integration_guide.md) | OTP는 저장소·Entity 직접 참조 없이 `otp.api`로만 호출 |
 | [product_api_fe_handoff.md](docs/product_api_fe_handoff.md) | 상품 API의 FE 인계 계약 — 실제 요청·응답 예시 |
 
 **협업 · 검증**
