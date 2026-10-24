@@ -84,7 +84,7 @@ class LoginServiceTest {
         given(loginCustomerPort.findByUserId(command.userId())).willReturn(Optional.empty());
         given(loginAttemptProcessor.process(1)).willReturn(decoyResult);
 
-        LoginFailedException exception = catchThrowableOfType(() -> service.login(command), LoginFailedException.class);
+        LoginFailedException exception = catchThrowableOfType(LoginFailedException.class, () -> service.login(command));
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);
         assertThat(exception.getAttemptResult()).contains(decoyResult);
@@ -101,7 +101,7 @@ class LoginServiceTest {
         LoginCommand command = loginCommand();
         given(loginCustomerPort.findByUserId(command.userId())).willReturn(Optional.of(loginCustomer(5, true)));
 
-        LoginFailedException exception = catchThrowableOfType(() -> service.login(command), LoginFailedException.class);
+        LoginFailedException exception = catchThrowableOfType(LoginFailedException.class, () -> service.login(command));
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.ACCOUNT_LOCKED);
         assertThat(exception.getAttemptResult()).isEmpty();
@@ -144,7 +144,7 @@ class LoginServiceTest {
         given(loginSuccessProcessor.process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER, CustomerRole.CUSTOMER))
                 .willReturn(LoginSuccessUpdateResult.ACCOUNT_LOCKED);
 
-        LoginFailedException exception = catchThrowableOfType(() -> service.login(command), LoginFailedException.class);
+        LoginFailedException exception = catchThrowableOfType(LoginFailedException.class, () -> service.login(command));
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.ACCOUNT_LOCKED);
         assertThat(exception.getAttemptResult()).isEmpty();
@@ -168,7 +168,7 @@ class LoginServiceTest {
         given(loginSuccessProcessor.process(1L, LOGIN_AT, REQUEST_IP, CustomerRole.CUSTOMER, CustomerRole.CUSTOMER))
                 .willReturn(LoginSuccessUpdateResult.ACCOUNT_SUSPENDED);
 
-        LoginFailedException exception = catchThrowableOfType(() -> service.login(command), LoginFailedException.class);
+        LoginFailedException exception = catchThrowableOfType(LoginFailedException.class, () -> service.login(command));
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.ACCOUNT_SUSPENDED);
         assertThat(exception.getAttemptResult()).isEmpty();
@@ -237,7 +237,7 @@ class LoginServiceTest {
         given(loginCustomerPort.recordLoginFailure(1L)).willReturn(new LoginFailureUpdateResult(4, false));
         given(loginAttemptProcessor.process(4)).willReturn(attemptResult);
 
-        LoginFailedException exception = catchThrowableOfType(() -> service.login(command), LoginFailedException.class);
+        LoginFailedException exception = catchThrowableOfType(LoginFailedException.class, () -> service.login(command));
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);
         assertThat(exception.getAttemptResult()).contains(attemptResult);
@@ -262,7 +262,7 @@ class LoginServiceTest {
         given(passwordHashVerifierPort.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(false);
         given(loginCustomerPort.recordLoginFailure(1L)).willReturn(new LoginFailureUpdateResult(5, true));
 
-        LoginFailedException exception = catchThrowableOfType(() -> service.login(command), LoginFailedException.class);
+        LoginFailedException exception = catchThrowableOfType(LoginFailedException.class, () -> service.login(command));
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.ACCOUNT_LOCKED);
         assertThat(exception.getAttemptResult()).isEmpty();
@@ -297,7 +297,7 @@ class LoginServiceTest {
                         CustomerRole.CUSTOMER,
                         CustomerRole.CUSTOMER);
 
-        LoginFailedException exception = catchThrowableOfType(() -> service.login(command), LoginFailedException.class);
+        LoginFailedException exception = catchThrowableOfType(LoginFailedException.class, () -> service.login(command));
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);
         assertThat(exception.getAttemptResult()).contains(attemptResult);
@@ -319,7 +319,7 @@ class LoginServiceTest {
                         CustomerRole.CUSTOMER,
                         CustomerRole.CUSTOMER);
 
-        LoginFailedException exception = catchThrowableOfType(() -> service.login(command), LoginFailedException.class);
+        LoginFailedException exception = catchThrowableOfType(LoginFailedException.class, () -> service.login(command));
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.ACCOUNT_LOCKED);
         assertThat(exception.getAttemptResult()).isEmpty();

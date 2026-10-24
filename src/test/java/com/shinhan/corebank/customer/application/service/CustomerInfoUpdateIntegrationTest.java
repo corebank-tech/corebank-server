@@ -89,9 +89,9 @@ class CustomerInfoUpdateIntegrationTest extends IntegrationTestSupport {
         saveEmailToken(token, requestedEmail, EmailVerificationPurpose.SIGN_UP);
 
         BusinessException exception = catchThrowableOfType(
+                BusinessException.class,
                 () -> updateCustomerInfoUseCase.update(
-                        new UpdateCustomerInfoCommand(customerId, "01087654321", requestedEmail, token)),
-                BusinessException.class);
+                        new UpdateCustomerInfoCommand(customerId, "01087654321", requestedEmail, token)));
 
         assertThat(exception.getErrorCode()).isEqualTo(SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN);
         assertThat(selectPhoneNumber(customerId)).isEqualTo("01012345678");

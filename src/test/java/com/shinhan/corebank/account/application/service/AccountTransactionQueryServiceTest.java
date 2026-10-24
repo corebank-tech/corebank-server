@@ -107,8 +107,8 @@ class AccountTransactionQueryServiceTest {
         when(accountPersistencePort.findByAccountIdAndCustomerId(101L, 1L)).thenReturn(Optional.empty());
 
         BusinessException exception = org.assertj.core.api.Assertions.catchThrowableOfType(
-                () -> service.getTransactions(1L, 101L, null, null, null, null, null, 1, 10, false),
-                BusinessException.class);
+                BusinessException.class,
+                () -> service.getTransactions(1L, 101L, null, null, null, null, null, 1, 10, false));
 
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.ACCOUNT_NOT_FOUND_OR_FORBIDDEN);
 
@@ -121,6 +121,7 @@ class AccountTransactionQueryServiceTest {
                 .thenReturn(Optional.of(mock(Account.class)));
 
         BusinessException exception = org.assertj.core.api.Assertions.catchThrowableOfType(
+                BusinessException.class,
                 () -> service.getTransactions(
                         1L,
                         101L,
@@ -131,8 +132,7 @@ class AccountTransactionQueryServiceTest {
                         LedgerHistorySort.LATEST,
                         1,
                         10,
-                        false),
-                BusinessException.class);
+                        false));
 
         assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.INVALID_DATE_RANGE);
 
@@ -145,6 +145,7 @@ class AccountTransactionQueryServiceTest {
                 .thenReturn(Optional.of(mock(Account.class)));
 
         BusinessException exception = org.assertj.core.api.Assertions.catchThrowableOfType(
+                BusinessException.class,
                 () -> service.getTransactions(
                         1L,
                         101L,
@@ -155,8 +156,7 @@ class AccountTransactionQueryServiceTest {
                         LedgerHistorySort.LATEST,
                         1,
                         10,
-                        false),
-                BusinessException.class);
+                        false));
 
         assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.DATE_RANGE_EXCEEDED);
     }
@@ -167,8 +167,8 @@ class AccountTransactionQueryServiceTest {
                 .thenReturn(Optional.of(mock(Account.class)));
 
         BusinessException exception = org.assertj.core.api.Assertions.catchThrowableOfType(
-                () -> service.getTransactions(1L, 101L, null, null, null, null, null, 1, 7, false),
-                BusinessException.class);
+                BusinessException.class,
+                () -> service.getTransactions(1L, 101L, null, null, null, null, null, 1, 7, false));
 
         assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.INVALID_PAGE_SIZE);
     }
@@ -179,8 +179,8 @@ class AccountTransactionQueryServiceTest {
                 .thenReturn(Optional.of(mock(Account.class)));
 
         BusinessException exception = org.assertj.core.api.Assertions.catchThrowableOfType(
-                () -> service.getTransactions(1L, 101L, null, null, null, null, null, 0, 10, false),
-                BusinessException.class);
+                BusinessException.class,
+                () -> service.getTransactions(1L, 101L, null, null, null, null, null, 0, 10, false));
 
         assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT);
     }

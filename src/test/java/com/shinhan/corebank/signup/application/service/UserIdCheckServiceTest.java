@@ -87,7 +87,7 @@ class UserIdCheckServiceTest {
     void rejectsInvalidFormats() {
         for (String userId : new String[] {"User123", "abc12", "abcdefghijklmnopq", "user_123", "한글아이디"}) {
             BusinessException exception =
-                    catchThrowableOfType(() -> service.check(new CheckUserIdCommand(userId)), BusinessException.class);
+                    catchThrowableOfType(BusinessException.class, () -> service.check(new CheckUserIdCommand(userId)));
             assertThat(exception.getErrorCode()).isEqualTo(SignupErrorCode.INVALID_USER_ID_FORMAT);
         }
 
@@ -101,7 +101,7 @@ class UserIdCheckServiceTest {
         given(customerAvailabilityPort.isUserIdTaken("user1234")).willReturn(true);
 
         BusinessException exception =
-                catchThrowableOfType(() -> service.check(new CheckUserIdCommand("user1234")), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.check(new CheckUserIdCommand("user1234")));
 
         assertThat(exception.getErrorCode()).isEqualTo(SignupErrorCode.DUPLICATE_USER_ID);
         verify(tokenGeneratorPort, never()).generateUserIdCheckToken();

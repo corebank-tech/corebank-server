@@ -118,7 +118,7 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
                 .andReturn();
 
         JsonNode body = objectMapper.readTree(mvcResult.getResponse().getContentAsString());
-        String token = body.get("data").get("accountPasswordAuthToken").asText();
+        String token = body.get("data").get("accountPasswordAuthToken").asString();
         AccountPasswordAuthTokenVerification verification =
                 new AccountPasswordAuthTokenVerification(token, customerId, account.getAccountId());
 
@@ -274,15 +274,15 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
 
         JsonNode firstBody = objectMapper.readTree(first.getResponse().getContentAsString());
         JsonNode replayBody = objectMapper.readTree(replay.getResponse().getContentAsString());
-        assertThat(replayBody.get("code").asText())
-                .isEqualTo(firstBody.get("code").asText());
-        assertThat(replayBody.get("message").asText())
-                .isEqualTo(firstBody.get("message").asText());
+        assertThat(replayBody.get("code").asString())
+                .isEqualTo(firstBody.get("code").asString());
+        assertThat(replayBody.get("message").asString())
+                .isEqualTo(firstBody.get("message").asString());
         assertThat(replayBody.at("/data/accountId").asLong())
                 .isEqualTo(firstBody.at("/data/accountId").asLong());
         // 공통 replay의 offset 표현 논의와 분리해 같은 instant인지 검증한다.
-        assertThat(OffsetDateTime.parse(replayBody.at("/data/updatedAt").asText()))
-                .isEqualTo(OffsetDateTime.parse(firstBody.at("/data/updatedAt").asText()));
+        assertThat(OffsetDateTime.parse(replayBody.at("/data/updatedAt").asString()))
+                .isEqualTo(OffsetDateTime.parse(firstBody.at("/data/updatedAt").asString()));
         verify(changeAuthVerificationPort, times(1))
                 .verifyAccountPasswordToken("first-password-token", customerId, account.getAccountId());
         verify(changeAuthVerificationPort, times(1))

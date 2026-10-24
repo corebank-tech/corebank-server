@@ -150,7 +150,7 @@ class WithdrawalAccountRegisterServiceTest {
 
         // when
         BusinessException exception =
-                catchThrowableOfType(() -> service.register(createCommand()), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.register(createCommand()));
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.ACCOUNT_NOT_FOUND_OR_FORBIDDEN);
@@ -171,7 +171,7 @@ class WithdrawalAccountRegisterServiceTest {
 
         // when
         BusinessException exception =
-                catchThrowableOfType(() -> service.register(createCommand()), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.register(createCommand()));
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.INVALID_WITHDRAWAL_ACCOUNT_TYPE);
@@ -192,7 +192,7 @@ class WithdrawalAccountRegisterServiceTest {
 
         // when
         BusinessException exception =
-                catchThrowableOfType(() -> service.register(createCommand()), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.register(createCommand()));
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.INVALID_WITHDRAWAL_ACCOUNT_TYPE);
@@ -213,7 +213,7 @@ class WithdrawalAccountRegisterServiceTest {
 
         // when
         BusinessException exception =
-                catchThrowableOfType(() -> service.register(createCommand()), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.register(createCommand()));
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.INVALID_ACCOUNT_STATUS);
@@ -234,7 +234,7 @@ class WithdrawalAccountRegisterServiceTest {
 
         // when
         BusinessException exception =
-                catchThrowableOfType(() -> service.register(createCommand()), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.register(createCommand()));
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.INVALID_ACCOUNT_STATUS);
