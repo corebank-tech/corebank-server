@@ -19,7 +19,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class LedgerReconciliationBatchService implements LedgerReconciliationBatchUseCase {
 
-    private static final String JOB_NAME = "LEDGER_RECONCILIATION_BATCH";
+    // PH-38 베이스라인 실행기가 같은 락을 잡는다(#744)
+    public static final String JOB_NAME = "LEDGER_RECONCILIATION_BATCH";
     // batch.application.service.DailyTransferBatchService#JOB_NAME과 동일 문자열. 별도 공개
     // 상수가 없어 잡 이름 자체(batch_execution_lock.job_name 값)로 결합한다.
     private static final String DAILY_TRANSFER_BATCH_JOB_NAME = "DAILY_TRANSFER_BATCH";

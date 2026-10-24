@@ -176,6 +176,48 @@ class CorebankApplicationTest {
     }
 
     @Test
+    @DisplayName("PH-38 베이스라인 실행이 완료되면 프로세스 컨텍스트를 닫는다")
+    void closesCompletedPh38BaselineProcess() {
+        GenericApplicationContext context = contextWithPh38BaselineExecution(true, true);
+
+        boolean shouldExit = Phase2SeedProcessRunner.closeCompletedSeedProcess(context);
+
+        assertThat(context.isActive()).isFalse();
+        assertThat(shouldExit).isTrue();
+    }
+
+    @Test
+    @DisplayName("PH-38 베이스라인 실행 플래그가 없으면 서버 컨텍스트를 유지한다")
+    void keepsContextWithoutPh38BaselineExecutionFlag() {
+        GenericApplicationContext context = contextWithPh38BaselineExecution(true, false);
+
+        boolean shouldExit = Phase2SeedProcessRunner.closeCompletedSeedProcess(context);
+
+        assertThat(context.isActive()).isTrue();
+        assertThat(shouldExit).isFalse();
+
+        context.close();
+    }
+
+    @Test
+    @DisplayName("PH-38 베이스라인 명령이면 스프링 실행 전에 DevTools 재시작을 끈다")
+    void disablesDevToolsRestartForPh38BaselineCommand() {
+        String previous = System.getProperty(DEVTOOLS_RESTART_PROPERTY);
+
+        try {
+            System.clearProperty(DEVTOOLS_RESTART_PROPERTY);
+
+            boolean disabled = Phase2SeedProcessRunner.disableDevToolsRestartForSeed(
+                    new String[] {"--spring.profiles.active=prod,ph38-baseline", "--app.ph38-baseline.execute=true"});
+
+            assertThat(disabled).isTrue();
+            assertThat(System.getProperty(DEVTOOLS_RESTART_PROPERTY)).isEqualTo("false");
+        } finally {
+            restoreSystemProperty(previous);
+        }
+    }
+
+    @Test
     @DisplayName("최소 시드와 대량 시드 플래그를 동시에 켜면 기동을 거부한다")
     void rejectsBothSeedExecutionFlags() {
         String[] args = {
@@ -239,6 +281,19 @@ class CorebankApplicationTest {
 
         context.refresh();
 
+        return context;
+    }
+
+    private GenericApplicationContext contextWithPh38BaselineExecution(boolean profileActive, boolean enabled) {
+        GenericApplicationContext context = new GenericApplicationContext();
+        if (profileActive) {
+            context.getEnvironment().setActiveProfiles("ph38-baseline");
+        }
+        context.getEnvironment()
+                .getPropertySources()
+                .addFirst(new MapPropertySource(
+                        "ph38BaselineTest", Map.of("app.ph38-baseline.execute", Boolean.toString(enabled))));
+        context.refresh();
         return context;
     }
 }
