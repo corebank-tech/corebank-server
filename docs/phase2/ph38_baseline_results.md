@@ -69,7 +69,7 @@ UPDATE batch_execution_lock SET currently_running = 0 WHERE job_name = 'LEDGER_R
 | 운영 이미지 / 측정 jar 커밋 | `176fe574` / `5e8a70b3`(#745. 운영 코드에 실행기만 추가) |
 | 데이터 | PH-60b 운영 적재분 |
 | 계좌 수 (`accounts`) | 180,011 |
-| `ledger_entry` 행 수 | 약 6,425,295(`information_schema.tables.table_rows` 추정치) · 데이터+인덱스 1,946MB |
+| `ledger_entry` 행 수 | 6,598,319(`SELECT COUNT(*)`, 10/25 18:12:52 기준) · 데이터+인덱스 1,946MB. 측정(13:00~14:00) 뒤 4시간 사이의 거래도 들어간 값이라, 측정 시점 행 수는 이보다 조금 적을 수 있다 |
 | 청크 크기 | `app.ledger-reconciliation.full-scan-chunk-size` = 1000(기본값) |
 | 회차 구성 | 3회, 예열 없음(아래 "예열을 뺀 이유") |
 | 직전 배포 | 릴리스 2(10/24 11:43). `transfer`·`gl_voucher`를 다시 썼다 |
@@ -101,5 +101,5 @@ UPDATE batch_execution_lock SET currently_running = 0 WHERE job_name = 'LEDGER_R
 PH-45를 적용한 뒤 다음 조건을 같게 유지해 다시 잰다.
 
 - 같은 실행기와 회차 구성(3회, 예열 없음)
-- 같은 데이터(계좌 수와 `ledger_entry` 행 수 일치)
+- 같은 데이터(계좌 수와 `ledger_entry` 행 수를 `SELECT COUNT(*)`로 세어 비교. `information_schema`의 `table_rows`는 추정치라 쓰지 않는다)
 - 같은 환경. 컷오버로 환경이 바뀌면(새 RDS는 `db.t3.small`, 버퍼 풀 약 1.3GB) 이 값과 비교하지 않고 새 환경에서 개선 전을 다시 잰다
