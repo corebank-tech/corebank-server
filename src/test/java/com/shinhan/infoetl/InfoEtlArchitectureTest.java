@@ -27,4 +27,17 @@ class InfoEtlArchitectureTest {
             .should()
             .dependOnClassesThat()
             .resideInAnyPackage("com.shinhan.infoetl.adapter..", "java.sql..", "javax.sql..");
+
+    @ArchTest
+    static final ArchRule inboundAdapterOnlyKnowsInboundPorts = noClasses()
+            .that()
+            .resideInAPackage("com.shinhan.infoetl.adapter.in..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage(
+                    "com.shinhan.infoetl.application.service..",
+                    "com.shinhan.infoetl.application.port.out..",
+                    "com.shinhan.infoetl.adapter.out..",
+                    "java.sql..",
+                    "javax.sql..");
 }
