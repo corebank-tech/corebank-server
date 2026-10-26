@@ -64,7 +64,7 @@ terraform/
 | `module.network.data_subnet_ids` | RDS 서브넷 그룹 |
 | `module.network.rds_sg_id` | RDS에 붙일 보안그룹 |
 
-컴퓨트 apply 직후 P2에게 넘기는 값(루트 `terraform output`으로도 나온다):
+통합 apply 직후 P2에게 넘기는 값(루트 `terraform output`으로도 나온다):
 
 | 출력값 | 용도 |
 |---|---|
@@ -88,8 +88,15 @@ terraform/
 ```bash
 cd terraform/main
 terraform init
-terraform plan
+terraform plan -var="snapshot_identifier=<스냅샷 ID>"
 ```
+
+### 실제 apply 단위 (10/26 PH-51 + PH-70-②)
+
+- `terraform/main`은 `network`·`compute`·`data`가 **같은 루트 모듈**이고 상태 파일(`main/terraform.tfstate`)도 하나다. 그래서 "컴퓨트만 apply"나 "RDS만 apply"가 따로 있지 않고, `terraform apply` 한 번에 네트워크, ALB(컴퓨트), P2의 RDS 복원이 함께 올라간다.
+- `snapshot_identifier`는 필수 변수라 **컴퓨트만 올리려 해도 실제 스냅샷 ID가 필요하다.** apply 전에 P2가 최종 스냅샷 ID(10/26 오전 것)를 확정해서 알려 준다. plan 검증용 값(리허설 스냅샷 `corebank-import-20261021` 등)으로 apply하지 않는다.
+- 루트 apply를 P2와 P5 중 누가 실행할지는 **apply 전에 협의해서 확정**한 뒤, 그 사람이 **한 번의 통합 apply**로 진행한다.
+- apply 직후 P2에게 넘기는 값은 위 "통합 apply 직후" 표를 따른다.
 
 ## 아직 미정인 것
 
