@@ -29,8 +29,9 @@ class CustomerPiiCryptoConfigurationTest {
                 .run(context -> {
                     assertThat(context.getStartupFailure()).isNull();
                     CustomerPiiCrypto crypto = context.getBean(CustomerPiiCrypto.class);
-                    String encrypted = crypto.cipher().encrypt("user@example.com");
-                    assertThat(crypto.cipher().decrypt(encrypted)).isEqualTo("user@example.com");
+                    String encrypted = crypto.cipher().encrypt("user@example.com", CustomerPiiCipher.Field.EMAIL);
+                    assertThat(crypto.cipher().decrypt(encrypted, CustomerPiiCipher.Field.EMAIL))
+                            .isEqualTo("user@example.com");
                     assertThat(crypto.emailBlindIndex().hash("User@Example.COM"))
                             .isEqualTo(crypto.emailBlindIndex().hash("user@example.com"));
                 });
