@@ -29,3 +29,7 @@ output "was_role_arn" {
 output "onprem_ssm_role_name" {
   value = aws_iam_role.onprem_ssm.name
 }
+
+output "asg_name" {
+  value = aws_autoscaling_group.was.name
+}

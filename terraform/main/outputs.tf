@@ -58,6 +58,10 @@ output "onprem_ssm_role_name" {
   value = module.compute.onprem_ssm_role_name
 }
 
+output "asg_name" {
+  value = module.compute.asg_name
+}
+
 output "rds_instance_id" {
   value = module.data.db_instance_id
 }

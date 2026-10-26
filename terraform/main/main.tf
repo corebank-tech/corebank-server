@@ -30,6 +30,9 @@ module "compute" {
   alb_sg_id               = module.network.alb_sg_id
   certificate_arn         = data.terraform_remote_state.acm.outputs.alb_certificate_arn
   audit_writer_policy_arn = data.terraform_remote_state.audit.outputs.audit_writer_policy_arn
+  was_sg_id               = module.network.was_sg_id
+  app_subnet_ids          = module.network.app_subnet_ids
+  db_host                 = module.data.db_address
 }
 
 module "data" {
