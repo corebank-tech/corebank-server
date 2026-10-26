@@ -3,6 +3,7 @@ package com.shinhan.corebank.notification.adapter.in.event;
 import com.shinhan.corebank.notification.api.NotificationRequest;
 import com.shinhan.corebank.notification.api.NotificationRequestCarrier;
 import com.shinhan.corebank.notification.application.port.in.NotificationCommandUseCase;
+import jakarta.validation.ConstraintViolationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.modulith.events.ApplicationModuleListener;
@@ -26,12 +27,12 @@ public class NotificationRequestedListener {
     }
 
     private void create(NotificationRequest request) {
-        // 타행 확정 경로는 출금계좌 조회가 비면 수신 고객 없이 발행한다. 다시 보내도 수신 고객을 알 수 없어 재제출
-        // 대상으로 남기지 않는다. 알림 한 건이 사라지는 데이터 결함이라 모니터링(PH-47)이 보는 ERROR 로 남긴다
-        if (request.customerId() == null) {
-            log.error("수신 고객이 없어 알림 유실 - type={}, refId={}", request.type(), request.refId());
-            return;
+        try {
+            notificationCommandUseCase.createNotification(request);
+        } catch (ConstraintViolationException e) {
+            // 계약 위반(수신 고객 없음 · 문구 길이 초과 등)은 다시 보내도 고쳐지지 않아 재제출 대상으로 남기지 않는다.
+            // 알림 한 건이 사라지는 데이터 결함이라 모니터링(PH-47)이 보는 ERROR 로 남긴다
+            log.error("알림 계약 위반으로 알림 유실 - type={}, refId={}, 위반={}", request.type(), request.refId(), e.getMessage());
         }
-        notificationCommandUseCase.createNotification(request);
     }
 }

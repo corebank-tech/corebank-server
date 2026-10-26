@@ -143,6 +143,21 @@ class NotificationRequestedListenerTest extends IntegrationTestSupport {
         assertThat(notificationCount()).isZero();
     }
 
+    @Test
+    @DisplayName("제목이 100자를 넘는 알림은 계약 위반으로 저장하지 않고, 다시 보낼 발행 기록도 남기지 않는다")
+    void notificationOverTitleLimit_createsNoNotificationAndLeavesNoPublication() {
+        // given
+        String overLimitTitle = "가".repeat(101);
+
+        // when
+        publishInsideTransaction(settledWith(notification(CUSTOMER_ID, overLimitTitle, "1,000,000원을 보냈습니다.")));
+
+        // then
+        await().atMost(LISTENER_TIMEOUT)
+                .untilAsserted(() -> assertThat(remainingPublicationCount()).isZero());
+        assertThat(notificationCount()).isZero();
+    }
+
     private void publishInsideTransaction(TransferSettled event) {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> publisher.publishEvent(event));
     }
