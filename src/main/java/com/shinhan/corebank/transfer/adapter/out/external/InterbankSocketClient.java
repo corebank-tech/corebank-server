@@ -47,6 +47,7 @@ public class InterbankSocketClient implements InterbankGatewayPort {
                         .slidingWindowSize(breaker.slidingWindowSize())
                         .minimumNumberOfCalls(breaker.minimumNumberOfCalls())
                         .waitDurationInOpenState(breaker.waitDurationInOpenState())
+                        .clock(clock)
                         .build());
     }
 
