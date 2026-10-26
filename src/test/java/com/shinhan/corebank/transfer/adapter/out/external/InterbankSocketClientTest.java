@@ -16,6 +16,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.ZoneId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +30,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 class InterbankSocketClientTest {
 
     private static final Duration RESPONSE_TIMEOUT = Duration.ofMillis(500);
+    private static final Duration WAIT_IN_OPEN = Duration.ofMinutes(1);
     private static final Clock CLOCK = Clock.system(ZoneId.of("Asia/Seoul"));
 
     private final HttpClient http = HttpClient.newHttpClient();
@@ -46,6 +48,10 @@ class InterbankSocketClientTest {
     }
 
     private InterbankSocketClient client(int port, int minimumNumberOfCalls) {
+        return client(port, minimumNumberOfCalls, CLOCK);
+    }
+
+    private InterbankSocketClient client(int port, int minimumNumberOfCalls, Clock clock) {
         return new InterbankSocketClient(
                 new InterbankProperties(
                         "127.0.0.1",
@@ -53,9 +59,9 @@ class InterbankSocketClientTest {
                         Duration.ofMillis(500),
                         RESPONSE_TIMEOUT,
                         new InterbankProperties.CircuitBreaker(
-                                50, minimumNumberOfCalls, minimumNumberOfCalls, Duration.ofMinutes(1)),
+                                50, minimumNumberOfCalls, minimumNumberOfCalls, WAIT_IN_OPEN),
                         new InterbankProperties.Inquiry(Duration.ZERO, 20)),
-                CLOCK);
+                clock);
     }
 
     private InterbankSocketClient client() {
@@ -274,9 +280,52 @@ class InterbankSocketClientTest {
         assertThat(elapsedMillis).isLessThan(RESPONSE_TIMEOUT.toMillis());
     }
 
+    @Test
+    @DisplayName("연결 거부로 열린 서킷은 조회 송신 없이 대기 시간만 지나도 다음 이체를 시험 송신한다")
+    void openCircuit_afterWaitDuration_letsNextTransferThrough() throws Exception {
+        int port = server.port();
+        server.close();
+        MovableClock clock = new MovableClock();
+        InterbankSocketClient client = client(port, 2, clock);
+        client.send(request("1234567890123"));
+        client.send(request("1234567890123"));
+        assertThat(client.isAvailable()).isFalse();
+
+        server = MockExternalServer.start("127.0.0.1", port, 0);
+        clock.advance(WAIT_IN_OPEN.plusSeconds(1));
+
+        assertThat(client.isAvailable()).isTrue();
+        assertThat(client.send(request("1234567890123")).outcome()).isEqualTo(InterbankOutcome.APPROVED);
+    }
+
     private static int closedPort() throws IOException {
         try (ServerSocket socket = new ServerSocket(0)) {
             return socket.getLocalPort();
+        }
+    }
+
+    // 테스트가 바늘을 직접 돌리는 시계. 서킷의 OPEN 대기 시간을 실제로 기다리지 않는다.
+    private static final class MovableClock extends Clock {
+
+        private Instant now = Instant.now();
+
+        void advance(Duration duration) {
+            now = now.plus(duration);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return CLOCK.getZone();
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Instant instant() {
+            return now;
         }
     }
 }

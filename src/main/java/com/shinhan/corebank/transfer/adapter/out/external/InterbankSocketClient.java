@@ -51,11 +51,14 @@ public class InterbankSocketClient implements InterbankGatewayPort {
                         .build());
     }
 
-    // getState()는 OPEN→HALF_OPEN 전이를 일으키지 않는다. 이체는 여기서 막히니 전이는 조회거래·수취인 조회의 송신이 일으킨다.
+    // getState()로는 대기 시간이 지난 OPEN이 HALF_OPEN으로 넘어가지 않아 권한을 요청해 본다. 송신 권한은 exchange()가 다시 받으니 바로 돌려준다.
     @Override
     public boolean isAvailable() {
-        CircuitBreaker.State state = circuitBreaker.getState();
-        return state != CircuitBreaker.State.OPEN && state != CircuitBreaker.State.FORCED_OPEN;
+        if (!circuitBreaker.tryAcquirePermission()) {
+            return false;
+        }
+        circuitBreaker.releasePermission();
+        return true;
     }
 
     @Override
