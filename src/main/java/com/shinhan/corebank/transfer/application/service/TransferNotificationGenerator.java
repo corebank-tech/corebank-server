@@ -8,25 +8,16 @@ import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.LocalDateTime;
-import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * 확정된 이체 한 건을 고객 알림으로 만든다(PR #723 리뷰 — 문구는 업무 도메인이 만든다). 실패 사유는 고객이 직접
  * 조치할 수 있는 오류만 그 오류코드의 문구로 붙이고, 나머지는 기본 문장만 쓴다.
  *
- * <p>예약 · 자동이체는 이 이체 확정으로 알림을 싣지 않는다. 그 알림은 #707에서 배치가 결과마다 자기 이벤트로 실어
- * 알림 참조 규약(예약 → scheduled_transfer_id, 자동 → execution_id)을 지키게 한다.
+ * <p>예약 · 자동이체 알림은 싣지 않는다. 참조 ID 규약에 맞춰 배치 이벤트가 싣는다(#707).
  */
 final class TransferNotificationGenerator {
-
-    private static final Set<TransferErrorCode> CUSTOMER_ACTIONABLE_ERRORS = EnumSet.of(
-            TransferErrorCode.INSUFFICIENT_BALANCE,
-            TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED,
-            TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED,
-            TransferErrorCode.INTERBANK_NOT_PROCESSED);
 
     static Optional<NotificationRequest> generate(Transfer transfer, Long customerId, LocalDateTime occurredAt) {
         boolean isCustomerInitiatedTransfer = transfer.getTransferType() == TransferType.IMMEDIATE;
@@ -54,10 +45,8 @@ final class TransferNotificationGenerator {
     }
 
     private static String customerReasonSuffix(String errorCode) {
-        return CUSTOMER_ACTIONABLE_ERRORS.stream()
-                .filter(actionable -> actionable.getCode().equals(errorCode))
-                .findFirst()
-                .map(actionable -> " " + actionable.getMessage())
+        return TransferErrorCode.customerActionableMessage(errorCode)
+                .map(reason -> " " + reason)
                 .orElse("");
     }
 }
