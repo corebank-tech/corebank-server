@@ -548,6 +548,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 .occurredAt(occurredAt)
                 .amount(transfer.getAmount())
                 .counterpartyName(MaskingUtil.maskName(transfer.getPayeeName()))
+                .notificationRequest(TransferNotificationComposer.compose(transfer, command.customerId(), occurredAt)
+                        .orElse(null))
                 .build());
     }
 

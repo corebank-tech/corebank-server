@@ -2,7 +2,10 @@ package com.shinhan.corebank.transfer.api;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.event.DomainEvent;
+import com.shinhan.corebank.notification.api.NotificationRequest;
+import com.shinhan.corebank.notification.api.NotificationRequestCarrier;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import lombok.Builder;
 
 /**
@@ -14,6 +17,9 @@ import lombok.Builder;
  *
  * <p>구독자가 transfer 를 다시 읽지 않도록 알림 문구에 필요한 값을 담는다. counterpartyName 은 발행 시점에
  * 마스킹한 값이고, 전체 계좌번호·인증 토큰은 넣지 않는다.
+ *
+ * <p>고객 알림은 발행 시점에 transfer 가 문구까지 완성해 notificationRequest 로 싣는다(PR #723 리뷰). 예약·자동이체는
+ * 비어 있다 — 그 알림은 #707에서 배치가 자기 이벤트로 싣는다.
  */
 @Builder
 public record TransferSettled(
@@ -24,5 +30,12 @@ public record TransferSettled(
         String errorCode,
         LocalDateTime occurredAt,
         long amount,
-        String counterpartyName)
-        implements DomainEvent {}
+        String counterpartyName,
+        NotificationRequest notificationRequest)
+        implements DomainEvent, NotificationRequestCarrier {
+
+    @Override
+    public Optional<NotificationRequest> notification() {
+        return Optional.ofNullable(notificationRequest);
+    }
+}

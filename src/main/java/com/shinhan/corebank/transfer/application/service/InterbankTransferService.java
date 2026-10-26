@@ -255,14 +255,17 @@ public class InterbankTransferService implements InterbankTransferUseCase {
             Transfer created = newTransfer(command, draft, businessDateGate.acquireSharedAndReadBusinessDate());
             created.fail(errorCode, errorMessage);
             Transfer failed = transferSavePort.save(created);
+            LocalDateTime occurredAt = LocalDateTime.now(clock);
             eventPublisher.publishEvent(TransferSettled.builder()
                     .customerId(command.customerId())
                     .refId(failed.getTransferId())
                     .txType(InterbankSettlementService.LEDGER_TRANSACTION_TYPE)
                     .status(failed.getStatus())
                     .errorCode(failed.getErrorCode())
-                    .occurredAt(LocalDateTime.now(clock))
+                    .occurredAt(occurredAt)
                     .amount(failed.getAmount())
+                    .notificationRequest(TransferNotificationComposer.compose(failed, command.customerId(), occurredAt)
+                            .orElse(null))
                     .build());
             return failed;
         });

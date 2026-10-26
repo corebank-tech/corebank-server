@@ -124,11 +124,12 @@ public class InterbankSettlementService {
 
     // 타행 확정 시점에도 이체 확정 이벤트를 낸다(tasks.md PH-33-②).
     private void publishSettled(Transfer transfer, LocalDateTime occurredAt) {
+        Long customerId = accountLockPort
+                .findWithdrawalAccountDetail(transfer.getWithdrawalAccountId())
+                .map(WithdrawalAccountDetail::customerId)
+                .orElse(null);
         eventPublisher.publishEvent(TransferSettled.builder()
-                .customerId(accountLockPort
-                        .findWithdrawalAccountDetail(transfer.getWithdrawalAccountId())
-                        .map(WithdrawalAccountDetail::customerId)
-                        .orElse(null))
+                .customerId(customerId)
                 .refId(transfer.getTransferId())
                 .txType(LEDGER_TRANSACTION_TYPE)
                 .status(transfer.getStatus())
@@ -137,6 +138,8 @@ public class InterbankSettlementService {
                 .amount(transfer.getAmount())
                 .counterpartyName(
                         transfer.getPayeeName() == null ? null : MaskingUtil.maskName(transfer.getPayeeName()))
+                .notificationRequest(TransferNotificationComposer.compose(transfer, customerId, occurredAt)
+                        .orElse(null))
                 .build());
     }
 }
