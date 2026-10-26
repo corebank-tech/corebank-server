@@ -281,7 +281,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 - **멱등 키는 업무 키 `(type, ref_id)`다.** `uk_noti_type_ref`가 두 번째 행을 막는다. 발행 기록은 지워지고 구독자는 그 ID를 받지 않는다.
 - **예약 · 자동이체 알림은 배치 이벤트로만 싣는다(10/22 결정).** 배치가 결과마다 발행해 `notification.ref_id` 규약(예약 → `scheduled_transfer_id`, 자동 → `execution_id`)을 지킨다. 엔진의 `TransferSettled`(예약 · 자동 `txType`, `refId = transfer_id`)에는 transfer가 알림을 싣지 않는다(#706, PR #723 리뷰 A안).
 - auth `LoginPasswordChangedSessionListener`는 #641(PH-49c)에서 BEFORE_COMMIT으로 바뀌어 발행 기록 대상이 아니다. 재제출은 다른 WAS의 메모리 세션까지 끊는 복구 수단이 아니다([ADR-0010](../adr/0010-outbox-spring-modulith-event-publication-registry.md) 결과).
-- **현황:** #706 완료(알림 도메인 · 최소 계약 · 리스너 1개 · 즉시 · 타행이체 알림 · `uk_noti_type_ref`). #707(PR #738, #706 위로 rebase 후 재리뷰) · #708 · #709 남음.
+- **현황:** #706 완료(알림 도메인 · 최소 계약 · 리스너 1개 · 즉시 · 타행이체 알림 · `uk_noti_type_ref`). #707 PR #738(예약 · 자동이체 이벤트가 같은 계약으로 알림을 싣는다, 실패 사유는 `TransferResult.customerFailureReason()`). #708 · #709 남음.
 
 실패 처리는 「즉시 재시도 → 주기 재제출 → 상한 초과는 포기 · 알림 → 수동 재처리」 순이고, 단계마다 프레임워크 기능을 쓴다.
 
