@@ -120,7 +120,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 | [PH-33-①](#ph-33-대외계-①-모의-서버-s1--②-타행-이체-s3) | 모의 대외계 서버 · 전문 어댑터 | S1 | 1.5 | PH-31 | — | #551 · PR #552 | 완료 |
 | [#379 규격](#379-규격-전달) | 파티션 프로시저 규격·판단 → P5 | S1 | 0 (완충) | — | **10/6** | #379 | 예정 |
 | [PH-80](#ph-80-timeout--정정-체인--자동-재시도-금지) | 정정 체인 · INVALID · 재시도 금지 규약 (TIMEOUT 제외분) | S1 | 1.5 | PH-99 | — | #548 · PR #550 | 완료 |
-| [PH-38](#ph-38-원장-대사-배치) | 대사 — 불일치 저장 · 목록 API · 300만 베이스라인 · CobStep 편입 | S2 | 2 | PH-60b · CobStep 인터페이스 | 베이스라인: 60b 적재 뒤 · API 10/16 | #468 | 예정 |
+| [PH-38](#ph-38-원장-대사-배치) | 대사 — 불일치 저장 · 목록 API · 300만 베이스라인 · CobStep 편입 | S2 | 2 | PH-60b · CobStep 인터페이스 | 베이스라인: 60b 적재 뒤 · API 10/16 | #468 · #613 · #604 · #744 · PR #745 | 완료 |
 | [PH-80](#ph-80-timeout--정정-체인--자동-재시도-금지) | TIMEOUT 추가 · 전체 머지 | S2 | 2.5 | PH-80 S1분 · P5 회차 현황 (10/6) | **10/8 머지** | #564 | 완료 |
 | [PH-99](#ph-99-이체-파이프라인-확장점seam) | `transfer.api` 입금 계약 (P2 이자·만기·해지용) | S2 | 0.5 | PH-99 | **10/16** | #595 · PR #616 | 완료 |
 | [EVT-2](#evt-2-publishevent-두-줄) | `publishEvent` 두 줄 | S2 | 0.5 | PH-32 | 10/6 | #505 | 완료 — P1이 #505에서 대신 처리 |
@@ -853,6 +853,7 @@ TransferExecutionService.execute(command)                         ← 편집자:
 - 불일치 목록 조회 API(관리자, `AUDIT_READ`)
     - 현황(#613): 테이블 `ledger_reconciliation_mismatch`(영업일 `COB_DATE`별, 같은 영업일 재대사는 교체)와 `GET /admin/ledger-reconciliation/mismatches`(영업일 생략 시 최근 영업일, `all=true`는 100건 상한)를 넣었다. 권한은 `#573` 이 `AUDIT_READ` 로 붙인다. COB 대사 스텝(`runInCob`)이 soft/hard 판정 **전에** 그 영업일 불일치를 저장한다 — hard로 마감을 멈춰도 그날 목록은 남는다. 0건이면 그날 행을 비우고, 락을 못 잡아 건너뛴 날은 저장도 삭제도 하지 않는다. 저장이 실패하면 러너로 전파한다.
 - 300만 원장 대사 시간 베이스라인(60b 적재 뒤, [D-27](README.md#d-27--109--팀-합의)). 전수 대사 경로(#468)로 잰다.
+    - 현황(#744): 전수 대사가 COB 안에서만 돌아 일회성 실행기 `ph38-baseline`으로 잰다. **10/25 측정 완료 — 중앙값 1,188,096ms(약 19.8분), 3회 모두 불일치 0.** 절차와 결과는 [ph38_baseline_results.md](ph38_baseline_results.md).
 - **`CobStep` 편입** — P5 인터페이스(10/6)가 들어오면 독립 스케줄러를 대사 스텝 구현체로 옮긴다. 등록 주체는 P4이고, soft/hard 임계는 P5가 정한다.
     - 현황(#604): `LedgerReconciliationCobStep`(`order=2`)이 전수 대사를 돌리고 독립 스케줄(02:00 증분 · 일 03:00 전수)은 없앴다. 증분 대사는 기표 시각 기준이라 COB 안에서 23:30~24:00·주말 거래를 놓쳐 쓰지 않는다. 임계는 `app.ledger-reconciliation.cob-hard-threshold`(기본 10). **hard는 `CobStepHaltException`으로 마감을 멈추고, 다음 `run()`이 같은 `COB_DATE`로 대사부터 다시 한다**(#600, #663). `run()`·`runFull()`과 같은 대사 락을 잡고(못 잡으면 `LEDGER_RECONCILIATION_SKIPPED` ERROR), COB가 길어져도 00:10 자동이체가 밀리지 않게 스케줄러 스레드 풀을 2로 늘렸다(`spring.task.scheduling.pool.size`).
 
