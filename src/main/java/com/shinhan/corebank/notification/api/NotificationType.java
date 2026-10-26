@@ -1,4 +1,4 @@
-package com.shinhan.corebank.notification.domain;
+package com.shinhan.corebank.notification.api;
 
 /** 알림을 발생시킨 업무 구분. notification.type 컬럼 값과 같다(api_conventions.md §5-9). */
 public enum NotificationType {

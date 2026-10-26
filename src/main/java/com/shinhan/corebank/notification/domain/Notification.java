@@ -1,5 +1,6 @@
 package com.shinhan.corebank.notification.domain;
 
+import com.shinhan.corebank.notification.api.NotificationType;
 import java.time.LocalDateTime;
 import lombok.Builder;
 

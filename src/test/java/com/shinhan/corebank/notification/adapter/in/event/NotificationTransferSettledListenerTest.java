@@ -7,7 +7,7 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.notification.adapter.out.persistence.NotificationJpaEntity;
 import com.shinhan.corebank.notification.adapter.out.persistence.NotificationJpaRepository;
-import com.shinhan.corebank.notification.domain.NotificationType;
+import com.shinhan.corebank.notification.api.NotificationType;
 import com.shinhan.corebank.transfer.api.TransferSettled;
 import java.time.Duration;
 import java.time.LocalDateTime;

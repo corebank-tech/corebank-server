@@ -1,6 +1,6 @@
 package com.shinhan.corebank.notification.adapter.out.persistence;
 
-import com.shinhan.corebank.notification.domain.NotificationType;
+import com.shinhan.corebank.notification.api.NotificationType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

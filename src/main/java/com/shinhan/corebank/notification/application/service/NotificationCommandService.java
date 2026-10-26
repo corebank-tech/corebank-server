@@ -1,11 +1,11 @@
 package com.shinhan.corebank.notification.application.service;
 
+import com.shinhan.corebank.notification.api.NotificationType;
 import com.shinhan.corebank.notification.application.port.in.NotificationCommandUseCase;
 import com.shinhan.corebank.notification.application.port.in.dto.NotificationTransferResultCommand;
 import com.shinhan.corebank.notification.application.port.out.NotificationCommandPort;
 import com.shinhan.corebank.notification.domain.Notification;
 import com.shinhan.corebank.notification.domain.NotificationTransferMessage;
-import com.shinhan.corebank.notification.domain.NotificationType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
