@@ -526,4 +526,44 @@ class TransferControllerTest extends IntegrationTestSupport {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("TRF0006"));
     }
+
+    @Test
+    @DisplayName("타행 수취인 조회: 상대 은행이 확인하지 못하면(9999 또는 연결 실패) 409 + TRF0309")
+    void inquireInterbankPayee_unverified_returnsConflict() throws Exception {
+        // 9999로 시작하는 계좌는 모의 서버가 9999로 답하고, 서버가 없으면 연결 실패다 — 둘 다 TRF0309다.
+        mockMvc.perform(get("/transfers/interbank/payee")
+                        .with(authentication(authenticationOf(1L)))
+                        .param("bankCode", "004")
+                        .param("accountNumber", "9999000000000"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("TRF0309"));
+    }
+
+    @Test
+    @DisplayName("타행 수취인 조회: 계좌번호 형식이 틀리면 400 + TRF0007, 목록에 없는 은행이면 400 + TRF0006")
+    void inquireInterbankPayee_invalidInput_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/transfers/interbank/payee")
+                        .with(authentication(authenticationOf(1L)))
+                        .param("bankCode", "004")
+                        .param("accountNumber", "12345678901234567"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TRF0007"));
+        mockMvc.perform(get("/transfers/interbank/payee")
+                        .with(authentication(authenticationOf(1L)))
+                        .param("bankCode", "088")
+                        .param("accountNumber", "1234567890123"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TRF0006"));
+    }
+
+    @Test
+    @DisplayName("API 문서에 타행 수취인 조회가 operationId와 payeeName 응답으로 노출된다")
+    void apiDocs_exposesInterbankPayeeInquiry() throws Exception {
+        mockMvc.perform(get("/api/v1/v3/api-docs").contextPath("/api/v1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$['paths']['/transfers/interbank/payee']['get']['operationId']")
+                        .value("getInterbankTransferPayee"))
+                .andExpect(jsonPath("$['components']['schemas']['InterbankPayeeResponse']['properties']['payeeName']")
+                        .exists());
+    }
 }

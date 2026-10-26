@@ -870,7 +870,7 @@ class ProductSubscriptionControllerTest extends IntegrationTestSupport {
 
     // REQ-PRDT-017 인수기준: "약관 본문을 조회하지 않은 상태로 가입 실행 API를 직접 호출하면
     // 거부된다". 열람 판정은 서비스 단위 테스트(ProductSubscriptionValidationServiceTest)에도 있지만,
-    // 인수기준이 겨냥하는 건 실행 엔드포인트라 실제 Redis 열람이력을 태워 확인한다.
+    // 인수기준이 겨냥하는 건 실행 엔드포인트라 실제 열람이력 저장소를 태워 확인한다.
     @Test
     @DisplayName("열람이 필요한 약관을 조회하지 않은 채 가입을 실행하면 400 + PRD0005를 반환한다")
     void execute_termsNotViewed_returnsPrd0005() throws Exception {

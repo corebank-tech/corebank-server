@@ -2,7 +2,6 @@ package com.shinhan.corebank.signup.adapter.out.persistence;
 
 import com.shinhan.corebank.common.authtoken.AuthTokenPurpose;
 import com.shinhan.corebank.common.authtoken.AuthTokenStore;
-import com.shinhan.corebank.common.ephemeralstore.ConditionalOnJdbcEphemeralStore;
 import com.shinhan.corebank.signup.application.port.out.EmailVerificationTokenPort;
 import com.shinhan.corebank.signup.domain.model.EmailVerificationTokenPayload;
 import java.time.Duration;
@@ -12,7 +11,6 @@ import org.springframework.stereotype.Component;
 
 // 이메일 인증 완료 토큰을 MySQL에 저장하고 한 번만 소비한다.
 @Component
-@ConditionalOnJdbcEphemeralStore
 @RequiredArgsConstructor
 public class EmailVerificationTokenPersistenceAdapter implements EmailVerificationTokenPort {
 

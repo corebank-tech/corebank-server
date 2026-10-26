@@ -11,8 +11,7 @@ spring:
     username: ${DB_USER}
     password: ${DB_PASSWORD}
     hikari:
-      # (메인 풀 + 채번 풀 3) × 서버 대수 + 그 밖의 접속(약 15) ≤ DB 최대 연결(60). 서버 2대면 넘으니 그 전에 다시 계산한다(#553).
-      maximum-pool-size: 20
+      maximum-pool-size: 10
       connection-timeout: 3000
       max-lifetime: 570000
   jpa:
@@ -23,9 +22,6 @@ spring:
     user: ${FLYWAY_USER}
     password: ${FLYWAY_PASSWORD}
     clean-disabled: true
-  data:
-    redis:
-      host: ${REDIS_HOST}
 
 management:
   endpoints:

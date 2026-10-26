@@ -60,4 +60,25 @@ public class AccountStatusHistoryJpaEntity {
 
         return entity;
     }
+
+    /**
+     * 고객 요청으로 만기 계좌를 종료한 감사 이력.
+     *
+     * effectiveBusinessDate에는 MATURITY 이체의 실제 거래일을 저장한다.
+     */
+    public static AccountStatusHistoryJpaEntity maturityClosed(
+            Long accountId, LocalDate maturityDate, LocalDate closedTradeDate, LocalDateTime changedAt) {
+
+        AccountStatusHistoryJpaEntity entity = new AccountStatusHistoryJpaEntity();
+
+        entity.accountId = accountId;
+        entity.previousStatus = AccountStatus.MATURED.name();
+        entity.newStatus = AccountStatus.CLOSED.name();
+        entity.maturityDate = maturityDate;
+        entity.effectiveBusinessDate = closedTradeDate;
+        entity.changedAt = changedAt;
+        entity.triggerType = "CUSTOMER";
+
+        return entity;
+    }
 }

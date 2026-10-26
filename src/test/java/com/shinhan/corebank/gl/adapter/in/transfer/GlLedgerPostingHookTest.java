@@ -6,6 +6,7 @@ import static org.assertj.core.groups.Tuple.tuple;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
+import com.shinhan.corebank.business.api.BusinessDateProvider;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.event.DomainEventSink;
 import com.shinhan.corebank.common.exception.BusinessException;
@@ -22,7 +23,6 @@ import com.shinhan.corebank.transfer.application.service.TransferExecutionServic
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import jakarta.persistence.EntityManager;
-import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
@@ -62,7 +62,7 @@ class GlLedgerPostingHookTest extends IntegrationTestSupport {
     private PlatformTransactionManager transactionManager;
 
     @Autowired
-    private Clock clock;
+    private BusinessDateProvider businessDateProvider;
 
     @MockitoBean
     private OtpAuthTokenVerifier otpAuthTokenVerifier;
@@ -132,13 +132,13 @@ class GlLedgerPostingHookTest extends IntegrationTestSupport {
     @Test
     @DisplayName("GL 기표가 실패하면 원장·잔액이 롤백되고 이체는 ERROR 로 확정된다")
     void glFailureRollsBackTransfer() {
-        // 오늘 TRF 일련번호를 소진시켜 훅 안에서 GLA9005 가 나게 한다.
-        LocalDate today = LocalDate.now(clock);
+        // 이체가 전표를 세우는 영업일(주말엔 달력과 다르다)의 TRF 일련번호를 소진시켜 GLA9005 를 낸다 (#741)
+        LocalDate businessDate = businessDateProvider.today();
         jdbcTemplate.update(
                 "INSERT INTO gl_voucher_sequence (trade_date, tx_type, last_seq, updated_at)"
                         + " VALUES (?, 'TRANSFER', 999999, NOW(6))"
                         + " ON DUPLICATE KEY UPDATE last_seq = 999999",
-                today);
+                businessDate);
         try {
             TransferResult result = transferExecutionService.execute(immediateCommand(30_000L));
 
@@ -154,7 +154,8 @@ class GlLedgerPostingHookTest extends IntegrationTestSupport {
                             result.transactionNumber()))
                     .isZero();
         } finally {
-            jdbcTemplate.update("DELETE FROM gl_voucher_sequence WHERE trade_date = ? AND tx_type = 'TRANSFER'", today);
+            jdbcTemplate.update(
+                    "DELETE FROM gl_voucher_sequence WHERE trade_date = ? AND tx_type = 'TRANSFER'", businessDate);
         }
     }
 

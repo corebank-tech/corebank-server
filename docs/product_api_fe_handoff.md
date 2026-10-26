@@ -311,7 +311,7 @@ const rows = rateTiers.map(t => ({
 ## 7. 로컬 확인 방법
 
 ```bash
-docker compose up -d minicore-mysql   # Redis는 app.ephemeral-store.provider=redis일 때만 필요 (#580)
+docker compose up -d minicore-mysql
 ./gradlew bootRun --args='--spring.profiles.active=local'
 
 # 목록 — 정렬 3종 / 필터 / 2페이지

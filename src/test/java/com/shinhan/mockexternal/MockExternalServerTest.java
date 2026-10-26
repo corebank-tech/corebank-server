@@ -171,6 +171,40 @@ class MockExternalServerTest {
     }
 
     @Nested
+    @DisplayName("수취인 조회(PYE001)")
+    class PayeeInquiryTest {
+
+        @ParameterizedTest(name = "계좌 {0} → {1}")
+        @CsvSource({
+            "1234567890123,APPROVED",
+            "1001000000001,ACCOUNT_NOT_FOUND",
+            "1002000000001,ACCOUNT_UNAVAILABLE",
+            "9999000000001,SYSTEM_ERROR"
+        })
+        @DisplayName("이체와 같은 계좌번호 앞 4자리 규칙으로 답하고, 정상이면 예금주를 싣는다")
+        void answersByAccountPrefix(String accountNumber, ResponseCode expected) throws IOException {
+            ExternalMessage response = send(request(TransactionCode.PAYEE_INQUIRY, nextSerial(), accountNumber));
+
+            assertThat(response.transactionCode()).isEqualTo(TransactionCode.PAYEE_INQUIRY);
+            assertThat(response.responseCode()).isEqualTo(expected);
+            assertThat(response.payeeName()).isEqualTo(expected == ResponseCode.APPROVED ? MockBank.PAYEE_NAME : null);
+        }
+
+        @Test
+        @DisplayName("장부에 남기지 않는다 — 같은 일련번호로 다시 물어도 2001이 아니고, 조회거래는 3001이다")
+        void doesNotRecord() throws IOException {
+            String serial = nextSerial();
+            send(request(TransactionCode.PAYEE_INQUIRY, serial, "1234567890123"));
+
+            ExternalMessage again = send(request(TransactionCode.PAYEE_INQUIRY, serial, "1234567890123"));
+            ExternalMessage inquiry = send(request(TransactionCode.INQUIRY, serial, "1234567890123"));
+
+            assertThat(again.responseCode()).isEqualTo(ResponseCode.APPROVED);
+            assertThat(inquiry.responseCode()).isEqualTo(ResponseCode.ORIGINAL_NOT_RECEIVED);
+        }
+    }
+
+    @Nested
     @DisplayName("장애 스위치 — 관리 HTTP로 켠다")
     class FaultTest {
 

@@ -85,6 +85,12 @@ ext {
     queryDslVersion = '7.1'
 }
 
+dependencyManagement {
+    imports {
+        mavenBom 'org.springframework.modulith:spring-modulith-bom:2.0.8'
+    }
+}
+
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     compileOnly 'org.projectlombok:lombok'
@@ -103,9 +109,6 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     runtimeOnly 'com.mysql:mysql-connector-j'
     infoEtlRuntimeOnly 'com.mysql:mysql-connector-j'
-
-    // Redis (약관 열람 이력, TTL 기반)
-    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
     // Querydsl (OpenFeign 포크, io.github.openfeign.querydsl)
     implementation "io.github.openfeign.querydsl:querydsl-jpa:${queryDslVersion}"
@@ -127,6 +130,9 @@ dependencies {
 
     // JSON 구조화 로깅 (PH-42)
     implementation 'net.logstash.logback:logstash-logback-encoder:8.0'
+
+    // 이벤트 발행 기록 — 아웃박스 (PH-96, #437)
+    implementation 'org.springframework.modulith:spring-modulith-starter-jdbc'
 
     // 테스트
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
@@ -170,6 +176,10 @@ tasks.named('test') {
     systemProperty 'spring.test.context.cache.maxSize', '4'
     // PH-49c 테스트가 같은 MySQL에 연결한 독립 WAS JVM 두 개를 실행한다.
     systemProperty 'corebank.test.application-classpath', sourceSets.main.runtimeClasspath.asPath
+    // #724: 기본값(SHORT)은 실패 줄 번호만 찍어 CI 로그에 실제 값이 안 남는다
+    testLogging {
+        exceptionFormat = 'full'
+    }
     finalizedBy tasks.named('jacocoTestReport')
 }
 

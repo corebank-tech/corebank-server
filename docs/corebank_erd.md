@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 46개 테이블(39개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트 5개 + Spring Session 2개), [스키마 목록](schema_reference.md#테이블-목록) 기준 385개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT.
+> **DBMS**: MySQL 8.4 / 47개 테이블(39개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트 5개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 394개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -24,7 +24,7 @@ erDiagram
     SPRING_SESSION ||--o{ SPRING_SESSION_ATTRIBUTES : "ON DELETE CASCADE"
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 46개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
+    %% MySQL 8.4 / 47개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -402,6 +402,17 @@ erDiagram
         datetime ended_at "DATETIME(6)"
         varchar status "SUCCESS / FAILURE / HALTED (#600, #603)"
         text failure_reason "실패·중단 시만. SUCCESS면 NULL"
+    }
+    EVENT_PUBLICATION {
+        varchar ID PK "VARCHAR(36). Spring Modulith 이벤트 발행 기록 (#437)"
+        varchar LISTENER_ID "VARCHAR(512)"
+        varchar EVENT_TYPE "VARCHAR(512)"
+        varchar SERIALIZED_EVENT "VARCHAR(4000). JSON"
+        timestamp PUBLICATION_DATE "TIMESTAMP(6). 라이브러리 DDL 그대로"
+        timestamp COMPLETION_DATE "delete 모드라 완료 시 행 삭제"
+        varchar STATUS "PUBLISHED / PROCESSING / COMPLETED / FAILED / RESUBMITTED"
+        int COMPLETION_ATTEMPTS
+        timestamp LAST_RESUBMISSION_DATE
     }
     auth_token {
         bigint auth_token_id PK

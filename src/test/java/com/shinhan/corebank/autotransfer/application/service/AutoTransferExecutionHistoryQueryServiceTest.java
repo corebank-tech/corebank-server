@@ -2,15 +2,18 @@ package com.shinhan.corebank.autotransfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
+import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferExecutionHistoryItem;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferExecutionHistoryResult;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryAggregate;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryQueryPort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionHistoryRow;
+import com.shinhan.corebank.autotransfer.application.port.out.TransferTradeDatePort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
@@ -21,6 +24,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -42,6 +46,9 @@ class AutoTransferExecutionHistoryQueryServiceTest {
 
     @Mock
     AutoTransferExecutionHistoryQueryPort autoTransferExecutionHistoryQueryPort;
+
+    @Mock
+    TransferTradeDatePort transferTradeDatePort;
 
     @Mock
     Clock clock;
@@ -66,6 +73,8 @@ class AutoTransferExecutionHistoryQueryServiceTest {
     private AutoTransferExecutionHistoryRow sampleRow() {
         return new AutoTransferExecutionHistoryRow(
                 1L,
+                10L,
+                LocalDate.of(2026, 3, 10),
                 ProcessResultStatus.SUCCESS,
                 LocalDateTime.of(2026, 3, 10, 9, 0),
                 2L,
@@ -359,6 +368,8 @@ class AutoTransferExecutionHistoryQueryServiceTest {
     private AutoTransferExecutionHistoryRow executionRow(Long executionId, LocalDateTime executedAt) {
         return new AutoTransferExecutionHistoryRow(
                 executionId,
+                10L,
+                executedAt.toLocalDate(),
                 ProcessResultStatus.SUCCESS,
                 executedAt,
                 2L,
@@ -408,5 +419,28 @@ class AutoTransferExecutionHistoryQueryServiceTest {
         assertThat(result.summary().successAmount()).isEqualTo(30_000L);
         assertThat(result.summary().errorCount()).isEqualTo(1L);
         assertThat(result.summary().errorAmount()).isEqualTo(5_000L);
+    }
+
+    @Test
+    @DisplayName("휴일에 실행된 회차는 이체 행의 거래일(익영업일)이 붙고, 이력 없는 합성 행(관리자 문의)은 null이다")
+    void search_attachesTradeDateOfTransferRow_andNullForMissingExecution() {
+        Pageable pageable = PageRequest.of(0, 10);
+        LocalDate saturday = LocalDate.of(2026, 3, 7);
+        LocalDate monday = LocalDate.of(2026, 3, 9);
+        AutoTransferExecutionHistoryRow saturdayRow = executionRow(1L, saturday.atTime(0, 10));
+        when(autoTransferExecutionHistoryQueryPort.search(eq(1L), eq(2L), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(saturdayRow), pageable, 1));
+        when(autoTransferExecutionHistoryQueryPort.summarize(eq(1L), eq(2L), any(), any()))
+                .thenReturn(AutoTransferExecutionHistoryAggregate.empty());
+        when(autoTransferExecutionHistoryQueryPort.findNormalStuckBefore(eq(1L), eq(2L), eq(TODAY)))
+                .thenReturn(List.of(stuckAutoTransfer(20L, LocalDate.of(2026, 3, 12))));
+        when(transferTradeDatePort.findTradeDates(List.of(saturdayRow))).thenReturn(Map.of(1L, monday));
+
+        AutoTransferExecutionHistoryResult result =
+                service.search(1L, 2L, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 15), 0, 10, false);
+
+        assertThat(result.page().getContent())
+                .extracting(AutoTransferExecutionHistoryItem::executionId, AutoTransferExecutionHistoryItem::tradeDate)
+                .containsExactly(tuple(null, null), tuple(1L, monday));
     }
 }

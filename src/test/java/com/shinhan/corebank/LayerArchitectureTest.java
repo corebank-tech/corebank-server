@@ -51,6 +51,9 @@ class LayerArchitectureTest {
     static final ArchRule gl = layerRule("gl");
 
     @ArchTest
+    static final ArchRule info = layerRule("info");
+
+    @ArchTest
     static final ArchRule limit = layerRule("limit");
 
     @ArchTest

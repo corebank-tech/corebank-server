@@ -150,6 +150,41 @@ class InterbankSocketClientTest {
         }
     }
 
+    @ParameterizedTest(name = "계좌 {0}… → {1}")
+    @CsvSource({
+        "1234567890123, APPROVED, 0000",
+        "1001000000000, ACCOUNT_NOT_FOUND, 1001",
+        "1002000000000, ACCOUNT_UNAVAILABLE, 1002",
+        "9999000000000, NOT_PROCESSED, 9999"
+    })
+    @DisplayName("수취인 조회(PYE001)는 0000이면 예금주를 받고, 1001·1002는 구분하고, 그 밖의 응답은 확인 못 함이다")
+    void inquirePayee_mapsResponseCode(String accountNumber, InterbankOutcome expected, String responseCode) {
+        InterbankReply reply = client().inquirePayee("004", accountNumber);
+
+        assertThat(reply.outcome()).isEqualTo(expected);
+        assertThat(reply.responseCode()).isEqualTo(responseCode);
+        assertThat(reply.payeeName()).isEqualTo(expected == InterbankOutcome.APPROVED ? "김민수" : null);
+    }
+
+    @Test
+    @DisplayName("수취인 조회에 응답이 없으면 UNKNOWN, 연결하지 못하면 NOT_PROCESSED다")
+    void inquirePayee_noResponseOrNotSent() throws Exception {
+        setFault("mode=NO_RESPONSE");
+        InterbankReply noResponse = client().inquirePayee("004", "1234567890123");
+        InterbankReply notSent = client(closedPort(), 100).inquirePayee("004", "1234567890123");
+
+        assertThat(noResponse.outcome()).isEqualTo(InterbankOutcome.UNKNOWN);
+        assertThat(notSent.outcome()).isEqualTo(InterbankOutcome.NOT_PROCESSED);
+    }
+
+    // 내림하면 1ms 미만이 남았을 때 0이 되어 마감 전에 끊는다 — CI에서 499ms로 깨진 원인(#724)
+    @ParameterizedTest(name = "남은 {0}ns → {1}ms")
+    @CsvSource({"1, 1", "600000, 1", "1000000, 1", "1000001, 2", "499600000, 500"})
+    @DisplayName("소켓 대기 시간은 남은 시간을 올림해 마감 전에 끝나지 않는다")
+    void soTimeoutMillis_roundsUpSoReadNeverEndsBeforeDeadline(long remainingNanos, int expectedMillis) {
+        assertThat(InterbankSocketClient.soTimeoutMillis(remainingNanos)).isEqualTo(expectedMillis);
+    }
+
     // 요청은 모의 대외기관에 그대로 넘기고, 받은 응답은 chunks 조각으로 나눠 gap마다 흘려보낸다.
     private ServerSocket trickleRelay(int chunks, Duration gap) throws IOException {
         ServerSocket relay = new ServerSocket(0);
