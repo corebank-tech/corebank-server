@@ -17,3 +17,15 @@ output "alb_zone_id" {
 output "target_group_arn" {
   value = aws_lb_target_group.was.arn
 }
+
+output "was_instance_profile_name" {
+  value = aws_iam_instance_profile.was.name
+}
+
+output "was_role_arn" {
+  value = aws_iam_role.was.arn
+}
+
+output "onprem_ssm_role_name" {
+  value = aws_iam_role.onprem_ssm.name
+}

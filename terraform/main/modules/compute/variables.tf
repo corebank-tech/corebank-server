@@ -22,3 +22,8 @@ variable "certificate_arn" {
   description = "terraform/acm이 내보낸 ALB용 ACM 인증서 ARN"
   type        = string
 }
+
+variable "audit_writer_policy_arn" {
+  description = "terraform/audit이 내보낸 감사 버킷 적재 정책 ARN"
+  type        = string
+}
