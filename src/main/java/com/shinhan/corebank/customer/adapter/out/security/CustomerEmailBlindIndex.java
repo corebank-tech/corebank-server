@@ -34,8 +34,7 @@ public final class CustomerEmailBlindIndex {
         try {
             Mac mac = Mac.getInstance(ALGORITHM);
             mac.init(key);
-            return HexFormat.of().formatHex(mac.doFinal(
-                    (DOMAIN_PREFIX + normalized).getBytes(StandardCharsets.UTF_8)));
+            return HexFormat.of().formatHex(mac.doFinal((DOMAIN_PREFIX + normalized).getBytes(StandardCharsets.UTF_8)));
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("이메일 검색 해시 생성에 실패했습니다.", e);
         }
