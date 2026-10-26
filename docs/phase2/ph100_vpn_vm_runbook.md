@@ -10,7 +10,9 @@
 - 터널은 **터널 1만** 설정한다. AWS가 터널을 2개 만들지만 터널 2는 DOWN이어도 정상이다.
 - Customer Gateway에 등록된 공인 IP는 `58.230.206.76`이다(교육장 NAT 출구, VM에서 `curl -s ifconfig.me`).
 - **최종 VM에서 아직 확인하지 못한 것**: UDP 500/4500 통과, 같은 방식으로 터널이 서는지, 장시간 유지·rekey, 터널 2 장애 전환, 실제 포트(RDS 3306·WAS 8080·정보계 API).
-- **VM이 다른 팀과 공용인지** 미확인이다. 공용이면 PSK를 파일로 두는 §3의 방식이 "공용 VM에 자격 증명을 평문으로 두지 않는다"는 원칙과 충돌한다. 설정 전에 `who`와 홈 디렉터리로 확인한다.
+- **VM은 우리 팀 전용으로 본다**(팀마다 IP가 달라 사용자가 확인, 2026-10-26). 접속자와 `/home`도 `student` 하나뿐이었다. 그래도 PSK는 root만 읽는 파일(권한 600)에만 두고 화면·채팅·저장소에 남기지 않는다.
+- **이 VM에는 #691(정보계 ETL)이 이미 둔 것이 있다.** `/etc/info-etl/`(비밀 파일), 마트 MySQL 컨테이너 `info-mart-mysql`(`127.0.0.1:3307`), `/var/lib/info-mart`, 호스트 포트 3306(레플리카 자리)·3307·80(Nginx 자리). VPN 작업은 이것들을 건드리지 않는다.
+- **VM 명령은 한 번에 한 세션만** 입력한다. `apt`는 동시에 돌 수 없고, 도커·네트워크 서비스를 다시 시작하면 마트가 영향을 받는다.
 
 ## 1. 먼저 얻을 것 (AWS 쪽 apply 뒤)
 
@@ -40,12 +42,15 @@
 ```bash
 sudo apt-get update && sudo apt-get install -y strongswan
 ```
+**완료(2026-10-26):** strongSwan 5.9.5가 설치됐고 `strongswan-starter`는 `disable --now`로 꺼 두었다(설정 없이 켜져 있지 않게). 설치 중 needrestart 화면은 서비스 재시작을 모두 해제했다(docker·ssh·networkd 재시작 방지, 마트 컨테이너 보호). 설치 전후 `ip route`의 기본 경로(`default via 192.168.0.1 dev enp6s18`)는 그대로였다.
 
 ### 3-2. `/etc/strongswan.d/zz-vpn.conf` (charon 설정)
 ```
 charon { install_routes = no }
 ```
 AWS 정적 라우팅의 트래픽 선택기가 `0.0.0.0/0`이라서, 이 설정이 없으면 VM의 기본 경로가 터널로 들어간다.
+
+**완료(2026-10-26):** 이 파일을 만들었다. `/etc/ipsec.conf`·`/etc/ipsec.secrets`와 VTI는 AWS 쪽 apply로 터널 주소와 PSK가 나온 뒤에 만든다(§3-3 이후).
 
 ### 3-3. `/etc/ipsec.conf` (연결 설정)
 ```
