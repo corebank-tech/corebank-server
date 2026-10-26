@@ -1,6 +1,6 @@
 package com.shinhan.corebank.transfer.api;
 
-// 이자·만기는 COB가 일으키므로 BT, 고객이 요청한 중도해지는 WB다.
+// 누가 시작했는지로 나눈다. COB가 시작하면 BT, 고객이 요청하면(중도해지·만기해지) WB다.
 public enum DepositChannel {
     WB,
     BT
