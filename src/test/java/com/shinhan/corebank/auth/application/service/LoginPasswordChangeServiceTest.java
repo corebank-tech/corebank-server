@@ -194,7 +194,7 @@ class LoginPasswordChangeServiceTest {
     }
 
     private void assertError(ChangeLoginPasswordCommand command, ErrorCode expected) {
-        BusinessException exception = catchThrowableOfType(() -> service.change(command), BusinessException.class);
+        BusinessException exception = catchThrowableOfType(BusinessException.class, () -> service.change(command));
         assertThat(exception.getErrorCode()).isEqualTo(expected);
         verify(customerFacade, never()).resetPassword(any());
         verify(auditLogService, never()).record(any(), any(), any(), any(), anyBoolean(), any());
@@ -202,7 +202,7 @@ class LoginPasswordChangeServiceTest {
     }
 
     private void assertPostSaveError(ChangeLoginPasswordCommand command, ErrorCode expected) {
-        BusinessException exception = catchThrowableOfType(() -> service.change(command), BusinessException.class);
+        BusinessException exception = catchThrowableOfType(BusinessException.class, () -> service.change(command));
         assertThat(exception.getErrorCode()).isEqualTo(expected);
         verify(customerFacade).resetPassword(any());
         verify(auditLogService, never()).record(any(), any(), any(), any(), anyBoolean(), any());

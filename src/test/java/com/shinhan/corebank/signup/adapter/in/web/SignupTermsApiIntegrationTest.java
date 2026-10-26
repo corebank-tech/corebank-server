@@ -85,7 +85,7 @@ class SignupTermsApiIntegrationTest extends IntegrationTestSupport {
                 .getContentAsString();
 
         JsonNode response = objectMapper.readTree(responseBody);
-        String token = response.get("data").get("termsAuthToken").asText();
+        String token = response.get("data").get("termsAuthToken").asString();
         generatedTokens.add(token);
 
         Long ttl = jdbcTemplate.queryForObject(
