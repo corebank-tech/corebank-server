@@ -31,7 +31,7 @@ terraform/
   main/
     modules/
       network/       VPC·서브넷·NAT·라우팅·SG (P5, plan 완료)
-      compute/        자리만 (ALB·ASG, PH-51)
+      compute/        ALB·대상그룹·HTTPS 리스너 (P5, PH-51 ①). ASG·IAM은 아직 없음(#694·#695)
       data/           RDS MySQL 8.4 · DB 서브넷 그룹 · 파라미터 그룹 (P2, plan 완료)
 ```
 
@@ -39,7 +39,8 @@ terraform/
 
 - `network` 모듈: plan 통과(28개 리소스), **apply는 아직 안 함**
 - `data` 모듈: RDS·DB 서브넷 그룹·파라미터 그룹 구현, plan 통과
-- 통합 Terraform plan: 31 to add, 0 to change, 0 to destroy
+- `compute` 모듈(ALB): 대상 그룹 헬스체크는 `/api/v1/actuator/health`(앱 context-path가 `/api/v1`). 인증서 ARN은 `terraform/acm` 상태에서 읽는다. plan 통과
+- 통합 Terraform plan: 35 to add, 0 to change, 0 to destroy (ALB 추가 후)
 - 실제 apply는 10/26, DNS 컷오버는 10/27 예정
 
 
@@ -62,6 +63,16 @@ terraform/
 | `module.network.vpc_id` | VPC 참조 |
 | `module.network.data_subnet_ids` | RDS 서브넷 그룹 |
 | `module.network.rds_sg_id` | RDS에 붙일 보안그룹 |
+
+컴퓨트 apply 직후 P2에게 넘기는 값(루트 `terraform output`으로도 나온다):
+
+| 출력값 | 용도 |
+|---|---|
+| `alb_arn` | WAF 연결 |
+| `https_listener_arn` | 리스너 참조 |
+| `alb_dns_name` | Route 53/가비아 DNS 전환 |
+| `alb_zone_id` | Route 53 별칭 레코드 |
+| `target_group_arn` | ASG(#694)가 서버를 붙일 대상 그룹 |
 
 **주의**: `alb`·`was`·`rds` 세 보안그룹의 인바운드·아웃바운드 규칙은 모두 `modules/network/security_groups.tf`에서만 관리한다. 다른 모듈(`modules/data` 등)에서 `aws_security_group_rule`로 같은 보안그룹에 규칙을 추가하면 이 파일의 인라인 규칙과 충돌해 apply가 깨진다. RDS에 추가 포트가 필요하면 이 파일을 고쳐달라고 요청한다.
 
