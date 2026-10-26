@@ -8,7 +8,6 @@ import com.shinhan.corebank.transfer.api.LedgerPostingContext;
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
 import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
-import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
@@ -538,16 +537,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
      * 재생 경로(findAlreadyProcessedResult)는 여기를 지나지 않아 같은 이체가 두 번 발행되지 않는다.
      */
     private void publishSettled(TransferCommand command, Transfer transfer, LocalDateTime occurredAt) {
-        eventPublisher.publishEvent(TransferSettled.builder()
-                .customerId(command.customerId())
-                .refId(transfer.getTransferId())
-                .txType(command.transferType().ledgerTransactionType())
-                .status(transfer.getStatus())
-                .errorCode(transfer.getErrorCode())
-                .occurredAt(occurredAt)
-                .notificationRequest(TransferNotificationComposer.compose(transfer, command.customerId(), occurredAt)
-                        .orElse(null))
-                .build());
+        eventPublisher.publishEvent(TransferSettledFactory.create(
+                transfer, command.customerId(), command.transferType().ledgerTransactionType(), occurredAt));
     }
 
     private TransferSourceType resolveSourceType(TransferType transferType) {

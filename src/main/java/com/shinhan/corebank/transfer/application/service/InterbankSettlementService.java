@@ -4,7 +4,6 @@ import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.ErrorCode;
 import com.shinhan.corebank.gl.api.JournalPostingUseCase;
-import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.InterbankOutcome;
 import com.shinhan.corebank.transfer.application.port.out.InterbankReply;
@@ -127,15 +126,7 @@ public class InterbankSettlementService {
                 .findWithdrawalAccountDetail(transfer.getWithdrawalAccountId())
                 .map(WithdrawalAccountDetail::customerId)
                 .orElse(null);
-        eventPublisher.publishEvent(TransferSettled.builder()
-                .customerId(customerId)
-                .refId(transfer.getTransferId())
-                .txType(LEDGER_TRANSACTION_TYPE)
-                .status(transfer.getStatus())
-                .errorCode(transfer.getErrorCode())
-                .occurredAt(occurredAt)
-                .notificationRequest(TransferNotificationComposer.compose(transfer, customerId, occurredAt)
-                        .orElse(null))
-                .build());
+        eventPublisher.publishEvent(
+                TransferSettledFactory.create(transfer, customerId, LEDGER_TRANSACTION_TYPE, occurredAt));
     }
 }
