@@ -31,7 +31,7 @@ terraform/
   main/
     modules/
       network/       VPC·서브넷·NAT·라우팅·SG (P5, plan 완료)
-      compute/        ALB·대상그룹·HTTPS 리스너 (P5, PH-51 ①). ASG·IAM은 아직 없음(#694·#695)
+      compute/        ALB·대상그룹·HTTPS 리스너, WAS 인스턴스 프로파일·SSM 역할, 시작 템플릿·ASG (P5, PH-51 ①②③)
       data/           RDS MySQL 8.4 · DB 서브넷 그룹 · 파라미터 그룹 (P2, plan 완료)
 ```
 
@@ -40,7 +40,7 @@ terraform/
 - `network` 모듈: plan 통과(28개 리소스), **apply는 아직 안 함**
 - `data` 모듈: RDS·DB 서브넷 그룹·파라미터 그룹 구현, plan 통과
 - `compute` 모듈(ALB): 대상 그룹 헬스체크는 `/api/v1/actuator/health`(앱 context-path가 `/api/v1`). 인증서 ARN은 `terraform/acm` 상태에서 읽는다. plan 통과
-- 통합 Terraform plan: 35 to add, 0 to change, 0 to destroy (ALB 추가 후)
+- 통합 Terraform plan: 44 to add, 0 to change, 0 to destroy (ALB·IAM·ASG 포함)
 - 실제 apply는 10/26, DNS 컷오버는 10/27 예정
 
 
