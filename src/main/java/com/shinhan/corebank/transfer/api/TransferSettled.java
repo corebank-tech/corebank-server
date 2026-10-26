@@ -13,10 +13,10 @@ import lombok.Builder;
  * (IMMEDIATE_TRANSFER · SCHEDULED_TRANSFER · AUTO_TRANSFER · INTERBANK_TRANSFER, ledger_entry.transaction_type 과
  * 같은 값). 타행이체는 송신 전 실패·상대 은행 응답·조회거래로 결과가 확정될 때 낸다 — 처리 불명(TIMEOUT)인 동안은 내지 않는다.
  * refId 는 transfer_id. transfer 행이 생기기 전의 사전검증 실패는 발행하지 않는다 — 즉시이체는 고객이 API 응답으로
- * 이미 오류를 받고, 예약·자동이체는 배치가 자기 이벤트로 따로 발행한다.
+ * 이미 오류를 받는다. 예약·자동이체 알림은 배치 이벤트(ScheduledTransferSettled · AutoTransferExecutionSettled)가
+ * 싣는다(#707).
  *
- * <p>고객 알림은 발행 시점에 transfer 가 문구까지 완성해 notificationRequest 로 싣는다(PR #723 리뷰). 예약·자동이체는
- * 비어 있다 — 그 알림은 #707에서 배치가 자기 이벤트로 싣는다.
+ * <p>고객 알림은 transfer 가 문구까지 완성해 notificationRequest 로 싣는다(PR #723 리뷰). 예약·자동이체는 비어 있다.
  */
 @Builder
 public record TransferSettled(

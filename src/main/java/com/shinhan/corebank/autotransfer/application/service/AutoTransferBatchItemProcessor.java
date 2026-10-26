@@ -11,7 +11,7 @@ import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
-import com.shinhan.corebank.common.util.MaskingUtil;
+import com.shinhan.corebank.notification.api.NotificationRequest;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
@@ -101,20 +101,19 @@ public class AutoTransferBatchItemProcessor {
         }
         autoTransferExecutionPersistencePort.save(processingExecution, autoTransfer.getAutoTransferId());
 
-        // 거래번호가 있으면 이체 엔진이 돈이 움직인 트랜잭션 안에서 이미 TransferSettled 를 발행했다(#436).
-        // 거래번호가 없는 건 transfer 행이 생기기 전의 사전검증 실패뿐이라 엔진이 발행하지 못하므로, 회차
-        // 기록과 함께 여기서 발행한다. refId 는 등록 ID 가 아니라 회차 ID 다.
-        if (result.isPreValidationFailure()) {
-            eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
-                    .customerId(autoTransfer.getCustomerId())
-                    .refId(processingExecution.getExecutionId())
-                    .status(result.status())
-                    .errorCode(result.errorCode())
-                    .occurredAt(LocalDateTime.now(clock))
-                    .amount(processingExecution.getAmount())
-                    .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
-                    .build());
-        }
+        // 회차 확정마다 발행한다(#707). 알림은 회차 ID 가 필요해 TransferSettled 가 아니라 이 이벤트에 싣는다.
+        // 재확정과 겹치면 두 번 나갈 수 있지만 알림은 업무 키로 한 건만 남는다.
+        LocalDateTime settledAt = LocalDateTime.now(clock);
+        NotificationRequest notification = AutoTransferNotificationComposer.compose(
+                autoTransfer, processingExecution, result.status(), result.customerFailureReason(), settledAt);
+        eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
+                .customerId(autoTransfer.getCustomerId())
+                .refId(processingExecution.getExecutionId())
+                .status(result.status())
+                .errorCode(result.errorCode())
+                .occurredAt(settledAt)
+                .notificationRequest(notification)
+                .build());
 
         autoTransfer.advanceNextExecutionDate();
         if (autoTransfer.getNextExecutionDate().isAfter(autoTransfer.getEndDate())) {
@@ -178,18 +177,17 @@ public class AutoTransferBatchItemProcessor {
             return;
         }
 
-        // transfer 행이 없으면 이체 엔진이 발행하지 못했고, completeProcessing() 의 사전검증 실패 발행도 함께
-        // 롤백된 건이다. 재확정이 겹치면 가드에서 return 해도 트랜잭션은 커밋되므로 가드를 통과한 뒤에만 발행한다.
-        if (hasNoTransferRow) {
-            eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
-                    .customerId(autoTransfer.getCustomerId())
-                    .refId(execution.getExecutionId())
-                    .status(ProcessResultStatus.ERROR)
-                    .occurredAt(LocalDateTime.now(clock))
-                    .amount(execution.getAmount())
-                    .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
-                    .build());
-        }
+        // 재확정도 확정마다 발행하되 가드를 통과한 뒤에만 낸다(#707). 실패 코드가 없어 알림은 기본 문장이다.
+        LocalDateTime settledAt = LocalDateTime.now(clock);
+        NotificationRequest notification = AutoTransferNotificationComposer.compose(
+                autoTransfer, execution, execution.getStatus(), Optional.empty(), settledAt);
+        eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
+                .customerId(autoTransfer.getCustomerId())
+                .refId(execution.getExecutionId())
+                .status(execution.getStatus())
+                .occurredAt(settledAt)
+                .notificationRequest(notification)
+                .build());
 
         if (execution.getStatus() == ProcessResultStatus.ERROR) {
             List<AutoTransferExecution> recent = autoTransferExecutionPersistencePort.findRecentByAutoTransferId(
