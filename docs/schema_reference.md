@@ -1310,7 +1310,7 @@ COB의 영업일 전환(`advanceFrom`)과 달력 따라잡기(`catchUpTo`)가 `B
 
 > COB 재시작 체크포인트 (#663)
 
-`CobRunnerService`가 새 COB를 시작할 때, 영업일을 넘기기 전에 마감 대상 영업일(`COB_DATE`)의 영업일 전환 행과 등록된 스텝 행을 모두 `PENDING`으로 남기고, 전환과 스텝이 끝날 때마다 `SUCCESS`로 바꾼다. 가장 최근 `cob_date`에 `SUCCESS`가 아닌 행이나 빠진 스텝이 있으면 다음 `run()`이 그 날짜의 그 스텝부터 이어서 실행한다. `batch_execution_history`는 관측용이라 재시작 근거로 쓰지 않고, `business_date_cutoff`는 달력 따라잡기도 기록하므로 `COB_DATE`의 근거가 아니다. 다른 테이블과 FK는 없다.
+`CobRunnerService`가 새 COB를 시작할 때, 영업일을 넘기기 전에 마감 대상 영업일(`COB_DATE`)의 영업일 전환 행과 등록된 스텝 행을 모두 `PENDING`으로 남기고, 전환과 스텝이 끝날 때마다 `SUCCESS`로 바꾼다. `PENDING`이 남은 `cob_date`가 있으면 다음 `run()`이 오래된 날짜부터 그 날짜의 `PENDING` 스텝만 이어서 실행한다. 행이 없는 스텝(초기화 실패 등)은 재개 대상이 아니다. `batch_execution_history`는 관측용이라 재시작 근거로 쓰지 않고, `business_date_cutoff`는 달력 따라잡기도 기록하므로 `COB_DATE`의 근거가 아니다. 다른 테이블과 FK는 없다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
