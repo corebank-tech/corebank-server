@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 39개 비즈니스 테이블 + 7개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 389개 컬럼
+**대상**: 39개 비즈니스 테이블 + 8개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 394개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -72,6 +72,7 @@
 | 44 | `SPRING_SESSION` | 공용 HTTP 세션 | P6 | 7 |
 | 45 | `SPRING_SESSION_ATTRIBUTES` | 직렬화된 세션 속성 | P6 | 3 |
 | 46 | `EVENT_PUBLICATION` | 이벤트 발행 기록 (Spring Modulith) | P1 | 9 |
+| 47 | `cob_checkpoint` | COB 재시작 체크포인트 | P5 | 5 |
 
 ---
 
@@ -1332,6 +1333,26 @@ COB의 영업일 전환(`advanceFrom`)과 달력 따라잡기(`catchUpTo`)가 `B
 | 구분 | 인덱스 | 컬럼 |
 | --- | --- | --- |
 | UNIQUE | `uk_business_date_cutoff_date_status` | `base_date, status` |
+
+---
+
+## `cob_checkpoint`
+
+> COB 재시작 체크포인트 (#663)
+
+`CobRunnerService`가 새 COB를 시작할 때, 영업일을 넘기기 전에 마감 대상 영업일(`COB_DATE`)의 영업일 전환 행과 등록된 스텝 행을 모두 `PENDING`으로 남기고, 전환과 스텝이 끝날 때마다 `SUCCESS`로 바꾼다. `PENDING`이 남은 `cob_date`가 있으면 다음 `run()`이 오래된 날짜부터 그 날짜의 `PENDING` 스텝만 이어서 실행한다. 행이 없는 스텝(초기화 실패 등)은 재개 대상이 아니다. `batch_execution_history`는 관측용이라 재시작 근거로 쓰지 않고, `business_date_cutoff`는 달력 따라잡기도 기록하므로 `COB_DATE`의 근거가 아니다. 다른 테이블과 FK는 없다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `cob_checkpoint_id` | `BIGINT` | **PK** | X |  | 내부 식별자 (AUTO_INCREMENT) |
+| `cob_date` | `DATE` | **UK** | X |  | 마감 대상 영업일(ADR-0004 `COB_DATE`) |
+| `step_name` | `VARCHAR(100)` | **UK** | X |  | `CobStep.name()`. 영업일 전환은 `business-date-advance` |
+| `status` | `VARCHAR(10)` |  | X |  | `PENDING` / `SUCCESS` |
+| `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각(KST, 애플리케이션이 채움) |
+
+| 구분 | 인덱스 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_cob_checkpoint_date_step` | `cob_date, step_name` |
 
 ---
 
