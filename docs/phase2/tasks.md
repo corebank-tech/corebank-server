@@ -148,7 +148,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 | [PH-47-①](#ph-47-메트릭--grafana) | 메트릭 골격 — Micrometer·Prometheus 연동 (애플리케이션) | S2 | 1.5 | PH-42 | — | #541 · PR #621 | 완료 |
 | [PH-47-②](#ph-47-메트릭--grafana) | Grafana 대시보드 · 알람 · actuator 노출 재설계 | S2 | 1.5 | PH-100 | 미확정(PH-100 완료 후) | #619 | 예정 |
 | [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-① | 하이브리드 연결 — 온프레미스 VM 1대 · SSM 하이브리드 등록 | S2 | 1.5 | [O-10](README.md#8-미결) | — | — | 예정 |
-| [PH-51](#ph-51-컴퓨트-계층--컷오버) | 컴퓨트 계층 · 컷오버 | S3 | 4.5 | PH-50 · PH-57 · PH-58 ACM ARN | 리허설 10/19~23 · **apply 10/26 · 컷오버 10/27** | #693 · #694 · #695 · #696 | 진행 — ① ALB 코드·plan 완료(#693), ASG·IAM 대기 |
+| [PH-51](#ph-51-컴퓨트-계층--컷오버) | 컴퓨트 계층 · 컷오버 | S3 | 4.5 | PH-50 · PH-57 · PH-58 ACM ARN | 리허설 10/19~23 · **apply 10/26 · 컷오버 10/27** | #693 · #695 · #696 (#694는 #695로 통합) | 진행 — ① ALB(#693) · ②③ 시작 템플릿·ASG·IAM(#695) 코드·plan 완료, 리뷰·apply 대기 |
 | [PH-100](#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3)-② | 하이브리드 연결 — Site-to-Site VPN | S3 | 1 | PH-50 · PH-100-① | 터널 **10/23** (리허설 안) → P2 | — | 예정 |
 | [PH-76](#ph-76-정보계-etl) | 정보계 ETL | S3 | 2.5 | PH-75 · PH-43 · #603(완료) · 원본: PH-70-② 복제 | 10/27 복제 시작 뒤 · PH-77(10/28) 전 | #644 · #645 · #646 · #664 · #668 · PR #649 · #665 · #669 · #674 | 진행 |
 | [PH-77](#ph-77-정보계-조회-api) | 정보계 조회 API | S3 | 1.5 | PH-76 | **10/28** | #675 · #704 | 진행 (① Swagger 스텁) |
@@ -1091,10 +1091,10 @@ public interface CobStep {
 
 - ALB(2AZ) + 대상그룹. 헬스체크는 `/api/v1/actuator/health`(앱 context-path가 `/api/v1`)이고, QA 시드 검증이 헬스체크를 죽이지 않게 한다(#439·#445).
 - WAS ASG: 시작 템플릿, min 2 / max 2(AZ별 1대). 내비게이션 API(P6)는 각 WAS에 함께 뜬다. util 노드는 없다([D-25](README.md#d-25--927--리드-제안1020-팀-확정)).
-- IAM은 인스턴스 프로파일 1개(WAS)와 SSM Agent·Session Manager 접속 기반까지다. 온프레미스 SSM 하이브리드 역할은 PH-100이 맡는다. 나머지 IAM은 P2 PH-72가 맡는다([D-11](README.md#d-11--920--p2p5)).
-- 현행 SSM 배포 스크립트(#440 반영분)를 이관한다.
+- IAM은 인스턴스 프로파일 1개(WAS)와 SSM Agent·Session Manager 접속 기반까지다. 온프레미스 SSM 하이브리드 역할은 역할 생성만 #695에 두고, 활성화 코드 발급과 VM 등록은 PH-100(#698)이 맡는다. 나머지 IAM은 P2 PH-72가 맡는다([D-11](README.md#d-11--920--p2p5)).
+- **서버 기동(10/26 결정, #695):** 서버가 켜질 때 `user_data`로 Docker 설치, SSM Parameter Store(`/corebank/*`) 읽기, 컨테이너(앱·모의 서버) 실행까지 한다. 서버는 Ubuntu 22.04, 앱 프로필은 `prod`(`qa-seed` 제외). 포트는 `8080:8080`이다(WAS 보안 그룹이 ALB의 8080만 허용). 현행 SSM 배포 스크립트(#440 반영분)를 ASG용으로 이관하는 일은 컷오버 뒤 PH-55로 미룬다.
 - HTTPS 리스너는 P2가 넘기는 ACM certificate ARN으로 만든다.
-- **출력값 → P2 (10/26 apply 직후):** ALB ARN · 리스너 ARN · ALB DNS name · ALB zone ID
+- **출력값 → P2 (10/26 통합 apply 직후):** ALB ARN · 리스너 ARN · ALB DNS name · ALB zone ID. `terraform/main`은 network·compute·data가 한 루트라 apply 한 번에 함께 올라간다([terraform/README.md](../../terraform/README.md)).
 - 일정: 10/19~23 리허설 → 10/26 apply → P2 RDS 복원 → SG 교차 검증 → 10/27 DNS 전환. 기존 EC2는 11/6까지 유지한다.
 - **Plan B:** EC2를 유지하고 구축 진행률을 리포트한다.
 - **완료 기준:** 프라이빗 서브넷에서 인터넷에 직접 접근할 수 없다. 앱이 3-Tier에서 돈다.
