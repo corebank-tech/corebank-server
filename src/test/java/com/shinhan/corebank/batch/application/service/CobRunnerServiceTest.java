@@ -679,7 +679,8 @@ class CobRunnerServiceTest {
     @DisplayName("전환 행이 PENDING이면 저장된 날짜로 전환을 다시 부르고 SUCCESS로 바꾼 뒤 스텝을 이어간다 (#663)")
     void run_resume_advancePending_callsAdvanceWithStoredDate() {
         when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
-        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        // 재개에서는 영업일이 아직 저장된 날짜이고, 이어지는 새 COB에서는 전환된 뒤의 날짜다
+        when(businessDateProvider.today()).thenReturn(OLD_COB_DATE, COB_DATE);
         when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
         when(businessDateAdvancer.advanceFrom(OLD_COB_DATE)).thenReturn(COB_DATE);
         CobStep step = stepOf("step", 1);
@@ -692,6 +693,26 @@ class CobRunnerServiceTest {
         inOrder.verify(businessDateAdvancer).advanceFrom(OLD_COB_DATE);
         inOrder.verify(cobCheckpointPort).markSuccess(eq(OLD_COB_DATE), eq(ADVANCE_STEP), any());
         inOrder.verify(step).run(OLD_COB_DATE);
+    }
+
+    @Test
+    @DisplayName("전환 행이 PENDING이어도 영업일이 이미 저장된 날짜를 지났으면 전환을 다시 부르지 않고 SUCCESS만 표시한 뒤 스텝을 이어간다 (#663)")
+    void run_resume_advancePending_businessDateAlreadyPast_marksSuccessWithoutAdvancing() {
+        when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
+        // 저장된 날짜로부터 영업일이 두 날 이상 앞서 있다 - advanceFrom을 부르면 매번 예외로 COB가 멈추는 경우
+        when(businessDateProvider.today()).thenReturn(COB_DATE);
+        when(businessDateAdvancer.advanceFrom(COB_DATE)).thenReturn(NEXT_BUSINESS_DATE);
+        CobStep step = stepOf("step", 1);
+        when(cobCheckpointPort.findIncomplete(any()))
+                .thenReturn(List.of(incomplete(OLD_COB_DATE, ADVANCE_STEP, "step")));
+
+        serviceWith(step).run(COB_DATE.plusDays(10));
+
+        verify(businessDateAdvancer, never()).advanceFrom(OLD_COB_DATE);
+        InOrder inOrder = inOrder(cobCheckpointPort, step);
+        inOrder.verify(cobCheckpointPort).markSuccess(eq(OLD_COB_DATE), eq(ADVANCE_STEP), any());
+        inOrder.verify(step).run(OLD_COB_DATE);
+        verify(step).run(COB_DATE);
     }
 
     @Test

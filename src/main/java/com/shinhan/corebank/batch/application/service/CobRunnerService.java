@@ -121,7 +121,10 @@ public class CobRunnerService implements CobRunnerUseCase {
             LocalDate cobDate = incomplete.cobDate();
             log.info("미완료 COB 재개 - cobDate={}, pending={}", cobDate, incomplete.pendingStepNames());
             if (incomplete.pendingStepNames().contains(ADVANCE_STEP_NAME)) {
-                advanceWithRetry(cobDate);
+                // 영업일이 이미 cobDate를 지났으면(자정 따라잡기·다음 COB) 전환은 끝난 것이다 - advanceFrom은 바로 다음 영업일일 때만 통과시키므로 다시 부르면 매번 실패한다
+                if (!businessDateProvider.today().isAfter(cobDate)) {
+                    advanceWithRetry(cobDate);
+                }
                 markCheckpointSuccess(cobDate, ADVANCE_STEP_NAME);
             }
             for (CobStep step : steps) {
