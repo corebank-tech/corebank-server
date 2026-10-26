@@ -25,7 +25,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * 업무 이벤트가 알림 계약(NotificationRequestCarrier)으로 실어 보낸 알림을, 커밋 뒤 리스너 하나가 받아 저장하는지 확인한다
  * (#706, PR #723 리뷰). 실제 업무 이벤트인 TransferSettled 를 트랜잭션 안에서 직접 발행한다 — 문구는 발행 쪽이
- * 만든 그대로 저장되는지 보고, 문구 생성은 TransferNotificationComposerTest 가 맡는다.
+ * 만든 그대로 저장되는지 보고, 문구 생성은 TransferNotificationGeneratorTest 가 맡는다.
  */
 class NotificationRequestedListenerTest extends IntegrationTestSupport {
 

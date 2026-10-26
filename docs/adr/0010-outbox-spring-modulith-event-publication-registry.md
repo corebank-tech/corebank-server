@@ -66,7 +66,7 @@ ADR-0005의 「MQ 대신 아웃박스」는 그대로다. 바뀌는 것은 §2�
 | 항목 | 결정 |
 |---|---|
 | 계약 | `notification.api.NotificationRequest`(customerId · type · refId · title · content · occurredAt)와 이를 돌려주는 `NotificationRequestCarrier` |
-| 문구 · 마스킹 · 고객용 실패 사유 | 발행 도메인(예: transfer 의 `TransferNotificationComposer`가 자기 `TransferErrorCode` 문구를 쓴다) |
+| 문구 · 마스킹 · 고객용 실패 사유 | 발행 도메인(예: transfer 의 `TransferNotificationGenerator`가 자기 `TransferErrorCode` 문구를 쓴다) |
 | notification | `@ApplicationModuleListener` 하나가 `NotificationRequestCarrier`를 받는다. 저장 · 업무 키 `(type, ref_id)` 중복 방지만 맡는다 |
 | 알림이 없는 결과 | `notification()`이 비어 있다(예: 예약 · 자동이체의 이체 확정 — 그 알림은 #707에서 배치 이벤트가 따로 싣는다) |
 | 채택하지 않음 | 받는 쪽 Inbox · worker. 발행 기록이 리스너(채널)별로 재시도를 이미 맡는다. 예약 발송 · 채널별 SLA가 생기면 다시 본다 |

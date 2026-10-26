@@ -13,7 +13,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-class TransferNotificationComposerTest {
+class TransferNotificationGeneratorTest {
 
     private static final Long CUSTOMER_ID = 7061L;
     private static final Long TRANSFER_ID = 7_061_001L;
@@ -21,9 +21,9 @@ class TransferNotificationComposerTest {
 
     @Test
     @DisplayName("성공한 즉시이체는 마스킹한 상대방과 천 단위로 구분한 금액으로 알림을 만든다")
-    void succeededImmediateTransfer_composesTransferNotification() {
+    void succeededImmediateTransfer_generatesTransferNotification() {
         // when
-        Optional<NotificationRequest> request = TransferNotificationComposer.compose(
+        Optional<NotificationRequest> request = TransferNotificationGenerator.generate(
                 transfer(TransferType.IMMEDIATE, ProcessResultStatus.SUCCESS, null, "홍길동"), CUSTOMER_ID, OCCURRED_AT);
 
         // then
@@ -41,7 +41,7 @@ class TransferNotificationComposerTest {
     @DisplayName("상대방 이름이 없으면 금액만으로 문장을 만든다 — 타행은 성공 응답 전에는 이름을 모른다")
     void transferWithoutPayeeName_omitsName() {
         // when
-        Optional<NotificationRequest> request = TransferNotificationComposer.compose(
+        Optional<NotificationRequest> request = TransferNotificationGenerator.generate(
                 transfer(TransferType.IMMEDIATE, ProcessResultStatus.ERROR, null, null), CUSTOMER_ID, OCCURRED_AT);
 
         // then
@@ -52,7 +52,7 @@ class TransferNotificationComposerTest {
     @DisplayName("고객이 조치할 수 있는 실패는 이체 오류코드의 문구를 본문 끝에 붙인다")
     void failedWithActionableErrorCode_appendsErrorCodeMessage() {
         // when
-        Optional<NotificationRequest> request = TransferNotificationComposer.compose(
+        Optional<NotificationRequest> request = TransferNotificationGenerator.generate(
                 transfer(
                         TransferType.IMMEDIATE,
                         ProcessResultStatus.ERROR,
@@ -73,9 +73,9 @@ class TransferNotificationComposerTest {
     @DisplayName("고객이 조치할 수 없는 코드 · 내부 오류 · 코드 없음은 기본 문장만 쓰고 코드를 드러내지 않는다")
     void failedWithOtherOrMissingErrorCode_showsDefaultSentenceOnly() {
         // when
-        Optional<NotificationRequest> other = TransferNotificationComposer.compose(
+        Optional<NotificationRequest> other = TransferNotificationGenerator.generate(
                 transfer(TransferType.IMMEDIATE, ProcessResultStatus.ERROR, "TRF0002", null), CUSTOMER_ID, OCCURRED_AT);
-        Optional<NotificationRequest> internal = TransferNotificationComposer.compose(
+        Optional<NotificationRequest> internal = TransferNotificationGenerator.generate(
                 transfer(TransferType.IMMEDIATE, ProcessResultStatus.ERROR, "CMN9999", null), CUSTOMER_ID, OCCURRED_AT);
 
         // then
@@ -85,14 +85,14 @@ class TransferNotificationComposerTest {
 
     @Test
     @DisplayName("예약 · 자동이체의 이체 확정은 알림을 싣지 않는다 — 그 알림은 배치가 결과마다 발행한다(#707)")
-    void batchInitiatedTransfer_composesNoNotification() {
+    void batchInitiatedTransfer_generatesNoNotification() {
         // when & then
-        assertThat(TransferNotificationComposer.compose(
+        assertThat(TransferNotificationGenerator.generate(
                         transfer(TransferType.SCHEDULED, ProcessResultStatus.SUCCESS, null, "홍길동"),
                         CUSTOMER_ID,
                         OCCURRED_AT))
                 .isEmpty();
-        assertThat(TransferNotificationComposer.compose(
+        assertThat(TransferNotificationGenerator.generate(
                         transfer(TransferType.AUTO, ProcessResultStatus.SUCCESS, null, "홍길동"),
                         CUSTOMER_ID,
                         OCCURRED_AT))

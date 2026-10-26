@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 final class TransferSettledFactory {
 
     static TransferSettled create(Transfer transfer, Long customerId, String txType, LocalDateTime occurredAt) {
-        NotificationRequest notification = TransferNotificationComposer.compose(transfer, customerId, occurredAt)
+        NotificationRequest notification = TransferNotificationGenerator.generate(transfer, customerId, occurredAt)
                 .orElse(null);
         return TransferSettled.builder()
                 .customerId(customerId)
