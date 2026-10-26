@@ -29,7 +29,7 @@ resource "aws_security_group" "alb" {
 
 resource "aws_security_group" "was" {
   name        = "${var.name_prefix}-sg-was"
-  description = "WAS - ALB에서 오는 8080만 허용"
+  description = "WAS - ALB와 온프레미스(VPN)에서 오는 8080만 허용"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -37,6 +37,13 @@ resource "aws_security_group" "was" {
     to_port         = 8080
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
+  }
+
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = [var.onprem_cidr]
   }
 
   egress {

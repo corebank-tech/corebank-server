@@ -21,3 +21,8 @@ variable "data_subnet_cidrs" {
 variable "name_prefix" {
   default = "corebank"
 }
+
+variable "onprem_cidr" {
+  description = "온프레미스(VM) 대역. VPN으로 WAS 8080에 닿는 대역"
+  default     = "192.168.0.0/24"
+}

@@ -35,6 +35,13 @@ module "compute" {
   db_host                 = module.data.db_address
 }
 
+module "vpn" {
+  source = "./modules/vpn"
+
+  vpc_id          = module.network.vpc_id
+  route_table_ids = concat(module.network.app_route_table_ids, [module.network.data_route_table_id])
+}
+
 module "data" {
   source = "./modules/data"
 
