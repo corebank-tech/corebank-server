@@ -132,20 +132,20 @@ class NotificationRequestedListenerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("수신 고객이 없는 알림은 저장하지 않고, 다시 보낼 발행 기록도 남기지 않는다")
-    void notificationWithoutCustomer_createsNoNotificationAndLeavesNoPublication() {
+    @DisplayName("수신 고객이 없는 알림은 저장하지 않고, 발행 기록을 실패로 남겨 다시 보낼 수 있게 한다")
+    void notificationWithoutCustomer_createsNoNotificationAndLeavesFailedPublication() {
         // when
         publishInsideTransaction(settledWith(notification(null, "이체 실패", "1,000,000원을 보내지 못했습니다.")));
 
         // then
         await().atMost(LISTENER_TIMEOUT)
-                .untilAsserted(() -> assertThat(remainingPublicationCount()).isZero());
+                .untilAsserted(() -> assertThat(failedPublicationCount()).isEqualTo(1));
         assertThat(notificationCount()).isZero();
     }
 
     @Test
-    @DisplayName("제목이 100자를 넘는 알림은 계약 위반으로 저장하지 않고, 다시 보낼 발행 기록도 남기지 않는다")
-    void notificationOverTitleLimit_createsNoNotificationAndLeavesNoPublication() {
+    @DisplayName("제목이 100자를 넘는 알림은 계약 위반으로 저장하지 않고, 발행 기록을 실패로 남겨 다시 보낼 수 있게 한다")
+    void notificationOverTitleLimit_createsNoNotificationAndLeavesFailedPublication() {
         // given
         String overLimitTitle = "가".repeat(101);
 
@@ -154,7 +154,7 @@ class NotificationRequestedListenerTest extends IntegrationTestSupport {
 
         // then
         await().atMost(LISTENER_TIMEOUT)
-                .untilAsserted(() -> assertThat(remainingPublicationCount()).isZero());
+                .untilAsserted(() -> assertThat(failedPublicationCount()).isEqualTo(1));
         assertThat(notificationCount()).isZero();
     }
 
@@ -199,6 +199,15 @@ class NotificationRequestedListenerTest extends IntegrationTestSupport {
     private int remainingPublicationCount() {
         return jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM EVENT_PUBLICATION WHERE EVENT_TYPE = ? AND SERIALIZED_EVENT LIKE ?",
+                Integer.class,
+                TransferSettled.class.getName(),
+                refIdPattern());
+    }
+
+    // 리스너가 실패로 끝난 발행 기록 — 지워지지 않고 남아 재제출 대상이 된다
+    private int failedPublicationCount() {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM EVENT_PUBLICATION WHERE EVENT_TYPE = ? AND SERIALIZED_EVENT LIKE ? AND STATUS = 'FAILED'",
                 Integer.class,
                 TransferSettled.class.getName(),
                 refIdPattern());
