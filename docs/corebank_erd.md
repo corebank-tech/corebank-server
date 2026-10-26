@@ -46,6 +46,9 @@ erDiagram
         datetime previous_login_at "대시보드 previousLoginAt"
         datetime password_changed_at "DATETIME(6)"
         datetime joined_at "DATETIME(6)"
+        varchar email_ciphertext "AES-256-GCM, NULL 허용"
+        varchar phone_number_ciphertext "AES-256-GCM, NULL 허용"
+        char email_search_hash UK "CHAR(64), HMAC-SHA256, NULL 허용"
     }
 
     terms {
