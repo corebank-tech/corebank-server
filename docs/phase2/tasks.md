@@ -39,7 +39,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 | [PH-89](#ph-89-감사-5w--조회-감사--조회-사유-강제) | 감사 5W · 조회 감사 · 조회 사유 강제 | S2 | 2.5 | PH-49a-② | **10/26** | #458 | 완료 |
 | 리드 | FE 리드 조율 | S2 | 0.5 | — | — | — | — |
 | [PH-04](#ph-04-알림-조회-api--마스킹-통일) | 알림 조회 API · 마스킹 통일 | S3 | 3 | PH-01 | **10/28** | #390 #391 #392 #410 | 예정 |
-| [PH-96-②](#ph-96-transactional-outbox-①-발행측릴레이-s2--②-구독-s3) | 아웃박스 구독 — 알림 4종 · 실패 처리 | S3 | 1.5 | PH-96-① · PH-01 | **10/29** | #707 #708 #709 | 예정 |
+| [PH-96-②](#ph-96-transactional-outbox-①-발행측릴레이-s2--②-구독-s3) | 아웃박스 구독 — 알림 4종 · 실패 처리 | S3 | 1.5 | PH-96-① · PH-01 | **10/29** | #707 #708 #709 · PR #738 | 진행 |
 | [PH-08](#ph-08-레이트리밋) | 레이트리밋 (로그인·OTP·이체) | S3 | 3.5 | — | **10/29** | #332 | 예정 |
 | [PH-49b](#ph-49b-직무분리-부여회수--maker-checker--step-up-표기) | 직무분리 부여/회수 · maker-checker · Step-up 표기 | S3 | 3 | PH-49a-② · PH-92 | **10/29** | — | 예정 |
 | [PH-82](#ph-82-worm-감사-저장소--무결성-해시) | WORM 감사 저장소 · 무결성 해시 | S3 | 2.5 | PH-72 버킷 (10/21) · PH-89 · 해시 컬럼 위치 P4 합의 | 해시 · 검증 배치 · 목 버킷 어댑터 **10/28** · 실제 S3 적재 검증 10/30~ | — | 예정 |
@@ -276,11 +276,12 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 **②**
 
 - 즉시 · 타행이체는 [PH-01](#ph-01-알림-도메인-인수--영속성) #706에 함께 들어간다. 예약 · 자동이체 회차 #707 · 상품가입 #708 · 구독 실패 처리 #709. #393~#396을 현재 아웃박스 설계(PR #703) 기준으로 다시 쓴 이슈다.
-- 구독자는 AFTER_COMMIT 리스너다. 두 번째 수신은 no-op이고, 알림 실패는 이체에 영향을 주지 않는다.
+- **알림 문구는 업무 도메인이 만들고, notification은 최소 계약으로 받는다(10/26, PR #723 리뷰 A안 · [ADR-0010](../adr/0010-outbox-spring-modulith-event-publication-registry.md) 「알림 최소 계약」).** 업무 이벤트가 `notification.api.NotificationRequestCarrier`를 구현해 완성된 `NotificationRequest`를 싣고, AFTER_COMMIT 리스너 `NotificationRequestedListener` 하나가 받는다. 업무 · 채널이 늘어도 notification의 알림함 저장 코드는 바뀌지 않는다.
+- 두 번째 수신은 no-op이고, 알림 실패는 이체에 영향을 주지 않는다.
 - **멱등 키는 업무 키 `(type, ref_id)`다.** `uk_noti_type_ref`가 두 번째 행을 막는다. 발행 기록은 지워지고 구독자는 그 ID를 받지 않는다.
-- **예약 · 자동이체 알림은 배치 이벤트로만 받는다(10/22 결정).** 배치가 결과마다 발행해 `notification.ref_id` 규약(예약 → `scheduled_transfer_id`, 자동 → `execution_id`)을 지킨다. 엔진의 `TransferSettled`(예약 · 자동 `txType`, `refId = transfer_id`)는 알림 구독자가 무시한다(#707).
+- **예약 · 자동이체 알림은 배치 이벤트로만 싣는다(10/22 결정).** 배치가 결과마다 발행해 `notification.ref_id` 규약(예약 → `scheduled_transfer_id`, 자동 → `execution_id`)을 지킨다. 엔진의 `TransferSettled`(예약 · 자동 `txType`, `refId = transfer_id`)에는 transfer가 알림을 싣지 않는다(#706, PR #723 리뷰 A안).
 - auth `LoginPasswordChangedSessionListener`는 #641(PH-49c)에서 BEFORE_COMMIT으로 바뀌어 발행 기록 대상이 아니다. 재제출은 다른 WAS의 메모리 세션까지 끊는 복구 수단이 아니다([ADR-0010](../adr/0010-outbox-spring-modulith-event-publication-registry.md) 결과).
-- **현황:** #706 완료(알림 도메인 · 즉시 · 타행이체 알림 · `uk_noti_type_ref`). #707 · #708 · #709 남음.
+- **현황:** #706 완료(알림 도메인 · 최소 계약 · 리스너 1개 · 즉시 · 타행이체 알림 · `uk_noti_type_ref`). #707(PR #738, #706 위로 rebase 후 재리뷰) · #708 · #709 남음.
 
 실패 처리는 「즉시 재시도 → 주기 재제출 → 상한 초과는 포기 · 알림 → 수동 재처리」 순이고, 단계마다 프레임워크 기능을 쓴다.
 

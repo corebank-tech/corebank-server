@@ -183,8 +183,8 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `ATH` | 인증·회원 | P6 | REQ-AUTH |
 | `OTP` | OTP 거래인증 | P6 | REQ-OTP |
 | `APW` | 계좌비밀번호 | P6 | REQ-ACCT-006~009 |
-| `MYP` (`MYP00xx`) | 마이페이지 | P6 | REQ-MYPG |
-| `MYP` (`MYP02xx`) | 알림 | P1 | REQ-MYPG |
+| `MYP` | 마이페이지 | P6 | REQ-MYPG |
+| `NTF` | 알림 | P1 | REQ-MYPG |
 | `ACC` | 계좌 | P2 | REQ-ACCT-001~005·010~015 |
 | `INQ` | 조회(계좌·거래내역) | P2 | REQ-INQR |
 | `PRD` | 상품·상품가입 | P3 | REQ-PRDT |
@@ -297,14 +297,13 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `APW0101` | 403 | 계좌비밀번호 5회 오류로 거래가 정지되었습니다. | 계좌 잠금 |
 | `APW0102` | 403 | 계좌비밀번호 인증 토큰이 유효하지 않습니다. | `accountPasswordAuthToken` 무효·만료·사용됨 |
 
-### 4-5. `MYP` 마이페이지·알림 — P6
+### 4-5. `MYP` 마이페이지 — P6
 
 | 코드 | HTTP | 메시지 | 의미 |
 | --- | --- | --- | --- |
 | `MYP0001` | 400 | 휴대폰 번호 형식이 올바르지 않습니다. | 고객정보 변경 시 형식 위반 |
-| `MYP0201` | 404 | 알림을 찾을 수 없습니다. | `notificationId` 없음 |
 
-> 알림 코드(`MYP02xx`)는 P1이 맡습니다. 고객정보 변경(`MYP00xx`)은 P6 그대로입니다.
+> 알림 코드는 담당이 달라 `NTF`(§4-16)로 나눴습니다(10/25, PR #723). 같은 요구사항(REQ-MYPG)이어도 담당자가 다르면 접두어를 쪼갠다는 §3-2 배정 원칙을 따릅니다.
 
 ### 4-6. `ACC` 계좌 — P2
 
@@ -462,6 +461,12 @@ public record ApiResponse<T>(String code, String message, T data) {
 | 코드 | HTTP | 메시지 | 의미 |
 | --- | --- | --- | --- |
 | `INF9001` | 500 | 정보계 API에 연결하지 못했습니다. | WAS가 온프레미스 정보계 API에 닿지 못함(VPN 단절·타임아웃·상대 서버 오류). 구현은 PH-77 ②(#704) |
+
+### 4-16. `NTF` 알림 — P1
+
+| 코드 | HTTP | 메시지 | 의미 |
+| --- | --- | --- | --- |
+| `NTF0201` | 404 | 알림을 찾을 수 없습니다. | `notificationId` 없음. 구현은 PH-04(#391) |
 
 ---
 
