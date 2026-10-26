@@ -473,7 +473,6 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
 
         return HttpRequest.newBuilder(uri("/auth/login"))
                 .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
-                .header("X-Forwarded-For", "203.0.113.10")
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                 .build();
     }

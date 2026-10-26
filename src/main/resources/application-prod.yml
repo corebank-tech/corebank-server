@@ -1,6 +1,8 @@
 server:
-  # ALB가 TLS를 종료하고 HTTP로 전달하므로, X-Forwarded-* 헤더로 원래 scheme(https)을 인식하게 한다.
-  forward-headers-strategy: framework
+  # ALB가 TLS를 종료하고 HTTP로 전달하므로, X-Forwarded-* 헤더로 원래 scheme(https)과 접속 IP를 인식하게 한다.
+  # 톰캣 RemoteIpValve가 X-Forwarded-For를 끝에서부터 읽어, 사설 IP(ALB, VPC 10.30.0.0/16)는 건너뛰고
+  # 처음 나오는 IP를 접속 IP로 쓴다. 고객이 앞에 써넣은 값은 무시된다(#458).
+  forward-headers-strategy: native
   servlet:
     session:
       cookie:
