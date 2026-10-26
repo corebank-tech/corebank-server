@@ -15,9 +15,6 @@ import lombok.Builder;
  * refId 는 transfer_id. transfer 행이 생기기 전의 사전검증 실패는 발행하지 않는다 — 즉시이체는 고객이 API 응답으로
  * 이미 오류를 받고, 예약·자동이체는 배치가 자기 이벤트로 따로 발행한다.
  *
- * <p>구독자가 transfer 를 다시 읽지 않도록 알림 문구에 필요한 값을 담는다. counterpartyName 은 발행 시점에
- * 마스킹한 값이고, 전체 계좌번호·인증 토큰은 넣지 않는다.
- *
  * <p>고객 알림은 발행 시점에 transfer 가 문구까지 완성해 notificationRequest 로 싣는다(PR #723 리뷰). 예약·자동이체는
  * 비어 있다 — 그 알림은 #707에서 배치가 자기 이벤트로 싣는다.
  */
@@ -29,8 +26,6 @@ public record TransferSettled(
         ProcessResultStatus status,
         String errorCode,
         LocalDateTime occurredAt,
-        long amount,
-        String counterpartyName,
         NotificationRequest notificationRequest)
         implements DomainEvent, NotificationRequestCarrier {
 

@@ -3,7 +3,6 @@ package com.shinhan.corebank.transfer.application.service;
 import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.ErrorCode;
-import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.gl.api.JournalPostingUseCase;
 import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
@@ -135,9 +134,6 @@ public class InterbankSettlementService {
                 .status(transfer.getStatus())
                 .errorCode(transfer.getErrorCode())
                 .occurredAt(occurredAt)
-                .amount(transfer.getAmount())
-                .counterpartyName(
-                        transfer.getPayeeName() == null ? null : MaskingUtil.maskName(transfer.getPayeeName()))
                 .notificationRequest(TransferNotificationComposer.compose(transfer, customerId, occurredAt)
                         .orElse(null))
                 .build());

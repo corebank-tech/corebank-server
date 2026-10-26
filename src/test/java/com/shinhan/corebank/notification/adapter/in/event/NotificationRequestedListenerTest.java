@@ -7,6 +7,7 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.notification.adapter.out.persistence.NotificationJpaEntity;
 import com.shinhan.corebank.notification.adapter.out.persistence.NotificationJpaRepository;
+import com.shinhan.corebank.notification.api.NotificationRequest;
 import com.shinhan.corebank.notification.api.NotificationType;
 import com.shinhan.corebank.transfer.api.TransferSettled;
 import java.time.Duration;
@@ -22,10 +23,11 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * 이체가 확정되면(TransferSettled) 커밋 뒤 비동기 구독자가 알림을 1건 남기고 발행 기록을 지우는지 확인한다(#706).
- * 엔진을 거치지 않고 이벤트를 트랜잭션 안에서 직접 발행한다 — 엔진의 발행은 #505 테스트가 맡는다.
+ * 업무 이벤트가 알림 계약(NotificationRequestCarrier)으로 실어 보낸 알림을, 커밋 뒤 리스너 하나가 받아 저장하는지 확인한다
+ * (#706, PR #723 리뷰). 실제 업무 이벤트인 TransferSettled 를 트랜잭션 안에서 직접 발행한다 — 문구는 발행 쪽이
+ * 만든 그대로 저장되는지 보고, 문구 생성은 TransferNotificationComposerTest 가 맡는다.
  */
-class NotificationTransferSettledListenerTest extends IntegrationTestSupport {
+class NotificationRequestedListenerTest extends IntegrationTestSupport {
 
     // 다른 테스트 · 시드와 겹치지 않는 #706 전용 대역
     private static final long CUSTOMER_ID = 7061L;
@@ -67,32 +69,34 @@ class NotificationTransferSettledListenerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("즉시이체가 확정되면 커밋 뒤 알림이 미읽음으로 1건 생기고 발행 기록은 지워진다")
-    void immediateTransferSettled_createsOneUnreadNotificationAndClearsPublication() {
+    @DisplayName("알림을 실은 업무 이벤트가 커밋되면 리스너 하나가 받아 미읽음 알림 1건을 남기고 발행 기록을 지운다")
+    void carrierEventCommitted_savesOneUnreadNotificationAndClearsPublication() {
         // when
-        publishInsideTransaction(settledImmediateTransfer());
+        publishInsideTransaction(settledWith(notification(CUSTOMER_ID, "이체 완료", "홍*동님에게 1,000,000원을 보냈습니다.")));
 
         // then
         await().atMost(LISTENER_TIMEOUT).untilAsserted(() -> {
             assertThat(notificationCount()).isEqualTo(1);
             assertThat(remainingPublicationCount()).isZero();
         });
-        NotificationJpaEntity notification = savedNotification();
-        assertThat(notification.getType()).isEqualTo(NotificationType.TRANSFER);
-        assertThat(notification.getRefId()).isEqualTo(TRANSFER_ID);
-        assertThat(notification.getTitle()).isEqualTo("이체 완료");
-        assertThat(notification.getContent()).isEqualTo("홍*동님에게 1,000,000원을 보냈습니다.");
-        assertThat(notification.getIsRead()).isFalse();
-        assertThat(notification.getReadAt()).isNull();
-        assertThat(notification.getOccurredAt()).isEqualTo(OCCURRED_AT);
+        // 시각은 앱과 같은 경로(Hibernate, jdbc.time_zone)로 읽는다 — JDBC 로 날값을 읽으면 JVM 시간대만큼 밀려 보인다
+        NotificationJpaEntity saved = savedNotification();
+        assertThat(saved.getType()).isEqualTo(NotificationType.TRANSFER);
+        assertThat(saved.getRefId()).isEqualTo(TRANSFER_ID);
+        assertThat(saved.getTitle()).isEqualTo("이체 완료");
+        assertThat(saved.getContent()).isEqualTo("홍*동님에게 1,000,000원을 보냈습니다.");
+        assertThat(saved.getIsRead()).isFalse();
+        assertThat(saved.getReadAt()).isNull();
+        assertThat(saved.getOccurredAt()).isEqualTo(OCCURRED_AT);
     }
 
     @Test
-    @DisplayName("같은 이체 결과를 두 번 받아도 알림은 1건이다 — 재제출은 최소 한 번 전달이다")
-    void sameTransferSettledTwice_keepsOneNotification() {
+    @DisplayName("같은 알림을 두 번 받아도 1건이다 — 재제출은 최소 한 번 전달이다")
+    void sameNotificationTwice_keepsOneNotification() {
         // when
-        publishInsideTransaction(settledImmediateTransfer());
-        publishInsideTransaction(settledImmediateTransfer());
+        TransferSettled settled = settledWith(notification(CUSTOMER_ID, "이체 완료", "1,000,000원을 보냈습니다."));
+        publishInsideTransaction(settled);
+        publishInsideTransaction(settled);
 
         // then — 두 발행 기록이 모두 처리돼 지워질 때까지 기다린 뒤 센다
         await().atMost(LISTENER_TIMEOUT)
@@ -101,45 +105,70 @@ class NotificationTransferSettledListenerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("실패한 이체는 실패 알림으로 남고, 고객이 조치할 수 있는 사유를 본문에 붙인다")
-    void failedImmediateTransfer_createsFailureNotificationWithReason() {
+    @DisplayName("발행 쪽이 만든 실패 문구를 해석하지 않고 그대로 저장한다")
+    void failureNotification_isSavedAsComposedByPublisher() {
         // when
-        publishInsideTransaction(TransferSettled.builder()
-                .customerId(CUSTOMER_ID)
-                .refId(TRANSFER_ID)
-                .txType("IMMEDIATE_TRANSFER")
-                .status(ProcessResultStatus.ERROR)
-                .errorCode("TRF0303")
-                .occurredAt(OCCURRED_AT)
-                .amount(1_000_000L)
-                .counterpartyName("홍*동")
-                .build());
+        publishInsideTransaction(
+                settledWith(notification(CUSTOMER_ID, "이체 실패", "홍*동님에게 1,000,000원을 보내지 못했습니다. 출금계좌 잔액이 부족합니다.")));
 
         // then
         await().atMost(LISTENER_TIMEOUT)
                 .untilAsserted(() -> assertThat(notificationCount()).isEqualTo(1));
-        NotificationJpaEntity notification = savedNotification();
-        assertThat(notification.getTitle()).isEqualTo("이체 실패");
-        assertThat(notification.getContent()).isEqualTo("홍*동님에게 1,000,000원을 보내지 못했습니다. 출금계좌 잔액이 부족합니다.");
+        NotificationJpaEntity saved = savedNotification();
+        assertThat(saved.getTitle()).isEqualTo("이체 실패");
+        assertThat(saved.getContent()).isEqualTo("홍*동님에게 1,000,000원을 보내지 못했습니다. 출금계좌 잔액이 부족합니다.");
+    }
+
+    @Test
+    @DisplayName("알림을 싣지 않은 업무 이벤트는 알림을 만들지 않는다 — 예약 · 자동이체의 이체 확정(#707)")
+    void eventWithoutNotification_createsNoNotification() {
+        // when
+        publishInsideTransaction(settledWith(null));
+
+        // then
+        await().atMost(LISTENER_TIMEOUT)
+                .untilAsserted(() -> assertThat(remainingPublicationCount()).isZero());
+        assertThat(notificationCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("수신 고객이 없는 알림은 저장하지 않고, 다시 보낼 발행 기록도 남기지 않는다")
+    void notificationWithoutCustomer_createsNoNotificationAndLeavesNoPublication() {
+        // when
+        publishInsideTransaction(settledWith(notification(null, "이체 실패", "1,000,000원을 보내지 못했습니다.")));
+
+        // then
+        await().atMost(LISTENER_TIMEOUT)
+                .untilAsserted(() -> assertThat(remainingPublicationCount()).isZero());
+        assertThat(notificationCount()).isZero();
     }
 
     private void publishInsideTransaction(TransferSettled event) {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> publisher.publishEvent(event));
     }
 
-    private static TransferSettled settledImmediateTransfer() {
+    private static TransferSettled settledWith(NotificationRequest notification) {
         return TransferSettled.builder()
-                .customerId(CUSTOMER_ID)
+                .customerId(notification == null ? Long.valueOf(CUSTOMER_ID) : notification.customerId())
                 .refId(TRANSFER_ID)
                 .txType("IMMEDIATE_TRANSFER")
                 .status(ProcessResultStatus.SUCCESS)
                 .occurredAt(OCCURRED_AT)
-                .amount(1_000_000L)
-                .counterpartyName("홍*동")
+                .notificationRequest(notification)
                 .build();
     }
 
-    // 시각은 앱과 같은 경로(Hibernate, jdbc.time_zone)로 읽는다 — JDBC 로 날값을 읽으면 JVM 시간대만큼 밀려 보인다
+    private static NotificationRequest notification(Long customerId, String title, String content) {
+        return NotificationRequest.builder()
+                .customerId(customerId)
+                .type(NotificationType.TRANSFER)
+                .refId(TRANSFER_ID)
+                .title(title)
+                .content(content)
+                .occurredAt(OCCURRED_AT)
+                .build();
+    }
+
     private NotificationJpaEntity savedNotification() {
         return notificationRepository.findAll().stream()
                 .filter(saved -> saved.getCustomerId().equals(CUSTOMER_ID))

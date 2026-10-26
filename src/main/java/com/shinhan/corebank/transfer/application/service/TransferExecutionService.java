@@ -4,7 +4,6 @@ import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
@@ -546,8 +545,6 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 .status(transfer.getStatus())
                 .errorCode(transfer.getErrorCode())
                 .occurredAt(occurredAt)
-                .amount(transfer.getAmount())
-                .counterpartyName(MaskingUtil.maskName(transfer.getPayeeName()))
                 .notificationRequest(TransferNotificationComposer.compose(transfer, command.customerId(), occurredAt)
                         .orElse(null))
                 .build());

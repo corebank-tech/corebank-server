@@ -263,7 +263,6 @@ public class InterbankTransferService implements InterbankTransferUseCase {
                     .status(failed.getStatus())
                     .errorCode(failed.getErrorCode())
                     .occurredAt(occurredAt)
-                    .amount(failed.getAmount())
                     .notificationRequest(TransferNotificationComposer.compose(failed, command.customerId(), occurredAt)
                             .orElse(null))
                     .build());
