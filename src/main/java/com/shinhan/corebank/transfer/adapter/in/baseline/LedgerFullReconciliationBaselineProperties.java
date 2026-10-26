@@ -17,8 +17,4 @@ public record LedgerFullReconciliationBaselineProperties(int rounds, int warmupR
             throw new IllegalArgumentException("예열을 빼고 통계를 낼 회차가 1회 이상 남아야 합니다.");
         }
     }
-
-    public int measuredRounds() {
-        return rounds - warmupRounds;
-    }
 }

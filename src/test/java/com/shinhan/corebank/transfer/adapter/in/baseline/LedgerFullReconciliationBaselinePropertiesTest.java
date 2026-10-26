@@ -1,6 +1,6 @@
 package com.shinhan.corebank.transfer.adapter.in.baseline;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.DisplayName;
@@ -12,9 +12,8 @@ class LedgerFullReconciliationBaselinePropertiesTest {
     @Test
     @DisplayName("예열을 빼고 통계를 낼 회차가 1회 이상이면 만들어진다")
     void acceptsRoundsLeftAfterWarmup() {
-        LedgerFullReconciliationBaselineProperties properties = new LedgerFullReconciliationBaselineProperties(4, 1);
-
-        assertThat(properties.measuredRounds()).isEqualTo(3);
+        assertThatCode(() -> new LedgerFullReconciliationBaselineProperties(4, 1))
+                .doesNotThrowAnyException();
     }
 
     @Test
