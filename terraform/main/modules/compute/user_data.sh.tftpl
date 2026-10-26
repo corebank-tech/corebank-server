@@ -3,6 +3,9 @@ set -euo pipefail
 exec > >(tee /var/log/corebank-bootstrap.log) 2>&1
 
 export DEBIAN_FRONTEND=noninteractive
+# WAS 보안 그룹은 443만 나가므로 apt 저장소를 HTTPS로 바꾼다
+sed -i 's|http://|https://|g' /etc/apt/sources.list 2>/dev/null || true
+sed -i 's|http://|https://|g' /etc/apt/sources.list.d/*.sources 2>/dev/null || true
 apt-get update -y
 apt-get install -y docker.io awscli
 systemctl enable --now docker

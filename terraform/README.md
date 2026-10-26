@@ -98,6 +98,18 @@ terraform plan -var="snapshot_identifier=<스냅샷 ID>"
 - 루트 apply를 P2와 P5 중 누가 실행할지는 **apply 전에 협의해서 확정**한 뒤, 그 사람이 **한 번의 통합 apply**로 진행한다.
 - apply 직후 P2에게 넘기는 값은 위 "통합 apply 직후" 표를 따른다.
 
+### 서버 부팅 확인 (apply 후)
+
+- 서버 접속: Session Manager (인스턴스는 EC2 콘솔이나 ASG에서 확인)
+- 부팅 로그: `/var/log/corebank-bootstrap.log` (apt 실패, Parameter Store 읽기 실패가 여기에 나온다)
+- 컨테이너: `docker ps`에서 `corebank-server`와 `corebank-mock-external`이 Up인지
+- 앱 헬스: `curl -s http://localhost:8080/api/v1/actuator/health`
+- 대상 그룹: EC2 > 대상 그룹 > `corebank-tg-was`에서 healthy 2대인지
+
+### 이미지 버전 (릴리스마다 수동 갱신)
+
+시작 템플릿은 커밋 SHA 태그로 이미지를 고정한다(`modules/compute/variables.tf`의 `app_image`, `mock_external_image`). 서버 한 대만 교체돼도 두 서버가 항상 같은 버전이 되게 하려는 것이다. 새 릴리스를 올릴 때는 SHA를 바꿔 apply하고 ASG를 새로고침한다. 배포 스크립트를 ASG용으로 바꾸는 PH-55에서 자동화한다.
+
 ## 아직 미정인 것
 
 - util 노드용 SG(8000) 규칙은 안 넣음 — D-25(하이브리드 인프라) 팀 확인(O-11) 끝나기 전까지 보류
