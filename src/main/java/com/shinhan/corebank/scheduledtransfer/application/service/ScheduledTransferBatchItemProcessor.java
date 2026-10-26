@@ -3,7 +3,7 @@ package com.shinhan.corebank.scheduledtransfer.application.service;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
-import com.shinhan.corebank.common.util.MaskingUtil;
+import com.shinhan.corebank.notification.api.NotificationRequest;
 import com.shinhan.corebank.scheduledtransfer.api.ScheduledTransferSettled;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferPersistencePort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLookupPort;
@@ -99,20 +99,18 @@ public class ScheduledTransferBatchItemProcessor {
 
         recordAudit(scheduledTransfer, date, result.status() == ProcessResultStatus.SUCCESS, result.errorCode());
 
-        // 거래번호가 있으면 이체 엔진이 돈이 움직인 트랜잭션 안에서 이미 TransferSettled 를 발행했다(#436).
-        // 거래번호가 없는 건 transfer 행이 생기기 전의 사전검증 실패뿐이고, 엔진이 발행하지 못하므로 여기서
-        // 실행 기록과 함께 발행한다.
-        if (result.isPreValidationFailure()) {
-            eventPublisher.publishEvent(ScheduledTransferSettled.builder()
-                    .customerId(scheduledTransfer.getCustomerId())
-                    .refId(scheduledTransfer.getScheduledTransferId())
-                    .status(result.status())
-                    .errorCode(result.errorCode())
-                    .occurredAt(executedAt)
-                    .amount(scheduledTransfer.getAmount())
-                    .counterpartyName(MaskingUtil.maskName(scheduledTransfer.getPayeeName()))
-                    .build());
-        }
+        // 예약 건 확정마다 발행한다(#707). 알림은 예약 건 ID 가 필요해 TransferSettled 가 아니라 이 이벤트에 싣는다.
+        // 가드를 통과한 쪽만 오므로 재확정과 겹쳐도 한 번만 나간다.
+        NotificationRequest notification = ScheduledTransferNotificationComposer.compose(
+                scheduledTransfer, result.status(), result.customerFailureReason(), executedAt);
+        eventPublisher.publishEvent(ScheduledTransferSettled.builder()
+                .customerId(scheduledTransfer.getCustomerId())
+                .refId(scheduledTransfer.getScheduledTransferId())
+                .status(result.status())
+                .errorCode(result.errorCode())
+                .occurredAt(executedAt)
+                .notificationRequest(notification)
+                .build());
     }
 
     // transfer 테이블에 실제 거래가 있었는지만 확인해서 확정 (PROCESSING에 멈춘 건 재확정)
@@ -148,24 +146,20 @@ public class ScheduledTransferBatchItemProcessor {
             return;
         }
 
-        recordAudit(
-                scheduledTransfer,
-                scheduledTransfer.getScheduledDate(),
-                scheduledTransfer.getStatus() == ScheduledTransferStatus.SUCCESS,
-                null);
+        boolean isSucceeded = scheduledTransfer.getStatus() == ScheduledTransferStatus.SUCCESS;
+        recordAudit(scheduledTransfer, scheduledTransfer.getScheduledDate(), isSucceeded, null);
 
-        // transfer 행이 없으면 이체 엔진이 발행하지 못했고, completeProcessing() 의 사전검증 실패 발행도 함께
-        // 롤백된 건이다. 재확정이 겹치면 가드에서 return 해도 트랜잭션은 커밋되므로 가드를 통과한 뒤에만 발행한다.
-        if (hasNoTransferRow) {
-            eventPublisher.publishEvent(ScheduledTransferSettled.builder()
-                    .customerId(scheduledTransfer.getCustomerId())
-                    .refId(scheduledTransfer.getScheduledTransferId())
-                    .status(ProcessResultStatus.ERROR)
-                    .occurredAt(now)
-                    .amount(scheduledTransfer.getAmount())
-                    .counterpartyName(MaskingUtil.maskName(scheduledTransfer.getPayeeName()))
-                    .build());
-        }
+        // 재확정도 확정마다 발행하되 가드를 통과한 뒤에만 낸다(#707). 실패 코드가 없어 알림은 기본 문장이다.
+        ProcessResultStatus status = isSucceeded ? ProcessResultStatus.SUCCESS : ProcessResultStatus.ERROR;
+        NotificationRequest notification =
+                ScheduledTransferNotificationComposer.compose(scheduledTransfer, status, Optional.empty(), now);
+        eventPublisher.publishEvent(ScheduledTransferSettled.builder()
+                .customerId(scheduledTransfer.getCustomerId())
+                .refId(scheduledTransfer.getScheduledTransferId())
+                .status(status)
+                .occurredAt(now)
+                .notificationRequest(notification)
+                .build());
     }
 
     private void recordAudit(ScheduledTransfer scheduledTransfer, LocalDate date, boolean succeeded, String errorCode) {

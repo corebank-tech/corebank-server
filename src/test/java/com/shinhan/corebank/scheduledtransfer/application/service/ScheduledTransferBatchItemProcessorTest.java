@@ -3,7 +3,6 @@ package com.shinhan.corebank.scheduledtransfer.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,6 +12,7 @@ import com.shinhan.corebank.common.audit.AuditLogJpaRepository;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.event.DomainEvent;
 import com.shinhan.corebank.common.event.DomainEventSink;
+import com.shinhan.corebank.notification.api.NotificationType;
 import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledTransferJpaEntity;
 import com.shinhan.corebank.scheduledtransfer.adapter.out.persistence.ScheduledTransferJpaRepository;
 import com.shinhan.corebank.scheduledtransfer.api.ScheduledTransferSettled;
@@ -83,8 +83,37 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
     private Long scheduledTransferId;
 
     @Test
-    @DisplayName("거래번호가 있으면 ERROR 여도 이체 엔진이 이미 발행했으므로 배치는 이벤트를 발행하지 않는다 (#436)")
-    void completeProcessing_withTransactionNumber_publishesNothing() {
+    @DisplayName("거래번호가 있는 성공도 예약 건 ID 를 refId 로 하는 ScheduledTransferSettled 를 한 번 발행한다 — 알림은 이 이벤트로만 받는다 (#707)")
+    void completeProcessing_succeeded_publishesScheduledTransferSettled() {
+        when(transferExecutionUseCase.execute(any()))
+                .thenReturn(TransferResult.builder()
+                        .status(ProcessResultStatus.SUCCESS)
+                        .transactionNumber("20260315BT0000000006")
+                        .build());
+        ScheduledTransfer target = reloadAsDomain();
+        itemProcessor.claim(target.getScheduledTransferId());
+
+        itemProcessor.completeProcessing(target, SCHEDULED_DATE);
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(ScheduledTransferSettled.class, event -> {
+            assertThat(event.customerId()).isEqualTo(customerId);
+            assertThat(event.refId()).isEqualTo(scheduledTransferId);
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(event.errorCode()).isNull();
+            assertThat(event.notification()).hasValueSatisfying(notification -> {
+                assertThat(notification.type()).isEqualTo(NotificationType.SCHEDULED_TRANSFER);
+                assertThat(notification.refId()).isEqualTo(scheduledTransferId);
+                assertThat(notification.title()).isEqualTo("예약이체 완료");
+                assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보냈습니다.");
+            });
+        });
+    }
+
+    @Test
+    @DisplayName("거래번호가 있는 실패도 ScheduledTransferSettled 를 한 번 발행하고 실패 코드를 담는다 (#707)")
+    void completeProcessing_failedWithTransactionNumber_publishesScheduledTransferSettledWithErrorCode() {
         when(transferExecutionUseCase.execute(any()))
                 .thenReturn(TransferResult.builder()
                         .status(ProcessResultStatus.ERROR)
@@ -97,7 +126,17 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
         itemProcessor.completeProcessing(target, SCHEDULED_DATE);
 
-        verify(domainEventSink, never()).record(any());
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(ScheduledTransferSettled.class, event -> {
+            assertThat(event.refId()).isEqualTo(scheduledTransferId);
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(event.errorCode()).isEqualTo("TRF0303");
+            assertThat(event.notification()).hasValueSatisfying(notification -> {
+                assertThat(notification.title()).isEqualTo("예약이체 실패");
+                assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보내지 못했습니다. 출금계좌 잔액이 부족합니다.");
+            });
+        });
     }
 
     @Test
@@ -121,8 +160,10 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
             assertThat(event.refId()).isEqualTo(scheduledTransferId);
             assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
             assertThat(event.errorCode()).isEqualTo("TRF0201");
-            assertThat(event.amount()).isEqualTo(10_000L);
-            assertThat(event.counterpartyName()).isEqualTo("홍*동");
+            assertThat(event.notification()).hasValueSatisfying(notification -> {
+                assertThat(notification.title()).isEqualTo("예약이체 실패");
+                assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보내지 못했습니다.");
+            });
         });
     }
 
@@ -141,14 +182,39 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
             assertThat(event.customerId()).isEqualTo(customerId);
             assertThat(event.refId()).isEqualTo(scheduledTransferId);
             assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
-            assertThat(event.amount()).isEqualTo(10_000L);
-            assertThat(event.counterpartyName()).isEqualTo("홍*동");
+            assertThat(event.notification()).hasValueSatisfying(notification -> {
+                assertThat(notification.title()).isEqualTo("예약이체 실패");
+                assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보내지 못했습니다.");
+            });
         });
     }
 
     @Test
-    @DisplayName("재확정이 transfer 행을 찾으면 이체 엔진이 이미 발행했으므로 배치는 이벤트를 발행하지 않는다 (#436)")
-    void reconcileStuckExecution_transferRowFound_publishesNothing() {
+    @DisplayName("재확정이 SUCCESS transfer 행으로 확정하면 SUCCESS 상태의 ScheduledTransferSettled 를 한 번 발행한다 (#707)")
+    void reconcileStuckExecution_successTransferRow_publishesSucceededSettled() {
+        itemProcessor.claim(scheduledTransferId);
+        when(transferLookupPort.findBySourceAndDate(scheduledTransferId, SCHEDULED_DATE))
+                .thenReturn(Optional.of(
+                        new TransferLookupResult("20260315BT0000000009", ProcessResultStatus.SUCCESS, null)));
+
+        itemProcessor.reconcileStuckExecution(reloadAsDomain());
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(ScheduledTransferSettled.class, event -> {
+            assertThat(event.refId()).isEqualTo(scheduledTransferId);
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(event.errorCode()).isNull();
+            assertThat(event.notification()).hasValueSatisfying(notification -> {
+                assertThat(notification.title()).isEqualTo("예약이체 완료");
+                assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보냈습니다.");
+            });
+        });
+    }
+
+    @Test
+    @DisplayName("재확정이 ERROR transfer 행으로 확정하면 실패 코드 없이 ERROR 상태의 ScheduledTransferSettled 를 한 번 발행한다 (#707)")
+    void reconcileStuckExecution_errorTransferRow_publishesFailedSettledWithoutErrorCode() {
         itemProcessor.claim(scheduledTransferId);
         when(transferLookupPort.findBySourceAndDate(scheduledTransferId, SCHEDULED_DATE))
                 .thenReturn(Optional.of(
@@ -156,7 +222,17 @@ class ScheduledTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
         itemProcessor.reconcileStuckExecution(reloadAsDomain());
 
-        verify(domainEventSink, never()).record(any());
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(ScheduledTransferSettled.class, event -> {
+            assertThat(event.refId()).isEqualTo(scheduledTransferId);
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(event.errorCode()).isNull();
+            assertThat(event.notification()).hasValueSatisfying(notification -> {
+                assertThat(notification.title()).isEqualTo("예약이체 실패");
+                assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보내지 못했습니다.");
+            });
+        });
     }
 
     @Test
