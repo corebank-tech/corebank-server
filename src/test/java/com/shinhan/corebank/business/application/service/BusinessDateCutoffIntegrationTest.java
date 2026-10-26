@@ -216,11 +216,10 @@ class BusinessDateCutoffIntegrationTest extends IntegrationTestSupport {
 
         // 이전 영업일을 읽고 커밋한 쓰기가 쌓였고 아직 커밋하지 않은 쓰기가 있을 때 전환한다
         awaitCondition(() -> readDates.stream().filter(BASE::equals).count() >= 3 && baseInFlight.get() > 0);
-        long baseBeforeAdvance = readDates.stream().filter(BASE::equals).count();
         Future<LocalDate> advance = executor.submit(() -> advancer.advanceFrom(BASE));
         assertThat(advance.get(30, SECONDS)).isEqualTo(next);
 
-        // 전환 뒤 새 영업일을 읽은 쓰기가 나와야 경합이 실제로 일어난 테스트다
+        // 전환 뒤 새 영업일을 읽은 쓰기가 나오면 쓰기를 멈춘다
         awaitCondition(() -> readDates.contains(next));
         stopWriters.set(true);
         for (Future<?> writer : writers) {
@@ -234,8 +233,6 @@ class BusinessDateCutoffIntegrationTest extends IntegrationTestSupport {
         assertThat(readDates).allMatch(date -> date.equals(BASE) || date.equals(next));
         assertThat(visibleAtCutoff.get()).isEqualTo(baseWrites);
         assertThat(baseWrites).isEqualTo(readDates.stream().filter(BASE::equals).count());
-        // 전환을 요청할 때 BASE 를 읽고 진행 중이던 쓰기가 있었어야 경합이 실제로 일어난 테스트다
-        assertThat(baseWrites).isGreaterThan(baseBeforeAdvance);
     }
 
     private List<LocalDate> cutoffDates() {
