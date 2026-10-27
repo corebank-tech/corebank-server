@@ -119,6 +119,18 @@ terraform apply main.tfplan
 
 시작 템플릿은 커밋 SHA 태그로 이미지를 고정한다(`modules/compute/variables.tf`의 `app_image`, `mock_external_image`). 서버 한 대만 교체돼도 두 서버가 항상 같은 버전이 되게 하려는 것이다. 새 릴리스를 올릴 때는 SHA를 바꿔 apply하고 ASG를 새로고침한다. 배포 스크립트를 ASG용으로 바꾸는 PH-55에서 자동화한다.
 
+## 모의 대외기관을 VM 한 곳으로 옮기기 (VPN 터널 성립 뒤)
+
+컷오버 때는 서버마다 모의 대외기관 컨테이너를 띄운다(`interbank_host`가 비어 있는 기본값). 서버가 2대라 거래 장부가 따로 생기므로, 터널이 선 뒤 VM의 모의 서버 한 곳으로 옮긴다.
+
+1. VM에서 모의 서버를 띄우고 9300 포트를 확인한다.
+2. `modules/network/security_groups.tf`에서 WAS 보안 그룹에 VM으로 나가는 TCP 9300 egress를 추가한다.
+3. `modules/compute`의 `interbank_host`에 VM 주소를 넣고 apply한다. 시작 템플릿 새 버전만 생기고 떠 있는 서버는 그대로다.
+4. 진행 중인 타행 이체가 없는 시간에 서버를 한 대씩 교체한다. 교체된 서버에는 모의 서버 컨테이너가 뜨지 않는다. 한 대가 healthy가 된 뒤 다음 대를 교체한다.
+5. 되돌릴 때는 `interbank_host`를 비우고 같은 방식으로 교체한다.
+
+모의 서버 장부는 컨테이너 메모리에만 있어서 교체하면 사라진다.
+
 ## 아직 미정인 것
 
 - util 노드용 SG(8000) 규칙은 안 넣음 — D-25(하이브리드 인프라) 팀 확인(O-11) 끝나기 전까지 보류
