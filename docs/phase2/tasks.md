@@ -450,10 +450,10 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 **②**
 
 - 10/28 오전: 최종 스냅샷 → 새 VPC data 서브넷에 복원 → SG 규칙 검증
-- 10/27: Flyway `validate` 확인 후 앱 연결 전환(P5와 함께)
+- 10/27: 리허설 스냅샷으로 Flyway `validate`를 확인한다. 10/28 최종 복원 뒤 앱 연결 전환(P5와 함께)
 - 적수 배치 1회 시간을 기록한다. 전환 확인용 기록이고 개선 전/후 비교에 쓰지 않는다(README §3-1).
 - **Plan B:** 기존 RDS를 유지하고 복원 절차 문서를 리포트에 싣는다.
-- 10/27~: 온프레미스 MySQL 레플리카로 binlog 복제를 시작한다. VPN(PH-100-②)이 있어야 한다.
+- 10/28~: 온프레미스 MySQL 레플리카로 binlog 복제를 시작한다. VPN(PH-100-②)이 있어야 한다.
     - `CALL mysql.rds_set_configuration('binlog retention hours', 24)`, 복제 전용 계정, GTID
     - 스냅샷이나 덤프로 초기 적재한 뒤 그 위치부터 복제한다.
     - 복제가 늦어지면 P5 PH-76은 덤프 적재로 대신한다.
@@ -1104,7 +1104,7 @@ public interface CobStep {
 - **PH-76은 10/21까지 덤프 적재로 먼저 진행한다**(P5 공지). PH-77은 10/28 그대로이고, 10/27~28은 컷오버라 측정과 적재 확인을 하지 않는다.
 - **ETL 경계일:** 운영 `business_date_cutoff`의 첫 행이 `2026-10-26 CLOSED`(10/27 아침 운영 DB 조회)라서 `ETL_CUTOFF_BOUNDARY_DATE`는 2026-10-26이다.
 - **온프레미스 독립 작업이다.** COB 스텝이 아니다([D-25](README.md#d-25--927--리드-제안1020-팀-확정)). 자동 적재는 #556이 원천 `business_date_cutoff`와 date-fence를 구현한 뒤에만 켠다. 레플리카의 `business_date_cutoff(base_date=D, status=CLOSED)`가 유일한 시작 신호이고, `batch_execution_history`(#603)는 관측용이라 신호로 쓰지 않는다. cutoff는 D 거래를 모두 drain한 뒤 영업일 전환과 같은 원천 트랜잭션으로 커밋되어야 하며, 복제는 `replica_preserve_commit_order = ON`으로 그 순서를 보존한다. 상세 조건은 [info_mart.md](info_mart.md) §3-0~§3-1이다.
-- 레플리카는 10/27 복제 시작(P2 PH-70-②) 뒤에 생긴다. 그 전에는 온프레미스 MySQL에 덤프를 적재해 개발하고, 10/27에 원본을 레플리카로 바꾼다. **Plan B:** 복제가 늦으면 덤프 적재로 시연한다.
+- 레플리카는 10/28 복제 시작(P2 PH-70-②) 뒤에 생긴다. 그 전에는 온프레미스 MySQL에 덤프를 적재해 개발하고, 복제가 시작되면 원본을 레플리카로 바꾼다. **Plan B:** 복제가 늦으면 덤프 적재로 시연한다.
 - 마트 2종을 온프레미스 MySQL에 적재한다. 전일 확정분 증분이고 재적재가 가능하며, **PII는 적재하지 않는다.** 스키마 · 트랜잭션 경계 · 대조 규칙은 [info_mart.md](info_mart.md) §2~§4를 따른다. 이벤트 적재 전에는 P2가 가입·해지 때의 논리 영업일을 `subscription_trade_date`·`closed_trade_date`로 저장해야 한다(§3-0·§3-3). 구현은 별도 jar(`info-etl.jar`), Spring 없이 JDBC다(#644). 잔액 적재 #644, 이벤트 · 기간 적재 #645, 대조 · PII 검증 · 적재 시간 측정 #646, 자동 시작(cutoff 감지) #668. 원천 컬럼은 #664(PR #665)로 추가됐고 `closed_trade_date`는 해지 구현(PH-15·16)이 채운다.
 - 덤프 기간에는 기준일을 실행 인자로 받는다. 거래일이 NULL인 원장은 [#515](https://github.com/corebank-tech/corebank-server/issues/515) 채우기 규칙으로 대체한다.
 - 마트는 레플리카와 **다른 MySQL 인스턴스**에 둔다(같은 VM의 다른 포트 가능). 레플리카의 `super_read_only`가 인스턴스 전체에 걸리기 때문이다. 가명 키(HMAC)의 키는 ETL에만 둔다.
@@ -1160,6 +1160,7 @@ S4지만 CI/CD·문서·훈련이라 S4 규칙에 걸리지 않는다([D-05](REA
 - Site-to-Site VPN: VPN Gateway ↔ Customer Gateway, IPsec 터널 1개(터널 1만 쓰고 VM이 먼저 접속), 정적 라우팅(온프레미스 대역 1개)
 - 터널은 VPN apply(P2 리허설 apply 뒤) 직후 VM 쪽 설정으로 세운다([VM 설정 절차](ph100_vpn_vm_runbook.md)). binlog 복제(P2 PH-70-②) · 대외 전문 · 메트릭 수집 · 정보계 조회가 이 터널을 지난다.
 - NAT 뒤 VM의 strongSwan 설정 요점(#624 테스트). `ipsec.conf`(연결 설정): 온프레미스가 먼저 접속하고(`auto=start`), `leftid`는 내부 IP가 아닌 공인 IP로 두며, `forceencaps=yes`로 UDP 캡슐화를 강제하고, `mark`로 터널에 태울 패킷을 좁힌다. `strongswan.conf`(`/etc/strongswan.d/*.conf`로 포함되는 charon 설정): `charon { install_routes = no }`로 라우팅 표 변경을 막는다. AWS 정적 라우팅의 트래픽 선택기가 `0.0.0.0/0`이라 둘 중 하나라도 빠지면 VM의 기본 경로가 터널로 들어가 SSH가 끊긴다.
+- **순서:** P2가 RDS 3306 허용 규칙을 적용한 뒤 VPN apply와 VM 터널 설정을 하고, 터널로 RDS 3306 연결 검증을 마친 뒤에 PH-70-② 복제를 시작한다.
 - **완료 기준:** 온프레미스에서 사설 IP로 WAS 8080(#756 보안 그룹 규칙)과 RDS 3306(허용 규칙은 P2가 추가)에 닿고, WAS에서 온프레미스 정보계 API와 모의 대외기관에 닿는다. 온프레미스의 인터넷 공개 포트는 Nginx 443 하나다.
 
 ## 2-6. P6 태스크 상세

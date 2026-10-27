@@ -14,6 +14,7 @@
      - `AmazonEC2FullAccess`
      - `AmazonS3FullAccess`
      - `IAMReadOnlyAccess`
+   - 컴퓨트 모듈(IAM 역할·인스턴스 프로파일)을 apply하는 사람은 위 4개 외에 IAM 쓰기 권한이 추가로 필요하다: `iam:CreateRole`, `iam:PutRolePolicy`, `iam:AttachRolePolicy`, `iam:CreateInstanceProfile`, `iam:AddRoleToInstanceProfile`, `iam:PassRole`. 없으면 IAM 리소스 생성 단계에서 `AccessDenied`가 난다. 통합 apply 담당자는 apply 전에 정하고 이 권한을 미리 받는다(P5 사용자에게는 정책 `corebank-p5-compute-iam`이 붙어 있다)
    - 작업하다 `AccessDenied` 에러가 나면, 에러 메시지에 나온 서비스의 정책을 그때 추가로 붙인다 (미리 다 예측해서 넓히지 않는다)
    - 액세스 키 생성 → 사용 사례 "CLI" 선택 → CSV 다운로드
 3. 로컬에 자격증명 등록
@@ -88,14 +89,17 @@ terraform/
 ## 실행 방법
 
 ```bash
+git checkout dev && git pull --ff-only && git status --short   # 마지막 명령 출력이 비어 있어야 한다
+git rev-parse HEAD                                              # plan 기록에 함께 남긴다
 cd terraform/main
 terraform init
-terraform plan -out=main.tfplan -var="snapshot_identifier=<스냅샷 ID>"
+(umask 077; terraform plan -out=main.tfplan -var="snapshot_identifier=<스냅샷 ID>")
 # 출력의 "Plan: N to add, 0 to change, 0 to destroy"가 예상한 개수인지, 예상 밖의 변경·삭제가 없는지 눈으로 확인한다
 terraform apply main.tfplan
 ```
 
 - 계획 파일(`main.tfplan`)은 커밋하지 않는다(`.gitignore`의 `*.tfplan`).
+- 계획 파일에는 VPN 사전 공유 키 같은 민감 값이 평문으로 들어 있다. `umask 077`로 만들고, `terraform apply` 직후 삭제하며, 업로드하거나 공유하지 않는다. 노출됐다면 VPN 연결을 새로 만들어 키를 교체한다.
 - 저장한 계획은 apply 때 확인 질문 없이 바로 실행된다. plan 출력을 확인한 직후에 apply하고, 시간이 지났거나 코드·상태가 바뀌었으면 다시 plan한다.
 - 예상 개수는 apply 범위에 따라 다르다. `dev`에 머지된 모듈만 올라간다: 네트워크·RDS만이면 31개, 컴퓨트(ALB·IAM·ASG)까지 머지되면 44개, VPN까지 머지되면 51개다.
 
