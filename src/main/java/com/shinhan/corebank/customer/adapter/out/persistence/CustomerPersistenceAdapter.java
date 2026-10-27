@@ -1,5 +1,7 @@
 package com.shinhan.corebank.customer.adapter.out.persistence;
 
+import com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCipher.Field;
+import com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCrypto;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
 import java.time.LocalDate;
@@ -7,6 +9,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 // CustomerPersistencePort를 JPA로 구현하는 영속성 어댑터
@@ -16,6 +19,7 @@ public class CustomerPersistenceAdapter implements CustomerPersistencePort {
 
     private final CustomerJpaRepository customerJpaRepository;
     private final CustomerMapper customerMapper;
+    private final ObjectProvider<CustomerPiiCrypto> customerPiiCryptoProvider;
 
     // 로그인 아이디로 고객을 조회하고 도메인 모델로 변환
     @Override
@@ -107,7 +111,11 @@ public class CustomerPersistenceAdapter implements CustomerPersistencePort {
         Objects.requireNonNull(customer, "customer must not be null");
 
         CustomerJpaEntity entity = findExistingEntityForUpdate(customer.getCustomerId());
+
         entity.updateContactInfo(customer.getPhoneNumber(), customer.getEmail());
+
+        // 평문 연락처와 암호화 컬럼을 같은 JPA 트랜잭션에서 갱신
+        writePiiShadow(entity, customer.getEmail(), customer.getPhoneNumber());
 
         CustomerJpaEntity savedEntity = customerJpaRepository.saveAndFlush(entity);
         return customerMapper.toDomain(savedEntity);
@@ -161,6 +169,9 @@ public class CustomerPersistenceAdapter implements CustomerPersistencePort {
 
         CustomerJpaEntity newEntity = customerMapper.toEntity(customer);
 
+        // PH-18: 기존 평문 컬럼과 신규 암호화 컬럼을 함께 저장
+        writePiiShadow(newEntity, customer.getEmail(), customer.getPhoneNumber());
+
         CustomerJpaEntity savedEntity = customerJpaRepository.save(newEntity);
 
         return customerMapper.toDomain(savedEntity);
@@ -173,5 +184,22 @@ public class CustomerPersistenceAdapter implements CustomerPersistencePort {
         return customerJpaRepository
                 .findByIdForUpdate(customerId)
                 .orElseThrow(() -> new IllegalStateException("저장할 고객이 존재하지 않습니다."));
+    }
+
+    private void writePiiShadow(CustomerJpaEntity entity, String email, String phoneNumber) {
+
+        CustomerPiiCrypto crypto = customerPiiCryptoProvider.getIfAvailable();
+
+        if (crypto == null) {
+            // 암호화 기능 비활성 상태에서는 오래된 암호문이 남지 않도록 한다.
+            entity.clearPiiShadow();
+            return;
+        }
+
+        String encryptedEmail = crypto.cipher().encrypt(email, Field.EMAIL);
+        String encryptedPhone = crypto.cipher().encrypt(phoneNumber, Field.PHONE_NUMBER);
+        String emailSearchHash = crypto.emailBlindIndex().hash(email);
+
+        entity.updatePiiShadow(encryptedEmail, encryptedPhone, emailSearchHash);
     }
 }
