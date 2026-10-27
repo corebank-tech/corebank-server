@@ -156,7 +156,8 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
                 eventType,
                 command.requestIp(),
                 true,
-                Map.of("targetCustomerId", command.targetCustomerId(), "changes", changes));
+                Map.of("targetCustomerId", command.targetCustomerId(), "changes", changes),
+                command.accessReason());
     }
 
     // 실패 기록은 AuditLogService가 별도 트랜잭션으로 커밋하므로 예외로 롤백돼도 남는다.
@@ -167,6 +168,7 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
                 eventType,
                 command.requestIp(),
                 false,
-                Map.of("targetCustomerId", command.targetCustomerId(), "reason", reason));
+                Map.of("targetCustomerId", command.targetCustomerId(), "reason", reason),
+                command.accessReason());
     }
 }
