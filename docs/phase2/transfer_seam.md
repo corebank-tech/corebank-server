@@ -136,7 +136,7 @@ record LedgerDepositResult(String transactionNumber, long depositBalanceAfter, L
 | `transferBetween` | `TERMINATION`(중도해지) | 2행 | `ACTIVE`, 잔액 ≥ 금액 | `ACTIVE` |
 | `credit` | `INTEREST`(이자) | 1행 | — | `ACTIVE`·`MATURED` |
 
-`channel`은 COB가 일으키면 `BT`, 고객이 요청한 중도해지는 `WB`입니다. 통장 표시는 `만기해지`·`중도해지`·`이자`로 고정합니다.
+`channel`은 거래 종류가 아니라 누가 시작했는지로 정합니다. COB가 시작하면 `BT`, 고객이 요청하면(중도해지·만기해지) `WB`입니다. 고객이 요청한 해지에서 함께 나가는 이자도 `WB`입니다. 나중에 COB가 만기해지를 자동으로 하면 그 건은 `BT`입니다. 통장 표시는 `만기해지`·`중도해지`·`이자`로 고정합니다.
 
 **거부**
 

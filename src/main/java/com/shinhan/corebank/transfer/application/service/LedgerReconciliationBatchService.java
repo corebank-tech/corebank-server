@@ -1,6 +1,7 @@
 package com.shinhan.corebank.transfer.application.service;
 
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
+import com.shinhan.corebank.batch.api.CobStepHaltException;
 import com.shinhan.corebank.transfer.application.port.in.LedgerFullReconciliationUseCase;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationBatchUseCase;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationMismatch;
@@ -19,7 +20,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class LedgerReconciliationBatchService implements LedgerReconciliationBatchUseCase {
 
-    private static final String JOB_NAME = "LEDGER_RECONCILIATION_BATCH";
+    // PH-38 베이스라인 실행기가 같은 락을 잡는다(#744)
+    public static final String JOB_NAME = "LEDGER_RECONCILIATION_BATCH";
     // batch.application.service.DailyTransferBatchService#JOB_NAME과 동일 문자열. 별도 공개
     // 상수가 없어 잡 이름 자체(batch_execution_lock.job_name 값)로 결합한다.
     private static final String DAILY_TRANSFER_BATCH_JOB_NAME = "DAILY_TRANSFER_BATCH";
@@ -72,7 +74,7 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
         runWithLock("scope=FULL", ledgerFullReconciliationUseCase::reconcileAll);
     }
 
-    // run()·runFull()과 서로 막도록 같은 락을 잡되, 나중에 켤 CobStepHaltException이 러너에 닿도록 catch 없이 try/finally만 쓴다
+    // run()·runFull()과 서로 막도록 같은 락을 잡되, CobStepHaltException이 러너에 닿도록 catch 없이 try/finally만 쓴다
     @Override
     public void runInCob(LocalDate cobDate) {
         if (!batchExecutionLockPort.tryAcquire(JOB_NAME)) {
@@ -92,13 +94,13 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
     // soft/hard는 마감을 계속할지의 판단이다 — 건별 불일치는 1건이어도 사고라 reconcileAll이 따로 ERROR로 남긴다
     private void judgeCobMismatches(LocalDate cobDate, List<LedgerReconciliationMismatch> mismatches) {
         if (mismatches.size() > cobHardThreshold) {
-            // hard지만 #556(COB_DATE 저장·실패 스텝 재실행) 전까지는 멈추면 복구할 수 없어 로그만 남긴다(#600)
             log.error(
-                    "[LEDGER_RECONCILIATION_HARD] cobDate={}, mismatches={}, threshold={} - 마감 중단 대상이나 #556 전까지 계속 진행",
+                    "[LEDGER_RECONCILIATION_HARD] cobDate={}, mismatches={}, threshold={} - 마감 중단",
                     cobDate,
                     mismatches.size(),
                     cobHardThreshold);
-            return;
+            throw new CobStepHaltException(
+                    "원장 대사 불일치 " + mismatches.size() + "건이 임계 " + cobHardThreshold + "건을 넘음 - cobDate=" + cobDate);
         }
         if (!mismatches.isEmpty()) {
             log.warn(
