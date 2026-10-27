@@ -102,6 +102,7 @@ terraform apply main.tfplan
 - 계획 파일에는 VPN 사전 공유 키 같은 민감 값이 평문으로 들어 있다. `umask 077`로 만들고, `terraform apply` 직후 삭제하며, 업로드하거나 공유하지 않는다. 노출됐다면 VPN 연결을 새로 만들어 키를 교체한다.
 - 저장한 계획은 apply 때 확인 질문 없이 바로 실행된다. plan 출력을 확인한 직후에 apply하고, 시간이 지났거나 코드·상태가 바뀌었으면 다시 plan한다.
 - 예상 개수는 apply 범위에 따라 다르다. `dev`에 머지된 모듈만 올라간다: 네트워크·RDS만이면 31개, 컴퓨트(ALB·IAM·ASG)까지 머지되면 44개, VPN까지 머지되면 51개다.
+- VPN을 포함해 apply하기 전에 `modules/vpn`의 `customer_gateway_ip`(기본값 `58.230.206.76`)가 최종 VM이 나가는 공인 IP와 같은지 VM에서 `curl -s ifconfig.me`로 확인하고, UDP 500/4500 아웃바운드도 확인한다. 다르면 기본값을 고쳐 PR로 반영한다. 터널 상태와 VM-VPC 연결성은 VPN 연결이 만들어진 apply 뒤에만 확인할 수 있으므로 [런북](../docs/phase2/ph100_vpn_vm_runbook.md) §4에서 확인하고, 모의 서버 VM 이전은 그 확인 뒤에 한다.
 
 ### 실제 apply 단위 (PH-51 + PH-70-②)
 
@@ -130,8 +131,14 @@ terraform apply main.tfplan
 1. VM에서 모의 서버를 띄우고 9300 포트를 확인한다.
 2. `modules/network/security_groups.tf`에서 WAS 보안 그룹에 VM으로 나가는 TCP 9300 egress를 추가한다.
 3. `modules/compute`의 `interbank_host`에 VM 주소를 넣고 apply한다. 시작 템플릿 새 버전만 생기고 떠 있는 서버는 그대로다.
-4. 진행 중인 타행 이체가 없는 시간에 서버를 한 대씩 교체한다. 교체된 서버에는 모의 서버 컨테이너가 뜨지 않는다. 한 대가 healthy가 된 뒤 다음 대를 교체한다.
-5. 되돌릴 때는 `interbank_host`를 비우고 같은 방식으로 교체한다.
+4. 서버를 교체하기 전에 미확정(`TIMEOUT`) 타행이체가 0건인지 확인한다(`InterbankInquiryScheduler`가 조회하는 대상과 같은 조건). 남아 있으면 교체하지 않는다. VM의 모의 서버 장부는 비어 있어서 원거래를 3001(미수신)로 답하고, 실제 승인된 거래를 미처리로 확정할 수 있다.
+5. 교체가 끝날 때까지 신규 타행이체를 실행하지 않는다(제한 방법은 팀과 정한다). 교체 중에는 옛 모의 서버와 VM의 모의 서버가 함께 쓰이기 때문이다.
+6. 서버를 한 대씩 종료한다. ASG에 `instance_refresh`가 없어서 apply만으로는 떠 있는 서버가 바뀌지 않는다. 새 서버가 `corebank-tg-was`에서 healthy가 된 것을 확인한 뒤 다음 대를 종료한다.
+   ```bash
+   aws autoscaling terminate-instance-in-auto-scaling-group --instance-id <ID> --no-should-decrement-desired-capacity
+   ```
+7. 완료 조건: 두 서버가 같은 VM 주소를 쓰고, 두 서버 모두 `docker ps`에 `corebank-mock-external`이 없으며, 대상 그룹 healthy가 2대이고, 미확정 타행이체가 여전히 0건이다.
+8. 되돌릴 때는 `interbank_host`를 비우고 같은 방식으로 교체한다.
 
 모의 서버 장부는 컨테이너 메모리에만 있어서 교체하면 사라진다.
 

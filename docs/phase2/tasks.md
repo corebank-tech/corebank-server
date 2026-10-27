@@ -1129,7 +1129,7 @@ public interface CobStep {
 - IAM은 인스턴스 프로파일 1개(WAS)와 SSM Agent·Session Manager 접속 기반까지다. 온프레미스 SSM 하이브리드 역할은 역할 생성만 #695에 두고, 활성화 코드 발급과 VM 등록은 PH-100(#698)이 맡는다. 나머지 IAM은 P2 PH-72가 맡는다([D-11](README.md#d-11--920--p2p5)).
 - **서버 기동(10/26 결정, #695):** 서버가 켜질 때 `user_data`로 Docker 설치, SSM Parameter Store(`/corebank/*`) 읽기, 컨테이너(앱·모의 서버) 실행까지 한다. 서버는 Ubuntu 22.04, 앱 프로필은 `prod`(`qa-seed` 제외). 포트는 `8080:8080`이다(WAS 보안 그룹은 8080을 ALB와 온프레미스 VM(`192.168.0.211/32`)에서 허용한다. 온프레미스 쪽은 VM의 모니터링이 VPN으로 앱 메트릭을 수집하는 경로다). 이미지는 커밋 SHA 태그로 고정하고(릴리스마다 수동 갱신), 보관함 값을 못 읽으면 부팅을 중단하며, ASG 헬스체크 유예는 1200초다. 현행 SSM 배포 스크립트(#440 반영분)를 ASG용으로 이관하는 일은 컷오버 뒤 PH-55로 미룬다.
 - HTTPS 리스너는 P2가 넘기는 ACM certificate ARN으로 만든다.
-- **출력값 → P2 (통합 apply 직후):** ALB ARN · 리스너 ARN · ALB DNS name · ALB zone ID. `terraform/main`은 network·compute·data가 한 루트라 apply 한 번에 함께 올라간다([terraform/README.md](../../terraform/README.md)).
+- **출력값 → P2 (통합 apply 직후):** ALB ARN · 리스너 ARN · ALB DNS name · ALB zone ID · 대상 그룹 ARN(`target_group_arn`). `terraform/main`은 network·compute·data·vpn(VPN 게이트웨이와 라우팅 포함)이 한 루트라 apply 한 번에 함께 올라간다([terraform/README.md](../../terraform/README.md)).
 - 일정: 10/27 P2 리허설 apply(리허설 스냅샷) → 10/28 최종 스냅샷 복원 · 본 apply → SG 교차 검증 → DNS 전환. 컴퓨트 PR(#750 → #752 → #756)은 P2의 리허설 apply가 끝난 뒤 머지한다(먼저 머지되면 dev apply 때 서버(ASG)까지 올라가 옛 DB에 붙는다). 기존 EC2는 11/6까지 유지한다.
 - **Plan B:** EC2를 유지하고 구축 진행률을 리포트한다.
 - **완료 기준:** 프라이빗 서브넷에서 인터넷에 직접 접근할 수 없다. 앱이 3-Tier에서 돈다.
@@ -1196,6 +1196,7 @@ S4지만 CI/CD·문서·훈련이라 S4 규칙에 걸리지 않는다([D-05](REA
 - 터널은 VPN apply(P2 리허설 apply 뒤) 직후 VM 쪽 설정으로 세운다([VM 설정 절차](ph100_vpn_vm_runbook.md)). binlog 복제(P2 PH-70-②) · 대외 전문 · 메트릭 수집 · 정보계 조회가 이 터널을 지난다.
 - NAT 뒤 VM의 strongSwan 설정 요점(#624 테스트). `ipsec.conf`(연결 설정): 온프레미스가 먼저 접속하고(`auto=start`), `leftid`는 내부 IP가 아닌 공인 IP로 두며, `forceencaps=yes`로 UDP 캡슐화를 강제하고, `mark`로 터널에 태울 패킷을 좁힌다. `strongswan.conf`(`/etc/strongswan.d/*.conf`로 포함되는 charon 설정): `charon { install_routes = no }`로 라우팅 표 변경을 막는다. AWS 정적 라우팅의 트래픽 선택기가 `0.0.0.0/0`이라 둘 중 하나라도 빠지면 VM의 기본 경로가 터널로 들어가 SSH가 끊긴다.
 - **순서:** P2가 RDS 3306 허용 규칙을 적용한 뒤 VPN apply와 VM 터널 설정을 하고, 터널로 RDS 3306 연결 검증을 마친 뒤에 PH-70-② 복제를 시작한다.
+- **한계(단일 터널):** 터널 1만 쓰므로 터널 1이 끊기면 binlog 복제 · 대외 전문 · 메트릭 수집 · 정보계 조회가 멈춘다. 가용성이 필요해지면 터널 2 설정과 전환 검증을 따로 한다(이 범위 밖).
 - **완료 기준:** 온프레미스에서 사설 IP로 WAS 8080(#756 보안 그룹 규칙)과 RDS 3306(허용 규칙은 P2가 추가)에 닿고, WAS에서 온프레미스 정보계 API와 모의 대외기관에 닿는다. 온프레미스의 인터넷 공개 포트는 Nginx 443 하나다.
 
 ## 2-6. P6 태스크 상세
