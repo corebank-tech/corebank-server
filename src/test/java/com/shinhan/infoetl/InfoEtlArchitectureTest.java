@@ -1,5 +1,6 @@
 package com.shinhan.infoetl;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -29,15 +30,16 @@ class InfoEtlArchitectureTest {
             .resideInAnyPackage("com.shinhan.infoetl.adapter..", "java.sql..", "javax.sql..");
 
     @ArchTest
-    static final ArchRule inboundAdapterOnlyKnowsInboundPorts = noClasses()
+    static final ArchRule inboundAdapterOnlyKnowsInboundPorts = classes()
             .that()
             .resideInAPackage("com.shinhan.infoetl.adapter.in..")
             .should()
-            .dependOnClassesThat()
+            .onlyDependOnClassesThat()
             .resideInAnyPackage(
-                    "com.shinhan.infoetl.application.service..",
-                    "com.shinhan.infoetl.application.port.out..",
-                    "com.shinhan.infoetl.adapter.out..",
-                    "java.sql..",
-                    "javax.sql..");
+                    "com.shinhan.infoetl.adapter.in..",
+                    "com.shinhan.infoetl.application.port.in..",
+                    "com.shinhan.infoetl.domain..",
+                    "java.lang..",
+                    "java.time..",
+                    "java.util..");
 }
