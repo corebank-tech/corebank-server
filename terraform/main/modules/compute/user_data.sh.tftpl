@@ -15,11 +15,16 @@ REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/la
 get() { aws ssm get-parameter --region "$REGION" --with-decryption --name "/corebank/$1" --query Parameter.Value --output text; }
 
 # 보관함 값이 아직 없거나 권한이 퍼지는 중이면 최대 10분 기다린다
+LOADED=0
 for i in $(seq 1 60); do
   if DB_USER=$(get db-user) && DB_PASSWORD=$(get db-password) && FLYWAY_USER=$(get flyway-user) \
-     && FLYWAY_PASSWORD=$(get flyway-password) && CORS=$(get cors-allowed-origins); then break; fi
+     && FLYWAY_PASSWORD=$(get flyway-password) && CORS=$(get cors-allowed-origins); then LOADED=1; break; fi
   sleep 10
 done
+if [ "$LOADED" != 1 ]; then
+  echo "Parameter Store 값을 읽지 못해 부팅을 중단한다: /corebank/{db-user,db-password,flyway-user,flyway-password,cors-allowed-origins}" >&2
+  exit 1
+fi
 
 umask 077
 mkdir -p /opt/corebank
