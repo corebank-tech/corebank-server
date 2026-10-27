@@ -35,11 +35,13 @@ DB_USER=$DB_USER
 DB_PASSWORD=$DB_PASSWORD
 FLYWAY_USER=$FLYWAY_USER
 FLYWAY_PASSWORD=$FLYWAY_PASSWORD
-APP_INTERBANK_HOST=mock-external
+APP_INTERBANK_HOST=%{ if interbank_host == "" }mock-external%{ else }${interbank_host}%{ endif }
 APP_INTERBANK_PORT=9300
 CORS_ALLOWED_ORIGINS=$CORS
 EOF
 
 docker network create corebank-net || true
+%{ if interbank_host == "" ~}
 docker run -d --name corebank-mock-external --network-alias mock-external --restart unless-stopped --network corebank-net ${mock_external_image}
+%{ endif ~}
 docker run -d --name corebank-server --restart unless-stopped --network corebank-net -p 8080:8080 --env-file /opt/corebank/app.env ${app_image}

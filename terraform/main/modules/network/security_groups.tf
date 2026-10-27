@@ -43,7 +43,7 @@ resource "aws_security_group" "was" {
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
-    cidr_blocks = [var.onprem_cidr]
+    cidr_blocks = [var.onprem_metrics_cidr]
   }
 
   egress {

@@ -43,6 +43,7 @@ resource "aws_launch_template" "was" {
     db_host             = var.db_host
     app_image           = var.app_image
     mock_external_image = var.mock_external_image
+    interbank_host      = var.interbank_host
   }))
 
   tag_specifications {

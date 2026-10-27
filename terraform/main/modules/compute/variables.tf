@@ -54,3 +54,9 @@ variable "mock_external_image" {
   type        = string
   default     = "corebank/corebank-mock-external:176fe574b6b5d2a1008ce9ce9359753b4d658cdb"
 }
+
+variable "interbank_host" {
+  description = "타행 연동 모의 대외기관 주소. 비우면 서버마다 모의 서버 컨테이너를 띄우고, 값이 있으면 컨테이너를 띄우지 않고 이 주소로 접속한다"
+  type        = string
+  default     = ""
+}
