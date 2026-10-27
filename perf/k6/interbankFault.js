@@ -102,13 +102,6 @@ function setFault(mode) {
 }
 
 export function setup() {
-  if (FAULT_ADMIN_URL) {
-    setFault(FAULT_MODE);
-    console.log(`장애 스위치 ${FAULT_MODE} 로 켬 (${FAULT_ADMIN_URL})`);
-  } else {
-    console.log(`FAULT_ADMIN_URL 없음 — 스위치가 ${FAULT_MODE} 인지 docker exec 로 먼저 확인했어야 한다`);
-  }
-
   const domesticSessions = [];
   for (let i = 1; i <= SESSION_POOL; i++) {
     const me = customer(i);
@@ -120,6 +113,14 @@ export function setup() {
     interbankSessions.push({ session: login(BASE_URL, me.userId, me.password), me });
   }
   console.log(`세션 당행 ${domesticSessions.length} · 타행 ${interbankSessions.length} 준비 완료 (측정 구간 밖)`);
+
+  // setup() 이 실패하면 teardown() 이 돌지 않는다. 스위치는 실패할 일이 남지 않은 마지막에 켠다.
+  if (FAULT_ADMIN_URL) {
+    setFault(FAULT_MODE);
+    console.log(`장애 스위치 ${FAULT_MODE} 로 켬 (${FAULT_ADMIN_URL})`);
+  } else {
+    console.log(`FAULT_ADMIN_URL 없음 — 스위치가 ${FAULT_MODE} 인지 docker exec 로 먼저 확인했어야 한다`);
+  }
   return { domesticSessions, interbankSessions };
 }
 
