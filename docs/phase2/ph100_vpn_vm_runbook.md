@@ -108,21 +108,28 @@ sudo ipsec statusall
 
 ## 4. 확인
 
+### 4-1. 터널 기본 검증 (§2의 타이머가 걸린 채로, 30분 안에)
+
 1. 터널 상태: `sudo ipsec statusall`에 `ESTABLISHED`, `INSTALLED, TUNNEL`이 보인다. AWS 콘솔(VPC > Site-to-Site VPN 연결)에서 터널 1이 UP이고 터널 2는 DOWN이어도 정상이다.
 2. VM 기본 경로가 그대로인지: `ip route`에서 `default via ...`가 터널이 아닌 원래 경로다. SSH가 유지되는지 같이 본다.
-3. VM → AWS: 먼저 `command -v nc`로 `nc`가 있는지 확인하고, 없으면 `sudo apt install netcat-openbsd`로 설치한다. 그다음 `nc -vz <WAS 사설 IP> 8080` (TCP 연결 검사). WAS 보안 그룹은 ICMP를 허용하지 않고 RDS도 ping에 응답하지 않아서 `ping`은 터널이 정상이어도 실패한다. RDS 3306은 P2가 보안 그룹 규칙을 추가한 뒤 `nc -vz <RDS 사설 IP> 3306`으로 따로 확인한다.
-4. 포트 확인(PH-100-② 완료 기준)
-   - VM → RDS 3306 (복제 계정은 P2 PH-70-②에서 정한다. 보안 그룹의 RDS 규칙은 P2가 추가한다)
-   - VM → WAS 8080 (메트릭 수집, 이 PR의 WAS 보안 그룹 규칙)
-   - WAS → VM의 정보계 API·모의 대외기관 (VM이 받는 포트가 정해진 뒤). **선행 조건:** 지금 WAS 보안 그룹의 아웃바운드는 443과 VPC 내부 3306뿐이다. 연동 전에 목적지 IP와 서비스 포트(모의 대외기관은 TCP 9300)를 확인하고 `modules/network/security_groups.tf`에 egress 규칙을 추가한다. 포트가 확정되기 전에는 규칙을 열지 않는다.
-5. 복구 확인: VM에서 `sudo ipsec restart`로 다시 올려 SPI가 바뀌며 복구되는지 본다.
-6. **자동 정지 취소(필수).** §2에서 건 30분 타이머가 남아 있으면 정상 연결도 30분 뒤 `ipsec stop`으로 끊겨 RDS 복제와 정보계 통신이 멈춘다. 위 1~5가 모두 통과하면 타이머를 취소하고 사라졌는지 확인한다.
-   ```bash
-   sudo systemctl stop vpn-auto-stop.timer
-   systemctl list-timers --all | grep vpn-auto-stop || echo "타이머 없음(취소됨)"
-   ```
-   - 1~5가 30분 안에 끝나지 않으면 취소하지 말고 §2의 `systemd-run`을 다시 걸어 시간을 늘린다.
-   - 이 단계 전은 초기 설정 단계(안전장치 있음), 이후는 정상 운영 단계(안전장치 없음)다. 이후 SSH가 끊기면 §5의 콘솔 접속을 쓴다.
+3. VM → AWS: 먼저 `command -v nc`로 `nc`가 있는지 확인하고, 없으면 `sudo apt install netcat-openbsd`로 설치한다. 그다음 `nc -vz <WAS 사설 IP> 8080` (TCP 연결 검사, 메트릭 수집 경로, 이 PR의 WAS 보안 그룹 규칙). WAS 보안 그룹은 ICMP를 허용하지 않고 RDS도 ping에 응답하지 않아서 `ping`은 터널이 정상이어도 실패한다.
+4. 복구 확인: VM에서 `sudo ipsec restart`로 다시 올려 SPI가 바뀌며 복구되는지 본다.
+
+### 4-2. 자동 정지 취소 (필수)
+
+4-1의 1~4가 통과하면 곧바로 타이머를 취소하고 사라졌는지 확인한다. 타이머가 남아 있으면 정상 연결도 30분 뒤 `ipsec stop`으로 끊겨 RDS 복제와 정보계 통신이 멈춘다. P2의 RDS 보안 그룹 변경이나 VM 서비스 포트 확정을 기다리는 것은 취소를 미룰 이유가 아니다(그 검증은 4-3에서 따로 한다).
+```bash
+sudo systemctl stop vpn-auto-stop.timer
+systemctl list-timers --all | grep vpn-auto-stop || echo "타이머 없음(취소됨)"
+```
+- 4-1이 30분 안에 끝나지 않으면 먼저 위 `stop`으로 기존 타이머를 지운 뒤 §2의 `systemd-run`을 다시 건다. 같은 이름(`vpn-auto-stop`)의 타이머가 살아 있는 채로 다시 걸면 실패한다.
+- 이 단계 전은 초기 설정 단계(안전장치 있음), 이후는 정상 운영 단계(안전장치 없음)다. 이후 SSH가 끊기면 §5의 콘솔 접속을 쓴다.
+
+### 4-3. 서비스 포트 연동 검증 (타이머 취소 뒤, 선행 조건이 갖춰진 때)
+
+PH-100-② 완료 기준이다. 상대 쪽 준비가 끝난 항목부터 따로 확인한다.
+- VM → RDS 3306: 복제 계정은 P2 PH-70-②에서 정한다. 보안 그룹의 RDS 규칙은 P2가 추가한 뒤 `nc -vz <RDS 사설 IP> 3306`으로 확인한다.
+- WAS → VM의 정보계 API·모의 대외기관 (VM이 받는 포트가 정해진 뒤). **선행 조건:** 지금 WAS 보안 그룹의 아웃바운드는 443과 VPC 내부 3306뿐이다. 연동 전에 목적지 IP와 서비스 포트(모의 대외기관은 TCP 9300)를 확인하고 `modules/network/security_groups.tf`에 egress 규칙을 추가한다. 포트가 확정되기 전에는 규칙을 열지 않는다.
 
 ## 5. 문제가 생기면
 
