@@ -110,7 +110,7 @@ sudo ipsec statusall
 
 1. 터널 상태: `sudo ipsec statusall`에 `ESTABLISHED`, `INSTALLED, TUNNEL`이 보인다. AWS 콘솔(VPC > Site-to-Site VPN 연결)에서 터널 1이 UP이고 터널 2는 DOWN이어도 정상이다.
 2. VM 기본 경로가 그대로인지: `ip route`에서 `default via ...`가 터널이 아닌 원래 경로다. SSH가 유지되는지 같이 본다.
-3. VM → AWS: `ping -c 3 <WAS 사설 IP>` 또는 RDS 사설 IP
+3. VM → AWS: `nc -vz <WAS 사설 IP> 8080` (TCP 연결 검사). WAS 보안 그룹은 ICMP를 허용하지 않고 RDS도 ping에 응답하지 않아서 `ping`은 터널이 정상이어도 실패한다. RDS 3306은 P2가 보안 그룹 규칙을 추가한 뒤 `nc -vz <RDS 사설 IP> 3306`으로 따로 확인한다.
 4. 포트 확인(PH-100-② 완료 기준)
    - VM → RDS 3306 (복제 계정은 P2 PH-70-②에서 정한다. 보안 그룹의 RDS 규칙은 P2가 추가한다)
    - VM → WAS 8080 (메트릭 수집, 이 PR의 WAS 보안 그룹 규칙)
