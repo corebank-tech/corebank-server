@@ -4,7 +4,9 @@
 
 ## 측정 조건
 
-기존 ALB → 단일 EC2 → 기존 RDS에서 **PH-49c의 JDBC 로그인 세션**, Hikari 메인 풀 10개로 측정했다. B′의 `provider=jdbc`는 일회성 저장소 모드의 명칭이며 로그인 세션의 JDBC 저장과 구분한다. 기록된 운영 이미지 SHA는 `176fe574b6b5d2a1008ce9ce9359753b4d658cdb`다. 10/27 운영 EC2에서 실행 중인 `corebank-server` 컨테이너를 `docker inspect`로 확인한 이미지 태그도 **`corebank/corebank-server:176fe574b6b5d2a1008ce9ce9359753b4d658cdb`**였고, 로컬 Docker 이미지 ID는 `sha256:78275514aba911e51bbd171db6e56a50f71c467c75640869b3bc422df134e0bb`였다. 이 사후 조회만으로 10/26 네 회차 사이에 재배포가 없었다는 사실까지 확인되지는 않는다. 부하 스크립트는 `perf/k6/load.js`이며, 목표 도착률 1·2·3·5·10/s를 각 3분 적용했다. 측정 당시 PH-30 성능 개선은 아직 운영에 적용되지 않았다. 아래 시각은 KST이고, 검사 구간은 시작 시각 이상·종료 시각 미만이다.
+기존 ALB → 단일 EC2 → 기존 RDS에서 **PH-49c의 JDBC 로그인 세션**, Hikari 메인 풀 10개로 측정했다. B′의 `provider=jdbc`는 일회성 저장소 모드의 명칭이며 로그인 세션의 JDBC 저장과 구분한다. 기록된 운영 이미지 SHA는 `176fe574b6b5d2a1008ce9ce9359753b4d658cdb`다. 10/27 운영 EC2에서 실행 중인 `corebank-server` 컨테이너를 `docker inspect`로 확인한 이미지 태그도 **`corebank/corebank-server:176fe574b6b5d2a1008ce9ce9359753b4d658cdb`**였고, 로컬 Docker 이미지 ID는 `sha256:78275514aba911e51bbd171db6e56a50f71c467c75640869b3bc422df134e0bb`였다. 같은 컨테이너의 `started_at`은 **2026-10-24 02:32:15.706352567 UTC(10/24 11:32:15 KST)**로 1회차 시작(10/26 13:26:24 KST)보다 이르다. 따라서 현재 컨테이너는 네 회차 내내 재시작되지 않았고, 위 이미지로 실행 중이었다. 부하 스크립트는 `perf/k6/load.js`이며, 목표 도착률 1·2·3·5·10/s를 각 3분 적용했다. 측정 당시 PH-30 성능 개선은 아직 운영에 적용되지 않았다. 아래 시각은 KST이고, 검사 구간은 시작 시각 이상·종료 시각 미만이다.
+
+10/27 사후 경로 확인에서 기존 ALB `corebank-alb`의 대상 그룹 `corebank-tg`에는 앱 EC2 `i-0c861fe2dc634f3af` **1대만 `healthy`**로 등록돼 있었다. 해당 EC2의 컨테이너 `DB_HOST`는 RDS `corebank-database`의 Endpoint(`corebank-database.cn6i0sa822p5.ap-northeast-2.rds.amazonaws.com`)와 일치했다. 실행 프로필은 `prod,qa-seed`였고, 컨테이너 환경변수에 `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`는 없었다. 컨테이너 기동 명령은 `java -jar app.jar`이며 추가 인자도 없었다. **실행 이미지의 `application-prod.yml`에는 Hikari 풀 10이 설정돼 있고, 확인한 환경변수·기동 인자에는 이 값을 덮어쓰는 항목이 없다.** Hikari 객체의 기동 시점 `maximumPoolSize`를 직접 조회한 기록은 아니므로 실제값 확인과는 구분한다.
 
 [PH-30 측정 기준](harness_results.md#2-측정-결과--2026-10-05-수준별)의 견딤은 **성공률 100%·HTTP 오류율 1% 미만·이체 p95 1초 미만**, 포화는 **HTTP 오류율 10% 초과 또는 유실 발생**이다. 목표 도착률은 이체 완료 처리량이 아니므로 두 값을 혼동하지 않는다. B′는 같은 운영 ALB·단일 `t3.small` EC2·RDS `db.t4g.micro`·Hikari 풀 10개에서 `SESSION_POOL=MAX_VUS=200`으로 측정했다([PH-101-② 측정 조건](ph101_redis_removal_results.md#1-측정-조건)). C에서도 같은 인프라·풀·목표 도착률을 사용했으나, 데이터 규모와 부하 생성 기기 조건이 B′와 같았는지는 기록으로 확인되지 않았다.
 
@@ -267,6 +269,34 @@ MySQL 세션 시각대 `Asia/Seoul`에서 `perf/sql/verify_integrity.sql`의 검
 | 2,612 | 2,577 | 35 | 51,300,288 |
 
 `ERROR` 35건의 오류코드와 원인은 아직 개별 조회하지 않았다. `limit_usage_mismatches`는 앞선 회차와 마찬가지로 10/26 하루 전체의 성공 이체 누계를 대조한다.
+
+## 사후 추가 검사 — 동일 계좌 100건 (`integrity.js`, 2026-10-27)
+
+1~4회차에는 `perf/k6/integrity.js`를 실행하지 않아, 10/27 17:48:01~17:48:49 KST에 **별도 핫스팟 검사**로 실행했다. 실행 직전 확인한 기존 ALB 대상 그룹에는 앱 EC2 `i-0c861fe2dc634f3af` 1대만 `healthy`로 등록돼 있었고, 해당 EC2의 컨테이너 이미지 태그와 시작 시각은 위 측정 조건에 기록한 값과 같았다. 컨테이너 `DB_HOST`도 기존 RDS `corebank-database`의 Endpoint와 일치했다. 따라서 **ALB·EC2·RDS 경로와 실행 컨테이너 이미지는 1~4회차의 확인된 조건과 일치**한다. 다만 실행일과 DB 데이터 상태, 동시 작업 여부까지 동일하다고 입증한 것은 아니므로 이 결과를 10/26 네 회차 중 한 회차의 검사로 소급하지 않는다.
+
+`CONCURRENCY=100`, 건당 19,876원으로 같은 출금 계좌에 사용할 토큰 100쌍을 `setup()`에서 선발급한 뒤, 100 VU가 각각 이체 1건을 실행했다. 아래는 제공된 k6 출력 기준이며 이 검사의 이체 지연을 분산 계좌 부하의 p95와 합산하지 않는다.
+
+| 항목 | 결과 |
+|---|---:|
+| 이체 성공 | 100/100 (100%) |
+| HTTP 실패 | 0/401 (0%) |
+| 완료·중단 iteration | 100·0 |
+| `transfer_duration` 평균·중앙값·p95·p99·최대 | 3.32초 · 3.66초 · 4.30초 · 4.41초 · 4.42초 |
+| k6 종료 코드 | 0 |
+
+추가 검사 구간(2026-10-27 17:48:01 이상·17:49:00 미만, KST)에 `verify_integrity.sql`을 실행했다. MySQL 세션 시각대는 `Asia/Seoul`이었고, 제공된 SQL 결과는 다음과 같다.
+
+| 검사 | 결과 |
+|---|---:|
+| `broken_ledger_pairs` | 0 |
+| `balance_mismatches` | 0 |
+| `limit_usage_mismatches` | 0 |
+
+| `total_transfers` | `success_count` | `error_count` | `success_amount` (원) |
+|---:|---:|---:|---:|
+| 100 | 100 | 0 | 1,987,600 |
+
+**동일 계좌 100건 추가 검사의 이체 성공과 SQL 정합성 검사는 모두 통과했다.** `limit_usage_mismatches`는 SQL 구조상 이 구간이 속한 10/27 하루 전체의 한도 누계를 검사한다. 이 결과는 10/26 네 회차의 SQL 결과와 별도로 기록한다.
 
 ## 4회 종합 판정과 B′ 비교
 

@@ -25,6 +25,12 @@ sudo -n docker inspect \
   --format 'name={{.Name}} image={{.Config.Image}} imageId={{.Image}}' \
   corebank-server
 sudo -n docker inspect \
+  --format 'started_at={{.State.StartedAt}} image={{.Config.Image}}' \
+  corebank-server
+sudo -n docker inspect \
+  --format 'entrypoint={{json .Config.Entrypoint}} cmd={{json .Config.Cmd}}' \
+  corebank-server
+sudo -n docker inspect \
   --format '{{range .Config.Env}}{{println .}}{{end}}' corebank-server |
   grep -E '^(SPRING_PROFILES_ACTIVE|SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE)='
 sudo -n docker inspect \
@@ -32,7 +38,7 @@ sudo -n docker inspect \
   sed -n 's/^DB_HOST=//p'
 ```
 
-마지막 출력은 RDS 콘솔의 **기존 DB Endpoint**와 대조한다. 환경변수 전체, Compose 파일 본문, DB 비밀번호·쿠키·토큰은 출력하거나 결과 문서에 붙이지 않는다. 2026-10-26 C 측정의 릴리스 2 이미지 태그는 `corebank/corebank-server:176fe574b6b5d2a1008ce9ce9359753b4d658cdb`였다. 실제 실행 중인 컨테이너 태그를 확인하며, 나중에 조회한 태그만으로 과거 네 회차 사이에 재배포가 없었다고 단정하지 않는다. `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`가 출력되지 않으면 `application-prod.yml`의 기본값 10을 확인하고, 다른 설정 경로의 덮어쓰기 여부도 P4와 확인한다.
+마지막 출력은 RDS 콘솔의 **기존 DB Endpoint**와 대조한다. 환경변수 전체, Compose 파일 본문, DB 비밀번호·쿠키·토큰은 출력하거나 결과 문서에 붙이지 않는다. 2026-10-26 C 측정의 릴리스 2 이미지 태그는 `corebank/corebank-server:176fe574b6b5d2a1008ce9ce9359753b4d658cdb`였다. 사후 이미지 조회만으로 과거 실행 상태를 단정하지 말고, 같은 컨테이너의 `started_at`을 측정 첫 START와 비교한다. C의 `started_at`은 2026-10-24 02:32:15.706352567 UTC로 네 회차보다 앞서므로 그 사이 컨테이너 재시작은 없었다. 10/27 확인 당시 기존 ALB `corebank-alb`의 대상 그룹 `corebank-tg`에는 앱 EC2 `i-0c861fe2dc634f3af` 1대만 `healthy`로 등록돼 있었고, 컨테이너 `DB_HOST`는 `corebank-database`의 RDS Endpoint와 일치했다. 실행 프로필은 `prod,qa-seed`, 기동 명령은 `java -jar app.jar`(추가 인자 없음)였다. `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE` 환경변수가 없고 실행 이미지의 `application-prod.yml`에 풀 10이 설정돼 있다. 이는 설정 근거이며 Hikari 객체의 실제 `maximumPoolSize`를 직접 조회한 기록은 아니다.
 
 현재 SSM 디렉터리에서 `docker compose ps`가 Compose 파일 없음으로 실패해도 위 `docker inspect`는 실행할 수 있다. Compose 상태가 꼭 필요하고 배포 경로가 `/home/ubuntu/corebank`라면 `sudo -n docker compose -f /home/ubuntu/corebank/docker-compose.yml ps`로 확인한다. 해당 경로도 없다면 다른 EC2에 접속했거나 배포 경로가 바뀌었는지 P4와 확인한다. `sudo -n`이 권한 오류를 내면 권한을 임의로 바꾸지 않고 조회 권한을 확인한다.
 
