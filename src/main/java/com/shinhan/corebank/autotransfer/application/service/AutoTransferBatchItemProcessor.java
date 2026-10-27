@@ -104,7 +104,7 @@ public class AutoTransferBatchItemProcessor {
         // 회차 확정마다 발행한다(#707). 알림은 회차 ID 가 필요해 TransferSettled 가 아니라 이 이벤트에 싣는다.
         // 재확정과 겹치면 두 번 나갈 수 있지만 알림은 업무 키로 한 건만 남는다.
         LocalDateTime settledAt = LocalDateTime.now(clock);
-        NotificationRequest notification = AutoTransferNotificationComposer.compose(
+        NotificationRequest notification = AutoTransferNotificationGenerator.generate(
                 autoTransfer, processingExecution, result.status(), result.customerFailureReason(), settledAt);
         eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
                 .customerId(autoTransfer.getCustomerId())
@@ -179,7 +179,7 @@ public class AutoTransferBatchItemProcessor {
 
         // 재확정도 확정마다 발행하되 가드를 통과한 뒤에만 낸다(#707). 실패 코드가 없어 알림은 기본 문장이다.
         LocalDateTime settledAt = LocalDateTime.now(clock);
-        NotificationRequest notification = AutoTransferNotificationComposer.compose(
+        NotificationRequest notification = AutoTransferNotificationGenerator.generate(
                 autoTransfer, execution, execution.getStatus(), Optional.empty(), settledAt);
         eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
                 .customerId(autoTransfer.getCustomerId())

@@ -101,7 +101,7 @@ public class ScheduledTransferBatchItemProcessor {
 
         // 예약 건 확정마다 발행한다(#707). 알림은 예약 건 ID 가 필요해 TransferSettled 가 아니라 이 이벤트에 싣는다.
         // 가드를 통과한 쪽만 오므로 재확정과 겹쳐도 한 번만 나간다.
-        NotificationRequest notification = ScheduledTransferNotificationComposer.compose(
+        NotificationRequest notification = ScheduledTransferNotificationGenerator.generate(
                 scheduledTransfer, result.status(), result.customerFailureReason(), executedAt);
         eventPublisher.publishEvent(ScheduledTransferSettled.builder()
                 .customerId(scheduledTransfer.getCustomerId())
@@ -152,7 +152,7 @@ public class ScheduledTransferBatchItemProcessor {
         // 재확정도 확정마다 발행하되 가드를 통과한 뒤에만 낸다(#707). 실패 코드가 없어 알림은 기본 문장이다.
         ProcessResultStatus status = isSucceeded ? ProcessResultStatus.SUCCESS : ProcessResultStatus.ERROR;
         NotificationRequest notification =
-                ScheduledTransferNotificationComposer.compose(scheduledTransfer, status, Optional.empty(), now);
+                ScheduledTransferNotificationGenerator.generate(scheduledTransfer, status, Optional.empty(), now);
         eventPublisher.publishEvent(ScheduledTransferSettled.builder()
                 .customerId(scheduledTransfer.getCustomerId())
                 .refId(scheduledTransfer.getScheduledTransferId())

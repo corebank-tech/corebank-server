@@ -14,7 +14,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-class AutoTransferNotificationComposerTest {
+class AutoTransferNotificationGeneratorTest {
 
     private static final Long CUSTOMER_ID = 7072L;
     private static final Long EXECUTION_ID = 7_072_001L;
@@ -22,9 +22,9 @@ class AutoTransferNotificationComposerTest {
 
     @Test
     @DisplayName("성공한 자동이체 회차는 회차 ID 로 회차 금액의 자동이체 완료 알림을 만든다")
-    void succeeded_composesAutoTransferNotification() {
+    void succeeded_generatesAutoTransferNotification() {
         // when
-        NotificationRequest notification = AutoTransferNotificationComposer.compose(
+        NotificationRequest notification = AutoTransferNotificationGenerator.generate(
                 autoTransfer("홍길동"), execution(30_000L), ProcessResultStatus.SUCCESS, Optional.empty(), OCCURRED_AT);
 
         // then
@@ -40,7 +40,7 @@ class AutoTransferNotificationComposerTest {
     @DisplayName("실패한 자동이체 회차는 고객이 조치할 수 있는 사유가 있으면 본문 끝에 붙인다")
     void failedWithReason_appendsReason() {
         // when
-        NotificationRequest notification = AutoTransferNotificationComposer.compose(
+        NotificationRequest notification = AutoTransferNotificationGenerator.generate(
                 autoTransfer("홍길동"),
                 execution(30_000L),
                 ProcessResultStatus.ERROR,
@@ -56,7 +56,7 @@ class AutoTransferNotificationComposerTest {
     @DisplayName("사유가 없는 실패(재확정)와 수취인 이름이 없는 건은 기본 문장만 쓴다")
     void failedWithoutReasonOrPayeeName_writesDefaultSentence() {
         // when
-        NotificationRequest notification = AutoTransferNotificationComposer.compose(
+        NotificationRequest notification = AutoTransferNotificationGenerator.generate(
                 autoTransfer(null), execution(30_000L), ProcessResultStatus.ERROR, Optional.empty(), OCCURRED_AT);
 
         // then

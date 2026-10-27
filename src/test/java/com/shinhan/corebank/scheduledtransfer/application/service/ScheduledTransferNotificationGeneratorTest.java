@@ -13,7 +13,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-class ScheduledTransferNotificationComposerTest {
+class ScheduledTransferNotificationGeneratorTest {
 
     private static final Long CUSTOMER_ID = 7071L;
     private static final Long SCHEDULED_TRANSFER_ID = 7_071_001L;
@@ -21,9 +21,9 @@ class ScheduledTransferNotificationComposerTest {
 
     @Test
     @DisplayName("성공한 예약이체는 예약 건 ID 로 마스킹한 수취인과 금액의 예약이체 완료 알림을 만든다")
-    void succeeded_composesScheduledTransferNotification() {
+    void succeeded_generatesScheduledTransferNotification() {
         // when
-        NotificationRequest notification = ScheduledTransferNotificationComposer.compose(
+        NotificationRequest notification = ScheduledTransferNotificationGenerator.generate(
                 scheduledTransfer("홍길동"), ProcessResultStatus.SUCCESS, Optional.empty(), OCCURRED_AT);
 
         // then
@@ -39,7 +39,7 @@ class ScheduledTransferNotificationComposerTest {
     @DisplayName("실패한 예약이체는 고객이 조치할 수 있는 사유가 있으면 본문 끝에 붙인다")
     void failedWithReason_appendsReason() {
         // when
-        NotificationRequest notification = ScheduledTransferNotificationComposer.compose(
+        NotificationRequest notification = ScheduledTransferNotificationGenerator.generate(
                 scheduledTransfer("홍길동"), ProcessResultStatus.ERROR, Optional.of("출금계좌 잔액이 부족합니다."), OCCURRED_AT);
 
         // then
@@ -51,7 +51,7 @@ class ScheduledTransferNotificationComposerTest {
     @DisplayName("사유가 없는 실패(재확정)와 수취인 이름이 없는 건은 기본 문장만 쓴다")
     void failedWithoutReasonOrPayeeName_writesDefaultSentence() {
         // when
-        NotificationRequest notification = ScheduledTransferNotificationComposer.compose(
+        NotificationRequest notification = ScheduledTransferNotificationGenerator.generate(
                 scheduledTransfer(null), ProcessResultStatus.ERROR, Optional.empty(), OCCURRED_AT);
 
         // then

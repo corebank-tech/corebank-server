@@ -13,9 +13,9 @@ import java.util.Optional;
  * 확정된 예약이체를 고객 알림으로 만든다(#707). 참조는 예약 건 ID 다.
  * 실패 사유는 이체 엔진이 고객 조치 가능으로 판정한 것만 붙이고, 없으면 기본 문장만 쓴다.
  */
-final class ScheduledTransferNotificationComposer {
+final class ScheduledTransferNotificationGenerator {
 
-    static NotificationRequest compose(
+    static NotificationRequest generate(
             ScheduledTransfer scheduledTransfer,
             ProcessResultStatus status,
             Optional<String> customerFailureReason,

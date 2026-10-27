@@ -14,9 +14,9 @@ import java.util.Optional;
  * 확정된 자동이체 회차를 고객 알림으로 만든다(#707). 참조는 회차 ID, 금액은 회차에 저장된 금액이다.
  * 실패 사유는 이체 엔진이 고객 조치 가능으로 판정한 것만 붙인다.
  */
-final class AutoTransferNotificationComposer {
+final class AutoTransferNotificationGenerator {
 
-    static NotificationRequest compose(
+    static NotificationRequest generate(
             AutoTransfer autoTransfer,
             AutoTransferExecution execution,
             ProcessResultStatus status,
