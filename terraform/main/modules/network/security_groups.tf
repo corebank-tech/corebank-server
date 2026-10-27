@@ -1,6 +1,6 @@
 resource "aws_security_group" "alb" {
   name        = "${var.name_prefix}-sg-alb"
-  description = "ALB - 인터넷에서 80/443만 허용"
+  description = "ALB - Allow inbound HTTP/HTTPS"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -29,7 +29,7 @@ resource "aws_security_group" "alb" {
 
 resource "aws_security_group" "was" {
   name        = "${var.name_prefix}-sg-was"
-  description = "WAS - ALB에서 오는 8080만 허용"
+  description = "WAS - Allow inbound 8080 from ALB"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -58,7 +58,7 @@ resource "aws_security_group" "was" {
 
 resource "aws_security_group" "rds" {
   name        = "${var.name_prefix}-sg-rds"
-  description = "RDS - WAS에서 오는 3306만 허용"
+  description = "RDS - Allow inbound 3306 from WAS"
   vpc_id      = aws_vpc.main.id
 
   ingress {
