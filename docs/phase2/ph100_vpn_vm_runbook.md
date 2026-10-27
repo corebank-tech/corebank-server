@@ -114,8 +114,15 @@ sudo ipsec statusall
 4. 포트 확인(PH-100-② 완료 기준)
    - VM → RDS 3306 (복제 계정은 P2 PH-70-②에서 정한다. 보안 그룹의 RDS 규칙은 P2가 추가한다)
    - VM → WAS 8080 (메트릭 수집, 이 PR의 WAS 보안 그룹 규칙)
-   - WAS → VM의 정보계 API·모의 대외기관 (VM이 받는 포트가 정해진 뒤)
+   - WAS → VM의 정보계 API·모의 대외기관 (VM이 받는 포트가 정해진 뒤). **선행 조건:** 지금 WAS 보안 그룹의 아웃바운드는 443과 VPC 내부 3306뿐이다. 연동 전에 목적지 IP와 서비스 포트(모의 대외기관은 TCP 9300)를 확인하고 `modules/network/security_groups.tf`에 egress 규칙을 추가한다. 포트가 확정되기 전에는 규칙을 열지 않는다.
 5. 복구 확인: VM에서 `sudo ipsec restart`로 다시 올려 SPI가 바뀌며 복구되는지 본다.
+6. **자동 정지 취소(필수).** §2에서 건 30분 타이머가 남아 있으면 정상 연결도 30분 뒤 `ipsec stop`으로 끊겨 RDS 복제와 정보계 통신이 멈춘다. 위 1~5가 모두 통과하면 타이머를 취소하고 사라졌는지 확인한다.
+   ```bash
+   sudo systemctl stop vpn-auto-stop.timer
+   systemctl list-timers --all | grep vpn-auto-stop || echo "타이머 없음(취소됨)"
+   ```
+   - 1~5가 30분 안에 끝나지 않으면 취소하지 말고 §2의 `systemd-run`을 다시 걸어 시간을 늘린다.
+   - 이 단계 전은 초기 설정 단계(안전장치 있음), 이후는 정상 운영 단계(안전장치 없음)다. 이후 SSH가 끊기면 §5의 콘솔 접속을 쓴다.
 
 ## 5. 문제가 생기면
 
