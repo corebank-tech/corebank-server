@@ -37,17 +37,20 @@ if (!__ENV.RATE) {
 }
 const RATE = Number(__ENV.RATE);
 const DURATION = __ENV.DURATION || '3m';
-const MAX_VUS = Number(__ENV.MAX_VUS || 200);
+// 고정 5~10/s 수준만 재므로 load.js(램프업 60/s 용)보다 작게 둔다. 세션을 VU 합계만큼 두 벌 만들어야 해서다.
+const MAX_VUS = Number(__ENV.MAX_VUS || 50);
 const INTERBANK_RATE = Number(__ENV.INTERBANK_RATE || 1);
 const INTERBANK_MAX_VUS = Number(__ENV.INTERBANK_MAX_VUS || 20);
-const SESSION_POOL = Number(__ENV.SESSION_POOL || MAX_VUS + INTERBANK_MAX_VUS);
-const INTERBANK_POOL = Number(__ENV.INTERBANK_POOL || INTERBANK_MAX_VUS);
+const TOTAL_VUS = MAX_VUS + INTERBANK_MAX_VUS;
+const SESSION_POOL = Number(__ENV.SESSION_POOL || TOTAL_VUS);
+const INTERBANK_POOL = Number(__ENV.INTERBANK_POOL || TOTAL_VUS);
 const PAYEE_BANK_CODE = __ENV.PAYEE_BANK_CODE || '004';
 
-// VU 번호는 두 시나리오를 합쳐 매겨진다. 당행 세션이 VU 합계보다 적으면 두 VU 가 같은 고객을 집어 락이 섞인다.
-if (SESSION_POOL < MAX_VUS + INTERBANK_MAX_VUS) {
+// VU 번호는 두 시나리오를 합쳐 매겨진다. 세션이 VU 합계보다 적으면 두 VU 가 같은 고객을 집는다 —
+// 당행은 계좌 행 락이 섞이고, 타행은 OTP 발급이 같은 고객의 앞 요청을 만료시켜 반복이 끊긴다.
+if (SESSION_POOL < TOTAL_VUS || INTERBANK_POOL < TOTAL_VUS) {
   throw new Error(
-    `SESSION_POOL(${SESSION_POOL}) 이 VU 합계(${MAX_VUS + INTERBANK_MAX_VUS}) 보다 작다 — 당행 VU 가 같은 고객을 집어 계좌 행 락이 섞인다`
+    `SESSION_POOL(${SESSION_POOL}) · INTERBANK_POOL(${INTERBANK_POOL}) 은 VU 합계(${TOTAL_VUS}) 이상이어야 한다 — 두 VU 가 같은 고객을 집는다`
   );
 }
 // 당행 출금 1..P · 당행 수취 P+1..2P · 타행 출금 2P+1..2P+Q. 넘치면 customer() 랩어라운드로 대역이 겹친다.
