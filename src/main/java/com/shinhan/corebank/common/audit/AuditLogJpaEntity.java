@@ -49,6 +49,9 @@ public class AuditLogJpaEntity {
     @Column(name = "detail")
     private Map<String, Object> detail; // 마스킹 후 저장
 
+    @Column(name = "access_reason", length = 20)
+    private String accessReason; // 관리자 개인정보 조회·변경 사유(PH-89). 그 밖의 행은 NULL
+
     @Column(name = "requested_at", nullable = false)
     private LocalDateTime requestedAt;
 
@@ -63,6 +66,7 @@ public class AuditLogJpaEntity {
             String requestIp,
             boolean success,
             Map<String, Object> detail,
+            AccessReason accessReason,
             LocalDateTime now) {
         boolean hasTransactionNumber = transactionNumber != null && !transactionNumber.isBlank();
         if (eventType.isLedgerChanging() && !hasTransactionNumber) {
@@ -79,6 +83,7 @@ public class AuditLogJpaEntity {
         e.requestIp = requestIp;
         e.result = success ? "SUCCESS" : "FAILURE";
         e.detail = sanitizeDetail(detail);
+        e.accessReason = accessReason == null ? null : accessReason.name();
         e.requestedAt = now;
         return e;
     }

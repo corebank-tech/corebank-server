@@ -626,6 +626,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
                     "127.0.0.1",
                     true,
                     null,
+                    null,
                     LocalDateTime.now())));
             return TransferResult.builder()
                     .status(ProcessResultStatus.SUCCESS)
