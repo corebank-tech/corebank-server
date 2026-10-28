@@ -7,6 +7,9 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
+import com.shinhan.corebank.transfer.api.TransferHoldContext;
+import com.shinhan.corebank.transfer.api.TransferHoldDecision;
+import com.shinhan.corebank.transfer.api.TransferHoldPolicy;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
 import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
 import com.shinhan.corebank.transfer.api.TransferSettled;
@@ -81,6 +84,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private final LedgerSavePort ledgerSavePort;
     private final List<TransferPreCheck> transferPreChecks;
     private final List<LedgerPostingHook> ledgerPostingHooks;
+    private final List<TransferHoldPolicy> transferHoldPolicies;
     private final Clock clock;
     private final BusinessDateGate businessDateGate;
     private final TransactionTemplate requiresNewTransactionTemplate;
@@ -98,6 +102,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             LedgerSavePort ledgerSavePort,
             List<TransferPreCheck> transferPreChecks,
             List<LedgerPostingHook> ledgerPostingHooks,
+            List<TransferHoldPolicy> transferHoldPolicies,
             Clock clock,
             BusinessDateGate businessDateGate,
             PlatformTransactionManager transactionManager,
@@ -116,6 +121,9 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 .sorted(Comparator.comparingInt(TransferPreCheck::order))
                 .toList();
         this.ledgerPostingHooks = List.copyOf(ledgerPostingHooks);
+        this.transferHoldPolicies = transferHoldPolicies.stream()
+                .sorted(Comparator.comparingInt(TransferHoldPolicy::order))
+                .toList();
         this.clock = clock;
         this.businessDateGate = businessDateGate;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
@@ -372,6 +380,9 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             // LMT0002/LMT0003을 던진다 — 여기서 예외가 나면 아래 계좌 락은 아예 시도되지 않는다.
             transferLimitPort.checkAndReserve(command.customerId(), command.amount());
 
+            // [훅 C] 한도 적립이 잡은 고객 행 락을 쥔 채 판정한다. 같은 고객의 즉시이체가 판정부터 커밋까지 줄을 선다.
+            decideHold(command, draft);
+
             // 계좌 락을 transfer 행 INSERT보다 먼저 잡는다. INSERT는 withdrawal_account_id·
             // deposit_account_id에 FK가 걸려 있어 대상 계좌 행에 공유락을 요구하는데, 그 순서가
             // lockForTransfer의 오름차순 규칙을 따르지 않는다(선언 순서=출금→입금). INSERT를
@@ -428,6 +439,32 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             publishSettled(command, completed, executedAt);
             return completed;
         });
+    }
+
+    // [훅 C] #771 이체 보류 판정. 구현체가 없거나 고객이 시작한 즉시이체가 아니면 컨텍스트도 만들지 않는다(측정 중립).
+    private void decideHold(TransferCommand command, Draft draft) {
+        if (transferHoldPolicies.isEmpty() || !isCustomerImmediate(command)) {
+            return;
+        }
+        TransferHoldContext context = new TransferHoldContext(
+                command.customerId(),
+                command.withdrawalAccountId(),
+                command.depositAccountNumber(),
+                command.amount(),
+                draft.requestedAt(),
+                command.flowId());
+        for (TransferHoldPolicy policy : transferHoldPolicies) {
+            TransferHoldDecision decision = policy.decide(context);
+            if (decision.hold()) {
+                // 보류 저장은 #772에서 붙인다. 그 전에는 실행하지 않고 실패로 막는다.
+                throw new BusinessException(CommonErrorCode.INTERNAL_ERROR);
+            }
+        }
+    }
+
+    // 보류 건 실행(#772)은 sourceId를 갖고 들어와 다시 보류되지 않는다
+    private static boolean isCustomerImmediate(TransferCommand command) {
+        return command.transferType() == TransferType.IMMEDIATE && command.sourceId() == null;
     }
 
     // [훅 B] PH-99 후속 기표. 기표 트랜잭션 안이라 훅 예외는 원장·잔액·한도 적립까지 롤백하고 이체를 실패시킨다.

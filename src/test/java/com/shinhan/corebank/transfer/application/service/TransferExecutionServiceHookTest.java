@@ -15,6 +15,9 @@ import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
+import com.shinhan.corebank.transfer.api.TransferHoldContext;
+import com.shinhan.corebank.transfer.api.TransferHoldDecision;
+import com.shinhan.corebank.transfer.api.TransferHoldPolicy;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
 import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
@@ -317,6 +320,134 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
                 .allSatisfy(counter -> assertThat(counter.count()).isZero());
     }
 
+    @Test
+    @DisplayName("[훅 C] 바로 실행을 내면 이체가 SUCCESS로 끝나고, 훅은 고객·계좌·금액·flowId·채번 시각을 받는다")
+    void holdPolicy_proceeds_receivesTransferInput() {
+        List<TransferHoldContext> received = new ArrayList<>();
+        TransferExecutionService service = serviceWithHoldPolicies(List.of(recordingHoldPolicy(1, received, null)));
+
+        TransferResult result = service.execute(immediateCommandWithFlowId(30000L, "flow-1"));
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(received).singleElement().satisfies(context -> {
+            assertThat(context.customerId()).isEqualTo(1L);
+            assertThat(context.withdrawalAccountId()).isEqualTo(101L);
+            assertThat(context.depositAccountNumber()).isEqualTo("110222222222");
+            assertThat(context.amount()).isEqualTo(30000L);
+            assertThat(context.flowId()).isEqualTo("flow-1");
+            assertThat(context.requestedAt()).isNotNull();
+        });
+    }
+
+    @Test
+    @DisplayName("[훅 C] 등록 순서와 무관하게 order 오름차순으로 호출된다")
+    void holdPolicies_runInOrder() {
+        List<Integer> called = new ArrayList<>();
+        TransferExecutionService service = serviceWithHoldPolicies(
+                List.of(orderRecordingHoldPolicy(20, called), orderRecordingHoldPolicy(10, called)));
+
+        TransferResult result = service.execute(immediateCommand(30000L));
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(called).containsExactly(10, 20);
+    }
+
+    @Test
+    @DisplayName("[훅 C] 훅이 예외를 던지면 이체는 ERROR로 확정되고 원장·잔액·한도 적립이 롤백된다")
+    void holdPolicy_throws_failsTransferAndRollsBackLimit() {
+        TransferHoldPolicy failing = holdPolicy(1, context -> {
+            throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
+        });
+        TransferExecutionService service = serviceWithHoldPolicies(List.of(failing));
+
+        TransferResult result = service.execute(immediateCommand(30000L));
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(transferStatuses()).containsExactly("ERROR");
+        assertRolledBack();
+    }
+
+    @Test
+    @DisplayName("[훅 C] 보류를 내면 보류 저장(#772)이 붙기 전까지 실행하지 않고 CMN9999 ERROR로 막는다")
+    void holdPolicy_holds_isBlockedUntilHoldStorageExists() {
+        List<Integer> called = new ArrayList<>();
+        TransferHoldPolicy holding = holdPolicy(1, context -> TransferHoldDecision.holdForApproval("TEST"));
+        TransferExecutionService service =
+                serviceWithHoldPolicies(List.of(holding, orderRecordingHoldPolicy(2, called)));
+
+        TransferResult result = service.execute(immediateCommand(30000L));
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(CommonErrorCode.INTERNAL_ERROR.getCode());
+        assertThat(called).as("처음 보류를 낸 훅이 정하고 뒤 순번은 부르지 않는다").isEmpty();
+        assertRolledBack();
+    }
+
+    @Test
+    @DisplayName("[훅 C] 예약이체는 훅 C를 지나지 않는다")
+    void holdPolicy_isNotCalledForScheduledTransfer() {
+        List<TransferHoldContext> received = new ArrayList<>();
+        TransferExecutionService service = serviceWithHoldPolicies(List.of(recordingHoldPolicy(1, received, null)));
+
+        TransferResult result = service.execute(TransferCommand.builder()
+                .customerId(1L)
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(30000L)
+                .transferType(TransferType.SCHEDULED)
+                .channel(TransferChannel.BT)
+                .sourceId(990771L)
+                .executionDate(BUSINESS_DATE)
+                .build());
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(received).isEmpty();
+    }
+
+    private static TransferHoldPolicy holdPolicy(
+            int order, java.util.function.Function<TransferHoldContext, TransferHoldDecision> decide) {
+        return new TransferHoldPolicy() {
+            @Override
+            public int order() {
+                return order;
+            }
+
+            @Override
+            public TransferHoldDecision decide(TransferHoldContext context) {
+                return decide.apply(context);
+            }
+        };
+    }
+
+    private static TransferHoldPolicy recordingHoldPolicy(
+            int order, List<TransferHoldContext> received, TransferHoldDecision decision) {
+        return holdPolicy(order, context -> {
+            received.add(context);
+            return decision == null ? TransferHoldDecision.proceed() : decision;
+        });
+    }
+
+    private static TransferHoldPolicy orderRecordingHoldPolicy(int order, List<Integer> called) {
+        return holdPolicy(order, context -> {
+            called.add(order);
+            return TransferHoldDecision.proceed();
+        });
+    }
+
+    private static TransferCommand immediateCommandWithFlowId(long amount, String flowId) {
+        return TransferCommand.builder()
+                .customerId(1L)
+                .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(amount)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .flowId(flowId)
+                .build();
+    }
+
     private TransferExecutionService serviceWith(
             List<TransferPreCheck> preChecks, List<LedgerPostingHook> ledgerPostingHooks) {
         return serviceWith(preChecks, ledgerPostingHooks, new SimpleMeterRegistry());
@@ -324,6 +455,18 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
 
     private TransferExecutionService serviceWith(
             List<TransferPreCheck> preChecks, List<LedgerPostingHook> ledgerPostingHooks, MeterRegistry registry) {
+        return serviceWith(preChecks, ledgerPostingHooks, List.of(), registry);
+    }
+
+    private TransferExecutionService serviceWithHoldPolicies(List<TransferHoldPolicy> holdPolicies) {
+        return serviceWith(List.of(), List.of(), holdPolicies, new SimpleMeterRegistry());
+    }
+
+    private TransferExecutionService serviceWith(
+            List<TransferPreCheck> preChecks,
+            List<LedgerPostingHook> ledgerPostingHooks,
+            List<TransferHoldPolicy> holdPolicies,
+            MeterRegistry registry) {
         return new TransferExecutionService(
                 accountLockPort,
                 transferLimitPort,
@@ -335,6 +478,7 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
                 ledgerSavePort,
                 preChecks,
                 ledgerPostingHooks,
+                holdPolicies,
                 clock,
                 businessDateGate,
                 transactionManager,
