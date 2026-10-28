@@ -461,7 +461,7 @@ erDiagram
         char account_code FK "CHAR(5)"
         varchar dr_cr "DEBIT / CREDIT. Fineract type_enum 대응"
         bigint amount "원 단위 정수. 항상 양수"
-        date trade_date "전표에서 복제. 시산표 집계 기준일"
+        date trade_date "전표에서 복제. 시산표 집계 기준일. INDEX(trade_date, account_code, dr_cr, amount)"
         datetime created_at "DATETIME(6)"
     }
     gl_voucher_sequence {

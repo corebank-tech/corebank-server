@@ -647,7 +647,7 @@ COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED →
 | `occurred_at` | `DATETIME(6)` | **PK** | X |  | 기표 발생 일시. RANGE 파티션 키이며 거래내역 조회의 기간 조건이 이 컬럼에 걸린다. **온라인 거래 경로(이체·상품가입 입금)는 계좌 락을 쥔 뒤 이 시각을 찍으므로, 시계가 정상적으로 흐르는 동안에는 같은 계좌의 잔액 반영 순서와 같다.** 적수·거래내역은 `occurred_at DESC, ledger_entry_id DESC` 순으로 마지막 잔액을 고른다. 락을 거치지 않고 직접 적재하는 시드(`Phase2MinimumSeedService`·`local-demo-data.sql`)는 이 계약의 대상이 아니다(#545) |
 | `trade_date` | `DATE` |  | O |  | **거래일** — 이 기표가 귀속되는 영업일. `occurred_at`(발생 시각)과 다르다. 값 규칙은 `transfer.trade_date`와 같다. **원장을 쓰는 모든 경로(이체·정정·상품가입 입금·예적금 입금 계약)가 채운다.** #516 대입 전 행은 NULL이다. P6 시드(PH-60b)는 GL과 같은 거래일을 넣는다 |
 
-**`trade_date` 는 NULL 을 허용한다(Expand).** `NOT NULL` 제약은 걸지 않는다 — 300만 행 파티션 테이블 재구성을 피하려고, 새 행의 필수 여부는 도메인 팩토리가 막는다(#515 A안). 기존 행 채우기는 #515에서 한다. 거래일로 조회하는 곳이 아직 없어 인덱스는 두지 않는다 — `gl_journal_entry` 와 같은 판단이다.
+**`trade_date` 는 NULL 을 허용한다(Expand).** `NOT NULL` 제약은 걸지 않는다 — 300만 행 파티션 테이블 재구성을 피하려고, 새 행의 필수 여부는 도메인 팩토리가 막는다(#515 A안). 기존 행 채우기는 #515에서 한다. 거래일로 조회하는 곳이 아직 없어 인덱스는 두지 않는다. `gl_journal_entry` 는 시산표가 거래일로 집계해서 GL-IDX 에서 거래일 인덱스를 붙였다.
 
 **`trade_date` 로 거를 때는 `occurred_at` 범위도 넉넉히 같이 건다.** 파티션 키가 `occurred_at` 이라 `trade_date` 조건만 걸면 모든 파티션을 읽는다. 거래일과 발생일의 간격은 일정하지 않다 — 연휴면 며칠 뒤이고, COB 가 늦어지면 하루 앞설 수도 있다.
 
@@ -1238,7 +1238,7 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 
 `trade_date` 를 전표에서 한 번 더 들고 간다. 600만 줄을 기간으로 거를 때 전표 조인을 없애기 위해서다 — Fineract 도 `entry_date` 를 같은 자리에 둔다. 분개는 전표와 함께 한 번만 쓰이고 수정되지 않으므로 두 값이 어긋날 경로가 없다.
 
-**시산표 집계용 복합 인덱스 `(account_code, trade_date)` 는 일부러 넣지 않았다.** PH-28 베이스라인(10/8)을 인덱스 없이 측정한 뒤 S3 에서 붙이고 재측정한다. 지금 넣으면 "개선 전" 수치가 사라진다.
+**시산표 집계용 인덱스는 거래일이 먼저다(GL-IDX).** `ix_gl_journal_entry_trade_date (trade_date, account_code, dr_cr, amount)` 는 조회 기간만 범위로 읽고, 집계 SQL 이 쓰는 컬럼을 모두 담아 본 테이블을 읽지 않는다. 인덱스가 없을 때는 기간과 무관하게 분개 전체를 `fk_gl_journal_entry_account` 순서로 읽었다(운영 647만 행 전 구간 평균 26.8초, [ph28_baseline_results.md](phase2/ph28_baseline_results.md)). `account_code` 로 시작하는 인덱스는 넣지 않는다. `(account_code, trade_date)` 는 기간으로 좁히지 못해 오히려 느렸고, `fk_gl_journal_entry_account` 는 FK 가 자동으로 만든 인덱스라 같은 FK 를 받칠 수 있는 인덱스가 생기면 MySQL 이 조용히 지운다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
@@ -1258,6 +1258,7 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 | UNIQUE | `uk_gl_journal_entry_line` | `voucher_no, line_no` |
 | FK | `fk_gl_journal_entry_voucher` | `voucher_no, trade_date` → `gl_voucher` |
 | FK | `fk_gl_journal_entry_account` | `account_code` → `gl_account` |
+| INDEX | `ix_gl_journal_entry_trade_date` | `trade_date, account_code, dr_cr, amount` |
 
 **제약**
 
