@@ -77,3 +77,20 @@ output "rds_address" {
 output "rds_port" {
   value = module.data.db_port
 }
+
+output "vpn_tunnel1_address" {
+  value = module.vpn.tunnel1_address
+}
+
+output "vpn_tunnel1_cgw_inside_address" {
+  value = module.vpn.tunnel1_cgw_inside_address
+}
+
+output "vpn_tunnel1_vgw_inside_address" {
+  value = module.vpn.tunnel1_vgw_inside_address
+}
+
+output "vpn_tunnel1_preshared_key" {
+  value     = module.vpn.tunnel1_preshared_key
+  sensitive = true
+}

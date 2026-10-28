@@ -21,3 +21,8 @@ variable "data_subnet_cidrs" {
 variable "name_prefix" {
   default = "corebank"
 }
+
+variable "onprem_metrics_cidr" {
+  description = "VPN으로 WAS 8080(메트릭)에 닿는 온프레미스 VM의 /32. 다른 VM이 필요해지면 여기를 바꾼다"
+  default     = "192.168.0.211/32"
+}

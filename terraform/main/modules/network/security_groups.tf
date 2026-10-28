@@ -39,6 +39,13 @@ resource "aws_security_group" "was" {
     security_groups = [aws_security_group.alb.id]
   }
 
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = [var.onprem_metrics_cidr]
+  }
+
   egress {
     from_port   = 443
     to_port     = 443

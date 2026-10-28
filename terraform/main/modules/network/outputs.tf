@@ -25,3 +25,11 @@ output "was_sg_id" {
 output "rds_sg_id" {
   value = aws_security_group.rds.id
 }
+
+output "app_route_table_ids" {
+  value = aws_route_table.app[*].id
+}
+
+output "data_route_table_id" {
+  value = aws_route_table.data.id
+}

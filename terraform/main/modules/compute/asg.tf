@@ -43,6 +43,7 @@ resource "aws_launch_template" "was" {
     db_host             = var.db_host
     app_image           = var.app_image
     mock_external_image = var.mock_external_image
+    interbank_host      = var.interbank_host
   }))
 
   tag_specifications {
@@ -59,7 +60,7 @@ resource "aws_autoscaling_group" "was" {
   vpc_zone_identifier       = var.app_subnet_ids
   target_group_arns         = [aws_lb_target_group.was.arn]
   health_check_type         = "ELB"
-  health_check_grace_period = 600
+  health_check_grace_period = 1200
 
   launch_template {
     id      = aws_launch_template.was.id
