@@ -203,7 +203,7 @@ API가 DB 측정보다 짧은 것은 기간 값의 형식 차이 때문으로 �
 ### 결정
 
 - **인덱스: `ix_gl_journal_entry_trade_date (trade_date, account_code, dr_cr, amount)`.** 기간이 짧을수록 크게 빨라지고(로컬 하루 17.8배), 분개가 쌓여도 조회 기간만큼만 읽는다. `(account_code, trade_date, dr_cr, amount)`는 전 구간이 약 1초 빠르지만, 기간과 무관하게 인덱스 전체를 읽어 분개가 쌓일수록 모든 조회가 느려지고, FK 인덱스 문제도 있다.
-- **쿼리 타임아웃: 30초**(`TrialBalanceQueryService`, `@Transactional(timeout)`). 개선 전 전 구간 p95가 27.4초, 최댓값이 30.0초라, 인덱스가 빠진 상황에서도 정상 조회는 거의 자르지 않는다. 넘기면 JDBC 쿼리 타임아웃으로 끊기고 공통 오류(`CMN9999`)로 응답한다.
+- **쿼리 타임아웃: 30초**(`TrialBalanceQueryService`, `@Transactional(timeout)`). 개선 전 전 구간 p95가 27.4초, 최댓값이 30.0초라, 인덱스가 빠진 상황에서도 정상 조회는 거의 자르지 않는다. 넘기면 JDBC 쿼리 타임아웃으로 끊기고 `GLA9010`("조회 기간을 줄여 다시 시도해 주세요")으로 응답한다. 공통 오류의 "잠시 후 다시 시도"는 같은 시간을 또 기다리게 해서 쓰지 않는다.
 
 ### 개선 후 측정 조건
 

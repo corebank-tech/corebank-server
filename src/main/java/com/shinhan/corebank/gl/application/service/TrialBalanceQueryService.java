@@ -21,7 +21,7 @@ public class TrialBalanceQueryService implements TrialBalanceQueryUseCase {
 
     // 집계가 커넥션을 붙잡는 상한(초). 인덱스 없이 전 구간을 잰 운영 p95가 27.4초, 최댓값이 30.0초라
     // 인덱스가 빠진 상황에서도 정상 조회는 거의 자르지 않는 값이다(ph28_baseline_results.md §3).
-    // 넘기면 JDBC 쿼리 타임아웃으로 끊기고 공통 오류(CMN9999)로 응답한다.
+    // 넘기면 JDBC 쿼리 타임아웃으로 끊기고 GLA9010(조회 기간을 줄이라는 안내)으로 응답한다.
     static final int QUERY_TIMEOUT_SECONDS = 30;
 
     @Override

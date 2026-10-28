@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.gl.domain.TrialBalanceLine;
+import com.shinhan.corebank.gl.domain.exception.GlErrorCode;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.time.Duration;
@@ -64,9 +66,10 @@ class TrialBalanceIndexAndTimeoutTest extends IntegrationTestSupport {
 
     // 서비스의 @Transactional(timeout) 이 이 네이티브 집계 쿼리에 JDBC 쿼리 타임아웃으로 실제로 걸리는지 본다.
     // 다른 커넥션이 분개 테이블 쓰기 잠금을 쥐고 있으면 집계는 잠금을 기다리다 1초 타임아웃에 끊겨야 한다.
+    // 끊기면 어댑터가 GLA9010(조회 기간을 줄이라는 안내)으로 바꾸고, 원인으로 쿼리 타임아웃을 남긴다.
     // 타임아웃이 걸리지 않으면 무한히 기다리므로 별도 스레드에서 돌려 10초 안에 안 끝나면 실패로 본다.
     @Test
-    @DisplayName("트랜잭션 타임아웃을 넘긴 집계는 잠금을 계속 기다리지 않고 쿼리 타임아웃으로 끊긴다")
+    @DisplayName("트랜잭션 타임아웃을 넘긴 집계는 잠금을 계속 기다리지 않고 끊겨 GLA9010 이 된다")
     void aggregateIsCutAtTransactionTimeout() throws Exception {
         TransactionTemplate oneSecond = new TransactionTemplate(transactionManager);
         oneSecond.setReadOnly(true);
@@ -83,7 +86,11 @@ class TrialBalanceIndexAndTimeoutTest extends IntegrationTestSupport {
 
                 assertThatThrownBy(() -> aggregate.get(10, TimeUnit.SECONDS))
                         .isInstanceOf(ExecutionException.class)
-                        .hasCauseInstanceOf(QueryTimeoutException.class);
+                        .cause()
+                        .isInstanceOf(BusinessException.class)
+                        .hasCauseInstanceOf(QueryTimeoutException.class)
+                        .extracting("errorCode")
+                        .isEqualTo(GlErrorCode.TRIAL_BALANCE_QUERY_TIMEOUT);
                 assertThat(Duration.ofNanos(System.nanoTime() - start)).isGreaterThanOrEqualTo(Duration.ofMillis(900));
             } finally {
                 statement.execute("UNLOCK TABLES");
