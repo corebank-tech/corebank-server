@@ -16,7 +16,8 @@ ms() { perl -MTime::HiRes=time -e 'printf "%.0f\n", time*1000'; }
 one_run() {
   local label=$1 before after s0 t0 t1 s1
   before=$(snap); s0=$(status); t0=$(ms)
-  echo "$SQL" | q > /dev/null
+  # 쿼리가 실패한 회차를 측정값으로 내지 않는다
+  if ! echo "$SQL" | q > /dev/null; then echo "$label: 쿼리 실패. 측정을 멈춘다"; return 1; fi
   t1=$(ms); after=$(snap); s1=$(status)
   python3 - "$label" "$((t1 - t0))" "$before" "$after" "$s0" "$s1" <<'EOF'
 import sys
@@ -33,17 +34,30 @@ print(f"{label}: 경과 {el:.2f}s | 가장 바쁜 스레드 CPU {top:.2f}s ({top
 EOF
 }
 
+# 버퍼 풀을 바꾸고 실제로 그 크기가 된 것을 확인한다. 끝나지 않거나 크기가 다르면 실패
+resize() {
+  local target=$1 st size i
+  echo "SET GLOBAL innodb_buffer_pool_size = $target;" | q || { echo "크기 변경 요청 실패($target)"; return 1; }
+  for i in $(seq 1 120); do
+    st=$(echo "SHOW STATUS LIKE 'Innodb_buffer_pool_resize_status_code';" | q | cut -f2)
+    size=$(echo "SELECT @@innodb_buffer_pool_size;" | q)
+    # 상태 코드 0 = 진행 중인 크기 변경 없음
+    [[ "$st" == 0 && "$size" == "$target" ]] && { echo "버퍼 풀 $((size / 1048576))MB"; return 0; }
+    sleep 1
+  done
+  echo "버퍼 풀 크기 변경이 끝나지 않음(목표 $target, 현재 $size, 상태 $st)"; return 1
+}
+
+# 중간에 끊기거나 실패해도 128MB로 되돌린다. 같은 컨테이너의 index_compare_local.sh 가 128MB를 전제로 한다
+restore() { resize 134217728 || echo "!! 버퍼 풀을 128MB로 되돌리지 못했다. 직접 확인할 것"; }
+trap restore EXIT
+
 echo "== 버퍼 풀 128MB"
-echo "SELECT @@innodb_buffer_pool_size/1048576;" | q
-for r in warm 1 2 3; do one_run "128MB $r"; done
+resize 134217728 || exit 1
+for r in warm 1 2 3; do one_run "128MB $r" || exit 1; done
 
 echo "== 버퍼 풀 2GB로 확장"
-echo "SET GLOBAL innodb_buffer_pool_size = 2147483648;" | q
-for i in $(seq 1 60); do st=$(echo "SHOW STATUS LIKE 'Innodb_buffer_pool_resize_status';" | q | cut -f2); [[ "$st" == *"Completed"* || -z "$st" ]] && break; sleep 1; done
-echo "SELECT @@innodb_buffer_pool_size/1048576;" | q
-for r in load1 load2 1 2 3; do one_run "2GB $r"; done
+resize 2147483648 || exit 1
+for r in load1 load2 1 2 3; do one_run "2GB $r" || exit 1; done
 
-echo "== 버퍼 풀 128MB로 되돌림"
-echo "SET GLOBAL innodb_buffer_pool_size = 134217728;" | q
-for i in $(seq 1 60); do st=$(echo "SHOW STATUS LIKE 'Innodb_buffer_pool_resize_status';" | q | cut -f2); [[ "$st" == *"Completed"* || -z "$st" ]] && break; sleep 1; done
-echo "SELECT @@innodb_buffer_pool_size/1048576;" | q
+echo "== 버퍼 풀 128MB로 되돌림(종료 처리)"
