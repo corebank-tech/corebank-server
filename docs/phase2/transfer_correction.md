@@ -96,6 +96,7 @@ repost(원거래 거래번호, 고친 금액)   // 정상거래 — reverse 뒤�
 - **테스트**: `InterbankFaultScenarioTest`가 장애(응답 지연 · 무응답 · 중복응답 · 중복거래 `2001`)를 송신·조회 단계에 넣어 끝까지 돌리고, 중간과 끝에서 `FundIntegrityCheck`로 위 4가지를 봅니다. 테스트는 시작 잔액을 찍어 두므로 ②를 "시작 잔액 − 성공 = 현재 잔액 + 미결제"로 한 번에 봅니다.
 - **운영·측정 데이터**: 아래 SQL을 씁니다. 시작 잔액을 알 수 없어서 ②를 거래 단위로 봅니다. ①이 맞으면 거래별 ②를 모두 더한 것이 테스트의 ②와 같습니다.
 - `perf/sql/verify_integrity.sql`은 당행 이체 전용입니다. "이체 1건 = 원장 2행"으로 짝을 보므로 타행 성공 건을 모두 깨진 짝으로 셉니다.
+- 측정이 끝나고 처리 중인 건이 없을 때 돌립니다. ②~④는 SUCCESS·TIMEOUT 외 상태를 모두 "출금 0 / 되돌림 0"으로 기대해서, 처리 중인 건이 있으면 오탐이 납니다.
 - TIMEOUT이 남아 있어도 ③이 그만큼을 기대하므로 판정할 수 있습니다. 다만 같은 날 한도 적립은 TIMEOUT 금액만큼 성공 금액보다 큽니다.
 
 ```sql
@@ -112,7 +113,8 @@ FROM account a
 WHERE a.account_id IN (
     SELECT withdrawal_account_id FROM transfer
     WHERE payee_bank_code IS NOT NULL AND created_at >= @from_at AND created_at < @to_at)
-HAVING a.balance <> last_balance_after;
+-- 원장이 한 행도 없으면 last_balance_after가 NULL이다. <=>로 그 경우도 불일치로 잡는다
+HAVING NOT (a.balance <=> last_balance_after);
 
 -- (2) 고객에게서 빠진 돈 = 성공·처리 불명이면 송금액, 실패면 0
 SELECT t.transaction_number, t.status, t.amount,
