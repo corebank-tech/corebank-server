@@ -131,13 +131,13 @@ terraform apply main.tfplan
 1. VM에서 모의 서버를 띄우고 9300 포트를 확인한다.
 2. `modules/network/security_groups.tf`에서 WAS 보안 그룹에 VM으로 나가는 TCP 9300 egress를 추가한다.
 3. `modules/compute`의 `interbank_host`에 VM 주소를 넣고 apply한다. 시작 템플릿 새 버전만 생기고 떠 있는 서버는 그대로다.
-4. 서버를 교체하기 전에 미확정(`TIMEOUT`) 타행이체가 0건인지 확인한다(`InterbankInquiryScheduler`가 조회하는 대상과 같은 조건). 남아 있으면 교체하지 않는다. VM의 모의 서버 장부는 비어 있어서 원거래를 3001(미수신)로 답하고, 실제 승인된 거래를 미처리로 확정할 수 있다.
+4. 서버를 교체하기 전에 미확정(`TIMEOUT`) 타행이체 **전체**가 0건인지 확인한다. 경과 시간(`minAge`)이나 배치 크기(`batchSize`) 제한 없이 모두 센다. 스케줄러(`InterbankInquiryService`)는 `minAge`보다 오래된 거래만 `batchSize`만큼 조회하므로, 같은 조건으로 세면 최근 거래가 남아 있어도 0건으로 나온다. 남아 있으면 교체하지 않는다. VM의 모의 서버 장부는 비어 있어서 원거래를 3001(미수신)로 답하고, 실제 승인된 거래를 미처리로 확정할 수 있다.
 5. 교체가 끝날 때까지 신규 타행이체를 실행하지 않는다(제한 방법은 팀과 정한다). 교체 중에는 옛 모의 서버와 VM의 모의 서버가 함께 쓰이기 때문이다.
 6. 서버를 한 대씩 종료한다. ASG에 `instance_refresh`가 없어서 apply만으로는 떠 있는 서버가 바뀌지 않는다. 새 서버가 `corebank-tg-was`에서 healthy가 된 것을 확인한 뒤 다음 대를 종료한다.
    ```bash
    aws autoscaling terminate-instance-in-auto-scaling-group --instance-id <ID> --no-should-decrement-desired-capacity
    ```
-7. 완료 조건: 두 서버가 같은 VM 주소를 쓰고, 두 서버 모두 `docker ps`에 `corebank-mock-external`이 없으며, 대상 그룹 healthy가 2대이고, 미확정 타행이체가 여전히 0건이다.
+7. 완료 조건: 두 서버가 같은 VM 주소를 쓰고, 두 서버 모두 `docker ps`에 `corebank-mock-external`이 없으며, 대상 그룹 healthy가 2대이고, 교체 뒤에 미확정 타행이체 전체를 다시 세어도 0건이다.
 8. 되돌릴 때는 `interbank_host`를 비우고 같은 방식으로 교체한다.
 
 모의 서버 장부는 컨테이너 메모리에만 있어서 교체하면 사라진다.
