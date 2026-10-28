@@ -1139,7 +1139,7 @@ public interface CobStep {
 - **서버 기동(10/26 결정, #695):** 서버가 켜질 때 `user_data`로 Docker 설치, SSM Parameter Store(`/corebank/*`) 읽기, 컨테이너(앱·모의 서버) 실행까지 한다. 서버는 Ubuntu 22.04, 앱 프로필은 `prod`(`qa-seed` 제외). 포트는 `8080:8080`이다(WAS 보안 그룹은 8080을 ALB와 온프레미스 VM(`192.168.0.211/32`)에서 허용한다. 온프레미스 쪽은 VM의 모니터링이 VPN으로 앱 메트릭을 수집하는 경로다). 이미지는 커밋 SHA 태그로 고정하고(릴리스마다 수동 갱신), 보관함 값을 못 읽으면 부팅을 중단하며, ASG 헬스체크 유예는 1200초다. 현행 SSM 배포 스크립트(#440 반영분)를 ASG용으로 이관하는 일은 컷오버 뒤 PH-55로 미룬다.
 - HTTPS 리스너는 P2가 넘기는 ACM certificate ARN으로 만든다.
 - **출력값 → P2 (통합 apply 직후):** ALB ARN · 리스너 ARN · ALB DNS name · ALB zone ID · 대상 그룹 ARN(`target_group_arn`). `terraform/main`은 network·compute·data·vpn(VPN 게이트웨이와 라우팅 포함)이 한 루트라 apply 한 번에 함께 올라간다([terraform/README.md](../../terraform/README.md)).
-- 일정: 10/27 P2 리허설 apply(리허설 스냅샷) → 10/28 최종 스냅샷 복원 · 본 apply → SG 교차 검증 → DNS 전환. 컴퓨트 PR(#750 → #752 → #756)은 P2의 리허설 apply가 끝난 뒤 머지한다(먼저 머지되면 dev apply 때 서버(ASG)까지 올라가 옛 DB에 붙는다). 기존 EC2는 11/6까지 유지한다.
+- 일정: 10/27 P2 리허설 apply(리허설 스냅샷) → 10/28 최종 스냅샷 복원 · 본 apply → SG 교차 검증 → DNS 전환. 컴퓨트 PR(#750 → #752 → #756)은 P2의 리허설 apply가 끝난 뒤 머지한다(먼저 머지되면 dev apply 때 서버(ASG)까지 올라가 옛 DB에 붙는다). 기존 EC2·RDS는 11/6까지 유지한다.
 - **Plan B:** EC2를 유지하고 구축 진행률을 리포트한다.
 - **완료 기준:** 프라이빗 서브넷에서 인터넷에 직접 접근할 수 없다. 앱이 3-Tier에서 돈다.
 
