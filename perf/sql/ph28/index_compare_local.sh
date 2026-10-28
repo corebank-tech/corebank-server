@@ -63,11 +63,18 @@ for c in "${CANDIDATES[@]}"; do
   run_candidate "${c%%|*}" "${c#*|}" || { echo "중단 $(now)"; exit 1; }
 done
 echo "-- 결과 동일성 (base 대비)"
+diffs=0
 for c in ${ONLY:-c1 c2 c3}; do
   for p in "${PERIODS[@]}"; do
     set -- $p
-    if cmp -s "$OUT/base_$1_$2_result.tsv" "$OUT/${c}_$1_$2_result.tsv"; then echo "same $c $1~$2"; else echo "DIFF $c $1~$2"; fi
+    # 기준 파일이 없거나 비어 있어도 같다고 보지 않는다
+    if [[ -s "$OUT/base_$1_$2_result.tsv" ]] && cmp -s "$OUT/base_$1_$2_result.tsv" "$OUT/${c}_$1_$2_result.tsv"; then
+      echo "same $c $1~$2"
+    else
+      echo "DIFF $c $1~$2"; diffs=$((diffs + 1))
+    fi
   done
 done
 echo "SHOW INDEX FROM gl_journal_entry;" | q | awk '{print "final_index", $3}' | sort -u
 echo "== 끝 $(now)"
+[[ $diffs -eq 0 ]] || { echo "결과가 다른 후보 $diffs건"; exit 1; }

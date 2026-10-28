@@ -7,6 +7,7 @@
 #   ./run_ph28_api.sh run     # 본 측정. tmux 안에서 실행한다 (아이디·비밀번호는 화면에서 입력)
 #   ./run_ph28_api.sh summary <log>
 set -uo pipefail
+umask 077   # 응답 JSON과 로그를 본인만 읽게 한다
 
 MODE=${1:-}
 N=${N:-5}
@@ -19,7 +20,7 @@ now() { date '+%F %T'; }
 
 login() {
   local hdr code
-  hdr=$(mktemp)
+  hdr="$OUT/.login_hdr"
   code=$(jq -n --arg u "$ADMIN_ID" --arg p "$ADMIN_PW" '{userId: $u, password: $p}' \
     | curl -s -o "$OUT/login_resp.json" -D "$hdr" -w '%{http_code}' \
         -H 'Content-Type: application/json' --data-binary @- "$BASE/admin/auth/login")
@@ -95,6 +96,8 @@ read -rsp "비밀번호: " ADMIN_PW; echo
 TS=$(date +%Y%m%d_%H%M%S)
 OUT=$DIR/logs/api_${MODE}_${TS}
 mkdir -p "$OUT"
+# 중간에 끊겨도 세션 쿠키가 담긴 헤더와 로그인 응답을 남기지 않는다
+trap 'rm -f "$OUT/.login_hdr" "$OUT/login_resp.json"' EXIT
 LOG=$OUT/api.log
 echo "log: $LOG"
 
