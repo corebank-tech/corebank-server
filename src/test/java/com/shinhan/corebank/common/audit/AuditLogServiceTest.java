@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -54,6 +57,24 @@ class AuditLogServiceTest extends IntegrationTestSupport {
         assertThat(auditLogJpaRepository.findAll())
                 .extracting(AuditLogJpaEntity::getAccessReason)
                 .containsExactlyInAnyOrder("AUDIT", null);
+    }
+
+    @Test
+    @DisplayName("저장한 행을 DB에서 다시 읽어 계산해도 row_hash와 같다 — JSON 서식 정규화와 DATETIME(6) 왕복에도 유지")
+    void record_rowHash_survivesDatabaseRoundTrip() {
+        Map<String, Object> detail = Map.of(
+                "conditions", List.of("userId", "name"),
+                "resultCount", 2,
+                "customerIds", List.of(10L, 11L),
+                "filter", Map.of("status", "ACTIVE", "accountLocked", false),
+                "executionDate", LocalDate.of(2026, 10, 27),
+                "appliedRate", new BigDecimal("1.50"));
+        auditLogService.record(1L, null, AuditEventType.CUSTOMER_SEARCH, "10.0.0.7", true, detail, AccessReason.AUDIT);
+
+        // 트랜잭션 밖 조회라 영속성 컨텍스트 캐시가 아니라 DB에서 새로 읽은 값이다
+        AuditLogJpaEntity reloaded = auditLogJpaRepository.findAll().getFirst();
+
+        assertThat(reloaded.getRowHash()).hasSize(64).isEqualTo(AuditLogRowHash.of(reloaded));
     }
 
     @Test

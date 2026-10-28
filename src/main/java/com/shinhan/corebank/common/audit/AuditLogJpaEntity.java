@@ -3,6 +3,7 @@ package com.shinhan.corebank.common.audit;
 import com.shinhan.corebank.common.util.MaskingUtil;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +53,9 @@ public class AuditLogJpaEntity {
     @Column(name = "access_reason", length = 20)
     private String accessReason; // 관리자 개인정보 조회·변경 사유(PH-89). 그 밖의 행은 NULL
 
+    @Column(name = "row_hash", columnDefinition = "CHAR(64)")
+    private String rowHash; // 무결성 해시(PH-82). 도입 전 행은 NULL
+
     @Column(name = "requested_at", nullable = false)
     private LocalDateTime requestedAt;
 
@@ -82,9 +86,10 @@ public class AuditLogJpaEntity {
         e.eventType = eventType.name();
         e.requestIp = requestIp;
         e.result = success ? "SUCCESS" : "FAILURE";
-        e.detail = sanitizeDetail(detail);
+        e.detail = AuditLogRowHash.toJsonTypes(sanitizeDetail(detail));
         e.accessReason = accessReason == null ? null : accessReason.name();
-        e.requestedAt = now;
+        e.requestedAt = now.truncatedTo(ChronoUnit.MICROS); // DATETIME(6)에 담기는 값으로 해시를 계산한다
+        e.rowHash = AuditLogRowHash.of(e);
         return e;
     }
 
