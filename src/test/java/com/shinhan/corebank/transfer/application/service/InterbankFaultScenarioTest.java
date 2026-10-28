@@ -83,27 +83,33 @@ class InterbankFaultScenarioTest extends InterbankIntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("송신 응답 중복: 같은 응답이 두 번 와도 SUCCESS 확정은 한 번이고 확정 전표도 1건이다")
+    @DisplayName("송신 응답 중복: 같은 승인 응답을 확정 서비스에 다시 넣어도 SUCCESS 확정은 한 번이고 확정 전표도 1건이다")
     void duplicateReplyOnSend_settlesOnce() throws Exception {
         FundIntegrityCheck integrity = FundIntegrityCheck.begin(jdbcTemplate, WITHDRAWAL_ACCOUNT_ID);
         setFault("DUPLICATE");
 
         InterbankTransferResult result = service(client).execute(command("004", APPROVED_ACCOUNT, AMOUNT));
+        boolean settledByDuplicate =
+                replaySameReply(result.transactionNumber(), APPROVED_ACCOUNT, InterbankOutcome.APPROVED);
 
         assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(settledByDuplicate).isFalse();
         assertThat(settlementVouchers(result.transactionNumber())).isEqualTo(1);
         integrity.assertHolds();
     }
 
     @Test
-    @DisplayName("송신 응답 중복 + 실패 확정: 1001이 두 번 와도 출금은 정확히 한 번 되돌린다")
+    @DisplayName("송신 응답 중복 + 실패 확정: 1001을 확정 서비스에 다시 넣어도 출금은 정확히 한 번 되돌린다")
     void duplicateReplyOnSend_refundsOnce() throws Exception {
         FundIntegrityCheck integrity = FundIntegrityCheck.begin(jdbcTemplate, WITHDRAWAL_ACCOUNT_ID);
         setFault("DUPLICATE");
 
         InterbankTransferResult result = service(client).execute(command("004", NOT_FOUND_ACCOUNT, AMOUNT));
+        boolean settledByDuplicate =
+                replaySameReply(result.transactionNumber(), NOT_FOUND_ACCOUNT, InterbankOutcome.ACCOUNT_NOT_FOUND);
 
         assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(settledByDuplicate).isFalse();
         assertThat(result.errorCode()).isEqualTo("TRF0201");
         assertThat(balance()).isEqualTo(INITIAL_BALANCE);
         assertThat(settlementVouchers(result.transactionNumber())).isEqualTo(1);
@@ -111,7 +117,7 @@ class InterbankFaultScenarioTest extends InterbankIntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("조회 응답 중복: TIMEOUT 건의 조회 응답이 두 번 와도 한 번만 확정하고, 다시 조회해도 바꾸지 않는다")
+    @DisplayName("조회 응답 중복: TIMEOUT 건의 조회 응답을 확정 서비스에 다시 넣어도 한 번만 확정하고, 다시 조회해도 바꾸지 않는다")
     void duplicateReplyOnInquiry_settlesOnce() throws Exception {
         FundIntegrityCheck integrity = FundIntegrityCheck.begin(jdbcTemplate, WITHDRAWAL_ACCOUNT_ID);
         setFault("NO_RESPONSE");
@@ -120,9 +126,12 @@ class InterbankFaultScenarioTest extends InterbankIntegrationTestSupport {
 
         setFault("DUPLICATE");
         int settled = inquiryService(Duration.ZERO).settleUnsettled();
+        boolean settledByDuplicate =
+                replaySameReply(result.transactionNumber(), APPROVED_ACCOUNT, InterbankOutcome.APPROVED);
         int settledAgain = inquiryService(Duration.ZERO).settleUnsettled();
 
         assertThat(settled).isEqualTo(1);
+        assertThat(settledByDuplicate).isFalse();
         assertThat(settledAgain).isZero();
         assertThat(status(result.transactionNumber())).isEqualTo("SUCCESS");
         assertThat(settlementVouchers(result.transactionNumber())).isEqualTo(1);
@@ -197,6 +206,14 @@ class InterbankFaultScenarioTest extends InterbankIntegrationTestSupport {
         } else {
             setFault(fault);
         }
+    }
+
+    // 소켓은 연결마다 응답 1건만 읽어 DUPLICATE의 두 번째 프레임이 서비스에 닿지 않는다. 같은 결과를 직접 다시 넣는다.
+    private boolean replaySameReply(String transactionNumber, String accountNumber, InterbankOutcome expected) {
+        InterbankReply reply =
+                client.inquire(new InterbankRequest("004", transactionNumber, accountNumber, AMOUNT, "홍길동"));
+        assertThat(reply.outcome()).isEqualTo(expected);
+        return interbankSettlementService.settle(transactionNumber, reply).isPresent();
     }
 
     private long settlementVouchers(String transactionNumber) {
