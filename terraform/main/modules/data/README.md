@@ -90,9 +90,8 @@
 
 #### 후속 작업
 
-- 10/26 Terraform apply 및 RDS 복원
-- 실제 이전에 사용할 최신 스냅샷과 이후 변경분의
-  동기화 절차 확정
+- 10/27 Terraform apply 및 RDS 복원·DB 검증 완료
+- 실제 이전에 사용할 최신 스냅샷과 이후 변경분의 동기화 절차 확정
 - 복원 후 DB 연결 및 데이터 정합성 검증
 
 ### 스냅샷 사전 검증
@@ -118,7 +117,7 @@ aws rds describe-db-snapshots \
 - [x] Encrypted = true
 - [x] KmsKeyId = 2차 계정에서 복사에 사용한 KMS 키
 - [x] 계정 간 복사 단계별 소요 시간 기록
-- [ ] 10/26 실제 컷오버에 사용할 스냅샷 생성 시점 확정
+- [ ] 10/28 최종 컷오버에 사용할 최신 스냅샷 생성 시점 확정
 - [ ] 스냅샷 이후 거래에 대한 최종 동기화 절차 확정
 
 Terraform plan 성공만으로 스냅샷 복원 가능 여부가 보장되지는 않는다.
@@ -210,7 +209,10 @@ terraform plan \
 No changes. Your infrastructure matches the configuration.
 ```
 
-**판정: Terraform 구성과 실제 AWS 리소스 간 차이 없음.**
+**판정: `snapshot_identifier`를 제외한 Terraform 관리 속성의 drift 없음.**
+
+`snapshot_identifier`는 `ignore_changes` 대상이므로, 이 plan 결과만으로 실제 복원 원본 스냅샷의 일치를 확인할 수 없다.
+최종 컷오버 전 RDS 복원 요청의 `DBSnapshotIdentifier` 또는 CloudTrail 기록으로 복원 원본을 별도 확인하고 결과를 기록한다.
 
 #### 6.4. RDS 복원 및 Multi-AZ 전환
 
@@ -268,7 +270,7 @@ AWS RDS 이벤트 기준 시각은 다음과 같다.
 2. Ubuntu 패키지 저장소 URL을 HTTPS로 변경
 3. MySQL 클라이언트 설치
 4. RDS CA 인증서 번들 다운로드
-5. TLS 인증서 검증을 사용해 신규 RDS 접속
+5. TLS 암호화 연결을 사용해 신규 RDS 접속
 6. MySQL 버전, 데이터베이스, 테이블 및 데이터 조회
 
 TLS 확인:
@@ -284,6 +286,9 @@ TLS_AES_256_GCM_SHA384
 ```
 
 **판정: 신규 VPC의 WAS 보안 그룹을 사용하는 EC2에서 RDS MySQL 접속 성공. TLS 암호화 연결 확인.**
+
+`Ssl_cipher` 결과로 TLS 암호화 연결을 확인했다.
+접속 명령의 `--ssl-ca` 및 `--ssl-mode` 옵션 기록이 없어, 인증서 검증 수행 여부는 이 기록만으로 확인할 수 없다.
 
 #### 6.6. 데이터베이스 및 테이블 검증
 
@@ -506,14 +511,14 @@ P5의 컴퓨트 apply 및 애플리케이션 연동 검증을 진행한다.
 - 최종 스냅샷 또는 증분 동기화 수행
 - 데이터 정합성 확인 후 신규 RDS로 연결 전환
 - 실패 시 기존 RDS 유지(Plan B)
-- 10/27 이후 온프레미스 MySQL 복제 구성
+- 최종 컷오버 일정에 맞춰 온프레미스 MySQL 복제 구성
 - 온프레미스 MySQL 복제 연결도 TLS를 사용하도록 설정하고 검증한다.
 
 ### GTID 복제 준비
 
-- 10/26: RDS 복원 후 실제 GTID 설정값을 확인한다.
-- 초기 `OFF_PERMISSIVE`는 GTID 전환 준비 상태다.
-- 10/27 복제 시작 전에 `ON_PERMISSIVE`로 전환하고 필요한 재부팅 및 트랜잭션 상태를 확인한다.
+- 최신 스냅샷으로 RDS를 복원한 뒤 실제 GTID 설정값을 다시 확인한다.
+- 10/27 리허설에서 확인한 `OFF_PERMISSIVE`는 GTID 전환 준비 상태다.
+- 복제 시작 전에 `ON_PERMISSIVE`로 전환하고 필요한 재부팅 및 트랜잭션 상태를 확인한다.
 - 익명 트랜잭션이 모두 처리된 것을 확인한 뒤 `ON` 전환 여부를 결정한다.
 - GTID 단계 변경은 Terraform 설정에 반영하고 P5와 재부팅 시간을 협의한다.
 - 온프레미스 복제 연결의 TLS 설정과 GTID 자동 위치 지정 동작을 검증한다.
