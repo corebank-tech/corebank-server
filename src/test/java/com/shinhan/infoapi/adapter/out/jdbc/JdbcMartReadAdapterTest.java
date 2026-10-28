@@ -112,6 +112,19 @@ class JdbcMartReadAdapterTest {
     }
 
     @Test
+    @DisplayName("과거 날짜를 나중에 재적재했으면 날짜가 더 늦은 행이 아니라 가장 최근에 적재된 행의 이름을 쓴다")
+    void productNameComesFromMostRecentlyLoadedRow() throws SQLException {
+        event(1, "2026-11-20", "SUBSCRIBE", 'a', 3, "DEP-12M", "옛 이름", "DEPOSIT");
+        event(2, "2026-10-05", "SUBSCRIBE", 'b', 3, "DEP-12M", "새 이름", "DEPOSIT");
+
+        List<ProductSubscriptionLine> lines =
+                adapter.productSubscriptions(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31));
+
+        assertThat(lines).hasSize(1);
+        assertThat(lines.get(0).productName()).isEqualTo("새 이름");
+    }
+
+    @Test
     @DisplayName("같은 날 이름이 둘이면 기본키 순서로 한 행만 골라 결과가 항상 같다")
     void sameDayNameConflictIsDeterministic() throws SQLException {
         event("2026-10-05", "SUBSCRIBE", 'a', 3, "DEP-12M", "이름A", "DEPOSIT");
@@ -139,11 +152,24 @@ class JdbcMartReadAdapterTest {
     private static void event(
             String baseDate, String eventType, char keyChar, long productId, String code, String name, String group)
             throws SQLException {
+        event(1, baseDate, eventType, keyChar, productId, code, name, group);
+    }
+
+    private static void event(
+            long loadBatchId,
+            String baseDate,
+            String eventType,
+            char keyChar,
+            long productId,
+            String code,
+            String name,
+            String group)
+            throws SQLException {
         String key = String.valueOf(keyChar).repeat(64);
         execute("INSERT INTO mart_product_subscription_event (base_date, event_type, account_key, customer_key,"
                 + " product_id, product_code, product_name, product_group, load_batch_id) VALUES ('" + baseDate
                 + "', '" + eventType + "', '" + key + "', '" + key + "', " + productId + ", '" + code + "', '"
-                + name + "', '" + group + "', 1)");
+                + name + "', '" + group + "', " + loadBatchId + ")");
     }
 
     private static void execute(String sql) throws SQLException {

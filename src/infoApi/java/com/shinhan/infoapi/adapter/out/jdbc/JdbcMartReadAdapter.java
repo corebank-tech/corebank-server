@@ -35,8 +35,8 @@ public class JdbcMartReadAdapter implements MartReadPort {
             ORDER BY base_date
             """;
 
-    // 상품명·코드·그룹은 상품별로 가장 최근 이벤트 행의 스냅샷이다(info_mart.md §5-3).
-    // 같은 날이면 기본키(base_date, event_type, account_key) 순서로 한 행만 골라 결과가 흔들리지 않는다.
+    // 상품명·코드·그룹은 상품별로 가장 최근에 적재된 행의 스냅샷이다(info_mart.md §5-3). 재적재하면 새 load_batch_id 가 붙는다.
+    // 적재 번호가 같으면 기본키(base_date, event_type, account_key) 순서로 한 행만 골라 결과가 흔들리지 않는다.
     private static final String PRODUCT_SUBSCRIPTIONS =
             """
             SELECT e.product_id,
@@ -48,7 +48,7 @@ public class JdbcMartReadAdapter implements MartReadPort {
                 SELECT product_id, product_code, product_name, product_group,
                        ROW_NUMBER() OVER (
                            PARTITION BY product_id
-                           ORDER BY base_date DESC, event_type DESC, account_key DESC) AS rn
+                           ORDER BY load_batch_id DESC, base_date DESC, event_type DESC, account_key DESC) AS rn
                 FROM mart_product_subscription_event
             ) latest ON latest.product_id = e.product_id AND latest.rn = 1
             WHERE e.base_date BETWEEN ? AND ?
