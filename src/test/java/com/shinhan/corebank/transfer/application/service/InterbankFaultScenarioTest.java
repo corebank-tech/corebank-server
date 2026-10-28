@@ -7,6 +7,8 @@ import com.shinhan.corebank.transfer.application.port.in.InterbankTransferResult
 import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 // PH-36 장애 주입(#711). 장애마다 송신·조회를 끝까지 돌리고, 중간과 끝에서 자금 정합성을 본다.
 class InterbankFaultScenarioTest extends InterbankIntegrationTestSupport {
@@ -47,6 +49,35 @@ class InterbankFaultScenarioTest extends InterbankIntegrationTestSupport {
 
         assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
         assertThat(unsettledBalance(result.transactionNumber())).isZero();
+        integrity.assertHolds();
+    }
+
+    @ParameterizedTest(name = "조회도 {0}")
+    @ValueSource(strings = {"DELAY", "NO_RESPONSE"})
+    @DisplayName("조회 단계 장애: 조회에도 답을 못 받으면 TIMEOUT 그대로 두고, 장애가 풀린 다음 주기에 SUCCESS로 확정된다")
+    void inquiryFault_leavesTimeout_thenNextCycleSettles(String inquiryFault) throws Exception {
+        FundIntegrityCheck integrity = FundIntegrityCheck.begin(jdbcTemplate, WITHDRAWAL_ACCOUNT_ID);
+        setFault("NO_RESPONSE");
+        InterbankTransferResult result = service(client).execute(command("004", APPROVED_ACCOUNT, AMOUNT));
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.TIMEOUT);
+
+        if ("DELAY".equals(inquiryFault)) {
+            setDelay(LONGER_THAN_WAIT_MS);
+        } else {
+            setFault(inquiryFault);
+        }
+        int settledDuringFault = inquiryService(Duration.ZERO).settleUnsettled();
+
+        assertThat(settledDuringFault).isZero();
+        assertThat(status(result.transactionNumber())).isEqualTo("TIMEOUT");
+        assertThat(balance()).isEqualTo(INITIAL_BALANCE - AMOUNT);
+        integrity.assertHolds();
+
+        setFault("NONE");
+        int settledAfterRecovery = inquiryService(Duration.ZERO).settleUnsettled();
+
+        assertThat(settledAfterRecovery).isEqualTo(1);
+        assertThat(status(result.transactionNumber())).isEqualTo("SUCCESS");
         integrity.assertHolds();
     }
 }
