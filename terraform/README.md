@@ -122,7 +122,7 @@ terraform apply main.tfplan
 
 ### 이미지 버전 (릴리스마다 수동 갱신)
 
-시작 템플릿은 커밋 SHA 태그로 이미지를 고정한다(`modules/compute/variables.tf`의 `app_image`, `mock_external_image`). 서버 한 대만 교체돼도 두 서버가 항상 같은 버전이 되게 하려는 것이다. 새 릴리스를 올릴 때는 SHA를 바꿔 apply하고 ASG를 새로고침한다. 배포 스크립트를 ASG용으로 바꾸는 PH-55에서 자동화한다.
+시작 템플릿은 커밋 SHA 태그로 이미지를 고정한다(`modules/compute/variables.tf`의 `app_image`, `mock_external_image`). 서버 한 대만 교체돼도 두 서버가 항상 같은 버전이 되게 하려는 것이다. 새 릴리스를 올릴 때는 SHA를 바꿔 apply한다. 이 apply는 시작 템플릿 새 버전만 만들고 떠 있는 서버는 그대로이므로(ASG에 `instance_refresh`를 두지 않는다. 두면 apply가 자동으로 롤링 교체를 시작해 사람이 확인하는 절차와 충돌한다), 아래 "모의 대외기관을 VM 한 곳으로 옮기기" 절차의 6번과 같은 방식으로 서버를 한 대씩 종료한다. 새 서버가 `corebank-tg-was`에서 healthy가 된 것을 확인한 뒤 다음 대로 넘어가고, 두 서버가 같은 이미지 태그로 떠 있는지 `docker ps`로 확인해야 완료다. 배포 스크립트를 ASG용으로 바꾸는 PH-55에서 자동화한다.
 
 ## 모의 대외기관을 VM 한 곳으로 옮기기 (VPN 터널 성립 뒤)
 
