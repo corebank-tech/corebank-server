@@ -26,6 +26,26 @@ output "rds_sg_id" {
   value = module.network.rds_sg_id
 }
 
+output "alb_arn" {
+  value = module.compute.alb_arn
+}
+
+output "https_listener_arn" {
+  value = module.compute.https_listener_arn
+}
+
+output "alb_dns_name" {
+  value = module.compute.alb_dns_name
+}
+
+output "alb_zone_id" {
+  value = module.compute.alb_zone_id
+}
+
+output "target_group_arn" {
+  value = module.compute.target_group_arn
+}
+
 output "rds_instance_id" {
   value = module.data.db_instance_id
 }
