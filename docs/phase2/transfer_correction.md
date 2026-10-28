@@ -103,15 +103,16 @@ repost(원거래 거래번호, 고친 금액)   // 정상거래 — reverse 뒤�
 SET @from_at = '2026-11-02 00:00:00';
 SET @to_at   = '2026-11-03 00:00:00';
 
--- (1) 계좌 잔액 = 마지막 원장 balance_after
-SELECT a.account_id, a.balance, le.balance_after
+-- (1) 계좌 잔액 = 마지막 원장 balance_after. 마지막은 occurred_at, 그다음 ledger_entry_id 순이다(#545)
+SELECT a.account_id, a.balance,
+       (SELECT le.balance_after FROM ledger_entry le
+        WHERE le.account_id = a.account_id
+        ORDER BY le.occurred_at DESC, le.ledger_entry_id DESC LIMIT 1) AS last_balance_after
 FROM account a
-JOIN ledger_entry le
-  ON le.ledger_entry_id = (SELECT MAX(l2.ledger_entry_id) FROM ledger_entry l2 WHERE l2.account_id = a.account_id)
 WHERE a.account_id IN (
     SELECT withdrawal_account_id FROM transfer
     WHERE payee_bank_code IS NOT NULL AND created_at >= @from_at AND created_at < @to_at)
-  AND a.balance <> le.balance_after;
+HAVING a.balance <> last_balance_after;
 
 -- (2) 고객에게서 빠진 돈 = 성공·처리 불명이면 송금액, 실패면 0
 SELECT t.transaction_number, t.status, t.amount,

@@ -74,10 +74,14 @@ final class FundIntegrityCheck {
                 .sum();
     }
 
+    // 마지막 잔액은 occurred_at, 그다음 ledger_entry_id 순으로 고른다(schema_reference.md ledger_entry, #545).
     private Optional<Long> lastBalanceAfter() {
         return jdbcTemplate
                 .queryForList(
-                        "SELECT balance_after FROM ledger_entry WHERE account_id = ? ORDER BY ledger_entry_id DESC LIMIT 1",
+                        """
+                        SELECT balance_after FROM ledger_entry WHERE account_id = ?
+                        ORDER BY occurred_at DESC, ledger_entry_id DESC LIMIT 1
+                        """,
                         Long.class,
                         accountId)
                 .stream()
