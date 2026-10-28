@@ -401,6 +401,10 @@ public class TransferController {
         fingerprint.put("amount", request.amount());
         fingerprint.put("myPassbookMemo", request.myPassbookMemo());
         fingerprint.put("recipientPassbookMemo", request.recipientPassbookMemo());
+        // 값이 있을 때만 넣어야 flowId가 생기기 전에 저장된 요청의 지문이 그대로 맞는다
+        if (request.flowId() != null) {
+            fingerprint.put("flowId", request.flowId());
+        }
         return fingerprint;
     }
 }
