@@ -1,0 +1,148 @@
+# 컷오버 롤백 절차 — COB · 영업일 · 정보계 마트 (P5)
+
+> 컷오버(10/28) 뒤 문제가 생겨 기존 환경으로 되돌릴 때, **COB · 영업일 · 정보계 마트**를 어떻게 정리하는지 적는다. P5 소유 범위만 다룬다.
+> RDS 복원, DB 연결 전환, 복원 소요 시간, 레플리카 재구성은 P2가 정리한다.
+> 기존 단일 EC2와 이전 RDS는 11/6까지 유지한다([D-30](README.md)).
+> 확인하지 못한 항목은 "확인 필요"로 표시하고 맨 아래 §7에 모았다. 아는 척하지 않는다.
+> 컷오버 자체가 실패했을 때의 판단은 바로 아래 "Plan B" 절에, 컷오버 진행 결과는 [cutover_result_report.md](cutover_result_report.md)에 적는다.
+
+## Plan B — 컷오버가 실패했을 때
+
+> 이 절의 기준은 P5가 정리한 제안이다. 판단 시점과 DNS 담당은 팀과 확정한다(§7).
+
+### 판단 기준
+
+`api.corebank.cloud`를 새 환경으로 넘기기 **전에** 아래 네 가지를 확인한다. 하나라도 안 맞으면 DNS를 넘기지 않고 Plan B로 간다.
+
+1. 서버가 스스로 앱을 띄운다(`user_data`로 Docker 설치와 앱 실행).
+2. DB가 준비돼 있다(P2의 최종 스냅샷 복원, `available`).
+3. 앱 기동이 성공한다(Flyway, 보관함 값 5개, 데모 데이터 검증). 기동에 실패하면 헬스체크가 실패하고 ASG가 서버를 계속 교체한다.
+4. 대상 그룹 `corebank-tg-was`가 healthy 2대이고 ALB 주소로 직접 접속이 된다.
+
+서버가 뜨는 데 시간이 걸린다(ASG 헬스체크 유예 1200초, #752). 판단은 apply 직후가 아니라 그 시간이 지난 뒤에 한다.
+
+### DNS를 넘기기 전에 실패한 경우
+
+- DNS를 넘기지 않는다. 사용자는 계속 기존 환경(기존 ALB, EC2, RDS)을 쓰므로 §1~§6의 롤백은 필요 없다.
+- 새 환경은 지우지 않고 원인을 조사한다. 공유 Terraform state라 삭제는 P2와 협의한다.
+- 주의(추정): 새 환경 서버를 켜 둔 채 DNS를 넘기지 않으면, 앱 안의 스케줄러(COB 포함)가 새 DB에서 돈다. 새 DB는 서비스에 쓰이지 않으니 영향은 없지만 COB 기록이 새 DB에 쌓인다.
+
+### DNS를 넘긴 뒤에 실패한 경우
+
+- 가비아의 `api.corebank.cloud` CNAME을 새 ALB에서 **기존 ALB `corebank-alb`로 되돌린다.** `corebank.cloud`의 권한 DNS는 가비아이고 레코드 권한은 P2에게 있어서 실행은 P2로 읽힌다(PH-58, 확인 필요).
+- 기존 단일 EC2와 RDS는 11/6까지 유지하므로 되돌아갈 곳이 있다. 다만 CD(`main` 배포) 대상을 새 환경으로 돌린 뒤에는 기존 EC2가 새 배포를 받지 않아 **그 시점의 코드**에 머문다. 돌리는 시점은 아직 정해지지 않았다(§7).
+- 되돌린 뒤에는 이 문서의 §3~§6(COB 기록, 영업일, 마트)을 따른다.
+- 컷오버 뒤 새 환경에서 일어난 거래는 기존 DB에 없다(데이터 공백). 처리 방법은 P2의 Plan B에서 정한다(§7).
+
+### Plan B로 갈 때의 일정
+
+- 3-Tier는 destroy하지 않고 원인을 조사한다. destroy는 S4 재측정이 끝난 뒤가 원래 계획이었고([D-30](README.md)), Plan B면 시점을 다시 협의한다.
+- 개선 전/후 재측정은 기존 단일 EC2에서 한다. 3-Tier 수치는 넣지 않고, P5는 컷오버 진행 결과를 리포트한다([cutover_result_report.md](cutover_result_report.md)).
+
+## 1. 결정 요약
+
+- 새 RDS에서 쌓인 **COB 기록은 폐기해도 된다.** #689 기준선은 기존 환경에서 쟀기 때문이다. 다만 롤백 직전에 기록 테이블을 조회해 저장해 두면 안전하다(§3).
+- **건너뛴 날의 대사 · 만기 감지는 따로 돌리지 않는다.** 다음 COB가 따라잡는다(ADR-0004 "건너뛴 날").
+- `cob_checkpoint`는 DB에 있는 테이블이라 DB를 되돌리면 같이 사라진다.
+- **정보계 마트**는 롤백 시점 이후의 `base_date` 행과 `mart_load_batch`를 지우고 `--from` · `--to`로 다시 적재한다(§5). 레플리카가 복원한 DB 기준으로 다시 만들어진 **뒤에** 한다(P2).
+
+## 2. 먼저 알아 둘 COB의 동작
+
+- COB는 매일 23:30에 시작한다(`CobScheduler`). 주말과 공휴일 밤에는 영업일이 달력보다 앞서 있어 아래 규칙으로 건너뛴다. 순서는 영업일 전환(`business-date-advance`) → 대사(`ledger-reconciliation`) → 만기 감지(`account-maturity`)다. 전환이 첫 스텝이다([ADR-0004](../adr/0004-cob-step-order-cob-date.md)).
+- 영업일이 달력 날짜보다 미래이면 COB는 그날을 건너뛴다(`CobRunnerService`: "영업일이 달력보다 미래라 COB를 건너뜀").
+- 진행 상태는 `cob_checkpoint(cob_date, step_name, status)`에 남는다. 시작할 때 `PENDING`이 남은 날짜가 있으면 오래된 날짜부터 이어서 한다.
+- 대사 불일치가 임계를 넘으면(`app.ledger-reconciliation.cob-hard-threshold`) 마감이 멈추고, 다음 COB가 같은 날짜로 대사부터 다시 한다. 원인을 고치지 않으면 다음 밤도 같은 자리에서 멈춘다.
+- 기존 EC2와 RDS는 컷오버 뒤에도 11/6까지 유지하고, 앱을 내리지 않으므로 기존 환경의 COB 스케줄도 그대로 돈다. 기존 DB의 데이터는 컷오버 시점(최종 스냅샷)에 멈춰 있고 새 거래는 들어오지 않지만, 대사와 만기 감지는 있는 데이터로 돌고 영업일은 새 환경과 같이 달력을 따라 넘어간다.
+
+## 3. COB 기록 처리
+
+롤백 대상은 아래 세 테이블이다.
+
+- `batch_execution_history`: 스텝별 시작 · 종료 시각과 상태(관측용 기록)
+- `business_date_cutoff`: 마감된 영업일(`base_date`, `CLOSED`, `closed_at`)
+- `cob_checkpoint`: 날짜별 스텝 진행 상태
+
+**폐기해도 되는 이유:** 새 RDS의 기록은 개선 전 기준선(#689)에 쓰이지 않는다. 기준선은 기존 환경의 기록으로 잡았다.
+
+**롤백 직전에 저장하는 방법:** 기존 계정이든 새 계정이든, 읽기 전용으로 `batch_execution_history`와 `business_date_cutoff`를 조회해 결과를 파일로 남긴다.
+
+```sql
+SELECT business_date, step_name, status,
+       TIMESTAMPDIFF(SECOND, started_at, ended_at) AS sec, started_at, ended_at
+FROM batch_execution_history WHERE job_name = 'COB' ORDER BY business_date, started_at;
+
+SELECT base_date, status, closed_at FROM business_date_cutoff ORDER BY base_date;
+SELECT * FROM business_date;
+```
+
+`cob_checkpoint`는 롤백 뒤에 쓰지 않으므로 저장은 선택이다.
+
+## 4. 영업일과 건너뛴 날
+
+- 건너뛴 날(달력 따라잡기로 영업일만 넘어간 날)은 체크포인트가 없어 재개 · 소급 대상이 아니다. **대사와 만기 감지를 그날 몫으로 따로 돌리지 않는다.**
+    - 만기 감지는 `maturityDate <= 기준일` 조건이라 건너뛴 날에 만기가 된 계좌도 다음 COB가 처리한다.
+    - 대사는 전수 대사라 다음 COB가 전체를 다시 맞춘다.
+- 롤백한 뒤 첫 COB 전에 아래를 확인한다.
+
+```sql
+SELECT * FROM business_date;                                   -- 현재 영업일
+SELECT base_date, status, closed_at FROM business_date_cutoff ORDER BY base_date DESC LIMIT 5;
+SELECT cob_date, step_name, status FROM cob_checkpoint WHERE status <> 'SUCCESS';
+```
+
+- 영업일이 오늘 달력 날짜보다 미래이면 오늘 밤 COB는 건너뛴다. 의도한 결과인지 확인한다.
+- `cob_checkpoint`에 `PENDING`이 남아 있으면 오늘 밤 COB가 그 날짜부터 이어서 실행한다. 되돌린 DB에 옛 `PENDING`이 남아 있어도 되는지 확인한다.
+- 기존 RDS를 그대로 쓰면 영업일은 따로 맞추지 않아도 된다. 컷오버 뒤에도 기존 환경의 COB가 매일 밤 돌아 영업일이 달력을 따라 넘어갔기 때문이다.
+- 대신 **컷오버 이후 새 환경에서 일어난 거래는 기존 DB에 없다**(데이터 공백). 이 문제는 COB가 아니라 롤백 방식의 문제이므로 P2의 Plan B와 롤백 절차에서 다룬다(§7).
+- 롤백 대상이 새 RDS의 복원본이라면 `business_date`와 `cob_checkpoint`는 그 복원 시점의 값이다. 어느 쪽인지는 P2의 롤백 방식이 정해야 한다(§7).
+
+### 영업일 따라잡기 (`catchUpTo`)
+
+롤백한 DB의 영업일이 달력보다 뒤처져 있으면 앱이 스스로 달력에 맞춘다(`BusinessDateCatchUpService`).
+
+- **언제 도는가:** 앱이 뜰 때(`ApplicationReadyEvent`)와 매일 00:00 KST(`BusinessDateCatchUpScheduler`). 코드 주석에는 자정 스케줄을 PH-43 COB 도입 때 제거한다고 되어 있으나 현재 코드에는 남아 있다.
+- **목표 영업일:** 오늘이 영업일이면 오늘, 아니면 다음 영업일.
+- **언제 올리는가:** 현재 영업일이 목표보다 이전일 때만 한 번에 목표로 올린다. 같거나 앞서 있으면 아무것도 하지 않는다. 여러 인스턴스가 동시에 불러도 한 번만 바뀐다(`compareAndSet`).
+- **올릴 때 남는 기록:** 떠나는 영업일과 건너뛴 영업일마다 `business_date_cutoff`에 `CLOSED` 행을 남긴다. 건너뛴 날은 원장이 비어 있다.
+- **건너뛴 날의 COB:** 체크포인트가 없어 재개 대상이 아니다. 대사와 만기 감지는 다음 COB가 따라잡는다.
+- **영업일을 뒤로 돌리는 경로는 없다.** 영업일을 바꾸는 포트(`BusinessDateCommandPort`)는 기대값을 확인하고 바꾸는 `compareAndSet`이고, 호출하는 두 서비스(`BusinessDateAdvanceService`, `BusinessDateCatchUpService`)는 앞으로만 올린다. 롤백한 DB의 영업일이 달력보다 앞서 있으면 COB는 그날을 건너뛰고, 따라잡기도 아무것도 하지 않는다. 달력이 영업일을 따라잡을 때까지 기다리는 수밖에 없다. 주말과 공휴일에는 영업일이 달력보다 앞서 있는 것이 정상이다.
+- **옛 `PENDING` 전환 스텝:** `cob_checkpoint`에 전환 스텝이 `PENDING`으로 남아 있고 영업일이 이미 그 날짜를 지났으면, 재개할 때 전환을 다시 부르지 않고 `SUCCESS`로 표시한다(`CobRunnerService`). `advanceFrom`은 현재 영업일이 그 날짜이거나 바로 다음 영업일일 때만 통과하므로, 여러 날 지난 날짜로 다시 부르면 매번 실패한다.
+
+## 5. 정보계 마트 재적재
+
+정보계 마트는 온프레미스 레플리카에서 읽어 만든다([info_mart.md](info_mart.md)). 롤백으로 원천 DB가 바뀌면 롤백 시점 이후의 마트 행은 원천과 맞지 않는다.
+
+1. **레플리카가 복원한 DB 기준으로 다시 만들어진 것을 확인한다**(P2 작업). 그 전에는 마트를 건드리지 않는다.
+2. 마트에서 롤백 시점 이후의 `base_date` 행을 지운다(마트 2종: `mart_daily_account_balance`와 이벤트 마트).
+3. `mart_load_batch`에서 같은 날짜의 적재 기록을 지운다.
+4. ETL을 `--from`과 `--to`로 실행해 다시 적재한다.
+
+```bash
+java -Xmx2g -jar info-etl.jar --from=<롤백 시점 다음 영업일> --to=<가장 최근 영업일>
+```
+
+- 이미 `COMPLETED`인 날짜는 자동으로 다시 적재하지 않는다. 날짜별로 다시 만들 때는 `--rebuild`를 쓴다.
+- ETL은 경계일(2026-10-26) 이후의 날짜를 적재할 때 레플리카의 `business_date_cutoff(D, CLOSED)` 행을 요구한다. 행이 없으면 COB 전환이 실패한 날로 보고 시작하지 않는다. 롤백한 DB에 해당 날짜의 cutoff가 있는지 먼저 본다.
+- 재적재 순서와 대조 규칙은 [info_mart.md](info_mart.md) §3 · §4를 따른다.
+
+## 6. 롤백 순서 (P5 몫)
+
+P2의 DB 전환 절차와 맞물린다. 번호는 순서다.
+
+1. 롤백을 결정하면 새 환경의 COB 기록을 §3 쿼리로 저장한다.
+2. P2가 DB를 되돌린다(복원, 연결 전환). P5 몫이 아니다.
+3. 되돌린 DB에서 §4 쿼리로 영업일 · cutoff · 체크포인트를 확인한다.
+4. 오늘 밤 COB가 돌 환경에서 앱이 떠 있어 `CobScheduler`가 도는지 확인한다. 기존 환경은 앱을 내리지 않았으면 그대로 돌고(§2), 새 RDS의 복원본에 붙이는 경우에만 따로 확인한다.
+5. P2의 레플리카 재구성이 끝나면 §5로 마트를 정리하고 다시 적재한다.
+6. 첫 COB가 끝난 다음 날 아침 `batch_execution_history`로 스텝 시간과 상태를 확인한다. 대사 hard로 멈췄다면 다음 밤도 멈추므로 원인부터 본다.
+
+## 7. 확인 필요
+
+- 롤백 대상 DB가 기존 RDS인지 새 RDS의 복원본인지(P2). `business_date` · `cob_checkpoint`의 상태가 여기에 달려 있다.
+- 컷오버 이후 새 환경에서 일어난 거래를 롤백 때 어떻게 처리하는지(데이터 공백, P2의 Plan B).
+- 영업일이 달력보다 앞서게 된 DB를 되돌리는 방법. 코드에 영업일을 뒤로 돌리는 경로가 없어서 COB가 건너뛰는 상태가 이어진다(§4). 실제로 이런 DB를 만들 일이 있는지, 있다면 어떻게 정정할지는 팀과 정한다.
+- 롤백 직전에 새 환경의 쓰기를 멈추는 방법(P2와 합의).
+- CD(`main` 배포) 대상을 기존 EC2에서 새 환경으로 돌리는 시점. 돌린 뒤에는 기존 EC2가 새 배포를 받지 않고, 돌리기 전에 `main`이 머지되면 기존 EC2의 앱 컨테이너가 재생성된다.
+- **Plan B 판단 시점.** DNS를 넘기기 전에 위 네 가지를 본다는 순서만 있고 시각은 정해져 있지 않다. 새 RDS 복원 시간은 리허설에서 정확히 재지 못했다(Multi-AZ 전환만 약 6분 43초, P2 #768).
+- DNS 되돌리기의 담당이 P2인지, 그리고 가비아 레코드의 TTL(되돌린 뒤 반영되는 시간).
+- 기존 ALB `corebank-alb`가 11/6까지 남는지. DNS를 되돌릴 대상이라 없으면 되돌릴 수 없다.
