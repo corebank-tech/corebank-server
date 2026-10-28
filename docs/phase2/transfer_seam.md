@@ -241,6 +241,7 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 ```
 
 - `flowId`는 `POST /transfers` 요청 본문의 선택 필드로 받고 멱등 지문(fingerprint)에 넣습니다. 이체는 값을 전달만 하고, 그 흐름이 이 고객 것인지는 FDS가 검사합니다.
+- `RecentTransferQuery`는 기존 인덱스 `ix_transfer_wacc`(출금계좌, 처리시각)로 고객의 출금계좌마다 읽습니다. `transfer`에 인덱스를 새로 달지 않습니다(§9-5 규칙 6).
 - `RecentTransferQuery`는 당행 즉시·예약·자동이체의 SUCCESS 행을 셉니다. 정정 체인으로 무효화된 행(`invalidated_at`)은 뺍니다. `firstTransferredAt`은 "반복 묶음 첫 이체 이전에 보낸 적 있는가"를 `hasSucceededBefore`로 물을 때 씁니다.
 - 이름과 필드는 PR-b 리뷰에서 바뀔 수 있습니다. 바뀌면 이 절을 같은 PR에서 고칩니다.
 
@@ -258,7 +259,7 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 ### 9-4. 실행·거절·취소
 
 - 상태는 `HELD → EXECUTING → EXECUTED / FAILED`, `HELD → REJECTED`(관리자 거절), `HELD → CANCELLED`(고객 취소), `HELD → EXPIRED`(만료)입니다. 전이는 조건부 UPDATE라, 같은 보류 건을 두 곳에서 동시에 처리해도 한 곳만 성공합니다.
-- **실행은 원본 요청 그대로 `execute()`를 한 번 부릅니다.** `transferType=IMMEDIATE`, `source_type=TRANSFER_HOLD`, `source_id=보류 ID`, `execution_date=보류한 날짜`입니다. 기존 `uk_transfer_source_execution_date`가 두 번 실행을 DB에서 막고, 다시 부르면 앞선 결과를 돌려받습니다. 원장 거래유형은 `IMMEDIATE_TRANSFER` 그대로라 GL(훅 B)은 바뀌지 않습니다.
+- **실행은 원본 요청 그대로 `execute()`를 한 번 부릅니다.** `transferType=IMMEDIATE`, `source_type=HELD`, `source_id=보류 ID`, `execution_date=보류한 날짜`입니다. `source_type`은 `VARCHAR(12)`라 12자 이하 값을 씁니다. 컬럼을 넓히면 300만 행 `transfer`에 ALTER가 걸립니다. 기존 `uk_transfer_source_execution_date`가 두 번 실행을 DB에서 막고, 다시 부르면 앞선 결과를 돌려받습니다. 원장 거래유형은 `IMMEDIATE_TRANSFER` 그대로라 GL(훅 B)은 바뀌지 않습니다.
 - **실행할 때는 토큰을 받지 않습니다.** 인증은 보류 시점에 끝났습니다. 잔액·한도·계좌 상태와 훅 A는 실행 시점 기준으로 다시 검사하고, 거부되면 `FAILED`로 끝납니다. 자동 재시도는 하지 않습니다.
 - **승인 권한과 콜 기록 검증은 호출자 몫입니다.** `release`·`reject`는 `actorId`와 사유만 남깁니다. 관리자 권한과 콜 결과 입력은 FDS가 부르기 전에 확인합니다.
 - Apache Fineract의 maker-checker도 같은 방식입니다. 업무 트랜잭션 안에서 승인 필요를 판정해 롤백하고(`CommandSourceService.validateMakerChecker`), 승인하면 저장해 둔 원본으로 같은 처리를 다시 실행합니다(`PortfolioCommandSourceWritePlatformServiceImpl.approveEntry`). 비밀값을 지운 요청은 승인 대기로 보낼 수 없게 막아, 비밀값을 저장하지 않습니다.
@@ -270,12 +271,18 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 3. **예외는 이체 실패입니다.** 훅 C가 예외를 던지면 이체는 ERROR로 확정됩니다. 판정을 건너뛰고 통과시키지 않습니다. 켜고 끄는 설정은 구현체가 둡니다(FDS는 11/6 측정이 끝날 때까지 꺼 둡니다).
 4. **order가 작은 구현체가 먼저 정합니다.** 처음 HOLD를 낸 구현체가 정하고 나머지는 부르지 않습니다. FDS(승인)가 지연이체(시각)보다 작은 order를 씁니다. 승인을 기다리는 건이 시각이 되었다고 실행되면 안 되기 때문입니다.
 5. 구현체는 소유 도메인에 두고 `transfer.api`만 참조합니다(AGENTS.md 규칙 2).
+6. **성능 측정을 바꾸지 않습니다.** 릴리스 3 이미지로 S4 재측정(PH-30·PH-36b)을 하므로, 훅 C 때문에 즉시이체 경로가 느려지면 그 비용이 LOCK-TUNE 개선 효과와 섞입니다.
+    - 구현체마다 전역 스위치를 둡니다(예: `app.delayed-transfer.enabled`). 꺼져 있으면 DB를 읽지 않고 바로 `proceed()`를 돌려줍니다. 고객별 설정을 조회해야 꺼진 줄 아는 구조로 만들지 않습니다.
+    - 구현체가 0개이거나 스위치가 모두 꺼져 있으면 즉시이체 경로에 쿼리·락이 하나도 늘지 않아야 합니다. P4는 구현체가 없으면 컨텍스트도 만들지 않습니다.
+    - `transfer`에 인덱스·컬럼을 더하지 않습니다. 이체 INSERT 비용과 운영 ALTER 시간이 함께 바뀝니다.
+    - S4 PH-30 재측정 동안 지연이체·FDS 스위치를 끕니다. 재측정이 끝나면 켜고 PH-36b의 지연이체 정상 지급률을 잽니다.
 
 ### 9-6. 테스트 (#771 PR-b · #772)
 
 | 고정하는 것 |
 |---|
 | 구현체 0개면 기존 즉시이체 결과·원장이 그대로다 |
+| 스위치가 꺼진 구현체는 DB를 읽지 않는다 |
 | HOLD면 원장·잔액·한도 사용액이 그대로고, `transfer_hold` 1행과 `TransferHeld`가 같은 커밋에 남는다. 보류 저장이 실패하면 ERROR다 |
 | 같은 고객의 동시 요청에서 뒤 요청의 훅 C가 앞 요청의 커밋 결과를 본다 |
 | 보류 건을 두 번 실행해도 기표는 1회다. 실행 시점 잔액 부족·계좌 정지면 `FAILED`다 |
