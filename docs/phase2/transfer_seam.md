@@ -3,7 +3,7 @@
 > **정본입니다.** `TransferExecutionService.execute()`에 다른 트랙이 기능을 붙이는 규칙은 이 문서를 따릅니다.
 > 태스크 범위·기한은 [tasks.md](tasks.md) §PH-99, 이벤트·아웃박스 규칙은 [README.md](README.md) §3-3입니다.
 >
-> **대상**: P2 PH-90(훅 A) · P3 PH-24(훅 B) · P5 PH-41(tradeDate) · P1 PH-32·PH-96(이벤트·아웃박스) · P2 PH-14·PH-15·PH-16(입금 계약, §8)
+> **대상**: P2 PH-90(훅 A) · P3 PH-24(훅 B) · P5 PH-41(tradeDate) · P1 PH-32·PH-96(이벤트·아웃박스) · P2 PH-14·PH-15·PH-16(입금 계약, §8) · P4 PH-06·P6 FDS(훅 C 이체 보류, §9)
 
 ---
 
@@ -26,7 +26,9 @@ execute(command)
  ├─ consumeOtpAuthToken
  └─ postLedger — REQUIRES_NEW 트랜잭션 {
        tradeDate = BusinessDateGate.acquireSharedAndReadBusinessDate() → Transfer 생성   ← 가장 먼저, 한 건에 한 번 (PH-41, #516, #662)
-       한도 적립 → 계좌 락 → 재검증 → transfer INSERT → 잔액 UPDATE
+       한도 적립                ← 고객 단위 행 락. 커밋까지 쥔다
+       [훅 C] TransferHoldPolicy 체인 (즉시이체만, #771 PR-b에서 연결)   ← HOLD면 이 트랜잭션을 롤백하고 보류 저장 (§9)
+       계좌 락 → 재검증 → transfer INSERT → 잔액 UPDATE
          [자리] PH-90 재검증을 출금가능액(잔액 − 보류액) 기준으로 바꾼다
        executedAt 캡처
        원장 2행 저장
@@ -48,6 +50,7 @@ execute(command)
 |---|---|---|---|---|
 | 훅 A | `TransferPreCheck { int order(); void check(TransferPreCheckContext) }` | P2 PH-90 | 없음. 락 이전, 읽기 전용 | `BusinessException` → 이체 ERROR 확정. OTP·한도 소모 없음. 계좌비밀번호 토큰은 `verifyBeforeLock`에서 이미 소비돼 재시도 시 재인증 필요 |
 | 훅 B | `LedgerPostingHook { void afterLedger(LedgerPostingContext) }` | P3 PH-24 | 원장을 기표한 트랜잭션 안. 이체는 REQUIRES_NEW, 상품가입·정정은 호출자 트랜잭션 | 원장·잔액·한도 적립까지 롤백 → 이체 ERROR 확정. 상품가입·정정은 예외가 호출자에게 전파된다 |
+| 훅 C | `TransferHoldPolicy { int order(); TransferHoldDecision decide(TransferHoldContext) }` | P4 PH-06 지연이체(#772) · P6 FDS | 기표 REQUIRES_NEW 안, 한도 적립 뒤. 고객 락을 쥔 채 읽기만 | 예외 → 이체 ERROR 확정. HOLD → 기표 트랜잭션 롤백 후 보류 저장(§9) |
 | tradeDate | `business.api.BusinessDateGate` | 제공 P5 PH-41·#556, 대입 P4 | 기표·ERROR 기록 트랜잭션 안 | — |
 | 확정 이벤트 | `TransferSettled` — 성공·실패를 `status`로, 이체 종류를 `txType`으로 구분 | 타입·페이로드 P1 PH-32. 발행 코드는 P1이 #505에서 넣었고(EVT-2 대신) | 성공은 기표 REQUIRES_NEW 안, 실패는 `failTransfer()` REQUIRES_NEW 안 | 리스너 예외 → 이체 롤백 |
 
@@ -58,6 +61,7 @@ transfer 행이 생기기 전의 사전검증 실패는 엔진이 발행하지 �
 | 레코드 | 필드 |
 |---|---|
 | `TransferPreCheckContext` | `customerId` · `withdrawalAccountId` · `amount` |
+| `TransferHoldContext` | `customerId` · `withdrawalAccountId` · `depositAccountNumber` · `amount` · `requestedAt` · `flowId`(없으면 null) |
 | `LedgerPostingContext` | `transactionNumber` · `txType`(원장 `transaction_type` 값 — `IMMEDIATE_TRANSFER`·`SCHEDULED_TRANSFER`·`AUTO_TRANSFER`·`PRODUCT_SUBSCRIPTION`·`REVERSAL`) · `amount` · `fromAccountId` · `toAccountId` · `tradeDate` |
 
 ## 4. 구현체 예시
@@ -105,6 +109,8 @@ PH-99 (10/2) → PH-80 (10/8) → PH-90 → PH-24 → PH-41 대입 (10/12~16) �
 ```
 
 PH-90·PH-24 PR은 **10/12까지 리뷰 가능한 상태**로 올립니다. 이 순서를 벗어나 `execute()`를 고치는 PR은 P4가 리뷰에서 막습니다.
+
+훅 C는 #771 PR-b(계약·호출 자리, 10/29) → #772 PR-a(보류 저장·실행) → #772 PR-b(지연이체) 순서로 머지하고, 모두 릴리스 3(10/30)에 싣습니다. FDS 구현체는 #772 PR-a 뒤에 머지합니다.
 
 ## 7. 테스트
 
@@ -166,6 +172,117 @@ record LedgerDepositResult(String transactionNumber, long depositBalanceAfter, L
 
 테스트는 `LedgerDepositServiceTest`가 고정합니다 — 호출자 롤백 시 잔액·원장 롤백, `credit` → `transferBetween` 뒤 잔액 = 원장 합계, 거부 8종, 호출자 account 저장 순서 2종(입금 전 조회 → 전체 롤백 / 입금 뒤 조회 → 함께 커밋). `last_transaction_at` 유지는 `AccountLockPersistenceAdapterTest`가 고정합니다.
 
-## 9. 범위 밖
+## 9. 훅 C — 이체 보류 (#771)
 
-- **지연이체 보류 자리** — 훅 A는 읽기 전용이라 이체를 보류로 돌릴 수 없습니다. 방법은 [README.md](README.md) O-09에서 정합니다.
+즉시이체를 기표하지 않고 원본 요청 그대로 잡아 두는 자리입니다([glossary](glossary.md) 12번 이체 보류). 지연이체(PH-06, #772)와 P6 FDS가 같이 씁니다. O-09 결정은 [README.md](README.md) D-34입니다.
+**#771 PR-b는 계약과 호출 자리만 머지합니다.** 구현체가 0개면 모든 요청이 지금처럼 실행됩니다. 보류 저장·실행 부품은 #772 PR-a가 만듭니다.
+
+### 9-1. 자리와 직렬화
+
+```
+postLedger — REQUIRES_NEW {
+    tradeDate = gate
+    한도 적립 checkAndReserve        ← 고객 단위 행 락. 커밋까지 쥔다
+    [훅 C] TransferHoldPolicy 체인   ← 즉시이체만. order 오름차순, 처음 HOLD를 낸 구현체가 정한다
+        CONTINUE → 계좌 락 → 재검증 → 기표 (기존 그대로)
+        HOLD     → 이 트랜잭션 롤백 (한도 적립·transfer 행 없음)
+}
+HOLD면 REQUIRES_NEW { transfer_hold 저장 → publishEvent(TransferHeld) }
+```
+
+- **고객이 요청한 즉시이체에서만 돕니다.** 예약·자동이체와 보류 건 실행(§9-4)은 지나지 않습니다. 타행이체는 `execute()`를 지나지 않아 대상이 아닙니다.
+- **같은 고객의 즉시이체는 판정부터 기표 커밋까지 줄을 섭니다.** 한도 적립이 고객 단위 행 락을 커밋까지 쥐기 때문입니다. 그래서 훅 C 안에서 조회한 성공 이력에는 앞선 요청의 결과가 들어 있고, 2번째와 3번째 요청이 동시에 들어와 둘 다 통과하는 일이 없습니다.
+- **판정 전 검증은 그대로 먼저 돕니다.** 소유·수취인·잔액 스냅샷·훅 A·한도 검사(`LMT0002`·`LMT0003`)를 통과한 요청만 보류됩니다. 통과 못 할 요청은 보류하지 않고 지금처럼 거부합니다.
+
+### 9-2. 계약 (`transfer.api`)
+
+```java
+// 훅 C. 구현체가 0개면 항상 바로 실행한다.
+public interface TransferHoldPolicy {
+    int order();
+    TransferHoldDecision decide(TransferHoldContext context);
+}
+
+public record TransferHoldContext(
+        long customerId,
+        long withdrawalAccountId,
+        String depositAccountNumber,
+        long amount,
+        LocalDateTime requestedAt, // 채번 시각. 시간 창의 기준으로 쓴다
+        String flowId) {}          // FE 행동 흐름 식별자. 없으면 null
+
+public record TransferHoldDecision(
+        boolean hold, String policyCode, TransferHoldReleaseMode releaseMode, LocalDateTime releaseAt) {
+    public static TransferHoldDecision proceed() { ... }                                          // 바로 실행
+    public static TransferHoldDecision holdUntil(String policyCode, LocalDateTime releaseAt) { ... } // 지연이체
+    public static TransferHoldDecision holdForApproval(String policyCode) { ... }                 // FDS
+}
+
+public enum TransferHoldReleaseMode { AT_TIME, ON_APPROVAL }
+
+// 보류 저장과 같은 커밋에 실린다(ADR-0010). 보류 뒤 할 일은 이 이벤트를 받아서 한다.
+public record TransferHeld(
+        long transferHoldId, long customerId, String policyCode, TransferHoldReleaseMode releaseMode,
+        LocalDateTime releaseAt, String flowId, LocalDateTime heldAt) {}
+
+public interface TransferHoldUseCase {
+    TransferHoldExecutionResult release(long transferHoldId, long actorId); // 원본 요청 그대로 1회 실행
+    void reject(long transferHoldId, long actorId, String reasonCode);     // 관리자 거절
+    void cancel(long transferHoldId, long customerId);                      // 고객 취소
+}
+
+// 커밋된 SUCCESS만 센다. 현재 요청은 넣지 않는다. 고객의 모든 출금계좌가 기준이다.
+public interface RecentTransferQuery {
+    RecentTransferAggregate aggregateSucceeded(long customerId, String depositAccountNumber, LocalDateTime since);
+    boolean hasSucceededBefore(long customerId, String depositAccountNumber, LocalDateTime before);
+}
+
+public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime firstTransferredAt) {}
+```
+
+- `flowId`는 `POST /transfers` 요청 본문의 선택 필드로 받고 멱등 지문(fingerprint)에 넣습니다. 이체는 값을 전달만 하고, 그 흐름이 이 고객 것인지는 FDS가 검사합니다.
+- `RecentTransferQuery`는 당행 즉시·예약·자동이체의 SUCCESS 행을 셉니다. 정정 체인으로 무효화된 행(`invalidated_at`)은 뺍니다. `firstTransferredAt`은 "반복 묶음 첫 이체 이전에 보낸 적 있는가"를 `hasSucceededBefore`로 물을 때 씁니다.
+- 이름과 필드는 PR-b 리뷰에서 바뀔 수 있습니다. 바뀌면 이 절을 같은 PR에서 고칩니다.
+
+### 9-3. HOLD일 때 P4가 보장하는 것
+
+| 항목 | 동작 |
+|---|---|
+| 원장·잔액·한도 | 바뀌지 않습니다. 기표 트랜잭션을 롤백하므로 한도 적립도 취소됩니다 |
+| 저장 | 새 트랜잭션에서 원본 요청(출금계좌·수취계좌번호·금액·메모·채널)·요청 지문·인증 완료 시각·정책 코드·해제 방식과 시각·`flowId`를 `transfer_hold`에 저장하고, `TransferHeld`를 같은 커밋에 발행합니다 |
+| 토큰 | 계좌비밀번호 토큰과 OTP는 지금처럼 판정 전에 소비합니다. 토큰 원문은 저장하지 않습니다. 보류 저장이 실패하면 기표 실패와 같이 ERROR로 확정되고 고객은 다시 인증합니다 |
+| 거래번호 | 판정 전에 받은 거래번호는 쓰이지 않고 빕니다(롤백 때와 같습니다). 실행할 때 새로 받습니다 |
+| 응답 | HTTP 200 + `code="0000"`. `data`에 보류 상태와 `transferHoldId`, 지연이체면 실행 예정 시각을 담습니다. `ProcessResultStatus`에는 값을 더하지 않습니다 |
+| 확정 이벤트 | `TransferSettled`는 보류 시점에 발행하지 않습니다. 이체 결과가 아직 없어서입니다. 실행될 때 지금처럼 발행됩니다 |
+
+### 9-4. 실행·거절·취소
+
+- 상태는 `HELD → EXECUTING → EXECUTED / FAILED`, `HELD → REJECTED`(관리자 거절), `HELD → CANCELLED`(고객 취소), `HELD → EXPIRED`(만료)입니다. 전이는 조건부 UPDATE라, 같은 보류 건을 두 곳에서 동시에 처리해도 한 곳만 성공합니다.
+- **실행은 원본 요청 그대로 `execute()`를 한 번 부릅니다.** `transferType=IMMEDIATE`, `source_type=TRANSFER_HOLD`, `source_id=보류 ID`, `execution_date=보류한 날짜`입니다. 기존 `uk_transfer_source_execution_date`가 두 번 실행을 DB에서 막고, 다시 부르면 앞선 결과를 돌려받습니다. 원장 거래유형은 `IMMEDIATE_TRANSFER` 그대로라 GL(훅 B)은 바뀌지 않습니다.
+- **실행할 때는 토큰을 받지 않습니다.** 인증은 보류 시점에 끝났습니다. 잔액·한도·계좌 상태와 훅 A는 실행 시점 기준으로 다시 검사하고, 거부되면 `FAILED`로 끝납니다. 자동 재시도는 하지 않습니다.
+- **승인 권한과 콜 기록 검증은 호출자 몫입니다.** `release`·`reject`는 `actorId`와 사유만 남깁니다. 관리자 권한과 콜 결과 입력은 FDS가 부르기 전에 확인합니다.
+- Apache Fineract의 maker-checker도 같은 방식입니다. 업무 트랜잭션 안에서 승인 필요를 판정해 롤백하고(`CommandSourceService.validateMakerChecker`), 승인하면 저장해 둔 원본으로 같은 처리를 다시 실행합니다(`PortfolioCommandSourceWritePlatformServiceImpl.approveEntry`). 비밀값을 지운 요청은 승인 대기로 보낼 수 없게 막아, 비밀값을 저장하지 않습니다.
+
+### 9-5. 구현체 규칙
+
+1. **외부 호출을 하지 않습니다.** 훅 C는 고객 락을 쥔 채 돕니다. Python 서비스 같은 외부 API를 기다리면 그 고객의 다른 이체가 모두 같이 멈춥니다. 같은 DB 읽기(`RecentTransferQuery`, 자기 도메인 테이블)만 합니다. 행동 점수가 필요하면 미리 계산해 저장해 둔 값을 읽습니다.
+2. **쓰기를 하지 않습니다.** HOLD면 트랜잭션이 롤백돼 훅 C 안의 쓰기는 사라집니다. 보류 뒤 할 일은 `TransferHeld`를 받아서 합니다.
+3. **예외는 이체 실패입니다.** 훅 C가 예외를 던지면 이체는 ERROR로 확정됩니다. 판정을 건너뛰고 통과시키지 않습니다. 켜고 끄는 설정은 구현체가 둡니다(FDS는 11/6 측정이 끝날 때까지 꺼 둡니다).
+4. **order가 작은 구현체가 먼저 정합니다.** 처음 HOLD를 낸 구현체가 정하고 나머지는 부르지 않습니다. FDS(승인)가 지연이체(시각)보다 작은 order를 씁니다. 승인을 기다리는 건이 시각이 되었다고 실행되면 안 되기 때문입니다.
+5. 구현체는 소유 도메인에 두고 `transfer.api`만 참조합니다(AGENTS.md 규칙 2).
+
+### 9-6. 테스트 (#771 PR-b · #772)
+
+| 고정하는 것 |
+|---|
+| 구현체 0개면 기존 즉시이체 결과·원장이 그대로다 |
+| HOLD면 원장·잔액·한도 사용액이 그대로고, `transfer_hold` 1행과 `TransferHeld`가 같은 커밋에 남는다. 보류 저장이 실패하면 ERROR다 |
+| 같은 고객의 동시 요청에서 뒤 요청의 훅 C가 앞 요청의 커밋 결과를 본다 |
+| 보류 건을 두 번 실행해도 기표는 1회다. 실행 시점 잔액 부족·계좌 정지면 `FAILED`다 |
+| 예약·자동이체와 보류 건 실행은 훅 C를 지나지 않는다 |
+
+## 10. 범위 밖
+
+- **타행이체 보류** — 타행이체는 `execute()`를 지나지 않습니다(정책 5).
+- **예약·자동이체 보류** — 실행 시점에 고객이 화면을 조작하지 않아 판정할 행동이 없습니다.
+- **보류 중 한도 예약** — 실행 시점에 다시 검사합니다. 한도를 되돌리는 계약이 아직 없습니다(#657).
