@@ -15,6 +15,7 @@ import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
+import com.shinhan.corebank.transfer.api.RecentTransferQuery;
 import com.shinhan.corebank.transfer.api.TransferHoldContext;
 import com.shinhan.corebank.transfer.api.TransferHoldDecision;
 import com.shinhan.corebank.transfer.api.TransferHoldPolicy;
@@ -40,6 +41,13 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -101,6 +109,9 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
 
     @Autowired
     private Clock clock;
+
+    @Autowired
+    private RecentTransferQuery recentTransferQuery;
 
     @Autowired
     private BusinessDateGate businessDateGate;
@@ -402,6 +413,53 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
 
         assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
         assertThat(received).isEmpty();
+    }
+
+    @Test
+    @DisplayName("[훅 C] 같은 고객의 요청 둘이 겹치면 뒤 요청은 한도 락에서 기다렸다가, 훅에서 앞 요청이 커밋한 SUCCESS를 본다")
+    void holdPolicy_secondRequestSeesFirstRequestsCommit() throws Exception {
+        CountDownLatch firstInHook = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        AtomicBoolean isFirst = new AtomicBoolean(true);
+        List<Integer> seenCounts = new CopyOnWriteArrayList<>();
+        TransferHoldPolicy counting = holdPolicy(1, context -> {
+            seenCounts.add(recentTransferQuery
+                    .aggregateSucceeded(
+                            context.customerId(),
+                            context.depositAccountNumber(),
+                            context.requestedAt().minusMinutes(10))
+                    .count());
+            if (isFirst.getAndSet(false)) {
+                firstInHook.countDown();
+                awaitQuietly(releaseFirst);
+            }
+            return TransferHoldDecision.proceed();
+        });
+        TransferExecutionService service = serviceWithHoldPolicies(List.of(counting));
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<TransferResult> first = executor.submit(() -> service.execute(immediateCommand(30000L)));
+            assertThat(firstInHook.await(10, TimeUnit.SECONDS)).isTrue();
+            Future<TransferResult> second = executor.submit(() -> service.execute(immediateCommand(30000L)));
+            // 직렬화가 깨졌다면 뒤 요청의 훅이 이 사이에 돌아 0건을 본다
+            Thread.sleep(500);
+            releaseFirst.countDown();
+
+            assertThat(first.get(30, TimeUnit.SECONDS).status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(second.get(30, TimeUnit.SECONDS).status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        } finally {
+            releaseFirst.countDown();
+            executor.shutdownNow();
+        }
+        assertThat(seenCounts).containsExactly(0, 1);
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private static TransferHoldPolicy holdPolicy(

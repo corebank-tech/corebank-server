@@ -381,6 +381,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             transferLimitPort.checkAndReserve(command.customerId(), command.amount());
 
             // [훅 C] 한도 적립이 잡은 고객 행 락을 쥔 채 판정한다. 같은 고객의 즉시이체가 판정부터 커밋까지 줄을 선다.
+            // 이 앞에 일반 SELECT를 두지 않는다. REPEATABLE READ 스냅샷이 락 대기 전에 고정되면 앞 요청의 커밋이 안 보인다.
             decideHold(command, draft);
 
             // 계좌 락을 transfer 행 INSERT보다 먼저 잡는다. INSERT는 withdrawal_account_id·
