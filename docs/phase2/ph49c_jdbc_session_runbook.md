@@ -65,27 +65,53 @@ k6는 앱 EC2와 **다른 기기**에서 실행한다. P6의 Windows Git Bash에
 cd ~/Intellij-workspace/corebank-server
 ls perf/k6/load.js
 k6 version
-BASE_URL='https://api.corebank.cloud/api/v1'
+BASE_URL='https://<P5와 확인한 기존 ALB 접속 주소>/api/v1'
 RESULT_DIR="../ph49c-c-results-$(date '+%Y%m%d-%H%M%S')"
 mkdir -p "$RESULT_DIR"
 printf '대상=%s\n결과 폴더=%s\n' "$BASE_URL" "$RESULT_DIR"
+if [[ "$(date +%z)" != '+0900' ]]; then
+  echo 'Git Bash 시간대가 KST(+0900)가 아닙니다. 시각대를 맞춘 뒤 다시 시작하세요.' >&2
+  return 1 2>/dev/null || exit 1
+fi
+{
+  k6 version
+  git rev-parse HEAD
+  git log -1 --format=%H -- perf/k6/load.js
+  git status --short -- perf/k6 perf/sql/verify_integrity.sql
+  sha256sum perf/k6/load.js perf/k6/lib/*.js perf/sql/verify_integrity.sql
+} | tee "$RESULT_DIR/source_provenance.txt"
 ```
 
-`BASE_URL`이 **확인한 기존 ALB 경로**인지 검사한다. 위 `RESULT_DIR`은 저장소 밖에 만든다. 같은 Git Bash에서 변수·함수를 이어서 사용한다. 새 터미널을 열었다면 변수와 함수를 다시 정의한다. 결과 폴더에는 세션 정보·오류 응답이 들어갈 수 있으므로 원본 JSON·로그를 Git이나 공개 채널에 올리지 않는다.
+`source_provenance.txt`의 checkout SHA·변경 상태·파일 해시·k6 버전을 결과에 기록한다. 수정된 소스가 있으면 B′와의 차이를 확인한 뒤 측정한다. 10/26 C의 `times.log`에는 `+0900`이 남아 있지만 당시 소스 상태와 k6 버전 출력은 보존되지 않았다. 10/29 재확인한 `load.js` 마지막 변경 커밋은 `f608e8effb499504d74bb5a9bd236a70df426b25`다. 실행자가 **10/26 k6를 처음 설치하고 이후 업데이트하지 않았음**을 확인했고, 10/29의 `k6 version` 출력은 `k6.exe v2.2.0 (commit/00a9a1b7f5, go1.26.5, windows/amd64)`이므로 이를 C 측정 버전으로 기록한다. 버전 출력은 사후 확인이며, 당시 로컬 checkout의 HEAD·변경 상태는 확인되지 않았다.
+
+10/26 C 측정에는 `https://api.corebank.cloud/api/v1`을 사용했다. **10/28 컷오버 뒤 S4에는 이 주소를 그대로 사용하지 않는다.** 새 운영 환경으로 향할 수 있으므로 P5와 기존 ALB로 접속할 주소 및 HTTPS 인증서 이름에 맞는 접속 방법을 먼저 정하고, 그 주소를 위 `BASE_URL`에 넣는다. 기존 ALB의 기본 DNS 이름으로 직접 HTTPS 접속하면 인증서 이름이 맞지 않을 수 있다. 인증서 검증을 끄거나 새 운영 주소에 부하를 보내는 방식으로 우회하지 않는다. 접속 주소가 확정되지 않으면 연결 점검부터 시작하지 않는다. 위 `RESULT_DIR`은 저장소 밖에 만든다. 같은 Git Bash에서 변수·함수를 이어서 사용한다. 새 터미널을 열었다면 변수와 함수를 다시 정의한다. 결과 폴더에는 세션 정보·오류 응답이 들어갈 수 있으므로 원본 JSON·로그를 Git이나 공개 채널에 올리지 않는다.
 
 짧은 연결 점검은 본측정과 분리해 저장한다. `setup()`에서 200개 고객 세션을 만들므로 20초 요청 구간보다 전체 실행 시간이 길 수 있다.
 
 ```bash
+printf '%s CHECK START\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" | tee -a "$RESULT_DIR/times.log"
 k6 run -e BASE_URL="$BASE_URL" -e RATE=1 -e DURATION=20s \
   -e MAX_VUS=200 -e SESSION_POOL=200 \
   --summary-trend-stats='avg,min,med,p(90),p(95),p(99),max' \
   --summary-export="$RESULT_DIR/check_summary.json" \
   perf/k6/load.js 2>&1 | tee "$RESULT_DIR/check.log"
 status=${PIPESTATUS[0]}
+printf '%s CHECK END exit=%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$status" | tee -a "$RESULT_DIR/times.log"
 printf 'check exit=%s\n' "$status"
 ```
 
 `transfer_duration`, `transfer_success`, `iterations`가 출력됐는지, 인증 오류와 HTTP 실패가 없는지 확인한다. **k6 종료 코드 0만으로 개별 요청 성공을 뜻하지 않는다.** 점검 결과는 C의 4회 통계에 넣지 않는다.
+
+**S4에서는 예열·본측정 전에**, 점검 직후 기존 RDS의 MySQL CLI에서 아래 쿼리를 실행한다. `<점검 시작 시각 KST>`에는 `times.log`의 `CHECK START` 시각을 `YYYY-MM-DD HH:MM:SS` 형식으로 넣는다. MySQL 세션 시각대가 `Asia/Seoul`인지 먼저 확인한다.
+
+```sql
+SELECT @@session.time_zone, NOW();
+SELECT COUNT(*) AS new_sessions
+FROM SPRING_SESSION
+WHERE CREATION_TIME >= UNIX_TIMESTAMP('<점검 시작 시각 KST>') * 1000;
+```
+
+`setup()`의 로그인 세션 약 200개가 기존 RDS에 새로 생겼는지 **즉시** 확인한다. 세션이 만료·정리되기 전에 조회해야 하며, 다른 로그인도 건수에 섞일 수 있으므로 이 값만으로 경로를 단정하지 않는다. 점검 로그의 세션 생성 결과와 기존 ALB 대상 그룹·EC2의 `DB_HOST` 대조 결과를 함께 확인한다. 새 세션이 확인되지 않거나 경로가 불명확하면 예열·본측정을 중단하고 `BASE_URL`을 다시 확인한다.
 
 ## 3. 예열 1회
 
@@ -115,6 +141,10 @@ printf '%s WARMUP END exit=%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$status" |
 ```bash
 run_level() {
   local run="$1" rate="$2" name="c_run${1}_rate${2}" prefix
+  if [[ "$(date +%z)" != '+0900' ]]; then
+    echo 'Git Bash 시간대가 KST(+0900)가 아니므로 측정을 중단합니다.' >&2
+    return 1
+  fi
   prefix="$RESULT_DIR/$name"
   if [[ -e "${prefix}_summary.json" || -e "${prefix}_samples.json" || -e "${prefix}.log" ]]; then
     echo "기존 파일이 있어 중단: $prefix" >&2
@@ -143,6 +173,8 @@ run_round() {
 ```
 
 `run_level`이 수준별 **START·END 시각과 k6 종료 코드**를 `times.log`에 자동으로 적는다. `run_round`는 이를 1→2→3→5→10/s 순서로 호출하는 재실행용 묶음 함수다. **한 회차가 끝날 때마다 §5 정합성 검증을 마친 다음 다음 회차를 시작한다.** Git Bash에서 재측정할 때의 실행 순서는 다음과 같다. 2026-10-26의 개별 회차를 모두 이 함수로 실행했다는 뜻은 아니며, 당시 구간은 아래 `times.log` 기록값을 기준으로 한다.
+
+`times.log`의 START·END는 `setup()` 및 종료 대기를 포함한 **k6 프로세스 경계**다. 3분 고정 도착률 시나리오의 정확한 경계와 같지 않다. 10/26 보존된 각 수준 로그에는 `duration: 3m0s`, 기본 `gracefulStop: 30s`가 표시된다. 재측정에도 실행 로그와 원시 샘플의 시각을 함께 보존하고, 3분 도착률 구간의 결과와 프로세스 전체 시간 범위를 구분한다.
 
 1회차:
 
@@ -176,7 +208,7 @@ grep -E ' (START|END) c_run4_rate' "$RESULT_DIR/times.log"
 
 ## 5. 회차별 정합성 SQL
 
-본측정 **각 회차의 다섯 수준을 모두 마친 뒤** Git Bash의 `times.log`에서 확인한 첫 START부터 마지막 END까지를 검사 구간으로 쓴다. 요청률별로 다섯 번 검사하는 절차가 아니다. 아래는 2026-10-26에 기록된 실제 시각이다. 재측정 시에는 새 `times.log` 값을 쓴다.
+본측정 **각 회차의 다섯 수준을 모두 마친 뒤** Git Bash의 `times.log`에서 확인한 첫 START부터 마지막 END까지를 넓은 정합성 검사 구간으로 쓴다. 이 구간은 `setup()`과 종료 대기에 완료된 이체를 포함할 수 있어 k6의 180초 도착률 구간과 같은 모집단이 아니다. k6 성공 건수와 SQL `success_count`의 차이는 경계 시각·다른 이체·응답 실패 여부를 추가 대조한다. 요청률별로 다섯 번 검사하는 절차가 아니다. 아래는 2026-10-26에 기록된 실제 시각이다. 재측정 시에는 새 `times.log` 값을 쓴다.
 
 | 회차 | `FROM_AT` (KST) | `TO_AT` (KST) | MySQL CLI에서 실행한 파일 |
 |---|---|---|---|
@@ -185,7 +217,13 @@ grep -E ' (START|END) c_run4_rate' "$RESULT_DIR/times.log"
 | 3 | 2026-10-26 16:09:22 | 2026-10-26 16:26:29 | `/tmp/ph49c_verify_run3.sql` |
 | 4 | 2026-10-26 16:49:26 | 2026-10-26 17:06:59 | `/tmp/ph49c_verify_run4.sql` |
 
-`perf/sql/verify_integrity.sql`의 원본은 유지하고, 기존 EC2의 `/home/ubuntu/verify_integrity.sql`에서 회차별 사본을 만든다. 서버 파일이 저장소의 최신 SQL과 같은지 확인한다. 특히 `broken_ledger_pairs`, `balance_mismatches`, `limit_usage_mismatches`, `total_transfers`가 들어 있어야 한다.
+`perf/sql/verify_integrity.sql`의 원본은 유지하고, 기존 EC2의 `/home/ubuntu/verify_integrity.sql`에서 회차별 사본을 만든다. **측정 시점 소스 커밋과 두 파일의 SHA-256**을 기록하고 해시가 일치하는지 비교한다. 별칭 검색만으로 SQL 내용의 동일성을 판정하지 않는다. 10/26 이전 저장소의 마지막 SQL 변경 커밋은 `e21f5b3752d42f865038f26dc0af86124d0c965c`였으나, 당시 EC2 파일 해시는 보존되지 않아 과거의 파일 동일성을 소급해 확정할 수 없다.
+
+Git Bash 저장소 루트에서 `git rev-parse HEAD`, `git log -1 --format=%H -- perf/sql/verify_integrity.sql`, `sha256sum perf/sql/verify_integrity.sql`을 실행한다. EC2 SSM 셸에서는 아래 해시를 구해 **64자리 SHA-256**을 비교한다. 다르면 사용해야 할 버전을 확인한 뒤 검사한다.
+
+```bash
+sudo -n sha256sum /home/ubuntu/verify_integrity.sql
+```
 
 다음은 **EC2 SSM 셸**에서 실행하는 예시다. `RUN`, `FROM_AT`, `TO_AT`은 해당 회차의 실제 `times.log` 시각으로 바꾼다. 아래 시각은 2026-10-26 **1회차 예시**이고 재측정에 그대로 쓰지 않는다.
 
@@ -242,7 +280,209 @@ sudo -n docker logs \
 
 `head -80`은 **발췌**다. 전체 구간의 오류 건수나 DB의 `ERROR` 개별 원인을 증명하지 않는다. 2026-10-26 C 측정의 10/s 서버 로그에서는 Hikari 메인 풀 `total=10, active=10, idle=0` 및 3초 커넥션 획득 타임아웃이 반복됐지만, 커넥션 점유가 길어진 상위 원인은 이 로그만으로 확정되지 않았다. 원문 로그에 고객 정보·SQL·토큰이 있으면 공유 전에 가린다.
 
-RDS와 EC2 CloudWatch 조회 명령 및 집계 한계는 [C 결과의 RDS 명령](ph49c_jdbc_session_results.md#rds-요청률별-모니터링-조회-명령어), [EC2 명령](ph49c_jdbc_session_results.md#ec2-전체-회차-모니터링-조회-명령어)을 따른다. **RDS는 요청률별 60초 표본**, **EC2는 실제 표본 간격이 약 5분이라 회차 전체**로 정리했다. RDS `DatabaseConnections`는 RDS 전체 연결 수이지 Hikari 활성·대기 연결 수가 아니다. 잠금 대기와 세션 테이블 부하는 별도 지표 없이는 판정하지 않는다.
+아래에 10/s Hikari 로그 집계 및 RDS·EC2 CloudWatch 조회 명령을 둔다. **RDS는 요청률별 60초 표본**, **EC2는 실제 표본 간격이 약 5분이라 회차 전체**로 정리했다. RDS `DatabaseConnections`는 RDS 전체 연결 수이지 Hikari 활성·대기 연결 수가 아니다. 잠금 대기와 세션 테이블 부하는 별도 지표 없이는 판정하지 않는다.
+
+### 6-1. 10/s Hikari 로그 집계
+
+[C 결과의 10/s Hikari 로그 표](ph49c_jdbc_session_results.md#10s-hikari-커넥션-획득-타임아웃-로그-수)에서 전체 문구·Hikari `message`·`Caused by:` 포함 줄을 센 명령이다. **기존 앱 EC2의 Ubuntu 셸**에서 실행한다.
+
+```bash
+set -euo pipefail
+for window in \
+  '1 2026-10-26T13:47:21+09:00 2026-10-26T13:50:49+09:00' \
+  '2 2026-10-26T15:03:22+09:00 2026-10-26T15:06:49+09:00' \
+  '3 2026-10-26T16:23:01+09:00 2026-10-26T16:26:29+09:00' \
+  '4 2026-10-26T17:03:25+09:00 2026-10-26T17:06:59+09:00'
+do
+  read -r run start_at end_at <<< "$window"
+  sudo -n docker logs --since "$start_at" --until "$end_at" corebank-server 2>&1 |
+    awk -v run="$run" '
+      /Connection is not available/ { all++ }
+      /"message":"HikariPool-1 - Connection is not available/ { hikari_message++ }
+      /Caused by:.*Connection is not available/ { caused_by++ }
+      END {
+        printf "%s회차 10/s | 전체 문구 줄=%d | Hikari message 줄=%d | Caused by 포함 줄=%d\n",
+          run, all, hikari_message, caused_by
+      }
+    '
+  status=${PIPESTATUS[0]}
+  if (( status != 0 )); then echo "${run}회차 로그 조회 실패: exit=$status" >&2; break; fi
+done
+```
+
+같은 결과 절의 고유 `correlationId` 수와 ID 없는 메시지 줄을 센 명령이다. 같은 EC2 Ubuntu 셸에서 동일한 시간 구간을 조회한다.
+
+```bash
+set -euo pipefail
+for window in \
+  '1 2026-10-26T13:47:21+09:00 2026-10-26T13:50:49+09:00' \
+  '2 2026-10-26T15:03:22+09:00 2026-10-26T15:06:49+09:00' \
+  '3 2026-10-26T16:23:01+09:00 2026-10-26T16:26:29+09:00' \
+  '4 2026-10-26T17:03:25+09:00 2026-10-26T17:06:59+09:00'
+do
+  read -r run start_at end_at <<< "$window"
+  sudo -n docker logs --since "$start_at" --until "$end_at" corebank-server 2>&1 |
+    awk -v run="$run" '
+      /"message":"HikariPool-1 - Connection is not available/ {
+        messages++
+        if (match($0, /"correlationId":"[^"]*"/)) {
+          id = substr($0, RSTART + 17, RLENGTH - 18)
+          if (id != "") seen[id] = 1
+          else missing++
+        } else missing++
+      }
+      END {
+        for (id in seen) unique++
+        printf "%s회차 10/s | Hikari 메시지=%d | 고유 correlationId=%d | ID 없음=%d\n",
+          run, messages, unique, missing
+      }
+    '
+  status=${PIPESTATUS[0]}
+  if (( status != 0 )); then echo "${run}회차 로그 조회 실패: exit=$status" >&2; break; fi
+done
+```
+
+### 6-2. RDS 요청률별 모니터링 조회 명령어
+
+AWS CloudShell에서 실행한다. 아래 `WINDOWS`는 2026-10-26 C 측정의 실제 구간이며, S4에서는 새 `times.log`에 맞춰 모두 교체한다. 입력 시각은 UTC, 출력의 최대값 시각은 KST다. CloudWatch의 60초 표본은 구간 경계에서 일부 겹칠 수 있다.
+
+```bash
+DB_ID='corebank-database'
+set -euo pipefail
+
+while read -r run rate start_at end_at; do
+  echo
+  echo "### ${run}회차 ${rate}/s RDS 지표"
+  echo '| 지표 | 표본 수 | 반환 표본 범위 | 구간 평균 | 최대값 (KST) |'
+  echo '|---|---:|---:|---:|---:|'
+
+  for metric in CPUUtilization DatabaseConnections ReadIOPS WriteIOPS; do
+    aws cloudwatch get-metric-statistics \
+      --namespace AWS/RDS \
+      --metric-name "$metric" \
+      --dimensions Name=DBInstanceIdentifier,Value="$DB_ID" \
+      --start-time "$start_at" \
+      --end-time "$end_at" \
+      --period 60 \
+      --statistics Average Maximum \
+      --output json |
+    jq -r --arg metric "$metric" '
+      .Datapoints as $d |
+      if ($d | length) == 0 then
+        [$metric, "0", "표본 없음", "—", "—", "—"] | @tsv
+      else
+        ([$d[].Average] | min) as $low |
+        ([$d[].Average] | max) as $high |
+        ([$d[].Average] | add / length) as $mean |
+        ($d | max_by(.Maximum)) as $peak |
+        [
+          $metric,
+          ($d | length | tostring),
+          "\($low * 10 | round / 10)~\($high * 10 | round / 10)",
+          "\($mean * 10 | round / 10)",
+          "\($peak.Maximum * 10 | round / 10)",
+          $peak.Timestamp
+        ] | @tsv
+      end
+    ' |
+    while IFS=$'\t' read -r name count range mean peak timestamp; do
+      if [[ "$timestamp" == "—" ]]; then
+        echo "| $name | $count | $range | $mean | $peak |"
+      else
+        peak_kst=$(TZ=Asia/Seoul date -d "$timestamp" '+%H:%M')
+        echo "| $name | $count | $range | $mean | $peak ($peak_kst) |"
+      fi
+    done
+  done
+done <<'WINDOWS'
+1 1 2026-10-26T04:26:24Z 2026-10-26T04:29:48Z
+1 2 2026-10-26T04:32:09Z 2026-10-26T04:35:32Z
+1 3 2026-10-26T04:40:01Z 2026-10-26T04:43:25Z
+1 5 2026-10-26T04:43:29Z 2026-10-26T04:46:52Z
+1 10 2026-10-26T04:47:21Z 2026-10-26T04:50:49Z
+2 1 2026-10-26T05:49:43Z 2026-10-26T05:53:08Z
+2 2 2026-10-26T05:53:08Z 2026-10-26T05:56:32Z
+2 3 2026-10-26T05:56:32Z 2026-10-26T05:59:54Z
+2 5 2026-10-26T05:59:54Z 2026-10-26T06:03:22Z
+2 10 2026-10-26T06:03:22Z 2026-10-26T06:06:49Z
+3 1 2026-10-26T07:09:22Z 2026-10-26T07:12:48Z
+3 2 2026-10-26T07:12:48Z 2026-10-26T07:16:13Z
+3 3 2026-10-26T07:16:13Z 2026-10-26T07:19:36Z
+3 5 2026-10-26T07:19:36Z 2026-10-26T07:23:01Z
+3 10 2026-10-26T07:23:01Z 2026-10-26T07:26:29Z
+4 1 2026-10-26T07:49:26Z 2026-10-26T07:52:56Z
+4 2 2026-10-26T07:52:57Z 2026-10-26T07:56:25Z
+4 3 2026-10-26T07:56:25Z 2026-10-26T07:59:52Z
+4 5 2026-10-26T07:59:52Z 2026-10-26T08:03:25Z
+4 10 2026-10-26T08:03:25Z 2026-10-26T08:06:59Z
+WINDOWS
+```
+
+### 6-3. EC2 전체 회차 모니터링 조회 명령어
+
+AWS CloudShell에서 실행한다. 아래 구간과 인스턴스 ID는 2026-10-26 C 측정 값이므로 S4에서는 새 대상·`times.log` 시각으로 교체한다. 조회 시각은 UTC, 출력의 최대값 시각은 KST다. CPU·네트워크는 `--period 60`, CPU 크레딧은 `--period 300`으로 요청했다. C에서 실제 CPU·네트워크 반환 시각은 약 5분 간격이었다.
+
+```bash
+INSTANCE_ID='i-0c861fe2dc634f3af'
+set -euo pipefail
+
+for window in \
+  '1 2026-10-26T04:26:00Z 2026-10-26T04:51:00Z' \
+  '2 2026-10-26T05:49:00Z 2026-10-26T06:07:00Z' \
+  '3 2026-10-26T07:09:00Z 2026-10-26T07:27:00Z' \
+  '4 2026-10-26T07:49:00Z 2026-10-26T08:07:00Z'
+do
+  read -r run start_at end_at <<< "$window"
+
+  echo
+  echo "### ${run}회차 EC2 지표"
+  echo '| 지표 | 반환 표본 범위 | 구간 평균 | 최대값 (KST) |'
+  echo '|---|---:|---:|---:|'
+
+  for metric in CPUUtilization NetworkIn NetworkOut NetworkPacketsIn NetworkPacketsOut CPUCreditUsage CPUCreditBalance; do
+    case "$metric" in
+      CPUCreditUsage|CPUCreditBalance) period=300 ;;
+      *) period=60 ;;
+    esac
+
+    aws cloudwatch get-metric-statistics \
+      --namespace AWS/EC2 \
+      --metric-name "$metric" \
+      --dimensions Name=InstanceId,Value="$INSTANCE_ID" \
+      --start-time "$start_at" \
+      --end-time "$end_at" \
+      --period "$period" \
+      --statistics Average Maximum \
+      --output json |
+    jq -r --arg metric "$metric" --arg period "$period" '
+      .Datapoints as $d |
+      if ($d | length) == 0 then
+        [$metric + " (" + $period + "초)", "표본 없음", "—", "—", "—"] | @tsv
+      else
+        ([$d[].Average] | min) as $low |
+        ([$d[].Average] | max) as $high |
+        ([$d[].Average] | add / length) as $mean |
+        ($d | max_by(.Maximum)) as $peak |
+        [
+          $metric + " (" + $period + "초)",
+          "\($low * 10 | round / 10)~\($high * 10 | round / 10)",
+          "\($mean * 10 | round / 10)",
+          "\($peak.Maximum * 10 | round / 10)",
+          $peak.Timestamp
+        ] | @tsv
+      end
+    ' |
+    while IFS=$'\t' read -r name range mean peak timestamp; do
+      if [[ "$timestamp" == "—" ]]; then
+        echo "| $name | $range | $mean | $peak |"
+      else
+        peak_kst=$(TZ=Asia/Seoul date -d "$timestamp" '+%H:%M')
+        echo "| $name | $range | $mean | $peak ($peak_kst) |"
+      fi
+    done
+  done
+done
+```
 
 ## 7. 결과 정리와 판정
 
