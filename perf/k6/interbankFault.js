@@ -10,18 +10,26 @@ import { getRequiredBaseUrl } from './lib/env.js';
 // 당행 transfer_duration p95·p99 와 처리량을 비교한다. 비교는 이 스크립트끼리만 한다 — load.js 와는 배경 부하가 다르다.
 //
 // EC2(B 단계)는 9301 이 닫혀 있어 스위치를 컨테이너 안에서 켠다(mock_external_server.md §4). 부하 생성기는 대상과 다른 기기다.
+// 측정 대상은 기존 EC2 의 ALB 다. 인증서가 corebank.cloud 용이라 ALB DNS 로 붙으면 --insecure-skip-tls-verify 가 필요하다.
+// 같은 EC2 의 다른 트랙 측정(PH-30 S4 등)과 겹치지 않게 돌린다 — 겹친 구간은 기준선에서 뺀다(#729).
 //
-//   BASE="https://<측정 대상>/api/v1"
+//   BASE="https://<기존 ALB DNS>/api/v1"
 //   STATS="avg,min,med,p(90),p(95),p(99),max"
+//   # 앱 이미지 태그(커밋 SHA)를 결과와 함께 남긴다. 서킷 HALF_OPEN(#759) 포함 여부에 따라 timeout · rejected 비율이 달라진다.
+//   docker inspect --format '{{.Config.Image}}' corebank-server
 //   docker exec corebank-mock-external wget -qO- --post-data='' 'http://localhost:9301/faults?mode=NONE'
-//   k6 run -e BASE_URL="$BASE" -e RATE=5 -e FAULT_MODE=NONE \
+//   docker exec corebank-mock-external wget -qO- 'http://localhost:9301/faults'   # FAULT_MODE 와 같은지 실행 직전에 본다
+//   k6 run --insecure-skip-tls-verify -e BASE_URL="$BASE" -e RATE=5 -e FAULT_MODE=NONE \
 //     --summary-trend-stats="$STATS" --summary-export=fault_none.json perf/k6/interbankFault.js
 //   docker exec corebank-mock-external wget -qO- --post-data='' 'http://localhost:9301/faults?mode=NO_RESPONSE'
-//   k6 run -e BASE_URL="$BASE" -e RATE=5 -e FAULT_MODE=NO_RESPONSE \
+//   docker exec corebank-mock-external wget -qO- 'http://localhost:9301/faults'
+//   k6 run --insecure-skip-tls-verify -e BASE_URL="$BASE" -e RATE=5 -e FAULT_MODE=NO_RESPONSE \
 //     --summary-trend-stats="$STATS" --summary-export=fault_no_response.json perf/k6/interbankFault.js
 //   docker exec corebank-mock-external wget -qO- --post-data='' 'http://localhost:9301/faults?mode=NONE'
 //
-// 끝나면 남은 TIMEOUT 을 조회거래가 확정할 때까지(1분 주기) 기다린 뒤 정합성을 본다.
+// 끝나면 남은 TIMEOUT 을 조회거래가 확정할 때까지(1분 주기) 기다린 뒤 정합성을 본다. 남아 있으면 한도 적립이 성공 금액보다 크게 나온다.
+// perf/sql/verify_integrity.sql 은 쓰지 않는다. 타행 성공은 원장이 출금 1행뿐이라 원장 짝 검사에서 전부 깨진 짝으로 잡힌다.
+// 자금 정합성은 #711 PR-b 의 검사로 보고, 타행 건은 금액 대역(29876 + 순번)으로 가려낸다.
 // 로컬은 -e FAULT_ADMIN_URL=http://localhost:9301 을 주면 스위치를 setup() 에서 켜고 teardown() 에서 NONE 으로 되돌린다.
 
 const FAULT_MODES = ['NONE', 'NO_RESPONSE'];
