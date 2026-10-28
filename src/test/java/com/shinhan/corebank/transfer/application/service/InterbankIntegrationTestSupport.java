@@ -224,8 +224,17 @@ abstract class InterbankIntegrationTestSupport extends IntegrationTestSupport {
     }
 
     void setFault(String mode) throws IOException, InterruptedException {
+        switchFault("mode=" + mode);
+    }
+
+    // 모의 대외기관은 요청을 장부에 남긴 뒤 늦게 답한다 — 상대는 처리했는데 응답만 늦는 상황이다.
+    void setDelay(long delayMs) throws IOException, InterruptedException {
+        switchFault("mode=DELAY&delayMs=" + delayMs);
+    }
+
+    private void switchFault(String query) throws IOException, InterruptedException {
         http.send(
-                HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + server.adminPort() + "/faults?mode=" + mode))
+                HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + server.adminPort() + "/faults?" + query))
                         .POST(HttpRequest.BodyPublishers.noBody())
                         .build(),
                 HttpResponse.BodyHandlers.discarding());
