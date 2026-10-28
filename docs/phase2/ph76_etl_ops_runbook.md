@@ -6,20 +6,21 @@
 
 ## 0. 전제와 미정 값
 
-- VM: Ubuntu 22.04, 2코어 · RAM 15GB · 디스크 55GB(약 46GB 여유), Docker 설치, `student` 계정으로 `sudo` 가능. 강사님이 알려 준 설치 패키지 목록에 Java가 없어서 ETL은 컨테이너로 실행한다(VM에서 `java -version`으로 한 번 확인한다).
-- 레플리카는 10/27 복제 시작(P2 PH-70-②) 뒤에 생긴다. 그 전에는 덤프를 적재한 DB가 레플리카 역할을 한다(Plan B).
-- VM은 다른 팀과 공용일 수 있다. 포트를 쓰기 전에 `ss -ltn`으로 비어 있는지 보고, 남의 컨테이너·포트는 건드리지 않는다.
+- VM: Ubuntu 22.04, 2코어 · RAM 약 14GB · 디스크 55GB(약 46GB 여유), Docker 설치, `student` 계정으로 `sudo` 가능(비밀번호 입력). 설치 패키지 목록에 Java가 없어서 ETL은 컨테이너로 실행한다(`java -version`으로 없음을 확인했다).
+- 레플리카는 P2의 복제 시작(PH-70-②, 10/28 예정) 뒤에 생긴다. 그 전에는 덤프를 적재한 DB가 레플리카 역할을 한다(Plan B).
+- 이 VM은 우리 팀 전용이다(강사님이 팀마다 IP를 따로 준다). 그래도 포트를 쓰기 전에 `ss -ltn`으로 비어 있는지 본다.
+- 명령은 한 줄씩 붙여 넣는다. `\`로 줄을 나눈 여러 줄 명령을 그대로 붙이면 첫 줄만 실행되는 일이 있었다.
 
 | 값 | 상태 |
 | --- | --- |
-| 경계일 `ETL_CUTOFF_BOUNDARY_DATE` | 운영 첫 COB(2026-10-26 23:30)가 `business_date_cutoff`에 남기는 첫 `base_date`. 확인 뒤 채운다 |
-| VM 시간대 | 미확인. `timedatectl`로 확인하고 §6의 시각을 맞춘다 |
+| 경계일 `ETL_CUTOFF_BOUNDARY_DATE` | **2026-10-26.** 운영 `business_date_cutoff`의 가장 이른 `CLOSED` 행(10/27 아침 조회). 적재 직전에 한 번 더 확인한다 |
+| VM 시간대 | **KST(`Asia/Seoul`)** 확인함. §7의 시각을 그대로 쓴다 |
 | 덤프 이동 방법 | 미정. 레플리카 복제가 시작되면 필요 없다 |
 
 ## 1. 구성
 
-- 레플리카 역할 MySQL(원본 복사본): 포트 3306
-- 마트 MySQL(`info_mart`): 포트 3307. `super_read_only`가 인스턴스 전체에 걸리므로 레플리카와 반드시 다른 인스턴스다.
+- 레플리카 역할 MySQL(원본 복사본): 포트 3306. 컨테이너 `info-replica-mysql`, 복제 옵션은 P2가 정한다(§2-1).
+- 마트 MySQL(`info_mart`): 포트 3307. 컨테이너 `info-mart-mysql`. `super_read_only`가 인스턴스 전체에 걸리므로 레플리카와 반드시 다른 인스턴스다.
 - ETL: 일회성 컨테이너(`--rm`)가 jar를 실행하고 종료한다. 서비스로 상주하지 않는다.
 - 두 MySQL은 `127.0.0.1`에만 연다. 외부에는 정보계 API(#704)만 나간다.
 
@@ -31,19 +32,42 @@ sudo mkdir -p /var/lib/info-mart
 docker run -d --name info-mart-mysql --restart unless-stopped \
   -e MYSQL_ROOT_PASSWORD_FILE=/run/secrets/root_pw \
   -v /var/lib/info-mart:/var/lib/mysql \
-  -v /etc/info-etl/mart-root.pw:/run/secrets/root_pw:ro \
+  -v /etc/info-etl/root.pw:/run/secrets/root_pw:ro \
   -p 127.0.0.1:3307:3306 \
   mysql:8.4 --innodb-buffer-pool-size=1G --max-allowed-packet=256M --character-set-server=utf8mb4
 ```
 
-- 루트 비밀번호 파일 `/etc/info-etl/mart-root.pw`는 먼저 만든다(권한 600). 값은 §4에서 만든 방식으로 생성하고 화면에 출력하지 않는다.
+- 루트 비밀번호 파일 `/etc/info-etl/root.pw`는 먼저 만든다(권한 600). §3의 비밀 파일 생성 명령으로 만들고 화면에 출력하지 않는다.
+- 컨테이너가 처음 뜰 때는 임시 서버를 먼저 띄웠다가 다시 시작한다. 로그에 `port: 3306  MySQL Community Server`가 있는 `ready for connections` 줄이 나온 뒤에 접속한다(`port: 0`인 줄은 임시 서버다).
 - 마트는 로컬 측정에서 약 1.3GB였다. 버퍼 풀 1GB로 시작하고 VM의 다른 컨테이너 사용량을 보며 조정한다.
-- 스키마 적용(DB 이름은 `info_mart`):
+- 스키마 적용(DB 이름은 `info_mart`). 스키마 파일은 노트북에만 있으므로 먼저 VM으로 올린다. 파일을 올리는 것과 DB에 적용하는 것은 별개 단계다.
 
 ```bash
-docker exec -i info-mart-mysql sh -c 'mysql -uroot -p"$(cat /run/secrets/root_pw)" -e "CREATE DATABASE IF NOT EXISTS info_mart DEFAULT CHARACTER SET utf8mb4"'
-docker exec -i info-mart-mysql sh -c 'mysql -uroot -p"$(cat /run/secrets/root_pw)" info_mart' < src/infoEtl/resources/mart-schema.sql
+# 노트북에서
+scp src/infoEtl/resources/mart-schema.sql student@<VM>:/tmp/mart-schema.sql
 ```
+
+```bash
+# VM에서
+docker exec -i info-mart-mysql sh -c 'mysql -uroot -p"$(cat /run/secrets/root_pw)" -e "CREATE DATABASE IF NOT EXISTS info_mart DEFAULT CHARACTER SET utf8mb4"'
+docker exec -i info-mart-mysql sh -c 'mysql -uroot -p"$(cat /run/secrets/root_pw)" info_mart' < /tmp/mart-schema.sql
+docker exec -i info-mart-mysql sh -c 'mysql -uroot -p"$(cat /run/secrets/root_pw)" info_mart -e "SHOW TABLES"'   # 테이블 3개가 나와야 한다
+```
+
+### 2-1. 레플리카 역할 MySQL (3306)
+
+서버만 띄운다. 복제 옵션(서버 ID, GTID, binlog 형식, `super_read_only`)은 P2가 정한 값에 맞춘다. 옵션을 바꿀 때는 컨테이너를 지우고 같은 데이터 폴더(`/var/lib/info-replica`)로 다시 띄운다.
+
+```bash
+umask 077; openssl rand -base64 24 | tr -d '\n' > /etc/info-etl/replica-root.pw
+sudo mkdir -p /var/lib/info-replica
+docker run -d --name info-replica-mysql --restart unless-stopped -e MYSQL_ROOT_PASSWORD_FILE=/run/secrets/root_pw -v /var/lib/info-replica:/var/lib/mysql -v /etc/info-etl/replica-root.pw:/run/secrets/root_pw:ro -p 127.0.0.1:3306:3306 mysql:8.4 --innodb-buffer-pool-size=2G --max-allowed-packet=256M --character-set-server=utf8mb4
+```
+
+- `docker run`은 한 줄로 붙여 넣는다.
+- 버퍼 풀 2GB는 시작값이다(RAM 약 14GB 중 마트 컨테이너가 약 0.5GB를 쓰는 상태에서 정했다). 정보계 API와 모니터링이 올라오면 `docker stats`로 보고 조정한다.
+- 기동 확인은 마트와 같은 방식이다(`docker ps`, 로그의 `port: 3306` 줄, `ss -ltn`).
+- 레플리카에 원본 테이블이 생기기 전에는 `etl_replica_reader`의 `GRANT`가 실패한다. 테이블이 생긴 뒤에 §3의 레플리카용 SQL을 적용한다.
 
 ## 3. 계정 3개
 
@@ -58,8 +82,12 @@ docker exec -i info-mart-mysql sh -c 'mysql -uroot -p"$(cat /run/secrets/root_pw
 ```bash
 umask 077
 sudo mkdir -p /etc/info-etl && sudo chown student /etc/info-etl
-for n in replica mart api; do openssl rand -base64 24 | tr -d '\n' > /etc/info-etl/$n.pw; done
+for n in root replica mart api; do openssl rand -base64 24 | tr -d '\n' > /etc/info-etl/$n.pw; done
+openssl rand -hex 32 | tr -d '\n' > /etc/info-etl/hmac.key
+ls -l /etc/info-etl && wc -c /etc/info-etl/*   # 권한 600, .pw는 32바이트, hmac.key는 64바이트
 ```
+
+- 파일 이름과 쓰임: `root.pw`는 마트 root, `replica.pw`는 `etl_replica_reader`, `mart.pw`는 `etl_mart_writer`, `api.pw`는 `info_api_reader`, `hmac.key`는 가명 키(§4). 레플리카 root 비밀번호는 `replica-root.pw`(§2-1)로 따로 둔다.
 
 - 만든 비밀번호는 출력하지 않는다. `CHANGE_ME`를 해당 비밀번호로 바꾼 임시 SQL 파일을 두 개(레플리카용, 마트용) 만들어 각 인스턴스에서 실행하고, 임시 파일은 `shred -u`로 지운다.
 - 적용 전에 임시 파일에 `CHANGE_ME`가 남지 않았는지 `grep -c CHANGE_ME`로 확인한다(0이어야 한다).
@@ -80,7 +108,7 @@ HMAC_KEY=<32바이트 이상>
 ETL_CUTOFF_BOUNDARY_DATE=<yyyy-MM-dd>
 ```
 
-- `HMAC_KEY`는 `openssl rand -hex 32`로 만든다. 키가 바뀌면 같은 계좌의 가명 키가 달라지므로 info_mart.md §3-3의 키 교체 절차를 따라야 한다. 분실하지 않게 팀의 비밀 보관 위치에 따로 둔다.
+- `HMAC_KEY` 값은 §3에서 만든 `/etc/info-etl/hmac.key`의 내용이다(`openssl rand -hex 32`). 키가 바뀌면 같은 계좌의 가명 키가 달라지므로 info_mart.md §3-3의 키 교체 절차를 따라야 한다. 분실하지 않게 팀의 비밀 보관 위치에 따로 둔다.
 - `ETL_CUTOFF_BOUNDARY_DATE`는 `--auto`에 필요하다. 없으면 `--auto`는 종료 코드 2로 끝난다. 이 값은 §0의 경계일이 확인된 뒤에 채운다.
 
 ## 5. jar 빌드와 전달
@@ -89,7 +117,10 @@ ETL_CUTOFF_BOUNDARY_DATE=<yyyy-MM-dd>
 ./gradlew infoEtlJar                         # build/info-etl/info-etl.jar
 ssh student@<VM> 'sudo mkdir -p /opt/info-etl && sudo chown student /opt/info-etl'
 scp build/info-etl/info-etl.jar student@<VM>:/opt/info-etl/info-etl.jar
+shasum -a 256 build/info-etl/info-etl.jar    # 노트북의 해시. VM의 `sha256sum /opt/info-etl/info-etl.jar`와 같아야 한다
 ```
+
+- jar는 `dev`에 합쳐진 최신 코드로 빌드한다. 브랜치 코드로 빌드하면 최신 변경이 빠질 수 있다(작업 브랜치가 `dev`보다 뒤처져 있으면 실제로 그렇다).
 
 실행(공통 형태). 호스트에 Java가 없으므로 컨테이너로 한다.
 
@@ -166,4 +197,4 @@ journalctl -u info-etl.service -n 50 --no-pager   # 마지막 실행 결과
 - 레플리카와 같은 MySQL 인스턴스에 마트를 만들지 않는다.
 - 비밀번호·`HMAC_KEY`를 저장소, 로그, 명령 기록, 채팅에 남기지 않는다. `etl.env`의 권한은 600이다.
 - 마트 DDL 권한을 ETL 계정이나 정보계 API 계정에 주지 않는다.
-- 공용 VM의 다른 컨테이너·포트를 끄거나 바꾸지 않는다.
+- 마트(3307)와 레플리카(3306) 컨테이너·포트를 임의로 끄거나 바꾸지 않는다. 레플리카 옵션을 바꿀 때는 P2와 맞춘다.
