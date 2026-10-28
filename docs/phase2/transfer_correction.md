@@ -3,7 +3,7 @@
 > **정본입니다.** 이미 기표된 이체를 바로잡는 방법과, 결과를 모르는 이체를 다루는 규칙은 이 문서를 따릅니다.
 > 태스크 범위·기한은 [tasks.md](tasks.md) §PH-80, 용어는 [glossary.md](glossary.md) 9번 처리 불명 · 10번 조회거래 · 11번 정정 체인입니다.
 >
-> **대상**: P4 PH-33-②(타행 조회거래) · PH-36(보상 트랜잭션), 이체·원장 경로를 고치는 모든 PR의 리뷰어
+> **대상**: P4 PH-33-②(타행 조회거래) · PH-36(보상 트랜잭션 · 자금 정합성 §5), 이체·원장 경로를 고치는 모든 PR의 리뷰어
 
 ---
 
@@ -82,7 +82,77 @@ repost(원거래 거래번호, 고친 금액)   // 정상거래 — reverse 뒤�
 - [ ] "이미 처리됐나"를 조회로만 막지 않고 유니크 제약이나 락으로 막는다 (TOCTOU)
 - [ ] 원장·잔액 시각을 계좌 락을 쥔 뒤에 찍는다 (`occurred_at` 순서 계약, #545)
 
-## 5. 범위 밖 · 후속
+## 5. 타행 장애 뒤 자금 정합성 (PH-36)
+
+상대 은행이 늦게 답하거나, 답하지 않거나, 같은 답을 두 번 보내도 돈이 새거나 두 번 움직이지 않았는지 아래 4가지로 봅니다. 타행 원장은 고객 출금 1행만 남고, 실패로 확정되면 되돌림 입금 1행이 붙습니다([gl_journal_patterns.md](gl_journal_patterns.md) §3-5). `10200` 미결제타점권은 송신 때 대변으로 쌓였다가 확정되면 0이 됩니다.
+
+| | 검사 | 깨지면 |
+|---|---|---|
+| ① | 계좌 잔액 = 그 계좌 마지막 원장 `balance_after` | 원장 없이 잔액만 바뀌었다 |
+| ② | 거래별로 고객에게서 빠진 돈(출금 − 되돌림) = SUCCESS·TIMEOUT이면 송금액, ERROR면 0 | 실패했는데 돈을 안 돌려줬거나, 성공했는데 돌려줬다 |
+| ③ | 거래별 `10200` 순잔액 = TIMEOUT이면 −송금액, 확정됐으면 0 | 확정이 두 번 됐거나, 확정됐는데 미결제가 남았다 |
+| ④ | 출금은 거래번호당 최대 1행, 되돌림은 송신 뒤 실패(ERROR이면서 출금 있음)에만 정확히 1행 | 보상이 두 번 일어났다 |
+
+- **테스트**: `InterbankFaultScenarioTest`가 장애(응답 지연 · 무응답 · 중복응답 · 중복거래 `2001`)를 송신·조회 단계에 넣어 끝까지 돌리고, 중간과 끝에서 `FundIntegrityCheck`로 위 4가지를 봅니다. 테스트는 시작 잔액을 찍어 두므로 ②를 "시작 잔액 − 성공 = 현재 잔액 + 미결제"로 한 번에 봅니다.
+- **운영·측정 데이터**: 아래 SQL을 씁니다. 시작 잔액을 알 수 없어서 ②를 거래 단위로 봅니다. ①이 맞으면 거래별 ②를 모두 더한 것이 테스트의 ②와 같습니다.
+- `perf/sql/verify_integrity.sql`은 당행 이체 전용입니다. "이체 1건 = 원장 2행"으로 짝을 보므로 타행 성공 건을 모두 깨진 짝으로 셉니다.
+- TIMEOUT이 남아 있어도 ③이 그만큼을 기대하므로 판정할 수 있습니다. 다만 같은 날 한도 적립은 TIMEOUT 금액만큼 성공 금액보다 큽니다.
+
+```sql
+-- 측정 구간. 타행 건(payee_bank_code IS NOT NULL)만 본다. (1)~(4)는 모두 0행이어야 한다.
+SET @from_at = '2026-11-02 00:00:00';
+SET @to_at   = '2026-11-03 00:00:00';
+
+-- (1) 계좌 잔액 = 마지막 원장 balance_after
+SELECT a.account_id, a.balance, le.balance_after
+FROM account a
+JOIN ledger_entry le
+  ON le.ledger_entry_id = (SELECT MAX(l2.ledger_entry_id) FROM ledger_entry l2 WHERE l2.account_id = a.account_id)
+WHERE a.account_id IN (
+    SELECT withdrawal_account_id FROM transfer
+    WHERE payee_bank_code IS NOT NULL AND created_at >= @from_at AND created_at < @to_at)
+  AND a.balance <> le.balance_after;
+
+-- (2) 고객에게서 빠진 돈 = 성공·처리 불명이면 송금액, 실패면 0
+SELECT t.transaction_number, t.status, t.amount,
+       COALESCE(SUM(CASE WHEN le.direction = 'WITHDRAWAL' THEN le.amount ELSE -le.amount END), 0) AS net_out
+FROM transfer t
+LEFT JOIN ledger_entry le ON le.transaction_number = t.transaction_number
+WHERE t.payee_bank_code IS NOT NULL AND t.created_at >= @from_at AND t.created_at < @to_at
+GROUP BY t.transaction_number, t.status, t.amount
+HAVING net_out <> CASE WHEN t.status IN ('SUCCESS', 'TIMEOUT') THEN t.amount ELSE 0 END;
+
+-- (3) 거래별 10200 순잔액 = 처리 불명이면 −송금액, 확정됐으면 0
+SELECT t.transaction_number, t.status, t.amount,
+       COALESCE(SUM(CASE WHEN e.dr_cr = 'DEBIT' THEN e.amount ELSE -e.amount END), 0) AS unsettled_net
+FROM transfer t
+LEFT JOIN gl_voucher v
+       ON v.reference_key = t.transaction_number
+      AND v.tx_type IN ('INTERBANK_TRANSFER', 'INTERBANK_SETTLEMENT')
+LEFT JOIN gl_journal_entry e ON e.voucher_no = v.voucher_no AND e.account_code = '10200'
+WHERE t.payee_bank_code IS NOT NULL AND t.created_at >= @from_at AND t.created_at < @to_at
+GROUP BY t.transaction_number, t.status, t.amount
+HAVING unsettled_net <> CASE WHEN t.status = 'TIMEOUT' THEN -t.amount ELSE 0 END;
+
+-- (4) 출금은 최대 1행, 되돌림은 송신 뒤 실패에만 정확히 1행
+SELECT t.transaction_number, t.status,
+       COALESCE(SUM(le.direction = 'WITHDRAWAL'), 0) AS withdrawals,
+       COALESCE(SUM(le.direction = 'DEPOSIT'), 0)    AS refunds
+FROM transfer t
+LEFT JOIN ledger_entry le ON le.transaction_number = t.transaction_number
+WHERE t.payee_bank_code IS NOT NULL AND t.created_at >= @from_at AND t.created_at < @to_at
+GROUP BY t.transaction_number, t.status
+HAVING withdrawals > 1
+    OR refunds <> CASE WHEN t.status = 'ERROR' AND withdrawals = 1 THEN 1 ELSE 0 END;
+
+-- 참고. 리포트에 적을 건수 — 판정은 아니다
+SELECT t.status, COUNT(*) AS transfers, SUM(t.amount) AS amount
+FROM transfer t
+WHERE t.payee_bank_code IS NOT NULL AND t.created_at >= @from_at AND t.created_at < @to_at
+GROUP BY t.status;
+```
+
+## 6. 범위 밖 · 후속
 
 | 항목 | 지금 | 후속 |
 |---|---|---|
