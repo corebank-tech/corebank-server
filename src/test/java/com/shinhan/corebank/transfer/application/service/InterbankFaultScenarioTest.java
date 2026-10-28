@@ -4,10 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.transfer.application.port.in.InterbankTransferResult;
+import com.shinhan.corebank.transfer.application.port.out.InterbankOutcome;
+import com.shinhan.corebank.transfer.application.port.out.InterbankReply;
+import com.shinhan.corebank.transfer.application.port.out.InterbankRequest;
 import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 // PH-36 장애 주입(#711). 장애마다 송신·조회를 끝까지 돌리고, 중간과 끝에서 자금 정합성을 본다.
@@ -126,6 +130,36 @@ class InterbankFaultScenarioTest extends InterbankIntegrationTestSupport {
         assertThat(settledAgain).isZero();
         assertThat(status(result.transactionNumber())).isEqualTo("SUCCESS");
         assertThat(settlementVouchers(result.transactionNumber())).isEqualTo(1);
+        integrity.assertHolds();
+    }
+
+    @ParameterizedTest(name = "원거래 계좌 {0} → {1}")
+    @CsvSource({"1234567890123, SUCCESS", "1001000000000, ERROR"})
+    @DisplayName("중복거래 2001: 같은 일련번호를 다시 보내 2001을 받아도 확정하지 않고, 조회거래가 원거래 결과로 한 번만 확정한다")
+    void duplicateTransaction_isNotSettled_untilInquiry(String accountNumber, String expectedStatus) throws Exception {
+        FundIntegrityCheck integrity = FundIntegrityCheck.begin(jdbcTemplate, WITHDRAWAL_ACCOUNT_ID);
+        setFault("NO_RESPONSE");
+        InterbankTransferResult result = service(client).execute(command("004", accountNumber, AMOUNT));
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.TIMEOUT);
+        setFault("NONE");
+
+        // 재시도 금지라 서비스는 다시 보내지 않는다. 같은 전문이 한 번 더 간 상황을 클라이언트로 직접 만든다.
+        InterbankReply resent =
+                client.send(new InterbankRequest("004", result.transactionNumber(), accountNumber, AMOUNT, "홍길동"));
+        boolean settledByDuplicate = interbankSettlementService
+                .settle(result.transactionNumber(), resent)
+                .isPresent();
+
+        assertThat(resent.outcome()).isEqualTo(InterbankOutcome.UNKNOWN);
+        assertThat(resent.responseCode()).isEqualTo("2001");
+        assertThat(settledByDuplicate).isFalse();
+        assertThat(status(result.transactionNumber())).isEqualTo("TIMEOUT");
+        integrity.assertHolds();
+
+        int settled = inquiryService(Duration.ZERO).settleUnsettled();
+
+        assertThat(settled).isEqualTo(1);
+        assertThat(status(result.transactionNumber())).isEqualTo(expectedStatus);
         integrity.assertHolds();
     }
 
