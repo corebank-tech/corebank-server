@@ -54,6 +54,10 @@ public class AdminTrialBalanceController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
                 description = "`CMN0102` 권한 없음",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "500",
+                description = "`GLA9010` 집계가 제한 시간(30초)을 넘음. 조회 기간을 줄여 다시 요청한다",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ApiResponse<TrialBalanceResponse> getTrialBalance(

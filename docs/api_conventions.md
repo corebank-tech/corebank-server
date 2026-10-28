@@ -437,7 +437,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 ### 4-14. `GLA` 회계 원장(GL) — P3
 
-전표는 사용자 입력이 아니라 내부 거래(이체·상품가입·이자)에서 만들어진다. 여기서 걸리면 호출한 쪽의 분개 패턴이 틀린 것이라 전부 `500`이다. 분개 규칙은 [gl_journal_patterns.md](phase2/gl_journal_patterns.md).
+전표는 사용자 입력이 아니라 내부 거래(이체·상품가입·이자)에서 만들어진다. 여기서 걸리면 호출한 쪽의 분개 패턴이 틀린 것이라 전부 `500`이다. `GLA9010`은 시산표 조회의 서버 쪽 시간 초과라 역시 `500`이다. 분개 규칙은 [gl_journal_patterns.md](phase2/gl_journal_patterns.md).
 
 | 코드 | HTTP | 메시지 | 의미 |
 | --- | --- | --- | --- |
@@ -450,6 +450,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `GLA9007` | 500 | 전표의 참조 키가 없습니다. | 기표 요청에 원 거래번호가 빠짐(PH-24) |
 | `GLA9008` | 500 | 이미 기표된 거래입니다. | 같은 `(tx_type, reference_key)` 재기표. 원장까지 롤백된다(PH-24) |
 | `GLA9009` | 500 | 분개 패턴이 없는 거래유형입니다. | 훅 B 로 패턴표에 없는 원장 거래유형이 들어옴. 이체가 롤백된다(PH-24) |
+| `GLA9010` | 500 | 시산표 집계가 제한 시간을 넘었습니다. 조회 기간을 줄여 다시 시도해 주세요. | 관리자 시산표 집계가 조회 타임아웃(30초)을 넘음(GL-IDX). 다시 눌러도 같은 시간을 기다리므로 기간을 줄이라고 안내한다 |
 
 ### 4-15. `INF` 정보계 조회 — P5
 
