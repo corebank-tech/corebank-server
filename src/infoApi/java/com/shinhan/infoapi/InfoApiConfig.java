@@ -4,8 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public record InfoApiConfig(String martUrl, String martUser, String martPassword, String sharedSecret, int port) {
+public record InfoApiConfig(
+        String martUrl, String martUser, String martPassword, String sharedSecret, String bindAddress, int port) {
 
+    private static final String DEFAULT_BIND = "127.0.0.1";
     private static final int DEFAULT_PORT = 8081;
 
     private static final List<String> REQUIRED =
@@ -28,7 +30,13 @@ public record InfoApiConfig(String martUrl, String martUser, String martPassword
                 env.get("MART_USER"),
                 env.get("MART_PASSWORD"),
                 env.get("INFO_API_SECRET"),
+                parseBind(env.get("INFO_API_BIND")),
                 parsePort(env.get("INFO_API_PORT")));
+    }
+
+    // 기본은 같은 VM 안에서만 받는다. VPN 쪽 주소로 직접 받아야 하면 INFO_API_BIND 로 정한다.
+    private static String parseBind(String value) {
+        return value == null || value.isBlank() ? DEFAULT_BIND : value.trim();
     }
 
     private static int parsePort(String value) {
@@ -50,6 +58,6 @@ public record InfoApiConfig(String martUrl, String martUser, String martPassword
     // record 기본 toString은 비밀번호와 공유 비밀을 그대로 찍는다. 로그에 새지 않도록 주소만 남긴다.
     @Override
     public String toString() {
-        return "InfoApiConfig[martUrl=" + martUrl + ", port=" + port + "]";
+        return "InfoApiConfig[martUrl=" + martUrl + ", bindAddress=" + bindAddress + ", port=" + port + "]";
     }
 }

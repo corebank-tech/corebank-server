@@ -36,7 +36,7 @@ class InfoApiServerTest {
 
     @BeforeEach
     void start() throws IOException {
-        server = new InfoApiServer(query, SECRET, 0);
+        server = new InfoApiServer(query, SECRET, "127.0.0.1", 0);
         server.start();
     }
 
@@ -70,6 +70,24 @@ class InfoApiServerTest {
         HttpResponse<String> response = send("GET", "/info/deposit-balances", "wrong-secret");
 
         assertThat(response.body()).doesNotContain(SECRET).doesNotContain("Exception");
+    }
+
+    @Test
+    @DisplayName("인증하지 않으면 없는 경로도 401이라 경로 존재 여부가 드러나지 않는다")
+    void unknownPathWithoutSecretIsUnauthorized() throws Exception {
+        for (String path : new String[] {"/info/foo", "/", "/info/deposit-balances/x", "/info/deposit-balancesZZZ"}) {
+            assertThat(send("GET", path, null).statusCode()).as(path).isEqualTo(401);
+        }
+        assertThat(query.calls).isEmpty();
+    }
+
+    @Test
+    @DisplayName("인증해도 등록된 경로와 정확히 같지 않으면 404이고 조회를 호출하지 않는다")
+    void nonExactPathIsNotFoundEvenWithSecret() throws Exception {
+        for (String path : new String[] {"/info/foo", "/", "/info/deposit-balances/x", "/info/deposit-balancesZZZ"}) {
+            assertThat(send("GET", path, SECRET).statusCode()).as(path).isEqualTo(404);
+        }
+        assertThat(query.calls).isEmpty();
     }
 
     @Test
@@ -164,6 +182,23 @@ class InfoApiServerTest {
         HttpResponse<String> response = send("GET", "/info/deposit-balances?from=2026-13-40", SECRET);
 
         assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(query.calls).isEmpty();
+    }
+
+    @Test
+    @DisplayName("허용 연도(2000~2999) 밖의 날짜는 500이 아니라 400이다")
+    void outOfRangeYearIsBadRequest() throws Exception {
+        for (String param :
+                new String[] {"from=1999-12-31", "to=3000-01-01", "from=-999999999-01-01", "to=%2B999999999-12-31"}) {
+            HttpResponse<String> response = send("GET", "/info/deposit-balances?" + param, SECRET);
+            assertThat(response.statusCode()).as(param).isEqualTo(400);
+        }
+        assertThat(send("GET", "/info/product-subscriptions?month=1999-12", SECRET)
+                        .statusCode())
+                .isEqualTo(400);
+        assertThat(send("GET", "/info/product-subscriptions?month=3000-01", SECRET)
+                        .statusCode())
+                .isEqualTo(400);
         assertThat(query.calls).isEmpty();
     }
 

@@ -16,11 +16,14 @@ import java.util.Optional;
 
 public class JdbcMartReadAdapter implements MartReadPort {
 
-    // completed_at 이 가장 늦은 COMPLETED 배치의 워터마크다(info_mart.md §5-4).
+    // 마트가 느려져도 작업 스레드가 오래 묶이지 않게 쿼리마다 건다.
+    private static final int QUERY_TIMEOUT_SECONDS = 10;
+
+    // completed_at 이 가장 늦은 COMPLETED 배치의 워터마크다(info_mart.md §5-4). 그 행의 워터마크가 NULL 이면 이력 없음으로 본다.
     private static final String LATEST_AS_OF =
             """
             SELECT as_of_date FROM mart_load_batch
-            WHERE status = 'COMPLETED' AND as_of_date IS NOT NULL
+            WHERE status = 'COMPLETED'
             ORDER BY completed_at DESC, load_batch_id DESC LIMIT 1
             """;
 
@@ -62,9 +65,15 @@ public class JdbcMartReadAdapter implements MartReadPort {
     @Override
     public Optional<LocalDate> latestAsOf() {
         try (Connection connection = connections.open();
-                PreparedStatement statement = connection.prepareStatement(LATEST_AS_OF);
-                ResultSet rows = statement.executeQuery()) {
-            return rows.next() ? Optional.of(rows.getDate(1).toLocalDate()) : Optional.empty();
+                PreparedStatement statement = connection.prepareStatement(LATEST_AS_OF)) {
+            statement.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
+            try (ResultSet rows = statement.executeQuery()) {
+                if (!rows.next()) {
+                    return Optional.empty();
+                }
+                Date asOf = rows.getDate(1);
+                return asOf == null ? Optional.empty() : Optional.of(asOf.toLocalDate());
+            }
         } catch (SQLException e) {
             throw new MartReadException("마트 asOf 조회에 실패했습니다.", e);
         }
@@ -74,6 +83,7 @@ public class JdbcMartReadAdapter implements MartReadPort {
     public List<DepositBalancePoint> depositBalances(LocalDate from, LocalDate to) {
         try (Connection connection = connections.open();
                 PreparedStatement statement = connection.prepareStatement(DEPOSIT_BALANCES)) {
+            statement.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
             statement.setDate(1, Date.valueOf(from));
             statement.setDate(2, Date.valueOf(to));
             try (ResultSet rows = statement.executeQuery()) {
@@ -92,6 +102,7 @@ public class JdbcMartReadAdapter implements MartReadPort {
     public List<ProductSubscriptionLine> productSubscriptions(LocalDate from, LocalDate to) {
         try (Connection connection = connections.open();
                 PreparedStatement statement = connection.prepareStatement(PRODUCT_SUBSCRIPTIONS)) {
+            statement.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
             statement.setDate(1, Date.valueOf(from));
             statement.setDate(2, Date.valueOf(to));
             try (ResultSet rows = statement.executeQuery()) {

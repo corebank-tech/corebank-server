@@ -30,6 +30,21 @@ class InfoApiConfigTest {
     }
 
     @Test
+    @DisplayName("바인딩 주소를 주지 않으면 같은 VM 안에서만 받는 127.0.0.1이다")
+    void bindsToLoopbackByDefault() {
+        assertThat(InfoApiConfig.from(validEnv()).bindAddress()).isEqualTo("127.0.0.1");
+    }
+
+    @Test
+    @DisplayName("INFO_API_BIND를 주면 그 주소를 쓴다")
+    void readsCustomBindAddress() {
+        Map<String, String> env = validEnv();
+        env.put("INFO_API_BIND", " 192.168.0.211 ");
+
+        assertThat(InfoApiConfig.from(env).bindAddress()).isEqualTo("192.168.0.211");
+    }
+
+    @Test
     @DisplayName("INFO_API_PORT를 주면 그 포트를 쓴다")
     void readsCustomPort() {
         Map<String, String> env = validEnv();

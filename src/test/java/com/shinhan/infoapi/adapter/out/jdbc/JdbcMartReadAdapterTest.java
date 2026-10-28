@@ -42,12 +42,12 @@ class JdbcMartReadAdapterTest {
     }
 
     @Test
-    @DisplayName("as_of_date가 NULL인 COMPLETED 배치는 asOf로 쓰지 않는다")
-    void asOfIgnoresNullWatermark() throws SQLException {
+    @DisplayName("가장 최근 COMPLETED 배치의 as_of_date가 NULL이면 오래된 값으로 대신하지 않고 이력 없음이다")
+    void latestBatchWithNullWatermarkMeansNoHistory() throws SQLException {
         batch("2026-10-20", "COMPLETED", "2026-10-21 03:30:00", 100L, "2026-10-20");
         batch("2026-10-21", "COMPLETED", "2026-10-22 03:30:00", 200L, null);
 
-        assertThat(adapter.latestAsOf()).contains(LocalDate.of(2026, 10, 20));
+        assertThat(adapter.latestAsOf()).isEmpty();
     }
 
     @Test
