@@ -20,6 +20,7 @@ public class CustomerPersistenceAdapter implements CustomerPersistencePort {
     private final CustomerJpaRepository customerJpaRepository;
     private final CustomerMapper customerMapper;
     private final ObjectProvider<CustomerPiiCrypto> customerPiiCryptoProvider;
+    private final CustomerPiiReadSupport piiReadSupport;
 
     // 로그인 아이디로 고객을 조회하고 도메인 모델로 변환
     @Override
@@ -68,6 +69,12 @@ public class CustomerPersistenceAdapter implements CustomerPersistencePort {
     @Override
     public boolean existsByEmail(String email) {
         Objects.requireNonNull(email, "email must not be null");
+
+        if (piiReadSupport.encryptedReads()) {
+            String emailHash = piiReadSupport.emailHash(email);
+            return customerJpaRepository.existsByEmailSearchHash(emailHash);
+        }
+
         return customerJpaRepository.existsByEmail(email);
     }
 

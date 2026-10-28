@@ -2,15 +2,26 @@ package com.shinhan.corebank.customer.adapter.out.persistence;
 
 import com.shinhan.corebank.customer.domain.model.Customer;
 import java.util.Objects;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 // Customer 도메인 모델과 JPA Entity 사이의 변환 담당
 @Component
+@RequiredArgsConstructor
 public class CustomerMapper {
 
-    // JPA Entity를 Customer 도메인 모델로 변환
+    private final CustomerPiiReadSupport piiReadSupport;
+
     public Customer toDomain(CustomerJpaEntity entity) {
         Objects.requireNonNull(entity, "entity must not be null");
+
+        String storedEmail = piiReadSupport.encryptedReads() ? entity.getEmailCiphertext() : entity.getEmail();
+
+        String storedPhoneNumber =
+                piiReadSupport.encryptedReads() ? entity.getPhoneNumberCiphertext() : entity.getPhoneNumber();
+
+        String email = piiReadSupport.email(storedEmail);
+        String phoneNumber = piiReadSupport.phoneNumber(storedPhoneNumber);
 
         return Customer.restore(
                 entity.getCustomerId(),
@@ -19,8 +30,8 @@ public class CustomerMapper {
                 entity.getPasswordHash(),
                 entity.getUserName(),
                 entity.getBirthDate(),
-                entity.getEmail(),
-                entity.getPhoneNumber(),
+                email,
+                phoneNumber,
                 entity.getLoginFailureCount(),
                 entity.isAccountLocked(),
                 entity.getStatus(),
@@ -34,7 +45,6 @@ public class CustomerMapper {
                 entity.getUpdatedAt());
     }
 
-    // 신규 Customer 도메인 모델을 JPA Entity로 변환
     public CustomerJpaEntity toEntity(Customer customer) {
         Objects.requireNonNull(customer, "customer must not be null");
 
