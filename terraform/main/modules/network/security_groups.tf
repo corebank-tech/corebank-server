@@ -29,7 +29,7 @@ resource "aws_security_group" "alb" {
 
 resource "aws_security_group" "was" {
   name        = "${var.name_prefix}-sg-was"
-  description = "WAS - Allow inbound 8080 from ALB and on-prem VPN"
+  description = "WAS - Allow inbound 8080 from ALB"
   vpc_id      = aws_vpc.main.id
 
   ingress {
