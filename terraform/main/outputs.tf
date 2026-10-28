@@ -46,6 +46,22 @@ output "target_group_arn" {
   value = module.compute.target_group_arn
 }
 
+output "was_instance_profile_name" {
+  value = module.compute.was_instance_profile_name
+}
+
+output "was_role_arn" {
+  value = module.compute.was_role_arn
+}
+
+output "onprem_ssm_role_name" {
+  value = module.compute.onprem_ssm_role_name
+}
+
+output "asg_name" {
+  value = module.compute.asg_name
+}
+
 output "rds_instance_id" {
   value = module.data.db_instance_id
 }

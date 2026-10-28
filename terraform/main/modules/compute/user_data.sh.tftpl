@@ -1,0 +1,40 @@
+#!/bin/bash
+set -euo pipefail
+exec > >(tee /var/log/corebank-bootstrap.log) 2>&1
+
+export DEBIAN_FRONTEND=noninteractive
+# WAS 보안 그룹은 443만 나가므로 apt 저장소를 HTTPS로 바꾼다
+sed -i 's|http://|https://|g' /etc/apt/sources.list 2>/dev/null || true
+sed -i 's|http://|https://|g' /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+apt-get update -y
+apt-get install -y docker.io awscli
+systemctl enable --now docker
+
+TOKEN=$(curl -s -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')
+REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
+get() { aws ssm get-parameter --region "$REGION" --with-decryption --name "/corebank/$1" --query Parameter.Value --output text; }
+
+# 보관함 값이 아직 없거나 권한이 퍼지는 중이면 최대 10분 기다린다
+for i in $(seq 1 60); do
+  if DB_USER=$(get db-user) && DB_PASSWORD=$(get db-password) && FLYWAY_USER=$(get flyway-user) \
+     && FLYWAY_PASSWORD=$(get flyway-password) && CORS=$(get cors-allowed-origins); then break; fi
+  sleep 10
+done
+
+umask 077
+mkdir -p /opt/corebank
+cat > /opt/corebank/app.env <<EOF
+SPRING_PROFILES_ACTIVE=prod
+DB_HOST=${db_host}
+DB_USER=$DB_USER
+DB_PASSWORD=$DB_PASSWORD
+FLYWAY_USER=$FLYWAY_USER
+FLYWAY_PASSWORD=$FLYWAY_PASSWORD
+APP_INTERBANK_HOST=mock-external
+APP_INTERBANK_PORT=9300
+CORS_ALLOWED_ORIGINS=$CORS
+EOF
+
+docker network create corebank-net || true
+docker run -d --name corebank-mock-external --network-alias mock-external --restart unless-stopped --network corebank-net ${mock_external_image}
+docker run -d --name corebank-server --restart unless-stopped --network corebank-net -p 8080:8080 --env-file /opt/corebank/app.env ${app_image}

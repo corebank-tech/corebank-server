@@ -31,7 +31,7 @@ terraform/
   main/
     modules/
       network/       VPC·서브넷·NAT·라우팅·SG (P5, plan 완료)
-      compute/        ALB·대상그룹·HTTPS 리스너 (P5, PH-51 ①). ASG·IAM은 아직 없음(#694·#695)
+      compute/        ALB·대상그룹·HTTPS 리스너, WAS 인스턴스 프로파일·SSM 역할, 시작 템플릿·ASG (P5, PH-51 ①②③)
       data/           RDS MySQL 8.4 · DB 서브넷 그룹 · 파라미터 그룹 (P2, plan 완료)
 ```
 
@@ -40,7 +40,7 @@ terraform/
 - `network` 모듈: plan 통과(28개 리소스), **apply는 아직 안 함**
 - `data` 모듈: RDS·DB 서브넷 그룹·파라미터 그룹 구현, plan 통과
 - `compute` 모듈(ALB): 대상 그룹 헬스체크는 `/api/v1/actuator/health`(앱 context-path가 `/api/v1`). 인증서 ARN은 `terraform/acm` 상태에서 읽는다. plan 통과
-- 통합 Terraform plan: 35 to add, 0 to change, 0 to destroy (ALB 추가 후)
+- 통합 Terraform plan: 44 to add, 0 to change, 0 to destroy (ALB·IAM·ASG 포함)
 - 실제 apply는 10/26, DNS 컷오버는 10/27 예정
 
 
@@ -97,6 +97,18 @@ terraform plan -var="snapshot_identifier=<스냅샷 ID>"
 - `snapshot_identifier`는 필수 변수라 **컴퓨트만 올리려 해도 실제 스냅샷 ID가 필요하다.** apply 전에 P2가 최종 스냅샷 ID(10/26 오전 것)를 확정해서 알려 준다. plan 검증용 값(리허설 스냅샷 `corebank-import-20261021` 등)으로 apply하지 않는다.
 - 루트 apply를 P2와 P5 중 누가 실행할지는 **apply 전에 협의해서 확정**한 뒤, 그 사람이 **한 번의 통합 apply**로 진행한다.
 - apply 직후 P2에게 넘기는 값은 위 "통합 apply 직후" 표를 따른다.
+
+### 서버 부팅 확인 (apply 후)
+
+- 서버 접속: Session Manager (인스턴스는 EC2 콘솔이나 ASG에서 확인)
+- 부팅 로그: `/var/log/corebank-bootstrap.log` (apt 실패, Parameter Store 읽기 실패가 여기에 나온다)
+- 컨테이너: `docker ps`에서 `corebank-server`와 `corebank-mock-external`이 Up인지
+- 앱 헬스: `curl -s http://localhost:8080/api/v1/actuator/health`
+- 대상 그룹: EC2 > 대상 그룹 > `corebank-tg-was`에서 healthy 2대인지
+
+### 이미지 버전 (릴리스마다 수동 갱신)
+
+시작 템플릿은 커밋 SHA 태그로 이미지를 고정한다(`modules/compute/variables.tf`의 `app_image`, `mock_external_image`). 서버 한 대만 교체돼도 두 서버가 항상 같은 버전이 되게 하려는 것이다. 새 릴리스를 올릴 때는 SHA를 바꿔 apply하고 ASG를 새로고침한다. 배포 스크립트를 ASG용으로 바꾸는 PH-55에서 자동화한다.
 
 ## 아직 미정인 것
 
