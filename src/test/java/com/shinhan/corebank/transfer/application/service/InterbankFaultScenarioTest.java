@@ -17,6 +17,7 @@ class InterbankFaultScenarioTest extends InterbankIntegrationTestSupport {
     private static final long LONGER_THAN_WAIT_MS = 1_000;
     private static final long SHORTER_THAN_WAIT_MS = 100;
     private static final String APPROVED_ACCOUNT = "1234567890123";
+    private static final String NOT_FOUND_ACCOUNT = "1001000000000";
 
     @Test
     @DisplayName("타임아웃: 응답이 대기 시간보다 늦으면 출금된 채 TIMEOUT으로 남고, 장애가 풀린 뒤 조회거래로 SUCCESS 확정된다")
@@ -79,5 +80,59 @@ class InterbankFaultScenarioTest extends InterbankIntegrationTestSupport {
         assertThat(settledAfterRecovery).isEqualTo(1);
         assertThat(status(result.transactionNumber())).isEqualTo("SUCCESS");
         integrity.assertHolds();
+    }
+
+    @Test
+    @DisplayName("송신 응답 중복: 같은 응답이 두 번 와도 SUCCESS 확정은 한 번이고 확정 전표도 1건이다")
+    void duplicateReplyOnSend_settlesOnce() throws Exception {
+        FundIntegrityCheck integrity = FundIntegrityCheck.begin(jdbcTemplate, WITHDRAWAL_ACCOUNT_ID);
+        setFault("DUPLICATE");
+
+        InterbankTransferResult result = service(client).execute(command("004", APPROVED_ACCOUNT, AMOUNT));
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(settlementVouchers(result.transactionNumber())).isEqualTo(1);
+        integrity.assertHolds();
+    }
+
+    @Test
+    @DisplayName("송신 응답 중복 + 실패 확정: 1001이 두 번 와도 출금은 정확히 한 번 되돌린다")
+    void duplicateReplyOnSend_refundsOnce() throws Exception {
+        FundIntegrityCheck integrity = FundIntegrityCheck.begin(jdbcTemplate, WITHDRAWAL_ACCOUNT_ID);
+        setFault("DUPLICATE");
+
+        InterbankTransferResult result = service(client).execute(command("004", NOT_FOUND_ACCOUNT, AMOUNT));
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo("TRF0201");
+        assertThat(balance()).isEqualTo(INITIAL_BALANCE);
+        assertThat(settlementVouchers(result.transactionNumber())).isEqualTo(1);
+        integrity.assertHolds();
+    }
+
+    @Test
+    @DisplayName("조회 응답 중복: TIMEOUT 건의 조회 응답이 두 번 와도 한 번만 확정하고, 다시 조회해도 바꾸지 않는다")
+    void duplicateReplyOnInquiry_settlesOnce() throws Exception {
+        FundIntegrityCheck integrity = FundIntegrityCheck.begin(jdbcTemplate, WITHDRAWAL_ACCOUNT_ID);
+        setFault("NO_RESPONSE");
+        InterbankTransferResult result = service(client).execute(command("004", APPROVED_ACCOUNT, AMOUNT));
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.TIMEOUT);
+
+        setFault("DUPLICATE");
+        int settled = inquiryService(Duration.ZERO).settleUnsettled();
+        int settledAgain = inquiryService(Duration.ZERO).settleUnsettled();
+
+        assertThat(settled).isEqualTo(1);
+        assertThat(settledAgain).isZero();
+        assertThat(status(result.transactionNumber())).isEqualTo("SUCCESS");
+        assertThat(settlementVouchers(result.transactionNumber())).isEqualTo(1);
+        integrity.assertHolds();
+    }
+
+    private long settlementVouchers(String transactionNumber) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM gl_voucher WHERE reference_key = ? AND tx_type = 'INTERBANK_SETTLEMENT'",
+                Long.class,
+                transactionNumber);
     }
 }
