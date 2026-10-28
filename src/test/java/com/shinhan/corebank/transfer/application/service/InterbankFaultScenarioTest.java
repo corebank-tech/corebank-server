@@ -66,11 +66,7 @@ class InterbankFaultScenarioTest extends InterbankIntegrationTestSupport {
         InterbankTransferResult result = service(client).execute(command("004", APPROVED_ACCOUNT, AMOUNT));
         assertThat(result.status()).isEqualTo(ProcessResultStatus.TIMEOUT);
 
-        if ("DELAY".equals(inquiryFault)) {
-            setDelay(LONGER_THAN_WAIT_MS);
-        } else {
-            setFault(inquiryFault);
-        }
+        applyFault(inquiryFault);
         int settledDuringFault = inquiryService(Duration.ZERO).settleUnsettled();
 
         assertThat(settledDuringFault).isZero();
@@ -161,6 +157,46 @@ class InterbankFaultScenarioTest extends InterbankIntegrationTestSupport {
         assertThat(settled).isEqualTo(1);
         assertThat(status(result.transactionNumber())).isEqualTo(expectedStatus);
         integrity.assertHolds();
+    }
+
+    @ParameterizedTest(name = "계좌 {0} · 송신 {1} · 조회 {2} → {3}")
+    @CsvSource({
+        "1001000000000, DELAY, NONE, TRF0201",
+        "1001000000000, NO_RESPONSE, DUPLICATE, TRF0201",
+        "1002000000000, NO_RESPONSE, NONE, TRF0301"
+    })
+    @DisplayName("실패 확정에 장애가 겹쳐도: TIMEOUT을 거쳐 조회로 실패 확정될 때 출금은 정확히 한 번 되돌리고, 다시 조회해도 두 번 되돌리지 않는다")
+    void failureWithFault_refundsExactlyOnce(
+            String accountNumber, String sendFault, String inquiryFault, String expectedErrorCode) throws Exception {
+        FundIntegrityCheck integrity = FundIntegrityCheck.begin(jdbcTemplate, WITHDRAWAL_ACCOUNT_ID);
+        applyFault(sendFault);
+        InterbankTransferResult result = service(client).execute(command("004", accountNumber, AMOUNT));
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.TIMEOUT);
+        integrity.assertHolds();
+
+        setFault(inquiryFault);
+        int settled = inquiryService(Duration.ZERO).settleUnsettled();
+        int settledAgain = inquiryService(Duration.ZERO).settleUnsettled();
+
+        assertThat(settled).isEqualTo(1);
+        assertThat(settledAgain).isZero();
+        assertThat(status(result.transactionNumber())).isEqualTo("ERROR");
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT error_code FROM transfer WHERE transaction_number = ?",
+                        String.class,
+                        result.transactionNumber()))
+                .isEqualTo(expectedErrorCode);
+        assertThat(balance()).isEqualTo(INITIAL_BALANCE);
+        integrity.assertHolds();
+    }
+
+    // DELAY는 응답 대기보다 길게 늦춰 TIMEOUT을 만든다.
+    private void applyFault(String fault) throws Exception {
+        if ("DELAY".equals(fault)) {
+            setDelay(LONGER_THAN_WAIT_MS);
+        } else {
+            setFault(fault);
+        }
     }
 
     private long settlementVouchers(String transactionNumber) {
