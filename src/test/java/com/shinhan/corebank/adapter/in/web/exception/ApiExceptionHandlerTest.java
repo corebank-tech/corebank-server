@@ -51,8 +51,8 @@ class ApiExceptionHandlerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"{", "{\"status\":\"UNKNOWN\"}", "{\"status\":[1]}"})
-    @DisplayName("읽을 수 없는 요청 본문(깨진 JSON, enum 불일치, 타입 불일치) -> CMN0001, 응답에 Jackson 원문 없음")
+    @ValueSource(strings = {"", "{", "{\"status\":\"UNKNOWN\"}", "{\"status\":[1]}"})
+    @DisplayName("읽을 수 없는 요청 본문(본문 누락, 깨진 JSON, enum 불일치, 타입 불일치) -> CMN0001, 응답에 Jackson 원문 없음")
     void unreadableBody(String body) throws Exception {
         mockMvc.perform(post("/test/errors/enum-body")
                         .contentType(APPLICATION_JSON)

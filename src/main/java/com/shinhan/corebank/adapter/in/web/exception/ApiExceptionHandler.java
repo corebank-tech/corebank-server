@@ -43,7 +43,7 @@ public class ApiExceptionHandler {
         return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_INPUT);
     }
 
-    // 본문을 읽을 수 없음 (깨진 JSON, Enum 에 없는 값, 필드 타입 불일치) -> CMN0001
+    // 본문을 읽을 수 없음 (본문 누락, 깨진 JSON, Enum 에 없는 값, 필드 타입 불일치) -> CMN0001
     // Jackson 원문에 클래스명과 입력값이 섞이므로 응답과 로그 어디에도 싣지 않는다
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException e) {
