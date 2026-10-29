@@ -78,6 +78,26 @@ class MockExistingBankCustomerVerificationAdapterTest {
     }
 
     @Test
+    @DisplayName("UAT 고객 6명은 각자 계좌로 인증되고, 계좌 잔액은 COB 대사가 깨지지 않도록 0원이다")
+    void uatCustomersVerifyWithZeroBalanceAccounts() {
+        ExistingBankAccountVerification result = adapter.verify("박서연", "950101", "110900000001", CORRECT_PASSWORD);
+
+        assertThat(result.status()).isEqualTo(ExistingBankAccountVerificationStatus.VERIFIED);
+        assertThat(result.existingBankCustomerId()).isEqualTo("BANK_CUSTOMER_101");
+
+        for (int number = 1; number <= 6; number++) {
+            String expectedAccountNumber = "11090000000" + number;
+            assertThat(adapter.findAllByCustomerId("BANK_CUSTOMER_10" + number))
+                    .singleElement()
+                    .satisfies(account -> {
+                        assertThat(account.accountNumber()).isEqualTo(expectedAccountNumber);
+                        assertThat(account.balance()).isZero();
+                        assertThat(account.status()).isEqualTo("ACTIVE");
+                    });
+        }
+    }
+
+    @Test
     @DisplayName("비밀번호 4회 실패 후 성공하면 연속 실패 횟수가 초기화된다")
     void resetsConsecutiveFailuresAfterSuccess() {
         for (int errorCount = 1; errorCount <= 4; errorCount++) {
