@@ -12,6 +12,7 @@ import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,18 +42,19 @@ class AutoTransferReconcileSchedulerTest {
         new AutoTransferReconcileScheduler(autoTransferBatchUseCase, batchExecutionLockPort, CLOCK).reconcile();
 
         verify(batchExecutionLockPort, never()).tryAcquire(any());
-        verify(autoTransferBatchUseCase, never()).reconcileStuckExecutions(any());
+        verify(autoTransferBatchUseCase, never()).reconcileStuckExecutionsStartedBefore(any(), any());
     }
 
     @Test
-    @DisplayName("메인 배치가 안 돌고 자기 락도 비어 있으면 재확정을 실행하고 락을 반납한다 (#365)")
+    @DisplayName("메인 배치가 안 돌고 자기 락도 비어 있으면 10분 전까지 시작한 회차를 재확정하고 락을 반납한다 (#365, PR #738 리뷰)")
     void reconcile_mainBatchIdle_runsAndReleasesLock() {
         when(batchExecutionLockPort.isRunning(DAILY_TRANSFER_BATCH_JOB_NAME)).thenReturn(false);
         when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
 
         new AutoTransferReconcileScheduler(autoTransferBatchUseCase, batchExecutionLockPort, CLOCK).reconcile();
 
-        verify(autoTransferBatchUseCase).reconcileStuckExecutions(TODAY);
+        verify(autoTransferBatchUseCase)
+                .reconcileStuckExecutionsStartedBefore(TODAY, LocalDateTime.of(2026, 10, 16, 9, 20));
         verify(batchExecutionLockPort).release(JOB_NAME);
     }
 
@@ -64,7 +66,7 @@ class AutoTransferReconcileSchedulerTest {
 
         new AutoTransferReconcileScheduler(autoTransferBatchUseCase, batchExecutionLockPort, CLOCK).reconcile();
 
-        verify(autoTransferBatchUseCase, never()).reconcileStuckExecutions(any());
+        verify(autoTransferBatchUseCase, never()).reconcileStuckExecutionsStartedBefore(any(), any());
         verify(batchExecutionLockPort, never()).release(any());
     }
 
@@ -73,7 +75,9 @@ class AutoTransferReconcileSchedulerTest {
     void reconcile_useCaseThrows_stillReleasesLock() {
         when(batchExecutionLockPort.isRunning(DAILY_TRANSFER_BATCH_JOB_NAME)).thenReturn(false);
         when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
-        doThrow(new RuntimeException("boom")).when(autoTransferBatchUseCase).reconcileStuckExecutions(any());
+        doThrow(new RuntimeException("boom"))
+                .when(autoTransferBatchUseCase)
+                .reconcileStuckExecutionsStartedBefore(any(), any());
 
         assertThatThrownBy(() -> new AutoTransferReconcileScheduler(
                                 autoTransferBatchUseCase, batchExecutionLockPort, CLOCK)

@@ -60,7 +60,7 @@ class AutoTransferReconcileSchedulerIntegrationTest extends IntegrationTestSuppo
     void reconcile_mainBatchIdle_runsAndReleasesLock() {
         scheduler.reconcile();
 
-        verify(autoTransferBatchUseCase).reconcileStuckExecutions(any());
+        verify(autoTransferBatchUseCase).reconcileStuckExecutionsStartedBefore(any(), any());
         assertThat(isRunning(RECONCILE_JOB)).isFalse();
     }
 
@@ -71,7 +71,7 @@ class AutoTransferReconcileSchedulerIntegrationTest extends IntegrationTestSuppo
 
         scheduler.reconcile();
 
-        verify(autoTransferBatchUseCase, never()).reconcileStuckExecutions(any());
+        verify(autoTransferBatchUseCase, never()).reconcileStuckExecutionsStartedBefore(any(), any());
         assertThat(isRunning(RECONCILE_JOB)).isFalse();
     }
 
@@ -82,7 +82,7 @@ class AutoTransferReconcileSchedulerIntegrationTest extends IntegrationTestSuppo
 
         scheduler.reconcile();
 
-        verify(autoTransferBatchUseCase).reconcileStuckExecutions(any());
+        verify(autoTransferBatchUseCase).reconcileStuckExecutionsStartedBefore(any(), any());
         assertThat(isRunning(RECONCILE_JOB)).isFalse();
     }
 

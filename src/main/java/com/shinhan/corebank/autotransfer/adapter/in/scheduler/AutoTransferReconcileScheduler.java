@@ -3,7 +3,9 @@ package com.shinhan.corebank.autotransfer.adapter.in.scheduler;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferBatchUseCase;
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -22,6 +24,8 @@ public class AutoTransferReconcileScheduler {
     // DailyTransferBatchService.JOB_NAME과 같은 값 - 메인 배치가 처리 중인 회차를
     // "멈춘 것"으로 오판하지 않으려고 실행 중인지만 확인한다(락은 안 잡음).
     private static final String DAILY_TRANSFER_BATCH_JOB_NAME = "DAILY_TRANSFER_BATCH";
+    // 락이 stale 이어도 메인 배치가 처리 중일 수 있어, 최근에 시작한 회차는 건너뛴다
+    private static final Duration IN_FLIGHT_GRACE = Duration.ofMinutes(10);
 
     private final AutoTransferBatchUseCase autoTransferBatchUseCase;
     private final BatchExecutionLockPort batchExecutionLockPort;
@@ -42,8 +46,9 @@ public class AutoTransferReconcileScheduler {
         }
         try {
             LocalDate date = LocalDate.now(clock.withZone(SEOUL));
-            log.info("독립 재확정 배치 시작 - date={}", date);
-            autoTransferBatchUseCase.reconcileStuckExecutions(date);
+            LocalDateTime startedBefore = LocalDateTime.now(clock).minus(IN_FLIGHT_GRACE);
+            log.info("독립 재확정 배치 시작 - date={}, startedBefore={}", date, startedBefore);
+            autoTransferBatchUseCase.reconcileStuckExecutionsStartedBefore(date, startedBefore);
             log.info("독립 재확정 배치 종료 - date={}", date);
         } finally {
             batchExecutionLockPort.release(JOB_NAME);
