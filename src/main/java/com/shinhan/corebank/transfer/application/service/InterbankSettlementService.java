@@ -126,7 +126,7 @@ public class InterbankSettlementService {
                 .findWithdrawalAccountDetail(transfer.getWithdrawalAccountId())
                 .map(WithdrawalAccountDetail::customerId)
                 .orElse(null);
-        TransferSettledFactory.create(transfer, customerId, LEDGER_TRANSACTION_TYPE, occurredAt)
-                .ifPresent(eventPublisher::publishEvent);
+        eventPublisher.publishEvent(
+                TransferSettledFactory.create(transfer, customerId, LEDGER_TRANSACTION_TYPE, occurredAt));
     }
 }

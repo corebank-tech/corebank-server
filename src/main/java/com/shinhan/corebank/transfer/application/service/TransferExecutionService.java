@@ -536,9 +536,15 @@ public class TransferExecutionService implements TransferExecutionUseCase {
      * 재생 경로(findAlreadyProcessedResult)는 여기를 지나지 않아 같은 이체가 두 번 발행되지 않는다.
      */
     private void publishSettled(TransferCommand command, Transfer transfer, LocalDateTime occurredAt) {
-        TransferSettledFactory.create(
-                        transfer, command.customerId(), command.transferType().ledgerTransactionType(), occurredAt)
-                .ifPresent(eventPublisher::publishEvent);
+        if (!isCustomerInitiatedTransfer(transfer)) {
+            return;
+        }
+        eventPublisher.publishEvent(TransferSettledFactory.create(
+                transfer, command.customerId(), command.transferType().ledgerTransactionType(), occurredAt));
+    }
+
+    private static boolean isCustomerInitiatedTransfer(Transfer transfer) {
+        return transfer.getTransferType() == TransferType.IMMEDIATE;
     }
 
     private TransferSourceType resolveSourceType(TransferType transferType) {
