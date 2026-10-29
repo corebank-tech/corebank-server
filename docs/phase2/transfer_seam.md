@@ -243,6 +243,9 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 - `flowId`는 `POST /transfers` 요청 본문의 선택 필드로 받고 멱등 지문(fingerprint)에 넣습니다. 이체는 값을 전달만 하고, 그 흐름이 이 고객 것인지는 FDS가 검사합니다.
 - `RecentTransferQuery`는 기존 인덱스 `ix_transfer_wacc`(출금계좌, 처리시각)로 고객의 출금계좌마다 읽습니다. `transfer`에 인덱스를 새로 달지 않습니다(§9-5 규칙 6).
 - `RecentTransferQuery`는 당행 즉시·예약·자동이체의 SUCCESS 행을 셉니다. 정정 체인으로 무효화된 행(`invalidated_at`)은 뺍니다. `firstTransferredAt`은 "반복 묶음 첫 이체 이전에 보낸 적 있는가"를 `hasSucceededBefore`로 물을 때 씁니다.
+- **정책 A가 보는 과거 성공 이체와 `flowId`의 연결은 P6이 소유합니다.** `transfer`에 컬럼을 더하지 않습니다(§9-5 규칙 6). P4는 `TransferSettled`에 nullable `String flowId`를 더하고, P6은 성공 커밋 뒤 이 이벤트를 받는 시점에 성공 이체 ID(`refId`)와 `flowId`의 연결을 자기 테이블에 저장해 반복 묶음 단위로 조회합니다.
+    - P4 구현은 PH-103(#747, 같은 이벤트를 고친다) 머지 뒤, S4 측정이 끝난 11/6 이후 첫 PR입니다. FDS는 11/6까지 꺼 두므로 P6은 그 전에 이 시그니처로 리스너를 만들어 둘 수 있습니다.
+    - 이벤트는 커밋 뒤 따로 처리되므로, 연달아 들어온 이체에서는 앞 건의 연결이 잠깐 안 보일 수 있습니다. 이때도 정책 B는 `RecentTransferQuery`만으로 판정합니다.
 - 이름과 필드는 PR-b 리뷰에서 바뀔 수 있습니다. 바뀌면 이 절을 같은 PR에서 고칩니다.
 
 ### 9-3. HOLD일 때 P4가 보장하는 것
