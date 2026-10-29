@@ -91,7 +91,7 @@ class AdminLedgerReconciliationControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("all=true면 그 영업일 전체를 계좌 ID 오름차순 한 페이지로 내려준다")
     void all_returnsWholeDateInOnePage() throws Exception {
-        mismatchAdapter.replaceForBusinessDate(
+        mismatchAdapter.saveIfAbsent(
                 EARLIER_DATE,
                 List.of(
                         new LedgerReconciliationMismatch(ACCOUNT_B, 0L, 50L),
@@ -147,11 +147,11 @@ class AdminLedgerReconciliationControllerTest extends IntegrationTestSupport {
     }
 
     private void saveSample() {
-        mismatchAdapter.replaceForBusinessDate(
+        mismatchAdapter.saveIfAbsent(
                 EARLIER_DATE,
                 List.of(new LedgerReconciliationMismatch(ACCOUNT_A, 1_000L, 900L)),
                 LocalDateTime.of(2099, 2, 3, 23, 31, 5));
-        mismatchAdapter.replaceForBusinessDate(
+        mismatchAdapter.saveIfAbsent(
                 LATEST_DATE,
                 List.of(new LedgerReconciliationMismatch(ACCOUNT_B, 0L, 50L)),
                 LocalDateTime.of(2099, 2, 4, 23, 31, 5));
