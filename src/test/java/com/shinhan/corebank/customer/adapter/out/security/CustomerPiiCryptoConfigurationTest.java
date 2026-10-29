@@ -40,7 +40,7 @@ class CustomerPiiCryptoConfigurationTest {
     @Test
     @DisplayName("활성화된 상태에서 키가 누락되면 서버 설정을 실패로 처리한다")
     void missingKeysFailClosed() {
-        runner.withPropertyValues("app.pii.enabled=true")
+        runner.withPropertyValues("app.pii.enabled=true", "APP_PII_AES_KEY_BASE64=", "APP_PII_HMAC_KEY_BASE64=")
                 .run(context -> assertThat(context.getStartupFailure()).isNotNull());
     }
 
