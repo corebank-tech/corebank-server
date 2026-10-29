@@ -64,10 +64,11 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
     @Autowired
     private ObjectMapper objectMapper;
 
-    // 세션 저장과 삭제의 실패만 골라 주입하고, 나머지 테스트는 실제 세션 동작을 쓰도록 스파이로 감싼다.
+    // 세션 저장 실패만 골라 주입하고, 나머지 테스트는 실제 세션 저장소를 쓰도록 스파이로 감싼다.
     @MockitoSpyBean
     private JdbcIndexedSessionRepository jdbcSessionRepository;
 
+    // 세션 삭제 실패만 골라 주입하고, 나머지 테스트는 실제 객체를 쓰도록 스파이로 감싼다.
     @MockitoSpyBean
     private CustomerSessionInvalidator sessionInvalidator;
 
