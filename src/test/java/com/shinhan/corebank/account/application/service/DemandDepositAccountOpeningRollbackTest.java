@@ -34,6 +34,8 @@ class DemandDepositAccountOpeningRollbackTest extends IntegrationTestSupport {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    // 계좌 저장 실패를 주입해 같은 트랜잭션의 계좌번호 채번이 롤백되는지 본다 —
+    // 실제 DB로는 저장만 골라 실패시킬 수 없다.
     @MockitoBean
     private AccountPersistencePort accountPersistencePort;
 

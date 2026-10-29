@@ -34,6 +34,7 @@ class SignupCompletionRollbackIntegrationTest extends IntegrationTestSupport {
     @Autowired
     JdbcTemplate jdbcTemplate;
 
+    // 계좌 등록 실패를 주입해 고객과 약관이 롤백되고 임시 토큰이 복구되는지 본다 — 실제 원장 데이터로는 등록만 골라 실패시킬 수 없다.
     @MockitoBean
     ExistingAccountRegistration accountRegistration;
 
