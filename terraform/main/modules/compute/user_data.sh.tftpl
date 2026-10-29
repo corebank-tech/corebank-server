@@ -40,6 +40,16 @@ APP_INTERBANK_PORT=9300
 CORS_ALLOWED_ORIGINS=$CORS
 EOF
 
+%{ if info_api_base_url != "" ~}
+INFO_API_SECRET=$(get info-api-secret 2>/dev/null || true)
+if [ -n "$INFO_API_SECRET" ]; then
+  printf 'APP_INFO_API_BASE_URL=%s\nAPP_INFO_API_SECRET=%s\n' '${info_api_base_url}' "$INFO_API_SECRET" >> /opt/corebank/app.env
+else
+  echo "Parameter Store /corebank/info-api-secret 이 없어 정보계 API 설정을 넣지 않는다" >&2
+fi
+
+%{ endif ~}
+
 docker network create corebank-net || true
 %{ if interbank_host == "" ~}
 docker run -d --name corebank-mock-external --network-alias mock-external --restart unless-stopped --network corebank-net ${mock_external_image}
