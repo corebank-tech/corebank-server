@@ -48,7 +48,9 @@ class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
     @Autowired
     JdbcTemplate jdbcTemplate;
 
-    // 계좌 등록 실패를 주입해 가입이 롤백될 때 한도 행도 남지 않는지 본다 — 실제 원장 데이터로는 등록만 골라 실패시킬 수 없다.
+    // 계좌 등록 실패를 주입해 가입이 롤백될 때 한도 행도 남지 않는지 본다.
+    // 등록 전 선검증(RegisteredExistingBankCustomerChecker)이 같은 계좌번호를 먼저 막아서, 실제 데이터로는
+    // 등록 단계 실패를 만들 수 없다(선검증과 INSERT 사이 경합에서만 난다).
     @MockitoBean
     ExistingAccountRegistration accountRegistration;
     // 원장 어댑터는 조회·프로필·계좌 세 포트를 한 빈으로 구현한다. @MockitoBean 으로
