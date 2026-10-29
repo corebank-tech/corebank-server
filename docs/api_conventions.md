@@ -460,7 +460,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 | 코드 | HTTP | 메시지 | 의미 |
 | --- | --- | --- | --- |
-| `INF9001` | 500 | 정보계 API에 연결하지 못했습니다. | WAS가 온프레미스 정보계 API에 닿지 못함(VPN 단절·타임아웃·상대 서버 오류). 구현은 PH-77 ②(#704) |
+| `INF9001` | 500 | 정보계 API에 연결하지 못했습니다. | WAS가 온프레미스 정보계 API에 닿지 못함(VPN 단절·타임아웃·인증 실패·상대 서버 오류·응답 형식 오류). 구현은 PH-77 ③(#776, `InfoApiClient`) |
 
 ### 4-16. `NTF` 알림 — P1
 
