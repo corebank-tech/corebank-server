@@ -264,6 +264,7 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 - 상태는 `HELD → EXECUTING → EXECUTED / FAILED`, `HELD → REJECTED`(관리자 거절), `HELD → CANCELLED`(고객 취소), `HELD → EXPIRED`(만료)입니다. 전이는 조건부 UPDATE라, 같은 보류 건을 두 곳에서 동시에 처리해도 한 곳만 성공합니다.
 - **실행은 원본 요청 그대로 `execute()`를 한 번 부릅니다.** `transferType=IMMEDIATE`, `source_type=HELD`, `source_id=보류 ID`, `execution_date=보류한 날짜`입니다. `source_type`은 `VARCHAR(12)`라 12자 이하 값을 씁니다. 컬럼을 넓히면 300만 행 `transfer`에 ALTER가 걸립니다. 기존 `uk_transfer_source_execution_date`가 두 번 실행을 DB에서 막고, 다시 부르면 앞선 결과를 돌려받습니다. 원장 거래유형은 `IMMEDIATE_TRANSFER` 그대로라 GL(훅 B)은 바뀌지 않습니다.
 - **실행할 때는 토큰을 받지 않습니다.** 인증은 보류 시점에 끝났습니다. 잔액·한도·계좌 상태와 훅 A는 실행 시점 기준으로 다시 검사하고, 거부되면 `FAILED`로 끝납니다. 자동 재시도는 하지 않습니다.
+- **전용 실행 메서드를 따로 두지 않습니다.** `release()`는 토큰을 비우고 `sourceId`에 보류 ID를 넣어 `execute()`를 부릅니다. 계좌비밀번호·OTP 검증은 토큰 값이 있을 때만 돌고(`verifyBeforeLock`·`consumeOtpAuthToken`), 훅 C는 `sourceId`가 없는 고객 즉시이체에만 돌아서(`isCustomerImmediate`) 둘 다 건너뜁니다. 예약·자동이체와 같은 경로입니다. 지금 `resolveSourceType`은 `IMMEDIATE`를 `null`로 돌려주므로, #772가 `sourceId`가 있는 `IMMEDIATE`를 `HELD`로 매핑합니다.
 - **승인하면 바로 실행합니다.** 지연이체 설정이 함께 해당하는 건이어도 다시 지연하지 않습니다. 승인 실행은 훅 C를 지나지 않고, 승인 과정의 고객 확인 콜이 지연이체의 보호 목적을 채웁니다.
 - **`ON_APPROVAL` 건은 보류한 영업일 안에 승인되지 않으면 `EXPIRED`입니다.** 실행할 때 `execution_date`가 보류한 날짜라, 며칠 뒤 승인하면 오래된 요청이 뒤늦게 기표되기 때문입니다. 만료 처리는 FDS 착수 때 구현하고, #772는 `AT_TIME`만 다룹니다. `AT_TIME` 건은 만료하지 않고 실행 시점 검사에서 거부되면 `FAILED`입니다.
 - **승인 권한과 콜 기록 검증은 호출자 몫입니다.** `release`·`reject`는 `actorId`와 사유만 남깁니다. 관리자 권한과 콜 결과 입력은 FDS가 부르기 전에 확인합니다.
@@ -292,7 +293,7 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 | 보류 저장이 실패하면 `transfer` ERROR 1행이 남고 원장·잔액·한도 사용액이 그대로다. 토큰은 소비돼 같은 멱등 키 재요청은 인증 토큰 오류로 끝나고, 보류·기표가 생기지 않는다 |
 | 같은 고객의 동시 요청에서 뒤 요청의 훅 C가 앞 요청의 커밋 결과를 본다 |
 | 보류 건을 두 번 실행해도 기표는 1회다. 실행 시점 잔액 부족·계좌 정지면 `FAILED`다 |
-| 예약·자동이체와 보류 건 실행은 훅 C를 지나지 않는다 |
+| 예약·자동이체와 보류 건 실행은 훅 C를 지나지 않는다. 보류 건 실행은 토큰 없이 성공하고 `source_type=HELD`로 남는다 |
 
 ## 10. 범위 밖
 
