@@ -1,13 +1,18 @@
 package com.shinhan.corebank.adapter.in.web.exception;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.web.servlet.MockMvc;
@@ -43,6 +48,21 @@ class ApiExceptionHandlerTest {
                 .andExpect(jsonPath("$.code").value("CMN0001"))
                 .andExpect(jsonPath("$.message").value("입력값이 올바르지 않습니다."))
                 .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{", "{\"status\":\"UNKNOWN\"}", "{\"status\":[1]}"})
+    @DisplayName("읽을 수 없는 요청 본문(깨진 JSON, enum 불일치, 타입 불일치) -> CMN0001, 응답에 Jackson 원문 없음")
+    void unreadableBody(String body) throws Exception {
+        mockMvc.perform(post("/test/errors/enum-body")
+                        .contentType(APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"))
+                .andExpect(jsonPath("$.message").value("입력값이 올바르지 않습니다."))
+                .andExpect(jsonPath("$.data").doesNotExist())
+                .andExpect(content().string(not(containsString("TestStatus"))))
+                .andExpect(content().string(not(containsString("UNKNOWN"))));
     }
 
     @Test

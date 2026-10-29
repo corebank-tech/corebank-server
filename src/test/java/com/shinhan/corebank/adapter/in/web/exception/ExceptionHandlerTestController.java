@@ -29,6 +29,11 @@ public class ExceptionHandlerTestController {
         return ApiResponse.success();
     }
 
+    @PostMapping("/test/errors/enum-body")
+    public ApiResponse<Void> enumBody(@RequestBody EnumRequest request) {
+        return ApiResponse.success();
+    }
+
     @GetMapping("/test/errors/type-mismatch")
     public ApiResponse<Void> typeMismatch(@RequestParam Long id) {
         return ApiResponse.success();
@@ -60,4 +65,10 @@ public class ExceptionHandlerTestController {
     }
 
     record TestRequest(@NotBlank String name) {}
+
+    enum TestStatus {
+        ACTIVE
+    }
+
+    record EnumRequest(TestStatus status) {}
 }

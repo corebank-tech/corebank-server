@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
@@ -39,6 +40,14 @@ public class ApiExceptionHandler {
                 "[{}] 요청 본문 검증 실패: {}개 필드 오류",
                 CommonErrorCode.INVALID_INPUT.getCode(),
                 e.getBindingResult().getFieldErrorCount());
+        return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_INPUT);
+    }
+
+    // 본문을 읽을 수 없음 (깨진 JSON, Enum 에 없는 값, 필드 타입 불일치) -> CMN0001
+    // Jackson 원문에 클래스명과 입력값이 섞이므로 응답과 로그 어디에도 싣지 않는다
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException e) {
+        log.warn("[{}] 요청 본문을 읽을 수 없음", CommonErrorCode.INVALID_INPUT.getCode());
         return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_INPUT);
     }
 
