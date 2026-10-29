@@ -26,6 +26,8 @@ import com.shinhan.corebank.common.audit.AuditLogJpaRepository;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.event.DomainEvent;
 import com.shinhan.corebank.common.event.DomainEventSink;
+import com.shinhan.corebank.notification.api.NotificationRequest;
+import com.shinhan.corebank.notification.api.NotificationType;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
@@ -103,8 +105,36 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
     // @BeforeEach/@AfterEach는 Spring 테스트 트랜잭션 지원 대상이 아니라서(@Test에만 적용됨),
     // AuditLogServiceTest와 동일하게 TransactionTemplate으로 직접 트랜잭션을 열고 닫는다.
     @Test
-    @DisplayName("거래번호가 있으면 ERROR 여도 이체 엔진이 이미 발행했으므로 배치는 이벤트를 발행하지 않는다 (#436)")
-    void completeProcessing_withTransactionNumber_publishesNothing() {
+    @DisplayName("거래번호가 있는 성공도 회차 ID 를 refId 로 하는 AutoTransferExecutionSettled 를 한 번 발행한다 — 알림은 이 이벤트로만 받는다 (#707)")
+    void completeProcessing_succeeded_publishesExecutionSettledWithExecutionId() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
+        when(transferExecutionUseCase.execute(any()))
+                .thenReturn(TransferResult.builder()
+                        .status(ProcessResultStatus.SUCCESS)
+                        .transactionNumber("20260315BT0000000008")
+                        .build());
+
+        itemProcessor.completeProcessing(autoTransfer(), saved, today);
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(AutoTransferExecutionSettled.class, event -> {
+            assertThat(event.customerId()).isEqualTo(customerId);
+            assertThat(event.refId()).isEqualTo(saved.getExecutionId());
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(event.errorCode()).isNull();
+            assertThat(event.notification()).satisfies(notification -> {
+                assertThat(notification.type()).isEqualTo(NotificationType.AUTO_TRANSFER);
+                assertThat(notification.refId()).isEqualTo(saved.getExecutionId());
+                assertThat(notification.title()).isEqualTo("자동이체 완료");
+                assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보냈습니다.");
+            });
+        });
+    }
+
+    @Test
+    @DisplayName("거래번호가 있는 실패도 AutoTransferExecutionSettled 를 한 번 발행하고 실패 코드를 담는다 (#707)")
+    void completeProcessing_failedWithTransactionNumber_publishesExecutionSettledWithErrorCode() {
         AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
         when(transferExecutionUseCase.execute(any()))
                 .thenReturn(TransferResult.builder()
@@ -116,7 +146,17 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
         itemProcessor.completeProcessing(autoTransfer(), saved, today);
 
-        verify(domainEventSink, never()).record(any());
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(AutoTransferExecutionSettled.class, event -> {
+            assertThat(event.refId()).isEqualTo(saved.getExecutionId());
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(event.errorCode()).isEqualTo("TRF0303");
+            assertThat(event.notification()).satisfies(notification -> {
+                assertThat(notification.title()).isEqualTo("자동이체 실패");
+                assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보내지 못했습니다. 출금계좌 잔액이 부족합니다.");
+            });
+        });
     }
 
     @Test
@@ -139,8 +179,10 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
             assertThat(event.refId()).isEqualTo(saved.getExecutionId());
             assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
             assertThat(event.errorCode()).isEqualTo("TRF0201");
-            assertThat(event.amount()).isEqualTo(10000L);
-            assertThat(event.counterpartyName()).isEqualTo("홍*동");
+            assertThat(event.notification()).satisfies(notification -> {
+                assertThat(notification.title()).isEqualTo("자동이체 실패");
+                assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보내지 못했습니다.");
+            });
         });
     }
 
@@ -158,8 +200,10 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
             assertThat(event.customerId()).isEqualTo(customerId);
             assertThat(event.refId()).isEqualTo(saved.getExecutionId());
             assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
-            assertThat(event.amount()).isEqualTo(10000L);
-            assertThat(event.counterpartyName()).isEqualTo("홍*동");
+            assertThat(event.notification()).satisfies(notification -> {
+                assertThat(notification.title()).isEqualTo("자동이체 실패");
+                assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보내지 못했습니다.");
+            });
         });
     }
 
@@ -176,14 +220,37 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
         ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
         verify(domainEventSink).record(published.capture());
         assertThat(published.getValue())
-                .isInstanceOfSatisfying(AutoTransferExecutionSettled.class, event -> assertThat(event.amount())
-                        .isEqualTo(saved.getAmount())
-                        .isEqualTo(10000L));
+                .isInstanceOfSatisfying(AutoTransferExecutionSettled.class, event -> assertThat(event.notification())
+                        .extracting(NotificationRequest::content)
+                        .isEqualTo("홍*동님에게 10,000원을 보내지 못했습니다."));
     }
 
     @Test
-    @DisplayName("재확정이 transfer 행을 찾으면 이체 엔진이 이미 발행했으므로 배치는 이벤트를 발행하지 않는다 (#436)")
-    void reconcileStuckExecution_transferRowFound_publishesNothing() {
+    @DisplayName("재확정이 SUCCESS transfer 행으로 확정하면 SUCCESS 상태의 AutoTransferExecutionSettled 를 한 번 발행한다 (#707)")
+    void reconcileStuckExecution_successTransferRow_publishesSucceededSettled() {
+        AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
+        when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
+                .thenReturn(Optional.of(
+                        new TransferLookupResult("20260315BT0000000010", ProcessResultStatus.SUCCESS, null)));
+
+        itemProcessor.reconcileStuckExecution(new StuckExecution(autoTransfer(), saved));
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(AutoTransferExecutionSettled.class, event -> {
+            assertThat(event.refId()).isEqualTo(saved.getExecutionId());
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(event.errorCode()).isNull();
+            assertThat(event.notification()).satisfies(notification -> {
+                assertThat(notification.title()).isEqualTo("자동이체 완료");
+                assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보냈습니다.");
+            });
+        });
+    }
+
+    @Test
+    @DisplayName("재확정이 ERROR transfer 행으로 확정하면 실패 코드 없이 ERROR 상태의 AutoTransferExecutionSettled 를 한 번 발행한다 (#707)")
+    void reconcileStuckExecution_errorTransferRow_publishesFailedSettledWithoutErrorCode() {
         AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
         when(transferLookupPort.findBySourceAndDate(autoTransferId, today))
                 .thenReturn(Optional.of(
@@ -191,7 +258,17 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
         itemProcessor.reconcileStuckExecution(new StuckExecution(autoTransfer(), saved));
 
-        verify(domainEventSink, never()).record(any());
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue()).isInstanceOfSatisfying(AutoTransferExecutionSettled.class, event -> {
+            assertThat(event.refId()).isEqualTo(saved.getExecutionId());
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(event.errorCode()).isNull();
+            assertThat(event.notification()).satisfies(notification -> {
+                assertThat(notification.title()).isEqualTo("자동이체 실패");
+                assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보내지 못했습니다.");
+            });
+        });
     }
 
     @Test
@@ -902,7 +979,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
     @Test
     @DisplayName("재확정이 동시에 두 번 수행돼도(같은 PROCESSING 스냅샷을 각자 읽음) 두 번째는 조용히 스킵되고 "
-            + "nextExecutionDate도 한 번만 갱신된다 - saveIfStillProcessing() 가드가 없으면 두 번째가 stale 버전으로 "
+            + "nextExecutionDate도 한 번만 갱신된다 - 회차 행 잠금 뒤 PROCESSING 확인이 없으면 두 번째가 stale 버전으로 "
             + "autoTransfer를 저장 시도해 OptimisticLockingFailureException이 터진다")
     void reconcileStuckExecution_concurrentDuplicateRun_secondRunSkipsSilently() {
         AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
@@ -922,7 +999,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
         assertThat(executionAfter.getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
         assertThat(executionAfter.getTransactionNumber()).isEqualTo("20260315BT0000000099");
 
-        // 한 번만 갱신됐어야 한다 - 가드가 없으면 두 번째 호출이 stale autoTransfer(version=0)를 저장 시도해서
+        // 한 번만 갱신됐어야 한다 - PROCESSING 확인이 없으면 두 번째 호출이 stale autoTransfer(version=0)를 저장 시도해서
         // 이 assert에 도달하기 전에 OptimisticLockingFailureException으로 테스트가 실패한다
         var autoTransferAfter =
                 autoTransferJpaRepository.findById(autoTransferId).orElseThrow();
