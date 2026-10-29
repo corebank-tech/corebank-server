@@ -39,7 +39,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * 메인 배치 락이 stale 로 판정돼 독립 재확정이 메인 배치와 겹칠 때, 같은 회차의 정상 확정과 재확정이 경합해도 회차 상태가
  * 실제 이체 결과와 같고 알림이 1건인지 실제 이체 · 실제 알림 리스너로 확인한다(#707 인수기준, PR #738 리뷰).
- * 메인 배치의 이체 트랜잭션을 기표 훅에서 멈춰 두고 그 사이에 재확정을 돌려 순서를 고정한다.
+ * 메인 배치의 이체 트랜잭션을 기표 훅에서 멈춰 두고 그 사이에 재확정을 돌려 순서를 고정한다. 회차가 처리를 시작한 지 얼마나
+ * 됐는지와 상관없이 회차 행 잠금으로 둘 중 하나만 확정해야 한다.
  */
 @Import(AutoTransferReconcileRaceIntegrationTest.PausingHookConfig.class)
 class AutoTransferReconcileRaceIntegrationTest extends IntegrationTestSupport {
@@ -50,6 +51,8 @@ class AutoTransferReconcileRaceIntegrationTest extends IntegrationTestSupport {
     private static final long AMOUNT = 10_000L;
     private static final LocalDate EXECUTION_DATE = LocalDate.of(2026, 10, 28);
     private static final Duration TIMEOUT = Duration.ofSeconds(10);
+    // 재확정이 잠금에서 기다리는지 보는 시간. 잠금이 없으면 재확정은 이 안에 끝난다
+    private static final Duration LOCK_WAIT_OBSERVATION = Duration.ofMillis(500);
 
     @Autowired
     AutoTransferReconcileScheduler reconcileScheduler;
@@ -129,8 +132,8 @@ class AutoTransferReconcileRaceIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("정상 확정의 이체가 커밋되기 전에 재확정이 끼어들어도 회차는 실제 이체 결과(SUCCESS)로 확정되고 성공 알림 1건만 남는다")
-    void reconcileDuringMainSettlement_settlesWithTransferResultAndOneNotification() throws Exception {
+    @DisplayName("정상 확정의 이체가 커밋되기 전에 재확정이 끼어들면 재확정은 회차 행 잠금에서 기다리고, 회차는 실제 이체 결과(SUCCESS)로 확정돼 성공 알림 1건만 남는다")
+    void reconcileDuringMainSettlement_waitsForRowLockAndSettlesWithTransferResult() throws Exception {
         // given — 메인 배치가 회차를 PROCESSING 으로 남기고 이체 트랜잭션 안(기표 훅)에서 멈춘다
         AutoTransfer autoTransfer =
                 autoTransferPersistencePort.findById(autoTransferId).orElseThrow();
@@ -140,10 +143,18 @@ class AutoTransferReconcileRaceIntegrationTest extends IntegrationTestSupport {
                 () -> itemProcessor.completeProcessing(autoTransfer, processing, EXECUTION_DATE));
         assertThat(pausingHook.awaitEntered()).isTrue();
 
-        // when — 그 사이 독립 재확정이 돌고, 메인 배치가 이어서 끝난다
-        reconcileScheduler.reconcile();
+        // when — 그 사이 독립 재확정이 돈다
+        CompletableFuture<Void> reconcile = CompletableFuture.runAsync(reconcileScheduler::reconcile);
+
+        // then — 메인 배치가 회차 행을 잡고 있는 동안 재확정은 끝나지 않는다
+        await().during(LOCK_WAIT_OBSERVATION)
+                .atMost(LOCK_WAIT_OBSERVATION.plusSeconds(1))
+                .until(() -> !reconcile.isDone());
+
+        // when — 메인 배치가 이어서 끝나고, 재확정이 잠금을 넘겨받는다
         pausingHook.release();
         mainSettlement.get(TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+        reconcile.get(TIMEOUT.toSeconds(), TimeUnit.SECONDS);
 
         // then
         assertThat(transferStatus()).isEqualTo("SUCCESS");
@@ -151,43 +162,35 @@ class AutoTransferReconcileRaceIntegrationTest extends IntegrationTestSupport {
         assertThat(nextExecutionDate()).isEqualTo(EXECUTION_DATE.plusMonths(1));
         awaitNotificationDelivery();
         assertThat(notificationContents(processing.getExecutionId())).containsExactly("홍*동님에게 10,000원을 보냈습니다.");
-
-        // when — 경합에서 확정하지 못한 쪽(재확정)을 다시 돌린다
-        reconcileScheduler.reconcile();
-
-        // then — 알림이 늘지 않는다
-        awaitNotificationDelivery();
-        assertThat(notificationContents(processing.getExecutionId())).hasSize(1);
     }
 
     @Test
-    @DisplayName("처리를 시작한 지 10분이 안 된 회차는 메인 배치가 처리 중일 수 있어 독립 재확정이 건드리지 않는다")
-    void recentlyStartedExecution_isLeftToMainBatch() {
-        // given — 이체 행 없이 방금 PROCESSING 으로 남은 회차
+    @DisplayName("재확정이 먼저 확정한 회차는 메인 배치가 이어서 처리해도 이체하지 않고, 회차 · 다음 실행일 · 알림이 재확정 결과 그대로 남는다")
+    void mainSettlementAfterReconcile_skipsTransfer() {
+        // given — 메인 배치가 회차를 PROCESSING 으로 남긴 직후, 이체 전에 독립 재확정이 먼저 ERROR 로 확정한다
         AutoTransfer autoTransfer =
                 autoTransferPersistencePort.findById(autoTransferId).orElseThrow();
         AutoTransferExecution processing = itemProcessor.saveProcessing(autoTransfer);
-
-        // when
         reconcileScheduler.reconcile();
+
+        // when — 메인 배치가 들고 있던 회차로 이어서 처리한다
+        itemProcessor.completeProcessing(autoTransfer, processing, EXECUTION_DATE);
 
         // then
-        assertThat(executionStatus(processing.getExecutionId())).isEqualTo("PROCESSING");
-        assertThat(nextExecutionDate()).isEqualTo(EXECUTION_DATE);
-        assertThat(notificationContents(processing.getExecutionId())).isEmpty();
+        assertThat(transferCount()).isZero();
+        assertThat(executionStatus(processing.getExecutionId())).isEqualTo("ERROR");
+        assertThat(nextExecutionDate()).isEqualTo(EXECUTION_DATE.plusMonths(1));
+        awaitNotificationDelivery();
+        assertThat(notificationContents(processing.getExecutionId())).containsExactly("홍*동님에게 10,000원을 보내지 못했습니다.");
     }
 
     @Test
-    @DisplayName("처리를 시작한 지 10분이 지난 회차는 멈춘 것으로 보고 이체 행이 없으면 ERROR 로 확정하고 실패 알림 1건을 남긴다")
-    void staleExecutionWithoutTransfer_isSettledAsErrorWithOneNotification() {
-        // given — 메인 배치가 이체 전에 죽어 11분째 PROCESSING 으로 남은 회차
+    @DisplayName("메인 배치가 이체 전에 죽어 PROCESSING 으로 남은 회차는 이체 행이 없으면 ERROR 로 확정하고 실패 알림 1건을 남긴다")
+    void stuckExecutionWithoutTransfer_isSettledAsErrorWithOneNotification() {
+        // given
         AutoTransfer autoTransfer =
                 autoTransferPersistencePort.findById(autoTransferId).orElseThrow();
         AutoTransferExecution processing = itemProcessor.saveProcessing(autoTransfer);
-        jdbcTemplate.update(
-                "UPDATE auto_transfer_execution SET executed_at = ? WHERE execution_id = ?",
-                LocalDateTime.now(clock).minusMinutes(11),
-                processing.getExecutionId());
 
         // when
         reconcileScheduler.reconcile();
@@ -212,6 +215,13 @@ class AutoTransferReconcileRaceIntegrationTest extends IntegrationTestSupport {
         return jdbcTemplate.queryForObject(
                 "SELECT status FROM transfer WHERE source_id = ? AND withdrawal_account_id = 101",
                 String.class,
+                autoTransferId);
+    }
+
+    private Integer transferCount() {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transfer WHERE source_id = ? AND withdrawal_account_id = 101",
+                Integer.class,
                 autoTransferId);
     }
 

@@ -979,7 +979,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
 
     @Test
     @DisplayName("재확정이 동시에 두 번 수행돼도(같은 PROCESSING 스냅샷을 각자 읽음) 두 번째는 조용히 스킵되고 "
-            + "nextExecutionDate도 한 번만 갱신된다 - saveIfStillProcessing() 가드가 없으면 두 번째가 stale 버전으로 "
+            + "nextExecutionDate도 한 번만 갱신된다 - 회차 행 잠금 뒤 PROCESSING 확인이 없으면 두 번째가 stale 버전으로 "
             + "autoTransfer를 저장 시도해 OptimisticLockingFailureException이 터진다")
     void reconcileStuckExecution_concurrentDuplicateRun_secondRunSkipsSilently() {
         AutoTransferExecution saved = itemProcessor.saveProcessing(autoTransfer());
@@ -999,7 +999,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
         assertThat(executionAfter.getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
         assertThat(executionAfter.getTransactionNumber()).isEqualTo("20260315BT0000000099");
 
-        // 한 번만 갱신됐어야 한다 - 가드가 없으면 두 번째 호출이 stale autoTransfer(version=0)를 저장 시도해서
+        // 한 번만 갱신됐어야 한다 - PROCESSING 확인이 없으면 두 번째 호출이 stale autoTransfer(version=0)를 저장 시도해서
         // 이 assert에 도달하기 전에 OptimisticLockingFailureException으로 테스트가 실패한다
         var autoTransferAfter =
                 autoTransferJpaRepository.findById(autoTransferId).orElseThrow();

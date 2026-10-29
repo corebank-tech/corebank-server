@@ -5,6 +5,7 @@ import com.shinhan.corebank.autotransfer.application.port.out.StuckExecution;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
@@ -35,19 +36,18 @@ public class AutoTransferExecutionPersistenceAdapter implements AutoTransferExec
     }
 
     @Override
+    public Optional<AutoTransferExecution> findProcessingForUpdate(Long executionId) {
+        return autoTransferExecutionJpaRepository
+                .findForUpdateByExecutionIdAndStatus(executionId, ProcessResultStatus.PROCESSING)
+                .map(AutoTransferExecutionMapper::toDomain);
+    }
+
+    @Override
     public List<AutoTransferExecution> findRecentByAutoTransferId(Long autoTransferId, int limit) {
         return autoTransferExecutionJpaRepository
                 .findRecentByAutoTransferId(autoTransferId, PageRequest.of(0, limit))
                 .stream()
                 .map(AutoTransferExecutionMapper::toDomain)
                 .toList();
-    }
-
-    @Override
-    public boolean saveIfStillProcessing(AutoTransferExecution execution) {
-        int updated = autoTransferExecutionJpaRepository.finalizeIfProcessing(
-                execution.getExecutionId(), execution.getStatus().name(),
-                execution.getTransactionNumber(), execution.getFailureReason());
-        return updated > 0;
     }
 }

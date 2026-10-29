@@ -2,6 +2,7 @@ package com.shinhan.corebank.autotransfer.application.port.out;
 
 import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import java.util.List;
+import java.util.Optional;
 
 public interface AutoTransferExecutionPersistencePort {
     // 즉시 flush 가 되어야 함 - 유니크 제약이 호출 시점에 바로 걸려야 중복 실행 막음
@@ -14,9 +15,9 @@ public interface AutoTransferExecutionPersistencePort {
     // 재확정 배치 대상 - PROCESSING 상태로 멈춰있는 회차 전체 ( 부모 AutoTransfer 포함 )
     List<StuckExecution> findAllProcessing();
 
-    // PROCESSING 상태일 때만 최종 확정(SUCCESS/ERROR) 저장 - 영향받은 행이 없으면 이미 다른 재확정 실행이
-    // 먼저 이 건을 확정한 것(중복 재확정 방어). claim 단계가 없는 reconcileStuckExecution() 전용 가드.
-    boolean saveIfStillProcessing(AutoTransferExecution execution);
+    // 회차 행을 잠그고 아직 PROCESSING 일 때만 돌려준다. 정상 확정과 재확정이 같은 회차를 동시에 확정하지 않게,
+    // 먼저 잡은 쪽이 커밋할 때까지 다른 쪽을 기다리게 한다
+    Optional<AutoTransferExecution> findProcessingForUpdate(Long executionId);
 
     // 연속 실패 감지용 - 자동이체의 최근 실행이력을 최신순으로 limit개만 조회
     List<AutoTransferExecution> findRecentByAutoTransferId(Long autoTransferId, int limit);

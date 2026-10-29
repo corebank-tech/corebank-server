@@ -1,7 +1,6 @@
 package com.shinhan.corebank.autotransfer.application.port.in;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 public interface AutoTransferBatchUseCase {
     // 지정한 날짜를 실행일로 하는 자동이체 배치를 돈다. @Scheduled는 이 메서드를 오늘 날짜로 호출하는
@@ -11,7 +10,4 @@ public interface AutoTransferBatchUseCase {
     // PROCESSING에 멈춘 회차 전체를 찾아 실제 거래 여부를 확인하고 SUCCESS/ERROR로 확정한다.
     // 대상은 status=PROCESSING 전체(날짜 무관) - date는 로그 표시용으로만 쓴다.
     void reconcileStuckExecutions(LocalDate date);
-
-    // 메인 배치와 겹칠 수 있는 독립 재확정용 — startedBefore 이전에 시작한 회차만 확정한다
-    void reconcileStuckExecutionsStartedBefore(LocalDate date, LocalDateTime startedBefore);
 }

@@ -7,7 +7,6 @@ import com.shinhan.corebank.autotransfer.application.port.out.StuckExecution;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -39,17 +38,6 @@ public class AutoTransferBatchService implements AutoTransferBatchUseCase {
         List<StuckExecution> stuckExecutions = autoTransferExecutionPersistencePort.findAllProcessing();
         for (StuckExecution stuckExecution : stuckExecutions) {
             reconcileOne(stuckExecution, date);
-        }
-    }
-
-    @Override
-    public void reconcileStuckExecutionsStartedBefore(LocalDate date, LocalDateTime startedBefore) {
-        List<StuckExecution> stuckExecutions = autoTransferExecutionPersistencePort.findAllProcessing();
-        for (StuckExecution stuckExecution : stuckExecutions) {
-            boolean isStartedBefore = stuckExecution.execution().getExecutedAt().isBefore(startedBefore);
-            if (isStartedBefore) {
-                reconcileOne(stuckExecution, date);
-            }
         }
     }
 
