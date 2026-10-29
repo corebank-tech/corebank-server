@@ -90,19 +90,13 @@ class BatchSettledNotificationListenerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("자동이체 회차가 정상 확정과 재확정으로 두 번 발행돼도 회차 ID 를 참조로 알림은 1건이다")
     void autoTransferExecutionSettledTwice_savesOneNotificationReferencingExecution() {
-        // given
-        AutoTransferExecutionSettled settled = AutoTransferExecutionSettled.builder()
-                .customerId(CUSTOMER_ID)
-                .refId(AUTO_TRANSFER_EXECUTION_ID)
-                .status(ProcessResultStatus.SUCCESS)
-                .occurredAt(OCCURRED_AT)
-                .notificationRequest(
-                        notification(NotificationType.AUTO_TRANSFER, AUTO_TRANSFER_EXECUTION_ID, "자동이체 완료"))
-                .build();
+        // given — 정상 확정과 재확정은 같은 회차를 서로 다른 시각에 확정한다
+        AutoTransferExecutionSettled mainSettled = autoTransferExecutionSettled(OCCURRED_AT);
+        AutoTransferExecutionSettled reconcileSettled = autoTransferExecutionSettled(OCCURRED_AT.plusMinutes(1));
 
         // when
-        publishInsideTransaction(settled);
-        publishInsideTransaction(settled);
+        publishInsideTransaction(mainSettled);
+        publishInsideTransaction(reconcileSettled);
 
         // then — 두 발행 기록이 모두 처리돼 지워질 때까지 기다린 뒤 센다
         await().atMost(LISTENER_TIMEOUT)
@@ -110,6 +104,17 @@ class BatchSettledNotificationListenerTest extends IntegrationTestSupport {
                         .isZero());
         assertThat(notificationCount(NotificationType.AUTO_TRANSFER, AUTO_TRANSFER_EXECUTION_ID))
                 .isEqualTo(1);
+    }
+
+    private static AutoTransferExecutionSettled autoTransferExecutionSettled(LocalDateTime occurredAt) {
+        return AutoTransferExecutionSettled.builder()
+                .customerId(CUSTOMER_ID)
+                .refId(AUTO_TRANSFER_EXECUTION_ID)
+                .status(ProcessResultStatus.SUCCESS)
+                .occurredAt(occurredAt)
+                .notificationRequest(
+                        notification(NotificationType.AUTO_TRANSFER, AUTO_TRANSFER_EXECUTION_ID, "자동이체 완료"))
+                .build();
     }
 
     private void publishInsideTransaction(Object event) {
