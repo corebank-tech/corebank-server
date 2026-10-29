@@ -3,9 +3,7 @@ package com.shinhan.corebank.transfer.application.service;
 import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.ErrorCode;
-import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.gl.api.JournalPostingUseCase;
-import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.InterbankOutcome;
 import com.shinhan.corebank.transfer.application.port.out.InterbankReply;
@@ -124,19 +122,11 @@ public class InterbankSettlementService {
 
     // 타행 확정 시점에도 이체 확정 이벤트를 낸다(tasks.md PH-33-②).
     private void publishSettled(Transfer transfer, LocalDateTime occurredAt) {
-        eventPublisher.publishEvent(TransferSettled.builder()
-                .customerId(accountLockPort
-                        .findWithdrawalAccountDetail(transfer.getWithdrawalAccountId())
-                        .map(WithdrawalAccountDetail::customerId)
-                        .orElse(null))
-                .refId(transfer.getTransferId())
-                .txType(LEDGER_TRANSACTION_TYPE)
-                .status(transfer.getStatus())
-                .errorCode(transfer.getErrorCode())
-                .occurredAt(occurredAt)
-                .amount(transfer.getAmount())
-                .counterpartyName(
-                        transfer.getPayeeName() == null ? null : MaskingUtil.maskName(transfer.getPayeeName()))
-                .build());
+        Long customerId = accountLockPort
+                .findWithdrawalAccountDetail(transfer.getWithdrawalAccountId())
+                .map(WithdrawalAccountDetail::customerId)
+                .orElse(null);
+        eventPublisher.publishEvent(
+                TransferSettledFactory.create(transfer, customerId, LEDGER_TRANSACTION_TYPE, occurredAt));
     }
 }

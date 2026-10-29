@@ -183,7 +183,8 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `ATH` | 인증·회원 | P6 | REQ-AUTH |
 | `OTP` | OTP 거래인증 | P6 | REQ-OTP |
 | `APW` | 계좌비밀번호 | P6 | REQ-ACCT-006~009 |
-| `MYP` | 마이페이지·알림 | P6 | REQ-MYPG |
+| `MYP` | 마이페이지 | P6 | REQ-MYPG |
+| `NTF` | 알림 | P1 | REQ-MYPG |
 | `ACC` | 계좌 | P2 | REQ-ACCT-001~005·010~015 |
 | `INQ` | 조회(계좌·거래내역) | P2 | REQ-INQR |
 | `PRD` | 상품·상품가입 | P3 | REQ-PRDT |
@@ -296,12 +297,13 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `APW0101` | 403 | 계좌비밀번호 5회 오류로 거래가 정지되었습니다. | 계좌 잠금 |
 | `APW0102` | 403 | 계좌비밀번호 인증 토큰이 유효하지 않습니다. | `accountPasswordAuthToken` 무효·만료·사용됨 |
 
-### 4-5. `MYP` 마이페이지·알림 — P6
+### 4-5. `MYP` 마이페이지 — P6
 
 | 코드 | HTTP | 메시지 | 의미 |
 | --- | --- | --- | --- |
 | `MYP0001` | 400 | 휴대폰 번호 형식이 올바르지 않습니다. | 고객정보 변경 시 형식 위반 |
-| `MYP0201` | 404 | 알림을 찾을 수 없습니다. | `notificationId` 없음 |
+
+> 알림 코드는 담당이 달라 `NTF`(§4-16)로 나눴습니다(10/25, PR #723). 같은 요구사항(REQ-MYPG)이어도 담당자가 다르면 접두어를 쪼갠다는 §3-2 배정 원칙을 따릅니다.
 
 ### 4-6. `ACC` 계좌 — P2
 
@@ -437,7 +439,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 ### 4-14. `GLA` 회계 원장(GL) — P3
 
-전표는 사용자 입력이 아니라 내부 거래(이체·상품가입·이자)에서 만들어진다. 여기서 걸리면 호출한 쪽의 분개 패턴이 틀린 것이라 전부 `500`이다. 분개 규칙은 [gl_journal_patterns.md](phase2/gl_journal_patterns.md).
+전표는 사용자 입력이 아니라 내부 거래(이체·상품가입·이자)에서 만들어진다. 여기서 걸리면 호출한 쪽의 분개 패턴이 틀린 것이라 전부 `500`이다. `GLA9010`은 시산표 조회의 서버 쪽 시간 초과라 역시 `500`이다. 분개 규칙은 [gl_journal_patterns.md](phase2/gl_journal_patterns.md).
 
 | 코드 | HTTP | 메시지 | 의미 |
 | --- | --- | --- | --- |
@@ -450,6 +452,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `GLA9007` | 500 | 전표의 참조 키가 없습니다. | 기표 요청에 원 거래번호가 빠짐(PH-24) |
 | `GLA9008` | 500 | 이미 기표된 거래입니다. | 같은 `(tx_type, reference_key)` 재기표. 원장까지 롤백된다(PH-24) |
 | `GLA9009` | 500 | 분개 패턴이 없는 거래유형입니다. | 훅 B 로 패턴표에 없는 원장 거래유형이 들어옴. 이체가 롤백된다(PH-24) |
+| `GLA9010` | 500 | 시산표 집계가 제한 시간을 넘었습니다. 조회 기간을 줄여 다시 시도해 주세요. | 관리자 시산표 집계가 조회 타임아웃(30초)을 넘음(GL-IDX). 다시 눌러도 같은 시간을 기다리므로 기간을 줄이라고 안내한다 |
 
 ### 4-15. `INF` 정보계 조회 — P5
 
@@ -458,6 +461,12 @@ public record ApiResponse<T>(String code, String message, T data) {
 | 코드 | HTTP | 메시지 | 의미 |
 | --- | --- | --- | --- |
 | `INF9001` | 500 | 정보계 API에 연결하지 못했습니다. | WAS가 온프레미스 정보계 API에 닿지 못함(VPN 단절·타임아웃·상대 서버 오류). 구현은 PH-77 ②(#704) |
+
+### 4-16. `NTF` 알림 — P1
+
+| 코드 | HTTP | 메시지 | 의미 |
+| --- | --- | --- | --- |
+| `NTF0201` | 404 | 알림을 찾을 수 없습니다. | `notificationId` 없음. 구현은 PH-04(#391) |
 
 ---
 
@@ -582,13 +591,13 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 > 폐기: `TRANSFER`, `PRODUCT_SIGN`, `LIMIT_CHANGE`, `ACC_REGISTER`, `PROFILE_CHANGE` (기존 OTP 발급 명세의 약어)
 
-> `AdminPermission`은 5종 고정입니다. 값을 늘리면 `/admin/**` 권한 매핑표(PH-49a-②)와 부여·회수 API(PH-49b)를 함께 고쳐야 합니다.
+> `CustomerRole` · `AdminPermission`은 관리자 인증(PH-49a, P1)이 맡습니다. `AdminPermission`은 5종 고정입니다. 값을 늘리면 `/admin/**` 권한 매핑표(PH-49a-②)와 부여·회수 API(PH-49b)를 함께 고쳐야 합니다.
 
-### 5-9. 알림 — P6
+### 5-9. 알림 — P1
 
 | Enum | 값 | 의미 |
 | --- | --- | --- |
-| `NotificationType` | `TRANSFER` | 즉시이체 결과 |
+| `NotificationType` | `TRANSFER` | 즉시 · 타행이체 결과 |
 |  | `SCHEDULED_TRANSFER` | 예약이체 결과 |
 |  | `AUTO_TRANSFER` | 자동이체 결과 |
 |  | `PRODUCT_SUBSCRIPTION` | 상품가입 결과 |

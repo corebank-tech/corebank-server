@@ -36,6 +36,7 @@ public class AdminInfoController {
             description =
                     """
                     asOf 이하의 COMPLETED 영업일별 총 수신 잔액을 돌려준다. from·to 를 생략하면 asOf 부터 거슬러 30일이고 최대 범위는 1년이다.
+                    둘 다 주면 순서와 1년 상한을 검사하고, 하나만 주면 검사 없이 asOf 까지로 잘라 응답한다(info_mart.md §5-2).
                     적재 이력이 없으면 200 + asOf null + 빈 배열이다.
                     **마트가 준비되기 전에는 적재 이력 없음 응답(asOf null, 빈 목록)을 돌려준다(PH-77 ①).**
                     """)

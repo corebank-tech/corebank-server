@@ -1,7 +1,7 @@
 # ADR-0010. 아웃박스는 Spring Modulith Event Publication Registry로 구현한다
 
 - 상태: 수락됨 (2026-10-21)
-- 관련: 이슈 #437(PH-96-①) · #393~#396(PH-96-②) · #436(PH-32), PR #505,
+- 관련: 이슈 #437(PH-96-①) · #706~#709(PH-96-②) · #436(PH-32), PR #505 · #723,
   [ADR-0005](0005-no-spring-batch-mq-api-gateway.md) §2 · [ADR-0003](0003-batch-api-for-cross-domain-lock-reuse.md),
   `docs/phase2/README.md` §3-3 · `tasks.md` §PH-96
 
@@ -57,6 +57,19 @@ ADR-0005의 「MQ 대신 아웃박스」는 그대로다. 바뀌는 것은 §2�
 - 도입 전 테스트는 Modulith API를 쓰지 않는 별도 코드라 저장소에 남기지 않았다.
 - 전체 테스트 2,736건 중 실패 · 오류 · 스킵 0건(7분 8초, 2026-10-21).
 - 확인한 것은 **리스너가 예외로 끝나는 경우**다. `kill -9` 후 재기동해 전달되는지는 PH-96-②에서 잰다.
+
+## 알림 최소 계약 (2026-10-26 추가, PR #723 리뷰)
+
+**요약:** 알림 문구는 업무 도메인이 만들고, notification 은 업무를 모른 채 최소 계약 하나로 저장한다.
+업무가 늘거나 채널(이메일 PH-102)이 붙어도 notification 코드와 문구가 한 벌로 유지된다.
+
+| 항목 | 결정 |
+|---|---|
+| 계약 | `notification.api.NotificationRequest`(customerId · type · refId · title · content · occurredAt)와 이를 돌려주는 `NotificationRequestCarrier` |
+| 문구 · 마스킹 · 고객용 실패 사유 | 발행 도메인(예: transfer 의 `TransferNotificationGenerator`가 자기 `TransferErrorCode` 문구를 쓴다) |
+| notification | `@ApplicationModuleListener` 하나가 `NotificationRequestCarrier`를 받는다. 저장 · 업무 키 `(type, ref_id)` 중복 방지만 맡는다 |
+| 알림이 없는 결과 | `notification()`이 비어 있다(예: 예약 · 자동이체의 이체 확정 — 그 알림은 #707에서 배치 이벤트가 따로 싣는다) |
+| 채택하지 않음 | 받는 쪽 Inbox · worker. 발행 기록이 리스너(채널)별로 재시도를 이미 맡는다. 예약 발송 · 채널별 SLA가 생기면 다시 본다 |
 
 ## 결과
 

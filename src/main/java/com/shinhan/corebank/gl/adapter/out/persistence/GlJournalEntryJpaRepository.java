@@ -14,7 +14,7 @@ public interface GlJournalEntryJpaRepository extends JpaRepository<GlJournalEntr
     // 넣는 결함 주입(PH-28b)이나 우회 적재가 있으면 INNER JOIN 은 그 분개를 총계에서 빼고 차대변이 맞는 것처럼
     // 보이게 한다(FE REQ-ADM-024).
     //
-    // 인덱스는 PH-28 베이스라인을 잰 뒤 GL-IDX 에서 붙인다. perf/sql/ph28_trial_balance_baseline.sql 이 같은 문장을
+    // 거래일이 먼저인 ix_gl_journal_entry_trade_date(GL-IDX)로 기간만 읽는다. perf/sql/ph28_trial_balance_baseline.sql 이 같은 문장을
     // 쓰고, TrialBalanceBaselineSqlTest 가 둘이 같은지 본다.
     String SUM_BY_ACCOUNT_SQL =
             """

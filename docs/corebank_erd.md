@@ -48,11 +48,6 @@ erDiagram
         datetime joined_at "DATETIME(6)"
     }
 
-    admin_permission {
-        bigint customer_id PK,FK "관리자"
-        varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ"
-        datetime granted_at "권한 부여 시각"
-    }
     terms {
         bigint terms_id PK
         varchar terms_code UK "VARCHAR(30)"
@@ -82,17 +77,6 @@ erDiagram
         boolean used
         datetime verified_at "DATETIME(6)"
         datetime expires_at "발급 + 180초"
-    }
-    notification {
-        bigint notification_id PK
-        bigint customer_id FK
-        varchar type "TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION"
-        bigint ref_id "다형 참조: TRANSFER->transfer.transfer_id / SCHEDULED_TRANSFER->scheduled_transfer_id / AUTO_TRANSFER->auto_transfer_execution.execution_id / PRODUCT_SUBSCRIPTION->subscription_id"
-        varchar title "VARCHAR(100)"
-        varchar content "VARCHAR(500)"
-        boolean is_read
-        datetime read_at "DATETIME(6)"
-        datetime occurred_at "DATETIME(6)"
     }
 
     %% ---------- P2 ----------
@@ -224,6 +208,22 @@ erDiagram
     }
 
     %% ---------- P1 ----------
+    admin_permission {
+        bigint customer_id PK,FK "관리자"
+        varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ"
+        datetime granted_at "권한 부여 시각"
+    }
+    notification {
+        bigint notification_id PK
+        bigint customer_id FK
+        varchar type UK "TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION"
+        bigint ref_id UK "uk_noti_type_ref(type, ref_id). 다형 참조: TRANSFER->transfer.transfer_id / SCHEDULED_TRANSFER->scheduled_transfer_id / AUTO_TRANSFER->auto_transfer_execution.execution_id / PRODUCT_SUBSCRIPTION->subscription_id"
+        varchar title "VARCHAR(100)"
+        varchar content "VARCHAR(500)"
+        boolean is_read
+        datetime read_at "DATETIME(6)"
+        datetime occurred_at "DATETIME(6)"
+    }
     transfer_limit {
         bigint customer_id PK
         bigint one_time_limit
@@ -461,7 +461,7 @@ erDiagram
         char account_code FK "CHAR(5)"
         varchar dr_cr "DEBIT / CREDIT. Fineract type_enum 대응"
         bigint amount "원 단위 정수. 항상 양수"
-        date trade_date "전표에서 복제. 시산표 집계 기준일"
+        date trade_date "전표에서 복제. 시산표 집계 기준일. INDEX(trade_date, account_code, dr_cr, amount)"
         datetime created_at "DATETIME(6)"
     }
     gl_voucher_sequence {
