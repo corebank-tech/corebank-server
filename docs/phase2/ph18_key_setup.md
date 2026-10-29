@@ -1,66 +1,77 @@
-# PH-18 · 고객 개인정보 암호화 키 주입 준비
+# PH-18 고객 개인정보 암호화 운영 가이드
 
-## 상태
+관련 이슈: #736 · PH-72(Secrets Manager) · PH-70-②(RDS 컷오버)
 
-이 문서는 #736의 암호화 키 주입 및 DB 확장 단계를 설명합니다.
+## 1. 적용 범위
 
-Flyway `V202610261600__add_customer_pii_shadow_columns.sql`을 통해
-`customer` 테이블에 다음 컬럼을 추가했습니다.
+`customer.email`, `phone_number`를 AES-256-GCM으로 암호화하고 이메일 정확 검색에 HMAC-SHA256 해시를 사용한다.
 
-- `email_ciphertext`
-- `phone_number_ciphertext`
-- `email_search_hash`
+- 신규 컬럼: `email_ciphertext`, `phone_number_ciphertext`, `email_search_hash`
+- 암호문: `v1:` + Base64URL, 랜덤 nonce 및 컬럼별 AAD 적용
+- 기존 평문 컬럼과 API 응답 계약은 전환 완료까지 유지
+- 평문 컬럼 제거는 별도 후속 작업
 
-기존 `email`, `phone_number` 컬럼 및 UNIQUE 제약은 유지하며,
-신규 컬럼은 데이터 전환이 완료되기 전까지 NULL을 허용합니다.
+## 2. 설정 및 키 관리
 
-현재 JPA 저장·조회 경로는 기존 평문 컬럼을 사용합니다.
-`app.pii.enabled=true`로 암호화 Bean을 생성하더라도
-고객 데이터가 자동으로 암호화되지는 않습니다.
-
-## 환경변수 계약
-
-| 환경변수 | 의미 | 초기값 |
+| 환경 변수 | 용도 | 기본값 |
 |---|---|---|
-| `APP_PII_ENABLED` | 암호화 관련 빈 생성 활성화 | 미설정(비활성) |
-| `APP_PII_AES_KEY_BASE64` | AES-256-GCM용 32바이트 키의 표준 Base64 인코딩 | 없음 |
-| `APP_PII_HMAC_KEY_BASE64` | 이메일 정확 일치 검색용 HMAC-SHA256 32바이트 키의 표준 Base64 인코딩 | 없음 |
+| `APP_PII_ENABLED` | 평문·암호문 이중 쓰기 | `false` |
+| `APP_PII_READ_ENCRYPTED` | 암호문 조회·해시 검색 | `false` |
+| `APP_PII_AES_KEY_BASE64` | AES-256-GCM 32바이트 키 | 없음 |
+| `APP_PII_HMAC_KEY_BASE64` | HMAC-SHA256 32바이트 키 | 없음 |
 
-- 두 키는 **서로 다른**, 암호학적으로 안전하게 생성한 32바이트 난수여야 합니다.
-- 서버에서 임시 키를 생성하거나 키가 없을 때 평문 저장으로 조용히 전환하지 않습니다.
-- 키 원문·Base64 문자열을 레포지토리, `.env` 추적 파일, PR, 로그, 예외 메시지에 남기지 않습니다.
-- 프로덕션과 전환 대상 VM이 같은 데이터를 읽으려면 **동일한 해당 환경의 키 버전**을 사용할 수 있어야 합니다. 키 전달 방식은 PH-72(Secrets Manager), PH-70(복원·VM)과 함께 확정합니다.
-- AES 키를 교체하면 이전 암호문은 이전 키 없이는 복호화할 수 없습니다. HMAC 키를 교체하면 기존 `email_search_hash`가 더 이상 검색에 맞지 않으므로 전체 재계산이 필요합니다. **암호화 데이터 마이그레이션 완료 전에는 키를 교체하지 않습니다.**
+- AES/HMAC 키는 서로 달라야 하며, 누락·오설정 시 암호화 기능 시작에 실패한다.
+- 키는 Git·설정 파일·Terraform state·로그에 저장하지 않는다.
+- 운영 키는 PH-72 Secrets Manager에서 관리한다. WAS 2대와 백필·검증 실행기는 동일한 키를 사용해야 한다.
+- 기존 암호문이 존재하는 동안 임의로 키를 교체하거나 자동 회전하지 않는다.
+- 설정 변경 시 WAS 재시작·재배포가 필요하다.
 
-## 전환 순서 및 주의
+## 3. 운영 전환 순서
 
-1. 기존 평문 이메일 중복 확인과 관리자 검색 성능 기준선을 먼저 수집합니다.
-2. 신규 암호문 및 검색 해시 컬럼을 추가하고, JDBC 시드/기존 데이터 백필 경로를 확정합니다.
-3. 양쪽 읽기·쓰기 호환성, 유일 제약, 백필 재실행 및 복구 경계를 검증합니다.
-4. 모든 고객 행의 암호화·검색이 확인된 뒤 평문 컬럼을 제거합니다.
+| 단계 | 설정·작업 |
+|---|---|
+| ① 코드 배포 | `APP_PII_ENABLED=false`, `APP_PII_READ_ENCRYPTED=false` |
+| ② 키 주입 | PH-72 연동 후 WAS 2대에 동일 키 주입 |
+| ③ 이중 쓰기 | 양쪽 WAS에 `APP_PII_ENABLED=true` 적용 |
+| ④ 백필 | 신규 RDS에서 일회성 백필 실행 |
+| ⑤ 전체 검증 | 암호문 누락·복호화·HMAC 불일치 모두 0건 확인 |
+| ⑥ 조회 전환 | 양쪽 WAS에 `APP_PII_READ_ENCRYPTED=true` 적용 |
+| ⑦ 회귀 검증 | 회원가입·로그인·연락처 변경·관리자 검색 확인 |
 
-**2~4 단계가 끝나기 전까지 이 구성의 활성화를 운영 DB 암호화 완료로 간주하면 안 됩니다.**
-키 없이 복호화를 시도하거나 암호화 기능이 켜진 상태에서 키가 틀리면 실패해야 합니다.
+모든 WAS의 이중 쓰기 활성화가 완료된 후 백필한다. 운영 전환 전 팀 승인 및 백업·복구 경로를 확인한다.
 
-## 키 주입 설정 단위 테스트
+## 4. 일회성 백필·검증
 
-```bash
-./gradlew test --tests '*CustomerPiiCryptoConfigurationTest' \
-  --tests '*CustomerPiiCipherTest' \
-  --tests '*CustomerEmailBlindIndexTest'
+운영 도구: `CustomerPiiMaintenanceApplication`
+
+- `app.pii.maintenance.action=backfill`: 누락된 암호화 컬럼 백필
+- `app.pii.maintenance.action=verify`: 전체 고객 암호문·평문·해시 검증
+- 백필은 최대 500건씩 별도 트랜잭션으로 처리하며 `SELECT ... FOR UPDATE`를 사용한다.
+- 기존 암호문은 보존하고 누락된 컬럼만 채운다.
+- 실행 대상 DB 호스트·스키마를 확인하며, 유지보수 모드에서는 Flyway를 실행하지 않는다.
+
+로컬 전체 검증 예시(동일 PowerShell에 로컬 키 주입 필요):
+
+```powershell
+.\gradlew.bat bootRun --args="--spring.profiles.active=local,pii-maintenance --app.pii.enabled=true --app.pii.read-encrypted=false --app.pii.maintenance.action=verify --app.pii.maintenance.expected-db-host=localhost --app.pii.maintenance.expected-db-name=minicore"
 ```
 
-## AES-GCM 암호문 인증 범위
+운영에서는 실제 RDS 설정과 운영 키를 사용한다. COB 및 성능 측정 시간대와 겹치지 않도록 실행 일정을 협의한다.
 
-암호문은 버전별 형식으로 저장하며, AES-GCM의 AAD에 컬럼 식별자를 포함합니다.
+## 5. 검증 및 장애 대응
 
-- 이메일: `corebank:customer:email:v1:`
-- 휴대폰 번호: `corebank:customer:phone_number:v1:`
+**로컬 검증 (2026-10-29)**
 
-따라서 이메일 암호문을 휴대폰 번호 컬럼에서 복호화할 수 없습니다.
+- 전체 Gradle 테스트 통과
+- 백필 동시성 및 재실행 테스트 통과
+- 로컬 고객 5명 전수 검증: 누락·복호화 불일치·HMAC 불일치·오류 모두 0건
 
-현재 AAD에는 고객 ID가 포함되지 않아 서로 다른 고객 행 사이의
-암호문 교체까지 방지하지는 못합니다.
+운영 RDS 백필·검증과 조회 성능 측정은 아직 수행하지 않았다.
 
-고객 ID를 AAD에 포함할지는 신규 고객의 ID 생성 시점 및
-기존 데이터 백필 절차를 고려해 실제 JPA 저장 연동 전에 결정합니다.
+**장애 대응**
+
+- 키 오류: 기존 키 복원. 새 키 임의 생성 금지.
+- 백필 중단: 원인 확인 후 재실행하고 전체 검증 수행.
+- 검증 불일치: 암호문 조회 전환 중단.
+- 조회 전환 후 장애: `APP_PII_ENABLED=true`를 유지하면서 `APP_PII_READ_ENCRYPTED=false`로 조회 롤백 검토.
+- 평문 컬럼은 안정화 확인 전 제거하지 않는다.
