@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 39개 비즈니스 테이블 + 8개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 396개 컬럼
+**대상**: 39개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 405개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -73,6 +73,7 @@
 | 45 | `SPRING_SESSION_ATTRIBUTES` | 직렬화된 세션 속성 | P6 | 3 |
 | 46 | `EVENT_PUBLICATION` | 이벤트 발행 기록 (Spring Modulith) | P1 | 9 |
 | 47 | `cob_checkpoint` | COB 재시작 체크포인트 | P5 | 5 |
+| 48 | `audit_archive_execution` | 감사 로그 WORM 적재 상태 | P1 | 9 |
 
 ---
 
@@ -1015,6 +1016,30 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | INDEX | `ix_audit_customer` | `customer_id, requested_at DESC` |
 | INDEX | `ix_audit_txno` | `transaction_number` |
 | INDEX | `ix_audit_requested_at` | `requested_at` — WORM 적재 · 검증 배치의 하루 범위 조회(PH-82) |
+
+---
+
+## `audit_archive_execution`
+
+> 감사 로그 WORM 적재 상태 (PH-82, #788)
+
+`AuditLogArchiveService`가 날짜 · 경로(`LOG` / `ACCESS`)마다 업로드 전에 `PENDING`을 커밋하고, 업로드가 끝나면 `SUCCESS`, 실패하면 `FAILURE`와 사유를 남긴다. 매일 00:30 배치가 최근 7일 중 `SUCCESS`가 아닌 날만 다시 올린다. 7일을 넘긴 미완료 날은 자동으로 다시 올리지 않는다. 저장소는 같은 키를 덮어쓰지 않으므로(S3 `If-None-Match: *`), 사본이 이미 있으면 내용이 같을 때만 `SUCCESS`로 확정한다. **`SUCCESS`인데 사본이 없으면 다시 올리지 않는다** — 지워진 증거를 현재 DB 내용으로 덮지 않기 위해서다. 다른 테이블과 FK는 없다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `audit_archive_execution_id` | `BIGINT` | **PK** | X |  | 내부 식별자 (AUTO_INCREMENT) |
+| `archive_date` | `DATE` | **UK** | X |  | 적재 대상 날짜(`audit_log.requested_at` 기준) |
+| `archive_type` | `VARCHAR(10)` | **UK** | X |  | `LOG` / `ACCESS` |
+| `status` | `VARCHAR(10)` |  | X |  | `PENDING` / `SUCCESS` / `FAILURE` |
+| `object_key` | `VARCHAR(100)` |  | X |  | 저장소 객체 키. 예: `audit/log/2026/10/28.jsonl` |
+| `row_count` | `INT` |  | O |  | 적재한 행 수. 성공 때만 채우고 0건도 남긴다 |
+| `failure_reason` | `VARCHAR(500)` |  | O |  | 마지막 실패 사유 |
+| `completed_at` | `DATETIME(6)` |  | O |  | 성공 시각(KST) |
+| `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각(KST, 애플리케이션이 채움) |
+
+| 구분 | 인덱스 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_audit_archive_execution_date_type` | `archive_date, archive_type` |
 
 ---
 

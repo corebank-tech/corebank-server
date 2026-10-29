@@ -2,8 +2,10 @@ package com.shinhan.corebank.common.audit;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -21,11 +23,14 @@ public class LocalAuditArchiveStorage implements AuditArchiveStorage {
     }
 
     @Override
-    public void put(String key, byte[] content) {
+    public boolean putIfAbsent(String key, byte[] content) {
         Path file = rootDirectory.resolve(key);
         try {
             Files.createDirectories(file.getParent());
-            Files.write(file, content);
+            Files.write(file, content, StandardOpenOption.CREATE_NEW);
+            return true;
+        } catch (FileAlreadyExistsException e) {
+            return false;
         } catch (IOException e) {
             throw new UncheckedIOException("감사 로그 사본을 쓰지 못했습니다: " + file, e);
         }
