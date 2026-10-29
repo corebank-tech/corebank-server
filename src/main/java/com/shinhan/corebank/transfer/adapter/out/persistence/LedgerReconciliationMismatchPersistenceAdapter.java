@@ -21,12 +21,14 @@ public class LedgerReconciliationMismatchPersistenceAdapter implements LedgerRec
         this.repository = repository;
     }
 
-    // 삭제와 삽입이 따로 커밋되면 "지웠는데 못 넣은" 상태가 보일 수 있어 한 트랜잭션으로 묶는다.
+    // 확인과 저장 사이 경합은 대사 락이 막고, 그래도 겹치면 (영업일, 계좌) 유니크 키가 막는다.
     @Override
     @Transactional
-    public void replaceForBusinessDate(
+    public boolean saveIfAbsent(
             LocalDate businessDate, List<LedgerReconciliationMismatch> mismatches, LocalDateTime detectedAt) {
-        repository.deleteByBusinessDate(businessDate);
+        if (repository.existsByBusinessDate(businessDate)) {
+            return false;
+        }
         repository.saveAll(mismatches.stream()
                 .map(mismatch -> LedgerReconciliationMismatchJpaEntity.builder()
                         .businessDate(businessDate)
@@ -36,6 +38,7 @@ public class LedgerReconciliationMismatchPersistenceAdapter implements LedgerRec
                         .detectedAt(detectedAt)
                         .build())
                 .toList());
+        return true;
     }
 
     @Override
