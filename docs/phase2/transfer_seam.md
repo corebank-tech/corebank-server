@@ -264,8 +264,10 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 - 상태는 `HELD → EXECUTING → EXECUTED / FAILED`, `HELD → REJECTED`(관리자 거절), `HELD → CANCELLED`(고객 취소), `HELD → EXPIRED`(만료)입니다. 전이는 조건부 UPDATE라, 같은 보류 건을 두 곳에서 동시에 처리해도 한 곳만 성공합니다.
 - **실행은 원본 요청 그대로 `execute()`를 한 번 부릅니다.** `transferType=IMMEDIATE`, `source_type=HELD`, `source_id=보류 ID`, `execution_date=보류한 날짜`입니다. `source_type`은 `VARCHAR(12)`라 12자 이하 값을 씁니다. 컬럼을 넓히면 300만 행 `transfer`에 ALTER가 걸립니다. 기존 `uk_transfer_source_execution_date`가 두 번 실행을 DB에서 막고, 다시 부르면 앞선 결과를 돌려받습니다. 원장 거래유형은 `IMMEDIATE_TRANSFER` 그대로라 GL(훅 B)은 바뀌지 않습니다.
 - **실행할 때는 토큰을 받지 않습니다.** 인증은 보류 시점에 끝났습니다. 잔액·한도·계좌 상태와 훅 A는 실행 시점 기준으로 다시 검사하고, 거부되면 `FAILED`로 끝납니다. 자동 재시도는 하지 않습니다.
+- **승인하면 바로 실행합니다.** 지연이체 설정이 함께 해당하는 건이어도 다시 지연하지 않습니다. 승인 실행은 훅 C를 지나지 않고, 승인 과정의 고객 확인 콜이 지연이체의 보호 목적을 채웁니다.
+- **`ON_APPROVAL` 건은 보류한 영업일 안에 승인되지 않으면 `EXPIRED`입니다.** 실행할 때 `execution_date`가 보류한 날짜라, 며칠 뒤 승인하면 오래된 요청이 뒤늦게 기표되기 때문입니다. 만료 처리는 FDS 착수 때 구현하고, #772는 `AT_TIME`만 다룹니다. `AT_TIME` 건은 만료하지 않고 실행 시점 검사에서 거부되면 `FAILED`입니다.
 - **승인 권한과 콜 기록 검증은 호출자 몫입니다.** `release`·`reject`는 `actorId`와 사유만 남깁니다. 관리자 권한과 콜 결과 입력은 FDS가 부르기 전에 확인합니다.
-- Apache Fineract의 maker-checker도 같은 방식입니다. 업무 트랜잭션 안에서 승인 필요를 판정해 롤백하고(`CommandSourceService.validateMakerChecker`), 승인하면 저장해 둔 원본으로 같은 처리를 다시 실행합니다(`PortfolioCommandSourceWritePlatformServiceImpl.approveEntry`). 비밀값을 지운 요청은 승인 대기로 보낼 수 없게 막아, 비밀값을 저장하지 않습니다.
+- Apache Fineract의 maker-checker도 같은 방식입니다. 업무 트랜잭션 안에서 승인 필요를 판정해 롤백하고(`CommandSourceService.validateMakerChecker`), 승인하면 저장해 둔 원본으로 같은 처리를 다시 실행합니다(`PortfolioCommandSourceWritePlatformServiceImpl.approveEntry`). 승인 단계는 하나이고, 승인된 건은 승인 대기 판정을 다시 거치지 않습니다. 비밀값을 지운 요청은 승인 대기로 보낼 수 없게 막아, 비밀값을 저장하지 않습니다.
 
 ### 9-5. 구현체 규칙
 
@@ -297,3 +299,5 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 - **타행이체 보류** — 타행이체는 `execute()`를 지나지 않습니다(정책 5).
 - **예약·자동이체 보류** — 실행 시점에 고객이 화면을 조작하지 않아 판정할 행동이 없습니다.
 - **보류 중 한도 예약** — 실행 시점에 다시 검사합니다. 한도를 되돌리는 계약이 아직 없습니다(#657).
+- **FDS 판정 근거와 Agent 조사** — 경계만 정합니다. P4는 `transferHoldId`로 원본 요청과 상태를 읽는 조회를 `transfer.api`에 둡니다. A/B 판정 근거·행동 요약·Agent 읽기 Tool은 P6이 소유합니다. 조회 구현은 FDS 착수 때 합니다.
+- **보류 종료 이벤트** — 고객 취소·만료를 FDS 사건 종료에 쓰려면 별도 이벤트가 필요할 수 있습니다. FDS 착수 때 P6과 정합니다.
