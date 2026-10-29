@@ -68,7 +68,7 @@ ADR-0005의 「MQ 대신 아웃박스」는 그대로다. 바뀌는 것은 §2�
 | 계약 | `notification.api.NotificationRequest`(customerId · type · refId · title · content · occurredAt)와 이를 돌려주는 `NotificationRequestCarrier` |
 | 문구 · 마스킹 · 고객용 실패 사유 | 발행 도메인(예: transfer 의 `TransferNotificationGenerator`가 자기 `TransferErrorCode` 문구를 쓴다). 예약 · 자동이체는 문구를 자기 생성기로 만들고, 실패 사유는 이체 엔진이 판정한 `TransferResult.customerFailureReason()`을 받아 붙인다(#707) |
 | notification | `@ApplicationModuleListener` 하나가 `NotificationRequestCarrier`를 받는다. 저장 · 업무 키 `(type, ref_id)` 중복 방지만 맡는다 |
-| 알림이 없는 결과 | `notification()`이 비어 있다(예: 예약 · 자동이체의 이체 확정 — 그 알림은 배치 이벤트가 따로 싣는다, #707) |
+| 알림이 없는 결과 | 알림 이벤트를 발행하지 않는다. `notification()`은 필수값이고 비어 있으면 검증에서 실패한다(예: 예약 · 자동이체의 이체 확정은 `TransferSettled`를 내지 않고, 그 알림은 배치 이벤트가 싣는다, #707 · PR #738 리뷰) |
 | 채택하지 않음 | 받는 쪽 Inbox · worker. 발행 기록이 리스너(채널)별로 재시도를 이미 맡는다. 예약 발송 · 채널별 SLA가 생기면 다시 본다 |
 
 ## 결과

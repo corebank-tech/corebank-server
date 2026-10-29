@@ -33,7 +33,7 @@ execute(command)
        [훅 B] LedgerPostingHook.afterLedger(ctx)
        transfer.complete
        transfer 저장
-       publishEvent(TransferSettled)   ← 즉시·예약·자동 모두. P1 #505, 이후 P4 소유
+       publishEvent(TransferSettled)   ← 즉시이체만(예약·자동은 배치 이벤트, PR #738). P1 #505, 이후 P4 소유
     }
  실패 시 failTransfer() — REQUIRES_NEW {
        tradeDate = gate로 읽기 → Transfer 생성

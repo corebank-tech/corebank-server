@@ -254,11 +254,12 @@ public class InterbankTransferService implements InterbankTransferUseCase {
             Transfer created = newTransfer(command, draft, businessDateGate.acquireSharedAndReadBusinessDate());
             created.fail(errorCode, errorMessage);
             Transfer failed = transferSavePort.save(created);
-            eventPublisher.publishEvent(TransferSettledFactory.create(
-                    failed,
-                    command.customerId(),
-                    InterbankSettlementService.LEDGER_TRANSACTION_TYPE,
-                    LocalDateTime.now(clock)));
+            TransferSettledFactory.create(
+                            failed,
+                            command.customerId(),
+                            InterbankSettlementService.LEDGER_TRANSACTION_TYPE,
+                            LocalDateTime.now(clock))
+                    .ifPresent(eventPublisher::publishEvent);
             return failed;
         });
     }

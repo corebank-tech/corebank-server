@@ -123,7 +123,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
             assertThat(event.refId()).isEqualTo(saved.getExecutionId());
             assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
             assertThat(event.errorCode()).isNull();
-            assertThat(event.notification()).hasValueSatisfying(notification -> {
+            assertThat(event.notification()).satisfies(notification -> {
                 assertThat(notification.type()).isEqualTo(NotificationType.AUTO_TRANSFER);
                 assertThat(notification.refId()).isEqualTo(saved.getExecutionId());
                 assertThat(notification.title()).isEqualTo("자동이체 완료");
@@ -152,7 +152,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
             assertThat(event.refId()).isEqualTo(saved.getExecutionId());
             assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
             assertThat(event.errorCode()).isEqualTo("TRF0303");
-            assertThat(event.notification()).hasValueSatisfying(notification -> {
+            assertThat(event.notification()).satisfies(notification -> {
                 assertThat(notification.title()).isEqualTo("자동이체 실패");
                 assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보내지 못했습니다. 출금계좌 잔액이 부족합니다.");
             });
@@ -179,7 +179,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
             assertThat(event.refId()).isEqualTo(saved.getExecutionId());
             assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
             assertThat(event.errorCode()).isEqualTo("TRF0201");
-            assertThat(event.notification()).hasValueSatisfying(notification -> {
+            assertThat(event.notification()).satisfies(notification -> {
                 assertThat(notification.title()).isEqualTo("자동이체 실패");
                 assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보내지 못했습니다.");
             });
@@ -200,7 +200,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
             assertThat(event.customerId()).isEqualTo(customerId);
             assertThat(event.refId()).isEqualTo(saved.getExecutionId());
             assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
-            assertThat(event.notification()).hasValueSatisfying(notification -> {
+            assertThat(event.notification()).satisfies(notification -> {
                 assertThat(notification.title()).isEqualTo("자동이체 실패");
                 assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보내지 못했습니다.");
             });
@@ -221,8 +221,8 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
         verify(domainEventSink).record(published.capture());
         assertThat(published.getValue())
                 .isInstanceOfSatisfying(AutoTransferExecutionSettled.class, event -> assertThat(event.notification())
-                        .map(NotificationRequest::content)
-                        .hasValue("홍*동님에게 10,000원을 보내지 못했습니다."));
+                        .extracting(NotificationRequest::content)
+                        .isEqualTo("홍*동님에게 10,000원을 보내지 못했습니다."));
     }
 
     @Test
@@ -241,7 +241,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
             assertThat(event.refId()).isEqualTo(saved.getExecutionId());
             assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
             assertThat(event.errorCode()).isNull();
-            assertThat(event.notification()).hasValueSatisfying(notification -> {
+            assertThat(event.notification()).satisfies(notification -> {
                 assertThat(notification.title()).isEqualTo("자동이체 완료");
                 assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보냈습니다.");
             });
@@ -264,7 +264,7 @@ class AutoTransferBatchItemProcessorTest extends IntegrationTestSupport {
             assertThat(event.refId()).isEqualTo(saved.getExecutionId());
             assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
             assertThat(event.errorCode()).isNull();
-            assertThat(event.notification()).hasValueSatisfying(notification -> {
+            assertThat(event.notification()).satisfies(notification -> {
                 assertThat(notification.title()).isEqualTo("자동이체 실패");
                 assertThat(notification.content()).isEqualTo("홍*동님에게 10,000원을 보내지 못했습니다.");
             });

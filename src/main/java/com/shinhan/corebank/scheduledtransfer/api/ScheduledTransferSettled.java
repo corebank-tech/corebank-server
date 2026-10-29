@@ -5,7 +5,6 @@ import com.shinhan.corebank.common.event.DomainEvent;
 import com.shinhan.corebank.notification.api.NotificationRequest;
 import com.shinhan.corebank.notification.api.NotificationRequestCarrier;
 import java.time.LocalDateTime;
-import java.util.Optional;
 import lombok.Builder;
 
 /**
@@ -24,7 +23,7 @@ public record ScheduledTransferSettled(
         implements DomainEvent, NotificationRequestCarrier {
 
     @Override
-    public Optional<NotificationRequest> notification() {
-        return Optional.ofNullable(notificationRequest);
+    public NotificationRequest notification() {
+        return notificationRequest;
     }
 }

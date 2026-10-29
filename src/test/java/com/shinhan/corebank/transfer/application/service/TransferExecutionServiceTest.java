@@ -2,6 +2,7 @@ package com.shinhan.corebank.transfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
@@ -664,7 +665,7 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
             assertThat(event.txType()).isEqualTo("IMMEDIATE_TRANSFER");
             assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
             assertThat(event.errorCode()).isNull();
-            assertThat(event.notification()).hasValueSatisfying(notification -> {
+            assertThat(event.notification()).satisfies(notification -> {
                 assertThat(notification.title()).isEqualTo("이체 완료");
                 assertThat(notification.content()).contains("*").contains("30,000원을 보냈습니다.");
             });
@@ -691,8 +692,9 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("자동이체도 엔진이 TransferSettled 를 한 번 발행하고, 같은 회차 재생 호출은 다시 발행하지 않는다 (#436)")
-    void execute_autoTransfer_publishesOnceEvenOnReplay() {
+    @DisplayName("자동이체의 이체 확정은 알림 대상이 아니라 엔진이 TransferSettled 를 발행하지 않는다 — 알림은 배치 이벤트가 싣는다 (#707, PR #738 리뷰)")
+    void execute_autoTransfer_publishesNoTransferSettled() {
+        // given
         new TransactionTemplate(transactionManager)
                 .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
         TransferCommand command = TransferCommand.builder()
@@ -708,19 +710,12 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 .executionDate(LocalDate.of(2026, 9, 27))
                 .build();
 
-        transferExecutionService.execute(command);
-        transferExecutionService.execute(command);
+        // when
+        TransferResult result = transferExecutionService.execute(command);
 
-        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
-        verify(domainEventSink).record(published.capture());
-        Long transferId = jdbcTemplate.queryForObject(
-                "SELECT transfer_id FROM transfer WHERE source_id = 556 AND status = 'SUCCESS'", Long.class);
-        assertThat(published.getValue()).isInstanceOfSatisfying(TransferSettled.class, event -> {
-            assertThat(event.refId()).isEqualTo(transferId);
-            assertThat(event.txType()).isEqualTo("AUTO_TRANSFER");
-            assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
-            assertThat(event.notification()).isEmpty();
-        });
+        // then
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        verifyNoInteractions(domainEventSink);
     }
 
     private TransferCommand transferCommand(long amount) {

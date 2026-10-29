@@ -528,16 +528,17 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     }
 
     /**
-     * 이체 결과가 확정된 트랜잭션 안에서 TransferSettled 를 발행한다(#436). 즉시·예약·자동이체 모두 여기서
-     * 한 번 나간다. 돈이 움직인 커밋과 함께 커밋되므로 즉시이체 알림은 빠지지 않는다. 사전검증 실패는 여기까지
-     * 오지 않는다. 예약·자동이체 알림은 배치 이벤트에 싣는다(#707).
+     * 이체 결과가 확정된 트랜잭션 안에서 TransferSettled 를 발행한다(#436). 즉시이체는 여기서 한 번 나간다.
+     * 돈이 움직인 커밋과 함께 커밋되므로 즉시이체 알림은 빠지지 않는다. 사전검증 실패는 여기까지 오지 않는다.
+     * 예약·자동이체는 발행하지 않는다(알림은 배치 이벤트가 싣는다).
      *
      * <p>기표·ERROR 확정 트랜잭션(REQUIRES_NEW) 안에서 부르므로 BEFORE_COMMIT 리스너가 그 커밋에 붙는다.
      * 재생 경로(findAlreadyProcessedResult)는 여기를 지나지 않아 같은 이체가 두 번 발행되지 않는다.
      */
     private void publishSettled(TransferCommand command, Transfer transfer, LocalDateTime occurredAt) {
-        eventPublisher.publishEvent(TransferSettledFactory.create(
-                transfer, command.customerId(), command.transferType().ledgerTransactionType(), occurredAt));
+        TransferSettledFactory.create(
+                        transfer, command.customerId(), command.transferType().ledgerTransactionType(), occurredAt)
+                .ifPresent(eventPublisher::publishEvent);
     }
 
     private TransferSourceType resolveSourceType(TransferType transferType) {
