@@ -1005,7 +1005,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | `result` | `VARCHAR(12)` |  | X |  | 처리 결과. `SUCCESS` / `FAILURE` |
 | `detail` | `JSON` |  | O |  | 부가 정보. 비밀번호·전체 계좌번호 등은 마스킹 후 저장한다 |
 | `access_reason` | `VARCHAR(20)` |  | O |  | 관리자 개인정보 조회·변경 사유(PH-89, D-10). `CUSTOMER_REQUEST` · `INCIDENT` · `AUDIT` · `OPERATION`. 그 밖의 행은 NULL |
-| `row_hash` | `CHAR(64)` |  | O |  | 무결성 해시(PH-82). `audit_log_id`를 뺀 전 컬럼을 키 정렬 JSON으로 만든 SHA-256(64자 hex). 매일 WORM 버킷에 올린 사본과 대조한다. 도입 전 행은 NULL이며 적재·검증 대상이 아니다 |
+| `row_hash` | `CHAR(64)` |  | O |  | 무결성 해시(PH-82). `audit_log_id`를 뺀 전 컬럼을 키 정렬 JSON으로 만든 SHA-256(64자 hex). 매일 WORM 버킷에 올린 사본과 대조한다. 도입 전 행은 NULL이며 적재 대상이 아니다 |
 | `requested_at` | `DATETIME(6)` |  | X |  | 요청 일시 |
 
 **인덱스**
@@ -1014,6 +1014,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | --- | --- | --- |
 | INDEX | `ix_audit_customer` | `customer_id, requested_at DESC` |
 | INDEX | `ix_audit_txno` | `transaction_number` |
+| INDEX | `ix_audit_requested_at` | `requested_at` — WORM 적재 · 검증 배치의 하루 범위 조회(PH-82) |
 
 ---
 
