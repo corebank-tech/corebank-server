@@ -55,6 +55,22 @@ class AuditLogJpaEntityTest {
     }
 
     @Test
+    @DisplayName("관리자 개인정보 조회 이벤트 + 사유 누락 -> IllegalArgumentException")
+    void accessReasonRequiredEvent_withoutAccessReason_throws() {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> AuditLogJpaEntity.of(
+                        1L, null, AuditEventType.CUSTOMER_DETAIL_VIEW, "127.0.0.1", true, null, null, NOW));
+    }
+
+    @Test
+    @DisplayName("사유가 필요 없는 이벤트 + 사유 있음 -> IllegalArgumentException (access 경로로 잘못 분류되지 않게)")
+    void accessReasonFreeEvent_withAccessReason_throws() {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> AuditLogJpaEntity.of(
+                        1L, null, AuditEventType.LOGIN, "127.0.0.1", true, null, AccessReason.OPERATION, NOW));
+    }
+
+    @Test
     @DisplayName("detail에 계좌번호 포함 -> 마스킹되어 저장됨")
     void detailWithAccountNumber_masked() {
         Map<String, Object> detail = Map.of("accountNumber", "110123456789");

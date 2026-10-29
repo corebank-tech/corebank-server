@@ -35,4 +35,13 @@ public enum AuditEventType {
                 || this == AUTO_TRANSFER
                 || this == PRODUCT_SUBSCRIPTION;
     }
+
+    /** 관리자 개인정보 조회 · 변경 여부(PH-89). true 면 access_reason 이 있어야 하고, 사본은 access 경로로 간다 */
+    public boolean requiresAccessReason() {
+        return this == CUSTOMER_SEARCH
+                || this == CUSTOMER_DETAIL_VIEW
+                || this == ACCOUNT_UNLOCK
+                || this == LOGIN_PASSWORD_RESET_BY_ADMIN
+                || this == CUSTOMER_STATUS_CHANGE;
+    }
 }

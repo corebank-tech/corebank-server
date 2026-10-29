@@ -79,6 +79,10 @@ public class AuditLogJpaEntity {
         if (!eventType.isLedgerChanging() && hasTransactionNumber) {
             throw new IllegalArgumentException("원장 비변경 이벤트(%s)는 transactionNumber 가 없어야 합니다.".formatted(eventType));
         }
+        if (eventType.requiresAccessReason() != (accessReason != null)) {
+            throw new IllegalArgumentException(
+                    "이벤트(%s)와 accessReason 유무가 맞지 않습니다: %s".formatted(eventType, accessReason));
+        }
 
         AuditLogJpaEntity e = new AuditLogJpaEntity();
         e.customerId = customerId;
