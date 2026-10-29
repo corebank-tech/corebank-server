@@ -75,5 +75,13 @@ resource "aws_security_group" "rds" {
     security_groups = [aws_security_group.was.id]
   }
 
+  ingress {
+    description = "On-premises MySQL replica over VPN"
+    from_port   = 3306
+    to_port     = 3306
+    protocol    = "tcp"
+    cidr_blocks = [var.onprem_replica_cidr]
+  }
+
   tags = { Name = "${var.name_prefix}-sg-rds" }
 }
