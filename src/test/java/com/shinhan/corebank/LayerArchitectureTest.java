@@ -57,6 +57,9 @@ class LayerArchitectureTest {
     static final ArchRule limit = layerRule("limit");
 
     @ArchTest
+    static final ArchRule notification = layerRule("notification");
+
+    @ArchTest
     static final ArchRule otp = layerRule("otp");
 
     @ArchTest

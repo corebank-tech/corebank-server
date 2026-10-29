@@ -664,8 +664,10 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
             assertThat(event.txType()).isEqualTo("IMMEDIATE_TRANSFER");
             assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
             assertThat(event.errorCode()).isNull();
-            assertThat(event.amount()).isEqualTo(30000L);
-            assertThat(event.counterpartyName()).contains("*");
+            assertThat(event.notification()).hasValueSatisfying(notification -> {
+                assertThat(notification.title()).isEqualTo("이체 완료");
+                assertThat(notification.content()).contains("*").contains("30,000원을 보냈습니다.");
+            });
         });
     }
 
@@ -717,6 +719,7 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
             assertThat(event.refId()).isEqualTo(transferId);
             assertThat(event.txType()).isEqualTo("AUTO_TRANSFER");
             assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(event.notification()).isEmpty();
         });
     }
 
