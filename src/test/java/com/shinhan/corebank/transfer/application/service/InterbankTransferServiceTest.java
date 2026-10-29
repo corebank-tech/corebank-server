@@ -3,256 +3,29 @@ package com.shinhan.corebank.transfer.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.shinhan.corebank.IntegrationTestSupport;
-import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
-import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
-import com.shinhan.corebank.common.event.DomainEventSink;
+import com.shinhan.corebank.common.event.DomainEvent;
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.gl.api.JournalPostingUseCase;
-import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
-import com.shinhan.corebank.transfer.adapter.out.external.InterbankSocketClient;
-import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
-import com.shinhan.corebank.transfer.api.TransferPreCheck;
-import com.shinhan.corebank.transfer.application.port.in.InterbankTransferCommand;
+import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.application.port.in.InterbankTransferResult;
-import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
-import com.shinhan.corebank.transfer.application.port.out.InterbankBankPort;
 import com.shinhan.corebank.transfer.application.port.out.InterbankGatewayPort;
 import com.shinhan.corebank.transfer.application.port.out.InterbankOutcome;
 import com.shinhan.corebank.transfer.application.port.out.InterbankReply;
 import com.shinhan.corebank.transfer.application.port.out.InterbankRequest;
-import com.shinhan.corebank.transfer.application.port.out.InterbankTransferPort;
-import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
-import com.shinhan.corebank.transfer.application.port.out.TransferAuthTokenVerificationPort;
-import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
-import com.shinhan.corebank.transfer.application.port.out.TransferOtpVerificationPort;
-import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
-import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
-import com.shinhan.corebank.transfer.config.InterbankProperties;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
-import com.shinhan.mockexternal.MockExternalServer;
-import jakarta.persistence.EntityManager;
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
+import org.mockito.ArgumentCaptor;
 
-// 실제 DB·GL·모의 대외기관으로 끝까지 돌린다. 서비스는 직접 조립한다 — 설정을 바꾸면 컨텍스트가 하나 더 뜬다.
-class InterbankTransferServiceTest extends IntegrationTestSupport {
-
-    private static final long WITHDRAWAL_ACCOUNT_ID = 101L;
-    private static final long INITIAL_BALANCE = 100_000L;
-    private static final long AMOUNT = 30_000L;
-
-    // 당행 이체 통합 테스트와 같은 경계 대역 — 같은 스프링 컨텍스트를 재사용한다.
-    @MockitoBean
-    private OtpAuthTokenVerifier otpAuthTokenVerifier;
-
-    @MockitoBean
-    private AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
-
-    @MockitoBean
-    private DomainEventSink domainEventSink;
-
-    @Autowired
-    private EntityManager entityManager;
-
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
-
-    @Autowired
-    private PlatformTransactionManager transactionManager;
-
-    @Autowired
-    private AccountLockPort accountLockPort;
-
-    @Autowired
-    private InterbankBankPort interbankBankPort;
-
-    @Autowired
-    private InterbankSettlementService interbankSettlementService;
-
-    @Autowired
-    private InterbankTransferPort interbankTransferPort;
-
-    @Autowired
-    private TransferLimitPort transferLimitPort;
-
-    @Autowired
-    private TransferAuthTokenVerificationPort transferAuthTokenVerificationPort;
-
-    @Autowired
-    private TransferOtpVerificationPort transferOtpVerificationPort;
-
-    @Autowired
-    private TransferSequencePort transferSequencePort;
-
-    @Autowired
-    private TransferSavePort transferSavePort;
-
-    @Autowired
-    private LedgerSavePort ledgerSavePort;
-
-    @Autowired
-    private JournalPostingUseCase journalPostingUseCase;
-
-    @Autowired
-    private List<TransferPreCheck> transferPreChecks;
-
-    @Autowired
-    private BusinessDateGate businessDateGate;
-
-    @Autowired
-    private ApplicationEventPublisher eventPublisher;
-
-    @Autowired
-    private Clock clock;
-
-    private final HttpClient http = HttpClient.newHttpClient();
-    private MockExternalServer server;
-    private InterbankSocketClient client;
-
-    @BeforeEach
-    void setUp() throws IOException {
-        server = MockExternalServer.start("127.0.0.1", 0, 0);
-        client = new InterbankSocketClient(
-                new InterbankProperties(
-                        "127.0.0.1",
-                        server.port(),
-                        Duration.ofMillis(500),
-                        Duration.ofMillis(500),
-                        new InterbankProperties.CircuitBreaker(50, 100, 100, Duration.ofMinutes(1)),
-                        new InterbankProperties.Inquiry(Duration.ZERO, 20)),
-                clock);
-        new TransactionTemplate(transactionManager)
-                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
-    }
-
-    @AfterEach
-    void tearDown() {
-        server.close();
-        jdbcTemplate.update(
-                """
-                DELETE e FROM gl_journal_entry e JOIN gl_voucher v ON v.voucher_no = e.voucher_no
-                WHERE v.tx_type IN ('INTERBANK_TRANSFER', 'INTERBANK_SETTLEMENT')
-                """);
-        jdbcTemplate.update("DELETE FROM gl_voucher WHERE tx_type IN ('INTERBANK_TRANSFER', 'INTERBANK_SETTLEMENT')");
-        jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id = ?", WITHDRAWAL_ACCOUNT_ID);
-        jdbcTemplate.update("DELETE FROM transfer WHERE payee_bank_code IS NOT NULL");
-        jdbcTemplate.update(
-                "UPDATE account SET balance = ?, status = 'ACTIVE' WHERE account_id = ?",
-                INITIAL_BALANCE,
-                WITHDRAWAL_ACCOUNT_ID);
-        jdbcTemplate.update("DELETE FROM transfer_limit_daily_usage WHERE customer_id = 1");
-    }
-
-    private InterbankTransferService service(InterbankGatewayPort gateway) {
-        return new InterbankTransferService(
-                accountLockPort,
-                interbankBankPort,
-                gateway,
-                interbankSettlementService,
-                transferLimitPort,
-                transferAuthTokenVerificationPort,
-                transferOtpVerificationPort,
-                transferSequencePort,
-                transferSavePort,
-                ledgerSavePort,
-                journalPostingUseCase,
-                transferPreChecks,
-                businessDateGate,
-                eventPublisher,
-                clock,
-                transactionManager);
-    }
-
-    private InterbankInquiryService inquiryService(Duration minAge) {
-        return new InterbankInquiryService(
-                interbankTransferPort,
-                client,
-                interbankSettlementService,
-                new InterbankProperties(
-                        "127.0.0.1",
-                        server.port(),
-                        Duration.ofMillis(500),
-                        Duration.ofMillis(500),
-                        new InterbankProperties.CircuitBreaker(50, 100, 100, Duration.ofMinutes(1)),
-                        new InterbankProperties.Inquiry(minAge, 20)),
-                clock);
-    }
-
-    private String status(String transactionNumber) {
-        return jdbcTemplate.queryForObject(
-                "SELECT status FROM transfer WHERE transaction_number = ?", String.class, transactionNumber);
-    }
-
-    private static InterbankTransferCommand command(String bankCode, String accountNumber, long amount) {
-        return InterbankTransferCommand.builder()
-                .customerId(1L)
-                .withdrawalAccountId(WITHDRAWAL_ACCOUNT_ID)
-                .payeeBankCode(bankCode)
-                .depositAccountNumber(accountNumber)
-                .amount(amount)
-                .myPassbookMemo("생활비")
-                .recipientPassbookMemo("홍길동")
-                .authToken("account-password-token")
-                .otpAuthToken("otp-token")
-                .build();
-    }
-
-    private long balance() {
-        return jdbcTemplate.queryForObject(
-                "SELECT balance FROM account WHERE account_id = ?", Long.class, WITHDRAWAL_ACCOUNT_ID);
-    }
-
-    // 미결제타점권(10200)의 이 거래 순잔액. 확정되면 0이어야 한다.
-    private long unsettledBalance(String transactionNumber) {
-        return jdbcTemplate.queryForObject(
-                """
-                SELECT COALESCE(SUM(CASE WHEN e.dr_cr = 'DEBIT' THEN e.amount ELSE -e.amount END), 0)
-                FROM gl_journal_entry e JOIN gl_voucher v ON v.voucher_no = e.voucher_no
-                WHERE v.reference_key = ? AND e.account_code = '10200'
-                """,
-                Long.class,
-                transactionNumber);
-    }
-
-    private List<Map<String, Object>> vouchers(String transactionNumber) {
-        return jdbcTemplate.queryForList(
-                """
-                SELECT v.tx_type, e.account_code, e.dr_cr FROM gl_voucher v
-                JOIN gl_journal_entry e ON e.voucher_no = v.voucher_no
-                WHERE v.reference_key = ? ORDER BY v.tx_type DESC, e.line_no
-                """,
-                transactionNumber);
-    }
-
-    private void setFault(String mode) throws IOException, InterruptedException {
-        http.send(
-                HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + server.adminPort() + "/faults?mode=" + mode))
-                        .POST(HttpRequest.BodyPublishers.noBody())
-                        .build(),
-                HttpResponse.BodyHandlers.discarding());
-    }
+class InterbankTransferServiceTest extends InterbankIntegrationTestSupport {
 
     @Test
     @DisplayName("0000이면 출금된 채 SUCCESS로 확정되고, 미결제타점권은 송신 때 쌓였다가 결제로 0이 된다")
@@ -393,6 +166,30 @@ class InterbankTransferServiceTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("타행 확정 이벤트는 출금계좌 주인에게 마스킹한 수취인과 금액으로 이체 완료 알림을 싣는다(#706)")
+    void approved_settledEventCarriesTransferNotification() {
+        service(client).execute(command("004", "1234567890123", AMOUNT));
+
+        assertThat(publishedTransferSettled().notification()).hasValueSatisfying(notification -> {
+            assertThat(notification.customerId()).isEqualTo(1L);
+            assertThat(notification.title()).isEqualTo("이체 완료");
+            assertThat(notification.content()).isEqualTo("김*수님에게 30,000원을 보냈습니다.");
+        });
+    }
+
+    @Test
+    @DisplayName("송신 전 실패 이벤트는 이체 실패 알림에 고객이 조치할 수 있는 사유를 붙여 싣는다(#706)")
+    void failedBeforeSend_settledEventCarriesFailureNotification() {
+        service(client).execute(command("004", "1234567890123", INITIAL_BALANCE + 1));
+
+        assertThat(publishedTransferSettled().notification()).hasValueSatisfying(notification -> {
+            assertThat(notification.customerId()).isEqualTo(1L);
+            assertThat(notification.title()).isEqualTo("이체 실패");
+            assertThat(notification.content()).endsWith(TransferErrorCode.INSUFFICIENT_BALANCE.getMessage());
+        });
+    }
+
+    @Test
     @DisplayName("조회거래: 응답 대기보다 오래된 처리 불명 건을 물어 0000이면 SUCCESS로 확정한다")
     void inquiry_settlesTimedOutTransfer() throws Exception {
         setFault("NO_RESPONSE");
@@ -443,5 +240,17 @@ class InterbankTransferServiceTest extends IntegrationTestSupport {
                 .isEqualTo("TRF0308");
         assertThat(balance()).isEqualTo(INITIAL_BALANCE);
         assertThat(unsettledBalance(result.transactionNumber())).isZero();
+    }
+
+    // 이체 한 건은 결과가 확정될 때 TransferSettled 를 정확히 한 번 남긴다
+    private TransferSettled publishedTransferSettled() {
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink, atLeastOnce()).record(published.capture());
+        List<TransferSettled> settledEvents = published.getAllValues().stream()
+                .filter(TransferSettled.class::isInstance)
+                .map(TransferSettled.class::cast)
+                .toList();
+        assertThat(settledEvents).hasSize(1);
+        return settledEvents.get(0);
     }
 }
