@@ -269,6 +269,8 @@ public class ApiExceptionHandler {
 }
 ```
 
+> 위 예제는 기본형입니다. `X-Access-Reason` 헤더를 `CMN0007`로 바꾸는 분기는 실제 `ApiExceptionHandler`의 `handleTypeMismatch` · `handleMissingHeader`를 따릅니다.
+
 핸들러 9개가 처리하는 상황:
 
 | 핸들러 | 처리 상황 | 반환 코드 |
