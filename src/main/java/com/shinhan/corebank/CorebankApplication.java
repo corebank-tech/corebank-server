@@ -8,11 +8,21 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class CorebankApplication {
 
     public static void main(String[] args) {
-        boolean piiMaintenance = Arrays.stream(args)
-                .filter(arg -> arg.startsWith("--spring.profiles.active="))
-                .map(arg -> arg.substring("--spring.profiles.active=".length()))
-                .flatMap(value -> Arrays.stream(value.split(",")))
-                .anyMatch("pii-maintenance"::equals);
+        String activeProfiles = Arrays.stream(args)
+        .filter(arg -> arg.startsWith("--spring.profiles.active="))
+        .map(arg -> arg.substring("--spring.profiles.active=".length()))
+        .findFirst()
+        .orElseGet(() -> {
+            String systemProfiles = System.getProperty("spring.profiles.active");
+            return systemProfiles != null
+                    ? systemProfiles
+                    : System.getenv("SPRING_PROFILES_ACTIVE");
+        });
+
+        boolean piiMaintenance = activeProfiles != null
+                && Arrays.stream(activeProfiles.split(","))
+                        .map(String::trim)
+                        .anyMatch("pii-maintenance"::equals);
 
         if (piiMaintenance) {
             CustomerPiiMaintenanceApplication.main(args);
