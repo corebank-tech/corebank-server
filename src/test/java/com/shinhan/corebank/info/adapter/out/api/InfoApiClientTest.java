@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -160,6 +161,60 @@ class InfoApiClientTest {
     @DisplayName("200 이어도 성공 코드가 아니면 INF9001 이다")
     void nonSuccessCodeBecomesConnectionFailed() throws Exception {
         assertRawResponseFails(200, "{\"code\":\"9999\",\"message\":\"x\",\"data\":null}");
+    }
+
+    @Test
+    @DisplayName("일별 수신 잔액의 items 가 없으면 INF9001 이다")
+    void missingTrendItemsBecomesConnectionFailed() {
+        query.trend = new com.shinhan.infoapi.domain.DepositBalanceTrend(LocalDate.of(2026, 10, 28), null);
+
+        assertThatThrownBy(() -> client(SECRET).depositBalances(null, null))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(InfoErrorCode.CONNECTION_FAILED));
+    }
+
+    @Test
+    @DisplayName("일별 수신 잔액 목록에 null 원소가 있으면 INF9001 이다")
+    void nullTrendItemBecomesConnectionFailed() {
+        query.trend = new com.shinhan.infoapi.domain.DepositBalanceTrend(
+                LocalDate.of(2026, 10, 28), Arrays.asList((DepositBalancePoint) null));
+
+        assertThatThrownBy(() -> client(SECRET).depositBalances(null, null))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(InfoErrorCode.CONNECTION_FAILED));
+    }
+
+    @Test
+    @DisplayName("상품 가입 요약의 items 가 없으면 INF9001 이다")
+    void missingSummaryItemsBecomesConnectionFailed() {
+        query.summary = new com.shinhan.infoapi.domain.ProductSubscriptionSummary(
+                LocalDate.of(2026, 10, 28), YearMonth.of(2026, 10), 0L, 0L, null);
+
+        assertThatThrownBy(() -> client(SECRET).productSubscriptions(null))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(InfoErrorCode.CONNECTION_FAILED));
+    }
+
+    @Test
+    @DisplayName("상품 가입 요약 목록에 null 원소가 있으면 INF9001 이다")
+    void nullSummaryItemBecomesConnectionFailed() {
+        query.summary = new com.shinhan.infoapi.domain.ProductSubscriptionSummary(
+                LocalDate.of(2026, 10, 28), YearMonth.of(2026, 10), 0L, 0L, Arrays.asList((ProductSubscriptionLine)
+                        null));
+
+        assertThatThrownBy(() -> client(SECRET).productSubscriptions(null))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(InfoErrorCode.CONNECTION_FAILED));
+    }
+
+    @Test
+    @DisplayName("http · https 가 아니거나 호스트가 없는 주소는 만들 때 거부한다")
+    void invalidBaseUrlIsRejectedAtCreation() {
+        for (String url : new String[] {"ftp://10.0.0.1:8081", "10.0.0.1:8081", "http:///info", "not a url"}) {
+            assertThatThrownBy(() ->
+                            new InfoApiClient(new InfoApiProperties(url, SECRET, CONNECT_TIMEOUT, READ_TIMEOUT), json))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
     }
 
     private void assertRawResponseFails(int status, String body) throws Exception {

@@ -40,7 +40,11 @@ public class InfoApiClient implements InfoMartPort {
     public InfoApiClient(InfoApiProperties properties, ObjectMapper objectMapper) {
         String url = properties.baseUrl().strip();
         this.baseUrl = url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
-        URI.create(this.baseUrl);
+        URI uri = URI.create(this.baseUrl);
+        if (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme())
+                || uri.getHost() == null) {
+            throw new IllegalArgumentException("정보계 API 주소는 http 또는 https 이고 호스트가 있어야 합니다.");
+        }
         this.secret = properties.secret();
         this.readTimeout = properties.readTimeout();
         this.httpClient = HttpClient.newBuilder()
@@ -52,13 +56,21 @@ public class InfoApiClient implements InfoMartPort {
     @Override
     public DepositBalanceTrend depositBalances(LocalDate from, LocalDate to) {
         TrendEnvelope body = get(DEPOSIT_BALANCES, query(param("from", from), param("to", to)), TrendEnvelope.class);
-        return data(body.code(), body.data(), DEPOSIT_BALANCES);
+        DepositBalanceTrend trend = data(body.code(), body.data(), DEPOSIT_BALANCES);
+        if (trend.items() == null || trend.items().contains(null)) {
+            throw invalidData(DEPOSIT_BALANCES);
+        }
+        return trend;
     }
 
     @Override
     public ProductSubscriptionSummary productSubscriptions(YearMonth month) {
         SummaryEnvelope body = get(PRODUCT_SUBSCRIPTIONS, query(param("month", month)), SummaryEnvelope.class);
-        return data(body.code(), body.data(), PRODUCT_SUBSCRIPTIONS);
+        ProductSubscriptionSummary summary = data(body.code(), body.data(), PRODUCT_SUBSCRIPTIONS);
+        if (summary.items() == null || summary.items().contains(null)) {
+            throw invalidData(PRODUCT_SUBSCRIPTIONS);
+        }
+        return summary;
     }
 
     private <T> T get(String path, String query, Class<T> type) {
@@ -93,6 +105,11 @@ public class InfoApiClient implements InfoMartPort {
             throw new BusinessException(InfoErrorCode.CONNECTION_FAILED);
         }
         return data;
+    }
+
+    private static BusinessException invalidData(String path) {
+        log.error("정보계 API 응답에 필수 값이 없음 - path={}", path);
+        return new BusinessException(InfoErrorCode.CONNECTION_FAILED);
     }
 
     private static String param(String name, Object value) {
