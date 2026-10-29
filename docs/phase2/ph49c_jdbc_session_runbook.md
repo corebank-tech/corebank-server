@@ -287,7 +287,8 @@ sudo -n docker logs \
 [C 결과의 10/s Hikari 로그 표](ph49c_jdbc_session_results.md#10s-hikari-커넥션-획득-타임아웃-로그-수)에서 전체 문구·Hikari `message`·`Caused by:` 포함 줄을 센 명령이다. **기존 앱 EC2의 Ubuntu 셸**에서 실행한다.
 
 ```bash
-set -euo pipefail
+(
+  set -euo pipefail
 for window in \
   '1 2026-10-26T13:47:21+09:00 2026-10-26T13:50:49+09:00' \
   '2 2026-10-26T15:03:22+09:00 2026-10-26T15:06:49+09:00' \
@@ -295,6 +296,7 @@ for window in \
   '4 2026-10-26T17:03:25+09:00 2026-10-26T17:06:59+09:00'
 do
   read -r run start_at end_at <<< "$window"
+  set +e
   sudo -n docker logs --since "$start_at" --until "$end_at" corebank-server 2>&1 |
     awk -v run="$run" '
       /Connection is not available/ { all++ }
@@ -306,14 +308,17 @@ do
       }
     '
   status=${PIPESTATUS[0]}
+  set -e
   if (( status != 0 )); then echo "${run}회차 로그 조회 실패: exit=$status" >&2; break; fi
 done
+)
 ```
 
 같은 결과 절의 고유 `correlationId` 수와 ID 없는 메시지 줄을 센 명령이다. 같은 EC2 Ubuntu 셸에서 동일한 시간 구간을 조회한다.
 
 ```bash
-set -euo pipefail
+(
+  set -euo pipefail
 for window in \
   '1 2026-10-26T13:47:21+09:00 2026-10-26T13:50:49+09:00' \
   '2 2026-10-26T15:03:22+09:00 2026-10-26T15:06:49+09:00' \
@@ -321,6 +326,7 @@ for window in \
   '4 2026-10-26T17:03:25+09:00 2026-10-26T17:06:59+09:00'
 do
   read -r run start_at end_at <<< "$window"
+  set +e
   sudo -n docker logs --since "$start_at" --until "$end_at" corebank-server 2>&1 |
     awk -v run="$run" '
       /"message":"HikariPool-1 - Connection is not available/ {
@@ -338,8 +344,10 @@ do
       }
     '
   status=${PIPESTATUS[0]}
+  set -e
   if (( status != 0 )); then echo "${run}회차 로그 조회 실패: exit=$status" >&2; break; fi
 done
+)
 ```
 
 ### 6-2. RDS 요청률별 모니터링 조회 명령어
@@ -348,7 +356,8 @@ AWS CloudShell에서 실행한다. 아래 `WINDOWS`는 2026-10-26 C 측정의 �
 
 ```bash
 DB_ID='corebank-database'
-set -euo pipefail
+(
+  set -euo pipefail
 
 while read -r run rate start_at end_at; do
   echo
@@ -416,6 +425,7 @@ done <<'WINDOWS'
 4 5 2026-10-26T07:59:52Z 2026-10-26T08:03:25Z
 4 10 2026-10-26T08:03:25Z 2026-10-26T08:06:59Z
 WINDOWS
+)
 ```
 
 ### 6-3. EC2 전체 회차 모니터링 조회 명령어
@@ -424,7 +434,8 @@ AWS CloudShell에서 실행한다. 아래 구간과 인스턴스 ID는 2026-10-2
 
 ```bash
 INSTANCE_ID='i-0c861fe2dc634f3af'
-set -euo pipefail
+(
+  set -euo pipefail
 
 for window in \
   '1 2026-10-26T04:26:00Z 2026-10-26T04:51:00Z' \
@@ -482,6 +493,7 @@ do
     done
   done
 done
+)
 ```
 
 ## 7. 결과 정리와 판정
