@@ -213,6 +213,14 @@ public class ApiExceptionHandler {
         return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_INPUT, message);
     }
 
+    // 본문을 읽을 수 없음 (본문 누락, 깨진 JSON, Enum 에 없는 값, 필드 타입 불일치) -> CMN0001
+    // Jackson 원문에 클래스명과 입력값이 섞이므로 응답과 로그 어디에도 싣지 않는다
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException e) {
+        log.warn("[{}] 요청 본문을 읽을 수 없음", CommonErrorCode.INVALID_INPUT.getCode());
+        return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_INPUT);
+    }
+
     // 파라미터 타입 불일치 (예: Long 자리에 abc, Enum 에 없는 값) -> CMN0001
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
@@ -260,13 +268,14 @@ public class ApiExceptionHandler {
 }
 ```
 
-핸들러 8개가 처리하는 상황:
+핸들러 9개가 처리하는 상황:
 
 | 핸들러 | 처리 상황 | 반환 코드 |
 | --- | --- | --- |
 | `BusinessException` | 각 파트가 명시적으로 던진 예외 | 해당 Enum의 코드 |
 | `MethodArgumentNotValidException` | `@Valid` 바디 검증 실패 | `CMN0001` |
-| `MethodArgumentTypeMismatchException` | 타입 불일치. Enum에 없는 값 전달 | `CMN0001` |
+| `HttpMessageNotReadableException` | 본문을 읽을 수 없음. 본문 누락, 깨진 JSON, 본문 Enum에 없는 값, 필드 타입 불일치 | `CMN0001` |
+| `MethodArgumentTypeMismatchException` | 쿼리 또는 경로 파라미터 타입 불일치. Enum에 없는 값 전달 | `CMN0001` |
 | `MissingServletRequestParameterException` | 필수 쿼리 파라미터 누락 | `CMN0002` |
 | `MissingRequestHeaderException` | 필수 헤더 누락 (`Idempotency-Key` 등) | `CMN0002` |
 | `NoResourceFoundException` / `NoHandlerFoundException` | 존재하지 않는 엔드포인트 (404) | `CMN0201` |
