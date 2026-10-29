@@ -43,6 +43,13 @@ public class AutoTransferExecutionPersistenceAdapter implements AutoTransferExec
     }
 
     @Override
+    public Optional<AutoTransferExecution> findProcessingForUpdateSkipLocked(Long executionId) {
+        return autoTransferExecutionJpaRepository
+                .findForUpdateSkipLockedByExecutionIdAndStatus(executionId, ProcessResultStatus.PROCESSING)
+                .map(AutoTransferExecutionMapper::toDomain);
+    }
+
+    @Override
     public List<AutoTransferExecution> findRecentByAutoTransferId(Long autoTransferId, int limit) {
         return autoTransferExecutionJpaRepository
                 .findRecentByAutoTransferId(autoTransferId, PageRequest.of(0, limit))

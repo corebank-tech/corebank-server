@@ -51,8 +51,6 @@ class AutoTransferReconcileRaceIntegrationTest extends IntegrationTestSupport {
     private static final long AMOUNT = 10_000L;
     private static final LocalDate EXECUTION_DATE = LocalDate.of(2026, 10, 28);
     private static final Duration TIMEOUT = Duration.ofSeconds(10);
-    // 재확정이 잠금에서 기다리는지 보는 시간. 잠금이 없으면 재확정은 이 안에 끝난다
-    private static final Duration LOCK_WAIT_OBSERVATION = Duration.ofMillis(500);
 
     @Autowired
     AutoTransferReconcileScheduler reconcileScheduler;
@@ -132,8 +130,8 @@ class AutoTransferReconcileRaceIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("정상 확정의 이체가 커밋되기 전에 재확정이 끼어들면 재확정은 회차 행 잠금에서 기다리고, 회차는 실제 이체 결과(SUCCESS)로 확정돼 성공 알림 1건만 남는다")
-    void reconcileDuringMainSettlement_waitsForRowLockAndSettlesWithTransferResult() throws Exception {
+    @DisplayName("정상 확정의 이체가 커밋되기 전에 재확정이 끼어들면 재확정은 잠긴 회차를 기다리지 않고 건너뛰며, 회차는 실제 이체 결과(SUCCESS)로 확정돼 성공 알림 1건만 남는다")
+    void reconcileDuringMainSettlement_skipsLockedExecution() throws Exception {
         // given — 메인 배치가 회차를 PROCESSING 으로 남기고 이체 트랜잭션 안(기표 훅)에서 멈춘다
         AutoTransfer autoTransfer =
                 autoTransferPersistencePort.findById(autoTransferId).orElseThrow();
@@ -144,17 +142,14 @@ class AutoTransferReconcileRaceIntegrationTest extends IntegrationTestSupport {
         assertThat(pausingHook.awaitEntered()).isTrue();
 
         // when — 그 사이 독립 재확정이 돈다
-        CompletableFuture<Void> reconcile = CompletableFuture.runAsync(reconcileScheduler::reconcile);
+        reconcileScheduler.reconcile();
 
-        // then — 메인 배치가 회차 행을 잡고 있는 동안 재확정은 끝나지 않는다
-        await().during(LOCK_WAIT_OBSERVATION)
-                .atMost(LOCK_WAIT_OBSERVATION.plusSeconds(1))
-                .until(() -> !reconcile.isDone());
+        // then — 메인 배치가 회차 행을 잡고 있어 재확정은 기다리지 않고 회차를 건드리지 않는다
+        assertThat(executionStatus(processing.getExecutionId())).isEqualTo("PROCESSING");
 
-        // when — 메인 배치가 이어서 끝나고, 재확정이 잠금을 넘겨받는다
+        // when — 메인 배치가 이어서 끝난다
         pausingHook.release();
         mainSettlement.get(TIMEOUT.toSeconds(), TimeUnit.SECONDS);
-        reconcile.get(TIMEOUT.toSeconds(), TimeUnit.SECONDS);
 
         // then
         assertThat(transferStatus()).isEqualTo("SUCCESS");

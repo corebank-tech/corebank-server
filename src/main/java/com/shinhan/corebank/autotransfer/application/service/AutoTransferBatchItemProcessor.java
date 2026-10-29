@@ -156,13 +156,14 @@ public class AutoTransferBatchItemProcessor {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void reconcileStuckExecution(StuckExecution stuckExecution) {
         AutoTransfer autoTransfer = stuckExecution.autoTransfer();
-        // 메인 배치가 이 회차를 처리 중이면 커밋할 때까지 기다린다. 그 사이 확정됐으면 건드리지 않고,
-        // 이체 기록도 잠금을 잡은 뒤에 읽어야 메인 배치가 커밋한 이체를 놓치지 않는다
-        Optional<AutoTransferExecution> lockedExecution = autoTransferExecutionPersistencePort.findProcessingForUpdate(
-                stuckExecution.execution().getExecutionId());
+        // 메인 배치가 잡고 있는 회차는 처리 중이라 건너뛰고, 이미 확정된 회차도 건드리지 않는다.
+        // 이체 기록은 잠금을 잡은 뒤에 읽어야 메인 배치가 커밋한 이체를 놓치지 않는다
+        Optional<AutoTransferExecution> lockedExecution =
+                autoTransferExecutionPersistencePort.findProcessingForUpdateSkipLocked(
+                        stuckExecution.execution().getExecutionId());
         if (lockedExecution.isEmpty()) {
             log.info(
-                    "이미 확정된 회차라 재확정하지 않음 - autoTransferId={}, executionId={}",
+                    "처리 중이거나 이미 확정된 회차라 재확정하지 않음 - autoTransferId={}, executionId={}",
                     autoTransfer.getAutoTransferId(),
                     stuckExecution.execution().getExecutionId());
             return;

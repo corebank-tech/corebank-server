@@ -19,6 +19,9 @@ public interface AutoTransferExecutionPersistencePort {
     // 먼저 잡은 쪽이 커밋할 때까지 다른 쪽을 기다리게 한다
     Optional<AutoTransferExecution> findProcessingForUpdate(Long executionId);
 
+    // 위와 같지만 다른 쪽이 잡고 있으면 기다리지 않고 비어 있다. 잡혀 있는 회차는 처리 중이라 멈춘 회차가 아니다
+    Optional<AutoTransferExecution> findProcessingForUpdateSkipLocked(Long executionId);
+
     // 연속 실패 감지용 - 자동이체의 최근 실행이력을 최신순으로 limit개만 조회
     List<AutoTransferExecution> findRecentByAutoTransferId(Long autoTransferId, int limit);
 }
