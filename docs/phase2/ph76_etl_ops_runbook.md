@@ -7,7 +7,8 @@
 ## 0. 전제와 미정 값
 
 - VM: Ubuntu 22.04, 2코어 · RAM 약 14GB · 디스크 55GB(약 46GB 여유), Docker 설치, `student` 계정으로 `sudo` 가능(비밀번호 입력). 설치 패키지 목록에 Java가 없어서 ETL은 컨테이너로 실행한다(`java -version`으로 없음을 확인했다).
-- 레플리카는 P2의 복제 시작(PH-70-②, 10/28 예정) 뒤에 생긴다. 그 전에는 덤프를 적재한 DB가 레플리카 역할을 한다(Plan B).
+- 레플리카 컨테이너는 떠 있지만 서비스 DB가 없는 빈 상태이고 복제는 아직 시작되지 않았다(10/29 확인). 복제 시작은 P2가 한다(PH-70-②). 늦으면 덤프를 적재한 DB가 레플리카 역할을 한다(Plan B).
+- VPN 터널은 VM 재부팅 뒤 약 1분 안에 자동 복구되고(`vti1`, `10.30.0.0/16`), VM에서 새 RDS 3306 연결이 된다(10/29 확인). 터널 서비스(`strongswan`, `vpn-vti`)는 건드리지 않는다.
 - 이 VM은 우리 팀 전용이다(강사님이 팀마다 IP를 따로 준다). 그래도 포트를 쓰기 전에 `ss -ltn`으로 비어 있는지 본다.
 - 명령은 한 줄씩 붙여 넣는다. `\`로 줄을 나눈 여러 줄 명령을 그대로 붙이면 첫 줄만 실행되는 일이 있었다.
 
@@ -15,14 +16,15 @@
 | --- | --- |
 | 경계일 `ETL_CUTOFF_BOUNDARY_DATE` | **2026-10-26.** 운영 `business_date_cutoff`의 가장 이른 `CLOSED` 행(10/27 아침 조회). 적재 직전에 한 번 더 확인한다 |
 | VM 시간대 | **KST(`Asia/Seoul`)** 확인함. §7의 시각을 그대로 쓴다 |
-| 덤프 이동 방법 | 미정. 레플리카 복제가 시작되면 필요 없다 |
+| 초기 데이터 방식 | P2와 협의 중. 새 RDS가 스냅샷 복원본이라 RDS에서 덤프를 떠서 레플리카에 넣는 방식이 될 것으로 보인다(추정). 담당과 시점(COB 23:30~23:50 제외)을 정한다 |
 
 ## 1. 구성
 
 - 레플리카 역할 MySQL(원본 복사본): 포트 3306. 컨테이너 `info-replica-mysql`, 복제 옵션은 P2가 정한다(§2-1).
 - 마트 MySQL(`info_mart`): 포트 3307. 컨테이너 `info-mart-mysql`. `super_read_only`가 인스턴스 전체에 걸리므로 레플리카와 반드시 다른 인스턴스다.
 - ETL: 일회성 컨테이너(`--rm`)가 jar를 실행하고 종료한다. 서비스로 상주하지 않는다.
-- 두 MySQL은 `127.0.0.1`에만 연다. 외부에는 정보계 API(#704)만 나간다.
+- 두 MySQL은 `127.0.0.1`에만 연다. 외부에는 정보계 API(#704)만 나간다. 정보계 API는 컨테이너 `info-api`로 이미 떠 있다(배포 절차는 #776에서 따로 적는다). VM 안에서는 `asOf=null` 응답까지 확인했고, WAS → 정보계 API 호출은 #804(PR #805)와 11/3 `main` 릴리스 뒤에야 확인할 수 있다.
+- 마트 · 레플리카 · `info-api` 컨테이너는 모두 `--restart unless-stopped`로 돈다.
 
 ## 2. 마트 MySQL 구성
 
@@ -56,7 +58,11 @@ docker exec -i info-mart-mysql sh -c 'mysql -uroot -p"$(cat /run/secrets/root_pw
 
 ### 2-1. 레플리카 역할 MySQL (3306)
 
-서버만 띄운다. 복제 옵션(서버 ID, GTID, binlog 형식, `super_read_only`)은 P2가 정한 값에 맞춘다. 옵션을 바꿀 때는 컨테이너를 지우고 같은 데이터 폴더(`/var/lib/info-replica`)로 다시 띄운다.
+서버만 띄운다. 복제 옵션은 P2가 정한 값에 맞춘다. 현재(10/29)는 `gtid_mode=ON`, `enforce_gtid_consistency=ON`, `server_id=101`이고 `SET PERSIST`로 영구 저장했다. `super_read_only`는 초기 적재가 끝난 뒤에 켠다. 먼저 켜면 덤프를 넣지 못한다. 그 밖의 옵션을 바꿀 때는 컨테이너를 지우고 같은 데이터 폴더(`/var/lib/info-replica`)로 다시 띄운다.
+
+- 새 RDS는 `gtid-mode=ON`, `binlog_format=ROW`, `require_secure_transport=1`이다. 복제 연결에는 SSL 옵션이 필요하다.
+- 복제가 도는 동안에는 VM 재부팅과 도커 재시작을 하지 않는다.
+- 복제가 붙은 뒤 병렬 복제이면 `replica_preserve_commit_order=ON`을 확인한다.
 
 ```bash
 umask 077; openssl rand -base64 24 | tr -d '\n' > /etc/info-etl/replica-root.pw
@@ -153,7 +159,7 @@ docker run --rm --network host --env-file /etc/info-etl/etl.env \
 
 ## 7. 자동 실행 타이머 (systemd)
 
-COB는 23:30에 시작해 대사가 약 20분 걸린다(PH-38 측정). 새벽 시각에 부르면 cutoff가 이미 복제된 뒤다. 시각은 03:30으로 시작하고 VM 시간대를 확인한 뒤 맞춘다.
+COB는 23:30에 시작한다. 새 환경의 10/28 밤 대사는 93.3초였고 COB 전체가 시작 약 1분 35초에 끝났다(기존 환경은 1,219.9초). 새벽 시각에 부르면 cutoff가 이미 복제된 뒤다. 시각은 03:30으로 시작하고, 복제 지연을 실측한 뒤 앞당길 수 있는지 본다. VM 시간대는 KST로 확인했다.
 
 `/etc/systemd/system/info-etl.service`
 
