@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 39개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 405개 컬럼
+**대상**: 39개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 408개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -26,7 +26,7 @@
 
 | # | 테이블 | 설명 | 담당 | 컬럼 |
 | --- | --- | --- | --- |----|
-| 1 | `customer` | 고객 | P6 | 19 |
+| 1 | `customer` | 고객 | P6 | 22 |
 | 2 | `terms` | 약관 | P6 | 10 |
 | 3 | `customer_terms_agreement` | 회원가입 약관 동의 | P6 | 4  |
 | 4 | `verification_request` | 인증 요청 | P6 | 13 |
@@ -129,6 +129,9 @@ Spring Session JDBC 표준 스키마. Flyway `V202610221420`으로만 생성하�
 | `joined_at` | `DATETIME(6)` |  | X |  | 회원가입 완료 일시. 고객정보 조회의 `joinedAt` |
 | `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시 |
+| `email_ciphertext` | `VARCHAR(768)` | | O | | 이메일 AES-256-GCM 암호문. PH-18 전환 중에는 NULL 허용 |
+| `phone_number_ciphertext` | `VARCHAR(128)` | | O | | 휴대폰 번호 AES-256-GCM 암호문. PH-18 전환 중에는 NULL 허용 |
+| `email_search_hash` | `CHAR(64)` | **UK** | O | | 정규화 이메일의 HMAC-SHA256 검색 해시. 암호화 키와 별도 키 사용 |
 
 **인덱스**
 
@@ -137,6 +140,7 @@ Spring Session JDBC 표준 스키마. Flyway `V202610221420`으로만 생성하�
 | UNIQUE | `uk_customer_user_id` | `user_id` |
 | UNIQUE | `uk_customer_email` | `email` |
 | UNIQUE | `uk_customer_existing_bank_customer_id` | `existing_bank_customer_id` |
+| UNIQUE | `uk_customer_email_search_hash` | `email_search_hash` |
 
 **CHECK 제약**
 

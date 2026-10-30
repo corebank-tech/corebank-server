@@ -26,6 +26,8 @@ public interface CustomerJpaRepository extends JpaRepository<CustomerJpaEntity, 
 
     boolean existsByEmail(String email);
 
+    boolean existsByEmailSearchHash(String emailSearchHash);
+
     boolean existsByExistingBankCustomerId(String existingBankCustomerId);
 
     // 로그인 상태 변경 중 같은 고객의 동시 수정을 직렬화

@@ -273,3 +273,7 @@ spotless {
         endWithNewline()
     }
 }
+
+springBoot {
+    mainClass = 'com.shinhan.corebank.CorebankApplication'
+}
