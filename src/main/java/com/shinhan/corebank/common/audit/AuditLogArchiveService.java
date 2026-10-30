@@ -67,9 +67,8 @@ public class AuditLogArchiveService {
     }
 
     private List<AuditLogJpaEntity> findRowsOfDay(LocalDate archiveDate) {
-        return auditLogJpaRepository
-                .findByRequestedAtGreaterThanEqualAndRequestedAtLessThanAndRowHashIsNotNullOrderByAuditLogId(
-                        archiveDate.atStartOfDay(), archiveDate.plusDays(1).atStartOfDay());
+        return auditLogJpaRepository.findArchiveRowsOfDay(
+                archiveDate.atStartOfDay(), archiveDate.plusDays(1).atStartOfDay());
     }
 
     // 사본이 이미 있으면(업로드 뒤 상태 저장만 실패한 경우) 내용이 같을 때만 확정한다. 다르면 원본을 두고 실패로 남긴다

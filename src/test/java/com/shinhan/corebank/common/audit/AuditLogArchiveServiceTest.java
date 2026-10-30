@@ -83,6 +83,19 @@ class AuditLogArchiveServiceTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("사본의 줄은 id가 아니라 요청 시각 순서다")
+    void archive_linesOrderedByRequestedAt() {
+        Long laterId = save(AuditEventType.LOGIN, null, ARCHIVE_DATE.atTime(10, 0));
+        Long earlierId = save(AuditEventType.LOGIN, null, ARCHIVE_DATE.atTime(9, 0));
+
+        auditLogArchiveService.archive(ARCHIVE_DATE);
+
+        assertThat(archivedLines(LOG_KEY))
+                .extracting(AuditArchiveLine::auditLogId)
+                .containsExactly(earlierId, laterId);
+    }
+
+    @Test
     @DisplayName("성공한 경로는 상태가 SUCCESS · 행 수로 남고, 같은 날을 다시 돌려도 다시 올리지 않는다")
     void archive_rerun_skipsSucceededPaths() {
         save(AuditEventType.CUSTOMER_SEARCH, AccessReason.OPERATION, ARCHIVE_DATE.atTime(12, 0));
