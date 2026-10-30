@@ -9,7 +9,8 @@
 - 방식: **VM이 먼저 터널을 여는 아웃바운드 방식**이다. VM은 NAT 뒤(192.168.0.211)라서 공유기 포트포워딩은 필요 없다(10/19 시험).
 - 터널은 **터널 1만** 설정한다. AWS가 터널을 2개 만들지만 터널 2는 DOWN이어도 정상이다.
 - Customer Gateway에 등록된 공인 IP는 `58.230.206.76`이다(교육장 NAT 출구, VM에서 `curl -s ifconfig.me`).
-- **최종 VM에서 아직 확인하지 못한 것**: UDP 500/4500 통과, 같은 방식으로 터널이 서는지, 장시간 유지·rekey, 터널 2 장애 전환, 실제 포트(RDS 3306·WAS 8080·정보계 API).
+- **최종 VM에서 확인함(2026-10-28~29)**: UDP 500/4500 통과, 터널 성립, 장시간 유지, VM → WAS 8080, VM → RDS 3306, 재부팅 후 자동 복구.
+- **최종 VM에서 아직 확인하지 못한 것**: 터널 2 장애 전환, WAS → VM(정보계 API·모의 대외기관).
 - **VM은 우리 팀 전용으로 본다**(팀마다 IP가 달라 사용자가 확인, 2026-10-26). 접속자와 `/home`도 `student` 하나뿐이었다. 그래도 PSK는 root만 읽는 파일(권한 600)에만 두고 화면·채팅·저장소에 남기지 않는다.
 - **이 VM에는 #691(정보계 ETL)이 이미 둔 것이 있다.** `/etc/info-etl/`(비밀 파일), 마트 MySQL 컨테이너 `info-mart-mysql`(`127.0.0.1:3307`), `/var/lib/info-mart`, 호스트 포트 3306(레플리카 자리)·3307·80(Nginx 자리). VPN 작업은 이것들을 건드리지 않는다.
 - **VM 명령은 한 번에 한 세션만** 입력한다. `apt`는 동시에 돌 수 없고, 도커·네트워크 서비스를 다시 시작하면 마트가 영향을 받는다.
@@ -30,9 +31,9 @@
    ```bash
    sudo systemd-run --on-active=30m --unit=vpn-auto-stop /usr/sbin/ipsec stop
    ```
-2. `strongswan-starter`의 부팅 자동 시작을 끈다(재부팅 시 잠김 방지).
+2. `strongswan-starter`의 부팅 자동 시작을 끈다(재부팅 시 잠김 방지). 초기 설정 동안만 끄고, 터널이 안정된 뒤 §3-7에서 다시 켠다.
    ```bash
-   sudo systemctl disable strongswan-starter
+   sudo systemctl disable --now strongswan-starter
    ```
 3. 이 VM에 **다른 접속 경로**(콘솔, 강사님 연락)가 있는지 확인한다.
 
@@ -98,13 +99,54 @@ sudo ip route add 10.30.0.0/16 dev vti1 src <VM 내부 IP>
 ```
 - `mark=100`만으로는 터널은 서지만 패킷이 `vti1`로 오가지 못한다. VTI와 `10.30.0.0/16` 경로가 있어야 양방향 통신이 된다.
 - `install_routes = no`라서 이 경로는 직접 넣는다. 이것이 VM의 기본 경로를 보호한다.
-- 재부팅하면 `vti1`과 경로가 사라진다. 지속시키는 방법은 터널이 안정된 뒤 정한다.
+- 재부팅하면 `vti1`과 경로가 사라진다. 지속시키는 방법은 §3-7이다.
 
 ### 3-6. 시작
 ```bash
 sudo ipsec restart
 sudo ipsec statusall
 ```
+
+### 3-7. 재부팅 후 자동 복구 (터널이 안정된 뒤)
+
+`/usr/local/sbin/vpn-vti-up.sh` (`chmod 755`). 터널 주소는 파일에 적지 않고 `/etc/ipsec.conf`의 `right=`에서 읽는다. 여러 번 실행해도 안전하다.
+```sh
+#!/bin/sh
+set -e
+T=$(awk -F= '/^[[:space:]]*right=/{print $2; exit}' /etc/ipsec.conf)
+ip link show vti1 >/dev/null 2>&1 || ip tunnel add vti1 local <VM 내부 IP> remote "$T" mode vti key 100
+ip link set vti1 up mtu 1400
+sysctl -w net.ipv4.conf.vti1.disable_policy=1
+sysctl -w net.ipv4.conf.vti1.rp_filter=2
+ip route replace 10.30.0.0/16 dev vti1 src <VM 내부 IP>
+```
+`/etc/systemd/system/vpn-vti.service`
+```ini
+[Unit]
+Description=VPN VTI and route
+After=strongswan-starter.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/vpn-vti-up.sh
+
+[Install]
+WantedBy=multi-user.target
+```
+```bash
+sudo chmod 755 /usr/local/sbin/vpn-vti-up.sh
+sudo systemctl daemon-reload
+sudo systemctl start vpn-vti
+sudo systemctl enable strongswan-starter
+sudo systemctl enable vpn-vti
+```
+- `start`는 이미 서 있는 터널에 영향이 없다. 경로가 `dev vti1`이고 RDS 3306이 그대로 닿는지 확인한 뒤 `enable`한다.
+- 실행 권한이 없으면 `ExecStart`가 `Permission denied`로 실패해 부팅 때 VTI와 경로가 복구되지 않는다. 위 `chmod 755`를 빠뜨리지 않는다.
+- VPN 연결을 새로 만들어 AWS 터널 주소가 바뀌면 기존 `vti1`이 낡은 주소로 남는다(스크립트는 `vti1`이 있으면 새로 만들지 않는다). `/etc/ipsec.conf`의 `right=`를 고친 뒤 `sudo ip tunnel del vti1`을 하고 `sudo systemctl restart vpn-vti`로 다시 만든다.
+
+**완료(2026-10-29):** 위 순서로 적용했다. 마트·레플리카 컨테이너(`info-mart-mysql`, `info-replica-mysql`)는 `unless-stopped`라 재부팅 후 같이 올라온다.
 
 ## 4. 확인
 
@@ -128,13 +170,14 @@ systemctl list-timers --all | grep vpn-auto-stop || echo "타이머 없음(취�
 ### 4-3. 서비스 포트 연동 검증 (타이머 취소 뒤, 선행 조건이 갖춰진 때)
 
 PH-100-② 완료 기준이다. 상대 쪽 준비가 끝난 항목부터 따로 확인한다.
-- VM → WAS 8080 (메트릭 수집, 이 PR의 WAS 보안 그룹 규칙): WAS가 기동한 뒤에 확인한다. 먼저 `command -v nc`로 `nc`가 있는지 확인하고, 없으면 `sudo apt install netcat-openbsd`로 설치한 다음 `nc -vz <WAS 사설 IP> 8080`(TCP 연결 검사)을 실행한다. WAS 보안 그룹은 ICMP를 허용하지 않고 RDS도 ping에 응답하지 않아서 `ping`은 터널이 정상이어도 실패한다.
-- VM → RDS 3306: 복제 계정은 P2 PH-70-②에서 정한다. 보안 그룹의 RDS 규칙은 P2가 추가한 뒤 `nc -vz <RDS 사설 IP> 3306`으로 확인한다.
-- WAS → VM의 정보계 API·모의 대외기관 (VM이 받는 포트가 정해진 뒤). **선행 조건:** 지금 WAS 보안 그룹의 아웃바운드는 443과 VPC 내부 3306뿐이다. 연동 전에 목적지 IP와 서비스 포트(모의 대외기관은 TCP 9300)를 확인하고 `modules/network/security_groups.tf`에 egress 규칙을 추가한다. 포트가 확정되기 전에는 규칙을 열지 않는다.
+- VM → WAS 8080 (메트릭 수집, 이 PR의 WAS 보안 그룹 규칙): **완료(2026-10-28)** 두 서버 모두 `status UP`. WAS가 기동한 뒤에 확인한다. 먼저 `command -v nc`로 `nc`가 있는지 확인하고, 없으면 `sudo apt install netcat-openbsd`로 설치한 다음 `nc -vz <WAS 사설 IP> 8080`(TCP 연결 검사)을 실행한다. WAS 보안 그룹은 ICMP를 허용하지 않고 RDS도 ping에 응답하지 않아서 `ping`은 터널이 정상이어도 실패한다.
+- VM → RDS 3306: 복제 계정은 P2 PH-70-②에서 정한다. 보안 그룹의 RDS 규칙은 P2가 추가한 뒤 `nc -vz <RDS 사설 IP> 3306`으로 확인한다. **완료(2026-10-29):** `nc -vz -w 5 <RDS 엔드포인트> 3306`이 `succeeded`였고 이름이 사설 IP로 풀려 터널을 탔다. 이 규칙의 Terraform 반영은 PR #794다.
+- WAS → VM의 정보계 API·모의 대외기관 (VM이 받는 포트가 정해진 뒤). **미완 — 정보계 API는 `192.168.0.211:8081`로 기동했고 WAS 규칙과 환경변수는 #804에서 진행한다.** **선행 조건:** 지금 WAS 보안 그룹의 아웃바운드는 443과 VPC 내부 3306뿐이다. 연동 전에 목적지 IP와 서비스 포트(모의 대외기관은 TCP 9300)를 확인하고 `modules/network/security_groups.tf`에 egress 규칙을 추가한다. 포트가 확정되기 전에는 규칙을 열지 않는다.
 
 ### 4-4. 정상 운영 전 조건
 
-- 재부팅하면 `vti1`과 `10.30.0.0/16` 경로가 사라지고, `strongswan-starter`는 꺼 둔 상태라 터널이 자동으로 다시 서지 않는다. 터널이 안정된 뒤 서비스 시작과 VTI·경로를 영속화하고, VM을 재부팅해 터널과 경로가 자동 복구되는지 확인하기 전에는 정상 운영으로 넘기지 않는다.
+- §3-7을 적용하고 VM을 재부팅해 터널과 경로가 자동 복구되는지 확인한 뒤에 정상 운영으로 넘긴다. 확인 항목: `sudo ipsec statusall`의 `ESTABLISHED`·`INSTALLED, TUNNEL`, `ip route get <WAS 사설 IP>`가 `dev vti1`, RDS 3306 `nc` 성공, 컨테이너 `Up`, `systemctl is-active strongswan-starter vpn-vti`가 `active`.
+- **완료(2026-10-29):** 재부팅 후 약 1분 안에 위 항목이 모두 정상이었다.
 
 ## 5. 문제가 생기면
 
@@ -148,5 +191,5 @@ PH-100-② 완료 기준이다. 상대 쪽 준비가 끝난 항목부터 따로 
 ## 6. 정리 (환경이 끝날 때)
 
 - AWS: `terraform destroy`에 VPN 연결·VGW·CGW가 포함된다(PH-55). VPN을 먼저 지우면 VM의 DPD가 정책을 풀어 SSH가 유지된다.
-- VM: `ipsec stop`, strongSwan 제거, `/etc/ipsec.*`와 `/etc/strongswan.d/zz-vpn.conf`, `vti1`과 경로 삭제
+- VM: 먼저 `sudo systemctl disable --now vpn-vti.service`로 서비스를 끄고 `/etc/systemd/system/vpn-vti.service`와 `/usr/local/sbin/vpn-vti-up.sh`를 지운 뒤 `sudo systemctl daemon-reload`를 한다. 이어서 `ipsec stop`, strongSwan 제거, `/etc/ipsec.*`와 `/etc/strongswan.d/zz-vpn.conf`, `vti1`과 경로를 삭제한다.
 - PSK가 남은 곳(클립보드, Terraform 상태 파일의 S3, 임시 파일)을 정리한다.

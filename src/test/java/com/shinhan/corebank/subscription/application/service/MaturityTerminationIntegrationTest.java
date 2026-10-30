@@ -99,9 +99,12 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
     @MockitoSpyBean
     private InterestPaymentPersistenceAdapter interestPaymentPersistenceAdapter;
 
+    // CLOSED 감사 이력을 실제로 저장한 뒤 실패를 주입해 원리금 지급까지 전체 롤백되는지 본다. 다른 테스트는 실제 메서드를 탄다.
     @MockitoSpyBean
     private AccountStatusHistoryPersistenceAdapter historyAdapter;
 
+    // 계좌비밀번호 토큰 검증은 account.api 경계만 본다 — 토큰 발급/소비 로직은 account 도메인 테스트가 담당한다.
+    // Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
     @MockitoBean
     private MaturityTerminationPasswordVerificationPort passwordVerificationPort;
 

@@ -39,6 +39,24 @@ class AuditLogServiceTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("사유를 넘기면 access_reason에 남고, 넘기지 않으면 NULL이다")
+    void record_accessReason_savedOnlyWhenGiven() {
+        auditLogService.record(
+                1L,
+                null,
+                AuditEventType.CUSTOMER_DETAIL_VIEW,
+                "127.0.0.1",
+                true,
+                Map.of("targetCustomerId", 2L),
+                AccessReason.AUDIT);
+        auditLogService.record(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, Map.of("device", "web"));
+
+        assertThat(auditLogJpaRepository.findAll())
+                .extracting(AuditLogJpaEntity::getAccessReason)
+                .containsExactlyInAnyOrder("AUDIT", null);
+    }
+
+    @Test
     @DisplayName("앰비언트 트랜잭션 없이 직접 호출해도 즉시 저장된다")
     void record_withoutAmbientTransaction_savesImmediately() {
         auditLogService.record(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, Map.of("device", "web"));

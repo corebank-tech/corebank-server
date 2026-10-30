@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 47개 테이블(39개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트 5개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 394개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
+> **DBMS**: MySQL 8.4 / 47개 테이블(39개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트 5개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 395개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -48,11 +48,6 @@ erDiagram
         datetime joined_at "DATETIME(6)"
     }
 
-    admin_permission {
-        bigint customer_id PK,FK "관리자"
-        varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ"
-        datetime granted_at "권한 부여 시각"
-    }
     terms {
         bigint terms_id PK
         varchar terms_code UK "VARCHAR(30)"
@@ -82,17 +77,6 @@ erDiagram
         boolean used
         datetime verified_at "DATETIME(6)"
         datetime expires_at "발급 + 180초"
-    }
-    notification {
-        bigint notification_id PK
-        bigint customer_id FK
-        varchar type "TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION"
-        bigint ref_id "다형 참조: TRANSFER->transfer.transfer_id / SCHEDULED_TRANSFER->scheduled_transfer_id / AUTO_TRANSFER->auto_transfer_execution.execution_id / PRODUCT_SUBSCRIPTION->subscription_id"
-        varchar title "VARCHAR(100)"
-        varchar content "VARCHAR(500)"
-        boolean is_read
-        datetime read_at "DATETIME(6)"
-        datetime occurred_at "DATETIME(6)"
     }
 
     %% ---------- P2 ----------
@@ -224,6 +208,22 @@ erDiagram
     }
 
     %% ---------- P1 ----------
+    admin_permission {
+        bigint customer_id PK,FK "관리자"
+        varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ"
+        datetime granted_at "권한 부여 시각"
+    }
+    notification {
+        bigint notification_id PK
+        bigint customer_id FK
+        varchar type UK "TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION"
+        bigint ref_id UK "uk_noti_type_ref(type, ref_id). 다형 참조: TRANSFER->transfer.transfer_id / SCHEDULED_TRANSFER->scheduled_transfer_id / AUTO_TRANSFER->auto_transfer_execution.execution_id / PRODUCT_SUBSCRIPTION->subscription_id"
+        varchar title "VARCHAR(100)"
+        varchar content "VARCHAR(500)"
+        boolean is_read
+        datetime read_at "DATETIME(6)"
+        datetime occurred_at "DATETIME(6)"
+    }
     transfer_limit {
         bigint customer_id PK
         bigint one_time_limit
@@ -376,6 +376,7 @@ erDiagram
         varchar request_ip "VARCHAR(45)"
         varchar result "SUCCESS / FAILURE"
         json detail "민감정보 마스킹 후 저장"
+        varchar access_reason "관리자 조회·변경 사유(PH-89). NULL 허용"
         datetime requested_at "DATETIME(6)"
     }
     common_code {

@@ -3,11 +3,15 @@ package com.shinhan.corebank.transfer.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.common.event.DomainEvent;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.application.port.in.InterbankTransferResult;
 import com.shinhan.corebank.transfer.application.port.out.InterbankGatewayPort;
 import com.shinhan.corebank.transfer.application.port.out.InterbankOutcome;
@@ -19,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class InterbankTransferServiceTest extends InterbankIntegrationTestSupport {
 
@@ -161,6 +166,30 @@ class InterbankTransferServiceTest extends InterbankIntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("타행 확정 이벤트는 출금계좌 주인에게 마스킹한 수취인과 금액으로 이체 완료 알림을 싣는다(#706)")
+    void approved_settledEventCarriesTransferNotification() {
+        service(client).execute(command("004", "1234567890123", AMOUNT));
+
+        assertThat(publishedTransferSettled().notification()).satisfies(notification -> {
+            assertThat(notification.customerId()).isEqualTo(1L);
+            assertThat(notification.title()).isEqualTo("이체 완료");
+            assertThat(notification.content()).isEqualTo("김*수님에게 30,000원을 보냈습니다.");
+        });
+    }
+
+    @Test
+    @DisplayName("송신 전 실패 이벤트는 이체 실패 알림에 고객이 조치할 수 있는 사유를 붙여 싣는다(#706)")
+    void failedBeforeSend_settledEventCarriesFailureNotification() {
+        service(client).execute(command("004", "1234567890123", INITIAL_BALANCE + 1));
+
+        assertThat(publishedTransferSettled().notification()).satisfies(notification -> {
+            assertThat(notification.customerId()).isEqualTo(1L);
+            assertThat(notification.title()).isEqualTo("이체 실패");
+            assertThat(notification.content()).endsWith(TransferErrorCode.INSUFFICIENT_BALANCE.getMessage());
+        });
+    }
+
+    @Test
     @DisplayName("조회거래: 응답 대기보다 오래된 처리 불명 건을 물어 0000이면 SUCCESS로 확정한다")
     void inquiry_settlesTimedOutTransfer() throws Exception {
         setFault("NO_RESPONSE");
@@ -211,5 +240,17 @@ class InterbankTransferServiceTest extends InterbankIntegrationTestSupport {
                 .isEqualTo("TRF0308");
         assertThat(balance()).isEqualTo(INITIAL_BALANCE);
         assertThat(unsettledBalance(result.transactionNumber())).isZero();
+    }
+
+    // 이체 한 건은 결과가 확정될 때 TransferSettled 를 정확히 한 번 남긴다
+    private TransferSettled publishedTransferSettled() {
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink, atLeastOnce()).record(published.capture());
+        List<TransferSettled> settledEvents = published.getAllValues().stream()
+                .filter(TransferSettled.class::isInstance)
+                .map(TransferSettled.class::cast)
+                .toList();
+        assertThat(settledEvents).hasSize(1);
+        return settledEvents.get(0);
     }
 }
