@@ -26,6 +26,20 @@
 - 두 MySQL은 `127.0.0.1`에만 연다. 외부에는 정보계 API(#704)만 나간다. 정보계 API는 컨테이너 `info-api`로 이미 떠 있다(배포 절차는 #776에서 따로 적는다). VM 안에서는 `asOf=null` 응답까지 확인했고, WAS → 정보계 API 호출은 #804(PR #805)와 11/3 `main` 릴리스 뒤에야 확인할 수 있다.
 - 마트 · 레플리카 · `info-api` 컨테이너는 모두 `--restart unless-stopped`로 돈다.
 
+## 1-1. 비밀 파일 준비
+
+컨테이너를 띄우기 전에 먼저 만든다. 값은 화면에 출력하지 않는다.
+
+```bash
+umask 077
+sudo mkdir -p /etc/info-etl && sudo chown student /etc/info-etl
+for n in root replica mart api replica-root; do openssl rand -base64 24 | tr -d '\n' > /etc/info-etl/$n.pw; done
+openssl rand -hex 32 | tr -d '\n' > /etc/info-etl/hmac.key
+ls -l /etc/info-etl && wc -c /etc/info-etl/*   # 권한 600, .pw는 32바이트, hmac.key는 64바이트
+```
+
+- 파일 이름과 쓰임: `root.pw`는 마트 root(§2), `replica-root.pw`는 레플리카 root(§2-1), `replica.pw`는 `etl_replica_reader`, `mart.pw`는 `etl_mart_writer`, `api.pw`는 `info_api_reader`(§3), `hmac.key`는 가명 키(§4).
+
 ## 2. 마트 MySQL 구성
 
 ```bash
@@ -39,7 +53,7 @@ docker run -d --name info-mart-mysql --restart unless-stopped \
   mysql:8.4 --innodb-buffer-pool-size=1G --max-allowed-packet=256M --character-set-server=utf8mb4
 ```
 
-- 루트 비밀번호 파일 `/etc/info-etl/root.pw`는 먼저 만든다(권한 600). §3의 비밀 파일 생성 명령으로 만들고 화면에 출력하지 않는다.
+- 루트 비밀번호 파일 `/etc/info-etl/root.pw`는 §1-1에서 먼저 만들었다(권한 600). 화면에 출력하지 않는다.
 - 컨테이너가 처음 뜰 때는 임시 서버를 먼저 띄웠다가 다시 시작한다. 로그에 `port: 3306  MySQL Community Server`가 있는 `ready for connections` 줄이 나온 뒤에 접속한다(`port: 0`인 줄은 임시 서버다).
 - 마트는 로컬 측정에서 약 1.3GB였다. 버퍼 풀 1GB로 시작하고 VM의 다른 컨테이너 사용량을 보며 조정한다.
 - 스키마 적용(DB 이름은 `info_mart`). 스키마 파일은 노트북에만 있으므로 먼저 VM으로 올린다. 파일을 올리는 것과 DB에 적용하는 것은 별개 단계다.
@@ -51,10 +65,12 @@ scp src/infoEtl/resources/mart-schema.sql student@<VM>:/tmp/mart-schema.sql
 
 ```bash
 # VM에서
-docker exec -i info-mart-mysql sh -c 'mysql -uroot -p"$(cat /run/secrets/root_pw)" -e "CREATE DATABASE IF NOT EXISTS info_mart DEFAULT CHARACTER SET utf8mb4"'
-docker exec -i info-mart-mysql sh -c 'mysql -uroot -p"$(cat /run/secrets/root_pw)" info_mart' < /tmp/mart-schema.sql
-docker exec -i info-mart-mysql sh -c 'mysql -uroot -p"$(cat /run/secrets/root_pw)" info_mart -e "SHOW TABLES"'   # 테이블 3개가 나와야 한다
+docker exec -i info-mart-mysql sh -c 'MYSQL_PWD=$(cat /run/secrets/root_pw) mysql -uroot -e "CREATE DATABASE IF NOT EXISTS info_mart DEFAULT CHARACTER SET utf8mb4"'
+docker exec -i info-mart-mysql sh -c 'MYSQL_PWD=$(cat /run/secrets/root_pw) mysql -uroot info_mart' < /tmp/mart-schema.sql
+docker exec -i info-mart-mysql sh -c 'MYSQL_PWD=$(cat /run/secrets/root_pw) mysql -uroot info_mart -e "SHOW TABLES"'   # 테이블 3개가 나와야 한다
 ```
+
+- 비밀번호는 `-p`로 넘기지 않고 `MYSQL_PWD` 환경변수로 넘긴다. `-p` 인자는 프로세스 목록(`ps`)에 그대로 보인다.
 
 ### 2-1. 레플리카 역할 MySQL (3306)
 
@@ -65,11 +81,11 @@ docker exec -i info-mart-mysql sh -c 'mysql -uroot -p"$(cat /run/secrets/root_pw
 - 복제가 붙은 뒤 병렬 복제이면 `replica_preserve_commit_order=ON`을 확인한다.
 
 ```bash
-umask 077; openssl rand -base64 24 | tr -d '\n' > /etc/info-etl/replica-root.pw
 sudo mkdir -p /var/lib/info-replica
 docker run -d --name info-replica-mysql --restart unless-stopped -e MYSQL_ROOT_PASSWORD_FILE=/run/secrets/root_pw -v /var/lib/info-replica:/var/lib/mysql -v /etc/info-etl/replica-root.pw:/run/secrets/root_pw:ro -p 127.0.0.1:3306:3306 mysql:8.4 --innodb-buffer-pool-size=2G --max-allowed-packet=256M --character-set-server=utf8mb4
 ```
 
+- 레플리카 root 비밀번호 파일 `/etc/info-etl/replica-root.pw`는 §1-1에서 먼저 만들었다.
 - `docker run`은 한 줄로 붙여 넣는다.
 - 버퍼 풀 2GB는 시작값이다(RAM 약 14GB 중 마트 컨테이너가 약 0.5GB를 쓰는 상태에서 정했다). 정보계 API와 모니터링이 올라오면 `docker stats`로 보고 조정한다.
 - 기동 확인은 마트와 같은 방식이다(`docker ps`, 로그의 `port: 3306` 줄, `ss -ltn`).
@@ -82,18 +98,11 @@ docker run -d --name info-replica-mysql --restart unless-stopped -e MYSQL_ROOT_P
 - `etl_replica_reader`: 레플리카 인스턴스에서 적재가 읽는 테이블에만 `SELECT`. 개인정보 테이블(`customer` 등)은 주지 않는다.
 - `etl_mart_writer`: 마트 인스턴스에서 `info_mart.*`에 `SELECT, INSERT, UPDATE, DELETE`. DDL 권한은 없다.
 - `info_api_reader`: 마트 인스턴스에서 `info_mart.*`에 `SELECT`만. 정보계 API(#704)가 쓴다.
+- 10/30 마트에서 `SHOW GRANTS`로 확인했다. `etl_mart_writer`는 `info_mart.*`에 `SELECT, INSERT, UPDATE, DELETE`만, `info_api_reader`는 `info_mart.*`에 `SELECT`만 있고 둘 다 전역 권한은 `USAGE`뿐이다.
 
 파일은 두 인스턴스에 나누어 적용한다. `etl_replica_reader`를 만드는 줄과 그 `GRANT`(minicore) 줄은 레플리카에, `etl_mart_writer`·`info_api_reader` 줄은 마트에 적용한다.
 
-```bash
-umask 077
-sudo mkdir -p /etc/info-etl && sudo chown student /etc/info-etl
-for n in root replica mart api; do openssl rand -base64 24 | tr -d '\n' > /etc/info-etl/$n.pw; done
-openssl rand -hex 32 | tr -d '\n' > /etc/info-etl/hmac.key
-ls -l /etc/info-etl && wc -c /etc/info-etl/*   # 권한 600, .pw는 32바이트, hmac.key는 64바이트
-```
-
-- 파일 이름과 쓰임: `root.pw`는 마트 root, `replica.pw`는 `etl_replica_reader`, `mart.pw`는 `etl_mart_writer`, `api.pw`는 `info_api_reader`, `hmac.key`는 가명 키(§4). 레플리카 root 비밀번호는 `replica-root.pw`(§2-1)로 따로 둔다.
+비밀 파일(`replica.pw`, `mart.pw`, `api.pw`, `hmac.key`)은 §1-1에서 먼저 만들었다.
 
 - 만든 비밀번호는 출력하지 않는다. `CHANGE_ME`를 해당 비밀번호로 바꾼 임시 SQL 파일을 두 개(레플리카용, 마트용) 만들어 각 인스턴스에서 실행하고, 임시 파일은 `shred -u`로 지운다.
 - 적용 전에 임시 파일에 `CHANGE_ME`가 남지 않았는지 `grep -c CHANGE_ME`로 확인한다(0이어야 한다).
@@ -115,7 +124,7 @@ HMAC_KEY=<32바이트 이상>
 ETL_CUTOFF_BOUNDARY_DATE=<yyyy-MM-dd>
 ```
 
-- `HMAC_KEY` 값은 §3에서 만든 `/etc/info-etl/hmac.key`의 내용이다(`openssl rand -hex 32`). 키가 바뀌면 같은 계좌의 가명 키가 달라지므로 info_mart.md §3-3의 키 교체 절차를 따라야 한다. 분실하지 않게 팀의 비밀 보관 위치에 따로 둔다.
+- `HMAC_KEY` 값은 §1-1에서 만든 `/etc/info-etl/hmac.key`의 내용이다(`openssl rand -hex 32`). 키가 바뀌면 같은 계좌의 가명 키가 달라지므로 info_mart.md §3-3의 키 교체 절차를 따라야 한다. 분실하지 않게 팀의 비밀 보관 위치에 따로 둔다.
 - `ETL_CUTOFF_BOUNDARY_DATE`는 `--auto`에 필요하다. 없으면 `--auto`는 종료 코드 2로 끝난다. 이 값은 §0의 경계일이 확인된 뒤에 채운다.
 
 ## 5. jar 빌드와 전달
@@ -160,7 +169,7 @@ docker run --rm --network host -e TZ=Asia/Seoul --env-file /etc/info-etl/etl.env
 
 ## 7. 자동 실행 타이머 (systemd)
 
-COB는 23:30에 시작한다. 새 환경의 10/28 밤 대사는 93.3초였고 COB 전체가 시작 약 1분 35초에 끝났다(기존 환경은 1,219.9초). 새벽 시각에 부르면 cutoff가 이미 복제된 뒤다. 시각은 03:30으로 시작하고, 복제 지연을 실측한 뒤 앞당길 수 있는지 본다. VM 시간대는 KST로 확인했다.
+COB는 23:30에 시작한다. 새 환경의 10/28 밤 대사는 93.3초였고 COB 전체가 시작 약 1분 35초에 끝났다(기존 환경은 1,219.9초). 새벽 시각에 부르면 cutoff가 이미 복제된 뒤일 것으로 본다(복제 지연은 실측하지 않았다). 시각은 03:30으로 시작하고, 복제 지연을 실측한 뒤 앞당길 수 있는지 본다. VM 시간대는 KST로 확인했다.
 
 `/etc/systemd/system/info-etl.service`
 
@@ -200,6 +209,8 @@ journalctl -u info-etl.service -n 50 --no-pager   # 마지막 실행 결과
 - 이 타이머는 경계일 설정(`ETL_CUTOFF_BOUNDARY_DATE`)과 수동 적재(§6 3번)가 끝난 뒤에 켠다.
 - 10/30에 등록했다(`systemctl list-timers`의 다음 실행 `Sat 2026-10-31 03:30:00 KST`). 등록 직후 서비스를 한 번 시험 실행해 종료 코드 0, `성공 0일, 이미 완료되어 건너뜀 4일`을 확인했다. 이미 적재한 날짜는 건너뛰므로 같은 날을 두 번 불러도 안전하다.
 - 컨테이너 시간대는 UTC라서 `-e TZ=Asia/Seoul`이 없으면 로그 시각이 9시간 늦게 찍힌다. 마트에 기록되는 시각은 코드가 `Asia/Seoul`로 고정해 영향이 없다.
+- 부팅 직후에는 DB 컨테이너가 연결을 받을 준비가 되기 전일 수 있다(`After=docker.service`는 도커 데몬의 시작 순서만 보장한다). `Persistent=true`로 부팅 직후 실행된 `--auto`가 연결 실패로 종료 코드 1이 되어도, 완료되지 않은 날짜는 다음 03:30 실행에서 오래된 날짜부터 다시 처리된다(`COMPLETED`인 날짜만 건너뛴다). 바로 보충하려면 `sudo systemctl start info-etl.service`로 수동 실행한다. 준비를 기다리려면 서비스에 `ExecStartPre`로 `mysqladmin ping` 재시도를 넣을 수 있다(적용하지 않았다).
+- 03:30에 그날의 `business_date_cutoff`가 레플리카에 아직 안 보이면(복제 지연) 그날은 시작하지 않고 `asOf`가 하루 전에 머문다. 다음 실행이 밀린 날짜를 따라잡고, 같은 날 재시도는 없다. 복제 지연의 최댓값은 실측하지 않았고 첫 자동 적재(10/31 03:30) 결과로 확인한다. 필요하면 04:30에 두 번째 트리거를 추가한다(이미 적재한 날짜는 건너뛰므로 두 번 실행해도 안전하다).
 
 ## 8. 하지 않는 것
 

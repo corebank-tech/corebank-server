@@ -126,7 +126,7 @@ java -Xmx2g -jar build/info-etl/info-etl.jar --verify-pii                       
 | 측정 일시 | 2026-10-30 09:32 ~ 10:25 KST |
 | 환경 | VM 2코어 · RAM 약 14GB · 디스크 55GB, Ubuntu 22.04. 레플리카(3306, MySQL 8.4.13, 버퍼 풀 2GB)와 마트(3307)는 별개 컨테이너다. 두 컨테이너와 정보계 API가 같은 VM에서 돌았고 레플리카는 복제 중이었다 |
 | ETL | `info-etl.jar`(`dev` `5de23add`, 해시 앞 16자 `60eddb999bb62b93`), `eclipse-temurin:21-jre` 컨테이너에서 `java -Xmx2g` |
-| 접속 계정 | 레플리카 `etl_replica_reader`(읽기 7개 테이블), 마트 `etl_mart_writer` (`etl-grants.sql`의 권한 분리 계정) |
+| 접속 계정 | 레플리카 `etl_replica_reader`(읽기 7개 테이블), 마트 `etl_mart_writer` (`etl-grants.sql`의 권한 분리 계정). 마트에서 `SHOW GRANTS`로 확인: `etl_mart_writer`는 `info_mart.*`에 `SELECT, INSERT, UPDATE, DELETE`만, `info_api_reader`는 `info_mart.*`에 `SELECT`만, 전역 권한은 둘 다 `USAGE`뿐 |
 | 경계일 | 2026-10-26 (`business_date_cutoff`의 가장 이른 `CLOSED` 행) |
 | 레플리카 데이터 | RDS와 GTID `...:1-1083`에서 `ledger_entry` 6,624,587 · `gl_journal_entry` 6,548,016 · `transfer` 3,199,211 · `gl_voucher` 3,274,008 |
 | 초기 데이터 이동 | RDS에서 전체 덤프(`--single-transaction`) 약 4분 33초, 레플리카 적재 약 40분(redo 로그 용량을 4GB로 올린 뒤 초당 약 7,650~10,000행) |
@@ -146,7 +146,7 @@ java -Xmx2g -jar build/info-etl/info-etl.jar --verify-pii                       
 
 - 하루 적재 시간은 날짜가 갈수록 늘었다(9월 초 30~40초대, 10월 중순 이후 60~90초, 아래 부록). 날짜별 시간은 마트 적재 기록 `mart_load_batch`의 시작~완료 시각 차이다.
 - 로컬 기준선(§1, 하루 평균 26.6초)보다 느리다. 같은 데이터가 아니고(VM은 원장이 더 크다), 레플리카 복제와 다른 컨테이너가 같은 2코어를 쓴다.
-- 하루 적재가 90초 안쪽이라 03:30 타이머 1회로 충분하다. 증가 추세는 이후 매일 쌓이는 적재 기록(`mart_load_batch`)으로 본다.
+- 하루 적재는 90초 안쪽이다. 03:30에 그날의 `business_date_cutoff`가 레플리카에 보이는지(복제 지연)는 실측하지 않았다. 안 보이면 그날은 시작하지 않고 `asOf`가 하루 전에 머물며 다음 실행이 따라잡는다. 첫 자동 적재(10/31 03:30) 결과로 확인하고, 필요하면 04:30에 두 번째 트리거를 추가한다(이미 적재한 날짜는 건너뛰므로 안전하다). 증가 추세는 매일 쌓이는 적재 기록(`mart_load_batch`)으로 본다.
 
 ### 대조 결과
 
