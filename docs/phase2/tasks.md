@@ -339,7 +339,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 **②**
 
 - 5W 필드 표준화(Who · When · Where · What · **Why**)
-- `AuditEventType`에 조회 이벤트를 추가한다(예: 고객 조회).
+- 조회 이벤트를 추가한다(예: 고객 조회). 사유가 필수인 관리자 개인정보 조회 · 변경은 `PersonalDataAccessEventType`에 둔다.
 
 **조회 사유 규약** ([D-10](README.md#d-10--923--리드))
 
@@ -672,7 +672,7 @@ S4지만 신규 API가 아니라 문서화·측정·훈련이다.
 
 ### PH-97. 관리자 고객 계정 운영 API
 
-- 고객 검색(마스킹), 잠금 해제(기존 `AuditEventType.ACCOUNT_UNLOCK`)
+- 고객 검색(마스킹), 잠금 해제(기존 `ACCOUNT_UNLOCK` 감사 이벤트)
 - 로그인 비밀번호 초기화: 임시 비밀번호를 응답으로 준다. `PASSWORD_RESET_BY_ADMIN`을 추가한다.
 - 계정 상태 변경: Flyway로 `customer.status`(ACTIVE/SUSPENDED)를 추가한다(#450).
 - S0에서 넘어온 몫이다. PH-49a-②가 임시 가드를 걷어내면 이 API들이 `/admin/**` 필터 아래로 들어간다.

@@ -64,12 +64,13 @@ class AuditLogArchiveServiceTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("그날 행만 두 경로로 나눠 올리고, 사유 있는 행은 access 경로에 담긴다. 해시 도입 전 행은 빠진다")
+    @DisplayName("그날 행만 두 경로로 나눠 올리고, 개인정보 접근 이벤트는 access 경로에 담긴다. 해시 도입 전 행은 빠진다")
     void archive_splitsRowsOfTheDayByPath() {
-        Long loginId = save(AuditEventType.LOGIN, null, ARCHIVE_DATE.atTime(9, 0));
-        Long viewId = save(AuditEventType.CUSTOMER_DETAIL_VIEW, AccessReason.AUDIT, ARCHIVE_DATE.atTime(23, 59, 59));
-        save(AuditEventType.LOGIN, null, ARCHIVE_DATE.plusDays(1).atStartOfDay());
-        Long legacyId = save(AuditEventType.LOGIN, null, ARCHIVE_DATE.atTime(10, 0));
+        Long loginId = save(AuditEventType.LOGIN, ARCHIVE_DATE.atTime(9, 0));
+        Long viewId = savePersonalDataAccess(
+                PersonalDataAccessEventType.CUSTOMER_DETAIL_VIEW, AccessReason.AUDIT, ARCHIVE_DATE.atTime(23, 59, 59));
+        save(AuditEventType.LOGIN, ARCHIVE_DATE.plusDays(1).atStartOfDay());
+        Long legacyId = save(AuditEventType.LOGIN, ARCHIVE_DATE.atTime(10, 0));
         jdbcTemplate.update("UPDATE audit_log SET row_hash = NULL WHERE audit_log_id = ?", legacyId);
 
         auditLogArchiveService.archive(ARCHIVE_DATE);
@@ -85,8 +86,8 @@ class AuditLogArchiveServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("사본의 줄은 id가 아니라 요청 시각 순서다")
     void archive_linesOrderedByRequestedAt() {
-        Long laterId = save(AuditEventType.LOGIN, null, ARCHIVE_DATE.atTime(10, 0));
-        Long earlierId = save(AuditEventType.LOGIN, null, ARCHIVE_DATE.atTime(9, 0));
+        Long laterId = save(AuditEventType.LOGIN, ARCHIVE_DATE.atTime(10, 0));
+        Long earlierId = save(AuditEventType.LOGIN, ARCHIVE_DATE.atTime(9, 0));
 
         auditLogArchiveService.archive(ARCHIVE_DATE);
 
@@ -98,10 +99,12 @@ class AuditLogArchiveServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("성공한 경로는 상태가 SUCCESS · 행 수로 남고, 같은 날을 다시 돌려도 다시 올리지 않는다")
     void archive_rerun_skipsSucceededPaths() {
-        save(AuditEventType.CUSTOMER_SEARCH, AccessReason.OPERATION, ARCHIVE_DATE.atTime(12, 0));
+        savePersonalDataAccess(
+                PersonalDataAccessEventType.CUSTOMER_SEARCH, AccessReason.OPERATION, ARCHIVE_DATE.atTime(12, 0));
         auditLogArchiveService.archive(ARCHIVE_DATE);
         byte[] first = auditArchiveStorage.get(ACCESS_KEY).orElseThrow();
-        save(AuditEventType.CUSTOMER_SEARCH, AccessReason.OPERATION, ARCHIVE_DATE.atTime(13, 0));
+        savePersonalDataAccess(
+                PersonalDataAccessEventType.CUSTOMER_SEARCH, AccessReason.OPERATION, ARCHIVE_DATE.atTime(13, 0));
 
         auditLogArchiveService.archive(ARCHIVE_DATE);
 
@@ -119,7 +122,7 @@ class AuditLogArchiveServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("업로드 뒤 상태를 못 남긴 날을 다시 돌리면, 사본과 같은 경로는 SUCCESS, 행이 지워진 경로는 원본을 두고 FAILURE")
     void archive_existingCopyDiffers_keepsOriginalAndFails() {
-        Long deletedId = save(AuditEventType.LOGIN, null, ARCHIVE_DATE.atTime(9, 0));
+        Long deletedId = save(AuditEventType.LOGIN, ARCHIVE_DATE.atTime(9, 0));
         auditLogArchiveService.archive(ARCHIVE_DATE);
         byte[] original = auditArchiveStorage.get(LOG_KEY).orElseThrow();
         auditArchiveExecutionJpaRepository.deleteAll();
@@ -145,8 +148,9 @@ class AuditLogArchiveServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("log 경로가 실패해도 access 경로는 확정되고, 다음 실행이 실패한 log 경로만 다시 올린다")
     void archive_partialFailure_recoversOnlyFailedPath() throws IOException {
-        Long loginId = save(AuditEventType.LOGIN, null, ARCHIVE_DATE.atTime(9, 0));
-        Long viewId = save(AuditEventType.CUSTOMER_DETAIL_VIEW, AccessReason.AUDIT, ARCHIVE_DATE.atTime(10, 0));
+        Long loginId = save(AuditEventType.LOGIN, ARCHIVE_DATE.atTime(9, 0));
+        Long viewId = savePersonalDataAccess(
+                PersonalDataAccessEventType.CUSTOMER_DETAIL_VIEW, AccessReason.AUDIT, ARCHIVE_DATE.atTime(10, 0));
         Path blocked = archiveRoot.resolve(LOG_KEY);
         Files.createDirectories(blocked.getParent());
         Files.writeString(blocked, "다른 내용");
@@ -174,9 +178,16 @@ class AuditLogArchiveServiceTest extends IntegrationTestSupport {
                 .containsOnly(AuditArchiveStatus.SUCCESS);
     }
 
-    private Long save(AuditEventType eventType, AccessReason accessReason, LocalDateTime requestedAt) {
+    private Long save(AuditEventType eventType, LocalDateTime requestedAt) {
         AuditLogJpaEntity auditLog = AuditLogJpaEntity.of(
-                1L, null, eventType, "10.0.0.7", true, Map.of("targetCustomerId", 2L), accessReason, requestedAt);
+                1L, null, eventType, "10.0.0.7", true, Map.of("targetCustomerId", 2L), requestedAt);
+        return auditLogJpaRepository.save(auditLog).getAuditLogId();
+    }
+
+    private Long savePersonalDataAccess(
+            PersonalDataAccessEventType eventType, AccessReason accessReason, LocalDateTime requestedAt) {
+        AuditLogJpaEntity auditLog = AuditLogJpaEntity.personalDataAccess(
+                1L, eventType, "10.0.0.7", true, Map.of("targetCustomerId", 2L), accessReason, requestedAt);
         return auditLogJpaRepository.save(auditLog).getAuditLogId();
     }
 

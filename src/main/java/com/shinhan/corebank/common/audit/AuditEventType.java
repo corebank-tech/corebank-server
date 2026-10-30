@@ -3,6 +3,7 @@ package com.shinhan.corebank.common.audit;
 /**
  * 감사 이벤트 종류 (REQ-NFR-010).
  * 원장에 영향을 준 행위와 인증 수단 변경 행위를 구분한다.
+ * 관리자 고객 개인정보 조회 · 변경은 사유가 필수라 {@link PersonalDataAccessEventType}에 따로 둔다.
  */
 public enum AuditEventType {
 
@@ -21,12 +22,7 @@ public enum AuditEventType {
     WITHDRAWAL_ACCOUNT_REGISTER, // 출금계좌 등록
     WITHDRAWAL_ACCOUNT_DELETE, // 출금계좌 삭제
     LOGIN, // 로그인 (REQ-CMN-025 접속이력)
-    LOGOUT, // 로그아웃 (PH-49a-②)
-    ACCOUNT_UNLOCK, // 관리자 계정 잠금 해제
-    LOGIN_PASSWORD_RESET_BY_ADMIN, // 관리자 로그인 비밀번호 초기화(잠금 해제 포함, #449)
-    CUSTOMER_STATUS_CHANGE, // 관리자 고객 계정 상태 변경(이용정지·해제, #450)
-    CUSTOMER_SEARCH, // 관리자 고객 검색(PH-89 조회 감사)
-    CUSTOMER_DETAIL_VIEW; // 관리자 고객 상세 조회(PH-89 조회 감사)
+    LOGOUT; // 로그아웃 (PH-49a-②)
 
     /** 원장 변경 여부. true 면 transaction_number 가 있어야 한다 */
     public boolean isLedgerChanging() {
@@ -34,14 +30,5 @@ public enum AuditEventType {
                 || this == SCHEDULED_TRANSFER
                 || this == AUTO_TRANSFER
                 || this == PRODUCT_SUBSCRIPTION;
-    }
-
-    /** 관리자 개인정보 조회 · 변경 여부(PH-89). true 면 access_reason 이 있어야 하고, 사본은 access 경로로 간다 */
-    public boolean requiresAccessReason() {
-        return this == CUSTOMER_SEARCH
-                || this == CUSTOMER_DETAIL_VIEW
-                || this == ACCOUNT_UNLOCK
-                || this == LOGIN_PASSWORD_RESET_BY_ADMIN
-                || this == CUSTOMER_STATUS_CHANGE;
     }
 }

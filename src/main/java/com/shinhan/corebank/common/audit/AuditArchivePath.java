@@ -17,7 +17,7 @@ public enum AuditArchivePath {
     }
 
     public static AuditArchivePath of(AuditLogJpaEntity auditLog) {
-        return AuditEventType.valueOf(auditLog.getEventType()).requiresAccessReason() ? ACCESS : LOG;
+        return PersonalDataAccessEventType.includes(auditLog.getEventType()) ? ACCESS : LOG;
     }
 
     public String keyOf(LocalDate archiveDate) {

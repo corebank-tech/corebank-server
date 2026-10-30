@@ -7,6 +7,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -70,7 +71,6 @@ public class AuditLogJpaEntity {
             String requestIp,
             boolean success,
             Map<String, Object> detail,
-            AccessReason accessReason,
             LocalDateTime now) {
         boolean hasTransactionNumber = transactionNumber != null && !transactionNumber.isBlank();
         if (eventType.isLedgerChanging() && !hasTransactionNumber) {
@@ -79,19 +79,39 @@ public class AuditLogJpaEntity {
         if (!eventType.isLedgerChanging() && hasTransactionNumber) {
             throw new IllegalArgumentException("원장 비변경 이벤트(%s)는 transactionNumber 가 없어야 합니다.".formatted(eventType));
         }
-        if (eventType.requiresAccessReason() != (accessReason != null)) {
-            throw new IllegalArgumentException(
-                    "이벤트(%s)와 accessReason 유무가 맞지 않습니다: %s".formatted(eventType, accessReason));
-        }
+        return create(customerId, transactionNumber, eventType.name(), requestIp, success, detail, null, now);
+    }
 
+    // 관리자 고객 개인정보 조회 · 변경(PH-89). 사유는 필수이고 거래번호는 없다
+    public static AuditLogJpaEntity personalDataAccess(
+            Long adminCustomerId,
+            PersonalDataAccessEventType eventType,
+            String requestIp,
+            boolean success,
+            Map<String, Object> detail,
+            AccessReason accessReason,
+            LocalDateTime now) {
+        Objects.requireNonNull(accessReason, "accessReason must not be null");
+        return create(adminCustomerId, null, eventType.name(), requestIp, success, detail, accessReason.name(), now);
+    }
+
+    private static AuditLogJpaEntity create(
+            Long customerId,
+            String transactionNumber,
+            String eventType,
+            String requestIp,
+            boolean success,
+            Map<String, Object> detail,
+            String accessReason,
+            LocalDateTime now) {
         AuditLogJpaEntity e = new AuditLogJpaEntity();
         e.customerId = customerId;
         e.transactionNumber = transactionNumber;
-        e.eventType = eventType.name();
+        e.eventType = eventType;
         e.requestIp = requestIp;
         e.result = success ? "SUCCESS" : "FAILURE";
         e.detail = AuditLogRowHash.toJsonTypes(sanitizeDetail(detail));
-        e.accessReason = accessReason == null ? null : accessReason.name();
+        e.accessReason = accessReason;
         e.requestedAt = now.truncatedTo(ChronoUnit.MICROS); // DATETIME(6)에 담기는 값으로 해시를 계산한다
         e.rowHash = AuditLogRowHash.of(e);
         return e;

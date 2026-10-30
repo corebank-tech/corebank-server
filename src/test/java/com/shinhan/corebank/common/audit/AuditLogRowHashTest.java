@@ -55,8 +55,8 @@ class AuditLogRowHashTest {
     }
 
     private static AuditLogJpaEntity adminView(Map<String, Object> detail, AccessReason accessReason, boolean success) {
-        return AuditLogJpaEntity.of(
-                1L, null, AuditEventType.CUSTOMER_DETAIL_VIEW, "10.0.0.7", success, detail, accessReason, NOW);
+        return AuditLogJpaEntity.personalDataAccess(
+                1L, PersonalDataAccessEventType.CUSTOMER_DETAIL_VIEW, "10.0.0.7", success, detail, accessReason, NOW);
     }
 
     private static Map<String, Object> linked(

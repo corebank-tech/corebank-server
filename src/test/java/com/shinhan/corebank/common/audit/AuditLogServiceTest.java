@@ -42,12 +42,11 @@ class AuditLogServiceTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("사유를 넘기면 access_reason에 남고, 넘기지 않으면 NULL이다")
-    void record_accessReason_savedOnlyWhenGiven() {
-        auditLogService.record(
+    @DisplayName("개인정보 접근 감사는 access_reason에 사유가 남고, 일반 감사는 NULL이다")
+    void recordPersonalDataAccess_savesAccessReason_recordLeavesItNull() {
+        auditLogService.recordPersonalDataAccess(
                 1L,
-                null,
-                AuditEventType.CUSTOMER_DETAIL_VIEW,
+                PersonalDataAccessEventType.CUSTOMER_DETAIL_VIEW,
                 "127.0.0.1",
                 true,
                 Map.of("targetCustomerId", 2L),
@@ -69,7 +68,8 @@ class AuditLogServiceTest extends IntegrationTestSupport {
                 "filter", Map.of("status", "ACTIVE", "accountLocked", false),
                 "executionDate", LocalDate.of(2026, 10, 27),
                 "appliedRate", new BigDecimal("1.50"));
-        auditLogService.record(1L, null, AuditEventType.CUSTOMER_SEARCH, "10.0.0.7", true, detail, AccessReason.AUDIT);
+        auditLogService.recordPersonalDataAccess(
+                1L, PersonalDataAccessEventType.CUSTOMER_SEARCH, "10.0.0.7", true, detail, AccessReason.AUDIT);
 
         // 트랜잭션 밖 조회라 영속성 컨텍스트 캐시가 아니라 DB에서 새로 읽은 값이다
         AuditLogJpaEntity reloaded = auditLogJpaRepository.findAll().getFirst();
