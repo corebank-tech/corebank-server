@@ -7,7 +7,7 @@
 ## 0. 전제와 미정 값
 
 - VM: Ubuntu 22.04, 2코어 · RAM 약 14GB · 디스크 55GB(약 46GB 여유), Docker 설치, `student` 계정으로 `sudo` 가능(비밀번호 입력). 설치 패키지 목록에 Java가 없어서 ETL은 컨테이너로 실행한다(`java -version`으로 없음을 확인했다).
-- 레플리카 컨테이너는 떠 있지만 서비스 DB가 없는 빈 상태이고 복제는 아직 시작되지 않았다(10/29 확인). 복제 시작은 P2가 한다(PH-70-②). 늦으면 덤프를 적재한 DB가 레플리카 역할을 한다(Plan B).
+- 레플리카는 10/29 저녁 RDS 전체 덤프를 적재하고 복제를 시작했다(PH-70-②). 10/30 아침에 지연 0초 · 오류 없음, RDS와 GTID `...:1-1083`에서 주요 4개 테이블 건수가 일치했고, `read_only` · `super_read_only`를 켰다(`SET PERSIST`).
 - VPN 터널은 VM 재부팅 뒤 약 1분 안에 자동 복구되고(`vti1`, `10.30.0.0/16`), VM에서 새 RDS 3306 연결이 된다(10/29 확인). 터널 서비스(`strongswan`, `vpn-vti`)는 건드리지 않는다.
 - 이 VM은 우리 팀 전용이다(강사님이 팀마다 IP를 따로 준다). 그래도 포트를 쓰기 전에 `ss -ltn`으로 비어 있는지 본다.
 - 명령은 한 줄씩 붙여 넣는다. `\`로 줄을 나눈 여러 줄 명령을 그대로 붙이면 첫 줄만 실행되는 일이 있었다.
@@ -16,7 +16,7 @@
 | --- | --- |
 | 경계일 `ETL_CUTOFF_BOUNDARY_DATE` | **2026-10-26.** 운영 `business_date_cutoff`의 가장 이른 `CLOSED` 행(10/27 아침 조회). 적재 직전에 한 번 더 확인한다 |
 | VM 시간대 | **KST(`Asia/Seoul`)** 확인함. §7의 시각을 그대로 쓴다 |
-| 초기 데이터 방식 | P2와 협의 중. 새 RDS가 스냅샷 복원본이라 RDS에서 덤프를 떠서 레플리카에 넣는 방식이 될 것으로 보인다(추정). 담당과 시점(COB 23:30~23:50 제외)을 정한다 |
+| 초기 데이터 방식 | 완료(10/29). RDS 덤프(`--single-transaction --set-gtid-purged=OFF`) 적재 → `gtid_purged` 입력 → `CHANGE REPLICATION SOURCE`(`SOURCE_AUTO_POSITION=1`, SSL) → `START REPLICA`. 복제 필터는 `mysql.rds%` 무시 |
 
 ## 1. 구성
 
@@ -98,6 +98,7 @@ ls -l /etc/info-etl && wc -c /etc/info-etl/*   # 권한 600, .pw는 32바이트,
 - 만든 비밀번호는 출력하지 않는다. `CHANGE_ME`를 해당 비밀번호로 바꾼 임시 SQL 파일을 두 개(레플리카용, 마트용) 만들어 각 인스턴스에서 실행하고, 임시 파일은 `shred -u`로 지운다.
 - 적용 전에 임시 파일에 `CHANGE_ME`가 남지 않았는지 `grep -c CHANGE_ME`로 확인한다(0이어야 한다).
 - 비밀번호에 `'`나 `\`가 들어가면 SQL이 깨지므로 `openssl rand -base64`처럼 안전한 문자만 쓴다.
+- 레플리카에 `super_read_only`를 켠 뒤에는 `CREATE USER`가 막힌다. 10/30에는 한 세션에서 `SET GLOBAL super_read_only=OFF; SET GLOBAL read_only=OFF; SET sql_log_bin=0;`으로 풀고 `etl_replica_reader`를 만든 뒤 `SET GLOBAL read_only=ON; SET GLOBAL super_read_only=ON;`으로 다시 잠갔다(`--force`로 돌려 중간 실패에도 잠금 문장은 실행). `sql_log_bin=0`이라 레플리카에 자체 GTID가 생기지 않았고(`gtid_executed`가 원본 UUID 하나로만 이어짐), `SHOW GRANTS`로 읽기 7개 테이블만 있는 것을 확인했다.
 
 ## 4. 환경변수 파일
 
@@ -131,7 +132,7 @@ shasum -a 256 build/info-etl/info-etl.jar    # 노트북의 해시. VM의 `sha25
 실행(공통 형태). 호스트에 Java가 없으므로 컨테이너로 한다.
 
 ```bash
-docker run --rm --network host --env-file /etc/info-etl/etl.env \
+docker run --rm --network host -e TZ=Asia/Seoul --env-file /etc/info-etl/etl.env \
   -v /opt/info-etl:/app:ro eclipse-temurin:21-jre \
   java -Xmx2g -jar /app/info-etl.jar <인자>
 ```
@@ -171,7 +172,7 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/docker run --rm --network host --env-file /etc/info-etl/etl.env -v /opt/info-etl:/app:ro eclipse-temurin:21-jre java -Xmx2g -jar /app/info-etl.jar --auto
+ExecStart=/usr/bin/docker run --rm --network host -e TZ=Asia/Seoul --env-file /etc/info-etl/etl.env -v /opt/info-etl:/app:ro eclipse-temurin:21-jre java -Xmx2g -jar /app/info-etl.jar --auto
 ```
 
 `/etc/systemd/system/info-etl.timer`
@@ -197,6 +198,8 @@ journalctl -u info-etl.service -n 50 --no-pager   # 마지막 실행 결과
 
 - 같은 날짜 동시 실행은 기준일 락이 막는다. 적재 실패는 soft라 종료 코드 1과 로그로만 드러난다. `systemctl status info-etl.service`에서 실패 여부를 본다.
 - 이 타이머는 경계일 설정(`ETL_CUTOFF_BOUNDARY_DATE`)과 수동 적재(§6 3번)가 끝난 뒤에 켠다.
+- 10/30에 등록했다(`systemctl list-timers`의 다음 실행 `Sat 2026-10-31 03:30:00 KST`). 등록 직후 서비스를 한 번 시험 실행해 종료 코드 0, `성공 0일, 이미 완료되어 건너뜀 4일`을 확인했다. 이미 적재한 날짜는 건너뛰므로 같은 날을 두 번 불러도 안전하다.
+- 컨테이너 시간대는 UTC라서 `-e TZ=Asia/Seoul`이 없으면 로그 시각이 9시간 늦게 찍힌다. 마트에 기록되는 시각은 코드가 `Asia/Seoul`로 고정해 영향이 없다.
 
 ## 8. 하지 않는 것
 
