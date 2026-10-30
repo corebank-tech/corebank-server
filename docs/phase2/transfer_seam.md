@@ -245,6 +245,8 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 - `RecentTransferQuery`는 당행 즉시·예약·자동이체의 SUCCESS 행을 셉니다. 정정 체인으로 무효화된 행(`invalidated_at`)은 뺍니다. `firstTransferredAt`은 "반복 묶음 첫 이체 이전에 보낸 적 있는가"를 `hasSucceededBefore`로 물을 때 씁니다.
 - **정책 A가 보는 과거 성공 이체와 `flowId`의 연결은 P6이 소유합니다.** `transfer`에 컬럼을 더하지 않습니다(§9-5 규칙 6). P4는 `TransferSettled`에 nullable `String flowId`를 더하고, P6은 성공 커밋 뒤 이 이벤트를 받는 시점에 성공 이체 ID(`refId`)와 `flowId`의 연결을 자기 테이블에 저장해 반복 묶음 단위로 조회합니다.
     - P4 구현은 PH-103(#747, 같은 이벤트를 고친다) 머지 뒤, S4 측정이 끝난 11/6 이후 첫 PR입니다. FDS는 11/6까지 꺼 두므로 P6은 그 전에 이 시그니처로 리스너를 만들어 둘 수 있습니다.
+    - **연결 순서:** 지금 `TransferSettled`에는 `flowId`가 없습니다. P6은 연결 저장 부품을 먼저 준비하고, 이벤트를 읽는 리스너는 P4가 필드를 추가한 PR이 머지된 뒤 연결합니다. P4는 그 PR이 머지되면 P6에 알립니다.
+    - **멱등 저장:** 같은 이벤트가 다시 전달될 수 있으므로, P6은 성공 이체 ID(`refId`)를 키로 한 번만 저장합니다. 같은 `refId`가 다시 오면 새 행을 만들지 않습니다.
     - 이벤트는 커밋 뒤 따로 처리되므로, 연달아 들어온 이체에서는 앞 건의 연결이 잠깐 안 보일 수 있습니다. 이때도 정책 B는 `RecentTransferQuery`만으로 판정합니다.
 - 이름과 필드는 PR-b 리뷰에서 바뀔 수 있습니다. 바뀌면 이 절을 같은 PR에서 고칩니다.
 
