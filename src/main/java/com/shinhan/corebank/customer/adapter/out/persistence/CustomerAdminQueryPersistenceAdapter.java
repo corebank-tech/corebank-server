@@ -19,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.support.PageableExecutionUtils;
 import org.springframework.stereotype.Repository;
 
+// startsWith는 Querydsl이 %·_·!를 이스케이프해 "like ? escape '!'"로 보낸다 — 입력 와일드카드가 글자로 비교된다.
 @Repository
 public class CustomerAdminQueryPersistenceAdapter implements CustomerAdminQueryPort {
 
@@ -46,6 +47,7 @@ public class CustomerAdminQueryPersistenceAdapter implements CustomerAdminQueryP
         List<CustomerAdminView> content =
                 query.fetch().stream().map(this::toView).toList();
 
+        // 전체 조회이거나 결과가 한 페이지에 다 들어오면 건수 쿼리를 보내지 않는다.
         return PageableExecutionUtils.getPage(content, pageable, () -> count(condition));
     }
 
