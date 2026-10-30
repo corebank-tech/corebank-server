@@ -41,7 +41,18 @@ CORS_ALLOWED_ORIGINS=$CORS
 EOF
 
 %{ if info_api_base_url != "" ~}
-INFO_API_SECRET=$(get info-api-secret 2>/dev/null || true)
+# ParameterNotFound는 등록 전이라 경고만 남기고, 권한·통신 같은 다른 실패는 재시도 뒤 부팅을 중단한다
+INFO_API_SECRET=""
+INFO_API_STATE=0
+for i in $(seq 1 30); do
+  if INFO_API_OUT=$(get info-api-secret 2>&1); then INFO_API_SECRET="$INFO_API_OUT"; INFO_API_STATE=1; break; fi
+  if echo "$INFO_API_OUT" | grep -q ParameterNotFound; then INFO_API_STATE=2; break; fi
+  sleep 10
+done
+if [ "$INFO_API_STATE" = 0 ]; then
+  echo "Parameter Store /corebank/info-api-secret 읽기에 실패해 부팅을 중단한다: $INFO_API_OUT" >&2
+  exit 1
+fi
 if [ -n "$INFO_API_SECRET" ]; then
   printf 'APP_INFO_API_BASE_URL=%s\nAPP_INFO_API_SECRET=%s\n' '${info_api_base_url}' "$INFO_API_SECRET" >> /opt/corebank/app.env
 else
