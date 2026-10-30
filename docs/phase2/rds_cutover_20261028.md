@@ -59,7 +59,7 @@
 | Encrypted | `true` |
 | EngineVersion | `8.4.10` |
 | KMS 소유 계정 | `853900964665` |
-| SourceDBSnapshotIdentifier | `arn:aws:rds:ap-northeast-2:883218392320:snapshot:corebank-share-cutover-20261028` |
+| SourceDBSnapshotIdentifier | 기존 계정의 공유용 스냅샷 ARN (전체 값 비공개) |
 
 최종 복사본이 신규 계정 소유의 암호화된 수동 스냅샷임을 확인했다.
 
@@ -234,7 +234,7 @@ Plan: 1 to add, 0 to change, 0 to destroy.
 | StorageEncrypted | `true` |
 | KMS 계정 | `853900964665` |
 | DBSubnetGroup | `corebank-rds-subnet-group` |
-| SecurityGroup | `sg-0a0991d8a04bcbeb6` |
+| SecurityGroup | RDS 보안 그룹 (실제 ID 비공개) |
 | BackupRetentionPeriod | 7일 |
 | DeletionProtection | `true` |
 | PubliclyAccessible | `false` |
@@ -242,9 +242,9 @@ Plan: 1 to add, 0 to change, 0 to destroy.
 | ParameterApplyStatus | `in-sync` |
 | PendingModifiedValues | `{}` |
 
-신규 RDS 엔드포인트:
-
-`corebank-rds.c7wwueokc5v4.ap-northeast-2.rds.amazonaws.com:3306`
+신규 RDS 엔드포인트는 공개 문서에 기록하지 않는다.
+실제 접속 정보는 신규 AWS 계정의 RDS 콘솔에서 확인한다.
+포트는 `3306`이다.
 
 AWS 조회 결과에서 주요 설정이 Terraform의 목표 구성과 일치했다.
 
@@ -422,6 +422,13 @@ Terraform 브랜치 비교 결과:
 기존 보안 그룹의 불필요한 교체를 방지했다.
 
 ## 9. 이전 리허설과의 차이
+
+10/27 리허설의 수치는 머지된 PR #768의
+`terraform/main/modules/data/README.md` §6.6~6.7을 기준으로 한다.
+해당 PR에는 주요 8개 테이블 합계 19,660,692건,
+일반 테이블 35개, Flyway 최신 순번 54가 기록되어 있다.
+
+- 근거: [PR #768](https://github.com/corebank-tech/corebank-server/pull/768)
 
 | 항목 | 10/27 리허설 | 10/28 최종 복원 |
 |---|---:|---:|
