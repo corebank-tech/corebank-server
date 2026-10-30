@@ -108,6 +108,7 @@ docker run -d --name info-replica-mysql --restart unless-stopped -e MYSQL_ROOT_P
 - 적용 전에 임시 파일에 `CHANGE_ME`가 남지 않았는지 `grep -c CHANGE_ME`로 확인한다(0이어야 한다).
 - 비밀번호에 `'`나 `\`가 들어가면 SQL이 깨지므로 `openssl rand -base64`처럼 안전한 문자만 쓴다.
 - 레플리카에 `super_read_only`를 켠 뒤에는 `CREATE USER`가 막힌다. 10/30에는 한 세션에서 `SET GLOBAL super_read_only=OFF; SET GLOBAL read_only=OFF; SET sql_log_bin=0;`으로 풀고 `etl_replica_reader`를 만든 뒤 `SET GLOBAL read_only=ON; SET GLOBAL super_read_only=ON;`으로 다시 잠갔다(`--force`로 돌려 중간 실패에도 잠금 문장은 실행). `sql_log_bin=0`이라 레플리카에 자체 GTID가 생기지 않았고(`gtid_executed`가 원본 UUID 하나로만 이어짐), `SHOW GRANTS`로 읽기 7개 테이블만 있는 것을 확인했다.
+- 잠금을 다시 건 뒤 레플리카에서 `SHOW GLOBAL VARIABLES WHERE Variable_name IN ('read_only', 'super_read_only');`와 `SHOW REPLICA STATUS\G`로 확인한다. `read_only`·`super_read_only`가 `ON`이고 `Replica_IO_Running`·`Replica_SQL_Running`이 `Yes`이며 `Last_Error`가 비어 있어야 한다. 두 설정은 전역이라 작업 중 세션이 끊기면 풀린 채 남을 수 있으므로, 이 절차를 다시 실행할 때마다 마지막에 확인한다.
 
 ## 4. 환경변수 파일
 
