@@ -1,6 +1,7 @@
 package com.shinhan.corebank.customer.adapter.out.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCrypto;
@@ -130,6 +131,52 @@ class CustomerPiiVerificationServiceIntegrationTest extends IntegrationTestSuppo
                 .isTrue();
 
         assertThat(verifier.verifyRange(id - 1, id).passed()).isFalse();
+    }
+
+    @Test
+    void detectsPhoneNumberMismatch() {
+        long id = customer("ph18verifyphone", "phone@ph18verify.test");
+
+        jdbc.update(
+                """
+                UPDATE customer
+                SET phone_number = ?
+                WHERE customer_id = ?
+                """,
+                "01099998888",
+                id);
+
+        var result = verifier().verifyRange(id - 1, id);
+
+        assertThat(result.phoneMismatchRows()).isEqualTo(1);
+        assertThat(result.passed()).isFalse();
+    }
+
+    @Test
+    void detectsHashMismatchOnly() {
+        long id = customer("ph18verifyhash", "hash@ph18verify.test");
+
+        jdbc.update(
+                """
+                UPDATE customer
+                SET email_search_hash = ?
+                WHERE customer_id = ?
+                """,
+                "0".repeat(64),
+                id);
+
+        var result = verifier().verifyRange(id - 1, id);
+
+        assertThat(result.hashMismatchRows()).isEqualTo(1);
+        assertThat(result.emailMismatchRows()).isZero();
+        assertThat(result.passed()).isFalse();
+    }
+
+    @Test
+    void rejectsInvalidVerificationRange() {
+        assertThatThrownBy(() -> verifier().verifyRange(100, 100))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("고객 ID 검증 범위");
     }
 
     private CustomerPiiVerificationService verifier() {

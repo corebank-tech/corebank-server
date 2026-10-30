@@ -3,6 +3,7 @@ package com.shinhan.corebank.customer.adapter.out.persistence;
 import static com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCipher.Field.EMAIL;
 import static com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCipher.Field.PHONE_NUMBER;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCrypto;
@@ -92,6 +93,29 @@ class CustomerPiiBackfillIntegrationTest extends IntegrationTestSupport {
         backfillService.backfill(2, 10);
 
         assertEncryptedColumns(customerId, "partial@example.com", "01099998888");
+    }
+
+    @Test
+    void rejectsInvalidBackfillArguments() {
+        assertThatThrownBy(() -> backfillService.backfillRange(-1, 100, 10, 1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("고객 ID");
+
+        assertThatThrownBy(() -> backfillService.backfillRange(100, 100, 10, 1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("고객 ID");
+
+        assertThatThrownBy(() -> backfillService.backfillRange(0, 100, 0, 1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("배치 크기");
+
+        assertThatThrownBy(() -> backfillService.backfillRange(0, 100, 501, 1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("배치 크기");
+
+        assertThatThrownBy(() -> backfillService.backfillRange(0, 100, 10, 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("최대 배치 횟수");
     }
 
     private long createCustomer(String userId, String email, String phoneNumber) {
