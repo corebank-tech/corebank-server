@@ -120,14 +120,14 @@ class NotificationRequestedListenerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("알림을 싣지 않은 업무 이벤트는 알림을 만들지 않는다 — 예약 · 자동이체의 이체 확정(#707)")
-    void eventWithoutNotification_createsNoNotification() {
+    @DisplayName("알림 없이 발행된 알림 이벤트는 계약 위반으로 저장하지 않고, 발행 기록을 실패로 남긴다 — 알림은 필수값이다(PR #738 리뷰)")
+    void eventWithoutNotification_createsNoNotificationAndLeavesFailedPublication() {
         // when
         publishInsideTransaction(settledWith(null));
 
         // then
         await().atMost(LISTENER_TIMEOUT)
-                .untilAsserted(() -> assertThat(remainingPublicationCount()).isZero());
+                .untilAsserted(() -> assertThat(failedPublicationCount()).isEqualTo(1));
         assertThat(notificationCount()).isZero();
     }
 

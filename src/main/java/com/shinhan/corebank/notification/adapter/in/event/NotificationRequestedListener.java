@@ -19,6 +19,6 @@ public class NotificationRequestedListener {
 
     @ApplicationModuleListener
     public void on(NotificationRequestCarrier event) {
-        event.notification().ifPresent(notificationCommandUseCase::createNotification);
+        notificationCommandUseCase.createNotification(event.notification());
     }
 }

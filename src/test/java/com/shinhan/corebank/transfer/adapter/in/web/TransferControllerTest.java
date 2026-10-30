@@ -506,6 +506,9 @@ class TransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("타행이체: 16자리를 넘는 계좌번호는 400 + TRF0007")
     void executeInterbank_invalidAccountNumber_returnsBadRequest() throws Exception {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
         postInterbank(interbankRequestJson("004", "12345678901234567", "홍길동"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("TRF0007"));
@@ -514,6 +517,9 @@ class TransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("타행이체: 전문 문자셋에 없는 문자(이모지)는 400 + TRF0008")
     void executeInterbank_emojiMemo_returnsBadRequest() throws Exception {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
         postInterbank(interbankRequestJson("004", "1234567890123", "홍길동😀"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("TRF0008"));
@@ -522,6 +528,9 @@ class TransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("타행이체: 목록에 없는 은행코드(당행 088 포함)는 400 + TRF0006")
     void executeInterbank_unsupportedBank_returnsBadRequest() throws Exception {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
         postInterbank(interbankRequestJson("088", "1234567890123", "홍길동"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("TRF0006"));

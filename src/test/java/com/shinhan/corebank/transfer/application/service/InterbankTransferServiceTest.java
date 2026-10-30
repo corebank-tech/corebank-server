@@ -170,7 +170,7 @@ class InterbankTransferServiceTest extends InterbankIntegrationTestSupport {
     void approved_settledEventCarriesTransferNotification() {
         service(client).execute(command("004", "1234567890123", AMOUNT));
 
-        assertThat(publishedTransferSettled().notification()).hasValueSatisfying(notification -> {
+        assertThat(publishedTransferSettled().notification()).satisfies(notification -> {
             assertThat(notification.customerId()).isEqualTo(1L);
             assertThat(notification.title()).isEqualTo("이체 완료");
             assertThat(notification.content()).isEqualTo("김*수님에게 30,000원을 보냈습니다.");
@@ -182,7 +182,7 @@ class InterbankTransferServiceTest extends InterbankIntegrationTestSupport {
     void failedBeforeSend_settledEventCarriesFailureNotification() {
         service(client).execute(command("004", "1234567890123", INITIAL_BALANCE + 1));
 
-        assertThat(publishedTransferSettled().notification()).hasValueSatisfying(notification -> {
+        assertThat(publishedTransferSettled().notification()).satisfies(notification -> {
             assertThat(notification.customerId()).isEqualTo(1L);
             assertThat(notification.title()).isEqualTo("이체 실패");
             assertThat(notification.content()).endsWith(TransferErrorCode.INSUFFICIENT_BALANCE.getMessage());

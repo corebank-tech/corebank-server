@@ -98,6 +98,12 @@ app:
       # 스케줄러 스레드가 2개라(#604) 한 번에 묻는 건수를 묶어 다른 스케줄을 오래 막지 않는다
       # 한 건 최대 4초(연결 1초 + 응답 3초) × 15건 = 1분
       batch-size: 15
+  # 온프레미스 정보계 API (PH-77 ③). base-url 이 비어 있으면 호출하지 않고 적재 이력 없음 응답을 유지한다 — APP_INFO_API_BASE_URL·APP_INFO_API_SECRET
+  info-api:
+    base-url: ${APP_INFO_API_BASE_URL:}
+    secret: ${APP_INFO_API_SECRET:}
+    connect-timeout: 1s
+    read-timeout: 5s
   interest:
     income-tax-rate: "0.14"
     local-tax-ratio: "0.10"
