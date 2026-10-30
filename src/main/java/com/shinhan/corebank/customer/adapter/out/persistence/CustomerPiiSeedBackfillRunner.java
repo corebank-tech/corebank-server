@@ -23,6 +23,8 @@ public class CustomerPiiSeedBackfillRunner {
 
     @EventListener(ApplicationReadyEvent.class)
     public void runOnce() {
+        verifier.assertNoDuplicateEmailSearchHashes();
+
         verifyExistingEncryptedRows();
 
         var report = backfillService.backfill(BATCH_SIZE, MAX_BATCHES);

@@ -4,7 +4,9 @@ import static com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCiph
 import static com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCipher.Field.PHONE_NUMBER;
 
 import com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCrypto;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -38,6 +40,43 @@ public class CustomerPiiVerificationService {
     public VerificationReport verifyExistingEncryptedRows() {
         return scan(Long.MIN_VALUE, Long.MAX_VALUE, false);
     }
+
+    // 백필 전 전체 고객 이메일의 HMAC 검색 해시 중복 여부를 검사한다.
+    // CustomerEmailBlindIndex의 정규화 규칙을 그대로 사용한다.
+    public void assertNoDuplicateEmailSearchHashes() {
+        Set<String> hashes = new HashSet<>();
+        long cursor = Long.MIN_VALUE;
+
+        while (true) {
+            List<EmailRow> rows = jdbc.query(
+                    """
+                SELECT customer_id, email
+                FROM customer
+                WHERE customer_id > ?
+                ORDER BY customer_id
+                LIMIT ?
+                """,
+                    (rs, rowNum) -> new EmailRow(rs.getLong("customer_id"), rs.getString("email")),
+                    cursor,
+                    PAGE_SIZE);
+
+            if (rows.isEmpty()) {
+                return;
+            }
+
+            for (EmailRow row : rows) {
+                String hash = crypto.emailBlindIndex().hash(row.email());
+
+                if (!hashes.add(hash)) {
+                    throw new IllegalStateException("이메일 정규화 후 중복이 발견되어 PII 백필을 중단합니다.");
+                }
+            }
+
+            cursor = rows.get(rows.size() - 1).id();
+        }
+    }
+
+    private record EmailRow(long id, String email) {}
 
     private VerificationReport scan(long fromExclusive, long toInclusive, boolean requireAllColumns) {
 

@@ -127,6 +127,7 @@ class CustomerPiiMaintenanceRunnerTest {
         runRunner();
 
         InOrder order = inOrder(verifier, backfillService);
+        order.verify(verifier).assertNoDuplicateEmailSearchHashes();
         order.verify(verifier).verifyExistingEncryptedRows();
         order.verify(backfillService).backfill(500, 10_000);
     }

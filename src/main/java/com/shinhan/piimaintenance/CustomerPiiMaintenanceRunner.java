@@ -52,6 +52,9 @@ public class CustomerPiiMaintenanceRunner implements ApplicationRunner {
     }
 
     private void runBackfill() {
+        // 신규 HMAC UNIQUE 인덱스 충돌 가능성을 백필 전에 검사한다.
+        verifier.assertNoDuplicateEmailSearchHashes();
+
         // 잘못된 키로 기존 암호문과 다른 키의 암호문을
         // 혼합 생성하지 않도록 백필 전에 검사한다.
         var precheck = verifier.verifyExistingEncryptedRows();
