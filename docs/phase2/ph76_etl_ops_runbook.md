@@ -78,7 +78,7 @@ docker exec -i info-mart-mysql sh -c 'MYSQL_PWD=$(cat /run/secrets/root_pw) mysq
 
 - 새 RDS는 `gtid-mode=ON`, `binlog_format=ROW`, `require_secure_transport=1`이다. 복제 연결에는 SSL 옵션이 필요하다.
 - 복제가 도는 동안에는 VM 재부팅과 도커 재시작을 하지 않는다.
-- 복제가 붙은 뒤 병렬 복제이면 `replica_preserve_commit_order=ON`을 확인한다.
+- 복제가 붙은 뒤 병렬 복제이면 `replica_preserve_commit_order=ON`을 확인한다. 10/30 확인: `replica_parallel_workers=4`, `replica_parallel_type=LOGICAL_CLOCK`, `replica_preserve_commit_order=ON`이라 병렬로 적용해도 커밋 순서가 보존된다. 그래서 cutoff가 보이면 그날 데이터가 모두 복제된 것으로 본다.
 
 ```bash
 sudo mkdir -p /var/lib/info-replica
