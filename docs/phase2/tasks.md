@@ -133,7 +133,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 | [PH-36](#ph-36-장애-주입-3종--보상-트랜잭션) | 장애 주입 3종 · 보상 트랜잭션 | S3 | 2 | PH-33-② · PH-80 | **10/29 머지**([D-31](README.md#d-31--1019--팀-합의), 릴리스 3) | #711 · PR #770 | 진행 |
 | [LOCK-TUNE](#lock-tune-락-튜닝) | 락 튜닝 | S3 | 1 | PH-30 베이스라인 · PH-80 | PH-101-② 측정 뒤 | — | 예정 |
 | [PH-101-①](#ph-101-redis-제거-①-구현-s2--②-판정-측정-s3) | Redis 제거 2단계 — Redis 어댑터·의존·운영 컨테이너 삭제 (판정 통과 시) | S3 | 0.5 | PH-101-② 판정 | 판정 뒤 | #580 · PR #710 | 완료 |
-| [PH-06](#ph-06-지연이체-서비스) | 지연이체 서비스 (P1에서 이관, D-14 예외 [D-29](README.md#d-29--1020--리드)) | S3 | 4 | PH-40 · PH-99 · PH-80 · [O-09](README.md#8-미결) | O-09 결정 뒤(10/21 가능 여부 P4 확인) | — | 예정 |
+| [PH-06](#ph-06-지연이체-서비스) | 지연이체 서비스 (P1에서 이관, D-14 예외 [D-29](README.md#d-29--1020--리드)) | S3 | 4 | PH-40 · PH-99 · PH-80 · [O-09](README.md#8-미결) | **릴리스 3(10/30)** — O-09는 [D-34](README.md#d-34--1028--p4)로 해결 | #771 · #772 | 예정 |
 | [PH-36b](#ph-36b-최종-측정--리포트) | 최종 측정 · 정합성+성능 리포트 | S4 | 3 | PH-30 재측정 · PH-36 | 11/6 | — | 예정 |
 
 ### P5 — COB · 영업일 · 네트워크/컴퓨트 · 정보계 ETL·조회 API · 운영
@@ -852,7 +852,9 @@ TransferExecutionService.execute(command)                         ← 편집자:
  ├─ OTP 소비 (기존)
  ├─ requiresNewTransactionTemplate.execute {                       ← PH-80이 S2에 재작성
  │     tradeDate = BusinessDateGate.acquireSharedAndReadBusinessDate()  ← 가장 먼저(gate → 한도 → 계좌). 한 번 구해 transfer에 싣고 원장·훅 B가 같이 쓴다(#516, #662)
- │     한도 · 계좌 락 · 잔액 (기존)
+ │     한도 (기존)                                                  ← 고객 단위 행 락. 커밋까지 쥔다
+ │     [훅 C] TransferHoldPolicy 체인 (즉시이체만)                  ← P4 PH-06 · P6 FDS. HOLD면 롤백 후 보류 저장(#771)
+ │     계좌 락 · 잔액 (기존)
  │     원장 기표 LedgerPair (기존)
  │     [훅 B] LedgerPostingHook.afterLedger(ctx)                   ← P3 PH-24 (예외 → 롤백 = 이체 실패)
  │     publisher.publishEvent(new TransferSettled(...))           ← P1 타입, EVT-2(#505)
@@ -866,6 +868,7 @@ TransferExecutionService.execute(command)                         ← 편집자:
 |---|---|---|---|
 | A | `transfer.api.TransferPreCheck { int order(); void check(TransferPreCheckContext ctx); }` — `record TransferPreCheckContext(long customerId, long withdrawalAccountId, long amount)`. 거부는 `BusinessException` | P2 PH-90 | 락 이전, 읽기 전용 |
 | B | `transfer.api.LedgerPostingHook { void afterLedger(LedgerPostingContext ctx); }` — `record LedgerPostingContext(String transactionNumber, String txType, long amount, long fromAccountId, long toAccountId, LocalDate tradeDate)` | P3 PH-24 | 이체 REQUIRES_NEW 안. 예외 = 롤백 |
+| C | `transfer.api.TransferHoldPolicy { int order(); TransferHoldDecision decide(TransferHoldContext ctx); }` — 이체 보류. 계약 전문은 [transfer_seam.md](transfer_seam.md) §9 | P4 PH-06(#772) · P6 FDS | 이체 REQUIRES_NEW 안, 한도 적립 뒤. 읽기만. HOLD = 롤백 후 보류 저장 |
 | tradeDate | `business.api.BusinessDateProvider` 주입 | 제공 P5 PH-40, 대입 P4 | 같은 트랜잭션 |
 | 이벤트 | 완료는 템플릿 콜백 안, 실패는 `failTransfer()` 안 | P1 #505(EVT-2 대신), 이후 P4 소유 | 활성 트랜잭션 안이어야 리스너가 받는다 |
 
@@ -978,8 +981,9 @@ P1 PH-30 결과(데드락률 · p99)를 근거로 락 범위나 조회 순서를
 전자금융감독규정상 필수 제공 서비스다. 입금계좌 지정(PH-07)은 2차에 없다([D-06](README.md#d-06--918--리드)).
 
 - 고객별 설정(on/off · 기준금액 · 지연시간)
-- 지연 대기 이체를 예약으로 처리한다(P5 예약이체 배치 재사용 검토)
-    - **즉시이체를 보류로 돌리는 자리가 PH-99 seam에 없다.** 훅 A는 읽기 전용이라 보류로 바꿀 수 없다. 컨트롤러 단에서 예약이체로 위임할지, 새 훅을 둘지는 [O-09](README.md#8-미결)에서 정한다. 새 훅을 두면 P4가 `execute()`에 호출 자리를 연결한다.
+- 지연 대기 이체는 훅 C로 보류하고 해제 시각에 실행한다([D-34](README.md#d-34--1028--p4)). 계약은 [transfer_seam.md](transfer_seam.md) §9(#771)다.
+    - 예약이체 배치는 하루 한 번(00:10) 돌아 시간 단위 지연을 처리할 수 없어 재사용하지 않는다. `transfer` 안의 스케줄러가 해제 시각이 지난 보류 건을 실행한다(#772).
+    - 보류 저장·1회 실행 부품은 P6 FDS와 같이 쓴다. 지연이체가 첫 구현체다.
 - 지연 중 취소
 - 대상 판정과 안내(남은 취소 가능 시간을 응답에)
 - **완료 기준:** 기준금액 이상 이체가 지정 시간 후 입금된다. 취소가 동작한다.
