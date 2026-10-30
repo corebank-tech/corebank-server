@@ -27,6 +27,7 @@ class AutoTransferReconcileSchedulerIntegrationTest extends IntegrationTestSuppo
     private static final String RECONCILE_JOB = "AUTO_TRANSFER_RECONCILE";
     private static final String MAIN_JOB = "DAILY_TRANSFER_BATCH";
 
+    // 스케줄러의 락 판정만 본다 — 재확정 로직 자체는 AutoTransferBatchItemProcessorTest 가 담당한다.
     @MockitoBean
     AutoTransferBatchUseCase autoTransferBatchUseCase;
 
