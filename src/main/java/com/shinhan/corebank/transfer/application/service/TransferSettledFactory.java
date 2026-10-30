@@ -1,6 +1,5 @@
 package com.shinhan.corebank.transfer.application.service;
 
-import com.shinhan.corebank.notification.api.NotificationRequest;
 import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.domain.Transfer;
 import java.time.LocalDateTime;
@@ -12,8 +11,6 @@ import java.time.LocalDateTime;
 final class TransferSettledFactory {
 
     static TransferSettled create(Transfer transfer, Long customerId, String txType, LocalDateTime occurredAt) {
-        NotificationRequest notification = TransferNotificationGenerator.generate(transfer, customerId, occurredAt)
-                .orElse(null);
         return TransferSettled.builder()
                 .customerId(customerId)
                 .refId(transfer.getTransferId())
@@ -21,7 +18,7 @@ final class TransferSettledFactory {
                 .status(transfer.getStatus())
                 .errorCode(transfer.getErrorCode())
                 .occurredAt(occurredAt)
-                .notificationRequest(notification)
+                .notificationRequest(TransferNotificationGenerator.generate(transfer, customerId, occurredAt))
                 .build();
     }
 }

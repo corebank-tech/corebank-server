@@ -33,7 +33,7 @@ execute(command)
        [훅 B] LedgerPostingHook.afterLedger(ctx)
        transfer.complete
        transfer 저장
-       publishEvent(TransferSettled)   ← 즉시·예약·자동 모두. P1 #505, 이후 P4 소유
+       publishEvent(TransferSettled)   ← 즉시이체만(예약·자동은 배치 이벤트, PR #738). P1 #505, 이후 P4 소유
     }
  실패 시 failTransfer() — REQUIRES_NEW {
        tradeDate = gate로 읽기 → Transfer 생성
@@ -51,7 +51,7 @@ execute(command)
 | tradeDate | `business.api.BusinessDateGate` | 제공 P5 PH-41·#556, 대입 P4 | 기표·ERROR 기록 트랜잭션 안 | — |
 | 확정 이벤트 | `TransferSettled` — 성공·실패를 `status`로, 이체 종류를 `txType`으로 구분 | 타입·페이로드 P1 PH-32. 발행 코드는 P1이 #505에서 넣었고(EVT-2 대신) | 성공은 기표 REQUIRES_NEW 안, 실패는 `failTransfer()` REQUIRES_NEW 안 | 리스너 예외 → 이체 롤백 |
 
-transfer 행이 생기기 전의 사전검증 실패는 엔진이 발행하지 않습니다. 즉시이체는 고객이 API 응답으로 오류를 받고, 예약·자동이체는 배치가 거래번호 없는 결과일 때와 재확정이 transfer 행을 찾지 못했을 때만 `ScheduledTransferSettled`·`AutoTransferExecutionSettled`를 발행합니다.
+transfer 행이 생기기 전의 사전검증 실패는 엔진이 발행하지 않습니다. 즉시이체는 고객이 API 응답으로 오류를 받습니다. 예약·자동이체는 배치가 정상 확정·재확정 결과마다 `ScheduledTransferSettled`·`AutoTransferExecutionSettled`를 발행하고, 예약·자동이체 알림은 이 이벤트가 싣습니다(#707, PR #723 리뷰 — 문구는 각 도메인이 만든다).
 
 컨텍스트 레코드는 원시 타입만 담습니다. `api` 패키지는 ArchUnit에서 다른 계층을 참조할 수 없어 `TransferCommand`를 넘기지 않습니다.
 

@@ -232,6 +232,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `CMN0004` | 400  | 조회기간이 최대 1년을 초과했습니다.                     | 조회기간 상한 초과                                     | `INQ0002`                               |
 | `CMN0005` | 400  | 지원하지 않는 페이지 크기입니다.                       | 5·10·20·30·50 외의 값                             | `INQ0005`                               |
 | `CMN0006` | 400  | 전체조회 결과가 너무 많습니다. 조회기간을 좁혀 주세요.           | `all=true` 조회 결과가 상한(100건)을 초과              | —                                       |
+| `CMN0007` | 400  | 조회 사유가 없거나 올바르지 않습니다.                    | 관리자 고객 개인정보 조회·변경 API의 `X-Access-Reason` 헤더 누락·미정의 값(D-10, PH-89) | —                                       |
 | `CMN0101` | 401  | 인증정보가 없거나 세션이 만료되었습니다.                   | 세션 없음 또는 10분 무조작 만료                            | `ATH0001`(세션), `ATH0002`(세션), `AUTH0001` |
 | `CMN0102` | 403  | 해당 자원에 접근할 권한이 없습니다.                     | 타 고객 자원 접근(IDOR)                               | `ATH0003`, `ACC0002`, `ACCT0002`        |
 | `CMN0201` | 404  | 잘못된 요청 주소입니다.                            | 존재하지 않는 엔드포인트 및 지원하지 않는 HTTP 메서드(405도 404로 통일) | —                                       |
@@ -242,7 +243,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `CMN9002` | 500  | 아직 오지 않은 영업일은 마감할 수 없습니다.               | COB 영업일 전환에 오늘 달력보다 미래인 영업일이 넘어옴. COB "영업일 확인" 스텝이 막아야 하므로 나오면 결함이다(PH-40·PH-43) | —                                       |
 | `CMN9999` | 500  | 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.        | 예상하지 못한 서버 오류                                  | `INQ9999`, `TRANSACTION_ROLLBACK_ERROR` |
 
-> `CMN0001`, `CMN0201`, `CMN0303`,`CMN9999`는 `ApiExceptionHandler`가 자동 반환하므로 직접 던지지 않아도 됩니다.
+> `CMN0001`, `CMN0007`, `CMN0201`, `CMN0303`,`CMN9999`는 `ApiExceptionHandler`가 자동 반환하므로 직접 던지지 않아도 됩니다.
 
 ### 4-2. `ATH` 인증·회원 — P6
 
@@ -460,7 +461,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 | 코드 | HTTP | 메시지 | 의미 |
 | --- | --- | --- | --- |
-| `INF9001` | 500 | 정보계 API에 연결하지 못했습니다. | WAS가 온프레미스 정보계 API에 닿지 못함(VPN 단절·타임아웃·상대 서버 오류). 구현은 PH-77 ②(#704) |
+| `INF9001` | 500 | 정보계 API에 연결하지 못했습니다. | WAS가 온프레미스 정보계 API에 닿지 못함(VPN 단절·타임아웃·인증 실패·상대 서버 오류·응답 형식 오류). 구현은 PH-77 ③(#776, `InfoApiClient`) |
 
 ### 4-16. `NTF` 알림 — P1
 
@@ -588,6 +589,10 @@ public record ApiResponse<T>(String code, String message, T data) {
 |  | `CUSTOMER_READ` | 고객 조회 |
 |  | `CUSTOMER_WRITE` | 고객 변경 |
 |  | `AUDIT_READ` | 감사로그 조회 |
+| `AccessReason` | `CUSTOMER_REQUEST` | 고객 요청 (`X-Access-Reason` 헤더, PH-89) |
+|  | `INCIDENT` | 사고·민원 대응 |
+|  | `AUDIT` | 감사·점검 |
+|  | `OPERATION` | 운영 확인 |
 
 > 폐기: `TRANSFER`, `PRODUCT_SIGN`, `LIMIT_CHANGE`, `ACC_REGISTER`, `PROFILE_CHANGE` (기존 OTP 발급 명세의 약어)
 

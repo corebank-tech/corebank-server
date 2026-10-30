@@ -37,11 +37,24 @@ public class MockExistingBankCustomerVerificationAdapter
     private final PasswordEncoder passwordEncoder;
     // 재가입 차단이 사람 단위로 동작하는지(ATH0303) 확인하려면 "막히는 고객"과
     // "그래도 가입되는 다른 고객"이 함께 있어야 하므로 원장 고객을 2명 둔다.
+    // 101~106은 PH-09 UAT에서 6명이 각자 가입하기 위한 고객이다(#795).
     private final Map<String, MockExistingBankCustomer> customersById = Map.of(
             "BANK_CUSTOMER_001",
             new MockExistingBankCustomer("BANK_CUSTOMER_001", "홍길동", LocalDate.of(1990, 1, 1)),
             "BANK_CUSTOMER_002",
-            new MockExistingBankCustomer("BANK_CUSTOMER_002", "김영희", LocalDate.of(1985, 5, 5)));
+            new MockExistingBankCustomer("BANK_CUSTOMER_002", "김영희", LocalDate.of(1985, 5, 5)),
+            "BANK_CUSTOMER_101",
+            new MockExistingBankCustomer("BANK_CUSTOMER_101", "박서연", LocalDate.of(1995, 1, 1)),
+            "BANK_CUSTOMER_102",
+            new MockExistingBankCustomer("BANK_CUSTOMER_102", "최민준", LocalDate.of(1995, 2, 2)),
+            "BANK_CUSTOMER_103",
+            new MockExistingBankCustomer("BANK_CUSTOMER_103", "정하은", LocalDate.of(1995, 3, 3)),
+            "BANK_CUSTOMER_104",
+            new MockExistingBankCustomer("BANK_CUSTOMER_104", "강도윤", LocalDate.of(1995, 4, 4)),
+            "BANK_CUSTOMER_105",
+            new MockExistingBankCustomer("BANK_CUSTOMER_105", "윤지우", LocalDate.of(1995, 5, 5)),
+            "BANK_CUSTOMER_106",
+            new MockExistingBankCustomer("BANK_CUSTOMER_106", "임서준", LocalDate.of(1995, 6, 6)));
     private final Map<String, MockExistingBankAccount> accountsByNumber = Map.of(
             "110123456789",
             new MockExistingBankAccount(
@@ -78,7 +91,19 @@ public class MockExistingBankCustomerVerificationAdapter
                     "ACTIVE",
                     MOCK_ACCOUNT_PASSWORD_HASH,
                     LocalDate.of(2023, 7, 1),
-                    null));
+                    null),
+            "110900000001",
+            zeroBalanceUatAccount("BANK_ACCOUNT_101", "BANK_CUSTOMER_101", "110900000001"),
+            "110900000002",
+            zeroBalanceUatAccount("BANK_ACCOUNT_102", "BANK_CUSTOMER_102", "110900000002"),
+            "110900000003",
+            zeroBalanceUatAccount("BANK_ACCOUNT_103", "BANK_CUSTOMER_103", "110900000003"),
+            "110900000004",
+            zeroBalanceUatAccount("BANK_ACCOUNT_104", "BANK_CUSTOMER_104", "110900000004"),
+            "110900000005",
+            zeroBalanceUatAccount("BANK_ACCOUNT_105", "BANK_CUSTOMER_105", "110900000005"),
+            "110900000006",
+            zeroBalanceUatAccount("BANK_ACCOUNT_106", "BANK_CUSTOMER_106", "110900000006"));
     private final ConcurrentMap<String, AttemptState> attempts = new ConcurrentHashMap<>();
 
     public MockExistingBankCustomerVerificationAdapter(PasswordEncoder passwordEncoder) {
@@ -144,6 +169,23 @@ public class MockExistingBankCustomerVerificationAdapter
         return customer != null
                 && customer.userName().equals(userName)
                 && customer.birthDate().format(BIRTH_DATE_FORMATTER).equals(birthDate);
+    }
+
+    // UAT 계좌는 잔액 0원으로 둔다. 가입 시 잔액이 원장 기록 없이 account로 복사되므로(#512),
+    // 잔액이 있으면 COB 대사가 불일치로 잡고 임계를 넘으면 마감이 멈춘다.
+    private static MockExistingBankAccount zeroBalanceUatAccount(
+            String existingBankAccountId, String existingBankCustomerId, String accountNumber) {
+        return new MockExistingBankAccount(
+                existingBankAccountId,
+                existingBankCustomerId,
+                accountNumber,
+                "DEMAND_DEPOSIT",
+                null,
+                0L,
+                "ACTIVE",
+                MOCK_ACCOUNT_PASSWORD_HASH,
+                LocalDate.of(2026, 10, 1),
+                null);
     }
 
     // Phase 1 Mock 은행 원장의 고객정보를 표현한다.

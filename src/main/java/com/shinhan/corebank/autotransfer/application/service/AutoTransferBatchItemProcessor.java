@@ -11,7 +11,7 @@ import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
-import com.shinhan.corebank.common.util.MaskingUtil;
+import com.shinhan.corebank.notification.api.NotificationRequest;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
@@ -65,6 +65,17 @@ public class AutoTransferBatchItemProcessor {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void completeProcessing(
             AutoTransfer autoTransfer, AutoTransferExecution processingExecution, LocalDate date) {
+        // 재확정과 같은 회차 행을 잠근다. 재확정이 먼저 확정한 회차면 이체하지 않는다
+        boolean isAlreadySettled = autoTransferExecutionPersistencePort
+                .findProcessingForUpdate(processingExecution.getExecutionId())
+                .isEmpty();
+        if (isAlreadySettled) {
+            log.info(
+                    "재확정이 먼저 확정한 회차라 이체하지 않음 - autoTransferId={}, executionId={}",
+                    autoTransfer.getAutoTransferId(),
+                    processingExecution.getExecutionId());
+            return;
+        }
         // saveProcessing()과 동일하게, 이 회차의 논리적 실행일(nextExecutionDate)을 써야 한다 -
         // 그래야 전날 후속처리 실패로 nextExecutionDate가 안 넘어가 다음날 배치가 같은 회차를
         // date=다음날로 재선택해도, 멱등성 사전조회가 첫 시도와 같은 키로 인식해 중복 송금을 막는다.
@@ -101,20 +112,18 @@ public class AutoTransferBatchItemProcessor {
         }
         autoTransferExecutionPersistencePort.save(processingExecution, autoTransfer.getAutoTransferId());
 
-        // 거래번호가 있으면 이체 엔진이 돈이 움직인 트랜잭션 안에서 이미 TransferSettled 를 발행했다(#436).
-        // 거래번호가 없는 건 transfer 행이 생기기 전의 사전검증 실패뿐이라 엔진이 발행하지 못하므로, 회차
-        // 기록과 함께 여기서 발행한다. refId 는 등록 ID 가 아니라 회차 ID 다.
-        if (result.isPreValidationFailure()) {
-            eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
-                    .customerId(autoTransfer.getCustomerId())
-                    .refId(processingExecution.getExecutionId())
-                    .status(result.status())
-                    .errorCode(result.errorCode())
-                    .occurredAt(LocalDateTime.now(clock))
-                    .amount(processingExecution.getAmount())
-                    .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
-                    .build());
-        }
+        // 회차 확정마다 발행한다(#707). 알림은 회차 ID 가 필요해 TransferSettled 가 아니라 이 이벤트에 싣는다.
+        LocalDateTime settledAt = LocalDateTime.now(clock);
+        NotificationRequest notification = AutoTransferNotificationGenerator.generate(
+                autoTransfer, processingExecution, result.status(), result.customerFailureReason(), settledAt);
+        eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
+                .customerId(autoTransfer.getCustomerId())
+                .refId(processingExecution.getExecutionId())
+                .status(result.status())
+                .errorCode(result.errorCode())
+                .occurredAt(settledAt)
+                .notificationRequest(notification)
+                .build());
 
         autoTransfer.advanceNextExecutionDate();
         if (autoTransfer.getNextExecutionDate().isAfter(autoTransfer.getEndDate())) {
@@ -147,7 +156,19 @@ public class AutoTransferBatchItemProcessor {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void reconcileStuckExecution(StuckExecution stuckExecution) {
         AutoTransfer autoTransfer = stuckExecution.autoTransfer();
-        AutoTransferExecution execution = stuckExecution.execution();
+        // 메인 배치가 잡고 있는 회차는 처리 중이라 건너뛰고, 이미 확정된 회차도 건드리지 않는다.
+        // 이체 기록은 잠금을 잡은 뒤에 읽어야 메인 배치가 커밋한 이체를 놓치지 않는다
+        Optional<AutoTransferExecution> lockedExecution =
+                autoTransferExecutionPersistencePort.findProcessingForUpdateSkipLocked(
+                        stuckExecution.execution().getExecutionId());
+        if (lockedExecution.isEmpty()) {
+            log.info(
+                    "처리 중이거나 이미 확정된 회차라 재확정하지 않음 - autoTransferId={}, executionId={}",
+                    autoTransfer.getAutoTransferId(),
+                    stuckExecution.execution().getExecutionId());
+            return;
+        }
+        AutoTransferExecution execution = lockedExecution.get();
 
         Optional<TransferLookupResult> lookup =
                 transferLookupPort.findBySourceAndDate(autoTransfer.getAutoTransferId(), execution.getExecutionDate());
@@ -167,29 +188,19 @@ public class AutoTransferBatchItemProcessor {
             execution.markError("실행 중 확인 불가로 재확정 배치가 오류 처리함", null);
         }
 
-        // claim 단계가 없는 reconcileStuckExecution() 전용 가드: findAllProcessing()으로 조회만 하고
-        // 선점하지 않아서, 동시에 두 번 돌면 이 저장 시점에 가드가 필요하다. 0건이면 이미 다른 실행이 먼저 확정한 것.
-        boolean confirmed = autoTransferExecutionPersistencePort.saveIfStillProcessing(execution);
-        if (!confirmed) {
-            log.info(
-                    "이미 다른 재확정 실행이 먼저 확정함(중복 재확정 방어) - autoTransferId={}, executionId={}",
-                    autoTransfer.getAutoTransferId(),
-                    execution.getExecutionId());
-            return;
-        }
+        autoTransferExecutionPersistencePort.save(execution, autoTransfer.getAutoTransferId());
 
-        // transfer 행이 없으면 이체 엔진이 발행하지 못했고, completeProcessing() 의 사전검증 실패 발행도 함께
-        // 롤백된 건이다. 재확정이 겹치면 가드에서 return 해도 트랜잭션은 커밋되므로 가드를 통과한 뒤에만 발행한다.
-        if (hasNoTransferRow) {
-            eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
-                    .customerId(autoTransfer.getCustomerId())
-                    .refId(execution.getExecutionId())
-                    .status(ProcessResultStatus.ERROR)
-                    .occurredAt(LocalDateTime.now(clock))
-                    .amount(execution.getAmount())
-                    .counterpartyName(MaskingUtil.maskName(autoTransfer.getPayeeName()))
-                    .build());
-        }
+        // 재확정도 확정마다 발행하되 가드를 통과한 뒤에만 낸다(#707). 실패 코드가 없어 알림은 기본 문장이다.
+        LocalDateTime settledAt = LocalDateTime.now(clock);
+        NotificationRequest notification = AutoTransferNotificationGenerator.generate(
+                autoTransfer, execution, execution.getStatus(), Optional.empty(), settledAt);
+        eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
+                .customerId(autoTransfer.getCustomerId())
+                .refId(execution.getExecutionId())
+                .status(execution.getStatus())
+                .occurredAt(settledAt)
+                .notificationRequest(notification)
+                .build());
 
         if (execution.getStatus() == ProcessResultStatus.ERROR) {
             List<AutoTransferExecution> recent = autoTransferExecutionPersistencePort.findRecentByAutoTransferId(

@@ -17,7 +17,7 @@ class AuditLogJpaEntityTest {
     @DisplayName("원장 변경 이벤트 + 거래번호 있음 -> 정상 생성")
     void ledgerChanging_withTransactionNumber_created() {
         AuditLogJpaEntity e = AuditLogJpaEntity.of(
-                1L, "TXN00000000000000001", AuditEventType.IMMEDIATE_TRANSFER, "127.0.0.1", true, null, NOW);
+                1L, "TXN00000000000000001", AuditEventType.IMMEDIATE_TRANSFER, "127.0.0.1", true, null, null, NOW);
 
         assertThat(e.getTransactionNumber()).isEqualTo("TXN00000000000000001");
     }
@@ -27,7 +27,7 @@ class AuditLogJpaEntityTest {
     void ledgerChanging_withoutTransactionNumber_throws() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> AuditLogJpaEntity.of(
-                        1L, null, AuditEventType.IMMEDIATE_TRANSFER, "127.0.0.1", true, null, NOW));
+                        1L, null, AuditEventType.IMMEDIATE_TRANSFER, "127.0.0.1", true, null, null, NOW));
     }
 
     @Test
@@ -35,13 +35,13 @@ class AuditLogJpaEntityTest {
     void ledgerChanging_withBlankTransactionNumber_throws() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> AuditLogJpaEntity.of(
-                        1L, "  ", AuditEventType.IMMEDIATE_TRANSFER, "127.0.0.1", true, null, NOW));
+                        1L, "  ", AuditEventType.IMMEDIATE_TRANSFER, "127.0.0.1", true, null, null, NOW));
     }
 
     @Test
     @DisplayName("원장 비변경 이벤트 + 거래번호 없음 -> 정상 생성")
     void nonLedgerChanging_withoutTransactionNumber_created() {
-        AuditLogJpaEntity e = AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, null, NOW);
+        AuditLogJpaEntity e = AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, null, null, NOW);
 
         assertThat(e.getTransactionNumber()).isNull();
     }
@@ -51,7 +51,7 @@ class AuditLogJpaEntityTest {
     void nonLedgerChanging_withTransactionNumber_throws() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> AuditLogJpaEntity.of(
-                        1L, "TXN00000000000000001", AuditEventType.LOGIN, "127.0.0.1", true, null, NOW));
+                        1L, "TXN00000000000000001", AuditEventType.LOGIN, "127.0.0.1", true, null, null, NOW));
     }
 
     @Test
@@ -59,7 +59,8 @@ class AuditLogJpaEntityTest {
     void detailWithAccountNumber_masked() {
         Map<String, Object> detail = Map.of("accountNumber", "110123456789");
 
-        AuditLogJpaEntity e = AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, NOW);
+        AuditLogJpaEntity e =
+                AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, null, NOW);
 
         assertThat(e.getDetail().get("accountNumber")).isEqualTo("110******789");
     }
@@ -69,7 +70,8 @@ class AuditLogJpaEntityTest {
     void detailWithPrefixedAccountNumberKey_masked() {
         Map<String, Object> detail = Map.of("depositAccountNumber", "110123456789");
 
-        AuditLogJpaEntity e = AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, NOW);
+        AuditLogJpaEntity e =
+                AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, null, NOW);
 
         assertThat(e.getDetail().get("depositAccountNumber")).isEqualTo("110******789");
     }
@@ -79,7 +81,8 @@ class AuditLogJpaEntityTest {
     void detailWithoutSensitiveKeys_keptAsIs() {
         Map<String, Object> detail = Map.of("eventNote", "정상 로그인");
 
-        AuditLogJpaEntity e = AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, NOW);
+        AuditLogJpaEntity e =
+                AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, null, NOW);
 
         assertThat(e.getDetail()).isEqualTo(detail);
     }
@@ -90,7 +93,8 @@ class AuditLogJpaEntityTest {
         Map<String, Object> detail = Map.of("birthDate", "19900101");
 
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, NOW));
+                .isThrownBy(() ->
+                        AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, null, NOW));
     }
 
     @Test
@@ -99,7 +103,8 @@ class AuditLogJpaEntityTest {
         Map<String, Object> detail = Map.of("otp", "123456");
 
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, NOW));
+                .isThrownBy(() ->
+                        AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, null, NOW));
     }
 
     @Test
@@ -108,7 +113,8 @@ class AuditLogJpaEntityTest {
         Map<String, Object> detail = Map.of("password", "1234");
 
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, NOW));
+                .isThrownBy(() ->
+                        AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, null, NOW));
     }
 
     @Test
@@ -116,7 +122,8 @@ class AuditLogJpaEntityTest {
     void nestedMapAccountNumber_masked() {
         Map<String, Object> detail = Map.of("transfer", Map.of("accountNumber", "110123456789"));
 
-        AuditLogJpaEntity e = AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, NOW);
+        AuditLogJpaEntity e =
+                AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, null, NOW);
 
         Map<?, ?> transfer = (Map<?, ?>) e.getDetail().get("transfer");
         assertThat(transfer.get("accountNumber")).isEqualTo("110******789");
@@ -127,7 +134,8 @@ class AuditLogJpaEntityTest {
     void listOfMapsAccountNumber_masked() {
         Map<String, Object> detail = Map.of("accounts", List.of(Map.of("accountNumber", "110123456789")));
 
-        AuditLogJpaEntity e = AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, NOW);
+        AuditLogJpaEntity e =
+                AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, null, NOW);
 
         List<?> accounts = (List<?>) e.getDetail().get("accounts");
         Map<?, ?> first = (Map<?, ?>) accounts.get(0);
@@ -140,6 +148,7 @@ class AuditLogJpaEntityTest {
         Map<String, Object> detail = Map.of("auth", Map.of("otp", "123456"));
 
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, NOW));
+                .isThrownBy(() ->
+                        AuditLogJpaEntity.of(1L, null, AuditEventType.LOGIN, "127.0.0.1", true, detail, null, NOW));
     }
 }

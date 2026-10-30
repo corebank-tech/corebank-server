@@ -2,15 +2,18 @@ package com.shinhan.corebank.customer.adapter.in.web.admin;
 
 import com.shinhan.corebank.adapter.in.web.exception.ErrorResponse;
 import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
+import com.shinhan.corebank.common.audit.AccessReason;
 import com.shinhan.corebank.common.idempotency.IdempotencyFingerprint;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.common.response.PageResponse;
 import com.shinhan.corebank.common.util.PageableResolver;
+import com.shinhan.corebank.customer.application.port.in.AdminAccessContext;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerCommandUseCase;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerOperationCommand;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerQueryUseCase;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerSearchQuery;
+import com.shinhan.corebank.customer.application.port.in.AdminCustomerViewAuditUseCase;
 import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -37,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.core.type.TypeReference;
 
 // 관리자 고객 계정 운영(#449, #450, PH-97). 인가는 SecurityConfig 의 경로별 권한 매핑이 맡는다.
+// 다섯 API 모두 조회 사유 헤더를 받고, 검색·상세는 조회 감사를 남긴다(PH-89).
 @RestController
 @RequestMapping("/admin/customers")
 @RequiredArgsConstructor
@@ -48,6 +52,7 @@ public class AdminCustomerController {
 
     private final AdminCustomerQueryUseCase adminCustomerQueryUseCase;
     private final AdminCustomerCommandUseCase adminCustomerCommandUseCase;
+    private final AdminCustomerViewAuditUseCase adminCustomerViewAuditUseCase;
     private final CurrentCustomerProvider currentCustomerProvider;
     private final IdempotentRequestExecutor idempotentRequestExecutor;
 
@@ -66,7 +71,7 @@ public class AdminCustomerController {
                 description =
                         "`CMN0002` 검색 조건 없음(accountLocked=false·status=ACTIVE 단독 포함) · `CMN0001` 아이디·성명 1글자, 정의되지 않은 status · "
                                 + "`CMN0005` 지원하지 않는 페이지 크기 · "
-                                + "`CMN0006` 전체조회(all=true) 결과 100건 초과",
+                                + "`CMN0006` 전체조회(all=true) 결과 100건 초과 · `CMN0007` 조회 사유 누락·미정의",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
@@ -96,10 +101,14 @@ public class AdminCustomerController {
                     int size,
             @Parameter(description = "true면 조건에 맞는 전체 건을 반환(최대 100건)", example = "false")
                     @RequestParam(defaultValue = "false")
-                    boolean all) {
+                    boolean all,
+            @Parameter(description = "조회 사유(D-10)", example = "CUSTOMER_REQUEST") @RequestHeader(AccessReason.HEADER)
+                    AccessReason accessReason,
+            HttpServletRequest httpRequest) {
         var pageable = PageableResolver.resolve(page, size, all, ALLOWED_PAGE_SIZES);
-        var result = adminCustomerQueryUseCase.search(
-                new AdminCustomerSearchQuery(userId, userName, email, accountLocked, status), pageable);
+        var query = new AdminCustomerSearchQuery(userId, userName, email, accountLocked, status);
+        var result = adminCustomerQueryUseCase.search(query, pageable);
+        adminCustomerViewAuditUseCase.recordSearch(createAccessContext(accessReason, httpRequest), query, result);
         return ApiResponse.success(PageResponse.from(result, AdminCustomerSummaryResponse::from));
     }
 
@@ -107,6 +116,10 @@ public class AdminCustomerController {
     @Operation(operationId = "getAdminCustomerDetail", summary = "관리자 고객 상세", description = "개인정보는 마스킹되어 내려간다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "`CMN0001` 잘못된 고객 식별자 · `CMN0007` 조회 사유 누락·미정의",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
@@ -122,8 +135,13 @@ public class AdminCustomerController {
     })
     public ApiResponse<AdminCustomerDetailResponse> getDetail(
             @Parameter(description = "고객 내부 식별자", required = true, example = "1") @PathVariable @Positive
-                    Long customerId) {
-        return ApiResponse.success(AdminCustomerDetailResponse.from(adminCustomerQueryUseCase.getDetail(customerId)));
+                    Long customerId,
+            @Parameter(description = "조회 사유(D-10)", example = "CUSTOMER_REQUEST") @RequestHeader(AccessReason.HEADER)
+                    AccessReason accessReason,
+            HttpServletRequest httpRequest) {
+        var detail = adminCustomerQueryUseCase.getDetail(customerId);
+        adminCustomerViewAuditUseCase.recordDetailView(createAccessContext(accessReason, httpRequest), customerId);
+        return ApiResponse.success(AdminCustomerDetailResponse.from(detail));
     }
 
     @PostMapping("/{customerId}/unlock")
@@ -133,6 +151,10 @@ public class AdminCustomerController {
             description = "잠금을 풀고 연속 로그인 실패 횟수를 0으로 되돌린다(REQ-AUTH-026·035). 이미 풀린 계정도 200이다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "해제 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "`CMN0001` 잘못된 고객 식별자 · `CMN0002` 멱등키 누락 · `CMN0007` 조회 사유 누락·미정의",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
@@ -156,9 +178,12 @@ public class AdminCustomerController {
             @Parameter(description = "멱등키", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
                     @RequestHeader("Idempotency-Key")
                     String idempotencyKey,
+            @Parameter(description = "조회 사유(D-10)", example = "CUSTOMER_REQUEST") @RequestHeader(AccessReason.HEADER)
+                    AccessReason accessReason,
             HttpServletRequest httpRequest) {
         Long adminCustomerId = currentCustomerProvider.getCurrentCustomerId();
-        var command = new AdminCustomerOperationCommand(adminCustomerId, customerId, httpRequest.getRemoteAddr());
+        var command = new AdminCustomerOperationCommand(
+                adminCustomerId, customerId, httpRequest.getRemoteAddr(), accessReason);
 
         // endpoint와 지문에 대상 id를 넣어 같은 키로 다른 고객을 풀면 CMN0302가 나게 한다.
         return idempotentRequestExecutor.execute(
@@ -182,7 +207,7 @@ public class AdminCustomerController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "변경 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "`CMN0001` 정의되지 않은 status · `CMN0002` 멱등키 누락",
+                description = "`CMN0001` 정의되지 않은 status · `CMN0002` 멱등키 누락 · `CMN0007` 조회 사유 누락·미정의",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
@@ -208,9 +233,12 @@ public class AdminCustomerController {
                     @RequestHeader("Idempotency-Key")
                     String idempotencyKey,
             @RequestBody @Valid AdminStatusChangeRequest request,
+            @Parameter(description = "조회 사유(D-10)", example = "CUSTOMER_REQUEST") @RequestHeader(AccessReason.HEADER)
+                    AccessReason accessReason,
             HttpServletRequest httpRequest) {
         Long adminCustomerId = currentCustomerProvider.getCurrentCustomerId();
-        var command = new AdminCustomerOperationCommand(adminCustomerId, customerId, httpRequest.getRemoteAddr());
+        var command = new AdminCustomerOperationCommand(
+                adminCustomerId, customerId, httpRequest.getRemoteAddr(), accessReason);
         CustomerStatus status = request.toStatus();
 
         // 지문에 바꿀 상태까지 넣어, 같은 키로 정지와 해제를 섞어 보내면 CMN0302가 나게 한다.
@@ -236,6 +264,10 @@ public class AdminCustomerController {
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "초기화 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "`CMN0001` 잘못된 고객 식별자 · `CMN0007` 조회 사유 누락·미정의",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -251,10 +283,17 @@ public class AdminCustomerController {
     public ApiResponse<AdminPasswordResetResponse> resetPassword(
             @Parameter(description = "고객 내부 식별자", required = true, example = "1") @PathVariable @Positive
                     Long customerId,
+            @Parameter(description = "조회 사유(D-10)", example = "CUSTOMER_REQUEST") @RequestHeader(AccessReason.HEADER)
+                    AccessReason accessReason,
             HttpServletRequest httpRequest) {
         Long adminCustomerId = currentCustomerProvider.getCurrentCustomerId();
-        var result = adminCustomerCommandUseCase.resetPassword(
-                new AdminCustomerOperationCommand(adminCustomerId, customerId, httpRequest.getRemoteAddr()));
+        var result = adminCustomerCommandUseCase.resetPassword(new AdminCustomerOperationCommand(
+                adminCustomerId, customerId, httpRequest.getRemoteAddr(), accessReason));
         return ApiResponse.success(AdminPasswordResetResponse.from(result), "로그인 비밀번호가 초기화되었습니다.");
+    }
+
+    private AdminAccessContext createAccessContext(AccessReason accessReason, HttpServletRequest httpRequest) {
+        return new AdminAccessContext(
+                currentCustomerProvider.getCurrentCustomerId(), httpRequest.getRemoteAddr(), accessReason);
     }
 }
