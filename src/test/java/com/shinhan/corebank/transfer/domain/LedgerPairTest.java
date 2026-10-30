@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.DisplayName;
@@ -17,6 +18,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 @DisplayName("LedgerPair 도메인 단위 테스트")
 class LedgerPairTest {
+
+    private static final LocalDate TRADE_DATE = LocalDate.of(2026, 8, 12);
 
     @Nested
     @DisplayName("forTransfer 팩토리 메서드")
@@ -52,7 +55,8 @@ class LedgerPairTest {
                     myMemo,
                     recipientMemo,
                     channel,
-                    occurredAt);
+                    occurredAt,
+                    TRADE_DATE);
 
             // then
             assertThat(pair).isNotNull();
@@ -80,6 +84,30 @@ class LedgerPairTest {
             assertThat(deposit.getTransactionContent()).isEqualTo(recipientMemo);
             assertThat(deposit.getChannel()).isEqualTo(channel);
             assertThat(deposit.getOccurredAt()).isEqualTo(occurredAt);
+            assertThat(withdrawal.getTradeDate()).isEqualTo(TRADE_DATE);
+            assertThat(deposit.getTradeDate()).isEqualTo(TRADE_DATE);
+        }
+
+        @Test
+        @DisplayName("거래일(tradeDate)이 null이면 BusinessException(REQUIRED_FIELD_MISSING) 예외가 발생한다")
+        void throwsExceptionWhenTradeDateIsNull() {
+            assertThatThrownBy(() -> LedgerPair.forTransfer(
+                            500L,
+                            "20260809WB0000000001",
+                            101L,
+                            90000L,
+                            202L,
+                            110000L,
+                            10000L,
+                            "IMMEDIATE_TRANSFER",
+                            "이체출금",
+                            "이체입금",
+                            TransferChannel.WB,
+                            LocalDateTime.now(),
+                            null))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
 
         @Test
@@ -101,7 +129,8 @@ class LedgerPairTest {
                     "메모",
                     "메모",
                     TransferChannel.WB,
-                    nanoTime);
+                    nanoTime,
+                    TRADE_DATE);
 
             // then
             LocalDateTime expectedMicroTime = nanoTime.truncatedTo(ChronoUnit.MICROS);
@@ -129,7 +158,8 @@ class LedgerPairTest {
                             "메모",
                             "메모",
                             TransferChannel.WB,
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(TransferErrorCode.INVALID_AMOUNT);
@@ -154,7 +184,8 @@ class LedgerPairTest {
                             "메모",
                             "메모",
                             TransferChannel.WB,
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
@@ -179,7 +210,8 @@ class LedgerPairTest {
                             "메모",
                             "메모",
                             TransferChannel.WB,
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -204,7 +236,8 @@ class LedgerPairTest {
                             "메모",
                             "메모",
                             TransferChannel.WB,
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -226,7 +259,8 @@ class LedgerPairTest {
                             "메모",
                             "메모",
                             TransferChannel.WB,
-                            null))
+                            null,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -253,7 +287,8 @@ class LedgerPairTest {
                             "메모",
                             "메모",
                             TransferChannel.WB,
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -280,7 +315,8 @@ class LedgerPairTest {
                             "메모",
                             "메모",
                             TransferChannel.WB,
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -305,7 +341,8 @@ class LedgerPairTest {
                             "메모",
                             "메모",
                             null,
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -336,7 +373,8 @@ class LedgerPairTest {
                     "상품가입",
                     "상품가입",
                     TransferChannel.WB,
-                    occurredAt);
+                    occurredAt,
+                    TRADE_DATE);
 
             // then
             LedgerEntry withdrawal = pair.getWithdrawalEntry();
@@ -375,7 +413,8 @@ class LedgerPairTest {
                             "상품가입",
                             "상품가입",
                             TransferChannel.WB,
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(TransferErrorCode.INVALID_AMOUNT);
@@ -400,10 +439,217 @@ class LedgerPairTest {
                             "상품가입",
                             "상품가입",
                             TransferChannel.WB,
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+    }
+
+    @Nested
+    @DisplayName("forDeposit — 예적금 만기·해지 입금")
+    class ForDepositTest {
+
+        @Test
+        @DisplayName("transfer_id 없이 넘겨받은 거래유형으로 상품계좌 출금·고객계좌 입금 2행을 만든다")
+        void createsPairWithGivenTransactionType() {
+            // given
+            LocalDateTime occurredAt = LocalDateTime.of(2026, 10, 23, 3, 0, 0, 123456789);
+
+            // when
+            LedgerPair pair = LedgerPair.forDeposit(
+                    "20261023BT0000000001",
+                    303L,
+                    0L,
+                    101L,
+                    1_520_000L,
+                    1_020_000L,
+                    "MATURITY",
+                    "만기해지",
+                    TransferChannel.BT,
+                    occurredAt,
+                    TRADE_DATE);
+
+            // then
+            LedgerEntry withdrawal = pair.getWithdrawalEntry();
+            assertThat(withdrawal.getTransferId()).isNull();
+            assertThat(withdrawal.getTransactionType()).isEqualTo("MATURITY");
+            assertThat(withdrawal.getAccountId()).isEqualTo(303L);
+            assertThat(withdrawal.getDirection()).isEqualTo(LedgerDirection.WITHDRAWAL);
+            assertThat(withdrawal.getBalanceAfter()).isZero();
+            assertThat(withdrawal.getTransactionContent()).isEqualTo("만기해지");
+
+            LedgerEntry deposit = pair.getDepositEntry();
+            assertThat(deposit.getTransferId()).isNull();
+            assertThat(deposit.getTransactionType()).isEqualTo("MATURITY");
+            assertThat(deposit.getAccountId()).isEqualTo(101L);
+            assertThat(deposit.getDirection()).isEqualTo(LedgerDirection.DEPOSIT);
+            assertThat(deposit.getBalanceAfter()).isEqualTo(1_520_000L);
+            assertThat(deposit.getTransactionContent()).isEqualTo("만기해지");
+
+            assertThat(withdrawal.getAmount()).isEqualTo(1_020_000L).isEqualTo(deposit.getAmount());
+            assertThat(withdrawal.getOccurredAt())
+                    .isEqualTo(occurredAt.truncatedTo(ChronoUnit.MICROS))
+                    .isEqualTo(deposit.getOccurredAt());
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {"   "})
+        @DisplayName("거래유형이 없으면(null/공백) BusinessException(REQUIRED_FIELD_MISSING) 예외가 발생한다")
+        void throwsExceptionWhenTransactionTypeIsBlank(String invalidType) {
+            assertThatThrownBy(() -> LedgerPair.forDeposit(
+                            "20261023BT0000000001",
+                            303L,
+                            0L,
+                            101L,
+                            1_520_000L,
+                            1_020_000L,
+                            invalidType,
+                            "만기해지",
+                            TransferChannel.BT,
+                            LocalDateTime.now(),
+                            TRADE_DATE))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        @Test
+        @DisplayName("상품계좌와 입금계좌가 같으면 BusinessException(SAME_ACCOUNT_TRANSFER) 예외가 발생한다")
+        void throwsExceptionWhenSameAccount() {
+            assertThatThrownBy(() -> LedgerPair.forDeposit(
+                            "20261023BT0000000001",
+                            303L,
+                            0L,
+                            303L,
+                            1_020_000L,
+                            1_020_000L,
+                            "TERMINATION",
+                            "중도해지",
+                            TransferChannel.WB,
+                            LocalDateTime.now(),
+                            TRADE_DATE))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
+        }
+    }
+
+    @Nested
+    @DisplayName("forReversal — 정정 체인 반대기표")
+    class ForReversalTest {
+
+        private final LocalDateTime originalAt = LocalDateTime.of(2026, 8, 9, 12, 0, 0);
+        private final LocalDateTime reversedAt = LocalDateTime.of(2026, 8, 10, 9, 0, 0);
+
+        private LedgerEntry savedEntry(long ledgerEntryId, long accountId, LedgerDirection direction) {
+            return LedgerEntry.builder()
+                    .ledgerEntryId(ledgerEntryId)
+                    .accountId(accountId)
+                    .transferId(1L)
+                    .transactionNumber("20260809WB0000000001")
+                    .direction(direction)
+                    .amount(50_000L)
+                    .balanceAfter(0L)
+                    .transactionType("IMMEDIATE_TRANSFER")
+                    .channel(TransferChannel.WB)
+                    .reversed(false)
+                    .occurredAt(originalAt)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("원거래와 방향을 뒤집은 2행을 만들고, 각 행이 같은 계좌의 원거래 행을 가리킨다")
+        void flipsDirectionAndPointsToOriginalRows() {
+            // given: 원거래 A(101) 출금 → B(202) 입금
+            LedgerEntry originalWithdrawal = savedEntry(1001L, 101L, LedgerDirection.WITHDRAWAL);
+            LedgerEntry originalDeposit = savedEntry(1002L, 202L, LedgerDirection.DEPOSIT);
+
+            // when
+            LedgerPair reversal = LedgerPair.forReversal(
+                    9L,
+                    "20260810BT0000000001",
+                    originalWithdrawal,
+                    originalDeposit,
+                    20_000L,
+                    150_000L,
+                    TransferChannel.BT,
+                    reversedAt,
+                    TRADE_DATE);
+
+            // then: B에서 빠져 A로 돌아간다
+            LedgerEntry withdrawal = reversal.getWithdrawalEntry();
+            assertThat(withdrawal.getAccountId()).isEqualTo(202L);
+            assertThat(withdrawal.getDirection()).isEqualTo(LedgerDirection.WITHDRAWAL);
+            assertThat(withdrawal.getReversalId()).isEqualTo(1002L);
+            assertThat(withdrawal.getBalanceAfter()).isEqualTo(20_000L);
+
+            LedgerEntry deposit = reversal.getDepositEntry();
+            assertThat(deposit.getAccountId()).isEqualTo(101L);
+            assertThat(deposit.getDirection()).isEqualTo(LedgerDirection.DEPOSIT);
+            assertThat(deposit.getReversalId()).isEqualTo(1001L);
+            assertThat(deposit.getBalanceAfter()).isEqualTo(150_000L);
+
+            // then: 금액은 원거래 그대로, 유형은 REVERSAL, 반대기표 자신은 reversed=false
+            assertThat(reversal.getWithdrawalEntry().getAmount()).isEqualTo(50_000L);
+            assertThat(reversal.getDepositEntry().getAmount()).isEqualTo(50_000L);
+            assertThat(withdrawal.getTransactionType()).isEqualTo("REVERSAL");
+            assertThat(deposit.getTransactionType()).isEqualTo("REVERSAL");
+            assertThat(withdrawal.isReversed()).isFalse();
+            assertThat(deposit.isReversed()).isFalse();
+            assertThat(withdrawal.getTransferId()).isEqualTo(9L);
+        }
+
+        @Test
+        @DisplayName("저장되지 않아 ID가 없는 원거래 행으로는 반대기표를 만들 수 없다")
+        void originalWithoutId_throws() {
+            // given
+            LedgerEntry unsaved = LedgerEntry.builder()
+                    .accountId(101L)
+                    .direction(LedgerDirection.WITHDRAWAL)
+                    .amount(50_000L)
+                    .build();
+            LedgerEntry originalDeposit = savedEntry(1002L, 202L, LedgerDirection.DEPOSIT);
+
+            // when & then
+            assertThatThrownBy(() -> LedgerPair.forReversal(
+                            9L,
+                            "20260810BT0000000001",
+                            unsaved,
+                            originalDeposit,
+                            0L,
+                            0L,
+                            TransferChannel.BT,
+                            reversedAt,
+                            TRADE_DATE))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        @Test
+        @DisplayName("출금·입금 행을 바꿔 넣으면 거부한다 — 돈이 같은 방향으로 한 번 더 간다")
+        void swappedOriginalRows_throws() {
+            // given
+            LedgerEntry originalWithdrawal = savedEntry(1001L, 101L, LedgerDirection.WITHDRAWAL);
+            LedgerEntry originalDeposit = savedEntry(1002L, 202L, LedgerDirection.DEPOSIT);
+
+            // when & then
+            assertThatThrownBy(() -> LedgerPair.forReversal(
+                            9L,
+                            "20260810BT0000000001",
+                            originalDeposit,
+                            originalWithdrawal,
+                            0L,
+                            0L,
+                            TransferChannel.BT,
+                            reversedAt,
+                            TRADE_DATE))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
         }
     }
 }

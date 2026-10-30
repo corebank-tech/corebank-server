@@ -1,5 +1,6 @@
 package com.shinhan.corebank.transfer.application.port.out;
 
+import com.shinhan.corebank.transfer.domain.LedgerEntry;
 import com.shinhan.corebank.transfer.domain.LedgerPair;
 
 public interface LedgerSavePort {
@@ -10,4 +11,22 @@ public interface LedgerSavePort {
      * 두 행을 한 번에 저장해야 하며 한 행만 저장되는 경로가 있어서는 안 된다.
      */
     void save(LedgerPair pair);
+
+    /**
+     * 정정 체인 반대기표 2행을 저장하고 원거래 2행에 reversed를 세운다. 원거래는 지우지 않는다.
+     * 원거래 행이 이미 취소돼 있으면 TRF0305로 거부한다.
+     */
+    void saveReversal(LedgerPair reversal, PostedLedgerPair original);
+
+    /**
+     * 상대 고객 계좌 없는 입금 1행을 저장한다. 1행은 {@link LedgerEntry#forCredit}으로 만든 것만 받는다 —
+     * 2행 경로({@link #save})와 섞이지 않게 메서드를 나눴다.
+     */
+    void saveCredit(LedgerEntry credit);
+
+    /** 상대 고객 계좌 없는 출금 1행을 저장한다(타행이체 송신). {@link LedgerEntry#forDebit}으로 만든 것만 받는다. */
+    void saveDebit(LedgerEntry debit);
+
+    /** 원 출금 행에 reversed를 세우고 되돌림 입금 1행을 저장한다. 이미 되돌린 출금이면 TRF0305로 거부한다. */
+    void saveRefund(LedgerEntry refund, LedgerEntry originalDebit);
 }

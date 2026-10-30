@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 26개 비즈니스 테이블 + 2개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`) · 268개 컬럼
+**대상**: 39개 비즈니스 테이블 + 8개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 395개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -26,38 +26,80 @@
 
 | # | 테이블 | 설명 | 담당 | 컬럼 |
 | --- | --- | --- | --- |----|
-| 1 | `customer` | 고객 | P6 | 17 |
+| 1 | `customer` | 고객 | P6 | 19 |
 | 2 | `terms` | 약관 | P6 | 10 |
 | 3 | `customer_terms_agreement` | 회원가입 약관 동의 | P6 | 4  |
 | 4 | `verification_request` | 인증 요청 | P6 | 13 |
-| 5 | `notification` | 알림 | P6 | 9  |
-| 6 | `product` | 상품 | P3 | 22 |
+| 5 | `notification` | 알림 | P1 | 9  |
+| 6 | `product` | 상품 | P3 | 25 |
 | 7 | `product_rate_tier` | 상품 기간별 금리 | P3 | 3  |
 | 8 | `product_preferential_rate` | 상품 우대금리 | P3 | 4  |
-| 9 | `product_terms` | 상품-약관 연결 | P3 | 2  |
-| 10 | `account` | 계좌 | P2 | 21 |
+| 9 | `product_terms` | 상품-약관 연결 | P3 | 3  |
+| 10 | `account` | 계좌 | P2 | 23 |
 | 11 | `account_number_sequence` | 계좌번호 채번 규칙 | P2 | 8  |
 | 12 | `transaction_sequence` | 거래번호 일련번호 채번 | P4 | 4  |
-| 13 | `transfer` | 이체 거래 | P4 | 21 |
-| 14 | `ledger_entry` | 원장 | P4 | 13 |
+| 13 | `transfer` | 이체 거래 | P4 | 26 |
+| 14 | `ledger_entry` | 원장 | P4 | 14 |
 | 15 | `ledger_entry_id_sequence` | 원장 PK 전용 채번 | P4 | 1  |
 | 16 | `favorite_account` | 자주 쓰는 계좌 | P4 | 6  |
 | 17 | `transfer_limit` | 이체한도 | P1 | 5  |
 | 18 | `transfer_limit_daily_usage` | 일별 한도 사용액 | P1 | 5  |
 | 19 | `transfer_limit_history` | 이체한도 변경 이력 | P1 | 6  |
-| 20 | `product_subscription` | 상품가입 | P3 | 18 |
+| 20 | `product_subscription` | 상품가입 | P3 | 19 |
 | 21 | `subscription_terms_agreement` | 상품 약관 동의 | P3 | 5  |
-| 22 | `scheduled_transfer` | 예약이체 | P3 | 17 |
+| 22 | `scheduled_transfer` | 예약이체 | P3 | 18 |
 | 23 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
 | 24 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8  |
 | 25 | `idempotency_key` | 멱등키 | P5 | 9  |
-| 26 | `audit_log` | 감사 로그 | P5 | 8  |
+| 26 | `audit_log` | 감사 로그 | P5 | 9  |
 | 27 | `common_code` | 공통코드 | P5 | 8  |
 | 28 | `batch_execution_lock` | 배치 중복 트리거 방지 락 | P5 | 3  |
+| 29 | `gl_account` | 계정과목 | P3 | 6  |
+| 30 | `gl_voucher` | 전표 | P3 | 6  |
+| 31 | `gl_journal_entry` | 분개 | P3 | 8  |
+| 32 | `business_date` | 현재 영업일 | P5 | 4  |
+| 33 | `holiday` | 휴일 달력 | P5 | 4  |
+| 34 | `gl_voucher_sequence` | 전표번호 일련번호 채번 | P3 | 4  |
+| 35 | `auth_token` | 일회성 인증 토큰 | P4 | 9  |
+| 36 | `otp_issue_lock` | OTP 발급 잠금 | P4 | 3  |
+| 37 | `terms_view_history` | 상품 약관 열람 이력 | P4 | 4  |
+| 38 | `batch_execution_history` | 배치 스텝 실행 기록 | P5 | 8  |
+| 39 | `ledger_reconciliation_mismatch` | 원장-잔액 대사 불일치 목록 | P4 | 6  |
+| 40 | `admin_permission` | 관리자 권한 | P1 | 3  |
+| 41 | `account_status_history` | 계좌 상태 전이 이력 | P2 | 8 |
+| 42 | `business_date_cutoff` | 영업일 마감 cutoff | P5 | 4  |
+| 43 | `interest_payment` | 예적금 이자 지급 이력 | P2 | 9 |
+| 44 | `SPRING_SESSION` | 공용 HTTP 세션 | P6 | 7 |
+| 45 | `SPRING_SESSION_ATTRIBUTES` | 직렬화된 세션 속성 | P6 | 3 |
+| 46 | `EVENT_PUBLICATION` | 이벤트 발행 기록 (Spring Modulith) | P1 | 9 |
+| 47 | `cob_checkpoint` | COB 재시작 체크포인트 | P5 | 5 |
 
 ---
 
-# 1. 고객 · 인증 — P6
+# 1. 고객 · 인증 — P6 (`admin_permission` · `notification`은 P1)
+
+## `SPRING_SESSION` / `SPRING_SESSION_ATTRIBUTES` (PH-49c)
+
+Spring Session JDBC 표준 스키마. Flyway `V202610221420`으로만 생성하며 JPA 엔티티를 만들지 않는다.
+세션의 시각은 프레임워크 계약에 따라 **UTC epoch 밀리초 BIGINT**이고 업무 테이블의 KST DATETIME(6) 규약의 예외다.
+
+| 테이블 | 컬럼 | 타입 | 키·NULL | 의미 |
+|---|---|---|---|---|
+| SPRING_SESSION | PRIMARY_ID | CHAR(36) | PK, NOT NULL | 내부 세션 행 UUID |
+| SPRING_SESSION | SESSION_ID | CHAR(36) | UK, NOT NULL | 쿠키로 연결하는 세션 ID |
+| SPRING_SESSION | CREATION_TIME | BIGINT | NOT NULL | 생성 epoch ms |
+| SPRING_SESSION | LAST_ACCESS_TIME | BIGINT | NOT NULL | 마지막 접근 epoch ms |
+| SPRING_SESSION | MAX_INACTIVE_INTERVAL | INT | NOT NULL | 무조작 만료 초: 고객 600, 관리자 1800(PH-49a-② 로그인 정책) |
+| SPRING_SESSION | EXPIRY_TIME | BIGINT | INDEX, NOT NULL | 만료 epoch ms |
+| SPRING_SESSION | PRINCIPAL_NAME | VARCHAR(100) | INDEX, NULL 허용 | 인증 고객 PK 문자열, 익명 세션은 NULL |
+| SPRING_SESSION_ATTRIBUTES | SESSION_PRIMARY_ID | CHAR(36) | 복합 PK·FK, NOT NULL | PRIMARY_ID 참조, ON DELETE CASCADE |
+| SPRING_SESSION_ATTRIBUTES | ATTRIBUTE_NAME | VARCHAR(200) | 복합 PK, NOT NULL | SPRING_SECURITY_CONTEXT 등 속성 이름 |
+| SPRING_SESSION_ATTRIBUTES | ATTRIBUTE_BYTES | BLOB | NOT NULL | 직렬화한 속성 값 |
+
+인덱스: `SPRING_SESSION_IX1(SESSION_ID)` UNIQUE, `SPRING_SESSION_IX2(EXPIRY_TIME)`,
+`SPRING_SESSION_IX3(PRINCIPAL_NAME)`. PRINCIPAL_NAME은 고객 FK가 아닌 프레임워크 검색 인덱스다.
+로그아웃은 해당 세션만 삭제하고 고객 비밀번호 변경은 고객 PK로 모든 세션을 삭제한다.
+세션 삭제는 해당 업무 트랜잭션에 참여하므로 업무 롤백 시 함께 롤백한다. 만료 행 정리는 매분이며 인증 만료는 즉시 적용된다.
 
 ## `customer`
 
@@ -77,6 +119,8 @@
 | `phone_number` | `VARCHAR(11)` |  | X |  | 휴대폰 번호. 하이픈 없이 숫자만 저장하고 응답 시 중간 4자리를 마스킹한다 |
 | `login_failure_count` | `TINYINT` |  | X | `0` | 로그인 비밀번호 연속 오류 횟수. 5회 도달 시 `account_locked`가 TRUE로 바뀐다 (ATH0102) |
 | `account_locked` | `BOOLEAN` |  | X | `FALSE` | 계정 잠금 여부. `login_failure_count` 5회 도달 시 TRUE, 관리자 잠금 해제로 FALSE 복귀 |
+| `status` | `VARCHAR(12)` |  | X | `ACTIVE` | 계정 상태. `ACTIVE`(정상) / `SUSPENDED`(이용정지). 관리자만 바꾼다. SUSPENDED면 비밀번호가 맞아도 로그인을 거부한다(ATH0106). 비밀번호 5회 오류 잠금(`account_locked`)과 별개이며 둘이 동시에 걸릴 수 있다 |
+| `role` | `VARCHAR(12)` |  | X | `CUSTOMER` | 계정 구분. `CUSTOMER`(고객) / `ADMIN`(관리자). 관리자 로그인은 `/admin/auth/login`으로 분리되고 이 값이 `ADMIN`인 계정만 통과한다 |
 | `last_login_at` | `DATETIME(6)` |  | O |  | 가장 최근 로그인 시각. 대시보드의 `currentLoginAt` |
 | `last_login_ip` | `VARCHAR(45)` |  | O |  | 가장 최근 로그인 IP. 대시보드의 `currentLoginIp` |
 | `previous_login_at` | `DATETIME(6)` |  | O |  | 직전 로그인 시각. 대시보드의 `previousLoginAt`. 부정 접속을 고객이 알아채는 단서 |
@@ -92,6 +136,43 @@
 | UNIQUE | `uk_customer_user_id` | `user_id` |
 | UNIQUE | `uk_customer_email` | `email` |
 | UNIQUE | `uk_customer_existing_bank_customer_id` | `existing_bank_customer_id` |
+
+**CHECK 제약**
+
+| 이름 | 조건 | 설명 |
+| --- | --- | --- |
+| `ck_customer_status` | `status IN ('ACTIVE', 'SUSPENDED')` | 계정 상태는 정상·이용정지 중 하나여야 한다. |
+| `ck_customer_role` | `role IN ('CUSTOMER', 'ADMIN')` | 계정 구분은 고객·관리자 중 하나여야 한다. |
+
+---
+
+## `admin_permission`
+
+> 관리자 권한 (#561)
+
+행 하나가 권한 하나다. 권한이 없는 관리자는 행이 0개이며, 관리자인지 아닌지는 `customer.role`로 가린다.
+CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_code`의 표시명과 값이 이어지지 않기
+때문이다(PR #572 리뷰). 부여·회수 API는 PH-49b 몫이고 이 시점에는 시드로만 넣는다.
+
+| 컬럼 | 타입 | 키 | NULL | 기본값 | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `customer_id` | `BIGINT` | **PK, FK** | X |  | 권한을 가진 관리자. `customer.customer_id` 참조 |
+| `permission` | `VARCHAR(20)` | **PK** | X |  | 권한 하나. `GL_READ`·`GL_WRITE`·`CUSTOMER_READ`·`CUSTOMER_WRITE`·`AUDIT_READ`. `common_code`의 `ADMIN_PERMISSION` 그룹과 값이 같다 |
+| `granted_at` | `DATETIME(6)` |  | X |  | 권한을 준 시각. 회수는 행 삭제라 이력은 `audit_log`가 맡는다 |
+
+**기본키** — `(customer_id, permission)` 복합. 같은 권한이 두 번 들어가지 않는다.
+
+**외래키**
+
+| 이름 | 컬럼 | 참조 |
+| --- | --- | --- |
+| `fk_admin_permission_customer` | `customer_id` | `customer(customer_id)` |
+
+**CHECK 제약**
+
+| 이름 | 조건 | 설명 |
+| --- | --- | --- |
+| `ck_admin_permission` | `permission COLLATE utf8mb4_0900_as_cs IN ('GL_READ', 'GL_WRITE', 'CUSTOMER_READ', 'CUSTOMER_WRITE', 'AUDIT_READ')` | 고정 5종만 허용한다. `common_code`는 `code_group`으로 여러 종류를 함께 담아 FK를 걸 수 없어 CHECK로 고정하고, 권한이 늘면 둘을 함께 바꾼다. |
 
 ---
 
@@ -141,9 +222,9 @@
 
 ## `verification_request`
 
-> 인증 요청 (이메일·비밀번호재설정·OTP 통합). *AuthToken 은 Redis
+> 인증 요청 (이메일·비밀번호재설정·OTP 통합). *AuthToken 은 `auth_token`
 
-이메일 인증·비밀번호 재설정·OTP를 하나로 합쳤다. 셋 다 `코드 발급 → 검증 → 만료 → 1회용` 구조가 같고 식별자가 모두 String이라 통합이 가능했다. 검증 결과로 발급되는 `*AuthToken`은 이 테이블이 아니라 Redis에 있다.
+이메일 인증·비밀번호 재설정·OTP를 하나로 합쳤다. 셋 다 `코드 발급 → 검증 → 만료 → 1회용` 구조가 같고 식별자가 모두 String이라 통합이 가능했다. 검증 결과로 발급되는 `*AuthToken`은 이 테이블이 아니라 [`auth_token`](#auth_token)에 있다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
@@ -154,8 +235,8 @@
 | `code_hash` | `CHAR(60)` |  | X |  | 인증번호·OTP 6자리의 단방향 해시. 평문 저장·로그 기록 금지 |
 | `transaction_type` | `VARCHAR(32)` |  | O |  | **OTP 전용.** 어떤 거래를 승인하려는 OTP인지 (`IMMEDIATE_TRANSFER` 등) |
 | `transaction_data` | `JSON` |  | O |  | **OTP 전용.** 출금계좌·입금계좌·금액 등 거래 핵심 정보. 최종 거래 API가 요청 본문과 대조해 변조를 잡는다 (OTP0102) |
-| `error_count` | `TINYINT` |  | X | `0` | 인증번호 연속 오류 횟수. 5회를 넘기면 `locked`가 TRUE가 된다 (OTP0103) |
-| `locked` | `BOOLEAN` |  | X | `FALSE` | 잠금 여부. `error_count`가 5를 넘으면 TRUE. 재발급 전까지 검증 불가 (OTP0103) |
+| `error_count` | `TINYINT` |  | X | `0` | 인증번호 연속 오류 횟수. 5회에 도달하면 `locked`가 TRUE가 된다 (OTP0103) |
+| `locked` | `BOOLEAN` |  | X | `FALSE` | 잠금 여부. `error_count`가 5이면 TRUE. 재발급 전까지 검증 불가 (OTP0103) |
 | `used` | `BOOLEAN` |  | X | `FALSE` | 사용 완료 여부. 검증 성공 시 TRUE로 바꿔 재사용을 막는다 |
 | `verified_at` | `DATETIME(6)` |  | O |  | 검증 성공 시각. 미검증이면 NULL |
 | `expires_at` | `DATETIME(6)` |  | X |  | 유효시간 만료 시각. 발급 시각 + 180초 |
@@ -168,6 +249,8 @@
 | INDEX | `ix_vr_customer` | `customer_id, purpose, created_at DESC` |
 | INDEX | `ix_vr_target` | `target, purpose, created_at DESC` |
 
+이메일 인증번호 발급은 `target(이메일) + purpose` 단위로 직렬화합니다. 같은 조합의 동시 재발급도 기존 활성 요청 무효화와 신규 요청 저장을 순서대로 수행하여, 마지막으로 처리된 요청 하나만 `used = FALSE` 상태로 남겨야 합니다. `SIGN_UP`과 `EMAIL_CHANGE`처럼 목적이 다른 요청은 서로 무효화하지 않습니다.
+
 ---
 
 ## `notification`
@@ -178,8 +261,8 @@
 | --- | --- | --- | --- | --- | --- |
 | `notification_id` | `BIGINT` | **PK** | X |  | 알림 내부 식별자. 읽음 처리 API의 경로 변수 |
 | `customer_id` | `BIGINT` | **FK** | X |  | 수신 고객 → `customer.customer_id` |
-| `type` | `VARCHAR(24)` |  | X |  | 알림을 발생시킨 업무 구분. `TRANSFER`(즉시이체) / `SCHEDULED_TRANSFER`(예약이체) / `AUTO_TRANSFER`(자동이체) / `PRODUCT_SUBSCRIPTION`(상품가입) |
-| `ref_id` | `BIGINT` |  | O |  | 다형 참조: TRANSFER->transfer.transfer_id / SCHEDULED_TRANSFER->scheduled_transfer_id / AUTO_TRANSFER->auto_transfer_execution.execution_id / PRODUCT_SUBSCRIPTION->subscription_id |
+| `type` | `VARCHAR(24)` | **UK** | X |  | 알림을 발생시킨 업무 구분. `TRANSFER`(즉시 · 타행이체) / `SCHEDULED_TRANSFER`(예약이체) / `AUTO_TRANSFER`(자동이체) / `PRODUCT_SUBSCRIPTION`(상품가입) |
+| `ref_id` | `BIGINT` | **UK** | O |  | 다형 참조: TRANSFER->transfer.transfer_id / SCHEDULED_TRANSFER->scheduled_transfer_id / AUTO_TRANSFER->auto_transfer_execution.execution_id / PRODUCT_SUBSCRIPTION->subscription_id |
 | `title` | `VARCHAR(100)` |  | X |  | 알림 제목. 목록 화면의 한 줄 요약 |
 | `content` | `VARCHAR(500)` |  | X |  | 알림 본문 문구 |
 | `is_read` | `BOOLEAN` |  | X | `FALSE` | 읽음 여부. 미읽음 건수 조회의 집계 대상 |
@@ -191,6 +274,7 @@
 | 종류 | 이름 | 컬럼 |
 | --- | --- | --- |
 | INDEX | `ix_noti_customer` | `customer_id, is_read, occurred_at DESC` |
+| UNIQUE | `uk_noti_type_ref` | `type, ref_id` — 구독자가 같은 이벤트를 두 번 받아도 알림은 1건(#706) |
 
 ---
 
@@ -300,7 +384,8 @@
 | `product_id`               | `BIGINT`      | **FK** | O    |          | 입출금계좌는 NULL → `product.product_id`                                                |
 | `account_type`             | `VARCHAR(24)` |        | X    |          | 계좌 종류. `DEMAND_DEPOSIT`(입출금) / `TIME_DEPOSIT`(정기예금) / `INSTALLMENT_SAVINGS`(정기적금) |
 | `balance`                  | `BIGINT`      |        | X    | `0`      | 현재 잔액. **조회 성능용 캐시**이며 진실의 원천은 `ledger_entry` 합계다. 배치로 대사한다                       |
-| `status`                   | `VARCHAR(12)` |        | X    | `ACTIVE` | 계좌 상태. `ACTIVE`(정상) / `SUSPENDED`(거래정지) / `CLOSED`(해지)                            |
+| `hold_amount` | `BIGINT` | | X | `0` | 지급정지 보류액. 출금가능액 계산 시 잔액에서 차감한다. |
+| `status`                   | `VARCHAR(12)` |        | X    | `ACTIVE` | 계좌 상태. `ACTIVE`(정상) / `SUSPENDED`(거래정지) / `MATURED`(만기 도달) / `CLOSED`(해지) / `DORMANT`(휴면)                            |
 | `password_hash`            | `CHAR(60)`    |        | X    |          | 계좌비밀번호 4자리의 BCrypt 해시                                                             |
 | `password_failure_count`   | `TINYINT`     |        | X    | `0`      | 계좌비밀번호 연속 오류 횟수. 검증 실패 응답의 `errorCount`                                           |
 | `password_locked`          | `BOOLEAN`     |        | X    | `FALSE`  | 계좌비밀번호 잠금 여부. 5회 오류 시 TRUE가 되어 거래가 정지된다 (APW0101)                                 |
@@ -311,6 +396,7 @@
 | `opened_date`              | `DATETIME(6)` |        | X    |          | 계좌 개설일                                                                            |
 | `maturity_date`            | `DATE`        |        | O    |          | 만기일. 예·적금 계좌만 값이 있다                                                               |
 | `closed_date`              | `DATETIME(6)` |        | O    |          | 해지일.                                                                              |
+| `closed_trade_date`        | `DATE`        |        | O    |          | 해지 논리 영업일. 해지 트랜잭션이 영업일 gate(`BusinessDateGate`)로 읽은 값(기표를 다른 서비스에 맡기면 그 결과의 `tradeDate`)이며 `today()`로 따로 읽지 않는다. 정보계 CLOSE 이벤트 기준일이며 해지 구현(PH-15·16)이 채운다 |
 | `last_transaction_at`      | `DATETIME(6)` |        | O    |          | 최근 거래 일시. 전체 계좌 조회의 `lastTransactionAt`                                           |
 | `version`                  | `BIGINT`      |        | X    | `0`      | 낙관적 락 버전. 배치·조회 경로의 갱신 충돌을 잡는다 (이체 실행 경로는 비관적 락)                                  |
 | `created_at`               | `DATETIME(6)` |        | X    |          | 행 생성 일시. JPA Auditing이 KST 기준으로 자동 설정                                             |
@@ -329,9 +415,10 @@
 | 이름                                    | 조건                                                                                                                                                   | 설명                                                 |
 |---------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------|
 | `ck_account_balance`                  | `balance >= 0`                                                                                                                                       | 계좌 잔액은 0원 이상이어야 한다.                                |
+| `ck_account_hold_amount` | `hold_amount >= 0 AND hold_amount <= balance` | 보류액은 0원 이상이며 원장잔액을 초과하지 않는다. |
 | `ck_account_number`                   | `account_number REGEXP '^[0-9]{12}$'`                                                                                                                | 계좌번호는 하이픈 없는 숫자 12자리여야 한다.                         |
 | `ck_account_type`                     | `account_type IN ('DEMAND_DEPOSIT', 'TIME_DEPOSIT', 'INSTALLMENT_SAVINGS')`                                                                          | 계좌 유형은 입출금·정기예금·정기적금 중 하나여야 한다.                    |
-| `ck_account_status`                   | `status IN ('ACTIVE', 'SUSPENDED', 'CLOSED')`                                                                                                        | 계좌 상태는 정상·거래정지·해지 중 하나여야 한다.                       |
+| `ck_account_status`                   | `status IN ('ACTIVE', 'SUSPENDED', 'MATURED', 'CLOSED', 'DORMANT')`                                                                                    | 계좌 상태는 정상·거래정지·만기 도달·해지·휴면 중 하나여야 한다.                       |
 | `ck_account_password_lock_state`      | 오류 횟수가 `0~4`이면 `password_locked = FALSE`, 오류 횟수가 `5`이면 `password_locked = TRUE`                                                                      | 계좌비밀번호 연속 오류 횟수와 잠금 상태가 항상 일치해야 한다.                |
 | `ck_account_withdrawal_registered`    | `withdrawal_registered IN (FALSE, TRUE)`                                                                                                             | 출금계좌 등록 여부는 Boolean 값이어야 한다.                       |
 | `ck_account_product`                  | `DEMAND_DEPOSIT`이면 `product_id IS NULL`<br>`TIME_DEPOSIT` 또는 `INSTALLMENT_SAVINGS`이면 `product_id IS NOT NULL`                                        | 입출금계좌에는 상품이 연결되지 않고, 예·적금계좌에는 상품이 반드시 연결되어야 한다.    |
@@ -339,6 +426,72 @@
 | `ck_account_withdrawal_type`          | `withdrawal_registered = FALSE OR account_type = 'DEMAND_DEPOSIT'`                                                                                   | 출금계좌 등록은 입출금계좌에만 허용한다.                             |
 | `ck_account_withdrawal_registered_at` | 미등록이면 `withdrawal_registered_at IS NULL`<br>등록이면 `withdrawal_registered_at IS NOT NULL`                                                              | 출금계좌 등록 여부와 등록 일시의 존재 여부가 일치해야 한다.                 |
 | `ck_account_closed_date`              | `CLOSED`이면 `closed_date IS NOT NULL AND closed_date >= opened_date`<br>`CLOSED`가 아니면 `closed_date IS NULL`                                           | 해지 계좌에는 개설일 이후의 해지일이 있어야 하며, 미해지 계좌에는 해지일이 없어야 한다. |
+
+---
+
+## `account_status_history`
+
+> 계좌 상태 전이 감사 이력 (PH-15, #671)
+
+계좌 상태 변경 시 전이 전·후 상태와 처리 시각을 기록하는 append-only 테이블이다.
+COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED → CLOSED` 전이를 기록한다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `history_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 이력 식별자 |
+| `account_id` | `BIGINT` | INDEX | X | | 상태가 변경된 계좌 ID |
+| `previous_status` | `VARCHAR(12)` | | X | | 변경 전 계좌 상태. 만기 전이는 `ACTIVE`, 만기해지는 `MATURED` |
+| `new_status` | `VARCHAR(12)` | | X | | 변경 후 계좌 상태. 만기 전이는 `MATURED`, 만기해지는 `CLOSED` |
+| `maturity_date` | `DATE` | | O | | 계약 만기일 |
+| `effective_business_date` | `DATE` | | O | | 만기 전이는 COB에서 계산한 만기 전이 기준일, 만기해지는 MATURITY 출금 원장의 실제 거래일(`tradeDate`) |
+| `changed_at` | `DATETIME(6)` | INDEX | X | | 실제 상태 전이 처리 시각 |
+| `trigger_type` | `VARCHAR(20)` | | X | | 전이 발생 원인. `COB`(배치 만기 전이) / `CUSTOMER`(고객 요청 만기해지) |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| PRIMARY | `PRIMARY` | `history_id` |
+| INDEX | `ix_account_status_history_account_time` | `account_id, changed_at` |
+
+---
+
+## `interest_payment`
+
+> 예적금 이자 지급 이력 (PH-14, #687)
+
+예적금 만기해지 또는 중도해지 시 계산된 이자와 원천세, 실제 원장 기표 결과를 기록한다.
+
+한 계좌에 대해 이자 지급 이력은 최대 1건이다. `account_id`의 UNIQUE 제약으로 중복 지급을 방지하며, 원장·GL·계좌 해지 처리와 동일한 트랜잭션에서 저장한다.
+
+세후이자가 0원이면 원장을 기표하지 않지만 지급 이력은 남긴다. 이 경우 `transaction_number`와 `trade_date`는 NULL이다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `interest_payment_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 이자 지급 이력 식별자 |
+| `account_id` | `BIGINT` | **UK** | X | | 지급 대상 상품 계좌 ID. 계좌당 이자 지급 1회 보장. 물리적 FK 없음 |
+| `payment_reason` | `VARCHAR(12)` | | X | | 지급 사유. `MATURITY`(만기해지) / `TERMINATION`(중도해지) |
+| `gross_amount` | `BIGINT` | | X | | 세전이자. 원 단위 정수 |
+| `tax_amount` | `BIGINT` | | X | | 원천징수 세금 합계. 원 단위 정수 |
+| `net_amount` | `BIGINT` | | X | | 세후이자. `gross_amount - tax_amount` |
+| `transaction_number` | `CHAR(20)` | **UK** | O | | `INTEREST` 원장 기표 거래번호. 지급액 0원이면 NULL |
+| `trade_date` | `DATE` | | O | | 이자 원장 거래일. `LedgerDepositResult.tradeDate` 사용. 지급액 0원이면 NULL |
+| `paid_at` | `DATETIME(6)` | | X | | 이자 지급 처리 일시 (KST) |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| PRIMARY | `PRIMARY` | `interest_payment_id` |
+| UNIQUE | `uk_interest_payment_account` | `account_id` |
+| UNIQUE | `uk_interest_payment_tx` | `transaction_number` |
+
+**CHECK 제약**
+
+| 이름 | 조건 | 설명 |
+| --- | --- | --- |
+| `ck_interest_payment_amount` | `gross_amount >= 0 AND tax_amount >= 0 AND tax_amount <= gross_amount AND net_amount = gross_amount - tax_amount` | 세전이자·세금·세후이자 정합성 |
+| `ck_interest_payment_ledger` | `net_amount = 0`이면 거래번호·거래일 모두 NULL, `net_amount > 0`이면 모두 NOT NULL | 실제 원장 기표 여부와 거래 식별자 일치 |
 
 ---
 
@@ -417,19 +570,22 @@
 
 즉시·예약·자동이체 3종이 모두 이 테이블 1행으로 수렴한다. 예약·자동은 `source_type`·`source_id`로 원본을 역추적한다. `status = ERROR`인 행은 원장 기표가 0행이다. 예약·자동이체는 `uk_transfer_source_execution_date`(`source_type, source_id, execution_date`)로 같은 회차의 중복 실행을 상태(SUCCESS/ERROR)와 무관하게 DB 레벨에서 막는다 — 즉시이체는 세 컬럼 모두 NULL이라 이 제약의 영향을 받지 않는다(MySQL은 NULL을 서로 다른 값으로 취급).
 
+**타행이체(PH-33-②)도 이 테이블에 남는다.** `payee_bank_code`가 있으면 타행, NULL이면 당행이다. 타행은 수취 계좌가 당행 `account`에 없어 `deposit_account_id`가 NULL이고, 예금주는 상대 은행 응답(SUCCESS)으로만 받아 `ERROR`·`TIMEOUT` 건은 `payee_name`도 NULL이다. 당행 행은 `ck_transfer_payee_account`·`ck_transfer_payee_name`이 지금처럼 두 값을 강제한다. 타행 예약·자동이체는 없다(즉시이체만).
+
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
 | `transfer_id` | `BIGINT` | **PK** | X |  | 이체 거래 내부 식별자. 대외 식별자는 `transaction_number` |
 | `transaction_number` | `CHAR(20)` | **UK** | X |  | 대외 거래 식별자. `YYYYMMDD`(8) + 채널(2) + 일련(10) = 20자. 이체 상세 조회의 경로 변수이자 원장 2행을 잇는 키 |
 | `withdrawal_account_id` | `BIGINT` | **FK** | X |  | 출금계좌 → `account.account_id` |
-| `deposit_account_id` | `BIGINT` | **FK** | X |  | 입금계좌. 원장 입금 행의 `account_id` 근거. 1차는 당행 전용이라 항상 값이 있다 → `account.account_id` |
-| `deposit_account_number` | `CHAR(12)` |  | X |  | 입금 계좌번호. 타행 확장을 대비해 번호도 함께 보관한다 |
-| `payee_name` | `VARCHAR(50)` |  | X |  | 입금계좌 예금주명. **거래 시점 스냅샷**이라 이후 상대 정보가 바뀌어도 남는다 |
+| `deposit_account_id` | `BIGINT` | **FK** | O |  | 입금계좌. 원장 입금 행의 `account_id` 근거 → `account.account_id`. 당행 거래는 항상 값이 있고, 타행 거래는 NULL이다(수취 계좌가 당행에 없다) |
+| `deposit_account_number` | `VARCHAR(16)` |  | X |  | 입금 계좌번호. 숫자만. 당행 12자리, 타행 1~16자리(전문 계좌번호 칸, [전문 규격](phase2/fixed_length_message_spec.md) §2) |
+| `payee_bank_code` | `CHAR(3)` |  | O |  | 타행 입금 은행코드(`common_code` `BANK_CODE`, 전문 기관코드). **NULL이면 당행 거래**다 |
+| `payee_name` | `VARCHAR(50)` |  | O |  | 입금계좌 예금주명. **거래 시점 스냅샷**이라 이후 상대 정보가 바뀌어도 남는다. 당행은 항상 있고, 타행은 SUCCESS 응답이 돌려준 이름이며 `ERROR`·`TIMEOUT`이면 NULL이다 |
 | `amount` | `BIGINT` |  | X |  | 이체금액 |
 | `fee` | `BIGINT` |  | X | `0` | 수수료. 당행 이체는 0으로 고정 |
 | `transfer_type` | `VARCHAR(12)` |  | X |  | 이체 종류. `IMMEDIATE`(즉시) / `SCHEDULED`(예약) / `AUTO`(자동) |
 | `channel` | `CHAR(2)` |  | X |  | 거래 채널. `WB`(인터넷뱅킹) / `BT`(배치). 거래번호의 채널 2자리와 같은 값 |
-| `status` | `VARCHAR(12)` |  | X |  | 처리 결과. `SUCCESS`(정상) / `ERROR`(오류). `PROCESSING`은 INSERT 직후의 트랜잭션 내부 상태라 커밋된 행에는 나타나지 않는다 (#377) |
+| `status` | `VARCHAR(12)` |  | X |  | 처리 결과. `SUCCESS`(정상) / `ERROR`(오류) / `TIMEOUT`(처리 불명 — 대외 전문 무응답으로 상대 처리 여부를 모른다. 실패가 아니며 조회거래로 확정한다, PH-80). `PROCESSING`은 INSERT 직후의 트랜잭션 내부 상태라 커밋된 행에는 나타나지 않는다 (#377) |
 | `source_type` | `VARCHAR(12)` |  | O |  | 이 이체를 만든 원본 구분. `SCHEDULED`(예약이체) / `AUTO`(자동이체). 즉시이체는 NULL |
 | `source_id` | `BIGINT` |  | O |  | 예약·자동이체 원본 PK. `source_type`과 함께 역추적에 쓴다 |
 | `execution_date` | `DATE` |  | O |  | `source_id`와 함께 멱등키를 구성하는 회차 실행일자. SCHEDULED/AUTO 전용(즉시이체는 NULL). 배치가 실제로 호출된 날짜가 아니라 그 회차의 논리적 실행일(`scheduled_transfer.scheduled_date` / `auto_transfer_execution.execution_date`)이 들어가야 크래시 후 재시도가 같은 회차로 식별된다 |
@@ -439,6 +595,10 @@
 | `error_code` | `VARCHAR(10)` |  | O |  | 실패 시 오류코드 |
 | `error_message` | `VARCHAR(200)` |  | O |  | 실패 시 사유 문구 |
 | `transferred_at` | `DATETIME(6)` |  | X |  | 이체 처리 일시 |
+| `trade_date` | `DATE` |  | O |  | **거래일** — 이 이체가 귀속되는 영업일. 거래 트랜잭션이 영업일 gate(`BusinessDateGate`)로 읽은 값이다. 휴일 거래는 다음 영업일이 된다([glossary](phase2/glossary.md) 7번). **영업일 전환(COB) 전에 gate를 잡은 거래는 전환 이전 영업일, 전환 뒤 거래는 다음 영업일이다 — 전환은 진행 중 거래가 끝난 뒤에만 일어난다(ADR-0008).** 성공·실패(ERROR) 행 모두 채운다 — 실패 행은 원장 없이 이 테이블에만 남고, 거래일은 ERROR 기록 트랜잭션이 gate로 읽은 값이다. 자동·예약이체는 휴일에도 지정일에 실행되므로(REQ-AUTO-001), 휴일에 실행된 회차의 거래일도 다음 영업일이다 — 실행일(`execution_date`, 달력 날짜)과 거래일이 다를 수 있다. 정정 거래(취소정정·정상거래)는 원거래일이 아니라 정정한 날의 영업일이다. #516 대입 전 행은 NULL이다 |
+| `invalidated_at` | `DATETIME(6)` |  | O |  | 정정 체인으로 **무효화된 시각**. NULL이면 유효한 거래다. 무효화는 `status`를 바꾸지 않는다 — `status`는 처리 결과(성공·실패)이고 무효화는 그 뒤에 일어나는 별개의 사건이다. SUCCESS인 원거래만 무효화되며 한 번 무효화되면 되돌리지 않는다(PH-80) |
+| `ref_transfer_id` | `BIGINT` | **FK** | O |  | 정정 체인의 **원거래** → `transfer.transfer_id`. 취소정정·정상거래 모두 원거래를 가리키므로 원거래 하나로 체인 전체를 찾는다. 일반 거래는 NULL |
+| `correction_type` | `VARCHAR(12)` |  | O |  | 정정 체인에서의 역할. `REVERSAL`(취소정정 — 원거래와 반대 방향) / `REPOST`(정상거래 — 원래 의도한 거래). 일반 거래는 NULL. `ref_transfer_id`와 함께 있거나 함께 없다 |
 | `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
 
 **인덱스**
@@ -447,7 +607,9 @@
 | --- | --- | --- |
 | UNIQUE | `uk_transfer_txno` | `transaction_number` |
 | INDEX | `ix_transfer_wacc` | `withdrawal_account_id, transferred_at DESC` |
-| UNIQUE | `uk_transfer_source_execution_date` | `source_type, source_id, execution_date` |
+| INDEX | `ix_transfer_status_created` | `status, created_at` — 조회거래 스케줄러가 1분마다 처리 불명(TIMEOUT) 타행 건을 찾는다(PH-33-②) |
+| UNIQUE | `uk_transfer_source_execution_date` | `source_type, source_id, execution_date` — 예약·자동이체 처리결과의 거래일 조회(`transfer.api.TransferTradeDateQuery`, #679)도 이 인덱스로 읽는다 |
+| UNIQUE | `uk_transfer_correction` | `ref_transfer_id, correction_type` — 원거래 하나에 취소정정·정상거래는 각각 1건. 동시 정정을 DB가 막는다 |
 
 **CHECK 제약**
 
@@ -455,7 +617,11 @@
 | --- | --- |
 | `ck_transfer_amount` | `amount > 0` |
 | `ck_transfer_fee` | `fee >= 0` |
-| `ck_transfer_selfsend` | `withdrawal_account_id <> deposit_account_id` |
+| `ck_transfer_selfsend` | `withdrawal_account_id <> deposit_account_id` — 타행은 `deposit_account_id`가 NULL이라 해당 없음 |
+| `ck_transfer_payee_account` | `(payee_bank_code IS NULL) = (deposit_account_id IS NOT NULL)` — 당행은 입금계좌 ID 필수, 타행은 없음 |
+| `ck_transfer_payee_name` | `payee_bank_code IS NOT NULL OR payee_name IS NOT NULL` — 당행은 예금주 필수 |
+| `ck_transfer_correction_type` | `correction_type IN ('REVERSAL', 'REPOST')` |
+| `ck_transfer_correction_ref` | `(correction_type IS NULL) = (ref_transfer_id IS NULL)` — 반쪽 정정 금지 |
 
 ---
 
@@ -463,23 +629,28 @@
 
 > 원장 (APPEND-ONLY. UPDATE/DELETE 금지)
 
-**APPEND-ONLY.** `UPDATE`·`DELETE`를 금지한다. 취소는 반대 방향 기표를 새로 쌓는다. `occurred_at` 기준 RANGE 파티션이라 FK를 선언할 수 없고, 파티션 키가 PK에 포함돼야 해서 PK가 복합키다. 파티션 범위와 유지보수 절차는 [flyway_guide.md](flyway_guide.md) §5를 따른다.
+**APPEND-ONLY.** `UPDATE`·`DELETE`를 금지한다. 취소는 반대 방향 기표를 새로 쌓는다. **예외는 `reversed` 하나다** — 반대기표를 쌓을 때 원거래 행의 이 값만 `FALSE`→`TRUE`로 한 번 세운다(정정 체인, PH-80). 금액·잔액·시각은 어떤 경우에도 바꾸지 않는다. `occurred_at` 기준 RANGE 파티션이라 FK를 선언할 수 없고, 파티션 키가 PK에 포함돼야 해서 PK가 복합키다. 파티션 범위와 유지보수 절차는 [flyway_guide.md](flyway_guide.md) §5를 따른다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
 | `ledger_entry_id` | `BIGINT` | **PK** | X |  | 원장 행 식별자. 거래내역 조회 응답의 `ledgerEntryId` |
 | `account_id` | `BIGINT` |  | X |  | 기표 대상 계좌 |
 | `transfer_id` | `BIGINT` |  | O |  | 원본 이체 거래. 상품가입 초입금·이자 지급처럼 이체가 아닌 기표는 NULL |
-| `transaction_number` | `CHAR(20)` |  | X |  | 이 기표가 속한 거래번호. **출금 행과 입금 행이 같은 값**을 갖는다 |
+| `transaction_number` | `CHAR(20)` |  | X |  | 이 기표가 속한 거래번호. **출금 행과 입금 행이 같은 값**을 갖는다. 짝 없는 1행(`OPENING`·`INTEREST`)은 이 번호를 혼자 쓴다 |
 | `direction` | `VARCHAR(10)` |  | X |  | 기표 방향. `DEPOSIT`(입금) / `WITHDRAWAL`(출금). 금액은 늘 양수라 부호 역할을 이 컬럼이 한다 |
 | `amount` | `BIGINT` |  | X |  | 기표 금액. 항상 양수 |
 | `balance_after` | `BIGINT` |  | X |  | 이 기표 직후의 계좌 잔액 스냅샷. 통장 형태로 보여줄 때 쓴다 |
-| `transaction_type` | `VARCHAR(32)` |  | X |  | 기표를 일으킨 업무. `IMMEDIATE_TRANSFER` / `SCHEDULED_TRANSFER` / `AUTO_TRANSFER` / `PRODUCT_SUBSCRIPTION`(가입 초입금) / `INTEREST`(이자) / `REVERSAL`(반대기표) |
+| `transaction_type` | `VARCHAR(32)` |  | X |  | 기표를 일으킨 업무. `OPENING`(개시 잔액, 짝 없는 1행이며 상대편은 GL 개시 전표) / `IMMEDIATE_TRANSFER` / `SCHEDULED_TRANSFER` / `AUTO_TRANSFER` / `PRODUCT_SUBSCRIPTION`(가입 초입금) / `INTEREST`(이자, 짝 없는 1행이며 상대편은 GL 이자 전표) / `MATURITY`(만기해지, 상품 계좌 → 고객 계좌 2행) / `TERMINATION`(중도해지, 상품 계좌 → 고객 계좌 2행) / `REVERSAL`(반대기표) / `INTERBANK_TRANSFER`(타행이체 출금, 짝 없는 1행이며 상대편은 GL 미결제 전표. 실패로 확정되면 같은 거래번호로 `reversal_id`가 원 출금을 가리키는 되돌림 입금 1행이 붙고 원 출금은 `reversed`가 선다). `INTEREST`·`MATURITY`·`TERMINATION`은 입금 계약 `transfer.api.LedgerDepositUseCase`(#595)만 남긴다 |
 | `transaction_content` | `VARCHAR(10)` |  | O |  | 통장에 찍히는 적요. 최대 10자 |
 | `channel` | `CHAR(2)` |  | X |  | 거래 채널. `WB` / `BT` |
 | `reversed` | `BOOLEAN` |  | X | `FALSE` | 반대기표로 취소된 원거래인지 여부. 원본을 지우지 않고 이 값만 세운다 |
 | `reversal_id` | `BIGINT` |  | O |  | 반대기표 행이 가리키는 원거래의 `ledger_entry_id` |
-| `occurred_at` | `DATETIME(6)` | **PK** | X |  | 기표 발생 일시. RANGE 파티션 키이며 거래내역 조회의 기간 조건이 이 컬럼에 걸린다 |
+| `occurred_at` | `DATETIME(6)` | **PK** | X |  | 기표 발생 일시. RANGE 파티션 키이며 거래내역 조회의 기간 조건이 이 컬럼에 걸린다. **온라인 거래 경로(이체·상품가입 입금)는 계좌 락을 쥔 뒤 이 시각을 찍으므로, 시계가 정상적으로 흐르는 동안에는 같은 계좌의 잔액 반영 순서와 같다.** 적수·거래내역은 `occurred_at DESC, ledger_entry_id DESC` 순으로 마지막 잔액을 고른다. 락을 거치지 않고 직접 적재하는 시드(`Phase2MinimumSeedService`·`local-demo-data.sql`)는 이 계약의 대상이 아니다(#545) |
+| `trade_date` | `DATE` |  | O |  | **거래일** — 이 기표가 귀속되는 영업일. `occurred_at`(발생 시각)과 다르다. 값 규칙은 `transfer.trade_date`와 같다. **원장을 쓰는 모든 경로(이체·정정·상품가입 입금·예적금 입금 계약)가 채운다.** #516 대입 전 행은 NULL이다. P6 시드(PH-60b)는 GL과 같은 거래일을 넣는다 |
+
+**`trade_date` 는 NULL 을 허용한다(Expand).** `NOT NULL` 제약은 걸지 않는다 — 300만 행 파티션 테이블 재구성을 피하려고, 새 행의 필수 여부는 도메인 팩토리가 막는다(#515 A안). 기존 행 채우기는 #515에서 한다. 거래일로 조회하는 곳이 아직 없어 인덱스는 두지 않는다. `gl_journal_entry` 는 시산표가 거래일로 집계해서 GL-IDX 에서 거래일 인덱스를 붙였다.
+
+**`trade_date` 로 거를 때는 `occurred_at` 범위도 넉넉히 같이 건다.** 파티션 키가 `occurred_at` 이라 `trade_date` 조건만 걸면 모든 파티션을 읽는다. 거래일과 발생일의 간격은 일정하지 않다 — 연휴면 며칠 뒤이고, COB 가 늦어지면 하루 앞설 수도 있다.
 
 **인덱스**
 
@@ -508,6 +679,29 @@
 | 컬럼명 | 데이터 타입 | NULL 허용 | 기본값 | 키 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `sequence_id` | `BIGINT` | X | `AUTO_INCREMENT` | PK | 생성 즉시 `ledger_entry.ledger_entry_id`로 그대로 쓰인다 |
+
+---
+
+## `ledger_reconciliation_mismatch`
+
+> 원장-잔액 대사 불일치 목록 (PH-38)
+
+COB 대사 스텝이 원장 누적 합계와 `account.balance`가 다른 계좌를 영업일별로 남긴다. 관리자 목록 API(FE ADM-04)가 읽는다. **같은 영업일을 다시 대사하면 그날 행을 모두 지우고 새 결과로 바꾼다** — 재실행 이력은 `batch_execution_history`가 남긴다. 대사는 보고만 하고 정정하지 않으므로 처리 상태 컬럼이 없다. 감사용 기록이라 계좌가 해지·정리돼도 남도록 `account`에 FK를 걸지 않는다. 차액(`ledger_balance - account_balance`)은 저장하지 않고 조회할 때 계산한다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `ledger_reconciliation_mismatch_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 불일치 행 식별자 |
+| `business_date` | `DATE` | **UK** | X |  | 대사한 COB의 마감 대상 영업일(ADR-0004 `COB_DATE`). `batch_execution_history.business_date`와 같은 값이다 |
+| `account_id` | `BIGINT` | **UK** | X |  | 불일치 계좌 |
+| `ledger_balance` | `BIGINT` |  | X |  | 원장 누적 합계 `SUM(DEPOSIT) - SUM(WITHDRAWAL)`. 원장이 없는 계좌는 0 |
+| `account_balance` | `BIGINT` |  | X |  | 대사 시점의 `account.balance` |
+| `detected_at` | `DATETIME(6)` |  | X |  | 대사가 불일치를 확인한 시각 |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_ledger_reconciliation_mismatch_date_account` | `business_date, account_id` — 영업일별 목록 조회와 최근 영업일 조회도 이 인덱스를 쓴다 |
 
 ---
 
@@ -632,6 +826,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | `opened_date` | `DATE` |  | O |  | 개설일 |
 | `maturity_date` | `DATE` |  | O |  | 만기일 |
 | `subscribed_at` | `DATETIME(6)` |  | X |  | 가입 실행 일시 |
+| `subscription_trade_date` | `DATE` |  | O |  | 가입 논리 영업일. 가입 트랜잭션이 영업일 gate(`BusinessDateGate`)로 읽은 값이다. 정보계 SUBSCRIBE 이벤트 기준일. 기존 행은 가입 시각을 영업일로 올려 채웠다 |
 
 **인덱스**
 
@@ -809,6 +1004,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | `request_ip` | `VARCHAR(45)` |  | X |  | 요청 클라이언트 IP. IPv6까지 담기도록 45자 |
 | `result` | `VARCHAR(12)` |  | X |  | 처리 결과. `SUCCESS` / `FAILURE` |
 | `detail` | `JSON` |  | O |  | 부가 정보. 비밀번호·전체 계좌번호 등은 마스킹 후 저장한다 |
+| `access_reason` | `VARCHAR(20)` |  | O |  | 관리자 개인정보 조회·변경 사유(PH-89, D-10). `CUSTOMER_REQUEST` · `INCIDENT` · `AUDIT` · `OPERATION`. 그 밖의 행은 NULL |
 | `requested_at` | `DATETIME(6)` |  | X |  | 요청 일시 |
 
 **인덱스**
@@ -853,8 +1049,325 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
-| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP` 2행 |
+| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP`, `LEDGER_RECONCILIATION_BATCH`, `AUTH_TOKEN_CLEANUP`, `TERMS_VIEW_HISTORY_CLEANUP`, `AUTO_TRANSFER_RECONCILE`, `SCHEDULED_TRANSFER_RECONCILE`, `COB` 8행 |
 | `currently_running` | `BOOLEAN` |  | X | `FALSE` | 이 배치가 지금 실행 중인지. 트리거 시작 시 `TRUE`, 종료 시(성공/실패 무관) `FALSE`로 되돌림 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각. stale(크래시로 방치됨) 판단 기준 |
 
 ---
+
+## `batch_execution_history`
+
+> COB 등 배치가 스텝을 실행한 기록 (#603)
+
+`CobRunnerService`가 스텝(`CobStep`)을 하나 실행할 때마다 결과를 1행 추가한다(append-only, UPDATE·DELETE 없음). 스텝이 시작하기 전에는 행이 없고, 끝난 뒤(성공·실패·중단 중 하나로 확정된 뒤) 한 번만 INSERT한다. 관리자 조회 API는 아직 없다(#603 범위 밖).
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `batch_execution_history_id` | `BIGINT` | **PK** | X |  | 내부 식별자 (AUTO_INCREMENT) |
+| `job_name` | `VARCHAR(50)` |  | X |  | 배치 식별자. 예: `COB` |
+| `step_name` | `VARCHAR(100)` |  | X |  | `CobStep.name()` |
+| `business_date` | `DATE` |  | X |  | 스텝이 처리한 영업일(`COB_DATE`) |
+| `started_at` | `DATETIME(6)` |  | X |  | 스텝 시작 시각 |
+| `ended_at` | `DATETIME(6)` |  | X |  | 스텝 종료(성공/실패/중단 확정) 시각 |
+| `status` | `VARCHAR(10)` |  | X |  | `SUCCESS` / `FAILURE` / `HALTED`(`CobStepHaltException`, #600) |
+| `failure_reason` | `TEXT` |  | O |  | 실패·중단 시 예외 메시지. `SUCCESS`면 `NULL` |
+
+---
+
+## `auth_token`
+
+> 일회성 인증 토큰 (#580). Redis에 있던 토큰 7종을 옮겼다
+
+약관 동의 · 아이디 확인 · 이메일 인증 · 계좌 인증 · 임시가입(회원가입 5종)과 OTP 인증 · 계좌비밀번호 인증 토큰을 한 테이블에 둔다. 토큰 원문은 저장하지 않고 SHA-256 해시로 찾는다. 소비는 `consumed_at IS NULL AND claim_id IS NULL AND expires_at > now` 조건부 `UPDATE` 한 번이고, 영향받은 행이 1일 때만 성공이다. 임시가입 토큰만 예외로, 선점한 가입 완료 요청이 `claim_id = 자기 요청 ID` 조건으로 소비한다. 저장·소비 모두 호출자 트랜잭션에 참여하므로 업무가 롤백되면 소비도 롤백된다(#498).
+
+유효성은 항상 `expires_at`으로 판정한다. `AUTH_TOKEN_CLEANUP` 배치는 만료 행을 지워 공간을 회수할 뿐이다. 길어야 30분 사는 데이터라 `customer`에 FK를 걸지 않는다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `auth_token_id` | `BIGINT` | **PK** | X |  | 내부 식별자 (AUTO_INCREMENT) |
+| `purpose` | `VARCHAR(30)` | **UK** | X |  | 토큰 종류. `TERMS_AUTH` / `USER_ID_CHECK` / `EMAIL_VERIFICATION` / `ACCOUNT_AUTH` / `TEMP_SIGNUP` / `OTP_AUTH` / `ACCOUNT_PASSWORD_AUTH` |
+| `token_hash` | `CHAR(64)` | **UK** | X |  | 토큰 원문의 SHA-256 16진수 |
+| `customer_id` | `BIGINT` |  | O |  | 로그인 고객 토큰의 고객. 회원가입 토큰은 `NULL` |
+| `payload` | `TEXT` |  | X |  | 토큰에 묶인 값(JSON 문자열). `utf8mb4_bin`이라 값 일치 소비가 바이트 단위로 비교된다 |
+| `claim_id` | `CHAR(36)` |  | O |  | 임시가입 토큰을 선점한 가입 완료 요청 ID. 선점 전·복구 후는 `NULL` |
+| `created_at` | `DATETIME(6)` |  | X |  | 발급 시각 |
+| `expires_at` | `DATETIME(6)` |  | X |  | 만료 시각. 이 시각이 지나면 조회·소비되지 않는다 |
+| `consumed_at` | `DATETIME(6)` |  | O |  | 소비 시각. `NULL`이면 아직 쓰지 않은 토큰 |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_auth_token_hash_purpose` | `token_hash, purpose` |
+| INDEX | `ix_auth_token_expires` | `expires_at` |
+
+---
+
+## `otp_issue_lock`
+
+> 고객별 OTP 발급 잠금 (#580). Redis `SET NX` 잠금을 옮겼다
+
+같은 고객의 OTP 발급 요청을 여러 인스턴스에서 한 번에 하나만 통과시킨다. 잠금은 발급 트랜잭션에 참여하지 않고(`NOT_SUPPORTED`) 문장마다 바로 커밋해 다른 인스턴스에 즉시 보이게 한다. 획득(`INSERT IGNORE` → 만료 잠금 `UPDATE`)을 한 트랜잭션에 묶으면 교착이 날 수 있어서다. 만료된 잠금은 다른 요청이 다시 잡을 수 있고, 해제는 `owner_id`가 같을 때만 된다. 고객당 1행이라 정리 배치가 없다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `customer_id` | `BIGINT` | **PK** | X |  | 잠금 대상 고객 |
+| `owner_id` | `CHAR(36)` |  | X |  | 잠금을 잡은 발급 요청 ID(UUID) |
+| `expires_at` | `DATETIME(6)` |  | X |  | 잠금 만료 시각 |
+
+---
+
+## `terms_view_history`
+
+> 상품 약관 열람 이력 (#580). Redis TTL 30분 키를 옮겼다
+
+상품가입 전 약관을 열람했는지 30분 동안 인정한다. 다시 열람하면 같은 행의 `viewed_at`·`expires_at`을 덮어쓴다. 유효성은 `expires_at`으로 판정하므로 만료 즉시 열람으로 인정되지 않는다. 행 삭제는 매시 45분에 도는 `TERMS_VIEW_HISTORY_CLEANUP` 배치가 맡아서, 만료된 행이 최대 약 1시간(열람 시점부터 약 90분) DB에 남을 수 있다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `customer_id` | `BIGINT` | **PK** | X |  | 열람 고객 |
+| `terms_id` | `BIGINT` | **PK** | X |  | 열람한 약관 |
+| `viewed_at` | `DATETIME(6)` |  | X |  | 마지막 열람 시각 |
+| `expires_at` | `DATETIME(6)` |  | X |  | 열람 인정 만료 시각 (열람 후 30분) |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| INDEX | `ix_terms_view_history_expires` | `expires_at` |
+
+---
+
+## `EVENT_PUBLICATION`
+
+> 이벤트 발행 기록 — 아웃박스 (PH-96, #437). Spring Modulith Event Publication Registry가 소유한다
+
+업무 트랜잭션 안에서 발행된 이벤트를 받을 AFTER_COMMIT 리스너마다 1행을 같은 커밋으로 남긴다. 리스너가 성공하면 행을 지운다(`spring.modulith.events.completion-mode=delete`). 그래서 **남아 있는 행이 곧 아직 전달되지 않은 이벤트**다. 커밋 직후 리스너가 실패하거나 프로세스가 죽어도 행이 남아 다시 전달할 수 있다.
+
+DDL은 `spring-modulith-events-jdbc` 2.0.8의 `schemas/v2/schema-mysql.sql`을 그대로 옮겼다. **테이블·컬럼명이 대문자**인 것은 라이브러리가 이 이름으로 조회하기 때문이고, **시각이 `TIMESTAMP(6)`**(2038-01-19까지)인 것은 원본 DDL을 바꾸지 않았기 때문이다([ADR-0010](adr/0010-outbox-spring-modulith-event-publication-registry.md)). 행은 애플리케이션이 직접 쓰지 않고 라이브러리만 쓴다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `ID` | `VARCHAR(36)` | **PK** | X |  | 발행 기록 식별자 (UUID) |
+| `LISTENER_ID` | `VARCHAR(512)` |  | X |  | 이벤트를 받을 리스너 메서드 식별자 |
+| `EVENT_TYPE` | `VARCHAR(512)` |  | X |  | 이벤트 클래스 전체 이름 |
+| `SERIALIZED_EVENT` | `VARCHAR(4000)` |  | X |  | Jackson으로 직렬화한 이벤트 JSON |
+| `PUBLICATION_DATE` | `TIMESTAMP(6)` |  | X |  | 발행 시각 |
+| `COMPLETION_DATE` | `TIMESTAMP(6)` |  | O | `NULL` | 완료 시각. `delete` 모드에서는 완료 시 행이 지워져 쓰이지 않는다 |
+| `STATUS` | `VARCHAR(20)` |  | O |  | `PUBLISHED` / `PROCESSING` / `COMPLETED` / `FAILED` / `RESUBMITTED` |
+| `COMPLETION_ATTEMPTS` | `INT` |  | O |  | 전달 시도 횟수 |
+| `LAST_RESUBMISSION_DATE` | `TIMESTAMP(6)` |  | O | `NULL` | 마지막 재제출 시각 |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| INDEX | `EVENT_PUBLICATION_BY_COMPLETION_DATE_IDX` | `COMPLETION_DATE` |
+
+---
+
+# 9. 회계 원장 — P3
+
+2차에 신설(PH-20, #451). 이자 지급(P2)과 타행 이체(P4)가 들어오면서 예수금 안의 이동만 있던 전제가 깨져 회계 원장이 필요해졌다.
+
+Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준으로 삼되 두 가지는 다르다. **금액을 `BIGINT` 원 단위 정수로 둔다**(Fineract 는 `DECIMAL(19,6)`, 절대규칙 5). **전표를 별도 테이블로 뺀다**(Fineract 는 `transaction_id` 를 공유하는 분개 묶음이 전표 역할) — 전표 단위로 차대변을 검증하고 채번 규칙을 둘 자리가 필요하다. 차대변 검증 자체는 Fineract 와 같이 애플리케이션에서만 한다([gl_journal_patterns.md](phase2/gl_journal_patterns.md) §2).
+
+## `gl_account`
+
+> 계정과목
+
+코드 체계는 **대분류1 + 중분류2 + 세분류2 = 5자리**이고 첫 자리가 분류와 1:1 로 대응한다(1 자산 / 2 부채 / 3 자본 / 4 수익 / 5 비용). 시드 15개는 `R__seed_gl_account.sql` 이 넣는다 — 마스터성 데이터라 `V__` 가 아니라 `R__` 다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `account_code` | `CHAR(5)` | **PK** | X |  | 계정과목 코드. 대1+중2+세2. 첫 자리가 분류 |
+| `account_name` | `VARCHAR(50)` |  | X |  | 계정과목명. 시산표 화면에 그대로 표시된다 |
+| `account_class` | `VARCHAR(12)` |  | X |  | `ASSET` / `LIABILITY` / `EQUITY` / `REVENUE` / `EXPENSE` |
+| `normal_balance` | `VARCHAR(6)` |  | X |  | 정상잔액 방향. `DEBIT` / `CREDIT`. 자산·비용은 차변, 부채·자본·수익은 대변 |
+| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
+| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
+
+**제약**
+
+| 이름 | 내용 | 이유 |
+| --- | --- | --- |
+| `ck_gl_account_code` | `account_code REGEXP '^[1-5][0-9]{4}$'` | 코드 체계가 문서에만 있으면 깨진다. `ck_account_number` 와 같은 방식 |
+| `ck_gl_account_class_code` | 코드 첫 자리 · `account_class` · `normal_balance` 다섯 조합 중 하나 | 열마다 따로 제한하면 `10100`+`LIABILITY` 나 `ASSET`+`CREDIT` 이 통과한다. 이 CHECK 가 두 열의 허용값 검사까지 포함한다. contra 계정(자산인데 정상잔액 대변)은 2차에 없고, 필요해지면 새 V 파일에서 넓힌다 |
+
+---
+
+## `gl_voucher`
+
+> 전표 — 분개를 담는 단위
+
+거래 1건이 장부에 남긴 기표 단위다. 분개 여러 줄을 담고 **전표 하나 안에서 차변 합계와 대변 합계가 같아야 한다.** 이 검증은 도메인(`gl.domain.Voucher`)에서만 하고 DB 제약은 걸지 않는다 — 근거는 [gl_journal_patterns.md](phase2/gl_journal_patterns.md) §2. 전표번호 `yyyyMMdd-TTT-NNNNNN` 은 `gl_voucher_sequence` 가 채번한다.
+
+`updated_at` 이 없다. 전표는 수정하지 않는다 — 틀리면 지우거나 고치지 않고 정정 전표를 새로 세운다(용어표 "정정 체인"). 수정 시각 칸이 있으면 고쳐도 되는 것처럼 읽힌다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `voucher_no` | `VARCHAR(20)` | **PK** | X |  | 전표번호. 영업일 + 유형 + 일련 |
+| `trade_date` | `DATE` |  | X |  | 이 전표가 귀속되는 영업일 |
+| `tx_type` | `VARCHAR(24)` |  | X |  | `OPENING` / `TRANSFER` / `PRODUCT_SUBSCRIPTION` / `INTEREST` / `REVERSAL` / `INTERBANK_TRANSFER`(타행 송신 요청) / `INTERBANK_SETTLEMENT`(타행 확정 해소) / `MATURITY`(만기해지 원리금 이체) / `TERMINATION`(중도해지 원리금 이체) |
+| `reference_key` | `VARCHAR(40)` |  | X |  | 원 거래번호. 원장 `transaction_number` 와 같은 값이고 개시 전표는 `OPENING-{yyyyMMdd}`. 원장과 전표를 1:1 로 잇는다(PH-24). 타행이체만 한 거래번호에 `INTERBANK_TRANSFER`·`INTERBANK_SETTLEMENT` 두 전표가 붙는다(`gl_journal_patterns.md` §3-5) |
+| `description` | `VARCHAR(200)` |  | O |  | 적요 |
+| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
+
+**제약**
+
+| 이름 | 내용 | 이유 |
+| --- | --- | --- |
+| `ck_gl_voucher_tx_type` | 9개 유형 중 하나 | `REVERSAL` 은 정정 체인 취소정정(PH-24). `INTERBANK_TRANSFER`·`INTERBANK_SETTLEMENT` 는 타행 미결제 2패턴([분개 패턴표](phase2/gl_journal_patterns.md) §3-5, PH-33-②). 두 전표는 같은 원 거래번호를 참조 키로 쓴다. `MATURITY`·`TERMINATION` 은 예적금 원리금 이체(분개 패턴표 §3-7, #713) |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_gl_voucher_no_trade_date` | `voucher_no, trade_date` |
+| UNIQUE | `uk_gl_voucher_tx_type_reference_key` | `tx_type, reference_key` |
+
+`voucher_no` 가 이미 PK 라 `uk_gl_voucher_no_trade_date` 는 행을 더 제한하지 않는다. 분개가 복제해 가는 `trade_date` 를 복합 FK 로 묶기 위한 참조 대상이다.
+
+`uk_gl_voucher_tx_type_reference_key` 는 같은 거래를 두 번 기표하는 것을 막는다. 두 번째 기표는 예외가 되어 원장까지 롤백된다 — 조용히 넘기면 원장만 두 번 기표된 상태가 가려진다.
+
+---
+
+## `gl_journal_entry`
+
+> 분개 — 전표 안의 한 줄
+
+계정과목 하나와 **차변 또는 대변 한쪽의 금액**을 가진다. Fineract `acc_gl_journal_entry.type_enum` + `amount` 와 같은 형태다.
+
+`trade_date` 를 전표에서 한 번 더 들고 간다. 600만 줄을 기간으로 거를 때 전표 조인을 없애기 위해서다 — Fineract 도 `entry_date` 를 같은 자리에 둔다. 분개는 전표와 함께 한 번만 쓰이고 수정되지 않으므로 두 값이 어긋날 경로가 없다.
+
+**시산표 집계용 인덱스는 거래일이 먼저다(GL-IDX).** `ix_gl_journal_entry_trade_date (trade_date, account_code, dr_cr, amount)` 는 조회 기간만 범위로 읽고, 집계 SQL 이 쓰는 컬럼을 모두 담아 본 테이블을 읽지 않는다. 인덱스가 없을 때는 기간과 무관하게 분개 전체를 `fk_gl_journal_entry_account` 순서로 읽었다(운영 647만 행 전 구간 평균 26.8초, [ph28_baseline_results.md](phase2/ph28_baseline_results.md)). `account_code` 로 시작하는 인덱스는 넣지 않는다. `(account_code, trade_date)` 는 기간으로 좁히지 못해 오히려 느렸고, `fk_gl_journal_entry_account` 는 FK 가 자동으로 만든 인덱스라 같은 FK 를 받칠 수 있는 인덱스가 생기면 MySQL 이 조용히 지운다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `journal_entry_id` | `BIGINT` | **PK** | X |  | AUTO_INCREMENT |
+| `voucher_no` | `VARCHAR(20)` | **FK** → `gl_voucher` | X |  | 이 줄이 속한 전표 |
+| `line_no` | `SMALLINT` |  | X |  | 전표 안의 줄 번호. 1부터 |
+| `account_code` | `CHAR(5)` | **FK** → `gl_account` | X |  | 계정과목 |
+| `dr_cr` | `VARCHAR(6)` |  | X |  | `DEBIT` / `CREDIT`. 금액의 방향을 이 칸이 말한다 |
+| `amount` | `BIGINT` |  | X |  | 원 단위 정수. 한 줄은 한쪽 금액만 가지므로 항상 양수 |
+| `trade_date` | `DATE` |  | X |  | 전표 `trade_date` 복제본. 시산표 집계 기준일 |
+| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_gl_journal_entry_line` | `voucher_no, line_no` |
+| FK | `fk_gl_journal_entry_voucher` | `voucher_no, trade_date` → `gl_voucher` |
+| FK | `fk_gl_journal_entry_account` | `account_code` → `gl_account` |
+| INDEX | `ix_gl_journal_entry_trade_date` | `trade_date, account_code, dr_cr, amount` |
+
+**제약**
+
+| 이름 | 내용 | 이유 |
+| --- | --- | --- |
+| `ck_gl_journal_entry_dr_cr` | `DEBIT` 또는 `CREDIT` | |
+| `ck_gl_journal_entry_amount` | `amount > 0` | 0원 분개와 음수 금액을 막는다. 방향은 `dr_cr` 이 말한다 |
+| `ck_gl_journal_entry_line_no` | `line_no > 0` | 줄 번호는 1부터다. `NOT NULL`·UNIQUE 만으로는 0 과 음수가 통과한다 |
+
+**전표 FK 가 복합인 이유.** `voucher_no` 만 참조하면 전표와 다른 `trade_date` 를 가진 분개가 저장되고, 그대로 날짜별 시산표 집계가 틀어진다. 복제본이 원본과 같도록 DB 가 강제한다 — 특히 P6 시드 생성기(PH-60b)는 애플리케이션을 거치지 않고 600만 건을 직접 INSERT 하므로 애플리케이션 규약으로는 막을 수 없다.
+
+---
+
+## `gl_voucher_sequence`
+
+> 전표번호 일련번호 채번 (PH-21)
+
+전표번호 끝 6자리를 (거래일, 유형)마다 1부터 채번한다. 구조는 `transaction_sequence` 와 같다. 카운터는 기표 트랜잭션과 **별도로 커밋**한다 — 같은 트랜잭션이면 이체가 커밋될 때까지 행 락을 잡아 같은 날 같은 유형의 기표가 직렬화된다. 대가로 기표가 롤백되면 결번이 생긴다.
+
+그날 행이 없으면 `gl_voucher` 에 이미 있는 가장 큰 번호 다음부터 시작한다. 시드(PH-60b)는 이 카운터를 거치지 않고 전표를 직접 넣기 때문이다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `trade_date` | `DATE` | **PK** | X |  | 전표의 거래일. 전표번호 앞 8자리와 같다 |
+| `tx_type` | `VARCHAR(24)` | **PK** | X |  | `gl_voucher.tx_type` 과 같은 값 |
+| `last_seq` | `INT` |  | X |  | 해당 거래일·유형에서 마지막으로 나간 일련번호 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 마지막 채번 시각 |
+
+**CHECK 제약**
+
+| 이름 | 조건 |
+| --- | --- |
+| `ck_gl_voucher_sequence_range` | `last_seq BETWEEN 1 AND 999999` |
+
+---
+
+# 10. 영업일 — P5
+
+2차에 신설(PH-40, #471). 영업일은 시스템 시각과 분리된 **논리 업무일자**이고 `business.api.BusinessDateProvider` 가 유일한 출처다([glossary](phase2/glossary.md) 6번).
+
+Apache Fineract 의 `m_business_date` 처럼 **시계가 아니라 DB 에 저장된 값**을 영업일로 쓴다. 테이블은 둘로 나눈다 — 매일 바뀌는 값 1개(`business_date`)와 한 번 넣고 거의 안 바뀌는 목록(`holiday`)은 성격이 다르다. Fineract 와 달리 영업일을 넘길 때 휴일을 건너뛴다(Fineract 는 `plusDays(1)` 이고 휴일은 별도 개념).
+
+## `business_date`
+
+> 현재 영업일
+
+`date_type` 별로 한 행이다. 2차에는 `BUSINESS_DATE` 한 행뿐이고, 마감 대상일(`COB_DATE`) 같은 종류가 필요해지면 테이블을 바꾸지 않고 행을 더한다(Fineract `BusinessDateType` 과 같은 구조).
+
+초기값 `2026-01-01` 은 의미 없는 과거 날짜다 — 서버가 뜰 때 오늘 달력에 맞춘다(오늘이 영업일이면 오늘, 아니면 다음 영업일. 저장값이 그보다 이전일 때만 바꾼다). V 파일이 실행되는 날은 환경마다(팀원 로컬·CI·배포) 달라서 특정 날짜를 박으면 미래나 과거로 어긋난다. `NOW()`·`CURRENT_DATE` 는 RDS 가 UTC 라 쓰지 않는다. 이후 영업일은 매일 자정(KST) 같은 방식으로 맞추고, PH-43 이후에는 COB 마지막 스텝이 다음 영업일로 넘긴다. 기동 시 맞추기는 PH-43 이후에도 남는다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `date_type` | `VARCHAR(20)` | **PK** | X |  | 영업일 종류. 2차는 `BUSINESS_DATE` 1행 |
+| `business_date` | `DATE` |  | X |  | 현재 영업일 |
+| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
+| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` | 마지막 영업일 전환 시각 |
+
+---
+
+## `business_date_cutoff`
+
+> 영업일 마감 cutoff (#556)
+
+COB의 영업일 전환(`advanceFrom`)과 달력 따라잡기(`catchUpTo`)가 `BUSINESS_DATE`를 다음 영업일로 넘길 때 떠나는 영업일 D의 행을 같은 트랜잭션으로 남긴다. 전환 UPDATE가 `BUSINESS_DATE` 행에 배타 락을 잡으므로, D를 읽은 거래가 모두 commit/rollback된 뒤에만 이 행이 커밋된다. 레플리카에서 `status = 'CLOSED'`인 D가 보이면 D 거래일 원장이 더는 추가되지 않는다(`info_mart.md` §3-0). `batch_execution_history`는 이 신호로 쓰지 않는다. 기준일마다 CLOSED 행은 하나이고, 재실행은 멱등 INSERT로 처리한다. 다른 테이블과 FK는 없다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `business_date_cutoff_id` | `BIGINT` | **PK** | X |  | 내부 식별자 (AUTO_INCREMENT) |
+| `base_date` | `DATE` | **UK** | X |  | 마감된 영업일 |
+| `status` | `VARCHAR(10)` | **UK** | X |  | `CLOSED` |
+| `closed_at` | `DATETIME(6)` |  | X |  | 마감 시각(KST, 애플리케이션이 채움) |
+
+| 구분 | 인덱스 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_business_date_cutoff_date_status` | `base_date, status` |
+
+---
+
+## `cob_checkpoint`
+
+> COB 재시작 체크포인트 (#663)
+
+`CobRunnerService`가 새 COB를 시작할 때, 영업일을 넘기기 전에 마감 대상 영업일(`COB_DATE`)의 영업일 전환 행과 등록된 스텝 행을 모두 `PENDING`으로 남기고, 전환과 스텝이 끝날 때마다 `SUCCESS`로 바꾼다. `PENDING`이 남은 `cob_date`가 있으면 다음 `run()`이 오래된 날짜부터 그 날짜의 `PENDING` 스텝만 이어서 실행한다. 행이 없는 스텝(초기화 실패 등)은 재개 대상이 아니다. `batch_execution_history`는 관측용이라 재시작 근거로 쓰지 않고, `business_date_cutoff`는 달력 따라잡기도 기록하므로 `COB_DATE`의 근거가 아니다. 다른 테이블과 FK는 없다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `cob_checkpoint_id` | `BIGINT` | **PK** | X |  | 내부 식별자 (AUTO_INCREMENT) |
+| `cob_date` | `DATE` | **UK** | X |  | 마감 대상 영업일(ADR-0004 `COB_DATE`) |
+| `step_name` | `VARCHAR(100)` | **UK** | X |  | `CobStep.name()`. 영업일 전환은 `business-date-advance` |
+| `status` | `VARCHAR(10)` |  | X |  | `PENDING` / `SUCCESS` |
+| `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각(KST, 애플리케이션이 채움) |
+
+| 구분 | 인덱스 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_cob_checkpoint_date_step` | `cob_date, step_name` |
+
+---
+
+## `holiday`
+
+> 휴일 달력 — 주말을 제외한 공휴일
+
+**주말은 넣지 않는다** — 토·일은 요일로 판정한다. 영업일 = 주말도 아니고 이 테이블에도 없는 날. 시드는 `R__seed_holiday.sql` 이 넣는다 — 운영에도 있어야 하고 대체공휴일·임시공휴일이 추가될 수 있는 마스터성 데이터라 `V__` 가 아니라 `R__` 다. 등록 API 는 2차 범위 밖이다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `holiday_date` | `DATE` | **PK** | X |  | 휴일 날짜 |
+| `holiday_name` | `VARCHAR(50)` |  | X |  | 예: `개천절`, `대체공휴일(추석)` |
+| `created_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |
+| `updated_at` | `DATETIME(6)` |  | X | `CURRENT_TIMESTAMP(6)` |  |

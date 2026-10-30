@@ -10,6 +10,7 @@ env:
   JAVA_DISTRIBUTION: 'corretto'
   DOCKER_IMAGE_NAME: 'corebank-server'
   CONTAINER_NAME: 'corebank-server'
+  MOCK_EXTERNAL_IMAGE_NAME: 'corebank-mock-external'
   SERVER_PORT: '8080'
   AWS_DEFAULT_REGION: 'ap-northeast-2'
 
@@ -47,6 +48,10 @@ jobs:
       - name: Build and test with Gradle
         run: ./gradlew build
 
+      # build에 포함되지 않는 모의 대외기관 실행 jar (타행이체 B 단계 컨테이너용, #697)
+      - name: Build mock external jar
+        run: ./gradlew mockExternalJar
+
       - name: Upload coverage report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -61,6 +66,13 @@ jobs:
         with:
           name: corebank-jar
           path: build/libs/*SNAPSHOT.jar
+          retention-days: 1
+
+      - name: Upload mock external artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mock-external-jar
+          path: build/mock-external/mock-external.jar
           retention-days: 1
 
   # -------------------------------------------------------------------------
@@ -117,6 +129,12 @@ jobs:
           name: corebank-jar
           path: build/libs/
 
+      - name: Download mock external artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mock-external-jar
+          path: build/mock-external/
+
       # Docker Buildx 설정 (멀티 플랫폼 및 GHA 캐시 사용 지원)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -139,6 +157,17 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # 타행이체 모의 대외기관 이미지 (B 단계, #697). 컷오버 뒤에는 같은 이미지를 온프레미스 VM에서 띄운다.
+      - name: Build and push mock external image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.mock-external
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.MOCK_EXTERNAL_IMAGE_NAME }}:latest
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.MOCK_EXTERNAL_IMAGE_NAME }}:${{ github.sha }}
 
       # 0) repo 디버깅 스텝
       - name: Debug OIDC subject
@@ -177,27 +206,28 @@ jobs:
                 - DB_PASSWORD=DB_PASSWORD_PLACEHOLDER
                 - FLYWAY_USER=FLYWAY_USER_PLACEHOLDER
                 - FLYWAY_PASSWORD=FLYWAY_PASSWORD_PLACEHOLDER
-                - REDIS_HOST=corebank-redis
+                # 타행이체 모의 대외기관 (B 단계, #697). 위치는 설정값뿐이라 컷오버 뒤에는 VM 주소로만 바꾼다.
+                - APP_INTERBANK_HOST=mock-external
+                - APP_INTERBANK_PORT=9300
+                # COB 원장 대사 hard 임계 (#663). 불일치가 이 건수를 넘으면 마감이 멈춘다. 릴리스 2의 첫 대사 결과를 본 뒤 낮춘다.
+                - APP_LEDGER_RECONCILIATION_COB_HARD_THRESHOLD=1000
                 - CORS_ALLOWED_ORIGINS=CORS_ALLOWED_ORIGINS_PLACEHOLDER
               healthcheck:
                 test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/api/v1/actuator/health || exit 1"]
                 interval: 10s
                 timeout: 5s
                 retries: 12
-                start_period: 60s
+                start_period: 600s  # 릴리스 1 gl_voucher 마이그레이션(#585)용 임시 상향, 배포 뒤 60s로 복귀 (#629)
               networks:
                 - corebank-net
-              depends_on:
-                corebank-redis:
-                  condition: service_healthy
 
-            # 약관 열람 이력 TTL 저장용 Redis (내부 네트워크 전용, 포트 미노출)
-            corebank-redis:
-              image: redis:7.4
-              container_name: corebank-redis
+            # 타행이체 모의 대외기관 (호스트 포트 미노출, 장애 스위치 9301도 내부 네트워크 전용). 재시작하면 장부가 비워진다.
+            mock-external:
+              image: DOCKER_USERNAME_PLACEHOLDER/MOCK_EXTERNAL_IMAGE_PLACEHOLDER:TAG_PLACEHOLDER
+              container_name: corebank-mock-external
               restart: unless-stopped
               healthcheck:
-                test: ["CMD", "redis-cli", "ping"]
+                test: ["CMD-SHELL", "wget -q --spider http://localhost:9301/health || exit 1"]
                 interval: 5s
                 timeout: 3s
                 retries: 10
@@ -213,6 +243,7 @@ jobs:
           # 환경 변수 및 태그 실제 값으로 치환
           sed -i "s|DOCKER_USERNAME_PLACEHOLDER|${{ secrets.DOCKER_USERNAME }}|g" docker-compose.yml
           sed -i "s|DOCKER_IMAGE_PLACEHOLDER|${{ env.DOCKER_IMAGE_NAME }}|g" docker-compose.yml
+          sed -i "s|MOCK_EXTERNAL_IMAGE_PLACEHOLDER|${{ env.MOCK_EXTERNAL_IMAGE_NAME }}|g" docker-compose.yml
           sed -i "s|TAG_PLACEHOLDER|${{ github.sha }}|g" docker-compose.yml
           sed -i "s|CONTAINER_NAME_PLACEHOLDER|${{ env.CONTAINER_NAME }}|g" docker-compose.yml
           sed -i "s|SERVER_PORT_PLACEHOLDER|${{ env.SERVER_PORT }}|g" docker-compose.yml
@@ -225,7 +256,8 @@ jobs:
 
           # Docker Compose를 이용한 최신 이미지 풀 및 무중단/선언적 배포
           docker compose pull
-          docker compose up -d --remove-orphans --wait --wait-timeout 180
+          # 릴리스 1 gl_voucher 마이그레이션(#585)용 임시 상향, 배포 뒤 180으로 복귀 (#629)
+          docker compose up -d --remove-orphans --wait --wait-timeout 600
           
           # 이전 오래된 도커 이미지 정리 (디스크 용량 확보)
           docker image prune -f || true
@@ -245,10 +277,10 @@ jobs:
             --output text)
 
           # aws ssm wait command-executed는 delay 5 x maxAttempts 20 = 최대 100초만 기다린다.
-          # 실제 배포는 이미지 풀 + `docker compose up --wait-timeout 180`으로 100초를 넘길 수 있어
+          # 실제 배포는 이미지 풀 + `docker compose up --wait-timeout 600`으로 100초를 넘길 수 있어
           # 배포가 성공해도 Job만 실패하는 오탐이 난다. get-command-invocation의 Status를
           # 직접 폴링해 종료 상태까지 기다린다.
-          POLL_DEADLINE=$((SECONDS + 300))
+          POLL_DEADLINE=$((SECONDS + 720))
           STATUS="Pending"
           while :; do
             sleep 5
@@ -258,7 +290,7 @@ jobs:
               --query '{Status:Status,StandardOutput:StandardOutputContent,StandardError:StandardErrorContent}' \
               --output json 2>/dev/null) || {
                 if [ "$SECONDS" -ge "$POLL_DEADLINE" ]; then
-                  echo "::error::SSM command polling exceeded 300s while querying invocation"
+                  echo "::error::SSM command polling exceeded 720s while querying invocation"
                   STATUS="PollTimedOut"
                   break
                 fi
@@ -270,7 +302,7 @@ jobs:
               *) break ;;
             esac
             if [ "$SECONDS" -ge "$POLL_DEADLINE" ]; then
-              echo "::error::SSM command polling exceeded 300s without reaching a terminal status (last status: $STATUS, CommandId: $COMMAND_ID)"
+              echo "::error::SSM command polling exceeded 720s without reaching a terminal status (last status: $STATUS, CommandId: $COMMAND_ID)"
               break
             fi
           done

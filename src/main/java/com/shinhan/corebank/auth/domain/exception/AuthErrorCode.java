@@ -15,6 +15,7 @@ public enum AuthErrorCode implements ErrorCode {
     LOGIN_FAILED("ATH0101", 401, "아이디 또는 비밀번호가 일치하지 않습니다."),
 
     ACCOUNT_LOCKED("ATH0102", 403, "비밀번호 5회 오류로 계정이 잠겼습니다."),
+    ACCOUNT_SUSPENDED("ATH0106", 403, "이용이 정지된 계정입니다. 고객센터로 문의해 주세요."),
 
     USER_NOT_FOUND("ATH0201", 404, "존재하지 않는 사용자입니다."),
     VERIFICATION_REQUEST_NOT_FOUND("ATH0202", 404, "인증 요청을 찾을 수 없습니다.");

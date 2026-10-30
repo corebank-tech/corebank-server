@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.transfer.application.port.out.LockedAccount;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountStatus;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountType;
 import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTransfer;
@@ -337,5 +338,100 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
+    }
+
+    @Test
+    @DisplayName("lockForCredit은 계좌 1개를 잠그고 최신 잔액·상태 스냅샷을 돌려준다")
+    void lockForCredit_returnsLockedSnapshot() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager
+                .createNativeQuery("UPDATE account SET status = 'MATURED' WHERE account_id = 202")
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        LockedAccount locked = adapter.lockForCredit(202L);
+
+        // then
+        assertThat(locked).isEqualTo(new LockedAccount(202L, "110222222222", 100000L, LockedAccountStatus.MATURED));
+    }
+
+    @Test
+    @DisplayName("applyDebit은 잠근 계좌에서 금액을 빼 출금 후 잔액을 돌려주고, 고객 거래라 last_transaction_at을 갱신한다")
+    void applyDebit_subtractsAmount_andUpdatesLastTransactionAt() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        LockedAccount locked = adapter.lockForCredit(101L);
+        LocalDateTime executedAt = LocalDateTime.of(2026, 10, 23, 10, 30, 15);
+
+        // when
+        long balanceAfter = adapter.applyDebit(locked, 30000L, executedAt);
+        entityManager.flush();
+        entityManager.clear();
+
+        // then
+        long balance = ((Number) entityManager
+                        .createNativeQuery("SELECT balance FROM account WHERE account_id = 101")
+                        .getSingleResult())
+                .longValue();
+        LocalDateTime lastTransactionAt = (LocalDateTime) entityManager
+                .createNativeQuery("SELECT last_transaction_at FROM account WHERE account_id = 101")
+                .getSingleResult();
+        assertThat(balanceAfter).isEqualTo(balance);
+        assertThat(balance).isEqualTo(locked.balance() - 30000L);
+        assertThat(lastTransactionAt).isEqualTo(executedAt);
+    }
+
+    @Test
+    @DisplayName("applyCredit은 잠근 계좌에 금액을 더해 입금 후 잔액을 돌려주고, 이자는 고객 거래가 아니라 last_transaction_at은 그대로 둔다")
+    void applyCredit_addsAmount_andKeepsLastTransactionAt() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        LocalDateTime lastCustomerTransactionAt = LocalDateTime.of(2026, 8, 18, 10, 30);
+        entityManager
+                .createNativeQuery("UPDATE account SET last_transaction_at = ?1 WHERE account_id = 202")
+                .setParameter(1, lastCustomerTransactionAt)
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
+        LockedAccount locked = adapter.lockForCredit(202L);
+
+        // when
+        long balanceAfter = adapter.applyCredit(locked, 20000L);
+        entityManager.flush();
+        entityManager.clear();
+
+        // then
+        assertThat(balanceAfter).isEqualTo(120000L);
+        long balance = ((Number) entityManager
+                        .createNativeQuery("SELECT balance FROM account WHERE account_id = 202")
+                        .getSingleResult())
+                .longValue();
+        LocalDateTime lastTransactionAt = (LocalDateTime) entityManager
+                .createNativeQuery("SELECT last_transaction_at FROM account WHERE account_id = 202")
+                .getSingleResult();
+        assertThat(balance).isEqualTo(120000L);
+        assertThat(lastTransactionAt).isEqualTo(lastCustomerTransactionAt);
+    }
+
+    @Test
+    @DisplayName("lockForCredit에 없는 계좌를 넘기면 TRF9001, null이면 REQUIRED_FIELD_MISSING으로 거부한다")
+    void lockForCredit_rejectsMissingAccount() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager.flush();
+        entityManager.clear();
+
+        // when & then
+        assertThatThrownBy(() -> adapter.lockForCredit(999999L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(TransferErrorCode.ACCOUNT_LOCK_TARGET_NOT_FOUND);
+        assertThatThrownBy(() -> adapter.lockForCredit(null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
     }
 }

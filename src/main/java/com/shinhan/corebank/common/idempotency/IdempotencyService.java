@@ -5,6 +5,7 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.Optional;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class IdempotencyService {
 
     private final IdempotencyKeyJpaRepository repository;
+    private final Clock clock;
     private static final String ANONYMOUS_SIGNUP_ENDPOINT = "POST /auth/signup/complete";
     private static final Pattern UUID_V4_PATTERN = Pattern.compile(
             "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", Pattern.CASE_INSENSITIVE);
@@ -42,8 +44,8 @@ public class IdempotencyService {
             try {
                 // saveAndFlush로 즉시 INSERT를 실행해, 동시에 같은 키로 먼저 들어온 요청이 있으면
                 // PK 제약 위반이 이 자리에서 바로 터지게 한다(findById+save 사이 레이스 방지)
-                repository.saveAndFlush(
-                        IdempotencyKeyJpaEntity.start(key, customerId, endpoint, requestHash, LocalDateTime.now()));
+                repository.saveAndFlush(IdempotencyKeyJpaEntity.start(
+                        key, customerId, endpoint, requestHash, LocalDateTime.now(clock)));
                 return IdempotencyResult.proceed();
             } catch (DataIntegrityViolationException e) {
                 // 원인이 둘로 갈린다: (1) 동시에 같은 키로 먼저 INSERT를 마친 요청 -> PK 충돌 -> 처리 중으로 응답

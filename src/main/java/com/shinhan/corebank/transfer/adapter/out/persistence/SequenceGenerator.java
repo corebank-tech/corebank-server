@@ -4,9 +4,9 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 import java.util.Optional;
@@ -36,14 +36,15 @@ public class SequenceGenerator implements TransferSequencePort {
     private static final int MAX_FIRST_INSERT_RACE_RETRIES = 5;
     private static final long BACKOFF_MIN_MILLIS = 10L;
     private static final long BACKOFF_MAX_MILLIS_PER_ATTEMPT = 30L;
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final TransactionSequenceJpaRepository repository;
     private final TransactionTemplate requiresNewTransactionTemplate;
+    private final Clock clock;
 
     public SequenceGenerator(
-            TransactionSequenceJpaRepository repository, PlatformTransactionManager transactionManager) {
+            TransactionSequenceJpaRepository repository, PlatformTransactionManager transactionManager, Clock clock) {
         this.repository = repository;
+        this.clock = clock;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
         this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -101,14 +102,14 @@ public class SequenceGenerator implements TransferSequencePort {
             if (entity.getLastSeq() >= MAX_SEQUENCE) {
                 throw new BusinessException(TransferErrorCode.TRANSACTION_SEQUENCE_EXHAUSTED);
             }
-            return entity.incrementAndGet();
+            return entity.incrementAndGet(LocalDateTime.now(clock));
         }
 
         repository.saveAndFlush(TransactionSequenceJpaEntity.builder()
                 .seqDate(seqDate)
                 .channel(channel)
                 .lastSeq(INITIAL_SEQUENCE)
-                .updatedAt(LocalDateTime.now(KST))
+                .updatedAt(LocalDateTime.now(clock))
                 .build());
         return INITIAL_SEQUENCE;
     }

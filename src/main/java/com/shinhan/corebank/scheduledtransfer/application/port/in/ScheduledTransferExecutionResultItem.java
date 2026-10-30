@@ -1,6 +1,7 @@
 package com.shinhan.corebank.scheduledtransfer.application.port.in;
 
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 // executedAt은 실제 실행(확정)시각(api_conventions.md §6-4) - SUCCESS/FAILED만 채워짐
@@ -15,4 +16,5 @@ public record ScheduledTransferExecutionResultItem(
         String payeeName,
         Long amount,
         String transactionNumber,
+        LocalDate tradeDate,
         String failureReason) {}

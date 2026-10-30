@@ -43,21 +43,24 @@ class AccountDetailQueryServiceTest {
         assertThat(result.balance()).isEqualTo(1_500_000L);
         assertThat(result.availableBalance()).isEqualTo(1_500_000L);
         assertThat(result.asOf().getOffset()).isEqualTo(ZoneOffset.ofHours(9));
+        assertThat(result.maturityDate()).isNull();
         verifyNoInteractions(productQueryUseCase);
     }
 
     @Test
-    @DisplayName("비밀번호 잠금 계좌는 출금 가능 잔액을 0으로 반환한다")
-    void lockedAccountHasNoAvailableBalance() {
+    @DisplayName("비밀번호 잠금 상태에서도 출금가능액은 유지된다")
+    void lockedAccountKeepsAvailableBalance() {
         Account account = account(AccountStatus.ACTIVE, 5, true, null);
+
         given(persistencePort.findByAccountIdAndCustomerId(101L, 1L)).willReturn(Optional.of(account));
 
         AccountDetailResult result = service.getDetail(1L, 101L);
 
-        assertThat(result.accountName()).isEqualTo("입출금통장");
-        assertThat(result.availableBalance()).isZero();
-        assertThat(result.passwordFailureCount()).isEqualTo(5);
+        assertThat(result.balance()).isEqualTo(1_500_000L);
+        assertThat(result.ledgerBalance()).isEqualTo(1_500_000L);
+        assertThat(result.availableBalance()).isEqualTo(1_500_000L);
         assertThat(result.passwordLocked()).isTrue();
+        assertThat(result.passwordFailureCount()).isEqualTo(5);
     }
 
     @Test
@@ -85,6 +88,7 @@ class AccountDetailQueryServiceTest {
 
         // then
         assertThat(result.accountName()).isEqualTo("신한 정기예금");
+        assertThat(result.maturityDate()).isEqualTo(LocalDate.of(2026, 3, 10));
 
         verify(productQueryUseCase).findProductNames(Set.of(20L));
         verify(productQueryUseCase, never()).getDetail(20L);

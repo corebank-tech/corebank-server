@@ -27,6 +27,11 @@ public final class LoginFailedException extends BusinessException {
         return new LoginFailedException(AuthErrorCode.ACCOUNT_LOCKED, null);
     }
 
+    // 비밀번호가 일치한 이용정지 계정 오류를 생성
+    public static LoginFailedException accountSuspended() {
+        return new LoginFailedException(AuthErrorCode.ACCOUNT_SUSPENDED, null);
+    }
+
     // 실패 응답에 포함할 로그인 시도 결과를 반환
     public Optional<LoginAttemptResult> getAttemptResult() {
         return Optional.ofNullable(attemptResult);

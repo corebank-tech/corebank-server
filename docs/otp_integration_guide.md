@@ -2,7 +2,9 @@
 
 ## 1. 목적
 
-OTP 인증이 필요한 업무 모듈은 OTP의 Redis 저장소, JPA Entity 및 내부 Service를 직접 참조하지 않습니다.
+OTP 인증이 필요한 업무 모듈은 OTP의 토큰 저장소, JPA Entity 및 내부 Service를 직접 참조하지 않습니다.
+
+> **토큰 저장소 (#580).** `otpAuthToken`·`accountPasswordAuthToken`은 MySQL `auth_token` 테이블에 토큰 원문 대신 SHA-256 해시로 저장합니다.
 
 각 업무 모듈의 OTP Adapter에서 `otp.api`가 공개한 다음 타입만 사용합니다.
 ```java
@@ -16,7 +18,6 @@ import com.shinhan.corebank.otp.api.OtpTransactionType;
 ```text
 otp.domain.model.OtpAuthTokenPayload
 otp.application.port.out.OtpAuthTokenStorePort
-otp.adapter.out.redis.OtpAuthTokenRedisAdapter
 otp.adapter.out.persistence.*
 ```
 
@@ -115,6 +116,16 @@ otpAuthTokenVerifier.verifyAndConsume(
 - `customerId`: 요청 JSON이 아니라 로그인 세션에서 가져온 고객 PK
 - `transactionType`: 업무에 해당하는 확정 `OtpTransactionType`
 - `transactionData`: 최종 업무 요청에서 구성한 거래 정보
+
+### 복수 인증 토큰을 사용하는 요청의 실패 처리
+
+계좌비밀번호 인증 토큰과 OTP 인증 토큰을 함께 요구하는 업무는 두 토큰을 순차적으로 검증하고 소비합니다. 토큰 소비는 `consumed_at`을 채우는 조건부 `UPDATE`이고, **호출자 트랜잭션에 참여합니다.**
+
+- 업무가 `@Transactional` 안에서 토큰을 소비하고(예: 상품가입) 뒤 단계에서 실패해 롤백되면, 토큰 소비도 함께 롤백됩니다. 클라이언트는 **같은 토큰으로 다시 요청할 수 있습니다** (#498).
+- 업무가 커밋되면 토큰은 다시 쓸 수 없습니다. 같은 토큰으로 동시에 들어온 요청은 행 잠금으로 줄을 서고, 한 건만 성공합니다.
+- 트랜잭션 밖에서 소비하는 업무(예: 즉시이체)는 소비가 바로 커밋됩니다. 그 뒤 실패하면 토큰은 돌아오지 않으므로 인증을 다시 받아야 합니다.
+
+소비된 토큰을 저장소에 **손으로 다시 넣는 보상 처리는 쓰지 않습니다.** 토큰 재사용과 동시성 위험을 만들기 때문입니다. 위의 롤백은 DB 트랜잭션이 소비를 되돌리는 것이라 보상 처리가 아닙니다.
 
 ---
 
@@ -572,7 +583,7 @@ public class WithdrawalAccountOtpVerificationAdapter
 
 ## 7. customerId와 accountId 처리
 
-Redis의 OTP 토큰 payload에는 다음 정보가 저장됩니다.
+OTP 토큰 payload에는 다음 정보가 저장됩니다.
 
 ```java
 public record OtpAuthTokenPayload(
@@ -588,11 +599,11 @@ public record OtpAuthTokenPayload(
 
 ```text
 호출자가 전달한 세션 customerId
-= Redis payload.customerId
+= 토큰 payload.customerId
 = verification_request.customer_id
 ```
 
-계좌 단위 거래에서 필요한 `accountId`는 Redis payload에 추가하지 않고 `transactionData`에 포함합니다.
+계좌 단위 거래에서 필요한 `accountId`는 토큰 payload에 추가하지 않고 `transactionData`에 포함합니다.
 
 ```java
 Map.of(

@@ -36,6 +36,7 @@ class ProductSubscriptionMapperTest {
         assertThat(domain.getOpenedDate()).isEqualTo(entity.getOpenedDate());
         assertThat(domain.getMaturityDate()).isEqualTo(entity.getMaturityDate());
         assertThat(domain.getSubscribedAt()).isEqualTo(entity.getSubscribedAt());
+        assertThat(domain.getSubscriptionTradeDate()).isEqualTo(entity.getSubscriptionTradeDate());
     }
 
     @Test
@@ -63,5 +64,6 @@ class ProductSubscriptionMapperTest {
         assertThat(entity.getOpenedDate()).isEqualTo(domain.getOpenedDate());
         assertThat(entity.getMaturityDate()).isEqualTo(domain.getMaturityDate());
         assertThat(entity.getSubscribedAt()).isEqualTo(domain.getSubscribedAt());
+        assertThat(entity.getSubscriptionTradeDate()).isEqualTo(domain.getSubscriptionTradeDate());
     }
 }

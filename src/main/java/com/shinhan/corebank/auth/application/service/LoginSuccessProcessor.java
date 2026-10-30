@@ -4,6 +4,7 @@ import com.shinhan.corebank.auth.application.port.out.LoginCustomerPort;
 import com.shinhan.corebank.auth.application.port.out.LoginSuccessUpdateResult;
 import com.shinhan.corebank.auth.application.port.out.RecordLoginAuditPort;
 import com.shinhan.corebank.auth.domain.model.LoginAuditReason;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
@@ -19,18 +20,19 @@ public class LoginSuccessProcessor {
     private final RecordLoginAuditPort recordLoginAuditPort;
 
     @Transactional
-    public LoginSuccessUpdateResult process(Long customerId, LocalDateTime loginAt, String requestIp) {
+    public LoginSuccessUpdateResult process(
+            Long customerId, LocalDateTime loginAt, String requestIp, CustomerRole role, CustomerRole requiredRole) {
         Objects.requireNonNull(customerId, "customerId must not be null");
         Objects.requireNonNull(loginAt, "loginAt must not be null");
         Objects.requireNonNull(requestIp, "requestIp must not be null");
 
         LoginSuccessUpdateResult updateResult = loginCustomerPort.recordLoginSuccess(customerId, loginAt, requestIp);
 
-        if (updateResult == LoginSuccessUpdateResult.ACCOUNT_LOCKED) {
+        if (updateResult != LoginSuccessUpdateResult.COMPLETED) {
             return updateResult;
         }
 
-        recordLoginAuditPort.record(customerId, requestIp, true, LoginAuditReason.SUCCESS);
+        recordLoginAuditPort.record(customerId, requestIp, true, LoginAuditReason.SUCCESS, role, requiredRole);
 
         return LoginSuccessUpdateResult.COMPLETED;
     }

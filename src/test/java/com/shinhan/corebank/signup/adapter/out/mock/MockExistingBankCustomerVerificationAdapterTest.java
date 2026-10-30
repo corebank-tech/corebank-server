@@ -13,6 +13,8 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 // Mock 은행 원장의 정보 검증과 연속 실패 거래정지를 검증한다.
@@ -75,6 +77,31 @@ class MockExistingBankCustomerVerificationAdapterTest {
 
         // 다른 고객의 계좌번호로는 실명이 일치해도 인증되지 않는다.
         assertInformationMismatch(adapter.verify("김영희", "850505", ACCOUNT_NUMBER, CORRECT_PASSWORD));
+    }
+
+    @ParameterizedTest(name = "{0} {1} {2} → {3}")
+    @CsvSource({
+        "박서연, 950101, 110900000001, BANK_CUSTOMER_101",
+        "최민준, 950202, 110900000002, BANK_CUSTOMER_102",
+        "정하은, 950303, 110900000003, BANK_CUSTOMER_103",
+        "강도윤, 950404, 110900000004, BANK_CUSTOMER_104",
+        "윤지우, 950505, 110900000005, BANK_CUSTOMER_105",
+        "임서준, 950606, 110900000006, BANK_CUSTOMER_106"
+    })
+    @DisplayName("UAT 고객 6명은 각자 계좌로 인증되고, 계좌 잔액은 COB 대사가 깨지지 않도록 0원이다")
+    void uatCustomersVerifyWithZeroBalanceAccounts(
+            String userName, String birthDate, String accountNumber, String existingBankCustomerId) {
+        ExistingBankAccountVerification result = adapter.verify(userName, birthDate, accountNumber, CORRECT_PASSWORD);
+
+        assertThat(result.status()).isEqualTo(ExistingBankAccountVerificationStatus.VERIFIED);
+        assertThat(result.existingBankCustomerId()).isEqualTo(existingBankCustomerId);
+        assertThat(adapter.findAllByCustomerId(existingBankCustomerId))
+                .singleElement()
+                .satisfies(account -> {
+                    assertThat(account.accountNumber()).isEqualTo(accountNumber);
+                    assertThat(account.balance()).isZero();
+                    assertThat(account.status()).isEqualTo("ACTIVE");
+                });
     }
 
     @Test

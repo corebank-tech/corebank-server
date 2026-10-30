@@ -9,6 +9,7 @@ import com.shinhan.corebank.auth.application.port.out.LoginSuccessUpdateResult;
 import com.shinhan.corebank.auth.domain.model.LoginCustomer;
 import com.shinhan.corebank.customer.api.CustomerAuthenticationData;
 import com.shinhan.corebank.customer.api.CustomerAuthenticationFacade;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import com.shinhan.corebank.customer.api.LoginFailureState;
 import com.shinhan.corebank.customer.api.LoginSuccessState;
 import com.shinhan.corebank.customer.api.RecordLoginFailureCommand;
@@ -41,7 +42,8 @@ class CustomerLoginAdapterTest {
     @Test
     @DisplayName("로그인 아이디로 LoginCustomer를 조회한다")
     void findByUserId() {
-        CustomerAuthenticationData data = new CustomerAuthenticationData(1L, "user01", "passwordHash", "홍길동", 2, false);
+        CustomerAuthenticationData data =
+                new CustomerAuthenticationData(1L, "user01", "passwordHash", "홍길동", 2, false, CustomerRole.CUSTOMER);
 
         given(customerAuthenticationFacade.findByUserId("user01")).willReturn(Optional.of(data));
 
@@ -107,5 +109,18 @@ class CustomerLoginAdapterTest {
         LoginSuccessUpdateResult result = adapter.recordLoginSuccess(1L, loginAt, "192.168.0.10");
 
         assertThat(result).isEqualTo(LoginSuccessUpdateResult.ACCOUNT_LOCKED);
+    }
+
+    @Test
+    @DisplayName("로그인 성공 처리 중 이용정지 결과를 변환한다")
+    void recordLoginSuccessAccountSuspended() {
+        LocalDateTime loginAt = LocalDateTime.of(2026, 8, 12, 10, 0);
+        RecordLoginSuccessCommand command = new RecordLoginSuccessCommand(1L, loginAt, "192.168.0.10");
+        given(customerAuthenticationFacade.updateLoginSuccessState(command))
+                .willReturn(LoginSuccessState.ACCOUNT_SUSPENDED);
+
+        LoginSuccessUpdateResult result = adapter.recordLoginSuccess(1L, loginAt, "192.168.0.10");
+
+        assertThat(result).isEqualTo(LoginSuccessUpdateResult.ACCOUNT_SUSPENDED);
     }
 }

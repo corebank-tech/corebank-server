@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-@Profile({"local", "qa-seed"})
+@Profile("!phase2-seed & (local | qa-seed)")
 public class DemoDataLoader implements ApplicationRunner {
 
     private final DataSource dataSource;

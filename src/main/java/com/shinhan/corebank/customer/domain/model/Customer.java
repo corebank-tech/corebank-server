@@ -1,5 +1,6 @@
 package com.shinhan.corebank.customer.domain.model;
 
+import com.shinhan.corebank.customer.api.CustomerRole;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.time.LocalDate;
@@ -26,6 +27,8 @@ public class Customer {
     private String phoneNumber;
     private int loginFailureCount;
     private boolean accountLocked;
+    private CustomerStatus status;
+    private final CustomerRole role;
     private LocalDateTime lastLoginAt;
     private String lastLoginIp;
     private LocalDateTime previousLoginAt;
@@ -55,6 +58,8 @@ public class Customer {
                 phoneNumber,
                 0,
                 false,
+                CustomerStatus.ACTIVE,
+                CustomerRole.CUSTOMER,
                 null,
                 null,
                 null,
@@ -76,6 +81,8 @@ public class Customer {
             String phoneNumber,
             int loginFailureCount,
             boolean accountLocked,
+            CustomerStatus status,
+            CustomerRole role,
             LocalDateTime lastLoginAt,
             String lastLoginIp,
             LocalDateTime previousLoginAt,
@@ -84,6 +91,7 @@ public class Customer {
             LocalDateTime createdAt,
             LocalDateTime updatedAt) {
         validateLoginState(loginFailureCount, accountLocked);
+        validateStatus(status);
 
         return new Customer(
                 customerId,
@@ -96,6 +104,8 @@ public class Customer {
                 phoneNumber,
                 loginFailureCount,
                 accountLocked,
+                status,
+                role,
                 lastLoginAt,
                 lastLoginIp,
                 previousLoginAt,
@@ -164,6 +174,29 @@ public class Customer {
         this.loginFailureCount = 0;
     }
 
+    // 관리자 수동 잠금 해제(REQ-AUTH-026). 실패 횟수도 0으로 되돌린다(REQ-AUTH-035).
+    public void unlockByAdmin() {
+        this.accountLocked = false;
+        this.loginFailureCount = 0;
+    }
+
+    // 관리자 비밀번호 초기화. 고객 셀프 재설정과 달리 잠금까지 해제해 바로 로그인할 수 있게 한다.
+    public void resetPasswordByAdmin(String passwordHash, LocalDateTime changedAt) {
+        resetPassword(passwordHash, changedAt);
+        unlockByAdmin();
+    }
+
+    // 관리자 계정 상태 변경(#450). 잠금·실패 횟수는 건드리지 않는다.
+    public void changeStatusByAdmin(CustomerStatus status) {
+        validateStatus(status);
+        this.status = status;
+    }
+
+    // 이용정지 여부. 정지 계정은 비밀번호가 맞아도 로그인할 수 없다.
+    public boolean isSuspended() {
+        return status == CustomerStatus.SUSPENDED;
+    }
+
     private static boolean isValidIpAddress(String loginIp) {
         return isValidIpv4Address(loginIp) || isValidIpv6Address(loginIp);
     }
@@ -215,6 +248,12 @@ public class Customer {
             return true;
         } catch (UnknownHostException exception) {
             return false;
+        }
+    }
+
+    private static void validateStatus(CustomerStatus status) {
+        if (status == null) {
+            throw new IllegalArgumentException("계정 상태는 필수입니다.");
         }
     }
 

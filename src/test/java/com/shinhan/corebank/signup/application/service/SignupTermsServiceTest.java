@@ -19,6 +19,7 @@ import com.shinhan.corebank.signup.config.SignupTokenProperties;
 import com.shinhan.corebank.signup.domain.exception.SignupErrorCode;
 import com.shinhan.corebank.signup.domain.model.SignupTerm;
 import com.shinhan.corebank.signup.domain.model.TermsAuthTokenPayload;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,7 +70,8 @@ class SignupTermsServiceTest {
                         Duration.ofMinutes(3),
                         Duration.ofMinutes(30),
                         Duration.ofMinutes(10),
-                        Duration.ofMinutes(30)));
+                        Duration.ofMinutes(30)),
+                Clock.systemDefaultZone());
 
         given(signupTermsQueryPort.findLatestSignupTerms()).willReturn(CURRENT_TERMS);
     }
@@ -176,7 +178,7 @@ class SignupTermsServiceTest {
     }
 
     @Test
-    @DisplayName("검증 실패 시 토큰을 생성하거나 Redis에 저장하지 않는다")
+    @DisplayName("검증 실패 시 토큰을 생성하거나 저장하지 않는다")
     void doesNotIssueTokenWhenValidationFails() {
         assertThatThrownBy(() -> signupTermsService.checkTermsAgreement(
                         command(agreement("1", "v1.0", true, true), agreement("2", "v1.0", false, true))))

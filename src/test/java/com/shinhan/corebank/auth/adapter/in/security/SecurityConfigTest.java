@@ -14,8 +14,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.customer.api.AdminPermission;
 import jakarta.servlet.http.Cookie;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -31,11 +34,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = SecurityTestController.class)
-@TestPropertySource(
-        properties = {
-            "app.security.cors.allowed-origins=http://localhost:5173,https://www.corebank.cloud",
-            "app.security.admin.bootstrap-customer-ids=7"
-        })
+@TestPropertySource(properties = {"app.security.cors.allowed-origins=http://localhost:5173,https://www.corebank.cloud"})
 @Import({
     SecurityTestController.class,
     SecurityConfig.class,
@@ -74,7 +73,7 @@ class SecurityConfigTest {
                         .header(
                                 HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
                                 "content-type,x-xsrf-token,idempotency-key,"
-                                        + "account-password-auth-token,otp-auth-token"))
+                                        + "account-password-auth-token,otp-auth-token,x-access-reason"))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://www.corebank.cloud"))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
@@ -84,6 +83,7 @@ class SecurityConfigTest {
                     assertThat(allowedHeaders).containsIgnoringCase("Idempotency-Key");
                     assertThat(allowedHeaders).containsIgnoringCase("Account-Password-Auth-Token");
                     assertThat(allowedHeaders).containsIgnoringCase("Otp-Auth-Token");
+                    assertThat(allowedHeaders).containsIgnoringCase("X-Access-Reason");
                 });
     }
 
@@ -278,27 +278,100 @@ class SecurityConfigTest {
     @Test
     @DisplayName("관리자 API는 세션이 없으면 401 CMN0101을 반환한다")
     void rejectsAdminApiWithoutSession() throws Exception {
-        mockMvc.perform(get("/api/v1/admin/test").contextPath("/api/v1"))
+        mockMvc.perform(get("/api/v1/admin/customers/test").contextPath("/api/v1"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("CMN0101"));
     }
 
     // CSRF 실패도 403 CMN0102라서 원인을 섞지 않으려고 GET으로 검증한다.
     @Test
-    @DisplayName("관리자 API는 허용 목록 밖의 고객이면 403 CMN0102를 반환한다")
-    void rejectsAdminApiForCustomerOutsideAllowlist() throws Exception {
-        mockMvc.perform(get("/api/v1/admin/test").contextPath("/api/v1").with(authentication(customer(8L))))
+    @DisplayName("관리자 API는 고객 계정이면 403 CMN0102를 반환한다")
+    void rejectsAdminApiForCustomer() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/customers/test")
+                        .contextPath("/api/v1")
+                        .with(authentication(customer(8L))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CMN0102"))
                 .andExpect(jsonPath("$.data").value((Object) null));
     }
 
     @Test
-    @DisplayName("관리자 API는 허용 목록의 고객이면 통과한다")
-    void permitsAdminApiForCustomerInAllowlist() throws Exception {
-        mockMvc.perform(get("/api/v1/admin/test").contextPath("/api/v1").with(authentication(customer(7L))))
+    @DisplayName("관리자 API는 권한을 가진 관리자면 통과한다")
+    void permitsAdminApiForAdminWithPermission() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/customers/test")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.CUSTOMER_READ))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").value("admin"));
+    }
+
+    // ②의 DoD — 조회 권한만 가진 관리자는 같은 경로의 변경 요청에서 막힌다.
+    @Test
+    @DisplayName("조회 권한만 있는 관리자는 변경 요청에서 403 CMN0102를 반환한다")
+    void rejectsWriteForReadOnlyAdmin() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/customers/test")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.CUSTOMER_READ)))
+                        .with(csrf()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CMN0102"));
+    }
+
+    @Test
+    @DisplayName("관리자 API는 권한이 없으면 403 CMN0102를 반환한다")
+    void rejectsAdminApiWithoutPermission() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/customers/test")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CMN0102"));
+    }
+
+    @Test
+    @DisplayName("권한 매핑이 없는 관리자 경로는 권한을 가졌어도 403이다")
+    void rejectsUnmappedAdminPath() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/unmapped/test")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.values()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CMN0102"));
+    }
+
+    // 조회 전용 경로는 GET 규칙만 두었으므로 변경 요청이 맨 아래 denyAll 로 떨어진다.
+    // 핸들러가 이 슬라이스에 없어도 인가가 필터에서 먼저 판정하므로 403 이다.
+    @ParameterizedTest(name = "{0} 의 변경 요청은 403")
+    @ValueSource(strings = {"/admin/trial-balance", "/admin/ledger-reconciliation/mismatches"})
+    @DisplayName("조회 전용 경로는 권한을 가진 관리자의 변경 요청도 403 CMN0102를 반환한다")
+    void rejectsWriteOnReadOnlyPath(String path) throws Exception {
+        mockMvc.perform(post("/api/v1" + path)
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.values())))
+                        .with(csrf()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CMN0102"));
+    }
+
+    @Test
+    @DisplayName("관리자 로그인 경로는 세션 없이도 인가를 통과한다")
+    void permitsAdminLoginWithoutSession() throws Exception {
+        // 인가만 본다 — 이 슬라이스에 AdminLoginController 가 없어 404 가 나지만,
+        // 401·403 이 아니라는 것은 permitAll 과 CSRF 예외가 /admin/** 보다 앞에 걸렸다는 뜻이다.
+        mockMvc.perform(post("/api/v1/admin/auth/login").contextPath("/api/v1")).andExpect(result -> {
+            int status = result.getResponse().getStatus();
+            assertThat(status).isNotIn(401, 403);
+        });
+    }
+
+    // 로그인 때 실린 세션 권한을 흉내 낸다 — SessionLoginManager 가 ROLE_ADMIN 과 권한 이름을 함께 싣는다.
+    private UsernamePasswordAuthenticationToken admin(Long customerId, AdminPermission... permissions) {
+        List<String> authorities = Stream.concat(
+                        Stream.of("ROLE_ADMIN"), Stream.of(permissions).map(AdminPermission::name))
+                .toList();
+
+        return UsernamePasswordAuthenticationToken.authenticated(
+                new AuthenticatedCustomer(customerId, "admin" + customerId, "관리자"),
+                null,
+                AuthorityUtils.createAuthorityList(authorities));
     }
 
     private UsernamePasswordAuthenticationToken customer(Long customerId) {

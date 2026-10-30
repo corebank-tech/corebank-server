@@ -6,7 +6,10 @@ import com.shinhan.corebank.common.exception.ErrorCode;
 public enum CustomerErrorCode implements ErrorCode {
     INVALID_PHONE_NUMBER("MYP0001", 400, "휴대폰 번호 형식이 올바르지 않습니다."),
 
-    DUPLICATE_EMAIL("ATH0302", 409, "이미 가입된 이메일입니다.");
+    DUPLICATE_EMAIL("ATH0302", 409, "이미 가입된 이메일입니다."),
+
+    // 관리자 고객 계정 운영(#449)의 대상 고객 없음. auth의 USER_NOT_FOUND와 같은 코드를 던진다(§3-2).
+    CUSTOMER_NOT_FOUND("ATH0201", 404, "존재하지 않는 사용자입니다.");
 
     private final String code;
     private final int status;

@@ -14,6 +14,7 @@ public final class AccountMapper {
                 .productId(domain.getProductId())
                 .accountType(domain.getAccountType())
                 .balance(domain.getBalance())
+                .holdAmount(domain.getHoldAmount())
                 .status(domain.getStatus())
                 .passwordHash(domain.getPasswordHash())
                 .passwordFailureCount((byte) domain.getPasswordFailureCount())
@@ -25,6 +26,7 @@ public final class AccountMapper {
                 .openedDate(domain.getOpenedDate())
                 .maturityDate(domain.getMaturityDate())
                 .closedDate(domain.getClosedDate())
+                .closedTradeDate(domain.getClosedTradeDate())
                 .lastTransactionAt(domain.getLastTransactionAt())
                 .version(domain.getVersion())
                 .build();
@@ -38,6 +40,7 @@ public final class AccountMapper {
                 entity.getProductId(),
                 entity.getAccountType(),
                 entity.getBalance(),
+                entity.getHoldAmount(),
                 entity.getStatus(),
                 entity.getPasswordHash(),
                 entity.getPasswordFailureCount(),
@@ -49,6 +52,7 @@ public final class AccountMapper {
                 entity.getOpenedDate(),
                 entity.getMaturityDate(),
                 entity.getClosedDate(),
+                entity.getClosedTradeDate(),
                 entity.getLastTransactionAt(),
                 entity.getVersion(),
                 entity.getCreatedAt(),

@@ -6,8 +6,7 @@ import com.shinhan.corebank.autotransfer.application.port.in.*;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-import com.shinhan.corebank.common.idempotency.IdempotencyResult;
-import com.shinhan.corebank.common.idempotency.IdempotencyService;
+import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.common.response.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,15 +19,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("/auto-transfers")
@@ -36,8 +31,7 @@ import tools.jackson.databind.ObjectMapper;
 @Tag(name = "자동이체", description = "자동이체 등록·조회·변경·해지 및 처리결과 조회 API")
 public class AutoTransferController {
     private final AutoTransferRegisterUseCase autoTransferRegisterUseCase;
-    private final IdempotencyService idempotencyService;
-    private final ObjectMapper objectMapper;
+    private final IdempotentRequestExecutor idempotentRequestExecutor;
     private final AutoTransferQueryUseCase autoTransferQueryUseCase;
     private final AutoTransferChangeUseCase autoTransferChangeUseCase;
     private final AutoTransferCancelUseCase autoTransferCancelUseCase;
@@ -85,7 +79,7 @@ public class AutoTransferController {
             HttpServletRequest httpRequest) {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         String requestIp = httpRequest.getRemoteAddr();
-        return withIdempotency(
+        return idempotentRequestExecutor.execute(
                 idempotencyKey,
                 customerId,
                 "POST /auto-transfers",
@@ -137,7 +131,7 @@ public class AutoTransferController {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         String requestIp = httpRequest.getRemoteAddr();
         String endpoint = "PATCH /auto-transfers/" + autoTransferId;
-        return withIdempotency(
+        return idempotentRequestExecutor.execute(
                 idempotencyKey,
                 customerId,
                 endpoint,
@@ -212,7 +206,7 @@ public class AutoTransferController {
                 .requestIp(requestIp)
                 .build();
 
-        return withIdempotency(
+        return idempotentRequestExecutor.execute(
                 idempotencyKey,
                 customerId,
                 "POST /auto-transfers/cancel",
@@ -270,34 +264,6 @@ public class AutoTransferController {
         }
     }
 
-    // 멱등키 처리 5단계(시작 → 재생-또는-진행 → 실행 → 완료 → 실패 시 예약 해제)를 한 곳에 모은 공용 헬퍼.
-    // register/change/cancel 전부 이 흐름을 그대로 재사용한다.
-    private <T> ResponseEntity<ApiResponse<T>> withIdempotency(
-            String idempotencyKey,
-            Long customerId,
-            String endpoint,
-            Object fingerprint,
-            TypeReference<ApiResponse<T>> responseType,
-            Supplier<ApiResponse<T>> action) {
-        IdempotencyResult idempotencyResult =
-                idempotencyService.begin(idempotencyKey, customerId, endpoint, toJson(fingerprint));
-        if (idempotencyResult.replay()) {
-            return ResponseEntity.status(idempotencyResult.httpStatus())
-                    .body(fromJson(idempotencyResult.responseSnapshot(), responseType));
-        }
-        ApiResponse<T> response;
-        try {
-            response = action.get();
-        } catch (RuntimeException e) {
-            // action() 자체가 실패했을 때만 예약을 해제한다 — 이미 성공한 뒤(complete() 등)에서 실패하면 여기서 release()를 타면 안 된다.
-            // 그러면 이미 커밋된 작업인데 같은 Idempotency-Key로 재시도 시 새로 처리(중복 실행)돼 버린다.
-            idempotencyService.release(idempotencyKey);
-            throw e;
-        }
-        idempotencyService.complete(idempotencyKey, (short) HttpStatus.OK.value(), toJson(response));
-        return ResponseEntity.ok(response);
-    }
-
     // 멱등키 해시는 인증 토큰을 제외한 지문으로 계산한다(request_hash 컬럼 코멘트 참고) —
     // OTP·계좌비밀번호 인증 토큰을 재발급받아 재시도해도 같은 요청으로 인식되도록
     private Map<String, Object> fingerprint(AutoTransferRegisterRequest request) {
@@ -336,24 +302,6 @@ public class AutoTransferController {
         fingerprint.put("customerId", command.customerId());
         fingerprint.put("autoTransferIds", command.autoTransferIds());
         return fingerprint;
-    }
-
-    // 멱등키 시작·완료 시점에 요청/응답 저장
-    private String toJson(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JacksonException e) {
-            throw new IllegalStateException("요청/응답을 JSON으로 직렬화하지 못했습니다.", e);
-        }
-    }
-
-    // 재요청 시 저장된 응답 스냅샷을 그대로 복원
-    private <T> T fromJson(String json, TypeReference<T> type) {
-        try {
-            return objectMapper.readValue(json, type);
-        } catch (JacksonException e) {
-            throw new IllegalStateException("저장된 응답을 역직렬화하지 못했습니다.", e);
-        }
     }
 
     // 결과조회

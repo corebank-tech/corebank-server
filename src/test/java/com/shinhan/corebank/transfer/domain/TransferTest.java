@@ -19,6 +19,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 @DisplayName("Transfer 도메인 단위 테스트")
 class TransferTest {
 
+    private static final LocalDate TRADE_DATE = LocalDate.of(2026, 8, 12);
+
     private static Transfer newProcessingTransfer() {
         return Transfer.create(
                 "20260809WB0000000001",
@@ -35,7 +37,8 @@ class TransferTest {
                 null,
                 "출금메모",
                 "입금메모",
-                LocalDateTime.of(2026, 8, 9, 12, 0, 0));
+                LocalDateTime.of(2026, 8, 9, 12, 0, 0),
+                TRADE_DATE);
     }
 
     @Nested
@@ -73,7 +76,8 @@ class TransferTest {
                     null,
                     "출금메모",
                     "입금메모",
-                    now);
+                    now,
+                    TRADE_DATE);
 
             // then
             assertThat(transfer).isNotNull();
@@ -84,6 +88,32 @@ class TransferTest {
             assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
             assertThat(transfer.getCreatedAt()).isEqualTo(now);
             assertThat(transfer.getTransferredAt()).isEqualTo(now);
+            assertThat(transfer.getTradeDate()).isEqualTo(TRADE_DATE);
+        }
+
+        @Test
+        @DisplayName("거래일(tradeDate)이 null이면 BusinessException(REQUIRED_FIELD_MISSING) 예외가 발생한다")
+        void throwsExceptionWhenTradeDateIsNull() {
+            assertThatThrownBy(() -> Transfer.create(
+                            "20260809WB0000000001",
+                            101L,
+                            202L,
+                            "110222222222",
+                            "성춘향",
+                            10000L,
+                            0L,
+                            TransferType.IMMEDIATE,
+                            TransferChannel.WB,
+                            null,
+                            null,
+                            null,
+                            "출금메모",
+                            "입금메모",
+                            LocalDateTime.now(),
+                            null))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
 
         @Test
@@ -109,7 +139,8 @@ class TransferTest {
                     executionDate,
                     "출금메모",
                     "입금메모",
-                    now);
+                    now,
+                    TRADE_DATE);
 
             // then
             assertThat(transfer.getExecutionDate()).isEqualTo(executionDate);
@@ -138,7 +169,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(TransferErrorCode.INVALID_AMOUNT);
@@ -167,7 +199,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.INVALID_INPUT);
@@ -195,7 +228,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -223,7 +257,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -251,7 +286,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(TransferErrorCode.SAME_ACCOUNT_TRANSFER);
@@ -281,7 +317,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -311,7 +348,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -341,7 +379,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -369,7 +408,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -397,7 +437,8 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            now))
+                            now,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -422,10 +463,165 @@ class TransferTest {
                             null,
                             "출금메모",
                             "입금메모",
-                            null))
+                            null,
+                            TRADE_DATE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+    }
+
+    @Nested
+    @DisplayName("createInterbank 타행 이체 팩토리")
+    class CreateInterbankTest {
+
+        private Transfer createInterbank(String payeeBankCode, String depositAccountNumber) {
+            return Transfer.createInterbank(
+                    "20261023WB0000000123",
+                    101L,
+                    payeeBankCode,
+                    depositAccountNumber,
+                    50000L,
+                    0L,
+                    TransferChannel.WB,
+                    "생활비",
+                    "홍길동",
+                    LocalDateTime.of(2026, 10, 23, 10, 30, 15),
+                    TRADE_DATE);
+        }
+
+        @Test
+        @DisplayName("입금계좌 ID와 예금주 없이 은행코드를 가진 PROCESSING 즉시이체로 생성된다")
+        void createsInterbankTransferWithoutDepositAccountIdAndPayeeName() {
+            Transfer transfer = createInterbank("004", "1234567890123456");
+
+            assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.PROCESSING);
+            assertThat(transfer.getPayeeBankCode()).isEqualTo("004");
+            assertThat(transfer.getDepositAccountNumber()).isEqualTo("1234567890123456");
+            assertThat(transfer.getDepositAccountId()).isNull();
+            assertThat(transfer.getPayeeName()).isNull();
+            assertThat(transfer.getTransferType()).isEqualTo(TransferType.IMMEDIATE);
+            assertThat(transfer.getSourceType()).isNull();
+            assertThat(transfer.getTradeDate()).isEqualTo(TRADE_DATE);
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {" "})
+        @DisplayName("은행코드가 비어 있으면 REQUIRED_FIELD_MISSING")
+        void rejectsBlankBankCode(String payeeBankCode) {
+            assertThatThrownBy(() -> createInterbank(payeeBankCode, "1234567890123"))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        @Test
+        @DisplayName("금액이 0이면 INVALID_AMOUNT")
+        void rejectsZeroAmount() {
+            assertThatThrownBy(() -> Transfer.createInterbank(
+                            "20261023WB0000000123",
+                            101L,
+                            "004",
+                            "1234567890123",
+                            0L,
+                            0L,
+                            TransferChannel.WB,
+                            null,
+                            null,
+                            LocalDateTime.of(2026, 10, 23, 10, 30, 15),
+                            TRADE_DATE))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_AMOUNT);
+        }
+    }
+
+    @Nested
+    @DisplayName("타행 처리 불명 확정 (settleApproved · settleFailed)")
+    class SettleInterbankTest {
+
+        private final LocalDateTime createdAt = LocalDateTime.of(2026, 10, 23, 10, 30, 15);
+
+        private Transfer timedOutInterbank() {
+            Transfer transfer = Transfer.createInterbank(
+                    "20261023WB0000000123",
+                    101L,
+                    "004",
+                    "1234567890123",
+                    50000L,
+                    0L,
+                    TransferChannel.WB,
+                    null,
+                    "홍길동",
+                    createdAt,
+                    TRADE_DATE);
+            transfer.timeout();
+            return transfer;
+        }
+
+        @Test
+        @DisplayName("TIMEOUT 타행 건을 성공으로 확정하면 예금주·출금 후 잔액·확정 시각이 채워진다")
+        void settleApproved_fillsPayeeAndBalance() {
+            Transfer transfer = timedOutInterbank();
+            LocalDateTime settledAt = createdAt.plusSeconds(1);
+
+            transfer.settleApproved("김민수", 950000L, settledAt);
+
+            assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(transfer.getPayeeName()).isEqualTo("김민수");
+            assertThat(transfer.getWithdrawalBalanceAfter()).isEqualTo(950000L);
+            assertThat(transfer.getTransferredAt()).isEqualTo(settledAt);
+            assertThat(transfer.isUnsettledInterbank()).isFalse();
+        }
+
+        @Test
+        @DisplayName("TIMEOUT 타행 건을 실패로 확정하면 예금주 없이 오류코드가 남는다")
+        void settleFailed_keepsPayeeEmpty() {
+            Transfer transfer = timedOutInterbank();
+
+            transfer.settleFailed("TRF0201", "입금계좌를 찾을 수 없습니다.");
+
+            assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(transfer.getErrorCode()).isEqualTo("TRF0201");
+            assertThat(transfer.getPayeeName()).isNull();
+        }
+
+        @Test
+        @DisplayName("이미 확정된 건은 다시 확정할 수 없다 — 조회거래가 두 번 와도 상태가 바뀌지 않는다")
+        void settleTwice_rejected() {
+            Transfer transfer = timedOutInterbank();
+            transfer.settleApproved("김민수", 950000L, createdAt.plusSeconds(1));
+
+            assertThatThrownBy(() -> transfer.settleFailed("TRF0308", "상대 은행에서 이체를 처리하지 못했습니다."))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
+            assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
+        }
+
+        @Test
+        @DisplayName("성공으로 확정된 타행 건도 정정 체인으로 무효화할 수 없다 — 받은 계좌가 당행에 없다")
+        void settledInterbank_notInvalidatable() {
+            Transfer transfer = timedOutInterbank();
+            transfer.settleApproved("김민수", 950000L, createdAt.plusSeconds(1));
+
+            assertThatThrownBy(() -> transfer.invalidate(createdAt.plusDays(1)))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+        }
+
+        @Test
+        @DisplayName("당행 TIMEOUT 건은 타행 확정 대상이 아니다")
+        void domesticTimeout_notSettleable() {
+            Transfer transfer = newProcessingTransfer();
+            transfer.timeout();
+
+            assertThatThrownBy(() -> transfer.settleApproved("성춘향", 0L, createdAt))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
         }
     }
 
@@ -453,7 +649,8 @@ class TransferTest {
                     null,
                     "출금메모",
                     "입금메모",
-                    createdAt);
+                    createdAt,
+                    TRADE_DATE);
 
             LocalDateTime completedAt = createdAt.plusSeconds(5);
 
@@ -540,6 +737,193 @@ class TransferTest {
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
+        }
+
+        @Test
+        @DisplayName("처리 중 이체를 timeout() 처리하면 TIMEOUT이 되고 실패 정보는 비어 있다")
+        void timesOutProcessingTransfer() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+
+            // when
+            transfer.timeout();
+
+            // then
+            assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.TIMEOUT);
+            assertThat(transfer.getErrorCode()).isNull();
+            assertThat(transfer.getErrorMessage()).isNull();
+        }
+
+        @Test
+        @DisplayName("TIMEOUT 이체를 complete()하면 BusinessException(INVALID_STATUS_TRANSITION) — 확정은 조회거래로만 한다")
+        void throwsExceptionWhenCompletingTimedOutTransfer() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.timeout();
+
+            // when & then
+            assertThatThrownBy(() -> transfer.complete(90000L, LocalDateTime.now()))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
+        }
+
+        @Test
+        @DisplayName("TIMEOUT 이체를 fail()하면 BusinessException(INVALID_STATUS_TRANSITION) — 결과를 모르는 거래를 실패로 단정하지 않는다")
+        void throwsExceptionWhenFailingTimedOutTransfer() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.timeout();
+
+            // when & then
+            assertThatThrownBy(() -> transfer.fail("TRF9999", "응답 없음"))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
+        }
+
+        @Test
+        @DisplayName("TIMEOUT 이체를 다시 timeout()하면 BusinessException(INVALID_STATUS_TRANSITION) 예외가 발생한다")
+        void throwsExceptionWhenTimingOutTimedOutTransfer() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.timeout();
+
+            // when & then
+            assertThatThrownBy(transfer::timeout)
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
+        }
+
+        @Test
+        @DisplayName("이미 확정(SUCCESS)된 이체를 timeout() 처리하면 BusinessException(INVALID_STATUS_TRANSITION) 예외가 발생한다")
+        void throwsExceptionWhenTimingOutCompletedTransfer() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.complete(90000L, LocalDateTime.now());
+
+            // when & then
+            assertThatThrownBy(transfer::timeout)
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.INVALID_STATUS_TRANSITION);
+        }
+    }
+
+    @Nested
+    @DisplayName("invalidate — 정정 체인 원거래 무효화")
+    class InvalidateTest {
+
+        private final LocalDateTime invalidatedAt = LocalDateTime.of(2026, 8, 10, 9, 0, 0);
+
+        @Test
+        @DisplayName("SUCCESS 이체는 무효화되고 status는 그대로 SUCCESS다")
+        void invalidateSuccessTransfer() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.complete(90000L, LocalDateTime.of(2026, 8, 9, 12, 0, 1));
+
+            // when
+            transfer.invalidate(invalidatedAt);
+
+            // then
+            assertThat(transfer.getInvalidatedAt()).isEqualTo(invalidatedAt);
+            assertThat(transfer.isInvalidated()).isTrue();
+            assertThat(transfer.getStatus()).isEqualTo(ProcessResultStatus.SUCCESS);
+        }
+
+        @Test
+        @DisplayName("이미 무효화된 이체를 다시 무효화하면 TRF0305로 거부된다")
+        void invalidateTwice_throws() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.complete(90000L, LocalDateTime.of(2026, 8, 9, 12, 0, 1));
+            transfer.invalidate(invalidatedAt);
+
+            // when & then
+            assertThatThrownBy(() -> transfer.invalidate(invalidatedAt.plusMinutes(1)))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+            assertThat(transfer.getInvalidatedAt()).isEqualTo(invalidatedAt);
+        }
+
+        @Test
+        @DisplayName("ERROR 이체는 돈이 움직이지 않았으므로 무효화할 수 없다")
+        void invalidateErrorTransfer_throws() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.fail("TRF0304", "거래정지 또는 해지 상태의 출금계좌입니다.");
+
+            // when & then
+            assertThatThrownBy(() -> transfer.invalidate(invalidatedAt))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+        }
+
+        @Test
+        @DisplayName("취소정정 거래는 무효화할 수 없다 — 취소의 취소 금지")
+        void invalidateReversal_throws() {
+            // given
+            Transfer reversal = newProcessingTransfer();
+            reversal.linkToOriginal(CorrectionType.REVERSAL, 1L);
+            reversal.complete(90000L, LocalDateTime.of(2026, 8, 10, 9, 0, 0));
+
+            // when & then
+            assertThatThrownBy(() -> reversal.invalidate(invalidatedAt))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+        }
+    }
+
+    @Nested
+    @DisplayName("linkToOriginal — 정정 체인 연결")
+    class LinkToOriginalTest {
+
+        @Test
+        @DisplayName("저장 전(PROCESSING) 이체에 원거래와 역할을 연결한다")
+        void linkProcessingTransfer() {
+            // given
+            Transfer reversal = newProcessingTransfer();
+
+            // when
+            reversal.linkToOriginal(CorrectionType.REVERSAL, 1L);
+
+            // then
+            assertThat(reversal.getRefTransferId()).isEqualTo(1L);
+            assertThat(reversal.getCorrectionType()).isEqualTo(CorrectionType.REVERSAL);
+        }
+
+        @Test
+        @DisplayName("이미 확정된 이체에는 연결할 수 없다")
+        void linkCompletedTransfer_throws() {
+            // given
+            Transfer transfer = newProcessingTransfer();
+            transfer.complete(90000L, LocalDateTime.of(2026, 8, 9, 12, 0, 1));
+
+            // when & then
+            assertThatThrownBy(() -> transfer.linkToOriginal(CorrectionType.REPOST, 1L))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+        }
+
+        @Test
+        @DisplayName("한 번 연결한 이체는 다시 연결할 수 없다")
+        void linkTwice_throws() {
+            // given
+            Transfer reversal = newProcessingTransfer();
+            reversal.linkToOriginal(CorrectionType.REVERSAL, 1L);
+
+            // when & then
+            assertThatThrownBy(() -> reversal.linkToOriginal(CorrectionType.REPOST, 2L))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
+            assertThat(reversal.getRefTransferId()).isEqualTo(1L);
         }
     }
 }

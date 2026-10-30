@@ -3,6 +3,7 @@ package com.shinhan.corebank.customer.domain.model;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.shinhan.corebank.customer.api.CustomerRole;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
@@ -210,7 +211,120 @@ class CustomerTest {
                 .hasMessage("로그인 IP는 필수입니다.");
     }
 
+    @Test
+    @DisplayName("관리자가 잠긴 계정을 해제하면 잠금이 풀리고 실패 횟수가 0이 된다")
+    void unlocksLockedAccountByAdmin() {
+        Customer customer = restoreCustomer(5, true);
+
+        customer.unlockByAdmin();
+
+        assertThat(customer.isAccountLocked()).isFalse();
+        assertThat(customer.getLoginFailureCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("잠기지 않은 계정도 관리자 해제 시 실패 횟수가 0이 된다")
+    void resetsFailureCountWhenUnlockingUnlockedAccount() {
+        Customer customer = restoreCustomer(3, false);
+
+        customer.unlockByAdmin();
+
+        assertThat(customer.isAccountLocked()).isFalse();
+        assertThat(customer.getLoginFailureCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("관리자 비밀번호 초기화는 비밀번호를 바꾸고 잠금까지 해제한다")
+    void resetsPasswordAndUnlocksByAdmin() {
+        Customer customer = restoreCustomer(5, true);
+        LocalDateTime changedAt = LocalDateTime.of(2026, 9, 21, 10, 0);
+
+        customer.resetPasswordByAdmin("newPasswordHash", changedAt);
+
+        assertThat(customer.getPasswordHash()).isEqualTo("newPasswordHash");
+        assertThat(customer.getPasswordChangedAt()).isEqualTo(changedAt);
+        assertThat(customer.isAccountLocked()).isFalse();
+        assertThat(customer.getLoginFailureCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("관리자 초기화 필수값이 없으면 고객 상태를 변경하지 않는다")
+    void rejectsMissingValuesOnAdminPasswordReset() {
+        Customer customer = restoreCustomer(5, true);
+        LocalDateTime changedAt = LocalDateTime.of(2026, 9, 21, 10, 0);
+
+        assertThatThrownBy(() -> customer.resetPasswordByAdmin(" ", changedAt))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> customer.resetPasswordByAdmin("newPasswordHash", null))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(customer.getPasswordHash()).isEqualTo("passwordHash");
+        assertThat(customer.isAccountLocked()).isTrue();
+        assertThat(customer.getLoginFailureCount()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("신규 가입 고객은 정상 상태다")
+    void registersActiveCustomer() {
+        Customer customer = Customer.register(
+                "user01",
+                null,
+                "passwordHash",
+                "홍길동",
+                LocalDate.of(1990, 1, 1),
+                "user01@example.com",
+                "01012345678",
+                LocalDateTime.of(2026, 1, 1, 9, 0));
+
+        assertThat(customer.getStatus()).isEqualTo(CustomerStatus.ACTIVE);
+        assertThat(customer.isSuspended()).isFalse();
+    }
+
+    @Test
+    @DisplayName("관리자가 정지하면 이용정지 상태가 되고 잠금과 실패 횟수는 그대로다")
+    void suspendsByAdminWithoutTouchingLoginState() {
+        Customer customer = restoreCustomer(3, false);
+
+        customer.changeStatusByAdmin(CustomerStatus.SUSPENDED);
+
+        assertThat(customer.getStatus()).isEqualTo(CustomerStatus.SUSPENDED);
+        assertThat(customer.isSuspended()).isTrue();
+        assertThat(customer.isAccountLocked()).isFalse();
+        assertThat(customer.getLoginFailureCount()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("관리자가 정지 계정을 되살리면 정상 상태가 된다")
+    void activatesSuspendedCustomerByAdmin() {
+        Customer customer = restoreCustomer(0, false, CustomerStatus.SUSPENDED);
+
+        customer.changeStatusByAdmin(CustomerStatus.ACTIVE);
+
+        assertThat(customer.getStatus()).isEqualTo(CustomerStatus.ACTIVE);
+        assertThat(customer.isSuspended()).isFalse();
+    }
+
+    @Test
+    @DisplayName("변경할 상태가 없으면 고객 상태를 바꾸지 않는다")
+    void rejectsMissingStatusOnAdminChange() {
+        Customer customer = restoreCustomer(0, false, CustomerStatus.SUSPENDED);
+
+        assertThatThrownBy(() -> customer.changeStatusByAdmin(null)).isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(customer.getStatus()).isEqualTo(CustomerStatus.SUSPENDED);
+    }
+
+    @Test
+    @DisplayName("계정 상태가 없으면 복원할 수 없다")
+    void rejectsMissingStatusOnRestore() {
+        assertThatThrownBy(() -> restoreCustomer(0, false, null)).isInstanceOf(IllegalArgumentException.class);
+    }
+
     private Customer restoreCustomer(int loginFailureCount, boolean accountLocked) {
+        return restoreCustomer(loginFailureCount, accountLocked, CustomerStatus.ACTIVE);
+    }
+
+    private Customer restoreCustomer(int loginFailureCount, boolean accountLocked, CustomerStatus status) {
         LocalDateTime joinedAt = LocalDateTime.of(2026, 1, 1, 9, 0);
 
         return Customer.restore(
@@ -224,6 +338,8 @@ class CustomerTest {
                 "01012345678",
                 loginFailureCount,
                 accountLocked,
+                status,
+                CustomerRole.CUSTOMER,
                 null,
                 null,
                 null,

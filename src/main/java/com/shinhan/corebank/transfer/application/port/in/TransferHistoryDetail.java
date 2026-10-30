@@ -12,7 +12,8 @@ public record TransferHistoryDetail(
         Long withdrawalAccountId,
         Long depositAccountId,
         String depositAccountNumber,
-        String payeeName,
+        String payeeBankCode, // NULL이면 당행 거래
+        String payeeName, // 타행 ERROR·TIMEOUT 건은 NULL — 상대 은행 예금주를 받지 못했다
         long amount,
         long fee,
         TransferType transferType,

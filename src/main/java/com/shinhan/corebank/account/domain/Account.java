@@ -21,6 +21,7 @@ public class Account {
     private final AccountType accountType;
 
     private long balance;
+    private long holdAmount;
     private AccountStatus status;
 
     private String passwordHash;
@@ -36,6 +37,7 @@ public class Account {
     private final LocalDateTime openedDate;
     private final LocalDate maturityDate;
     private LocalDateTime closedDate;
+    private LocalDate closedTradeDate;
     private LocalDateTime lastTransactionAt;
 
     private final Long version;
@@ -54,6 +56,7 @@ public class Account {
             Long productId,
             AccountType accountType,
             long balance,
+            long holdAmount,
             AccountStatus status,
             String passwordHash,
             int passwordFailureCount,
@@ -75,6 +78,7 @@ public class Account {
         this.productId = productId;
         this.accountType = accountType;
         this.balance = balance;
+        this.holdAmount = holdAmount;
         this.status = status;
         this.passwordHash = passwordHash;
         this.passwordFailureCount = passwordFailureCount;
@@ -108,6 +112,7 @@ public class Account {
                 customerId,
                 productId,
                 accountType,
+                0L,
                 0L,
                 AccountStatus.ACTIVE,
                 passwordHash,
@@ -144,6 +149,7 @@ public class Account {
                 productId,
                 accountType,
                 balance,
+                0L,
                 status,
                 passwordHash,
                 0,
@@ -161,6 +167,12 @@ public class Account {
                 null);
     }
 
+    /**
+     * 기존 호출부 및 테스트 호환을 위한 계좌 복원 메서드.
+     *
+     * <p>보류액(holdAmount)은 0으로, 해지 거래일(closedTradeDate)은 null로 복원한다.
+     * 실제 DB 계좌 복원에는 모든 필드를 받는 오버로드를 사용한다.
+     */
     public static Account reconstitute(
             Long accountId,
             String accountNumber,
@@ -190,6 +202,7 @@ public class Account {
                 productId,
                 accountType,
                 balance,
+                0L,
                 status,
                 passwordHash,
                 passwordFailureCount,
@@ -205,6 +218,128 @@ public class Account {
                 version,
                 createdAt,
                 updatedAt);
+    }
+
+    /**
+     * 기존 호출부 호환을 위한 계좌 복원 메서드.
+     *
+     * <p>보류액은 전달받은 값을 사용하지만, 해지 거래일은 null로 복원한다.
+     * PH-15·16에서 사용하는 closedTradeDate를 포함한 DB 복원은
+     * 신규 오버로드를 사용한다.
+     */
+    public static Account reconstitute(
+            Long accountId,
+            String accountNumber,
+            Long customerId,
+            Long productId,
+            AccountType accountType,
+            long balance,
+            long holdAmount,
+            AccountStatus status,
+            String passwordHash,
+            int passwordFailureCount,
+            boolean passwordLocked,
+            String alias,
+            Integer displayOrder,
+            boolean withdrawalRegistered,
+            LocalDateTime withdrawalRegisteredAt,
+            LocalDateTime openedDate,
+            LocalDate maturityDate,
+            LocalDateTime closedDate,
+            LocalDateTime lastTransactionAt,
+            Long version,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt) {
+
+        return new Account(
+                accountId,
+                accountNumber,
+                customerId,
+                productId,
+                accountType,
+                balance,
+                holdAmount,
+                status,
+                passwordHash,
+                passwordFailureCount,
+                passwordLocked,
+                alias,
+                displayOrder,
+                withdrawalRegistered,
+                withdrawalRegisteredAt,
+                openedDate,
+                maturityDate,
+                closedDate,
+                lastTransactionAt,
+                version,
+                createdAt,
+                updatedAt);
+    }
+
+    /**
+     * DB에 저장된 모든 계좌 상태를 복원한다.
+     *
+     * <p>PH-15 만기해지 및 PH-16 중도해지에서 사용하는 closedTradeDate를
+     * 포함하며, AccountMapper의 영속 엔티티 → 도메인 변환에서 사용한다.
+     *
+     * <p>closedDate는 실제 해지 시각이고, closedTradeDate는
+     * 해지 출금 원장에 기표된 거래일이다. 두 값은 서로 다른 의미를 갖는다.
+     *
+     * @param closedTradeDate 해지 출금 원장의 거래일. 미해지 계좌는 null
+     */
+    public static Account reconstitute(
+            Long accountId,
+            String accountNumber,
+            Long customerId,
+            Long productId,
+            AccountType accountType,
+            long balance,
+            long holdAmount,
+            AccountStatus status,
+            String passwordHash,
+            int passwordFailureCount,
+            boolean passwordLocked,
+            String alias,
+            Integer displayOrder,
+            boolean withdrawalRegistered,
+            LocalDateTime withdrawalRegisteredAt,
+            LocalDateTime openedDate,
+            LocalDate maturityDate,
+            LocalDateTime closedDate,
+            LocalDate closedTradeDate,
+            LocalDateTime lastTransactionAt,
+            Long version,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt) {
+
+        Account account = reconstitute(
+                accountId,
+                accountNumber,
+                customerId,
+                productId,
+                accountType,
+                balance,
+                holdAmount,
+                status,
+                passwordHash,
+                passwordFailureCount,
+                passwordLocked,
+                alias,
+                displayOrder,
+                withdrawalRegistered,
+                withdrawalRegisteredAt,
+                openedDate,
+                maturityDate,
+                closedDate,
+                lastTransactionAt,
+                version,
+                createdAt,
+                updatedAt);
+
+        account.closedTradeDate = closedTradeDate;
+        account.validateClosedState();
+
+        return account;
     }
 
     public void changeAlias(String alias) {
@@ -255,6 +390,78 @@ public class Account {
 
         this.withdrawalRegistered = false;
         this.withdrawalRegisteredAt = null;
+    }
+
+    /**
+     * 영업일 기준으로 만기가 도래한 예·적금 계좌를 MATURED 상태로 전환한다.
+     *
+     * @param effectiveBusinessDate 만기 판정 기준일 (nextBusinessDay(COB_DATE))
+     * @return 이번 호출에서 상태가 변경되면 true, 이미 MATURED이면 false
+     */
+    public boolean markMatured(LocalDate effectiveBusinessDate) {
+        if (effectiveBusinessDate == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        // 만기 대상이 아닌 계좌 유형은 전이할 수 없다.
+        if (!accountType.isMaturityEligible()) {
+            throw new BusinessException(AccountErrorCode.MATURITY_UNSUPPORTED_ACCOUNT_TYPE);
+        }
+
+        // 동일 COB 재실행 시 중복 전이를 방지한다.
+        if (status == AccountStatus.MATURED) {
+            return false;
+        }
+
+        // ACTIVE 계좌만 만기 상태로 전이할 수 있다.
+        if (status != AccountStatus.ACTIVE) {
+            throw new BusinessException(AccountErrorCode.INVALID_ACCOUNT_STATUS);
+        }
+
+        // 만기일이 아직 도래하지 않았다면 전이를 거부한다.
+        if (maturityDate == null || maturityDate.isAfter(effectiveBusinessDate)) {
+            throw new BusinessException(AccountErrorCode.MATURITY_DATE_NOT_REACHED);
+        }
+
+        this.status = AccountStatus.MATURED;
+        return true;
+    }
+
+    /**
+     * 원리금 이체가 완료된 만기 계좌를 해지한다.
+     *
+     * <p>호출자는 MATURITY 원리금 이체를 먼저 완료해야 한다.
+     * 이 메서드는 같은 트랜잭션에서 최신 잔액을 조회한 계좌에 사용한다.
+     *
+     * @param closedAt 실제 해지 처리 시각(KST)
+     * @param tradeDate MATURITY 원장 기표 결과의 거래일
+     */
+    public void closeMatured(LocalDateTime closedAt, LocalDate tradeDate) {
+        if (closedAt == null || tradeDate == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        if (!accountType.isMaturityEligible()) {
+            throw new BusinessException(AccountErrorCode.MATURITY_UNSUPPORTED_ACCOUNT_TYPE);
+        }
+
+        if (status != AccountStatus.MATURED) {
+            throw new BusinessException(AccountErrorCode.INVALID_ACCOUNT_STATUS);
+        }
+
+        // 영업일이 앞당겨져도 실제 계약 만기일 전 해지는 허용하지 않는다.
+        if (maturityDate == null || maturityDate.isAfter(closedAt.toLocalDate())) {
+            throw new BusinessException(AccountErrorCode.MATURITY_DATE_NOT_REACHED);
+        }
+
+        // 원리금 이체가 끝난 계좌만 해지할 수 있다.
+        if (balance != 0L || holdAmount != 0L) {
+            throw new BusinessException(AccountErrorCode.MATURITY_BALANCE_NOT_ZERO);
+        }
+
+        this.status = AccountStatus.CLOSED;
+        this.closedDate = closedAt;
+        this.closedTradeDate = tradeDate;
     }
 
     public void changeDisplayOrder(int displayOrder) {
@@ -326,6 +533,7 @@ public class Account {
         validateAccountNumber();
         validateCustomer();
         validateBalance();
+        validateHoldAmount();
         validatePasswordHash();
         validateOpenedDate();
         validateProductAndMaturity();
@@ -351,6 +559,12 @@ public class Account {
     private void validateBalance() {
         if (balance < 0) {
             throw new IllegalStateException("계좌 잔액은 음수일 수 없습니다.");
+        }
+    }
+
+    private void validateHoldAmount() {
+        if (holdAmount < 0 || holdAmount > balance) {
+            throw new IllegalStateException("보류액은 0 이상이고 원장잔액 이하여야 합니다.");
         }
     }
 
@@ -439,11 +653,23 @@ public class Account {
         if (closedDate != null && closedDate.isBefore(openedDate)) {
             throw new IllegalStateException("해지 시각은 개설 시각보다 이전일 수 없습니다.");
         }
+
+        if (status != AccountStatus.CLOSED && closedTradeDate != null) {
+            throw new IllegalStateException("해지되지 않은 계좌는 해지 거래일을 가질 수 없습니다.");
+        }
     }
 
     private void validateDisplayOrder() {
         if (displayOrder != null && displayOrder <= 0) {
             throw new IllegalStateException("계좌 표시순서는 1 이상이어야 합니다.");
         }
+    }
+
+    public long getAvailableBalance() {
+        if (status != AccountStatus.ACTIVE) {
+            return 0L;
+        }
+
+        return balance - holdAmount;
     }
 }

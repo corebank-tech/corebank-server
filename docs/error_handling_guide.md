@@ -115,6 +115,7 @@ public enum CommonErrorCode implements ErrorCode {
     DATE_RANGE_EXCEEDED("CMN0004", 400, "조회기간이 최대 1년을 초과했습니다."),
     INVALID_PAGE_SIZE("CMN0005", 400, "지원하지 않는 페이지 크기입니다."),
     ALL_QUERY_TOO_LARGE("CMN0006", 400, "전체조회 결과가 너무 많습니다. 조회기간을 좁혀 주세요."),
+    ACCESS_REASON_INVALID("CMN0007", 400, "조회 사유가 없거나 올바르지 않습니다."),
 
     UNAUTHORIZED("CMN0101", 401, "인증정보가 없거나 세션이 만료되었습니다."),
     FORBIDDEN("CMN0102", 403, "해당 자원에 접근할 권한이 없습니다."),
@@ -213,6 +214,14 @@ public class ApiExceptionHandler {
         return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_INPUT, message);
     }
 
+    // 본문을 읽을 수 없음 (본문 누락, 깨진 JSON, Enum 에 없는 값, 필드 타입 불일치) -> CMN0001
+    // Jackson 원문에 클래스명과 입력값이 섞이므로 응답과 로그 어디에도 싣지 않는다
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException e) {
+        log.warn("[{}] 요청 본문을 읽을 수 없음", CommonErrorCode.INVALID_INPUT.getCode());
+        return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_INPUT);
+    }
+
     // 파라미터 타입 불일치 (예: Long 자리에 abc, Enum 에 없는 값) -> CMN0001
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
@@ -260,15 +269,18 @@ public class ApiExceptionHandler {
 }
 ```
 
-핸들러 8개가 처리하는 상황:
+> 위 예제는 기본형입니다. `X-Access-Reason` 헤더를 `CMN0007`로 바꾸는 분기는 실제 `ApiExceptionHandler`의 `handleTypeMismatch` · `handleMissingHeader`를 따릅니다.
+
+핸들러 9개가 처리하는 상황:
 
 | 핸들러 | 처리 상황 | 반환 코드 |
 | --- | --- | --- |
 | `BusinessException` | 각 파트가 명시적으로 던진 예외 | 해당 Enum의 코드 |
 | `MethodArgumentNotValidException` | `@Valid` 바디 검증 실패 | `CMN0001` |
-| `MethodArgumentTypeMismatchException` | 타입 불일치. Enum에 없는 값 전달 | `CMN0001` |
+| `HttpMessageNotReadableException` | 본문을 읽을 수 없음. 본문 누락, 깨진 JSON, 본문 Enum에 없는 값, 필드 타입 불일치 | `CMN0001` |
+| `MethodArgumentTypeMismatchException` | 쿼리 또는 경로 파라미터 타입 불일치. Enum에 없는 값 전달 | `CMN0001` (`X-Access-Reason` 헤더만 `CMN0007`) |
 | `MissingServletRequestParameterException` | 필수 쿼리 파라미터 누락 | `CMN0002` |
-| `MissingRequestHeaderException` | 필수 헤더 누락 (`Idempotency-Key` 등) | `CMN0002` |
+| `MissingRequestHeaderException` | 필수 헤더 누락 (`Idempotency-Key` 등) | `CMN0002` (`X-Access-Reason` 헤더만 `CMN0007`) |
 | `NoResourceFoundException` / `NoHandlerFoundException` | 존재하지 않는 엔드포인트 (404) | `CMN0201` |
 | `HttpRequestMethodNotSupportedException` | 지원하지 않는 HTTP 메서드 (405 → 404로 통일) | `CMN0201` |
 | `Exception` | 그 외 모든 예외 | `CMN9999` |
@@ -461,3 +473,16 @@ public ApiResponse<ProductResponse> getProduct(@PathVariable Long productId) {
 - [ ] `throw new BusinessException(...)` 로만 던졌는가 (컨트롤러에서 try-catch 안 함)
 - [ ] 컨트롤러가 성공 응답만 반환하는가
 - [ ] 새로 만든 오류코드를 [api_conventions.md](api_conventions.md) §4 표에 추가했는가
+
+## 9. 로그 레벨 규칙
+
+| 상황 | 레벨 | 예시 |
+|---|---|---|
+| 예상된 비즈니스 거부(`BusinessException`) | `warn` | 잘못된 입력, 중복 요청, 권한 없음 |
+| 처리되지 않은 예외(`ApiExceptionHandler`의 최종 캐치) | `error` | NPE 등 예상 못 한 버그 |
+| 정상적인 주요 흐름 | `info` | 요청 처리 시작/종료, 배치 시작/종료 |
+| 개발용 상세 정보 | `debug` | SQL 쿼리 등. `application-local.yml`에서만 켜짐 |
+
+- 운영(`logback-spring.xml` 기본값)은 `INFO` 이상만 찍는다 — `debug`는 로컬에서만 보인다.
+- `BusinessException`을 `error`로 찍지 않는다 — 고객 입력 실수까지 장애 알람이 울리면 안 된다.
+- 반대로 처리되지 않은 예외를 `warn`으로 낮추지 않는다 — 모니터링(PH-47)이 `error`만 감시한다.

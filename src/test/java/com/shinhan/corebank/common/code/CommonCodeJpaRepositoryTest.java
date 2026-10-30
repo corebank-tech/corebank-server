@@ -29,7 +29,27 @@ class CommonCodeJpaRepositoryTest extends IntegrationTestSupport {
                         CommonCodeJpaEntity::getCode,
                         CommonCodeJpaEntity::getCodeName,
                         CommonCodeJpaEntity::getSortOrder)
-                .containsExactly(tuple("ACTIVE", "정상", 1), tuple("SUSPENDED", "거래정지", 2), tuple("CLOSED", "해지", 3));
+                .containsExactly(
+                        tuple("ACTIVE", "정상", 1),
+                        tuple("SUSPENDED", "거래정지", 2),
+                        tuple("CLOSED", "해지", 3),
+                        tuple("MATURED", "만기 도달", 4),
+                        tuple("DORMANT", "휴면", 5));
+    }
+
+    @Test
+    @DisplayName("타행 은행코드는 당행 088 없이 5개가 은행코드 오름차순으로 들어 있다")
+    void bankCodes_fiveInterbankBanksWithoutOwnBank() {
+        List<CommonCodeJpaEntity> result = repository.findByCodeGroupAndUseYnOrderBySortOrderAsc("BANK_CODE", "Y");
+
+        assertThat(result)
+                .extracting(CommonCodeJpaEntity::getCode, CommonCodeJpaEntity::getCodeName)
+                .containsExactly(
+                        tuple("004", "KB국민은행"),
+                        tuple("011", "NH농협은행"),
+                        tuple("020", "우리은행"),
+                        tuple("081", "하나은행"),
+                        tuple("090", "카카오뱅크"));
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.shinhan.corebank.autotransfer.application.service;
 
+import com.shinhan.corebank.autotransfer.api.AutoTransferExecutionSettled;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferExecutionPersistencePort;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferPersistencePort;
 import com.shinhan.corebank.autotransfer.application.port.out.StuckExecution;
@@ -10,11 +11,13 @@ import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.notification.api.NotificationRequest;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -23,6 +26,7 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +47,8 @@ public class AutoTransferBatchItemProcessor {
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final AuditLogService auditLogService;
     private final TransferLookupPort transferLookupPort;
+    private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     // DB에 지금부터 처리 시작 남
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -51,7 +57,7 @@ public class AutoTransferBatchItemProcessor {
         // completeProcessing()이 만드는 TransferCommand.executionDate와 같은 값을 가리켜, 멱등성
         // 사전조회가 재시도 날짜가 달라져도 같은 회차로 인식한다.
         AutoTransferExecution processing = AutoTransferExecution.processing(
-                autoTransfer.getNextExecutionDate(), autoTransfer.getAmount(), LocalDateTime.now());
+                autoTransfer.getNextExecutionDate(), autoTransfer.getAmount(), LocalDateTime.now(clock));
         return autoTransferExecutionPersistencePort.save(processing, autoTransfer.getAutoTransferId());
     }
 
@@ -59,6 +65,17 @@ public class AutoTransferBatchItemProcessor {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void completeProcessing(
             AutoTransfer autoTransfer, AutoTransferExecution processingExecution, LocalDate date) {
+        // 재확정과 같은 회차 행을 잠근다. 재확정이 먼저 확정한 회차면 이체하지 않는다
+        boolean isAlreadySettled = autoTransferExecutionPersistencePort
+                .findProcessingForUpdate(processingExecution.getExecutionId())
+                .isEmpty();
+        if (isAlreadySettled) {
+            log.info(
+                    "재확정이 먼저 확정한 회차라 이체하지 않음 - autoTransferId={}, executionId={}",
+                    autoTransfer.getAutoTransferId(),
+                    processingExecution.getExecutionId());
+            return;
+        }
         // saveProcessing()과 동일하게, 이 회차의 논리적 실행일(nextExecutionDate)을 써야 한다 -
         // 그래야 전날 후속처리 실패로 nextExecutionDate가 안 넘어가 다음날 배치가 같은 회차를
         // date=다음날로 재선택해도, 멱등성 사전조회가 첫 시도와 같은 키로 인식해 중복 송금을 막는다.
@@ -95,9 +112,22 @@ public class AutoTransferBatchItemProcessor {
         }
         autoTransferExecutionPersistencePort.save(processingExecution, autoTransfer.getAutoTransferId());
 
+        // 회차 확정마다 발행한다(#707). 알림은 회차 ID 가 필요해 TransferSettled 가 아니라 이 이벤트에 싣는다.
+        LocalDateTime settledAt = LocalDateTime.now(clock);
+        NotificationRequest notification = AutoTransferNotificationGenerator.generate(
+                autoTransfer, processingExecution, result.status(), result.customerFailureReason(), settledAt);
+        eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
+                .customerId(autoTransfer.getCustomerId())
+                .refId(processingExecution.getExecutionId())
+                .status(result.status())
+                .errorCode(result.errorCode())
+                .occurredAt(settledAt)
+                .notificationRequest(notification)
+                .build());
+
         autoTransfer.advanceNextExecutionDate();
         if (autoTransfer.getNextExecutionDate().isAfter(autoTransfer.getEndDate())) {
-            autoTransfer.expire(LocalDateTime.now());
+            autoTransfer.expire(LocalDateTime.now(clock));
         }
         autoTransferPersistencePort.save(autoTransfer);
 
@@ -126,12 +156,25 @@ public class AutoTransferBatchItemProcessor {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void reconcileStuckExecution(StuckExecution stuckExecution) {
         AutoTransfer autoTransfer = stuckExecution.autoTransfer();
-        AutoTransferExecution execution = stuckExecution.execution();
+        // 메인 배치가 잡고 있는 회차는 처리 중이라 건너뛰고, 이미 확정된 회차도 건드리지 않는다.
+        // 이체 기록은 잠금을 잡은 뒤에 읽어야 메인 배치가 커밋한 이체를 놓치지 않는다
+        Optional<AutoTransferExecution> lockedExecution =
+                autoTransferExecutionPersistencePort.findProcessingForUpdateSkipLocked(
+                        stuckExecution.execution().getExecutionId());
+        if (lockedExecution.isEmpty()) {
+            log.info(
+                    "처리 중이거나 이미 확정된 회차라 재확정하지 않음 - autoTransferId={}, executionId={}",
+                    autoTransfer.getAutoTransferId(),
+                    stuckExecution.execution().getExecutionId());
+            return;
+        }
+        AutoTransferExecution execution = lockedExecution.get();
 
         Optional<TransferLookupResult> lookup =
                 transferLookupPort.findBySourceAndDate(autoTransfer.getAutoTransferId(), execution.getExecutionDate());
 
-        if (lookup.isEmpty()) {
+        boolean hasNoTransferRow = lookup.isEmpty();
+        if (hasNoTransferRow) {
             execution.markError("실행 중 확인 불가로 재확정 배치가 오류 처리함", null);
         } else if (lookup.get().status() == ProcessResultStatus.SUCCESS) {
             execution.markSuccess(lookup.get().transactionNumber());
@@ -145,16 +188,19 @@ public class AutoTransferBatchItemProcessor {
             execution.markError("실행 중 확인 불가로 재확정 배치가 오류 처리함", null);
         }
 
-        // claim 단계가 없는 reconcileStuckExecution() 전용 가드: findAllProcessing()으로 조회만 하고
-        // 선점하지 않아서, 동시에 두 번 돌면 이 저장 시점에 가드가 필요하다. 0건이면 이미 다른 실행이 먼저 확정한 것.
-        boolean confirmed = autoTransferExecutionPersistencePort.saveIfStillProcessing(execution);
-        if (!confirmed) {
-            log.info(
-                    "이미 다른 재확정 실행이 먼저 확정함(중복 재확정 방어) - autoTransferId={}, executionId={}",
-                    autoTransfer.getAutoTransferId(),
-                    execution.getExecutionId());
-            return;
-        }
+        autoTransferExecutionPersistencePort.save(execution, autoTransfer.getAutoTransferId());
+
+        // 재확정도 확정마다 발행하되 가드를 통과한 뒤에만 낸다(#707). 실패 코드가 없어 알림은 기본 문장이다.
+        LocalDateTime settledAt = LocalDateTime.now(clock);
+        NotificationRequest notification = AutoTransferNotificationGenerator.generate(
+                autoTransfer, execution, execution.getStatus(), Optional.empty(), settledAt);
+        eventPublisher.publishEvent(AutoTransferExecutionSettled.builder()
+                .customerId(autoTransfer.getCustomerId())
+                .refId(execution.getExecutionId())
+                .status(execution.getStatus())
+                .occurredAt(settledAt)
+                .notificationRequest(notification)
+                .build());
 
         if (execution.getStatus() == ProcessResultStatus.ERROR) {
             List<AutoTransferExecution> recent = autoTransferExecutionPersistencePort.findRecentByAutoTransferId(
@@ -171,7 +217,7 @@ public class AutoTransferBatchItemProcessor {
 
         autoTransfer.advanceNextExecutionDate();
         if (autoTransfer.getNextExecutionDate().isAfter(autoTransfer.getEndDate())) {
-            autoTransfer.expire(LocalDateTime.now());
+            autoTransfer.expire(LocalDateTime.now(clock));
         }
         autoTransferPersistencePort.save(autoTransfer);
     }

@@ -7,5 +7,7 @@ package com.shinhan.corebank.transfer.application.port.out;
 public enum LockedAccountStatus {
     ACTIVE,
     SUSPENDED,
-    CLOSED
+    MATURED,
+    CLOSED,
+    DORMANT
 }

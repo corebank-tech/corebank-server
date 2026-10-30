@@ -12,6 +12,7 @@ import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTrans
 import com.shinhan.corebank.scheduledtransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferExecutionResultAggregate;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferQueryPort;
+import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferTradeDatePort;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import java.time.Clock;
@@ -36,6 +37,7 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
 
     private final ScheduledTransferQueryPort scheduledTransferQueryPort;
     private final AccountStatusPort accountStatusPort;
+    private final TransferTradeDatePort transferTradeDatePort;
     private final Clock clock;
 
     @Override
@@ -119,9 +121,11 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
                 .distinct()
                 .toList();
         Map<Long, String> withdrawalAccountNumbers = accountStatusPort.findAccountNumbersByIds(withdrawalAccountIds);
+        // 거래일도 페이지 단위로 한 번에 읽는다 — 휴일 실행 회차는 executedAt 날짜와 거래일이 다르다(#679)
+        Map<Long, LocalDate> tradeDates = transferTradeDatePort.findTradeDates(result.getContent());
 
         Page<ScheduledTransferExecutionResultItem> itemPage =
-                result.map(scheduledTransfer -> toResultItem(scheduledTransfer, withdrawalAccountNumbers));
+                result.map(scheduledTransfer -> toResultItem(scheduledTransfer, withdrawalAccountNumbers, tradeDates));
         return new ScheduledTransferExecutionResultPage(itemPage, toSummary(aggregate));
     }
 
@@ -158,7 +162,9 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
     }
 
     private ScheduledTransferExecutionResultItem toResultItem(
-            ScheduledTransfer scheduledTransfer, Map<Long, String> withdrawalAccountNumbers) {
+            ScheduledTransfer scheduledTransfer,
+            Map<Long, String> withdrawalAccountNumbers,
+            Map<Long, LocalDate> tradeDates) {
         String withdrawalAccountNumber = withdrawalAccountNumbers.get(scheduledTransfer.getWithdrawalAccountId());
 
         if (withdrawalAccountNumber == null) {
@@ -174,6 +180,7 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
                 scheduledTransfer.getPayeeName(),
                 scheduledTransfer.getAmount(),
                 scheduledTransfer.getTransactionNumber(),
+                tradeDates.get(scheduledTransfer.getScheduledTransferId()),
                 scheduledTransfer.getFailureReason());
     }
 

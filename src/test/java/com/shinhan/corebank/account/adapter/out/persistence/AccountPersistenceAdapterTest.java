@@ -1,7 +1,9 @@
 package com.shinhan.corebank.account.adapter.out.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.assertj.core.api.Assertions.entry;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
@@ -11,7 +13,10 @@ import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
+import com.shinhan.corebank.product.adapter.out.persistence.ProductTestFixtures;
 import jakarta.persistence.EntityManager;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -40,6 +45,9 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
 
     @Autowired
     private EntityManager entityManager;
+
+    @Autowired
+    private ProductJpaRepository productJpaRepository;
 
     private Long customerId;
 
@@ -358,5 +366,239 @@ class AccountPersistenceAdapterTest extends IntegrationTestSupport {
 
         // then
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("계좌 ID 목록으로 잔액을 락 없이 일괄 조회한다 — 다른 도메인의 대사 배치(#378)가 쓰는 경로")
+    void findBalancesByAccountIds() {
+        // given
+        Account first = accountPersistencePort.save(Account.importExisting(
+                "088100000023",
+                customerId,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                100000L,
+                AccountStatus.ACTIVE,
+                PASSWORD_HASH,
+                LocalDateTime.of(2026, 8, 10, 10, 0),
+                null));
+        Account second = accountPersistencePort.save(Account.importExisting(
+                "088100000024",
+                customerId,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                50000L,
+                AccountStatus.ACTIVE,
+                PASSWORD_HASH,
+                LocalDateTime.of(2026, 8, 10, 10, 0),
+                null));
+
+        // when
+        var balances =
+                accountPersistencePort.findBalancesByAccountIds(List.of(first.getAccountId(), second.getAccountId()));
+
+        // then
+        assertThat(balances).containsEntry(first.getAccountId(), 100000L).containsEntry(second.getAccountId(), 50000L);
+    }
+
+    @Test
+    @DisplayName("커서(afterAccountId) 다음 계좌부터 account_id 오름차순으로 limit개만 잔액을 조회한다 — 전수 대사(#468)의 keyset 페이지")
+    void findBalancesAfter() {
+        // given — 같은 트랜잭션에서 연달아 저장해 ID가 이어지므로, 커서를 첫 계좌 바로 앞에 두면 시드 계좌가 섞이지 않는다
+        Account first = saveDemandDeposit("088100000025", 100000L);
+        Account second = saveDemandDeposit("088100000026", 50000L);
+        long cursor = first.getAccountId() - 1;
+
+        // when
+        var firstPage = accountPersistencePort.findBalancesAfter(cursor, 1);
+        var nextPage = accountPersistencePort.findBalancesAfter(firstPage.lastKey(), 1);
+
+        // then
+        assertThat(firstPage).containsExactly(entry(first.getAccountId(), 100000L));
+        assertThat(nextPage).containsExactly(entry(second.getAccountId(), 50000L));
+    }
+
+    @Test
+    @DisplayName("커서 뒤에 계좌가 없으면 빈 맵을 돌려준다 — 전수 대사의 종료 조건")
+    void findBalancesAfterReturnsEmptyAtEnd() {
+        // when
+        var page = accountPersistencePort.findBalancesAfter(Long.MAX_VALUE, 1000);
+
+        // then
+        assertThat(page).isEmpty();
+    }
+
+    @Test
+    @DisplayName("DB 보류액이 도메인 객체로 정확하게 복원된다")
+    void restoresHoldAmountFromDatabase() {
+        // given
+        LocalDateTime openedAt = LocalDateTime.of(2026, 8, 10, 10, 0);
+
+        Account account = Account.open(
+                ACCOUNT_NUMBER, customerId, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, openedAt, null);
+
+        Account saved = accountPersistencePort.save(account);
+        entityManager.flush();
+
+        jdbcTemplate.update(
+                """
+                UPDATE account
+                SET balance = ?, hold_amount = ?
+                WHERE account_id = ?
+                """,
+                100_000L,
+                30_000L,
+                saved.getAccountId());
+
+        entityManager.clear();
+
+        // when
+        Account restored = accountPersistencePort
+                .findByAccountIdAndCustomerId(saved.getAccountId(), customerId)
+                .orElseThrow();
+
+        // then
+        assertThat(restored.getBalance()).isEqualTo(100_000L);
+        assertThat(restored.getHoldAmount()).isEqualTo(30_000L);
+        assertThat(restored.getAvailableBalance()).isEqualTo(70_000L);
+    }
+
+    @Test
+    @DisplayName("만기 후보 조회: ACTIVE 예금 중 기준일까지 만기된 계좌만 ID 순으로 조회한다")
+    void findMaturityCandidateIdsAfter_filtersAndPaginates() {
+        Long productId = productJpaRepository
+                .save(ProductTestFixtures.productWithCode("MAT-633-01"))
+                .getProductId();
+
+        Account first =
+                saveMaturityAccount("088200000091", productId, AccountStatus.ACTIVE, LocalDate.of(2026, 10, 24));
+
+        Account second =
+                saveMaturityAccount("088200000092", productId, AccountStatus.ACTIVE, LocalDate.of(2026, 10, 26));
+
+        saveMaturityAccount("088200000093", productId, AccountStatus.MATURED, LocalDate.of(2026, 10, 25));
+
+        saveMaturityAccount("088200000094", productId, AccountStatus.ACTIVE, LocalDate.of(2026, 10, 27));
+
+        saveDemandDeposit("088100000095", 100_000L);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        LocalDate maturityBaseDate = LocalDate.of(2026, 10, 26);
+
+        List<Long> firstPage =
+                accountPersistencePort.findMaturityCandidateIdsAfter(first.getAccountId() - 1, maturityBaseDate, 1);
+
+        List<Long> secondPage =
+                accountPersistencePort.findMaturityCandidateIdsAfter(first.getAccountId(), maturityBaseDate, 1);
+
+        List<Long> lastPage =
+                accountPersistencePort.findMaturityCandidateIdsAfter(second.getAccountId(), maturityBaseDate, 1);
+
+        assertThat(firstPage).containsExactly(first.getAccountId());
+        assertThat(secondPage).containsExactly(second.getAccountId());
+        assertThat(lastPage).isEmpty();
+    }
+
+    @Test
+    @DisplayName("잠금 조회한 계좌의 만기 상태 전이가 DB에 저장된다")
+    void findByAccountIdForUpdate_savesMaturityTransition() {
+        Long productId = productJpaRepository
+                .save(ProductTestFixtures.productWithCode("MAT-633-02"))
+                .getProductId();
+
+        Account saved =
+                saveMaturityAccount("088200000096", productId, AccountStatus.ACTIVE, LocalDate.of(2026, 10, 26));
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Account locked = accountPersistencePort
+                .findByAccountIdForUpdate(saved.getAccountId())
+                .orElseThrow();
+
+        assertThat(locked.markMatured(LocalDate.of(2026, 10, 26))).isTrue();
+
+        accountPersistencePort.save(locked);
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Account restored = accountPersistencePort
+                .findByAccountIdAndCustomerId(saved.getAccountId(), customerId)
+                .orElseThrow();
+
+        assertThat(restored.getStatus()).isEqualTo(AccountStatus.MATURED);
+        assertThat(restored.getBalance()).isZero();
+        assertThat(restored.getClosedDate()).isNull();
+    }
+
+    private Account saveMaturityAccount(
+            String accountNumber, Long productId, AccountStatus status, LocalDate maturityDate) {
+
+        Account account = Account.importExisting(
+                accountNumber,
+                customerId,
+                productId,
+                AccountType.TIME_DEPOSIT,
+                0L,
+                status,
+                PASSWORD_HASH,
+                LocalDateTime.of(2026, 9, 1, 10, 0),
+                maturityDate);
+
+        return accountPersistencePort.save(account);
+    }
+
+    private Account saveDemandDeposit(String accountNumber, long balance) {
+        return accountPersistencePort.save(Account.importExisting(
+                accountNumber,
+                customerId,
+                null,
+                AccountType.DEMAND_DEPOSIT,
+                balance,
+                AccountStatus.ACTIVE,
+                PASSWORD_HASH,
+                LocalDateTime.of(2026, 8, 10, 10, 0),
+                null));
+    }
+
+    @Test
+    @DisplayName("만기 후보 조회 시 기준일이 없으면 거부한다")
+    void rejectNullMaturityBaseDate() {
+        assertThatThrownBy(() -> accountPersistencePort.findMaturityCandidateIdsAfter(0L, null, 500))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
+    }
+
+    @Test
+    @DisplayName("만기 후보 조회 시 음수 커서를 거부한다")
+    void rejectNegativeMaturityCursor() {
+        assertThatThrownBy(() ->
+                        accountPersistencePort.findMaturityCandidateIdsAfter(-1L, LocalDate.of(2026, 10, 26), 500))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    @DisplayName("만기 후보 조회 시 0 이하 페이지 크기를 거부한다")
+    void rejectInvalidMaturityPageSize() {
+        assertThatThrownBy(
+                        () -> accountPersistencePort.findMaturityCandidateIdsAfter(0L, LocalDate.of(2026, 10, 26), 0))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.INVALID_PAGE_SIZE);
+    }
+
+    @Test
+    @DisplayName("잠금 조회 시 계좌 ID가 없으면 거부한다")
+    void rejectNullAccountIdForUpdate() {
+        assertThatThrownBy(() -> accountPersistencePort.findByAccountIdForUpdate(null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
     }
 }

@@ -42,10 +42,22 @@ class LayerArchitectureTest {
     static final ArchRule batch = layerRule("batch", "Domain");
 
     @ArchTest
+    static final ArchRule business = layerRule("business");
+
+    @ArchTest
     static final ArchRule customer = layerRule("customer");
 
     @ArchTest
+    static final ArchRule gl = layerRule("gl");
+
+    @ArchTest
+    static final ArchRule info = layerRule("info");
+
+    @ArchTest
     static final ArchRule limit = layerRule("limit");
+
+    @ArchTest
+    static final ArchRule notification = layerRule("notification");
 
     @ArchTest
     static final ArchRule otp = layerRule("otp");

@@ -4,5 +4,6 @@ package com.shinhan.corebank.auth.domain.model;
 public enum LoginAuditReason {
     SUCCESS,
     INVALID_CREDENTIALS,
-    ACCOUNT_LOCKED
+    ACCOUNT_LOCKED,
+    ACCOUNT_SUSPENDED
 }

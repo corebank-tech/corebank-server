@@ -25,6 +25,7 @@ import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,7 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-// 계좌상세 및 계좌비밀번호 검증 API의 실제 DB·Redis 계약을 검증한다.
+// 계좌상세 및 계좌비밀번호 검증 API의 실제 DB 계약을 검증한다.
 @AutoConfigureMockMvc
 @Transactional
 class AccountPasswordControllerTest extends IntegrationTestSupport {
@@ -117,7 +118,7 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
                 .andReturn();
 
         JsonNode body = objectMapper.readTree(mvcResult.getResponse().getContentAsString());
-        String token = body.get("data").get("accountPasswordAuthToken").asText();
+        String token = body.get("data").get("accountPasswordAuthToken").asString();
         AccountPasswordAuthTokenVerification verification =
                 new AccountPasswordAuthTokenVerification(token, customerId, account.getAccountId());
 
@@ -154,7 +155,7 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("다섯 번째 오답은 APW0101로 잠그고 상세 조회의 출금 가능 잔액을 0으로 만든다")
+    @DisplayName("다섯 번째 오답은 APW0101로 잠그되 출금가능액은 유지한다")
     void locksOnFifthFailure() throws Exception {
         Long customerId = customerTestFixture.createCustomer();
         Account account = saveAccount(customerId, 4);
@@ -176,7 +177,9 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
         mockMvc.perform(get("/accounts/{accountId}", account.getAccountId())
                         .with(authentication(authenticationOf(customerId))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.availableBalance").value(0))
+                .andExpect(jsonPath("$.data.balance").value(1_500_000L))
+                .andExpect(jsonPath("$.data.ledgerBalance").value(1_500_000L))
+                .andExpect(jsonPath("$.data.availableBalance").value(1_500_000L))
                 .andExpect(jsonPath("$.data.passwordLocked").value(true));
     }
 
@@ -260,7 +263,7 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
     void replaysResponseWithoutConsumingNewTokens() throws Exception {
         Long customerId = customerTestFixture.createCustomer();
         Account account = saveAccount(customerId, 0);
-        String idempotencyKey = "1e7a10b2-2c2c-4ad9-a02d-40ce9bfb8323";
+        String idempotencyKey = UUID.randomUUID().toString();
 
         MvcResult first = performPasswordChange(
                 customerId, account.getAccountId(), idempotencyKey, "first-otp-token", "first-password-token");
@@ -271,15 +274,15 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
 
         JsonNode firstBody = objectMapper.readTree(first.getResponse().getContentAsString());
         JsonNode replayBody = objectMapper.readTree(replay.getResponse().getContentAsString());
-        assertThat(replayBody.get("code").asText())
-                .isEqualTo(firstBody.get("code").asText());
-        assertThat(replayBody.get("message").asText())
-                .isEqualTo(firstBody.get("message").asText());
+        assertThat(replayBody.get("code").asString())
+                .isEqualTo(firstBody.get("code").asString());
+        assertThat(replayBody.get("message").asString())
+                .isEqualTo(firstBody.get("message").asString());
         assertThat(replayBody.at("/data/accountId").asLong())
                 .isEqualTo(firstBody.at("/data/accountId").asLong());
         // 공통 replay의 offset 표현 논의와 분리해 같은 instant인지 검증한다.
-        assertThat(OffsetDateTime.parse(replayBody.at("/data/updatedAt").asText()))
-                .isEqualTo(OffsetDateTime.parse(firstBody.at("/data/updatedAt").asText()));
+        assertThat(OffsetDateTime.parse(replayBody.at("/data/updatedAt").asString()))
+                .isEqualTo(OffsetDateTime.parse(firstBody.at("/data/updatedAt").asString()));
         verify(changeAuthVerificationPort, times(1))
                 .verifyAccountPasswordToken("first-password-token", customerId, account.getAccountId());
         verify(changeAuthVerificationPort, times(1))
@@ -295,7 +298,7 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
         mockMvc.perform(put("/accounts/{accountId}/password", account.getAccountId())
                         .with(authentication(authenticationOf(customerId)))
                         .with(csrf())
-                        .header("Idempotency-Key", "4ab41240-c137-4eab-b816-b7b9e6647131")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(changeRequest("otp-token", "password-token", "5678", "1234")))
                 .andExpect(status().isBadRequest())
@@ -311,7 +314,7 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
 
         mockMvc.perform(put("/accounts/{accountId}/password", 1L)
                         .with(csrf())
-                        .header("Idempotency-Key", "a5829b6a-53c8-4a51-a55a-7465efb66428")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(request))
                 .andExpect(status().isUnauthorized());
@@ -320,7 +323,7 @@ class AccountPasswordControllerTest extends IntegrationTestSupport {
         Account account = saveAccount(customerId, 0);
         mockMvc.perform(put("/accounts/{accountId}/password", account.getAccountId())
                         .with(authentication(authenticationOf(customerId)))
-                        .header("Idempotency-Key", "d046593a-45b8-49f9-80ad-51bcc2687cf1")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(request))
                 .andExpect(status().isForbidden());

@@ -5,6 +5,7 @@ import com.shinhan.corebank.account.application.port.in.ProductAccountOpeningCom
 import com.shinhan.corebank.account.application.port.in.ProductAccountOpeningUseCase;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.domain.exception.AccountPasswordErrorCode;
+import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.ErrorCode;
@@ -12,6 +13,7 @@ import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.product.application.port.in.ProductQueryUseCase;
 import com.shinhan.corebank.product.domain.Product;
 import com.shinhan.corebank.product.domain.ProductGroup;
+import com.shinhan.corebank.subscription.api.ProductSubscriptionCompleted;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionExecuteUseCase;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionValidationCommand;
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionValidationCommand.AgreedTerms;
@@ -36,6 +38,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,6 +61,8 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
     private final SaveTermsAgreementPort saveTermsAgreementPort;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
+    private final BusinessDateGate businessDateGate;
+    private final ApplicationEventPublisher eventPublisher;
 
     // 권장 순서: 소비 없는 검증(비밀번호 확인·상품조회·중복가입·validate())을 전부 먼저 끝내고,
     // 인증 토큰 검증(1회성 소비)은 그 뒤에, 계좌개설(되돌릴 수 없는 지점) 바로 앞에 둔다 —
@@ -93,7 +98,7 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
             throw toBusinessException(validation.getViolations().get(0));
         }
 
-        passwordVerificationPort.verifyAccountPasswordToken(
+        passwordVerificationPort.verifyAndConsumeAccountPasswordToken(
                 command.accountPasswordAuthToken(), command.customerId(), command.withdrawalAccountId());
         otpVerificationPort.verifyAndConsume(
                 command.otpAuthToken(),
@@ -124,6 +129,8 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
         }
 
         LocalDateTime now = LocalDateTime.now(clock);
+        // 정보계 SUBSCRIBE 기준일. 정기예금은 초입금 기표가 이미 잡은 gate 값을, 정기적금은 여기서 잡은 값을 같은 트랜잭션에서 얻는다.
+        LocalDate subscriptionTradeDate = businessDateGate.acquireSharedAndReadBusinessDate();
         ProductSubscription saved = saveProductSubscriptionPort.save(ProductSubscription.builder()
                 .customerId(command.customerId())
                 .productId(command.productId())
@@ -141,9 +148,20 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
                 .openedDate(LocalDate.now(clock.withZone(KST)))
                 .maturityDate(validation.getMaturityDate())
                 .subscribedAt(now)
+                .subscriptionTradeDate(subscriptionTradeDate)
                 .build());
 
         saveTermsAgreementPort.saveAll(toTermsAgreements(saved.getSubscriptionId(), command.agreedTerms(), now));
+
+        // 가입 트랜잭션 안에서 발행한다(#436). 계좌개설·초입금·약관 저장 중 하나라도 실패해 롤백되면 이벤트도 같이 사라진다.
+        eventPublisher.publishEvent(ProductSubscriptionCompleted.builder()
+                .customerId(command.customerId())
+                .refId(saved.getSubscriptionId())
+                .status(ProcessResultStatus.SUCCESS)
+                .occurredAt(now)
+                .productName(product.getProductName())
+                .maskedAccountNumber(MaskingUtil.maskAccountNumber(accountOpeningResult.accountNumber()))
+                .build());
 
         return new ProductSubscriptionExecuteResult(
                 saved.getSubscriptionId(),

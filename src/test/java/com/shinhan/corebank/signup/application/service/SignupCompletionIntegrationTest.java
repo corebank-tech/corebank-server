@@ -9,10 +9,10 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.signup.adapter.in.web.dto.CompleteSignupResponse;
-import com.shinhan.corebank.signup.adapter.out.redis.TempSignupTokenRedisAdapter;
 import com.shinhan.corebank.signup.application.port.in.CompleteSignupCommand;
 import com.shinhan.corebank.signup.application.port.out.ExistingBankCustomerAccountsPort;
 import com.shinhan.corebank.signup.application.port.out.ExistingBankCustomerProfilePort;
+import com.shinhan.corebank.signup.application.port.out.TempSignupTokenPort;
 import com.shinhan.corebank.signup.domain.exception.SignupErrorCode;
 import com.shinhan.corebank.signup.domain.model.AgreedTerm;
 import com.shinhan.corebank.signup.domain.model.SignupCompletionSnapshot;
@@ -49,7 +49,7 @@ class SignupCompletionIntegrationTest extends IntegrationTestSupport {
     ExistingBankCustomerAccountsPort accountsPort;
 
     @Autowired
-    TempSignupTokenRedisAdapter tempTokenAdapter;
+    TempSignupTokenPort tempTokenAdapter;
 
     @Autowired
     IdempotentRequestExecutor idempotentRequestExecutor;

@@ -9,12 +9,14 @@ import static org.mockito.Mockito.verify;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import com.shinhan.corebank.customer.application.port.in.UpdateCustomerInfoCommand;
 import com.shinhan.corebank.customer.application.port.in.UpdateCustomerInfoResult;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.application.port.out.EmailChangeVerificationPort;
 import com.shinhan.corebank.customer.domain.exception.CustomerErrorCode;
 import com.shinhan.corebank.customer.domain.model.Customer;
+import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -139,7 +141,7 @@ class CustomerInfoUpdateServiceTest {
 
     // 기대 오류코드와 실제 BusinessException을 비교한다.
     private void assertError(UpdateCustomerInfoCommand command, Object expectedErrorCode) {
-        BusinessException exception = catchThrowableOfType(() -> service.update(command), BusinessException.class);
+        BusinessException exception = catchThrowableOfType(BusinessException.class, () -> service.update(command));
         assertThat(exception.getErrorCode()).isEqualTo(expectedErrorCode);
     }
 
@@ -157,6 +159,8 @@ class CustomerInfoUpdateServiceTest {
                 "01012345678",
                 0,
                 false,
+                CustomerStatus.ACTIVE,
+                CustomerRole.CUSTOMER,
                 null,
                 null,
                 null,
@@ -179,6 +183,8 @@ class CustomerInfoUpdateServiceTest {
                 customer.getPhoneNumber(),
                 customer.getLoginFailureCount(),
                 customer.isAccountLocked(),
+                CustomerStatus.ACTIVE,
+                CustomerRole.CUSTOMER,
                 customer.getLastLoginAt(),
                 customer.getLastLoginIp(),
                 customer.getPreviousLoginAt(),

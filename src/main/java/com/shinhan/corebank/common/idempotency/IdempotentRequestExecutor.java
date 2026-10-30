@@ -12,7 +12,7 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
 // 멱등키 처리 5단계(시작 → 재생-또는-진행 → 실행 → 완료 → 실패 시 예약 해제)를 한 곳에 모은 공용 헬퍼.
-// TransferController/AutoTransferController가 각자 들고 있던 동일 로직을 여기로 합쳤다.
+// Idempotency-Key 를 받는 모든 엔드포인트가 이 헬퍼 하나를 거친다. 컨트롤러별 복사본을 두지 않는다.
 @Component
 @RequiredArgsConstructor
 public class IdempotentRequestExecutor {

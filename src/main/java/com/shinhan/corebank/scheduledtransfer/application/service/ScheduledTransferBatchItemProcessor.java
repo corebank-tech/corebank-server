@@ -3,6 +3,8 @@ package com.shinhan.corebank.scheduledtransfer.application.service;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.notification.api.NotificationRequest;
+import com.shinhan.corebank.scheduledtransfer.api.ScheduledTransferSettled;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferPersistencePort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferLookupResult;
@@ -13,6 +15,7 @@ import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCas
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -20,6 +23,7 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +42,8 @@ public class ScheduledTransferBatchItemProcessor {
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final AuditLogService auditLogService;
     private final TransferLookupPort transferLookupPort;
+    private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     // WAITING -> PROCESSING 원자적 선점 (REQ-SCD-013 멱등성 방어)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -68,7 +74,7 @@ public class ScheduledTransferBatchItemProcessor {
                     .formatted(scheduledTransfer.getScheduledTransferId(), date));
         }
 
-        LocalDateTime executedAt = LocalDateTime.now();
+        LocalDateTime executedAt = LocalDateTime.now(clock);
         if (result.status() == ProcessResultStatus.SUCCESS) {
             scheduledTransfer.markSuccess(result.transactionNumber(), executedAt);
         } else {
@@ -92,6 +98,19 @@ public class ScheduledTransferBatchItemProcessor {
         }
 
         recordAudit(scheduledTransfer, date, result.status() == ProcessResultStatus.SUCCESS, result.errorCode());
+
+        // 예약 건 확정마다 발행한다(#707). 알림은 예약 건 ID 가 필요해 TransferSettled 가 아니라 이 이벤트에 싣는다.
+        // 가드를 통과한 쪽만 오므로 재확정과 겹쳐도 한 번만 나간다.
+        NotificationRequest notification = ScheduledTransferNotificationGenerator.generate(
+                scheduledTransfer, result.status(), result.customerFailureReason(), executedAt);
+        eventPublisher.publishEvent(ScheduledTransferSettled.builder()
+                .customerId(scheduledTransfer.getCustomerId())
+                .refId(scheduledTransfer.getScheduledTransferId())
+                .status(result.status())
+                .errorCode(result.errorCode())
+                .occurredAt(executedAt)
+                .notificationRequest(notification)
+                .build());
     }
 
     // transfer 테이블에 실제 거래가 있었는지만 확인해서 확정 (PROCESSING에 멈춘 건 재확정)
@@ -100,8 +119,9 @@ public class ScheduledTransferBatchItemProcessor {
         Optional<TransferLookupResult> lookup = transferLookupPort.findBySourceAndDate(
                 scheduledTransfer.getScheduledTransferId(), scheduledTransfer.getScheduledDate());
 
-        LocalDateTime now = LocalDateTime.now();
-        if (lookup.isEmpty()) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        boolean hasNoTransferRow = lookup.isEmpty();
+        if (hasNoTransferRow) {
             scheduledTransfer.markFailed("실행 중 확인 불가로 재확정 배치가 오류 처리함", null, now);
         } else if (lookup.get().status() == ProcessResultStatus.SUCCESS) {
             scheduledTransfer.markSuccess(lookup.get().transactionNumber(), now);
@@ -126,11 +146,20 @@ public class ScheduledTransferBatchItemProcessor {
             return;
         }
 
-        recordAudit(
-                scheduledTransfer,
-                scheduledTransfer.getScheduledDate(),
-                scheduledTransfer.getStatus() == ScheduledTransferStatus.SUCCESS,
-                null);
+        boolean isSucceeded = scheduledTransfer.getStatus() == ScheduledTransferStatus.SUCCESS;
+        recordAudit(scheduledTransfer, scheduledTransfer.getScheduledDate(), isSucceeded, null);
+
+        // 재확정도 확정마다 발행하되 가드를 통과한 뒤에만 낸다(#707). 실패 코드가 없어 알림은 기본 문장이다.
+        ProcessResultStatus status = isSucceeded ? ProcessResultStatus.SUCCESS : ProcessResultStatus.ERROR;
+        NotificationRequest notification =
+                ScheduledTransferNotificationGenerator.generate(scheduledTransfer, status, Optional.empty(), now);
+        eventPublisher.publishEvent(ScheduledTransferSettled.builder()
+                .customerId(scheduledTransfer.getCustomerId())
+                .refId(scheduledTransfer.getScheduledTransferId())
+                .status(status)
+                .occurredAt(now)
+                .notificationRequest(notification)
+                .build());
     }
 
     private void recordAudit(ScheduledTransfer scheduledTransfer, LocalDate date, boolean succeeded, String errorCode) {

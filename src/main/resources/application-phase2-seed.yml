@@ -1,0 +1,8 @@
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 10
+
+logging:
+  level:
+    com.shinhan.corebank.common.init.Phase2MinimumSeedLoader: info

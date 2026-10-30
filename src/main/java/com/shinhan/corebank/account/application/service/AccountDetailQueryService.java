@@ -4,7 +4,6 @@ import com.shinhan.corebank.account.application.port.in.AccountDetailQueryUseCas
 import com.shinhan.corebank.account.application.port.in.AccountDetailResult;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
-import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
@@ -44,8 +43,10 @@ public class AccountDetailQueryService implements AccountDetailQueryUseCase {
                 resolveAccountName(account),
                 account.getAccountNumber(),
                 account.getBalance(),
-                resolveAvailableBalance(account),
+                account.getBalance(),
+                account.getAvailableBalance(),
                 account.getOpenedDate().toLocalDate(),
+                account.getMaturityDate(),
                 account.getStatus(),
                 account.getPasswordFailureCount(),
                 account.isPasswordLocked());
@@ -70,12 +71,5 @@ public class AccountDetailQueryService implements AccountDetailQueryUseCase {
         }
 
         return productName;
-    }
-
-    // 거래정지·해지·비밀번호 잠금 계좌의 출금 가능 잔액을 0으로 반환한다.
-    private long resolveAvailableBalance(Account account) {
-        boolean withdrawalRestricted = account.getStatus() != AccountStatus.ACTIVE || account.isPasswordLocked();
-
-        return withdrawalRestricted ? 0L : account.getBalance();
     }
 }

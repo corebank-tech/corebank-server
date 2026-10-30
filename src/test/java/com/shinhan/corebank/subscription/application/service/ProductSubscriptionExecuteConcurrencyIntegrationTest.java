@@ -5,10 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.adapter.out.persistence.AccountJpaEntity;
 import com.shinhan.corebank.account.adapter.out.persistence.AccountJpaRepository;
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.account.domain.AccountStatus;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
+import com.shinhan.corebank.business.api.BusinessDateProvider;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaEntity;
@@ -69,6 +71,9 @@ class ProductSubscriptionExecuteConcurrencyIntegrationTest extends IntegrationTe
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
+    private BusinessDateProvider businessDateProvider;
+
+    @Autowired
     private CustomerTestFixture customerTestFixture;
 
     @Autowired
@@ -78,6 +83,10 @@ class ProductSubscriptionExecuteConcurrencyIntegrationTest extends IntegrationTe
     // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
     @MockitoBean
     private OtpAuthTokenVerifier otpAuthTokenVerifier;
+
+    // 계좌비밀번호 인증 토큰도 같은 이유로 account.api 경계만 대체한다 — 발급/소비 로직은 account 도메인 테스트가 담당한다.
+    @MockitoBean
+    private AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
 
     private ExecutorService executor;
     private Long customerId;
@@ -166,6 +175,19 @@ class ProductSubscriptionExecuteConcurrencyIntegrationTest extends IntegrationTe
                 customerId,
                 withdrawalAccountId);
         assertThat(openedAccountCount).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("정기적금 가입에 성공하면 초입금 원장이 없어도 가입 논리 영업일이 현재 영업일로 저장된다")
+    void execute_savingsSubscription_storesSubscriptionTradeDate() {
+        ProductSubscriptionExecuteResult result = productSubscriptionExecuteUseCase.execute(buildCommand());
+
+        LocalDate stored = jdbcTemplate.queryForObject(
+                "SELECT subscription_trade_date FROM product_subscription WHERE subscription_id = ?",
+                LocalDate.class,
+                result.subscriptionId());
+        assertThat(result.transactionNumber()).isNull();
+        assertThat(stored).isEqualTo(businessDateProvider.today());
     }
 
     private Future<ExecutionOutcome> submitExecute(CountDownLatch anyFinished) {

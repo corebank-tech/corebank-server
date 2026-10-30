@@ -3,6 +3,7 @@ package com.shinhan.corebank.batch.adapter.in.scheduler;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.notification.application.port.in.NotificationCommandUseCase;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -34,6 +36,10 @@ class DailyTransferBatchSchedulerIntegrationTest extends IntegrationTestSupport 
 
     @Autowired
     PlatformTransactionManager transactionManager;
+
+    // 알림이 실제 고객으로 저장되면 정리 단계의 고객 삭제가 FK 에 막힌다(#707).
+    @MockitoBean
+    NotificationCommandUseCase notificationCommandUseCase;
 
     private static final AtomicLong CUSTOMER_SEQ = new AtomicLong();
     private static final AtomicLong ACCOUNT_SEQ = new AtomicLong();
@@ -147,7 +153,7 @@ class DailyTransferBatchSchedulerIntegrationTest extends IntegrationTestSupport 
                 .setParameter("id", scheduledTransferId)
                 .getSingleResult();
         assertThat(scheduled[0]).isEqualTo("FAILED");
-        assertThat((String) scheduled[1]).contains("잔액이 부족");
+        assertThat((String) scheduled[1]).contains("출금가능금액이 부족");
 
         long balanceAfter = ((Number) entityManager
                         .createNativeQuery("SELECT balance FROM account WHERE account_id = :id")

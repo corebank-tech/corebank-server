@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
+import java.time.Clock;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,7 +27,8 @@ class IdempotencyKeyCleanupSchedulerUnitTest {
     BatchExecutionLockPort batchExecutionLockPort;
 
     private IdempotencyKeyCleanupScheduler scheduler() {
-        return new IdempotencyKeyCleanupScheduler(idempotencyKeyJpaRepository, batchExecutionLockPort);
+        return new IdempotencyKeyCleanupScheduler(
+                idempotencyKeyJpaRepository, batchExecutionLockPort, Clock.systemDefaultZone());
     }
 
     @Test

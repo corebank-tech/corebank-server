@@ -3,7 +3,6 @@ package com.shinhan.corebank.transfer.adapter.out.persistence;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import lombok.*;
 
 @Entity
@@ -29,11 +28,9 @@ public class TransactionSequenceJpaEntity {
     @Column(name = "updated_at", nullable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime updatedAt;
 
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
-    public long incrementAndGet() {
+    public long incrementAndGet(LocalDateTime now) {
         this.lastSeq += 1;
-        this.updatedAt = LocalDateTime.now(KST);
+        this.updatedAt = now;
         return this.lastSeq;
     }
 }

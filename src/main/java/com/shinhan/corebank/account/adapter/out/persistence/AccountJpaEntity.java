@@ -42,6 +42,10 @@ public class AccountJpaEntity extends BaseEntity {
     @Column(name = "balance", nullable = false)
     private Long balance;
 
+    @Builder.Default
+    @Column(name = "hold_amount", nullable = false)
+    private Long holdAmount = 0L;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 12)
     private AccountStatus status;
@@ -76,6 +80,9 @@ public class AccountJpaEntity extends BaseEntity {
     @Column(name = "closed_date", columnDefinition = "DATETIME(6)")
     private LocalDateTime closedDate;
 
+    @Column(name = "closed_trade_date")
+    private LocalDate closedTradeDate;
+
     @Column(name = "last_transaction_at", columnDefinition = "DATETIME(6)")
     private LocalDateTime lastTransactionAt;
 
@@ -85,6 +92,7 @@ public class AccountJpaEntity extends BaseEntity {
 
     public void updateFrom(Account account) {
         this.balance = account.getBalance();
+        this.holdAmount = account.getHoldAmount();
         this.status = account.getStatus();
         this.passwordHash = account.getPasswordHash();
         this.passwordFailureCount = (byte) account.getPasswordFailureCount();
@@ -94,6 +102,7 @@ public class AccountJpaEntity extends BaseEntity {
         this.withdrawalRegistered = account.isWithdrawalRegistered();
         this.withdrawalRegisteredAt = account.getWithdrawalRegisteredAt();
         this.closedDate = account.getClosedDate();
+        this.closedTradeDate = account.getClosedTradeDate();
         this.lastTransactionAt = account.getLastTransactionAt();
     }
 

@@ -9,6 +9,7 @@ import com.shinhan.corebank.auth.application.port.in.LoginResult;
 import com.shinhan.corebank.auth.application.port.in.LoginUseCase;
 import com.shinhan.corebank.auth.domain.exception.AuthErrorCode;
 import com.shinhan.corebank.auth.domain.exception.LoginFailedException;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -54,7 +55,8 @@ class LoginAuditPersistenceIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("로그인 성공은 민감정보 없이 LOGIN 성공 감사로 저장된다")
     void persistsSuccessfulLoginAudit() {
-        LoginResult result = loginUseCase.login(new LoginCommand(USER_ID, RAW_PASSWORD, REQUEST_IP));
+        LoginResult result =
+                loginUseCase.login(new LoginCommand(USER_ID, RAW_PASSWORD, REQUEST_IP, CustomerRole.CUSTOMER));
 
         assertThat(result.customerId()).isEqualTo(customerId);
 
@@ -63,6 +65,7 @@ class LoginAuditPersistenceIntegrationTest extends IntegrationTestSupport {
         assertThat(audit.eventType()).isEqualTo("LOGIN");
         assertThat(audit.result()).isEqualTo("SUCCESS");
         assertThat(audit.reason()).isEqualTo("SUCCESS");
+        assertThat(audit.requiredRole()).isEqualTo("CUSTOMER");
         assertSensitiveDataNotRecorded(audit.detail());
     }
 
@@ -71,8 +74,8 @@ class LoginAuditPersistenceIntegrationTest extends IntegrationTestSupport {
     @DisplayName("로그인 실패는 민감정보 없이 LOGIN 실패 감사로 저장된다")
     void persistsFailedLoginAudit() {
         LoginFailedException exception = catchThrowableOfType(
-                () -> loginUseCase.login(new LoginCommand(USER_ID, WRONG_PASSWORD, REQUEST_IP)),
-                LoginFailedException.class);
+                LoginFailedException.class,
+                () -> loginUseCase.login(new LoginCommand(USER_ID, WRONG_PASSWORD, REQUEST_IP, CustomerRole.CUSTOMER)));
 
         assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);
 
@@ -81,6 +84,26 @@ class LoginAuditPersistenceIntegrationTest extends IntegrationTestSupport {
         assertThat(audit.eventType()).isEqualTo("LOGIN");
         assertThat(audit.result()).isEqualTo("FAILURE");
         assertThat(audit.reason()).isEqualTo("INVALID_CREDENTIALS");
+        assertThat(audit.requiredRole()).isEqualTo("CUSTOMER");
+        assertSensitiveDataNotRecorded(audit.detail());
+    }
+
+    // 관리자 경로 시도였는지는 요구 역할만 알려 준다. 고객 경로 실패와 응답이 같아서,
+    // 감사 행에 남지 않으면 어느 경로로 두드렸는지 사후에 알 방법이 없다.
+    @Test
+    @DisplayName("관리자 경로 실패는 요구 역할을 ADMIN 으로 저장한다")
+    void persistsRequiredRoleForAdminPath() {
+        LoginFailedException exception = catchThrowableOfType(
+                LoginFailedException.class,
+                () -> loginUseCase.login(new LoginCommand(USER_ID, RAW_PASSWORD, REQUEST_IP, CustomerRole.ADMIN)));
+
+        assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.LOGIN_FAILED);
+
+        PersistedAudit audit = findLatestAudit();
+
+        assertThat(audit.result()).isEqualTo("FAILURE");
+        assertThat(audit.reason()).isEqualTo("INVALID_CREDENTIALS");
+        assertThat(audit.requiredRole()).isEqualTo("ADMIN");
         assertSensitiveDataNotRecorded(audit.detail());
     }
 
@@ -119,6 +142,7 @@ class LoginAuditPersistenceIntegrationTest extends IntegrationTestSupport {
                     event_type,
                     result,
                     JSON_UNQUOTE(JSON_EXTRACT(detail, '$.reason')) AS reason,
+                    JSON_UNQUOTE(JSON_EXTRACT(detail, '$.requiredRole')) AS required_role,
                     CAST(detail AS CHAR) AS detail
                 FROM audit_log
                 WHERE customer_id = ?
@@ -129,6 +153,7 @@ class LoginAuditPersistenceIntegrationTest extends IntegrationTestSupport {
                         resultSet.getString("event_type"),
                         resultSet.getString("result"),
                         resultSet.getString("reason"),
+                        resultSet.getString("required_role"),
                         resultSet.getString("detail")),
                 customerId);
     }
@@ -160,5 +185,5 @@ class LoginAuditPersistenceIntegrationTest extends IntegrationTestSupport {
     }
 
     // 감사 로그의 보안 검증에 필요한 저장 결과
-    private record PersistedAudit(String eventType, String result, String reason, String detail) {}
+    private record PersistedAudit(String eventType, String result, String reason, String requiredRole, String detail) {}
 }

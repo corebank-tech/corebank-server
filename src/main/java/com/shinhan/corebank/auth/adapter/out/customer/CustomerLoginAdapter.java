@@ -56,6 +56,7 @@ public class CustomerLoginAdapter implements LoginCustomerPort {
         return switch (state) {
             case COMPLETED -> LoginSuccessUpdateResult.COMPLETED;
             case ACCOUNT_LOCKED -> LoginSuccessUpdateResult.ACCOUNT_LOCKED;
+            case ACCOUNT_SUSPENDED -> LoginSuccessUpdateResult.ACCOUNT_SUSPENDED;
         };
     }
 }

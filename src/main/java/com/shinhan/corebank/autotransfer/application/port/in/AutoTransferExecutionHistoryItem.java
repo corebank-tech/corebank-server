@@ -1,6 +1,7 @@
 package com.shinhan.corebank.autotransfer.application.port.in;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 // 자동이체 실행 이력 목록에 보여줄 한 줄
@@ -14,4 +15,5 @@ public record AutoTransferExecutionHistoryItem(
         Long amount,
         Integer cycleMonths,
         String myPassbookMemo,
+        LocalDate tradeDate,
         String failureReason) {}

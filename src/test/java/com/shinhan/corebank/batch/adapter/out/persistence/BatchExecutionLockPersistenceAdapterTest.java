@@ -137,8 +137,73 @@ class BatchExecutionLockPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("isRunning - 실행 중이 아니면 false")
+    void isRunning_idle_returnsFalse() {
+        assertThat(adapter.isRunning(jobName)).isFalse();
+    }
+
+    @Test
+    @DisplayName("isRunning - 실행 중이고 갱신된 지 얼마 안 됐으면 true")
+    void isRunning_recentlyRunning_returnsTrue() {
+        adapter.tryAcquire(jobName);
+
+        assertThat(adapter.isRunning(jobName)).isTrue();
+    }
+
+    @Test
+    @DisplayName("isRunning - 실행 중으로 남았어도 stale 임계값(6시간)보다 오래됐으면 false (크래시로 release 누락)")
+    void isRunning_staleLock_returnsFalse() {
+        adapter.tryAcquire(jobName);
+        setUpdatedAt(LocalDateTime.now(clock).minusHours(7));
+
+        assertThat(adapter.isRunning(jobName)).isFalse();
+    }
+
+    @Test
+    @DisplayName("isRunning - stale 임계값 이내(5시간)면 아직 true")
+    void isRunning_withinThreshold_returnsTrue() {
+        adapter.tryAcquire(jobName);
+        setUpdatedAt(LocalDateTime.now(clock).minusHours(5));
+
+        assertThat(adapter.isRunning(jobName)).isTrue();
+    }
+
+    @Test
+    @DisplayName("isRunning - 락 행이 없으면 false")
+    void isRunning_missingRow_returnsFalse() {
+        assertThat(adapter.isRunning("NO_SUCH_JOB_" + JOB_SEQ.incrementAndGet()))
+                .isFalse();
+    }
+
+    private void setUpdatedAt(LocalDateTime updatedAt) {
+        transactionTemplate().executeWithoutResult(status -> entityManager
+                .createNativeQuery("UPDATE batch_execution_lock SET updated_at = :updatedAt WHERE job_name = :jobName")
+                .setParameter("updatedAt", updatedAt)
+                .setParameter("jobName", jobName)
+                .executeUpdate());
+    }
+
+    @Test
     @DisplayName("존재하지 않는 jobName으로 선점을 시도하면 예외를 던진다")
     void tryAcquire_unknownJobName_throwsIllegalState() {
         assertThatThrownBy(() -> adapter.tryAcquire("NO_SUCH_JOB")).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("isRunning()은 락을 잡지 않고 currently_running만 조회한다")
+    void isRunning_reflectsCurrentlyRunningWithoutAcquiring() {
+        assertThat(adapter.isRunning(jobName)).isFalse();
+
+        adapter.tryAcquire(jobName);
+        assertThat(adapter.isRunning(jobName)).isTrue();
+
+        adapter.release(jobName);
+        assertThat(adapter.isRunning(jobName)).isFalse();
+    }
+
+    @Test
+    @DisplayName("isRunning()은 존재하지 않는 jobName을 실행 중이 아닌 것으로 본다")
+    void isRunning_unknownJobName_returnsFalse() {
+        assertThat(adapter.isRunning("NO_SUCH_JOB")).isFalse();
     }
 }

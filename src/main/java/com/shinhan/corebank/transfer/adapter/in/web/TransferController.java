@@ -7,8 +7,12 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
+import com.shinhan.corebank.transfer.application.port.in.InterbankBankQueryUseCase;
+import com.shinhan.corebank.transfer.application.port.in.InterbankPayeeInquiryUseCase;
+import com.shinhan.corebank.transfer.application.port.in.InterbankTransferUseCase;
 import com.shinhan.corebank.transfer.application.port.in.PayeeInquiryUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
+import com.shinhan.corebank.transfer.application.port.in.TransferHistoryPage;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryQueryUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistorySort;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,8 +25,11 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -40,11 +47,17 @@ import tools.jackson.core.type.TypeReference;
 @Tag(name = "이체", description = "즉시이체 실행 및 수취인(예금주) 조회 API")
 public class TransferController {
 
+    private static final int EXPORT_PAGE_NUMBER = 0;
+    private static final int EXPORT_PAGE_SIZE = 10;
+
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final PayeeInquiryUseCase payeeInquiryUseCase;
     private final CurrentCustomerProvider currentCustomerProvider;
     private final IdempotentRequestExecutor idempotentRequestExecutor;
     private final TransferHistoryQueryUseCase transferHistoryQueryUseCase;
+    private final InterbankTransferUseCase interbankTransferUseCase;
+    private final InterbankBankQueryUseCase interbankBankQueryUseCase;
+    private final InterbankPayeeInquiryUseCase interbankPayeeInquiryUseCase;
 
     @PostMapping
     @Operation(
@@ -59,7 +72,8 @@ public class TransferController {
             description =
                     """
             이체 요청이 처리됨. 실행 자체의 성공 여부와 이체 성공 여부는 다르다 — 응답 본문의 status로 \
-            판단한다. status=ERROR면 errorCode에 `TRF0001`(등록되지 않은 출금계좌) · `TRF0002`(출금·입금계좌 동일) \
+            판단한다. status=TIMEOUT이면 처리 불명(대외 응답 없음)이라 실패가 아니다 — 재시도하지 않는다. \
+            status=ERROR면 errorCode에 `TRF0001`(등록되지 않은 출금계좌) · `TRF0002`(출금·입금계좌 동일) \
             · `TRF0004`(입금 불가 상품유형) · `TRF0201`(입금계좌를 찾을 수 없음) · `TRF0301`/`TRF0304`(거래정지·해지 \
             상태의 입금/출금계좌) · `TRF0303`(출금계좌 잔액 부족) · `OTP0101`(OTP 인증 토큰 무효) · `OTP0102`(인증한 \
             거래 내용과 요청 내용 불일치) 중 하나가 담긴다.""")
@@ -97,6 +111,67 @@ public class TransferController {
                         transferExecutionUseCase.execute(request.toCommand(customerId, authToken, otpAuthToken)))));
     }
 
+    @PostMapping("/interbank")
+    @Operation(
+            operationId = "executeInterbankTransfer",
+            summary = "타행이체 실행",
+            description =
+                    """
+            다른 은행 계좌로 이체한다. 당행 이체(POST /transfers)와 계좌번호 검증·OTP 대조 데이터가 달라 따로 둔다. \
+            OTP 발급 때 transactionData에 payeeBankCode를 더한다. 동일한 Idempotency-Key와 동일한 요청 내용으로 \
+            재요청하면 새로 처리하지 않고 저장된 응답을 그대로 반환한다.""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "200",
+            description =
+                    """
+            이체 요청이 처리됨. 결과는 응답 본문의 status로 본다. status=TIMEOUT이면 상대 은행 응답이 없어 처리 불명이다 — \
+            다시 보내지 않는다(상대가 이미 입금했을 수 있다). 결과는 서버가 조회거래로 확인하고 이체 상세에서 다시 본다. \
+            status=ERROR면 errorCode에 `TRF0001` · `TRF0304` · `TRF0303`/`LMT0001` · `LMT0002` · `LMT0003` · \
+            `OTP0101` · `OTP0102` · `TRF0201`(상대 은행에 수취 계좌 없음) · `TRF0301`(수취 계좌 거래 불가) · \
+            `TRF0308`(상대 은행이 처리하지 못함 — 출금했으면 되돌린 뒤 확정) 중 하나가 담긴다.""")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description =
+                        "`TRF0003` 이체금액 형식 · `TRF0005` 통장 표시내용 길이 · `TRF0006` 지원하지 않는 은행 · `TRF0007` 타행 계좌번호 형식 · `TRF0008` 보낼 수 없는 문자",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "`CMN0301`/`CMN0302` 멱등키 충돌",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<ApiResponse<InterbankTransferResponse>> executeInterbank(
+            @Parameter(description = "멱등키. 동일 키로 재요청 시 재처리 없이 저장된 응답을 반환", required = true)
+                    @RequestHeader("Idempotency-Key")
+                    String idempotencyKey,
+            @Parameter(description = "계좌 비밀번호 인증 완료 후 발급되는 1회성 인증 토큰", required = true)
+                    @RequestHeader("Account-Password-Auth-Token")
+                    String authToken,
+            @Parameter(description = "OTP 인증 완료 후 발급되는 1회성 인증 토큰", required = true) @RequestHeader("Otp-Auth-Token")
+                    String otpAuthToken,
+            @RequestBody InterbankTransferRequest request) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
+        return idempotentRequestExecutor.execute(
+                idempotencyKey,
+                customerId,
+                "POST /transfers/interbank",
+                interbankFingerprint(customerId, request),
+                new TypeReference<>() {},
+                () -> ApiResponse.success(InterbankTransferResponse.from(
+                        interbankTransferUseCase.execute(request.toCommand(customerId, authToken, otpAuthToken)))));
+    }
+
+    @GetMapping("/banks")
+    @Operation(
+            operationId = "getInterbankBanks",
+            summary = "타행이체 은행 목록",
+            description = "타행이체로 보낼 수 있는 은행을 은행코드 오름차순으로 돌려준다. 당행(088)은 없다.")
+    public ApiResponse<List<InterbankBankResponse>> getInterbankBanks() {
+        return ApiResponse.success(interbankBankQueryUseCase.findAll().stream()
+                .map(InterbankBankResponse::from)
+                .toList());
+    }
+
     @GetMapping("/payee")
     @Operation(operationId = "getTransferPayee", summary = "수취인(예금주) 조회", description = "이체 실행 전 입금계좌번호로 예금주명을 조회한다.")
     @ApiResponses({
@@ -116,6 +191,41 @@ public class TransferController {
         return ApiResponse.success(PayeeResponse.from(payeeInquiryUseCase.inquire(accountNumber)));
     }
 
+    @GetMapping("/interbank/payee")
+    @Operation(
+            operationId = "getInterbankTransferPayee",
+            summary = "타행 수취인(예금주) 조회",
+            description =
+                    """
+            타행이체 전에 상대 은행에 입금계좌의 예금주명을 묻는다. 당행 조회(GET /transfers/payee)와 달리 \
+            상대 은행 전문을 보내므로 응답 대기 시간만큼 걸릴 수 있다. 조회에 실패하면(오류 응답 전부) 이체 화면은 \
+            다음 단계로 넘어가지 않는다 — 이름 없이 진행하는 경로는 없다.""")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "`CMN0002` 필수값 누락 · `TRF0006` 지원하지 않는 은행 · `TRF0007` 타행 계좌번호 형식",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "`TRF0201` 상대 은행에 입금계좌가 없음",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "`TRF0301` 입금계좌 거래 불가(정지·해지) · `TRF0309` 상대 은행에서 예금주를 확인하지 못함" + "(무응답 · 상대 장애 · 서킷 열림)",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ApiResponse<InterbankPayeeResponse> inquireInterbankPayee(
+            @Parameter(description = "받는 은행코드. GET /transfers/banks 목록의 bankCode", required = true, example = "004")
+                    @RequestParam
+                    String bankCode,
+            @Parameter(description = "입금계좌번호. 숫자만 1~16자리, 하이픈 없이", required = true, example = "1234567890123")
+                    @RequestParam
+                    String accountNumber) {
+        return ApiResponse.success(
+                InterbankPayeeResponse.from(interbankPayeeInquiryUseCase.inquire(bankCode, accountNumber)));
+    }
+
     @GetMapping
     @Operation(
             operationId = "searchTransfers",
@@ -131,14 +241,16 @@ public class TransferController {
     public ApiResponse<TransferHistoryPageResponse> search(
             @Parameter(description = "조회할 출금계좌 ID", required = true, example = "101") @RequestParam
                     Long withdrawalAccountId,
-            @Parameter(description = "처리상태 필터. SUCCESS/ERROR, 미지정 또는 ALL이면 전체", example = "SUCCESS")
+            @Parameter(description = "처리상태 필터. SUCCESS/ERROR/TIMEOUT, 미지정 또는 ALL이면 전체", example = "SUCCESS")
                     @RequestParam(required = false)
                     String status,
             @Parameter(description = "조회 시작일(미지정 시 종료일-1개월)", example = "2026-08-01") @RequestParam(required = false)
                     LocalDate fromDate,
             @Parameter(description = "조회 종료일(미지정 시 오늘)", example = "2026-08-31") @RequestParam(required = false)
                     LocalDate toDate,
-            @RequestParam(defaultValue = "LATEST") TransferHistorySort sort,
+            @Parameter(description = "정렬 조건. LATEST(최신순)·OLDEST(과거순). 생략 시 LATEST", example = "LATEST")
+                    @RequestParam(defaultValue = "LATEST")
+                    TransferHistorySort sort,
             @Parameter(description = "페이지 번호(0부터 시작). all=true면 무시됨", example = "0") @RequestParam(defaultValue = "0")
                     int page,
             @Parameter(description = "페이지 크기. 5/10/20/30/50 중 하나만 허용. all=true면 무시됨", example = "10")
@@ -150,6 +262,59 @@ public class TransferController {
         Long customerId = currentCustomerProvider.getCurrentCustomerId();
         return ApiResponse.success(TransferHistoryPageResponse.from(transferHistoryQueryUseCase.search(
                 customerId, withdrawalAccountId, parseStatus(status), fromDate, toDate, sort, page, size, all)));
+    }
+
+    // 성공은 CSV 원본, 실패만 공통 JSON 오류를 쓰는 파일 다운로드 응답 규약 — api_conventions.md §"파일 다운로드 응답 예외"
+    @GetMapping("/export")
+    @Operation(
+            operationId = "exportTransfers",
+            summary = "이체결과 CSV 다운로드",
+            description =
+                    """
+            목록 조회(`GET /transfers`)와 동일한 조건·소유권 검증으로 조회한 전체 건을 CSV 파일로 내려받는다. \
+            페이징은 적용되지 않는다(목록 API의 all=true와 동일한 조회). 성공 응답은 공통 응답 봉투(`code`/`message`/`data`) \
+            없이 CSV 파일 원본이 내려간다.""")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "다운로드 성공",
+                content = @Content(mediaType = "text/csv")),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "`TRF0001` 등록되지 않은/타인 소유 출금계좌 · `CMN0001` 지원하지 않는 status 값 · `CMN0003`/`CMN0004` 조회기간 오류",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<byte[]> exportCsv(
+            @Parameter(description = "조회할 출금계좌 ID", required = true, example = "101") @RequestParam
+                    Long withdrawalAccountId,
+            @Parameter(description = "처리상태 필터. SUCCESS/ERROR/TIMEOUT, 미지정 또는 ALL이면 전체", example = "SUCCESS")
+                    @RequestParam(required = false)
+                    String status,
+            @Parameter(description = "조회 시작일(미지정 시 종료일-1개월)", example = "2026-08-01") @RequestParam(required = false)
+                    LocalDate fromDate,
+            @Parameter(description = "조회 종료일(미지정 시 오늘)", example = "2026-08-31") @RequestParam(required = false)
+                    LocalDate toDate,
+            @RequestParam(defaultValue = "LATEST") TransferHistorySort sort) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
+        // all=true면 PageableResolver가 size 검증 없이 Pageable.unpaged()를 반환한다(PageableResolver 클래스 주석) —
+        // 그래도 여기 EXPORT_PAGE 값은 목록 API가 허용하는 크기 중 하나로 둬서 그 계약이 바뀌어도 안전하게 만든다
+        TransferHistoryPage result = transferHistoryQueryUseCase.search(
+                customerId,
+                withdrawalAccountId,
+                parseStatus(status),
+                fromDate,
+                toDate,
+                sort,
+                EXPORT_PAGE_NUMBER,
+                EXPORT_PAGE_SIZE,
+                true);
+        byte[] csv = TransferHistoryCsvWriter.write(result.page().getContent().stream()
+                .map(TransferHistoryItemResponse::from)
+                .toList());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"transfer-history.csv\"")
+                .contentType(MediaType.valueOf("text/csv;charset=UTF-8"))
+                .body(csv);
     }
 
     @GetMapping("/monthly-statistics")
@@ -211,6 +376,19 @@ public class TransferController {
         } catch (IllegalArgumentException e) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT, "status 값이 올바르지 않습니다.");
         }
+    }
+
+    // 당행과 같은 이유로 인증 토큰은 빼고, 은행코드를 더한다.
+    private Map<String, Object> interbankFingerprint(Long customerId, InterbankTransferRequest request) {
+        Map<String, Object> fingerprint = new LinkedHashMap<>();
+        fingerprint.put("customerId", customerId);
+        fingerprint.put("withdrawalAccountId", request.withdrawalAccountId());
+        fingerprint.put("payeeBankCode", request.payeeBankCode());
+        fingerprint.put("depositAccountNumber", request.depositAccountNumber());
+        fingerprint.put("amount", request.amount());
+        fingerprint.put("myPassbookMemo", request.myPassbookMemo());
+        fingerprint.put("recipientPassbookMemo", request.recipientPassbookMemo());
+        return fingerprint;
     }
 
     // 멱등키 해시는 인증 토큰을 제외한 지문으로 계산한다(AutoTransferController와 동일 이유) —

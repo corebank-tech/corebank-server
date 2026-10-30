@@ -2,6 +2,7 @@ package com.shinhan.corebank.auth.adapter.in.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.shinhan.corebank.SharedTestObjectMapper;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,7 +15,7 @@ import tools.jackson.databind.ObjectMapper;
 
 class SessionAuthenticationEntryPointTest {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = SharedTestObjectMapper.INSTANCE;
     private final SessionAuthenticationEntryPoint entryPoint = new SessionAuthenticationEntryPoint(objectMapper);
 
     @Test
@@ -31,8 +32,8 @@ class SessionAuthenticationEntryPointTest {
         assertThat(MediaType.APPLICATION_JSON.isCompatibleWith(MediaType.parseMediaType(response.getContentType())))
                 .isTrue();
         assertThat(response.getCharacterEncoding()).isEqualTo(StandardCharsets.UTF_8.name());
-        assertThat(body.get("code").asText()).isEqualTo("CMN0101");
-        assertThat(body.get("message").asText()).isEqualTo("인증정보가 없거나 세션이 만료되었습니다.");
+        assertThat(body.get("code").asString()).isEqualTo("CMN0101");
+        assertThat(body.get("message").asString()).isEqualTo("인증정보가 없거나 세션이 만료되었습니다.");
         assertThat(body.has("data")).isTrue();
         assertThat(body.get("data").isNull()).isTrue();
         assertThat(response.getContentAsString()).doesNotContain("외부에 노출하면 안 되는 인증 예외");

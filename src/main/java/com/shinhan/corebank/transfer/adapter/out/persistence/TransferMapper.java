@@ -16,6 +16,7 @@ public class TransferMapper {
                 .withdrawalAccountId(domain.getWithdrawalAccountId())
                 .depositAccountId(domain.getDepositAccountId())
                 .depositAccountNumber(domain.getDepositAccountNumber())
+                .payeeBankCode(domain.getPayeeBankCode())
                 .payeeName(domain.getPayeeName())
                 .amount(domain.getAmount())
                 .fee(domain.getFee())
@@ -32,6 +33,10 @@ public class TransferMapper {
                 .errorMessage(domain.getErrorMessage())
                 .transferredAt(domain.getTransferredAt())
                 .createdAt(domain.getCreatedAt())
+                .tradeDate(domain.getTradeDate())
+                .invalidatedAt(domain.getInvalidatedAt())
+                .refTransferId(domain.getRefTransferId())
+                .correctionType(domain.getCorrectionType())
                 .build();
     }
 
@@ -46,6 +51,7 @@ public class TransferMapper {
                 .withdrawalAccountId(entity.getWithdrawalAccountId())
                 .depositAccountId(entity.getDepositAccountId())
                 .depositAccountNumber(entity.getDepositAccountNumber())
+                .payeeBankCode(entity.getPayeeBankCode())
                 .payeeName(entity.getPayeeName())
                 .amount(entity.getAmount())
                 .fee(entity.getFee())
@@ -62,6 +68,10 @@ public class TransferMapper {
                 .errorMessage(entity.getErrorMessage())
                 .transferredAt(entity.getTransferredAt())
                 .createdAt(entity.getCreatedAt())
+                .tradeDate(entity.getTradeDate())
+                .invalidatedAt(entity.getInvalidatedAt())
+                .refTransferId(entity.getRefTransferId())
+                .correctionType(entity.getCorrectionType())
                 .build();
     }
 }

@@ -121,9 +121,9 @@ class EmailVerificationServiceTest {
         given(customerAvailabilityPort.isEmailTaken("user@example.com")).willReturn(true);
 
         BusinessException exception = catchThrowableOfType(
+                BusinessException.class,
                 () -> service.issue(
-                        new IssueEmailVerificationCommand("user@example.com", EmailVerificationPurpose.SIGN_UP)),
-                BusinessException.class);
+                        new IssueEmailVerificationCommand("user@example.com", EmailVerificationPurpose.SIGN_UP)));
 
         assertThat(exception.getErrorCode()).isEqualTo(SignupErrorCode.DUPLICATE_EMAIL);
         verify(requestPort, never()).save(any());
@@ -133,8 +133,8 @@ class EmailVerificationServiceTest {
     @DisplayName("이메일 형식이 잘못되면 CMN0001을 반환한다")
     void rejectsInvalidEmailFormat() {
         BusinessException exception = catchThrowableOfType(
-                () -> service.issue(new IssueEmailVerificationCommand("not-email", EmailVerificationPurpose.SIGN_UP)),
-                BusinessException.class);
+                BusinessException.class,
+                () -> service.issue(new IssueEmailVerificationCommand("not-email", EmailVerificationPurpose.SIGN_UP)));
 
         assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT);
         verify(requestPort, never()).save(any());
@@ -213,7 +213,7 @@ class EmailVerificationServiceTest {
         given(tokenPort.find(TOKEN)).willReturn(Optional.of(emailChangePayload("other@corebank.com")));
 
         BusinessException emailMismatch = catchThrowableOfType(
-                () -> service.verifyAndConsumeForEmailChange(TOKEN, "newmail@corebank.com"), BusinessException.class);
+                BusinessException.class, () -> service.verifyAndConsumeForEmailChange(TOKEN, "newmail@corebank.com"));
 
         assertThat(emailMismatch.getErrorCode()).isEqualTo(SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN);
         verify(tokenPort, never()).consume(any());
@@ -227,7 +227,7 @@ class EmailVerificationServiceTest {
                         "newmail@corebank.com", EmailVerificationPurpose.SIGN_UP, LocalDateTime.now(clock))));
 
         BusinessException exception = catchThrowableOfType(
-                () -> service.verifyAndConsumeForEmailChange(TOKEN, "newmail@corebank.com"), BusinessException.class);
+                BusinessException.class, () -> service.verifyAndConsumeForEmailChange(TOKEN, "newmail@corebank.com"));
 
         assertThat(exception.getErrorCode()).isEqualTo(SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN);
         verify(tokenPort, never()).consume(any());
@@ -239,7 +239,7 @@ class EmailVerificationServiceTest {
         given(tokenPort.find(TOKEN)).willReturn(Optional.empty());
 
         BusinessException exception = catchThrowableOfType(
-                () -> service.verifyAndConsumeForEmailChange(TOKEN, "newmail@corebank.com"), BusinessException.class);
+                BusinessException.class, () -> service.verifyAndConsumeForEmailChange(TOKEN, "newmail@corebank.com"));
 
         assertThat(exception.getErrorCode()).isEqualTo(SignupErrorCode.INVALID_EMAIL_VERIFICATION_TOKEN);
         verify(tokenPort, never()).consume(any());
@@ -256,14 +256,14 @@ class EmailVerificationServiceTest {
                 now.minusMinutes(1));
     }
 
-    // 이메일 변경 토큰 검증에 사용할 Redis payload를 생성한다.
+    // 이메일 변경 토큰 검증에 사용할 저장 payload를 생성한다.
     private EmailVerificationTokenPayload emailChangePayload(String email) {
         return new EmailVerificationTokenPayload(
                 email, EmailVerificationPurpose.EMAIL_CHANGE, LocalDateTime.now(clock));
     }
 
     private void assertError(VerifyEmailCommand command, SignupErrorCode expected) {
-        BusinessException exception = catchThrowableOfType(() -> service.verify(command), BusinessException.class);
+        BusinessException exception = catchThrowableOfType(BusinessException.class, () -> service.verify(command));
         assertThat(exception.getErrorCode()).isEqualTo(expected);
     }
 }

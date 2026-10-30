@@ -11,8 +11,10 @@ public record AccountDetailResult(
         String accountName,
         String accountNumber,
         long balance,
+        long ledgerBalance,
         long availableBalance,
         LocalDate openedDate,
+        LocalDate maturityDate,
         AccountStatus status,
         int passwordFailureCount,
         boolean passwordLocked) {}

@@ -12,6 +12,7 @@ import com.shinhan.corebank.auth.domain.exception.LoginFailedException;
 import com.shinhan.corebank.auth.domain.model.LoginAttemptResult;
 import com.shinhan.corebank.auth.domain.model.LoginAuditReason;
 import com.shinhan.corebank.auth.domain.model.LoginCustomer;
+import com.shinhan.corebank.customer.api.CustomerRole;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -43,60 +44,115 @@ public class LoginService implements LoginUseCase {
 
         LoginCustomer loginCustomer = loginCustomerPort
                 .findByUserId(command.userId())
-                .orElseThrow(() -> customerNotFound(command.password(), command.requestIp()));
+                .orElseThrow(() -> customerNotFound(command.password(), command.requestIp(), command.requiredRole()));
 
         if (loginCustomer.isAccountLocked()) {
-            recordFailureAudit(loginCustomer.getCustomerId(), command.requestIp(), LoginAuditReason.ACCOUNT_LOCKED);
+            recordFailureAudit(
+                    loginCustomer.getCustomerId(),
+                    command.requestIp(),
+                    LoginAuditReason.ACCOUNT_LOCKED,
+                    loginCustomer.getRole(),
+                    command.requiredRole());
             throw LoginFailedException.accountLocked();
         }
 
         boolean passwordMatches = passwordHashVerifierPort.matches(command.password(), loginCustomer.getPasswordHash());
 
         if (!passwordMatches) {
-            throw handlePasswordMismatch(loginCustomer, command.requestIp());
+            throw handlePasswordMismatch(loginCustomer, command.requestIp(), command.requiredRole());
+        }
+
+        // 두 경로가 서로를 거절한다 — 고객 계정은 관리자 경로를, 관리자 계정은 고객 경로를 못 쓴다.
+        // 역할이 맞지 않아도 비밀번호가 틀렸을 때와 같은 응답을 주어 관리자 계정의 존재가
+        // 드러나지 않게 한다(admin_auth.md ③ · REQ-NFR-017).
+        // 실패 횟수는 올리지 않는다 — 비밀번호는 맞았고, 경로를 잘못 고른 것만으로
+        // 계정이 잠기면 안 된다. 존재하지 않는 아이디와 같은 「최초 실패」 모양만 만든다.
+        if (loginCustomer.getRole() != command.requiredRole()) {
+            recordFailureAudit(
+                    loginCustomer.getCustomerId(),
+                    command.requestIp(),
+                    LoginAuditReason.INVALID_CREDENTIALS,
+                    loginCustomer.getRole(),
+                    command.requiredRole());
+            throw LoginFailedException.invalidCredentials(loginAttemptProcessor.process(1));
         }
 
         LoginSuccessUpdateResult updateResult = loginSuccessProcessor.process(
-                loginCustomer.getCustomerId(), LocalDateTime.now(clock), command.requestIp());
+                loginCustomer.getCustomerId(),
+                LocalDateTime.now(clock),
+                command.requestIp(),
+                loginCustomer.getRole(),
+                command.requiredRole());
 
         if (updateResult == LoginSuccessUpdateResult.ACCOUNT_LOCKED) {
-            recordFailureAudit(loginCustomer.getCustomerId(), command.requestIp(), LoginAuditReason.ACCOUNT_LOCKED);
+            recordFailureAudit(
+                    loginCustomer.getCustomerId(),
+                    command.requestIp(),
+                    LoginAuditReason.ACCOUNT_LOCKED,
+                    loginCustomer.getRole(),
+                    command.requiredRole());
             throw LoginFailedException.accountLocked();
         }
 
-        return new LoginResult(loginCustomer.getCustomerId(), loginCustomer.getUserId(), loginCustomer.getUserName());
+        if (updateResult == LoginSuccessUpdateResult.ACCOUNT_SUSPENDED) {
+            recordFailureAudit(
+                    loginCustomer.getCustomerId(),
+                    command.requestIp(),
+                    LoginAuditReason.ACCOUNT_SUSPENDED,
+                    loginCustomer.getRole(),
+                    command.requiredRole());
+            throw LoginFailedException.accountSuspended();
+        }
+
+        return new LoginResult(
+                loginCustomer.getCustomerId(),
+                loginCustomer.getUserId(),
+                loginCustomer.getUserName(),
+                loginCustomer.getRole());
     }
 
     // 존재하지 않는 아이디도 최초 실패처럼 보이는 값과 시간으로 계정 존재 여부 노출을 방지 (REQ-AUTH-023)
-    private LoginFailedException customerNotFound(String rawPassword, String requestIp) {
+    private LoginFailedException customerNotFound(String rawPassword, String requestIp, CustomerRole requiredRole) {
         // BCrypt 비교를 생략하면 응답 시간 차이로 계정 존재 여부가 드러나 더미 해시로 시간을 맞춘다
         passwordHashVerifierPort.matches(rawPassword, DUMMY_PASSWORD_HASH);
 
-        recordFailureAudit(null, requestIp, LoginAuditReason.INVALID_CREDENTIALS);
+        recordFailureAudit(null, requestIp, LoginAuditReason.INVALID_CREDENTIALS, null, requiredRole);
 
         return LoginFailedException.invalidCredentials(loginAttemptProcessor.process(1));
     }
 
     // 저장된 최신 실패 상태를 기준으로 오류와 노출 데이터를 결정
-    private LoginFailedException handlePasswordMismatch(LoginCustomer loginCustomer, String requestIp) {
+    private LoginFailedException handlePasswordMismatch(
+            LoginCustomer loginCustomer, String requestIp, CustomerRole requiredRole) {
         LoginFailureUpdateResult updateResult = loginCustomerPort.recordLoginFailure(loginCustomer.getCustomerId());
 
         if (updateResult.accountLocked()) {
-            recordFailureAudit(loginCustomer.getCustomerId(), requestIp, LoginAuditReason.ACCOUNT_LOCKED);
+            recordFailureAudit(
+                    loginCustomer.getCustomerId(),
+                    requestIp,
+                    LoginAuditReason.ACCOUNT_LOCKED,
+                    loginCustomer.getRole(),
+                    requiredRole);
             return LoginFailedException.accountLocked();
         }
 
         LoginAttemptResult attemptResult = loginAttemptProcessor.process(updateResult.errorCount());
 
-        recordFailureAudit(loginCustomer.getCustomerId(), requestIp, LoginAuditReason.INVALID_CREDENTIALS);
+        recordFailureAudit(
+                loginCustomer.getCustomerId(),
+                requestIp,
+                LoginAuditReason.INVALID_CREDENTIALS,
+                loginCustomer.getRole(),
+                requiredRole);
 
         return LoginFailedException.invalidCredentials(attemptResult);
     }
 
     // 감사 저장 오류가 로그인 실패 응답을 대체하지 않도록 격리
-    private void recordFailureAudit(Long customerId, String requestIp, LoginAuditReason reason) {
+    private void recordFailureAudit(
+            Long customerId, String requestIp, LoginAuditReason reason, CustomerRole role, CustomerRole requiredRole) {
         try {
-            recordLoginAuditPort.record(customerId, requestIp, false, reason);
+            recordLoginAuditPort.record(customerId, requestIp, false, reason, role, requiredRole);
         } catch (RuntimeException exception) {
             log.error("로그인 실패 감사 로그 저장에 실패했습니다. customerId={}, reason={}", customerId, reason, exception);
         }

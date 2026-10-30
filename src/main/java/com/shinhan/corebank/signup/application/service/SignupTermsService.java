@@ -14,6 +14,7 @@ import com.shinhan.corebank.signup.domain.exception.SignupErrorCode;
 import com.shinhan.corebank.signup.domain.model.AgreedTerm;
 import com.shinhan.corebank.signup.domain.model.SignupTerm;
 import com.shinhan.corebank.signup.domain.model.TermsAuthTokenPayload;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -30,16 +31,19 @@ public class SignupTermsService implements GetSignupTermsUseCase, CheckTermsAgre
     private final TermsAuthTokenPort termsAuthTokenPort;
     private final AuthTokenGeneratorPort authTokenGeneratorPort;
     private final SignupTokenProperties tokenProperties;
+    private final Clock clock;
 
     public SignupTermsService(
             SignupTermsQueryPort signupTermsQueryPort,
             TermsAuthTokenPort termsAuthTokenPort,
             AuthTokenGeneratorPort authTokenGeneratorPort,
-            SignupTokenProperties tokenProperties) {
+            SignupTokenProperties tokenProperties,
+            Clock clock) {
         this.signupTermsQueryPort = signupTermsQueryPort;
         this.termsAuthTokenPort = termsAuthTokenPort;
         this.authTokenGeneratorPort = authTokenGeneratorPort;
         this.tokenProperties = tokenProperties;
+        this.clock = clock;
     }
 
     @Override
@@ -78,7 +82,7 @@ public class SignupTermsService implements GetSignupTermsUseCase, CheckTermsAgre
 
         String token = authTokenGeneratorPort.generateTermsAuthToken();
 
-        TermsAuthTokenPayload payload = new TermsAuthTokenPayload(agreedTerms, Instant.now());
+        TermsAuthTokenPayload payload = new TermsAuthTokenPayload(agreedTerms, Instant.now(clock));
 
         termsAuthTokenPort.save(token, payload, tokenProperties.termsAuthTtl());
 

@@ -1,12 +1,18 @@
 package com.shinhan.corebank.transfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
+import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.common.event.DomainEvent;
+import com.shinhan.corebank.common.event.DomainEventSink;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
+import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
@@ -22,6 +28,8 @@ import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -36,7 +44,9 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -64,6 +74,9 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     private PlatformTransactionManager transactionManager;
 
     @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
+    @Autowired
     private AccountLockPort accountLockPort;
 
     @Autowired
@@ -85,6 +98,10 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     @MockitoBean
     private AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
 
+    // 발행된 도메인 이벤트를 잡는다 — BEFORE_COMMIT 리스너가 넘기는 sink 를 mock 으로 바꿔 끼운다(#436).
+    @MockitoBean
+    private DomainEventSink domainEventSink;
+
     @Autowired
     private TransferSequencePort transferSequencePort;
 
@@ -99,6 +116,12 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
 
     @Autowired
     private Clock clock;
+
+    @Autowired
+    private MeterRegistry meterRegistry;
+
+    @Autowired
+    private BusinessDateGate businessDateGate;
 
     @AfterEach
     void cleanUpCommittedData() {
@@ -179,6 +202,54 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("정상 이체가 완료되면 transfer.count{result=SUCCESS,replayed=false} 카운터와 같은 태그의 transfer.duration 타이머가 올라간다")
+    void execute_completesTransfer_recordsMetrics() {
+        // given: 픽스처는 별도 트랜잭션에서 커밋한다.
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(10000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .build();
+
+        // 다른 테스트도 같은 Spring 컨텍스트의 MeterRegistry를 공유하므로 절대값이 아니라
+        // 이 호출 전후의 증가분(delta)으로 검증한다. 메트릭은 서버 시작 때 0으로 등록된다.
+        double countBefore = transferCount("SUCCESS", false);
+        long timerCountBefore = transferTimerCount("SUCCESS", false);
+
+        TransferResult result = transferExecutionService.execute(command);
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(transferCount("SUCCESS", false)).isEqualTo(countBefore + 1);
+        assertThat(transferTimerCount("SUCCESS", false)).isEqualTo(timerCountBefore + 1);
+    }
+
+    private double transferCount(String result, boolean replayed) {
+        return meterRegistry
+                .get("transfer.count")
+                .tags("result", result, "replayed", String.valueOf(replayed))
+                .counter()
+                .count();
+    }
+
+    private long transferTimerCount(String result, boolean replayed) {
+        return meterRegistry
+                .get("transfer.duration")
+                .tags("result", result, "replayed", String.valueOf(replayed))
+                .timer()
+                .count();
+    }
+
+    @Test
     @DisplayName("정상 이체가 완료되면 limit 도메인의 당일 사용액에 이체금액이 적립된다")
     void execute_completesTransfer_accumulatesDailyUsageInLimitDomain() {
         // given: 픽스처는 별도 트랜잭션에서 커밋한다.
@@ -244,9 +315,16 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 .executionDate(executionDate)
                 .build();
 
+        double newCountBefore = transferCount("SUCCESS", false);
+        double replayedCountBefore = transferCount("SUCCESS", true);
+
         // when: 같은 회차를 두 번 실행한다 (당일 안전장치 미작동 후 익일 재시도 시나리오와 동일한 모양)
         TransferResult first = transferExecutionService.execute(command);
         TransferResult second = transferExecutionService.execute(command);
+
+        // then: 새로 처리한 이체는 1건, 다시 확인한 호출은 따로 1건으로 센다 — SUCCESS가 2건으로 부풀지 않는다
+        assertThat(transferCount("SUCCESS", false)).isEqualTo(newCountBefore + 1);
+        assertThat(transferCount("SUCCESS", true)).isEqualTo(replayedCountBefore + 1);
 
         // then: 두 번째 호출은 재처리 없이 첫 번째와 동일한 결과를 반환한다
         assertThat(first.status()).isEqualTo(ProcessResultStatus.SUCCESS);
@@ -370,8 +448,13 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 transferSavePort,
                 new PreCheckBarrierTransferLookupPort(transferLookupPort, bothPreChecksEmpty),
                 ledgerSavePort,
+                List.of(),
+                List.of(),
                 clock,
-                transactionManager);
+                businessDateGate,
+                transactionManager,
+                eventPublisher,
+                new SimpleMeterRegistry());
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         TransferResult first;
@@ -561,6 +644,78 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 101 AND status = 'PROCESSING'",
                 Long.class);
         assertThat(processingCount).isZero();
+    }
+
+    @Test
+    @DisplayName("즉시이체가 성공하면 기표 트랜잭션 안에서 TransferSettled 가 한 번 발행된다 (#436)")
+    void execute_immediateSuccess_publishesTransferSettledOnce() {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        transferExecutionService.execute(transferCommand(30000L));
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        Long transferId = jdbcTemplate.queryForObject(
+                "SELECT transfer_id FROM transfer WHERE withdrawal_account_id = 101 AND status = 'SUCCESS'",
+                Long.class);
+        assertThat(published.getValue()).isInstanceOfSatisfying(TransferSettled.class, event -> {
+            assertThat(event.customerId()).isEqualTo(1L);
+            assertThat(event.refId()).isEqualTo(transferId);
+            assertThat(event.txType()).isEqualTo("IMMEDIATE_TRANSFER");
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(event.errorCode()).isNull();
+            assertThat(event.notification()).satisfies(notification -> {
+                assertThat(notification.title()).isEqualTo("이체 완료");
+                assertThat(notification.content()).contains("*").contains("30,000원을 보냈습니다.");
+            });
+        });
+    }
+
+    @Test
+    @DisplayName("잔액부족으로 ERROR 확정되면 그 트랜잭션 안에서 ERROR 상태의 TransferSettled 가 발행된다 (#436)")
+    void execute_immediateInsufficientBalance_publishesErrorSettled() {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
+        transferExecutionService.execute(transferCommand(200_000L));
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        Long transferId = jdbcTemplate.queryForObject(
+                "SELECT transfer_id FROM transfer WHERE withdrawal_account_id = 101 AND status = 'ERROR'", Long.class);
+        assertThat(published.getValue()).isInstanceOfSatisfying(TransferSettled.class, event -> {
+            assertThat(event.refId()).isEqualTo(transferId);
+            assertThat(event.status()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(event.errorCode()).isEqualTo(TransferErrorCode.INSUFFICIENT_BALANCE.getCode());
+        });
+    }
+
+    @Test
+    @DisplayName("자동이체의 이체 확정은 알림 대상이 아니라 엔진이 TransferSettled 를 발행하지 않는다 — 알림은 배치 이벤트가 싣는다 (#707, PR #738 리뷰)")
+    void execute_autoTransfer_publishesNoTransferSettled() {
+        // given
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(30000L)
+                .transferType(TransferType.AUTO)
+                .channel(TransferChannel.BT)
+                .myPassbookMemo("출금메모")
+                .recipientPassbookMemo("입금메모")
+                .sourceId(556L)
+                .executionDate(LocalDate.of(2026, 9, 27))
+                .build();
+
+        // when
+        TransferResult result = transferExecutionService.execute(command);
+
+        // then
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        verifyNoInteractions(domainEventSink);
     }
 
     private TransferCommand transferCommand(long amount) {

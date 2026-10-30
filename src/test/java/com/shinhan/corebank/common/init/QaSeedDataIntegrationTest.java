@@ -103,6 +103,61 @@ class QaSeedDataIntegrationTest extends IntegrationTestSupport {
                         """,
                         Long.class))
                 .isGreaterThanOrEqualTo(14L);
+        // QA 데모 계좌 초기 잔액에 대응하는 장부 기록이 잔액과 일치하는지, 재실행돼도
+        // 중복 없이 9건(잔액 0원인 K3·K4 제외)만 유지되는지 확인한다 (#378 대사 배치 오탐 방지).
+        assertThat(count(jdbc, "SELECT COUNT(*) FROM ledger_entry WHERE transaction_type = 'QA_SEED_INITIAL'"))
+                .isEqualTo(9);
+        assertThat(jdbc.queryForObject(
+                        """
+                        SELECT SUM(CASE WHEN direction = 'DEPOSIT' THEN amount ELSE -amount END)
+                        FROM ledger_entry WHERE account_id = (
+                            SELECT account_id FROM account WHERE account_number = '088100000010'
+                        )
+                        """,
+                        Long.class))
+                .isEqualTo(100000L);
+    }
+
+    @Test
+    @DisplayName(
+            "QA 데모 계좌에 QA_SEED_INITIAL 외의 실거래 장부가 쌓인 뒤 재배포돼도 balance를 초기값으로 되돌리지 않는다 (#378 대사 오탐 방지, CodeRabbit 리뷰)")
+    void doesNotResetBalance_whenAccountHasRealLedgerActivitySinceSeed() {
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        Long accountId =
+                jdbc.queryForObject("SELECT account_id FROM account WHERE account_number = '088100000011'", Long.class);
+
+        // QA가 이 계좌로 실제 출금 500원을 했다고 가정 - balance 갱신 + 실거래 장부 추가
+        jdbc.update("UPDATE account SET balance = 99500 WHERE account_id = ?", accountId);
+        jdbc.update("INSERT INTO ledger_entry_id_sequence () VALUES ()");
+        Long ledgerEntryId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+        jdbc.update(
+                """
+                INSERT INTO ledger_entry
+                    (ledger_entry_id, occurred_at, account_id, transaction_number, direction, amount,
+                     balance_after, transaction_type, channel, reversed)
+                VALUES (?, NOW(6), ?, '20260810WB0000000099', 'WITHDRAWAL', 500, 99500, 'IMMEDIATE_TRANSFER', 'WB', FALSE)
+                """,
+                ledgerEntryId,
+                accountId);
+
+        ResourceDatabasePopulator populator =
+                new ResourceDatabasePopulator(new ClassPathResource("db/seed/local-demo-data.sql"));
+        populator.setSqlScriptEncoding(StandardCharsets.UTF_8.name());
+        populator.setContinueOnError(false);
+        populator.execute(dataSource);
+
+        // balance는 여전히 99500 - 초기값(100000)으로 되돌리면 장부 합계(100000-500=99500)와 어긋난다.
+        assertThat(jdbc.queryForObject("SELECT balance FROM account WHERE account_id = ?", Long.class, accountId))
+                .isEqualTo(99500L);
+        // 장부 합계와 balance가 여전히 일치하는지도 함께 확인한다.
+        assertThat(jdbc.queryForObject(
+                        """
+                        SELECT SUM(CASE WHEN direction = 'DEPOSIT' THEN amount ELSE -amount END)
+                        FROM ledger_entry WHERE account_id = ?
+                        """,
+                        Long.class,
+                        accountId))
+                .isEqualTo(99500L);
     }
 
     private int count(JdbcTemplate jdbc, String sql) {

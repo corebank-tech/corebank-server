@@ -17,6 +17,7 @@ import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTrans
 import com.shinhan.corebank.scheduledtransfer.application.port.out.AccountStatusPort;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferExecutionResultAggregate;
 import com.shinhan.corebank.scheduledtransfer.application.port.out.ScheduledTransferQueryPort;
+import com.shinhan.corebank.scheduledtransfer.application.port.out.TransferTradeDatePort;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransfer;
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
 import java.time.Clock;
@@ -44,6 +45,9 @@ class ScheduledTransferQueryServiceTest {
 
     @Mock
     AccountStatusPort accountStatusPort;
+
+    @Mock
+    TransferTradeDatePort transferTradeDatePort;
 
     @Mock
     Clock clock;
@@ -547,5 +551,65 @@ class ScheduledTransferQueryServiceTest {
         assertThat(result.summary().failedAmount()).isEqualTo(30_000L);
         assertThat(result.summary().canceledCount()).isEqualTo(1L);
         assertThat(result.summary().canceledAmount()).isEqualTo(50_000L);
+    }
+
+    @Test
+    @DisplayName("처리결과 조회: 휴일에 실행된 회차는 이체 행의 거래일(익영업일)이 붙고, 이체 행이 없는 취소 건은 null이다")
+    void searchExecutionResults_attachesTradeDateOfTransferRow() {
+        stubClock();
+        LocalDate saturday = LocalDate.of(2026, 8, 8);
+        LocalDate monday = LocalDate.of(2026, 8, 10);
+        ScheduledTransfer success = ScheduledTransfer.reconstitute(
+                201L,
+                1L,
+                2L,
+                "088",
+                "110987654321",
+                "홍길동",
+                100_000L,
+                saturday,
+                null,
+                null,
+                ScheduledTransferStatus.SUCCESS,
+                "TXN100",
+                LocalDateTime.of(2026, 8, 1, 10, 0),
+                saturday.atTime(0, 10),
+                null,
+                null,
+                null);
+        ScheduledTransfer canceled = ScheduledTransfer.reconstitute(
+                202L,
+                1L,
+                2L,
+                "088",
+                "110987654321",
+                "홍길동",
+                50_000L,
+                saturday,
+                null,
+                null,
+                ScheduledTransferStatus.CANCELED,
+                null,
+                LocalDateTime.of(2026, 8, 1, 10, 0),
+                null,
+                LocalDateTime.of(2026, 8, 5, 9, 0),
+                null,
+                null);
+        LocalDate fromDate = LocalDate.of(2026, 8, 1);
+        LocalDate toDate = LocalDate.of(2026, 8, 15);
+        when(scheduledTransferQueryPort.searchExecutionResults(
+                        1L, 2L, fromDate, toDate, ScheduledTransferExecutionResultSort.LATEST, PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(List.of(success, canceled)));
+        when(accountStatusPort.findAccountNumbersByIds(List.of(2L))).thenReturn(Map.of(2L, "110123456789"));
+        when(scheduledTransferQueryPort.summarizeExecutionResults(1L, 2L, fromDate, toDate))
+                .thenReturn(ScheduledTransferExecutionResultAggregate.empty());
+        when(transferTradeDatePort.findTradeDates(List.of(success, canceled))).thenReturn(Map.of(201L, monday));
+
+        ScheduledTransferExecutionResultPage result = scheduledTransferQueryService.searchExecutionResults(
+                1L, 2L, fromDate, toDate, ScheduledTransferExecutionResultSort.LATEST, 0, 10, false);
+
+        assertThat(result.page().getContent())
+                .extracting(ScheduledTransferExecutionResultItem::tradeDate)
+                .containsExactly(monday, null);
     }
 }

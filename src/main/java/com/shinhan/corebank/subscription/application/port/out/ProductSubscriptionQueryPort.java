@@ -5,4 +5,6 @@ import java.util.Optional;
 
 public interface ProductSubscriptionQueryPort {
     Optional<ProductSubscription> findByIdAndCustomerId(Long subscriptionId, Long customerId);
+
+    Optional<ProductSubscription> findByAccountIdAndCustomerId(Long accountId, Long customerId);
 }

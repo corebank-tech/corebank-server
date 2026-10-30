@@ -6,14 +6,19 @@ import java.util.regex.Pattern;
 public class MaskingUtil {
     private static final Pattern PHONE_PATTERN = Pattern.compile("^\\d{11}$");
 
+    // 앞·뒤 (자릿수÷4)자리만 남긴다. 12자리면 "110******877"로 당행 규칙과 같고, 타행 1~16자리도 받는다(#654)
     public static String maskAccountNumber(String accountNumber) {
         if (accountNumber == null
-                || !AccountNumberPolicy.ACCOUNT_NUMBER_PATTERN
+                || !AccountNumberPolicy.INTERBANK_ACCOUNT_NUMBER_PATTERN
                         .matcher(accountNumber)
                         .matches()) {
             throw new IllegalArgumentException("계좌번호 형식이 올바르지 않습니다.");
         }
-        return accountNumber.substring(0, 3) + "******" + accountNumber.substring(9, 12);
+        int length = accountNumber.length();
+        int visible = length / 4;
+        return accountNumber.substring(0, visible)
+                + "*".repeat(length - visible * 2)
+                + accountNumber.substring(length - visible);
     }
 
     // "홍길동" -> "홍*동", "홍길" -> "홍*", 1글자는 마스킹 없이 그대로
@@ -54,6 +59,18 @@ public class MaskingUtil {
             throw new IllegalArgumentException("휴대폰 번호 형식이 올바르지 않습니다.");
         }
         return phoneNumber.substring(0, 3) + "****" + phoneNumber.substring(7);
+    }
+
+    // "123456" -> "****56", 2자리 이하는 전부 가린다
+    public static String maskCustomerId(Long customerId) {
+        if (customerId == null) {
+            throw new IllegalArgumentException("고객 ID가 없습니다.");
+        }
+        String raw = String.valueOf(customerId);
+        if (raw.length() <= 2) {
+            return "*".repeat(raw.length());
+        }
+        return "*".repeat(raw.length() - 2) + raw.substring(raw.length() - 2);
     }
 
     private MaskingUtil() {} // new 만드는거 방지

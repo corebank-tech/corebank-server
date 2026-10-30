@@ -7,6 +7,7 @@ public enum CommonErrorCode implements ErrorCode {
     DATE_RANGE_EXCEEDED("CMN0004", 400, "조회기간이 최대 1년을 초과했습니다."),
     INVALID_PAGE_SIZE("CMN0005", 400, "지원하지 않는 페이지 크기입니다."),
     ALL_QUERY_TOO_LARGE("CMN0006", 400, "전체조회 결과가 너무 많습니다. 조회기간을 좁혀 주세요."),
+    ACCESS_REASON_INVALID("CMN0007", 400, "조회 사유가 없거나 올바르지 않습니다."),
 
     UNAUTHORIZED("CMN0101", 401, "인증정보가 없거나 세션이 만료되었습니다."),
     FORBIDDEN("CMN0102", 403, "해당 자원에 접근할 권한이 없습니다."),
@@ -17,6 +18,8 @@ public enum CommonErrorCode implements ErrorCode {
     IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST("CMN0302", 409, "동일한 멱등키가 다른 요청에 사용되었습니다."),
     CONCURRENT_MODIFICATION("CMN0303", 409, "다른 요청에 의해 정보가 변경되었습니다. 다시 조회한 후 시도해 주세요."),
 
+    BUSINESS_DATE_NOT_FOUND("CMN9001", 500, "영업일 정보를 확인할 수 없습니다."),
+    FUTURE_BUSINESS_DATE_CLOSE("CMN9002", 500, "아직 오지 않은 영업일은 마감할 수 없습니다."),
     INTERNAL_ERROR("CMN9999", 500, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
 
     private final String code;

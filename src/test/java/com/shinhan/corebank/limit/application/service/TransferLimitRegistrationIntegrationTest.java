@@ -11,8 +11,8 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.ExistingAccountRegistration;
 import com.shinhan.corebank.limit.api.TransferLimitRegistration;
 import com.shinhan.corebank.signup.adapter.out.mock.MockExistingBankCustomerVerificationAdapter;
-import com.shinhan.corebank.signup.adapter.out.redis.TempSignupTokenRedisAdapter;
 import com.shinhan.corebank.signup.application.port.in.CompleteSignupCommand;
+import com.shinhan.corebank.signup.application.port.out.TempSignupTokenPort;
 import com.shinhan.corebank.signup.application.service.SignupCompletionService;
 import com.shinhan.corebank.signup.domain.model.AgreedTerm;
 import com.shinhan.corebank.signup.domain.model.ExistingBankAccountSnapshot;
@@ -43,11 +43,14 @@ class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
     SignupCompletionService completionService;
 
     @Autowired
-    TempSignupTokenRedisAdapter tempTokenAdapter;
+    TempSignupTokenPort tempTokenAdapter;
 
     @Autowired
     JdbcTemplate jdbcTemplate;
 
+    // 계좌 등록 실패를 주입해 가입이 롤백될 때 한도 행도 남지 않는지 본다.
+    // 등록 전 선검증(RegisteredExistingBankCustomerChecker)이 같은 계좌번호를 먼저 막아서, 실제 데이터로는
+    // 등록 단계 실패를 만들 수 없다(선검증과 INSERT 사이 경합에서만 난다).
     @MockitoBean
     ExistingAccountRegistration accountRegistration;
     // 원장 어댑터는 조회·프로필·계좌 세 포트를 한 빈으로 구현한다. @MockitoBean 으로
@@ -55,6 +58,7 @@ class TransferLimitRegistrationIntegrationTest extends IntegrationTestSupport {
     @MockitoSpyBean
     MockExistingBankCustomerVerificationAdapter ledgerAdapter;
 
+    // 한도 생성 실패 주입과 registerDefault 호출 인자 캡처용 스파이 — 성공 경로는 실제 메서드를 그대로 탄다.
     @MockitoSpyBean
     TransferLimitRegistration transferLimitRegistration;
 

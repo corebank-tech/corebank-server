@@ -2,6 +2,7 @@ package com.shinhan.corebank.auth.adapter.in.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.shinhan.corebank.SharedTestObjectMapper;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,7 +14,7 @@ import tools.jackson.databind.ObjectMapper;
 
 class SessionLogoutSuccessHandlerTest {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = SharedTestObjectMapper.INSTANCE;
     private final SessionAuthenticationEntryPoint entryPoint = new SessionAuthenticationEntryPoint(objectMapper);
     private final SessionLogoutSuccessHandler logoutSuccessHandler =
             new SessionLogoutSuccessHandler(objectMapper, entryPoint);
@@ -32,8 +33,8 @@ class SessionLogoutSuccessHandlerTest {
 
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(response.getCharacterEncoding()).isEqualTo(StandardCharsets.UTF_8.name());
-        assertThat(body.get("code").asText()).isEqualTo("0000");
-        assertThat(body.get("message").asText()).isEqualTo("로그아웃되었습니다.");
+        assertThat(body.get("code").asString()).isEqualTo("0000");
+        assertThat(body.get("message").asString()).isEqualTo("로그아웃되었습니다.");
         assertThat(body.get("data").isNull()).isTrue();
         assertCachePreventionHeaders(response);
     }
@@ -48,7 +49,7 @@ class SessionLogoutSuccessHandlerTest {
         JsonNode body = objectMapper.readTree(response.getContentAsByteArray());
 
         assertThat(response.getStatus()).isEqualTo(401);
-        assertThat(body.get("code").asText()).isEqualTo("CMN0101");
+        assertThat(body.get("code").asString()).isEqualTo("CMN0101");
         assertThat(body.get("data").isNull()).isTrue();
         assertCachePreventionHeaders(response);
     }

@@ -4,9 +4,15 @@ server:
     session:
       timeout: 10m
       cookie:
+        name: JSESSIONID
         http-only: true
         same-site: lax
 spring:
+  session:
+    timeout: ${server.servlet.session.timeout}
+    jdbc:
+      # 세션 DDL은 Flyway만 실행하고 만료 행은 매분 정리한다.
+      initialize-schema: never
   application:
     name: corebank
   jpa:
@@ -21,9 +27,27 @@ spring:
     locations: classpath:db/migration
     validate-on-migrate: true
     baseline-on-migrate: false
-  data:
-    redis:
-      port: 6379
+  task:
+    scheduling:
+      pool:
+        # COB(23:30)가 대사로 길어져도 00:10 자동이체 등 다른 @Scheduled가 같은 스레드를 기다리지 않게 한다 (#604)
+        size: 2
+  modulith:
+    events:
+      # 리스너가 성공하면 발행 기록을 지운다. 남아 있는 행이 곧 아직 전달되지 않은 이벤트다 (#437)
+      completion-mode: delete
+      jdbc:
+        schema-initialization:
+          # EVENT_PUBLICATION 은 Flyway 가 만든다
+          enabled: false
+
+management:
+  metrics:
+    distribution:
+      percentiles-histogram:
+        # 구간별 건수(_bucket)를 내야 Prometheus에서 histogram_quantile로 이체 p95를 낼 수 있다(PH-30 판정 지표).
+        # http.server.requests는 시계열이 많이 늘어 대시보드를 만드는 #619에서 정한다.
+        transfer.duration: true
 
 springdoc:
   swagger-ui:
@@ -35,11 +59,8 @@ springdoc:
 app:
   security:
     admin:
-      # #448 임시 가드 — /admin/** 접근을 허용할 customer_id 목록(쉼표 구분). 비어 있으면 전부 403.
-      # 로컬에서 쓰려면 ADMIN_BOOTSTRAP_CUSTOMER_IDS=<customer_id> ./gradlew bootRun.
-      # 시드 계정(공개 저장소에 비밀번호가 있는 공개 픽스처)의 customer_id는 넣지 않는다.
-      # PH-49a 역할 기반 인가로 교체될 때 함께 지운다.
-      bootstrap-customer-ids: ${ADMIN_BOOTSTRAP_CUSTOMER_IDS:}
+      # 관리자 세션 무조작 만료. 고객은 server.servlet.session.timeout(10m)을 그대로 쓴다 (admin_auth.md ④).
+      session-timeout: 30m
   account:
     password:
       auth-token-ttl: 5m
@@ -57,3 +78,32 @@ app:
       temp-signup-ttl: 30m
     email-verification:
       code-ttl: 3m
+  # 타행 전문 송신 (PH-33-②). 주소는 배포 단계마다 다르다(mock_external_server.md §5) — APP_INTERBANK_HOST·APP_INTERBANK_PORT
+  interbank:
+    host: 127.0.0.1
+    port: 9300
+    connect-timeout: 1s
+    # 처리 불명(TIMEOUT) 기준. 넘으면 실패로 확정하지 않고 조회거래로 결과를 확인한다
+    response-timeout: 3s
+    # 상대 은행 장애 때 타행만 빠르게 거부해 당행 이체 스레드를 지킨다
+    circuit-breaker:
+      failure-rate-threshold: 50
+      sliding-window-size: 20
+      minimum-number-of-calls: 10
+      wait-duration-in-open-state: 30s
+    # 처리 불명 건 조회거래. 응답 대기보다 충분히 지난 건만 묻는다 — 아직 응답을 기다리는 건에 3001을 받지 않게 한다
+    inquiry:
+      min-age: 30s
+      fixed-delay: 60s
+      # 스케줄러 스레드가 2개라(#604) 한 번에 묻는 건수를 묶어 다른 스케줄을 오래 막지 않는다
+      # 한 건 최대 4초(연결 1초 + 응답 3초) × 15건 = 1분
+      batch-size: 15
+  # 온프레미스 정보계 API (PH-77 ③). base-url 이 비어 있으면 호출하지 않고 적재 이력 없음 응답을 유지한다 — APP_INFO_API_BASE_URL·APP_INFO_API_SECRET
+  info-api:
+    base-url: ${APP_INFO_API_BASE_URL:}
+    secret: ${APP_INFO_API_SECRET:}
+    connect-timeout: 1s
+    read-timeout: 5s
+  interest:
+    income-tax-rate: "0.14"
+    local-tax-ratio: "0.10"

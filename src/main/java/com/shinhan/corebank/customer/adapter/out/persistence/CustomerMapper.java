@@ -23,6 +23,8 @@ public class CustomerMapper {
                 entity.getPhoneNumber(),
                 entity.getLoginFailureCount(),
                 entity.isAccountLocked(),
+                entity.getStatus(),
+                entity.getRole(),
                 entity.getLastLoginAt(),
                 entity.getLastLoginIp(),
                 entity.getPreviousLoginAt(),
@@ -47,6 +49,8 @@ public class CustomerMapper {
                 .phoneNumber(customer.getPhoneNumber())
                 .loginFailureCount(customer.getLoginFailureCount())
                 .accountLocked(customer.isAccountLocked())
+                .status(customer.getStatus())
+                .role(customer.getRole())
                 .lastLoginAt(customer.getLastLoginAt())
                 .lastLoginIp(customer.getLastLoginIp())
                 .previousLoginAt(customer.getPreviousLoginAt())
