@@ -8,6 +8,14 @@ BASE=${1:?"사용법: $0 <base 커밋> [head 커밋]"}
 HEAD_REF=${2:-HEAD}
 DIR=src/main/resources/db/migration
 
+# 커밋을 못 찾으면 아래 비교가 빈 결과로 조용히 통과하므로 먼저 막는다 (얕은 checkout 등)
+for ref in "$BASE" "$HEAD_REF"; do
+  if ! git rev-parse -q --verify "$ref^{commit}" > /dev/null; then
+    echo "::error::커밋 $ref 을(를) 찾을 수 없습니다. checkout fetch-depth가 0인지 확인하세요."
+    exit 2
+  fi
+done
+
 # V202610301000__x.sql → 202610301000, V20260728_1600__x.sql → 20260728.1600 (Flyway는 _를 .으로 읽는다)
 # 끝의 .0은 Flyway가 없는 것으로 비교하므로 뗀다 (1000.0 = 1000)
 version_of() {
