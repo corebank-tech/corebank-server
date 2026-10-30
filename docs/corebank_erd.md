@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 48개 테이블(39개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트·감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 408개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
+> **DBMS**: MySQL 8.4 / 49개 테이블(40개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트·감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 413개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -24,7 +24,7 @@ erDiagram
     SPRING_SESSION ||--o{ SPRING_SESSION_ATTRIBUTES : "ON DELETE CASCADE"
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 48개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
+    %% MySQL 8.4 / 49개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -394,6 +394,13 @@ erDiagram
         datetime completed_at "DATETIME(6). 성공 시각(KST)"
         datetime updated_at "DATETIME(6). 마지막 상태 변경(KST)"
     }
+    audit_integrity_mismatch {
+        bigint audit_integrity_mismatch_id PK
+        date archive_date UK "검증한 사본의 날짜"
+        bigint audit_log_id UK "FK 없음 (지워진 행도 기록)"
+        varchar mismatch_type UK "TAMPERED / MISSING_IN_DB / NOT_ARCHIVED"
+        datetime detected_at "DATETIME(6)"
+    }
     common_code {
         varchar code_group PK "예: ACCOUNT_STATUS"
         varchar code PK "서버 Enum 값과 일치. 예: ACTIVE"
@@ -573,6 +580,7 @@ erDiagram
     transfer ||--o{ ledger_entry : "성공 시 출금1행+입금1행 / 실패 시 0행"
     transfer |o--o{ transfer : "정정 체인 — 취소정정·정상거래가 원거래를 가리킨다"
     customer ||--o{ audit_log : "행위"
+    audit_log ||..o{ audit_integrity_mismatch : "무결성 불일치 (FK 없음)"
     scheduled_transfer      |o--o| transfer : "실행결과 (WAITING 은 없음)"
     auto_transfer_execution |o--o| transfer : "실행결과 (ERROR 는 없음)"
 ```
