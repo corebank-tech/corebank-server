@@ -27,12 +27,20 @@ public class LocalAuditArchiveStorage implements AuditArchiveStorage {
         Path file = rootDirectory.resolve(key);
         try {
             Files.createDirectories(file.getParent());
+            return writeIfAbsent(file, content);
+        } catch (IOException e) {
+            throw new UncheckedIOException("감사 로그 사본을 쓰지 못했습니다: " + file, e);
+        }
+    }
+
+    // 같은 키의 사본이 이미 있을 때만 false. 상위 경로에 파일이 있어 디렉터리를 못 만든 경우도
+    // FileAlreadyExistsException이라, 쓰기에서 난 것만 따로 잡아 오류와 섞이지 않게 한다
+    private boolean writeIfAbsent(Path file, byte[] content) throws IOException {
+        try {
             Files.write(file, content, StandardOpenOption.CREATE_NEW);
             return true;
         } catch (FileAlreadyExistsException e) {
             return false;
-        } catch (IOException e) {
-            throw new UncheckedIOException("감사 로그 사본을 쓰지 못했습니다: " + file, e);
         }
     }
 

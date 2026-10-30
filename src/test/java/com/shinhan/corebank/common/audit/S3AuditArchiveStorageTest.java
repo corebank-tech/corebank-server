@@ -10,8 +10,12 @@ import static org.mockito.Mockito.verify;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
@@ -45,5 +49,21 @@ class S3AuditArchiveStorageTest {
                 .willThrow(S3Exception.builder().statusCode(403).build());
 
         assertThatThrownBy(() -> storage.putIfAbsent(KEY, new byte[] {1})).isInstanceOf(S3Exception.class);
+    }
+
+    @Test
+    @DisplayName("올린 사본은 내용을 돌려주고, 키가 없으면(NoSuchKey) 비어 있다")
+    void get_returnsContentOrEmpty() {
+        given(s3Client.getObjectAsBytes(any(GetObjectRequest.class)))
+                .willReturn(
+                        ResponseBytes.fromByteArray(GetObjectResponse.builder().build(), new byte[] {7}));
+
+        assertThat(storage.get(KEY))
+                .hasValueSatisfying(content -> assertThat(content).containsExactly(7));
+
+        given(s3Client.getObjectAsBytes(any(GetObjectRequest.class)))
+                .willThrow(NoSuchKeyException.builder().build());
+
+        assertThat(storage.get(KEY)).isEmpty();
     }
 }
