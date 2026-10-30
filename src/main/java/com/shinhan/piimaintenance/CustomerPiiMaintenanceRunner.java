@@ -1,6 +1,7 @@
 package com.shinhan.piimaintenance;
 
 import com.shinhan.corebank.customer.adapter.out.persistence.CustomerPiiBackfillService;
+import com.shinhan.corebank.customer.adapter.out.persistence.CustomerPiiVerificationService;
 import java.net.URI;
 import java.sql.Connection;
 import java.sql.SQLException;

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.customer.adapter.out.persistence.CustomerPiiBackfillService;
+import com.shinhan.corebank.customer.adapter.out.persistence.CustomerPiiVerificationService;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import javax.sql.DataSource;

@@ -1,4 +1,4 @@
-package com.shinhan.piimaintenance;
+package com.shinhan.corebank.customer.adapter.out.persistence;
 
 import static com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCipher.Field.EMAIL;
 import static com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCipher.Field.PHONE_NUMBER;
@@ -6,10 +6,14 @@ import static com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCiph
 import com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCrypto;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
 
 // 전체 고객의 암호문·검색 해시를 검증한다.
 // 개인정보 원문 및 암호문은 로그에 출력하지 않는다.
+@Component
+@ConditionalOnProperty(prefix = "app.pii", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class CustomerPiiVerificationService {
 

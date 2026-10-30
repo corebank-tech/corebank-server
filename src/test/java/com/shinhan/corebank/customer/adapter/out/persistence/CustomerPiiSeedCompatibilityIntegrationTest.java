@@ -155,7 +155,8 @@ class CustomerPiiSeedCompatibilityIntegrationTest extends IntegrationTestSupport
     }
 
     private CustomerPiiSeedBackfillRunner runner() {
-        return new CustomerPiiSeedBackfillRunner(backfillService, crypto, jdbcTemplate);
+        return new CustomerPiiSeedBackfillRunner(
+                backfillService, new CustomerPiiVerificationService(jdbcTemplate, crypto));
     }
 
     private long insertRawCustomer() {

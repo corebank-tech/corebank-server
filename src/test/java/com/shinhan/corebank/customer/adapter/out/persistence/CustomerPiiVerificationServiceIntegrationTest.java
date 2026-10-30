@@ -7,7 +7,6 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCrypto;
 import com.shinhan.corebank.customer.application.port.out.CustomerPersistencePort;
 import com.shinhan.corebank.customer.domain.model.Customer;
-import com.shinhan.piimaintenance.CustomerPiiVerificationService;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;

@@ -1,6 +1,7 @@
 package com.shinhan.piimaintenance;
 
 import com.shinhan.corebank.customer.adapter.out.persistence.CustomerPiiBackfillService;
+import com.shinhan.corebank.customer.adapter.out.persistence.CustomerPiiVerificationService;
 import com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCryptoConfiguration;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.WebApplicationType;

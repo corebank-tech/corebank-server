@@ -1,14 +1,11 @@
 package com.shinhan.corebank.customer.adapter.out.persistence;
 
-import com.shinhan.corebank.customer.adapter.out.security.CustomerPiiCrypto;
-import com.shinhan.piimaintenance.CustomerPiiVerificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -22,8 +19,7 @@ public class CustomerPiiSeedBackfillRunner {
     private static final int MAX_BATCHES = 2_000;
 
     private final CustomerPiiBackfillService backfillService;
-    private final CustomerPiiCrypto crypto;
-    private final JdbcTemplate jdbcTemplate;
+    private final CustomerPiiVerificationService verifier;
 
     @EventListener(ApplicationReadyEvent.class)
     public void runOnce() {
@@ -43,8 +39,6 @@ public class CustomerPiiSeedBackfillRunner {
     }
 
     private void verifyExistingEncryptedRows() {
-        var verifier = new CustomerPiiVerificationService(jdbcTemplate, crypto);
-
         var report = verifier.verifyExistingEncryptedRows();
 
         if (!report.existingDataConsistent()) {
