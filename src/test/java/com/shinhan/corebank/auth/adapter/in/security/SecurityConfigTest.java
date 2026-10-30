@@ -73,7 +73,7 @@ class SecurityConfigTest {
                         .header(
                                 HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
                                 "content-type,x-xsrf-token,idempotency-key,"
-                                        + "account-password-auth-token,otp-auth-token"))
+                                        + "account-password-auth-token,otp-auth-token,x-access-reason"))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://www.corebank.cloud"))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
@@ -83,6 +83,7 @@ class SecurityConfigTest {
                     assertThat(allowedHeaders).containsIgnoringCase("Idempotency-Key");
                     assertThat(allowedHeaders).containsIgnoringCase("Account-Password-Auth-Token");
                     assertThat(allowedHeaders).containsIgnoringCase("Otp-Auth-Token");
+                    assertThat(allowedHeaders).containsIgnoringCase("X-Access-Reason");
                 });
     }
 
