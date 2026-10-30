@@ -1,7 +1,9 @@
 module "network" {
   source = "./modules/network"
 
-  onprem_replica_cidr = var.onprem_replica_cidr
+  onprem_replica_cidr  = var.onprem_replica_cidr
+  onprem_info_api_cidr = var.onprem_info_api_cidr
+  info_api_port        = var.info_api_port
 }
 
 data "terraform_remote_state" "acm" {
@@ -35,6 +37,7 @@ module "compute" {
   was_sg_id               = module.network.was_sg_id
   app_subnet_ids          = module.network.app_subnet_ids
   db_host                 = module.data.db_address
+  info_api_base_url       = var.info_api_base_url
 }
 
 module "vpn" {

@@ -31,3 +31,13 @@ variable "onprem_replica_cidr" {
   description = "RDS MySQL 복제에 접근할 온프레미스 VM의 CIDR"
   default     = "192.168.0.211/32"
 }
+
+variable "onprem_info_api_cidr" {
+  description = "WAS가 정보계 API를 부르러 나가는 온프레미스 VM의 /32"
+  default     = "192.168.0.211/32"
+}
+
+variable "info_api_port" {
+  description = "온프레미스 정보계 API가 받는 포트"
+  default     = 8081
+}
