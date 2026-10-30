@@ -2,6 +2,7 @@ package com.shinhan.corebank.common.audit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -52,6 +53,25 @@ class AuditLogJpaEntityTest {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> AuditLogJpaEntity.of(
                         1L, "TXN00000000000000001", AuditEventType.LOGIN, "127.0.0.1", true, null, NOW));
+    }
+
+    @Test
+    @DisplayName("관리자 개인정보 조회 이벤트 + 사유 누락 -> NullPointerException")
+    void personalDataAccess_withoutAccessReason_throws() {
+        assertThatNullPointerException()
+                .isThrownBy(() -> AuditLogJpaEntity.personalDataAccess(
+                        1L, PersonalDataAccessEventType.CUSTOMER_DETAIL_VIEW, "127.0.0.1", true, null, null, NOW))
+                .withMessageContaining("accessReason");
+    }
+
+    @Test
+    @DisplayName("관리자 개인정보 조회 이벤트 + 사유 -> 사유가 남고 거래번호는 없다")
+    void personalDataAccess_withAccessReason_created() {
+        AuditLogJpaEntity e = AuditLogJpaEntity.personalDataAccess(
+                1L, PersonalDataAccessEventType.CUSTOMER_DETAIL_VIEW, "127.0.0.1", true, null, AccessReason.AUDIT, NOW);
+
+        assertThat(e.getAccessReason()).isEqualTo("AUDIT");
+        assertThat(e.getTransactionNumber()).isNull();
     }
 
     @Test

@@ -60,3 +60,9 @@ variable "interbank_host" {
   type        = string
   default     = ""
 }
+
+variable "info_api_base_url" {
+  description = "온프레미스 정보계 API 주소. 비우면 WAS에 주입하지 않아 적재 이력 없음 응답을 유지한다"
+  type        = string
+  default     = ""
+}

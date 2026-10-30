@@ -42,3 +42,8 @@ app:
     csrf:
       # www.corebank.cloud가 api.corebank.cloud의 CSRF 토큰을 읽도록 상위 도메인을 공유한다.
       cookie-domain: corebank.cloud
+  audit:
+    archive:
+      # 감사 로그 WORM 적재 버킷(PH-72 terraform/audit). WAS 역할에 corebank-audit-writer 정책이 붙어야 적재된다(PH-82).
+      storage: s3
+      bucket: corebank-audit-worm-853900964665

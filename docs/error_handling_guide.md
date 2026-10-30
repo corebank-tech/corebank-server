@@ -115,6 +115,7 @@ public enum CommonErrorCode implements ErrorCode {
     DATE_RANGE_EXCEEDED("CMN0004", 400, "조회기간이 최대 1년을 초과했습니다."),
     INVALID_PAGE_SIZE("CMN0005", 400, "지원하지 않는 페이지 크기입니다."),
     ALL_QUERY_TOO_LARGE("CMN0006", 400, "전체조회 결과가 너무 많습니다. 조회기간을 좁혀 주세요."),
+    ACCESS_REASON_INVALID("CMN0007", 400, "조회 사유가 없거나 올바르지 않습니다."),
 
     UNAUTHORIZED("CMN0101", 401, "인증정보가 없거나 세션이 만료되었습니다."),
     FORBIDDEN("CMN0102", 403, "해당 자원에 접근할 권한이 없습니다."),
@@ -268,6 +269,8 @@ public class ApiExceptionHandler {
 }
 ```
 
+> 위 예제는 기본형입니다. `X-Access-Reason` 헤더를 `CMN0007`로 바꾸는 분기는 실제 `ApiExceptionHandler`의 `handleTypeMismatch` · `handleMissingHeader`를 따릅니다.
+
 핸들러 9개가 처리하는 상황:
 
 | 핸들러 | 처리 상황 | 반환 코드 |
@@ -275,9 +278,9 @@ public class ApiExceptionHandler {
 | `BusinessException` | 각 파트가 명시적으로 던진 예외 | 해당 Enum의 코드 |
 | `MethodArgumentNotValidException` | `@Valid` 바디 검증 실패 | `CMN0001` |
 | `HttpMessageNotReadableException` | 본문을 읽을 수 없음. 본문 누락, 깨진 JSON, 본문 Enum에 없는 값, 필드 타입 불일치 | `CMN0001` |
-| `MethodArgumentTypeMismatchException` | 쿼리 또는 경로 파라미터 타입 불일치. Enum에 없는 값 전달 | `CMN0001` |
+| `MethodArgumentTypeMismatchException` | 쿼리 또는 경로 파라미터 타입 불일치. Enum에 없는 값 전달 | `CMN0001` (`X-Access-Reason` 헤더만 `CMN0007`) |
 | `MissingServletRequestParameterException` | 필수 쿼리 파라미터 누락 | `CMN0002` |
-| `MissingRequestHeaderException` | 필수 헤더 누락 (`Idempotency-Key` 등) | `CMN0002` |
+| `MissingRequestHeaderException` | 필수 헤더 누락 (`Idempotency-Key` 등) | `CMN0002` (`X-Access-Reason` 헤더만 `CMN0007`) |
 | `NoResourceFoundException` / `NoHandlerFoundException` | 존재하지 않는 엔드포인트 (404) | `CMN0201` |
 | `HttpRequestMethodNotSupportedException` | 지원하지 않는 HTTP 메서드 (405 → 404로 통일) | `CMN0201` |
 | `Exception` | 그 외 모든 예외 | `CMN9999` |

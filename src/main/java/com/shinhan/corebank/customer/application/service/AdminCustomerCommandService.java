@@ -1,7 +1,7 @@
 package com.shinhan.corebank.customer.application.service;
 
-import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
+import com.shinhan.corebank.common.audit.PersonalDataAccessEventType;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.customer.api.CustomerRole;
@@ -44,15 +44,15 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
     @Override
     @Transactional
     public AdminUnlockResult unlock(AdminCustomerOperationCommand command) {
-        rejectSelfTarget(command, AuditEventType.ACCOUNT_UNLOCK);
+        rejectSelfTarget(command, PersonalDataAccessEventType.ACCOUNT_UNLOCK);
 
-        Customer customer = findTargetForUpdate(command, AuditEventType.ACCOUNT_UNLOCK);
+        Customer customer = findTargetForUpdate(command, PersonalDataAccessEventType.ACCOUNT_UNLOCK);
         Map<String, Object> changes = loginStateChanges(customer);
 
         customer.unlockByAdmin();
         customerPersistencePort.updateLoginFailureState(customer);
 
-        recordSuccess(command, AuditEventType.ACCOUNT_UNLOCK, changes);
+        recordSuccess(command, PersonalDataAccessEventType.ACCOUNT_UNLOCK, changes);
         return new AdminUnlockResult(
                 customer.getCustomerId(), customer.isAccountLocked(), customer.getLoginFailureCount());
     }
@@ -60,14 +60,14 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
     @Override
     @Transactional
     public AdminPasswordResetResult resetPassword(AdminCustomerOperationCommand command) {
-        rejectSelfTarget(command, AuditEventType.LOGIN_PASSWORD_RESET_BY_ADMIN);
+        rejectSelfTarget(command, PersonalDataAccessEventType.LOGIN_PASSWORD_RESET_BY_ADMIN);
 
         // BCrypt는 느리므로 대상 행 락을 잡기 전에 계산해 로그인 경로의 대기 시간을 늘리지 않는다.
         String temporaryPassword = temporaryPasswordGeneratorPort.generate();
         String passwordHash = passwordEncoder.encode(temporaryPassword);
 
-        Customer customer = findTargetForUpdate(command, AuditEventType.LOGIN_PASSWORD_RESET_BY_ADMIN);
-        rejectAdminTarget(customer, command, AuditEventType.LOGIN_PASSWORD_RESET_BY_ADMIN);
+        Customer customer = findTargetForUpdate(command, PersonalDataAccessEventType.LOGIN_PASSWORD_RESET_BY_ADMIN);
+        rejectAdminTarget(customer, command, PersonalDataAccessEventType.LOGIN_PASSWORD_RESET_BY_ADMIN);
 
         Map<String, Object> changes = new LinkedHashMap<>();
         // "password" 키는 AuditLogJpaEntity가 금지하므로 값 없이 바뀌었다는 표시만 남긴다.
@@ -77,7 +77,7 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
         customer.resetPasswordByAdmin(passwordHash, LocalDateTime.now(clock));
         customerPersistencePort.updatePasswordResetByAdmin(customer);
 
-        recordSuccess(command, AuditEventType.LOGIN_PASSWORD_RESET_BY_ADMIN, changes);
+        recordSuccess(command, PersonalDataAccessEventType.LOGIN_PASSWORD_RESET_BY_ADMIN, changes);
         return new AdminPasswordResetResult(
                 customer.getCustomerId(),
                 temporaryPassword,
@@ -89,10 +89,10 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
     @Transactional
     public AdminStatusChangeResult changeStatus(AdminCustomerOperationCommand command, CustomerStatus status) {
         Objects.requireNonNull(status, "status must not be null");
-        rejectSelfTarget(command, AuditEventType.CUSTOMER_STATUS_CHANGE);
+        rejectSelfTarget(command, PersonalDataAccessEventType.CUSTOMER_STATUS_CHANGE);
 
         // 로그인 성공 처리와 같은 락이라, 로그인 도중 정지해도 그 로그인은 성공 상태를 저장하지 못한다.
-        Customer customer = findTargetForUpdate(command, AuditEventType.CUSTOMER_STATUS_CHANGE);
+        Customer customer = findTargetForUpdate(command, PersonalDataAccessEventType.CUSTOMER_STATUS_CHANGE);
         Map<String, Object> changes = new LinkedHashMap<>();
         if (customer.getStatus() != status) {
             changes.put("status", status.name());
@@ -101,12 +101,12 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
         customer.changeStatusByAdmin(status);
         customerPersistencePort.updateStatus(customer);
 
-        recordSuccess(command, AuditEventType.CUSTOMER_STATUS_CHANGE, changes);
+        recordSuccess(command, PersonalDataAccessEventType.CUSTOMER_STATUS_CHANGE, changes);
         return new AdminStatusChangeResult(customer.getCustomerId(), customer.getStatus());
     }
 
     // 자기 계정 초기화는 셀프 재설정의 이메일 인증을 우회하므로 막는다.
-    private void rejectSelfTarget(AdminCustomerOperationCommand command, AuditEventType eventType) {
+    private void rejectSelfTarget(AdminCustomerOperationCommand command, PersonalDataAccessEventType eventType) {
         Objects.requireNonNull(command, "command must not be null");
         Objects.requireNonNull(command.adminCustomerId(), "adminCustomerId must not be null");
         Objects.requireNonNull(command.targetCustomerId(), "targetCustomerId must not be null");
@@ -119,7 +119,8 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
 
     // 관리자를 대상으로 초기화하면 임시 비밀번호를 알게 되어 그 계정을 가져갈 수 있다. 직무분리가
     // 서려면 관리자끼리는 서로의 비밀번호를 건드리지 못해야 한다(#448 제거 체크리스트).
-    private void rejectAdminTarget(Customer target, AdminCustomerOperationCommand command, AuditEventType eventType) {
+    private void rejectAdminTarget(
+            Customer target, AdminCustomerOperationCommand command, PersonalDataAccessEventType eventType) {
         if (target.getRole() == CustomerRole.ADMIN) {
             recordFailure(command, eventType, "ADMIN_TARGET");
             throw new BusinessException(CommonErrorCode.FORBIDDEN);
@@ -127,7 +128,7 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
     }
 
     // 로그인 실패·성공 처리와 같은 비관적 락으로 대상 고객을 읽는다(AGENTS.md §4 TOCTOU).
-    private Customer findTargetForUpdate(AdminCustomerOperationCommand command, AuditEventType eventType) {
+    private Customer findTargetForUpdate(AdminCustomerOperationCommand command, PersonalDataAccessEventType eventType) {
         return customerPersistencePort
                 .findByIdForUpdate(command.targetCustomerId())
                 .orElseThrow(() -> {
@@ -149,24 +150,25 @@ public class AdminCustomerCommandService implements AdminCustomerCommandUseCase 
     }
 
     private void recordSuccess(
-            AdminCustomerOperationCommand command, AuditEventType eventType, Map<String, Object> changes) {
-        auditLogService.record(
+            AdminCustomerOperationCommand command, PersonalDataAccessEventType eventType, Map<String, Object> changes) {
+        auditLogService.recordPersonalDataAccess(
                 command.adminCustomerId(),
-                null,
                 eventType,
                 command.requestIp(),
                 true,
-                Map.of("targetCustomerId", command.targetCustomerId(), "changes", changes));
+                Map.of("targetCustomerId", command.targetCustomerId(), "changes", changes),
+                command.accessReason());
     }
 
     // 실패 기록은 AuditLogService가 별도 트랜잭션으로 커밋하므로 예외로 롤백돼도 남는다.
-    private void recordFailure(AdminCustomerOperationCommand command, AuditEventType eventType, String reason) {
-        auditLogService.record(
+    private void recordFailure(
+            AdminCustomerOperationCommand command, PersonalDataAccessEventType eventType, String reason) {
+        auditLogService.recordPersonalDataAccess(
                 command.adminCustomerId(),
-                null,
                 eventType,
                 command.requestIp(),
                 false,
-                Map.of("targetCustomerId", command.targetCustomerId(), "reason", reason));
+                Map.of("targetCustomerId", command.targetCustomerId(), "reason", reason),
+                command.accessReason());
     }
 }

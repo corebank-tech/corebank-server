@@ -1,5 +1,6 @@
 package com.shinhan.corebank.adapter.in.web.exception;
 
+import com.shinhan.corebank.common.audit.AccessReason;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import jakarta.validation.ConstraintViolationException;
@@ -51,9 +52,12 @@ public class ApiExceptionHandler {
         return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_INPUT);
     }
 
-    // 파라미터 타입 불일치 (예: Long 자리에 abc, Enum 에 없는 값) -> CMN0001
+    // 파라미터 타입 불일치 (예: Long 자리에 abc, Enum 에 없는 값) -> CMN0001. 조회 사유 헤더만 CMN0007
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        if (AccessReason.HEADER.equals(e.getName())) {
+            return respondAccessReasonInvalid();
+        }
         String message = "'%s' 파라미터 값이 올바르지 않습니다.".formatted(e.getName());
         log.warn("[{}] {}", CommonErrorCode.INVALID_INPUT.getCode(), message);
         return ErrorResponse.toResponseEntity(CommonErrorCode.INVALID_INPUT, message);
@@ -74,9 +78,12 @@ public class ApiExceptionHandler {
         return ErrorResponse.toResponseEntity(CommonErrorCode.REQUIRED_FIELD_MISSING, message);
     }
 
-    // 필수 헤더 누락 (예: Idempotency-Key 미전송) -> CMN0002
+    // 필수 헤더 누락 (예: Idempotency-Key 미전송) -> CMN0002. 조회 사유 헤더만 CMN0007
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<ErrorResponse> handleMissingHeader(MissingRequestHeaderException e) {
+        if (AccessReason.HEADER.equals(e.getHeaderName())) {
+            return respondAccessReasonInvalid();
+        }
         String message = "필수 헤더 '%s' 가 누락되었습니다.".formatted(e.getHeaderName());
         log.warn("[{}] {}", CommonErrorCode.REQUIRED_FIELD_MISSING.getCode(), message);
         return ErrorResponse.toResponseEntity(CommonErrorCode.REQUIRED_FIELD_MISSING, message);
@@ -109,5 +116,11 @@ public class ApiExceptionHandler {
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception e) {
         log.error("처리되지 않은 예외 발생", e);
         return ErrorResponse.toResponseEntity(CommonErrorCode.INTERNAL_ERROR);
+    }
+
+    // 누락과 미정의 값을 같은 코드로 돌려준다(D-10, PH-89)
+    private ResponseEntity<ErrorResponse> respondAccessReasonInvalid() {
+        log.warn("[{}] 조회 사유 헤더 누락 또는 미정의 값", CommonErrorCode.ACCESS_REASON_INVALID.getCode());
+        return ErrorResponse.toResponseEntity(CommonErrorCode.ACCESS_REASON_INVALID);
     }
 }

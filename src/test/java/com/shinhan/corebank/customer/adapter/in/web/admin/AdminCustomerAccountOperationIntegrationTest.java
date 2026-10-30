@@ -12,8 +12,10 @@ import com.jayway.jsonpath.JsonPath;
 import com.shinhan.corebank.AdminAccountFixture;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.common.audit.AccessReason;
 import com.shinhan.corebank.customer.api.AdminPermission;
 import jakarta.servlet.http.Cookie;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -83,7 +85,7 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
 
         mockMvc.perform(post("/admin/customers/{id}/unlock", targetId)
                         .header("Idempotency-Key", UUID.randomUUID().toString())
-                        .with(admin())
+                        .with(adminWithReason())
                         .with(csrf()))
                 .andExpect(status().isOk());
 
@@ -91,13 +93,14 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"));
         assertThat(adminAuditRows("ACCOUNT_UNLOCK", "SUCCESS")).isEqualTo(1);
+        assertThat(accessReasonOf("ACCOUNT_UNLOCK")).containsOnly("OPERATION");
     }
 
     @Test
     @DisplayName("관리자가 초기화한 임시 비밀번호로 잠겨 있던 계정에 로그인할 수 있고 옛 비밀번호는 거부된다")
     void resetCustomerCanLogInWithTemporaryPassword() throws Exception {
         String body = mockMvc.perform(post("/admin/customers/{id}/password-reset", targetId)
-                        .with(admin())
+                        .with(adminWithReason())
                         .with(csrf()))
                 .andExpect(status().isOk())
                 .andReturn()
@@ -116,18 +119,19 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
                 String.class,
                 ADMIN_ID);
         assertThat(detail).doesNotContain(temporaryPassword).contains("\"passwordChanged\": true");
+        assertThat(accessReasonOf("LOGIN_PASSWORD_RESET_BY_ADMIN")).containsOnly("OPERATION");
     }
 
     @Test
     @DisplayName("없는 고객과 자기 자신 대상은 거부되고, 업무가 롤백돼도 실패 감사는 커밋된다")
     void failedRequestsAreAuditedEvenWhenRolledBack() throws Exception {
         mockMvc.perform(post("/admin/customers/{id}/password-reset", 999_999_999L)
-                        .with(admin())
+                        .with(adminWithReason())
                         .with(csrf()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ATH0201"));
         mockMvc.perform(post("/admin/customers/{id}/password-reset", ADMIN_ID)
-                        .with(admin())
+                        .with(adminWithReason())
                         .with(csrf()))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CMN0102"));
@@ -176,6 +180,7 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
                         ADMIN_ID,
                         activeId))
                 .containsExactly("SUSPENDED", "ACTIVE");
+        assertThat(accessReasonOf("CUSTOMER_STATUS_CHANGE")).containsOnly("OPERATION");
         assertThat(jdbcTemplate.queryForObject(
                         "SELECT COUNT(*) FROM audit_log WHERE customer_id = ? AND event_type = 'LOGIN' "
                                 + "AND result = 'FAILURE' AND JSON_UNQUOTE(JSON_EXTRACT(detail, '$.reason')) = 'ACCOUNT_SUSPENDED'",
@@ -188,14 +193,22 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
     @Test
     @DisplayName("관리자 세션은 DB 권한 행으로 관리자 API를 통과하고, 권한을 지우고 다시 로그인하면 막힌다")
     void adminSessionCarriesPermissionsFromDatabase() throws Exception {
-        mockMvc.perform(get("/admin/customers").param("userId", TARGET_USER_ID).cookie(adminLoginCookie()))
+        mockMvc.perform(get("/admin/customers")
+                        .param("userId", TARGET_USER_ID)
+                        .header(AccessReason.HEADER, AccessReason.OPERATION.name())
+                        .cookie(adminLoginCookie()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"));
+        // 테스트 트랜잭션이 없어 조회(readOnly)와 감사가 운영처럼 따로 커밋된다.
+        assertThat(accessReasonOf("CUSTOMER_SEARCH")).containsOnly("OPERATION");
 
         jdbcTemplate.update(
                 "DELETE FROM admin_permission WHERE customer_id = ? AND permission = 'CUSTOMER_READ'", ADMIN_ID);
 
-        mockMvc.perform(get("/admin/customers").param("userId", TARGET_USER_ID).cookie(adminLoginCookie()))
+        mockMvc.perform(get("/admin/customers")
+                        .param("userId", TARGET_USER_ID)
+                        .header(AccessReason.HEADER, AccessReason.OPERATION.name())
+                        .cookie(adminLoginCookie()))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CMN0102"));
     }
@@ -227,7 +240,7 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType("application/json")
                         .content("{\"status\":\"%s\"}".formatted(status))
-                        .with(admin())
+                        .with(adminWithReason())
                         .with(csrf()))
                 .andExpect(status().isOk());
     }
@@ -242,6 +255,14 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
                 .content("{\"userId\":\"%s\",\"password\":\"%s\"}".formatted(userId, password)));
     }
 
+    private List<String> accessReasonOf(String eventType) {
+        return jdbcTemplate.queryForList(
+                "SELECT access_reason FROM audit_log WHERE customer_id = ? AND event_type = ?",
+                String.class,
+                ADMIN_ID,
+                eventType);
+    }
+
     private int adminAuditRows(String eventType, String result) {
         return jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM audit_log WHERE customer_id = ? AND event_type = ? AND result = ? "
@@ -251,6 +272,15 @@ class AdminCustomerAccountOperationIntegrationTest extends IntegrationTestSuppor
                 eventType,
                 result,
                 targetId);
+    }
+
+    // 조회 사유 헤더(PH-89)까지 붙인 관리자 요청
+    private RequestPostProcessor adminWithReason() {
+        RequestPostProcessor authenticated = admin();
+        return request -> {
+            request.addHeader(AccessReason.HEADER, AccessReason.OPERATION.name());
+            return authenticated.postProcessRequest(request);
+        };
     }
 
     // 다른 테스트는 운영 업무만 보므로 로그인을 거치지 않고 같은 세션 authority 를 직접 준다.
