@@ -42,6 +42,8 @@ class AccountDisplayOrderRollbackTest extends IntegrationTestSupport {
     @Autowired
     private CustomerTestFixture customerTestFixture;
 
+    // 여러 계좌 저장 중 한 건에만 실패를 주입해 앞선 표시순서 변경까지 롤백되는지 본다 —
+    // 실제 DB로는 저장만 골라 실패시킬 수 없다.
     @MockitoBean
     private AccountPersistencePort accountPersistencePort;
 

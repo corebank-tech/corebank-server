@@ -183,7 +183,8 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `ATH` | 인증·회원 | P6 | REQ-AUTH |
 | `OTP` | OTP 거래인증 | P6 | REQ-OTP |
 | `APW` | 계좌비밀번호 | P6 | REQ-ACCT-006~009 |
-| `MYP` | 마이페이지·알림 | P6 | REQ-MYPG |
+| `MYP` | 마이페이지 | P6 | REQ-MYPG |
+| `NTF` | 알림 | P1 | REQ-MYPG |
 | `ACC` | 계좌 | P2 | REQ-ACCT-001~005·010~015 |
 | `INQ` | 조회(계좌·거래내역) | P2 | REQ-INQR |
 | `PRD` | 상품·상품가입 | P3 | REQ-PRDT |
@@ -231,6 +232,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `CMN0004` | 400  | 조회기간이 최대 1년을 초과했습니다.                     | 조회기간 상한 초과                                     | `INQ0002`                               |
 | `CMN0005` | 400  | 지원하지 않는 페이지 크기입니다.                       | 5·10·20·30·50 외의 값                             | `INQ0005`                               |
 | `CMN0006` | 400  | 전체조회 결과가 너무 많습니다. 조회기간을 좁혀 주세요.           | `all=true` 조회 결과가 상한(100건)을 초과              | —                                       |
+| `CMN0007` | 400  | 조회 사유가 없거나 올바르지 않습니다.                    | 관리자 고객 개인정보 조회·변경 API의 `X-Access-Reason` 헤더 누락·미정의 값(D-10, PH-89) | —                                       |
 | `CMN0101` | 401  | 인증정보가 없거나 세션이 만료되었습니다.                   | 세션 없음 또는 10분 무조작 만료                            | `ATH0001`(세션), `ATH0002`(세션), `AUTH0001` |
 | `CMN0102` | 403  | 해당 자원에 접근할 권한이 없습니다.                     | 타 고객 자원 접근(IDOR)                               | `ATH0003`, `ACC0002`, `ACCT0002`        |
 | `CMN0201` | 404  | 잘못된 요청 주소입니다.                            | 존재하지 않는 엔드포인트 및 지원하지 않는 HTTP 메서드(405도 404로 통일) | —                                       |
@@ -241,7 +243,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `CMN9002` | 500  | 아직 오지 않은 영업일은 마감할 수 없습니다.               | COB 영업일 전환에 오늘 달력보다 미래인 영업일이 넘어옴. COB "영업일 확인" 스텝이 막아야 하므로 나오면 결함이다(PH-40·PH-43) | —                                       |
 | `CMN9999` | 500  | 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.        | 예상하지 못한 서버 오류                                  | `INQ9999`, `TRANSACTION_ROLLBACK_ERROR` |
 
-> `CMN0001`, `CMN0201`, `CMN0303`,`CMN9999`는 `ApiExceptionHandler`가 자동 반환하므로 직접 던지지 않아도 됩니다.
+> `CMN0001`, `CMN0007`, `CMN0201`, `CMN0303`,`CMN9999`는 `ApiExceptionHandler`가 자동 반환하므로 직접 던지지 않아도 됩니다.
 
 ### 4-2. `ATH` 인증·회원 — P6
 
@@ -296,12 +298,13 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `APW0101` | 403 | 계좌비밀번호 5회 오류로 거래가 정지되었습니다. | 계좌 잠금 |
 | `APW0102` | 403 | 계좌비밀번호 인증 토큰이 유효하지 않습니다. | `accountPasswordAuthToken` 무효·만료·사용됨 |
 
-### 4-5. `MYP` 마이페이지·알림 — P6
+### 4-5. `MYP` 마이페이지 — P6
 
 | 코드 | HTTP | 메시지 | 의미 |
 | --- | --- | --- | --- |
 | `MYP0001` | 400 | 휴대폰 번호 형식이 올바르지 않습니다. | 고객정보 변경 시 형식 위반 |
-| `MYP0201` | 404 | 알림을 찾을 수 없습니다. | `notificationId` 없음 |
+
+> 알림 코드는 담당이 달라 `NTF`(§4-16)로 나눴습니다(10/25, PR #723). 같은 요구사항(REQ-MYPG)이어도 담당자가 다르면 접두어를 쪼갠다는 §3-2 배정 원칙을 따릅니다.
 
 ### 4-6. `ACC` 계좌 — P2
 
@@ -437,7 +440,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 ### 4-14. `GLA` 회계 원장(GL) — P3
 
-전표는 사용자 입력이 아니라 내부 거래(이체·상품가입·이자)에서 만들어진다. 여기서 걸리면 호출한 쪽의 분개 패턴이 틀린 것이라 전부 `500`이다. 분개 규칙은 [gl_journal_patterns.md](phase2/gl_journal_patterns.md).
+전표는 사용자 입력이 아니라 내부 거래(이체·상품가입·이자)에서 만들어진다. 여기서 걸리면 호출한 쪽의 분개 패턴이 틀린 것이라 전부 `500`이다. `GLA9010`은 시산표 조회의 서버 쪽 시간 초과라 역시 `500`이다. 분개 규칙은 [gl_journal_patterns.md](phase2/gl_journal_patterns.md).
 
 | 코드 | HTTP | 메시지 | 의미 |
 | --- | --- | --- | --- |
@@ -450,6 +453,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `GLA9007` | 500 | 전표의 참조 키가 없습니다. | 기표 요청에 원 거래번호가 빠짐(PH-24) |
 | `GLA9008` | 500 | 이미 기표된 거래입니다. | 같은 `(tx_type, reference_key)` 재기표. 원장까지 롤백된다(PH-24) |
 | `GLA9009` | 500 | 분개 패턴이 없는 거래유형입니다. | 훅 B 로 패턴표에 없는 원장 거래유형이 들어옴. 이체가 롤백된다(PH-24) |
+| `GLA9010` | 500 | 시산표 집계가 제한 시간을 넘었습니다. 조회 기간을 줄여 다시 시도해 주세요. | 관리자 시산표 집계가 조회 타임아웃(30초)을 넘음(GL-IDX). 다시 눌러도 같은 시간을 기다리므로 기간을 줄이라고 안내한다 |
 
 ### 4-15. `INF` 정보계 조회 — P5
 
@@ -457,7 +461,13 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 | 코드 | HTTP | 메시지 | 의미 |
 | --- | --- | --- | --- |
-| `INF9001` | 500 | 정보계 API에 연결하지 못했습니다. | WAS가 온프레미스 정보계 API에 닿지 못함(VPN 단절·타임아웃·상대 서버 오류). 구현은 PH-77 ②(#704) |
+| `INF9001` | 500 | 정보계 API에 연결하지 못했습니다. | WAS가 온프레미스 정보계 API에 닿지 못함(VPN 단절·타임아웃·인증 실패·상대 서버 오류·응답 형식 오류). 구현은 PH-77 ③(#776, `InfoApiClient`) |
+
+### 4-16. `NTF` 알림 — P1
+
+| 코드 | HTTP | 메시지 | 의미 |
+| --- | --- | --- | --- |
+| `NTF0201` | 404 | 알림을 찾을 수 없습니다. | `notificationId` 없음. 구현은 PH-04(#391) |
 
 ---
 
@@ -579,16 +589,20 @@ public record ApiResponse<T>(String code, String message, T data) {
 |  | `CUSTOMER_READ` | 고객 조회 |
 |  | `CUSTOMER_WRITE` | 고객 변경 |
 |  | `AUDIT_READ` | 감사로그 조회 |
+| `AccessReason` | `CUSTOMER_REQUEST` | 고객 요청 (`X-Access-Reason` 헤더, PH-89) |
+|  | `INCIDENT` | 사고·민원 대응 |
+|  | `AUDIT` | 감사·점검 |
+|  | `OPERATION` | 운영 확인 |
 
 > 폐기: `TRANSFER`, `PRODUCT_SIGN`, `LIMIT_CHANGE`, `ACC_REGISTER`, `PROFILE_CHANGE` (기존 OTP 발급 명세의 약어)
 
-> `AdminPermission`은 5종 고정입니다. 값을 늘리면 `/admin/**` 권한 매핑표(PH-49a-②)와 부여·회수 API(PH-49b)를 함께 고쳐야 합니다.
+> `CustomerRole` · `AdminPermission`은 관리자 인증(PH-49a, P1)이 맡습니다. `AdminPermission`은 5종 고정입니다. 값을 늘리면 `/admin/**` 권한 매핑표(PH-49a-②)와 부여·회수 API(PH-49b)를 함께 고쳐야 합니다.
 
-### 5-9. 알림 — P6
+### 5-9. 알림 — P1
 
 | Enum | 값 | 의미 |
 | --- | --- | --- |
-| `NotificationType` | `TRANSFER` | 즉시이체 결과 |
+| `NotificationType` | `TRANSFER` | 즉시 · 타행이체 결과 |
 |  | `SCHEDULED_TRANSFER` | 예약이체 결과 |
 |  | `AUTO_TRANSFER` | 자동이체 결과 |
 |  | `PRODUCT_SUBSCRIPTION` | 상품가입 결과 |

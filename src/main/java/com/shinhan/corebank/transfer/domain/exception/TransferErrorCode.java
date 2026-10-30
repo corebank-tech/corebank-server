@@ -1,6 +1,9 @@
 package com.shinhan.corebank.transfer.domain.exception;
 
 import com.shinhan.corebank.common.exception.ErrorCode;
+import java.util.EnumSet;
+import java.util.Optional;
+import java.util.Set;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -29,7 +32,19 @@ public enum TransferErrorCode implements ErrorCode {
     ACCOUNT_LOCK_TARGET_NOT_FOUND("TRF9001", 500, "이체 처리 중 계좌 정보를 확인할 수 없습니다."),
     TRANSACTION_SEQUENCE_EXHAUSTED("TRF9002", 500, "거래번호 일련번호 채번 가능 범위를 초과했습니다.");
 
+    // 고객이 직접 조치할 수 있는 실패만 알림 사유로 붙인다. 나머지는 내부 코드를 드러내지 않게 기본 문장만 쓴다
+    private static final Set<TransferErrorCode> CUSTOMER_ACTIONABLE = EnumSet.of(
+            INSUFFICIENT_BALANCE, WITHDRAWAL_ACCOUNT_SUSPENDED, PAYEE_ACCOUNT_SUSPENDED, INTERBANK_NOT_PROCESSED);
+
     private final String code;
     private final int status;
     private final String message;
+
+    /** 고객이 조치할 수 있는 실패 코드면 그 문구를, 아니면(null · 다른 도메인 코드 포함) 빈 값을 돌려준다. */
+    public static Optional<String> customerActionableMessage(String code) {
+        return CUSTOMER_ACTIONABLE.stream()
+                .filter(actionable -> actionable.code.equals(code))
+                .findFirst()
+                .map(TransferErrorCode::getMessage);
+    }
 }

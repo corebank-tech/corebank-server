@@ -7,7 +7,6 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.gl.api.JournalPostingUseCase;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
 import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
-import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.application.port.in.InterbankTransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.InterbankTransferResult;
 import com.shinhan.corebank.transfer.application.port.in.InterbankTransferUseCase;
@@ -255,15 +254,11 @@ public class InterbankTransferService implements InterbankTransferUseCase {
             Transfer created = newTransfer(command, draft, businessDateGate.acquireSharedAndReadBusinessDate());
             created.fail(errorCode, errorMessage);
             Transfer failed = transferSavePort.save(created);
-            eventPublisher.publishEvent(TransferSettled.builder()
-                    .customerId(command.customerId())
-                    .refId(failed.getTransferId())
-                    .txType(InterbankSettlementService.LEDGER_TRANSACTION_TYPE)
-                    .status(failed.getStatus())
-                    .errorCode(failed.getErrorCode())
-                    .occurredAt(LocalDateTime.now(clock))
-                    .amount(failed.getAmount())
-                    .build());
+            eventPublisher.publishEvent(TransferSettledFactory.create(
+                    failed,
+                    command.customerId(),
+                    InterbankSettlementService.LEDGER_TRANSACTION_TYPE,
+                    LocalDateTime.now(clock)));
             return failed;
         });
     }

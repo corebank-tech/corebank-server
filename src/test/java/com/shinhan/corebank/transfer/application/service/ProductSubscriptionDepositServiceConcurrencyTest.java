@@ -6,6 +6,7 @@ import static org.assertj.core.api.SoftAssertions.assertSoftly;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.notification.application.port.in.NotificationCommandUseCase;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase.ProductSubscriptionDepositCommand;
 import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase.ProductSubscriptionDepositResult;
@@ -76,11 +77,19 @@ class ProductSubscriptionDepositServiceConcurrencyTest extends IntegrationTestSu
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    // 이체 실행은 실제 OTP 발급 없이 otp.api 경계만 검증한다 — OTP 자체의 발급/소비 로직은
+    // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
     @MockitoBean
     private OtpAuthTokenVerifier otpAuthTokenVerifier;
 
+    // 계좌비밀번호 인증도 동일하게 account.api 경계만 검증한다 — 토큰 자체의 발급/소비 로직은
+    // account 도메인 테스트가 담당한다.
     @MockitoBean
     private AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
+
+    // 이체가 실제 고객으로 알림을 남기면 정리 단계의 고객 삭제가 notification FK 에 막힌다. 알림은 이 테스트의 관심사가 아니다(#706).
+    @MockitoBean
+    private NotificationCommandUseCase notificationCommandUseCase;
 
     @BeforeEach
     void setUp() {

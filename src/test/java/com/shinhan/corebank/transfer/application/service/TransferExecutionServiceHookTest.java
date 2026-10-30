@@ -121,9 +121,13 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
 
     private LocalDate originalBusinessDate;
 
+    // 이체 실행은 실제 OTP 발급 없이 otp.api 경계만 검증한다 — OTP 자체의 발급/소비 로직은
+    // otp 도메인 테스트가 담당한다. Mockito void mock은 기본이 no-op이라 별도 stubbing 없이도 통과시킨다.
     @MockitoBean
     private OtpAuthTokenVerifier otpAuthTokenVerifier;
 
+    // 계좌비밀번호 인증도 동일하게 account.api 경계만 검증한다 — 토큰 자체의 발급/소비 로직은
+    // account 도메인 테스트가 담당한다.
     @MockitoBean
     private AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
 

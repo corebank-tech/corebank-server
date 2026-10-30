@@ -4,7 +4,6 @@ import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
 import com.shinhan.corebank.transfer.api.TransferHoldContext;
@@ -12,7 +11,6 @@ import com.shinhan.corebank.transfer.api.TransferHoldDecision;
 import com.shinhan.corebank.transfer.api.TransferHoldPolicy;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
 import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
-import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
@@ -568,25 +566,23 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     }
 
     /**
-     * 이체 결과가 확정된 트랜잭션 안에서 TransferSettled 를 발행한다(#436). 즉시·예약·자동이체 모두 여기서
-     * 한 번 나간다. 돈이 움직인 커밋과 이벤트가 함께 커밋되므로, 뒤이은 배치 기록 저장이 실패해도 알림은
-     * 빠지지 않는다. transfer 행이 생기기 전의 사전검증 실패는 여기까지 오지 않으며, 배치는 그 경우만 따로
-     * 발행한다.
+     * 이체 결과가 확정된 트랜잭션 안에서 TransferSettled 를 발행한다(#436). 즉시이체는 여기서 한 번 나간다.
+     * 돈이 움직인 커밋과 함께 커밋되므로 즉시이체 알림은 빠지지 않는다. 사전검증 실패는 여기까지 오지 않는다.
+     * 예약·자동이체는 발행하지 않는다(알림은 배치 이벤트가 싣는다).
      *
      * <p>기표·ERROR 확정 트랜잭션(REQUIRES_NEW) 안에서 부르므로 BEFORE_COMMIT 리스너가 그 커밋에 붙는다.
      * 재생 경로(findAlreadyProcessedResult)는 여기를 지나지 않아 같은 이체가 두 번 발행되지 않는다.
      */
     private void publishSettled(TransferCommand command, Transfer transfer, LocalDateTime occurredAt) {
-        eventPublisher.publishEvent(TransferSettled.builder()
-                .customerId(command.customerId())
-                .refId(transfer.getTransferId())
-                .txType(command.transferType().ledgerTransactionType())
-                .status(transfer.getStatus())
-                .errorCode(transfer.getErrorCode())
-                .occurredAt(occurredAt)
-                .amount(transfer.getAmount())
-                .counterpartyName(MaskingUtil.maskName(transfer.getPayeeName()))
-                .build());
+        if (!isCustomerInitiatedTransfer(transfer)) {
+            return;
+        }
+        eventPublisher.publishEvent(TransferSettledFactory.create(
+                transfer, command.customerId(), command.transferType().ledgerTransactionType(), occurredAt));
+    }
+
+    private static boolean isCustomerInitiatedTransfer(Transfer transfer) {
+        return transfer.getTransferType() == TransferType.IMMEDIATE;
     }
 
     private TransferSourceType resolveSourceType(TransferType transferType) {

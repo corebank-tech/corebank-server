@@ -14,6 +14,7 @@ import com.shinhan.corebank.business.support.BusinessDateTestFixture;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.event.DomainEventSink;
 import com.shinhan.corebank.gl.api.JournalPostingUseCase;
+import com.shinhan.corebank.notification.application.port.in.NotificationCommandUseCase;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
 import com.shinhan.corebank.transfer.application.port.in.InterbankTransferCommand;
@@ -73,6 +74,10 @@ class TransferCutoffConcurrencyTest extends IntegrationTestSupport {
 
     @MockitoBean
     private AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
+
+    // 이체가 실제 고객으로 알림을 남기면 정리 단계의 고객 삭제가 notification FK 에 막힌다. 알림은 이 테스트의 관심사가 아니다(#706).
+    @MockitoBean
+    private NotificationCommandUseCase notificationCommandUseCase;
 
     @MockitoBean
     private DomainEventSink domainEventSink;

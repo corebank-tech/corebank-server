@@ -1,5 +1,7 @@
 module "network" {
   source = "./modules/network"
+
+  onprem_replica_cidr = var.onprem_replica_cidr
 }
 
 data "terraform_remote_state" "acm" {
