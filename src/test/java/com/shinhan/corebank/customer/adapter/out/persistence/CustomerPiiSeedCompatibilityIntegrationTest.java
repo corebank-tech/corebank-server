@@ -102,14 +102,14 @@ class CustomerPiiSeedCompatibilityIntegrationTest extends IntegrationTestSupport
     }
 
     @Test
-    void rejectsInconsistentCiphertextAfterFirstFiftyRows() {
+    void rejectsInconsistentCiphertextAcrossVerificationPages() {
         // 백필이 필요한 기존 평문 고객
         long legacyCustomerId = insertRawCustomer();
 
         String suffix = UUID.randomUUID().toString().substring(0, 8);
 
-        // 암호화 데이터가 있는 고객 51명 생성
-        for (int i = 0; i < 51; i++) {
+        // PAGE_SIZE(500)를 초과하도록 암호화 데이터가 있는 고객 501명 생성
+        for (int i = 0; i < 501; i++) {
             String userId = "ph18f" + suffix + i;
             String email = "ph18-" + suffix + "-" + i + "@example.com";
 
@@ -129,8 +129,8 @@ class CustomerPiiSeedCompatibilityIntegrationTest extends IntegrationTestSupport
                     "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq",
                     email);
 
-            // 마지막 고객의 이메일 암호문에만 다른 값을 저장한다.
-            String encryptedEmail = crypto.cipher().encrypt(i == 50 ? "wrong@example.com" : email, EMAIL);
+            // 두 번째 페이지에 위치한 마지막 고객의 암호문만 불일치시킨다.
+            String encryptedEmail = crypto.cipher().encrypt(i == 500 ? "wrong@example.com" : email, EMAIL);
 
             jdbcTemplate.update(
                     """
