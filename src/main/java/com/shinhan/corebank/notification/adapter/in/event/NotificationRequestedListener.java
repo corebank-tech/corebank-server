@@ -2,8 +2,10 @@ package com.shinhan.corebank.notification.adapter.in.event;
 
 import com.shinhan.corebank.notification.api.NotificationRequestCarrier;
 import com.shinhan.corebank.notification.application.port.in.NotificationCommandUseCase;
+import jakarta.validation.ConstraintViolationException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.modulith.events.ApplicationModuleListener;
+import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Component;
 
 /**
@@ -17,7 +19,9 @@ public class NotificationRequestedListener {
 
     private final NotificationCommandUseCase notificationCommandUseCase;
 
+    // 순간 장애는 그 자리에서 다시 시도한다. 계약 위반은 몇 번 해도 같으니 바로 실패로 남겨 재제출 · 포기 경로로 보낸다
     @ApplicationModuleListener
+    @Retryable(delay = 200, excludes = ConstraintViolationException.class)
     public void on(NotificationRequestCarrier event) {
         notificationCommandUseCase.createNotification(event.notification());
     }
