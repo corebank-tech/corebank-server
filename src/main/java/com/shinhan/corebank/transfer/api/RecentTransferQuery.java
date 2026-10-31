@@ -15,6 +15,11 @@ public interface RecentTransferQuery {
     /** since 이후(포함) 성공 이체의 건수·합계·첫 시각. 없으면 건수 0. */
     RecentTransferAggregate aggregateSucceeded(long customerId, String depositAccountNumber, LocalDateTime since);
 
-    /** before 이전(미포함)에 성공 이체가 한 건이라도 있는지. */
+    /**
+     * before 이전(미포함)에 성공 이체가 한 건이라도 있는지.
+     *
+     * 하한이 없어서 그 수취계좌로 보낸 적이 없으면 고객의 before 이전 이체를 전부 훑는다. 훅 C는 고객 락을 쥔 채 돌므로,
+     * 이 메서드를 쓰는 구현체는 켜기 전에 이체가 많은 고객 데이터로 미존재 수취계좌 조회 시간을 잰다.
+     */
     boolean hasSucceededBefore(long customerId, String depositAccountNumber, LocalDateTime before);
 }
