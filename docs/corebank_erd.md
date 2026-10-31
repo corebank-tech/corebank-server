@@ -212,7 +212,8 @@ erDiagram
 
     %% ---------- P1 ----------
     admin_permission {
-        bigint customer_id PK,FK "관리자"
+        bigint customer_id PK,FK "관리자. (customer_id, role)로 customer 참조"
+        varchar role FK "항상 ADMIN. DEFAULT ADMIN"
         varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ"
         datetime granted_at "권한 부여 시각"
     }

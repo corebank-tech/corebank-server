@@ -100,7 +100,7 @@ docker compose up -d minicore-mysql                 # 로컬 인프라 (MySQL)
 
 | 문서 | 언제 여는가 |
 |---|---|
-| [schema_reference.md](docs/schema_reference.md) | 28개 테이블 268개 컬럼 정의 |
+| [schema_reference.md](docs/schema_reference.md) | 28개 테이블 269개 컬럼 정의 |
 | [corebank_erd.md](docs/corebank_erd.md) | 테이블 관계, 금액·시각 타입 계약 |
 | [flyway_guide.md](docs/flyway_guide.md) | Flyway 설정과 마이그레이션 작성 규칙 |
 | [flyway_file_role_guide.md](docs/flyway_file_role_guide.md) | `V__`·`R__`·`seed` 파일명과 역할 구분 |
