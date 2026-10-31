@@ -13,7 +13,7 @@ spring:
     username: ${DB_USER}
     password: ${DB_PASSWORD}
     hikari:
-      # 측정 때 컨테이너 환경변수로만 바꾼다. 서버 2대면 RDS 연결 60 때문에 18이 상한이다(#798).
+      # 풀 10·20 비교 측정을 재배포 없이 하려고 환경변수로 뺐다. 연결 예산은 team_db_architecture_guide.md §4(#798).
       maximum-pool-size: ${DB_POOL_SIZE:10}
       connection-timeout: 3000
       max-lifetime: 570000
