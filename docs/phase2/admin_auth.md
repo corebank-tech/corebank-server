@@ -28,8 +28,8 @@
 행으로 두면 CHECK가 오타를 막고 부여·회수가 `INSERT`/`DELETE` 한 줄이 된다.
 
 **권한이 없는 관리자는 `admin_permission`에 행이 0개다.** "권한 0개인 관리자"와 "관리자가 아닌 고객"은
-`customer.role`로 갈린다. 둘이 모순되는 상태(`CUSTOMER`인데 권한 행이 있음)를 막는 제약은 그 값을 쓰는
-부여·회수 API가 생기는 PH-49b에서 함께 넣는다.
+`customer.role`로 갈린다. 둘이 모순되는 상태(`CUSTOMER`인데 권한 행이 있음)는 PH-49b에서 복합 FK
+`fk_admin_permission_admin`으로 막았다([아래](#부여회수-api와-maker-checker-검토-ph-49b)).
 
 **② 권한 5종 고정**
 
@@ -42,7 +42,7 @@
 | `AUDIT_READ` | 감사로그 조회 | 대사 불일치(ADM-04·PH-38) · PH-89 |
 
 `api_conventions.md` §5-8에 `CustomerRole`·`AdminPermission`으로 등록했다. 값을 늘리면 `/admin/**`
-권한 매핑표(②)와 부여·회수 API(PH-49b)를 함께 고쳐야 한다. ①·② 시점에는 시드와 Runbook SQL로만 넣는다.
+권한 매핑표(②)와 부여·회수 API(PH-49b)를 함께 고쳐야 한다. ①·② 시점에는 시드와 Runbook SQL로만 넣었고, PH-49b부터 API로도 넣는다.
 
 **③ 로그인 경로 분리** — `POST /admin/auth/login`. `role=ADMIN`만 통과한다.
 **실패 응답은 고객 로그인과 같은 `ATH0101`** 이다. 아이디 없음 · 비밀번호 틀림 · **고객 계정의 관리자
@@ -219,6 +219,23 @@ SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS 
 - **세션 만료(무조작 30분) 로그아웃은 감사에 남지 않는다.** `LogoutSuccessEvent`는 명시적 로그아웃에만
   온다. 만료 감사가 필요하면 Spring Session JDBC의 만료 감지와 감사 기록 경로를 별도로 설계한다.
   `SecurityConfig`에는 `HttpSessionEventPublisher`가 없다 — 어느 REQ도 요구하지 않아 ② 범위에 넣지 않았다.
-- 권한 부여·회수 API 와 `role=CUSTOMER` 인데 권한 행이 있는 모순 제약 — PH-49b.
-  **회수는 권한 행만 지우면 이미 로그인한 세션에 반영되지 않는다.** 즉시 끊어야 하면
-  `CustomerSessionInvalidator`로 해당 관리자의 JDBC 세션을 함께 삭제한다.
+- 권한 부여·회수 API 와 `role=CUSTOMER` 인데 권한 행이 있는 모순 제약 — PH-49b에서 만들었다(아래).
+
+## 부여·회수 API와 maker-checker 검토 (PH-49b)
+
+관리자 권한을 API로 주고 뺀다. 변경은 전부 `AuditLog`에 남고, 회수하면 대상의 로그인 세션을 즉시 끊는다.
+
+| 항목 | 결정 |
+|---|---|
+| API | `POST /admin/customers/{customerId}/permissions`(본문 `permission`) · `DELETE /admin/customers/{customerId}/permissions/{permission}`. 둘 다 `Idempotency-Key` 필수, 이미 가진 권한 부여·없는 권한 회수는 200 |
+| 인가 | `CUSTOMER_WRITE`. 5종 고정을 유지하려고 새 권한을 만들지 않았다. 그래서 `CUSTOMER_WRITE` 보유자는 자기를 뺀 어느 관리자에게도 5종을 줄 수 있고, 보유자끼리 서로 줄 수도 있다 |
+| 모순 방지 | `customer`에 `UNIQUE(customer_id, role)`, `admin_permission.role`(`ADMIN` 고정)과 복합 FK. `CUSTOMER` 계정에는 권한 행이 붙지 않고, 권한 행이 남은 관리자는 `CUSTOMER`로 바꿀 수 없다 |
+| 세션 | 권한이 로그인 때 세션 authority로 실리므로 회수는 같은 트랜잭션에서 `CustomerSessionInvalidator.invalidateAll`을 부른다. 부여는 대상의 다음 로그인부터 적용된다 |
+| 감사 | `ADMIN_PERMISSION_GRANT`·`ADMIN_PERMISSION_REVOKE`. 행위자는 호출한 관리자, 대상은 `targetCustomerId`, 바뀐 권한은 `changes`. 자기 대상·비관리자 대상 거부도 실패로 남는다 |
+| Step-up | 두 API 모두 `Step-up 필요`를 Swagger(`x-step-up-required`)에 표기했다. 재인증 검증은 아직 없다([mfa_step_up_matrix.md](mfa_step_up_matrix.md) §4) |
+
+**maker-checker 검토 결과: 이번에는 도입하지 않는다.**
+
+- 역분개·한도변경을 승인 대기로 두려면 관리자가 그 요청을 만드는 API가 있어야 한다. `origin/dev`(2026-10-29)에 관리자 역분개 API는 없고, 한도변경은 고객 본인의 OTP 흐름이라 관리자 승인 경로가 없다.
+- 들어온다면 필요한 것은 승인 대기 저장소, 요청자와 승인자가 다르다는 규칙, 만료 처리다. 전면 도입은 범위 밖이다.
+- 첫 후보는 이 부여·회수 API다. 요청자≠승인자 규칙을 걸면 위의 "보유자끼리 서로 줄 수 있다"가 막힌다.

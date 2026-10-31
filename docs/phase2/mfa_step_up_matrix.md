@@ -41,7 +41,8 @@
 | 예약·자동이체 배치 실행 | 등록된 지시에 따른 시스템 실행. 고객 세션·인증 토큰 없음 | **해당 없음:** 새 고객 승인 행위 아님 | 배치 회차마다 고객 Step-up을 요구하지 않음 | 등록 시점의 인증을 근거로 실행 | [TransferCommand](../../src/main/java/com/shinhan/corebank/transfer/application/port/in/TransferCommand.java) |
 | 관리자 조회 API | 관리자 로그인 세션 + 경로별 `CUSTOMER_READ`·`GL_READ`·`AUDIT_READ` 권한 | **미충족:** 로그인 비밀번호 1종 | 조회마다 추가 Step-up을 요구하지 않음 | `GET /admin/customers`, `GET /admin/trial-balance`, `GET /admin/ledger-reconciliation/mismatches`가 구현됨. 행위 직전 추가 인증 없음 | [SecurityConfig](../../src/main/java/com/shinhan/corebank/auth/adapter/in/security/SecurityConfig.java), [AdminCustomerController](../../src/main/java/com/shinhan/corebank/customer/adapter/in/web/admin/AdminCustomerController.java), [AdminTrialBalanceController](../../src/main/java/com/shinhan/corebank/gl/adapter/in/web/admin/AdminTrialBalanceController.java), [AdminLedgerReconciliationController](../../src/main/java/com/shinhan/corebank/transfer/adapter/in/web/admin/AdminLedgerReconciliationController.java) |
 | 관리자 고객 변경 API | 관리자 로그인 세션 + `CUSTOMER_WRITE` 권한 | **미충족:** 로그인 비밀번호 1종 | 고객 상태 변경 전 Step-up 요구 구간 | `POST /admin/customers/{customerId}/unlock`, `/status`, `/password-reset`이 구현됐으나 실행 직전 재인증 없음 | [AdminCustomerController](../../src/main/java/com/shinhan/corebank/customer/adapter/in/web/admin/AdminCustomerController.java), [SecurityConfig](../../src/main/java/com/shinhan/corebank/auth/adapter/in/security/SecurityConfig.java) |
-| 관리자 GL 변경·권한 부여/회수 API | 해당 변경 API 미구현 | **판정 보류:** 실행 경로 없음 | `GL_WRITE` 변경과 권한 부여·회수 전 Step-up 요구 구간 | 권한 Enum·인가 계약은 있지만 변경 API와 Step-up 검증 경로는 아직 없음 | [admin_auth.md](admin_auth.md), [tasks.md](tasks.md#ph-49b-직무분리-부여회수--maker-checker--step-up-표기) |
+| 관리자 권한 부여/회수 API | 관리자 로그인 세션 + `CUSTOMER_WRITE` 권한 | **미충족:** 로그인 비밀번호 1종 | 권한 변경 전 Step-up 요구 구간 | `POST·DELETE /admin/customers/{customerId}/permissions`가 구현됐으나 실행 직전 재인증 없음 | [AdminCustomerController](../../src/main/java/com/shinhan/corebank/customer/adapter/in/web/admin/AdminCustomerController.java), [admin_auth.md](admin_auth.md) |
+| 관리자 GL 변경 API | 해당 변경 API 미구현 | **판정 보류:** 실행 경로 없음 | `GL_WRITE` 변경 전 Step-up 요구 구간 | 권한 Enum·인가 계약은 있지만 변경 API와 Step-up 검증 경로는 아직 없음 | [admin_auth.md](admin_auth.md) |
 
 예약이체의 등록·취소와 자동이체의 등록·변경·해지는 해당 동작의 거래정보로 OTP를 검증한다. 반면 배치 실행은 고객이 그때 다시 요청한 이체가 아니다. 이 차이를 무시하고 배치 실행을 `2요소 충족` 또는 `OTP 누락`으로 표시하지 않는다.
 
@@ -53,10 +54,10 @@ PH-49b는 이 문서의 관리자 행을 받아 **관리자 변경 API가 Step-u
 |---|---|---|
 | `POST /admin/customers/{customerId}/unlock` · `POST /admin/customers/{customerId}/status` · `POST /admin/customers/{customerId}/password-reset` | `CUSTOMER_WRITE` ([AdminCustomerController](../../src/main/java/com/shinhan/corebank/customer/adapter/in/web/admin/AdminCustomerController.java)) | `Step-up 필요` |
 | GL·전표·분개 변경 | `GL_WRITE` ([admin_auth.md](admin_auth.md)) | `Step-up 필요` |
-| 관리자 권한 부여·회수 | PH-49b 부여·회수 API ([tasks.md](tasks.md#ph-49b-직무분리-부여회수--maker-checker--step-up-표기)) | `Step-up 필요` |
+| 관리자 권한 부여·회수 | `POST·DELETE /admin/customers/{customerId}/permissions` — `CUSTOMER_WRITE` ([AdminCustomerController](../../src/main/java/com/shinhan/corebank/customer/adapter/in/web/admin/AdminCustomerController.java)) | `Step-up 필요` |
 | 고객·GL·감사 조회 | `CUSTOMER_READ`·`GL_READ`·`AUDIT_READ` | 이 매트릭스만으로 추가 Step-up을 요구하지 않음 |
 
-고객 변경 API의 위 경로·메서드는 현재 구현 기준이다. GL 변경·권한 부여/회수 API의 실제 경로·메서드는 담당 구현과 함께 확정한다. 기존 코드에 없는 Step-up 완료 상태나 새 응답 필드를 이 문서가 정의하지 않는다. 권한 검사, 감사로그, maker-checker는 Step-up과 서로 다른 통제다.
+고객 변경 API와 권한 부여/회수 API의 위 경로·메서드는 현재 구현 기준이고, 이 API들은 Swagger operation에 `x-step-up-required`와 설명 한 문장으로 표기했다. GL 변경 API의 실제 경로·메서드는 담당 구현과 함께 확정한다. 기존 코드에 없는 Step-up 완료 상태나 새 응답 필드를 이 문서가 정의하지 않는다. 권한 검사, 감사로그, maker-checker는 Step-up과 서로 다른 통제다.
 
 ## 5. 후속 구현 때 다시 판정할 조건
 
@@ -65,4 +66,4 @@ PH-49b는 이 문서의 관리자 행을 받아 **관리자 변경 API가 Step-u
 3. 관리자 변경 API에는 권한 확인과 별도로, Step-up을 실제로 검증하는 경로가 들어간 뒤에만 `적용 완료`를 표시한다. PH-49b의 정책 표기만으로 차단 기능이 구현된 것은 아니다.
 4. 구현 후에는 같은 세션에서 두 비밀번호만 입력한 경우, Mock OTP 번호를 같은 응답에서 읽은 경우, 다른 거래용 OTP 토큰을 제출한 경우, 만료·재사용 토큰을 제출한 경우를 구분해 재검증한다.
 
-이 문서의 사실 판정은 `dev` 커밋 `83948e97`(2026-10-22)을 합친 코드와 설정 기준이다. 이후 PH-49b 권한 부여/회수 API가 들어오면 관리자 행을 다시 대조한다.
+이 문서의 사실 판정은 `dev` 커밋 `83948e97`(2026-10-22)을 합친 코드와 설정 기준이다. PH-49b 권한 부여/회수 API는 `dev` 커밋 `0c6674ab`(2026-10-29) 위에서 반영해 관리자 행을 다시 대조했다.
