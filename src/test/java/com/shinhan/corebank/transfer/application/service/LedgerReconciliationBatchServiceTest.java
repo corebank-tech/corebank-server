@@ -50,6 +50,7 @@ class LedgerReconciliationBatchServiceTest {
     private static final int COB_HARD_THRESHOLD = 10;
     private static final String SOFT_MARKER = "[LEDGER_RECONCILIATION_SOFT]";
     private static final String HARD_MARKER = "[LEDGER_RECONCILIATION_HARD]";
+    private static final String KEPT_MARKER = "[LEDGER_RECONCILIATION_KEPT]";
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
     private static final LocalDateTime DETECTED_AT = LocalDateTime.of(2026, 8, 10, 0, 30);
     private static final Clock FIXED_CLOCK = Clock.fixed(DETECTED_AT.atZone(KST).toInstant(), KST);
@@ -161,27 +162,32 @@ class LedgerReconciliationBatchServiceTest {
         doAnswer(invocation -> {
                     judgeLogsAtSave.addAll(logsWith(SOFT_MARKER));
                     judgeLogsAtSave.addAll(logsWith(HARD_MARKER));
-                    return null;
+                    return true;
                 })
                 .when(ledgerReconciliationMismatchPort)
-                .replaceForBusinessDate(DATE, found, DETECTED_AT);
+                .saveIfAbsent(DATE, found, DETECTED_AT);
 
         assertThatThrownBy(() -> service().runInCob(DATE)).isInstanceOf(CobStepHaltException.class);
 
-        verify(ledgerReconciliationMismatchPort).replaceForBusinessDate(DATE, found, DETECTED_AT);
+        verify(ledgerReconciliationMismatchPort).saveIfAbsent(DATE, found, DETECTED_AT);
         assertThat(judgeLogsAtSave).isEmpty();
         assertThat(logsWith(HARD_MARKER)).hasSize(1);
     }
 
     @Test
-    @DisplayName("COB 대사 불일치가 0건이어도 저장을 불러 그 영업일에 남아 있던 행을 비운다")
-    void runInCob_noMismatch_stillReplacesToClearThatDay() {
+    @DisplayName("그 영업일 목록이 이미 있어 저장하지 않아도 마감 판정은 이번 대사 결과로 한다(#749)")
+    void runInCob_listAlreadySaved_keepsIt_butJudgesThisRun() {
         when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
-        when(ledgerFullReconciliationUseCase.reconcileAll()).thenReturn(List.of());
+        List<LedgerReconciliationMismatch> found = mismatches(COB_HARD_THRESHOLD + 1);
+        when(ledgerFullReconciliationUseCase.reconcileAll()).thenReturn(found);
+        when(ledgerReconciliationMismatchPort.saveIfAbsent(DATE, found, DETECTED_AT))
+                .thenReturn(false);
 
-        service().runInCob(DATE);
+        assertThatThrownBy(() -> service().runInCob(DATE)).isInstanceOf(CobStepHaltException.class);
 
-        verify(ledgerReconciliationMismatchPort).replaceForBusinessDate(DATE, List.of(), DETECTED_AT);
+        assertThat(logsWith(KEPT_MARKER)).hasSize(1);
+        assertThat(logsWith(HARD_MARKER)).hasSize(1);
+        verify(batchExecutionLockPort).release(JOB_NAME);
     }
 
     @Test
@@ -190,7 +196,7 @@ class LedgerReconciliationBatchServiceTest {
         when(batchExecutionLockPort.tryAcquire(JOB_NAME)).thenReturn(true);
         when(ledgerFullReconciliationUseCase.reconcileAll()).thenReturn(mismatches(1));
         IllegalStateException failure = new IllegalStateException("db down");
-        doThrow(failure).when(ledgerReconciliationMismatchPort).replaceForBusinessDate(any(), any(), any());
+        doThrow(failure).when(ledgerReconciliationMismatchPort).saveIfAbsent(any(), any(), any());
 
         assertThatThrownBy(() -> service().runInCob(DATE)).isSameAs(failure);
 

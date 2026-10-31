@@ -91,7 +91,7 @@ class AdminLedgerReconciliationControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("all=true면 그 영업일 전체를 계좌 ID 오름차순 한 페이지로 내려준다")
     void all_returnsWholeDateInOnePage() throws Exception {
-        mismatchAdapter.replaceForBusinessDate(
+        mismatchAdapter.saveIfAbsent(
                 EARLIER_DATE,
                 List.of(
                         new LedgerReconciliationMismatch(ACCOUNT_B, 0L, 50L),
@@ -110,6 +110,34 @@ class AdminLedgerReconciliationControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.totalPages").value(1))
                 .andExpect(jsonPath("$.data.items.length()").value(2))
                 .andExpect(jsonPath("$.data.items[0].accountId").value(ACCOUNT_A))
+                .andExpect(jsonPath("$.data.items[1].accountId").value(ACCOUNT_B));
+    }
+
+    @Test
+    @DisplayName("같은 영업일로 대사가 다시 돌아도 처음 저장한 목록과 시각을 내려준다(#749)")
+    void rerunForSameDate_returnsFirstRun() throws Exception {
+        mismatchAdapter.saveIfAbsent(
+                EARLIER_DATE,
+                List.of(
+                        new LedgerReconciliationMismatch(ACCOUNT_A, 1_000L, 900L),
+                        new LedgerReconciliationMismatch(ACCOUNT_B, 0L, 50L)),
+                LocalDateTime.of(2099, 2, 3, 23, 31, 5));
+        entityManager.flush();
+        entityManager.clear();
+        // 멈춘 COB 재개 때의 재대사 — A만 남았다
+        mismatchAdapter.saveIfAbsent(
+                EARLIER_DATE,
+                List.of(new LedgerReconciliationMismatch(ACCOUNT_A, 1_000L, 950L)),
+                LocalDateTime.of(2099, 2, 4, 23, 31, 5));
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get(URL).param("businessDate", "2099-02-03").with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalCount").value(2))
+                .andExpect(jsonPath("$.data.items[0].accountId").value(ACCOUNT_A))
+                .andExpect(jsonPath("$.data.items[0].accountBalance").value(900))
+                .andExpect(jsonPath("$.data.items[0].detectedAt").value("2099-02-03T23:31:05+09:00"))
                 .andExpect(jsonPath("$.data.items[1].accountId").value(ACCOUNT_B));
     }
 
@@ -147,11 +175,11 @@ class AdminLedgerReconciliationControllerTest extends IntegrationTestSupport {
     }
 
     private void saveSample() {
-        mismatchAdapter.replaceForBusinessDate(
+        mismatchAdapter.saveIfAbsent(
                 EARLIER_DATE,
                 List.of(new LedgerReconciliationMismatch(ACCOUNT_A, 1_000L, 900L)),
                 LocalDateTime.of(2099, 2, 3, 23, 31, 5));
-        mismatchAdapter.replaceForBusinessDate(
+        mismatchAdapter.saveIfAbsent(
                 LATEST_DATE,
                 List.of(new LedgerReconciliationMismatch(ACCOUNT_B, 0L, 50L)),
                 LocalDateTime.of(2099, 2, 4, 23, 31, 5));
