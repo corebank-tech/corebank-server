@@ -8,15 +8,20 @@ import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.common.response.PageResponse;
 import com.shinhan.corebank.common.util.PageableResolver;
+import com.shinhan.corebank.customer.api.AdminPermission;
 import com.shinhan.corebank.customer.application.port.in.AdminAccessContext;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerCommandUseCase;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerOperationCommand;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerQueryUseCase;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerSearchQuery;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerViewAuditUseCase;
+import com.shinhan.corebank.customer.application.port.in.AdminPermissionCommand;
+import com.shinhan.corebank.customer.application.port.in.AdminPermissionCommandUseCase;
 import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.extensions.Extension;
+import io.swagger.v3.oas.annotations.extensions.ExtensionProperty;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -29,6 +34,7 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,17 +47,19 @@ import tools.jackson.core.type.TypeReference;
 
 // 관리자 고객 계정 운영(#449, #450, PH-97). 인가는 SecurityConfig 의 경로별 권한 매핑이 맡는다.
 // 다섯 API 모두 조회 사유 헤더를 받고, 검색·상세는 조회 감사를 남긴다(PH-89).
+// 권한 부여·회수(PH-49b)는 조회 사유 헤더를 받지 않는다.
 @RestController
 @RequestMapping("/admin/customers")
 @RequiredArgsConstructor
 @Validated
-@Tag(name = "관리자 고객 계정 운영", description = "관리자의 고객 검색·잠금 해제·로그인 비밀번호 초기화·계정 상태 변경 API")
+@Tag(name = "관리자 고객 계정 운영", description = "관리자의 고객 검색·잠금 해제·로그인 비밀번호 초기화·계정 상태 변경·관리자 권한 부여·회수 API")
 public class AdminCustomerController {
 
     private static final Set<Integer> ALLOWED_PAGE_SIZES = Set.of(5, 10, 20, 30, 50);
 
     private final AdminCustomerQueryUseCase adminCustomerQueryUseCase;
     private final AdminCustomerCommandUseCase adminCustomerCommandUseCase;
+    private final AdminPermissionCommandUseCase adminPermissionCommandUseCase;
     private final AdminCustomerViewAuditUseCase adminCustomerViewAuditUseCase;
     private final CurrentCustomerProvider currentCustomerProvider;
     private final IdempotentRequestExecutor idempotentRequestExecutor;
@@ -148,7 +156,12 @@ public class AdminCustomerController {
     @Operation(
             operationId = "unlockAdminCustomer",
             summary = "관리자 계정 잠금 해제",
-            description = "잠금을 풀고 연속 로그인 실패 횟수를 0으로 되돌린다(REQ-AUTH-026·035). 이미 풀린 계정도 200이다.")
+            extensions =
+                    @Extension(
+                            name = "x-step-up-required",
+                            properties = @ExtensionProperty(name = "required", value = "true")),
+            description = "잠금을 풀고 연속 로그인 실패 횟수를 0으로 되돌린다(REQ-AUTH-026·035). 이미 풀린 계정도 200이다. "
+                    + "Step-up 필요(정책 표기, 재인증 검증은 아직 없다).")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "해제 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -200,9 +213,13 @@ public class AdminCustomerController {
     @Operation(
             operationId = "changeAdminCustomerStatus",
             summary = "관리자 계정 상태 변경",
+            extensions =
+                    @Extension(
+                            name = "x-step-up-required",
+                            properties = @ExtensionProperty(name = "required", value = "true")),
             description = "계정을 이용정지(SUSPENDED)하거나 정상(ACTIVE)으로 되돌린다. 정지된 고객은 비밀번호가 맞아도 "
                     + "로그인이 ATH0106으로 거부된다. 잠금·실패 횟수는 바꾸지 않는다. 이미 같은 상태여도 200이다. "
-                    + "이미 로그인한 세션은 끊지 않는다(무조작 10분 만료까지 유효).")
+                    + "이미 로그인한 세션은 끊지 않는다(무조작 10분 만료까지 유효). Step-up 필요(정책 표기, 재인증 검증은 아직 없다).")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "변경 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -259,8 +276,13 @@ public class AdminCustomerController {
     @Operation(
             operationId = "resetAdminCustomerPassword",
             summary = "관리자 로그인 비밀번호 초기화",
+            extensions =
+                    @Extension(
+                            name = "x-step-up-required",
+                            properties = @ExtensionProperty(name = "required", value = "true")),
             description = "임시 비밀번호를 발급해 이 응답으로 한 번만 돌려주고, 계정 잠금도 해제한다. "
-                    + "멱등키를 쓰지 않으며, 다시 요청하면 새 임시 비밀번호가 발급되고 이전 값은 쓸 수 없다.")
+                    + "멱등키를 쓰지 않으며, 다시 요청하면 새 임시 비밀번호가 발급되고 이전 값은 쓸 수 없다. "
+                    + "Step-up 필요(정책 표기, 재인증 검증은 아직 없다).")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "초기화 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -290,6 +312,127 @@ public class AdminCustomerController {
         var result = adminCustomerCommandUseCase.resetPassword(new AdminCustomerOperationCommand(
                 adminCustomerId, customerId, httpRequest.getRemoteAddr(), accessReason));
         return ApiResponse.success(AdminPasswordResetResponse.from(result), "로그인 비밀번호가 초기화되었습니다.");
+    }
+
+    @PostMapping("/{customerId}/permissions")
+    @Operation(
+            operationId = "grantAdminPermission",
+            summary = "관리자 권한 부여",
+            extensions =
+                    @Extension(
+                            name = "x-step-up-required",
+                            properties = @ExtensionProperty(name = "required", value = "true")),
+            description = "대상 관리자에게 권한 하나를 준다. 이미 가진 권한이어도 200이다. 새 권한은 대상이 다시 로그인한 뒤부터 "
+                    + "적용된다. Step-up 필요(정책 표기, 재인증 검증은 아직 없다).")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "부여 성공. data.permissions는 변경 후 대상이 가진 권한 전부"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "`CMN0001` 정의되지 않은 permission, 또는 대상이 관리자가 아님 · `CMN0002` 멱등키 누락",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "`CMN0102` 자기 자신 대상 또는 권한 없음",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "`ATH0201` 대상 고객 없음",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "`CMN0301`/`CMN0302` 멱등키 충돌",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<ApiResponse<AdminPermissionChangeResponse>> grantPermission(
+            @Parameter(description = "대상 관리자 내부 식별자", required = true, example = "1") @PathVariable @Positive
+                    Long customerId,
+            @Parameter(description = "멱등키", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+                    @RequestHeader("Idempotency-Key")
+                    String idempotencyKey,
+            @RequestBody @Valid AdminPermissionGrantRequest request,
+            HttpServletRequest httpRequest) {
+        Long adminCustomerId = currentCustomerProvider.getCurrentCustomerId();
+        var command = new AdminPermissionCommand(adminCustomerId, customerId, httpRequest.getRemoteAddr());
+        AdminPermission permission = request.permission();
+
+        // 지문에 대상과 권한을 넣어, 같은 키로 다른 권한을 주면 CMN0302가 나게 한다.
+        return idempotentRequestExecutor.execute(
+                idempotencyKey,
+                adminCustomerId,
+                "POST /admin/customers/" + customerId + "/permissions",
+                IdempotencyFingerprint.of(
+                        adminCustomerId, null, Map.of("targetCustomerId", customerId, "permission", permission.name())),
+                new TypeReference<>() {},
+                () -> ApiResponse.success(
+                        AdminPermissionChangeResponse.from(
+                                customerId, adminPermissionCommandUseCase.grantPermission(command, permission)),
+                        "관리자 권한이 부여되었습니다."));
+    }
+
+    @DeleteMapping("/{customerId}/permissions/{permission}")
+    @Operation(
+            operationId = "revokeAdminPermission",
+            summary = "관리자 권한 회수",
+            extensions =
+                    @Extension(
+                            name = "x-step-up-required",
+                            properties = @ExtensionProperty(name = "required", value = "true")),
+            description = "대상 관리자에게서 권한 하나를 뺀다. 가진 적 없는 권한이어도 200이다. 실제로 뺐다면 대상의 로그인 세션을 "
+                    + "모두 끊어 바로 적용한다. Step-up 필요(정책 표기, 재인증 검증은 아직 없다).")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "회수 성공. data.permissions는 변경 후 대상이 가진 권한 전부"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "`CMN0001` 정의되지 않은 permission, 또는 대상이 관리자가 아님 · `CMN0002` 멱등키 누락",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "`CMN0102` 자기 자신 대상 또는 권한 없음",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "`ATH0201` 대상 고객 없음",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "`CMN0301`/`CMN0302` 멱등키 충돌",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<ApiResponse<AdminPermissionChangeResponse>> revokePermission(
+            @Parameter(description = "대상 관리자 내부 식별자", required = true, example = "1") @PathVariable @Positive
+                    Long customerId,
+            @Parameter(description = "회수할 권한", required = true, example = "GL_READ") @PathVariable
+                    AdminPermission permission,
+            @Parameter(description = "멱등키", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+                    @RequestHeader("Idempotency-Key")
+                    String idempotencyKey,
+            HttpServletRequest httpRequest) {
+        Long adminCustomerId = currentCustomerProvider.getCurrentCustomerId();
+        var command = new AdminPermissionCommand(adminCustomerId, customerId, httpRequest.getRemoteAddr());
+
+        return idempotentRequestExecutor.execute(
+                idempotencyKey,
+                adminCustomerId,
+                "DELETE /admin/customers/" + customerId + "/permissions/" + permission.name(),
+                IdempotencyFingerprint.of(
+                        adminCustomerId, null, Map.of("targetCustomerId", customerId, "permission", permission.name())),
+                new TypeReference<>() {},
+                () -> ApiResponse.success(
+                        AdminPermissionChangeResponse.from(
+                                customerId, adminPermissionCommandUseCase.revokePermission(command, permission)),
+                        "관리자 권한이 회수되었습니다."));
     }
 
     private AdminAccessContext createAccessContext(AccessReason accessReason, HttpServletRequest httpRequest) {
