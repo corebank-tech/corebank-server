@@ -22,7 +22,9 @@ public enum AuditEventType {
     WITHDRAWAL_ACCOUNT_REGISTER, // 출금계좌 등록
     WITHDRAWAL_ACCOUNT_DELETE, // 출금계좌 삭제
     LOGIN, // 로그인 (REQ-CMN-025 접속이력)
-    LOGOUT; // 로그아웃 (PH-49a-②)
+    LOGOUT, // 로그아웃 (PH-49a-②)
+    ADMIN_PERMISSION_GRANT, // 관리자 권한 부여(PH-49b)
+    ADMIN_PERMISSION_REVOKE; // 관리자 권한 회수(PH-49b)
 
     /** 원장 변경 여부. true 면 transaction_number 가 있어야 한다 */
     public boolean isLedgerChanging() {
