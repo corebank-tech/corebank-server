@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 47개 테이블(39개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트 5개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 395개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
+> **DBMS**: MySQL 8.4 / 48개 테이블(39개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트·감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 408개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -24,7 +24,7 @@ erDiagram
     SPRING_SESSION ||--o{ SPRING_SESSION_ATTRIBUTES : "ON DELETE CASCADE"
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 47개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
+    %% MySQL 8.4 / 48개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -46,6 +46,9 @@ erDiagram
         datetime previous_login_at "대시보드 previousLoginAt"
         datetime password_changed_at "DATETIME(6)"
         datetime joined_at "DATETIME(6)"
+        varchar email_ciphertext "AES-256-GCM, NULL 허용"
+        varchar phone_number_ciphertext "AES-256-GCM, NULL 허용"
+        char email_search_hash UK "CHAR(64), HMAC-SHA256, NULL 허용"
     }
 
     terms {
@@ -377,7 +380,19 @@ erDiagram
         varchar result "SUCCESS / FAILURE"
         json detail "민감정보 마스킹 후 저장"
         varchar access_reason "관리자 조회·변경 사유(PH-89). NULL 허용"
+        char row_hash "무결성 해시 SHA-256(PH-82). 도입 전 NULL"
         datetime requested_at "DATETIME(6)"
+    }
+    audit_archive_execution {
+        bigint audit_archive_execution_id PK
+        date archive_date UK "적재 대상 날짜. (archive_date, archive_type) UNIQUE"
+        varchar archive_type UK "VARCHAR(10). LOG / ACCESS"
+        varchar status "VARCHAR(10). PENDING / SUCCESS / FAILURE"
+        varchar object_key "VARCHAR(100). 저장소 객체 키"
+        int row_count "성공 때 적재 행 수. NULL 허용"
+        varchar failure_reason "VARCHAR(500). 마지막 실패 사유"
+        datetime completed_at "DATETIME(6). 성공 시각(KST)"
+        datetime updated_at "DATETIME(6). 마지막 상태 변경(KST)"
     }
     common_code {
         varchar code_group PK "예: ACCOUNT_STATUS"
