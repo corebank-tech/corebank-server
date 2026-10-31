@@ -2,11 +2,12 @@ package com.shinhan.corebank.customer.adapter.out.persistence;
 
 import com.shinhan.corebank.customer.api.AdminPermission;
 import com.shinhan.corebank.customer.application.port.out.AdminPermissionPort;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-// admin_permission 조회를 담당하는 영속성 어댑터
+// admin_permission 조회·부여·회수를 담당하는 영속성 어댑터
 @Component
 @RequiredArgsConstructor
 public class AdminPermissionPersistenceAdapter implements AdminPermissionPort {
@@ -19,5 +20,19 @@ public class AdminPermissionPersistenceAdapter implements AdminPermissionPort {
         return adminPermissionJpaRepository.findPermissionsByCustomerId(customerId).stream()
                 .sorted()
                 .toList();
+    }
+
+    @Override
+    public boolean grant(Long customerId, AdminPermission permission, LocalDateTime grantedAt) {
+        if (adminPermissionJpaRepository.existsByCustomerIdAndPermission(customerId, permission)) {
+            return false;
+        }
+        adminPermissionJpaRepository.save(AdminPermissionJpaEntity.of(customerId, permission, grantedAt));
+        return true;
+    }
+
+    @Override
+    public boolean revoke(Long customerId, AdminPermission permission) {
+        return adminPermissionJpaRepository.deleteByCustomerIdAndPermission(customerId, permission) > 0;
     }
 }
