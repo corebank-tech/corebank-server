@@ -248,6 +248,7 @@ DELETE FROM flyway_schema_history WHERE success = 0;
 | 한글 `COMMENT` 깨짐 | `flyway.encoding` 미설정 | `encoding: UTF-8` |
 | `Cannot add foreign key constraint` | 파일 순서를 바꿈 | 타임스탬프 순서 확인 |
 | CI `Check migration version order` 실패: `...의 버전 ... 이(가) base 최신 V... 보다 앞이거나 같습니다` | PR이 열린 사이 dev에 더 늦은 번호가 머지됨 | 파일 이름을 dev 최신보다 뒤 번호로 변경 (§3 ②) |
+| 위 검사가 `dev → main` 릴리스 PR에서 실패 | 그 파일은 이미 dev에 머지되어 릴리스 PR에서는 고칠 수 없음 | dev에서 이름을 바꾸는 PR을 먼저 머지한 뒤 릴리스 PR을 다시 돌린다 |
 | 기동 시 `Validate failed: Detected resolved migration not applied to database` | 앞 번호 `V` 파일이 이미 머지되어, 더 늦은 번호를 적용한 DB와 순서가 맞지 않음 | 개발 DB면 DB를 지우고 다시 적용. 재발은 위 CI 검사가 막는다 |
 | 프로시저 생성 실패 | `DELIMITER` 미인식 | 해당 파일만 단독 실행 후 `flyway repair` |
 
