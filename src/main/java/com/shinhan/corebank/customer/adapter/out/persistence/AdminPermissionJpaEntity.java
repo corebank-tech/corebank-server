@@ -36,7 +36,15 @@ public class AdminPermissionJpaEntity {
     @Column(name = "permission", length = 20)
     private AdminPermission permission;
 
-    // 지금은 읽기만 한다. 값을 넣는 부여 API 는 PH-49b 다.
     @Column(name = "granted_at", nullable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime grantedAt;
+
+    // role 컬럼은 매핑하지 않는다 — DB 기본값 ADMIN 이 복합 FK(customer_id, role)를 채운다.
+    public static AdminPermissionJpaEntity of(Long customerId, AdminPermission permission, LocalDateTime grantedAt) {
+        AdminPermissionJpaEntity entity = new AdminPermissionJpaEntity();
+        entity.customerId = customerId;
+        entity.permission = permission;
+        entity.grantedAt = grantedAt;
+        return entity;
+    }
 }
