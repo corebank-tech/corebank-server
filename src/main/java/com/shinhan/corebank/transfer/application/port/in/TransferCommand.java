@@ -27,8 +27,11 @@ public record TransferCommand(
         // 식별되어 멱등성 사전조회에 걸린다.
         LocalDate executionDate,
         String authToken, // Account-Password-Auth-Token. IMMEDIATE만 필수(REQ-TRSF-009) — SCHEDULED/AUTO는 시스템 트리거라 세션이 없음
-        String otpAuthToken // Otp-Auth-Token. IMMEDIATE만 필수 — SCHEDULED/AUTO는 등록 시점에 검증됨(otp_integration_guide.md)
+        String otpAuthToken, // Otp-Auth-Token. IMMEDIATE만 필수 — SCHEDULED/AUTO는 등록 시점에 검증됨(otp_integration_guide.md)
+        String flowId // FE 행동 흐름 식별자(선택). 훅 C(TransferHoldPolicy)에 그대로 넘긴다. IMMEDIATE만
         ) {
+
+    private static final int FLOW_ID_MAX_LENGTH = 64;
 
     public TransferCommand {
 
@@ -82,6 +85,14 @@ public record TransferCommand(
         }
         if (transferType == TransferType.IMMEDIATE && (otpAuthToken == null || otpAuthToken.isBlank())) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        // 화면 행동은 고객이 직접 시작한 즉시이체에만 있다. 예약·자동이체에 오면 잘못된 호출이다
+        if (flowId != null
+                && (transferType != TransferType.IMMEDIATE
+                        || flowId.isBlank()
+                        || flowId.length() > FLOW_ID_MAX_LENGTH)) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
     }
 }

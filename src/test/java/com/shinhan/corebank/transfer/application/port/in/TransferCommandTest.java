@@ -181,4 +181,53 @@ class TransferCommandTest {
                 // authToken 없음
                 .build());
     }
+
+    @Test
+    @DisplayName("즉시 이체는 flowId를 함께 받을 수 있다")
+    void immediateTransfer_withFlowId_Success() {
+        assertDoesNotThrow(() -> immediateWithFlowId("3f1c2b7e-8a4d-4f0e-9c1a-2b6d5e7f8a90"));
+    }
+
+    @Test
+    @DisplayName("flowId가 비어 있거나 64자를 넘으면 INVALID_INPUT 에러가 발생한다")
+    void immediateTransfer_withBlankOrTooLongFlowId_ThrowsException() {
+        assertThatThrownBy(() -> immediateWithFlowId(" "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining(CommonErrorCode.INVALID_INPUT.getMessage());
+        assertThatThrownBy(() -> immediateWithFlowId("a".repeat(65)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining(CommonErrorCode.INVALID_INPUT.getMessage());
+    }
+
+    @Test
+    @DisplayName("예약 이체에 flowId가 있으면 INVALID_INPUT 에러가 발생한다 (화면 행동은 즉시이체에만 있다)")
+    void scheduledTransfer_withFlowId_ThrowsException() {
+        assertThatThrownBy(() -> TransferCommand.builder()
+                        .customerId(1L)
+                        .withdrawalAccountId(1L)
+                        .depositAccountNumber("123456789012")
+                        .amount(10000L)
+                        .transferType(TransferType.SCHEDULED)
+                        .channel(TransferChannel.BT)
+                        .sourceId(100L)
+                        .executionDate(LocalDate.now())
+                        .flowId("3f1c2b7e-8a4d-4f0e-9c1a-2b6d5e7f8a90")
+                        .build())
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining(CommonErrorCode.INVALID_INPUT.getMessage());
+    }
+
+    private TransferCommand immediateWithFlowId(String flowId) {
+        return TransferCommand.builder()
+                .customerId(1L)
+                .withdrawalAccountId(1L)
+                .depositAccountNumber("123456789012")
+                .amount(10000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
+                .flowId(flowId)
+                .build();
+    }
 }
