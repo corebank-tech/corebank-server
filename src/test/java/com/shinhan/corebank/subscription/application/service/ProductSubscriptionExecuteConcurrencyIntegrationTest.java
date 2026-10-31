@@ -12,6 +12,7 @@ import com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.business.api.BusinessDateProvider;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.notification.application.port.in.NotificationCommandUseCase;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaEntity;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
@@ -87,6 +88,10 @@ class ProductSubscriptionExecuteConcurrencyIntegrationTest extends IntegrationTe
     // 계좌비밀번호 인증 토큰도 같은 이유로 account.api 경계만 대체한다 — 발급/소비 로직은 account 도메인 테스트가 담당한다.
     @MockitoBean
     private AccountPasswordAuthTokenVerifier accountPasswordAuthTokenVerifier;
+
+    // 가입이 실제 고객으로 알림을 남기면 정리 단계의 고객 삭제가 notification FK 에 막힌다. 알림은 이 테스트의 관심사가 아니다.
+    @MockitoBean
+    private NotificationCommandUseCase notificationCommandUseCase;
 
     private ExecutorService executor;
     private Long customerId;
