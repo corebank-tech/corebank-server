@@ -111,3 +111,33 @@ flowchart TD
 | **JPA DDL 모드** | `validate` (스키마 불일치 시 에러) | `validate` | `validate` |
 | **시드 데이터** | `DemoDataLoader` 자동 로딩 ⭕ | 자동 로딩 ❌ (순수 테스트 데이터만) | `prod,qa-seed` 팀 QA 배포는 자동 로딩 ⭕ / `prod` 단독은 ❌ |
 | **타임존 관리** | DB/JVM/로그 모두 **KST** (변환 없음) | DB/JVM/로그 모두 **KST** (변환 없음) | DB/JVM/로그 모두 **KST** (변환 없음) |
+| **DB 연결 개수** (`hikari.maximum-pool-size`) | 10 | 16 | 10 (환경변수 `DB_POOL_SIZE`로 조정) |
+
+**운영 DB 연결 개수를 정하는 방법** (#553, #798)
+
+운영 풀 크기는 `DB_POOL_SIZE`로 정하고, 값이 없으면 10이다. 서버 연결과 그 밖의 접속을 합쳐 DB 최대 연결(`max_connections`)을 넘지 않게 정한다.
+
+```
+(메인 풀 + 채번 풀 3) × 서버 대수 + 그 밖의 접속 15 ≤ max_connections
+```
+
+- **서버 한 대는 풀 두 개를 연다.** 메인 풀(`maximum-pool-size`)과 전표번호 채번 전용 풀(`GlVoucherSequenceAdapter`, 3)이다. 둘 다 `minimum-idle`을 정하지 않아 서버가 떠 있는 동안 늘 꽉 채워 둔다.
+- **그 밖의 접속은 15개로 잡는다.** 2026-10-05 조회 때 DB가 기록한 최대 동시 연결 25개에서 서버 연결 10개를 뺀 값이다. 평소에는 4개(AWS 관리용 `rdsadmin` 2, `event_scheduler` 1, DataGrip 1)이고, 25는 시드 적재 프로그램(연결 10개)이 함께 돌던 때 찍힌 것으로 보인다.
+
+| 환경 | `max_connections` | 서버 대수 | 풀 10 | 풀 20 |
+| :--- | ---: | ---: | ---: | ---: |
+| 기존 EC2·RDS (db.t4g.micro, 11/6까지, S4 측정용) | 60 (실측) | 1 | 28 | 38 |
+| 새 환경 (db.t3.small) | 약 140 (추정) | 2 | 41 | 61 |
+
+- `max_connections` 값은 [PH-57 용량 산정 §4-2](phase2/ph57_capacity_plan.md#4-2-rds--dbt3small-multi-az)를 따른다. 새 RDS 값은 공식 `{DBInstanceClassMemory/12582880}`로 낸 추정이라, 접속할 수 있게 되면 `SELECT @@hostname, @@max_connections;`로 확인한다.
+- **두 환경 모두 풀 20까지 한도 안이다.**
+- **DB 최대 연결은 늘리지 않는다.** 연결마다 메모리를 먹어서, 소형 DB에서 숫자만 올리면 메모리가 먼저 부족해진다.
+- **연결 대기 시간(`connection-timeout` 3초)은 늘리지 않는다.** 연결 개수가 같으면 처리량도 같고, 실패를 늦게 알려 줄 뿐이다.
+
+**풀 크기를 바꾸는 절차**
+
+`docker restart`는 환경변수를 다시 읽지 않는다. 컨테이너를 새로 만들어야 값이 바뀐다.
+
+- **기존 EC2**: `/home/ubuntu/corebank/docker-compose.yml`의 `corebank-server` `environment:`에 `- DB_POOL_SIZE=20`을 넣고 `docker compose up -d corebank-server`로 다시 만든다. 이 파일은 CD가 배포할 때마다 새로 쓰므로, 다음 배포가 오면 10으로 돌아간다.
+- **새 환경**: `/opt/corebank/app.env`에 `DB_POOL_SIZE=20` 같은 줄을 넣고, `corebank-server` 컨테이너를 지운 뒤 user data(`terraform/main/modules/compute/user_data.sh.tftpl`)의 `docker run` 명령으로 다시 띄운다. 서버마다 따로 한다.
+- **확인**: 운영은 actuator가 `health`만 열려 있어 풀 크기를 직접 볼 수 없다. DB에서 `SELECT COUNT(*) FROM information_schema.processlist WHERE user = 'app_user';`로 세면 서버 한 대당 메인 풀 + 3개가 나온다(풀 20이면 23).
