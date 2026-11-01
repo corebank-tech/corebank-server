@@ -145,7 +145,7 @@ erDiagram
     transaction_sequence {
         date seq_date PK "KST 기준 영업일"
         char channel PK "WB / BT"
-        bigint last_seq "해당 일자·채널의 마지막 일련번호"
+        bigint last_seq "해당 일자·채널에서 예약한 마지막 일련번호(묶음 예약)"
     }
     transfer {
         bigint transfer_id PK

@@ -11,6 +11,11 @@ spring:
       # 데드락 회귀인지 커넥션 풀 대기인지 구분할 수 없어 워커 수와 맞춰 명시한다.
       maximum-pool-size: 16
 
+app:
+  # 컨텍스트를 같이 쓰는 테스트끼리 메모리 묶음이 이어지지 않게 한 개씩 받는다. 묶음 동작은 SequenceGeneratorBlockTest가 본다
+  transaction-sequence:
+    block-size: 1
+
 management:
   endpoints:
     web:

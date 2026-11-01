@@ -11,10 +11,10 @@ import com.shinhan.corebank.transfer.domain.TransferChannel;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -38,8 +38,12 @@ class SequenceGeneratorRetryTest {
     @Spy
     private Clock clock = Clock.systemDefaultZone();
 
-    @InjectMocks
     private SequenceGenerator sequenceGenerator;
+
+    @BeforeEach
+    void setUp() {
+        sequenceGenerator = new SequenceGenerator(repository, transactionManager, clock, 1);
+    }
 
     @Test
     @DisplayName("재시도 대상이 아닌 DataAccessException은 재시도 없이 즉시 전파된다")
