@@ -723,8 +723,12 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
 
         @Override
         public boolean finishExecution(
-                long transferHoldId, TransferHoldStatus result, Long transferId, LocalDateTime completedAt) {
-            return delegate.finishExecution(transferHoldId, result, transferId, completedAt);
+                long transferHoldId,
+                TransferHoldStatus result,
+                Long transferId,
+                String errorCode,
+                LocalDateTime completedAt) {
+            return delegate.finishExecution(transferHoldId, result, transferId, errorCode, completedAt);
         }
 
         @Override

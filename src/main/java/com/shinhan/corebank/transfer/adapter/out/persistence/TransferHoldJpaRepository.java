@@ -34,6 +34,7 @@ public interface TransferHoldJpaRepository extends JpaRepository<TransferHoldJpa
             UPDATE TransferHoldJpaEntity h
                SET h.status = :result,
                    h.transferId = :transferId,
+                   h.reasonCode = :errorCode,
                    h.completedAt = :completedAt
              WHERE h.transferHoldId = :transferHoldId
                AND h.status = com.shinhan.corebank.transfer.domain.TransferHoldStatus.EXECUTING
@@ -42,6 +43,7 @@ public interface TransferHoldJpaRepository extends JpaRepository<TransferHoldJpa
             @Param("transferHoldId") long transferHoldId,
             @Param("result") TransferHoldStatus result,
             @Param("transferId") Long transferId,
+            @Param("errorCode") String errorCode,
             @Param("completedAt") LocalDateTime completedAt);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)

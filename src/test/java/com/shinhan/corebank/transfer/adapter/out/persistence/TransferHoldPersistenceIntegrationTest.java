@@ -76,9 +76,9 @@ class TransferHoldPersistenceIntegrationTest extends IntegrationTestSupport {
         assertThat(port.close(id, TransferHoldStatus.CANCELLED, CUSTOMER_ID, null, NOW.plusHours(3)))
                 .isFalse();
 
-        assertThat(port.finishExecution(id, TransferHoldStatus.EXECUTED, null, NOW.plusHours(3)))
+        assertThat(port.finishExecution(id, TransferHoldStatus.EXECUTED, null, null, NOW.plusHours(3)))
                 .isTrue();
-        assertThat(port.finishExecution(id, TransferHoldStatus.FAILED, null, NOW.plusHours(3)))
+        assertThat(port.finishExecution(id, TransferHoldStatus.FAILED, null, "TRF0303", NOW.plusHours(3)))
                 .isFalse();
 
         Map<String, Object> row = row(id);
@@ -106,7 +106,7 @@ class TransferHoldPersistenceIntegrationTest extends IntegrationTestSupport {
     void transitions_rejectWrongResult() {
         long id = port.save(newHold()).getTransferHoldId();
 
-        assertThatThrownBy(() -> port.finishExecution(id, TransferHoldStatus.CANCELLED, null, NOW))
+        assertThatThrownBy(() -> port.finishExecution(id, TransferHoldStatus.CANCELLED, null, null, NOW))
                 .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> port.close(id, TransferHoldStatus.EXECUTED, null, null, NOW))
                 .isInstanceOf(BusinessException.class);

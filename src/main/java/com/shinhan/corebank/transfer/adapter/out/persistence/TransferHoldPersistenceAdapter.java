@@ -40,9 +40,13 @@ public class TransferHoldPersistenceAdapter implements TransferHoldPort {
 
     @Override
     public boolean finishExecution(
-            long transferHoldId, TransferHoldStatus result, Long transferId, LocalDateTime completedAt) {
+            long transferHoldId,
+            TransferHoldStatus result,
+            Long transferId,
+            String errorCode,
+            LocalDateTime completedAt) {
         requireOneOf(EXECUTION_RESULTS, result);
-        return repository.finishExecution(transferHoldId, result, transferId, completedAt) == 1;
+        return repository.finishExecution(transferHoldId, result, transferId, errorCode, completedAt) == 1;
     }
 
     @Override

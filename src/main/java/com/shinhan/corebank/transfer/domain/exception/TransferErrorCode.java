@@ -20,6 +20,7 @@ public enum TransferErrorCode implements ErrorCode {
     UNSENDABLE_MEMO_CHARACTER("TRF0008", 400, "통장 표시내용에 보낼 수 없는 문자가 있습니다."),
     PAYEE_NOT_FOUND("TRF0201", 404, "입금계좌를 찾을 수 없습니다."),
     TRANSACTION_NOT_FOUND("TRF0202", 404, "거래내역을 찾을 수 없습니다."),
+    TRANSFER_HOLD_NOT_FOUND("TRF0203", 404, "보류 이체를 찾을 수 없습니다."),
     PAYEE_ACCOUNT_SUSPENDED("TRF0301", 409, "거래정지 또는 해지 상태의 입금계좌입니다."),
     INVALID_STATUS_TRANSITION("TRF0302", 409, "이미 처리 완료(SUCCESS/ERROR)된 이체는 상태를 변경할 수 없습니다."),
     INSUFFICIENT_BALANCE("TRF0303", 409, "출금계좌 잔액이 부족합니다."),
@@ -30,6 +31,7 @@ public enum TransferErrorCode implements ErrorCode {
     INTERBANK_NOT_PROCESSED("TRF0308", 409, "상대 은행에서 이체를 처리하지 못했습니다."),
     INTERBANK_PAYEE_UNVERIFIED("TRF0309", 409, "상대 은행에서 예금주를 확인하지 못했습니다."),
     TRANSFER_HOLD_NOT_EXECUTABLE("TRF0310", 409, "실행할 수 없는 보류 이체입니다."),
+    TRANSFER_HOLD_ALREADY_CLOSED("TRF0311", 409, "이미 실행 중이거나 끝난 보류 이체입니다."),
     ACCOUNT_LOCK_TARGET_NOT_FOUND("TRF9001", 500, "이체 처리 중 계좌 정보를 확인할 수 없습니다."),
     TRANSACTION_SEQUENCE_EXHAUSTED("TRF9002", 500, "거래번호 일련번호 채번 가능 범위를 초과했습니다.");
 

@@ -30,6 +30,7 @@ public class TransferHold {
     private final LocalDateTime authenticatedAt;
     private final LocalDateTime heldAt;
     private final Long transferId;
+    private final String reasonCode;
 
     private TransferHold(
             Long transferHoldId,
@@ -47,7 +48,8 @@ public class TransferHold {
             TransferHoldStatus status,
             LocalDateTime authenticatedAt,
             LocalDateTime heldAt,
-            Long transferId) {
+            Long transferId,
+            String reasonCode) {
         this.transferHoldId = transferHoldId;
         this.customerId = customerId;
         this.withdrawalAccountId = withdrawalAccountId;
@@ -64,6 +66,7 @@ public class TransferHold {
         this.authenticatedAt = authenticatedAt;
         this.heldAt = heldAt;
         this.transferId = transferId;
+        this.reasonCode = reasonCode;
     }
 
     /** 훅 C가 보류로 판정한 요청을 HELD로 만든다. 판정 값의 조합은 TransferHoldDecision이 이미 검증했다. */
@@ -99,6 +102,7 @@ public class TransferHold {
                 TransferHoldStatus.HELD,
                 authenticatedAt,
                 heldAt,
+                null,
                 null);
     }
 
@@ -118,7 +122,8 @@ public class TransferHold {
             TransferHoldStatus status,
             LocalDateTime authenticatedAt,
             LocalDateTime heldAt,
-            Long transferId) {
+            Long transferId,
+            String reasonCode) {
         return new TransferHold(
                 transferHoldId,
                 customerId,
@@ -135,7 +140,8 @@ public class TransferHold {
                 status,
                 authenticatedAt,
                 heldAt,
-                transferId);
+                transferId,
+                reasonCode);
     }
 
     /** 실행 중으로 선점됐고, 실행하려는 요청이 저장된 원본과 같은지. 다르면 인증 없이 실행하면 안 된다. */
@@ -209,5 +215,10 @@ public class TransferHold {
 
     public Long getTransferId() {
         return transferId;
+    }
+
+    /** 거절 사유 코드, 또는 FAILED일 때 실행이 거부된 오류코드 */
+    public String getReasonCode() {
+        return reasonCode;
     }
 }
