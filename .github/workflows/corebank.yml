@@ -193,6 +193,10 @@ jobs:
         run: |
           # 1. EC2 내부에서 실행될 인라인 스크립트 작성
           COMMANDS=$(cat << 'EOF'
+          # 중간 명령이 실패하면 즉시 멈춘다. 마지막 prune 이 `|| true` 라서 set -e 가 없으면
+          # compose 실패에도 이 스크립트가 0 으로 끝나고, 아래에서 폴링하는 SSM Status 가
+          # Success 가 되어 배포 Job 까지 통과한다.
+          set -e
           mkdir -p /home/ubuntu/corebank
           cd /home/ubuntu/corebank
           
