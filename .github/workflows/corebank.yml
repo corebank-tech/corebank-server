@@ -282,7 +282,7 @@ jobs:
               | grep '"level":"ERROR"' \
               | grep -oE '([a-z][a-z0-9_]*\.)+[A-Z][A-Za-z0-9_$]*(Exception|Error)' \
               | sort | uniq -c | sort -rn | head -n 10
-            echo "::error::서버가 600초 안에 healthy가 되지 않았습니다. 마이그레이션이 길면 아직 기동 중일 수 있으니 /actuator/health를 확인하세요 (#743)"
+            echo "::error::docker compose up 실패: 600초 안에 healthy가 되지 않았거나 컨테이너를 띄우지 못했습니다. 위 상태가 starting·unhealthy면 마이그레이션 중일 수 있으니 몇 분 뒤 /actuator/health를 확인하세요 (#743)"
             exit 1
           fi
 
