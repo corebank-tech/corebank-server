@@ -263,11 +263,13 @@ jobs:
 
           # Docker Compose를 이용한 최신 이미지 풀 및 무중단/선언적 배포
           docker compose pull
+          DEPLOY_STARTED_AT=$(date +%s)
           # 릴리스 2 Flyway가 10분 41초 걸려(#743) 릴리스 3까지 600 유지, 그 뒤 180으로 복귀 (#629)
           # 실패를 마지막 줄 prune이 덮지 않게 여기서 끝낸다. 공개 저장소라 로그는 기동 단계 문구와 예외 클래스명만 찍는다 (#743)
           if ! docker compose up -d --remove-orphans --wait --wait-timeout 600; then
-            docker compose ps
-            SERVER_LOG=$(docker compose logs --no-color --no-log-prefix corebank-server 2>/dev/null)
+            docker compose ps -a
+            # 같은 SHA 재실행이면 컨테이너가 재사용돼 이전 로그까지 읽히므로 이번 배포 것만 담는다
+            SERVER_LOG=$(docker compose logs --since "$DEPLOY_STARTED_AT" --tail 1000 --no-color --no-log-prefix corebank-server 2>/dev/null)
             echo "--- 기동 단계 (최근 30줄)"
             printf '%s\n' "$SERVER_LOG" \
               | grep -E '"message":"(Migrating schema|Successfully applied|Started CorebankApplication|Application run failed)' \
