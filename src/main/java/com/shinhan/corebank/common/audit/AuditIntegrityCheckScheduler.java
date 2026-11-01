@@ -50,10 +50,15 @@ public class AuditIntegrityCheckScheduler {
         }
     }
 
+    // 한 날짜의 실패가 다른 날짜의 검증을 막지 않도록 날짜마다 격리한다
     private void checkAndReport(LocalDate archiveDate) {
-        int mismatchCount = auditIntegrityCheckService.check(archiveDate);
-        if (mismatchCount > 0) {
-            log.error("감사 로그 무결성 불일치 발견 - archiveDate={}, count={}", archiveDate, mismatchCount);
+        try {
+            int mismatchCount = auditIntegrityCheckService.check(archiveDate);
+            if (mismatchCount > 0) {
+                log.error("감사 로그 무결성 불일치 발견 - archiveDate={}, count={}", archiveDate, mismatchCount);
+            }
+        } catch (RuntimeException e) {
+            log.error("감사 로그 무결성 검증 실패 - archiveDate={}", archiveDate, e);
         }
     }
 

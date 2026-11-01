@@ -29,6 +29,7 @@ class AuditIntegrityCheckSchedulerTest extends IntegrationTestSupport {
     // 정기 검증은 어제부터 7일을 보므로 실제 어제를 쓴다
     private static final LocalDate YESTERDAY =
             LocalDate.now(ZoneId.of("Asia/Seoul")).minusDays(1);
+    private static final LocalDate TWO_DAYS_AGO = YESTERDAY.minusDays(1);
 
     @Autowired
     ApplicationEventPublisher eventPublisher;
@@ -60,7 +61,7 @@ class AuditIntegrityCheckSchedulerTest extends IntegrationTestSupport {
 
     @BeforeEach
     void deleteArchivedCopies() throws IOException {
-        for (LocalDate date : new LocalDate[] {EVENT_DATE, YESTERDAY}) {
+        for (LocalDate date : new LocalDate[] {EVENT_DATE, YESTERDAY, TWO_DAYS_AGO}) {
             for (AuditArchivePath path : AuditArchivePath.values()) {
                 Files.deleteIfExists(archiveRoot.resolve(path.keyOf(date)));
             }
@@ -144,6 +145,25 @@ class AuditIntegrityCheckSchedulerTest extends IntegrationTestSupport {
 
         // then
         assertThat(auditIntegrityMismatchJpaRepository.findAll()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("정기 검증은 한 날짜의 검증이 실패해도 그보다 오래된 날짜를 계속 대조한다")
+    void cron_whenOneDayFails_stillChecksOlderDays() throws IOException {
+        // given
+        save(YESTERDAY.atTime(9, 0));
+        auditLogArchiveService.archive(YESTERDAY);
+        Path brokenCopy = archiveRoot.resolve(AuditArchivePath.values()[0].keyOf(YESTERDAY));
+        Files.writeString(brokenCopy, "not a json line");
+        Long tamperedId = archiveAndTamper(TWO_DAYS_AGO);
+
+        // when
+        auditIntegrityCheckScheduler.checkRecentDays();
+
+        // then
+        assertThat(auditIntegrityMismatchJpaRepository.findAll())
+                .extracting(AuditIntegrityMismatchJpaEntity::getAuditLogId)
+                .containsExactly(tamperedId);
     }
 
     // 적재를 끝낸 뒤 그 행의 내용을 바꿔 사본과 달라지게 한다
