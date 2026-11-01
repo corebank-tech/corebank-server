@@ -212,6 +212,8 @@ ON DUPLICATE KEY UPDATE last_seq = GREATEST(last_seq, VALUES(last_seq));
 INSERT IGNORE INTO ledger_entry_id_sequence(sequence_id) VALUES (60500000);
 ```
 
+`transaction_sequence`를 SQL로 올린 뒤에는 앱을 재시작한다. 서버는 거래번호를 묶음으로 예약해 메모리에 들고 있어서(#786), 재시작 전까지는 SQL로 올리기 전에 예약한 번호를 계속 나눠 준다.
+
 실행 후 다음 쿼리로 각 `AUTO_INCREMENT`가 시드 종료값보다 큰지 확인한다.
 
 ```sql
