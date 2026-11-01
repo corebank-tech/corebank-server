@@ -57,6 +57,10 @@ springdoc:
       header-name: X-XSRF-TOKEN
 
 app:
+  audit:
+    integrity:
+      # 감사 로그 해시를 배포한 시각(11/3 배포). 이 전의 해시 없는 행은 검증에서 뺀다.
+      row-hash-since: 2026-11-04T00:00:00
   security:
     admin:
       # 관리자 세션 무조작 만료. 고객은 server.servlet.session.timeout(10m)을 그대로 쓴다 (admin_auth.md ④).

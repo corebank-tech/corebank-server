@@ -8,4 +8,6 @@ public interface AuditArchiveExecutionJpaRepository extends JpaRepository<AuditA
 
     Optional<AuditArchiveExecutionJpaEntity> findByArchiveDateAndArchiveType(
             LocalDate archiveDate, AuditArchivePath archiveType);
+
+    long countByArchiveDateAndStatus(LocalDate archiveDate, AuditArchiveStatus status);
 }

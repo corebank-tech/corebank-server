@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 39개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 408개 컬럼
+**대상**: 40개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 413개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -74,6 +74,7 @@
 | 46 | `EVENT_PUBLICATION` | 이벤트 발행 기록 (Spring Modulith) | P1 | 9 |
 | 47 | `cob_checkpoint` | COB 재시작 체크포인트 | P5 | 5 |
 | 48 | `audit_archive_execution` | 감사 로그 WORM 적재 상태 | P1 | 9 |
+| 49 | `audit_integrity_mismatch` | 감사 로그 무결성 불일치 목록 | P1 | 5 |
 
 ---
 
@@ -1047,6 +1048,28 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 
 ---
 
+## `audit_integrity_mismatch`
+
+> 감사 로그 무결성 불일치 목록 (PH-82)
+
+검증 배치(매일 01:00, 최근 7일)가 WORM 사본과 DB 감사 행을 대조해 찾은 불일치를 날짜별로 남긴다. **증거라 지우지 않는다. 같은 날을 다시 검증해도 이미 남긴 불일치는 건너뛰고 새로 찾은 것만 쌓는다.** 지워진 감사 행도 기록해야 하므로 `audit_log`에 FK를 걸지 않는다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `audit_integrity_mismatch_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 불일치 행 식별자 |
+| `archive_date` | `DATE` | **UK** | X |  | 검증한 사본의 날짜(`audit_log.requested_at` 기준) |
+| `audit_log_id` | `BIGINT` | **UK** | X |  | 불일치 감사 행 |
+| `mismatch_type` | `VARCHAR(20)` | **UK** | X |  | `TAMPERED`(다시 계산한 해시가 사본과 다름) · `MISSING_IN_DB`(사본에만 있음) · `NOT_ARCHIVED`(DB에만 있음) |
+| `detected_at` | `DATETIME(6)` |  | X |  | 검증 배치가 불일치를 확인한 시각 |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_audit_integrity_mismatch_date_log_type` | `archive_date, audit_log_id, mismatch_type` |
+
+---
+
 ## `common_code`
 
 > 공통코드 (REQ-CMN-023). 코드값 → 화면 표시명 매핑
@@ -1080,7 +1103,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
-| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP`, `LEDGER_RECONCILIATION_BATCH`, `AUTH_TOKEN_CLEANUP`, `TERMS_VIEW_HISTORY_CLEANUP`, `AUTO_TRANSFER_RECONCILE`, `SCHEDULED_TRANSFER_RECONCILE`, `COB`, `AUDIT_LOG_ARCHIVE` 9행 |
+| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP`, `LEDGER_RECONCILIATION_BATCH`, `AUTH_TOKEN_CLEANUP`, `TERMS_VIEW_HISTORY_CLEANUP`, `AUTO_TRANSFER_RECONCILE`, `SCHEDULED_TRANSFER_RECONCILE`, `COB`, `AUDIT_LOG_ARCHIVE`, `AUDIT_INTEGRITY_CHECK` 10행 |
 | `currently_running` | `BOOLEAN` |  | X | `FALSE` | 이 배치가 지금 실행 중인지. 트리거 시작 시 `TRUE`, 종료 시(성공/실패 무관) `FALSE`로 되돌림 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각. stale(크래시로 방치됨) 판단 기준 |
 

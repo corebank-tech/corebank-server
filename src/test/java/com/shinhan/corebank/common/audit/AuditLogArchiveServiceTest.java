@@ -20,8 +20,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import tools.jackson.databind.ObjectMapper;
 
+@RecordApplicationEvents
 class AuditLogArchiveServiceTest extends IntegrationTestSupport {
 
     // 다른 테스트가 남기는 오늘 날짜 감사 행과 겹치지 않는 날
@@ -31,6 +34,12 @@ class AuditLogArchiveServiceTest extends IntegrationTestSupport {
 
     @Autowired
     AuditLogArchiveService auditLogArchiveService;
+
+    @Autowired
+    ApplicationEvents applicationEvents;
+
+    @Autowired
+    AuditIntegrityMismatchJpaRepository auditIntegrityMismatchJpaRepository;
 
     @Autowired
     AuditLogJpaRepository auditLogJpaRepository;
@@ -59,6 +68,7 @@ class AuditLogArchiveServiceTest extends IntegrationTestSupport {
 
     @AfterEach
     void cleanUp() {
+        auditIntegrityMismatchJpaRepository.deleteAll();
         auditArchiveExecutionJpaRepository.deleteAll();
         auditLogJpaRepository.deleteAll();
     }
@@ -94,6 +104,19 @@ class AuditLogArchiveServiceTest extends IntegrationTestSupport {
         assertThat(archivedLines(LOG_KEY))
                 .extracting(AuditArchiveLine::auditLogId)
                 .containsExactly(earlierId, laterId);
+    }
+
+    @Test
+    @DisplayName("모든 경로 적재가 끝나면 완료 이벤트를 한 번 내보내고, 이미 끝난 날은 다시 내보내지 않는다")
+    void archive_completed_publishesEventOnce() {
+        save(AuditEventType.LOGIN, ARCHIVE_DATE.atTime(9, 0));
+
+        auditLogArchiveService.archive(ARCHIVE_DATE);
+        auditLogArchiveService.archive(ARCHIVE_DATE);
+
+        assertThat(applicationEvents.stream(AuditArchiveCompletedEvent.class))
+                .extracting(AuditArchiveCompletedEvent::archiveDate)
+                .containsExactly(ARCHIVE_DATE);
     }
 
     @Test
