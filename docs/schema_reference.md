@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 40개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 428개 컬럼
+**대상**: 41개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 434개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -75,6 +75,7 @@
 | 47 | `cob_checkpoint` | COB 재시작 체크포인트 | P5 | 5 |
 | 48 | `audit_archive_execution` | 감사 로그 WORM 적재 상태 | P1 | 9 |
 | 49 | `transfer_hold` | 이체 보류 | P4 | 20 |
+| 50 | `delayed_transfer_setting` | 고객별 지연이체 설정 | P4 | 6 |
 
 ---
 
@@ -779,6 +780,32 @@ COB 대사 스텝이 원장 누적 합계와 `account.balance`가 다른 계좌�
 | `ck_transfer_hold_release` | `(release_mode = 'AT_TIME') = (release_at IS NOT NULL)` |
 
 FK는 두지 않는다. 원장 근거가 아니고, 출금계좌 FK는 INSERT 때 계좌 행에 공유 락을 요구한다. 소유·수취인 검증은 보류 판정 전에 끝난다.
+
+---
+
+## `delayed_transfer_setting`
+
+> 고객별 지연이체 설정 (PH-06, #772)
+
+근거는 전자금융거래법 제13조제2항과 시행령 제9조의2다(이용자가 원하면 거래지시부터 일정 시간 뒤에 지급 효력이 생기게 해야 한다). 훅 C 구현체(`DelayedTransferHoldPolicy`)가 고객 락을 쥔 채 이 행을 PK로 한 번 읽는다. 전역 스위치(`app.delayed-transfer.enabled`)가 꺼져 있으면 읽지 않는다.
+
+**행이 없으면 꺼진 것으로 본다.** 처음 저장할 때 INSERT하므로 기존 고객 백필이 없다. 고객 본인만 바꾸는 값이라 `version`을 두지 않는다(동시에 바꾸면 나중 요청이 남는다).
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `customer_id` | `BIGINT` | **PK** | X |  | 고객. 고객당 1행 |
+| `enabled` | `BOOLEAN` |  | X |  | 지연이체 사용 여부 |
+| `threshold_amount` | `BIGINT` |  | X |  | 기준금액(원). 이 금액 **이상**인 당행 즉시이체를 지연한다. 화면 기본값 100만 원은 은행들의 "건당 100만 원 이하 즉시이체 허용" 예외에 맞춘 값이다 |
+| `delay_hours` | `INT` |  | X |  | 지연시간(시간 단위). 최소 3시간은 금감원 안내·은행 공통 기준, 최대 24시간은 우리 기준이다 |
+| `created_at` | `DATETIME(6)` |  | X |  | 처음 저장한 시각 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 마지막으로 바꾼 시각 |
+
+**CHECK 제약**
+
+| 이름 | 조건 |
+| --- | --- |
+| `ck_delayed_transfer_setting_threshold` | `threshold_amount > 0` |
+| `ck_delayed_transfer_setting_delay` | `delay_hours BETWEEN 3 AND 24` |
 
 ---
 
