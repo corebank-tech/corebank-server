@@ -175,7 +175,7 @@ class SequenceGeneratorTest extends IntegrationTestSupport {
     void issuesUniqueNumbersAcrossTwoGeneratorInstances() throws Exception {
         // given: 서버 한 대 = 채번기 객체 하나. 메모리 상태를 따로 갖는 두 번째 채번기를 직접 만든다
         SequenceGenerator otherServer =
-                new SequenceGenerator(repository, transactionManager, Clock.systemDefaultZone());
+                new SequenceGenerator(repository, transactionManager, Clock.systemDefaultZone(), 1);
         int callsPerServer = 200;
         ExecutorService executor = Executors.newFixedThreadPool(8);
         CountDownLatch startLatch = new CountDownLatch(1);
