@@ -31,9 +31,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 위반 또는 InnoDB가 동시 INSERT를 데드락으로 해소하는 경우 모두 관측됨) 이미 다른
  * 스레드가 만든 행을 재조회해 재시도한다.
  *
- * 행을 잠글 때마다 번호를 blockSize개씩 예약해 두고 메모리에서 하나씩 나눠 준다(#786). 모든 웹 이체가
- * 같은 행 하나에 줄을 서므로, 잠그는 횟수를 줄여야 처리 상한이 오른다. 같은 서버 안의 스레드는 묶음
- * 잠금으로, 서버끼리는 행 락으로 줄을 선다. 재시작하면 쓰지 않은 번호는 버려져 빈칸이 생긴다.
+ * 모든 웹 이체가 이 행 하나에 줄을 서서, 잠글 때 blockSize개씩 예약해 메모리에서 나눠 준다(#786). 재시작하면 남은 번호는 빈칸이 된다.
  */
 @Component
 public class SequenceGenerator implements TransferSequencePort {
