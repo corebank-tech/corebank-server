@@ -4,6 +4,7 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.api.TransferHoldDecision;
 import com.shinhan.corebank.transfer.api.TransferHoldReleaseMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -143,9 +144,15 @@ public class TransferHold {
                 reasonCode);
     }
 
-    /** 실행 중으로 선점됐고, 실행하려는 요청이 저장된 원본과 같은지. 다르면 인증 없이 실행하면 안 된다. */
-    public boolean isExecutableAs(long customerId, long withdrawalAccountId, String depositAccountNumber, long amount) {
+    // 실행일자는 중복 기표를 막는 유니크 키의 일부라 보류한 날짜와 같아야 한다
+    public boolean isExecutableAs(
+            long customerId,
+            long withdrawalAccountId,
+            String depositAccountNumber,
+            long amount,
+            LocalDate executionDate) {
         return status == TransferHoldStatus.EXECUTING
+                && heldAt.toLocalDate().equals(executionDate)
                 && this.customerId == customerId
                 && this.withdrawalAccountId == withdrawalAccountId
                 && this.depositAccountNumber.equals(depositAccountNumber)

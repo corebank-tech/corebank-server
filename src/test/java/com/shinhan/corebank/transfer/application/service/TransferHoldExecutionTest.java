@@ -130,7 +130,7 @@ class TransferHoldExecutionTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("EXECUTING이어도 금액·수취계좌번호·출금계좌·고객이 원본과 다르면 TRF0310으로 거부된다")
+    @DisplayName("EXECUTING이어도 금액·수취계좌번호·출금계좌·고객·실행일자가 원본과 다르면 TRF0310으로 거부된다")
     void executingHold_withDifferentRequest_isRejected() {
         long holdId = executingHold(30_000L);
 
@@ -142,6 +142,10 @@ class TransferHoldExecutionTest extends IntegrationTestSupport {
                 heldExecutionBuilder(holdId, 30_000L).withdrawalAccountId(202L).build()));
         assertRejected(transferExecutionService.execute(
                 heldExecutionBuilder(holdId, 30_000L).customerId(2L).build()));
+        // 실행일자가 다르면 유니크 키가 다른 값으로 보고 두 번째 기표를 막지 못한다
+        assertRejected(transferExecutionService.execute(heldExecutionBuilder(holdId, 30_000L)
+                .executionDate(HELD_AT.toLocalDate().plusDays(1))
+                .build()));
 
         assertThat(transferRows()).isZero();
     }

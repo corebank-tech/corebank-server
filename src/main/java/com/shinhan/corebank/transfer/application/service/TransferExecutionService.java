@@ -337,7 +337,8 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                         command.customerId(),
                         command.withdrawalAccountId(),
                         command.depositAccountNumber(),
-                        command.amount()))
+                        command.amount(),
+                        command.executionDate()))
                 .isPresent();
         if (!executable) {
             throw new BusinessException(TransferErrorCode.TRANSFER_HOLD_NOT_EXECUTABLE);
