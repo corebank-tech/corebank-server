@@ -87,26 +87,51 @@ public class AuditIntegrityCheckService {
 
     private List<AuditIntegrityMismatchJpaEntity> compare(
             LocalDate archiveDate,
-            List<AuditLogJpaEntity> rowsOfDay,
+            List<AuditLogJpaEntity> rowsToCheck,
             Map<Long, String> archivedHashById,
             LocalDateTime detectedAt) {
-        Map<Long, String> notYetMatched = new HashMap<>(archivedHashById);
         List<AuditIntegrityMismatchJpaEntity> mismatches = new ArrayList<>();
-        for (AuditLogJpaEntity row : rowsOfDay) {
-            String archivedHash = notYetMatched.remove(row.getAuditLogId());
+        mismatches.addAll(findNotArchivedOrTampered(archiveDate, rowsToCheck, archivedHashById, detectedAt));
+        mismatches.addAll(findMissingInDb(archiveDate, rowsToCheck, archivedHashById, detectedAt));
+        return mismatches;
+    }
+
+    // DB에 있는 행을 사본과 견준다. 사본에 없으면 적재 누락이거나 사후에 끼워 넣은 행이고, 해시가 다르면 내용이 바뀐 행이다
+    private List<AuditIntegrityMismatchJpaEntity> findNotArchivedOrTampered(
+            LocalDate archiveDate,
+            List<AuditLogJpaEntity> rowsToCheck,
+            Map<Long, String> archivedHashById,
+            LocalDateTime detectedAt) {
+        List<AuditIntegrityMismatchJpaEntity> found = new ArrayList<>();
+        for (AuditLogJpaEntity row : rowsToCheck) {
+            String archivedHash = archivedHashById.get(row.getAuditLogId());
             if (archivedHash == null) {
-                mismatches.add(AuditIntegrityMismatchJpaEntity.of(
+                found.add(AuditIntegrityMismatchJpaEntity.of(
                         archiveDate, row.getAuditLogId(), AuditIntegrityMismatchType.NOT_ARCHIVED, detectedAt));
             } else if (!archivedHash.equals(AuditLogRowHash.of(row))) {
-                mismatches.add(AuditIntegrityMismatchJpaEntity.of(
+                found.add(AuditIntegrityMismatchJpaEntity.of(
                         archiveDate, row.getAuditLogId(), AuditIntegrityMismatchType.TAMPERED, detectedAt));
             }
         }
-        for (Long missingId : notYetMatched.keySet()) {
-            mismatches.add(AuditIntegrityMismatchJpaEntity.of(
-                    archiveDate, missingId, AuditIntegrityMismatchType.MISSING_IN_DB, detectedAt));
+        return found;
+    }
+
+    // 사본에는 있는데 DB에 없는 행은 적재한 뒤 지워진 행이다
+    private List<AuditIntegrityMismatchJpaEntity> findMissingInDb(
+            LocalDate archiveDate,
+            List<AuditLogJpaEntity> rowsToCheck,
+            Map<Long, String> archivedHashById,
+            LocalDateTime detectedAt) {
+        Set<Long> dbRowIds =
+                rowsToCheck.stream().map(AuditLogJpaEntity::getAuditLogId).collect(toSet());
+        List<AuditIntegrityMismatchJpaEntity> found = new ArrayList<>();
+        for (Long archivedId : archivedHashById.keySet()) {
+            if (!dbRowIds.contains(archivedId)) {
+                found.add(AuditIntegrityMismatchJpaEntity.of(
+                        archiveDate, archivedId, AuditIntegrityMismatchType.MISSING_IN_DB, detectedAt));
+            }
         }
-        return mismatches;
+        return found;
     }
 
     private record MismatchKey(Long auditLogId, AuditIntegrityMismatchType mismatchType) {
