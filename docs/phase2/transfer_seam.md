@@ -175,7 +175,7 @@ record LedgerDepositResult(String transactionNumber, long depositBalanceAfter, L
 ## 9. 훅 C — 이체 보류 (#771)
 
 즉시이체를 기표하지 않고 원본 요청 그대로 잡아 두는 자리입니다([glossary](glossary.md) 12번 이체 보류). 지연이체(PH-06, #772)와 P6 FDS가 같이 씁니다. O-09 결정은 [README.md](README.md) D-34입니다.
-**#771 PR-b는 계약과 호출 자리만 머지합니다.** 구현체가 0개면 모든 요청이 지금처럼 실행됩니다. 보류 저장·실행 부품은 #772 PR-a가 만듭니다.
+#771 PR-b가 계약과 호출 자리를, #772 PR-a가 보류 저장·실행 부품(`transfer_hold`, `TransferHoldService`)을 머지합니다. 구현체가 0개면 모든 요청이 지금처럼 실행됩니다. 첫 구현체는 #772 PR-b의 지연이체입니다.
 
 ### 9-1. 자리와 직렬화
 
@@ -255,10 +255,10 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 | 항목 | 동작 |
 |---|---|
 | 원장·잔액·한도 | 바뀌지 않습니다. 기표 트랜잭션을 롤백하므로 한도 적립도 취소됩니다 |
-| 저장 | 새 트랜잭션에서 원본 요청(출금계좌·수취계좌번호·금액·메모·채널)·요청 지문·인증 완료 시각·정책 코드·해제 방식과 시각·`flowId`를 `transfer_hold`에 저장하고, `TransferHeld`를 같은 커밋에 발행합니다 |
+| 저장 | 새 트랜잭션에서 원본 요청(고객·출금계좌·수취계좌번호·금액·메모·채널)·인증 완료 시각·정책 코드·해제 방식과 시각·`flowId`를 `transfer_hold`에 저장하고, `TransferHeld`를 같은 커밋에 발행합니다. 기표 트랜잭션은 예외 없이 롤백만 표시해(`setRollbackOnly`) ERROR 행 경로를 지나지 않습니다. 원장을 쓰지 않아 gate를 잡지 않습니다. 멱등 요청 지문은 저장하지 않습니다. 원본 요청 컬럼에 같은 정보가 있고, 지문은 컨트롤러 계층에만 있습니다 |
 | 토큰 | 계좌비밀번호 토큰과 OTP는 지금처럼 판정 전에 소비합니다. 토큰 원문은 저장하지 않습니다. **#771·#772 초안의 "토큰 소비와 보류 저장을 한 트랜잭션으로"에서 바꾼 계약입니다.** 일반 즉시이체의 인증 순서를 바꾸지 않기 위해서입니다. 보류 저장이 실패하면 기표 중 내부 오류와 같은 경로로 `transfer`에 ERROR 행을 남기고 실패 응답을 돌려줍니다. 토큰은 이미 소비돼서, 같은 멱등 키로 다시 보내도 인증 토큰 오류로 끝나고 보류·기표는 생기지 않습니다. 자동 재시도는 없고, 고객은 다시 인증해 새 요청을 보냅니다 |
 | 거래번호 | 판정 전에 받은 거래번호는 쓰이지 않고 빕니다(롤백 때와 같습니다). 실행할 때 새로 받습니다 |
-| 응답 | HTTP 200 + `code="0000"`. `data`에 보류 상태와 `transferHoldId`, 지연이체면 실행 예정 시각을 담습니다. `ProcessResultStatus`에는 값을 더하지 않습니다 |
+| 응답 | HTTP 200 + `code="0000"`. `data`에 보류 상태와 `transferHoldId`, 지연이체면 실행 예정 시각을 담습니다. `ProcessResultStatus`에는 값을 더하지 않습니다. `TransferResult`는 `status`가 null이고 `transferHoldId`가 있습니다(`held()`). 메트릭은 `transfer.count{result=HELD}`로 셉니다 |
 | 확정 이벤트 | `TransferSettled`는 보류 시점에 발행하지 않습니다. 이체 결과가 아직 없어서입니다. 실행될 때 지금처럼 발행됩니다 |
 
 ### 9-4. 실행·거절·취소
@@ -275,7 +275,14 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 - **승인하면 바로 실행합니다.** 지연이체 설정이 함께 해당하는 건이어도 다시 지연하지 않습니다. 승인 실행은 훅 C를 지나지 않고, 승인 과정의 고객 확인 콜이 지연이체의 보호 목적을 채웁니다.
 - **`ON_APPROVAL` 건은 보류한 영업일 안에 승인되지 않으면 `EXPIRED`입니다.** 실행할 때 `execution_date`가 보류한 날짜라, 며칠 뒤 승인하면 오래된 요청이 뒤늦게 기표되기 때문입니다. 만료 처리는 FDS 착수 때 구현하고, #772는 `AT_TIME`만 다룹니다. `AT_TIME` 건은 만료하지 않고 실행 시점 검사에서 거부되면 `FAILED`입니다.
 - **승인 권한과 콜 기록 검증은 호출자 몫입니다.** `release`·`reject`는 `actorId`와 사유만 남깁니다. 관리자 권한과 콜 결과 입력은 FDS가 부르기 전에 확인합니다.
-- Apache Fineract의 maker-checker도 같은 방식입니다. 업무 트랜잭션 안에서 승인 필요를 판정해 롤백하고(`CommandSourceService.validateMakerChecker`), 승인하면 저장해 둔 원본으로 같은 처리를 다시 실행합니다(`PortfolioCommandSourceWritePlatformServiceImpl.approveEntry`). 승인 단계는 하나이고, 승인된 건은 승인 대기 판정을 다시 거치지 않습니다. 비밀값을 지운 요청은 승인 대기로 보낼 수 없게 막아, 비밀값을 저장하지 않습니다.
+- **구현(#772 PR-a).** `TransferHoldService`가 `TransferHoldUseCase`를 구현합니다. 트랜잭션 없이 단계마다 커밋합니다. 선점(`HELD → EXECUTING`)이 먼저 커밋돼야 `execute()`가 그 행을 `EXECUTING`으로 봅니다.
+    - `release()`는 선점에 이기면 원본으로 `execute()`를 부르고 `EXECUTED`·`FAILED`와 `transfer_id`를 남깁니다. 이체 행 없이 거부된 `FAILED`는 오류코드를 `reason_code`에 남겨 다시 물을 때 돌려줍니다.
+    - 선점에 졌을 때 이미 `EXECUTED`·`FAILED`면 앞선 결과를 돌려주고, 다른 상태(`EXECUTING`·`CANCELLED`·`REJECTED`·`EXPIRED`)면 `TRF0311`입니다.
+    - 선점과 결과 기록 사이에 서버가 멈추면 `EXECUTING`으로 남습니다. `resume()`이 같은 보류를 다시 실행해 마무리합니다. `source_type=HELD` 유니크 키라 기표는 한 번입니다(Fineract Standing Instruction은 이 구간을 `last_run_date` 갱신만으로 막아 중복 송금이 날 수 있습니다).
+    - 스케줄러 실행은 `releaseAsSystem()`으로 하고 `actor_id`를 비웁니다. `api` 계약은 바꾸지 않습니다.
+    - 고객 취소는 없는 보류와 남의 보류를 똑같이 `TRF0203`으로 돌려줍니다. 조회 1회로 연산량도 같습니다.
+    - `execute()`의 보류 행 확인이 실패하면 `TRF0310`이고, 채번 전이라 이체 행이 남지 않습니다.
+- Apache Fineract의 maker-checker도 같은 방식입니다. 업무 트랜잭션 안에서 승인 필요를 판정해 롤백하고(`CommandSourceService.validateMakerChecker`), 승인하면 저장해 둔 원본으로 같은 처리를 다시 실행합니다(`PortfolioCommandSourceWritePlatformServiceImpl.approveEntry`). 승인 단계는 하나이고, 승인된 건은 승인 대기 판정을 다시 거치지 않습니다. 비밀값을 지운 요청은 승인 대기로 보낼 수 없게 막아, 비밀값을 저장하지 않습니다. 다만 Fineract는 승인 전에 상태를 읽어 확인(`isAwaitingApproval`)하고 버전 컬럼이 없어, 같은 건의 동시 승인을 DB가 막는 장치가 코드에 보이지 않습니다. 여기서는 조건부 UPDATE로 선점합니다.
 
 ### 9-5. 구현체 규칙
 
@@ -292,16 +299,17 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 
 ### 9-6. 테스트 (#771 PR-b · #772)
 
-| 고정하는 것 |
-|---|
-| 구현체 0개면 기존 즉시이체 결과·원장이 그대로다 |
-| 스위치가 꺼진 구현체는 DB를 읽지 않는다 |
-| HOLD면 원장·잔액·한도 사용액이 그대로고, `transfer_hold` 1행과 `TransferHeld`가 같은 커밋에 남는다 |
-| 보류 저장이 실패하면 `transfer` ERROR 1행이 남고 원장·잔액·한도 사용액이 그대로다. 토큰은 소비돼 같은 멱등 키 재요청은 인증 토큰 오류로 끝나고, 보류·기표가 생기지 않는다 |
-| 같은 고객의 동시 요청에서 뒤 요청의 훅 C가 앞 요청의 커밋 결과를 본다 |
-| 보류 건을 두 번 실행해도 기표는 1회다. 실행 시점 잔액 부족·계좌 정지면 `FAILED`다 |
-| 예약·자동이체와 보류 건 실행은 훅 C를 지나지 않는다. 보류 건 실행은 토큰 없이 성공하고 `source_type=HELD`로 남는다 |
-| `sourceId`를 채운 즉시이체는 보류 행이 `EXECUTING`이 아니거나(없음·`HELD`·종료) 출금계좌·수취계좌번호·금액이 원본과 다르면 인증 생략 없이 거부되고 기표되지 않는다. 토큰과 `sourceId`를 함께 보내도 거부된다 |
+| 고정하는 것 | 테스트 |
+|---|---|
+| 구현체 0개면 기존 즉시이체 결과·원장이 그대로다 | `TransferExecutionServiceTest` 외 기존 이체 테스트 |
+| 스위치가 꺼진 구현체는 DB를 읽지 않는다 | #772 PR-b |
+| HOLD면 원장·잔액·한도 사용액이 그대로고, `transfer_hold` 1행과 `TransferHeld`가 같은 커밋에 남는다 | `TransferExecutionServiceHookTest` |
+| 보류 저장이 실패하면 `transfer` ERROR 1행이 남고 원장·잔액·한도 사용액이 그대로다. 토큰은 소비돼 같은 멱등 키 재요청은 인증 토큰 오류로 끝나고, 보류·기표가 생기지 않는다 | `TransferExecutionServiceHookTest` · `TransferHoldStoreFailureIdempotencyTest`(실제 계좌비밀번호 토큰) |
+| 같은 고객의 동시 요청에서 뒤 요청의 훅 C가 앞 요청의 커밋 결과를 본다 | `TransferExecutionServiceHookTest` |
+| 보류 건을 두 번(동시에도) 실행해도 기표는 1회다. 실행 시점 잔액 부족·계좌 정지면 `FAILED`다. 실행 중 멈춘 건은 `resume()`이 마무리한다 | `TransferHoldServiceIntegrationTest` · `TransferHoldExecutionTest` |
+| 예약·자동이체와 보류 건 실행은 훅 C를 지나지 않는다. 보류 건 실행은 토큰 없이 성공하고 `source_type=HELD`로 남는다 | `TransferExecutionServiceHookTest` · `TransferHoldExecutionTest` |
+| `sourceId`를 채운 즉시이체는 보류 행이 `EXECUTING`이 아니거나(없음·`HELD`·종료) 고객·출금계좌·수취계좌번호·금액이 원본과 다르면 인증 생략 없이 거부되고 기표되지 않는다. 토큰과 `sourceId`를 함께 보내도 거부된다 | `TransferHoldExecutionTest` · `TransferCommandTest` |
+| 보류 상태 전이는 동시에 시도해도 한 곳만 성공하고, 취소·거절한 건은 실행되지 않는다 | `TransferHoldPersistenceIntegrationTest` · `TransferHoldServiceIntegrationTest` |
 
 ## 10. 범위 밖
 

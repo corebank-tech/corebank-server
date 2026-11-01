@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 48개 테이블(39개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트·감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 408개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
+> **DBMS**: MySQL 8.4 / 49개 테이블(40개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트·감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 428개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -24,7 +24,7 @@ erDiagram
     SPRING_SESSION ||--o{ SPRING_SESSION_ATTRIBUTES : "ON DELETE CASCADE"
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 48개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
+    %% MySQL 8.4 / 49개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -160,9 +160,9 @@ erDiagram
         varchar transfer_type "IMMEDIATE / SCHEDULED / AUTO"
         char channel "WB / BT"
         varchar status "SUCCESS / ERROR / TIMEOUT (PROCESSING은 커밋되지 않음, #377)"
-        varchar source_type "SCHEDULED / AUTO"
+        varchar source_type "SCHEDULED / AUTO / HELD"
         bigint source_id
-        date execution_date "source_id와 함께 멱등키. SCHEDULED/AUTO 전용"
+        date execution_date "source_id와 함께 멱등키. SCHEDULED/AUTO/HELD 전용"
         varchar my_passbook_memo "TRF0005 최대 10자"
         varchar recipient_passbook_memo "VARCHAR(10)"
         bigint withdrawal_balance_after
@@ -173,6 +173,28 @@ erDiagram
         datetime invalidated_at "정정 체인 무효화 시각. NULL이면 유효"
         bigint ref_transfer_id FK "정정 체인 원거래"
         varchar correction_type "REVERSAL / REPOST"
+    }
+    transfer_hold {
+        bigint transfer_hold_id PK "실행한 transfer.source_id"
+        bigint customer_id
+        bigint withdrawal_account_id
+        varchar deposit_account_number "VARCHAR(16). 당행"
+        bigint amount
+        varchar my_passbook_memo "VARCHAR(10)"
+        varchar recipient_passbook_memo "VARCHAR(10)"
+        char channel "WB"
+        varchar flow_id "VARCHAR(64). FE 행동 흐름"
+        varchar policy_code "보류를 정한 정책"
+        varchar release_mode "AT_TIME / ON_APPROVAL"
+        datetime release_at "AT_TIME일 때만"
+        varchar status "HELD / EXECUTING / EXECUTED / FAILED / REJECTED / CANCELLED / EXPIRED"
+        datetime authenticated_at "토큰 소비 시각. 원문은 저장하지 않음"
+        datetime held_at "DATETIME(6)"
+        bigint transfer_id UK "실행으로 생긴 이체"
+        bigint actor_id "실행·거절·취소 주체"
+        varchar reason_code "거절 사유"
+        datetime executing_at "실행 선점 시각"
+        datetime completed_at "DATETIME(6)"
     }
     ledger_entry {
         bigint ledger_entry_id PK
@@ -575,6 +597,7 @@ erDiagram
     customer ||--o{ audit_log : "행위"
     scheduled_transfer      |o--o| transfer : "실행결과 (WAITING 은 없음)"
     auto_transfer_execution |o--o| transfer : "실행결과 (ERROR 는 없음)"
+    transfer_hold |o..o| transfer : "실행결과 (source_type=HELD, FK 없음)"
 ```
 
 ## 원장-잔액 대사 (Reconciliation, #378)

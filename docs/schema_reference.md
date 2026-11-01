@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 39개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 408개 컬럼
+**대상**: 40개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 428개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -74,6 +74,7 @@
 | 46 | `EVENT_PUBLICATION` | 이벤트 발행 기록 (Spring Modulith) | P1 | 9 |
 | 47 | `cob_checkpoint` | COB 재시작 체크포인트 | P5 | 5 |
 | 48 | `audit_archive_execution` | 감사 로그 WORM 적재 상태 | P1 | 9 |
+| 49 | `transfer_hold` | 이체 보류 | P4 | 20 |
 
 ---
 
@@ -591,9 +592,9 @@ COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED →
 | `transfer_type` | `VARCHAR(12)` |  | X |  | 이체 종류. `IMMEDIATE`(즉시) / `SCHEDULED`(예약) / `AUTO`(자동) |
 | `channel` | `CHAR(2)` |  | X |  | 거래 채널. `WB`(인터넷뱅킹) / `BT`(배치). 거래번호의 채널 2자리와 같은 값 |
 | `status` | `VARCHAR(12)` |  | X |  | 처리 결과. `SUCCESS`(정상) / `ERROR`(오류) / `TIMEOUT`(처리 불명 — 대외 전문 무응답으로 상대 처리 여부를 모른다. 실패가 아니며 조회거래로 확정한다, PH-80). `PROCESSING`은 INSERT 직후의 트랜잭션 내부 상태라 커밋된 행에는 나타나지 않는다 (#377) |
-| `source_type` | `VARCHAR(12)` |  | O |  | 이 이체를 만든 원본 구분. `SCHEDULED`(예약이체) / `AUTO`(자동이체). 즉시이체는 NULL |
-| `source_id` | `BIGINT` |  | O |  | 예약·자동이체 원본 PK. `source_type`과 함께 역추적에 쓴다 |
-| `execution_date` | `DATE` |  | O |  | `source_id`와 함께 멱등키를 구성하는 회차 실행일자. SCHEDULED/AUTO 전용(즉시이체는 NULL). 배치가 실제로 호출된 날짜가 아니라 그 회차의 논리적 실행일(`scheduled_transfer.scheduled_date` / `auto_transfer_execution.execution_date`)이 들어가야 크래시 후 재시도가 같은 회차로 식별된다 |
+| `source_type` | `VARCHAR(12)` |  | O |  | 이 이체를 만든 원본 구분. `SCHEDULED`(예약이체) / `AUTO`(자동이체) / `HELD`(이체 보류 실행, `transfer_type`은 `IMMEDIATE`). 고객이 바로 실행한 즉시이체는 NULL |
+| `source_id` | `BIGINT` |  | O |  | 예약·자동이체 원본 PK, 또는 이체 보류 `transfer_hold_id`. `source_type`과 함께 역추적에 쓴다 |
+| `execution_date` | `DATE` |  | O |  | `source_id`와 함께 멱등키를 구성하는 회차 실행일자. SCHEDULED/AUTO와 HELD 전용(고객이 바로 실행한 즉시이체는 NULL). HELD는 보류한 날짜(`transfer_hold.held_at`)다. 배치가 실제로 호출된 날짜가 아니라 그 회차의 논리적 실행일(`scheduled_transfer.scheduled_date` / `auto_transfer_execution.execution_date`)이 들어가야 크래시 후 재시도가 같은 회차로 식별된다 |
 | `my_passbook_memo` | `VARCHAR(10)` |  | O |  | 내 통장에 찍히는 문구. 최대 10자 |
 | `recipient_passbook_memo` | `VARCHAR(10)` |  | O |  | 받는 분 통장에 찍히는 문구 |
 | `withdrawal_balance_after` | `BIGINT` |  | O |  | 출금 직후 출금계좌 잔액. 성공 시에만 값이 있다 |
@@ -728,6 +729,56 @@ COB 대사 스텝이 원장 누적 합계와 `account.balance`가 다른 계좌�
 | 종류 | 이름 | 컬럼 |
 | --- | --- | --- |
 | UNIQUE | `uk_fav` | `customer_id, deposit_account_number` |
+
+---
+
+## `transfer_hold`
+
+> 이체 보류 — 기표하지 않고 잡아 둔 즉시이체 원본 요청 (#772)
+
+훅 C(`TransferHoldPolicy`)가 보류로 판정한 즉시이체를 원본 요청 그대로 담는다([transfer_seam.md](phase2/transfer_seam.md) §9, [glossary](phase2/glossary.md) 12번). 보류 중에는 원장·잔액·한도가 바뀌지 않는다. 실행하면 원본 그대로 이체를 한 번 실행하고 `transfer`(`source_type = HELD`, `source_id = transfer_hold_id`) 1행이 생긴다. 계좌비밀번호·OTP 토큰은 보류 전에 소비되고 원문은 저장하지 않는다.
+
+상태는 `HELD → EXECUTING → EXECUTED / FAILED`, `HELD → REJECTED / CANCELLED / EXPIRED`다. 전이는 조건부 UPDATE(`WHERE status = 이전 상태`)로 해서 같은 건을 두 곳에서 동시에 처리해도 한 곳만 성공한다. 그래서 `version` 컬럼이 없다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `transfer_hold_id` | `BIGINT` | **PK** | X |  | 보류 건 식별자. 실행한 `transfer.source_id` |
+| `customer_id` | `BIGINT` |  | X |  | 요청한 고객. 고객 취소는 본인 건만 된다 |
+| `withdrawal_account_id` | `BIGINT` |  | X |  | 출금계좌 ID |
+| `deposit_account_number` | `VARCHAR(16)` |  | X |  | 입금 계좌번호(당행, 숫자만) |
+| `amount` | `BIGINT` |  | X |  | 이체금액 |
+| `my_passbook_memo` | `VARCHAR(10)` |  | O |  | 내 통장 표시내용 |
+| `recipient_passbook_memo` | `VARCHAR(10)` |  | O |  | 받는 분 통장 표시내용 |
+| `channel` | `CHAR(2)` |  | X |  | 요청 채널. 실행할 때도 이 채널로 채번한다 |
+| `flow_id` | `VARCHAR(64)` |  | O |  | FE 행동 흐름 식별자 |
+| `policy_code` | `VARCHAR(30)` |  | X |  | 보류를 정한 정책 코드 |
+| `release_mode` | `VARCHAR(12)` |  | X |  | 푸는 방식. `AT_TIME`(시각 도래, 지연이체) / `ON_APPROVAL`(관리자 승인, FDS) |
+| `release_at` | `DATETIME(6)` |  | O |  | `AT_TIME`일 때 실행할 시각. 그 밖에는 NULL |
+| `status` | `VARCHAR(10)` |  | X |  | `HELD`(보류 중) / `EXECUTING`(실행 선점) / `EXECUTED`(실행 성공) / `FAILED`(실행 시점 검사에서 거부) / `REJECTED`(관리자 거절) / `CANCELLED`(고객 취소) / `EXPIRED`(승인 기한 지남) |
+| `authenticated_at` | `DATETIME(6)` |  | X |  | 계좌비밀번호·OTP 토큰을 소비한 시각 |
+| `held_at` | `DATETIME(6)` |  | X |  | 보류 저장 시각. 실행한 `transfer.execution_date`는 이 날짜다 |
+| `transfer_id` | `BIGINT` | **UK** | O |  | 실행으로 생긴 `transfer` 행. 실행 전이거나 실행 없이 끝났으면 NULL |
+| `actor_id` | `BIGINT` |  | O |  | 실행·거절·취소한 주체(관리자 또는 고객). 스케줄러 실행은 NULL |
+| `reason_code` | `VARCHAR(30)` |  | O |  | 거절 사유 코드 |
+| `executing_at` | `DATETIME(6)` |  | O |  | `EXECUTING`으로 선점한 시각. 서버가 실행 중 멈춘 건을 찾는 기준 |
+| `completed_at` | `DATETIME(6)` |  | O |  | 종료 상태가 된 시각 |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_transfer_hold_transfer` | `transfer_id` — 보류 한 건은 이체 행 하나로만 끝난다 |
+| INDEX | `ix_transfer_hold_status_release` | `status, release_at` — 해제 스케줄러가 해제 시각이 지난 `HELD`와 멈춘 `EXECUTING`을 찾는다 |
+| INDEX | `ix_transfer_hold_customer` | `customer_id, held_at` — 고객의 보류 건 조회 |
+
+**CHECK 제약**
+
+| 이름 | 조건 |
+| --- | --- |
+| `ck_transfer_hold_amount` | `amount > 0` |
+| `ck_transfer_hold_release` | `(release_mode = 'AT_TIME') = (release_at IS NOT NULL)` |
+
+FK는 두지 않는다. 원장 근거가 아니고, 출금계좌 FK는 INSERT 때 계좌 행에 공유 락을 요구한다. 소유·수취인 검증은 보류 판정 전에 끝난다.
 
 ---
 
