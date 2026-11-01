@@ -501,3 +501,46 @@ done
 회차마다 `times.log`, 수준별 `*_summary.json`, `*_samples.json`, `*.log`, 정합성 SQL 결과와 서버 로그·RDS·EC2 관측 범위를 비공개로 보존한다. [C 결과 문서](ph49c_jdbc_session_results.md)에는 원본 전체 대신 회차별 실제 시각·지표·예외 유형과 한계를 기록한다. 예열과 20초 점검은 네 회차 통계에서 제외한다.
 
 이체 성공률은 **이체 API에 도달한 호출**을 분모로 한다. 앞선 계좌 비밀번호·OTP 단계에서 실패한 반복을 놓치지 않도록 HTTP 오류율과 이체 API 도달률도 함께 본다. 성공 이체 TPS는 `성공 이체 건수 ÷ 180초`의 근삿값이며 목표 `RATE`나 k6의 `iterations.rate`와 구분한다. 네 회차 중앙값과 범위를 수준별로 제시하고, [PH-30 판정 기준](harness_results.md#2-측정-결과--2026-10-05-수준별)에 따라 견딤·포화를 판정한다. B′와는 같은 지표·요청률을 비교하되 릴리스 2의 다른 코드 변경, 데이터 규모, 부하 생성 환경 차이를 PH-49c 단독 효과로 해석하지 않는다.
+
+### #790 기존 서버 로그 보존·PC 다운로드
+
+10/26 C 측정의 1·2회차 10/s 전체 로그는 기존 EC2에서 각각 `/tmp/ph49c_run1_full.log`, `/tmp/ph49c_run2_full.log`로 조회했다. 컨테이너 재생성이나 EC2 종료 전에 원본을 비공개로 보존한다. 로그에는 고객 정보·토큰 등이 포함될 수 있으므로 Git, 공개 이슈, 채팅에 원문을 올리지 않는다. 조사 결과에는 집계값과 필요한 부분을 가린 발췌만 남긴다. **원본 파일을 이 가이드 작성자에게 전달할 필요는 없다.**
+
+기존 EC2의 Ubuntu SSM 셸에서 `/tmp` 밖에 권한을 제한한 사본과 해시를 만든다. 이미 사본과 해시가 있다면 덮어쓰지 않고 검증한다.
+
+```bash
+umask 077
+EVIDENCE_DIR="$HOME/ph49c-790-evidence"
+mkdir -p "$EVIDENCE_DIR"
+for run in 1 2; do
+  if [[ ! -e "$EVIDENCE_DIR/ph49c_run${run}_full.log" ]]; then
+    cp "/tmp/ph49c_run${run}_full.log" "$EVIDENCE_DIR/"
+  fi
+done
+chmod 600 "$EVIDENCE_DIR"/*.log
+cd "$EVIDENCE_DIR"
+if [[ ! -e SHA256SUMS ]]; then
+  sha256sum ph49c_run1_full.log ph49c_run2_full.log > SHA256SUMS
+fi
+sha256sum -c SHA256SUMS
+tar -czf ph49c-790-evidence.tar.gz ph49c_run1_full.log ph49c_run2_full.log SHA256SUMS
+chmod 600 ph49c-790-evidence.tar.gz
+sha256sum ph49c-790-evidence.tar.gz
+```
+
+PC에서 **기존에 허용된 SSH 접속 경로**로 내려받는다. 아래는 Windows Git Bash 명령이다. `KEY`와 `EC2_HOST`는 평소 이 EC2에 SSH 접속할 때 사용한 개인 키 경로와 호스트로 바꾼다. SSH가 직접 닿지 않는 환경이라면 보안 그룹을 새로 열지 말고 기존 SSM/SSH 접속 방법에 맞춰 파일 전송 방법을 확인한다. EC2에 AWS CLI를 설치하거나 Terraform 상태용 S3 버킷을 사용하지 않는다.
+
+```bash
+KEY="$HOME/.ssh/<실제-키파일>.pem"
+EC2_HOST='<기존-SSH-접속-주소>'
+LOCAL_EVIDENCE="$HOME/Intellij-workspace/ph49c-790-evidence"
+mkdir -p "$LOCAL_EVIDENCE"
+scp -i "$KEY" -o IdentitiesOnly=yes \
+  "ubuntu@$EC2_HOST:/home/ubuntu/ph49c-790-evidence/ph49c-790-evidence.tar.gz" \
+  "$LOCAL_EVIDENCE/"
+cd "$LOCAL_EVIDENCE"
+tar -xzf ph49c-790-evidence.tar.gz
+sha256sum -c SHA256SUMS
+```
+
+두 로그 모두 `OK`가 나와야 한다. 이 로컬 폴더는 `corebank-server` 저장소 밖에 둔다. EC2 홈의 사본도 EC2가 종료되면 사라질 수 있으므로 종료 전에 다운로드와 해시 검증을 마친다.
