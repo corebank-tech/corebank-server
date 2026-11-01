@@ -263,9 +263,31 @@ jobs:
 
           # Docker Compose를 이용한 최신 이미지 풀 및 무중단/선언적 배포
           docker compose pull
-          # 릴리스 1 gl_voucher 마이그레이션(#585)용 임시 상향, 배포 뒤 180으로 복귀 (#629)
-          docker compose up -d --remove-orphans --wait --wait-timeout 600
-          
+          DEPLOY_STARTED_AT=$(date +%s)
+          # 릴리스 2 Flyway가 10분 41초 걸려(#743) 릴리스 3까지 600 유지, 그 뒤 180으로 복귀 (#629)
+          # 실패를 마지막 줄 prune이 덮지 않게 여기서 끝낸다. 공개 저장소라 로그는 기동 단계 문구와 예외 클래스명만 찍는다 (#743)
+          if ! docker compose up -d --remove-orphans --wait --wait-timeout 600; then
+            docker compose ps -a
+            # 같은 SHA 재실행이면 컨테이너가 재사용돼 이전 로그까지 읽히므로 이번 배포 것만 담는다
+            SERVER_LOG=$(docker compose logs --since "$DEPLOY_STARTED_AT" --tail 1000 --no-color --no-log-prefix corebank-server 2>/dev/null)
+            echo "--- 기동 단계 (최근 30줄)"
+            printf '%s\n' "$SERVER_LOG" \
+              | grep -E '"message":"(Migrating schema|Successfully applied|Started CorebankApplication|Application run failed)' \
+              | sed -E 's/.*"timestamp":"([^"]*)","level":"([^"]*)".*"message":"(([^"\\]|\\.)*)".*/\1 \2 \3/' \
+              | sed 's/\\"/"/g' \
+              | tail -n 30
+            if printf '%s\n' "$SERVER_LOG" | grep -q 'APPLICATION FAILED TO START'; then
+              echo "Spring 기동 실패 보고(APPLICATION FAILED TO START)가 있습니다. 설명은 EC2에서 docker logs로 확인하세요."
+            fi
+            echo "--- ERROR 줄의 예외 클래스 (개수)"
+            printf '%s\n' "$SERVER_LOG" \
+              | grep '"level":"ERROR"' \
+              | grep -oE '([a-z][a-z0-9_]*\.)+[A-Z][A-Za-z0-9_$]*(Exception|Error)' \
+              | sort | uniq -c | sort -rn | head -n 10
+            echo "::error::docker compose up 실패: 600초 안에 healthy가 되지 않았거나 컨테이너를 띄우지 못했습니다. 위 상태가 starting·unhealthy면 마이그레이션 중일 수 있으니 몇 분 뒤 /actuator/health를 확인하세요 (#743)"
+            exit 1
+          fi
+
           # 이전 오래된 도커 이미지 정리 (디스크 용량 확보)
           docker image prune -f || true
           EOF
