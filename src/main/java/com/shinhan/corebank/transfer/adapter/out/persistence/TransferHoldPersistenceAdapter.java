@@ -7,9 +7,11 @@ import com.shinhan.corebank.transfer.domain.TransferHold;
 import com.shinhan.corebank.transfer.domain.TransferHoldStatus;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -31,6 +33,16 @@ public class TransferHoldPersistenceAdapter implements TransferHoldPort {
     @Override
     public Optional<TransferHold> findById(long transferHoldId) {
         return repository.findById(transferHoldId).map(TransferHoldMapper::toDomain);
+    }
+
+    @Override
+    public List<Long> findReleasableIds(LocalDateTime now, int limit) {
+        return repository.findReleasableIds(now, Limit.of(limit));
+    }
+
+    @Override
+    public List<Long> findStuckExecutingIds(LocalDateTime executingBefore, int limit) {
+        return repository.findStuckExecutingIds(executingBefore, Limit.of(limit));
     }
 
     @Override

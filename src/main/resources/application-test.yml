@@ -16,3 +16,9 @@ management:
     web:
       exposure:
         include: health,prometheus
+
+app:
+  delayed-transfer:
+    release:
+      # 스위트가 도는 동안 해제 스케줄러가 다른 테스트의 보류를 실행하지 않게 한다. 테스트는 배치 서비스를 직접 부른다
+      fixed-delay: 24h

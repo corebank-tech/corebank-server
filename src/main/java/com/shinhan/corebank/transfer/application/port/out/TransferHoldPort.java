@@ -3,6 +3,7 @@ package com.shinhan.corebank.transfer.application.port.out;
 import com.shinhan.corebank.transfer.domain.TransferHold;
 import com.shinhan.corebank.transfer.domain.TransferHoldStatus;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -14,6 +15,12 @@ public interface TransferHoldPort {
     TransferHold save(TransferHold transferHold);
 
     Optional<TransferHold> findById(long transferHoldId);
+
+    /** 시각으로 푸는 HELD 중 해제 시각이 지난 것. 해제 시각 순이다. */
+    List<Long> findReleasableIds(LocalDateTime now, int limit);
+
+    /** executingBefore 전에 선점하고 아직 결과가 없는 EXECUTING. 실행 중 멈춘 것으로 본다. */
+    List<Long> findStuckExecutingIds(LocalDateTime executingBefore, int limit);
 
     /** HELD → EXECUTING. 실행을 선점한다. actorId는 스케줄러 실행이면 null이다. */
     boolean markExecuting(long transferHoldId, Long actorId, LocalDateTime executingAt);
