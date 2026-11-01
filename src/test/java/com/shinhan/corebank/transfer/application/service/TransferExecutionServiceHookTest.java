@@ -16,6 +16,7 @@ import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixture
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
 import com.shinhan.corebank.transfer.api.RecentTransferQuery;
+import com.shinhan.corebank.transfer.api.TransferHeld;
 import com.shinhan.corebank.transfer.api.TransferHoldContext;
 import com.shinhan.corebank.transfer.api.TransferHoldDecision;
 import com.shinhan.corebank.transfer.api.TransferHoldPolicy;
@@ -26,12 +27,15 @@ import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferAuthTokenVerificationPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferHoldPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferOtpVerificationPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
+import com.shinhan.corebank.transfer.domain.TransferHold;
+import com.shinhan.corebank.transfer.domain.TransferHoldStatus;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -39,8 +43,11 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -108,6 +115,9 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
     private LedgerSavePort ledgerSavePort;
 
     @Autowired
+    private TransferHoldPort transferHoldPort;
+
+    @Autowired
     private Clock clock;
 
     @Autowired
@@ -152,6 +162,7 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
         jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id = 101 AND deposit_account_id = 202");
         jdbcTemplate.update("UPDATE account SET balance = 100000, status = 'ACTIVE' WHERE account_id IN (101, 202)");
         jdbcTemplate.update("DELETE FROM transfer_limit_daily_usage WHERE customer_id = 1");
+        jdbcTemplate.update("DELETE FROM transfer_hold WHERE customer_id = 1");
     }
 
     @Test
@@ -323,14 +334,14 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("[메트릭] 이체가 한 번도 없어도 결과 5종 × replayed 2종의 transfer.count·transfer.duration이 0으로 등록돼 있다 (#541)")
+    @DisplayName("[메트릭] 이체가 한 번도 없어도 결과 6종(보류 포함) × replayed 2종의 transfer.count·transfer.duration이 0으로 등록돼 있다 (#541)")
     void construct_registersAllTransferMetricsAtZero() {
         MeterRegistry registry = new SimpleMeterRegistry();
 
         serviceWith(List.of(), List.of(), registry);
 
-        assertThat(registry.find("transfer.count").counters()).hasSize(10);
-        assertThat(registry.find("transfer.duration").timers()).hasSize(10);
+        assertThat(registry.find("transfer.count").counters()).hasSize(12);
+        assertThat(registry.find("transfer.duration").timers()).hasSize(12);
         assertThat(registry.find("transfer.count").counters())
                 .allSatisfy(counter -> assertThat(counter.count()).isZero());
     }
@@ -383,19 +394,95 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("[훅 C] 보류를 내면 보류 저장(#772)이 붙기 전까지 실행하지 않고 CMN9999 ERROR로 막는다")
-    void holdPolicy_holds_isBlockedUntilHoldStorageExists() {
+    @DisplayName("[훅 C] 보류를 내면 기표를 롤백하고, 원본 요청을 transfer_hold에 저장하며 같은 트랜잭션에서 TransferHeld를 발행한다")
+    void holdPolicy_holds_savesHoldAndPublishesInSameTransaction() {
         List<Integer> called = new ArrayList<>();
-        TransferHoldPolicy holding = holdPolicy(1, context -> TransferHoldDecision.holdForApproval("TEST"));
-        TransferExecutionService service =
-                serviceWithHoldPolicies(List.of(holding, orderRecordingHoldPolicy(2, called)));
+        List<Object> events = new ArrayList<>();
+        List<Boolean> publishedInTransaction = new ArrayList<>();
+        ApplicationEventPublisher recording = event -> {
+            events.add(event);
+            publishedInTransaction.add(TransactionSynchronizationManager.isActualTransactionActive());
+            eventPublisher.publishEvent(event);
+        };
+        LocalDateTime releaseAt = LocalDateTime.of(2031, 7, 1, 13, 0);
+        TransferHoldPolicy holding = holdPolicy(1, context -> TransferHoldDecision.holdUntil("TEST", releaseAt));
+        TransferExecutionService service = serviceWith(
+                List.of(),
+                List.of(),
+                List.of(holding, orderRecordingHoldPolicy(2, called)),
+                transferHoldPort,
+                recording,
+                new SimpleMeterRegistry());
 
-        TransferResult result = service.execute(immediateCommand(30000L));
+        TransferResult result = service.execute(immediateCommandWithFlowId(30000L, "flow-1"));
 
-        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
-        assertThat(result.errorCode()).isEqualTo(CommonErrorCode.INTERNAL_ERROR.getCode());
+        assertThat(result.held()).isTrue();
+        assertThat(result.status()).isNull();
+        assertThat(result.transactionNumber()).as("판정 전에 받은 거래번호는 쓰이지 않는다").isNull();
+        assertThat(result.releaseAt()).isEqualTo(releaseAt);
         assertThat(called).as("처음 보류를 낸 훅이 정하고 뒤 순번은 부르지 않는다").isEmpty();
         assertRolledBack();
+        assertThat(transferStatuses()).isEmpty();
+
+        Map<String, Object> hold = jdbcTemplate.queryForMap(
+                "SELECT * FROM transfer_hold WHERE transfer_hold_id = ?", result.transferHoldId());
+        assertThat(hold.get("status")).isEqualTo("HELD");
+        assertThat(hold.get("customer_id")).isEqualTo(1L);
+        assertThat(hold.get("withdrawal_account_id")).isEqualTo(101L);
+        assertThat(hold.get("deposit_account_number")).isEqualTo("110222222222");
+        assertThat(hold.get("amount")).isEqualTo(30000L);
+        assertThat(hold.get("channel")).isEqualTo("WB");
+        assertThat(hold.get("flow_id")).isEqualTo("flow-1");
+        assertThat(hold.get("policy_code")).isEqualTo("TEST");
+        assertThat(hold.get("release_mode")).isEqualTo("AT_TIME");
+        assertThat(hold.get("authenticated_at")).isNotNull();
+
+        assertThat(events).singleElement().isInstanceOfSatisfying(TransferHeld.class, held -> {
+            assertThat(held.transferHoldId()).isEqualTo(result.transferHoldId());
+            assertThat(held.customerId()).isEqualTo(1L);
+            assertThat(held.policyCode()).isEqualTo("TEST");
+            assertThat(held.releaseAt()).isEqualTo(releaseAt);
+            assertThat(held.flowId()).isEqualTo("flow-1");
+        });
+        assertThat(publishedInTransaction).containsExactly(true);
+    }
+
+    @Test
+    @DisplayName("[훅 C] 보류 저장이 실패하면 기표 중 내부 오류처럼 ERROR 행을 남기고 예외를 전파하며, 원장·한도·보류는 남지 않는다")
+    void holdPolicy_holdStorageFails_recordsErrorAndRollsBack() {
+        IllegalStateException boom = new IllegalStateException("hold store down");
+        TransferHoldPort failingPort = new FailingSaveTransferHoldPort(transferHoldPort, boom);
+        TransferHoldPolicy holding = holdPolicy(1, context -> TransferHoldDecision.holdForApproval("TEST"));
+        TransferExecutionService service = serviceWith(
+                List.of(), List.of(), List.of(holding), failingPort, eventPublisher, new SimpleMeterRegistry());
+
+        assertThatThrownBy(() -> service.execute(immediateCommand(30000L))).isSameAs(boom);
+
+        assertRolledBack();
+        assertThat(transferStatuses()).containsExactly("ERROR");
+        String errorCode = jdbcTemplate.queryForObject(
+                "SELECT error_code FROM transfer WHERE withdrawal_account_id = 101 AND status = 'ERROR'", String.class);
+        assertThat(errorCode).isEqualTo(CommonErrorCode.INTERNAL_ERROR.getCode());
+        Integer holdRows =
+                jdbcTemplate.queryForObject("SELECT COUNT(*) FROM transfer_hold WHERE customer_id = 1", Integer.class);
+        assertThat(holdRows).isZero();
+    }
+
+    @Test
+    @DisplayName("[메트릭] 보류는 transfer.count{result=HELD}로 센다")
+    void holdPolicy_holds_recordsHeldMetric() {
+        MeterRegistry registry = new SimpleMeterRegistry();
+        TransferHoldPolicy holding = holdPolicy(1, context -> TransferHoldDecision.holdForApproval("TEST"));
+        TransferExecutionService service =
+                serviceWith(List.of(), List.of(), List.of(holding), transferHoldPort, eventPublisher, registry);
+
+        service.execute(immediateCommand(30000L));
+
+        assertThat(registry.get("transfer.count")
+                        .tags("result", "HELD", "replayed", "false")
+                        .counter()
+                        .count())
+                .isEqualTo(1.0);
     }
 
     @Test
@@ -529,6 +616,16 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
             List<LedgerPostingHook> ledgerPostingHooks,
             List<TransferHoldPolicy> holdPolicies,
             MeterRegistry registry) {
+        return serviceWith(preChecks, ledgerPostingHooks, holdPolicies, transferHoldPort, eventPublisher, registry);
+    }
+
+    private TransferExecutionService serviceWith(
+            List<TransferPreCheck> preChecks,
+            List<LedgerPostingHook> ledgerPostingHooks,
+            List<TransferHoldPolicy> holdPolicies,
+            TransferHoldPort holdPort,
+            ApplicationEventPublisher publisher,
+            MeterRegistry registry) {
         return new TransferExecutionService(
                 accountLockPort,
                 transferLimitPort,
@@ -538,13 +635,14 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
                 transferSavePort,
                 transferLookupPort,
                 ledgerSavePort,
+                holdPort,
                 preChecks,
                 ledgerPostingHooks,
                 holdPolicies,
                 clock,
                 businessDateGate,
                 transactionManager,
-                eventPublisher,
+                publisher,
                 registry);
     }
 
@@ -602,5 +700,41 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
 
     private long balanceOf(long accountId) {
         return jdbcTemplate.queryForObject("SELECT balance FROM account WHERE account_id = ?", Long.class, accountId);
+    }
+
+    // 보류 저장만 실패시키는 대역. 나머지는 실제 저장소로 넘긴다.
+    private record FailingSaveTransferHoldPort(TransferHoldPort delegate, RuntimeException failure)
+            implements TransferHoldPort {
+
+        @Override
+        public TransferHold save(TransferHold transferHold) {
+            throw failure;
+        }
+
+        @Override
+        public Optional<TransferHold> findById(long transferHoldId) {
+            return delegate.findById(transferHoldId);
+        }
+
+        @Override
+        public boolean markExecuting(long transferHoldId, Long actorId, LocalDateTime executingAt) {
+            return delegate.markExecuting(transferHoldId, actorId, executingAt);
+        }
+
+        @Override
+        public boolean finishExecution(
+                long transferHoldId, TransferHoldStatus result, Long transferId, LocalDateTime completedAt) {
+            return delegate.finishExecution(transferHoldId, result, transferId, completedAt);
+        }
+
+        @Override
+        public boolean close(
+                long transferHoldId,
+                TransferHoldStatus result,
+                Long actorId,
+                String reasonCode,
+                LocalDateTime completedAt) {
+            return delegate.close(transferHoldId, result, actorId, reasonCode, completedAt);
+        }
     }
 }

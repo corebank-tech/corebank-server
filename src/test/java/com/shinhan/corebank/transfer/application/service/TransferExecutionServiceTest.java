@@ -18,6 +18,7 @@ import com.shinhan.corebank.transfer.application.port.in.TransferResult;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferAuthTokenVerificationPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferHoldPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferOtpVerificationPort;
@@ -113,6 +114,9 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
 
     @Autowired
     private LedgerSavePort ledgerSavePort;
+
+    @Autowired
+    private TransferHoldPort transferHoldPort;
 
     @Autowired
     private Clock clock;
@@ -448,6 +452,7 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
                 transferSavePort,
                 new PreCheckBarrierTransferLookupPort(transferLookupPort, bothPreChecksEmpty),
                 ledgerSavePort,
+                transferHoldPort,
                 List.of(),
                 List.of(),
                 List.of(),
