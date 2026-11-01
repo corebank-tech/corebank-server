@@ -11,6 +11,7 @@ import lombok.Builder;
  *
  * @param transferHoldId 보류했으면 보류 ID. 그 밖에는 null
  * @param releaseAt      시각으로 푸는 보류(지연이체)의 실행 예정 시각. 그 밖에는 null
+ * @param cancellableUntil 고객이 취소할 수 있는 마지막 시각. releaseAt이 없으면 null
  */
 @Builder
 public record TransferResult(
@@ -21,7 +22,8 @@ public record TransferResult(
         String errorMessage,
         Long withdrawalBalanceAfter,
         Long transferHoldId,
-        LocalDateTime releaseAt) {
+        LocalDateTime releaseAt,
+        LocalDateTime cancellableUntil) {
 
     public boolean held() {
         return transferHoldId != null;

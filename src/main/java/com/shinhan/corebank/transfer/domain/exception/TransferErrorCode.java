@@ -33,6 +33,7 @@ public enum TransferErrorCode implements ErrorCode {
     INTERBANK_PAYEE_UNVERIFIED("TRF0309", 409, "상대 은행에서 예금주를 확인하지 못했습니다."),
     TRANSFER_HOLD_NOT_EXECUTABLE("TRF0310", 409, "실행할 수 없는 보류 이체입니다."),
     TRANSFER_HOLD_ALREADY_CLOSED("TRF0311", 409, "이미 실행 중이거나 끝난 보류 이체입니다."),
+    TRANSFER_HOLD_CANCEL_DEADLINE_PASSED("TRF0312", 409, "취소 가능 시간이 지났습니다. 실행 30분 전까지 취소할 수 있습니다."),
     ACCOUNT_LOCK_TARGET_NOT_FOUND("TRF9001", 500, "이체 처리 중 계좌 정보를 확인할 수 없습니다."),
     TRANSACTION_SEQUENCE_EXHAUSTED("TRF9002", 500, "거래번호 일련번호 채번 가능 범위를 초과했습니다.");
 

@@ -4,6 +4,7 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.api.TransferHoldDecision;
 import com.shinhan.corebank.transfer.api.TransferHoldReleaseMode;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -13,6 +14,9 @@ import java.time.LocalDateTime;
  * 읽고 바꾸면 동시 처리에서 둘 다 통과하므로 상태 전이 메서드를 두지 않고 TransferHoldPort의 조건부 UPDATE로만 한다.
  */
 public class TransferHold {
+
+    // 실행 30분 전까지 취소할 수 있다(금감원 안내·은행 공통 기준, 생활법령 지연이체)
+    private static final Duration CANCEL_CUTOFF = Duration.ofMinutes(30);
 
     private final Long transferHoldId;
     private final long customerId;
@@ -157,6 +161,11 @@ public class TransferHold {
                 && this.withdrawalAccountId == withdrawalAccountId
                 && this.depositAccountNumber.equals(depositAccountNumber)
                 && this.amount == amount;
+    }
+
+    /** 고객이 취소할 수 있는 마지막 시각. 승인으로 푸는 보류는 시각이 없어 null이다. */
+    public LocalDateTime cancellableUntil() {
+        return releaseAt == null ? null : releaseAt.minus(CANCEL_CUTOFF);
     }
 
     public Long getTransferHoldId() {

@@ -202,6 +202,45 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("실행 30분 전까지만 취소된다. 31분 전은 취소되고, 29분 전은 TRF0312로 거부되며 보류가 그대로다")
+    void cancel_respectsThirtyMinuteCutoff() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        long beforeCutoff = heldUntil(now.plusMinutes(31));
+        long afterCutoff = heldUntil(now.plusMinutes(29));
+
+        transferHoldService.cancel(beforeCutoff, CUSTOMER_ID);
+        assertBusinessError(
+                () -> transferHoldService.cancel(afterCutoff, CUSTOMER_ID),
+                TransferErrorCode.TRANSFER_HOLD_CANCEL_DEADLINE_PASSED);
+
+        assertThat(holdRow(beforeCutoff).get("status")).isEqualTo("CANCELLED");
+        assertThat(holdRow(afterCutoff).get("status")).isEqualTo("HELD");
+    }
+
+    @Test
+    @DisplayName("승인으로 푸는 보류는 시각이 없어 시한 없이 취소된다")
+    void cancel_onApproval_hasNoCutoff() {
+        long holdId = transferHoldPort
+                .save(TransferHold.hold(
+                        CUSTOMER_ID,
+                        101L,
+                        "110222222222",
+                        30_000L,
+                        null,
+                        null,
+                        TransferChannel.WB,
+                        null,
+                        TransferHoldDecision.holdForApproval("FDS_TEST"),
+                        HELD_AT,
+                        HELD_AT))
+                .getTransferHoldId();
+
+        transferHoldService.cancel(holdId, CUSTOMER_ID);
+
+        assertThat(holdRow(holdId).get("status")).isEqualTo("CANCELLED");
+    }
+
+    @Test
     @DisplayName("남의 보류와 없는 보류는 똑같이 TRF0203이고, 남의 보류는 그대로 HELD다")
     void cancel_othersOrMissing_isNotFound() {
         long holdId = held(30_000L);
@@ -262,6 +301,23 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
             org.assertj.core.api.ThrowableAssert.ThrowingCallable call, TransferErrorCode expected) {
         assertThatThrownBy(call).isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
                 .isEqualTo(expected));
+    }
+
+    private long heldUntil(LocalDateTime releaseAt) {
+        return transferHoldPort
+                .save(TransferHold.hold(
+                        CUSTOMER_ID,
+                        101L,
+                        "110222222222",
+                        30_000L,
+                        null,
+                        null,
+                        TransferChannel.WB,
+                        null,
+                        TransferHoldDecision.holdUntil("TEST", releaseAt),
+                        HELD_AT,
+                        HELD_AT))
+                .getTransferHoldId();
     }
 
     private long held(long amount) {

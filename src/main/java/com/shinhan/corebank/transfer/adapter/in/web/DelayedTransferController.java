@@ -4,13 +4,17 @@ import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.common.idempotency.IdempotencyFingerprint;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
 import com.shinhan.corebank.common.response.ApiResponse;
+import com.shinhan.corebank.transfer.api.TransferHoldUseCase;
 import com.shinhan.corebank.transfer.application.port.in.DelayedTransferSettingUseCase;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -21,10 +25,11 @@ import tools.jackson.core.type.TypeReference;
 @RestController
 @RequestMapping("/transfers")
 @RequiredArgsConstructor
-@Tag(name = "지연이체", description = "지연이체 설정 조회·변경 (PH-06)")
+@Tag(name = "지연이체", description = "지연이체 설정 조회·변경, 보류된 이체 취소 (PH-06)")
 public class DelayedTransferController {
 
     private final DelayedTransferSettingUseCase delayedTransferSettingUseCase;
+    private final TransferHoldUseCase transferHoldUseCase;
     private final CurrentCustomerProvider currentCustomerProvider;
     private final IdempotentRequestExecutor idempotentRequestExecutor;
 
@@ -63,5 +68,30 @@ public class DelayedTransferController {
                 new TypeReference<>() {},
                 () -> ApiResponse.success(DelayedTransferSettingResponse.from(
                         delayedTransferSettingUseCase.change(request.toCommand(customerId, authToken)))));
+    }
+
+    @PostMapping("/holds/{transferHoldId}/cancel")
+    @Operation(
+            operationId = "cancelTransferHold",
+            summary = "보류된 이체 취소",
+            description =
+                    """
+            즉시이체 응답의 `transferHold.transferHoldId`로 보류된 이체를 취소한다. 실행 30분 전(`cancellableUntil`)까지 되고, \
+            지나면 `TRF0312`다. 돈이 나가는 것을 멈추는 동작이라 추가 인증은 받지 않는다. 남의 보류·없는 보류는 `TRF0203`, \
+            이미 실행 중이거나 끝난 보류는 `TRF0311`이다.""")
+    public ResponseEntity<ApiResponse<TransferHoldCancelResponse>> cancel(
+            @Parameter(description = "멱등키", required = true) @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @PathVariable long transferHoldId) {
+        Long customerId = currentCustomerProvider.getCurrentCustomerId();
+        return idempotentRequestExecutor.execute(
+                idempotencyKey,
+                customerId,
+                "POST /transfers/holds/{transferHoldId}/cancel",
+                IdempotencyFingerprint.of(customerId, null, Map.of("transferHoldId", transferHoldId)),
+                new TypeReference<>() {},
+                () -> {
+                    transferHoldUseCase.cancel(transferHoldId, customerId);
+                    return ApiResponse.success(new TransferHoldCancelResponse(transferHoldId, "CANCELLED"));
+                });
     }
 }

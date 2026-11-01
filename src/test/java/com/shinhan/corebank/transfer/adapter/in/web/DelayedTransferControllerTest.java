@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -22,6 +23,11 @@ import com.shinhan.corebank.account.domain.exception.AccountPasswordErrorCode;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
+import com.shinhan.corebank.transfer.api.TransferHoldDecision;
+import com.shinhan.corebank.transfer.application.port.out.TransferHoldPort;
+import com.shinhan.corebank.transfer.domain.TransferChannel;
+import com.shinhan.corebank.transfer.domain.TransferHold;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -53,6 +59,9 @@ class DelayedTransferControllerTest extends IntegrationTestSupport {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private TransferHoldPort transferHoldPort;
+
     @MockitoBean
     private OtpAuthTokenVerifier otpAuthTokenVerifier;
 
@@ -76,6 +85,7 @@ class DelayedTransferControllerTest extends IntegrationTestSupport {
     @AfterEach
     void cleanUp() {
         jdbcTemplate.update("DELETE FROM delayed_transfer_setting WHERE customer_id = ?", CUSTOMER_ID);
+        jdbcTemplate.update("DELETE FROM transfer_hold WHERE customer_id IN (?, 1)", CUSTOMER_ID);
         jdbcTemplate.update("DELETE FROM idempotency_key WHERE customer_id = ?", CUSTOMER_ID);
         jdbcTemplate.update("DELETE FROM customer WHERE customer_id = ?", CUSTOMER_ID);
     }
@@ -153,6 +163,54 @@ class DelayedTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.code").value("TRF0009"));
 
         verify(accountPasswordAuthTokenVerifier, never()).verifyAndConsume(anyString(), anyLong());
+    }
+
+    @Test
+    @DisplayName("보류를 취소하면 200과 CANCELLED이고, 다시 취소하면 TRF0311, 남의 보류는 TRF0203이다")
+    void cancelHold() throws Exception {
+        long mine = saveHold(CUSTOMER_ID);
+        long others = saveHold(1L);
+
+        postCancel(mine)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.transferHoldId").value(mine))
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"));
+        postCancel(mine)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("TRF0311"));
+        postCancel(others)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TRF0203"));
+
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT status FROM transfer_hold WHERE transfer_hold_id = ?", String.class, others))
+                .isEqualTo("HELD");
+    }
+
+    private long saveHold(long customerId) {
+        LocalDateTime now = LocalDateTime.now();
+        return transferHoldPort
+                .save(TransferHold.hold(
+                        customerId,
+                        101L,
+                        "110222222222",
+                        30_000L,
+                        null,
+                        null,
+                        TransferChannel.WB,
+                        null,
+                        TransferHoldDecision.holdUntil("TEST", now.plusHours(3)),
+                        now,
+                        now))
+                .getTransferHoldId();
+    }
+
+    private ResultActions postCancel(long transferHoldId) throws Exception {
+        return mockMvc.perform(post("/transfers/holds/{id}/cancel", transferHoldId)
+                .with(authentication(authenticationOf()))
+                .with(csrf())
+                .header("Idempotency-Key", UUID.randomUUID().toString()));
     }
 
     private ResultActions putSetting(boolean enabled, long thresholdAmount, int delayHours, String token)
