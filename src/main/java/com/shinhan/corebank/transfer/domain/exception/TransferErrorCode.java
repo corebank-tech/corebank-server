@@ -18,6 +18,7 @@ public enum TransferErrorCode implements ErrorCode {
     UNSUPPORTED_BANK("TRF0006", 400, "지원하지 않는 은행입니다."),
     INVALID_INTERBANK_ACCOUNT_NUMBER("TRF0007", 400, "타행 계좌번호는 숫자 1~16자리여야 합니다."),
     UNSENDABLE_MEMO_CHARACTER("TRF0008", 400, "통장 표시내용에 보낼 수 없는 문자가 있습니다."),
+    INVALID_DELAYED_TRANSFER_SETTING("TRF0009", 400, "지연이체 기준금액은 1원 이상, 지연시간은 3~24시간이어야 합니다."),
     PAYEE_NOT_FOUND("TRF0201", 404, "입금계좌를 찾을 수 없습니다."),
     TRANSACTION_NOT_FOUND("TRF0202", 404, "거래내역을 찾을 수 없습니다."),
     TRANSFER_HOLD_NOT_FOUND("TRF0203", 404, "보류 이체를 찾을 수 없습니다."),
