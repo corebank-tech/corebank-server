@@ -994,7 +994,7 @@ P1 PH-30 결과(데드락률 · p99)를 근거로 락 범위나 조회 순서를
 
 ### PH-06. 지연이체 서비스
 
-전자금융감독규정상 필수 제공 서비스다. 입금계좌 지정(PH-07)은 2차에 없다([D-06](README.md#d-06--918--리드)).
+전자금융거래법 제13조제2항·시행령 제9조의2가 이용자가 원하면 제공하도록 정한 서비스다(2026. 10. 2. 시행 현행 법률에도 그대로 있다). 법은 "일정 시간"만 정하고, 최소 3시간·실행 30분 전까지 취소는 금감원 안내·은행 공통 기준이다. 입금계좌 지정(PH-07)은 2차에 없다([D-06](README.md#d-06--918--리드)).
 
 - 고객별 설정(on/off · 기준금액 · 지연시간)
 - 지연 대기 이체는 훅 C로 보류하고 해제 시각에 실행한다([D-34](README.md#d-34--1028--p4)). 계약은 [transfer_seam.md](transfer_seam.md) §9(#771)다.
@@ -1003,7 +1003,30 @@ P1 PH-30 결과(데드락률 · p99)를 근거로 락 범위나 조회 순서를
 - 지연 중 취소
 - 대상 판정과 안내(남은 취소 가능 시간을 응답에)
 - **완료 기준:** 기준금액 이상 이체가 지정 시간 후 입금된다. 취소가 동작한다.
-- **범위 밖:** FE B-6(지연이체 화면)
+- **범위 밖:** FE B-6(지연이체 화면). 본인계좌·등록계좌 즉시이체 예외(수취계좌 소유 판정에 고객 락 안 조회가 하나 늘고 PH-07이 범위 밖). 내 보류 목록 조회. 보류됐다는 알림(실행 결과는 `TransferSettled` 알림으로 간다)
+- **현황(#772):** PR-a #838(보류 저장·실행 부품), PR-b(지연이체)
+    - 설정: `GET`·`PUT /transfers/delayed-transfer-setting`. 저장한 적 없으면 꺼짐. 기본값 기준금액 100만 원(은행들의 건당 100만 원 이하 즉시이체 예외에 맞춤)·지연 3시간, 범위 1원 이상·3~24시간(`TRF0009`). 켠 상태에서 끄기·기준금액 올리기·지연시간 줄이기는 계좌비밀번호 토큰이 필요하다
+    - 보류: 훅 C `DelayedTransferHoldPolicy`(order 200). 기준금액 **이상**이면 요청 시각 + 지연시간까지 보류한다. 응답은 `status=null`과 `transferHold { transferHoldId, status, releaseAt, cancellableUntil }`
+    - 해제: `TransferHoldReleaseScheduler`가 1분마다 해제 시각이 지난 `AT_TIME` 보류를 실행하고, 5분 넘게 `EXECUTING`인 건을 다시 실행해 마무리한다. 실행 시점 검사에서 거부되면 `FAILED`이고 자동 재시도는 없다
+    - 취소: `POST /transfers/holds/{transferHoldId}/cancel`. 실행 30분 전까지(`TRF0312`). 돈이 나가는 것을 멈추는 동작이라 추가 인증은 없다
+    - 운영 스위치: `APP_DELAYED_TRANSFER_ENABLED`(기본 false). 새로 보류할지만 정하고, 이미 보류된 건은 꺼져 있어도 실행한다. S4 PH-30 재측정 동안 끄고, 끝난 뒤 켜서 아래 지급률을 잰다([transfer_seam.md](transfer_seam.md) §9-5 규칙 6)
+- **지연이체 정상 지급률(PH-36b):** 해제 시각이 지난 시각 해제 보류 중 고객이 취소한 건을 뺀 것이 분모, 실행 성공(`EXECUTED`)이 분자다. 제때 지급은 해제 시각부터 2분 안(스케줄러 주기 1분)에 기표된 건이다. 해제 시각이 지났는데 `HELD`·`EXECUTING`이면 아직 지급되지 않은 건이다.
+
+```sql
+SELECT COUNT(*)                                                         AS due,
+       SUM(h.status = 'EXECUTED')                                       AS paid,
+       SUM(h.status = 'EXECUTED'
+           AND t.transferred_at <= h.release_at + INTERVAL 2 MINUTE)    AS paid_on_time,
+       SUM(h.status = 'FAILED')                                         AS failed,
+       SUM(h.status IN ('HELD', 'EXECUTING'))                           AS not_yet_paid,
+       ROUND(100 * SUM(h.status = 'EXECUTED') / COUNT(*), 2)            AS paid_rate_pct
+  FROM transfer_hold h
+  LEFT JOIN transfer t ON t.transfer_id = h.transfer_id
+ WHERE h.release_mode = 'AT_TIME'
+   AND h.status <> 'CANCELLED'
+   AND h.release_at >= :from AND h.release_at < :to
+   AND h.release_at <= NOW(6);
+```
 
 ### PH-36b. 최종 측정 · 리포트
 

@@ -297,12 +297,39 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
     - `transfer`에 인덱스·컬럼을 더하지 않습니다. 이체 INSERT 비용과 운영 ALTER 시간이 함께 바뀝니다.
     - S4 PH-30 재측정 동안 지연이체·FDS 스위치를 끕니다. 재측정이 끝나면 켜고 PH-36b의 지연이체 정상 지급률을 잽니다.
 
+### 9-5-1. 구현체 예 — 지연이체 (#772 PR-b)
+
+```java
+@Component
+public class DelayedTransferHoldPolicy implements TransferHoldPolicy {
+
+    public int order() {
+        return 200; // 승인으로 푸는 FDS가 먼저 정한다(규칙 4)
+    }
+
+    public TransferHoldDecision decide(TransferHoldContext context) {
+        if (!properties.enabled()) {
+            return TransferHoldDecision.proceed(); // 스위치를 조회보다 먼저 본다(규칙 6)
+        }
+        return delayedTransferSettingPort.findByCustomerId(context.customerId()) // 같은 DB, PK 1회(규칙 1)
+                .filter(setting -> setting.appliesTo(context.amount()))
+                .map(setting -> TransferHoldDecision.holdUntil(
+                        DelayedTransferSetting.POLICY_CODE, setting.releaseAt(context.requestedAt())))
+                .orElseGet(TransferHoldDecision::proceed);
+    }
+}
+```
+
+- 시각으로 푸는 보류는 `TransferHoldReleaseScheduler`가 1분마다 `releaseAsSystem()`으로 실행합니다. 이미 보류된 건은 스위치가 꺼져 있어도 실행해 고객 돈이 묶이지 않게 합니다.
+- 고객 취소는 실행 30분 전까지입니다(`TransferHold.cancellableUntil()`, `TRF0312`). 승인으로 푸는 보류는 시각이 없어 시한 없이 취소됩니다.
+- 지연이체 구현체는 `transfer` 소유라 같은 도메인 안에 있지만, `transfer.api` 계약만 구현합니다. FDS 구현체도 같은 모양으로 `fds` 쪽에 둡니다.
+
 ### 9-6. 테스트 (#771 PR-b · #772)
 
 | 고정하는 것 | 테스트 |
 |---|---|
 | 구현체 0개면 기존 즉시이체 결과·원장이 그대로다 | `TransferExecutionServiceTest` 외 기존 이체 테스트 |
-| 스위치가 꺼진 구현체는 DB를 읽지 않는다 | #772 PR-b |
+| 스위치가 꺼진 구현체는 DB를 읽지 않는다 | `DelayedTransferHoldPolicyTest` |
 | HOLD면 원장·잔액·한도 사용액이 그대로고, `transfer_hold` 1행과 `TransferHeld`가 같은 커밋에 남는다 | `TransferExecutionServiceHookTest` |
 | 보류 저장이 실패하면 `transfer` ERROR 1행이 남고 원장·잔액·한도 사용액이 그대로다. 토큰은 소비돼 같은 멱등 키 재요청은 인증 토큰 오류로 끝나고, 보류·기표가 생기지 않는다 | `TransferExecutionServiceHookTest` · `TransferHoldStoreFailureIdempotencyTest`(실제 계좌비밀번호 토큰) |
 | 같은 고객의 동시 요청에서 뒤 요청의 훅 C가 앞 요청의 커밋 결과를 본다 | `TransferExecutionServiceHookTest` |
