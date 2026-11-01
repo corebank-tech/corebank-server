@@ -1059,7 +1059,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | `audit_integrity_mismatch_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 불일치 행 식별자 |
 | `archive_date` | `DATE` | **UK** | X |  | 검증한 사본의 날짜(`audit_log.requested_at` 기준) |
 | `audit_log_id` | `BIGINT` | **UK** | X |  | 불일치 감사 행 |
-| `mismatch_type` | `VARCHAR(20)` |  | X |  | `TAMPERED`(다시 계산한 해시가 사본과 다름) · `MISSING_IN_DB`(사본에만 있음) · `NOT_ARCHIVED`(DB에만 있음) |
+| `mismatch_type` | `VARCHAR(20)` | **UK** | X |  | `TAMPERED`(다시 계산한 해시가 사본과 다름) · `MISSING_IN_DB`(사본에만 있음) · `NOT_ARCHIVED`(DB에만 있음) |
 | `detected_at` | `DATETIME(6)` |  | X |  | 검증 배치가 불일치를 확인한 시각 |
 
 **인덱스**
