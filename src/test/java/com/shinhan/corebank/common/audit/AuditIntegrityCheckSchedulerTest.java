@@ -1,6 +1,7 @@
 package com.shinhan.corebank.common.audit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.tuple;
 
 import com.shinhan.corebank.IntegrationTestSupport;
@@ -161,6 +162,31 @@ class AuditIntegrityCheckSchedulerTest extends IntegrationTestSupport {
         auditIntegrityCheckScheduler.checkRecentDays();
 
         // then
+        assertThat(auditIntegrityMismatchJpaRepository.findAll())
+                .extracting(AuditIntegrityMismatchJpaEntity::getAuditLogId)
+                .containsExactly(tamperedId);
+    }
+
+    @Test
+    @DisplayName("검증 락 행이 없어 획득이 실패해도 예외가 적재 쪽으로 새지 않고, 락 행이 돌아오면 다시 검증한다")
+    void event_whenLockAcquireFails_doesNotPropagate() {
+        // given
+        Long tamperedId = archiveAndTamper(EVENT_DATE);
+        jdbcTemplate.update("DELETE FROM batch_execution_lock WHERE job_name = ?", JOB_NAME);
+
+        try {
+            // when / then
+            assertThatCode(() -> eventPublisher.publishEvent(new AuditArchiveCompletedEvent(EVENT_DATE)))
+                    .doesNotThrowAnyException();
+            assertThat(auditIntegrityMismatchJpaRepository.findAll()).isEmpty();
+        } finally {
+            jdbcTemplate.update(
+                    "INSERT INTO batch_execution_lock (job_name, currently_running, updated_at) VALUES (?, FALSE, NOW())",
+                    JOB_NAME);
+        }
+
+        eventPublisher.publishEvent(new AuditArchiveCompletedEvent(EVENT_DATE));
+
         assertThat(auditIntegrityMismatchJpaRepository.findAll())
                 .extracting(AuditIntegrityMismatchJpaEntity::getAuditLogId)
                 .containsExactly(tamperedId);

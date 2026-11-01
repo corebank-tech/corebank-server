@@ -62,7 +62,16 @@ public class AuditIntegrityCheckScheduler {
         }
     }
 
+    // 락 획득·해제 실패가 이벤트를 발행한 적재 쪽으로 새면 적재 성공이 「적재 실패」로 기록된다
     private void runWithLock(Runnable check) {
+        try {
+            runIfLockAcquired(check);
+        } catch (RuntimeException e) {
+            log.error("감사 로그 무결성 검증 락 처리 실패 - jobName={}", JOB_NAME, e);
+        }
+    }
+
+    private void runIfLockAcquired(Runnable check) {
         if (!batchExecutionLockPort.tryAcquire(JOB_NAME)) {
             log.warn("이미 실행 중인 감사 로그 검증 배치가 있어 이번 트리거는 건너뜀 - jobName={}", JOB_NAME);
             return;
