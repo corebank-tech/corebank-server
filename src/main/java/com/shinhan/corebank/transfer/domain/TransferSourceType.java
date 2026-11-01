@@ -5,5 +5,8 @@ public enum TransferSourceType {
     SCHEDULED,
 
     // 자동이체에 의해 발생된 이체
-    AUTO
+    AUTO,
+
+    // 이체 보류를 실행해 발생된 이체. transfer_type은 IMMEDIATE다(#772)
+    HELD
 }

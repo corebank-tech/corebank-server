@@ -283,11 +283,13 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             return Optional.empty();
         }
         return transferLookupPort.findBySourceAndExecutionDate(
-                resolveSourceType(command.transferType()), command.sourceId(), command.executionDate());
+                resolveSourceType(command), command.sourceId(), command.executionDate());
     }
 
     // 1차 검증(락 이전) ①~④. 넷 다 계좌 락도 한도 예약도 건드리지 않으므로 여기서 먼저 끝낸다.
     private ResolvedPayee verifyBeforeLock(TransferCommand command) {
+        verifyHeldExecution(command);
+
         // 1차 검증(락 이전) ①: 출금계좌 소유·등록 여부. 존재하지 않는 계좌도 "내 소유가 아님"과
         // 구분하지 않고 같은 TRF0001로 묶는다 — 계좌ID가 이제 HTTP 요청 바디로 들어오므로
         // 계좌 존재 여부를 스캐닝하는 데 악용되지 않도록 한다.
@@ -324,6 +326,25 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         return payee;
     }
 
+    // 보류 건 실행은 토큰 없이 들어온다. release()가 선점한 원본 그대로인지 확인해야 인증을 건너뛸 수 있다(transfer_seam.md §9-4).
+    // sourceId가 있을 때만 읽으므로 고객 즉시이체에는 쿼리가 늘지 않는다.
+    private void verifyHeldExecution(TransferCommand command) {
+        if (command.transferType() != TransferType.IMMEDIATE || command.sourceId() == null) {
+            return;
+        }
+        boolean executable = transferHoldPort
+                .findById(command.sourceId())
+                .filter(hold -> hold.isExecutableAs(
+                        command.customerId(),
+                        command.withdrawalAccountId(),
+                        command.depositAccountNumber(),
+                        command.amount()))
+                .isPresent();
+        if (!executable) {
+            throw new BusinessException(TransferErrorCode.TRANSFER_HOLD_NOT_EXECUTABLE);
+        }
+    }
+
     private Transfer newTransfer(TransferCommand command, Draft draft, LocalDate tradeDate) {
         return Transfer.create(
                 draft.transactionNumber(),
@@ -335,7 +356,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 FEE,
                 command.transferType(),
                 command.channel(),
-                resolveSourceType(command.transferType()),
+                resolveSourceType(command),
                 command.sourceId(),
                 command.executionDate(),
                 command.myPassbookMemo(),
@@ -571,7 +592,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             return Optional.empty();
         }
         return requiresNewTransactionTemplate.execute(status -> transferLookupPort.findBySourceAndExecutionDate(
-                resolveSourceType(command.transferType()), command.sourceId(), command.executionDate()));
+                resolveSourceType(command), command.sourceId(), command.executionDate()));
     }
 
     /**
@@ -654,11 +675,12 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         return transfer.getTransferType() == TransferType.IMMEDIATE;
     }
 
-    private TransferSourceType resolveSourceType(TransferType transferType) {
-        return switch (transferType) {
+    private TransferSourceType resolveSourceType(TransferCommand command) {
+        return switch (command.transferType()) {
             case SCHEDULED -> TransferSourceType.SCHEDULED;
             case AUTO -> TransferSourceType.AUTO;
-            case IMMEDIATE -> null;
+            // sourceId가 있는 즉시이체는 보류 건 실행이다
+            case IMMEDIATE -> command.sourceId() == null ? null : TransferSourceType.HELD;
         };
     }
 }

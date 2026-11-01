@@ -138,6 +138,15 @@ public class TransferHold {
                 transferId);
     }
 
+    /** 실행 중으로 선점됐고, 실행하려는 요청이 저장된 원본과 같은지. 다르면 인증 없이 실행하면 안 된다. */
+    public boolean isExecutableAs(long customerId, long withdrawalAccountId, String depositAccountNumber, long amount) {
+        return status == TransferHoldStatus.EXECUTING
+                && this.customerId == customerId
+                && this.withdrawalAccountId == withdrawalAccountId
+                && this.depositAccountNumber.equals(depositAccountNumber)
+                && this.amount == amount;
+    }
+
     public Long getTransferHoldId() {
         return transferHoldId;
     }
