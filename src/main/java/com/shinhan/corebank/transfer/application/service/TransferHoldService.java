@@ -23,9 +23,7 @@ import org.springframework.stereotype.Service;
 /**
  * 이체 보류의 실행·거절·취소(transfer_seam.md §9-4).
  *
- * 트랜잭션을 걸지 않는다. 선점(HELD → EXECUTING)이 먼저 커밋돼야 execute()가 그 행을 EXECUTING으로 보고 인증을 건너뛴다.
- * 그래서 선점과 기록 사이에 서버가 멈추면 EXECUTING으로 남고, resume()이 같은 보류 건을 다시 실행해 마무리한다.
- * 이체는 source_type=HELD·source_id 유니크 키라 다시 실행해도 기표는 한 번이다.
+ * 선점이 먼저 커밋돼야 execute()가 EXECUTING을 보므로 트랜잭션을 걸지 않는다. 중간에 멈춘 건은 resume()이 마무리한다.
  */
 @Service
 @RequiredArgsConstructor

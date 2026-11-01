@@ -326,8 +326,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         return payee;
     }
 
-    // 보류 건 실행은 토큰 없이 들어온다. release()가 선점한 원본 그대로인지 확인해야 인증을 건너뛸 수 있다(transfer_seam.md §9-4).
-    // sourceId가 있을 때만 읽으므로 고객 즉시이체에는 쿼리가 늘지 않는다.
+    // 토큰 없는 보류 건 실행은 release()가 선점한 원본 그대로일 때만 통과시킨다(§9-4). 고객 즉시이체는 조회하지 않는다.
     private void verifyHeldExecution(TransferCommand command) {
         if (command.transferType() != TransferType.IMMEDIATE || command.sourceId() == null) {
             return;
@@ -514,11 +513,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         return Optional.empty();
     }
 
-    /**
-     * 보류한 원본 요청을 저장하고 같은 커밋으로 TransferHeld를 발행한다(transfer_seam.md §9-3). 원장을 쓰지 않아 gate를 잡지 않는다.
-     *
-     * 저장이 실패하면 doExecute의 catch가 기표 중 내부 오류와 같이 ERROR 행을 남긴다. 토큰은 이미 소비돼 고객이 다시 인증해야 한다.
-     */
+    // 보류 저장과 TransferHeld를 한 커밋으로 남긴다(§9-3). 실패하면 doExecute의 catch가 ERROR 행을 남긴다.
     private TransferResult holdTransfer(
             TransferCommand command, TransferHoldDecision decision, LocalDateTime authenticatedAt) {
         TransferHold saved = requiresNewTransactionTemplate.execute(status -> {

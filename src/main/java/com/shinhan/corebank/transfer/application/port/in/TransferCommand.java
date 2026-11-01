@@ -81,14 +81,7 @@ public record TransferCommand(
         }
     }
 
-    /**
-     * 즉시이체는 둘 중 하나다(transfer_seam.md §9-4).
-     *
-     * 고객 요청: sourceId·executionDate가 없고 계좌비밀번호·OTP 토큰이 둘 다 있다.
-     *
-     * 보류 건 실행: sourceId(보류 ID)·executionDate(보류한 날짜)가 있고 토큰이 없다. 토큰과 함께 오면 거부한다.
-     * 토큰이 없다는 것만으로 인증을 건너뛰지 않는다. execute()가 보류 행이 실행 중인지 다시 확인한다.
-     */
+    // 즉시이체는 고객 요청(토큰 둘, sourceId 없음)이거나 보류 건 실행(sourceId·실행일, 토큰 없음)이다(§9-4).
     private static void validateImmediate(
             Long sourceId, LocalDate executionDate, String authToken, String otpAuthToken) {
         if (sourceId != null) {

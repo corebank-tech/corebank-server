@@ -18,11 +18,7 @@ public interface TransferHoldPort {
     /** HELD → EXECUTING. 실행을 선점한다. actorId는 스케줄러 실행이면 null이다. */
     boolean markExecuting(long transferHoldId, Long actorId, LocalDateTime executingAt);
 
-    /**
-     * EXECUTING → EXECUTED 또는 FAILED. 실행으로 생긴 이체 행을 남긴다.
-     *
-     * 이체 행 없이 거부됐으면 transferId는 null이라, FAILED면 errorCode를 reason_code에 남겨 다시 물을 때 돌려준다.
-     */
+    /** EXECUTING → EXECUTED 또는 FAILED. 이체 행 없이 거부된 FAILED는 errorCode를 reason_code에 남겨 재생에 쓴다. */
     boolean finishExecution(
             long transferHoldId,
             TransferHoldStatus result,

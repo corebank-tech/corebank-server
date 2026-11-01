@@ -9,8 +9,7 @@ import java.time.LocalDateTime;
 /**
  * 이체 보류. 기표하지 않고 잡아 둔 즉시이체의 원본 요청이다(glossary 12번).
  *
- * 상태를 바꾸는 메서드가 없다. 전이는 TransferHoldPort의 조건부 UPDATE로만 한다. 읽은 뒤 검사하고 저장하면
- * 같은 건을 두 곳에서 동시에 처리할 때 둘 다 통과한다.
+ * 읽고 바꾸면 동시 처리에서 둘 다 통과하므로 상태 전이 메서드를 두지 않고 TransferHoldPort의 조건부 UPDATE로만 한다.
  */
 public class TransferHold {
 
