@@ -130,6 +130,7 @@ flowchart TD
 | 새 환경 (db.t3.small) | 약 140 (추정) | 2 | 41 | 61 |
 
 - `max_connections` 값은 [PH-57 용량 산정 §4-2](phase2/ph57_capacity_plan.md#4-2-rds--dbt3small-multi-az)를 따른다. 새 RDS 값은 공식 `{DBInstanceClassMemory/12582880}`로 낸 추정이라, 접속할 수 있게 되면 `SELECT @@hostname, @@max_connections;`로 확인한다.
+- PH-57 §4-2의 서버 1대 값(풀 10이면 25, 풀 20이면 35)은 채번 풀 3을 빼고 센 값이라 위 표보다 3씩 작다. 결론(한도 안)은 같다.
 - **두 환경 모두 풀 20까지 한도 안이다.**
 - **DB 최대 연결은 늘리지 않는다.** 연결마다 메모리를 먹어서, 소형 DB에서 숫자만 올리면 메모리가 먼저 부족해진다.
 - **연결 대기 시간(`connection-timeout` 3초)은 늘리지 않는다.** 연결 개수가 같으면 처리량도 같고, 실패를 늦게 알려 줄 뿐이다.
@@ -140,4 +141,4 @@ flowchart TD
 
 - **기존 EC2**: `/home/ubuntu/corebank/docker-compose.yml`의 `corebank-server` `environment:`에 `- DB_POOL_SIZE=20`을 넣고 `docker compose up -d corebank-server`로 다시 만든다. 이 파일은 CD가 배포할 때마다 새로 쓰므로, 다음 배포가 오면 10으로 돌아간다.
 - **새 환경**: `/opt/corebank/app.env`에 `DB_POOL_SIZE=20` 같은 줄을 넣고, `corebank-server` 컨테이너를 지운 뒤 user data(`terraform/main/modules/compute/user_data.sh.tftpl`)의 `docker run` 명령으로 다시 띄운다. 서버마다 따로 한다.
-- **확인**: 운영은 actuator가 `health`만 열려 있어 풀 크기를 직접 볼 수 없다. DB에서 `SELECT COUNT(*) FROM information_schema.processlist WHERE user = 'app_user';`로 세면 서버 한 대당 메인 풀 + 3개가 나온다(풀 20이면 23).
+- **확인**: 운영은 actuator가 `health`만 열려 있어 풀 크기를 직접 볼 수 없다. DB에서 `SELECT COUNT(*) FROM information_schema.processlist WHERE user = 'app_user';`로 세면 서버 한 대당 메인 풀 + 3개가 나온다(풀 20이면 23). 새 환경은 서버가 2대라 같은 쿼리가 두 배로 나온다(풀 20이면 46).
