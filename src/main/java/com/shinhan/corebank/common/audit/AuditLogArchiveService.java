@@ -11,11 +11,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 
 // 하루치 감사 로그를 WORM 저장소에 올린다(PH-82). 해시 도입 전 행(row_hash NULL)은 보장 대상이 아니라 뺀다.
 // 경로마다 상태를 남겨 SUCCESS가 아닌 경로만 다시 올리고, 한 번 올린 사본은 덮어쓰지 않는다(#788 리뷰).
+// 모든 경로가 확정되면 적재 완료 이벤트를 내보내 무결성 검증이 바로 이어지게 한다(검증 시각에 기대지 않는다).
 // S3 호출 동안 DB 커넥션을 쥐지 않도록 트랜잭션을 걸지 않는다. 상태 저장은 저장할 때마다 바로 커밋된다.
 @Service
 @RequiredArgsConstructor
@@ -26,6 +28,7 @@ public class AuditLogArchiveService {
     private final AuditArchiveStorage auditArchiveStorage;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     public void archive(LocalDate archiveDate) {
         List<AuditArchiveExecutionJpaEntity> unfinished = startUnfinishedExecutions(archiveDate);
@@ -46,6 +49,7 @@ public class AuditLogArchiveService {
             }
         }
         throwIfAnyFailed(archiveDate, failures);
+        eventPublisher.publishEvent(new AuditArchiveCompletedEvent(archiveDate));
     }
 
     // 업로드 전에 PENDING을 커밋해 둔다. 중간에 멈춰도 다음 적재가 이 경로를 다시 본다.
