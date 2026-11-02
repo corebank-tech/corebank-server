@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 39개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 408개 컬럼
+**대상**: 40개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 413개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -74,6 +74,7 @@
 | 46 | `EVENT_PUBLICATION` | 이벤트 발행 기록 (Spring Modulith) | P1 | 9 |
 | 47 | `cob_checkpoint` | COB 재시작 체크포인트 | P5 | 5 |
 | 48 | `audit_archive_execution` | 감사 로그 WORM 적재 상태 | P1 | 9 |
+| 49 | `audit_integrity_mismatch` | 감사 로그 무결성 불일치 목록 | P1 | 5 |
 
 ---
 
@@ -552,13 +553,19 @@ COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED →
 
 > 거래번호 일련번호 채번 (비관적 락 대상 0순위)
 
-거래번호 일련 10자리를 채번한다. 일자·채널별로 매일 0부터 다시 시작하므로 `AUTO_INCREMENT`로 만들 수 없다. 전 고객이 같은 행을 두고 경합하는 유일한 지점이라 락 보유 시간을 최소로 유지해야 한다.
+거래번호 일련 10자리를 채번한다. 일자·채널별로 매일 0부터 다시 시작하므로 `AUTO_INCREMENT`로 만들 수 없다. 전 고객이 같은 행을 두고 경합하는 유일한 지점이라, 서버는 행을 잠글 때 번호를 `app.transaction-sequence.block-size`(기본 100)개씩 예약하고 메모리에서 나눠 준다(#786).
+
+예약분은 서버(WAS 인스턴스)마다 따로 들고 있어서, 다음 경우 예약하고 쓰지 않은 번호가 빈칸(결번)으로 남는다.
+
+- 서버 재시작·종료: 그 서버가 들고 있던 남은 번호. 예약 직후 종료하면 묶음 전체(최대 100개)가 빈다
+- 거래일 변경: 이전 일자의 묶음에 남은 번호. 일자가 바뀌면 새 일자 행에서 새로 예약한다
+- 서버가 여러 대: 위 빈칸이 서버마다 생긴다. 일자·채널 하나에서 서버 수 × 100개까지 빌 수 있다
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
 | `seq_date` | `DATE` | **PK** | X |  | 채번 기준 영업일. KST 기준이며 거래번호 앞 8자리와 같다 |
 | `channel` | `CHAR(2)` | **PK** | X |  | 채널 코드. `WB`(인터넷뱅킹) / `BT`(배치·예약이체). 거래번호 9~10번째 자리 |
-| `last_seq` | `BIGINT` |  | X | `0` | 해당 일자·채널에서 마지막으로 나간 일련번호. 다음 거래는 이 값 + 1을 받는다 |
+| `last_seq` | `BIGINT` |  | X | `0` | 해당 일자·채널에서 서버가 예약한 마지막 일련번호. 다음 예약은 이 값 + 1부터다. 앱이 떠 있는 동안 SQL로 바꾸면 서버 메모리의 예약분과 겹칠 수 있어 모든 WAS 인스턴스를 재시작해 예약분을 버린다 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 마지막 채번 시각 |
 
 **CHECK 제약**
@@ -691,7 +698,7 @@ COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED →
 
 > 원장-잔액 대사 불일치 목록 (PH-38)
 
-COB 대사 스텝이 원장 누적 합계와 `account.balance`가 다른 계좌를 영업일별로 남긴다. 관리자 목록 API(FE ADM-04)가 읽는다. **같은 영업일을 다시 대사하면 그날 행을 모두 지우고 새 결과로 바꾼다** — 재실행 이력은 `batch_execution_history`가 남긴다. 대사는 보고만 하고 정정하지 않으므로 처리 상태 컬럼이 없다. 감사용 기록이라 계좌가 해지·정리돼도 남도록 `account`에 FK를 걸지 않는다. 차액(`ledger_balance - account_balance`)은 저장하지 않고 조회할 때 계산한다.
+COB 대사 스텝이 원장 누적 합계와 `account.balance`가 다른 계좌를 영업일별로 남긴다. 관리자 목록 API(FE ADM-04)가 읽는다. **같은 영업일로 대사가 다시 돌면 그날 행이 이미 있을 때는 저장하지 않고 처음 목록을 그대로 둔다(#749).** 멈춘 COB를 재개하면 같은 영업일로 대사가 다시 도는데, 그 결과는 지금 원장을 대조한 다른 시점의 목록이라 마감을 멈춘 원인을 지우게 되기 때문이다. 마감을 계속할지는 다시 돈 대사 결과로 판정하고, 그 건수는 `[LEDGER_RECONCILIATION_KEPT]` 로그에 남는다. 처음 실행이 0건이라 행이 없던 날은 다시 돈 결과를 저장한다. 재실행 이력은 `batch_execution_history`가 남긴다. 대사는 보고만 하고 정정하지 않으므로 처리 상태 컬럼이 없다. 감사용 기록이라 계좌가 해지·정리돼도 남도록 `account`에 FK를 걸지 않는다. 차액(`ledger_balance - account_balance`)은 저장하지 않고 조회할 때 계산한다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
@@ -1047,6 +1054,28 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 
 ---
 
+## `audit_integrity_mismatch`
+
+> 감사 로그 무결성 불일치 목록 (PH-82)
+
+검증 배치(매일 01:00, 최근 7일)가 WORM 사본과 DB 감사 행을 대조해 찾은 불일치를 날짜별로 남긴다. **증거라 지우지 않는다. 같은 날을 다시 검증해도 이미 남긴 불일치는 건너뛰고 새로 찾은 것만 쌓는다.** 지워진 감사 행도 기록해야 하므로 `audit_log`에 FK를 걸지 않는다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `audit_integrity_mismatch_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 불일치 행 식별자 |
+| `archive_date` | `DATE` | **UK** | X |  | 검증한 사본의 날짜(`audit_log.requested_at` 기준) |
+| `audit_log_id` | `BIGINT` | **UK** | X |  | 불일치 감사 행 |
+| `mismatch_type` | `VARCHAR(20)` | **UK** | X |  | `TAMPERED`(다시 계산한 해시가 사본과 다름) · `MISSING_IN_DB`(사본에만 있음) · `NOT_ARCHIVED`(DB에만 있음) |
+| `detected_at` | `DATETIME(6)` |  | X |  | 검증 배치가 불일치를 확인한 시각 |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_audit_integrity_mismatch_date_log_type` | `archive_date, audit_log_id, mismatch_type` |
+
+---
+
 ## `common_code`
 
 > 공통코드 (REQ-CMN-023). 코드값 → 화면 표시명 매핑
@@ -1080,7 +1109,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
-| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP`, `LEDGER_RECONCILIATION_BATCH`, `AUTH_TOKEN_CLEANUP`, `TERMS_VIEW_HISTORY_CLEANUP`, `AUTO_TRANSFER_RECONCILE`, `SCHEDULED_TRANSFER_RECONCILE`, `COB`, `AUDIT_LOG_ARCHIVE` 9행 |
+| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP`, `LEDGER_RECONCILIATION_BATCH`, `AUTH_TOKEN_CLEANUP`, `TERMS_VIEW_HISTORY_CLEANUP`, `AUTO_TRANSFER_RECONCILE`, `SCHEDULED_TRANSFER_RECONCILE`, `COB`, `AUDIT_LOG_ARCHIVE`, `AUDIT_INTEGRITY_CHECK` 10행 |
 | `currently_running` | `BOOLEAN` |  | X | `FALSE` | 이 배치가 지금 실행 중인지. 트리거 시작 시 `TRUE`, 종료 시(성공/실패 무관) `FALSE`로 되돌림 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각. stale(크래시로 방치됨) 판단 기준 |
 

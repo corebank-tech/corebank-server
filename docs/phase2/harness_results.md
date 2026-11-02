@@ -47,7 +47,7 @@
 | **2** | WAS 대수 1대 | PH-56 이 1대 → 2대 증가율을 잰다 | ASG 2대 | P5 PH-56 |
 | **3** | **RDS `max_connections` 60** | `PR #555` 계산 — WAS 2대면 20×2+15 = **55**, **3대면 75 > 60** | 파라미터 그룹 신설 + **최초 연결 시 재부팅 1회**(이후 값 조정은 무중단 — AWS RDS 문서: *"When you associate a new DB parameter group with a DB instance, the modified static and dynamic parameters are applied only after the DB instance is rebooted"*). 단 *"메모리 1GB 소형 DB라 숫자만 올리면 메모리가 먼저 부족"*(`PR #555`)이라 **인스턴스 상향이 선행**일 수 있다 | P4 · P5 |
 | 4 | db.t3.small CPU (Multi-AZ 동기 복제) | ❌ **미측정** — WAS CPU 가 먼저 막혀 DB 까지 가지 못했다 | 인스턴스 상향 | P5 |
-| **5** | 🔴 **WAS CPU — BCrypt 가 이체 1건에 4회** (login·계좌비번·OTP발급·OTP검증). 행 락·트랜잭션 **안**에서 돈다. 더해 `transaction_sequence` 전역 1행 `FOR UPDATE` · 요청당 커넥션 **9회** | ✅ **측정 완료** — 부하 중 **CPU 98~99% · I/O 대기 0 · 실행 대기 10~11**(vCPU 2개), 부하 끄면 즉시 1%(§3-3) | **BCrypt 를 락 밖으로** · OTP 해시 재검토 · 채번 분산 | P4 `astrokan`(transfer) · P6 `cy389`(otp) · P2 `vsopsw`(account) |
+| **5** | 🔴 **WAS CPU — BCrypt 가 이체 1건에 3회** (계좌비번·OTP발급·OTP검증). 행 락·트랜잭션 **안**에서 돈다. 더해 `transaction_sequence` 전역 1행 `FOR UPDATE` · 요청당 커넥션 **9회** | ✅ **측정 완료** — 부하 중 **CPU 98~99% · I/O 대기 0 · 실행 대기 10~11**(vCPU 2개), 부하 끄면 즉시 1%(§3-3) | **BCrypt 를 락 밖으로** · OTP 해시 재검토 · 채번 분산 | P4 `astrokan`(transfer) · P6 `cy389`(otp) · P2 `vsopsw`(account) |
 | ~~6~~ | ~~계좌 행 락~~ | ❌ **배제됨** — 계좌를 전부 분산해도 처리량 +2.7%(§3-2) | — | — |
 
 **순서는 5 → 1 이다.** 5번이 먼저 막히고, 1번은 그 결과로 보였던 증상이다 — 풀을 20 으로
@@ -238,9 +238,10 @@ OTP 만료 → 계좌비밀번호 검증 500)는 전부 2차 증상이라는 판
 ![10/s 부하 중 EC2 vmstat — CPU 98~99%, 종료 직후 1% 복귀](images/ph30-vmstat-10tps-20261006.jpg)
 이 회차의 k6 결과는 §3-2 의 10/s 와 같다(iteration 1,751 · 에러율 20.7% · 유실 49).
 
-**산술도 맞는다.** 2 vCPU 는 초당 2,000ms 의 CPU 시간이고, 10/s × BCrypt 4회 = 초당 40회다.
-2,000 ÷ 40 = **50ms/회** — BCrypt 강도 10(`SecurityConfig.java:36`)의 전형값이다.
+**산술도 맞는다.** 2 vCPU 는 초당 2,000ms 의 CPU 시간이고, 10/s × BCrypt 3회 = 초당 30회다.
+2,000 ÷ 30 = **66.7ms/회** — BCrypt 강도 10(`SecurityConfig.java:70`)의 전형 범위 안이다.
 setup 구간이 같은 방향을 가리킨다: **로그인만** 200회 하는데 CPU 가 45% 올랐고, 로그인은 BCrypt 1회다.
+로그인은 `load.js:80` 의 `setup()` 에서 돌아 3분 측정 구간 밖이므로 위 3회에 넣지 않는다.
 
 > **CPU 포화는 확정이고, BCrypt 가 지배적이라는 건 유력하지만 단정은 아니다.** 위 역산은
 > 「CPU 를 BCrypt 가 전부 썼다」는 가정이고, 정확한 분해는 프로파일링이 필요하다.
@@ -529,7 +530,7 @@ Redis 5/s 의 괄호는 1회차를 뺀 값이다.
 
 **B안의 S4 비교 기준은 C다.** B′는 PH-49c(JDBC 세션) 적용 전 수치다. P6은 릴리스 2의 기존 단일 EC2·RDS에서
 `provider=jdbc`로 예열 후 4회 측정하고 C로 기록한다. 측정 조건·원장 정합성을 확인한 C를 PH-30 개선 전 기준선으로
-채택한다. 새 RDS의 D 측정은 생략한다. P1은 P4가 릴리스 3을 같은 기존 EC2에 수동 배포한 뒤 S4를 재측정한다.
+채택한다. 새 RDS의 D 측정은 생략한다. P1은 같은 기존 EC2에서 S4를 재측정한다. 배포 경로는 [D-35](README.md#d-35--1030--p4)를 따른다.
 유효한 C가 없으면 기존 환경에서 다시 재고, C↔S4는 릴리스 사이 개선 묶음의 차이로 해석한다([측정 계획](ph49c_jdbc_session.md#운영-성능-재측정-계획)).
 
 10/s 에서 두 모드가 갈리는 것은 **`transfer` 한 단계뿐이고 앞 세 단계는 같다**

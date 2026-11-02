@@ -86,8 +86,15 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
             LedgerFullReconciliationResult result = ledgerFullReconciliationUseCase.reconcileAllIsolatingFailures();
             List<LedgerReconciliationMismatch> mismatches = result.mismatches();
             // 마감을 멈춰도 그날 목록이 남도록 판정보다 먼저 저장한다
-            ledgerReconciliationMismatchPort.replaceForBusinessDate(cobDate, mismatches, LocalDateTime.now(clock));
+            if (!ledgerReconciliationMismatchPort.saveIfAbsent(cobDate, mismatches, LocalDateTime.now(clock))) {
+                log.info(
+                        "[LEDGER_RECONCILIATION_KEPT] cobDate={} 목록이 이미 있어 처음 목록을 유지 - 이번 대사 mismatches={}",
+                        cobDate,
+                        mismatches.size());
+            }
+            // 확인하지 못한 구간이 있으면 판정 전에 마감을 멈춘다
             haltIfUnverified(cobDate, result);
+            // 판정은 지금 원장을 대조한 이번 결과로 한다
             judgeCobMismatches(cobDate, mismatches);
         } finally {
             batchExecutionLockPort.release(JOB_NAME);
@@ -106,7 +113,7 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
                 result.mismatches().size());
         throw new CobStepHaltException("원장 대사에서 확인하지 못한 account_id 구간이 있음 - cobDate=" + cobDate + ", 구간="
                 + result.unverifiedRanges() + ", 찾은 불일치=" + result.mismatches().size()
-                + "건. 같은 영업일을 다시 돌린 경우 이 구간에 있던 이전 불일치 기록은 지워졌을 수 있음");
+                + "건. 같은 영업일 목록은 처음 저장한 것을 유지하므로, 이번 결과가 불완전하면 확인 못 한 구간의 불일치는 목록에 없을 수 있음");
     }
 
     // soft/hard는 마감을 계속할지의 판단이다 — 건별 불일치는 1건이어도 사고라 reconcileAll이 따로 ERROR로 남긴다
