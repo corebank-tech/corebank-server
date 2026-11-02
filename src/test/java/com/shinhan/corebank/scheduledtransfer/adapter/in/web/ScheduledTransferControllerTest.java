@@ -79,6 +79,9 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
     void seedCustomerAndAccount() {
         customerId = insertCustomer();
         accountId = insertAccount(customerId);
+
+        // 등록 테스트에서 사용하는 입금계좌를 실제 DB에 생성한다.
+        seedDepositAccount(customerId);
     }
 
     @Test
@@ -792,5 +795,35 @@ class ScheduledTransferControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$['components']['schemas']['ScheduledTransferExecutionResultItemResponse']"
                                 + "['properties']['tradeDate']['type']")
                         .value(hasItem("null")));
+    }
+
+    private void seedDepositAccount(Long customerId) {
+        entityManager
+                .createNativeQuery(
+                        """
+                    INSERT INTO account (
+                        account_number,
+                        customer_id,
+                        account_type,
+                        status,
+                        password_hash,
+                        withdrawal_registered,
+                        opened_date,
+                        created_at,
+                        updated_at
+                    ) VALUES (
+                        '110987654321',
+                        :customerId,
+                        'DEMAND_DEPOSIT',
+                        'ACTIVE',
+                        'x',
+                        FALSE,
+                        NOW(6),
+                        NOW(6),
+                        NOW(6)
+                    )
+                    """)
+                .setParameter("customerId", customerId)
+                .executeUpdate();
     }
 }
