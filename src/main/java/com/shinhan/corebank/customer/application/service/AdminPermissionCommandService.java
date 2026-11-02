@@ -18,10 +18,10 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * 관리자 권한 부여·회수(PH-49b).
@@ -30,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 관리자, 대상은 {@code targetCustomerId}, 바뀐 것만 {@code changes}에 남기고 실패한 요청도 남긴다.
  */
 @Service
+@Validated
 @RequiredArgsConstructor
 public class AdminPermissionCommandService implements AdminPermissionCommandUseCase {
 
@@ -42,7 +43,6 @@ public class AdminPermissionCommandService implements AdminPermissionCommandUseC
     @Override
     @Transactional
     public List<AdminPermission> grantPermission(AdminPermissionCommand command, AdminPermission permission) {
-        Objects.requireNonNull(permission, "permission must not be null");
         rejectSelfTarget(command, AuditEventType.ADMIN_PERMISSION_GRANT);
 
         // 같은 대상의 부여·회수를 대상 행 락으로 직렬화하고, 중복은 PK 가 마지막에 막는다.
@@ -58,7 +58,6 @@ public class AdminPermissionCommandService implements AdminPermissionCommandUseC
     @Override
     @Transactional
     public List<AdminPermission> revokePermission(AdminPermissionCommand command, AdminPermission permission) {
-        Objects.requireNonNull(permission, "permission must not be null");
         rejectSelfTarget(command, AuditEventType.ADMIN_PERMISSION_REVOKE);
 
         Customer customer = findTargetForUpdate(command, AuditEventType.ADMIN_PERMISSION_REVOKE);
@@ -75,10 +74,6 @@ public class AdminPermissionCommandService implements AdminPermissionCommandUseC
     }
 
     private void rejectSelfTarget(AdminPermissionCommand command, AuditEventType eventType) {
-        Objects.requireNonNull(command, "command must not be null");
-        Objects.requireNonNull(command.adminCustomerId(), "adminCustomerId must not be null");
-        Objects.requireNonNull(command.targetCustomerId(), "targetCustomerId must not be null");
-
         if (command.adminCustomerId().equals(command.targetCustomerId())) {
             recordFailure(command, eventType, "SELF_TARGET");
             throw new BusinessException(CommonErrorCode.FORBIDDEN);
