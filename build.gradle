@@ -114,6 +114,7 @@ ext {
 dependencyManagement {
     imports {
         mavenBom 'org.springframework.modulith:spring-modulith-bom:2.0.8'
+        mavenBom 'software.amazon.awssdk:bom:2.55.16'
     }
 }
 
@@ -161,6 +162,9 @@ dependencies {
 
     // 이벤트 발행 기록 — 아웃박스 (PH-96, #437)
     implementation 'org.springframework.modulith:spring-modulith-starter-jdbc'
+
+    // 감사 로그 WORM 적재 — S3 Object Lock 버킷 (PH-82, #766). Boot에 S3 지원이 없어 AWS 공식 SDK를 쓴다
+    implementation 'software.amazon.awssdk:s3'
 
     // 테스트
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
@@ -268,4 +272,8 @@ spotless {
         trimTrailingWhitespace()
         endWithNewline()
     }
+}
+
+springBoot {
+    mainClass = 'com.shinhan.corebank.CorebankApplication'
 }

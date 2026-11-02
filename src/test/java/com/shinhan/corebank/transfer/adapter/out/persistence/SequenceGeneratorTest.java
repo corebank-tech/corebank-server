@@ -7,6 +7,7 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.PlatformTransactionManager;
 
 @DisplayName("거래번호 채번기(SequenceGenerator) 통합 테스트")
 class SequenceGeneratorTest extends IntegrationTestSupport {
@@ -39,6 +41,9 @@ class SequenceGeneratorTest extends IntegrationTestSupport {
 
     @Autowired
     private TransactionSequenceJpaRepository repository;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @AfterEach
     void tearDown() {
@@ -159,6 +164,42 @@ class SequenceGeneratorTest extends IntegrationTestSupport {
                     .collect(Collectors.toList());
 
             assertThat(transactionNumbers).containsExactlyInAnyOrderElementsOf(expectedNumbers);
+        } finally {
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(30, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
+    @DisplayName("채번기 두 개(서버 두 대)가 같은 일자·채널을 동시에 채번해도 번호가 겹치지 않는다")
+    void issuesUniqueNumbersAcrossTwoGeneratorInstances() throws Exception {
+        // given: 서버 한 대 = 채번기 객체 하나. 메모리 상태를 따로 갖는 두 번째 채번기를 직접 만든다
+        SequenceGenerator otherServer =
+                new SequenceGenerator(repository, transactionManager, Clock.systemDefaultZone(), 1);
+        int callsPerServer = 200;
+        ExecutorService executor = Executors.newFixedThreadPool(8);
+        CountDownLatch startLatch = new CountDownLatch(1);
+
+        try {
+            List<Future<String>> futures = new ArrayList<>();
+            for (SequenceGenerator server : List.of(sequenceGenerator, otherServer)) {
+                for (int i = 0; i < callsPerServer; i++) {
+                    futures.add(executor.submit(() -> {
+                        startLatch.await();
+                        return server.nextTransactionNumber(SEQ_DATE, CHANNEL);
+                    }));
+                }
+            }
+
+            // when
+            startLatch.countDown();
+            List<String> transactionNumbers = new ArrayList<>();
+            for (Future<String> future : futures) {
+                transactionNumbers.add(future.get(60, TimeUnit.SECONDS));
+            }
+
+            // then
+            assertThat(transactionNumbers).hasSize(callsPerServer * 2).doesNotHaveDuplicates();
         } finally {
             executor.shutdownNow();
             assertThat(executor.awaitTermination(30, TimeUnit.SECONDS)).isTrue();

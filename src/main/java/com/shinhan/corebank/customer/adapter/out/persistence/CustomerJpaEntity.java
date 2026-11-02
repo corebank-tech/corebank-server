@@ -13,6 +13,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -54,6 +55,16 @@ public class CustomerJpaEntity extends BaseEntity {
 
     @Column(name = "phone_number", nullable = false, length = 11)
     private String phoneNumber;
+
+    // PH-18: 기존 평문 컬럼과 병행 저장하는 암호화 전환용 컬럼
+    @Column(name = "email_ciphertext", length = 768)
+    private String emailCiphertext;
+
+    @Column(name = "phone_number_ciphertext", length = 128)
+    private String phoneNumberCiphertext;
+
+    @Column(name = "email_search_hash", columnDefinition = "CHAR(64)")
+    private String emailSearchHash;
 
     @Column(name = "login_failure_count", nullable = false, columnDefinition = "TINYINT")
     private int loginFailureCount;
@@ -123,5 +134,19 @@ public class CustomerJpaEntity extends BaseEntity {
         this.passwordHash = passwordHash;
         this.passwordChangedAt = passwordChangedAt;
         this.loginFailureCount = loginFailureCount;
+    }
+
+    // 암호문과 검색 해시를 함께 설정한다.
+    public void updatePiiShadow(String emailCiphertext, String phoneNumberCiphertext, String emailSearchHash) {
+        this.emailCiphertext = Objects.requireNonNull(emailCiphertext);
+        this.phoneNumberCiphertext = Objects.requireNonNull(phoneNumberCiphertext);
+        this.emailSearchHash = Objects.requireNonNull(emailSearchHash);
+    }
+
+    // 암호화 기능이 꺼진 상태에서 연락처가 변경되면 이전 암호문을 무효화한다.
+    public void clearPiiShadow() {
+        this.emailCiphertext = null;
+        this.phoneNumberCiphertext = null;
+        this.emailSearchHash = null;
     }
 }

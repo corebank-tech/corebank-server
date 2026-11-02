@@ -60,6 +60,14 @@ resource "aws_security_group" "was" {
     cidr_blocks = [var.vpc_cidr]
   }
 
+  egress {
+    description = "On-premises info API over VPN"
+    from_port   = var.info_api_port
+    to_port     = var.info_api_port
+    protocol    = "tcp"
+    cidr_blocks = [var.onprem_info_api_cidr]
+  }
+
   tags = { Name = "${var.name_prefix}-sg-was" }
 }
 

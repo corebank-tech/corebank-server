@@ -1,7 +1,7 @@
 package com.shinhan.corebank.customer.application.service;
 
-import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
+import com.shinhan.corebank.common.audit.PersonalDataAccessEventType;
 import com.shinhan.corebank.customer.application.port.in.AdminAccessContext;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerSearchQuery;
 import com.shinhan.corebank.customer.application.port.in.AdminCustomerSummary;
@@ -33,16 +33,16 @@ public class AdminCustomerViewAuditService implements AdminCustomerViewAuditUseC
                 "resultCount", customerIds.size(),
                 "customerIds", customerIds);
 
-        record(context, AuditEventType.CUSTOMER_SEARCH, detail);
+        record(context, PersonalDataAccessEventType.CUSTOMER_SEARCH, detail);
     }
 
     @Override
     public void recordDetailView(AdminAccessContext context, Long targetCustomerId) {
-        record(context, AuditEventType.CUSTOMER_DETAIL_VIEW, Map.of("targetCustomerId", targetCustomerId));
+        record(context, PersonalDataAccessEventType.CUSTOMER_DETAIL_VIEW, Map.of("targetCustomerId", targetCustomerId));
     }
 
-    private void record(AdminAccessContext context, AuditEventType eventType, Map<String, Object> detail) {
-        auditLogService.record(
-                context.adminCustomerId(), null, eventType, context.requestIp(), true, detail, context.accessReason());
+    private void record(AdminAccessContext context, PersonalDataAccessEventType eventType, Map<String, Object> detail) {
+        auditLogService.recordPersonalDataAccess(
+                context.adminCustomerId(), eventType, context.requestIp(), true, detail, context.accessReason());
     }
 }
