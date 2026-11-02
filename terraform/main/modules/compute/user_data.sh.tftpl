@@ -7,6 +7,11 @@ export DEBIAN_FRONTEND=noninteractive
 sed -i 's|http://|https://|g' /etc/apt/sources.list 2>/dev/null || true
 sed -i 's|http://|https://|g' /etc/apt/sources.list.d/*.sources 2>/dev/null || true
 apt-get update -y
+# 컨테이너 로그가 디스크를 채우지 않도록 Docker 설치 전에 순환 설정을 둔다(#839)
+mkdir -p /etc/docker
+cat > /etc/docker/daemon.json <<'EOF'
+{"log-driver":"json-file","log-opts":{"max-size":"50m","max-file":"5"}}
+EOF
 apt-get install -y docker.io awscli
 systemctl enable --now docker
 
