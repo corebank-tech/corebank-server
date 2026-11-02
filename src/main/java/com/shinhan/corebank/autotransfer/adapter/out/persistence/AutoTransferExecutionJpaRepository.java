@@ -42,4 +42,20 @@ public interface AutoTransferExecutionJpaRepository extends JpaRepository<AutoTr
             """)
     List<AutoTransferExecutionJpaEntity> findRecentByAutoTransferId(
             @Param("autoTransferId") Long autoTransferId, Pageable pageable);
+
+    @Query(
+            """
+        SELECT COUNT(e)
+        FROM AutoTransferExecutionJpaEntity e
+        JOIN e.autoTransfer a
+        WHERE e.status = :status
+          AND (
+              a.withdrawalAccountId = :accountId
+              OR a.depositAccountNumber = :accountNumber
+          )
+        """)
+    long countProcessingReferencingAccount(
+            @Param("accountId") Long accountId,
+            @Param("accountNumber") String accountNumber,
+            @Param("status") ProcessResultStatus status);
 }

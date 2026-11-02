@@ -41,4 +41,7 @@ public interface AccountPersistencePort {
 
     // 만기해지 사전 검증용. JPA 관리 엔티티를 올리지 않는다.
     Optional<MaturityAccountSnapshot> findMaturityAccountSnapshot(Long accountId, Long customerId);
+
+    /** JPA 엔티티를 로딩하지 않고 계좌번호만 조회한다. */
+    Optional<String> findAccountNumberByIdAndCustomerId(Long accountId, Long customerId);
 }

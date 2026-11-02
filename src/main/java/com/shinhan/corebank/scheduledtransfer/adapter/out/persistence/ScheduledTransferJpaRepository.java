@@ -1,10 +1,12 @@
 package com.shinhan.corebank.scheduledtransfer.adapter.out.persistence;
 
 import com.shinhan.corebank.scheduledtransfer.domain.ScheduledTransferStatus;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -47,4 +49,21 @@ public interface ScheduledTransferJpaRepository extends JpaRepository<ScheduledT
             @Param("transactionNumber") String transactionNumber,
             @Param("failureReason") String failureReason,
             @Param("executedAt") LocalDateTime executedAt);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+            """
+        SELECT s
+        FROM ScheduledTransferJpaEntity s
+        WHERE s.status IN :statuses
+          AND (
+              s.withdrawalAccountId = :accountId
+              OR s.payeeAccountNumber = :accountNumber
+          )
+        ORDER BY s.scheduledTransferId
+        """)
+    List<ScheduledTransferJpaEntity> findLinkedForUpdate(
+            @Param("accountId") Long accountId,
+            @Param("accountNumber") String accountNumber,
+            @Param("statuses") List<ScheduledTransferStatus> statuses);
 }

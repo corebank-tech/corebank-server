@@ -66,6 +66,19 @@ public class AccountStatusHistoryJpaEntity {
      *
      * effectiveBusinessDate에는 MATURITY 이체의 실제 거래일을 저장한다.
      */
+    public static AccountStatusHistoryJpaEntity earlyClosed(
+            Long accountId, LocalDate maturityDate, LocalDate closedTradeDate, LocalDateTime changedAt) {
+        AccountStatusHistoryJpaEntity entity = new AccountStatusHistoryJpaEntity();
+        entity.accountId = accountId;
+        entity.previousStatus = AccountStatus.ACTIVE.name();
+        entity.newStatus = AccountStatus.CLOSED.name();
+        entity.maturityDate = maturityDate;
+        entity.effectiveBusinessDate = closedTradeDate;
+        entity.changedAt = changedAt;
+        entity.triggerType = "CUSTOMER";
+        return entity;
+    }
+
     public static AccountStatusHistoryJpaEntity maturityClosed(
             Long accountId, LocalDate maturityDate, LocalDate closedTradeDate, LocalDateTime changedAt) {
 

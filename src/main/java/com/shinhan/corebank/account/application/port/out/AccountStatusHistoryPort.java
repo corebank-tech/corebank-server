@@ -14,6 +14,8 @@ public interface AccountStatusHistoryPort {
      * @param closedTradeDate MATURITY 출금 원장의 실제 거래일
      * @param changedAt 실제 해지 시각
      */
+    void recordEarlyClosure(Long accountId, LocalDate maturityDate, LocalDate closedTradeDate, LocalDateTime changedAt);
+
     void recordMaturityClosure(
             Long accountId, LocalDate maturityDate, LocalDate closedTradeDate, LocalDateTime changedAt);
 }

@@ -10,6 +10,7 @@ public enum SubscriptionErrorCode implements ErrorCode {
     SUBSCRIPTION_NOT_COMPLETED("PRD0303", 409, "가입 처리가 완료되지 않은 계좌입니다."),
     MATURITY_PAYOUT_AMOUNT_ZERO("PRD0304", 409, "지급할 만기 원리금이 없습니다."),
     MATURITY_RENEW_UNSUPPORTED("PRD0305", 409, "자동 재예치 방식의 만기해지는 지원하지 않습니다."),
+    EARLY_TERMINATION_PAYOUT_ZERO("PRD0306", 409, "지급할 중도해지 원리금이 없습니다."),
     PRODUCT_LOCK_TARGET_NOT_FOUND("PRD9002", 500, "가입 처리 중 상품 정보를 확인할 수 없습니다.");
 
     private final String code;
