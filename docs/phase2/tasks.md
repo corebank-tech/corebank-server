@@ -919,7 +919,7 @@ TransferExecutionService.execute(command)                         ← 편집자:
 
 - **불일치 저장 테이블** — Flyway + `schema_reference.md` + ERD. 목록 API와 FE ADM-04가 읽을 데이터다.
 - 불일치 목록 조회 API(관리자, `AUDIT_READ`)
-    - 현황(#613): 테이블 `ledger_reconciliation_mismatch`(영업일 `COB_DATE`별, 같은 영업일 재대사는 교체)와 `GET /admin/ledger-reconciliation/mismatches`(영업일 생략 시 최근 영업일, `all=true`는 100건 상한)를 넣었다. 권한은 `#573` 이 `AUDIT_READ` 로 붙인다. COB 대사 스텝(`runInCob`)이 soft/hard 판정 **전에** 그 영업일 불일치를 저장한다 — hard로 마감을 멈춰도 그날 목록은 남는다. 0건이면 그날 행을 비우고, 락을 못 잡아 건너뛴 날은 저장도 삭제도 하지 않는다. 저장이 실패하면 러너로 전파한다.
+    - 현황(#613): 테이블 `ledger_reconciliation_mismatch`(영업일 `COB_DATE`별, 같은 영업일로 다시 돌면 처음 목록 유지 — #749)와 `GET /admin/ledger-reconciliation/mismatches`(영업일 생략 시 최근 영업일, `all=true`는 100건 상한)를 넣었다. 권한은 `#573` 이 `AUDIT_READ` 로 붙인다. COB 대사 스텝(`runInCob`)이 soft/hard 판정 **전에** 그 영업일 불일치를 저장한다 — hard로 마감을 멈춰도 그날 목록은 남는다. 그날 행이 이미 있거나 0건이면 아무것도 바꾸지 않고, 락을 못 잡아 건너뛴 날도 저장하지 않는다. 저장이 실패하면 러너로 전파한다.
 - 300만 원장 대사 시간 베이스라인(60b 적재 뒤, [D-27](README.md#d-27--109--팀-합의)). 전수 대사 경로(#468)로 잰다.
     - 현황(#744): 전수 대사가 COB 안에서만 돌아 일회성 실행기 `ph38-baseline`으로 잰다. **10/25 측정 완료 — 중앙값 1,188,096ms(약 19.8분), 3회 모두 불일치 0.** 절차와 결과는 [ph38_baseline_results.md](ph38_baseline_results.md).
 - **`CobStep` 편입** — P5 인터페이스(10/6)가 들어오면 독립 스케줄러를 대사 스텝 구현체로 옮긴다. 등록 주체는 P4이고, soft/hard 임계는 P5가 정한다.
