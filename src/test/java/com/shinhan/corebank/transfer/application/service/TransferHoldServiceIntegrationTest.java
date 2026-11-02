@@ -5,18 +5,30 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
+import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
+import com.shinhan.corebank.transfer.api.LedgerPostingHook;
 import com.shinhan.corebank.transfer.api.TransferHoldDecision;
 import com.shinhan.corebank.transfer.api.TransferHoldExecutionResult;
+import com.shinhan.corebank.transfer.api.TransferPreCheck;
+import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
+import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
+import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
+import com.shinhan.corebank.transfer.application.port.out.TransferAuthTokenVerificationPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferHoldPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferOtpVerificationPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
+import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferHold;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Duration;
@@ -37,6 +49,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -74,6 +87,40 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
 
     @Autowired
     private PlatformTransactionManager transactionManager;
+
+    // 기표 직전에 멈추는 훅 A를 끼운 실행 서비스를 직접 조립할 때 쓴다
+    @Autowired
+    private AccountLockPort accountLockPort;
+
+    @Autowired
+    private TransferLimitPort transferLimitPort;
+
+    @Autowired
+    private TransferAuthTokenVerificationPort transferAuthTokenVerificationPort;
+
+    @Autowired
+    private TransferOtpVerificationPort transferOtpVerificationPort;
+
+    @Autowired
+    private TransferSequencePort transferSequencePort;
+
+    @Autowired
+    private TransferSavePort transferSavePort;
+
+    @Autowired
+    private LedgerSavePort ledgerSavePort;
+
+    @Autowired
+    private List<TransferPreCheck> transferPreChecks;
+
+    @Autowired
+    private List<LedgerPostingHook> ledgerPostingHooks;
+
+    @Autowired
+    private BusinessDateGate businessDateGate;
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
 
     @MockitoBean
     private OtpAuthTokenVerifier otpAuthTokenVerifier;
@@ -330,6 +377,90 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
             letOriginalGo.countDown();
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    @DisplayName("[R2] 원래 실행이 기표 직전에 멈춘 사이 resume()이 이체 행 없이 FAILED로 끝내면, 원래 실행은 기표하지 못한다")
+    void resume_failsWhileOriginalBeforePosting_originalDoesNotPost() throws Exception {
+        long holdId = held(30_000L);
+        CountDownLatch originalBeforePosting = new CountDownLatch(1);
+        CountDownLatch letOriginalPost = new CountDownLatch(1);
+        AtomicBoolean first = new AtomicBoolean(true);
+        // 원장 기표 트랜잭션 바로 앞 자리(훅 A 뒤)에서 첫 실행만 멈춘다
+        TransferPreCheck pauseFirst = new TransferPreCheck() {
+            @Override
+            public int order() {
+                return Integer.MAX_VALUE;
+            }
+
+            @Override
+            public void check(TransferPreCheckContext context) {
+                if (first.getAndSet(false)) {
+                    originalBeforePosting.countDown();
+                    awaitQuietly(letOriginalPost);
+                }
+            }
+        };
+        TransferHoldService service =
+                new TransferHoldService(transferHoldPort, executionServiceWith(pauseFirst), transferLookupPort, clock);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<TransferHoldExecutionResult> original = executor.submit(() -> service.releaseAsSystem(holdId));
+            assertThat(originalBeforePosting.await(10, TimeUnit.SECONDS)).isTrue();
+            jdbcTemplate.update(
+                    "UPDATE transfer_hold SET executing_at = ? WHERE transfer_hold_id = ?",
+                    LocalDateTime.now(clock).minusMinutes(10),
+                    holdId);
+            // 다시 실행할 때는 출금계좌 등록이 풀려 채번 전에 거부된다(이체 행 없음)
+            jdbcTemplate.update(
+                    "UPDATE account SET withdrawal_registered = FALSE, withdrawal_registered_at = NULL WHERE account_id = 101");
+
+            TransferHoldExecutionResult resumed = service.resume(holdId, Duration.ofMinutes(5));
+            jdbcTemplate.update(
+                    "UPDATE account SET withdrawal_registered = TRUE, withdrawal_registered_at = NOW(6) WHERE account_id = 101");
+            letOriginalPost.countDown();
+            TransferHoldExecutionResult late = original.get(30, TimeUnit.SECONDS);
+
+            assertThat(resumed.status()).isEqualTo(ProcessResultStatus.ERROR);
+            assertThat(late).isEqualTo(resumed);
+            assertThat(holdRow(holdId).get("status")).isEqualTo("FAILED");
+            assertThat(transferRowsOf(holdId)).isZero();
+            assertThat(balanceOf(101)).isEqualTo(100_000L);
+            assertThat(ledgerRows()).isZero();
+        } finally {
+            letOriginalPost.countDown();
+            executor.shutdownNow();
+            jdbcTemplate.update(
+                    "UPDATE account SET withdrawal_registered = TRUE, withdrawal_registered_at = NOW(6) WHERE account_id = 101");
+        }
+    }
+
+    private TransferExecutionService executionServiceWith(TransferPreCheck extraPreCheck) {
+        List<TransferPreCheck> preChecks = new ArrayList<>(transferPreChecks);
+        preChecks.add(extraPreCheck);
+        return new TransferExecutionService(
+                accountLockPort,
+                transferLimitPort,
+                transferAuthTokenVerificationPort,
+                transferOtpVerificationPort,
+                transferSequencePort,
+                transferSavePort,
+                transferLookupPort,
+                ledgerSavePort,
+                transferHoldPort,
+                preChecks,
+                ledgerPostingHooks,
+                List.of(),
+                clock,
+                businessDateGate,
+                transactionManager,
+                eventPublisher,
+                new SimpleMeterRegistry());
+    }
+
+    private int transferRowsOf(long holdId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transfer WHERE source_type = 'HELD' AND source_id = ?", Integer.class, holdId);
     }
 
     private static void awaitQuietly(CountDownLatch latch) {

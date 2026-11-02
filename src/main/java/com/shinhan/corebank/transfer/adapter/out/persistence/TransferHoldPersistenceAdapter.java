@@ -49,6 +49,11 @@ public class TransferHoldPersistenceAdapter implements TransferHoldPort {
     }
 
     @Override
+    public boolean holdsClaim(long transferHoldId, LocalDateTime claimedAt) {
+        return repository.findClaimForUpdate(transferHoldId, claimedAt).isPresent();
+    }
+
+    @Override
     public boolean finishExecution(
             long transferHoldId,
             LocalDateTime claimedAt,

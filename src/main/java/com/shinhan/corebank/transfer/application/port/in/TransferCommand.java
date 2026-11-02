@@ -7,6 +7,7 @@ import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.Builder;
 
 @Builder
@@ -28,7 +29,8 @@ public record TransferCommand(
         LocalDate executionDate,
         String authToken, // Account-Password-Auth-Token. IMMEDIATE만 필수(REQ-TRSF-009) — SCHEDULED/AUTO는 시스템 트리거라 세션이 없음
         String otpAuthToken, // Otp-Auth-Token. IMMEDIATE만 필수 — SCHEDULED/AUTO는 등록 시점에 검증됨(otp_integration_guide.md)
-        String flowId // FE 행동 흐름 식별자(선택). 훅 C(TransferHoldPolicy)에 그대로 넘긴다. IMMEDIATE만
+        String flowId, // FE 행동 흐름 식별자(선택). 훅 C(TransferHoldPolicy)에 그대로 넘긴다. IMMEDIATE만
+        LocalDateTime holdClaimedAt // 보류 건 실행의 선점 시각(executing_at). 기표 직전에 선점이 아직 이쪽 것인지 본다(§9-4)
         ) {
 
     private static final int FLOW_ID_MAX_LENGTH = 64;
@@ -69,7 +71,9 @@ public record TransferCommand(
         }
 
         if (transferType == TransferType.IMMEDIATE) {
-            validateImmediate(sourceId, executionDate, authToken, otpAuthToken);
+            validateImmediate(sourceId, executionDate, authToken, otpAuthToken, holdClaimedAt);
+        } else if (holdClaimedAt != null) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
 
         // 화면 행동은 고객이 직접 시작한 즉시이체에만 있다. 예약·자동이체에 오면 잘못된 호출이다
@@ -81,11 +85,15 @@ public record TransferCommand(
         }
     }
 
-    // 즉시이체는 고객 요청(토큰 둘, sourceId 없음)이거나 보류 건 실행(sourceId·실행일, 토큰 없음)이다(§9-4).
+    // 즉시이체는 고객 요청(토큰 둘, sourceId 없음)이거나 보류 건 실행(sourceId·실행일·선점 시각, 토큰 없음)이다(§9-4).
     private static void validateImmediate(
-            Long sourceId, LocalDate executionDate, String authToken, String otpAuthToken) {
+            Long sourceId,
+            LocalDate executionDate,
+            String authToken,
+            String otpAuthToken,
+            LocalDateTime holdClaimedAt) {
         if (sourceId != null) {
-            if (executionDate == null) {
+            if (executionDate == null || holdClaimedAt == null) {
                 throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
             }
             if (authToken != null || otpAuthToken != null) {
@@ -93,7 +101,7 @@ public record TransferCommand(
             }
             return;
         }
-        if (executionDate != null) {
+        if (executionDate != null || holdClaimedAt != null) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
         // 고객 요청은 두 토큰이 모두 있어야 한다(REQ-TRSF-009)

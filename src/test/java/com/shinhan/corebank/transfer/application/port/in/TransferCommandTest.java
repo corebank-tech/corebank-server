@@ -9,6 +9,7 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -66,6 +67,27 @@ class TransferCommandTest {
         assertThatThrownBy(() -> heldExecution().executionDate(null).build())
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining(CommonErrorCode.REQUIRED_FIELD_MISSING.getMessage());
+    }
+
+    @Test
+    @DisplayName("보류 건 실행에 선점 시각이 없으면 REQUIRED_FIELD_MISSING, 보류 건 실행이 아닌데 있으면 INVALID_INPUT이다")
+    void holdClaimedAt_onlyForHeldExecution() {
+        assertThatThrownBy(() -> heldExecution().holdClaimedAt(null).build())
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining(CommonErrorCode.REQUIRED_FIELD_MISSING.getMessage());
+        assertThatThrownBy(() -> TransferCommand.builder()
+                        .customerId(1L)
+                        .withdrawalAccountId(1L)
+                        .depositAccountNumber("123456789012")
+                        .amount(10000L)
+                        .transferType(TransferType.AUTO)
+                        .channel(TransferChannel.BT)
+                        .sourceId(100L)
+                        .executionDate(LocalDate.now())
+                        .holdClaimedAt(LocalDateTime.of(2031, 7, 1, 13, 0))
+                        .build())
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining(CommonErrorCode.INVALID_INPUT.getMessage());
     }
 
     @Test
@@ -256,6 +278,7 @@ class TransferCommandTest {
                 .transferType(TransferType.IMMEDIATE)
                 .channel(TransferChannel.WB)
                 .sourceId(100L)
-                .executionDate(LocalDate.of(2031, 7, 1));
+                .executionDate(LocalDate.of(2031, 7, 1))
+                .holdClaimedAt(LocalDateTime.of(2031, 7, 1, 13, 0));
     }
 }

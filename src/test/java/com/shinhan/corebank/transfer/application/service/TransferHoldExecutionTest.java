@@ -39,6 +39,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 class TransferHoldExecutionTest extends IntegrationTestSupport {
 
     private static final LocalDateTime HELD_AT = LocalDateTime.of(2031, 7, 1, 10, 0);
+    private static final LocalDateTime CLAIMED_AT = HELD_AT.plusHours(3);
     // 시드와 다른 테스트가 쓰지 않는 보류 ID 대역(없는 행 확인용)
     private static final long MISSING_HOLD_ID = 999_772_001L;
 
@@ -151,6 +152,19 @@ class TransferHoldExecutionTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("[R2] 원본과 같아도 선점 시각이 지금 선점과 다르면(다시 선점됨) 기표 직전에 TRF0310으로 물러나고 이체 행을 남기지 않는다")
+    void executingHold_withStaleClaim_doesNotPost() {
+        long holdId = executingHold(30_000L);
+
+        assertRejected(transferExecutionService.execute(heldExecutionBuilder(holdId, 30_000L)
+                .holdClaimedAt(CLAIMED_AT.minusMinutes(10))
+                .build()));
+
+        assertThat(transferRows()).isZero();
+        assertThat(balanceOf(101)).isEqualTo(100_000L);
+    }
+
+    @Test
     @DisplayName("[R1] 이미 실행된 보류 ID라도 고객·금액·수취계좌·출금계좌·실행일자가 원본과 다르면 앞선 결과를 받지 못하고 TRF0310이다")
     void executedHold_replayRequiresOriginal() {
         long holdId = executingHold(30_000L);
@@ -182,8 +196,7 @@ class TransferHoldExecutionTest extends IntegrationTestSupport {
 
     private long executingHold(long amount) {
         long holdId = transferHoldPort.save(hold(amount)).getTransferHoldId();
-        assertThat(transferHoldPort.markDueExecuting(holdId, HELD_AT.plusHours(3)))
-                .isTrue();
+        assertThat(transferHoldPort.markDueExecuting(holdId, CLAIMED_AT)).isTrue();
         return holdId;
     }
 
@@ -215,7 +228,8 @@ class TransferHoldExecutionTest extends IntegrationTestSupport {
                 .transferType(TransferType.IMMEDIATE)
                 .channel(TransferChannel.WB)
                 .sourceId(holdId)
-                .executionDate(LocalDate.from(HELD_AT));
+                .executionDate(LocalDate.from(HELD_AT))
+                .holdClaimedAt(CLAIMED_AT);
     }
 
     private long balanceOf(long accountId) {
