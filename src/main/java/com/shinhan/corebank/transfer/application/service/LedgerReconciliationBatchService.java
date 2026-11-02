@@ -2,6 +2,7 @@ package com.shinhan.corebank.transfer.application.service;
 
 import com.shinhan.corebank.batch.api.BatchExecutionLockPort;
 import com.shinhan.corebank.batch.api.CobStepHaltException;
+import com.shinhan.corebank.transfer.application.port.in.LedgerFullReconciliationResult;
 import com.shinhan.corebank.transfer.application.port.in.LedgerFullReconciliationUseCase;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationBatchUseCase;
 import com.shinhan.corebank.transfer.application.port.in.LedgerReconciliationMismatch;
@@ -82,13 +83,29 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
             return;
         }
         try {
-            List<LedgerReconciliationMismatch> mismatches = ledgerFullReconciliationUseCase.reconcileAll();
-            // hard로 마감을 멈춰도 그날 목록이 남도록 판정보다 먼저 저장한다
+            LedgerFullReconciliationResult result = ledgerFullReconciliationUseCase.reconcileAllIsolatingFailures();
+            List<LedgerReconciliationMismatch> mismatches = result.mismatches();
+            // 마감을 멈춰도 그날 목록이 남도록 판정보다 먼저 저장한다
             ledgerReconciliationMismatchPort.replaceForBusinessDate(cobDate, mismatches, LocalDateTime.now(clock));
+            haltIfUnverified(cobDate, result);
             judgeCobMismatches(cobDate, mismatches);
         } finally {
             batchExecutionLockPort.release(JOB_NAME);
         }
+    }
+
+    // 확인하지 못한 구간은 불일치 0건이 아니라 검증 못 한 상태라, 마감을 멈추고 구간을 사유에 남긴다
+    private void haltIfUnverified(LocalDate cobDate, LedgerFullReconciliationResult result) {
+        if (result.unverifiedRanges().isEmpty()) {
+            return;
+        }
+        log.error(
+                "[LEDGER_RECONCILIATION_UNVERIFIED] cobDate={}, unverifiedRanges={}, mismatches={} - 마감 중단",
+                cobDate,
+                result.unverifiedRanges(),
+                result.mismatches().size());
+        throw new CobStepHaltException("원장 대사에서 확인하지 못한 account_id 구간이 있음 - cobDate=" + cobDate + ", 구간="
+                + result.unverifiedRanges() + ", 찾은 불일치=" + result.mismatches().size() + "건");
     }
 
     // soft/hard는 마감을 계속할지의 판단이다 — 건별 불일치는 1건이어도 사고라 reconcileAll이 따로 ERROR로 남긴다
