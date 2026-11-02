@@ -21,7 +21,7 @@ public class LedgerReconciliationMismatchPersistenceAdapter implements LedgerRec
         this.repository = repository;
     }
 
-    // 확인과 저장 사이 경합은 대사 락이 막고, 그래도 겹치면 (영업일, 계좌) 유니크 키가 막는다.
+    // 확인과 저장 사이 겹침은 대사 락이 막는다. (영업일, 계좌) 유니크 키는 같은 계좌의 중복 저장만 막는다.
     @Override
     @Transactional
     public boolean saveIfAbsent(
