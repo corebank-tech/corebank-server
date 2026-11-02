@@ -150,6 +150,30 @@ class TransferHoldExecutionTest extends IntegrationTestSupport {
         assertThat(transferRows()).isZero();
     }
 
+    @Test
+    @DisplayName("[R1] 이미 실행된 보류 ID라도 고객·금액·수취계좌·출금계좌·실행일자가 원본과 다르면 앞선 결과를 받지 못하고 TRF0310이다")
+    void executedHold_replayRequiresOriginal() {
+        long holdId = executingHold(30_000L);
+        TransferResult first = transferExecutionService.execute(heldExecution(holdId, 30_000L));
+        assertThat(first.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+
+        assertRejected(transferExecutionService.execute(
+                heldExecutionBuilder(holdId, 30_000L).customerId(2L).build()));
+        assertRejected(transferExecutionService.execute(heldExecution(holdId, 99_000L)));
+        assertRejected(transferExecutionService.execute(heldExecutionBuilder(holdId, 30_000L)
+                .depositAccountNumber("110999999999")
+                .build()));
+        assertRejected(transferExecutionService.execute(
+                heldExecutionBuilder(holdId, 30_000L).withdrawalAccountId(202L).build()));
+        assertRejected(transferExecutionService.execute(heldExecutionBuilder(holdId, 30_000L)
+                .executionDate(HELD_AT.toLocalDate().plusDays(1))
+                .build()));
+
+        TransferResult replay = transferExecutionService.execute(heldExecution(holdId, 30_000L));
+        assertThat(replay.transactionNumber()).isEqualTo(first.transactionNumber());
+        assertThat(ledgerRows()).isEqualTo(2);
+    }
+
     private static void assertRejected(TransferResult result) {
         assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
         assertThat(result.errorCode()).isEqualTo(TransferErrorCode.TRANSFER_HOLD_NOT_EXECUTABLE.getCode());
@@ -158,7 +182,7 @@ class TransferHoldExecutionTest extends IntegrationTestSupport {
 
     private long executingHold(long amount) {
         long holdId = transferHoldPort.save(hold(amount)).getTransferHoldId();
-        assertThat(transferHoldPort.markExecuting(holdId, null, HELD_AT.plusHours(3)))
+        assertThat(transferHoldPort.markDueExecuting(holdId, HELD_AT.plusHours(3)))
                 .isTrue();
         return holdId;
     }
