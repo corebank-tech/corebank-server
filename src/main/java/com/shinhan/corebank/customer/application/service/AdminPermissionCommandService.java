@@ -67,6 +67,8 @@ public class AdminPermissionCommandService implements AdminPermissionCommandUseC
         if (revoked) {
             // 권한은 로그인 때 세션에 실려 행만 지우면 이미 로그인한 세션에 남으므로 같은 트랜잭션에서 끊는다.
             customerSessionInvalidator.invalidateAll(customer.getCustomerId());
+            // 권한을 읽고 세션을 아직 저장하지 못한 로그인은 위 삭제에 걸리지 않는다. 버전을 올려 그 세션도 거부한다.
+            adminPermissionPort.increasePermissionVersion(customer.getCustomerId());
         }
 
         recordSuccess(command, AuditEventType.ADMIN_PERMISSION_REVOKE, permissionChanges(permission, revoked, false));

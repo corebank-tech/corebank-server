@@ -49,6 +49,7 @@ erDiagram
         varchar email_ciphertext "AES-256-GCM, NULL 허용"
         varchar phone_number_ciphertext "AES-256-GCM, NULL 허용"
         char email_search_hash UK "CHAR(64), HMAC-SHA256, NULL 허용"
+        bigint admin_permission_version "권한 회수 때마다 증가, 세션 버전 대조"
     }
 
     terms {

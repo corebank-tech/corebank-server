@@ -15,4 +15,10 @@ public interface AdminPermissionPort {
 
     // 가진 적 없는 권한이면 false 를 돌려준다.
     boolean revoke(Long customerId, AdminPermission permission);
+
+    // 권한 회수 횟수. 세션에 실어 둔 값과 맞춰 낡은 세션을 가려낸다.
+    long findPermissionVersion(Long customerId);
+
+    // 권한을 회수한 같은 트랜잭션에서 올린다.
+    void increasePermissionVersion(Long customerId);
 }

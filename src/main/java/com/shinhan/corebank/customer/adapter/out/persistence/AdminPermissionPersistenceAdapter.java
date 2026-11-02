@@ -35,4 +35,14 @@ public class AdminPermissionPersistenceAdapter implements AdminPermissionPort {
     public boolean revoke(Long customerId, AdminPermission permission) {
         return adminPermissionJpaRepository.deleteByCustomerIdAndPermission(customerId, permission) > 0;
     }
+
+    @Override
+    public long findPermissionVersion(Long customerId) {
+        return adminPermissionJpaRepository.findPermissionVersionByCustomerId(customerId);
+    }
+
+    @Override
+    public void increasePermissionVersion(Long customerId) {
+        adminPermissionJpaRepository.increasePermissionVersionByCustomerId(customerId);
+    }
 }

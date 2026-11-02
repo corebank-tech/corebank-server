@@ -172,6 +172,7 @@ class AdminPermissionCommandServiceTest {
 
         assertThat(result).isEmpty();
         verify(customerSessionInvalidator).invalidateAll(TARGET_ID);
+        verify(adminPermissionPort).increasePermissionVersion(TARGET_ID);
         Map<String, Object> detail = captureDetail(AuditEventType.ADMIN_PERMISSION_REVOKE, true);
         assertThat(detail).containsEntry("targetCustomerId", TARGET_ID);
         assertThat(detail.get("changes")).isEqualTo(Map.of("permission", "GL_READ", "granted", false));
@@ -187,6 +188,7 @@ class AdminPermissionCommandServiceTest {
         service.revokePermission(command(TARGET_ID), AdminPermission.GL_READ);
 
         verify(customerSessionInvalidator, never()).invalidateAll(anyLong());
+        verify(adminPermissionPort, never()).increasePermissionVersion(anyLong());
         Map<String, Object> detail = captureDetail(AuditEventType.ADMIN_PERMISSION_REVOKE, true);
         assertThat(detail.get("changes")).isEqualTo(Map.of());
     }
