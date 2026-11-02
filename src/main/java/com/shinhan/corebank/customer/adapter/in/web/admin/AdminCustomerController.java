@@ -358,7 +358,8 @@ public class AdminCustomerController {
             @RequestBody @Valid AdminPermissionGrantRequest request,
             HttpServletRequest httpRequest) {
         Long adminCustomerId = currentCustomerProvider.getCurrentCustomerId();
-        var command = new AdminPermissionCommand(adminCustomerId, customerId, httpRequest.getRemoteAddr());
+        AdminPermissionCommand command =
+                new AdminPermissionCommand(adminCustomerId, customerId, httpRequest.getRemoteAddr());
         AdminPermission permission = request.permission();
 
         // 지문에 대상과 권한을 넣어, 같은 키로 다른 권한을 주면 CMN0302가 나게 한다.
@@ -420,7 +421,8 @@ public class AdminCustomerController {
                     String idempotencyKey,
             HttpServletRequest httpRequest) {
         Long adminCustomerId = currentCustomerProvider.getCurrentCustomerId();
-        var command = new AdminPermissionCommand(adminCustomerId, customerId, httpRequest.getRemoteAddr());
+        AdminPermissionCommand command =
+                new AdminPermissionCommand(adminCustomerId, customerId, httpRequest.getRemoteAddr());
 
         return idempotentRequestExecutor.execute(
                 idempotencyKey,
