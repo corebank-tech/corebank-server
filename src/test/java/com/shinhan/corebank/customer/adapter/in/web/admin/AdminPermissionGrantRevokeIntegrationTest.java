@@ -5,12 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.shinhan.corebank.AdminAccountFixture;
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.auth.adapter.in.security.AdminPermissionStamp;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.customer.api.AdminPermission;
 import jakarta.persistence.EntityManager;
@@ -202,6 +204,38 @@ class AdminPermissionGrantRevokeIntegrationTest extends IntegrationTestSupport {
         assertThat(sessionExists(targetSessionId)).isTrue();
     }
 
+    // 로그인이 권한을 읽은 뒤 회수가 먼저 커밋되고 세션이 뒤늦게 저장되는 순서를 흉내 낸다.
+    @Test
+    @DisplayName("회수 전에 권한을 읽어 간 세션은 회수 뒤 다음 요청에서 401로 거부된다")
+    void rejectsSessionSavedAfterRevoke() throws Exception {
+        mockMvc.perform(grant(
+                                TARGET_ADMIN_ID,
+                                "CUSTOMER_READ",
+                                UUID.randomUUID().toString())
+                        .with(grantor())
+                        .with(csrf()))
+                .andExpect(status().isOk());
+        UsernamePasswordAuthenticationToken lateLogin = UsernamePasswordAuthenticationToken.authenticated(
+                new AuthenticatedCustomer(TARGET_ADMIN_ID, "adm" + TARGET_ADMIN_ID, "관리자"),
+                null,
+                AuthorityUtils.createAuthorityList("ROLE_ADMIN", AdminPermission.CUSTOMER_READ.name()));
+        lateLogin.setDetails(new AdminPermissionStamp(permissionVersionOf(TARGET_ADMIN_ID)));
+        RequestPostProcessor lateSession = authentication(lateLogin);
+        mockMvc.perform(get("/admin/customers/{id}", PLAIN_CUSTOMER_ID).with(lateSession))
+                .andExpect(
+                        result -> assertThat(result.getResponse().getStatus()).isNotEqualTo(401));
+
+        mockMvc.perform(delete("/admin/customers/{id}/permissions/{permission}", TARGET_ADMIN_ID, "CUSTOMER_READ")
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .with(grantor())
+                        .with(csrf()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/admin/customers/{id}", PLAIN_CUSTOMER_ID).with(lateSession))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("CMN0101"));
+    }
+
     @Test
     @DisplayName("role이 CUSTOMER인 고객에 권한 행을 넣으면 DB가 복합 FK로 막는다")
     void databaseRejectsPermissionForCustomerRole() {
@@ -279,6 +313,14 @@ class AdminPermissionGrantRevokeIntegrationTest extends IntegrationTestSupport {
                         + "ORDER BY permission")
                 .setParameter("customerId", customerId)
                 .getResultList();
+    }
+
+    private long permissionVersionOf(long customerId) {
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT admin_permission_version FROM customer WHERE customer_id = :id")
+                        .setParameter("id", customerId)
+                        .getSingleResult())
+                .longValue();
     }
 
     private boolean sessionExists(String sessionId) {

@@ -17,6 +17,7 @@ import com.shinhan.corebank.auth.adapter.in.security.SessionAuthenticationEntryP
 import com.shinhan.corebank.auth.adapter.in.security.SessionLogoutSuccessHandler;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import com.shinhan.corebank.signup.application.port.in.GetSignupConfirmationUseCase;
 import com.shinhan.corebank.signup.application.port.in.SignupConfirmationResult;
 import com.shinhan.corebank.signup.application.port.in.ValidateSignupResult;
@@ -39,6 +40,9 @@ import org.springframework.test.web.servlet.MockMvc;
     SessionLogoutSuccessHandler.class
 })
 class SignupProgressControllerTest {
+
+    @MockitoBean
+    AdminPermissionFacade adminPermissionFacade;
 
     @Autowired
     MockMvc mockMvc;
