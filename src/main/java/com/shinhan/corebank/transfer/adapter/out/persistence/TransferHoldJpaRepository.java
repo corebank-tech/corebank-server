@@ -17,14 +17,44 @@ public interface TransferHoldJpaRepository extends JpaRepository<TransferHoldJpa
             """
             UPDATE TransferHoldJpaEntity h
                SET h.status = com.shinhan.corebank.transfer.domain.TransferHoldStatus.EXECUTING,
+                   h.executingAt = :executingAt
+             WHERE h.transferHoldId = :transferHoldId
+               AND h.status = com.shinhan.corebank.transfer.domain.TransferHoldStatus.HELD
+               AND h.releaseMode = com.shinhan.corebank.transfer.api.TransferHoldReleaseMode.AT_TIME
+               AND h.releaseAt <= :executingAt
+            """)
+    int markDueExecuting(@Param("transferHoldId") long transferHoldId, @Param("executingAt") LocalDateTime executingAt);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query(
+            """
+            UPDATE TransferHoldJpaEntity h
+               SET h.status = com.shinhan.corebank.transfer.domain.TransferHoldStatus.EXECUTING,
                    h.actorId = :actorId,
                    h.executingAt = :executingAt
              WHERE h.transferHoldId = :transferHoldId
                AND h.status = com.shinhan.corebank.transfer.domain.TransferHoldStatus.HELD
+               AND h.releaseMode = com.shinhan.corebank.transfer.api.TransferHoldReleaseMode.ON_APPROVAL
             """)
-    int markExecuting(
+    int markApprovedExecuting(
             @Param("transferHoldId") long transferHoldId,
-            @Param("actorId") Long actorId,
+            @Param("actorId") long actorId,
+            @Param("executingAt") LocalDateTime executingAt);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query(
+            """
+            UPDATE TransferHoldJpaEntity h
+               SET h.executingAt = :executingAt
+             WHERE h.transferHoldId = :transferHoldId
+               AND h.status = com.shinhan.corebank.transfer.domain.TransferHoldStatus.EXECUTING
+               AND h.executingAt <= :staleBefore
+            """)
+    int reclaimStuck(
+            @Param("transferHoldId") long transferHoldId,
+            @Param("staleBefore") LocalDateTime staleBefore,
             @Param("executingAt") LocalDateTime executingAt);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
@@ -38,9 +68,11 @@ public interface TransferHoldJpaRepository extends JpaRepository<TransferHoldJpa
                    h.completedAt = :completedAt
              WHERE h.transferHoldId = :transferHoldId
                AND h.status = com.shinhan.corebank.transfer.domain.TransferHoldStatus.EXECUTING
+               AND h.executingAt = :claimedAt
             """)
     int finishExecution(
             @Param("transferHoldId") long transferHoldId,
+            @Param("claimedAt") LocalDateTime claimedAt,
             @Param("result") TransferHoldStatus result,
             @Param("transferId") Long transferId,
             @Param("errorCode") String errorCode,

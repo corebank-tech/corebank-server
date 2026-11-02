@@ -717,18 +717,29 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
         }
 
         @Override
-        public boolean markExecuting(long transferHoldId, Long actorId, LocalDateTime executingAt) {
-            return delegate.markExecuting(transferHoldId, actorId, executingAt);
+        public boolean markDueExecuting(long transferHoldId, LocalDateTime executingAt) {
+            return delegate.markDueExecuting(transferHoldId, executingAt);
+        }
+
+        @Override
+        public boolean markApprovedExecuting(long transferHoldId, long actorId, LocalDateTime executingAt) {
+            return delegate.markApprovedExecuting(transferHoldId, actorId, executingAt);
+        }
+
+        @Override
+        public boolean reclaimStuck(long transferHoldId, LocalDateTime staleBefore, LocalDateTime executingAt) {
+            return delegate.reclaimStuck(transferHoldId, staleBefore, executingAt);
         }
 
         @Override
         public boolean finishExecution(
                 long transferHoldId,
+                LocalDateTime claimedAt,
                 TransferHoldStatus result,
                 Long transferId,
                 String errorCode,
                 LocalDateTime completedAt) {
-            return delegate.finishExecution(transferHoldId, result, transferId, errorCode, completedAt);
+            return delegate.finishExecution(transferHoldId, claimedAt, result, transferId, errorCode, completedAt);
         }
 
         @Override

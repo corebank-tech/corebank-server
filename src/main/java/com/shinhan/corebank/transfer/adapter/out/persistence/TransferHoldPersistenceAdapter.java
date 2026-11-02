@@ -34,19 +34,30 @@ public class TransferHoldPersistenceAdapter implements TransferHoldPort {
     }
 
     @Override
-    public boolean markExecuting(long transferHoldId, Long actorId, LocalDateTime executingAt) {
-        return repository.markExecuting(transferHoldId, actorId, executingAt) == 1;
+    public boolean markDueExecuting(long transferHoldId, LocalDateTime executingAt) {
+        return repository.markDueExecuting(transferHoldId, executingAt) == 1;
+    }
+
+    @Override
+    public boolean markApprovedExecuting(long transferHoldId, long actorId, LocalDateTime executingAt) {
+        return repository.markApprovedExecuting(transferHoldId, actorId, executingAt) == 1;
+    }
+
+    @Override
+    public boolean reclaimStuck(long transferHoldId, LocalDateTime staleBefore, LocalDateTime executingAt) {
+        return repository.reclaimStuck(transferHoldId, staleBefore, executingAt) == 1;
     }
 
     @Override
     public boolean finishExecution(
             long transferHoldId,
+            LocalDateTime claimedAt,
             TransferHoldStatus result,
             Long transferId,
             String errorCode,
             LocalDateTime completedAt) {
         requireOneOf(EXECUTION_RESULTS, result);
-        return repository.finishExecution(transferHoldId, result, transferId, errorCode, completedAt) == 1;
+        return repository.finishExecution(transferHoldId, claimedAt, result, transferId, errorCode, completedAt) == 1;
     }
 
     @Override
