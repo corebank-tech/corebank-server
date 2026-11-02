@@ -43,18 +43,19 @@ public interface AutoTransferExecutionJpaRepository extends JpaRepository<AutoTr
     List<AutoTransferExecutionJpaEntity> findRecentByAutoTransferId(
             @Param("autoTransferId") Long autoTransferId, Pageable pageable);
 
+    @Lock(LockModeType.PESSIMISTIC_READ)
     @Query(
             """
-        SELECT COUNT(e)
-        FROM AutoTransferExecutionJpaEntity e
-        JOIN e.autoTransfer a
-        WHERE e.status = :status
-          AND (
-              a.withdrawalAccountId = :accountId
-              OR a.depositAccountNumber = :accountNumber
-          )
-        """)
-    long countProcessingReferencingAccount(
+            SELECT e
+            FROM AutoTransferExecutionJpaEntity e
+            JOIN e.autoTransfer a
+            WHERE e.status = :status
+              AND (
+                  a.withdrawalAccountId = :accountId
+                  OR a.depositAccountNumber = :accountNumber
+              )
+            """)
+    List<AutoTransferExecutionJpaEntity> findProcessingReferencingAccountForShare(
             @Param("accountId") Long accountId,
             @Param("accountNumber") String accountNumber,
             @Param("status") ProcessResultStatus status);

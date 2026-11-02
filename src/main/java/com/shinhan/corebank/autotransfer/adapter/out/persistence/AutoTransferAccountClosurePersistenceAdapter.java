@@ -26,8 +26,8 @@ public class AutoTransferAccountClosurePersistenceAdapter implements AutoTransfe
     @Override
     public boolean hasProcessingExecutionReferencingAccount(Long accountId, String accountNumber) {
 
-        return executionRepository.countProcessingReferencingAccount(
-                        accountId, accountNumber, ProcessResultStatus.PROCESSING)
-                > 0;
+        return !executionRepository
+                .findProcessingReferencingAccountForShare(accountId, accountNumber, ProcessResultStatus.PROCESSING)
+                .isEmpty();
     }
 }
