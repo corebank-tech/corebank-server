@@ -22,12 +22,23 @@ public interface TransferHoldPort {
     /** executingBefore 전에 선점하고 아직 결과가 없는 EXECUTING. 실행 중 멈춘 것으로 본다. */
     List<Long> findStuckExecutingIds(LocalDateTime executingBefore, int limit);
 
-    /** HELD → EXECUTING. 실행을 선점한다. actorId는 스케줄러 실행이면 null이다. */
-    boolean markExecuting(long transferHoldId, Long actorId, LocalDateTime executingAt);
+    /** 시각으로 푸는 HELD를 해제 시각이 지났을 때만 EXECUTING으로 선점한다. executingAt이 이 선점의 표식이다. */
+    boolean markDueExecuting(long transferHoldId, LocalDateTime executingAt);
 
-    /** EXECUTING → EXECUTED 또는 FAILED. 이체 행 없이 거부된 FAILED는 errorCode를 reason_code에 남겨 재생에 쓴다. */
+    /** 승인으로 푸는 HELD만 EXECUTING으로 선점한다. */
+    boolean markApprovedExecuting(long transferHoldId, long actorId, LocalDateTime executingAt);
+
+    /** staleBefore 전에 선점된 채 멈춘 EXECUTING을 다시 선점한다. 앞선 선점은 결과를 기록하지 못하게 된다. */
+    boolean reclaimStuck(long transferHoldId, LocalDateTime staleBefore, LocalDateTime executingAt);
+
+    /**
+     * EXECUTING → EXECUTED 또는 FAILED. claimedAt으로 선점한 쪽만 기록한다(펜싱).
+     *
+     * 이체 행 없이 거부된 FAILED는 errorCode를 reason_code에 남겨 재생에 쓴다.
+     */
     boolean finishExecution(
             long transferHoldId,
+            LocalDateTime claimedAt,
             TransferHoldStatus result,
             Long transferId,
             String errorCode,

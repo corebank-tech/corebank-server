@@ -188,8 +188,8 @@ class TransferHoldReleaseBatchServiceTest extends IntegrationTestSupport {
         LocalDateTime now = LocalDateTime.now(clock);
         long stuck = atTime(now.minusHours(1));
         long recent = atTime(now.minusHours(1));
-        transferHoldPort.markExecuting(stuck, null, now.minusMinutes(10));
-        transferHoldPort.markExecuting(recent, null, now.minusMinutes(1));
+        transferHoldPort.markDueExecuting(stuck, now.minusMinutes(10));
+        transferHoldPort.markDueExecuting(recent, now.minusMinutes(1));
 
         TransferHoldReleaseSummary summary = batchService.releaseDue();
 

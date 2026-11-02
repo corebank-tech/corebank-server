@@ -27,6 +27,7 @@ import com.shinhan.corebank.transfer.api.TransferHoldDecision;
 import com.shinhan.corebank.transfer.application.port.out.TransferHoldPort;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferHold;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
@@ -61,6 +62,9 @@ class DelayedTransferControllerTest extends IntegrationTestSupport {
 
     @Autowired
     private TransferHoldPort transferHoldPort;
+
+    @Autowired
+    private Clock clock;
 
     @MockitoBean
     private OtpAuthTokenVerifier otpAuthTokenVerifier;
@@ -189,7 +193,8 @@ class DelayedTransferControllerTest extends IntegrationTestSupport {
     }
 
     private long saveHold(long customerId) {
-        LocalDateTime now = LocalDateTime.now();
+        // 서비스와 같은 Clock(KST)을 쓴다. JVM 기본 시간대(CI는 UTC)로 만들면 취소 시한이 이미 지난 보류가 된다
+        LocalDateTime now = LocalDateTime.now(clock);
         return transferHoldPort
                 .save(TransferHold.hold(
                         customerId,

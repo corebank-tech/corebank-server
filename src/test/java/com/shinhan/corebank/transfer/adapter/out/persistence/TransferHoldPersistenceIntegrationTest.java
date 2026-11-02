@@ -71,14 +71,16 @@ class TransferHoldPersistenceIntegrationTest extends IntegrationTestSupport {
     void execute_transitionsOnce() {
         long id = port.save(newHold()).getTransferHoldId();
 
-        assertThat(port.markExecuting(id, null, NOW.plusHours(3))).isTrue();
-        assertThat(port.markExecuting(id, null, NOW.plusHours(3))).isFalse();
+        assertThat(port.markDueExecuting(id, NOW.plusHours(3))).isTrue();
+        assertThat(port.markDueExecuting(id, NOW.plusHours(3))).isFalse();
         assertThat(port.close(id, TransferHoldStatus.CANCELLED, CUSTOMER_ID, null, NOW.plusHours(3)))
                 .isFalse();
 
-        assertThat(port.finishExecution(id, TransferHoldStatus.EXECUTED, null, null, NOW.plusHours(3)))
+        assertThat(port.finishExecution(
+                        id, NOW.plusHours(3), TransferHoldStatus.EXECUTED, null, null, NOW.plusHours(3)))
                 .isTrue();
-        assertThat(port.finishExecution(id, TransferHoldStatus.FAILED, null, "TRF0303", NOW.plusHours(3)))
+        assertThat(port.finishExecution(
+                        id, NOW.plusHours(3), TransferHoldStatus.FAILED, null, "TRF0303", NOW.plusHours(3)))
                 .isFalse();
 
         Map<String, Object> row = row(id);
@@ -95,7 +97,7 @@ class TransferHoldPersistenceIntegrationTest extends IntegrationTestSupport {
         assertThat(port.close(id, TransferHoldStatus.CANCELLED, CUSTOMER_ID, null, NOW.plusHours(1)))
                 .isTrue();
 
-        assertThat(port.markExecuting(id, null, NOW.plusHours(3))).isFalse();
+        assertThat(port.markDueExecuting(id, NOW.plusHours(3))).isFalse();
         Map<String, Object> row = row(id);
         assertThat(row.get("status")).isEqualTo("CANCELLED");
         assertThat(((Number) row.get("actor_id")).longValue()).isEqualTo(CUSTOMER_ID);
@@ -106,7 +108,7 @@ class TransferHoldPersistenceIntegrationTest extends IntegrationTestSupport {
     void transitions_rejectWrongResult() {
         long id = port.save(newHold()).getTransferHoldId();
 
-        assertThatThrownBy(() -> port.finishExecution(id, TransferHoldStatus.CANCELLED, null, null, NOW))
+        assertThatThrownBy(() -> port.finishExecution(id, NOW, TransferHoldStatus.CANCELLED, null, null, NOW))
                 .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> port.close(id, TransferHoldStatus.EXECUTED, null, null, NOW))
                 .isInstanceOf(BusinessException.class);
@@ -114,7 +116,7 @@ class TransferHoldPersistenceIntegrationTest extends IntegrationTestSupport {
 
     @Test
     @DisplayName("같은 보류를 여러 스레드가 동시에 실행 선점해도 한 곳만 성공한다")
-    void markExecuting_concurrently_onlyOneWins() throws Exception {
+    void markDueExecuting_concurrently_onlyOneWins() throws Exception {
         long id = port.save(newHold()).getTransferHoldId();
         int threads = 8;
         ExecutorService pool = Executors.newFixedThreadPool(threads);
@@ -122,7 +124,7 @@ class TransferHoldPersistenceIntegrationTest extends IntegrationTestSupport {
         try {
             Callable<Boolean> attempt = () -> {
                 start.await();
-                return port.markExecuting(id, null, NOW.plusHours(3));
+                return port.markDueExecuting(id, NOW.plusHours(3));
             };
             List<Future<Boolean>> futures = new ArrayList<>();
             for (int i = 0; i < threads; i++) {
@@ -140,6 +142,51 @@ class TransferHoldPersistenceIntegrationTest extends IntegrationTestSupport {
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    @Test
+    @DisplayName("시각으로 푸는 선점은 해제 시각이 지나야 되고, 승인 대기는 승인 선점으로만 된다")
+    void markExecuting_respectsReleaseMode() {
+        long atTime = port.save(newHold()).getTransferHoldId();
+        long approval = port.save(TransferHold.hold(
+                        CUSTOMER_ID,
+                        101L,
+                        "110222222222",
+                        1_000_000L,
+                        null,
+                        null,
+                        TransferChannel.WB,
+                        null,
+                        TransferHoldDecision.holdForApproval("FDS_TEST"),
+                        NOW,
+                        NOW))
+                .getTransferHoldId();
+
+        assertThat(port.markDueExecuting(atTime, NOW.plusHours(3).minusSeconds(1)))
+                .isFalse();
+        assertThat(port.markApprovedExecuting(atTime, 9L, NOW.plusHours(3))).isFalse();
+        assertThat(port.markDueExecuting(approval, NOW.plusHours(3))).isFalse();
+        assertThat(port.markApprovedExecuting(approval, 9L, NOW)).isTrue();
+        assertThat(port.markDueExecuting(atTime, NOW.plusHours(3))).isTrue();
+    }
+
+    @Test
+    @DisplayName("멈춘 지 오래된 EXECUTING만 다시 선점되고, 다시 선점되면 앞선 선점 표식으로는 결과를 기록할 수 없다")
+    void reclaimStuck_fencesPreviousClaim() {
+        long id = port.save(newHold()).getTransferHoldId();
+        LocalDateTime firstClaim = NOW.plusHours(3);
+        port.markDueExecuting(id, firstClaim);
+
+        assertThat(port.reclaimStuck(id, firstClaim.minusSeconds(1), firstClaim.plusMinutes(10)))
+                .isFalse();
+        LocalDateTime secondClaim = firstClaim.plusMinutes(10);
+        assertThat(port.reclaimStuck(id, firstClaim, secondClaim)).isTrue();
+
+        assertThat(port.finishExecution(id, firstClaim, TransferHoldStatus.FAILED, null, "X", secondClaim))
+                .isFalse();
+        assertThat(port.finishExecution(id, secondClaim, TransferHoldStatus.EXECUTED, null, null, secondClaim))
+                .isTrue();
+        assertThat(row(id).get("status")).isEqualTo("EXECUTED");
     }
 
     private Map<String, Object> row(long id) {

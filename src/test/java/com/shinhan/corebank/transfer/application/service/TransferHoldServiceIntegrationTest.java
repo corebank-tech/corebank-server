@@ -19,6 +19,7 @@ import com.shinhan.corebank.transfer.domain.TransferHold;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -45,7 +46,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 @DisplayName("이체 보류 실행·거절·취소(TransferHoldService) 통합 테스트")
 class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
 
-    private static final LocalDateTime HELD_AT = LocalDateTime.of(2031, 7, 1, 10, 0);
     private static final long CUSTOMER_ID = 1L;
     private static final long OTHER_CUSTOMER_ID = 2L;
     private static final long ADMIN_ID = 9_772L;
@@ -100,7 +100,7 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("실행하면 원본 그대로 기표하고 EXECUTED·transfer_id·실행 주체를 남긴다. 다시 실행하면 앞선 결과를 돌려준다")
     void release_executesOnce_andReplays() {
-        long holdId = held(30_000L);
+        long holdId = awaitingApproval(30_000L);
 
         TransferHoldExecutionResult first = transferHoldService.release(holdId, ADMIN_ID);
         TransferHoldExecutionResult second = transferHoldService.release(holdId, ADMIN_ID);
@@ -189,7 +189,8 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("고객이 취소한 보류는 실행하면 TRF0311로 거부되고 기표되지 않는다")
     void cancel_thenRelease_isRejected() {
-        long holdId = held(30_000L);
+        // 취소 시한(실행 30분 전) 안쪽이어야 취소할 수 있다
+        long holdId = heldUntil(LocalDateTime.now(clock).plusHours(2));
 
         transferHoldService.cancel(holdId, CUSTOMER_ID);
 
@@ -220,20 +221,7 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("승인으로 푸는 보류는 시각이 없어 시한 없이 취소된다")
     void cancel_onApproval_hasNoCutoff() {
-        long holdId = transferHoldPort
-                .save(TransferHold.hold(
-                        CUSTOMER_ID,
-                        101L,
-                        "110222222222",
-                        30_000L,
-                        null,
-                        null,
-                        TransferChannel.WB,
-                        null,
-                        TransferHoldDecision.holdForApproval("FDS_TEST"),
-                        HELD_AT,
-                        HELD_AT))
-                .getTransferHoldId();
+        long holdId = awaitingApproval(30_000L);
 
         transferHoldService.cancel(holdId, CUSTOMER_ID);
 
@@ -290,11 +278,93 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
         assertThat(holdRow(holdId).get("status")).isEqualTo("EXECUTING");
         assertBusinessError(() -> service.releaseAsSystem(holdId), TransferErrorCode.TRANSFER_HOLD_ALREADY_CLOSED);
 
-        TransferHoldExecutionResult resumed = service.resume(holdId);
+        // 방금 선점한 건은 아직 실행 중일 수 있어 건드리지 않는다
+        assertBusinessError(
+                () -> service.resume(holdId, Duration.ofMinutes(5)), TransferErrorCode.TRANSFER_HOLD_ALREADY_CLOSED);
+
+        TransferHoldExecutionResult resumed = service.resume(holdId, Duration.ZERO);
 
         assertThat(resumed.status()).isEqualTo(ProcessResultStatus.SUCCESS);
         assertThat(holdRow(holdId).get("status")).isEqualTo("EXECUTED");
         assertThat(ledgerRows()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("[R3] 스케줄러 해제는 시각으로 푸는 보류 중 해제 시각이 지난 것만 실행한다. 승인 대기·시각 전은 TRF0310이고 HELD로 남는다")
+    void releaseAsSystem_onlyDueAtTime() {
+        long approval = awaitingApproval(30_000L);
+        long future = heldUntil(LocalDateTime.now(clock).plusHours(1));
+
+        assertBusinessError(
+                () -> transferHoldService.releaseAsSystem(approval), TransferErrorCode.TRANSFER_HOLD_NOT_EXECUTABLE);
+        assertBusinessError(
+                () -> transferHoldService.releaseAsSystem(future), TransferErrorCode.TRANSFER_HOLD_NOT_EXECUTABLE);
+
+        assertThat(holdRow(approval).get("status")).isEqualTo("HELD");
+        assertThat(holdRow(future).get("status")).isEqualTo("HELD");
+        assertThat(ledgerRows()).isZero();
+    }
+
+    @Test
+    @DisplayName("[R3] 관리자 승인 실행은 승인으로 푸는 보류만 실행한다. 시각으로 푸는 보류는 TRF0310이다")
+    void release_onlyOnApproval() {
+        long atTime = held(30_000L);
+
+        assertBusinessError(
+                () -> transferHoldService.release(atTime, ADMIN_ID), TransferErrorCode.TRANSFER_HOLD_NOT_EXECUTABLE);
+
+        assertThat(holdRow(atTime).get("status")).isEqualTo("HELD");
+        assertThat(ledgerRows()).isZero();
+    }
+
+    @Test
+    @DisplayName("[R2] 원래 실행이 끝나기 전에 resume()이 다시 선점해 마무리하면, 늦게 끝난 원래 실행은 결과를 덮어쓰지 못하고 같은 결과를 받는다")
+    void resume_whileOriginalRunning_keepsHoldConsistentWithTransfer() throws Exception {
+        long holdId = held(30_000L);
+        CountDownLatch originalInExecute = new CountDownLatch(1);
+        CountDownLatch letOriginalGo = new CountDownLatch(1);
+        AtomicBoolean first = new AtomicBoolean(true);
+        TransferExecutionUseCase slowFirst = command -> {
+            if (first.getAndSet(false)) {
+                originalInExecute.countDown();
+                awaitQuietly(letOriginalGo);
+            }
+            return transferExecutionUseCase.execute(command);
+        };
+        TransferHoldService service = new TransferHoldService(transferHoldPort, slowFirst, transferLookupPort, clock);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<TransferHoldExecutionResult> original = executor.submit(() -> service.releaseAsSystem(holdId));
+            assertThat(originalInExecute.await(10, TimeUnit.SECONDS)).isTrue();
+            // 원래 실행이 오래 멈춘 것처럼 선점 시각을 과거로 옮긴다
+            jdbcTemplate.update(
+                    "UPDATE transfer_hold SET executing_at = ? WHERE transfer_hold_id = ?",
+                    LocalDateTime.now(clock).minusMinutes(10),
+                    holdId);
+
+            TransferHoldExecutionResult resumed = service.resume(holdId, Duration.ofMinutes(5));
+            letOriginalGo.countDown();
+            TransferHoldExecutionResult late = original.get(30, TimeUnit.SECONDS);
+
+            assertThat(resumed.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+            assertThat(late).isEqualTo(resumed);
+            Map<String, Object> hold = holdRow(holdId);
+            assertThat(hold.get("status")).isEqualTo("EXECUTED");
+            assertThat(((Number) hold.get("transfer_id")).longValue())
+                    .isEqualTo(transferIdOf(resumed.transactionNumber()));
+            assertThat(ledgerRows()).isEqualTo(2);
+        } finally {
+            letOriginalGo.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private static void assertBusinessError(
@@ -303,24 +373,22 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
                 .isEqualTo(expected));
     }
 
-    private long heldUntil(LocalDateTime releaseAt) {
-        return transferHoldPort
-                .save(TransferHold.hold(
-                        CUSTOMER_ID,
-                        101L,
-                        "110222222222",
-                        30_000L,
-                        null,
-                        null,
-                        TransferChannel.WB,
-                        null,
-                        TransferHoldDecision.holdUntil("TEST", releaseAt),
-                        HELD_AT,
-                        HELD_AT))
-                .getTransferHoldId();
+    // 해제 시각이 지난 시각 해제 보류. 스케줄러가 바로 실행할 수 있다
+    private long held(long amount) {
+        return save(
+                TransferHoldDecision.holdUntil("TEST", LocalDateTime.now(clock).minusMinutes(1)), amount);
     }
 
-    private long held(long amount) {
+    private long heldUntil(LocalDateTime releaseAt) {
+        return save(TransferHoldDecision.holdUntil("TEST", releaseAt), 30_000L);
+    }
+
+    private long awaitingApproval(long amount) {
+        return save(TransferHoldDecision.holdForApproval("FDS_TEST"), amount);
+    }
+
+    private long save(TransferHoldDecision decision, long amount) {
+        LocalDateTime heldAt = LocalDateTime.now(clock).minusHours(3);
         return transferHoldPort
                 .save(TransferHold.hold(
                         CUSTOMER_ID,
@@ -331,9 +399,9 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
                         null,
                         TransferChannel.WB,
                         null,
-                        TransferHoldDecision.holdUntil("TEST", HELD_AT.plusHours(3)),
-                        HELD_AT,
-                        HELD_AT))
+                        decision,
+                        heldAt,
+                        heldAt))
                 .getTransferHoldId();
     }
 

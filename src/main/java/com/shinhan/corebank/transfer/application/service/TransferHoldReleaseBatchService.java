@@ -32,7 +32,7 @@ public class TransferHoldReleaseBatchService implements TransferHoldReleaseBatch
         LocalDateTime now = LocalDateTime.now(clock);
         List<Long> stuck =
                 transferHoldPort.findStuckExecutingIds(now.minus(properties.stuckAfter()), properties.batchSize());
-        int resumed = runEach(stuck, transferHoldService::resume);
+        int resumed = runEach(stuck, id -> transferHoldService.resume(id, properties.stuckAfter()));
         List<Long> due = transferHoldPort.findReleasableIds(now, properties.batchSize());
         int released = runEach(due, transferHoldService::releaseAsSystem);
         return new TransferHoldReleaseSummary(resumed, released, stuck.size() - resumed + due.size() - released);

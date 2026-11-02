@@ -149,14 +149,13 @@ public class TransferHold {
     }
 
     // 실행일자는 중복 기표를 막는 유니크 키의 일부라 보류한 날짜와 같아야 한다
-    public boolean isExecutableAs(
+    public boolean matchesOriginal(
             long customerId,
             long withdrawalAccountId,
             String depositAccountNumber,
             long amount,
             LocalDate executionDate) {
-        return status == TransferHoldStatus.EXECUTING
-                && heldAt.toLocalDate().equals(executionDate)
+        return heldAt.toLocalDate().equals(executionDate)
                 && this.customerId == customerId
                 && this.withdrawalAccountId == withdrawalAccountId
                 && this.depositAccountNumber.equals(depositAccountNumber)

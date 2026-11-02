@@ -32,6 +32,7 @@ import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.LedgerPair;
 import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.TransferHold;
+import com.shinhan.corebank.transfer.domain.TransferHoldStatus;
 import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
@@ -203,10 +204,21 @@ public class TransferExecutionService implements TransferExecutionUseCase {
 
     // replayed: 이미 처리된 회차의 기존 결과를 돌려주는 경로면 true로 바꾼다(메트릭 구분용).
     private TransferResult doExecute(TransferCommand command, AtomicBoolean replayed) {
+        // 보류 건 실행은 원본 대조를 재생보다 먼저 한다. 보류 ID와 날짜만 맞춘 다른 요청이 앞선 결과를 받지 못하게 한다(§9-4).
+        Optional<TransferHold> heldOrigin = findHeldOrigin(command);
+        if (isHeldExecution(command) && heldOrigin.isEmpty()) {
+            return rejectedBeforeDraft(TransferErrorCode.TRANSFER_HOLD_NOT_EXECUTABLE);
+        }
+
         Optional<TransferResult> alreadyProcessed = findAlreadyProcessedResult(command);
         if (alreadyProcessed.isPresent()) {
             replayed.set(true);
             return alreadyProcessed.get();
+        }
+
+        // 새로 실행할 때는 release()가 선점한 상태여야 토큰 없이 실행할 수 있다
+        if (heldOrigin.isPresent() && heldOrigin.get().getStatus() != TransferHoldStatus.EXECUTING) {
+            return rejectedBeforeDraft(TransferErrorCode.TRANSFER_HOLD_NOT_EXECUTABLE);
         }
 
         // 계좌 락 획득 전 시각이므로 채번(거래번호 달력일)에만 쓴다. 락 대기로 실제 처리가 지연될 수
@@ -288,8 +300,6 @@ public class TransferExecutionService implements TransferExecutionUseCase {
 
     // 1차 검증(락 이전) ①~④. 넷 다 계좌 락도 한도 예약도 건드리지 않으므로 여기서 먼저 끝낸다.
     private ResolvedPayee verifyBeforeLock(TransferCommand command) {
-        verifyHeldExecution(command);
-
         // 1차 검증(락 이전) ①: 출금계좌 소유·등록 여부. 존재하지 않는 계좌도 "내 소유가 아님"과
         // 구분하지 않고 같은 TRF0001로 묶는다 — 계좌ID가 이제 HTTP 요청 바디로 들어오므로
         // 계좌 존재 여부를 스캐닝하는 데 악용되지 않도록 한다.
@@ -326,23 +336,32 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         return payee;
     }
 
-    // 토큰 없는 보류 건 실행은 release()가 선점한 원본 그대로일 때만 통과시킨다(§9-4). 고객 즉시이체는 조회하지 않는다.
-    private void verifyHeldExecution(TransferCommand command) {
-        if (command.transferType() != TransferType.IMMEDIATE || command.sourceId() == null) {
-            return;
+    private static boolean isHeldExecution(TransferCommand command) {
+        return command.transferType() == TransferType.IMMEDIATE && command.sourceId() != null;
+    }
+
+    // 고객 즉시이체는 조회하지 않는다(§9-5 규칙 6)
+    private Optional<TransferHold> findHeldOrigin(TransferCommand command) {
+        if (!isHeldExecution(command)) {
+            return Optional.empty();
         }
-        boolean executable = transferHoldPort
+        return transferHoldPort
                 .findById(command.sourceId())
-                .filter(hold -> hold.isExecutableAs(
+                .filter(hold -> hold.matchesOriginal(
                         command.customerId(),
                         command.withdrawalAccountId(),
                         command.depositAccountNumber(),
                         command.amount(),
-                        command.executionDate()))
-                .isPresent();
-        if (!executable) {
-            throw new BusinessException(TransferErrorCode.TRANSFER_HOLD_NOT_EXECUTABLE);
-        }
+                        command.executionDate()));
+    }
+
+    // 채번 전 거부라 남길 이체 행이 없다
+    private static TransferResult rejectedBeforeDraft(TransferErrorCode errorCode) {
+        return TransferResult.builder()
+                .status(ProcessResultStatus.ERROR)
+                .errorCode(errorCode.getCode())
+                .errorMessage(errorCode.getMessage())
+                .build();
     }
 
     private Transfer newTransfer(TransferCommand command, Draft draft, LocalDate tradeDate) {
