@@ -10,6 +10,8 @@ import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -25,6 +27,9 @@ import lombok.NoArgsConstructor;
 @IdClass(AdminPermissionId.class)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+// role 컬럼은 매핑하지 않는다 — DB 기본값 ADMIN 이 복합 FK(customer_id, role)를 채운다.
+@Builder
 public class AdminPermissionJpaEntity {
 
     @Id
@@ -38,13 +43,4 @@ public class AdminPermissionJpaEntity {
 
     @Column(name = "granted_at", nullable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime grantedAt;
-
-    // role 컬럼은 매핑하지 않는다 — DB 기본값 ADMIN 이 복합 FK(customer_id, role)를 채운다.
-    public static AdminPermissionJpaEntity of(Long customerId, AdminPermission permission, LocalDateTime grantedAt) {
-        AdminPermissionJpaEntity entity = new AdminPermissionJpaEntity();
-        entity.customerId = customerId;
-        entity.permission = permission;
-        entity.grantedAt = grantedAt;
-        return entity;
-    }
 }

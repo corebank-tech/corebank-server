@@ -27,7 +27,11 @@ public class AdminPermissionPersistenceAdapter implements AdminPermissionPort {
         if (adminPermissionJpaRepository.existsByCustomerIdAndPermission(customerId, permission)) {
             return false;
         }
-        adminPermissionJpaRepository.save(AdminPermissionJpaEntity.of(customerId, permission, grantedAt));
+        adminPermissionJpaRepository.save(AdminPermissionJpaEntity.builder()
+                .customerId(customerId)
+                .permission(permission)
+                .grantedAt(grantedAt)
+                .build());
         return true;
     }
 
