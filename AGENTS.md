@@ -69,7 +69,8 @@ docker compose up -d minicore-mysql                 # 로컬 인프라 (MySQL)
 6. **스키마 변경은 세 곳을 함께 갱신한다** — Flyway 증분 파일 + [schema_reference.md](docs/schema_reference.md) + [corebank_erd.md](docs/corebank_erd.md).
    `local`·`test`·`prod` 프로필은 `ddl-auto: validate`라서 Flyway 없이 엔티티만 고치면 기동이 깨진다.
    `V__`/`R__`/`seed` 구분은 [flyway_file_role_guide.md](docs/flyway_file_role_guide.md)를 따른다.
-   센서: 없음 (기동 시 `validate` 실패로 늦게 드러난다)
+   센서: 마이그레이션 번호 순서만 — PR CI `Check migration version order`가 base 최신보다 앞 번호인 `V__`를 막는다(#814).
+   세 곳 동시 갱신은 없음 (기동 시 `validate` 실패로 늦게 드러난다)
 
 ## 4. 이 프로젝트에서 자주 나는 실수
 
