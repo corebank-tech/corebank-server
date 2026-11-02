@@ -33,10 +33,13 @@
 ```bash
 umask 077
 sudo mkdir -p /etc/info-etl && sudo chown student /etc/info-etl
-for n in root replica mart api replica-root; do openssl rand -base64 24 | tr -d '\n' > /etc/info-etl/$n.pw; done
-openssl rand -hex 32 | tr -d '\n' > /etc/info-etl/hmac.key
+for n in root replica mart api replica-root; do [ -s /etc/info-etl/$n.pw ] || openssl rand -base64 24 | tr -d '\n' > /etc/info-etl/$n.pw; done
+[ -s /etc/info-etl/hmac.key ] || openssl rand -hex 32 | tr -d '\n' > /etc/info-etl/hmac.key
 ls -l /etc/info-etl && wc -c /etc/info-etl/*   # 권한 600, .pw는 32바이트, hmac.key는 64바이트
 ```
+
+- **이미 있는 파일은 만들지 않는다**(`[ -s ... ] ||`). 런북을 다시 실행해도 기존 비밀번호와 HMAC 키가 바뀌지 않는다. 비밀번호 파일만 새로 만들면 이미 만들어 둔 MySQL 계정과 어긋나 인증이 실패하고, HMAC 키가 바뀌면 기존 마트의 가명 식별자와 신규 적재가 어긋난다.
+- 비밀번호나 HMAC 키를 **바꾸는 일은 이 절차가 아니라 별도 절차**로 한다. 계정 비밀번호는 DB의 `ALTER USER`와 해당 파일, `etl.env`를 함께 바꾸고, HMAC 키는 §4의 `info_mart.md` §3-3 키 교체 절차를 따른다. 바꾸기 전에는 기존 파일을 백업한다.
 
 - 파일 이름과 쓰임: `root.pw`는 마트 root(§2), `replica-root.pw`는 레플리카 root(§2-1), `replica.pw`는 `etl_replica_reader`, `mart.pw`는 `etl_mart_writer`, `api.pw`는 `info_api_reader`(§3), `hmac.key`는 가명 키(§4).
 
