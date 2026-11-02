@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
@@ -22,8 +21,10 @@ import tools.jackson.databind.ObjectMapper;
 // 저장소를 읽는 동안 DB 커넥션을 쥐지 않도록, 기록하는 부분만 트랜잭션으로 묶는다.
 @Service
 @RequiredArgsConstructor
-@EnableConfigurationProperties(AuditIntegrityProperties.class)
 public class AuditIntegrityCheckService {
+
+    // 해시를 처음 배포한 시각(11/3 배포, 하루 여유). 이 전에 생긴 해시 없는 행은 기존 운영 데이터라 검증에서 뺀다
+    private static final LocalDateTime ROW_HASH_INTRODUCED_AT = LocalDateTime.of(2026, 11, 4, 0, 0);
 
     private final AuditLogJpaRepository auditLogJpaRepository;
     private final AuditIntegrityMismatchJpaRepository auditIntegrityMismatchJpaRepository;
@@ -31,7 +32,6 @@ public class AuditIntegrityCheckService {
     private final AuditArchiveStorage auditArchiveStorage;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
-    private final AuditIntegrityProperties auditIntegrityProperties;
     private final Clock clock;
 
     // 모든 경로 적재가 SUCCESS인 날만 대조 대상이다. 적재 중이거나 실패한 날은 사본이 비어 있어 오탐이 난다
@@ -70,7 +70,7 @@ public class AuditIntegrityCheckService {
 
     // 해시 도입 전 행은 해시가 없어도 정상이다. 도입 뒤에 해시 없이 들어온 행은 위조라 그대로 대조한다
     private boolean isBeforeRowHashIntroduced(AuditLogJpaEntity row) {
-        return row.getRowHash() == null && row.getRequestedAt().isBefore(auditIntegrityProperties.rowHashSince());
+        return row.getRowHash() == null && row.getRequestedAt().isBefore(ROW_HASH_INTRODUCED_AT);
     }
 
     // 사본이 없는 날은 빈 맵이 되어, 그날 DB 행이 전부 NOT_ARCHIVED로 남는다
