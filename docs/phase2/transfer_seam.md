@@ -284,6 +284,7 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
     - **선점 시각(`executing_at`)이 선점의 표식입니다(#838 리뷰 R2).** 결과 기록은 `executing_at`이 자기 선점 시각과 같을 때만 됩니다(펜싱).
         - 선점과 결과 기록 사이에 서버가 멈추면 `EXECUTING`으로 남습니다. `resume(id, stuckAfter)`은 `stuckAfter`보다 오래 멈춘 건만 다시 선점해 실행합니다. 아직 실행 중인 건은 `TRF0311`입니다.
         - 다시 선점되면 늦게 끝난 앞선 실행은 결과를 덮어쓰지 못하고, 보류에 남은 결과를 돌려받습니다. `source_type=HELD` 유니크 키라 기표는 한 번입니다(Fineract Standing Instruction은 이 구간을 `last_run_date` 갱신만으로 막아 중복 송금이 날 수 있습니다).
+        - 기표도 같은 표식으로 막습니다. `execute()`는 기표 트랜잭션 안에서 보류 행을 `FOR UPDATE`로 읽어 `executing_at`이 자기 선점 시각(`TransferCommand.holdClaimedAt`)과 같을 때만 기표합니다. 다르면 이체 행 없이 `TRF0310`으로 물러납니다. 앞선 실행이 검사를 통과한 뒤 멈춘 사이 `resume()`이 이체 행 없이 `FAILED`로 끝내도, 늦게 깨어난 앞선 실행이 기표해 `transfer=SUCCESS`·`transfer_hold=FAILED`로 어긋나지 않습니다.
     - **`execute()`는 보류 원본 대조를 멱등 재생보다 먼저 합니다(#838 리뷰 R1).** `sourceId`가 있는 즉시이체는 보류 행의 고객·출금계좌·수취계좌번호·금액·보류한 날짜가 모두 같아야 앞선 결과를 받거나 새로 실행합니다. 다르면 `TRF0310`이고 채번 전이라 이체 행이 남지 않습니다. 새로 실행할 때는 상태가 `EXECUTING`이어야 합니다.
     - 고객 취소는 없는 보류와 남의 보류를 똑같이 `TRF0203`으로 돌려줍니다. 조회 1회로 연산량도 같습니다.
 - Apache Fineract의 maker-checker도 같은 방식입니다. 업무 트랜잭션 안에서 승인 필요를 판정해 롤백하고(`CommandSourceService.validateMakerChecker`), 승인하면 저장해 둔 원본으로 같은 처리를 다시 실행합니다(`PortfolioCommandSourceWritePlatformServiceImpl.approveEntry`). 승인 단계는 하나이고, 승인된 건은 승인 대기 판정을 다시 거치지 않습니다. 비밀값을 지운 요청은 승인 대기로 보낼 수 없게 막아, 비밀값을 저장하지 않습니다. 다만 Fineract는 승인 전에 상태를 읽어 확인(`isAwaitingApproval`)하고 버전 컬럼이 없어, 같은 건의 동시 승인을 DB가 막는 장치가 코드에 보이지 않습니다. 여기서는 조건부 UPDATE로 선점합니다.
