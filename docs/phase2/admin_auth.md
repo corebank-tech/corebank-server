@@ -229,8 +229,8 @@ SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS 
 |---|---|
 | API | `POST /admin/customers/{customerId}/permissions`(본문 `permission`) · `DELETE /admin/customers/{customerId}/permissions/{permission}`. 둘 다 `Idempotency-Key` 필수, 이미 가진 권한 부여·없는 권한 회수는 200 |
 | 인가 | `CUSTOMER_WRITE`. 5종 고정을 유지하려고 새 권한을 만들지 않았다. 그래서 `CUSTOMER_WRITE` 보유자는 자기를 뺀 어느 관리자에게도 5종을 줄 수 있고, 보유자끼리 서로 줄 수도 있다 |
-| 모순 방지 | `customer`에 `UNIQUE(customer_id, role)`, `admin_permission.role`(`ADMIN` 고정)과 복합 FK. `CUSTOMER` 계정에는 권한 행이 붙지 않고, 권한 행이 남은 관리자는 `CUSTOMER`로 바꿀 수 없다 |
-| 세션 | 권한이 로그인 때 세션 authority로 실리므로 회수는 같은 트랜잭션에서 `CustomerSessionInvalidator.invalidateAll`을 부른다. 부여는 대상의 다음 로그인부터 적용된다 |
+| 모순 방지 | `customer`에 `UNIQUE(customer_id, role)`, `admin_permission.role`(`ADMIN` 고정)과 복합 FK. `CUSTOMER` 계정에는 권한 행이 붙지 않고, 권한 행이 남은 관리자는 `CUSTOMER`로 바꿀 수 없다. **배포 전** `SELECT ap.customer_id, c.role, ap.permission FROM admin_permission ap JOIN customer c ON c.customer_id = ap.customer_id WHERE c.role <> 'ADMIN';`가 0건인지 확인한다 — 있으면 FK 적용이 실패하고, 그때 앞서 만든 `uk_customer_id_role`이 남을 수 있다 |
+| 세션 | 권한이 로그인 때 세션 authority로 실리므로 회수는 같은 트랜잭션에서 `CustomerSessionInvalidator.invalidateAll`을 부른다. 회수와 겹친 로그인이 권한을 읽고 뒤늦게 저장한 세션은 이 삭제에 걸리지 않아, `customer.admin_permission_version`을 회수 때마다 올리고, `AdminPermissionVersionFilter`가 관리자 요청마다 로그인 때 세션에 실은 값과 맞춰 달라졌으면 401로 거부한다. 부여는 대상의 다음 로그인부터 적용된다 |
 | 감사 | `ADMIN_PERMISSION_GRANT`·`ADMIN_PERMISSION_REVOKE`. 행위자는 호출한 관리자, 대상은 `targetCustomerId`, 바뀐 권한은 `changes`. 자기 대상·비관리자 대상 거부도 실패로 남는다 |
 | Step-up | 두 API 모두 `Step-up 필요`를 Swagger(`x-step-up-required`)에 표기했다. 재인증 검증은 아직 없다([mfa_step_up_matrix.md](mfa_step_up_matrix.md) §4) |
 

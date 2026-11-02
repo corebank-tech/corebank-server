@@ -162,7 +162,7 @@ Spring Session JDBC 표준 스키마. Flyway `V202610221420`으로만 생성하�
 
 행 하나가 권한 하나다. 권한이 없는 관리자는 행이 0개이며, 관리자인지 아닌지는 `customer.role`로 가린다.
 CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_code`의 표시명과 값이 이어지지 않기
-때문이다(PR #572 리뷰). 부여·회수는 `POST·DELETE /admin/customers/{customerId}/permissions`(PH-49b)가 맡는다.
+때문이다(PR #572 리뷰). 부여는 `POST /admin/customers/{customerId}/permissions`, 회수는 `DELETE /admin/customers/{customerId}/permissions/{permission}`(PH-49b)가 맡는다.
 
 | 컬럼 | 타입 | 키 | NULL | 기본값 | 설명 |
 | --- | --- | --- | --- | --- | --- |
