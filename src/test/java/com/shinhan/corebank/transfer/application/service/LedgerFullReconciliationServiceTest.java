@@ -21,12 +21,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class LedgerFullReconciliationServiceTest {
 
     private static final int CHUNK_SIZE = 2;
+    private static final int CHUNK_TIMEOUT_SECONDS = 7;
 
     @Mock
     AccountBalanceSnapshotPort accountBalanceSnapshotPort;
@@ -42,7 +45,11 @@ class LedgerFullReconciliationServiceTest {
     @BeforeEach
     void setUp() {
         service = new LedgerFullReconciliationService(
-                accountBalanceSnapshotPort, ledgerReconciliationPort, transactionManager, CHUNK_SIZE);
+                accountBalanceSnapshotPort,
+                ledgerReconciliationPort,
+                transactionManager,
+                CHUNK_SIZE,
+                CHUNK_TIMEOUT_SECONDS);
     }
 
     @Test
@@ -146,5 +153,15 @@ class LedgerFullReconciliationServiceTest {
         assertThatThrownBy(() -> service.reconcileAll())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("1~2");
+    }
+
+    @Test
+    @DisplayName("청크 트랜잭션에 설정한 제한 시간이 걸려 있어, 느린 쿼리가 예외 없이 대사를 멈추지 못한다(#692)")
+    void chunkTransactionTemplate_hasConfiguredTimeout() {
+        TransactionTemplate template =
+                (TransactionTemplate) ReflectionTestUtils.getField(service, "readOnlyTransactionTemplate");
+
+        assertThat(template.getTimeout()).isEqualTo(CHUNK_TIMEOUT_SECONDS);
+        assertThat(template.isReadOnly()).isTrue();
     }
 }

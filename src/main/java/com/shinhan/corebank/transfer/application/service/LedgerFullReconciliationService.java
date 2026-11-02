@@ -29,11 +29,14 @@ public class LedgerFullReconciliationService implements LedgerFullReconciliation
             AccountBalanceSnapshotPort accountBalanceSnapshotPort,
             LedgerReconciliationPort ledgerReconciliationPort,
             PlatformTransactionManager transactionManager,
-            @Value("${app.ledger-reconciliation.full-scan-chunk-size:1000}") int chunkSize) {
+            @Value("${app.ledger-reconciliation.full-scan-chunk-size:1000}") int chunkSize,
+            @Value("${app.ledger-reconciliation.full-scan-chunk-timeout-seconds:60}") int chunkTimeoutSeconds) {
         this.accountBalanceSnapshotPort = accountBalanceSnapshotPort;
         this.ledgerReconciliationPort = ledgerReconciliationPort;
         this.readOnlyTransactionTemplate = new TransactionTemplate(transactionManager);
         this.readOnlyTransactionTemplate.setReadOnly(true);
+        // 청크 하나가 이 시간을 넘기면 예외가 나서 격리 경로로 간다. 제한이 없으면 느린 쿼리가 예외 없이 대사를 멈춘다
+        this.readOnlyTransactionTemplate.setTimeout(chunkTimeoutSeconds);
         this.chunkSize = chunkSize;
     }
 

@@ -105,7 +105,8 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
                 result.unverifiedRanges(),
                 result.mismatches().size());
         throw new CobStepHaltException("원장 대사에서 확인하지 못한 account_id 구간이 있음 - cobDate=" + cobDate + ", 구간="
-                + result.unverifiedRanges() + ", 찾은 불일치=" + result.mismatches().size() + "건");
+                + result.unverifiedRanges() + ", 찾은 불일치=" + result.mismatches().size()
+                + "건. 같은 영업일을 다시 돌린 경우 이 구간에 있던 이전 불일치 기록은 지워졌을 수 있음");
     }
 
     // soft/hard는 마감을 계속할지의 판단이다 — 건별 불일치는 1건이어도 사고라 reconcileAll이 따로 ERROR로 남긴다
