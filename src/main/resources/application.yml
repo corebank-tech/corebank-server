@@ -104,6 +104,9 @@ app:
     secret: ${APP_INFO_API_SECRET:}
     connect-timeout: 1s
     read-timeout: 5s
+  # 거래번호 채번 행 하나를 잠글 때 예약할 번호 수(#786). 클수록 잠금이 줄고, 재시작 때 버려지는 번호가 는다
+  transaction-sequence:
+    block-size: 100
   interest:
     income-tax-rate: "0.14"
     local-tax-ratio: "0.10"
