@@ -159,6 +159,8 @@
 
 ### 4.2 파생 피처
 
+활성 체류는 visible 구간의 밀리초 차이를 먼저 모두 합산하고, 마지막에 1000으로 나누어 소수 초를 버린 정수(`Math.floor`)로 제출한다. 각 구간을 먼저 초 단위로 버리지 않는다. 59.999초는 59초, 60.000초는 60초다.
+
 ```text
 backCount                 : 확인 → 입력 복귀 횟수
 amountRevisionCount       : 확정 금액 재수정 횟수
@@ -175,7 +177,7 @@ behaviorRiskScore         : XGBoost 보조 위험 점수
 
 1. `backCount >= 1`
 2. `amountRevisionCount >= 2`
-3. `confirmActiveSeconds >= 60`
+3. `confirmActiveSeconds >= 60`. FE는 visible 구간의 `performance.now()` 밀리초 차이를 모두 합산한 뒤 마지막에 1000으로 나누어 소수 초를 버린다(`Math.floor`). 59.999초는 59초로 미충족, 60.000초는 60초로 충족한다.
 
 이 수치는 **데모 가설값**이며 실제 사기 거래에서 검증된 기준이 아니다. 망설임 하나만으로 이체를 보류하지 않는다.
 

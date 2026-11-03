@@ -35,7 +35,7 @@ Idempotency-Key: Y
 | `events[].eventType` | 행동 유형 | String(ENUM) | 아래 7종 | X | `"TRANSFER_ENTER"` |
 | `events[].occurredAt` | FE 발생 시각 | String(DateTime) | ISO-8601 오프셋 포함; 서버 수신보다 최대 30분 이전·5분 이후 | X | `"2026-11-03T13:00:00+09:00"` |
 | `events[].step` | 화면 단계 | String(ENUM) | `D-01`, `D-02` 제안 | X | `"D-01"` |
-| `confirmActiveSeconds` | 보이는 확인 화면의 활성 체류 | Integer | 0~1800초, `performance.now()` 경과값. `SUBMIT_REQUESTED`를 담은 최종 배치에서만 선택해 흐름당 한 번 확정; 서버는 범위와 확인 화면 진입·이탈 쌍을 검사 | O | `65` |
+| `confirmActiveSeconds` | 보이는 확인 화면의 활성 체류 | Integer | visible 구간의 `performance.now()` 밀리초 차이를 합산한 뒤 마지막에 1000으로 나누어 소수 초를 버림(`Math.floor`), 0~1800초. `SUBMIT_REQUESTED` 최종 배치에서만 선택해 흐름당 한 번 확정; 서버는 범위와 확인 화면 진입·이탈 쌍을 검사 | O | `65` |
 
 `eventType`: `TRANSFER_ENTER`, `RECIPIENT_CONFIRMED`, `AMOUNT_EDITED`, `STEP_BACK`, `CONFIRM_ENTER`, `CONFIRM_LEAVE`, `SUBMIT_REQUESTED`.
 
@@ -80,6 +80,8 @@ Idempotency-Key: Y
 | `500` | `[CMN9999]` 예상하지 못한 서버 오류 |
 
 ### 비고
+
+최종 배치가 `CMN0001`·`FDS0001` 등 검증 오류로 거부되면 이벤트, 흐름 마감 상태, `confirmActiveSeconds`를 모두 변경하지 않는다. 검증·이벤트 저장·체류값 확정·흐름 마감은 하나의 원자적 전이로 처리해, 올바른 최종 배치를 다시 제출할 수 있게 한다. 활성 체류 59.999초는 59초, 60.000초는 60초로 제출하며 60초 망설임 조건은 후자부터 성립한다.
 
 이벤트 제출 실패와 이체 실패는 화면에서 구분한다. 행동 정보가 없으면 정책 A의 망설임은 추정하지 않고 정책 B는 계속 검사한다. 30분 유효기간과 이벤트 순서는 서버 수신 시각으로 판정한다. FE는 같은 탭 새로고침에서 `sessionStorage`의 흐름을 복원하고 만료·새 이체·완료·보류 확정 시 지운다. 미전송 행동은 새로고침 후 추정해 재구성하지 않는다. 동일 `(flowId, seqNo)`·동일 내용은 중복 저장 없이 성공하고 다른 내용은 충돌로 거부한다. `confirmActiveSeconds`는 `SUBMIT_REQUESTED`를 담은 최종 배치에서만 선택해 한 번 확정한다. 그 배치에서 누락되면 해당 흐름의 체류값은 미확인으로 확정한다. 최종 배치의 같은 값·같은 이벤트 재전송은 성공, 다른 값 제출이나 최종 배치 이후 새 이벤트는 `FDS0301`로 거부한다. 묶음은 전부 저장하거나 전부 거부하며, 새 이벤트와 재전송이 섞인 경우 `acceptedCount`는 새로 저장한 건수다. 이 값은 시연 시스템의 입력 제한이지 사기 판정 임계값이 아니다.
 
