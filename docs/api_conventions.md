@@ -627,6 +627,9 @@ public record ApiResponse<T>(String code, String message, T data) {
 |  | `CUSTOMER_READ` | 고객 조회 |
 |  | `CUSTOMER_WRITE` | 고객 변경 |
 |  | `AUDIT_READ` | 감사로그 조회 |
+|  | `PAYMENT_STOP_READ` | 지급정지 조회 |
+|  | `PAYMENT_STOP_WRITE` | 지급정지 변경 (사건 등록, 이의제기 접수, 판정 작성) |
+|  | `PAYMENT_STOP_APPROVE` | 지급정지 해제 승인 (작성자와 다른 관리자, D-36) |
 | `AccessReason` | `CUSTOMER_REQUEST` | 고객 요청 (`X-Access-Reason` 헤더, PH-89) |
 |  | `INCIDENT` | 사고·민원 대응 |
 |  | `AUDIT` | 감사·점검 |

@@ -169,7 +169,7 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | --- | --- | --- | --- | --- | --- |
 | `customer_id` | `BIGINT` | **PK, FK** | X |  | 권한을 가진 관리자. `customer(customer_id, role)` 참조 |
 | `role` | `VARCHAR(12)` | FK | X | `'ADMIN'` | 항상 `ADMIN`. `customer.role`과 함께 복합 FK를 이뤄 `CUSTOMER` 계정에 권한 행이 붙는 것을 막는다. 엔티티에 매핑하지 않고 DB 기본값을 쓴다 |
-| `permission` | `VARCHAR(20)` | **PK** | X |  | 권한 하나. `GL_READ`·`GL_WRITE`·`CUSTOMER_READ`·`CUSTOMER_WRITE`·`AUDIT_READ`. `common_code`의 `ADMIN_PERMISSION` 그룹과 값이 같다 |
+| `permission` | `VARCHAR(20)` | **PK** | X |  | 권한 하나. `GL_READ`·`GL_WRITE`·`CUSTOMER_READ`·`CUSTOMER_WRITE`·`AUDIT_READ`·`PAYMENT_STOP_READ`·`PAYMENT_STOP_WRITE`·`PAYMENT_STOP_APPROVE`. `common_code`의 `ADMIN_PERMISSION` 그룹과 값이 같다 |
 | `granted_at` | `DATETIME(6)` |  | X |  | 권한을 준 시각. 회수는 행 삭제라 이력은 `audit_log`가 맡는다 |
 
 **기본키** — `(customer_id, permission)` 복합. 같은 권한이 두 번 들어가지 않는다.
@@ -185,7 +185,7 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | 이름 | 조건 | 설명 |
 | --- | --- | --- |
 | `ck_admin_permission_role` | `role = 'ADMIN'` | 권한은 관리자에게만 붙는다. |
-| `ck_admin_permission` | `permission COLLATE utf8mb4_0900_as_cs IN ('GL_READ', 'GL_WRITE', 'CUSTOMER_READ', 'CUSTOMER_WRITE', 'AUDIT_READ')` | 고정 5종만 허용한다. `common_code`는 `code_group`으로 여러 종류를 함께 담아 FK를 걸 수 없어 CHECK로 고정하고, 권한이 늘면 둘을 함께 바꾼다. |
+| `ck_admin_permission` | `permission COLLATE utf8mb4_0900_as_cs IN ('GL_READ', 'GL_WRITE', 'CUSTOMER_READ', 'CUSTOMER_WRITE', 'AUDIT_READ', 'PAYMENT_STOP_READ', 'PAYMENT_STOP_WRITE', 'PAYMENT_STOP_APPROVE')` | 고정 8종만 허용한다(지급정지 3종은 `V202611051400`). `common_code`는 `code_group`으로 여러 종류를 함께 담아 FK를 걸 수 없어 CHECK로 고정하고, 권한이 늘면 둘을 함께 바꾼다. |
 
 ---
 

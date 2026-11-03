@@ -31,7 +31,7 @@
 `customer.role`로 갈린다. 둘이 모순되는 상태(`CUSTOMER`인데 권한 행이 있음)는 PH-49b에서 복합 FK
 `fk_admin_permission_admin`으로 막았다([아래](#부여회수-api와-maker-checker-검토-ph-49b)).
 
-**② 권한 5종 고정**
+**② 권한 고정** (5종, 11/3 지급정지 3종 추가로 8종)
 
 | 권한 | 의미 | 쓰는 곳 |
 |---|---|---|
@@ -40,6 +40,9 @@
 | `CUSTOMER_READ` | 고객 조회 | PH-97 검색·상세 |
 | `CUSTOMER_WRITE` | 고객 변경 | PH-97 잠금해제·비밀번호 초기화·상태 변경 |
 | `AUDIT_READ` | 감사로그 조회 | 대사 불일치(ADM-04·PH-38) · PH-89 |
+| `PAYMENT_STOP_READ` | 지급정지 조회 | 이의제기 AI 심사 지원([D-36](README.md#d-36--113--리드)) 사건과 이의제기 조회 |
+| `PAYMENT_STOP_WRITE` | 지급정지 변경 | 사건 등록, 이의제기 접수, 판정 작성 |
+| `PAYMENT_STOP_APPROVE` | 지급정지 해제 승인 | 수용, 일부 지급정지 판정의 승인. 작성자와 다른 관리자 |
 
 `api_conventions.md` §5-8에 `CustomerRole`·`AdminPermission`으로 등록했다. 값을 늘리면 `/admin/**`
 권한 매핑표(②)와 부여·회수 API(PH-49b)를 함께 고쳐야 한다. ①·② 시점에는 시드와 Runbook SQL로만 넣었고, PH-49b부터 API로도 넣는다.
