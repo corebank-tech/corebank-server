@@ -44,19 +44,14 @@ public interface AutoTransferExecutionJpaRepository extends JpaRepository<AutoTr
             @Param("autoTransferId") Long autoTransferId, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_READ)
+    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "0"))
     @Query(
             """
-            SELECT e
-            FROM AutoTransferExecutionJpaEntity e
-            JOIN e.autoTransfer a
-            WHERE e.status = :status
-              AND (
-                  a.withdrawalAccountId = :accountId
-                  OR a.depositAccountNumber = :accountNumber
-              )
-            """)
-    List<AutoTransferExecutionJpaEntity> findProcessingReferencingAccountForShare(
-            @Param("accountId") Long accountId,
-            @Param("accountNumber") String accountNumber,
-            @Param("status") ProcessResultStatus status);
+        SELECT e
+        FROM AutoTransferExecutionJpaEntity e
+        WHERE e.autoTransfer.autoTransferId IN :autoTransferIds
+          AND e.status = :status
+        """)
+    List<AutoTransferExecutionJpaEntity> findProcessingForShareNowait(
+            @Param("autoTransferIds") List<Long> autoTransferIds, @Param("status") ProcessResultStatus status);
 }

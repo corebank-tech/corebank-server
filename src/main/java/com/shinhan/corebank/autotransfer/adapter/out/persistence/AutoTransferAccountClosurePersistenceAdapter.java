@@ -3,9 +3,12 @@ package com.shinhan.corebank.autotransfer.adapter.out.persistence;
 import com.shinhan.corebank.autotransfer.application.port.out.AutoTransferAccountClosurePort;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
+import com.shinhan.corebank.autotransfer.domain.exception.AutoTransferErrorCode;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.common.exception.BusinessException;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -24,10 +27,19 @@ public class AutoTransferAccountClosurePersistenceAdapter implements AutoTransfe
     }
 
     @Override
-    public boolean hasProcessingExecutionReferencingAccount(Long accountId, String accountNumber) {
+    public boolean hasProcessingExecutionForAutoTransferIds(List<Long> autoTransferIds) {
 
-        return !executionRepository
-                .findProcessingReferencingAccountForShare(accountId, accountNumber, ProcessResultStatus.PROCESSING)
-                .isEmpty();
+        if (autoTransferIds.isEmpty()) {
+            return false;
+        }
+
+        try {
+            return !executionRepository
+                    .findProcessingForShareNowait(autoTransferIds, ProcessResultStatus.PROCESSING)
+                    .isEmpty();
+        } catch (PessimisticLockingFailureException e) {
+            throw new BusinessException(
+                    AutoTransferErrorCode.NOT_IN_NORMAL_STATUS, "처리 중인 자동이체 회차가 있어 계좌를 해지할 수 없습니다.");
+        }
     }
 }

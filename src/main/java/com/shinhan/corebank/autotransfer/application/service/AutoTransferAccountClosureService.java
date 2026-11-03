@@ -31,8 +31,10 @@ public class AutoTransferAccountClosureService implements AutoTransferAccountClo
 
         List<AutoTransfer> linked = closurePort.findNormalReferencingAccountForUpdate(accountId, accountNumber);
 
-        // 등록 건의 NORMAL 상태와 회차의 PROCESSING 상태는 별개다.
-        if (closurePort.hasProcessingExecutionReferencingAccount(accountId, accountNumber)) {
+        List<Long> linkedIds =
+                linked.stream().map(AutoTransfer::getAutoTransferId).toList();
+
+        if (closurePort.hasProcessingExecutionForAutoTransferIds(linkedIds)) {
             throw new BusinessException(
                     AutoTransferErrorCode.NOT_IN_NORMAL_STATUS, "처리 중인 자동이체 회차가 있어 계좌를 해지할 수 없습니다.");
         }

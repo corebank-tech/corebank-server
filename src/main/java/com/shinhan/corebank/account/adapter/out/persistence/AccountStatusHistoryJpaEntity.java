@@ -62,9 +62,9 @@ public class AccountStatusHistoryJpaEntity {
     }
 
     /**
-     * 고객 요청으로 만기 계좌를 종료한 감사 이력.
+     * 고객 요청 중도해지로 ACTIVE 상품 계좌를 종료한 감사 이력.
      *
-     * effectiveBusinessDate에는 MATURITY 이체의 실제 거래일을 저장한다.
+     * effectiveBusinessDate에는 TERMINATION 이체의 거래일을 저장한다.
      */
     public static AccountStatusHistoryJpaEntity earlyClosed(
             Long accountId, LocalDate maturityDate, LocalDate closedTradeDate, LocalDateTime changedAt) {
@@ -79,6 +79,11 @@ public class AccountStatusHistoryJpaEntity {
         return entity;
     }
 
+    /**
+     * 고객 요청 만기해지로 MATURED 계좌를 종료한 감사 이력.
+     *
+     * effectiveBusinessDate에는 MATURITY 이체의 거래일을 저장한다.
+     */
     public static AccountStatusHistoryJpaEntity maturityClosed(
             Long accountId, LocalDate maturityDate, LocalDate closedTradeDate, LocalDateTime changedAt) {
 

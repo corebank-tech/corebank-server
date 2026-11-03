@@ -7,5 +7,5 @@ public interface AutoTransferAccountClosurePort {
 
     List<AutoTransfer> findNormalReferencingAccountForUpdate(Long accountId, String accountNumber);
 
-    boolean hasProcessingExecutionReferencingAccount(Long accountId, String accountNumber);
+    boolean hasProcessingExecutionForAutoTransferIds(List<Long> autoTransferIds);
 }

@@ -68,6 +68,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.util.AopTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @DisplayName("PH-16/#844 중도해지 연결 이체 DB 통합 테스트")
 class EarlyTerminationLinkedTransferIntegrationTest extends IntegrationTestSupport {
@@ -136,6 +138,9 @@ class EarlyTerminationLinkedTransferIntegrationTest extends IntegrationTestSuppo
 
     @Autowired
     private ScheduledTransferBatchItemProcessor scheduledBatchProcessor;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @MockitoBean
     private com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort autoAccountStatusPort;
@@ -349,6 +354,134 @@ class EarlyTerminationLinkedTransferIntegrationTest extends IntegrationTestSuppo
 
         assertThat(autoStatus(autoId)).isEqualTo("NORMAL");
         assertNoTermination();
+    }
+
+    @Test
+    @DisplayName("잠긴 연결 PROCESSING 회차는 NOWAIT로 빠르게 거부하고 전체 롤백한다")
+    void terminate_lockedProcessingFailsFastAndRollsBack() throws Exception {
+
+        long linkedAutoId = seedAuto(WITHDRAWAL_ACCOUNT_ID, PRODUCT_NUMBER, today().plusDays(10));
+
+        long executionId = seedProcessingExecution(linkedAutoId);
+
+        withExecutionRowLocked(executionId, () -> {
+            long started = System.nanoTime();
+
+            assertThatThrownBy(() -> terminationUseCase.terminate(command()))
+                    .isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(exception.getErrorCode())
+                            .isEqualTo(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS));
+
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+
+            assertThat(elapsedMs).as("연결 회차의 락을 기다리지 않고 빠르게 거부해야 한다").isLessThan(5_000L);
+
+            return null;
+        });
+
+        // 잠금 실패로 자동이체가 종료되면 안 된다.
+        assertThat(autoStatus(linkedAutoId)).isEqualTo("NORMAL");
+        assertThat(autoTerminatedAt(linkedAutoId)).isNull();
+
+        // 회차 상태도 변경되면 안 된다.
+        String executionStatus = jdbcTemplate.queryForObject(
+                """
+            SELECT status
+            FROM auto_transfer_execution
+            WHERE execution_id = ?
+            """,
+                String.class,
+                executionId);
+
+        assertThat(executionStatus).isEqualTo("PROCESSING");
+
+        // 계좌, 원금, 이자 지급, 원장, GL, 종료 이력 전체 불변
+        assertNoTermination();
+    }
+
+    @Test
+    @DisplayName("무관한 PROCESSING 회차가 잠겨 있어도 중도해지는 정상 완료된다")
+    void terminate_unrelatedProcessingLockDoesNotBlock() throws Exception {
+
+        LocalDate future = today().plusDays(10);
+
+        // 해지할 상품 계좌에 연결된 자동이체
+        long linkedAutoId = seedAuto(WITHDRAWAL_ACCOUNT_ID, PRODUCT_NUMBER, future);
+
+        // 해지할 상품 계좌와 연결되지 않은 자동이체
+        long unrelatedAutoId = seedAuto(WITHDRAWAL_ACCOUNT_ID, OTHER_NUMBER, future);
+
+        long unrelatedExecutionId = seedProcessingExecution(unrelatedAutoId);
+
+        // 무관한 회차에 X락을 유지한 상태에서 중도해지 수행
+        withExecutionRowLocked(unrelatedExecutionId, () -> {
+            long started = System.nanoTime();
+
+            EarlyTerminationResult result = terminationUseCase.terminate(command());
+
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+
+            assertThat(elapsedMs).as("무관한 PROCESSING 회차 락 때문에 해지가 지연되면 안 된다").isLessThan(5_000L);
+
+            assertThat(result.totalTransferred()).isPositive();
+
+            return null;
+        });
+
+        // 상품 계좌 정상 종료
+        assertThat(accountStatus()).isEqualTo("CLOSED");
+        assertThat(balanceOf(PRODUCT_ACCOUNT_ID)).isZero();
+
+        // 연결된 자동이체만 종료
+        assertThat(autoStatus(linkedAutoId)).isEqualTo("TERMINATED");
+
+        // 무관한 자동이체와 회차는 유지
+        assertThat(autoStatus(unrelatedAutoId)).isEqualTo("NORMAL");
+
+        String unrelatedStatus = jdbcTemplate.queryForObject(
+                """
+            SELECT status
+            FROM auto_transfer_execution
+            WHERE execution_id = ?
+            """,
+                String.class,
+                unrelatedExecutionId);
+
+        assertThat(unrelatedStatus).isEqualTo("PROCESSING");
+
+        // 원리금 이체와 GL까지 정상 완료
+        assertThat(countTerminationLedger()).isEqualTo(2);
+        assertThat(countVoucher("TERMINATION")).isEqualTo(1);
+        assertThat(countClosureHistory()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("연결 자동이체가 없으면 PROCESSING 조회 없이 정상 중도해지한다")
+    void terminate_withoutLinkedAutoTransfers() {
+
+        // 자동이체를 등록하지 않은 상태로 해지
+        EarlyTerminationResult result = terminationUseCase.terminate(command());
+
+        assertThat(result.totalTransferred()).isPositive();
+
+        assertThat(accountStatus()).isEqualTo("CLOSED");
+        assertThat(balanceOf(PRODUCT_ACCOUNT_ID)).isZero();
+
+        assertThat(countTerminationLedger()).isEqualTo(2);
+        assertThat(countVoucher("TERMINATION")).isEqualTo(1);
+        assertThat(countClosureHistory()).isEqualTo(1);
+
+        Long autoTransferCount = jdbcTemplate.queryForObject(
+                """
+            SELECT COUNT(*)
+            FROM auto_transfer
+            WHERE withdrawal_account_id = ?
+               OR deposit_account_number = ?
+            """,
+                Long.class,
+                PRODUCT_ACCOUNT_ID,
+                PRODUCT_NUMBER);
+
+        assertThat(autoTransferCount).isZero();
     }
 
     @Test
@@ -663,6 +796,20 @@ class EarlyTerminationLinkedTransferIntegrationTest extends IntegrationTestSuppo
                 .getScheduledTransferId();
     }
 
+    private long seedProcessingExecution(long autoTransferId) {
+        AutoTransferJpaEntity auto = autoRepository.findById(autoTransferId).orElseThrow();
+
+        return autoExecutionRepository
+                .saveAndFlush(AutoTransferExecutionJpaEntity.builder()
+                        .autoTransfer(auto)
+                        .executionDate(today().minusDays(1))
+                        .amount(10_000L)
+                        .status(ProcessResultStatus.PROCESSING)
+                        .executedAt(LocalDateTime.now(clock))
+                        .build())
+                .getExecutionId();
+    }
+
     private void assertNoTermination() {
         assertThat(accountStatus()).isEqualTo("ACTIVE");
         assertThat(balanceOf(PRODUCT_ACCOUNT_ID)).isEqualTo(PRINCIPAL);
@@ -914,5 +1061,69 @@ class EarlyTerminationLinkedTransferIntegrationTest extends IntegrationTestSuppo
         });
 
         when(scheduledLimitPort.findOneTimeLimit(customerId)).thenReturn(1_000_000L);
+    }
+
+    /**
+     * 별도 트랜잭션에서 자동이체 회차 행의 X락을 유지한 상태로
+     * 전달받은 검증 코드를 실행한다.
+     *
+     * 검증 종료 시 잠금을 해제하고 작업 스레드 종료까지 확인한다.
+     */
+    private <T> T withExecutionRowLocked(long executionId, Callable<T> assertion) throws Exception {
+
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+
+        Future<?> lockHolder = executor.submit(() -> {
+            TransactionTemplate tx = new TransactionTemplate(transactionManager);
+
+            tx.executeWithoutResult(status -> {
+                Long lockedId = jdbcTemplate.queryForObject(
+                        """
+                    SELECT execution_id
+                    FROM auto_transfer_execution
+                    WHERE execution_id = ?
+                    FOR UPDATE
+                    """,
+                        Long.class,
+                        executionId);
+
+                assertThat(lockedId).isEqualTo(executionId);
+                locked.countDown();
+
+                try {
+                    if (!release.await(10, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("회차 잠금 해제 신호 대기 시간 초과");
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("회차 잠금 유지 스레드 중단", e);
+                }
+            });
+        });
+
+        try {
+            assertThat(locked.await(5, TimeUnit.SECONDS))
+                    .as("별도 트랜잭션이 회차 X락을 획득해야 한다")
+                    .isTrue();
+
+            // X락을 유지하는 동안 테스트 동작 실행
+            return assertion.call();
+
+        } finally {
+            release.countDown();
+
+            try {
+                lockHolder.get(10, TimeUnit.SECONDS);
+            } finally {
+                executor.shutdownNow();
+
+                assertThat(executor.awaitTermination(5, TimeUnit.SECONDS))
+                        .as("회차 잠금 테스트 스레드가 종료되어야 한다")
+                        .isTrue();
+            }
+        }
     }
 }
