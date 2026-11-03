@@ -506,41 +506,67 @@ done
 
 10/26 C 측정의 1·2회차 10/s 전체 로그는 기존 EC2에서 각각 `/tmp/ph49c_run1_full.log`, `/tmp/ph49c_run2_full.log`로 조회했다. 컨테이너 재생성이나 EC2 종료 전에 원본을 비공개로 보존한다. 로그에는 고객 정보·토큰 등이 포함될 수 있으므로 Git, 공개 이슈, 채팅에 원문을 올리지 않는다. 조사 결과에는 집계값과 필요한 부분을 가린 발췌만 남긴다. **원본 파일을 이 가이드 작성자에게 전달할 필요는 없다.**
 
-기존 EC2의 Ubuntu SSM 셸에서 `/tmp` 밖에 권한을 제한한 사본과 해시를 만든다. 이미 사본과 해시가 있다면 덮어쓰지 않고 검증한다.
+기존 EC2에 SSM으로 접속하면 기본 사용자는 `ssm-user`일 수 있다. 아래 보존 명령 **전에 `id -un`을 확인하고**, `ssm-user`라면 `sudo -iu ubuntu`로 전환한다. 이후 명령과 SSH 다운로드는 모두 `ubuntu` 사용자·`/home/ubuntu/ph49c-790-evidence` 경로를 쓴다. `/tmp` 밖에 권한을 제한한 사본과 해시를 만들고, 이미 있는 사본·아카이브는 덮어쓰지 않고 검증한다.
 
 ```bash
-umask 077
-EVIDENCE_DIR="$HOME/ph49c-790-evidence"
-mkdir -p "$EVIDENCE_DIR"
-for run in 1 2; do
-  if [[ ! -e "$EVIDENCE_DIR/ph49c_run${run}_full.log" ]]; then
-    cp "/tmp/ph49c_run${run}_full.log" "$EVIDENCE_DIR/"
+id -un
+# ssm-user로 표시될 때만 실행한다. ubuntu로 표시되면 건너뛴다.
+sudo -iu ubuntu
+id -un  # ubuntu 확인
+```
+
+```bash
+(
+  set -euo pipefail
+  test "$(id -un)" = ubuntu
+  umask 077
+  EVIDENCE_DIR=/home/ubuntu/ph49c-790-evidence
+  mkdir -p "$EVIDENCE_DIR"
+  chmod 700 "$EVIDENCE_DIR"
+  for run in 1 2; do
+    if [[ ! -e "$EVIDENCE_DIR/ph49c_run${run}_full.log" ]]; then
+      cp "/tmp/ph49c_run${run}_full.log" "$EVIDENCE_DIR/"
+    fi
+  done
+  chmod 600 "$EVIDENCE_DIR"/*.log
+  cd "$EVIDENCE_DIR"
+  if [[ ! -e SHA256SUMS ]]; then
+    sha256sum ph49c_run1_full.log ph49c_run2_full.log > SHA256SUMS
   fi
-done
-chmod 600 "$EVIDENCE_DIR"/*.log
-cd "$EVIDENCE_DIR"
-if [[ ! -e SHA256SUMS ]]; then
-  sha256sum ph49c_run1_full.log ph49c_run2_full.log > SHA256SUMS
-fi
-sha256sum -c SHA256SUMS
-tar -czf ph49c-790-evidence.tar.gz ph49c_run1_full.log ph49c_run2_full.log SHA256SUMS
-chmod 600 ph49c-790-evidence.tar.gz
-sha256sum ph49c-790-evidence.tar.gz
+  chmod 600 SHA256SUMS
+  sha256sum -c SHA256SUMS
+  if [[ ! -e ph49c-790-evidence.tar.gz ]]; then
+    tar -czf ph49c-790-evidence.tar.gz ph49c_run1_full.log ph49c_run2_full.log SHA256SUMS
+  fi
+  chmod 600 ph49c-790-evidence.tar.gz
+  if [[ ! -e ph49c-790-evidence.tar.gz.sha256 ]]; then
+    sha256sum ph49c-790-evidence.tar.gz > ph49c-790-evidence.tar.gz.sha256
+  fi
+  chmod 600 ph49c-790-evidence.tar.gz.sha256
+  sha256sum -c ph49c-790-evidence.tar.gz.sha256
+  cat ph49c-790-evidence.tar.gz.sha256
+)
 ```
 
 PC에서 **기존에 허용된 SSH 접속 경로**로 내려받는다. 아래는 Windows Git Bash 명령이다. `KEY`와 `EC2_HOST`는 평소 이 EC2에 SSH 접속할 때 사용한 개인 키 경로와 호스트로 바꾼다. SSH가 직접 닿지 않는 환경이라면 보안 그룹을 새로 열지 말고 기존 SSM/SSH 접속 방법에 맞춰 파일 전송 방법을 확인한다. EC2에 AWS CLI를 설치하거나 Terraform 상태용 S3 버킷을 사용하지 않는다.
 
 ```bash
-KEY="$HOME/.ssh/<실제-키파일>.pem"
-EC2_HOST='<기존-SSH-접속-주소>'
-LOCAL_EVIDENCE="$HOME/Intellij-workspace/ph49c-790-evidence"
-mkdir -p "$LOCAL_EVIDENCE"
-scp -i "$KEY" -o IdentitiesOnly=yes \
-  "ubuntu@$EC2_HOST:/home/ubuntu/ph49c-790-evidence/ph49c-790-evidence.tar.gz" \
-  "$LOCAL_EVIDENCE/"
-cd "$LOCAL_EVIDENCE"
-tar -xzf ph49c-790-evidence.tar.gz
-sha256sum -c SHA256SUMS
+(
+  set -euo pipefail
+  umask 077
+  KEY="$HOME/.ssh/<실제-키파일>.pem"
+  EC2_HOST='<기존-SSH-접속-주소>'
+  LOCAL_EVIDENCE=$(mktemp -d "$HOME/Intellij-workspace/ph49c-790-evidence.XXXXXX")
+  scp -i "$KEY" -o IdentitiesOnly=yes \
+    "ubuntu@$EC2_HOST:/home/ubuntu/ph49c-790-evidence/ph49c-790-evidence.tar.gz" \
+    "ubuntu@$EC2_HOST:/home/ubuntu/ph49c-790-evidence/ph49c-790-evidence.tar.gz.sha256" \
+    "$LOCAL_EVIDENCE/"
+  cd "$LOCAL_EVIDENCE"
+  sha256sum -c ph49c-790-evidence.tar.gz.sha256
+  tar --keep-old-files -xzf ph49c-790-evidence.tar.gz
+  sha256sum -c SHA256SUMS
+  printf '검증한 로컬 보존 경로: %s\n' "$LOCAL_EVIDENCE"
+)
 ```
 
-두 로그 모두 `OK`가 나와야 한다. 이 로컬 폴더는 `corebank-server` 저장소 밖에 둔다. EC2 홈의 사본도 EC2가 종료되면 사라질 수 있으므로 종료 전에 다운로드와 해시 검증을 마친다.
+PC에서 먼저 아카이브 해시가 `OK`, 이어 두 로그가 모두 `OK`로 나와야 한다. PC의 `.sha256` 파일 값이 EC2에서 출력한 아카이브 해시와 같은지도 대조한다. `mktemp -d`가 실행마다 새 폴더를 만들어 기존 검증본을 덮어쓰지 않는다. 이 로컬 폴더는 `corebank-server` 저장소 밖에 둔다. EC2 홈의 사본도 EC2가 종료되면 사라질 수 있으므로 종료 전에 다운로드와 해시 검증을 마친다.
