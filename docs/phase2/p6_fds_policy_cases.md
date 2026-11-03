@@ -8,7 +8,7 @@
 
 1. `TransferHoldContext.requestedAt`을 기준으로 `since = requestedAt - 10분`을 계산한다. P4 `RecentTransferQuery.aggregateSucceeded(customerId, depositAccountNumber, since)`로 **같은 고객의 모든 출금계좌 → 같은 수취계좌**에서 **`requestedAt - 10분`부터 훅 C가 조회하는 순간까지 커밋된 SUCCESS 전부**를 센다. `transferred_at >= since`는 포함하고 **종료 시각 상한은 두지 않는다.** 훅 C가 고객 락을 쥔 때 보이는 앞선 요청의 커밋 결과에는 `requestedAt` 이후에 기표된 동시 요청도 들어간다. 현재 요청은 미기표라 조회에 없고 마지막에 정확히 한 번 더한다.
 2. 당행 즉시·예약·자동이체의 커밋된 SUCCESS만 센다. 실패·취소·거절·보류와 `invalidated_at`이 있는 정정 무효화 행은 제외한다. `count10m = 성공 건수 + 1`, `amount10m = 성공 금액 합계 + 현재 요청 금액`이다. 금액은 원 단위 정수다.
-3. 같은 반복 묶음의 **첫 성공 이체 이전**에 그 고객이 이 수취인에게 성공 이체한 적이 있는지 `hasSucceededBefore`로 판단한다. 이력이 없으면 `newRecipientAtWindowStart=true`다. 묶음 안 앞선 두 건을 기존 수취인의 근거로 삼지 않는다. 반복 묶음의 첫 이체 시각은 집계의 `firstTransferredAt`을 쓰고 그 시각 **미만**의 과거를 묻는다. 창 안 SUCCESS가 없으면 `requestedAt` 미만의 과거를 묻되, 이때 A의 3건 조건은 먼저 불성립한다. 조회 비용은 P4 #832 측정 결과와 맞춘다.
+3. 같은 반복 묶음의 **첫 성공 이체 이전**에 그 고객이 이 수취인에게 성공 이체한 적이 있는지 `hasSucceededBefore`로 판단한다. 이력이 없으면 `newRecipientAtWindowStart=true`다. 묶음 안 앞선 두 건을 기존 수취인의 근거로 삼지 않는다. 반복 묶음의 첫 이체 시각은 집계의 `firstTransferredAt`을 쓰고 그 시각 **미만**의 과거를 묻는다. 창 안 SUCCESS가 없으면 `requestedAt` 미만의 과거를 묻되, 이때 A의 3건 조건은 먼저 불성립한다. **#832 조회 비용 측정 결과에 따라 과거 이력에 기간 하한을 도입할지는 P4와 재합의한다.** 하한이 생기면 `newRecipientAtWindowStart`의 뜻과 아래 C07·C10·C18의 과거 이력 변형 사례를 다시 검증해야 한다. 지금 표는 전체 과거 이력 기준이다.
 4. 한 `flowId`의 `backCount >= 1`, `amountRevisionCount >= 2`, `confirmActiveSeconds >= 60` 중 **확인된 참이 2개 이상**이면 그 시도의 `hesitationWarning=true`다. `confirmActiveSeconds`는 화면이 보이는 활성 구간만 합산한다. #854 API에서 이 값은 선택 필드이므로 누락되면 해당 조건을 **미확인**으로 두고 참으로 추정하지 않는다. 다른 두 조건이 모두 확인된 참이면 망설임은 성립한다. 흐름 자체가 없거나 참으로 확인된 조건이 2개 미만이면 A의 망설임 근거로 쓰지 않는다. `hesitationInWindow`는 현재 시도 또는 같은 반복 묶음의 앞선 SUCCESS에 연결된 흐름 중 하나라도 망설임이 확인되면 true다. 과거 `refId`–`flowId` 연결은 P6이 저장·조회하며, 리스너 연결은 P4 `TransferSettled.flowId` 머지 뒤다.
 5. `A = hesitationInWindow && newRecipientAtWindowStart && count10m >= 3 && amount10m >= 1_500_000`, `B = count10m >= 3 && amount10m >= 3_000_000`으로 계산한다. **A가 먼저** 성립하면 `HOLD(A)`, 그 외 B가 성립하면 `HOLD(B)`, 둘 다 아니면 `CONTINUE`다. HOLD는 `ON_APPROVAL`이며 실제 원장·잔액·한도 사용액은 보류 시점에 바뀌지 않는다.
 
@@ -18,7 +18,7 @@
 |---|---|---|
 | `STEP_BACK` | `backCount` | 확인 단계에서 입력 단계로 돌아간 횟수. 1회 이상이면 망설임 조건 하나 |
 | `AMOUNT_EDITED` | `amountRevisionCount` | 최초 확정 금액 이후의 재수정 완료만 센다. 최초 입력·연속 키 입력은 제외. 2회 이상이면 조건 하나 |
-| `CONFIRM_ENTER`·`CONFIRM_LEAVE`, 본문 `confirmActiveSeconds` | `confirmActiveSeconds` | FE는 visible 구간을 `performance.now()`로 합산해 **0~1800 정수 초**로 제출. 서버는 범위·진입/이탈 쌍·순서를 검증한다. 60초 이상이면 조건 하나. `occurredAt`의 달력 시각 차이를 활성 체류로 대신 쓰지 않음 |
+| `CONFIRM_ENTER`·`CONFIRM_LEAVE`, 본문 `confirmActiveSeconds` | `confirmActiveSeconds` | FE는 visible 구간을 `performance.now()`로 합산해 **0~1800 정수 초**로 `SUBMIT_REQUESTED` 최종 배치에서 한 번 확정. 누락 시 미확인, 같은 값 재전송은 성공, 다른 값은 `FDS0301`. 서버는 범위·진입/이탈 쌍·순서를 검증한다. 60초 이상이면 조건 하나. `occurredAt`의 달력 시각 차이를 활성 체류로 대신 쓰지 않음 |
 | `TRANSFER_ENTER`·`RECIPIENT_CONFIRMED`·`SUBMIT_REQUESTED` | 흐름 순서, `recipientConfirmSeconds`·`totalFlowSeconds` 참고 | 이 세 이벤트의 발생 자체는 망설임 조건이 아니며, 이벤트 **종류 수**를 위험 점수로 세지 않음 |
 
 각 이벤트의 `flowId`는 URL과 같아야 하고 `seqNo`는 1부터 빈 번호 없이 증가한다. 이벤트 종류는 7종이며 반복 가능하다. #854 입력 계약의 **흐름당 100개, 본문 32 KiB, 첫 서버 수신부터 30분**, `occurredAt`의 수신 시각 대비 과거 30분·미래 5분 제한을 따른다. `(flowId, seqNo)`에 같은 내용이 재전달되면 중복 저장 없이 성공하고 다른 내용이면 충돌이다. 이러한 제한은 입력 검증이며 A/B의 사기 판정 임계값이 아니다. FE가 보낸 고객 ID·위험 점수·금액은 판정 근거로 신뢰하지 않고, `flowId` 소유권과 거래 이력은 서버에서 확인한다.
@@ -66,8 +66,12 @@
 | C26 · 스위치 off | FDS 전역 스위치 off | 정책 조회 자체가 없음 | 훅 C `proceed()`; FDS DB 조회 0회 |
 | C27 · 선택 체류값 누락 | C03 이력; 현재 `backCount=1`, `amountRevisionCount=2`, `confirmActiveSeconds` 없음 | 확인된 참 2개 → A 참; B 거짓 | `HOLD(A)`; 누락된 체류값을 0초나 60초로 꾸미지 않음 |
 | C28 · 선택 체류값 누락 | C03 이력; 현재 `backCount=1`, `amountRevisionCount=1`, `confirmActiveSeconds` 없음 | 확인된 참 1개 → A 거짓; B 거짓 | `CONTINUE`; 불명인 체류값을 참으로 추정하지 않음 |
+| C29 · 최종 체류값 재전송 | `SUBMIT_REQUESTED` 최종 배치에 `confirmActiveSeconds=65`를 제출한 뒤 같은 이벤트·같은 값 재전송 | 이미 확정한 체류값 유지 | 중복 저장 없이 성공; A 판정 입력 불변 |
+| C30 · 최종 체류값 충돌 | C29의 흐름에 `confirmActiveSeconds=66`을 다시 제출하거나 최종 배치에 빠진 값을 나중에 제출 | 이미 확정한 체류값 또는 미확인 상태 유지 | `FDS0301`; 배치 전체 거부, A 판정 입력 불변 |
 
 행동 기록 **부재**와 행동 저장소 **조회 실패**는 다르다. 정책 B는 행동·모델 데이터가 없어도 `RecentTransferQuery`로 독립 판정한다. 반면 훅 C에서 실제 DB 조회 예외가 발생하면 [이체 계약 §9-5 규칙 3](transfer_seam.md#9-5-구현체-규칙)에 따라 이체 `ERROR`다. C21의 A가 확인되지 않았다는 사실을 A 불성립으로 영구 확정하지 않는다. 과거 연결 리스너가 준비되지 않은 동안 과거 행동까지 요구하는 A는 구현 완료로 표시하지 않는다.
+
+**#832 재합의 대상:** C07·C10·C18은 모두 반복 묶음의 첫 성공 이체 이전에 동일 수취인 이력이 있는 사례다. 표의 12:40 또는 12:49:59.999 이력은 기간 하한을 도입해도 보통 범위 안이므로 현재 기대값은 그대로다. 다만 그 이력을 하한보다 오래된 시각(예: 1년 전)으로 옮긴 변형에서는 신규 수취인 여부가 바뀐다. C07은 `CONTINUE`에서 `HOLD(A)`로 바뀔 수 있고, C10은 건수·금액 조건이 부족해 `CONTINUE`로 남으며, C18은 B가 독립 성립해 `HOLD(B)`로 남는다. 기간 하한과 사례 기대값은 #832 결과 뒤 P4와 확정한다.
 
 ## 4. 임계값의 근거와 한계
 
@@ -79,6 +83,6 @@
 |---|---|---|
 | C01–C06, C12–C14, C18–C20 | [명세서 §4.3·§5.2–5.4](p6_fds_ai_agent_spec.md#4-3-망설임-규칙), T01–T05 | A 우선·B 독립·행동/금액/건수 경계와 정상 오탐 |
 | C07–C11, C15–C17 | 명세서 T06–T08b, [제안서 §5](p6_fds_ai_agent_proposal.md#5-탐지-판정과-관리자-검토-정책) | 고객 전체 출금계좌, 첫 이체 이전 이력, 시작 경계, 동시 커밋, 정정 제외 |
-| C21–C28 | 명세서 T08c·T09a, 이체 계약 §9-5, #854 이벤트 API의 선택 `confirmActiveSeconds` | 이벤트 연결 지연·재전달, 행동 누락/DB 오류 분리, 선택 체류값 누락, 스위치 off 조회 0회 |
+| C21–C30 | 명세서 T08c·T09a, 이체 계약 §9-5, #854 이벤트 API의 선택 `confirmActiveSeconds` | 이벤트 연결 지연·재전달, 행동 누락/DB 오류 분리, 선택 체류값 확정·충돌, 스위치 off 조회 0회 |
 
 이 문서는 **판정 기대값**이다. 서버의 실제 훅 C, P4 보류 저장·실행, FE 계측, Agent 조사나 원장 정합성 테스트를 통과했다고 뜻하지 않는다. #854의 API 경로·인증·응답 필드는 [연동 계약](p6_fds_integration_contract.md)과 [API 명세](p6_fds_api_spec.md)에 두고, 정책 사례에 새 FE/BE 경로를 만들지 않는다. #855 완료 조건은 위 행의 계산을 재현할 수 있고 명세서·제안서·이체 계약과 충돌하지 않는 것이다.
