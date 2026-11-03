@@ -8,6 +8,7 @@ P4는 TIMEOUT과 정정 체인을, P5는 영업일을 만든다. 이름이 트�
 - 이 범위 밖의 용어와 화면 라벨 불일치 목록은 S3의 C-6에서 따로 뽑는다.
 - 소유 트랙(P4) 확인 완료(O-02): `correction`(정정 체인)은 #548, "처리 불명"(TIMEOUT)은 #564에서 코드·공통코드 이름으로 확정했다. `inquiry`(조회거래)는 PH-33-②에서 전문 이름으로 쓴다.
 - 12번(이체 보류)은 PH-87 범위 밖이지만 2번의 지급정지 보류액과 이름이 겹쳐 10/28 #771에서 추가했다.
+- 13~15번(지급정지, 이의제기, 판정안)은 PH-87 범위 밖이지만 S4 이의제기 AI 심사 지원([D-36](README.md#d-36--113--리드))에서 새로 쓰는 이름이라 11/3에 추가했다.
 - "지금 코드" 칸은 2026-09-18 `dev` 기준이다. 이름이 새로 생기거나 바뀌면 그 PR에서 이 칸도 고친다.
 
 ## 1. 용어표
@@ -26,6 +27,9 @@ P4는 TIMEOUT과 정정 체인을, P5는 영업일을 만든다. 이름이 트�
 | 10 | **조회거래** | `inquiry` (전문) | 원거래의 실제 처리 결과를 상대 은행에 **다시 묻는 전문**이다. 원장을 바꾸지 않는다. "정정"이 아니다 | P4 PH-33 타행 이체 | 없음 |
 | 11 | **정정 체인** | `correction` (`ref_transfer_id`) | 이미 기표된 거래를 **지우지 않고** 바로잡는 순서다. 원거래를 `INVALID`로 표기(`invalidated_at`) → 취소정정 거래 INSERT → 정상 거래 INSERT. DELETE는 0건이고, `ref_transfer_id`로 원거래까지 거슬러 올라갈 수 있다. **2차에는 당일취소·익일정정 구분이 없고, 정정 경로는 정정 체인 하나다** — v3 PH-33·PH-80 범위 축소에서 뺐다(P4 확인) | P4 PH-80, 감사 추적 | `transfer.invalidated_at`·`ref_transfer_id`·`correction_type`(`REVERSAL` 취소정정 / `REPOST` 정상거래), `TransferCorrectionUseCase`. 정본은 [transfer_correction.md](transfer_correction.md) (#548) |
 | 12 | **이체 보류** | `transferHold` (상태 `HELD`) | 고객이 인증까지 마친 즉시이체를 **기표하지 않고 원본 요청 그대로 잡아 둔 것**이다. 시각이 되거나(지연이체) 관리자가 승인하면(FDS) 원본 요청 그대로 한 번 실행된다. **2번의 지급정지 보류액(`holdAmount`)과 다르다** — 보류액은 계좌의 돈을 묶는 금액이고, 이체 보류는 아직 실행하지 않은 이체 요청이다. 이체 보류를 나타내는 도메인 필드·Enum·화면 라벨은 `hold`를 단독으로 쓰지 않고 `transferHold`로 쓴다. 훅 C 계약의 판정 필드와 메서드명(`hold`·`holdUntil`·`holdForApproval`)은 [transfer_seam.md](transfer_seam.md) §9를 따른다. `transfer.status`의 값이 아니다(이체 행은 실행할 때 생긴다) | P4 훅 C(#771)·PH-06 지연이체(#772), P6 FDS | 없음. 계약은 [transfer_seam.md](transfer_seam.md) §9 (#771) |
+| 13 | **지급정지** | `paymentStop` (`FULL` 전부 / `PARTIAL` 일부) | 피해 신고를 받아 사기이용계좌로 의심되는 계좌의 출금을 막는 조치다. 전부 지급정지는 계좌의 출금을 모두 막고, 일부 지급정지는 2번의 지급정지 보류액(`holdAmount`)만큼만 묶는다. 계좌 상태로 어떻게 나타낼지는 `account.api` 지급정지 계약에서 P2와 정한다. 12번 이체 보류와 다르다 — 지급정지는 계좌 단위, 이체 보류는 요청 단위다 | P3 이의제기 AI 심사 지원([D-36](README.md#d-36--113--리드)), `account.api` | 지급정지 개념과 이름은 없다. 일부 지급정지에 쓸 보류액은 `Account.holdAmount`로 있다(2번) |
+| 14 | **이의제기** | `objection` (소명 `statement`) | 지급정지된 계좌의 명의인이 정지를 풀어 달라고 신청하는 것이다. 명의인이 낸 설명과 서류를 **소명**이라 한다. 심사결과는 `ACCEPTED`(수용), `PARTIAL`(일부 지급정지로 전환), `REJECTED`(불수용) 셋이다 | P3 이의제기 AI 심사 지원 | 없음 |
+| 15 | **판정안** | `reviewDraft` (Agent 실행 `agentRun`, 단계 `agentRunStep`) | AI Agent가 소명과 원장을 대조해 낸 **심사 참고안**이다. 해제 여부는 판정안이 아니라 서버의 해제 게이트와 담당자 확정으로 정한다. Agent 한 번의 실행과 그 안의 단계 기록 형식은 [agent_run_step_schema.md](agent_run_step_schema.md)다 | P3 이의제기 AI 심사 지원, P6 FDS Agent(단계 형식 공유 제안) | 없음 |
 
 "정정"이라는 말은 단독으로 쓰지 않는다. 문서나 코드에서는 반드시 **조회거래**와 **정정 체인** 중 하나로 적는다. 대사(P4 PH-38)는 불일치를 보고만 하고 자동 정정은 하지 않는다.
 
