@@ -45,6 +45,7 @@ out/
 ### Claude Code (개인 설정 · 로컬 전용) ###
 .claude/
 .superpowers/
+/docs/superpowers
 /docs/personal/requirements_overview.md
 /docs/personal/api_endpoint_reference.md
 /docs/personal/api_spec_conflict_report.md

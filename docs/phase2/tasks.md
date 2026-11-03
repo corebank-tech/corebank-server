@@ -1013,7 +1013,7 @@ P1 PH-30 결과(데드락률 · p99)를 근거로 락 범위나 조회 순서를
     - 설정: `GET`·`PUT /transfers/delayed-transfer-setting`. 저장한 적 없으면 꺼짐. 기본값 기준금액 100만 원(은행들의 건당 100만 원 이하 즉시이체 예외에 맞춤)·지연 3시간, 범위 1원 이상·3~24시간(`TRF0009`). 켠 상태에서 끄기·기준금액 올리기·지연시간 줄이기는 계좌비밀번호 토큰이 필요하다
     - 보류: 훅 C `DelayedTransferHoldPolicy`(order 200). 기준금액 **이상**이면 요청 시각 + 지연시간까지 보류한다. 응답은 `status=null`과 `transferHold { transferHoldId, status, releaseAt, cancellableUntil }`
     - 해제: `TransferHoldReleaseScheduler`가 1분마다 해제 시각이 지난 `AT_TIME` 보류를 실행하고, 5분 넘게 `EXECUTING`인 건을 다시 실행해 마무리한다. 실행 시점 검사에서 거부되면 `FAILED`이고 자동 재시도는 없다
-    - 한계: 해제 시점에 채번 전 검증(출금계좌 해제 `TRF0001`, 수취계좌 없음 `TRF0201` 등)에서 거부되면 이체 행이 없어 `TransferSettled` 알림도 없이 `FAILED`로만 남는다. 잔액 부족처럼 채번 뒤 거부는 이체 행이 남아 알림이 간다. 보류 목록 조회와 함께 후속 이슈로 다룬다
+    - 한계: 해제 시점에 채번 전 검증(출금계좌 해제 `TRF0001`, 수취계좌 없음 `TRF0201` 등)에서 거부되면 이체 행이 없어 `TransferSettled` 알림도 없이 `FAILED`로만 남는다. 잔액 부족처럼 채번 뒤 거부는 이체 행이 남아 알림이 간다. 보류 목록 조회와 함께 #866에서 다룬다
     - 취소: `POST /transfers/holds/{transferHoldId}/cancel`. 실행 30분 전까지(`TRF0312`). 돈이 나가는 것을 멈추는 동작이라 추가 인증은 없다
     - 운영 스위치: `APP_DELAYED_TRANSFER_ENABLED`(기본 false). 새로 보류할지만 정하고, 이미 보류된 건은 꺼져 있어도 실행한다. S4 PH-30 재측정 동안 끄고, 끝난 뒤 켜서 아래 지급률을 잰다([transfer_seam.md](transfer_seam.md) §9-5 규칙 6)
 - **지연이체 정상 지급률(PH-36b):** 해제 시각이 지난 시각 해제 보류 중 고객이 취소한 건을 뺀 것이 분모, 실행 성공(`EXECUTED`)이 분자다. 제때 지급은 해제 시각부터 2분 안(스케줄러 주기 1분)에 기표된 건이다. 해제 시각부터 2분이 지난 건만 센다. 그 안의 `HELD`는 스케줄러를 기다리는 정상 건이라서다. 그 뒤에도 `HELD`·`EXECUTING`이면 아직 지급되지 않은 건이다. `FAILED`는 고객 쪽 거부(잔액 부족·한도 초과)와 시스템 쪽 거부가 섞이므로 두 번째 쿼리로 `reason_code`별로 나눠 본다.
