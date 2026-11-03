@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 43개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 441개 컬럼
+**대상**: 43개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 451개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -476,6 +476,9 @@ COB의 `ACTIVE → MATURED` 전이, 고객 요청 만기해지의 `MATURED → C
 `account.api.PaymentStopUseCase`가 쓰는 사건별 지급정지 기록이다. 계좌의 `status`와 `hold_amount`는 이 테이블의 유효한 행으로 계산한다.
 전부 지급정지(`FULL`)가 하나라도 있으면 `SUSPENDED`, 일부 지급정지(`PARTIAL`)만 있으면 정지 전 상태에 `applied_amount` 합계만큼 보류한다. 마지막 행이 해제되면 `status_before`로 돌아간다.
 해제해도 행을 지우지 않는다. 다른 사건의 지급정지 이력을 보는 데 쓴다.
+
+- **이력 책임 경계:** 이 테이블은 사건별 최종 상태와 생성, 해제 시각만 둔다. 일부 지급정지 전환 시각, 확정한 담당자, 판정 근거는 paymentstop 도메인의 판정 이력과 감사 로그(`audit_log`)가 남긴다. `account_status_history`에는 계좌 상태가 실제로 바뀐 경우만 남아, 여러 사건이 겹쳐 상태가 그대로인 전환과 해제는 남지 않는다.
+- **선행 조건:** 일부 지급정지를 운영에서 쓰려면 #521(락 이후 재검증을 출금가능액 기준으로)이 먼저 머지돼야 한다. 그 전에는 이체와 보류액 변경이 경합하면 `ck_account_hold_amount` 위반으로 이체가 DB 오류로 끝난다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
