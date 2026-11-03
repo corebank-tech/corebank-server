@@ -207,7 +207,14 @@ tasks.named('test') {
     systemProperty 'junit.jupiter.execution.parallel.enabled', 'false'
     systemProperty 'spring.test.context.cache.maxSize', '4'
     // PH-49c 테스트가 같은 MySQL에 연결한 독립 WAS JVM 두 개를 실행한다.
-    systemProperty 'corebank.test.application-classpath', sourceSets.main.runtimeClasspath.asPath
+    // #871: classpath를 -D로 직접 넘기면 Windows 명령줄 한도(32,767자)를 넘어 파일 경로만 넘긴다
+    def applicationClasspath = sourceSets.main.runtimeClasspath
+    def applicationClasspathFile = layout.buildDirectory.file('dual-was/application-classpath.txt').get().asFile
+    systemProperty 'corebank.test.application-classpath-file', applicationClasspathFile.absolutePath
+    doFirst {
+        applicationClasspathFile.parentFile.mkdirs()
+        applicationClasspathFile.setText(applicationClasspath.asPath, 'UTF-8')
+    }
     // #724: 기본값(SHORT)은 실패 줄 번호만 찍어 CI 로그에 실제 값이 안 남는다
     testLogging {
         exceptionFormat = 'full'
