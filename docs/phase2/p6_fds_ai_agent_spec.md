@@ -491,7 +491,7 @@ P4의 토큰 소비·보류 저장·해제 계약은 문서로 확정됐으며, 
 
 ## 9. API 계약 초안
 
-> 아래 P6 URL은 [연동 계약 §1](p6_fds_integration_contract.md#1-url-검증-결과와-상태)에서 **경로를 결정했으나 아직 미구현**이다. 표는 컨트롤러 매핑 기준이며 외부 호출에는 `/api/v1`을 앞에 붙인다(예: `/api/v1/transfers`). 기존 `POST /transfers`의 보류 응답 DTO는 P4 인계 대기다. `TransferHeld`, 훅 C, `flowId`를 이체 요청 지문에 넣는 규칙은 [transfer_seam.md §9](transfer_seam.md#9-훅-c--이체-보류-771)을 따른다.
+> 아래 P6 URL은 [연동 계약 §1](p6_fds_integration_contract.md#1-url-검증-결과와-상태)에서 **경로를 결정했으나 아직 미구현**이다. 표는 컨트롤러 매핑 기준이며 외부 호출에는 `/api/v1`을 앞에 붙인다(예: `/api/v1/transfers`). 기존 `POST /transfers`에는 `TransferResponse.transferHold` 중첩 보류 응답이 구현돼 있다. FDS `ON_APPROVAL` 실제 응답은 P4 구현 뒤 확인한다. 조사 작업의 60초 제한은 각 시도별 Agent 실행에 적용하고, 1분·5분 재시도 대기는 제외한다([연동 계약 §5](p6_fds_integration_contract.md#5-agent-tool보고서-계약-초안)). `TransferHeld`, 훅 C, `flowId`를 이체 요청 지문에 넣는 규칙은 [transfer_seam.md §9](transfer_seam.md#9-훅-c--이체-보류-771)을 따른다.
 
 | 호출 | 경로 | 주요 기능 |
 |---|---|---|

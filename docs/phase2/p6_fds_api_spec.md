@@ -92,7 +92,7 @@ URL: `/api/v1/transfers`
 사용자: 유저
 인증 필요: Y
 Idempotency-Key: Y
-기타: **기존 API**. `flowId` 본문 필드와 멱등 지문 포함은 구현됨. 보류 응답 DTO는 아직 미구현·P4 합의 대기. `Account-Password-Auth-Token`·`Otp-Auth-Token` 헤더 필수.
+기타: **기존 API**. `flowId` 본문 필드와 멱등 지문 포함, `data.transferHold` 중첩 보류 응답은 구현됨. FDS `ON_APPROVAL`에서 추가로 필요한 필드는 P4와 합의 대기. `Account-Password-Auth-Token`·`Otp-Auth-Token` 헤더 필수.
 
 ### 요구사항 ID
 
@@ -129,21 +129,22 @@ Idempotency-Key: Y
 |---|---|---|---|---|---|
 | `code` | 성공 코드 | String | `0000` | X | `"0000"` |
 | `message` | 응답 메시지 | String | 공통 메시지 | X | `"정상 처리되었습니다."` |
-| `data.status` | **기존 이체 결과** | String(ENUM) | `SUCCESS`, `ERROR`, `TIMEOUT`; 보류 값 금지 | 정상 실행만 | `"SUCCESS"` |
+| `data.status` | **기존 이체 결과** | String(ENUM) | `SUCCESS`, `ERROR`, `TIMEOUT`; 보류면 null | O | `"SUCCESS"` |
 | `data.transactionNumber` | 거래번호 | String | 기존 계약 | O | `"202611030000001"` |
 | `data.transferredAt` | 성공 이체 시각 | String(DateTime) | 성공만 | O | `"2026-11-03T13:02:00"` |
 | `data.errorCode` | 기존 이체 오류코드 | String | `ERROR`일 때 | O | `null` |
 | `data.errorMessage` | 기존 이체 오류 메시지 | String | `ERROR`일 때 | O | `null` |
 | `data.withdrawalBalanceAfter` | 출금 후 잔액 | Long | 성공만 | O | `1000000` |
-| `data.transferHoldId` | **제안** 보류 ID | Long | 보류일 때 | O | `123` |
-| `data.holdStatus` | **제안** 보류 상태 | String(ENUM) | 보류일 때 `HELD`; `transfer.status`와 별개 | O | `"HELD"` |
-| `data.releaseMode` | **제안** 해제 방식 | String(ENUM) | `AT_TIME`, `ON_APPROVAL` | O | `"ON_APPROVAL"` |
-| `data.releaseAt` | **제안** 시각 해제 예정 | String(DateTime) | `ON_APPROVAL`이면 null | O | `null` |
+| `data.transferHold` | 기존 중첩 보류 응답 | Object | 보류 시에만 채워짐; 정상 실행이면 null | O | `{...}` |
+| `data.transferHold.transferHoldId` | 보류 ID | Long | 보류일 때 | O | `123` |
+| `data.transferHold.status` | 보류 상태 | String | 보류 응답에서는 `HELD`; `transfer.status`와 별개 | O | `"HELD"` |
+| `data.transferHold.releaseAt` | 시각 해제 예정 | String(DateTime) | 승인 해제 건은 null | O | `null` |
+| `data.transferHold.cancellableUntil` | 취소 가능 종료 시각 | String(DateTime) | 승인 해제 건은 null | O | `null` |
 
-**Example — 보류 응답 제안, P4 DTO 확정 전**
+**Example — 기존 중첩 보류 응답 구조에 맞춘 FDS `ON_APPROVAL` 예상값. P4 구현 전이므로 이 방식의 응답은 검증 대기**
 
 ```json
-{"code":"0000","message":"정상 처리되었습니다.","data":{"transferHoldId":123,"holdStatus":"HELD","releaseMode":"ON_APPROVAL","releaseAt":null}}
+{"code":"0000","message":"정상 처리되었습니다.","data":{"status":null,"transactionNumber":null,"transferredAt":null,"errorCode":null,"errorMessage":null,"withdrawalBalanceAfter":null,"transferHold":{"transferHoldId":123,"status":"HELD","releaseAt":null,"cancellableUntil":null}}}
 ```
 
 ### Status
@@ -261,7 +262,7 @@ Idempotency-Key: N
 | `data.transferHoldId` | 보류 ID | Long |  | X | `123` |
 | `data.hasSucceededBeforeWindow` | 반복 묶음 첫 성공 이체 이전의 동일 수취인 성공 이력 | Boolean | 전체 과거 이력 조회; `RecentTransferQuery.hasSucceededBefore`와 같은 기준 | X | `false` |
 | `data.firstSucceededAt` | 해당 고객의 모든 출금계좌에서 이 수취인으로 보낸 최초 SUCCESS 시각 | String(DateTime) | 성공 이력이 전혀 없으면 null. `hasSucceededBeforeWindow=false`여도 반복 묶음 안에 성공 이력이 있으면 시각을 반환 | O | `"2026-11-03T12:55:00+09:00"` |
-| `data.otherWithdrawalAccountCount` | 다른 출금계좌의 성공 건수 | Integer | 고객 전체 기준 | X | `0` |
+| `data.otherWithdrawalAccountCount` | 현재 보류 건의 출금계좌를 제외하고, 동일 수취인에게 성공 이체한 서로 다른 출금계좌 수 | Integer | 고객의 전체 이력에서 `withdrawalAccountId` DISTINCT 기준; 이체 건수가 아님 | X | `0` |
 
 **Example**
 
@@ -289,7 +290,7 @@ URL: `/api/v1/internal/fds/investigations/{investigationId}/report`
 사용자: 시스템
 인증 필요: Y
 Idempotency-Key: Y
-기타: `Authorization: Bearer <Agent 서비스 토큰>` 필수. 전용 stateless 체인·발표 VM의 사설 Compose 브리지로 보호하고 호스트 분리 시 내부 TLS를 적용한다. 이 경로에서만 CSRF 제외. 본문 최대 16 KiB. 같은 조사 ID·같은 본문은 재전달해도 보고서 1개, 다른 본문은 충돌. 실제 근거 이체 ID를 BE에서 검증한다. 조사 작업은 같은 ID로 총 3회(즉시·1분 뒤·5분 뒤) 시도하며 전체 실행 60초, 각 Tool HTTP 호출 5초 제한을 적용한다. 최종 실패는 **P6 조사 상태만 `FAILED`**, P4 이체 보류 상태는 `HELD`를 유지한다. `HELD`는 `transfer.status`가 아니다. 아직 미구현.
+기타: `Authorization: Bearer <Agent 서비스 토큰>` 필수. 전용 stateless 체인·발표 VM의 사설 Compose 브리지로 보호하고 호스트 분리 시 내부 TLS를 적용한다. 이 경로에서만 CSRF 제외. 본문 최대 16 KiB. 같은 조사 ID·같은 본문은 재전달해도 보고서 1개, 다른 본문은 충돌. 실제 근거 이체 ID를 BE에서 검증한다. 조사 작업은 같은 ID로 총 3회(즉시·1분 뒤·5분 뒤) 시도한다. **60초는 각 시도의 Agent 실행 제한이며 재시도 대기 시간은 제외한다.** 각 Tool HTTP 호출 제한은 5초다. 최종 실패는 **P6 조사 상태만 `FAILED`**, P4 이체 보류 상태는 `HELD`를 유지한다. `HELD`는 `transfer.status`가 아니다. 아직 미구현.
 
 ### 요구사항 ID
 
@@ -680,8 +681,8 @@ Idempotency-Key: Y
 
 **P4 합의 전 종료 이벤트 제안:** 고객 취소(`CANCELLED`) 또는 `ON_APPROVAL` 만료(`EXPIRED`)가 확정되는 같은 트랜잭션에서 P4가 `transfer.api.TransferHoldClosed(transferHoldId, reason, closedAt)`를 발행하고, P6은 중복 전달을 멱등 처리해 조사 작업·재시도를 닫는다. 늦게 도착한 Agent 보고서는 활성 조사 결과로 표시하지 않는다. 관리자 거절은 P6이 직접 처리하므로 이 이벤트에서 제외한다. 이벤트 확정 전까지 이 항목을 구현 완료 계약으로 취급하지 않는다. 상세 예시는 [연동 계약 §5-1](p6_fds_integration_contract.md#5-1-고객-취소만료-종료-이벤트-제안--p4-합의-전)을 따른다.
 
-1. **P4 소유·구현:** 보류 응답 DTO의 실제 필드명·시각 형식, `transfer.api` 원본·상태 조회, 승인 실행 실패·응답 유실 시 결과 조회 계약은 P4가 결정·제공한다. P6은 FDS 관리자 API·FE 화면에 이를 연결하고 응답 유실 시 보류 상세를 재조회한다. 현재 `TransferResponse`에는 보류 필드가 없다.
+1. **P4 소유·구현:** 현재 `TransferResponse.transferHold` 중첩 필드와 `TransferHoldResponse`의 `transferHoldId`·`status`·`releaseAt`·`cancellableUntil`은 구현돼 있다. FDS `ON_APPROVAL` 보류의 실제 응답 및 해제 방식 표시가 추가로 필요한지는 P4와 맞춘다. `transfer.api` 원본·상태 조회, 승인 실행 실패·응답 유실 시 결과 조회 계약도 P4가 결정·제공한다. P6은 FDS 관리자 API·FE 화면에 이를 연결하고 응답 유실 시 보류 상세를 재조회한다.
 2. §6의 인증 계약대로 **기존 관리자 권한**(`CUSTOMER_READ`·`CUSTOMER_WRITE`)을 재사용한다. 11/7 이후 `/admin/fds/**` matcher와 Agent 서비스 Bearer 토큰·전용 stateless 체인·CSRF 분리·네트워크 접근 제한을 구현하고 테스트한다. `AdminPermission`은 5종 고정이므로 새 권한을 추가하지 않는다. 실제 배포의 비밀값 주입·TLS 경로는 인프라 설정과 대조한다.
-3. P6은 확정한 이벤트 입력 제한·재전송 규칙·콜 결과 4종, 새로고침 복원, `confirmActiveSeconds` 검증, 보고서 발견 코드·권고값 및 거절 enum을 구현한다. 각 이벤트의 `flowId`는 경로와 대조하고, 보고서 16 KiB·문자열·배열 상한과 조사 작업 3회·60초·Tool 5초 제한을 적용한다. 최근 이력 Tool은 24시간·100건과 `hasMore`를 적용하고, 수취인 전체 과거 거래 여부는 §4의 별도 집계로 확인한다.
+3. P6은 확정한 이벤트 입력 제한·재전송 규칙·콜 결과 4종, 새로고침 복원, `confirmActiveSeconds` 검증, 보고서 발견 코드·권고값 및 거절 enum을 구현한다. 각 이벤트의 `flowId`는 경로와 대조하고, 보고서 16 KiB·문자열·배열 상한과 조사 작업 3회·**시도별 실행 60초(대기 제외)**·Tool 호출별 5초 제한을 적용한다. 최근 이력 Tool은 24시간·100건과 `hasMore`를 적용하고, 수취인 전체 과거 거래 여부는 §4의 별도 집계로 확인한다.
 4. `FDS` 새 오류코드를 Java `ErrorCode`에 구현할 때 API 명세·[오류코드 마스터](../api_conventions.md#4-17-fds-이상거래탐지보류-사건-조사--p6-854)와 일치시키고 Swagger UI로 실제 응답을 확인한다.
 5. 노션 페이지로 옮길 때는 API별로 별도 페이지를 만들고 속성 8종과 본문 섹션 순서를 유지한다. **이 문서의 제안 응답을 구현 완료로 표시하지 않는다.**

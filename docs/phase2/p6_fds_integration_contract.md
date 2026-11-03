@@ -7,7 +7,7 @@
 
 ## 1. URL 검증 결과와 상태
 
-서버의 `server.servlet.context-path`는 `/api/v1`이다. 아래 경로의 왼쪽은 **컨트롤러 매핑**, 오른쪽은 FE·Agent가 호출하는 **전체 경로**다. `/api/v1`을 두 번 붙이지 않는다. 기존 `TransferController`는 `@RequestMapping("/transfers")`와 `@PostMapping`을 사용한다. **P6 신규 FDS 경로는 아래 경로로 결정한다.** 아직 구현된 API라는 뜻은 아니며, 기존 이체의 보류 응답 DTO는 P4와 별도로 확정한다.
+서버의 `server.servlet.context-path`는 `/api/v1`이다. 아래 경로의 왼쪽은 **컨트롤러 매핑**, 오른쪽은 FE·Agent가 호출하는 **전체 경로**다. `/api/v1`을 두 번 붙이지 않는다. 기존 `TransferController`는 `@RequestMapping("/transfers")`와 `@PostMapping`을 사용한다. **P6 신규 FDS 경로는 아래 경로로 결정한다.** 아직 구현된 API라는 뜻은 아니다. 기존 이체의 보류 응답은 `TransferResponse.transferHold` 중첩 구조로 구현돼 있으며, FDS `ON_APPROVAL` 응답은 P4 구현 뒤 확인한다.
 
 | 호출 | 컨트롤러 매핑 | 전체 호출 경로 | 상태·소유자 |
 |---|---|---|---|
@@ -84,22 +84,30 @@ Cookie: JSESSIONID=<고객 세션>
 }
 ```
 
-현재 구현된 정상 성공 응답의 `data`에는 `status`, `transactionNumber`, `transferredAt`, `errorCode`, `errorMessage`, `withdrawalBalanceAfter`가 있다. 성공은 공통 래퍼의 HTTP 200·`code="0000"`을 쓴다. **현재 `TransferResponse`에는 보류 응답 필드가 없다.** 명세서·제안서와 P4 계약상 `data`에 보류 여부·`transferHoldId`, 시각 해제 건의 실행 예정 시각을 표현해야 하지만, 이 응답 DTO는 P4 구현·합의 대기다. `HELD`는 `transfer.status`나 기존 `ProcessResultStatus` 값이 아니므로 FE가 `data.status="HELD"`를 기존 필드에 넣도록 가정하면 안 된다. 아래는 P6의 **제안 예시**이며 실제 필드명은 P4와 합의한 뒤 P6이 FE에 반영한다.
+현재 `TransferResponse`에는 `status`, `transactionNumber`, `transferredAt`, `errorCode`, `errorMessage`, `withdrawalBalanceAfter`와 중첩 `transferHold`가 있다. 보류 시 `status`·`transactionNumber`는 null이고 `transferHold`에 `transferHoldId`·`status="HELD"`·`releaseAt`·`cancellableUntil`이 담긴다. `ON_APPROVAL`에서 두 시각은 null인 예상값이며, 실제 FDS 보류 응답은 P4 구현 뒤 확인한다. `releaseMode`는 현재 DTO에 없으므로 필요하면 P4와 별도 확장 계약을 정한다. `HELD`는 `transfer.status`나 기존 `ProcessResultStatus` 값이 아니다.
 
 ```json
 {
   "code": "0000",
   "message": "정상 처리되었습니다.",
   "data": {
-    "transferHoldId": 123,
-    "holdStatus": "HELD",
-    "releaseMode": "ON_APPROVAL",
-    "releaseAt": null
+    "status": null,
+    "transactionNumber": null,
+    "transferredAt": null,
+    "errorCode": null,
+    "errorMessage": null,
+    "withdrawalBalanceAfter": null,
+    "transferHold": {
+      "transferHoldId": 123,
+      "status": "HELD",
+      "releaseAt": null,
+      "cancellableUntil": null
+    }
   }
 }
 ```
 
-P6은 FE에서 보류를 이체 완료로 표시하지 않는다. 승인 대기와 시각 해제는 안내 문구가 다르다. 이체 HTTP 오류, `data.status=ERROR`, `HELD`, 행동 이벤트 전송 실패를 각각 별도 상태로 처리한다. 보류 저장 실패 뒤 같은 멱등 키로 자동 재시도하지 않는다.
+P6은 FE에서 보류를 이체 완료로 표시하지 않는다. 승인 대기와 시각 해제는 안내 문구가 다르다. 이체 HTTP 오류, `data.status=ERROR`, `data.transferHold.status=HELD`, 행동 이벤트 전송 실패를 각각 별도 상태로 처리한다. 보류 저장 실패 뒤 같은 멱등 키로 자동 재시도하지 않는다.
 
 ## 5. Agent Tool·보고서 계약 초안
 
@@ -108,7 +116,7 @@ P6은 FE에서 보류를 이체 완료로 표시하지 않는다. 승인 대기�
 | API | 요청 입력 | 응답의 최소 내용 | 실패 처리 |
 |---|---|---|---|
 | `GET .../history` | `transferHoldId`; 보류 직전 최대 24시간 | 최근 성공 이체 최신순 최대 100건의 `refId`·시각·금액·마스킹 수취계좌와 잘림 여부 `hasMore` | P4 `transfer.api`의 이체 목록 조회 인계 대기. 권한·보류 조회 실패면 조사 실패; 거래가 없음은 빈 배열 |
-| `GET .../recipient-context` | `transferHoldId` | 해당 고객·수취인의 **전체 과거 성공 이력** 존재 여부·최초 성공 시각·다른 출금계좌 수의 좁은 집계(목록 미반환) | P4 `transfer.api`의 수취인 집계 조회 인계 대기. 정보 없음과 조회 장애 구분; 최근 목록에 없다는 이유로 신규 수취인으로 취급하지 않음 |
+| `GET .../recipient-context` | `transferHoldId` | 해당 고객·수취인의 **전체 과거 성공 이력** 존재 여부·최초 성공 시각·현재 보류 건 출금계좌를 제외한 다른 출금계좌 수(`withdrawalAccountId` DISTINCT)의 좁은 집계(목록 미반환) | P4 `transfer.api`의 수취인 집계 조회 인계 대기. 정보 없음과 조회 장애 구분; 최근 목록에 없다는 이유로 신규 수취인으로 취급하지 않음 |
 | `PUT .../report` | 경로 `investigationId`, 본문 `transferHoldId`, 조사 상태·`secondaryFindings`·근거 ID | 저장된 조사 ID·상태 | 같은 조사 ID 재제출은 멱등; 근거 ID가 허용된 조회 결과 밖이면 거부 |
 
 ```json
@@ -130,7 +138,7 @@ P6은 FE에서 보류를 이체 완료로 표시하지 않는다. 승인 대기�
 
 이 JSON은 제안서·명세서의 보고서 형식을 따른 **예시**다. `evidenceTransferIds`는 실제 조회 결과의 해당 고객 이체 `refId`인지 BE에서 재검증한다. Agent가 보류 해제·승인·원장 변경 API를 호출할 권한은 없다. 내부 인증·네트워크는 §6-2에 정하고, 작업 타임아웃·재시도는 아래에 정한다. 로그에는 토큰·원문 계좌번호·보고서 자유 텍스트를 남기지 않는다.
 
-**P6 조사 작업 실행 계약:** 한 `transferHoldId`에 조사 작업 1개와 안정적인 `investigationId` 1개를 둔다. Agent 전체 실행 제한은 60초, 각 BE Tool HTTP 호출 제한은 5초다. 실패하면 같은 조사 ID로 총 3회까지 시도한다(첫 시도 즉시, 이후 1분·5분 뒤). 실패한 중간 시도는 보고서를 제출하지 않는다. 성공 시 `COMPLETED` 보고서를 한 번 멱등 저장하고, 최종 실패 시 BE가 조사 작업 상태를 `FAILED`로 기록한다. **P4의 이체 보류 상태는 `HELD` 그대로** 두고 관리자가 서버 A/B 근거와 콜 결과로 수동 검토한다. `HELD`는 `transfer.status`가 아니다. 제한 시간·횟수는 시연 환경의 실행 보호값이며 사기 판정 기준이 아니다.
+**P6 조사 작업 실행 계약:** 한 `transferHoldId`에 조사 작업 1개와 안정적인 `investigationId` 1개를 둔다. **60초는 각 시도별 Agent 실행 제한이며 재시도 대기 시간은 제외한다.** 각 BE Tool HTTP 호출 제한은 5초다. 실패하면 같은 조사 ID로 총 3회까지 시도한다(첫 시도 즉시, 이후 1분·5분 뒤). 실패한 중간 시도는 보고서를 제출하지 않는다. 성공 시 `COMPLETED` 보고서를 한 번 멱등 저장하고, 최종 실패 시 BE가 조사 작업 상태를 `FAILED`로 기록한다. **P4의 이체 보류 상태는 `HELD` 그대로** 두고 관리자가 서버 A/B 근거와 콜 결과로 수동 검토한다. `HELD`는 `transfer.status`가 아니다. 제한 시간·횟수는 시연 환경의 실행 보호값이며 사기 판정 기준이 아니다.
 
 ### 5-1. 고객 취소·만료 종료 이벤트 제안 — P4 합의 전
 
@@ -245,21 +253,29 @@ Idempotency-Key: 6fa61214-4817-47ad-b08f-5279af78df40
   "code": "0000",
   "message": "정상 처리되었습니다.",
   "data": {
-    "transferHoldId": 123,
-    "holdStatus": "HELD",
-    "releaseMode": "ON_APPROVAL",
-    "releaseAt": null
+    "status": null,
+    "transactionNumber": null,
+    "transferredAt": null,
+    "errorCode": null,
+    "errorMessage": null,
+    "withdrawalBalanceAfter": null,
+    "transferHold": {
+      "transferHoldId": 123,
+      "status": "HELD",
+      "releaseAt": null,
+      "cancellableUntil": null
+    }
   }
 }
 ```
 
-정상 이체는 현재 구현된 `TransferResponse` 형식으로 온다. 보류 제안 응답과 같은 구조로 가정하지 않는다.
+정상 이체도 같은 `TransferResponse` 형식이며 `transferHold`는 null이다.
 
 ```json
 {"code":"0000","message":"정상 처리되었습니다.","data":{"status":"SUCCESS","transactionNumber":"202611030000001","transferredAt":"2026-11-03T13:02:00","errorCode":null,"errorMessage":null,"withdrawalBalanceAfter":1000000}}
 ```
 
-위 보류 응답은 **P4 DTO 합의 전 제안**이다. FE는 `data.status`에 `HELD`가 온다고 가정하지 않는다. `SUCCESS`는 기존 이체 완료 화면, `HELD`는 승인 대기 안내, `ERROR`는 실패 안내로 구분한다. 행동 이벤트 전송 실패를 이체 성공이나 실패로 오인하지 않는다.
+위 보류 응답은 **기존 중첩 DTO 구조를 따른 `ON_APPROVAL` 예상값**이다. 실제 FDS 응답은 P4 구현 뒤 확인한다. FE는 `data.status`에 `HELD`가 온다고 가정하지 않고 `data.transferHold?.status`로 보류를 구분한다. `SUCCESS`는 기존 이체 완료 화면, 보류는 승인 대기 안내, `ERROR`는 실패 안내로 구분한다. 행동 이벤트 전송 실패를 이체 성공이나 실패로 오인하지 않는다.
 
 **관리자 화면 → 조회·콜·조치** — 관리자 세션으로 `GET /api/v1/admin/fds/holds`와 `GET /api/v1/admin/fds/holds/{transferHoldId}`를 호출해 서버 A/B 근거와 AI 추가 발견을 별도 영역에 표시한다. 두 조회와 콜 기록에는 `X-Access-Reason`을 전송한다. 콜 결과를 먼저 기록한 뒤 승인하거나 거절한다. 다음은 **경로·콜 enum이 결정된 신규 FDS API의 미구현 예시**이며, P4 실행 결과를 담는 응답 필드는 P4 인계 대기다.
 
@@ -353,14 +369,14 @@ Idempotency-Key: 9fa61214-4817-47ad-b08f-5279af78df43
 |---|---|---|
 | FE `flowId` 생성·새 흐름·새로고침·만료, 이벤트 재전송 | P6 FE·BE | §2·§3 결정 완료; 구현 대기 |
 | 이벤트 제출 API 필드·시각·크기·오류 응답 및 화면 연결 | P6 FE·BE | 경로·입력 제한·재전송 결정 완료; 구현 대기 |
-| 실제 `HELD` 응답 필드·승인 실행 실패·응답 유실 뒤 결과 조회 | P4 → P6 | `transfer_seam.md` §9-3의 응답 의미는 확정; 실제 DTO·결과 조회 형태는 P4 인계 대기. P6 예시는 미확정 |
+| 실제 `HELD` 응답 필드·승인 실행 실패·응답 유실 뒤 결과 조회 | P4 → P6 | `TransferResponse.transferHold` 중첩 DTO는 구현됨. FDS `ON_APPROVAL` 실제 응답·추가 필드 필요 여부와 결과 조회 형태는 P4 인계 대기 |
 | 보류 원본·상태 `transfer.api` 조회 | P4 → P6 | `transfer_seam.md` §10의 P4 소유 경계는 확정; 공개 조회 메서드·반환 필드 구현 인계 대기 |
-| Agent Tool용 이체 목록·수취인 집계 `transfer.api` 조회 | P4 → P6 | §5와 API 명세 §3·§4의 24시간·최대 100건 목록(`refId`·금액·시각·마스킹 수취계좌, `hasMore`), 최초 SUCCESS 시각, 다른 출금계좌 수는 기존 `RecentTransferQuery`의 건수·합계·존재 여부만으로 만들 수 없음. P4 공개 조회 계약·성능 검증 인계 대기; P6은 `transfer` 테이블 직접 조회 금지 |
+| Agent Tool용 이체 목록·수취인 집계 `transfer.api` 조회 | P4 → P6 | §5와 API 명세 §3·§4의 24시간·최대 100건 목록(`refId`·금액·시각·마스킹 수취계좌, `hasMore`), 최초 SUCCESS 시각, 현재 보류 건 출금계좌 외 다른 출금계좌 수(DISTINCT)는 기존 `RecentTransferQuery`의 건수·합계·존재 여부만으로 만들 수 없음. P4 공개 조회 계약·성능 검증 인계 대기; P6은 `transfer` 테이블 직접 조회 금지 |
 | 고객 취소·`ON_APPROVAL` 만료 종료 신호 | P4·P6 | `transfer_seam.md` §10 미결. 이 문서 §5-1 `TransferHoldClosed`는 P6 제안이며 P4 합의 전; 리스너 미구현 |
 | `TransferSettled.flowId` 성공 이벤트와 `refId` 멱등 저장 | P4 → P6 | `transfer_seam.md` §9-2 연결 순서·`refId` 멱등 규칙 확정; P4 필드 PR 머지 뒤 P6 리스너 연결. P6 저장·조회 부품은 선행 가능 |
 | 내부 Tool 인증·네트워크·CSRF·권한 | P6·인프라 | §6-2의 환경변수 주입·같은 VM 브리지·외부 HTTPS·내부 HTTP 결정; 실제 VM 설정 검증·코드 구현 대기 |
 | FDS 관리자 권한 matcher·사유·감사·콜 결과와 화면 API 연결 | P6 FE·BE | §6의 권한·CSRF·사유·감사·콜 결과 4종과 승인 허용 조건 결정; 코드·화면 연결 대기 |
 | 관리자 승인·거절의 PENDING 조치와 감사 복구 | P6 FE·BE, P4 결과 조회 인계 | §6-1의 사전 내구화·멱등 재생 계약 작성; 조치 행 스키마·P4 결과 대조 필드·장애 주입 검증 대기. 상태만으로 행위자·사유를 추정하지 않음 |
-| 조사 작업 재시도·보고서 멱등·AI 장애 시 수동 검토 화면 | P6 FE·BE·AI | §5의 조사 ID 멱등·3회 재시도·60초/5초 제한·보고서 상한·수동 검토 원칙 결정; 코드·화면 검증 대기 |
+| 조사 작업 재시도·보고서 멱등·AI 장애 시 수동 검토 화면 | P6 FE·BE·AI | §5의 조사 ID 멱등·3회 재시도·시도별 60초(대기 제외)/Tool 5초 제한·보고서 상한·수동 검토 원칙 결정; 코드·화면 검증 대기 |
 
 P4 인계·합의 대기 항목은 실제 계약이 정해지면 상태와 관련 PR을 갱신한다. P6이 결정한 항목도 구현·검증 전에는 완료로 표시하지 않는다. #855는 이벤트·피처 계약을 정책 사례와 최종 대조한다.
