@@ -1,10 +1,13 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
 import com.shinhan.corebank.transfer.domain.TransferHoldStatus;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -31,6 +34,18 @@ public interface TransferHoldJpaRepository extends JpaRepository<TransferHoldJpa
              ORDER BY h.executingAt
             """)
     List<Long> findStuckExecutingIds(@Param("executingBefore") LocalDateTime executingBefore, Limit limit);
+
+    // 기표 트랜잭션 안에서 부른다. SELECT ... FOR UPDATE라 커밋까지 재선점·결과 기록이 기다린다
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+            """
+            SELECT h FROM TransferHoldJpaEntity h
+             WHERE h.transferHoldId = :transferHoldId
+               AND h.status = com.shinhan.corebank.transfer.domain.TransferHoldStatus.EXECUTING
+               AND h.executingAt = :claimedAt
+            """)
+    Optional<TransferHoldJpaEntity> findClaimForUpdate(
+            @Param("transferHoldId") long transferHoldId, @Param("claimedAt") LocalDateTime claimedAt);
 
     // 모두 이전 상태일 때만 바꾸는 조건부 UPDATE다(1이면 이 호출이 전이). 호출자 트랜잭션이 없으면 따로 커밋한다.
     @Modifying(clearAutomatically = true, flushAutomatically = true)

@@ -116,7 +116,7 @@ public class TransferHoldService implements TransferHoldUseCase {
      * 기록하지 않고 전파해 EXECUTING으로 남긴다(resume() 대상).
      */
     private TransferHoldExecutionResult executeAndFinish(TransferHold hold, LocalDateTime claimedAt) {
-        TransferResult executed = transferExecutionUseCase.execute(toCommand(hold));
+        TransferResult executed = transferExecutionUseCase.execute(toCommand(hold, claimedAt));
         TransferResult result = recordedTransfer(hold).orElse(executed);
         boolean succeeded = result.status() == ProcessResultStatus.SUCCESS;
         boolean recorded = transferHoldPort.finishExecution(
@@ -166,7 +166,7 @@ public class TransferHoldService implements TransferHoldUseCase {
                 .orElse(null);
     }
 
-    private static TransferCommand toCommand(TransferHold hold) {
+    private static TransferCommand toCommand(TransferHold hold, LocalDateTime claimedAt) {
         return TransferCommand.builder()
                 .customerId(hold.getCustomerId())
                 .withdrawalAccountId(hold.getWithdrawalAccountId())
@@ -179,6 +179,7 @@ public class TransferHoldService implements TransferHoldUseCase {
                 .sourceId(hold.getTransferHoldId())
                 .executionDate(hold.getHeldAt().toLocalDate())
                 .flowId(hold.getFlowId())
+                .holdClaimedAt(claimedAt)
                 .build();
     }
 

@@ -32,6 +32,13 @@ public interface TransferHoldPort {
     boolean reclaimStuck(long transferHoldId, LocalDateTime staleBefore, LocalDateTime executingAt);
 
     /**
+     * claimedAt 선점이 아직 유효한지(EXECUTING이고 executing_at이 같은지) 행 락을 잡고 본다. 호출자 트랜잭션 안에서 불러야 한다.
+     *
+     * 락은 그 트랜잭션이 끝날 때까지 이어져, 그동안 다시 선점하거나 결과를 기록하지 못한다.
+     */
+    boolean holdsClaim(long transferHoldId, LocalDateTime claimedAt);
+
+    /**
      * EXECUTING → EXECUTED 또는 FAILED. claimedAt으로 선점한 쪽만 기록한다(펜싱).
      *
      * 이체 행 없이 거부된 FAILED는 errorCode를 reason_code에 남겨 재생에 쓴다.

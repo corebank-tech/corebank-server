@@ -78,14 +78,18 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     // 채번 뒤 기표 전까지 들고 다니는 값. 거래일은 gate를 쥔 트랜잭션 안에서 읽어야 해서 Transfer는 거기서 만든다.
     private record Draft(ResolvedPayee payee, String transactionNumber, LocalDateTime requestedAt) {}
 
-    // 기표 트랜잭션의 결과. 기표했으면 transfer, 훅 C가 보류했으면(트랜잭션은 롤백) holdDecision 하나만 있다.
-    private record Posting(Transfer transfer, TransferHoldDecision holdDecision) {
+    // 기표 트랜잭션의 결과. 기표했으면 transfer, 훅 C가 보류했으면 holdDecision만 있다. 보류 선점을 잃었으면 claimLost다(둘 다 롤백).
+    private record Posting(Transfer transfer, TransferHoldDecision holdDecision, boolean claimLost) {
         static Posting posted(Transfer transfer) {
-            return new Posting(transfer, null);
+            return new Posting(transfer, null, false);
         }
 
         static Posting held(TransferHoldDecision holdDecision) {
-            return new Posting(null, holdDecision);
+            return new Posting(null, holdDecision, false);
+        }
+
+        static Posting lostClaim() {
+            return new Posting(null, null, true);
         }
     }
 
@@ -242,6 +246,9 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             LocalDateTime authenticatedAt = LocalDateTime.now(clock);
 
             Posting posting = postLedger(command, draft);
+            if (posting.claimLost()) {
+                return rejectedBeforeDraft(TransferErrorCode.TRANSFER_HOLD_NOT_EXECUTABLE);
+            }
             if (posting.holdDecision() != null) {
                 return holdTransfer(command, posting.holdDecision(), authenticatedAt);
             }
@@ -355,7 +362,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                         command.executionDate()));
     }
 
-    // 채번 전 거부라 남길 이체 행이 없다
+    // 채번 전 거부, 또는 기표 직전에 선점을 잃은 보류 건 실행이라 남길 이체 행이 없다
     private static TransferResult rejectedBeforeDraft(TransferErrorCode errorCode) {
         return TransferResult.builder()
                 .status(ProcessResultStatus.ERROR)
@@ -439,6 +446,13 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         return requiresNewTransactionTemplate.execute(status -> {
             // 가장 먼저 gate를 잡는다(gate → 한도 → 계좌). 한 건에 한 번만 읽어 transfer에 싣는다 — 원장·훅 B·완료 기록이 같은 거래일을 갖게(#516).
             LocalDate tradeDate = businessDateGate.acquireSharedAndReadBusinessDate();
+
+            // 보류 건 실행은 선점이 아직 이쪽 것일 때만 기표한다. 그사이 resume()이 다시 선점했으면 행을 남기지 않고 물러난다(§9-4).
+            if (isHeldExecution(command) && !transferHoldPort.holdsClaim(command.sourceId(), command.holdClaimedAt())) {
+                status.setRollbackOnly();
+                return Posting.lostClaim();
+            }
+
             Transfer createdTransfer = newTransfer(command, draft, tradeDate);
 
             // 한도 락을 계좌 락보다 먼저 획득한다(P1-P4 합의: 한도 → 계좌 순서). 위반 시

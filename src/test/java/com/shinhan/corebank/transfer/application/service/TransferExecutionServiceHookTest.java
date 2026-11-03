@@ -742,6 +742,11 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
         }
 
         @Override
+        public boolean holdsClaim(long transferHoldId, LocalDateTime claimedAt) {
+            return delegate.holdsClaim(transferHoldId, claimedAt);
+        }
+
+        @Override
         public boolean finishExecution(
                 long transferHoldId,
                 LocalDateTime claimedAt,
