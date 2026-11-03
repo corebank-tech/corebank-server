@@ -8,7 +8,7 @@
 
 - 방식: **VM이 먼저 터널을 여는 아웃바운드 방식**이다. VM은 NAT 뒤(192.168.0.211)라서 공유기 포트포워딩은 필요 없다(10/19 시험).
 - 터널은 **터널 1만** 설정한다. AWS가 터널을 2개 만들지만 터널 2는 DOWN이어도 정상이다.
-- Customer Gateway에 등록된 공인 IP는 `58.230.206.76`이다(교육장 NAT 출구, VM에서 `curl -s ifconfig.me`).
+- Customer Gateway에 등록된 공인 IP는 교육장 NAT 출구 주소다(값은 문서에 쓰지 않는다). 2026-11-03에 이 주소가 바뀌어 고객 게이트웨이를 교체했다(§5-1, #851).
 - **최종 VM에서 확인함(2026-10-28~29)**: UDP 500/4500 통과, 터널 성립, 장시간 유지, VM → WAS 8080, VM → RDS 3306, 재부팅 후 자동 복구.
 - **최종 VM에서 아직 확인하지 못한 것**: 터널 2 장애 전환, WAS → VM(정보계 API·모의 대외기관).
 - **VM은 우리 팀 전용으로 본다**(팀마다 IP가 달라 사용자가 확인, 2026-10-26). 접속자와 `/home`도 `student` 하나뿐이었다. 그래도 PSK는 root만 읽는 파일(권한 600)에만 두고 화면·채팅·저장소에 남기지 않는다.
@@ -76,9 +76,10 @@ conn aws-t1
     mark=100
     forceencaps=yes
 ```
-- `leftid`는 내부 IP(192.168.0.211)가 아니라 **공인 IP**여야 한다.
+- `leftid`는 내부 IP(192.168.0.211)가 아니라 **공인 IP**여야 한다. 교육장 공인 IP가 바뀌어도 옛 값이 남은 채로 붙은 사례가 있다(2026-11-03, §5-1).
 - `mark=100`이 빠지면 모든 트래픽이 터널로 들어간다.
 - `if_id_in` 같은 XFRM 키워드는 strongSwan 5.9.5의 `ipsec.conf`가 모른다(`unknown keyword`). 쓰지 않는다.
+- **`auto=start`는 strongSwan이 시작될 때만 연결하고, `dpdaction=restart`는 상대가 응답하지 않을 때만 다시 붙인다.** AWS가 정상적으로 세션 삭제(DELETE)를 보내면 둘 다 작동하지 않아 VM이 재연결하지 않는다(2026-11-01 23:18 실제 사례, #851). `closeaction=restart`로 막을 수 있는지는 복구 뒤 검증할 예정이며, 검증 전에는 이 런북의 설정에 넣지 않았다.
 
 ### 3-4. `/etc/ipsec.secrets`
 ```
@@ -178,6 +179,7 @@ PH-100-② 완료 기준이다. 상대 쪽 준비가 끝난 항목부터 따로 
 
 - §3-7을 적용하고 VM을 재부팅해 터널과 경로가 자동 복구되는지 확인한 뒤에 정상 운영으로 넘긴다. 확인 항목: `sudo ipsec statusall`의 `ESTABLISHED`·`INSTALLED, TUNNEL`, `ip route get <WAS 사설 IP>`가 `dev vti1`, RDS 3306 `nc` 성공, 컨테이너 `Up`, `systemctl is-active strongswan-starter vpn-vti`가 `active`.
 - **완료(2026-10-29):** 재부팅 후 약 1분 안에 위 항목이 모두 정상이었다.
+- 위 확인은 VM 재부팅 시나리오만 검증한 것이다. **AWS가 세션 삭제(DELETE)를 보낸 경우에는 자동으로 복구되지 않는다**(2026-11-01, #851).
 
 ## 5. 문제가 생기면
 
@@ -187,6 +189,82 @@ PH-100-② 완료 기준이다. 상대 쪽 준비가 끝난 항목부터 따로 
 | `unknown keyword` | strongSwan 5.9.5 `ipsec.conf`가 모르는 키워드 | `mark=100` + VTI를 쓴다 |
 | 터널은 UP인데 통신 안 됨 | VTI나 `10.30.0.0/16` 경로가 없음 | §3-5를 확인한다 |
 | 큰 응답이 끊김 | MTU 문제 | `vti1`의 mtu 1400 확인 (시험에서 MSS 1360이 맞았다) |
+| 로그에 `received DELETE for IKE_SA` 뒤로 `establishing`·`retransmit`이 없고 `Security Associations (0 up, 0 connecting)` | AWS가 터널을 정상 종료(장비 교체 등)했는데 VM이 재연결하지 않음 | `sudo ipsec restart`로 다시 붙인다. 그래도 `connecting`에서 안 올라오면 아래 행 |
+| `Security Associations (0 up, 1 connecting)`이고 로그에 `retransmit`만 반복, 인증·제안 오류 없음 | AWS가 연결 요청에 응답하지 않음. 교육장 공인 IP가 바뀌어 고객 게이트웨이 IP와 다른 경우가 있었다 | §5-1 |
+
+### 5-1. 교육장 공인 IP가 바뀌었을 때 (2026-11-03, #851)
+
+터널이 끊기고 재시작해도 `connecting`에서 안 올라오면 의심한다. 주소는 화면에 찍지 않고 같음/다름과 해시 앞 4글자만 본다.
+
+1. 비교: 현재 공인 IP와 고객 게이트웨이에 등록된 IP가 같은지 본다. 조회가 하나라도 실패하거나 IPv4 형식이 아니면 `조회실패`가 나오고, 이때는 같음/다름으로 판단하지 않는다.
+```bash
+v(){ printf '%s' "$1" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; }; CUR=$(curl -fsS -m 5 https://checkip.amazonaws.com | tr -d '\n'); REG=$(aws ec2 describe-customer-gateways --customer-gateway-ids <CGW ID> --query 'CustomerGateways[0].IpAddress' --output text | tr -d '\n'); if v "$CUR" && v "$REG"; then [ "$CUR" = "$REG" ] && echo 같음 || echo 다름; else echo 조회실패; fi; unset CUR REG
+```
+- 교육장 안의 PC(VM과 같은 공인 IP)에서 실행한다. `다름`이면 아래로 진행하고, `조회실패`면 네트워크, AWS 프로필, `<CGW ID>`를 먼저 확인한다.
+2. 새 고객 게이트웨이를 만든다(기존 것은 정상 연결이 확인될 때까지 지우지 않는다).
+```bash
+aws ec2 create-customer-gateway --type ipsec.1 --bgp-asn 65000 --ip-address "$(curl -fsS -m 5 https://checkip.amazonaws.com | tr -d '\n')" --query 'CustomerGateway.CustomerGatewayId' --output text
+```
+3. 변경 전에 AWS 터널의 외부 주소를 기록한다. 터널 번호는 배열 순서로 정하지 않는다(`VgwTelemetry`에 터널 번호 필드가 없다). 두 터널의 해시를 구하고, VM이 실제로 쓰는 터널(`ipsec.conf`의 `right`)의 해시와 같은 쪽을 "터널 1"로 본다.
+```bash
+aws ec2 describe-vpn-connections --vpn-connection-ids <VPN ID> --query 'VpnConnections[0].VgwTelemetry[*].OutsideIpAddress' --output text | tr '\t' '\n' | while read -r ip; do printf '%s' "$ip" | shasum -a 256 | cut -c1-4; done
+```
+VM에서:
+```bash
+sudo awk -F= '/^[[:space:]]*right=/{print $2; exit}' /etc/ipsec.conf | tr -d '\n' | sha256sum | cut -c1-4
+```
+terraform 출력값과도 대조한다(주소는 출력하지 않는다). 이 값은 VM `right`나 AWS 해시와 같아야 한다.
+```bash
+cd terraform/main && terraform output -raw vpn_tunnel1_address | tr -d '\n' | shasum -a 256 | cut -c1-4
+```
+- 세 값(AWS 두 터널 중 하나, VM `right`, terraform 출력)이 같은 해시로 모이지 않으면 **여기서 멈추고** 어느 쪽이 낡았는지 확인한다. 순서만 믿고 4단계로 넘어가지 않는다. 2026-11-03에는 셋이 같았다.
+4. 기존 VPN 연결을 새 고객 게이트웨이로 바꾼다.
+```bash
+aws ec2 modify-vpn-connection --vpn-connection-id <VPN ID> --customer-gateway-id <새 CGW ID>
+```
+- 상태가 `modifying`인 동안 **약 20분** 걸렸다(2026-11-03, 터널을 하나씩 교체했고 터널 2는 약 10분, 터널 1은 약 20분 시점에 올라왔다). 오류가 아니므로 이 동안 다른 변경을 겹치지 않는다. 터널마다 "Customer Initiated" 교체 알림 메일이 온다.
+5. `available`이 되면 3단계의 AWS 명령을 다시 실행해 해시를 비교한다.
+- VM `right`와 같은 해시가 그대로 있으면 `right`는 바꾸지 않는다(2026-11-03에는 같았고 VM 설정을 바꾸지 않았는데 붙었다).
+- 달라졌으면 VM의 `/etc/ipsec.conf`의 `right`와 `/etc/ipsec.secrets`의 두 번째 식별자를 새 값으로 고친다. 그리고 `vti1`이 낡은 주소로 남지 않게 아래 순서로 한다(§3-7).
+```bash
+sudo ipsec restart
+```
+```bash
+sudo ip tunnel del vti1
+```
+```bash
+sudo systemctl restart vpn-vti
+```
+- 로컬 식별자도 따로 확인한다. VM 공인 IP가 바뀌었으니 `ipsec.conf`의 `leftid`와 `ipsec.secrets`의 첫 번째 식별자가 옛 IP로 남아 있을 수 있다. 아래 세 값의 해시를 비교한다(현재 공인 IP, `leftid`, `ipsec.secrets` 첫 식별자).
+```bash
+curl -fsS -m 5 https://checkip.amazonaws.com | tr -d '\n' | sha256sum | cut -c1-4
+```
+```bash
+sudo awk -F= '/^[[:space:]]*leftid=/{print $2; exit}' /etc/ipsec.conf | tr -d '\n' | sha256sum | cut -c1-4
+```
+```bash
+sudo awk 'NF && $1 !~ /^#/{print $1; exit}' /etc/ipsec.secrets | tr -d '\n' | sha256sum | cut -c1-4
+```
+- 식별자가 현재 공인 IP와 다를 때는 터널 상태로 나눈다.
+  - **터널이 정상 연결된 경우:** 불일치만 기록하고 바꾸지 않는다. 정상인 VPN을 불필요하게 재시작하지 않는다. 변경은 P2와 정한 유지보수 시점에 `closeaction` 변경 등과 묶어 한 번의 재시작으로 한다. 2026-11-03이 이 경우였다(`leftid`와 `ipsec.secrets` 첫 식별자가 둘 다 옛 공인 IP 그대로였는데 터널이 붙었다. AWS가 이 불일치를 거부하지 않았다).
+  - **인증 실패 등으로 변경이 필요한 경우:** `leftid`와 `ipsec.secrets` 첫 식별자를 같은 값(새 공인 IP)으로 함께 고친다(한쪽만 바꾸면 PSK를 못 찾아 인증이 실패할 수 있다, 추정). 그다음 `sudo ipsec restart`로 다시 연결하고 `Security Associations`가 `1 up`인지 확인한다.
+6. 확인: AWS 쪽 터널 1이 UP, VM에서 `Security Associations (1 up, 0 connecting)`, `ip route get <WAS 사설 IP>`가 `dev vti1`, RDS 3306이 열려 있다. `vti1`의 remote 주소가 `right`와 같은지도 본다(해시가 같아야 한다).
+```bash
+ip -d tunnel show vti1 | grep -oE 'remote [0-9.]+' | awk '{print $2}' | tr -d '\n' | sha256sum | cut -c1-4
+```
+7. 복제를 확인한다. 레플리카는 재시도 10회(간격 60초)를 쓰고 나면 IO 스레드가 멈춰 터널이 복구돼도 **자동으로 재개되지 않는다.** GTID를 RDS의 `gtid_purged`와 비교한 뒤 재개한다(P2).
+8. terraform 코드와 state를 맞춘다(#868). 이 VPN은 terraform이 관리하는데 3·4단계는 AWS에서 직접 바꾼 것이라, 그대로 두면 다음 `plan`이 고객 게이트웨이를 교체하려 든다(2026-11-03 `plan`에서 확인: 1 add, 1 destroy와 VPN 연결 수정). 정리 전에는 `terraform plan`·`apply`를 하지 않고, 공유 state라 팀에 먼저 알린다. S3의 state 파일은 직접 고치지 않는다.
+- 새 고객 게이트웨이의 `Name` 태그를 코드(`<name_prefix>-cgw-onprem`)와 같게 맞춘다. 다르면 가져온 뒤 `plan`에 태그 수정이 남는다.
+- 장부에서 옛 고객 게이트웨이를 빼고 새 것을 가져온다. VPN 연결은 가져오지 않는다. VPN ID가 그대로라 `aws_vpn_connection_route`도 영향이 없고, refresh로 새 고객 게이트웨이를 가리키는지 확인한다.
+```bash
+terraform state rm module.vpn.aws_customer_gateway.onprem
+```
+```bash
+terraform import module.vpn.aws_customer_gateway.onprem <새 CGW ID>
+```
+- `modules/vpn/variables.tf`의 `customer_gateway_ip` 기본값을 새 공인 IP로 고치는 PR을 올린다. 머지는 아래 `plan` 확인 뒤에 한다.
+- `plan`(`-lock=false`, 저장 안 함)에서 `module.vpn` 항목이 하나도 없고 예상하지 않은 destroy/recreate가 없어야 한다. 그 뒤에만 PR을 머지한다.
+- 이 절차는 #868에서 처음 수행한다. 수행 결과를 이 절에 다시 반영한다. `terraform/README.md`의 "VPN을 포함해 apply하기 전에 공인 IP 확인" 절차도 함께 본다.
 
 ## 6. 정리 (환경이 끝날 때)
 
