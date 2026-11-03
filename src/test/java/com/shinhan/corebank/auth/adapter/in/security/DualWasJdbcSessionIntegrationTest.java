@@ -125,7 +125,9 @@ class DualWasJdbcSessionIntegrationTest extends IntegrationTestSupport {
                 "-Dfile.encoding=UTF-8",
                 "-Dspring.devtools.restart.enabled=false",
                 "-cp",
-                System.getProperty("corebank.test.application-classpath"),
+                Files.readString(
+                        Path.of(System.getProperty("corebank.test.application-classpath-file")),
+                        StandardCharsets.UTF_8),
                 "com.shinhan.corebank.CorebankApplication",
                 "--spring.profiles.active=test",
                 "--server.port=" + port,
