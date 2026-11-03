@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 /**
  * PH-38 300만 원장 전수 대사 시간 베이스라인을 운영 DB에서 잰다(#744).
  *
- * COB 대사 스텝과 같은 reconcileAll()을 같은 락 안에서 돌린다. runFull()은 락을 못 잡거나 예외가 나도
+ * COB 대사 스텝과 같은 전수 대사를 같은 락 안에서 돌린다(reconcileAll()은 확인 못 한 구간이 있으면 예외를 던진다). runFull()은 락을 못 잡거나 예외가 나도
  * 조용히 넘어가 0초를 측정값으로 남길 수 있어 쓰지 않는다. 결과는 읽기만 하고 불일치 테이블·영업일은 건드리지 않는다.
  */
 @Slf4j
