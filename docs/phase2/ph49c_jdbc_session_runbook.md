@@ -556,6 +556,7 @@ PC에서 **기존에 허용된 SSH 접속 경로**로 내려받는다. 아래는
   umask 077
   KEY="$HOME/.ssh/<실제-키파일>.pem"
   EC2_HOST='<기존-SSH-접속-주소>'
+  mkdir -p "$HOME/Intellij-workspace"
   LOCAL_EVIDENCE=$(mktemp -d "$HOME/Intellij-workspace/ph49c-790-evidence.XXXXXX")
   scp -i "$KEY" -o IdentitiesOnly=yes \
     "ubuntu@$EC2_HOST:/home/ubuntu/ph49c-790-evidence/ph49c-790-evidence.tar.gz" \
