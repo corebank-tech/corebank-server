@@ -15,6 +15,8 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.adapter.in.security.AdminPermissionStamp;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.customer.api.AdminPermission;
+import com.shinhan.corebank.customer.application.port.in.AdminPermissionCommand;
+import com.shinhan.corebank.customer.application.port.in.AdminPermissionCommandUseCase;
 import jakarta.persistence.EntityManager;
 import java.util.List;
 import java.util.UUID;
@@ -48,6 +50,9 @@ class AdminPermissionGrantRevokeIntegrationTest extends IntegrationTestSupport {
 
     @Autowired
     EntityManager entityManager;
+
+    @Autowired
+    AdminPermissionCommandUseCase adminPermissionCommandUseCase;
 
     @BeforeEach
     void setUp() {
@@ -205,31 +210,21 @@ class AdminPermissionGrantRevokeIntegrationTest extends IntegrationTestSupport {
     }
 
     // 로그인이 권한을 읽은 뒤 회수가 먼저 커밋되고 세션이 뒤늦게 저장되는 순서를 흉내 낸다.
+    // 부여·회수는 HTTP 가 아니라 유스케이스로 부른다 — 요청마다 별도 트랜잭션으로 커밋되는 세션 행이
+    // 이 테스트 트랜잭션의 세션 삭제 락과 겹쳐 대기가 난다.
     @Test
     @DisplayName("회수 전에 권한을 읽어 간 세션은 회수 뒤 다음 요청에서 401로 거부된다")
     void rejectsSessionSavedAfterRevoke() throws Exception {
-        mockMvc.perform(grant(
-                                TARGET_ADMIN_ID,
-                                "CUSTOMER_READ",
-                                UUID.randomUUID().toString())
-                        .with(grantor())
-                        .with(csrf()))
-                .andExpect(status().isOk());
+        AdminPermissionCommand command = new AdminPermissionCommand(GRANTOR_ID, TARGET_ADMIN_ID, "127.0.0.1");
+        adminPermissionCommandUseCase.grantPermission(command, AdminPermission.CUSTOMER_READ);
         UsernamePasswordAuthenticationToken lateLogin = UsernamePasswordAuthenticationToken.authenticated(
                 new AuthenticatedCustomer(TARGET_ADMIN_ID, "adm" + TARGET_ADMIN_ID, "관리자"),
                 null,
                 AuthorityUtils.createAuthorityList("ROLE_ADMIN", AdminPermission.CUSTOMER_READ.name()));
         lateLogin.setDetails(new AdminPermissionStamp(permissionVersionOf(TARGET_ADMIN_ID)));
         RequestPostProcessor lateSession = authentication(lateLogin);
-        mockMvc.perform(get("/admin/customers/{id}", PLAIN_CUSTOMER_ID).with(lateSession))
-                .andExpect(
-                        result -> assertThat(result.getResponse().getStatus()).isNotEqualTo(401));
 
-        mockMvc.perform(delete("/admin/customers/{id}/permissions/{permission}", TARGET_ADMIN_ID, "CUSTOMER_READ")
-                        .header("Idempotency-Key", UUID.randomUUID().toString())
-                        .with(grantor())
-                        .with(csrf()))
-                .andExpect(status().isOk());
+        adminPermissionCommandUseCase.revokePermission(command, AdminPermission.CUSTOMER_READ);
 
         mockMvc.perform(get("/admin/customers/{id}", PLAIN_CUSTOMER_ID).with(lateSession))
                 .andExpect(status().isUnauthorized())
