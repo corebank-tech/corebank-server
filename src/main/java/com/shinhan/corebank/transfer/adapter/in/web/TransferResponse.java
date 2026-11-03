@@ -8,7 +8,8 @@ import java.time.LocalDateTime;
 public record TransferResponse(
         @Schema(
                         description =
-                                "이체 처리 결과. SUCCESS · ERROR · TIMEOUT. TIMEOUT은 처리 불명(대외 응답 없음)으로 실패가 아니다 — 재시도하지 말고 결과 확인 중으로 안내한다")
+                                "이체 처리 결과. SUCCESS · ERROR · TIMEOUT. TIMEOUT은 처리 불명(대외 응답 없음)으로 실패가 아니다 — 재시도하지 말고 결과 확인 중으로 안내한다. 보류됐으면 null이고 transferHold가 채워진다",
+                        nullable = true)
                 ProcessResultStatus status,
         @Schema(
                         description =
@@ -19,7 +20,12 @@ public record TransferResponse(
         @Schema(description = "실패 코드. status=ERROR일 때만 채워짐 (예: TRF0303). TIMEOUT이면 null", nullable = true)
                 String errorCode,
         @Schema(description = "실패 메시지. status=ERROR일 때만 채워짐. TIMEOUT이면 null", nullable = true) String errorMessage,
-        @Schema(description = "이체 후 출금계좌 잔액. status=SUCCESS일 때만 채워짐 (TIMEOUT이면 null)") Long withdrawalBalanceAfter) {
+        @Schema(description = "이체 후 출금계좌 잔액. status=SUCCESS일 때만 채워짐 (TIMEOUT이면 null)") Long withdrawalBalanceAfter,
+        @Schema(
+                        description =
+                                "보류됐을 때만 채워짐(지연이체 등). 이때 status·transactionNumber는 null이고, 실행 예정 시각에 실행된 결과는 알림과 이체결과 조회로 확인한다",
+                        nullable = true)
+                TransferHoldResponse transferHold) {
     // transfer 행의 transferred_at은 NOT NULL이라 ERROR·TIMEOUT 행에도 생성 시각이 남는다 — 계약대로 SUCCESS만 내보낸다.
     public static TransferResponse from(TransferResult result) {
         return new TransferResponse(
@@ -28,6 +34,7 @@ public record TransferResponse(
                 result.status() == ProcessResultStatus.SUCCESS ? result.transferredAt() : null,
                 result.errorCode(),
                 result.errorMessage(),
-                result.withdrawalBalanceAfter());
+                result.withdrawalBalanceAfter(),
+                result.held() ? TransferHoldResponse.heldFrom(result) : null);
     }
 }

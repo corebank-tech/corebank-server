@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 39개 비즈니스 테이블 + 7개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 389개 컬럼
+**대상**: 42개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 439개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -26,11 +26,11 @@
 
 | # | 테이블 | 설명 | 담당 | 컬럼 |
 | --- | --- | --- | --- |----|
-| 1 | `customer` | 고객 | P6 | 19 |
+| 1 | `customer` | 고객 | P6 | 22 |
 | 2 | `terms` | 약관 | P6 | 10 |
 | 3 | `customer_terms_agreement` | 회원가입 약관 동의 | P6 | 4  |
 | 4 | `verification_request` | 인증 요청 | P6 | 13 |
-| 5 | `notification` | 알림 | P6 | 9  |
+| 5 | `notification` | 알림 | P1 | 9  |
 | 6 | `product` | 상품 | P3 | 25 |
 | 7 | `product_rate_tier` | 상품 기간별 금리 | P3 | 3  |
 | 8 | `product_preferential_rate` | 상품 우대금리 | P3 | 4  |
@@ -51,7 +51,7 @@
 | 23 | `auto_transfer` | 자동이체 등록 | P5 | 18 |
 | 24 | `auto_transfer_execution` | 자동이체 회차 실행결과 | P5 | 8  |
 | 25 | `idempotency_key` | 멱등키 | P5 | 9  |
-| 26 | `audit_log` | 감사 로그 | P5 | 8  |
+| 26 | `audit_log` | 감사 로그 | P5 | 10 |
 | 27 | `common_code` | 공통코드 | P5 | 8  |
 | 28 | `batch_execution_lock` | 배치 중복 트리거 방지 락 | P5 | 3  |
 | 29 | `gl_account` | 계정과목 | P3 | 6  |
@@ -72,10 +72,15 @@
 | 44 | `SPRING_SESSION` | 공용 HTTP 세션 | P6 | 7 |
 | 45 | `SPRING_SESSION_ATTRIBUTES` | 직렬화된 세션 속성 | P6 | 3 |
 | 46 | `EVENT_PUBLICATION` | 이벤트 발행 기록 (Spring Modulith) | P1 | 9 |
+| 47 | `cob_checkpoint` | COB 재시작 체크포인트 | P5 | 5 |
+| 48 | `audit_archive_execution` | 감사 로그 WORM 적재 상태 | P1 | 9 |
+| 49 | `audit_integrity_mismatch` | 감사 로그 무결성 불일치 목록 | P1 | 5 |
+| 50 | `transfer_hold` | 이체 보류 | P4 | 20 |
+| 51 | `delayed_transfer_setting` | 고객별 지연이체 설정 | P4 | 6 |
 
 ---
 
-# 1. 고객 · 인증 — P6
+# 1. 고객 · 인증 — P6 (`admin_permission` · `notification`은 P1)
 
 ## `SPRING_SESSION` / `SPRING_SESSION_ATTRIBUTES` (PH-49c)
 
@@ -127,6 +132,9 @@ Spring Session JDBC 표준 스키마. Flyway `V202610221420`으로만 생성하�
 | `joined_at` | `DATETIME(6)` |  | X |  | 회원가입 완료 일시. 고객정보 조회의 `joinedAt` |
 | `created_at` | `DATETIME(6)` |  | X |  | 행 생성 일시 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 행 최종 수정 일시 |
+| `email_ciphertext` | `VARCHAR(768)` | | O | | 이메일 AES-256-GCM 암호문. PH-18 전환 중에는 NULL 허용 |
+| `phone_number_ciphertext` | `VARCHAR(128)` | | O | | 휴대폰 번호 AES-256-GCM 암호문. PH-18 전환 중에는 NULL 허용 |
+| `email_search_hash` | `CHAR(64)` | **UK** | O | | 정규화 이메일의 HMAC-SHA256 검색 해시. 암호화 키와 별도 키 사용 |
 
 **인덱스**
 
@@ -135,6 +143,7 @@ Spring Session JDBC 표준 스키마. Flyway `V202610221420`으로만 생성하�
 | UNIQUE | `uk_customer_user_id` | `user_id` |
 | UNIQUE | `uk_customer_email` | `email` |
 | UNIQUE | `uk_customer_existing_bank_customer_id` | `existing_bank_customer_id` |
+| UNIQUE | `uk_customer_email_search_hash` | `email_search_hash` |
 
 **CHECK 제약**
 
@@ -260,8 +269,8 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | --- | --- | --- | --- | --- | --- |
 | `notification_id` | `BIGINT` | **PK** | X |  | 알림 내부 식별자. 읽음 처리 API의 경로 변수 |
 | `customer_id` | `BIGINT` | **FK** | X |  | 수신 고객 → `customer.customer_id` |
-| `type` | `VARCHAR(24)` |  | X |  | 알림을 발생시킨 업무 구분. `TRANSFER`(즉시이체) / `SCHEDULED_TRANSFER`(예약이체) / `AUTO_TRANSFER`(자동이체) / `PRODUCT_SUBSCRIPTION`(상품가입) |
-| `ref_id` | `BIGINT` |  | O |  | 다형 참조: TRANSFER->transfer.transfer_id / SCHEDULED_TRANSFER->scheduled_transfer_id / AUTO_TRANSFER->auto_transfer_execution.execution_id / PRODUCT_SUBSCRIPTION->subscription_id |
+| `type` | `VARCHAR(24)` | **UK** | X |  | 알림을 발생시킨 업무 구분. `TRANSFER`(즉시 · 타행이체) / `SCHEDULED_TRANSFER`(예약이체) / `AUTO_TRANSFER`(자동이체) / `PRODUCT_SUBSCRIPTION`(상품가입) |
+| `ref_id` | `BIGINT` | **UK** | O |  | 다형 참조: TRANSFER->transfer.transfer_id / SCHEDULED_TRANSFER->scheduled_transfer_id / AUTO_TRANSFER->auto_transfer_execution.execution_id / PRODUCT_SUBSCRIPTION->subscription_id |
 | `title` | `VARCHAR(100)` |  | X |  | 알림 제목. 목록 화면의 한 줄 요약 |
 | `content` | `VARCHAR(500)` |  | X |  | 알림 본문 문구 |
 | `is_read` | `BOOLEAN` |  | X | `FALSE` | 읽음 여부. 미읽음 건수 조회의 집계 대상 |
@@ -273,6 +282,7 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | 종류 | 이름 | 컬럼 |
 | --- | --- | --- |
 | INDEX | `ix_noti_customer` | `customer_id, is_read, occurred_at DESC` |
+| UNIQUE | `uk_noti_type_ref` | `type, ref_id` — 구독자가 같은 이벤트를 두 번 받아도 알림은 1건(#706) |
 
 ---
 
@@ -545,13 +555,19 @@ COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED →
 
 > 거래번호 일련번호 채번 (비관적 락 대상 0순위)
 
-거래번호 일련 10자리를 채번한다. 일자·채널별로 매일 0부터 다시 시작하므로 `AUTO_INCREMENT`로 만들 수 없다. 전 고객이 같은 행을 두고 경합하는 유일한 지점이라 락 보유 시간을 최소로 유지해야 한다.
+거래번호 일련 10자리를 채번한다. 일자·채널별로 매일 0부터 다시 시작하므로 `AUTO_INCREMENT`로 만들 수 없다. 전 고객이 같은 행을 두고 경합하는 유일한 지점이라, 서버는 행을 잠글 때 번호를 `app.transaction-sequence.block-size`(기본 100)개씩 예약하고 메모리에서 나눠 준다(#786).
+
+예약분은 서버(WAS 인스턴스)마다 따로 들고 있어서, 다음 경우 예약하고 쓰지 않은 번호가 빈칸(결번)으로 남는다.
+
+- 서버 재시작·종료: 그 서버가 들고 있던 남은 번호. 예약 직후 종료하면 묶음 전체(최대 100개)가 빈다
+- 거래일 변경: 이전 일자의 묶음에 남은 번호. 일자가 바뀌면 새 일자 행에서 새로 예약한다
+- 서버가 여러 대: 위 빈칸이 서버마다 생긴다. 일자·채널 하나에서 서버 수 × 100개까지 빌 수 있다
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
 | `seq_date` | `DATE` | **PK** | X |  | 채번 기준 영업일. KST 기준이며 거래번호 앞 8자리와 같다 |
 | `channel` | `CHAR(2)` | **PK** | X |  | 채널 코드. `WB`(인터넷뱅킹) / `BT`(배치·예약이체). 거래번호 9~10번째 자리 |
-| `last_seq` | `BIGINT` |  | X | `0` | 해당 일자·채널에서 마지막으로 나간 일련번호. 다음 거래는 이 값 + 1을 받는다 |
+| `last_seq` | `BIGINT` |  | X | `0` | 해당 일자·채널에서 서버가 예약한 마지막 일련번호. 다음 예약은 이 값 + 1부터다. 앱이 떠 있는 동안 SQL로 바꾸면 서버 메모리의 예약분과 겹칠 수 있어 모든 WAS 인스턴스를 재시작해 예약분을 버린다 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 마지막 채번 시각 |
 
 **CHECK 제약**
@@ -584,9 +600,9 @@ COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED →
 | `transfer_type` | `VARCHAR(12)` |  | X |  | 이체 종류. `IMMEDIATE`(즉시) / `SCHEDULED`(예약) / `AUTO`(자동) |
 | `channel` | `CHAR(2)` |  | X |  | 거래 채널. `WB`(인터넷뱅킹) / `BT`(배치). 거래번호의 채널 2자리와 같은 값 |
 | `status` | `VARCHAR(12)` |  | X |  | 처리 결과. `SUCCESS`(정상) / `ERROR`(오류) / `TIMEOUT`(처리 불명 — 대외 전문 무응답으로 상대 처리 여부를 모른다. 실패가 아니며 조회거래로 확정한다, PH-80). `PROCESSING`은 INSERT 직후의 트랜잭션 내부 상태라 커밋된 행에는 나타나지 않는다 (#377) |
-| `source_type` | `VARCHAR(12)` |  | O |  | 이 이체를 만든 원본 구분. `SCHEDULED`(예약이체) / `AUTO`(자동이체). 즉시이체는 NULL |
-| `source_id` | `BIGINT` |  | O |  | 예약·자동이체 원본 PK. `source_type`과 함께 역추적에 쓴다 |
-| `execution_date` | `DATE` |  | O |  | `source_id`와 함께 멱등키를 구성하는 회차 실행일자. SCHEDULED/AUTO 전용(즉시이체는 NULL). 배치가 실제로 호출된 날짜가 아니라 그 회차의 논리적 실행일(`scheduled_transfer.scheduled_date` / `auto_transfer_execution.execution_date`)이 들어가야 크래시 후 재시도가 같은 회차로 식별된다 |
+| `source_type` | `VARCHAR(12)` |  | O |  | 이 이체를 만든 원본 구분. `SCHEDULED`(예약이체) / `AUTO`(자동이체) / `HELD`(이체 보류 실행, `transfer_type`은 `IMMEDIATE`). 고객이 바로 실행한 즉시이체는 NULL |
+| `source_id` | `BIGINT` |  | O |  | 예약·자동이체 원본 PK, 또는 이체 보류 `transfer_hold_id`. `source_type`과 함께 역추적에 쓴다 |
+| `execution_date` | `DATE` |  | O |  | `source_id`와 함께 멱등키를 구성하는 회차 실행일자. SCHEDULED/AUTO와 HELD 전용(고객이 바로 실행한 즉시이체는 NULL). HELD는 보류한 날짜(`transfer_hold.held_at`)다. 배치가 실제로 호출된 날짜가 아니라 그 회차의 논리적 실행일(`scheduled_transfer.scheduled_date` / `auto_transfer_execution.execution_date`)이 들어가야 크래시 후 재시도가 같은 회차로 식별된다 |
 | `my_passbook_memo` | `VARCHAR(10)` |  | O |  | 내 통장에 찍히는 문구. 최대 10자 |
 | `recipient_passbook_memo` | `VARCHAR(10)` |  | O |  | 받는 분 통장에 찍히는 문구 |
 | `withdrawal_balance_after` | `BIGINT` |  | O |  | 출금 직후 출금계좌 잔액. 성공 시에만 값이 있다 |
@@ -646,7 +662,7 @@ COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED →
 | `occurred_at` | `DATETIME(6)` | **PK** | X |  | 기표 발생 일시. RANGE 파티션 키이며 거래내역 조회의 기간 조건이 이 컬럼에 걸린다. **온라인 거래 경로(이체·상품가입 입금)는 계좌 락을 쥔 뒤 이 시각을 찍으므로, 시계가 정상적으로 흐르는 동안에는 같은 계좌의 잔액 반영 순서와 같다.** 적수·거래내역은 `occurred_at DESC, ledger_entry_id DESC` 순으로 마지막 잔액을 고른다. 락을 거치지 않고 직접 적재하는 시드(`Phase2MinimumSeedService`·`local-demo-data.sql`)는 이 계약의 대상이 아니다(#545) |
 | `trade_date` | `DATE` |  | O |  | **거래일** — 이 기표가 귀속되는 영업일. `occurred_at`(발생 시각)과 다르다. 값 규칙은 `transfer.trade_date`와 같다. **원장을 쓰는 모든 경로(이체·정정·상품가입 입금·예적금 입금 계약)가 채운다.** #516 대입 전 행은 NULL이다. P6 시드(PH-60b)는 GL과 같은 거래일을 넣는다 |
 
-**`trade_date` 는 NULL 을 허용한다(Expand).** `NOT NULL` 제약은 걸지 않는다 — 300만 행 파티션 테이블 재구성을 피하려고, 새 행의 필수 여부는 도메인 팩토리가 막는다(#515 A안). 기존 행 채우기는 #515에서 한다. 거래일로 조회하는 곳이 아직 없어 인덱스는 두지 않는다 — `gl_journal_entry` 와 같은 판단이다.
+**`trade_date` 는 NULL 을 허용한다(Expand).** `NOT NULL` 제약은 걸지 않는다 — 300만 행 파티션 테이블 재구성을 피하려고, 새 행의 필수 여부는 도메인 팩토리가 막는다(#515 A안). 기존 행 채우기는 #515에서 한다. 거래일로 조회하는 곳이 아직 없어 인덱스는 두지 않는다. `gl_journal_entry` 는 시산표가 거래일로 집계해서 GL-IDX 에서 거래일 인덱스를 붙였다.
 
 **`trade_date` 로 거를 때는 `occurred_at` 범위도 넉넉히 같이 건다.** 파티션 키가 `occurred_at` 이라 `trade_date` 조건만 걸면 모든 파티션을 읽는다. 거래일과 발생일의 간격은 일정하지 않다 — 연휴면 며칠 뒤이고, COB 가 늦어지면 하루 앞설 수도 있다.
 
@@ -684,7 +700,7 @@ COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED →
 
 > 원장-잔액 대사 불일치 목록 (PH-38)
 
-COB 대사 스텝이 원장 누적 합계와 `account.balance`가 다른 계좌를 영업일별로 남긴다. 관리자 목록 API(FE ADM-04)가 읽는다. **같은 영업일을 다시 대사하면 그날 행을 모두 지우고 새 결과로 바꾼다** — 재실행 이력은 `batch_execution_history`가 남긴다. 대사는 보고만 하고 정정하지 않으므로 처리 상태 컬럼이 없다. 감사용 기록이라 계좌가 해지·정리돼도 남도록 `account`에 FK를 걸지 않는다. 차액(`ledger_balance - account_balance`)은 저장하지 않고 조회할 때 계산한다.
+COB 대사 스텝이 원장 누적 합계와 `account.balance`가 다른 계좌를 영업일별로 남긴다. 관리자 목록 API(FE ADM-04)가 읽는다. **같은 영업일로 대사가 다시 돌면 그날 행이 이미 있을 때는 저장하지 않고 처음 목록을 그대로 둔다(#749).** 멈춘 COB를 재개하면 같은 영업일로 대사가 다시 도는데, 그 결과는 지금 원장을 대조한 다른 시점의 목록이라 마감을 멈춘 원인을 지우게 되기 때문이다. 마감을 계속할지는 다시 돈 대사 결과로 판정하고, 그 건수는 `[LEDGER_RECONCILIATION_KEPT]` 로그에 남는다. 처음 실행이 0건이라 행이 없던 날은 다시 돈 결과를 저장한다. 재실행 이력은 `batch_execution_history`가 남긴다. 대사는 보고만 하고 정정하지 않으므로 처리 상태 컬럼이 없다. 감사용 기록이라 계좌가 해지·정리돼도 남도록 `account`에 FK를 걸지 않는다. 차액(`ledger_balance - account_balance`)은 저장하지 않고 조회할 때 계산한다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
@@ -721,6 +737,82 @@ COB 대사 스텝이 원장 누적 합계와 `account.balance`가 다른 계좌�
 | 종류 | 이름 | 컬럼 |
 | --- | --- | --- |
 | UNIQUE | `uk_fav` | `customer_id, deposit_account_number` |
+
+---
+
+## `transfer_hold`
+
+> 이체 보류 — 기표하지 않고 잡아 둔 즉시이체 원본 요청 (#772)
+
+훅 C(`TransferHoldPolicy`)가 보류로 판정한 즉시이체를 원본 요청 그대로 담는다([transfer_seam.md](phase2/transfer_seam.md) §9, [glossary](phase2/glossary.md) 12번). 보류 중에는 원장·잔액·한도가 바뀌지 않는다. 실행하면 원본 그대로 이체를 한 번 실행하고 `transfer`(`source_type = HELD`, `source_id = transfer_hold_id`) 1행이 생긴다. 계좌비밀번호·OTP 토큰은 보류 전에 소비되고 원문은 저장하지 않는다.
+
+상태는 `HELD → EXECUTING → EXECUTED / FAILED`, `HELD → REJECTED / CANCELLED / EXPIRED`다. 전이는 조건부 UPDATE(`WHERE status = 이전 상태`)로 해서 같은 건을 두 곳에서 동시에 처리해도 한 곳만 성공한다. 그래서 `version` 컬럼이 없다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `transfer_hold_id` | `BIGINT` | **PK** | X |  | 보류 건 식별자. 실행한 `transfer.source_id` |
+| `customer_id` | `BIGINT` |  | X |  | 요청한 고객. 고객 취소는 본인 건만 된다 |
+| `withdrawal_account_id` | `BIGINT` |  | X |  | 출금계좌 ID |
+| `deposit_account_number` | `VARCHAR(16)` |  | X |  | 입금 계좌번호(당행, 숫자만) |
+| `amount` | `BIGINT` |  | X |  | 이체금액 |
+| `my_passbook_memo` | `VARCHAR(10)` |  | O |  | 내 통장 표시내용 |
+| `recipient_passbook_memo` | `VARCHAR(10)` |  | O |  | 받는 분 통장 표시내용 |
+| `channel` | `CHAR(2)` |  | X |  | 요청 채널. 실행할 때도 이 채널로 채번한다 |
+| `flow_id` | `VARCHAR(64)` |  | O |  | FE 행동 흐름 식별자 |
+| `policy_code` | `VARCHAR(30)` |  | X |  | 보류를 정한 정책 코드 |
+| `release_mode` | `VARCHAR(12)` |  | X |  | 푸는 방식. `AT_TIME`(시각 도래, 지연이체) / `ON_APPROVAL`(관리자 승인, FDS) |
+| `release_at` | `DATETIME(6)` |  | O |  | `AT_TIME`일 때 실행할 시각. 그 밖에는 NULL |
+| `status` | `VARCHAR(10)` |  | X |  | `HELD`(보류 중) / `EXECUTING`(실행 선점) / `EXECUTED`(실행 성공) / `FAILED`(실행 시점 검사에서 거부) / `REJECTED`(관리자 거절) / `CANCELLED`(고객 취소) / `EXPIRED`(승인 기한 지남) |
+| `authenticated_at` | `DATETIME(6)` |  | X |  | 계좌비밀번호·OTP 토큰을 소비한 시각 |
+| `held_at` | `DATETIME(6)` |  | X |  | 보류 저장 시각. 실행한 `transfer.execution_date`는 이 날짜다 |
+| `transfer_id` | `BIGINT` | **UK** | O |  | 실행으로 생긴 `transfer` 행. 실행 전이거나 실행 없이 끝났으면 NULL |
+| `actor_id` | `BIGINT` |  | O |  | 실행·거절·취소한 주체(관리자 또는 고객). 스케줄러 실행은 NULL |
+| `reason_code` | `VARCHAR(30)` |  | O |  | 거절 사유 코드 |
+| `executing_at` | `DATETIME(6)` |  | O |  | `EXECUTING`으로 선점한 시각. 서버가 실행 중 멈춘 건을 찾는 기준 |
+| `completed_at` | `DATETIME(6)` |  | O |  | 종료 상태가 된 시각 |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_transfer_hold_transfer` | `transfer_id` — 보류 한 건은 이체 행 하나로만 끝난다 |
+| INDEX | `ix_transfer_hold_status_release` | `status, release_at` — 해제 스케줄러가 해제 시각이 지난 `HELD`와 멈춘 `EXECUTING`을 찾는다 |
+| INDEX | `ix_transfer_hold_customer` | `customer_id, held_at` — 고객의 보류 건 조회 |
+
+**CHECK 제약**
+
+| 이름 | 조건 |
+| --- | --- |
+| `ck_transfer_hold_amount` | `amount > 0` |
+| `ck_transfer_hold_release` | `(release_mode = 'AT_TIME') = (release_at IS NOT NULL)` |
+
+FK는 두지 않는다. 원장 근거가 아니고, 출금계좌 FK는 INSERT 때 계좌 행에 공유 락을 요구한다. 소유·수취인 검증은 보류 판정 전에 끝난다.
+
+---
+
+## `delayed_transfer_setting`
+
+> 고객별 지연이체 설정 (PH-06, #772)
+
+근거는 전자금융거래법 제13조제2항과 시행령 제9조의2다(이용자가 원하면 거래지시부터 일정 시간 뒤에 지급 효력이 생기게 해야 한다). 훅 C 구현체(`DelayedTransferHoldPolicy`)가 고객 락을 쥔 채 이 행을 PK로 한 번 읽는다. 전역 스위치(`app.delayed-transfer.enabled`)가 꺼져 있으면 읽지 않는다.
+
+**행이 없으면 꺼진 것으로 본다.** 처음 저장할 때 INSERT하므로 기존 고객 백필이 없다. 고객 본인만 바꾸는 값이라 `version`을 두지 않는다(동시에 바꾸면 나중 요청이 남는다).
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `customer_id` | `BIGINT` | **PK** | X |  | 고객. 고객당 1행 |
+| `enabled` | `BOOLEAN` |  | X |  | 지연이체 사용 여부 |
+| `threshold_amount` | `BIGINT` |  | X |  | 기준금액(원). 이 금액 **이상**인 당행 즉시이체를 지연한다. 화면 기본값 100만 원은 은행들의 "건당 100만 원 이하 즉시이체 허용" 예외에 맞춘 값이다 |
+| `delay_hours` | `INT` |  | X |  | 지연시간(시간 단위). 최소 3시간은 금감원 안내·은행 공통 기준, 최대 24시간은 우리 기준이다 |
+| `created_at` | `DATETIME(6)` |  | X |  | 처음 저장한 시각 |
+| `updated_at` | `DATETIME(6)` |  | X |  | 마지막으로 바꾼 시각 |
+
+**CHECK 제약**
+
+| 이름 | 조건 |
+| --- | --- |
+| `ck_delayed_transfer_setting_threshold` | `threshold_amount > 0` |
+| `ck_delayed_transfer_setting_delay` | `delay_hours BETWEEN 3 AND 24` |
 
 ---
 
@@ -884,6 +976,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | --- | --- | --- |
 | UNIQUE | `uk_sched_active_dup` | `active_dup_key` |
 | INDEX | `ix_sched_batch` | `status, scheduled_date` |
+| INDEX | `ix_sched_payee_status` | `payee_account_number, status` |
 
 **CHECK 제약**
 
@@ -924,6 +1017,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | --- | --- | --- |
 | UNIQUE | `uk_auto_active_dup` | `active_dup_key` |
 | INDEX | `ix_auto_batch` | `status, next_execution_date` |
+| INDEX | `ix_auto_deposit_status` | `deposit_account_number, status` |
 
 **CHECK 제약**
 
@@ -1002,6 +1096,8 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | `request_ip` | `VARCHAR(45)` |  | X |  | 요청 클라이언트 IP. IPv6까지 담기도록 45자 |
 | `result` | `VARCHAR(12)` |  | X |  | 처리 결과. `SUCCESS` / `FAILURE` |
 | `detail` | `JSON` |  | O |  | 부가 정보. 비밀번호·전체 계좌번호 등은 마스킹 후 저장한다 |
+| `access_reason` | `VARCHAR(20)` |  | O |  | 관리자 개인정보 조회·변경 사유(PH-89, D-10). `CUSTOMER_REQUEST` · `INCIDENT` · `AUDIT` · `OPERATION`. 그 밖의 행은 NULL |
+| `row_hash` | `CHAR(64)` |  | O |  | 무결성 해시(PH-82). `audit_log_id`를 뺀 전 컬럼을 키 정렬 JSON으로 만든 SHA-256(64자 hex). 매일 WORM 버킷에 올린 사본과 대조한다. 도입 전 행은 NULL이며 적재 대상이 아니다 |
 | `requested_at` | `DATETIME(6)` |  | X |  | 요청 일시 |
 
 **인덱스**
@@ -1010,6 +1106,53 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | --- | --- | --- |
 | INDEX | `ix_audit_customer` | `customer_id, requested_at DESC` |
 | INDEX | `ix_audit_txno` | `transaction_number` |
+| INDEX | `ix_audit_requested_at` | `requested_at` — WORM 적재 · 검증 배치의 하루 범위 조회(PH-82) |
+
+---
+
+## `audit_archive_execution`
+
+> 감사 로그 WORM 적재 상태 (PH-82, #788)
+
+`AuditLogArchiveService`가 날짜 · 경로(`LOG` / `ACCESS`)마다 업로드 전에 `PENDING`을 커밋하고, 업로드가 끝나면 `SUCCESS`, 실패하면 `FAILURE`와 사유를 남긴다. 매일 00:30 배치가 최근 7일 중 `SUCCESS`가 아닌 날만 다시 올린다. 7일을 넘긴 미완료 날은 자동으로 다시 올리지 않는다. 저장소는 같은 키를 덮어쓰지 않으므로(S3 `If-None-Match: *`), 사본이 이미 있으면 내용이 같을 때만 `SUCCESS`로 확정한다. **`SUCCESS`인데 사본이 없으면 다시 올리지 않는다** — 지워진 증거를 현재 DB 내용으로 덮지 않기 위해서다. 다른 테이블과 FK는 없다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `audit_archive_execution_id` | `BIGINT` | **PK** | X |  | 내부 식별자 (AUTO_INCREMENT) |
+| `archive_date` | `DATE` | **UK** | X |  | 적재 대상 날짜(`audit_log.requested_at` 기준) |
+| `archive_type` | `VARCHAR(10)` | **UK** | X |  | `LOG` / `ACCESS` |
+| `status` | `VARCHAR(10)` |  | X |  | `PENDING` / `SUCCESS` / `FAILURE` |
+| `object_key` | `VARCHAR(100)` |  | X |  | 저장소 객체 키. 예: `audit/log/2026/10/28.jsonl` |
+| `row_count` | `INT` |  | O |  | 적재한 행 수. 성공 때만 채우고 0건도 남긴다 |
+| `failure_reason` | `VARCHAR(500)` |  | O |  | 마지막 실패 사유 |
+| `completed_at` | `DATETIME(6)` |  | O |  | 성공 시각(KST) |
+| `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각(KST, 애플리케이션이 채움) |
+
+| 구분 | 인덱스 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_audit_archive_execution_date_type` | `archive_date, archive_type` |
+
+---
+
+## `audit_integrity_mismatch`
+
+> 감사 로그 무결성 불일치 목록 (PH-82)
+
+검증 배치(매일 01:00, 최근 7일)가 WORM 사본과 DB 감사 행을 대조해 찾은 불일치를 날짜별로 남긴다. **증거라 지우지 않는다. 같은 날을 다시 검증해도 이미 남긴 불일치는 건너뛰고 새로 찾은 것만 쌓는다.** 지워진 감사 행도 기록해야 하므로 `audit_log`에 FK를 걸지 않는다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `audit_integrity_mismatch_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 불일치 행 식별자 |
+| `archive_date` | `DATE` | **UK** | X |  | 검증한 사본의 날짜(`audit_log.requested_at` 기준) |
+| `audit_log_id` | `BIGINT` | **UK** | X |  | 불일치 감사 행 |
+| `mismatch_type` | `VARCHAR(20)` | **UK** | X |  | `TAMPERED`(다시 계산한 해시가 사본과 다름) · `MISSING_IN_DB`(사본에만 있음) · `NOT_ARCHIVED`(DB에만 있음) |
+| `detected_at` | `DATETIME(6)` |  | X |  | 검증 배치가 불일치를 확인한 시각 |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_audit_integrity_mismatch_date_log_type` | `archive_date, audit_log_id, mismatch_type` |
 
 ---
 
@@ -1046,7 +1189,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
-| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP`, `LEDGER_RECONCILIATION_BATCH`, `AUTH_TOKEN_CLEANUP`, `TERMS_VIEW_HISTORY_CLEANUP`, `AUTO_TRANSFER_RECONCILE`, `SCHEDULED_TRANSFER_RECONCILE`, `COB` 8행 |
+| `job_name` | `VARCHAR(50)` | **PK** | X |  | 배치 잡 식별자. `DAILY_TRANSFER_BATCH`, `IDEMPOTENCY_KEY_CLEANUP`, `LEDGER_RECONCILIATION_BATCH`, `AUTH_TOKEN_CLEANUP`, `TERMS_VIEW_HISTORY_CLEANUP`, `AUTO_TRANSFER_RECONCILE`, `SCHEDULED_TRANSFER_RECONCILE`, `COB`, `AUDIT_LOG_ARCHIVE`, `AUDIT_INTEGRITY_CHECK` 10행 |
 | `currently_running` | `BOOLEAN` |  | X | `FALSE` | 이 배치가 지금 실행 중인지. 트리거 시작 시 `TRUE`, 종료 시(성공/실패 무관) `FALSE`로 되돌림 |
 | `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각. stale(크래시로 방치됨) 판단 기준 |
 
@@ -1237,7 +1380,7 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 
 `trade_date` 를 전표에서 한 번 더 들고 간다. 600만 줄을 기간으로 거를 때 전표 조인을 없애기 위해서다 — Fineract 도 `entry_date` 를 같은 자리에 둔다. 분개는 전표와 함께 한 번만 쓰이고 수정되지 않으므로 두 값이 어긋날 경로가 없다.
 
-**시산표 집계용 복합 인덱스 `(account_code, trade_date)` 는 일부러 넣지 않았다.** PH-28 베이스라인(10/8)을 인덱스 없이 측정한 뒤 S3 에서 붙이고 재측정한다. 지금 넣으면 "개선 전" 수치가 사라진다.
+**시산표 집계용 인덱스는 거래일이 먼저다(GL-IDX).** `ix_gl_journal_entry_trade_date (trade_date, account_code, dr_cr, amount)` 는 조회 기간만 범위로 읽고, 집계 SQL 이 쓰는 컬럼을 모두 담아 본 테이블을 읽지 않는다. 인덱스가 없을 때는 기간과 무관하게 분개 전체를 `fk_gl_journal_entry_account` 순서로 읽었다(운영 647만 행 전 구간 평균 26.8초, [ph28_baseline_results.md](phase2/ph28_baseline_results.md)). `account_code` 로 시작하는 인덱스는 넣지 않는다. `(account_code, trade_date)` 는 기간으로 좁히지 못해 오히려 느렸고, `fk_gl_journal_entry_account` 는 FK 가 자동으로 만든 인덱스라 같은 FK 를 받칠 수 있는 인덱스가 생기면 MySQL 이 조용히 지운다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
@@ -1257,6 +1400,7 @@ Apache Fineract 의 `acc_gl_account`·`acc_gl_journal_entry` 를 대조 기준�
 | UNIQUE | `uk_gl_journal_entry_line` | `voucher_no, line_no` |
 | FK | `fk_gl_journal_entry_voucher` | `voucher_no, trade_date` → `gl_voucher` |
 | FK | `fk_gl_journal_entry_account` | `account_code` → `gl_account` |
+| INDEX | `ix_gl_journal_entry_trade_date` | `trade_date, account_code, dr_cr, amount` |
 
 **제약**
 
@@ -1332,6 +1476,26 @@ COB의 영업일 전환(`advanceFrom`)과 달력 따라잡기(`catchUpTo`)가 `B
 | 구분 | 인덱스 | 컬럼 |
 | --- | --- | --- |
 | UNIQUE | `uk_business_date_cutoff_date_status` | `base_date, status` |
+
+---
+
+## `cob_checkpoint`
+
+> COB 재시작 체크포인트 (#663)
+
+`CobRunnerService`가 새 COB를 시작할 때, 영업일을 넘기기 전에 마감 대상 영업일(`COB_DATE`)의 영업일 전환 행과 등록된 스텝 행을 모두 `PENDING`으로 남기고, 전환과 스텝이 끝날 때마다 `SUCCESS`로 바꾼다. `PENDING`이 남은 `cob_date`가 있으면 다음 `run()`이 오래된 날짜부터 그 날짜의 `PENDING` 스텝만 이어서 실행한다. 행이 없는 스텝(초기화 실패 등)은 재개 대상이 아니다. `batch_execution_history`는 관측용이라 재시작 근거로 쓰지 않고, `business_date_cutoff`는 달력 따라잡기도 기록하므로 `COB_DATE`의 근거가 아니다. 다른 테이블과 FK는 없다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `cob_checkpoint_id` | `BIGINT` | **PK** | X |  | 내부 식별자 (AUTO_INCREMENT) |
+| `cob_date` | `DATE` | **UK** | X |  | 마감 대상 영업일(ADR-0004 `COB_DATE`) |
+| `step_name` | `VARCHAR(100)` | **UK** | X |  | `CobStep.name()`. 영업일 전환은 `business-date-advance` |
+| `status` | `VARCHAR(10)` |  | X |  | `PENDING` / `SUCCESS` |
+| `updated_at` | `DATETIME(6)` |  | X |  | 마지막 상태 변경 시각(KST, 애플리케이션이 채움) |
+
+| 구분 | 인덱스 | 컬럼 |
+| --- | --- | --- |
+| UNIQUE | `uk_cob_checkpoint_date_step` | `cob_date, step_name` |
 
 ---
 

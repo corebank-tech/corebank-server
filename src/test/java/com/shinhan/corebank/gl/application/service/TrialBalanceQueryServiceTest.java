@@ -22,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Transactional;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("TrialBalanceQueryService 단위 테스트")
@@ -91,5 +92,18 @@ class TrialBalanceQueryServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(CommonErrorCode.DATE_RANGE_EXCEEDED);
         verifyNoInteractions(trialBalanceQueryPort);
+    }
+
+    // 값의 근거는 개선 전 운영 측정(전 구간 p95 27.4초, 최댓값 30.0초). 타임아웃이 실제로 쿼리에 걸리는지는
+    // TrialBalanceIndexAndTimeoutTest 가 본다.
+    @Test
+    @DisplayName("집계 트랜잭션은 읽기 전용이고 30초 타임아웃이 걸린다")
+    void queryTransactionIsReadOnlyWithThirtySecondTimeout() throws NoSuchMethodException {
+        Transactional transactional = TrialBalanceQueryService.class
+                .getMethod("query", TrialBalanceQuery.class)
+                .getAnnotation(Transactional.class);
+
+        assertThat(transactional.readOnly()).isTrue();
+        assertThat(transactional.timeout()).isEqualTo(30);
     }
 }

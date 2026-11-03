@@ -96,7 +96,9 @@ public class SecurityConfig {
                 // 브라우저가 거래용 일회성 인증 토큰을 헤더로 전송할 수 있도록 preflight에서 허용한다.
                 "Account-Password-Auth-Token",
                 "Otp-Auth-Token",
-                "X-Correlation-Id"));
+                "X-Correlation-Id",
+                // 관리자 고객 개인정보 API의 조회 사유(PH-89)
+                "X-Access-Reason"));
         configuration.setExposedHeaders(List.of("X-Correlation-Id"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);

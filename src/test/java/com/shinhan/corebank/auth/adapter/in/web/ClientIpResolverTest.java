@@ -12,40 +12,22 @@ class ClientIpResolverTest {
     private final ClientIpResolver resolver = new ClientIpResolver();
 
     @Test
-    @DisplayName("X-Forwarded-For에서 ALB가 마지막에 추가한 접속 IP를 반환한다")
-    void resolvesLastForwardedIpAddedByAlb() {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("X-Forwarded-For", " 203.0.113.10, 10.0.1.20 ");
-
-        assertThat(resolver.resolve(request)).isEqualTo("10.0.1.20");
-    }
-
-    @Test
-    @DisplayName("클라이언트가 주입한 선행 X-Forwarded-For 값을 신뢰하지 않는다")
-    void ignoresClientSuppliedForwardedIp() {
+    @DisplayName("X-Forwarded-For 헤더를 읽지 않고 원격 주소를 반환한다")
+    void ignoresForwardedForHeader() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("X-Forwarded-For", "9.9.9.9, 203.0.113.10");
+        request.setRemoteAddr("192.0.2.30");
 
-        assertThat(resolver.resolve(request)).isEqualTo("203.0.113.10");
+        assertThat(resolver.resolve(request)).isEqualTo("192.0.2.30");
     }
 
     @Test
-    @DisplayName("전달 헤더가 없으면 원격 주소를 반환한다")
-    void fallsBackToRemoteAddress() {
+    @DisplayName("원격 주소의 앞뒤 공백을 제거해 반환한다")
+    void trimsRemoteAddress() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRemoteAddr(" 192.0.2.10 ");
 
         assertThat(resolver.resolve(request)).isEqualTo("192.0.2.10");
-    }
-
-    @Test
-    @DisplayName("전달 헤더가 공백이면 원격 주소를 반환한다")
-    void fallsBackWhenForwardedHeaderIsBlank() {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("X-Forwarded-For", "   ");
-        request.setRemoteAddr("192.0.2.20");
-
-        assertThat(resolver.resolve(request)).isEqualTo("192.0.2.20");
     }
 
     @Test
@@ -63,7 +45,7 @@ class ClientIpResolverTest {
     @DisplayName("추출된 IP가 45자를 초과하면 거부한다")
     void rejectsIpLongerThanFortyFiveCharacters() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("X-Forwarded-For", "1".repeat(46));
+        request.setRemoteAddr("1".repeat(46));
 
         assertThatThrownBy(() -> resolver.resolve(request))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -75,7 +57,7 @@ class ClientIpResolverTest {
     void acceptsFortyFiveCharacterIp() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         String clientIp = "1".repeat(45);
-        request.addHeader("X-Forwarded-For", clientIp);
+        request.setRemoteAddr(clientIp);
 
         assertThat(resolver.resolve(request)).isEqualTo(clientIp);
     }

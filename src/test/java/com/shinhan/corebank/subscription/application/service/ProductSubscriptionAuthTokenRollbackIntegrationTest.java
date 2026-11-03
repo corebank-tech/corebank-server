@@ -16,6 +16,7 @@ import com.shinhan.corebank.account.domain.exception.AccountPasswordErrorCode;
 import com.shinhan.corebank.account.support.AccountNumberSequenceTestFixture;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.notification.application.port.in.NotificationCommandUseCase;
 import com.shinhan.corebank.otp.api.OtpTransactionType;
 import com.shinhan.corebank.otp.application.port.in.IssueOtpCommand;
 import com.shinhan.corebank.otp.application.port.in.IssueOtpResult;
@@ -54,6 +55,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 // #498: 가입이 롤백되면 그 안에서 소비한 계좌비번·OTP 토큰도 함께 되살아나야 한다.
@@ -99,6 +101,10 @@ class ProductSubscriptionAuthTokenRollbackIntegrationTest extends IntegrationTes
     // 계좌개설 뒤 단계를 실패시켜 두 토큰이 모두 소비된 상태의 롤백을 재현한다. 평소에는 진짜 구현을 부른다.
     @MockitoSpyBean
     private SaveTermsAgreementPort saveTermsAgreementPort;
+
+    // 가입이 실제 고객으로 알림을 남기면 정리 단계의 고객 삭제가 notification FK 에 막힌다. 알림은 이 테스트의 관심사가 아니다.
+    @MockitoBean
+    private NotificationCommandUseCase notificationCommandUseCase;
 
     private Long customerId;
     private Long productId;

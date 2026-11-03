@@ -1,5 +1,6 @@
 package com.shinhan.corebank.scheduledtransfer.application.service;
 
+import com.shinhan.corebank.account.api.AccountTransferLifecycleLockUseCase;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
@@ -48,6 +49,7 @@ public class ScheduledTransferCommandService
     private final AccountStatusPort accountStatusPort;
     private final TransferLimitPort transferLimitPort;
     private final AuditLogService auditLogService;
+    private final AccountTransferLifecycleLockUseCase lifecycleLockUseCase;
     private final Clock clock;
 
     @Override
@@ -125,6 +127,9 @@ public class ScheduledTransferCommandService
                 command.myPassbookMemo(),
                 command.recipientPassbookMemo(),
                 LocalDateTime.now(clock));
+
+        lifecycleLockUseCase.lockForRegistration(
+                command.customerId(), command.withdrawalAccountId(), command.depositAccountNumber());
 
         ScheduledTransfer saved = scheduledTransferPersistencePort.save(scheduledTransfer);
         auditLogService.record(

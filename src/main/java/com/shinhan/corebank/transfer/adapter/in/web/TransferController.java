@@ -76,7 +76,9 @@ public class TransferController {
             status=ERROR면 errorCode에 `TRF0001`(등록되지 않은 출금계좌) · `TRF0002`(출금·입금계좌 동일) \
             · `TRF0004`(입금 불가 상품유형) · `TRF0201`(입금계좌를 찾을 수 없음) · `TRF0301`/`TRF0304`(거래정지·해지 \
             상태의 입금/출금계좌) · `TRF0303`(출금계좌 잔액 부족) · `OTP0101`(OTP 인증 토큰 무효) · `OTP0102`(인증한 \
-            거래 내용과 요청 내용 불일치) 중 하나가 담긴다.""")
+            거래 내용과 요청 내용 불일치) 중 하나가 담긴다. \
+            지연이체를 켠 고객이 기준금액 이상을 보내면 바로 기표하지 않고 보류한다. 이때 status·transactionNumber는 null이고 \
+            `transferHold`에 보류 ID·실행 예정 시각·취소 가능 시각이 담긴다.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
@@ -401,6 +403,10 @@ public class TransferController {
         fingerprint.put("amount", request.amount());
         fingerprint.put("myPassbookMemo", request.myPassbookMemo());
         fingerprint.put("recipientPassbookMemo", request.recipientPassbookMemo());
+        // 값이 있을 때만 넣어야 flowId가 생기기 전에 저장된 요청의 지문이 그대로 맞는다
+        if (request.flowId() != null) {
+            fingerprint.put("flowId", request.flowId());
+        }
         return fingerprint;
     }
 }

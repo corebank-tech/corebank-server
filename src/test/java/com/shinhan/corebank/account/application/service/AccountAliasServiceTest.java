@@ -112,7 +112,7 @@ class AccountAliasServiceTest {
 
         // when
         BusinessException exception = catchThrowableOfType(
-                () -> service.changeAlias(CUSTOMER_ID, ACCOUNT_ID, "생활비통장"), BusinessException.class);
+                BusinessException.class, () -> service.changeAlias(CUSTOMER_ID, ACCOUNT_ID, "생활비통장"));
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.ACCOUNT_NOT_FOUND_OR_FORBIDDEN);

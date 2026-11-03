@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 46개 테이블(39개 비즈니스 테이블 + 채번·배치·cutoff 4개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 389개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
+> **DBMS**: MySQL 8.4 / 51개 테이블(42개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트·감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 439개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -24,7 +24,7 @@ erDiagram
     SPRING_SESSION ||--o{ SPRING_SESSION_ATTRIBUTES : "ON DELETE CASCADE"
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 45개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
+    %% MySQL 8.4 / 51개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -46,13 +46,11 @@ erDiagram
         datetime previous_login_at "대시보드 previousLoginAt"
         datetime password_changed_at "DATETIME(6)"
         datetime joined_at "DATETIME(6)"
+        varchar email_ciphertext "AES-256-GCM, NULL 허용"
+        varchar phone_number_ciphertext "AES-256-GCM, NULL 허용"
+        char email_search_hash UK "CHAR(64), HMAC-SHA256, NULL 허용"
     }
 
-    admin_permission {
-        bigint customer_id PK,FK "관리자"
-        varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ"
-        datetime granted_at "권한 부여 시각"
-    }
     terms {
         bigint terms_id PK
         varchar terms_code UK "VARCHAR(30)"
@@ -82,17 +80,6 @@ erDiagram
         boolean used
         datetime verified_at "DATETIME(6)"
         datetime expires_at "발급 + 180초"
-    }
-    notification {
-        bigint notification_id PK
-        bigint customer_id FK
-        varchar type "TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION"
-        bigint ref_id "다형 참조: TRANSFER->transfer.transfer_id / SCHEDULED_TRANSFER->scheduled_transfer_id / AUTO_TRANSFER->auto_transfer_execution.execution_id / PRODUCT_SUBSCRIPTION->subscription_id"
-        varchar title "VARCHAR(100)"
-        varchar content "VARCHAR(500)"
-        boolean is_read
-        datetime read_at "DATETIME(6)"
-        datetime occurred_at "DATETIME(6)"
     }
 
     %% ---------- P2 ----------
@@ -158,7 +145,7 @@ erDiagram
     transaction_sequence {
         date seq_date PK "KST 기준 영업일"
         char channel PK "WB / BT"
-        bigint last_seq "해당 일자·채널의 마지막 일련번호"
+        bigint last_seq "해당 일자·채널에서 예약한 마지막 일련번호(묶음 예약)"
     }
     transfer {
         bigint transfer_id PK
@@ -173,9 +160,9 @@ erDiagram
         varchar transfer_type "IMMEDIATE / SCHEDULED / AUTO"
         char channel "WB / BT"
         varchar status "SUCCESS / ERROR / TIMEOUT (PROCESSING은 커밋되지 않음, #377)"
-        varchar source_type "SCHEDULED / AUTO"
+        varchar source_type "SCHEDULED / AUTO / HELD"
         bigint source_id
-        date execution_date "source_id와 함께 멱등키. SCHEDULED/AUTO 전용"
+        date execution_date "source_id와 함께 멱등키. SCHEDULED/AUTO/HELD 전용"
         varchar my_passbook_memo "TRF0005 최대 10자"
         varchar recipient_passbook_memo "VARCHAR(10)"
         bigint withdrawal_balance_after
@@ -186,6 +173,36 @@ erDiagram
         datetime invalidated_at "정정 체인 무효화 시각. NULL이면 유효"
         bigint ref_transfer_id FK "정정 체인 원거래"
         varchar correction_type "REVERSAL / REPOST"
+    }
+    transfer_hold {
+        bigint transfer_hold_id PK "실행한 transfer.source_id"
+        bigint customer_id
+        bigint withdrawal_account_id
+        varchar deposit_account_number "VARCHAR(16). 당행"
+        bigint amount
+        varchar my_passbook_memo "VARCHAR(10)"
+        varchar recipient_passbook_memo "VARCHAR(10)"
+        char channel "WB"
+        varchar flow_id "VARCHAR(64). FE 행동 흐름"
+        varchar policy_code "보류를 정한 정책"
+        varchar release_mode "AT_TIME / ON_APPROVAL"
+        datetime release_at "AT_TIME일 때만"
+        varchar status "HELD / EXECUTING / EXECUTED / FAILED / REJECTED / CANCELLED / EXPIRED"
+        datetime authenticated_at "토큰 소비 시각. 원문은 저장하지 않음"
+        datetime held_at "DATETIME(6)"
+        bigint transfer_id UK "실행으로 생긴 이체"
+        bigint actor_id "실행·거절·취소 주체"
+        varchar reason_code "거절 사유"
+        datetime executing_at "실행 선점 시각"
+        datetime completed_at "DATETIME(6)"
+    }
+    delayed_transfer_setting {
+        bigint customer_id PK "고객당 1행. 없으면 꺼짐"
+        boolean enabled
+        bigint threshold_amount "이 금액 이상이면 지연"
+        int delay_hours "3~24"
+        datetime created_at "DATETIME(6)"
+        datetime updated_at "DATETIME(6)"
     }
     ledger_entry {
         bigint ledger_entry_id PK
@@ -224,6 +241,22 @@ erDiagram
     }
 
     %% ---------- P1 ----------
+    admin_permission {
+        bigint customer_id PK,FK "관리자"
+        varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ"
+        datetime granted_at "권한 부여 시각"
+    }
+    notification {
+        bigint notification_id PK
+        bigint customer_id FK
+        varchar type UK "TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION"
+        bigint ref_id UK "uk_noti_type_ref(type, ref_id). 다형 참조: TRANSFER->transfer.transfer_id / SCHEDULED_TRANSFER->scheduled_transfer_id / AUTO_TRANSFER->auto_transfer_execution.execution_id / PRODUCT_SUBSCRIPTION->subscription_id"
+        varchar title "VARCHAR(100)"
+        varchar content "VARCHAR(500)"
+        boolean is_read
+        datetime read_at "DATETIME(6)"
+        datetime occurred_at "DATETIME(6)"
+    }
     transfer_limit {
         bigint customer_id PK
         bigint one_time_limit
@@ -312,7 +345,7 @@ erDiagram
         bigint customer_id FK
         bigint withdrawal_account_id FK
         char payee_bank_code "당행 상수. bank 테이블 없음"
-        char payee_account_number "CHAR(12)"
+        char payee_account_number "CHAR(12), INDEX ix_sched_payee_status(payee_account_number, status)"
         varchar payee_name "VARCHAR(50)"
         bigint amount
         date scheduled_date "익일~1년 이내 (SCD0001)"
@@ -333,7 +366,7 @@ erDiagram
         bigint auto_transfer_id PK
         bigint customer_id FK
         bigint withdrawal_account_id FK
-        char deposit_account_number "CHAR(12)"
+        char deposit_account_number "CHAR(12), INDEX ix_auto_deposit_status(deposit_account_number, status)"
         varchar payee_name "VARCHAR(50)"
         bigint amount
         tinyint cycle_months "1 / 3 / 6"
@@ -376,7 +409,27 @@ erDiagram
         varchar request_ip "VARCHAR(45)"
         varchar result "SUCCESS / FAILURE"
         json detail "민감정보 마스킹 후 저장"
+        varchar access_reason "관리자 조회·변경 사유(PH-89). NULL 허용"
+        char row_hash "무결성 해시 SHA-256(PH-82). 도입 전 NULL"
         datetime requested_at "DATETIME(6)"
+    }
+    audit_archive_execution {
+        bigint audit_archive_execution_id PK
+        date archive_date UK "적재 대상 날짜. (archive_date, archive_type) UNIQUE"
+        varchar archive_type UK "VARCHAR(10). LOG / ACCESS"
+        varchar status "VARCHAR(10). PENDING / SUCCESS / FAILURE"
+        varchar object_key "VARCHAR(100). 저장소 객체 키"
+        int row_count "성공 때 적재 행 수. NULL 허용"
+        varchar failure_reason "VARCHAR(500). 마지막 실패 사유"
+        datetime completed_at "DATETIME(6). 성공 시각(KST)"
+        datetime updated_at "DATETIME(6). 마지막 상태 변경(KST)"
+    }
+    audit_integrity_mismatch {
+        bigint audit_integrity_mismatch_id PK
+        date archive_date UK "검증한 사본의 날짜"
+        bigint audit_log_id UK "FK 없음 (지워진 행도 기록)"
+        varchar mismatch_type UK "TAMPERED / MISSING_IN_DB / NOT_ARCHIVED"
+        datetime detected_at "DATETIME(6)"
     }
     common_code {
         varchar code_group PK "예: ACCOUNT_STATUS"
@@ -461,7 +514,7 @@ erDiagram
         char account_code FK "CHAR(5)"
         varchar dr_cr "DEBIT / CREDIT. Fineract type_enum 대응"
         bigint amount "원 단위 정수. 항상 양수"
-        date trade_date "전표에서 복제. 시산표 집계 기준일"
+        date trade_date "전표에서 복제. 시산표 집계 기준일. INDEX(trade_date, account_code, dr_cr, amount)"
         datetime created_at "DATETIME(6)"
     }
     gl_voucher_sequence {
@@ -484,6 +537,13 @@ erDiagram
         date base_date UK "마감된 영업일. (base_date, status) UNIQUE"
         varchar status UK "VARCHAR(10). CLOSED"
         datetime closed_at "DATETIME(6). 마감 시각(KST)"
+    }
+    cob_checkpoint {
+        bigint cob_checkpoint_id PK
+        date cob_date UK "마감 대상 영업일(COB_DATE). (cob_date, step_name) UNIQUE"
+        varchar step_name UK "CobStep.name(). 영업일 전환은 business-date-advance"
+        varchar status "VARCHAR(10). PENDING / SUCCESS"
+        datetime updated_at "DATETIME(6). 마지막 상태 변경(KST)"
     }
     holiday {
         date holiday_date PK "주말 제외 공휴일만. 주말은 요일로 판정"
@@ -550,8 +610,11 @@ erDiagram
     transfer ||--o{ ledger_entry : "성공 시 출금1행+입금1행 / 실패 시 0행"
     transfer |o--o{ transfer : "정정 체인 — 취소정정·정상거래가 원거래를 가리킨다"
     customer ||--o{ audit_log : "행위"
+    audit_log ||..o{ audit_integrity_mismatch : "무결성 불일치 (FK 없음)"
     scheduled_transfer      |o--o| transfer : "실행결과 (WAITING 은 없음)"
     auto_transfer_execution |o--o| transfer : "실행결과 (ERROR 는 없음)"
+    transfer_hold |o..o| transfer : "실행결과 (source_type=HELD, FK 없음)"
+    customer ||..o| delayed_transfer_setting : "지연이체 설정 (FK 없음)"
 ```
 
 ## 원장-잔액 대사 (Reconciliation, #378)
@@ -567,8 +630,8 @@ erDiagram
   남는다(경보 채널 연동은 미정 — 현재는 로그 기반).
 - **soft / hard**: 불일치 건수가 임계(`app.ledger-reconciliation.cob-hard-threshold`, 기본 10) 이하면
   soft(`LEDGER_RECONCILIATION_SOFT` WARN), 초과면 hard(`LEDGER_RECONCILIATION_HARD` ERROR)다. hard는
-  원래 `CobStepHaltException`으로 마감을 멈출 자리지만, 영업일 전환 뒤라 멈추면 복구할 수단이 없어
-  #663(`COB_DATE` 저장·실패 스텝 재실행) 전까지는 로그만 남기고 다음 스텝으로 넘어간다(#600).
+  `CobStepHaltException`으로 마감을 멈춘다. 영업일 전환 뒤에 멈춰도 `cob_checkpoint`가 `COB_DATE`와 남은
+  스텝을 기억해서, 다음 COB가 같은 날짜로 대사부터 다시 한다(#600, #663).
   soft/hard는 **마감을 계속할지**의 판단이지 경보 심각도가 아니다 — 원장 불일치는 1건이어도 사고라
   건별 `LEDGER_RECONCILIATION_MISMATCH`는 soft/hard와 무관하게 항상 ERROR다.
 - **전수 대사 (#468)**: 원장을 거치지 않고 잔액만 틀어진 휴면 계좌까지 잡도록 **전 계좌**를
@@ -584,8 +647,10 @@ erDiagram
 - **자동 정정 없음**: `ledger_entry`는 파티션 테이블이라 FK로도 강제되지 않는 APPEND-ONLY
   원장이다. 배치는 탐지까지만 하고 잔액을 임의로 덮어쓰지 않는다.
 - **불일치 목록 (#613)**: COB 대사가 찾은 불일치 계좌를 `ledger_reconciliation_mismatch`에
-  영업일(`COB_DATE`)별로 남기고, 관리자 목록 API가 읽는다. 같은 영업일을 다시 대사하면 그날 행을
-  지우고 새 결과로 바꾼다. 재실행 이력은 `batch_execution_history`(#603)가 맡는다.
+  영업일(`COB_DATE`)별로 남기고, 관리자 목록 API가 읽는다. 같은 영업일로 대사가 다시 돌아도(멈춘 COB 재개)
+  그날 행이 이미 있으면 처음 목록을 그대로 둔다(#749). 재실행 이력은 `batch_execution_history`(#603)가 맡는다.
+  그래서 재개 후 화면 목록은 멈춘 시점의 스냅샷이다. 지금 남은 계좌와 재대사에서 새로 나온 계좌는
+  `[LEDGER_RECONCILIATION_MISMATCH]` ERROR 로그로 본다.
 - **대응 절차**: 불일치가 나오면 원장이 맞고 `account.balance`가 틀린 것으로 간주한다.
   담당자가 원인(동시성 버그, 배포 중 유실 등)을 먼저 파악하고, 필요하면 반대기표(원거래와
   반대 방향의 신규 `ledger_entry` 행)로만 정정한다. 기존 행을 UPDATE/DELETE하지 않는다.

@@ -14,11 +14,15 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,6 +36,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 class BusinessDateCutoffIntegrationTest extends IntegrationTestSupport {
 
     private static final LocalDate BASE = LocalDate.of(2026, 10, 14);
+    private static final int WRITERS = 8;
 
     @Autowired
     BusinessDateGate gate;
@@ -156,17 +161,34 @@ class BusinessDateCutoffIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("cutoff 를 처음 본 시점의 스냅샷에는 그 영업일을 읽은 거래의 쓰기가 모두 보인다")
     void whenCutoffIsVisibleEveryWriteOfThatDayIsVisible() throws Exception {
-        List<Future<LocalDate>> writers = new ArrayList<>();
-        for (int i = 0; i < 16; i++) {
-            long startDelay = i * 40L;
+        ConcurrentLinkedQueue<LocalDate> readDates = new ConcurrentLinkedQueue<>();
+        AtomicBoolean stopWriters = new AtomicBoolean(false);
+        AtomicInteger baseInFlight = new AtomicInteger();
+        List<Future<?>> writers = new ArrayList<>();
+        for (int i = 0; i < WRITERS; i++) {
             writers.add(executor.submit(() -> {
-                Thread.sleep(startDelay);
-                return tx.execute(status -> {
-                    LocalDate tradeDate = gate.acquireSharedAndReadBusinessDate();
-                    jdbc.update("INSERT INTO gate_probe (trade_date) VALUES (?)", Date.valueOf(tradeDate));
-                    sleepQuietly(150);
-                    return tradeDate;
-                });
+                // 시간이 아니라 조건으로 경합을 만든다. 전환이 끝나고 새 영업일을 읽은 쓰기가 나올 때까지 계속 쓴다
+                while (!stopWriters.get() && !Thread.currentThread().isInterrupted()) {
+                    boolean[] counted = {false};
+                    LocalDate tradeDate;
+                    try {
+                        tradeDate = tx.execute(status -> {
+                            LocalDate date = gate.acquireSharedAndReadBusinessDate();
+                            jdbc.update("INSERT INTO gate_probe (trade_date) VALUES (?)", Date.valueOf(date));
+                            if (BASE.equals(date)) {
+                                baseInFlight.incrementAndGet();
+                                counted[0] = true;
+                            }
+                            sleepQuietly(50);
+                            return date;
+                        });
+                    } finally {
+                        if (counted[0]) {
+                            baseInFlight.decrementAndGet();
+                        }
+                    }
+                    readDates.add(tradeDate);
+                }
             }));
         }
 
@@ -192,19 +214,21 @@ class BusinessDateCutoffIntegrationTest extends IntegrationTestSupport {
         });
         observerStarted.await(5, SECONDS);
 
-        Thread.sleep(250);
+        // 이전 영업일을 읽고 커밋한 쓰기가 쌓였고 아직 커밋하지 않은 쓰기가 있을 때 전환한다
+        awaitCondition(() -> readDates.stream().filter(BASE::equals).count() >= 3 && baseInFlight.get() > 0);
         Future<LocalDate> advance = executor.submit(() -> advancer.advanceFrom(BASE));
-
-        List<LocalDate> readDates = new ArrayList<>();
-        for (Future<LocalDate> writer : writers) {
-            readDates.add(writer.get(30, SECONDS));
-        }
         assertThat(advance.get(30, SECONDS)).isEqualTo(next);
+
+        // 전환 뒤 새 영업일을 읽은 쓰기가 나오면 쓰기를 멈춘다
+        awaitCondition(() -> readDates.contains(next));
+        stopWriters.set(true);
+        for (Future<?> writer : writers) {
+            writer.get(30, SECONDS);
+        }
         observer.get(30, SECONDS);
 
         long baseWrites = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM gate_probe WHERE trade_date = ?", Long.class, Date.valueOf(BASE));
-        // 두 날짜가 모두 나와야 경합이 실제로 일어난 테스트다
         assertThat(readDates).contains(BASE, next);
         assertThat(readDates).allMatch(date -> date.equals(BASE) || date.equals(next));
         assertThat(visibleAtCutoff.get()).isEqualTo(baseWrites);
@@ -218,6 +242,14 @@ class BusinessDateCutoffIntegrationTest extends IntegrationTestSupport {
     private LocalDateTime closedAt(LocalDate baseDate) {
         return jdbc.queryForObject(
                 "SELECT closed_at FROM business_date_cutoff WHERE base_date = ?", LocalDateTime.class, baseDate);
+    }
+
+    private static void awaitCondition(BooleanSupplier condition) {
+        long deadline = System.nanoTime() + SECONDS.toNanos(30);
+        while (!condition.getAsBoolean()) {
+            assertThat(System.nanoTime()).as("조건이 30초 안에 만족되지 않았다").isLessThan(deadline);
+            sleepQuietly(10);
+        }
     }
 
     private static void sleepQuietly(long millis) {

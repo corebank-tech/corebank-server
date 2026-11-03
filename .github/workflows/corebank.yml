@@ -24,9 +24,16 @@ jobs:
     permissions:
       contents: read
     steps:
-      # 소스코드 체크아웃 (v4 업그레이드)
+      # 소스코드 체크아웃 (v4 업그레이드). 마이그레이션 번호 검사가 base 커밋과 비교하려고 전체 기록을 받는다 (#814)
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # PR이 추가한 V__ 마이그레이션이 base 최신보다 앞이면 실패 (#814). 빌드 전에 몇 초 안에 끝난다
+      - name: Check migration version order
+        if: github.event_name == 'pull_request'
+        run: bash scripts/check-migration-order.sh "${{ github.event.pull_request.base.sha }}"
 
       # JDK 21 설정 및 Gradle 캐시 활성화 (빌드 속도 향상)
       - name: Set up JDK 21
@@ -186,6 +193,10 @@ jobs:
         run: |
           # 1. EC2 내부에서 실행될 인라인 스크립트 작성
           COMMANDS=$(cat << 'EOF'
+          # 중간 명령이 실패하면 즉시 멈춘다. 마지막 prune 이 `|| true` 라서 set -e 가 없으면
+          # compose 실패에도 이 스크립트가 0 으로 끝나고, 아래에서 폴링하는 SSM Status 가
+          # Success 가 되어 배포 Job 까지 통과한다.
+          set -e
           mkdir -p /home/ubuntu/corebank
           cd /home/ubuntu/corebank
           
@@ -209,6 +220,12 @@ jobs:
                 # 타행이체 모의 대외기관 (B 단계, #697). 위치는 설정값뿐이라 컷오버 뒤에는 VM 주소로만 바꾼다.
                 - APP_INTERBANK_HOST=mock-external
                 - APP_INTERBANK_PORT=9300
+                # COB 원장 대사 hard 임계 (#663). 불일치가 이 건수를 넘으면 마감이 멈춘다. 릴리스 2의 첫 대사 결과를 본 뒤 낮춘다.
+                - APP_LEDGER_RECONCILIATION_COB_HARD_THRESHOLD=1000
+                # OTP 번호 해시를 HMAC-SHA256으로 돌린다 (#834). 키는 SSM 명령 본문에 평문으로 남지 않도록
+                # EC2 /home/ubuntu/corebank/.env 에서 읽는다. 없으면 compose가 여기서 멈춘다.
+                - APP_OTP_CODE_HASH_ALGORITHM=hmac
+                - APP_OTP_CODE_HASH_KEY_BASE64=${APP_OTP_CODE_HASH_KEY_BASE64:?missing in /home/ubuntu/corebank/.env}
                 - CORS_ALLOWED_ORIGINS=CORS_ALLOWED_ORIGINS_PLACEHOLDER
               healthcheck:
                 test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/api/v1/actuator/health || exit 1"]
@@ -254,9 +271,32 @@ jobs:
 
           # Docker Compose를 이용한 최신 이미지 풀 및 무중단/선언적 배포
           docker compose pull
-          # 릴리스 1 gl_voucher 마이그레이션(#585)용 임시 상향, 배포 뒤 180으로 복귀 (#629)
-          docker compose up -d --remove-orphans --wait --wait-timeout 600
-          
+          DEPLOY_STARTED_AT=$(date +%s)
+          # 릴리스 2 Flyway가 10분 41초 걸려(#743) 릴리스 3까지 600 유지, 그 뒤 180으로 복귀 (#629)
+          # 실패를 마지막 줄 prune이 덮지 않게 여기서 끝낸다. 공개 저장소라 로그는 기동 단계 문구와 예외 클래스명만 찍는다 (#743)
+          if ! docker compose up -d --remove-orphans --wait --wait-timeout 600; then
+            # 진단 명령이 실패해도 set -e로 여기서 끝나지 않게 한다. 실패 판정은 블록 끝 exit 1이 한다
+            docker compose ps -a || true
+            # 같은 SHA 재실행이면 컨테이너가 재사용돼 이전 로그까지 읽히므로 이번 배포 것만 담는다
+            SERVER_LOG=$(docker compose logs --since "$DEPLOY_STARTED_AT" --tail 1000 --no-color --no-log-prefix corebank-server 2>/dev/null) || true
+            echo "--- 기동 단계 (최근 30줄)"
+            printf '%s\n' "$SERVER_LOG" \
+              | grep -E '"message":"(Migrating schema|Successfully applied|Started CorebankApplication|Application run failed)' \
+              | sed -E 's/.*"timestamp":"([^"]*)","level":"([^"]*)".*"message":"(([^"\\]|\\.)*)".*/\1 \2 \3/' \
+              | sed 's/\\"/"/g' \
+              | tail -n 30
+            if printf '%s\n' "$SERVER_LOG" | grep -q 'APPLICATION FAILED TO START'; then
+              echo "Spring 기동 실패 보고(APPLICATION FAILED TO START)가 있습니다. 설명은 EC2에서 docker logs로 확인하세요."
+            fi
+            echo "--- ERROR 줄의 예외 클래스 (개수)"
+            printf '%s\n' "$SERVER_LOG" \
+              | grep '"level":"ERROR"' \
+              | grep -oE '([a-z][a-z0-9_]*\.)+[A-Z][A-Za-z0-9_$]*(Exception|Error)' \
+              | sort | uniq -c | sort -rn | head -n 10
+            echo "::error::docker compose up 실패: 600초 안에 healthy가 되지 않았거나 컨테이너를 띄우지 못했습니다. 위 상태가 starting·unhealthy면 마이그레이션 중일 수 있으니 몇 분 뒤 /actuator/health를 확인하세요 (#743)"
+            exit 1
+          fi
+
           # 이전 오래된 도커 이미지 정리 (디스크 용량 확보)
           docker image prune -f || true
           EOF

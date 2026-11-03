@@ -159,8 +159,8 @@ public class ProductSubscriptionExecuteService implements ProductSubscriptionExe
                 .refId(saved.getSubscriptionId())
                 .status(ProcessResultStatus.SUCCESS)
                 .occurredAt(now)
-                .productName(product.getProductName())
-                .maskedAccountNumber(MaskingUtil.maskAccountNumber(accountOpeningResult.accountNumber()))
+                .notificationRequest(ProductSubscriptionNotificationGenerator.generate(
+                        saved, product.getProductName(), accountOpeningResult.accountNumber()))
                 .build());
 
         return new ProductSubscriptionExecuteResult(

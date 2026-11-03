@@ -7,6 +7,7 @@ import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.Builder;
 
 @Builder
@@ -27,8 +28,12 @@ public record TransferCommand(
         // 식별되어 멱등성 사전조회에 걸린다.
         LocalDate executionDate,
         String authToken, // Account-Password-Auth-Token. IMMEDIATE만 필수(REQ-TRSF-009) — SCHEDULED/AUTO는 시스템 트리거라 세션이 없음
-        String otpAuthToken // Otp-Auth-Token. IMMEDIATE만 필수 — SCHEDULED/AUTO는 등록 시점에 검증됨(otp_integration_guide.md)
+        String otpAuthToken, // Otp-Auth-Token. IMMEDIATE만 필수 — SCHEDULED/AUTO는 등록 시점에 검증됨(otp_integration_guide.md)
+        String flowId, // FE 행동 흐름 식별자(선택). 훅 C(TransferHoldPolicy)에 그대로 넘긴다. IMMEDIATE만
+        LocalDateTime holdClaimedAt // 보류 건 실행의 선점 시각(executing_at). 기표 직전에 선점이 아직 이쪽 것인지 본다(§9-4)
         ) {
+
+    private static final int FLOW_ID_MAX_LENGTH = 64;
 
     public TransferCommand {
 
@@ -59,28 +64,48 @@ public record TransferCommand(
             throw new BusinessException(TransferErrorCode.MEMO_LENGTH_EXCEEDED);
         }
 
-        // 이체 유형에 따른 원본 식별자(sourceId) 필수 여부 검증
-        if (transferType == TransferType.IMMEDIATE && sourceId != null) {
-            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
-        }
-        if ((transferType == TransferType.SCHEDULED || transferType == TransferType.AUTO) && sourceId == null) {
+        // 예약·자동이체는 원본 식별자(sourceId)와 회차 실행일자(executionDate)가 필수다
+        if ((transferType == TransferType.SCHEDULED || transferType == TransferType.AUTO)
+                && (sourceId == null || executionDate == null)) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
 
-        // 이체 유형에 따른 실행일자(executionDate) 필수 여부 검증 — sourceId와 동일한 규칙
-        if (transferType == TransferType.IMMEDIATE && executionDate != null) {
+        if (transferType == TransferType.IMMEDIATE) {
+            validateImmediate(sourceId, executionDate, authToken, otpAuthToken, holdClaimedAt);
+        } else if (holdClaimedAt != null) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
-        if ((transferType == TransferType.SCHEDULED || transferType == TransferType.AUTO) && executionDate == null) {
-            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
-        }
 
-        // 즉시 이체만 인증 토큰 필수. 예약/자동 이체는 시스템(배치)이 트리거하므로 실시간
-        // 사용자 세션이 없어 인증 토큰을 받을 수 없다.
-        if (transferType == TransferType.IMMEDIATE && (authToken == null || authToken.isBlank())) {
-            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        // 화면 행동은 고객이 직접 시작한 즉시이체에만 있다. 예약·자동이체에 오면 잘못된 호출이다
+        if (flowId != null
+                && (transferType != TransferType.IMMEDIATE
+                        || flowId.isBlank()
+                        || flowId.length() > FLOW_ID_MAX_LENGTH)) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
-        if (transferType == TransferType.IMMEDIATE && (otpAuthToken == null || otpAuthToken.isBlank())) {
+    }
+
+    // 즉시이체는 고객 요청(토큰 둘, sourceId 없음)이거나 보류 건 실행(sourceId·실행일·선점 시각, 토큰 없음)이다(§9-4).
+    private static void validateImmediate(
+            Long sourceId,
+            LocalDate executionDate,
+            String authToken,
+            String otpAuthToken,
+            LocalDateTime holdClaimedAt) {
+        if (sourceId != null) {
+            if (executionDate == null || holdClaimedAt == null) {
+                throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+            }
+            if (authToken != null || otpAuthToken != null) {
+                throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+            }
+            return;
+        }
+        if (executionDate != null || holdClaimedAt != null) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        }
+        // 고객 요청은 두 토큰이 모두 있어야 한다(REQ-TRSF-009)
+        if (authToken == null || authToken.isBlank() || otpAuthToken == null || otpAuthToken.isBlank()) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
     }

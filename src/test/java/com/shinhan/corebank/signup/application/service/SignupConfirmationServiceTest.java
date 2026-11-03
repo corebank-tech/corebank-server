@@ -67,7 +67,7 @@ class SignupConfirmationServiceTest {
         SignupConfirmationService service = new SignupConfirmationService(tempTokenPort, profilePort);
 
         BusinessException exception =
-                catchThrowableOfType(() -> service.getConfirmation("INVALID"), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.getConfirmation("INVALID"));
 
         assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT);
     }

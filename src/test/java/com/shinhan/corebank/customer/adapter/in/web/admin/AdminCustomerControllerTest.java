@@ -1,5 +1,6 @@
 package com.shinhan.corebank.customer.adapter.in.web.admin;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -13,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.shinhan.corebank.AdminAccountFixture;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.common.audit.AccessReason;
 import com.shinhan.corebank.customer.api.AdminPermission;
 import com.shinhan.corebank.customer.domain.model.CustomerStatus;
 import jakarta.persistence.EntityManager;
@@ -29,6 +31,8 @@ import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 // 컨트롤러 계약(마스킹·페이징·오류코드·멱등키)을 실제 서비스·MySQL로 본다. 로그인까지 잇는 DoD는
 // AdminCustomerAccountOperationIntegrationTest가 맡는다. 두 클래스는 같은 설정이라 컨텍스트를 공유한다.
@@ -38,12 +42,16 @@ import org.springframework.transaction.annotation.Transactional;
 class AdminCustomerControllerTest extends IntegrationTestSupport {
 
     static final long ADMIN_ID = 944900001L;
+    private static final String VIEWER_IP = "10.0.0.7"; // MockMvc 기본 원격 주소(127.0.0.1)와 달라야 IP 매핑이 드러난다
 
     @Autowired
     MockMvc mockMvc;
 
     @Autowired
     EntityManager entityManager;
+
+    @Autowired
+    ObjectMapper objectMapper;
 
     private Long lockedId;
     private Long otherId;
@@ -60,7 +68,7 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("검색 결과는 개인정보를 가리고 §6-5 페이징 형식으로 내려준다")
     void searchReturnsMaskedPage() throws Exception {
-        mockMvc.perform(get("/admin/customers").param("userId", "adm449lo").with(admin()))
+        mockMvc.perform(get("/admin/customers").param("userId", "adm449lo").with(adminWithReason()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"))
                 .andExpect(jsonPath("$.data.page").value(0))
@@ -85,7 +93,7 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
         mockMvc.perform(get("/admin/customers")
                         .param("accountLocked", "true")
                         .param("userId", "adm449")
-                        .with(admin()))
+                        .with(adminWithReason()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalCount").value(1))
                 .andExpect(jsonPath("$.data.items[0].customerId").value(lockedId));
@@ -94,13 +102,13 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("조건 없는 검색은 CMN0002, 지원하지 않는 페이지 크기는 CMN0005다")
     void rejectsInvalidSearch() throws Exception {
-        mockMvc.perform(get("/admin/customers").with(admin()))
+        mockMvc.perform(get("/admin/customers").with(adminWithReason()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0002"));
         mockMvc.perform(get("/admin/customers")
                         .param("userId", "adm449")
                         .param("size", "7")
-                        .with(admin()))
+                        .with(adminWithReason()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0005"));
     }
@@ -108,12 +116,12 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("상세는 생년월일·연락처까지 가려서 내려주고, 없는 고객은 ATH0201이다")
     void detailIsMaskedOrNotFound() throws Exception {
-        mockMvc.perform(get("/admin/customers/{id}", lockedId).with(admin()))
+        mockMvc.perform(get("/admin/customers/{id}", lockedId).with(adminWithReason()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.birthDate").value("1990-**-**"))
                 .andExpect(jsonPath("$.data.phoneNumber").value("010****5678"))
                 .andExpect(jsonPath("$.data.loginFailureCount").value(5));
-        mockMvc.perform(get("/admin/customers/{id}", 999_999_999L).with(admin()))
+        mockMvc.perform(get("/admin/customers/{id}", 999_999_999L).with(adminWithReason()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ATH0201"));
     }
@@ -122,7 +130,7 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
     @DisplayName("잠금 해제는 멱등키가 없으면 CMN0002다")
     void unlockRequiresIdempotencyKey() throws Exception {
         mockMvc.perform(post("/admin/customers/{id}/unlock", lockedId)
-                        .with(admin())
+                        .with(adminWithReason())
                         .with(csrf()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0002"));
@@ -135,7 +143,7 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
 
         mockMvc.perform(post("/admin/customers/{id}/unlock", lockedId)
                         .header("Idempotency-Key", key)
-                        .with(admin())
+                        .with(adminWithReason())
                         .with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.customerId").value(lockedId))
@@ -143,7 +151,7 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
 
         mockMvc.perform(post("/admin/customers/{id}/unlock", otherId)
                         .header("Idempotency-Key", key)
-                        .with(admin())
+                        .with(adminWithReason())
                         .with(csrf()))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CMN0302"));
@@ -153,7 +161,7 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
     @DisplayName("초기화는 멱등키 없이 200이고 임시 비밀번호를 한 번 돌려준다")
     void resetPasswordWithoutIdempotencyKey() throws Exception {
         mockMvc.perform(post("/admin/customers/{id}/password-reset", lockedId)
-                        .with(admin())
+                        .with(adminWithReason())
                         .with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("로그인 비밀번호가 초기화되었습니다."))
@@ -166,7 +174,7 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
     @DisplayName("관리자가 자기 자신을 대상으로 하면 CMN0102다")
     void rejectsSelfTarget() throws Exception {
         mockMvc.perform(post("/admin/customers/{id}/password-reset", ADMIN_ID)
-                        .with(admin())
+                        .with(adminWithReason())
                         .with(csrf()))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CMN0102"));
@@ -179,20 +187,20 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"SUSPENDED\"}")
-                        .with(admin())
+                        .with(adminWithReason())
                         .with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("계정 상태가 변경되었습니다."))
                 .andExpect(jsonPath("$.data.customerId").value(otherId))
                 .andExpect(jsonPath("$.data.status").value("SUSPENDED"));
 
-        mockMvc.perform(get("/admin/customers/{id}", otherId).with(admin()))
+        mockMvc.perform(get("/admin/customers/{id}", otherId).with(adminWithReason()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("SUSPENDED"));
         mockMvc.perform(get("/admin/customers")
                         .param("userId", "adm449")
                         .param("status", "SUSPENDED")
-                        .with(admin()))
+                        .with(adminWithReason()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalCount").value(1))
                 .andExpect(jsonPath("$.data.items[0].customerId").value(otherId))
@@ -207,7 +215,7 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
                             .header("Idempotency-Key", UUID.randomUUID().toString())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(body)
-                            .with(admin())
+                            .with(adminWithReason())
                             .with(csrf()))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("CMN0001"));
@@ -215,7 +223,7 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
         mockMvc.perform(post("/admin/customers/{id}/status", otherId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"SUSPENDED\"}")
-                        .with(admin())
+                        .with(adminWithReason())
                         .with(csrf()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0002"));
@@ -230,7 +238,7 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
                             .header("Idempotency-Key", UUID.randomUUID().toString())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"status\":\"%s\"}".formatted(status.name()))
-                            .with(admin())
+                            .with(adminWithReason())
                             .with(csrf()))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.status").value(status.name()));
@@ -246,7 +254,7 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
                         .header("Idempotency-Key", key)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"SUSPENDED\"}")
-                        .with(admin())
+                        .with(adminWithReason())
                         .with(csrf()))
                 .andExpect(status().isOk());
 
@@ -254,7 +262,7 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
                         .header("Idempotency-Key", key)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"ACTIVE\"}")
-                        .with(admin())
+                        .with(adminWithReason())
                         .with(csrf()))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CMN0302"));
@@ -263,15 +271,143 @@ class AdminCustomerControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("status=ACTIVE 단독 검색은 CMN0002, 정의되지 않은 status 조건은 CMN0001이다")
     void rejectsInvalidStatusSearch() throws Exception {
-        mockMvc.perform(get("/admin/customers").param("status", "ACTIVE").with(admin()))
+        mockMvc.perform(get("/admin/customers").param("status", "ACTIVE").with(adminWithReason()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0002"));
         mockMvc.perform(get("/admin/customers")
                         .param("userId", "adm449")
                         .param("status", "DORMANT")
-                        .with(admin()))
+                        .with(adminWithReason()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0001"));
+    }
+
+    @Test
+    @DisplayName("조회 사유 헤더가 없거나 정의되지 않은 값이면 CMN0007이고 조회 감사를 남기지 않는다")
+    void rejectsMissingOrUndefinedAccessReason() throws Exception {
+        mockMvc.perform(get("/admin/customers").param("userId", "adm449lo").with(admin()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0007"));
+        mockMvc.perform(get("/admin/customers/{id}", lockedId)
+                        .header(AccessReason.HEADER, "FOO")
+                        .with(admin()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0007"));
+
+        assertThat(adminAuditCount("CUSTOMER_SEARCH")).isZero();
+        assertThat(adminAuditCount("CUSTOMER_DETAIL_VIEW")).isZero();
+    }
+
+    @Test
+    @DisplayName("변경 API도 조회 사유가 없으면 CMN0007이고 대상 계정은 바뀌지 않는다")
+    void commandRejectsMissingAccessReason() throws Exception {
+        mockMvc.perform(post("/admin/customers/{id}/unlock", lockedId)
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .with(admin())
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0007"));
+
+        mockMvc.perform(get("/admin/customers/{id}", lockedId).with(adminWithReason()))
+                .andExpect(jsonPath("$.data.accountLocked").value(true));
+    }
+
+    @Test
+    @DisplayName("상세·상태 변경·비밀번호 초기화도 조회 사유가 없으면 CMN0007이다")
+    void otherEndpointsRejectMissingAccessReason() throws Exception {
+        mockMvc.perform(get("/admin/customers/{id}", lockedId).with(admin()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0007"));
+        mockMvc.perform(post("/admin/customers/{id}/status", otherId)
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"SUSPENDED\"}")
+                        .with(admin())
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0007"));
+        mockMvc.perform(post("/admin/customers/{id}/password-reset", lockedId)
+                        .with(admin())
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0007"));
+    }
+
+    @Test
+    @DisplayName("검색은 관리자·IP·사유·노출된 고객 ID·쓴 조건을 조회 감사 1행으로 남기고 검색어 값은 남기지 않는다")
+    void searchRecordsViewAuditWithoutSearchTerm() throws Exception {
+        mockMvc.perform(get("/admin/customers")
+                        .param("userId", "adm449lo")
+                        .param("userName", "홍길")
+                        .param("email", "locked@adm449.test")
+                        .param("accountLocked", "true")
+                        .param("status", "ACTIVE")
+                        .header(AccessReason.HEADER, "AUDIT")
+                        .remoteAddress(VIEWER_IP)
+                        .with(admin()))
+                .andExpect(status().isOk());
+
+        AuditRow row = adminAuditRow("CUSTOMER_SEARCH");
+        assertThat(row.accessReason()).isEqualTo("AUDIT");
+        assertThat(row.requestIp()).isEqualTo(VIEWER_IP);
+        assertThat(row.detail().get("customerIds").values())
+                .extracting(JsonNode::asLong)
+                .containsExactly(lockedId);
+        assertThat(row.detail().get("conditions").values())
+                .extracting(JsonNode::asString)
+                .containsExactly("userId", "userName", "email", "accountLocked", "status");
+        assertThat(row.detail().get("resultCount").asInt()).isEqualTo(1);
+        assertThat(row.rawDetail())
+                .doesNotContain("adm449lo")
+                .doesNotContain("홍길")
+                .doesNotContain("locked@adm449.test");
+    }
+
+    @Test
+    @DisplayName("상세 조회는 대상 고객 ID와 사유를 조회 감사 1행으로 남긴다")
+    void detailRecordsViewAudit() throws Exception {
+        mockMvc.perform(get("/admin/customers/{id}", lockedId)
+                        .header(AccessReason.HEADER, "INCIDENT")
+                        .with(admin()))
+                .andExpect(status().isOk());
+
+        AuditRow row = adminAuditRow("CUSTOMER_DETAIL_VIEW");
+        assertThat(row.accessReason()).isEqualTo("INCIDENT");
+        assertThat(row.detail().get("targetCustomerId").asLong()).isEqualTo(lockedId);
+    }
+
+    private AuditRow adminAuditRow(String eventType) {
+        entityManager.flush();
+        Object[] row = (Object[]) entityManager
+                .createNativeQuery("SELECT access_reason, request_ip, CAST(detail AS CHAR) FROM audit_log "
+                        + "WHERE customer_id = :adminId AND event_type = :eventType")
+                .setParameter("adminId", ADMIN_ID)
+                .setParameter("eventType", eventType)
+                .getSingleResult();
+        String rawDetail = (String) row[2];
+        return new AuditRow((String) row[0], (String) row[1], rawDetail, objectMapper.readTree(rawDetail));
+    }
+
+    private record AuditRow(String accessReason, String requestIp, String rawDetail, JsonNode detail) {}
+
+    private long adminAuditCount(String eventType) {
+        entityManager.flush();
+        return ((Number) entityManager
+                        .createNativeQuery("SELECT COUNT(*) FROM audit_log WHERE customer_id = :adminId "
+                                + "AND event_type = :eventType")
+                        .setParameter("adminId", ADMIN_ID)
+                        .setParameter("eventType", eventType)
+                        .getSingleResult())
+                .longValue();
+    }
+
+    // 조회 사유 헤더(PH-89)까지 붙인 관리자 요청. 사유 누락을 보는 테스트만 admin()을 쓴다.
+    private RequestPostProcessor adminWithReason() {
+        RequestPostProcessor authenticated = admin();
+        return request -> {
+            request.addHeader(AccessReason.HEADER, AccessReason.OPERATION.name());
+            return authenticated.postProcessRequest(request);
+        };
     }
 
     private RequestPostProcessor admin() {

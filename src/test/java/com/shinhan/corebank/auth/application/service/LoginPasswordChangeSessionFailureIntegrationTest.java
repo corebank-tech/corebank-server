@@ -31,6 +31,7 @@ class LoginPasswordChangeSessionFailureIntegrationTest extends IntegrationTestSu
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    // 세션 저장소 장애를 주입해 비밀번호와 감사 로그가 롤백되는지 본다 — 실제 세션 테이블로는 삭제 실패를 재현할 수 없다.
     @MockitoBean
     private CustomerSessionInvalidator sessionInvalidator;
 

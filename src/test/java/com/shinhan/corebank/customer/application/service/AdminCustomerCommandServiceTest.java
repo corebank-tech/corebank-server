@@ -5,15 +5,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import com.shinhan.corebank.common.audit.AuditEventType;
+import com.shinhan.corebank.common.audit.AccessReason;
 import com.shinhan.corebank.common.audit.AuditLogJpaEntity;
 import com.shinhan.corebank.common.audit.AuditLogService;
+import com.shinhan.corebank.common.audit.PersonalDataAccessEventType;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.customer.api.CustomerRole;
@@ -50,6 +50,7 @@ class AdminCustomerCommandServiceTest {
     private static final Long ADMIN_ID = 900L;
     private static final Long TARGET_ID = 1L;
     private static final String REQUEST_IP = "127.0.0.1";
+    private static final AccessReason ACCESS_REASON = AccessReason.OPERATION;
     private static final String TEMPORARY_PASSWORD = "Ab3!xYz7#Qw9";
     private static final String ENCODED = "$2a$10$encodedTemporaryPassword";
 
@@ -86,7 +87,7 @@ class AdminCustomerCommandServiceTest {
         assertThat(result.loginFailureCount()).isZero();
         verify(customerPersistencePort).updateLoginFailureState(any(Customer.class));
 
-        Map<String, Object> detail = captureDetail(AuditEventType.ACCOUNT_UNLOCK, true);
+        Map<String, Object> detail = captureDetail(PersonalDataAccessEventType.ACCOUNT_UNLOCK, true);
         assertThat(detail).containsEntry("targetCustomerId", TARGET_ID);
         assertThat(detail.get("changes")).isEqualTo(Map.of("accountLocked", false, "loginFailureCount", 0));
         assertNoForbiddenKeys(detail);
@@ -99,7 +100,7 @@ class AdminCustomerCommandServiceTest {
 
         service.unlock(command(TARGET_ID));
 
-        Map<String, Object> detail = captureDetail(AuditEventType.ACCOUNT_UNLOCK, true);
+        Map<String, Object> detail = captureDetail(PersonalDataAccessEventType.ACCOUNT_UNLOCK, true);
         assertThat(detail.get("changes")).isEqualTo(Map.of("loginFailureCount", 0));
     }
 
@@ -124,7 +125,7 @@ class AdminCustomerCommandServiceTest {
         assertThat(saved.getValue().getPasswordHash()).isEqualTo(ENCODED);
         assertThat(saved.getValue().getPasswordChangedAt()).isEqualTo(LocalDateTime.of(2026, 9, 21, 10, 0));
 
-        Map<String, Object> detail = captureDetail(AuditEventType.LOGIN_PASSWORD_RESET_BY_ADMIN, true);
+        Map<String, Object> detail = captureDetail(PersonalDataAccessEventType.LOGIN_PASSWORD_RESET_BY_ADMIN, true);
         assertThat(detail.get("changes"))
                 .isEqualTo(Map.of("passwordChanged", true, "accountLocked", false, "loginFailureCount", 0));
         assertThat(detail.toString()).doesNotContain(TEMPORARY_PASSWORD).doesNotContain(ENCODED);
@@ -141,7 +142,7 @@ class AdminCustomerCommandServiceTest {
 
         verify(customerPersistencePort, never()).findByIdForUpdate(anyLong());
         verify(temporaryPasswordGeneratorPort, never()).generate();
-        Map<String, Object> detail = captureDetail(AuditEventType.LOGIN_PASSWORD_RESET_BY_ADMIN, false);
+        Map<String, Object> detail = captureDetail(PersonalDataAccessEventType.LOGIN_PASSWORD_RESET_BY_ADMIN, false);
         assertThat(detail).containsEntry("targetCustomerId", ADMIN_ID).containsEntry("reason", "SELF_TARGET");
     }
 
@@ -156,7 +157,7 @@ class AdminCustomerCommandServiceTest {
                 .isEqualTo(CommonErrorCode.FORBIDDEN);
 
         verify(customerPersistencePort, never()).updatePasswordResetByAdmin(any());
-        Map<String, Object> detail = captureDetail(AuditEventType.LOGIN_PASSWORD_RESET_BY_ADMIN, false);
+        Map<String, Object> detail = captureDetail(PersonalDataAccessEventType.LOGIN_PASSWORD_RESET_BY_ADMIN, false);
         assertThat(detail).containsEntry("targetCustomerId", TARGET_ID).containsEntry("reason", "ADMIN_TARGET");
     }
 
@@ -171,7 +172,7 @@ class AdminCustomerCommandServiceTest {
                 .isEqualTo(CustomerErrorCode.CUSTOMER_NOT_FOUND);
 
         verify(customerPersistencePort, never()).updateLoginFailureState(any());
-        Map<String, Object> detail = captureDetail(AuditEventType.ACCOUNT_UNLOCK, false);
+        Map<String, Object> detail = captureDetail(PersonalDataAccessEventType.ACCOUNT_UNLOCK, false);
         assertThat(detail).containsEntry("targetCustomerId", TARGET_ID).containsEntry("reason", "CUSTOMER_NOT_FOUND");
     }
 
@@ -189,7 +190,7 @@ class AdminCustomerCommandServiceTest {
         assertThat(saved.getValue().getStatus()).isEqualTo(CustomerStatus.SUSPENDED);
         assertThat(saved.getValue().getLoginFailureCount()).isEqualTo(2);
 
-        Map<String, Object> detail = captureDetail(AuditEventType.CUSTOMER_STATUS_CHANGE, true);
+        Map<String, Object> detail = captureDetail(PersonalDataAccessEventType.CUSTOMER_STATUS_CHANGE, true);
         assertThat(detail).containsEntry("targetCustomerId", TARGET_ID);
         assertThat(detail.get("changes")).isEqualTo(Map.of("status", "SUSPENDED"));
         assertNoForbiddenKeys(detail);
@@ -203,7 +204,7 @@ class AdminCustomerCommandServiceTest {
         AdminStatusChangeResult result = service.changeStatus(command(TARGET_ID), CustomerStatus.ACTIVE);
 
         assertThat(result.status()).isEqualTo(CustomerStatus.ACTIVE);
-        Map<String, Object> detail = captureDetail(AuditEventType.CUSTOMER_STATUS_CHANGE, true);
+        Map<String, Object> detail = captureDetail(PersonalDataAccessEventType.CUSTOMER_STATUS_CHANGE, true);
         assertThat(detail.get("changes")).isEqualTo(Map.of());
     }
 
@@ -217,7 +218,7 @@ class AdminCustomerCommandServiceTest {
 
         verify(customerPersistencePort, never()).findByIdForUpdate(anyLong());
         verify(customerPersistencePort, never()).updateStatus(any());
-        Map<String, Object> detail = captureDetail(AuditEventType.CUSTOMER_STATUS_CHANGE, false);
+        Map<String, Object> detail = captureDetail(PersonalDataAccessEventType.CUSTOMER_STATUS_CHANGE, false);
         assertThat(detail).containsEntry("targetCustomerId", ADMIN_ID).containsEntry("reason", "SELF_TARGET");
     }
 
@@ -232,7 +233,7 @@ class AdminCustomerCommandServiceTest {
                 .isEqualTo(CustomerErrorCode.CUSTOMER_NOT_FOUND);
 
         verify(customerPersistencePort, never()).updateStatus(any());
-        Map<String, Object> detail = captureDetail(AuditEventType.CUSTOMER_STATUS_CHANGE, false);
+        Map<String, Object> detail = captureDetail(PersonalDataAccessEventType.CUSTOMER_STATUS_CHANGE, false);
         assertThat(detail).containsEntry("targetCustomerId", TARGET_ID).containsEntry("reason", "CUSTOMER_NOT_FOUND");
     }
 
@@ -248,15 +249,16 @@ class AdminCustomerCommandServiceTest {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> captureDetail(AuditEventType eventType, boolean success) {
+    private Map<String, Object> captureDetail(PersonalDataAccessEventType eventType, boolean success) {
         ArgumentCaptor<Map<String, Object>> detail = ArgumentCaptor.forClass(Map.class);
         verify(auditLogService)
-                .record(eq(ADMIN_ID), isNull(), eq(eventType), eq(REQUEST_IP), eq(success), detail.capture());
+                .recordPersonalDataAccess(
+                        eq(ADMIN_ID), eq(eventType), eq(REQUEST_IP), eq(success), detail.capture(), eq(ACCESS_REASON));
         return detail.getValue();
     }
 
     private AdminCustomerOperationCommand command(Long targetCustomerId) {
-        return new AdminCustomerOperationCommand(ADMIN_ID, targetCustomerId, REQUEST_IP);
+        return new AdminCustomerOperationCommand(ADMIN_ID, targetCustomerId, REQUEST_IP, ACCESS_REASON);
     }
 
     // 대상이 관리자인 경우. role 만 다르고 나머지는 일반 고객 픽스처와 같다.

@@ -1,9 +1,12 @@
 package com.shinhan.corebank.subscription.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -19,6 +22,7 @@ import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.event.DomainEvent;
 import com.shinhan.corebank.common.event.DomainEventSink;
+import com.shinhan.corebank.notification.api.NotificationType;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaEntity;
 import com.shinhan.corebank.product.adapter.out.persistence.ProductJpaRepository;
@@ -37,9 +41,11 @@ import com.shinhan.corebank.subscription.application.port.in.ProductSubscription
 import com.shinhan.corebank.subscription.application.port.in.ProductSubscriptionExecuteUseCase.ProductSubscriptionExecuteResult;
 import com.shinhan.corebank.subscription.application.port.out.SaveTermsAgreementPort;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -56,6 +62,7 @@ class ProductSubscriptionExecuteRollbackTest extends IntegrationTestSupport {
 
     private static final String PRODUCT_CODE = "EXE-ROLLBACK-01";
     private static final String DEPOSIT_PRODUCT_CODE = "EXE-ROLLBACK-02";
+    private static final Duration TIMEOUT = Duration.ofSeconds(10);
 
     @Autowired
     private ProductSubscriptionExecuteUseCase productSubscriptionExecuteUseCase;
@@ -116,6 +123,13 @@ class ProductSubscriptionExecuteRollbackTest extends IntegrationTestSupport {
             jdbcTemplate.update("DELETE FROM product WHERE product_id = ?", productId);
         }
         if (customerId != null) {
+            // 성공 가입의 알림 행이 고객 FK 를 잡으므로, 비동기 리스너가 끝난 뒤 알림부터 지운다
+            awaitPublicationCompleted();
+            jdbcTemplate.update("DELETE FROM notification WHERE customer_id = ?", customerId);
+            jdbcTemplate.update(
+                    "DELETE FROM EVENT_PUBLICATION WHERE EVENT_TYPE = ? AND SERIALIZED_EVENT LIKE ?",
+                    ProductSubscriptionCompleted.class.getName(),
+                    customerJsonFragment());
             customerTestFixture.deleteCustomer(customerId);
         }
     }
@@ -222,9 +236,76 @@ class ProductSubscriptionExecuteRollbackTest extends IntegrationTestSupport {
             assertThat(event.refId()).isEqualTo(result.subscriptionId());
             assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
             assertThat(event.errorCode()).isNull();
-            assertThat(event.productName()).isEqualTo("청년 희망 적금");
-            assertThat(event.maskedAccountNumber()).contains("*");
+            assertThat(event.notification().type()).isEqualTo(NotificationType.PRODUCT_SUBSCRIPTION);
+            assertThat(event.notification().refId()).isEqualTo(result.subscriptionId());
         });
+    }
+
+    @Test
+    @DisplayName("가입이 커밋되면 알림 리스너가 가입 건 ID 로 상품가입 완료 알림을 한 건 남긴다")
+    void execute_success_savesProductSubscriptionNotification() {
+        customerId = customerTestFixture.createCustomer();
+        productId = seedSavingsProduct();
+        withdrawalAccountId = seedWithdrawalAccount();
+
+        ProductSubscriptionExecuteResult result = productSubscriptionExecuteUseCase.execute(subscriptionCommand());
+
+        awaitPublicationCompleted();
+        List<Map<String, Object>> notifications = jdbcTemplate.queryForList(
+                "SELECT type, ref_id, title, content FROM notification WHERE customer_id = ?", customerId);
+        assertThat(notifications).singleElement().satisfies(notification -> {
+            assertThat(notification.get("type")).isEqualTo("PRODUCT_SUBSCRIPTION");
+            assertThat(((Number) notification.get("ref_id")).longValue()).isEqualTo(result.subscriptionId());
+            assertThat(notification.get("title")).isEqualTo("상품가입 완료");
+            assertThat((String) notification.get("content"))
+                    .startsWith("청년 희망 적금 가입이 완료되었습니다. 계좌번호 ")
+                    .contains("*");
+        });
+    }
+
+    @Test
+    @DisplayName("정기예금 가입이 커밋되어도 가입 건 ID 로 상품가입 완료 알림을 한 건 남긴다")
+    void execute_timeDepositSuccess_savesProductSubscriptionNotification() {
+        customerId = customerTestFixture.createCustomer();
+        productId = seedDepositProduct();
+        withdrawalAccountId = seedWithdrawalAccount();
+
+        ProductSubscriptionExecuteResult result = productSubscriptionExecuteUseCase.execute(subscriptionCommand());
+
+        awaitPublicationCompleted();
+        List<Map<String, Object>> notifications = jdbcTemplate.queryForList(
+                "SELECT type, ref_id, content FROM notification WHERE customer_id = ?", customerId);
+        assertThat(notifications).singleElement().satisfies(notification -> {
+            assertThat(notification.get("type")).isEqualTo("PRODUCT_SUBSCRIPTION");
+            assertThat(((Number) notification.get("ref_id")).longValue()).isEqualTo(result.subscriptionId());
+            assertThat((String) notification.get("content"))
+                    .startsWith("정기예금 가입이 완료되었습니다. 계좌번호 ")
+                    .contains("*");
+        });
+    }
+
+    @Test
+    @DisplayName("발행 기록을 남긴 뒤 커밋 직전에 실패하면 가입 · 계좌개설과 발행 기록이 함께 롤백되고 알림도 없다")
+    void execute_failsAfterPublicationInsert_rollsBackPublicationWithSubscription() {
+        customerId = customerTestFixture.createCustomer();
+        productId = seedSavingsProduct();
+        withdrawalAccountId = seedWithdrawalAccount();
+        long accountCountBefore = countAccountsByCustomer();
+        long subscriptionCountBefore = subscriptionJpaRepository.count();
+        doThrow(new IllegalStateException("커밋 직전 실패"))
+                .when(domainEventSink)
+                .record(isA(ProductSubscriptionCompleted.class));
+
+        assertThatThrownBy(() -> productSubscriptionExecuteUseCase.execute(subscriptionCommand()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("커밋 직전 실패");
+
+        assertThat(countAccountsByCustomer()).isEqualTo(accountCountBefore);
+        assertThat(subscriptionJpaRepository.count()).isEqualTo(subscriptionCountBefore);
+        assertThat(publicationCount()).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM notification WHERE customer_id = ?", Integer.class, customerId))
+                .isZero();
     }
 
     @Test
@@ -250,6 +331,37 @@ class ProductSubscriptionExecuteRollbackTest extends IntegrationTestSupport {
                 List.of())));
 
         verify(domainEventSink, never()).record(any());
+    }
+
+    private ProductSubscriptionExecuteCommand subscriptionCommand() {
+        return new ProductSubscriptionExecuteCommand(
+                customerId,
+                productId,
+                500_000L,
+                12,
+                withdrawalAccountId,
+                "1234",
+                "1234",
+                "ACC_PWD_test",
+                "OTP_AUTH_test",
+                List.of());
+    }
+
+    private void awaitPublicationCompleted() {
+        await().atMost(TIMEOUT)
+                .untilAsserted(() -> assertThat(publicationCount()).isZero());
+    }
+
+    private int publicationCount() {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM EVENT_PUBLICATION WHERE EVENT_TYPE = ? AND SERIALIZED_EVENT LIKE ?",
+                Integer.class,
+                ProductSubscriptionCompleted.class.getName(),
+                customerJsonFragment());
+    }
+
+    private String customerJsonFragment() {
+        return "%\"customerId\":" + customerId + ",%";
     }
 
     private long countProductSubscriptionLedgerEntries() {

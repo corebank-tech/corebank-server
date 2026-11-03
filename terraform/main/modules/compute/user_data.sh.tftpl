@@ -1,0 +1,73 @@
+#!/bin/bash
+set -euo pipefail
+exec > >(tee /var/log/corebank-bootstrap.log) 2>&1
+
+export DEBIAN_FRONTEND=noninteractive
+# WAS 보안 그룹은 443만 나가므로 apt 저장소를 HTTPS로 바꾼다
+sed -i 's|http://|https://|g' /etc/apt/sources.list 2>/dev/null || true
+sed -i 's|http://|https://|g' /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+apt-get update -y
+# 컨테이너 로그가 디스크를 채우지 않도록 Docker 설치 전에 순환 설정을 둔다(#839)
+mkdir -p /etc/docker
+cat > /etc/docker/daemon.json <<'EOF'
+{"log-driver":"json-file","log-opts":{"max-size":"50m","max-file":"5"}}
+EOF
+apt-get install -y docker.io awscli
+systemctl enable --now docker
+
+TOKEN=$(curl -s -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')
+REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
+get() { aws ssm get-parameter --region "$REGION" --with-decryption --name "/corebank/$1" --query Parameter.Value --output text; }
+
+# 보관함 값이 아직 없거나 권한이 퍼지는 중이면 최대 10분 기다린다
+LOADED=0
+for i in $(seq 1 60); do
+  if DB_USER=$(get db-user) && DB_PASSWORD=$(get db-password) && FLYWAY_USER=$(get flyway-user) \
+     && FLYWAY_PASSWORD=$(get flyway-password) && CORS=$(get cors-allowed-origins); then LOADED=1; break; fi
+  sleep 10
+done
+if [ "$LOADED" != 1 ]; then
+  echo "Parameter Store 값을 읽지 못해 부팅을 중단한다: /corebank/{db-user,db-password,flyway-user,flyway-password,cors-allowed-origins}" >&2
+  exit 1
+fi
+
+umask 077
+mkdir -p /opt/corebank
+cat > /opt/corebank/app.env <<EOF
+SPRING_PROFILES_ACTIVE=prod
+DB_HOST=${db_host}
+DB_USER=$DB_USER
+DB_PASSWORD=$DB_PASSWORD
+FLYWAY_USER=$FLYWAY_USER
+FLYWAY_PASSWORD=$FLYWAY_PASSWORD
+APP_INTERBANK_HOST=%{ if interbank_host == "" }mock-external%{ else }${interbank_host}%{ endif }
+APP_INTERBANK_PORT=9300
+CORS_ALLOWED_ORIGINS=$CORS
+EOF
+
+%{ if info_api_base_url != "" ~}
+# ParameterNotFound는 등록 전이라 경고만 남기고, 권한·통신 같은 다른 실패는 재시도 뒤 부팅을 중단한다
+INFO_API_SECRET=""
+INFO_API_STATE=0
+for i in $(seq 1 30); do
+  if INFO_API_OUT=$(get info-api-secret 2>&1); then INFO_API_SECRET="$INFO_API_OUT"; INFO_API_STATE=1; break; fi
+  if echo "$INFO_API_OUT" | grep -q ParameterNotFound; then INFO_API_STATE=2; break; fi
+  sleep 10
+done
+if [ "$INFO_API_STATE" = 0 ]; then
+  echo "Parameter Store /corebank/info-api-secret 읽기에 실패해 부팅을 중단한다: $INFO_API_OUT" >&2
+  exit 1
+fi
+if [ -n "$INFO_API_SECRET" ]; then
+  printf 'APP_INFO_API_BASE_URL=%s\nAPP_INFO_API_SECRET=%s\n' '${info_api_base_url}' "$INFO_API_SECRET" >> /opt/corebank/app.env
+else
+  echo "Parameter Store /corebank/info-api-secret 이 없어 정보계 API 설정을 넣지 않는다" >&2
+fi
+
+%{ endif ~}
+
+docker network create corebank-net || true
+%{ if interbank_host == "" ~}
+docker run -d --name corebank-mock-external --network-alias mock-external --restart unless-stopped --network corebank-net ${mock_external_image}
+%{ endif ~}
+docker run -d --name corebank-server --restart unless-stopped --network corebank-net -p 8080:8080 --env-file /opt/corebank/app.env ${app_image}

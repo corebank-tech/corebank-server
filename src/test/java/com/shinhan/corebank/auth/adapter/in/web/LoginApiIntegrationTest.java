@@ -64,9 +64,11 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
     @Autowired
     private ObjectMapper objectMapper;
 
+    // 세션 저장 실패만 골라 주입하고, 나머지 테스트는 실제 세션 저장소를 쓰도록 스파이로 감싼다.
     @MockitoSpyBean
     private JdbcIndexedSessionRepository jdbcSessionRepository;
 
+    // 세션 삭제 실패만 골라 주입하고, 나머지 테스트는 실제 객체를 쓰도록 스파이로 감싼다.
     @MockitoSpyBean
     private CustomerSessionInvalidator sessionInvalidator;
 
@@ -206,12 +208,12 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
                         Integer.class,
                         storedSessionId()))
                 .isEqualTo(600);
-        assertThat(body.get("code").asText()).isEqualTo("0000");
+        assertThat(body.get("code").asString()).isEqualTo("0000");
         assertThat(body.get("data").get("customerId").asLong()).isEqualTo(customerId);
-        assertThat(body.get("data").get("userName").asText()).isEqualTo("로그인고객");
+        assertThat(body.get("data").get("userName").asString()).isEqualTo("로그인고객");
 
         OffsetDateTime sessionExpiresAt =
-                OffsetDateTime.parse(body.get("data").get("sessionExpiresAt").asText());
+                OffsetDateTime.parse(body.get("data").get("sessionExpiresAt").asString());
 
         assertThat(sessionExpiresAt.toInstant())
                 .isAfterOrEqualTo(requestedAt.plusSeconds(600))
@@ -225,7 +227,7 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
         JsonNode protectedBody = objectMapper.readTree(protectedResponse.body());
 
         assertThat(protectedResponse.statusCode()).isEqualTo(200);
-        assertThat(protectedBody.get("code").asText()).isEqualTo("0000");
+        assertThat(protectedBody.get("code").asString()).isEqualTo("0000");
     }
 
     @Test
@@ -290,7 +292,7 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
                 .noneMatch(cookie -> "JSESSIONID".equals(cookie.getName()));
         assertThat(cookieManager.getCookieStore().getCookies())
                 .noneMatch(cookie -> "XSRF-TOKEN".equals(cookie.getName()));
-        assertThat(body.get("code").asText()).isEqualTo("ATH0101");
+        assertThat(body.get("code").asString()).isEqualTo("ATH0101");
         assertThat(body.get("data").get("errorCount").asInt()).isEqualTo(1);
         assertThat(body.get("data").get("remainingAttempts").asInt()).isEqualTo(4);
         assertThat(response.body()).doesNotContain(RAW_PASSWORD).doesNotContain(WRONG_PASSWORD);
@@ -315,8 +317,8 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
 
         assertThat(nonexistentUserResponse.statusCode()).isEqualTo(401);
         assertThat(wrongPasswordResponse.statusCode()).isEqualTo(401);
-        assertThat(nonexistentUserBody.get("code").asText())
-                .isEqualTo(wrongPasswordBody.get("code").asText());
+        assertThat(nonexistentUserBody.get("code").asString())
+                .isEqualTo(wrongPasswordBody.get("code").asString());
         assertThat(nonexistentUserBody.get("data")).isEqualTo(wrongPasswordBody.get("data"));
     }
 
@@ -339,8 +341,8 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
         JsonNode logoutBody = objectMapper.readTree(logoutResponse.body());
 
         assertThat(logoutResponse.statusCode()).isEqualTo(200);
-        assertThat(logoutBody.get("code").asText()).isEqualTo("0000");
-        assertThat(logoutBody.get("message").asText()).isEqualTo("로그아웃되었습니다.");
+        assertThat(logoutBody.get("code").asString()).isEqualTo("0000");
+        assertThat(logoutBody.get("message").asString()).isEqualTo("로그아웃되었습니다.");
         assertThat(logoutBody.get("data").isNull()).isTrue();
         assertThat(logoutResponse.headers().firstValue("Cache-Control"))
                 .hasValueSatisfying(value -> assertThat(value).contains("no-store"));
@@ -359,7 +361,7 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
         JsonNode protectedBody = objectMapper.readTree(protectedResponse.body());
 
         assertThat(protectedResponse.statusCode()).isEqualTo(401);
-        assertThat(protectedBody.get("code").asText()).isEqualTo("CMN0101");
+        assertThat(protectedBody.get("code").asString()).isEqualTo("CMN0101");
 
         HttpResponse<String> reloginResponse =
                 httpClient.send(loginRequest(RAW_PASSWORD), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
@@ -383,7 +385,7 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
         // 변경 실패 시 현재·다른 세션을 그대로 유지한다.
         HttpResponse<String> failedChange = changePassword(currentSession, WRONG_PASSWORD, NEW_PASSWORD);
         assertThat(failedChange.statusCode()).isEqualTo(400);
-        assertThat(objectMapper.readTree(failedChange.body()).get("code").asText())
+        assertThat(objectMapper.readTree(failedChange.body()).get("code").asString())
                 .isEqualTo("ATH0010");
         assertProtected(currentSession, 200, "0000");
         assertProtected(otherSession, 200, "0000");
@@ -392,7 +394,7 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
         assertThat(successfulChange.statusCode())
                 .withFailMessage("비밀번호 변경 응답: %s", successfulChange.body())
                 .isEqualTo(200);
-        assertThat(objectMapper.readTree(successfulChange.body()).get("code").asText())
+        assertThat(objectMapper.readTree(successfulChange.body()).get("code").asString())
                 .isEqualTo("0000");
 
         assertProtected(currentSession, 401, "CMN0101");
@@ -428,8 +430,8 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
         JsonNode issueBody = objectMapper.readTree(issueResponse.body()).get("data");
 
         assertThat(issueResponse.statusCode()).isEqualTo(200);
-        String requestId = issueBody.get("passwordResetRequestId").asText();
-        String verificationCode = issueBody.get("verificationCode").asText();
+        String requestId = issueBody.get("passwordResetRequestId").asString();
+        String verificationCode = issueBody.get("verificationCode").asString();
 
         HttpResponse<String> resetResponse = httpClient.send(
                 HttpRequest.newBuilder(uri("/auth/password-reset-requests/" + requestId))
@@ -473,7 +475,6 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
 
         return HttpRequest.newBuilder(uri("/auth/login"))
                 .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
-                .header("X-Forwarded-For", "203.0.113.10")
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                 .build();
     }
@@ -515,7 +516,8 @@ class LoginApiIntegrationTest extends IntegrationTestSupport {
                         HttpRequest.newBuilder(uri("/accounts")).GET().build(),
                         HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         assertThat(response.statusCode()).isEqualTo(expectedStatus);
-        assertThat(objectMapper.readTree(response.body()).get("code").asText()).isEqualTo(expectedCode);
+        assertThat(objectMapper.readTree(response.body()).get("code").asString())
+                .isEqualTo(expectedCode);
     }
 
     private SessionClient sessionClient() {

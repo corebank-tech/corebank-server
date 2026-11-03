@@ -1,6 +1,8 @@
 server:
-  # ALB가 TLS를 종료하고 HTTP로 전달하므로, X-Forwarded-* 헤더로 원래 scheme(https)을 인식하게 한다.
-  forward-headers-strategy: framework
+  # ALB가 TLS를 종료하고 HTTP로 전달하므로, X-Forwarded-* 헤더로 원래 scheme(https)과 접속 IP를 인식하게 한다.
+  # 톰캣 RemoteIpValve가 X-Forwarded-For를 끝에서부터 읽어, 사설 IP(ALB, VPC 10.30.0.0/16)는 건너뛰고
+  # 처음 나오는 IP를 접속 IP로 쓴다. 고객이 앞에 써넣은 값은 무시된다(#458).
+  forward-headers-strategy: native
   servlet:
     session:
       cookie:
@@ -11,7 +13,8 @@ spring:
     username: ${DB_USER}
     password: ${DB_PASSWORD}
     hikari:
-      maximum-pool-size: 10
+      # 풀 10·20 비교 측정을 재배포 없이 하려고 환경변수로 뺐다. 연결 예산은 team_db_architecture_guide.md §4(#798).
+      maximum-pool-size: ${DB_POOL_SIZE:10}
       connection-timeout: 3000
       max-lifetime: 570000
   jpa:
@@ -40,3 +43,8 @@ app:
     csrf:
       # www.corebank.cloud가 api.corebank.cloud의 CSRF 토큰을 읽도록 상위 도메인을 공유한다.
       cookie-domain: corebank.cloud
+  audit:
+    archive:
+      # 감사 로그 WORM 적재 버킷(PH-72 terraform/audit). WAS 역할에 corebank-audit-writer 정책이 붙어야 적재된다(PH-82).
+      storage: s3
+      bucket: corebank-audit-worm-853900964665

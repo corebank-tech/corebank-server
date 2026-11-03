@@ -51,4 +51,4 @@ D를 알아야 fence를 고를 수 있어 순환한다. 기각(결정 1).
 - `TransferExecutionService`와 타행이체(`InterbankTransferService`·`InterbankSettlementService`)도 기표·확정·ERROR 기록 트랜잭션 안에서 gate로 거래일을 읽는다(#662). 이체 경로까지 cutoff 보장이 성립하고 ArchUnit 예외는 없다.
 - cutoff 경계일은 #556과 #662가 둘 다 운영 배포된 뒤 첫 COB가 마감한 D이고, ETL 설정값으로 받는다(#668). 건너뛴 날을 CLOSED 대신 SKIPPED 행으로 남기자는 이견이 나오면 `status`만 바꿔 대응할 수 있다.
 - 이 변경 이전의 영업일에는 cutoff가 없다. 최초 적재 처리는 [info_mart.md](../phase2/info_mart.md) §3-1을 따른다.
-- `COB_DATE`의 영구 저장과 실패 스텝부터의 재실행은 이 결정의 범위가 아니다(#663). ADR-0004가 #556으로 미뤄 둔 그 결정은 #663이 이어받는다.
+- `COB_DATE`의 영구 저장과 실패 스텝부터의 재실행은 이 결정의 범위가 아니다. ADR-0004가 미뤄 둔 그 결정은 #663이 ADR-0004의 "후속 결정"으로 정했다.

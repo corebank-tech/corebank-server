@@ -20,6 +20,12 @@ public class AccountStatusHistoryPersistenceAdapter implements AccountStatusHist
     }
 
     @Override
+    public void recordEarlyClosure(
+            Long accountId, LocalDate maturityDate, LocalDate closedTradeDate, LocalDateTime changedAt) {
+        repository.save(AccountStatusHistoryJpaEntity.earlyClosed(accountId, maturityDate, closedTradeDate, changedAt));
+    }
+
+    @Override
     public void recordMaturityClosure(
             Long accountId, LocalDate maturityDate, LocalDate closedTradeDate, LocalDateTime changedAt) {
 

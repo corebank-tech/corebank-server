@@ -114,7 +114,7 @@ class SignupAccountVerificationServiceTest {
         givenVerification(ExistingBankAccountVerification.informationMismatch());
 
         AccountVerificationFailedException exception =
-                catchThrowableOfType(() -> service.verify(COMMAND), AccountVerificationFailedException.class);
+                catchThrowableOfType(AccountVerificationFailedException.class, () -> service.verify(COMMAND));
 
         assertThat(exception.getErrorCode()).isEqualTo(SignupErrorCode.ACCOUNT_VERIFICATION_FAILED);
         assertThat(exception.getAttemptResult()).isEmpty();
@@ -128,7 +128,7 @@ class SignupAccountVerificationServiceTest {
         givenVerification(ExistingBankAccountVerification.passwordMismatch(3));
 
         AccountVerificationFailedException exception =
-                catchThrowableOfType(() -> service.verify(COMMAND), AccountVerificationFailedException.class);
+                catchThrowableOfType(AccountVerificationFailedException.class, () -> service.verify(COMMAND));
 
         assertThat(exception.getErrorCode()).isEqualTo(SignupErrorCode.ACCOUNT_VERIFICATION_FAILED);
         assertThat(exception.getAttemptResult()).hasValueSatisfying(result -> {
@@ -145,7 +145,7 @@ class SignupAccountVerificationServiceTest {
         givenVerification(ExistingBankAccountVerification.locked());
 
         AccountVerificationFailedException exception =
-                catchThrowableOfType(() -> service.verify(COMMAND), AccountVerificationFailedException.class);
+                catchThrowableOfType(AccountVerificationFailedException.class, () -> service.verify(COMMAND));
 
         assertThat(exception.getErrorCode()).isEqualTo(SignupErrorCode.ACCOUNT_LOCKED);
         assertThat(exception.getAttemptResult()).hasValueSatisfying(result -> {

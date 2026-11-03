@@ -136,7 +136,7 @@ class SignupValidationServiceTest {
     @DisplayName("약관 토큰이 없으면 ATH0104이고 어떤 토큰도 소비하지 않는다")
     void rejectsInvalidTermsToken() {
         BusinessException exception =
-                catchThrowableOfType(() -> service.validate(initialCommand()), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.validate(initialCommand()));
 
         assertThat(exception.getErrorCode()).isEqualTo(SignupErrorCode.INVALID_TERMS_AUTH_TOKEN);
         verify(transitionPort, never()).replaceInitialTokensWithTemp(any(), any(), any(), any(), any(), any(), any());
@@ -443,7 +443,7 @@ class SignupValidationServiceTest {
     }
 
     private void assertError(ValidateSignupCommand command, ErrorCode expectedErrorCode) {
-        BusinessException exception = catchThrowableOfType(() -> service.validate(command), BusinessException.class);
+        BusinessException exception = catchThrowableOfType(BusinessException.class, () -> service.validate(command));
         assertThat(exception.getErrorCode()).isEqualTo(expectedErrorCode);
     }
 }

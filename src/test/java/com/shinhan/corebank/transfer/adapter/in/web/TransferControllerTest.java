@@ -106,6 +106,50 @@ class TransferControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("같은 Idempotency-Key인데 flowId만 다르면 409 + CMN0302를 반환한다")
+    void execute_sameIdempotencyKeyDifferentFlowId_returnsIdempotencyKeyReused() throws Exception {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        postTransfer(idempotencyKey, transferRequestJson(101L, "110222222222", 30000L, "flow-a"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"));
+
+        postTransfer(idempotencyKey, transferRequestJson(101L, "110222222222", 30000L, "flow-b"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CMN0302"));
+    }
+
+    @Test
+    @DisplayName("같은 Idempotency-Key로 flowId 없는 같은 요청을 다시 보내면 기존 결과를 재생한다")
+    void execute_sameIdempotencyKeyWithoutFlowId_replays() throws Exception {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        String idempotencyKey = UUID.randomUUID().toString();
+        String body = transferRequestJson(101L, "110222222222", 30000L);
+
+        postTransfer(idempotencyKey, body).andExpect(status().isOk());
+
+        postTransfer(idempotencyKey, body)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.withdrawalBalanceAfter").value(70000));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions postTransfer(String idempotencyKey, String body)
+            throws Exception {
+        return mockMvc.perform(post("/transfers")
+                .with(authentication(authenticationOf(1L)))
+                .with(csrf())
+                .header("Idempotency-Key", idempotencyKey)
+                .header("Account-Password-Auth-Token", "dummy-auth-token")
+                .header("Otp-Auth-Token", "dummy-otp-token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
+    }
+
+    @Test
     @DisplayName("출금계좌와 입금계좌가 같으면 200 + ApiResponse 봉투로 TRF0002 ERROR 결과를 반환한다")
     void execute_withSameWithdrawalAndDepositAccount_returnsErrorResult() throws Exception {
         new TransactionTemplate(transactionManager)
@@ -450,8 +494,13 @@ class TransferControllerTest extends IntegrationTestSupport {
 
     private String transferRequestJson(Long withdrawalAccountId, String depositAccountNumber, long amount)
             throws Exception {
+        return transferRequestJson(withdrawalAccountId, depositAccountNumber, amount, null);
+    }
+
+    private String transferRequestJson(
+            Long withdrawalAccountId, String depositAccountNumber, long amount, String flowId) throws Exception {
         TransferRequest request =
-                new TransferRequest(withdrawalAccountId, depositAccountNumber, amount, "출금메모", "입금메모");
+                new TransferRequest(withdrawalAccountId, depositAccountNumber, amount, "출금메모", "입금메모", flowId);
         return OBJECT_MAPPER.writeValueAsString(request);
     }
 
@@ -506,6 +555,9 @@ class TransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("타행이체: 16자리를 넘는 계좌번호는 400 + TRF0007")
     void executeInterbank_invalidAccountNumber_returnsBadRequest() throws Exception {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
         postInterbank(interbankRequestJson("004", "12345678901234567", "홍길동"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("TRF0007"));
@@ -514,6 +566,9 @@ class TransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("타행이체: 전문 문자셋에 없는 문자(이모지)는 400 + TRF0008")
     void executeInterbank_emojiMemo_returnsBadRequest() throws Exception {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
         postInterbank(interbankRequestJson("004", "1234567890123", "홍길동😀"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("TRF0008"));
@@ -522,6 +577,9 @@ class TransferControllerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("타행이체: 목록에 없는 은행코드(당행 088 포함)는 400 + TRF0006")
     void executeInterbank_unsupportedBank_returnsBadRequest() throws Exception {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+
         postInterbank(interbankRequestJson("088", "1234567890123", "홍길동"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("TRF0006"));

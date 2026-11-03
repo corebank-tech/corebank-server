@@ -4,26 +4,16 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
-// ALB 전달 헤더 또는 원격 주소에서 로그인 요청 IP를 추출
+// 원격 주소에서 로그인 요청 IP를 추출. prod는 톰캣 RemoteIpValve가 ALB 뒤 접속 IP로 바꿔 둔다(#458)
 @Component
 public class ClientIpResolver {
 
-    private static final String X_FORWARDED_FOR = "X-Forwarded-For";
     private static final int MAX_IP_LENGTH = 45;
 
     public String resolve(HttpServletRequest request) {
         Objects.requireNonNull(request, "request must not be null");
 
-        String forwardedFor = request.getHeader(X_FORWARDED_FOR);
-        String clientIp = hasText(forwardedFor) ? lastForwardedIp(forwardedFor) : request.getRemoteAddr();
-
-        return validateAndNormalize(clientIp);
-    }
-
-    // 단일 신뢰 프록시인 ALB가 직접 확인해 마지막에 추가한 접속 IP를 사용
-    private String lastForwardedIp(String forwardedFor) {
-        int lastSeparatorIndex = forwardedFor.lastIndexOf(',');
-        return forwardedFor.substring(lastSeparatorIndex + 1).trim();
+        return validateAndNormalize(request.getRemoteAddr());
     }
 
     // customer와 audit_log 컬럼 제약에 맞는 IP만 허용

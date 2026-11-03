@@ -1,13 +1,11 @@
 package com.shinhan.corebank.account.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
-import com.shinhan.corebank.account.domain.Account;
-import com.shinhan.corebank.account.domain.AccountStatus;
-import com.shinhan.corebank.account.domain.AccountType;
-import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -23,8 +21,6 @@ class AccountNumberQueryServiceTest {
     private static final Long ACCOUNT_ID = 10L;
     private static final String ACCOUNT_NUMBER = "088100000001";
 
-    private static final String PASSWORD_HASH = "$2a$10$34abEWY4uXLwTEnT5hNow.603a5rWofFx7Bnj59agU.PsESK0v/Yq";
-
     @Mock
     private AccountPersistencePort accountPersistencePort;
 
@@ -36,55 +32,26 @@ class AccountNumberQueryServiceTest {
     }
 
     @Test
-    @DisplayName("본인 계좌면 계좌번호를 반환한다")
+    @DisplayName("본인 계좌면 엔티티 로딩 없이 계좌번호만 반환한다")
     void findAccountNumber() {
-        // given
-        when(accountPersistencePort.findByAccountIdAndCustomerId(ACCOUNT_ID, CUSTOMER_ID))
-                .thenReturn(Optional.of(createAccount()));
+        when(accountPersistencePort.findAccountNumberByIdAndCustomerId(ACCOUNT_ID, CUSTOMER_ID))
+                .thenReturn(Optional.of(ACCOUNT_NUMBER));
 
-        // when
         Optional<String> accountNumber = service.findAccountNumber(ACCOUNT_ID, CUSTOMER_ID);
 
-        // then
         assertThat(accountNumber).contains(ACCOUNT_NUMBER);
+
+        verify(accountPersistencePort, never()).findByAccountIdAndCustomerId(ACCOUNT_ID, CUSTOMER_ID);
     }
 
     @Test
     @DisplayName("본인 계좌가 아니거나 없으면 빈 값을 반환한다")
     void findAccountNumberNotOwned() {
-        // given
-        when(accountPersistencePort.findByAccountIdAndCustomerId(ACCOUNT_ID, CUSTOMER_ID))
+        when(accountPersistencePort.findAccountNumberByIdAndCustomerId(ACCOUNT_ID, CUSTOMER_ID))
                 .thenReturn(Optional.empty());
 
-        // when
         Optional<String> accountNumber = service.findAccountNumber(ACCOUNT_ID, CUSTOMER_ID);
 
-        // then
         assertThat(accountNumber).isEmpty();
-    }
-
-    private Account createAccount() {
-        return Account.reconstitute(
-                ACCOUNT_ID,
-                ACCOUNT_NUMBER,
-                CUSTOMER_ID,
-                null,
-                AccountType.DEMAND_DEPOSIT,
-                1_000_000L,
-                AccountStatus.ACTIVE,
-                PASSWORD_HASH,
-                0,
-                false,
-                null,
-                null,
-                false,
-                null,
-                LocalDateTime.of(2026, 8, 1, 10, 0),
-                null,
-                null,
-                LocalDateTime.of(2026, 8, 10, 15, 0),
-                0L,
-                LocalDateTime.of(2026, 8, 1, 10, 0),
-                LocalDateTime.of(2026, 8, 10, 15, 0));
     }
 }

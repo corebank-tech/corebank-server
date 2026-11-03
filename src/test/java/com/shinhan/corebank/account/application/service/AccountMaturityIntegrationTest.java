@@ -59,6 +59,7 @@ class AccountMaturityIntegrationTest extends IntegrationTestSupport {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    // 두 번째 감사 이력 저장 뒤 실패를 주입해 청크 전체가 롤백되는지 본다 — 앞선 저장은 실제로 타도록 스파이로 감싼다.
     @MockitoSpyBean
     private AccountStatusHistoryPersistenceAdapter historyAdapter;
 

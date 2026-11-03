@@ -11,6 +11,15 @@ spring:
       # 데드락 회귀인지 커넥션 풀 대기인지 구분할 수 없어 워커 수와 맞춰 명시한다.
       maximum-pool-size: 16
 
+app:
+  # 컨텍스트를 같이 쓰는 테스트끼리 메모리 묶음이 이어지지 않게 한 개씩 받는다. 묶음 동작은 SequenceGeneratorBlockTest가 본다
+  transaction-sequence:
+    block-size: 1
+  delayed-transfer:
+    release:
+      # 스위트가 도는 동안 해제 스케줄러가 다른 테스트의 보류를 실행하지 않게 한다. 테스트는 배치 서비스를 직접 부른다
+      fixed-delay: 24h
+
 management:
   endpoints:
     web:

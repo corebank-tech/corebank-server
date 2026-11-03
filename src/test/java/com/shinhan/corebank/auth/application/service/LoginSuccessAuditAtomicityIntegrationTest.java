@@ -39,6 +39,7 @@ class LoginSuccessAuditAtomicityIntegrationTest extends IntegrationTestSupport {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    // 성공 감사 저장 실패를 주입해 로그인 상태 변경이 함께 롤백되는지 본다 — 실제 DB로는 감사 저장만 골라 실패시킬 수 없다.
     @MockitoBean
     private RecordLoginAuditPort recordLoginAuditPort;
 

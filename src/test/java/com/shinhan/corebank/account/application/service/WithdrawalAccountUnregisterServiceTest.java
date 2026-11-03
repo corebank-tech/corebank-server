@@ -121,7 +121,7 @@ class WithdrawalAccountUnregisterServiceTest {
 
         // when
         BusinessException exception =
-                catchThrowableOfType(() -> service.unregister(createCommand()), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.unregister(createCommand()));
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.ACCOUNT_NOT_FOUND_OR_FORBIDDEN);
@@ -147,7 +147,7 @@ class WithdrawalAccountUnregisterServiceTest {
 
         // when
         BusinessException exception =
-                catchThrowableOfType(() -> service.unregister(createCommand()), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.unregister(createCommand()));
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.WITHDRAWAL_ACCOUNT_UNREGISTRATION_RESTRICTED);
@@ -186,7 +186,7 @@ class WithdrawalAccountUnregisterServiceTest {
 
         // when
         BusinessException exception =
-                catchThrowableOfType(() -> service.unregister(createCommand()), BusinessException.class);
+                catchThrowableOfType(BusinessException.class, () -> service.unregister(createCommand()));
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.WITHDRAWAL_ACCOUNT_UNREGISTRATION_RESTRICTED);

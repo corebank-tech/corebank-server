@@ -162,6 +162,12 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
         return accountJpaRepository.findByAccountIdForUpdate(accountId).map(AccountMapper::toDomain);
     }
 
+    @Override
+    public Optional<String> findAccountNumberByIdAndCustomerId(Long accountId, Long customerId) {
+
+        return accountJpaRepository.findAccountNumberByIdAndCustomerId(accountId, customerId);
+    }
+
     private void validateVersion(Account account, AccountJpaEntity entity) {
         if (!Objects.equals(account.getVersion(), entity.getVersion())) {
             throw new BusinessException(CommonErrorCode.CONCURRENT_MODIFICATION);

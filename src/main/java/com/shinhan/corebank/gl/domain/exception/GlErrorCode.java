@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
  * 회계 원장(GL) 도메인 오류코드. 값은 docs/api_conventions.md §4-14 마스터를 따른다.
  *
  * <p>전표는 사용자 입력이 아니라 이체·상품가입·이자 같은 내부 거래에서 만들어진다. 그래서 전부
- * 9xxx(500)다 — 여기서 걸리면 호출한 쪽의 분개 패턴이 틀린 것이다.
+ * 9xxx(500)다 — 여기서 걸리면 호출한 쪽의 분개 패턴이 틀린 것이다. GLA9010 은 시산표 조회의 서버 쪽 시간 초과라 역시 500이다.
  */
 @Getter
 @RequiredArgsConstructor
@@ -21,7 +21,9 @@ public enum GlErrorCode implements ErrorCode {
     VOUCHER_TYPE_MISMATCH("GLA9006", 500, "전표번호의 유형이 전표 유형과 다릅니다."),
     MISSING_REFERENCE_KEY("GLA9007", 500, "전표의 참조 키가 없습니다."),
     DUPLICATE_REFERENCE_KEY("GLA9008", 500, "이미 기표된 거래입니다."),
-    UNSUPPORTED_LEDGER_TX_TYPE("GLA9009", 500, "분개 패턴이 없는 거래유형입니다.");
+    UNSUPPORTED_LEDGER_TX_TYPE("GLA9009", 500, "분개 패턴이 없는 거래유형입니다."),
+    // 시산표 집계가 조회 트랜잭션 타임아웃(TrialBalanceQueryService)을 넘김. 다시 눌러도 같은 시간을 기다리므로 기간을 줄이라고 안내한다
+    TRIAL_BALANCE_QUERY_TIMEOUT("GLA9010", 500, "시산표 집계가 제한 시간을 넘었습니다. 조회 기간을 줄여 다시 시도해 주세요.");
 
     private final String code;
     private final int status;

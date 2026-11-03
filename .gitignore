@@ -27,6 +27,7 @@ out/
 !**/src/main/**/out/
 !**/src/test/**/out/
 !**/src/infoEtl/**/out/
+!**/src/infoApi/**/out/
 
 ### NetBeans ###
 /nbproject/private/

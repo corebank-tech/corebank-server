@@ -62,6 +62,8 @@ ALTER TABLE account ADD COLUMN nickname VARCHAR(30) NULL COMMENT '별칭';
 **② 파일명은 `V{yyyyMMddHHmm}__{설명}.sql`.**
 `V1__`, `V2__` 같은 순번은 쓰지 않습니다. 6명이 동시에 파일을 만들면 번호가 겹칩니다. 타임스탬프면 겹칠 일이 없습니다.
 
+다만 겹치지 않을 뿐, **순서는 뒤집힐 수 있습니다.** PR이 열려 있는 동안 dev에 더 늦은 번호가 먼저 머지되면, 내 파일은 "이미 적용된 버전보다 앞 번호"가 됩니다. `out-of-order: false`라서 dev를 이미 적용한 DB는 기동할 때 검증에 실패합니다. 그래서 PR CI의 `Check migration version order` 단계가 새 `V__` 파일이 base 최신보다 뒤 번호인지 확인합니다(#814). 걸리면 파일 이름을 dev 최신보다 뒤 번호로 바꾸십시오. 로컬에서는 `scripts/check-migration-order.sh origin/dev`로 미리 볼 수 있습니다.
+
 **③ 자기 도메인 파일만 만듭니다.**
 남의 테이블을 고쳐야 하면 담당자에게 요청하십시오. 접두어 소유 원칙(`common_rev` §3-2)과 같습니다.
 
@@ -245,6 +247,8 @@ DELETE FROM flyway_schema_history WHERE success = 0;
 | `Schema-validation: wrong column type` | `DATETIME(6)` ↔ `LocalDateTime` 정밀도 불일치 | `@Column(columnDefinition = "DATETIME(6)")` |
 | 한글 `COMMENT` 깨짐 | `flyway.encoding` 미설정 | `encoding: UTF-8` |
 | `Cannot add foreign key constraint` | 파일 순서를 바꿈 | 타임스탬프 순서 확인 |
+| CI `Check migration version order` 실패: `...의 버전 ... 이(가) base 최신 V... 보다 앞이거나 같습니다` | PR이 열린 사이 dev에 더 늦은 번호가 머지됨 | 파일 이름을 dev 최신보다 뒤 번호로 변경 (§3 ②) |
+| 기동 시 `Validate failed: Detected resolved migration not applied to database` | 앞 번호 `V` 파일이 이미 머지되어, 더 늦은 번호를 적용한 DB와 순서가 맞지 않음 | 개발 DB면 DB를 지우고 다시 적용. 재발은 위 CI 검사가 막는다 |
 | 프로시저 생성 실패 | `DELIMITER` 미인식 | 해당 파일만 단독 실행 후 `flyway repair` |
 
 ---

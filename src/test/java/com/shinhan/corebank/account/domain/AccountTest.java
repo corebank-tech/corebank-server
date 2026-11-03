@@ -562,7 +562,7 @@ class AccountTest {
         String alias = "가나다라마바사아자차카타파";
 
         // when
-        BusinessException exception = catchThrowableOfType(() -> account.changeAlias(alias), BusinessException.class);
+        BusinessException exception = catchThrowableOfType(BusinessException.class, () -> account.changeAlias(alias));
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.INVALID_ACCOUNT_ALIAS);
@@ -594,7 +594,7 @@ class AccountTest {
         String alias = "abcdefghijklmnopqrstuvwxy";
 
         // when
-        BusinessException exception = catchThrowableOfType(() -> account.changeAlias(alias), BusinessException.class);
+        BusinessException exception = catchThrowableOfType(BusinessException.class, () -> account.changeAlias(alias));
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(AccountErrorCode.INVALID_ACCOUNT_ALIAS);
@@ -608,7 +608,7 @@ class AccountTest {
                 ACCOUNT_NUMBER, CUSTOMER_ID, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, OPENED_DATE, null);
 
         // when
-        BusinessException exception = catchThrowableOfType(() -> account.changeAlias("   "), BusinessException.class);
+        BusinessException exception = catchThrowableOfType(BusinessException.class, () -> account.changeAlias("   "));
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);
@@ -622,7 +622,7 @@ class AccountTest {
                 ACCOUNT_NUMBER, CUSTOMER_ID, null, AccountType.DEMAND_DEPOSIT, PASSWORD_HASH, OPENED_DATE, null);
 
         // when
-        BusinessException exception = catchThrowableOfType(() -> account.changeAlias(null), BusinessException.class);
+        BusinessException exception = catchThrowableOfType(BusinessException.class, () -> account.changeAlias(null));
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.REQUIRED_FIELD_MISSING);

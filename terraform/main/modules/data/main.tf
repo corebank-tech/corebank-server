@@ -50,7 +50,7 @@ resource "aws_db_parameter_group" "main" {
 
   parameter {
     name         = "gtid-mode"
-    value        = "OFF_PERMISSIVE"
+    value        = "ON"
     apply_method = "pending-reboot"
   }
 

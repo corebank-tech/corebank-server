@@ -25,11 +25,15 @@ sourceSets {
     }
     // 정보계 ETL (PH-76). 운영 jar와 따로 빌드·실행하고, main 코드는 쓰지 않는다.
     infoEtl {}
+    // 정보계 조회 API (PH-77 ②). ETL처럼 운영 jar와 따로 빌드·실행하고, main 코드는 쓰지 않는다.
+    infoApi {}
     test {
         compileClasspath += sourceSets.mockExternal.output
         runtimeClasspath += sourceSets.mockExternal.output
         compileClasspath += sourceSets.infoEtl.output
         runtimeClasspath += sourceSets.infoEtl.output
+        compileClasspath += sourceSets.infoApi.output
+        runtimeClasspath += sourceSets.infoApi.output
     }
 }
 
@@ -52,6 +56,28 @@ tasks.register('mockExternalJar', Jar) {
     }
     manifest {
         attributes 'Main-Class': 'com.shinhan.mockexternal.MockExternalServer'
+    }
+}
+
+tasks.register('runInfoApi', JavaExec) {
+    group = 'application'
+    description = '정보계 조회 API를 실행한다 (PH-77 ②)'
+    classpath = sourceSets.infoApi.runtimeClasspath
+    mainClass = 'com.shinhan.infoapi.InfoApiMain'
+}
+
+// VM에 그대로 올리는 실행 파일. MySQL 드라이버와 JSON 라이브러리를 같이 담는다 — java -jar info-api.jar
+tasks.register('infoApiJar', Jar) {
+    group = 'build'
+    description = '정보계 조회 API 실행 jar를 만든다 (PH-77 ②)'
+    archiveFileName = 'info-api.jar'
+    destinationDirectory = layout.buildDirectory.dir('info-api')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from sourceSets.infoApi.output
+    from { configurations.infoApiRuntimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+    manifest {
+        attributes 'Main-Class': 'com.shinhan.infoapi.InfoApiMain'
     }
 }
 
@@ -88,6 +114,7 @@ ext {
 dependencyManagement {
     imports {
         mavenBom 'org.springframework.modulith:spring-modulith-bom:2.0.8'
+        mavenBom 'software.amazon.awssdk:bom:2.55.16'
     }
 }
 
@@ -109,6 +136,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     runtimeOnly 'com.mysql:mysql-connector-j'
     infoEtlRuntimeOnly 'com.mysql:mysql-connector-j'
+    infoApiRuntimeOnly 'com.mysql:mysql-connector-j'
+    infoApiImplementation 'tools.jackson.core:jackson-databind'
 
     // Querydsl (OpenFeign 포크, io.github.openfeign.querydsl)
     implementation "io.github.openfeign.querydsl:querydsl-jpa:${queryDslVersion}"
@@ -133,6 +162,9 @@ dependencies {
 
     // 이벤트 발행 기록 — 아웃박스 (PH-96, #437)
     implementation 'org.springframework.modulith:spring-modulith-starter-jdbc'
+
+    // 감사 로그 WORM 적재 — S3 Object Lock 버킷 (PH-82, #766). Boot에 S3 지원이 없어 AWS 공식 SDK를 쓴다
+    implementation 'software.amazon.awssdk:s3'
 
     // 테스트
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
@@ -175,7 +207,14 @@ tasks.named('test') {
     systemProperty 'junit.jupiter.execution.parallel.enabled', 'false'
     systemProperty 'spring.test.context.cache.maxSize', '4'
     // PH-49c 테스트가 같은 MySQL에 연결한 독립 WAS JVM 두 개를 실행한다.
-    systemProperty 'corebank.test.application-classpath', sourceSets.main.runtimeClasspath.asPath
+    // #871: classpath를 -D로 직접 넘기면 Windows 명령줄 한도(32,767자)를 넘어 파일 경로만 넘긴다
+    def applicationClasspath = sourceSets.main.runtimeClasspath
+    def applicationClasspathFile = layout.buildDirectory.file('dual-was/application-classpath.txt').get().asFile
+    systemProperty 'corebank.test.application-classpath-file', applicationClasspathFile.absolutePath
+    doFirst {
+        applicationClasspathFile.parentFile.mkdirs()
+        applicationClasspathFile.setText(applicationClasspath.asPath, 'UTF-8')
+    }
     // #724: 기본값(SHORT)은 실패 줄 번호만 찍어 CI 로그에 실제 값이 안 남는다
     testLogging {
         exceptionFormat = 'full'
@@ -240,4 +279,8 @@ spotless {
         trimTrailingWhitespace()
         endWithNewline()
     }
+}
+
+springBoot {
+    mainClass = 'com.shinhan.corebank.CorebankApplication'
 }

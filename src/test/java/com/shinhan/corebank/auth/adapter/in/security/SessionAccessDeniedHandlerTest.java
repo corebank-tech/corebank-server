@@ -31,8 +31,8 @@ class SessionAccessDeniedHandlerTest {
         assertThat(MediaType.APPLICATION_JSON.isCompatibleWith(MediaType.parseMediaType(response.getContentType())))
                 .isTrue();
         assertThat(response.getCharacterEncoding()).isEqualTo(StandardCharsets.UTF_8.name());
-        assertThat(body.get("code").asText()).isEqualTo("CMN0102");
-        assertThat(body.get("message").asText()).isEqualTo("해당 자원에 접근할 권한이 없습니다.");
+        assertThat(body.get("code").asString()).isEqualTo("CMN0102");
+        assertThat(body.get("message").asString()).isEqualTo("해당 자원에 접근할 권한이 없습니다.");
         assertThat(body.has("data")).isTrue();
         assertThat(body.get("data").isNull()).isTrue();
         assertThat(response.getContentAsString()).doesNotContain("외부에 노출하면 안 되는 권한 예외");

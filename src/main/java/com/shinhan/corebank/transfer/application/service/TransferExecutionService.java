@@ -4,12 +4,14 @@ import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
+import com.shinhan.corebank.transfer.api.TransferHeld;
+import com.shinhan.corebank.transfer.api.TransferHoldContext;
+import com.shinhan.corebank.transfer.api.TransferHoldDecision;
+import com.shinhan.corebank.transfer.api.TransferHoldPolicy;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
 import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
-import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferResult;
@@ -21,6 +23,7 @@ import com.shinhan.corebank.transfer.application.port.out.LockedAccountsForTrans
 import com.shinhan.corebank.transfer.application.port.out.ResolvedPayee;
 import com.shinhan.corebank.transfer.application.port.out.TransferAuthTokenVerificationPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferBalances;
+import com.shinhan.corebank.transfer.application.port.out.TransferHoldPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLimitPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferOtpVerificationPort;
@@ -28,6 +31,8 @@ import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.LedgerPair;
 import com.shinhan.corebank.transfer.domain.Transfer;
+import com.shinhan.corebank.transfer.domain.TransferHold;
+import com.shinhan.corebank.transfer.domain.TransferHoldStatus;
 import com.shinhan.corebank.transfer.domain.TransferSourceType;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
@@ -67,9 +72,26 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private static final long FEE = 0L; // 당행 이체 수수료 0 고정 (POL-028)
     // doExecute()가 예외를 던져 결과를 못 만든 호출. 태그 값을 고정해 두려고 상수로 둔다.
     private static final String RESULT_EXCEPTION = "EXCEPTION";
+    // 훅 C가 보류해 이체 결과(status)가 아직 없는 호출
+    private static final String RESULT_HELD = "HELD";
 
     // 채번 뒤 기표 전까지 들고 다니는 값. 거래일은 gate를 쥔 트랜잭션 안에서 읽어야 해서 Transfer는 거기서 만든다.
     private record Draft(ResolvedPayee payee, String transactionNumber, LocalDateTime requestedAt) {}
+
+    // 기표 트랜잭션의 결과. 기표했으면 transfer, 훅 C가 보류했으면 holdDecision만 있다. 보류 선점을 잃었으면 claimLost다(둘 다 롤백).
+    private record Posting(Transfer transfer, TransferHoldDecision holdDecision, boolean claimLost) {
+        static Posting posted(Transfer transfer) {
+            return new Posting(transfer, null, false);
+        }
+
+        static Posting held(TransferHoldDecision holdDecision) {
+            return new Posting(null, holdDecision, false);
+        }
+
+        static Posting lostClaim() {
+            return new Posting(null, null, true);
+        }
+    }
 
     private final AccountLockPort accountLockPort;
     private final TransferLimitPort transferLimitPort;
@@ -79,8 +101,10 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     private final TransferSavePort transferSavePort;
     private final TransferLookupPort transferLookupPort;
     private final LedgerSavePort ledgerSavePort;
+    private final TransferHoldPort transferHoldPort;
     private final List<TransferPreCheck> transferPreChecks;
     private final List<LedgerPostingHook> ledgerPostingHooks;
+    private final List<TransferHoldPolicy> transferHoldPolicies;
     private final Clock clock;
     private final BusinessDateGate businessDateGate;
     private final TransactionTemplate requiresNewTransactionTemplate;
@@ -96,8 +120,10 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             TransferSavePort transferSavePort,
             TransferLookupPort transferLookupPort,
             LedgerSavePort ledgerSavePort,
+            TransferHoldPort transferHoldPort,
             List<TransferPreCheck> transferPreChecks,
             List<LedgerPostingHook> ledgerPostingHooks,
+            List<TransferHoldPolicy> transferHoldPolicies,
             Clock clock,
             BusinessDateGate businessDateGate,
             PlatformTransactionManager transactionManager,
@@ -111,11 +137,15 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         this.transferSavePort = transferSavePort;
         this.transferLookupPort = transferLookupPort;
         this.ledgerSavePort = ledgerSavePort;
+        this.transferHoldPort = transferHoldPort;
         // 빈 등록 순서가 아니라 order()로 실행 순서를 고정한다.
         this.transferPreChecks = transferPreChecks.stream()
                 .sorted(Comparator.comparingInt(TransferPreCheck::order))
                 .toList();
         this.ledgerPostingHooks = List.copyOf(ledgerPostingHooks);
+        this.transferHoldPolicies = transferHoldPolicies.stream()
+                .sorted(Comparator.comparingInt(TransferHoldPolicy::order))
+                .toList();
         this.clock = clock;
         this.businessDateGate = businessDateGate;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
@@ -132,6 +162,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             registerTransferMetrics(status.name());
         }
         registerTransferMetrics(RESULT_EXCEPTION);
+        registerTransferMetrics(RESULT_HELD);
     }
 
     private void registerTransferMetrics(String result) {
@@ -165,7 +196,9 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         String result = RESULT_EXCEPTION;
         try {
             TransferResult transferResult = doExecute(command, replayed);
-            result = transferResult.status().name();
+            result = transferResult.held()
+                    ? RESULT_HELD
+                    : transferResult.status().name();
             return transferResult;
         } finally {
             sample.stop(transferTimer(result, replayed.get()));
@@ -175,10 +208,21 @@ public class TransferExecutionService implements TransferExecutionUseCase {
 
     // replayed: 이미 처리된 회차의 기존 결과를 돌려주는 경로면 true로 바꾼다(메트릭 구분용).
     private TransferResult doExecute(TransferCommand command, AtomicBoolean replayed) {
+        // 보류 건 실행은 원본 대조를 재생보다 먼저 한다. 보류 ID와 날짜만 맞춘 다른 요청이 앞선 결과를 받지 못하게 한다(§9-4).
+        Optional<TransferHold> heldOrigin = findHeldOrigin(command);
+        if (isHeldExecution(command) && heldOrigin.isEmpty()) {
+            return rejectedBeforeDraft(TransferErrorCode.TRANSFER_HOLD_NOT_EXECUTABLE);
+        }
+
         Optional<TransferResult> alreadyProcessed = findAlreadyProcessedResult(command);
         if (alreadyProcessed.isPresent()) {
             replayed.set(true);
             return alreadyProcessed.get();
+        }
+
+        // 새로 실행할 때는 release()가 선점한 상태여야 토큰 없이 실행할 수 있다
+        if (heldOrigin.isPresent() && heldOrigin.get().getStatus() != TransferHoldStatus.EXECUTING) {
+            return rejectedBeforeDraft(TransferErrorCode.TRANSFER_HOLD_NOT_EXECUTABLE);
         }
 
         // 계좌 락 획득 전 시각이므로 채번(거래번호 달력일)에만 쓴다. 락 대기로 실제 처리가 지연될 수
@@ -199,8 +243,16 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             preCheckWithoutLock(command, payee);
             runTransferPreChecks(command);
             consumeOtpAuthToken(command);
+            LocalDateTime authenticatedAt = LocalDateTime.now(clock);
 
-            Transfer completed = postLedger(command, draft);
+            Posting posting = postLedger(command, draft);
+            if (posting.claimLost()) {
+                return rejectedBeforeDraft(TransferErrorCode.TRANSFER_HOLD_NOT_EXECUTABLE);
+            }
+            if (posting.holdDecision() != null) {
+                return holdTransfer(command, posting.holdDecision(), authenticatedAt);
+            }
+            Transfer completed = posting.transfer();
 
             return TransferResult.builder()
                     .status(completed.getStatus())
@@ -250,7 +302,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             return Optional.empty();
         }
         return transferLookupPort.findBySourceAndExecutionDate(
-                resolveSourceType(command.transferType()), command.sourceId(), command.executionDate());
+                resolveSourceType(command), command.sourceId(), command.executionDate());
     }
 
     // 1차 검증(락 이전) ①~④. 넷 다 계좌 락도 한도 예약도 건드리지 않으므로 여기서 먼저 끝낸다.
@@ -291,6 +343,34 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         return payee;
     }
 
+    private static boolean isHeldExecution(TransferCommand command) {
+        return command.transferType() == TransferType.IMMEDIATE && command.sourceId() != null;
+    }
+
+    // 고객 즉시이체는 조회하지 않는다(§9-5 규칙 6)
+    private Optional<TransferHold> findHeldOrigin(TransferCommand command) {
+        if (!isHeldExecution(command)) {
+            return Optional.empty();
+        }
+        return transferHoldPort
+                .findById(command.sourceId())
+                .filter(hold -> hold.matchesOriginal(
+                        command.customerId(),
+                        command.withdrawalAccountId(),
+                        command.depositAccountNumber(),
+                        command.amount(),
+                        command.executionDate()));
+    }
+
+    // 채번 전 거부, 또는 기표 직전에 선점을 잃은 보류 건 실행이라 남길 이체 행이 없다
+    private static TransferResult rejectedBeforeDraft(TransferErrorCode errorCode) {
+        return TransferResult.builder()
+                .status(ProcessResultStatus.ERROR)
+                .errorCode(errorCode.getCode())
+                .errorMessage(errorCode.getMessage())
+                .build();
+    }
+
     private Transfer newTransfer(TransferCommand command, Draft draft, LocalDate tradeDate) {
         return Transfer.create(
                 draft.transactionNumber(),
@@ -302,7 +382,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 FEE,
                 command.transferType(),
                 command.channel(),
-                resolveSourceType(command.transferType()),
+                resolveSourceType(command),
                 command.sourceId(),
                 command.executionDate(),
                 command.myPassbookMemo(),
@@ -360,17 +440,33 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     }
 
     // 기표 트랜잭션. 한도 예약부터 원장 2행·완료 기록까지가 한 단위로 커밋된다.
-    private Transfer postLedger(TransferCommand command, Draft draft) {
+    private Posting postLedger(TransferCommand command, Draft draft) {
         ResolvedPayee payee = draft.payee();
         String transactionNumber = draft.transactionNumber();
         return requiresNewTransactionTemplate.execute(status -> {
             // 가장 먼저 gate를 잡는다(gate → 한도 → 계좌). 한 건에 한 번만 읽어 transfer에 싣는다 — 원장·훅 B·완료 기록이 같은 거래일을 갖게(#516).
             LocalDate tradeDate = businessDateGate.acquireSharedAndReadBusinessDate();
+
+            // 보류 건 실행은 선점이 아직 이쪽 것일 때만 기표한다. 그사이 resume()이 다시 선점했으면 행을 남기지 않고 물러난다(§9-4).
+            if (isHeldExecution(command) && !transferHoldPort.holdsClaim(command.sourceId(), command.holdClaimedAt())) {
+                status.setRollbackOnly();
+                return Posting.lostClaim();
+            }
+
             Transfer createdTransfer = newTransfer(command, draft, tradeDate);
 
             // 한도 락을 계좌 락보다 먼저 획득한다(P1-P4 합의: 한도 → 계좌 순서). 위반 시
             // LMT0002/LMT0003을 던진다 — 여기서 예외가 나면 아래 계좌 락은 아예 시도되지 않는다.
             transferLimitPort.checkAndReserve(command.customerId(), command.amount());
+
+            // [훅 C] 한도 적립이 잡은 고객 행 락을 쥔 채 판정한다. 같은 고객의 즉시이체가 판정부터 커밋까지 줄을 선다.
+            // 이 앞에 일반 SELECT를 두지 않는다. REPEATABLE READ 스냅샷이 락 대기 전에 고정되면 앞 요청의 커밋이 안 보인다.
+            Optional<TransferHoldDecision> holdDecision = decideHold(command, draft);
+            if (holdDecision.isPresent()) {
+                // 예외로 롤백하면 아래 catch들이 ERROR 행을 남긴다. 표시만 하고 정상 반환해 한도 적립을 되돌린다.
+                status.setRollbackOnly();
+                return Posting.held(holdDecision.get());
+            }
 
             // 계좌 락을 transfer 행 INSERT보다 먼저 잡는다. INSERT는 withdrawal_account_id·
             // deposit_account_id에 FK가 걸려 있어 대상 계좌 행에 공유락을 요구하는데, 그 순서가
@@ -426,8 +522,68 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             transfer.complete(balances.withdrawalBalanceAfter(), executedAt);
             Transfer completed = transferSavePort.save(transfer);
             publishSettled(command, completed, executedAt);
-            return completed;
+            return Posting.posted(completed);
         });
+    }
+
+    // [훅 C] #771 이체 보류 판정. 구현체가 없거나 고객이 시작한 즉시이체가 아니면 컨텍스트도 만들지 않는다(측정 중립).
+    private Optional<TransferHoldDecision> decideHold(TransferCommand command, Draft draft) {
+        if (transferHoldPolicies.isEmpty() || !isCustomerImmediate(command)) {
+            return Optional.empty();
+        }
+        TransferHoldContext context = new TransferHoldContext(
+                command.customerId(),
+                command.withdrawalAccountId(),
+                command.depositAccountNumber(),
+                command.amount(),
+                draft.requestedAt(),
+                command.flowId());
+        for (TransferHoldPolicy policy : transferHoldPolicies) {
+            TransferHoldDecision decision = policy.decide(context);
+            if (decision.hold()) {
+                return Optional.of(decision);
+            }
+        }
+        return Optional.empty();
+    }
+
+    // 보류 저장과 TransferHeld를 한 커밋으로 남긴다(§9-3). 실패하면 doExecute의 catch가 ERROR 행을 남긴다.
+    private TransferResult holdTransfer(
+            TransferCommand command, TransferHoldDecision decision, LocalDateTime authenticatedAt) {
+        TransferHold saved = requiresNewTransactionTemplate.execute(status -> {
+            LocalDateTime heldAt = LocalDateTime.now(clock);
+            TransferHold hold = transferHoldPort.save(TransferHold.hold(
+                    command.customerId(),
+                    command.withdrawalAccountId(),
+                    command.depositAccountNumber(),
+                    command.amount(),
+                    command.myPassbookMemo(),
+                    command.recipientPassbookMemo(),
+                    command.channel(),
+                    command.flowId(),
+                    decision,
+                    authenticatedAt,
+                    heldAt));
+            eventPublisher.publishEvent(new TransferHeld(
+                    hold.getTransferHoldId(),
+                    hold.getCustomerId(),
+                    hold.getPolicyCode(),
+                    hold.getReleaseMode(),
+                    hold.getReleaseAt(),
+                    hold.getFlowId(),
+                    heldAt));
+            return hold;
+        });
+        return TransferResult.builder()
+                .transferHoldId(saved.getTransferHoldId())
+                .releaseAt(saved.getReleaseAt())
+                .cancellableUntil(saved.cancellableUntil())
+                .build();
+    }
+
+    // 보류 건 실행은 sourceId를 갖고 들어와 다시 보류되지 않는다
+    private static boolean isCustomerImmediate(TransferCommand command) {
+        return command.transferType() == TransferType.IMMEDIATE && command.sourceId() == null;
     }
 
     // [훅 B] PH-99 후속 기표. 기표 트랜잭션 안이라 훅 예외는 원장·잔액·한도 적립까지 롤백하고 이체를 실패시킨다.
@@ -466,7 +622,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             return Optional.empty();
         }
         return requiresNewTransactionTemplate.execute(status -> transferLookupPort.findBySourceAndExecutionDate(
-                resolveSourceType(command.transferType()), command.sourceId(), command.executionDate()));
+                resolveSourceType(command), command.sourceId(), command.executionDate()));
     }
 
     /**
@@ -530,32 +686,31 @@ public class TransferExecutionService implements TransferExecutionUseCase {
     }
 
     /**
-     * 이체 결과가 확정된 트랜잭션 안에서 TransferSettled 를 발행한다(#436). 즉시·예약·자동이체 모두 여기서
-     * 한 번 나간다. 돈이 움직인 커밋과 이벤트가 함께 커밋되므로, 뒤이은 배치 기록 저장이 실패해도 알림은
-     * 빠지지 않는다. transfer 행이 생기기 전의 사전검증 실패는 여기까지 오지 않으며, 배치는 그 경우만 따로
-     * 발행한다.
+     * 이체 결과가 확정된 트랜잭션 안에서 TransferSettled 를 발행한다(#436). 즉시이체는 여기서 한 번 나간다.
+     * 돈이 움직인 커밋과 함께 커밋되므로 즉시이체 알림은 빠지지 않는다. 사전검증 실패는 여기까지 오지 않는다.
+     * 예약·자동이체는 발행하지 않는다(알림은 배치 이벤트가 싣는다).
      *
      * <p>기표·ERROR 확정 트랜잭션(REQUIRES_NEW) 안에서 부르므로 BEFORE_COMMIT 리스너가 그 커밋에 붙는다.
      * 재생 경로(findAlreadyProcessedResult)는 여기를 지나지 않아 같은 이체가 두 번 발행되지 않는다.
      */
     private void publishSettled(TransferCommand command, Transfer transfer, LocalDateTime occurredAt) {
-        eventPublisher.publishEvent(TransferSettled.builder()
-                .customerId(command.customerId())
-                .refId(transfer.getTransferId())
-                .txType(command.transferType().ledgerTransactionType())
-                .status(transfer.getStatus())
-                .errorCode(transfer.getErrorCode())
-                .occurredAt(occurredAt)
-                .amount(transfer.getAmount())
-                .counterpartyName(MaskingUtil.maskName(transfer.getPayeeName()))
-                .build());
+        if (!isCustomerInitiatedTransfer(transfer)) {
+            return;
+        }
+        eventPublisher.publishEvent(TransferSettledFactory.create(
+                transfer, command.customerId(), command.transferType().ledgerTransactionType(), occurredAt));
     }
 
-    private TransferSourceType resolveSourceType(TransferType transferType) {
-        return switch (transferType) {
+    private static boolean isCustomerInitiatedTransfer(Transfer transfer) {
+        return transfer.getTransferType() == TransferType.IMMEDIATE;
+    }
+
+    private TransferSourceType resolveSourceType(TransferCommand command) {
+        return switch (command.transferType()) {
             case SCHEDULED -> TransferSourceType.SCHEDULED;
             case AUTO -> TransferSourceType.AUTO;
-            case IMMEDIATE -> null;
+            // sourceId가 있는 즉시이체는 보류 건 실행이다
+            case IMMEDIATE -> command.sourceId() == null ? null : TransferSourceType.HELD;
         };
     }
 }

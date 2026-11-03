@@ -1,6 +1,9 @@
 package com.shinhan.corebank.transfer.domain.exception;
 
 import com.shinhan.corebank.common.exception.ErrorCode;
+import java.util.EnumSet;
+import java.util.Optional;
+import java.util.Set;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -15,8 +18,10 @@ public enum TransferErrorCode implements ErrorCode {
     UNSUPPORTED_BANK("TRF0006", 400, "지원하지 않는 은행입니다."),
     INVALID_INTERBANK_ACCOUNT_NUMBER("TRF0007", 400, "타행 계좌번호는 숫자 1~16자리여야 합니다."),
     UNSENDABLE_MEMO_CHARACTER("TRF0008", 400, "통장 표시내용에 보낼 수 없는 문자가 있습니다."),
+    INVALID_DELAYED_TRANSFER_SETTING("TRF0009", 400, "지연이체 기준금액은 1원 이상, 지연시간은 3~24시간이어야 합니다."),
     PAYEE_NOT_FOUND("TRF0201", 404, "입금계좌를 찾을 수 없습니다."),
     TRANSACTION_NOT_FOUND("TRF0202", 404, "거래내역을 찾을 수 없습니다."),
+    TRANSFER_HOLD_NOT_FOUND("TRF0203", 404, "보류 이체를 찾을 수 없습니다."),
     PAYEE_ACCOUNT_SUSPENDED("TRF0301", 409, "거래정지 또는 해지 상태의 입금계좌입니다."),
     INVALID_STATUS_TRANSITION("TRF0302", 409, "이미 처리 완료(SUCCESS/ERROR)된 이체는 상태를 변경할 수 없습니다."),
     INSUFFICIENT_BALANCE("TRF0303", 409, "출금계좌 잔액이 부족합니다."),
@@ -26,10 +31,25 @@ public enum TransferErrorCode implements ErrorCode {
     DEPOSIT_TYPE_STATUS_MISMATCH("TRF0307", 409, "입금 유형과 계좌 상태가 맞지 않습니다."),
     INTERBANK_NOT_PROCESSED("TRF0308", 409, "상대 은행에서 이체를 처리하지 못했습니다."),
     INTERBANK_PAYEE_UNVERIFIED("TRF0309", 409, "상대 은행에서 예금주를 확인하지 못했습니다."),
+    TRANSFER_HOLD_NOT_EXECUTABLE("TRF0310", 409, "실행할 수 없는 보류 이체입니다."),
+    TRANSFER_HOLD_ALREADY_CLOSED("TRF0311", 409, "이미 실행 중이거나 끝난 보류 이체입니다."),
+    TRANSFER_HOLD_CANCEL_DEADLINE_PASSED("TRF0312", 409, "취소 가능 시간이 지났습니다. 실행 30분 전까지 취소할 수 있습니다."),
     ACCOUNT_LOCK_TARGET_NOT_FOUND("TRF9001", 500, "이체 처리 중 계좌 정보를 확인할 수 없습니다."),
     TRANSACTION_SEQUENCE_EXHAUSTED("TRF9002", 500, "거래번호 일련번호 채번 가능 범위를 초과했습니다.");
+
+    // 고객이 직접 조치할 수 있는 실패만 알림 사유로 붙인다. 나머지는 내부 코드를 드러내지 않게 기본 문장만 쓴다
+    private static final Set<TransferErrorCode> CUSTOMER_ACTIONABLE = EnumSet.of(
+            INSUFFICIENT_BALANCE, WITHDRAWAL_ACCOUNT_SUSPENDED, PAYEE_ACCOUNT_SUSPENDED, INTERBANK_NOT_PROCESSED);
 
     private final String code;
     private final int status;
     private final String message;
+
+    /** 고객이 조치할 수 있는 실패 코드면 그 문구를, 아니면(null · 다른 도메인 코드 포함) 빈 값을 돌려준다. */
+    public static Optional<String> customerActionableMessage(String code) {
+        return CUSTOMER_ACTIONABLE.stream()
+                .filter(actionable -> actionable.code.equals(code))
+                .findFirst()
+                .map(TransferErrorCode::getMessage);
+    }
 }
