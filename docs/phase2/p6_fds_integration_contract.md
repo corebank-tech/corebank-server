@@ -28,7 +28,7 @@
 |---|---|
 | P6 FE 작업 | 즉시이체 화면에 `flowId` 생성·7종 이벤트 계측·제출·이체 API 연결, 정상/보류 안내, 관리자 목록·상세·콜·승인/거절 화면과 실제 API 연결 |
 | P6 Spring Boot | 인증 고객의 `flowId` 소유권·이벤트 유효성, 행동 요약, A/B 판정과 근거, 훅 C 구현, 조사 작업·Tool·보고서·관리자 권한/콜/감사 |
-| P4 transfer | 이체 요청과 멱등 지문, 훅 C 호출, 보류 원본 저장·`TransferHeld`, 보류 조회 공개 API, `release()`·`reject()`·1회 실행 |
+| P4 transfer | 이체 요청과 멱등 지문, 훅 C 호출, 보류 원본 저장·`TransferHeld`, 보류 조회와 Agent Tool용 이체 목록·수취인 집계 공개 API, `release()`·`reject()`·1회 실행 |
 | 인증 담당 | 고객 세션에서 고객 ID 제공, 관리자 세션·권한 제공, 내부 서비스 인증 방식 검토 |
 | Python Agent | `TransferHeld` 뒤 조사 작업 수신, 인증된 읽기 Tool 호출, 구조화 보고서 제출. 보류 결정·승인·기표 권한 없음 |
 
@@ -107,13 +107,12 @@ P6은 FE에서 보류를 이체 완료로 표시하지 않는다. 승인 대기�
 
 | API | 요청 입력 | 응답의 최소 내용 | 실패 처리 |
 |---|---|---|---|
-| `GET .../history` | `transferHoldId`; 보류 직전 최대 24시간 | 최근 성공 이체 최신순 최대 100건의 `refId`·시각·금액과 잘림 여부 `hasMore` | 권한·보류 조회 실패면 조사 실패; 거래가 없음은 빈 배열 |
-| `GET .../recipient-context` | `transferHoldId` | 해당 고객·수취인의 **전체 과거 성공 이력** 존재 여부와 좁은 집계(목록 미반환) | 정보 없음과 조회 장애 구분; 최근 목록에 없다는 이유로 신규 수취인으로 취급하지 않음 |
+| `GET .../history` | `transferHoldId`; 보류 직전 최대 24시간 | 최근 성공 이체 최신순 최대 100건의 `refId`·시각·금액·마스킹 수취계좌와 잘림 여부 `hasMore` | P4 `transfer.api`의 이체 목록 조회 인계 대기. 권한·보류 조회 실패면 조사 실패; 거래가 없음은 빈 배열 |
+| `GET .../recipient-context` | `transferHoldId` | 해당 고객·수취인의 **전체 과거 성공 이력** 존재 여부·최초 성공 시각·다른 출금계좌 수의 좁은 집계(목록 미반환) | P4 `transfer.api`의 수취인 집계 조회 인계 대기. 정보 없음과 조회 장애 구분; 최근 목록에 없다는 이유로 신규 수취인으로 취급하지 않음 |
 | `PUT .../report` | 경로 `investigationId`, 본문 `transferHoldId`, 조사 상태·`secondaryFindings`·근거 ID | 저장된 조사 ID·상태 | 같은 조사 ID 재제출은 멱등; 근거 ID가 허용된 조회 결과 밖이면 거부 |
 
 ```json
 {
-  "investigationId": "inv-123",
   "transferHoldId": 123,
   "status": "COMPLETED",
   "secondaryFindings": [{
@@ -161,7 +160,7 @@ public enum TransferHoldCloseReason { CANCELLED, EXPIRED }
 | 승인 | `POST /api/v1/admin/fds/holds/{transferHoldId}/approve` | 관리자 권한·콜 결과·`ON_APPROVAL`·상태 확인 뒤 P4 `release()` 호출 |
 | 거절 | `POST /api/v1/admin/fds/holds/{transferHoldId}/reject` | 관리자 권한·사유 확인 뒤 P4 `reject()` 호출 |
 
-목록·상세는 고객 개인정보 조회이므로 기존 관리자 조회 규칙의 `X-Access-Reason` 유효값 검사와 조회 감사를 적용한다. 콜 결과도 고객 확인 결과의 변경이므로 같은 사유 헤더·검증과 기존 `AuditLog`를 적용한다. 승인·거절은 개인정보를 응답으로 반환하지 않는 관리자 변경으로 설계하고 기존 `AuditLog`를 적용한다. **P6이 소유한 콜 기록 변경과 감사 기록은 같은 트랜잭션으로 처리한다.** P4의 `release()`·`reject()`는 별도 소유 경계이므로 P6 감사 기록과 한 트랜잭션이라고 약속하지 않는다. 승인·거절 결과를 보류 ID에 연결해 재조회하고, 호출 성공 후 P6 기록 실패는 결과 조회로 복구한다. `PUT /report`와 관리자 변경 응답도 공통 HTTP 200·`code="0000"` 형식 및 오류코드 마스터를 따른다.
+목록·상세는 고객 개인정보 조회이므로 기존 관리자 조회 규칙의 `X-Access-Reason` 유효값 검사와 조회 감사를 적용한다. 콜 결과도 고객 확인 결과의 변경이므로 같은 사유 헤더·검증과 기존 `AuditLog`를 적용한다. 승인·거절은 개인정보를 응답으로 반환하지 않는 관리자 변경으로 설계하고 기존 `AuditLog`를 적용한다. **P6이 소유한 콜 기록 변경과 감사 기록은 같은 트랜잭션으로 처리한다.** P4의 `release()`·`reject()`는 별도 소유 경계이므로 P6 감사 기록과 한 트랜잭션이라고 약속하지 않는다. 승인·거절 전에 P6 조치 정보를 내구화하고, P4 호출 결과를 확인한 뒤 감사를 멱등 기록한다(§6-1). `PUT /report`와 관리자 변경 응답도 공통 HTTP 200·`code="0000"` 형식 및 오류코드 마스터를 따른다.
 
 **P6 콜 결과 계약:** `CUSTOMER_CONFIRMED`, `CUSTOMER_DENIED`, `NO_ANSWER`, `INCONCLUSIVE` 네 값만 받는다. 콜 기록은 덮어쓰지 않고 추가하며 서버 기록 시각으로 최신 결과를 정한다. 해당 보류 건의 최신 결과가 `CUSTOMER_CONFIRMED`일 때만 P4 `release()`를 호출한다. 최신 결과가 `CUSTOMER_DENIED`일 때만 사유 `CUSTOMER_DENIED`로 P4 `reject()`를 호출한다. `NO_ANSWER`·`INCONCLUSIVE`는 보류를 유지해 추가 확인한다. AI 보고서는 승인 요건이 아니다. P4와는 이 호출 조건 및 `actorId`·사유 전달을 대조한다.
 
@@ -174,6 +173,10 @@ public enum TransferHoldCloseReason { CANCELLED, EXPIRED }
 이 경로를 구현하는 PR에서 [admin_auth.md §권한 매핑표](admin_auth.md#권한-매핑표)에 `/admin/fds/holds`의 GET/POST 권한을 추가하고 `SecurityConfig`와 함께 갱신한다. 기존 관리자 권한은 로그인 때 세션에 적재되므로 `CUSTOMER_READ`·`CUSTOMER_WRITE`를 회수해도 이미 로그인한 세션에는 즉시 반영되지 않는다. 즉시 차단이 필요한 회수에서는 `admin_auth.md`의 `CustomerSessionInvalidator` 경계를 따른다.
 
 목록·상세 조회와 콜 기록에는 `X-Access-Reason`을 필수로 받고 `AccessReason` 값(`CUSTOMER_REQUEST`, `INCIDENT`, `AUDIT`, `OPERATION`)만 허용한다. 누락·무효는 `CMN0007`이다. 조회는 누가·언제·어떤 보류 건을·왜 열었는지 감사 기록을 남긴다. 콜 기록·승인·거절은 기존 `AuditLog`에 행위·대상·행위자·시각을 남긴다. 승인·거절 응답에 고객 개인정보가 추가되면 사유 헤더 적용 범위를 다시 검토한다.
+
+**감사 분기:** 목록·상세·콜 기록은 `X-Access-Reason`을 받고 `AuditLogService.recordPersonalDataAccess(...)` 경로를 쓴다. 구현 PR에서 해당 `PersonalDataAccessEventType`을 추가한다. 승인·거절 요청은 현재 계약상 `X-Access-Reason`을 요구하지 않고, 별도 `AuditEventType`을 추가해 `AuditLogService.record(...)`로 기록한다. 승인에는 확인된 최신 콜 기록 ID, 거절에는 `CUSTOMER_DENIED` 사유와 콜 기록 ID를 감사 상세에 남긴다. 승인·거절 응답에 개인정보를 추가하거나 사유 헤더를 요구하도록 정책을 바꾸면 이 분기와 API 명세를 함께 바꾼다.
+
+**승인·거절 감사의 재시작 복구:** P6은 P4 호출 **전** 별도 트랜잭션에서 `actionId`, `transferHoldId`, 세션의 `actorId`, `APPROVE`/`REJECT`, 거절 `reasonCode`, 최신 `callRecordId`, `Idempotency-Key`, 요청 지문을 PENDING 조치 행으로 커밋한다. 같은 관리자·엔드포인트·멱등 키의 재요청은 같은 행을 사용하고, 같은 보류 건에 동시에 미완료 조치가 둘 생기지 않게 DB 제약 또는 행 락으로 막는다. 이후 P4 `release()`/`reject()`를 호출한다. P4 결과를 보류 ID로 재조회해 조치와 일치함을 확인한 다음, P6 조치 행을 잠그고 기존 `AuditLog` 성공 기록·FDS 보조 기록·조치 APPLIED 표시를 **한 트랜잭션**에 저장한다. 재시작한 작업자는 PENDING 행에서 행위자·사유·멱등 키를 복원하고 P4 결과를 확인해 같은 트랜잭션을 재시도한다. 이미 APPLIED면 감사 행을 다시 만들지 않고 저장된 결과를 반환한다. P4가 실행 전 거부해 상태 변경이 없었다고 확인되면 실패 감사와 ABORTED를 기록한다. `HELD`·`EXECUTING` 또는 취소·만료 등 결과가 모호하거나 다른 조치와 맞지 않으면 성공 감사로 임의 확정하지 않고 재조회·수동 대조 대상으로 남긴다. P4 결과 조회에서 최종 상태와 실행 이체 ID를 받을 수 있는지는 인계 대기다. 이 조치 행은 기존 `AuditLog`를 대체하지 않는다.
 
 ### 6-2. Agent 내부 API 인증 결정
 
@@ -352,10 +355,12 @@ Idempotency-Key: 9fa61214-4817-47ad-b08f-5279af78df43
 | 이벤트 제출 API 필드·시각·크기·오류 응답 및 화면 연결 | P6 FE·BE | 경로·입력 제한·재전송 결정 완료; 구현 대기 |
 | 실제 `HELD` 응답 필드·승인 실행 실패·응답 유실 뒤 결과 조회 | P4 → P6 | `transfer_seam.md` §9-3의 응답 의미는 확정; 실제 DTO·결과 조회 형태는 P4 인계 대기. P6 예시는 미확정 |
 | 보류 원본·상태 `transfer.api` 조회 | P4 → P6 | `transfer_seam.md` §10의 P4 소유 경계는 확정; 공개 조회 메서드·반환 필드 구현 인계 대기 |
+| Agent Tool용 이체 목록·수취인 집계 `transfer.api` 조회 | P4 → P6 | §5와 API 명세 §3·§4의 24시간·최대 100건 목록(`refId`·금액·시각·마스킹 수취계좌, `hasMore`), 최초 SUCCESS 시각, 다른 출금계좌 수는 기존 `RecentTransferQuery`의 건수·합계·존재 여부만으로 만들 수 없음. P4 공개 조회 계약·성능 검증 인계 대기; P6은 `transfer` 테이블 직접 조회 금지 |
 | 고객 취소·`ON_APPROVAL` 만료 종료 신호 | P4·P6 | `transfer_seam.md` §10 미결. 이 문서 §5-1 `TransferHoldClosed`는 P6 제안이며 P4 합의 전; 리스너 미구현 |
 | `TransferSettled.flowId` 성공 이벤트와 `refId` 멱등 저장 | P4 → P6 | `transfer_seam.md` §9-2 연결 순서·`refId` 멱등 규칙 확정; P4 필드 PR 머지 뒤 P6 리스너 연결. P6 저장·조회 부품은 선행 가능 |
 | 내부 Tool 인증·네트워크·CSRF·권한 | P6·인프라 | §6-2의 환경변수 주입·같은 VM 브리지·외부 HTTPS·내부 HTTP 결정; 실제 VM 설정 검증·코드 구현 대기 |
 | FDS 관리자 권한 matcher·사유·감사·콜 결과와 화면 API 연결 | P6 FE·BE | §6의 권한·CSRF·사유·감사·콜 결과 4종과 승인 허용 조건 결정; 코드·화면 연결 대기 |
+| 관리자 승인·거절의 PENDING 조치와 감사 복구 | P6 FE·BE, P4 결과 조회 인계 | §6-1의 사전 내구화·멱등 재생 계약 작성; 조치 행 스키마·P4 결과 대조 필드·장애 주입 검증 대기. 상태만으로 행위자·사유를 추정하지 않음 |
 | 조사 작업 재시도·보고서 멱등·AI 장애 시 수동 검토 화면 | P6 FE·BE·AI | §5의 조사 ID 멱등·3회 재시도·60초/5초 제한·보고서 상한·수동 검토 원칙 결정; 코드·화면 검증 대기 |
 
 P4 인계·합의 대기 항목은 실제 계약이 정해지면 상태와 관련 PR을 갱신한다. P6이 결정한 항목도 구현·검증 전에는 완료로 표시하지 않는다. #855는 이벤트·피처 계약을 정책 사례와 최종 대조한다.

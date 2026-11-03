@@ -558,7 +558,7 @@ URL: `/api/v1/admin/fds/holds/{transferHoldId}/approve`
 사용자: 관리자
 인증 필요: Y
 Idempotency-Key: Y
-기타: `CUSTOMER_WRITE` 권한과 기존 세션·CSRF 보호. `ON_APPROVAL`·당일 유효·해당 보류 건의 최신 콜 결과 `CUSTOMER_CONFIRMED` 확인 뒤 P4 `release()`를 호출한다. 다른 결과 또는 기록이 없으면 `FDS0302`다. 기존 `AuditLog`를 남긴다. AI 보고서 완료는 승인 필수 조건이 아니다. 응답 유실 시 결과 재조회가 가능해야 한다. 아직 미구현.
+기타: `CUSTOMER_WRITE` 권한과 기존 세션·CSRF 보호. `X-Access-Reason`은 현재 승인 요청의 필수 헤더가 아니다. `ON_APPROVAL`·당일 유효·해당 보류 건의 최신 콜 결과 `CUSTOMER_CONFIRMED` 확인 뒤 P6이 관리자 ID·행위·콜 기록 ID·멱등 키를 PENDING 조치로 먼저 커밋하고 P4 `release()`를 호출한다. 다른 콜 결과 또는 기록이 없으면 `FDS0302`다. 결과 확인 뒤 기존 `AuditLog`를 멱등 기록한다([연동 계약 §6-1](p6_fds_integration_contract.md#6-1-관리자-권한csrf조회-감사-결정)). AI 보고서 완료는 승인 필수 조건이 아니다. 응답 유실 시 결과 재조회가 가능해야 한다. 아직 미구현.
 
 ### 요구사항 ID
 
@@ -620,7 +620,7 @@ URL: `/api/v1/admin/fds/holds/{transferHoldId}/reject`
 사용자: 관리자
 인증 필요: Y
 Idempotency-Key: Y
-기타: `CUSTOMER_WRITE` 권한과 기존 세션·CSRF 보호. P4 `reject()` 호출과 기존 `AuditLog` 기록. 아직 미구현.
+기타: `CUSTOMER_WRITE` 권한과 기존 세션·CSRF 보호. `X-Access-Reason`은 현재 거절 요청의 필수 헤더가 아니다. P6이 관리자 ID·행위·거절 사유·콜 기록 ID·멱등 키를 PENDING 조치로 먼저 커밋한 뒤 P4 `reject()`를 호출하고, 결과 확인 뒤 기존 `AuditLog`를 멱등 기록한다([연동 계약 §6-1](p6_fds_integration_contract.md#6-1-관리자-권한csrf조회-감사-결정)). 아직 미구현.
 
 ### 요구사항 ID
 
