@@ -345,7 +345,7 @@ erDiagram
         bigint customer_id FK
         bigint withdrawal_account_id FK
         char payee_bank_code "당행 상수. bank 테이블 없음"
-        char payee_account_number "CHAR(12)"
+        char payee_account_number "CHAR(12), INDEX ix_sched_payee_status(payee_account_number, status)"
         varchar payee_name "VARCHAR(50)"
         bigint amount
         date scheduled_date "익일~1년 이내 (SCD0001)"
@@ -366,7 +366,7 @@ erDiagram
         bigint auto_transfer_id PK
         bigint customer_id FK
         bigint withdrawal_account_id FK
-        char deposit_account_number "CHAR(12)"
+        char deposit_account_number "CHAR(12), INDEX ix_auto_deposit_status(deposit_account_number, status)"
         varchar payee_name "VARCHAR(50)"
         bigint amount
         tinyint cycle_months "1 / 3 / 6"

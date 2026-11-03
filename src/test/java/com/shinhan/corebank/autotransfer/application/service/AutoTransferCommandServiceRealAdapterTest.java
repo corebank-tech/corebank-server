@@ -9,6 +9,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.account.api.AccountTransferLifecycleLockUseCase;
 import com.shinhan.corebank.autotransfer.adapter.out.account.AccountLookupJpaRepository;
 import com.shinhan.corebank.autotransfer.adapter.out.account.AccountStatusAdapter;
 import com.shinhan.corebank.autotransfer.application.port.in.AutoTransferRegisterCommand;
@@ -59,6 +60,7 @@ class AutoTransferCommandServiceRealAdapterTest extends IntegrationTestSupport {
         transferLimitPort = mock(TransferLimitPort.class);
         when(transferLimitPort.findOneTimeLimit(anyLong())).thenReturn(10_000_000L);
         AuditLogService auditLogService = mock(AuditLogService.class);
+        AccountTransferLifecycleLockUseCase lifecycleLockUseCase = mock(AccountTransferLifecycleLockUseCase.class);
 
         commandService = new AutoTransferCommandService(
                 autoTransferPersistencePort,
@@ -67,6 +69,7 @@ class AutoTransferCommandServiceRealAdapterTest extends IntegrationTestSupport {
                 realAccountStatusAdapter,
                 transferLimitPort,
                 auditLogService,
+                lifecycleLockUseCase,
                 Clock.systemDefaultZone());
     }
 

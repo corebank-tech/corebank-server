@@ -8,9 +8,12 @@ import com.shinhan.corebank.autotransfer.application.port.out.TransferLookupPort
 import com.shinhan.corebank.autotransfer.application.port.out.TransferLookupResult;
 import com.shinhan.corebank.autotransfer.domain.AutoTransfer;
 import com.shinhan.corebank.autotransfer.domain.AutoTransferExecution;
+import com.shinhan.corebank.autotransfer.domain.AutoTransferStatus;
+import com.shinhan.corebank.autotransfer.domain.exception.AutoTransferErrorCode;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.notification.api.NotificationRequest;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
@@ -51,14 +54,25 @@ public class AutoTransferBatchItemProcessor {
     private final ApplicationEventPublisher eventPublisher;
 
     // DB에 지금부터 처리 시작 남
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public AutoTransferExecution saveProcessing(AutoTransfer autoTransfer) {
-        // executionDate는 배치가 도는 날이 아니라 이 회차의 논리적 실행일(nextExecutionDate)이어야
-        // completeProcessing()이 만드는 TransferCommand.executionDate와 같은 값을 가리켜, 멱등성
-        // 사전조회가 재시도 날짜가 달라져도 같은 회차로 인식한다.
+
+        // 배치 대상 조회 이후 상태가 바뀌었을 수 있으므로
+        // 최신 등록 건을 잠그고 선점 가능 여부를 다시 확인한다.
+        AutoTransfer current = autoTransferPersistencePort
+                .findByIdForUpdate(autoTransfer.getAutoTransferId())
+                .orElseThrow(() -> new BusinessException(AutoTransferErrorCode.NOT_FOUND));
+
+        if (current.getStatus() != AutoTransferStatus.NORMAL
+                || !current.getNextExecutionDate().equals(autoTransfer.getNextExecutionDate())) {
+            throw new BusinessException(AutoTransferErrorCode.NOT_IN_NORMAL_STATUS);
+        }
+
         AutoTransferExecution processing = AutoTransferExecution.processing(
-                autoTransfer.getNextExecutionDate(), autoTransfer.getAmount(), LocalDateTime.now(clock));
-        return autoTransferExecutionPersistencePort.save(processing, autoTransfer.getAutoTransferId());
+                current.getNextExecutionDate(), current.getAmount(), LocalDateTime.now(clock));
+
+        return autoTransferExecutionPersistencePort.save(processing, current.getAutoTransferId());
     }
 
     // 실제 이체 및 다음 실행일 계산

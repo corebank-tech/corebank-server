@@ -52,6 +52,11 @@ public class AutoTransferPersistenceAdapter
     }
 
     @Override
+    public Optional<AutoTransfer> findByIdForUpdate(Long autoTransferId) {
+        return autoTransferJpaRepository.findByIdForUpdate(autoTransferId).map(AutoTransferMapper::toDomain);
+    }
+
+    @Override
     public boolean existsActiveDuplicate(Long withdrawalAccountId, String depositAccountNumber, int transferDay) {
         return autoTransferJpaRepository.existsByWithdrawalAccountIdAndDepositAccountNumberAndTransferDayAndStatus(
                 withdrawalAccountId, depositAccountNumber, transferDay, AutoTransferStatus.NORMAL);

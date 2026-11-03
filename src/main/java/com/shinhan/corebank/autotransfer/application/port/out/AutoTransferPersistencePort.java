@@ -8,5 +8,7 @@ public interface AutoTransferPersistencePort {
 
     Optional<AutoTransfer> findById(Long autoTransferId);
 
+    Optional<AutoTransfer> findByIdForUpdate(Long autoTransferId);
+
     boolean existsActiveDuplicate(Long withdrawalAccountId, String depositAccountNumber, int transferDay);
 }

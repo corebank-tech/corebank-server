@@ -976,6 +976,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | --- | --- | --- |
 | UNIQUE | `uk_sched_active_dup` | `active_dup_key` |
 | INDEX | `ix_sched_batch` | `status, scheduled_date` |
+| INDEX | `ix_sched_payee_status` | `payee_account_number, status` |
 
 **CHECK 제약**
 
@@ -1016,6 +1017,7 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | --- | --- | --- |
 | UNIQUE | `uk_auto_active_dup` | `active_dup_key` |
 | INDEX | `ix_auto_batch` | `status, next_execution_date` |
+| INDEX | `ix_auto_deposit_status` | `deposit_account_number, status` |
 
 **CHECK 제약**
 
