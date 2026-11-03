@@ -214,6 +214,24 @@ class PaymentStopServiceIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("일부 지급정지 중 다른 경로로 상태가 바뀐 계좌는 해제가 그 상태를 덮어쓰지 않고 거부된다")
+    void release_rejectsWhenOtherPathChangedStatus() {
+        long accountId = insertAccount(AccountStatus.ACTIVE, 100_000L);
+        inTx(() -> paymentStopUseCase.applyFullStop(accountId, CASE_A));
+        inTx(() -> paymentStopUseCase.convertToPartial(accountId, CASE_A, 30_000L));
+        // 휴면 전환 같은 다른 경로가 상태를 바꾼 상황
+        jdbcTemplate.update("UPDATE account SET status = 'DORMANT' WHERE account_id = ?", accountId);
+
+        assertThatThrownBy(() -> inTx(() -> paymentStopUseCase.release(accountId, CASE_A)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(AccountErrorCode.INVALID_ACCOUNT_STATUS);
+        assertThat(status(accountId)).isEqualTo("DORMANT");
+        assertThat(holdAmount(accountId)).isEqualTo(30_000L);
+        assertThat(stopActive(accountId, CASE_A)).isTrue();
+    }
+
+    @Test
     @DisplayName("기록이 없는 사건을 일부 지급정지로 바꾸거나 해제하면 거부한다")
     void unknownCase_isRejected() {
         long accountId = insertAccount(AccountStatus.ACTIVE, 100_000L);

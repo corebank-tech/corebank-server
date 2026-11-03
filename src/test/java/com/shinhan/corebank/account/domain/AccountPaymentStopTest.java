@@ -3,6 +3,7 @@ package com.shinhan.corebank.account.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
@@ -109,6 +110,55 @@ class AccountPaymentStopTest {
             Account account = account(status, 10_000L, 0L);
 
             account.validatePaymentStopAllowed();
+        }
+
+        @Test
+        @DisplayName("입출금계좌가 아니면 지급정지를 걸 수 없다")
+        void rejectsNonDemandDeposit() {
+            Account account = Account.reconstitute(
+                    102L,
+                    "088200000001",
+                    1L,
+                    10L,
+                    AccountType.TIME_DEPOSIT,
+                    10_000L,
+                    0L,
+                    AccountStatus.ACTIVE,
+                    "test-password-hash",
+                    0,
+                    false,
+                    null,
+                    null,
+                    false,
+                    null,
+                    OPENED_AT,
+                    OPENED_AT.toLocalDate().plusMonths(6),
+                    null,
+                    null,
+                    0L,
+                    OPENED_AT,
+                    OPENED_AT);
+
+            assertThatThrownBy(account::validatePaymentStopAllowed)
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(AccountErrorCode.PAYMENT_STOP_UNSUPPORTED_ACCOUNT_TYPE);
+        }
+
+        @ParameterizedTest
+        @EnumSource(
+                value = AccountStatus.class,
+                names = {"MATURED", "DORMANT"})
+        @DisplayName("다른 경로가 상태를 바꿨으면 지급정지 반영이 그 상태를 덮어쓰지 않고 거부한다")
+        void rejectsOverwritingOtherStatus(AccountStatus status) {
+            Account account = account(status, 100_000L, 30_000L);
+
+            assertThatThrownBy(() -> account.applyPaymentStops(AccountStatus.ACTIVE, false, 0L))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(AccountErrorCode.INVALID_ACCOUNT_STATUS);
+            assertThat(account.getStatus()).isEqualTo(status);
+            assertThat(account.getHoldAmount()).isEqualTo(30_000L);
         }
     }
 

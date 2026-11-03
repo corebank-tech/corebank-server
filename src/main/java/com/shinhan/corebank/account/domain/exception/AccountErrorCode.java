@@ -6,6 +6,7 @@ public enum AccountErrorCode implements ErrorCode {
     INVALID_ACCOUNT_ALIAS("ACC0001", 400, "계좌별명 길이 제한을 초과했습니다."),
     INVALID_DISPLAY_ORDER("ACC0002", 400, "표시 순서 정보가 올바르지 않습니다."),
     INVALID_WITHDRAWAL_ACCOUNT_TYPE("ACC0003", 400, "입출금계좌만 출금계좌로 등록할 수 있습니다."),
+    PAYMENT_STOP_UNSUPPORTED_ACCOUNT_TYPE("ACC0004", 400, "입출금계좌만 지급정지할 수 있습니다."),
     ACCOUNT_NOT_FOUND_OR_FORBIDDEN("ACC0201", 404, "계좌를 찾을 수 없거나 접근할 수 없습니다."),
     PAYMENT_STOP_NOT_FOUND("ACC0202", 404, "지급정지 기록을 찾을 수 없습니다."),
     INVALID_ACCOUNT_STATUS("ACC0301", 409, "거래정지 또는 해지 상태의 계좌입니다."),

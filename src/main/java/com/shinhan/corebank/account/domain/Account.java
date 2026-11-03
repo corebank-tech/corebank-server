@@ -684,8 +684,17 @@ public class Account {
         }
     }
 
-    /** 지급정지를 걸 수 있는 상태인지 본다. 정지 전 상태로 되돌릴 수 있는 ACTIVE와 SUSPENDED만 허용한다. */
+    /**
+     * 지급정지를 걸 수 있는 계좌인지 본다.
+     *
+     * <p>사기이용계좌는 이체를 받는 입출금계좌라 입출금계좌만 허용한다. 예·적금은 만기 전이와 해지 출금이 보류액과 부딪힌다.
+     * 상태는 정지 전 상태로 되돌릴 수 있는 ACTIVE와 SUSPENDED만 허용한다.
+     */
     public void validatePaymentStopAllowed() {
+        if (accountType != AccountType.DEMAND_DEPOSIT) {
+            throw new BusinessException(AccountErrorCode.PAYMENT_STOP_UNSUPPORTED_ACCOUNT_TYPE);
+        }
+
         if (status != AccountStatus.ACTIVE && status != AccountStatus.SUSPENDED) {
             throw new BusinessException(AccountErrorCode.INVALID_ACCOUNT_STATUS);
         }
@@ -697,9 +706,14 @@ public class Account {
      * <p>전부 지급정지가 하나라도 있으면 SUSPENDED, 없으면 정지 전 상태다. 보류액은 유효한 일부 지급정지 적용액의 합이다.
      * 유효한 기록이 없으면 호출자는 정지 전 상태와 false, 0을 넘긴다.
      *
+     * <p>지금 상태가 ACTIVE나 SUSPENDED가 아니면 다른 경로(휴면 전환 등)가 상태를 바꾼 것이라 덮어쓰지 않고 거부한다.
+     *
      * @param statusBeforeStop 첫 지급정지를 걸기 전의 계좌 상태(ACTIVE 또는 SUSPENDED)
      */
     public void applyPaymentStops(AccountStatus statusBeforeStop, boolean fullStopActive, long partialHoldAmount) {
+        if (status != AccountStatus.ACTIVE && status != AccountStatus.SUSPENDED) {
+            throw new BusinessException(AccountErrorCode.INVALID_ACCOUNT_STATUS);
+        }
         if (statusBeforeStop != AccountStatus.ACTIVE && statusBeforeStop != AccountStatus.SUSPENDED) {
             throw new IllegalArgumentException("정지 전 상태는 ACTIVE 또는 SUSPENDED여야 합니다.");
         }
