@@ -84,7 +84,13 @@ public class LedgerReconciliationBatchService implements LedgerReconciliationBat
         try {
             List<LedgerReconciliationMismatch> mismatches = ledgerFullReconciliationUseCase.reconcileAll();
             // hard로 마감을 멈춰도 그날 목록이 남도록 판정보다 먼저 저장한다
-            ledgerReconciliationMismatchPort.replaceForBusinessDate(cobDate, mismatches, LocalDateTime.now(clock));
+            if (!ledgerReconciliationMismatchPort.saveIfAbsent(cobDate, mismatches, LocalDateTime.now(clock))) {
+                log.info(
+                        "[LEDGER_RECONCILIATION_KEPT] cobDate={} 목록이 이미 있어 처음 목록을 유지 - 이번 대사 mismatches={}",
+                        cobDate,
+                        mismatches.size());
+            }
+            // 판정은 지금 원장을 대조한 이번 결과로 한다
             judgeCobMismatches(cobDate, mismatches);
         } finally {
             batchExecutionLockPort.release(JOB_NAME);
