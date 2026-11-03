@@ -113,7 +113,7 @@ ext {
 
 dependencyManagement {
     imports {
-        mavenBom 'org.springframework.modulith:spring-modulith-bom:2.0.8'
+        mavenBom 'org.springframework.modulith:spring-modulith-bom:2.0.9'
         mavenBom 'software.amazon.awssdk:bom:2.55.16'
     }
 }

@@ -40,7 +40,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 | [PH-89-②](#ph-89-감사-5w--조회-감사--조회-사유-강제) | 감사 5W · 조회 감사 · 조회 사유 강제 | S2 | 2.5 | PH-49a-② | **릴리스 3 배포 전** | #760 · PR #762 | 완료 |
 | 리드 | FE 리드 조율 | S2 | 0.5 | — | — | — | — |
 | [PH-04](#ph-04-알림-조회-api--마스킹-통일) | 알림 조회 API · 마스킹 통일 | S3 | 3 | PH-01 | **10/28** | #390 #391 #392 #410 | 예정 |
-| [PH-96-②](#ph-96-transactional-outbox-①-발행측릴레이-s2--②-구독-s3) | 아웃박스 구독 — 알림 4종 · 실패 처리 | S3 | 1.5 | PH-96-① · PH-01 | **10/29** | #707 #708 #709 · PR #738 | 진행 |
+| [PH-96-②](#ph-96-transactional-outbox-①-발행측릴레이-s2--②-구독-s3) | 아웃박스 구독 — 알림 4종 · 실패 처리 | S3 | 1.5 | PH-96-① · PH-01 | **10/29** | #707 #708 #709 · PR #738 · #830 · #880 | 완료 |
 | [PH-08](#ph-08-레이트리밋) | 레이트리밋 (로그인·OTP·이체) | S3 | 3.5 | — | **10/29** | #332 | 예정 |
 | [PH-49b](#ph-49b-직무분리-부여회수--maker-checker--step-up-표기) | 직무분리 부여/회수 · maker-checker · Step-up 표기 | S3 | 3 | PH-49a-② · PH-92 | **10/29** | — | 예정 |
 | [PH-82](#ph-82-worm-감사-저장소--무결성-해시) | WORM 감사 저장소 · 무결성 해시 | S3 | 2.5 | PH-72 버킷 (10/21) · PH-89-② · 해시 컬럼 위치 P4 합의 | 해시 · 검증 배치 · 목 버킷 어댑터 **10/28** · 실제 S3 적재 검증 10/30~ | #766 | 진행 |
@@ -285,7 +285,7 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 - **멱등 키는 업무 키 `(type, ref_id)`다.** `uk_noti_type_ref`가 두 번째 행을 막는다. 발행 기록은 지워지고 구독자는 그 ID를 받지 않는다.
 - **예약 · 자동이체 알림은 배치 이벤트로만 싣는다(10/22 결정).** 배치가 결과마다 발행해 `notification.ref_id` 규약(예약 → `scheduled_transfer_id`, 자동 → `execution_id`)을 지킨다. 엔진은 예약 · 자동이체의 `TransferSettled`(`refId = transfer_id`)를 발행하지 않는다 — 알림 이벤트는 알림이 필수값이다(#706 · PR #723 리뷰 A안, PR #738 리뷰).
 - auth `LoginPasswordChangedSessionListener`는 #641(PH-49c)에서 BEFORE_COMMIT으로 바뀌어 발행 기록 대상이 아니다. 재제출은 다른 WAS의 메모리 세션까지 끊는 복구 수단이 아니다([ADR-0010](../adr/0010-outbox-spring-modulith-event-publication-registry.md) 결과).
-- **현황:** #706 완료(알림 도메인 · 최소 계약 · 리스너 1개 · 즉시 · 타행이체 알림 · `uk_noti_type_ref`). #707 PR #738(예약 · 자동이체 이벤트가 같은 계약으로 알림을 싣는다, 실패 사유는 `TransferResult.customerFailureReason()`). #708 상품가입 완료 알림(`ProductSubscriptionCompleted`가 같은 계약으로 싣는다, `ref_id` = `subscription_id`). #709 남음.
+- **현황:** #706 완료(알림 도메인 · 최소 계약 · 리스너 1개 · 즉시 · 타행이체 알림 · `uk_noti_type_ref`). #707 PR #738(예약 · 자동이체 이벤트가 같은 계약으로 알림을 싣는다, 실패 사유는 `TransferResult.customerFailureReason()`). #708 상품가입 완료 알림(`ProductSubscriptionCompleted`가 같은 계약으로 싣는다, `ref_id` = `subscription_id`, PR #830). #709 실패 처리 — 즉시 재시도 · 5분 재제출 · 상한 3번 포기 경보 · staleness 10분 · 수동 재처리 런북([ADR-0010](../adr/0010-outbox-spring-modulith-event-publication-registry.md) 「구독 실패 처리」).
 
 실패 처리는 「즉시 재시도 → 주기 재제출 → 상한 초과는 포기 · 알림 → 수동 재처리」 순이고, 단계마다 프레임워크 기능을 쓴다.
 
@@ -293,11 +293,11 @@ S3 머지 기한은 [D-31](README.md#d-31--1019--팀-합의)을 따른다. 인�
 |---|---|---|
 | 구독 실행 | `@ApplicationModuleListener` — 비동기 · `REQUIRES_NEW` · AFTER_COMMIT | ❌ |
 | 즉시 재시도 | `@Retryable` + `@EnableResilientMethods`(Spring Framework 7) | ❌ 설정값만 |
-| 주기 재제출 | `IncompleteEventPublications.resubmitIncompletePublications(ResubmissionOptions)` — 재제출 횟수(`completionAttempts`)가 상한을 넘은 건은 필터로 빼서 포기한다(행은 남는다) | 스케줄 메서드 1개 |
-| 재기동 후 전달 | `republish-outstanding-events-on-restart`와 주기 재제출 중 하나 — 다중 인스턴스 중복을 보고 고른다 | ❌ |
+| 주기 재제출 | `FailedEventPublications.resubmit(ResubmissionOptions)` — 재제출 횟수(`completionAttempts` − 1)가 상한을 넘은 건은 필터로 빼서 포기한다(행은 남는다) | 스케줄 메서드 1개 |
+| 재기동 후 전달 | 멈춘 발행 정리 + 주기 재제출. `republish-outstanding-events-on-restart`는 켜지 않는다 | ❌ |
 | 멈춘 발행 정리 | `spring.modulith.events.staleness.*` — `PUBLISHED` · `PROCESSING` · `RESUBMITTED`에서 오래 멈춘 발행(처리 중 프로세스가 죽은 건 등)을 `FAILED`로 바꿔 재제출 대상에 넣는다 | ❌ 설정값만 |
-| 포기 건 알림 | 재제출 횟수가 상한을 넘은 건수를 ERROR 로그와 지표로 | 조회 1개 |
-| 수동 재처리 | `FailedEventPublications.resubmit(ResubmissionOptions)` — 원인을 고친 뒤 운영자가 `FAILED` 건을 다시 보낸다 | 호출 1줄 |
+| 포기 건 알림 | 재제출 필터가 건너뛴 건수를 ERROR 로그와 지표(`notification.publication.abandoned`)로 | 필터 1개 |
+| 수동 재처리 | 원인을 고친 뒤 포기 건의 `COMPLETION_ATTEMPTS`를 1로 되돌리면 다음 주기 재제출이 보낸다 — 런북은 ADR-0010 「구독 실패 처리」 | SQL 1줄 |
 
 **완료 기준:** 발행 직후 프로세스를 죽여도 재기동 후 전달된다. 알림 유형 4종마다 결과 1건에 알림 1건이 생긴다. 중복 발행해도 1건이다.
 
