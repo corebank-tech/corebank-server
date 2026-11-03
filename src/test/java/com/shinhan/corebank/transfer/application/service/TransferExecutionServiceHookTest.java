@@ -717,6 +717,16 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
         }
 
         @Override
+        public List<Long> findReleasableIds(LocalDateTime now, int limit) {
+            return delegate.findReleasableIds(now, limit);
+        }
+
+        @Override
+        public List<Long> findStuckExecutingIds(LocalDateTime executingBefore, int limit) {
+            return delegate.findStuckExecutingIds(executingBefore, limit);
+        }
+
+        @Override
         public boolean markDueExecuting(long transferHoldId, LocalDateTime executingAt) {
             return delegate.markDueExecuting(transferHoldId, executingAt);
         }

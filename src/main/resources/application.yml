@@ -78,6 +78,15 @@ app:
       temp-signup-ttl: 30m
     email-verification:
       code-ttl: 3m
+  # 지연이체 (PH-06, #772). enabled는 새로 보류할지만 정한다. S4 PH-30 측정 동안 끈다(transfer_seam.md §9-5)
+  delayed-transfer:
+    enabled: ${APP_DELAYED_TRANSFER_ENABLED:false}
+    # 이만큼 EXECUTING에 머문 보류는 멈춘 것으로 보고 다시 실행한다. 이체 한 건보다 넉넉히 길게 둔다
+    stuck-after: 5m
+    batch-size: 100
+    # 해제 시각이 지난 보류를 꺼내는 주기
+    release:
+      fixed-delay: 60s
   # 타행 전문 송신 (PH-33-②). 주소는 배포 단계마다 다르다(mock_external_server.md §5) — APP_INTERBANK_HOST·APP_INTERBANK_PORT
   interbank:
     host: 127.0.0.1

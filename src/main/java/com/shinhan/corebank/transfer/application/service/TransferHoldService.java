@@ -81,11 +81,18 @@ public class TransferHoldService implements TransferHoldUseCase {
     // 없는 건과 남의 건을 같은 오류로 돌려준다. 보류 ID로 다른 고객의 보류 존재를 알아내지 못하게 한다.
     @Override
     public void cancel(long transferHoldId, long customerId) {
-        transferHoldPort
+        TransferHold hold = transferHoldPort
                 .findById(transferHoldId)
-                .filter(hold -> hold.getCustomerId() == customerId)
+                .filter(found -> found.getCustomerId() == customerId)
                 .orElseThrow(() -> new BusinessException(TransferErrorCode.TRANSFER_HOLD_NOT_FOUND));
-        if (!transferHoldPort.close(transferHoldId, TransferHoldStatus.CANCELLED, customerId, null, now())) {
+        if (hold.getStatus() != TransferHoldStatus.HELD) {
+            throw new BusinessException(TransferErrorCode.TRANSFER_HOLD_ALREADY_CLOSED);
+        }
+        LocalDateTime now = now();
+        if (hold.cancellableUntil() != null && !now.isBefore(hold.cancellableUntil())) {
+            throw new BusinessException(TransferErrorCode.TRANSFER_HOLD_CANCEL_DEADLINE_PASSED);
+        }
+        if (!transferHoldPort.close(transferHoldId, TransferHoldStatus.CANCELLED, customerId, null, now)) {
             throw new BusinessException(TransferErrorCode.TRANSFER_HOLD_ALREADY_CLOSED);
         }
     }

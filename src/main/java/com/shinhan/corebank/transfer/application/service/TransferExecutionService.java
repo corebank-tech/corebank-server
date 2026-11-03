@@ -577,6 +577,7 @@ public class TransferExecutionService implements TransferExecutionUseCase {
         return TransferResult.builder()
                 .transferHoldId(saved.getTransferHoldId())
                 .releaseAt(saved.getReleaseAt())
+                .cancellableUntil(saved.cancellableUntil())
                 .build();
     }
 

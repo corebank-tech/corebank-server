@@ -236,7 +236,8 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("고객이 취소한 보류는 실행하면 TRF0311로 거부되고 기표되지 않는다")
     void cancel_thenRelease_isRejected() {
-        long holdId = held(30_000L);
+        // 취소 시한(실행 30분 전) 안쪽이어야 취소할 수 있다
+        long holdId = heldUntil(LocalDateTime.now(clock).plusHours(2));
 
         transferHoldService.cancel(holdId, CUSTOMER_ID);
 
@@ -246,6 +247,32 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
         assertBusinessError(
                 () -> transferHoldService.cancel(holdId, CUSTOMER_ID), TransferErrorCode.TRANSFER_HOLD_ALREADY_CLOSED);
         assertThat(ledgerRows()).isZero();
+    }
+
+    @Test
+    @DisplayName("실행 30분 전까지만 취소된다. 31분 전은 취소되고, 29분 전은 TRF0312로 거부되며 보류가 그대로다")
+    void cancel_respectsThirtyMinuteCutoff() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        long beforeCutoff = heldUntil(now.plusMinutes(31));
+        long afterCutoff = heldUntil(now.plusMinutes(29));
+
+        transferHoldService.cancel(beforeCutoff, CUSTOMER_ID);
+        assertBusinessError(
+                () -> transferHoldService.cancel(afterCutoff, CUSTOMER_ID),
+                TransferErrorCode.TRANSFER_HOLD_CANCEL_DEADLINE_PASSED);
+
+        assertThat(holdRow(beforeCutoff).get("status")).isEqualTo("CANCELLED");
+        assertThat(holdRow(afterCutoff).get("status")).isEqualTo("HELD");
+    }
+
+    @Test
+    @DisplayName("승인으로 푸는 보류는 시각이 없어 시한 없이 취소된다")
+    void cancel_onApproval_hasNoCutoff() {
+        long holdId = awaitingApproval(30_000L);
+
+        transferHoldService.cancel(holdId, CUSTOMER_ID);
+
+        assertThat(holdRow(holdId).get("status")).isEqualTo("CANCELLED");
     }
 
     @Test
