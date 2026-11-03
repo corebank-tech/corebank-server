@@ -171,7 +171,7 @@ behaviorRiskScore         : XGBoost 보조 위험 점수
 
 ### 4.3 망설임 규칙
 
-다음 세 조건 중 **2개 이상**이면 `hesitationWarning=true`:
+다음 세 조건 중 **확인된 참이 2개 이상**이면 `hesitationWarning=true`. 이벤트 제출 API에서 선택 필드인 `confirmActiveSeconds`가 없으면 해당 조건은 미확인으로 두며 참으로 추정하지 않는다. 나머지 두 조건이 모두 확인된 참이면 망설임은 성립한다. 흐름 자체가 없거나 확인된 참이 2개 미만이면 A의 망설임 근거로 쓰지 않는다([#855 사례 C27–C28](p6_fds_policy_cases.md#행동연결오류-사례)).
 
 1. `backCount >= 1`
 2. `amountRevisionCount >= 2`
@@ -191,6 +191,8 @@ behaviorRiskScore         : XGBoost 보조 위험 점수
 ---
 
 ## 5. 서버의 1차 FDS 정책
+
+입력별 계산·기대 결과와 경계값은 [#855 정책 사례표](p6_fds_policy_cases.md)를 따른다. 아래 규칙을 구현하거나 테스트할 때 사례표의 독립 픽스처와 같은 고객·수취인·시간 기준을 사용한다.
 
 ### 5.1 공통 집계
 
