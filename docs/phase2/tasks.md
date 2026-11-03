@@ -499,7 +499,7 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 - 적수 배치 1회 시간을 기록한다. 전환 확인용 기록이고 개선 전/후 비교에 쓰지 않는다(README §3-1).
 - **Plan B:** 기존 RDS를 유지하고 복원 절차 문서를 리포트에 싣는다.
 - 10/28~: 온프레미스 MySQL 레플리카로 binlog 복제를 시작한다. VPN(PH-100-②)이 있어야 한다.
-    - `CALL mysql.rds_set_configuration('binlog retention hours', 24)`, 복제 전용 계정, GTID
+    - 복제 전용 계정, GTID. binlog 보존 시간은 `CALL mysql.rds_show_configuration;`으로 확인하고, 바꿔야 할 때만 `CALL mysql.rds_set_configuration('binlog retention hours', 72);`를 실행한다. 처음 계획은 24시간이었으나 10/29에 신규 RDS를 조회했을 때 실제 값은 72시간이었고 11/2 16:58에 다시 확인해도 72시간이다(#862).
     - 스냅샷이나 덤프로 초기 적재한 뒤 그 위치부터 복제한다.
     - 복제가 늦어지면 P5 PH-76은 덤프 적재로 대신한다.
 
