@@ -213,6 +213,11 @@ VM에서:
 ```bash
 sudo awk -F= '/^[[:space:]]*right=/{print $2; exit}' /etc/ipsec.conf | tr -d '\n' | sha256sum | cut -c1-4
 ```
+terraform 출력값과도 대조한다(주소는 출력하지 않는다). 이 값은 VM `right`나 AWS 해시와 같아야 한다.
+```bash
+cd terraform/main && terraform output -raw vpn_tunnel1_address | tr -d '\n' | shasum -a 256 | cut -c1-4
+```
+- 세 값(AWS 두 터널 중 하나, VM `right`, terraform 출력)이 같은 해시로 모이지 않으면 **여기서 멈추고** 어느 쪽이 낡았는지 확인한다. 순서만 믿고 4단계로 넘어가지 않는다. 2026-11-03에는 셋이 같았다.
 4. 기존 VPN 연결을 새 고객 게이트웨이로 바꾼다.
 ```bash
 aws ec2 modify-vpn-connection --vpn-connection-id <VPN ID> --customer-gateway-id <새 CGW ID>
