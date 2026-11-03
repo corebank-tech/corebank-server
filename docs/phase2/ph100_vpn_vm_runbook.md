@@ -173,7 +173,8 @@ systemctl list-timers --all | grep vpn-auto-stop || echo "타이머 없음(취�
 PH-100-② 완료 기준이다. 상대 쪽 준비가 끝난 항목부터 따로 확인한다.
 - VM → WAS 8080 (메트릭 수집, 이 PR의 WAS 보안 그룹 규칙): **완료(2026-10-28)** 두 서버 모두 `status UP`. WAS가 기동한 뒤에 확인한다. 먼저 `command -v nc`로 `nc`가 있는지 확인하고, 없으면 `sudo apt install netcat-openbsd`로 설치한 다음 `nc -vz <WAS 사설 IP> 8080`(TCP 연결 검사)을 실행한다. WAS 보안 그룹은 ICMP를 허용하지 않고 RDS도 ping에 응답하지 않아서 `ping`은 터널이 정상이어도 실패한다.
 - VM → RDS 3306: 복제 계정은 P2 PH-70-②에서 정한다. 보안 그룹의 RDS 규칙은 P2가 추가한 뒤 `nc -vz <RDS 사설 IP> 3306`으로 확인한다. **완료(2026-10-29):** `nc -vz -w 5 <RDS 엔드포인트> 3306`이 `succeeded`였고 이름이 사설 IP로 풀려 터널을 탔다. 이 규칙의 Terraform 반영은 PR #794다.
-- WAS → VM의 정보계 API·모의 대외기관 (VM이 받는 포트가 정해진 뒤). **미완 — 정보계 API는 `192.168.0.211:8081`로 기동했고 WAS 규칙과 환경변수는 #804에서 진행한다.** **선행 조건:** 지금 WAS 보안 그룹의 아웃바운드는 443과 VPC 내부 3306뿐이다. 연동 전에 목적지 IP와 서비스 포트(모의 대외기관은 TCP 9300)를 확인하고 `modules/network/security_groups.tf`에 egress 규칙을 추가한다. 포트가 확정되기 전에는 규칙을 열지 않는다.
+- WAS → VM의 정보계 API: **완료(2026-11-03, #823).** 릴리스 3 반영으로 WAS 보안 그룹에 VM `192.168.0.211:8081` 아웃바운드 규칙이 들어갔고(지금 아웃바운드는 443, 3306, 8081), 환경변수 `APP_INFO_API_BASE_URL` · `APP_INFO_API_SECRET`이 서버의 `app.env`에 들어갔다. 비밀은 Parameter Store `/corebank/info-api-secret`에서 서버가 켜질 때 읽는다. WAS 2대에서 연결이 `401`(인증 전)이고, 헤더 `X-Info-Api-Secret`을 담아 `/info/product-subscriptions`를 호출하면 `200`이었다. **관리자 화면 요청이 WAS를 거쳐 정보계 API의 `asOf` 응답을 받는 것은 아직 확인하지 못했다**(로그인이 필요해 UAT 또는 #818에서 확인한다).
+- WAS → VM의 모의 대외기관: **미완(#761).** 선행 조건: 지금 WAS 보안 그룹의 아웃바운드에 모의 대외기관 포트(TCP 9300)는 없다. 연동 전에 목적지 IP와 서비스 포트를 확인하고 `modules/network/security_groups.tf`에 egress 규칙을 추가한다. 포트가 확정되기 전에는 규칙을 열지 않는다.
 
 ### 4-4. 정상 운영 전 조건
 
