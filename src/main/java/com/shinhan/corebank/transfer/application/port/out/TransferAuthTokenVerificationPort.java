@@ -8,4 +8,7 @@ package com.shinhan.corebank.transfer.application.port.out;
  */
 public interface TransferAuthTokenVerificationPort {
     void verifyAndConsume(String authToken, Long customerId, Long accountId);
+
+    /** 계좌가 아니라 고객 단위 설정(지연이체 완화 등)을 바꿀 때 쓴다. 토큰의 고객만 대조한다. */
+    void verifyAndConsume(String authToken, Long customerId);
 }

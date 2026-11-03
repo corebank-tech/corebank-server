@@ -101,6 +101,17 @@ public interface AccountJpaRepository extends JpaRepository<AccountJpaEntity, Lo
     Optional<MaturityAccountSnapshot> findMaturityAccountSnapshot(
             @Param("accountId") Long accountId, @Param("customerId") Long customerId);
 
+    // 계좌번호만 반환해 AccountJpaEntity가 영속성 컨텍스트에 올라가지 않도록 한다.
+    @Query(
+            """
+        SELECT a.accountNumber
+        FROM AccountJpaEntity a
+        WHERE a.accountId = :accountId
+          AND a.customerId = :customerId
+        """)
+    Optional<String> findAccountNumberByIdAndCustomerId(
+            @Param("accountId") Long accountId, @Param("customerId") Long customerId);
+
     interface AccountBalanceProjection {
         Long getAccountId();
 

@@ -42,4 +42,16 @@ public interface AutoTransferExecutionJpaRepository extends JpaRepository<AutoTr
             """)
     List<AutoTransferExecutionJpaEntity> findRecentByAutoTransferId(
             @Param("autoTransferId") Long autoTransferId, Pageable pageable);
+
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "0"))
+    @Query(
+            """
+        SELECT e
+        FROM AutoTransferExecutionJpaEntity e
+        WHERE e.autoTransfer.autoTransferId IN :autoTransferIds
+          AND e.status = :status
+        """)
+    List<AutoTransferExecutionJpaEntity> findProcessingForShareNowait(
+            @Param("autoTransferIds") List<Long> autoTransferIds, @Param("status") ProcessResultStatus status);
 }

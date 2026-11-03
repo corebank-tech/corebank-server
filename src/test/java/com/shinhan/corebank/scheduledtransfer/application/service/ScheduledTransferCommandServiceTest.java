@@ -12,6 +12,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.shinhan.corebank.account.api.AccountTransferLifecycleLockUseCase;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
@@ -65,6 +66,9 @@ class ScheduledTransferCommandServiceTest {
 
     @Mock
     AuditLogService auditLogService;
+
+    @Mock
+    AccountTransferLifecycleLockUseCase lifecycleLockUseCase;
 
     @Mock
     Clock clock;
