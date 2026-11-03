@@ -16,7 +16,7 @@ variable "route_table_ids" {
 variable "customer_gateway_ip" {
   description = "VM이 나가는 교육장 NAT의 공인 IP (VM에서 curl ifconfig.me로 확인)"
   type        = string
-  default     = "58.230.206.76"
+  default     = "175.123.155.209"
 }
 
 variable "onprem_cidr" {

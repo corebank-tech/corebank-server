@@ -102,7 +102,7 @@ terraform apply main.tfplan
 - 계획 파일에는 VPN 사전 공유 키 같은 민감 값이 평문으로 들어 있다. `umask 077`로 만들고, `terraform apply` 직후 삭제하며, 업로드하거나 공유하지 않는다. 노출됐다면 VPN 연결을 새로 만들어 키를 교체한다.
 - 저장한 계획은 apply 때 확인 질문 없이 바로 실행된다. plan 출력을 확인한 직후에 apply하고, 시간이 지났거나 코드·상태가 바뀌었으면 다시 plan한다.
 - 예상 개수는 apply 범위에 따라 다르다. `dev`에 머지된 모듈만 올라간다: 네트워크·RDS만이면 31개, 컴퓨트(ALB·IAM·ASG)까지 머지되면 44개, VPN까지 머지되면 51개다.
-- VPN을 포함해 apply하기 전에 `modules/vpn`의 `customer_gateway_ip`(기본값 `58.230.206.76`)가 최종 VM이 나가는 공인 IP와 같은지 VM에서 `curl -s ifconfig.me`로 확인하고, UDP 500/4500 아웃바운드도 확인한다. 다르면 기본값을 고쳐 PR로 반영한다. 터널 상태와 VM-VPC 연결성은 VPN 연결이 만들어진 apply 뒤에만 확인할 수 있으므로 [런북](../docs/phase2/ph100_vpn_vm_runbook.md) §4에서 확인하고, 모의 서버 VM 이전은 그 확인 뒤에 한다.
+- VPN을 포함해 apply하기 전에 `modules/vpn`의 `customer_gateway_ip`(기본값, 값은 문서에 쓰지 않는다)가 최종 VM이 나가는 공인 IP와 같은지 VM에서 `curl -s ifconfig.me`로 확인하고, UDP 500/4500 아웃바운드도 확인한다. 다르면 기본값을 고쳐 PR로 반영한다. 공인 IP가 바뀐 뒤 AWS의 VPN 연결을 CLI로 먼저 바꿨다면 terraform state도 맞춰야 하므로 [런북 §5-1](../docs/phase2/ph100_vpn_vm_runbook.md)을 따른다. 터널 상태와 VM-VPC 연결성은 VPN 연결이 만들어진 apply 뒤에만 확인할 수 있으므로 [런북](../docs/phase2/ph100_vpn_vm_runbook.md) §4에서 확인하고, 모의 서버 VM 이전은 그 확인 뒤에 한다.
 
 ### 실제 apply 단위 (PH-51 + PH-70-②)
 
