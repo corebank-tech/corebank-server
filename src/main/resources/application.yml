@@ -78,6 +78,15 @@ app:
       temp-signup-ttl: 30m
     email-verification:
       code-ttl: 3m
+  # 지연이체 (PH-06, #772). enabled는 새로 보류할지만 정한다. S4 PH-30 측정 동안 끈다(transfer_seam.md §9-5)
+  delayed-transfer:
+    enabled: ${APP_DELAYED_TRANSFER_ENABLED:false}
+    # 이만큼 EXECUTING에 머문 보류는 멈춘 것으로 보고 다시 실행한다. 이체 한 건보다 넉넉히 길게 둔다
+    stuck-after: 5m
+    batch-size: 100
+    # 해제 시각이 지난 보류를 꺼내는 주기
+    release:
+      fixed-delay: 60s
   # 타행 전문 송신 (PH-33-②). 주소는 배포 단계마다 다르다(mock_external_server.md §5) — APP_INTERBANK_HOST·APP_INTERBANK_PORT
   interbank:
     host: 127.0.0.1
@@ -107,6 +116,23 @@ app:
   # 거래번호 채번 행 하나를 잠글 때 예약할 번호 수(#786). 클수록 잠금이 줄고, 재시작 때 버려지는 번호가 는다
   transaction-sequence:
     block-size: 100
+  subscription:
+    early-termination:
+      # #844 연결 이체 정리 및 동시성 통합 테스트 완료 전까지 반드시 false
+      enabled: false
+      # PH-16 P3 승인: 가입 확정 금리 × 경과기간별 적용률
+      # 가입일 포함·해지일 제외, 이율 중간 절사 없음
+      rate-tiers:
+        - min-days: 0
+          multiplier: 0.10
+        - min-days: 30
+          multiplier: 0.20
+        - min-days: 90
+          multiplier: 0.40
+        - min-days: 180
+          multiplier: 0.60
+        - min-days: 365
+          multiplier: 0.80
   interest:
     income-tax-rate: "0.14"
     local-tax-ratio: "0.10"

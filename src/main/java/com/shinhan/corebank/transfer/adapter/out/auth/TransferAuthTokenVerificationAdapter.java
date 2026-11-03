@@ -17,4 +17,9 @@ public class TransferAuthTokenVerificationAdapter implements TransferAuthTokenVe
         accountPasswordAuthTokenVerifier.verifyAndConsume(
                 new AccountPasswordAuthTokenVerification(authToken, customerId, accountId));
     }
+
+    @Override
+    public void verifyAndConsume(String authToken, Long customerId) {
+        accountPasswordAuthTokenVerifier.verifyAndConsume(authToken, customerId);
+    }
 }

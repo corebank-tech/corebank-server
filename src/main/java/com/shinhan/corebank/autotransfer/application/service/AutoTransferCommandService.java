@@ -1,5 +1,6 @@
 package com.shinhan.corebank.autotransfer.application.service;
 
+import com.shinhan.corebank.account.api.AccountTransferLifecycleLockUseCase;
 import com.shinhan.corebank.account.domain.AccountType;
 import com.shinhan.corebank.autotransfer.application.port.in.*;
 import com.shinhan.corebank.autotransfer.application.port.out.AccountStatusPort;
@@ -42,6 +43,7 @@ public class AutoTransferCommandService
     private final TransferLimitPort transferLimitPort;
     private final AuditLogService auditLogService;
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+    private final AccountTransferLifecycleLockUseCase lifecycleLockUseCase;
     private final Clock clock;
 
     @Override
@@ -115,6 +117,11 @@ public class AutoTransferCommandService
                 command.myPassbookMemo(),
                 command.recipientPassbookMemo(),
                 LocalDateTime.now(clock.withZone(SEOUL)));
+
+        // 기존 사전 검증 이후에도 계좌가 종료될 수 있으므로
+        // 실제 DB 저장 직전에 두 계좌를 잠그고 상태를 다시 확인한다.
+        lifecycleLockUseCase.lockForRegistration(
+                command.customerId(), command.withdrawalAccountId(), command.depositAccountNumber());
 
         AutoTransfer saved = autoTransferPersistencePort.save(autoTransfer);
         auditLogService.record(

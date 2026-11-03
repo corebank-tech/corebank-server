@@ -464,6 +464,25 @@ public class Account {
         this.closedTradeDate = tradeDate;
     }
 
+    /** 중도해지 원리금 이체 완료 뒤 ACTIVE 상품 계좌를 종료한다. */
+    public void closeEarly(LocalDateTime closedAt, LocalDate tradeDate) {
+        if (closedAt == null || tradeDate == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+        if (!accountType.isMaturityEligible()
+                || status != AccountStatus.ACTIVE
+                || maturityDate == null
+                || !closedAt.toLocalDate().isBefore(maturityDate)) {
+            throw new BusinessException(AccountErrorCode.EARLY_TERMINATION_NOT_ALLOWED);
+        }
+        if (balance != 0L || holdAmount != 0L) {
+            throw new BusinessException(AccountErrorCode.MATURITY_BALANCE_NOT_ZERO);
+        }
+        this.status = AccountStatus.CLOSED;
+        this.closedDate = closedAt;
+        this.closedTradeDate = tradeDate;
+    }
+
     public void changeDisplayOrder(int displayOrder) {
         if (displayOrder <= 0) {
             throw new BusinessException(AccountErrorCode.INVALID_DISPLAY_ORDER);
