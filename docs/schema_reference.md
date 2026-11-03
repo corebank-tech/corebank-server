@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 42개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 441개 컬럼
+**대상**: 43개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 441개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -77,6 +77,7 @@
 | 49 | `audit_integrity_mismatch` | 감사 로그 무결성 불일치 목록 | P1 | 5 |
 | 50 | `transfer_hold` | 이체 보류 | P4 | 20 |
 | 51 | `delayed_transfer_setting` | 고객별 지연이체 설정 | P4 | 6 |
+| 52 | `account_payment_stop` | 계좌 사건별 지급정지 기록 | P3 | 10 |
 
 ---
 
@@ -396,7 +397,7 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | `product_id`               | `BIGINT`      | **FK** | O    |          | 입출금계좌는 NULL → `product.product_id`                                                |
 | `account_type`             | `VARCHAR(24)` |        | X    |          | 계좌 종류. `DEMAND_DEPOSIT`(입출금) / `TIME_DEPOSIT`(정기예금) / `INSTALLMENT_SAVINGS`(정기적금) |
 | `balance`                  | `BIGINT`      |        | X    | `0`      | 현재 잔액. **조회 성능용 캐시**이며 진실의 원천은 `ledger_entry` 합계다. 배치로 대사한다                       |
-| `hold_amount` | `BIGINT` | | X | `0` | 지급정지 보류액. 출금가능액 계산 시 잔액에서 차감한다. |
+| `hold_amount` | `BIGINT` | | X | `0` | 지급정지 보류액. 출금가능액 계산 시 잔액에서 차감한다. 유효한 `account_payment_stop` 일부 지급정지 행의 `applied_amount` 합계로 계산한다(D-36) |
 | `status`                   | `VARCHAR(12)` |        | X    | `ACTIVE` | 계좌 상태. `ACTIVE`(정상) / `SUSPENDED`(거래정지) / `MATURED`(만기 도달) / `CLOSED`(해지) / `DORMANT`(휴면)                            |
 | `password_hash`            | `CHAR(60)`    |        | X    |          | 계좌비밀번호 4자리의 BCrypt 해시                                                             |
 | `password_failure_count`   | `TINYINT`     |        | X    | `0`      | 계좌비밀번호 연속 오류 횟수. 검증 실패 응답의 `errorCount`                                           |
@@ -446,7 +447,7 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 > 계좌 상태 전이 감사 이력 (PH-15, #671)
 
 계좌 상태 변경 시 전이 전·후 상태와 처리 시각을 기록하는 append-only 테이블이다.
-COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED → CLOSED` 전이를 기록한다.
+COB의 `ACTIVE → MATURED` 전이, 고객 요청 만기해지의 `MATURED → CLOSED` 전이, 지급정지 적용과 전환과 해제로 바뀐 `ACTIVE ↔ SUSPENDED` 전이를 기록한다. 지급정지로 상태가 바뀌지 않으면(원래 `SUSPENDED` 계좌 등) 남기지 않는다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
@@ -457,7 +458,7 @@ COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED →
 | `maturity_date` | `DATE` | | O | | 계약 만기일 |
 | `effective_business_date` | `DATE` | | O | | 만기 전이는 COB에서 계산한 만기 전이 기준일, 만기해지는 MATURITY 출금 원장의 실제 거래일(`tradeDate`) |
 | `changed_at` | `DATETIME(6)` | INDEX | X | | 실제 상태 전이 처리 시각 |
-| `trigger_type` | `VARCHAR(20)` | | X | | 전이 발생 원인. `COB`(배치 만기 전이) / `CUSTOMER`(고객 요청 만기해지) |
+| `trigger_type` | `VARCHAR(20)` | | X | | 전이 발생 원인. `COB`(배치 만기 전이) / `CUSTOMER`(고객 요청 만기해지) / `PAYMENT_STOP`(지급정지 적용, 전환, 해제) |
 
 **인덱스**
 
@@ -465,6 +466,41 @@ COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED →
 | --- | --- | --- |
 | PRIMARY | `PRIMARY` | `history_id` |
 | INDEX | `ix_account_status_history_account_time` | `account_id, changed_at` |
+
+---
+
+## `account_payment_stop`
+
+> 계좌 사건별 지급정지 기록 (이의제기 AI 심사 지원, [D-36](phase2/README.md#d-36--113--리드))
+
+`account.api.PaymentStopUseCase`가 쓰는 사건별 지급정지 기록이다. 계좌의 `status`와 `hold_amount`는 이 테이블의 유효한 행으로 계산한다.
+전부 지급정지(`FULL`)가 하나라도 있으면 `SUSPENDED`, 일부 지급정지(`PARTIAL`)만 있으면 정지 전 상태에 `applied_amount` 합계만큼 보류한다. 마지막 행이 해제되면 `status_before`로 돌아간다.
+해제해도 행을 지우지 않는다. 다른 사건의 지급정지 이력을 보는 데 쓴다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `payment_stop_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 기록 식별자 |
+| `account_id` | `BIGINT` | **FK** **UK** | X | | 지급정지된 계좌 → `account.account_id` |
+| `case_id` | `BIGINT` | **UK** | X | | 지급정지 사건 ID(paymentstop 도메인). 그 테이블이 아직 없어 FK가 없다 |
+| `stop_type` | `VARCHAR(10)` | | X | | `FULL`(전부 지급정지) / `PARTIAL`(일부 지급정지) |
+| `requested_amount` | `BIGINT` | | X | `0` | 일부 지급정지 요청 보류액. `FULL`은 0 |
+| `applied_amount` | `BIGINT` | | X | `0` | 실제로 묶은 보류액. 잔액에서 다른 사건 보류액을 뺀 금액이 상한이다. `FULL`은 0 |
+| `status_before` | `VARCHAR(12)` | | X | | 첫 지급정지를 걸기 전 계좌 상태(`ACTIVE` / `SUSPENDED`). 같은 계좌의 유효한 행은 모두 같은 값이다 |
+| `active` | `BOOLEAN` | | X | `TRUE` | 유효 여부. 해제하면 `FALSE` |
+| `created_at` | `DATETIME(6)` | | X | | 지급정지를 건 시각 |
+| `released_at` | `DATETIME(6)` | | O | | 해제 시각. 유효한 행은 NULL |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 / 조건 |
+| --- | --- | --- |
+| PRIMARY | `PRIMARY` | `payment_stop_id` |
+| UNIQUE | `uk_account_payment_stop_account_case` | `account_id, case_id` |
+| FK | `fk_aps_account` | `account_id` → `account.account_id` |
+| CHECK | `ck_aps_stop_type` | `stop_type IN ('FULL', 'PARTIAL')` |
+| CHECK | `ck_aps_status_before` | `status_before IN ('ACTIVE', 'SUSPENDED')` |
+| CHECK | `ck_aps_amount` | `requested_amount >= 0 AND applied_amount >= 0 AND applied_amount <= requested_amount` |
+| CHECK | `ck_aps_released` | 유효하면 `released_at IS NULL`, 해제됐으면 `released_at IS NOT NULL` |
 
 ---
 

@@ -116,7 +116,20 @@ erDiagram
           date maturity_date "NULL 허용. 계약 만기일"
           date effective_business_date "NULL 허용. 상태 전이 기준 영업일"
           datetime changed_at "DATETIME(6)"
-          varchar trigger_type "VARCHAR(20). COB"
+          varchar trigger_type "VARCHAR(20). COB / CUSTOMER / PAYMENT_STOP"
+    }
+
+    account_payment_stop {
+        bigint payment_stop_id PK "AUTO_INCREMENT"
+        bigint account_id FK "UK(account_id, case_id)"
+        bigint case_id "지급정지 사건 ID. FK 없음 (paymentstop 테이블 전)"
+        varchar stop_type "FULL / PARTIAL"
+        bigint requested_amount "일부 지급정지 요청 보류액. FULL은 0"
+        bigint applied_amount "실제 보류액. 남은 잔액이 상한"
+        varchar status_before "ACTIVE / SUSPENDED. 마지막 해제 때 복원"
+        boolean active "해제하면 FALSE"
+        datetime created_at "DATETIME(6)"
+        datetime released_at "DATETIME(6). 유효하면 NULL"
     }
 
     interest_payment {
@@ -583,6 +596,7 @@ erDiagram
     product ||--o{ product_subscription : "가입대상"
     account ||--o| product_subscription : "개설계좌"
     account ||..o| interest_payment : "이자 지급 이력 (논리 관계, FK 없음)"
+    account ||--o{ account_payment_stop : "사건별 지급정지 기록 (D-36)"
     product_subscription ||--o{ subscription_terms_agreement : "약관동의"
     terms ||--o{ subscription_terms_agreement : "약관동의"
     customer ||--o{ scheduled_transfer : "예약"

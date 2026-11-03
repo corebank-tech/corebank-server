@@ -684,6 +684,33 @@ public class Account {
         }
     }
 
+    /** 지급정지를 걸 수 있는 상태인지 본다. 정지 전 상태로 되돌릴 수 있는 ACTIVE와 SUSPENDED만 허용한다. */
+    public void validatePaymentStopAllowed() {
+        if (status != AccountStatus.ACTIVE && status != AccountStatus.SUSPENDED) {
+            throw new BusinessException(AccountErrorCode.INVALID_ACCOUNT_STATUS);
+        }
+    }
+
+    /**
+     * 유효한 지급정지 기록으로 계산한 상태와 보류액을 반영한다.
+     *
+     * <p>전부 지급정지가 하나라도 있으면 SUSPENDED, 없으면 정지 전 상태다. 보류액은 유효한 일부 지급정지 적용액의 합이다.
+     * 유효한 기록이 없으면 호출자는 정지 전 상태와 false, 0을 넘긴다.
+     *
+     * @param statusBeforeStop 첫 지급정지를 걸기 전의 계좌 상태(ACTIVE 또는 SUSPENDED)
+     */
+    public void applyPaymentStops(AccountStatus statusBeforeStop, boolean fullStopActive, long partialHoldAmount) {
+        if (statusBeforeStop != AccountStatus.ACTIVE && statusBeforeStop != AccountStatus.SUSPENDED) {
+            throw new IllegalArgumentException("정지 전 상태는 ACTIVE 또는 SUSPENDED여야 합니다.");
+        }
+        if (partialHoldAmount < 0 || partialHoldAmount > balance) {
+            throw new IllegalArgumentException("보류액은 0 이상이고 원장잔액 이하여야 합니다.");
+        }
+
+        this.status = fullStopActive ? AccountStatus.SUSPENDED : statusBeforeStop;
+        this.holdAmount = partialHoldAmount;
+    }
+
     public long getAvailableBalance() {
         if (status != AccountStatus.ACTIVE) {
             return 0L;
