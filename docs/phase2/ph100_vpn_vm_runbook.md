@@ -235,7 +235,7 @@ sudo ip tunnel del vti1
 ```bash
 sudo systemctl restart vpn-vti
 ```
-- 로컬 식별자도 따로 확인한다. VM 공인 IP가 바뀌었으니 `ipsec.conf`의 `leftid`와 `ipsec.secrets`의 첫 번째 식별자가 옛 IP로 남아 있을 수 있다. 현재 공인 IP의 해시와 비교하고, 다르면 새 공인 IP로 고친 뒤 `sudo ipsec restart`로 인증 상태를 확인한다. **2026-11-03 확인 결과:** `leftid`와 `ipsec.secrets` 첫 식별자가 둘 다 옛 공인 IP 그대로였는데 터널은 붙었다(AWS가 이 불일치를 거부하지 않았다). 그래서 바로 바꾸지 않았다. 바꿀 때는 둘을 같은 값으로 함께 바꾸고(한쪽만 바꾸면 PSK를 못 찾아 인증이 실패할 수 있다, 추정) 재시작이 필요하므로 `closeaction` 변경과 한 번의 재시작으로 묶는다.
+- 로컬 식별자도 따로 확인한다. VM 공인 IP가 바뀌었으니 `ipsec.conf`의 `leftid`와 `ipsec.secrets`의 첫 번째 식별자가 옛 IP로 남아 있을 수 있다. 아래 세 값의 해시를 비교한다(현재 공인 IP, `leftid`, `ipsec.secrets` 첫 식별자).
 ```bash
 curl -fsS -m 5 https://checkip.amazonaws.com | tr -d '\n' | sha256sum | cut -c1-4
 ```
@@ -245,6 +245,9 @@ sudo awk -F= '/^[[:space:]]*leftid=/{print $2; exit}' /etc/ipsec.conf | tr -d '\
 ```bash
 sudo awk 'NF && $1 !~ /^#/{print $1; exit}' /etc/ipsec.secrets | tr -d '\n' | sha256sum | cut -c1-4
 ```
+- 식별자가 현재 공인 IP와 다를 때는 터널 상태로 나눈다.
+  - **터널이 정상 연결된 경우:** 불일치만 기록하고 바꾸지 않는다. 정상인 VPN을 불필요하게 재시작하지 않는다. 변경은 P2와 정한 유지보수 시점에 `closeaction` 변경 등과 묶어 한 번의 재시작으로 한다. 2026-11-03이 이 경우였다(`leftid`와 `ipsec.secrets` 첫 식별자가 둘 다 옛 공인 IP 그대로였는데 터널이 붙었다. AWS가 이 불일치를 거부하지 않았다).
+  - **인증 실패 등으로 변경이 필요한 경우:** `leftid`와 `ipsec.secrets` 첫 식별자를 같은 값(새 공인 IP)으로 함께 고친다(한쪽만 바꾸면 PSK를 못 찾아 인증이 실패할 수 있다, 추정). 그다음 `sudo ipsec restart`로 다시 연결하고 `Security Associations`가 `1 up`인지 확인한다.
 6. 확인: AWS 쪽 터널 1이 UP, VM에서 `Security Associations (1 up, 0 connecting)`, `ip route get <WAS 사설 IP>`가 `dev vti1`, RDS 3306이 열려 있다. `vti1`의 remote 주소가 `right`와 같은지도 본다(해시가 같아야 한다).
 ```bash
 ip -d tunnel show vti1 | grep -oE 'remote [0-9.]+' | awk '{print $2}' | tr -d '\n' | sha256sum | cut -c1-4
