@@ -371,7 +371,7 @@ Idempotency-Key: 9fa61214-4817-47ad-b08f-5279af78df43
 |---|---|---|
 | FE `flowId` 생성·새 흐름·새로고침·만료, 이벤트 재전송 | P6 FE·BE | §2·§3 결정 완료; 구현 대기 |
 | 이벤트 제출 API 필드·시각·크기·오류 응답 및 화면 연결 | P6 FE·BE | 경로·입력 제한·재전송 결정 완료; 구현 대기 |
-| 실제 `HELD` 응답 필드·승인 실행 실패·응답 유실 뒤 결과 조회 | P4 → P6 | `TransferResponse.transferHold` 중첩 DTO는 구현됨. FDS `ON_APPROVAL` 실제 응답·추가 필드 필요 여부와 결과 조회 형태는 P4 인계 대기 |
+| 실제 `HELD` 응답 필드·승인 실행 실패·응답 유실 뒤 결과 조회 | P4 → P6 | 공용 보류 저장·실행 부품 #838(#772 PR-a)은 11/3 머지 완료. `TransferResponse.transferHold` 중첩 DTO는 구현됨. FDS `ON_APPROVAL` 실제 응답·추가 필드 필요 여부와 결과 조회 형태는 P4 인계 대기 |
 | 보류 원본·상태 `transfer.api` 조회 | P4 → P6 | `transfer_seam.md` §10의 P4 소유 경계는 확정; 공개 조회 메서드·반환 필드 구현 인계 대기 |
 | Agent Tool용 이체 목록·수취인 집계 `transfer.api` 조회 | P4 → P6 | §5와 API 명세 §3·§4의 24시간·최대 100건 목록(`refId`·금액·시각·마스킹 수취계좌, `hasMore`), 최초 SUCCESS 시각, 현재 보류 건 출금계좌 외 다른 출금계좌 수(DISTINCT)는 기존 `RecentTransferQuery`의 건수·합계·존재 여부만으로 만들 수 없음. P4 공개 조회 계약·성능 검증 인계 대기; P6은 `transfer` 테이블 직접 조회 금지 |
 | 고객 취소·`ON_APPROVAL` 만료 종료 신호 | P4·P6 | `transfer_seam.md` §10 미결. 이 문서 §5-1 `TransferHoldClosed`는 P6 제안이며 P4 합의 전; 리스너 미구현 |
