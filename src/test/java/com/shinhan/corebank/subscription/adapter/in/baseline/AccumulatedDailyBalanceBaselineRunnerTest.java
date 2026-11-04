@@ -46,6 +46,7 @@ class AccumulatedDailyBalanceBaselineRunnerTest {
         assertThat(result.averageMs()).isGreaterThanOrEqualTo(0);
         assertThat(result.p95Ms()).isGreaterThanOrEqualTo(0);
         assertThat(result.p99Ms()).isGreaterThanOrEqualTo(0);
+        assertThat(result.fingerprintSha256()).hasSize(64);
 
         InOrder inOrder = inOrder(accumulatedDailyBalanceUseCase);
 

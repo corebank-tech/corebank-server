@@ -46,6 +46,7 @@ public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner 
             p99Ms={}
             checksum={}
             zeroResultCount={}
+            fingerprintSha256={}
             """,
                 properties.accountIdStart(),
                 properties.accountCount(),
@@ -56,7 +57,8 @@ public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner 
                 p95MsForLog,
                 p99MsForLog,
                 checksumForLog,
-                result.zeroResultCount());
+                result.zeroResultCount(),
+                result.fingerprintSha256());
     }
 
     BaselineResult measure() {
@@ -65,6 +67,8 @@ public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner 
 
         long checksum = 0L;
         int zeroResultCount = 0;
+        AccumulatedBalanceFingerprint fingerprint = new AccumulatedBalanceFingerprint();
+
         long totalStart = System.nanoTime();
 
         for (int i = 0; i < properties.accountCount(); i++) {
@@ -82,6 +86,8 @@ public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner 
             }
 
             checksum = Math.addExact(checksum, accumulatedDailyBalance);
+
+            fingerprint.update(accountId, accumulatedDailyBalance);
         }
 
         long totalElapsedNanos = System.nanoTime() - totalStart;
@@ -95,7 +101,8 @@ public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner 
                 percentile(sorted, 0.95) / 1_000_000.0,
                 percentile(sorted, 0.99) / 1_000_000.0,
                 checksum,
-                zeroResultCount);
+                zeroResultCount,
+                fingerprint.hex());
     }
 
     private long percentile(long[] sorted, double percentile) {
@@ -104,5 +111,11 @@ public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner 
     }
 
     record BaselineResult(
-            double totalSeconds, double averageMs, double p95Ms, double p99Ms, long checksum, int zeroResultCount) {}
+            double totalSeconds,
+            double averageMs,
+            double p95Ms,
+            double p99Ms,
+            long checksum,
+            int zeroResultCount,
+            String fingerprintSha256) {}
 }
