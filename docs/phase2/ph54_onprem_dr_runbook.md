@@ -495,7 +495,7 @@ Replica 데이터: 9.7GB
 | VM·API 실행 환경 지원 | P5 |
 | 거래 정합성 협조 | P3·P4 |
 | 운영 전환 최종 승인 | 리드 및 합의된 승인자 |
-| DNS 변경 실행 | 권한 확인 후 담당자 지정 |
+| DNS 변경 실행 | P2 (변경 권한 및 실제 DNS 관리 주체 사전 확인) |
 
 실행 체크리스트:
 
@@ -510,31 +510,57 @@ Replica 데이터: 9.7GB
 
 ### 6-2. Gate B — 원본 쓰기 차단
 
-계획된 DR 전환에서는 먼저 AWS 계정계의 모든 쓰기 경로를 차단한다.
+계획된 DR 전환에서는 Replica 승격 전에 AWS RDS로 향하는 모든 쓰기 경로를 차단한다.
 
-차단 대상:
+차단 대상과 실행 방법은 다음과 같다.
 
-1. 외부 API의 신규 거래 요청
-2. 이미 처리 중인 트랜잭션
-3. COB 및 영업일 변경 배치
-4. 자동·예약이체 관련 스케줄러
-5. 감사 적재 및 기타 DB 쓰기 작업
-6. 관리자·유지보수 작업
-7. 다른 서비스에서 RDS로 직접 수행하는 쓰기
+| 쓰기 경로 | 차단 및 확인 방법 | 담당 |
+|---|---|---|
+| 외부 API 요청 | 신규 거래 요청 차단 및 WAS의 처리 중인 요청 종료 확인 | P2 총괄, AWS WAS 운영 담당 |
+| 계정계 내부 스케줄러 | WAS 실행 환경에서 스케줄러 중지 또는 WAS 안전 종료 | AWS WAS 운영 담당 |
+| COB·영업일 변경 배치 | 실행 중인 배치 종료 및 재실행 방지 확인 | 배치 담당자 |
+| 자동·예약이체 | 관련 스케줄러 중지 및 진행 중인 거래 확인 | 해당 도메인 담당자 |
+| 관리자·유지보수 작업 | 수동 SQL 및 관리자 작업 중단 확인 | P2 및 해당 작업 담당자 |
+| 기타 RDS 직접 쓰기 | 접속 주체 조사 후 모든 쓰기 경로 차단 | P2 |
 
-ALB에서 외부 요청을 차단하는 것만으로 모든 DB 쓰기가 차단되는 것은 아니다.
+각 항목의 실제 중지 명령과 실행 담당자는 리허설 승인 전에 확정한다. 미확정 항목이 있으면 Gate B를 진행하지 않는다.
 
-API 컨테이너 내부의 배치와 스케줄러는 계속 실행될 수 있기 때문이다.
+ALB에서 외부 요청을 차단하는 것만으로 모든 DB 쓰기가 차단되는 것은 아니다. WAS 내부 스케줄러나 직접 DB에 접속하는 작업이 계속 실행될 수 있기 때문이다.
+
+모든 쓰기 경로를 중단한 뒤 원본 RDS에서 다음 읽기 전용 SQL로 상태를 확인한다.
+
+```sql
+SELECT
+    trx_id,
+    trx_mysql_thread_id,
+    trx_started,
+    trx_state
+FROM information_schema.INNODB_TRX;
+
+SHOW FULL PROCESSLIST;
+
+SELECT
+    NOW(6) AS checked_at,
+    @@GLOBAL.gtid_executed AS source_gtid;
+```
+
+활성 트랜잭션과 접속 주체를 확인하고, GTID를 일정 간격으로 재조회하여 추가 커밋 발생 여부를 기록한다. 관찰 간격은 리허설 전에 정한다.
+
+단, 활성 트랜잭션이 조회되지 않거나 GTID가 증가하지 않는 것만으로 향후 쓰기가 발생하지 않는다고 보장할 수는 없다. 모든 쓰기 경로가 실제로 차단됐다는 담당자 확인이 필요하다.
 
 완료 조건:
 
-- [ ] 신규 거래가 차단됐다.
-- [ ] 진행 중인 거래가 종료 또는 안전하게 중단됐다.
-- [ ] 백그라운드 쓰기가 중지됐다.
-- [ ] 원본 DB에 새로운 쓰기가 발생하지 않는 상태를 확인했다.
-- [ ] 최종 원본 GTID를 기록했다.
+- [ ] 외부 신규 거래 요청이 차단됐다.
+- [ ] 처리 중인 거래가 정상 종료 또는 안전하게 중단됐다.
+- [ ] WAS 내부 스케줄러와 배치 실행이 중단됐다.
+- [ ] 관리자 및 다른 서비스의 직접 DB 쓰기가 차단됐다.
+- [ ] 활성 트랜잭션과 DB 접속 주체를 확인했다.
+- [ ] GTID 재조회 결과와 차단 상태를 기록했다.
+- [ ] 모든 쓰기 경로의 중지 담당자가 확인했다.
 
-이 시점을 `T_SOURCE_FROZEN`으로 기록한다.
+조건을 모두 충족한 시점을 `T_SOURCE_FROZEN`으로 기록한다.
+
+이후 Gate C에서 최종 원본 GTID를 확정한다. 쓰기 차단을 보장하지 못하면 Replica를 승격하지 않는다.
 
 ### 6-3. Gate C — 최종 GTID 동기화
 
@@ -567,9 +593,70 @@ Replica SQL 오류 = 0
 
 ### 6-4. Gate D — Replica 승격
 
-**다음 명령은 운영 Replica 상태를 변경한다. 실행 승인 전 사용 금지.**
+**이 절의 명령은 운영 Replica 상태를 변경한다. 실행 승인 전 사용 금지.**
 
-최종 GTID 동기화와 원본 쓰기 차단이 확인된 후 복제를 중지한다.
+Gate B에서 원본 쓰기 차단을 확인하고, Gate C에서 최종 원본 GTID가 모두 적용된 경우에만 승격을 진행한다.
+
+승격 전 확인:
+
+- [ ] 기존 AWS Primary의 모든 쓰기 경로가 차단됐다.
+- [ ] 최종 원본 GTID가 Replica에 모두 적용됐다.
+- [ ] Replica SQL 오류가 없다.
+- [ ] MySQL 복제 설정과 최종 GTID를 기록했다.
+- [ ] 재기동 후 복제 자동 시작을 차단하는 방법을 확정했다.
+- [ ] 재기동 후 쓰기 가능 상태를 유지하는 방법을 확정했다.
+- [ ] 필요한 MySQL 관리자 권한을 확인했다.
+- [ ] 영구 설정 로딩 및 컨테이너 시작 옵션을 확인했다.
+
+현재 Replica는 `read_only`와 `super_read_only`가 영구 설정으로 저장된 이력이 있으며, 컨테이너는 `--restart unless-stopped`로 실행되고 있다.
+
+따라서 `STOP REPLICA`와 `SET GLOBAL`만 수행하면 MySQL 재기동 후 기존 복제가 다시 시작되거나 쓰기 금지 상태로 돌아갈 수 있다.
+
+먼저 영구 설정 로딩 여부를 확인한다.
+
+```bash
+docker exec -i info-replica-mysql sh -c \
+  'MYSQL_PWD=$(cat /run/secrets/root_pw) exec mysql -uroot' <<'SQL'
+SELECT
+    @@GLOBAL.persisted_globals_load AS persisted_globals_load,
+    @@GLOBAL.skip_replica_start AS skip_replica_start,
+    @@GLOBAL.read_only AS read_only,
+    @@GLOBAL.super_read_only AS super_read_only;
+
+SELECT
+    VARIABLE_NAME,
+    VARIABLE_VALUE
+FROM performance_schema.persisted_variables
+WHERE VARIABLE_NAME IN (
+    'skip_replica_start',
+    'read_only',
+    'super_read_only'
+);
+SQL
+```
+
+`persisted_globals_load=ON`인지 확인하고, Docker 실행 옵션 및 MySQL 설정 파일에서 영구 설정이 재기동 시 적용되는지 확인한다.
+
+이후 재기동 시 원본 복제가 자동 시작되지 않도록 설정한다.
+
+```bash
+# 승인된 실제 DR 전환에서만 실행
+
+docker exec -i info-replica-mysql sh -c \
+  'MYSQL_PWD=$(cat /run/secrets/root_pw) exec mysql -uroot' <<'SQL'
+SET PERSIST_ONLY skip_replica_start = ON;
+
+SELECT
+    VARIABLE_NAME,
+    VARIABLE_VALUE
+FROM performance_schema.persisted_variables
+WHERE VARIABLE_NAME = 'skip_replica_start';
+SQL
+```
+
+`skip_replica_start`는 비동적 변수이므로 위 명령은 현재 실행 중인 복제 스레드를 중지하지 않는다. 다음 MySQL 시작부터 자동 복제 시작을 차단한다.
+
+설정이 정상 저장됐음을 확인한 뒤 복제를 중지한다.
 
 ```bash
 # 승인된 실제 DR 전환에서만 실행
@@ -581,49 +668,84 @@ SHOW REPLICA STATUS\G
 SQL
 ```
 
-복제 중지 결과를 확인한다.
+복제 중지 확인:
 
-확인 항목:
-
-- [ ] IO 스레드 중지
-- [ ] SQL 스레드 중지
-- [ ] 최종 원본 GTID 적용 확인
+- [ ] `Replica_IO_Running=No`
+- [ ] `Replica_SQL_Running=No`
+- [ ] 최종 원본 GTID 적용 완료
 - [ ] 복제 오류 확인
 - [ ] 최종 적용 GTID 기록
+- [ ] `skip_replica_start=ON` 영구 설정 저장 확인
 
-이후 쓰기 방지를 해제한다.
+이후 읽기 전용 상태를 해제하고 재기동 후에도 쓰기 가능 상태가 유지되도록 설정한다.
 
 ```bash
 # 승인된 실제 DR 전환에서만 실행
 
 docker exec -i info-replica-mysql sh -c \
   'MYSQL_PWD=$(cat /run/secrets/root_pw) exec mysql -uroot' <<'SQL'
-SET GLOBAL super_read_only = OFF;
-SET GLOBAL read_only = OFF;
+SET PERSIST super_read_only = OFF;
+SET PERSIST read_only = OFF;
 
 SELECT
     @@GLOBAL.read_only AS read_only,
     @@GLOBAL.super_read_only AS super_read_only,
     @@GLOBAL.gtid_executed AS executed_gtid;
+
+SELECT
+    VARIABLE_NAME,
+    VARIABLE_VALUE
+FROM performance_schema.persisted_variables
+WHERE VARIABLE_NAME IN (
+    'skip_replica_start',
+    'read_only',
+    'super_read_only'
+);
 SQL
 ```
 
 승격 후 기대 상태:
 
 ```text
+Replica_IO_Running = No
+Replica_SQL_Running = No
 read_only = 0
 super_read_only = 0
+
+영구 설정:
+skip_replica_start = ON
+read_only = OFF
+super_read_only = OFF
 ```
 
-이 시각을 `T_PROMOTED`로 기록한다.
+`SET PERSIST_ONLY`에는 `SYSTEM_VARIABLES_ADMIN` 및 `PERSIST_RO_VARIABLES_ADMIN` 권한이 필요하다. 설정 실패 또는 영구 설정 로딩 방식이 불확실하면 승격을 중단한다.
 
-**주의 사항**
+승격 후 MySQL 또는 컨테이너가 재기동되면, API를 외부에 공개하기 전에 다음 상태를 다시 확인한다.
 
-- 현재 Replica의 `read_only` 설정은 영구 설정으로 저장된 이력이 있다.
-- 위 명령은 실행 중인 인스턴스의 상태를 변경한다.
-- MySQL 또는 컨테이너 재시작 후 읽기 전용 상태가 어떻게 되는지는 별도로 확인해야 한다.
-- 재기동 정책은 P5의 VM 운영 구성과 함께 확정한다.
-- 복제 메타데이터와 GTID 이력은 복구 검증을 위해 보존한다.
+```bash
+docker exec -i info-replica-mysql sh -c \
+  'MYSQL_PWD=$(cat /run/secrets/root_pw) exec mysql -uroot' <<'SQL'
+SHOW REPLICA STATUS\G
+
+SELECT
+    @@GLOBAL.skip_replica_start AS skip_replica_start,
+    @@GLOBAL.read_only AS read_only,
+    @@GLOBAL.super_read_only AS super_read_only,
+    @@GLOBAL.gtid_executed AS executed_gtid;
+SQL
+```
+
+재기동 후에도 복제 IO/SQL 스레드가 중지돼 있어야 하며, `read_only=OFF`, `super_read_only=OFF` 상태여야 한다.
+
+실제 재기동 검증은 먼저 승인된 격리 리허설에서 수행한다. 운영 DR 전환 중 검증 목적으로 임의 재기동하지 않는다.
+
+주의 사항:
+
+- 복제 채널 설정과 GTID 이력을 보존한다.
+- `skip_replica_start`는 자동 시작 방지 설정이며, 관리자가 수동으로 `START REPLICA`를 실행하는 것까지 차단하지는 않는다.
+- 승격 후 원본 RDS의 복제를 다시 시작하지 않는다.
+- 영구 설정과 컨테이너 시작 옵션이 충돌하는 경우 승격을 보류한다.
+- 원본 AWS의 쓰기 차단 상태를 유지한다.
 
 다음 명령은 기본 승격 절차에서 실행하지 않는다.
 
@@ -634,7 +756,9 @@ super_read_only = 0
 -- RESET BINARY LOGS AND GTIDS;
 ```
 
-승격 후에도 API를 외부에 공개하기 전까지 원본 AWS의 쓰기 차단 상태를 유지한다.
+최종 적용 GTID와 쓰기 가능 상태를 기록하고, 모든 승격 조건을 충족한 시각을 `T_PROMOTED`로 기록한다.
+
+이후 Gate E에서 계정계 API의 실제 DB 연결 및 권한을 검증한다.
 
 ### 6-5. Gate E — VM 계정계 API 기동
 
@@ -646,7 +770,9 @@ P5로부터 다음 정보를 인계받는다.
 - [ ] Docker Compose 경로
 - [ ] 실행 및 종료 명령어
 - [ ] Spring Profile
+- [ ] Docker 네트워크 모드 및 네트워크 이름
 - [ ] DB 접속 호스트와 포트
+- [ ] DB·Flyway 계정 및 권한 구성
 - [ ] MySQL TLS 연결 방법
 - [ ] API 헬스체크 경로
 - [ ] 운영 비밀 및 OTP 키 주입 방식
@@ -659,51 +785,86 @@ P5로부터 다음 정보를 인계받는다.
 spring:
   datasource:
     url: jdbc:mysql://${DB_HOST}:3306/minicore?sslMode=REQUIRED&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  flyway:
+    user: ${FLYWAY_USER}
+    password: ${FLYWAY_PASSWORD}
 ```
 
-VM API에서 `DB_HOST`가 승격한 MySQL에 연결되는지 확인해야 한다.
+VM API에서 `DB_HOST`가 승격한 MySQL을 가리키는지 확인한다.
 
-특히 Docker 컨테이너 내부의 `localhost`는 일반적으로 해당 컨테이너 자신이다.
+특히 Docker 컨테이너 내부의 `localhost`는 일반적으로 해당 컨테이너 자신이다. 현재 Replica는 호스트 `127.0.0.1:3306`에 바인딩되어 있으므로, P5의 실제 Docker 네트워크 구성에 맞는 접속 경로를 사용해야 한다.
 
-현재 Replica가 호스트 `127.0.0.1:3306`에 바인딩되어 있으므로, API의 Docker 네트워크 구성에 맞는 실제 DB 접속 경로를 검증한다.
+DB 연결에 사용하는 계정은 다음과 같이 확인한다.
 
-API 기동 시 다음 요소도 확인한다.
+```sql
+-- 승인된 환경에서 읽기 전용 확인
+SELECT User, Host
+FROM mysql.user
+WHERE User IN ('<DB_USER>', '<FLYWAY_USER>');
 
-- Flyway 자동 실행 여부
-- JDBC Session 저장소
-- 자동 실행되는 스케줄러
-- OTP 및 개인정보 암호화 키
-- 감사 로그의 S3 의존성
-- HTTPS Secure Cookie
-- CSRF Cookie Domain
-- CORS 허용 도메인
+SHOW GRANTS FOR '<DB_USER>'@'<Host>';
+SHOW GRANTS FOR '<FLYWAY_USER>'@'<Host>';
+```
 
-**P5가 검증한 실행 명령어와 설정을 이 절에 추가한 뒤 실제 리허설을 진행한다.**
+`<DB_USER>`, `<FLYWAY_USER>`, `<Host>`는 #849에서 인계받은 실제 설정과 조회 결과를 기준으로 대체한다. 비밀번호와 비밀값은 문서나 로그에 기록하지 않는다.
 
-API 기동 완료 시각을 `T_API_HEALTHY`로 기록한다.
+계정과 권한이 존재하더라도 네트워크·인증·TLS 설정이 일치하지 않으면 API 연결이 실패할 수 있으므로, 실제 API 컨테이너의 접속 경로에서 연결을 검증한다.
+
+확인 항목:
+
+- [ ] API 컨테이너에서 승격한 VM MySQL에 접근할 수 있다.
+- [ ] 연결 대상이 AWS RDS가 아닌 VM MySQL임을 확인했다.
+- [ ] `DB_USER` 및 `FLYWAY_USER` 계정이 존재한다.
+- [ ] 계정별 Host 허용 범위와 필요한 권한을 확인했다.
+- [ ] API와 동일한 접속 경로·인증·TLS 조건에서 `SELECT 1`에 성공했다.
+- [ ] Flyway의 스키마 접근 및 마이그레이션 검증에 문제가 없다.
+- [ ] Flyway 자동 실행 여부를 확인했다.
+- [ ] JDBC Session 저장소에 정상 연결된다.
+- [ ] 자동 실행되는 스케줄러의 동작을 확인했다.
+- [ ] OTP 및 개인정보 암호화 키가 정상 주입됐다.
+- [ ] 감사 로그의 S3 의존성을 확인했다.
+- [ ] HTTPS Secure Cookie·CSRF Cookie Domain·CORS 설정을 확인했다.
+- [ ] API 헬스체크가 정상 응답한다.
+
+**P5가 검증한 실행 명령어와 설정을 이 절에 반영한 후 실제 리허설을 진행한다.**
+
+DB 연결·계정 권한·헬스체크 검증이 완료되지 않으면 Gate E를 완료하지 않는다.
+
+모든 필수 조건을 충족한 시각을 `T_API_HEALTHY`로 기록한다.
 
 ### 6-6. Gate F — DNS 및 접속 경로 전환
 
-API 기동과 내부 검증이 완료되면 외부 접속 경로 전환을 검토한다.
+Gate E의 API 기동과 DB 연결 검증이 완료되면 외부 접속 경로 전환을 검토한다.
 
 전환 전 확인:
 
-- [ ] 실제 DNS 관리 주체와 변경 권한을 확인했다.
-- [ ] 기존 `api.corebank.cloud` 레코드를 보관했다.
-- [ ] 기존 TTL을 확인했다.
+- [ ] P2의 DNS 변경 권한과 실제 DNS 관리 주체를 확인했다.
+- [ ] 기존 `api.corebank.cloud` 레코드와 TTL을 기록했다.
 - [ ] VM의 외부 접근 가능한 HTTPS 진입점을 확보했다.
-- [ ] TLS 인증서가 도메인과 일치한다.
+- [ ] TLS 종료 방식(API 직접 종료 또는 Reverse Proxy 종료)을 확인했다.
+- [ ] TLS 인증서가 실제 접속 도메인과 일치한다.
 - [ ] 방화벽 및 443 포트 접근이 가능하다.
 - [ ] FE API 주소와 CORS 설정이 일치한다.
+- [ ] Secure Cookie·CSRF·로그인 세션 동작을 검증했다.
 - [ ] 기존 AWS 경로의 쓰기가 차단되어 있다.
+
+Reverse Proxy에서 TLS를 종료하는 경우, `X-Forwarded-Proto=https` 등 필요한 헤더가 API에 전달되는지 확인한다.
+
+현재 `application-prod.yml`은 `server.forward-headers-strategy=native`를 사용하므로, VM의 프록시 구성이 기존 AWS ALB 기반 설정과 호환되는지 검증해야 한다.
+
+외부 클라이언트가 임의로 전달한 Forwarded Header를 신뢰하지 않도록 프록시 신뢰 경계도 확인한다.
+
+API가 TLS를 직접 종료하는 경우에는 Reverse Proxy의 Forwarded Header 검증을 해당 없음으로 기록한다.
 
 **VM의 사설 IP `192.168.0.211`을 외부 공개 DNS에 등록한다고 해서 외부 접속이 가능한 것은 아니다.**
 
-공인 접근 경로와 포트 전달 또는 프록시 구성이 먼저 준비되어야 한다.
+공인 접근 경로와 필요한 포트 전달 또는 프록시 구성이 먼저 준비되어야 한다.
 
-또한 CNAME 레코드의 대상에는 IP 주소가 아닌 DNS 이름을 사용해야 한다. 공인 IP를 직접 지정하는 구성이라면 적절한 A 레코드를 사용한다.
+CNAME 레코드의 대상에는 IP 주소가 아닌 DNS 이름을 사용한다. 공인 IP를 직접 지정하는 구성이라면 적절한 A 레코드를 사용한다.
 
-DNS 변경은 승인받은 담당자가 수행한다.
+P2는 승인된 전환 시점에 DNS를 변경하고 기존 레코드를 복구 가능하도록 보관한다.
 
 변경 후 확인:
 
@@ -716,22 +877,40 @@ dig api.corebank.cloud @1.1.1.1
 dig api.corebank.cloud @8.8.8.8
 ```
 
-DNS 결과뿐 아니라 실제 HTTPS 연결과 업무 API 정상 응답도 확인한다.
+DNS 응답이 변경됐더라도 실제 서비스가 정상이라고 판단하지 않는다.
+
+외부 HTTPS 접속, TLS 인증서, 로그인 세션 및 업무 API 응답을 확인한다.
 
 DNS TTL 및 캐시로 인해 기존 경로와 신규 경로가 일정 시간 공존할 수 있으므로, 이 기간에도 기존 AWS에 쓰기가 발생하지 않도록 유지한다.
+
+TLS 종료 방식이나 외부 HTTPS 접속 경로가 미검증 상태라면 DNS 전환을 진행하지 않는다.
 
 DNS 변경 시각을 `T_DNS_CHANGED`로 기록한다.
 
 ### 6-7. Gate G — 업무 정상 동작 확인
 
-다음 순서로 확인한다.
+외부 업무를 공개하기 전에 Gate D의 승격 상태와 Gate E의 DB 연결 검증 결과를 확인한다.
+
+사전 조건:
+
+- [ ] 원본 AWS RDS의 쓰기가 차단돼 있다.
+- [ ] Replica IO/SQL 스레드가 중지 상태다.
+- [ ] 승격 MySQL의 `read_only=OFF`, `super_read_only=OFF`를 확인했다.
+- [ ] 복제 자동 시작 방지 및 쓰기 가능 상태의 영구 설정을 확인했다.
+- [ ] API가 AWS RDS가 아닌 승격 MySQL에 연결된다.
+- [ ] API 계정의 인증·TLS·쓰기 권한을 검증했다.
+- [ ] 격리 리허설에서 MySQL 재기동 후 상태를 검증했다.
+
+승격 후 MySQL 또는 컨테이너 재기동이 발생했다면 복제 상태와 읽기 전용 상태를 다시 확인한다. 재기동 후 검증이 완료되지 않았다면 외부 업무를 공개하지 않는다.
+
+다음 순서로 업무를 확인한다.
 
 | 순서 | 검증 항목 | 정상 조건 |
 |---|---|---|
 | 1 | API Health | 정상 응답 |
 | 2 | 로그인 | 시험 고객 로그인 성공 |
 | 3 | 계좌 조회 | 잔액·상태 정상 |
-| 4 | 당행이체 | 성공 응답 및 거래 저장 |
+| 4 | 당행이체 | 승인된 시험 계좌에서 쓰기 거래 1건 성공 |
 | 5 | 이체 후 잔액 | 출금·입금 계좌 잔액 정합 |
 | 6 | 원장 조회 | 이체 원장과 거래번호 일치 |
 | 7 | GL 기표 | 분개 차변·대변 합계 일치 |
@@ -749,6 +928,10 @@ DNS 변경 시각을 `T_DNS_CHANGED`로 기록한다.
 - GL 기표 결과가 정상이다.
 - API 로그에 DB 연결·TLS 오류가 없다.
 - 신규 거래가 승격한 VM MySQL에 저장된다.
+- 실제 쓰기 거래를 통해 읽기 전용 해제 상태를 검증했다.
+- MySQL 재기동이 발생했다면 복제 스레드 중지와 쓰기 가능 상태를 재검증했다.
+
+필수 검증 중 하나라도 실패하면 외부 업무 공개를 보류하고 §9의 중단 조건에 따라 대응한다.
 
 모든 필수 업무가 정상 동작하는 시각을 `T_BUSINESS_OK`로 기록한다.
 
@@ -850,30 +1033,48 @@ Failback은 DR 환경으로 전환한 서비스를 원래 AWS 환경으로 복�
 
 ### 8-3. 상황 B — VM에서 신규 쓰기가 발생한 경우
 
-VM이 새로운 Primary로 거래를 처리한 상태다.
+**상태: Failback 설계 전용 / 실행 절차 미확정**
 
-이 경우 다음 절차가 필요하다.
+VM이 새로운 Primary로 거래를 처리한 경우, 기존 AWS RDS와 VM MySQL의 데이터가 서로 달라질 수 있다.
+
+현재 VM에서 발생한 변경분을 AWS RDS에 반영하는 구체적인 복구 방식은 검증되지 않았다. 따라서 이 절은 Failback 실행 명령이 아니라 복귀 전 확인해야 할 조건을 정의한다.
+
+복귀를 위해 다음 절차가 필요하다.
 
 1. VM의 신규 쓰기를 안전하게 중단한다.
-2. VM 최종 GTID를 기록한다.
-3. AWS RDS의 마지막 데이터 상태와 비교한다.
+2. VM 최종 GTID와 binary log 보존 상태를 확인한다.
+3. AWS RDS의 마지막 데이터 상태와 VM 변경분을 비교한다.
 4. VM에서 발생한 거래·원장·GL 변경분을 확인한다.
-5. 재동기화 전략을 결정한다.
-6. 독립 환경에서 복구 방법을 검증한다.
-7. AWS의 단일 쓰기 경로를 준비한다.
-8. API 및 DNS를 전환한다.
-9. 주요 금융 업무와 데이터 정합성을 재검증한다.
+5. RDS MySQL에서 지원되는 데이터 재동기화 방법과 필요한 권한을 검증한다.
+6. 백업·복원 및 실패 시 중단·롤백 절차를 확정한다.
+7. 독립 환경에서 복구 방법과 데이터 정합성을 검증한다.
+8. AWS DB에 최종 거래 데이터가 반영된 것을 확인한다.
+9. AWS와 VM 중 단일 Primary만 쓰기를 처리하도록 보장한다.
+10. 승인 후 API 및 DNS를 전환하고 주요 업무를 재검증한다.
 
 재동기화 방안은 다음 중 환경에 맞는 방법을 검토한다.
 
 | 방법 | 설명 | 주의사항 |
 |---|---|---|
 | AWS DB 재구축 | VM 최종 데이터를 기준으로 AWS DB를 재구축 | 백업·복원 시간과 접근 권한 확인 |
-| 역방향 복제 | VM 변경분을 AWS에 복제 | RDS 지원 방식·GTID·충돌 검증 필요 |
+| 역방향 복제 | VM 변경분을 AWS에 복제 | RDS 지원 방식·GTID·binlog·충돌 검증 필요 |
 
-실제 방법은 RDS MySQL의 관리형 제약과 사용할 수 있는 복제 권한을 검증한 후 결정한다.
+실제 방법은 RDS MySQL의 관리형 제약, 복제 권한, 데이터 보존 및 복구 가능성을 검증한 후 결정한다.
 
-**검증되지 않은 역방향 복제 명령은 실행하지 않는다.**
+다음 조건 중 하나라도 충족하지 못하면 Failback을 진행하지 않는다.
+
+- [ ] VM의 최종 거래 데이터와 GTID를 확보했다.
+- [ ] 필요한 binary log와 백업을 보존했다.
+- [ ] AWS DB 재동기화 방법을 확정했다.
+- [ ] 독립 환경에서 복구 방법을 검증했다.
+- [ ] 거래·원장·GL 정합성이 확인됐다.
+- [ ] 장애 시 중단·롤백 방법을 준비했다.
+- [ ] AWS와 VM의 동시 쓰기가 차단돼 있다.
+- [ ] 복귀 승인을 받았다.
+
+**데이터 재동기화 및 정합성 검증이 끝나기 전에는 AWS로 DNS만 되돌리지 않는다.**
+
+검증되지 않은 역방향 복제 또는 DB 재구축 명령은 실행하지 않으며, 실제 Failback 미실시 여부는 리허설 결과에 명시한다.
 
 ### 8-4. Failback 완료 조건
 
@@ -906,16 +1107,24 @@ VM이 새로운 Primary로 거래를 처리한 상태다.
 | 문제 상황 | 조치 |
 |---|---|
 | 원본 RDS 쓰기 차단 실패 | 승격·DNS 전환 중단 |
-| Replica GTID 미적용 | 승격 중단 |
+| 활성 거래·배치·스케줄러 미중단 | Gate B 완료 보류 |
+| 원본 최종 GTID 미확정 또는 미적용 | 승격 중단 |
 | Replica IO/SQL 오류 | 원인 분석 후 재판정 |
+| 복제 자동 시작 방지 설정 실패 | 승격 중단 |
+| 영구 설정 로딩 또는 MySQL 시작 옵션 미확인 | 승격 보류 |
+| 승격 후 MySQL 재기동 및 상태 미검증 | 외부 업무 공개 중단, 복제·쓰기 가능 상태 재확인 |
+| 재기동 후 원본 복제 채널 자동 시작 | 신규 쓰기 중단, 이중 Primary 위험 확인 |
+| 승격 MySQL `read_only` 또는 `super_read_only` 활성화 | 외부 업무 공개 중단, 설정 및 재기동 원인 확인 |
 | VM 디스크 공간 부족 | 격리 시험 또는 전환 보류 |
 | VM 계정계 API 실행 실패 | 외부 트래픽 전환 중단 |
-| API의 DB 연결 실패 | DB 호스트·TLS·권한 확인 |
-| HTTPS 인증서 오류 | DNS 전환 중단 |
-| FE·CORS·CSRF 오류 | 외부 업무 공개 보류 |
+| API DB 네트워크·인증·TLS 연결 실패 | Gate E 완료 보류 |
+| DB·Flyway 계정 또는 권한 검증 실패 | API 기동 및 외부 공개 보류 |
+| HTTPS 인증서 또는 TLS 종료 방식 미검증 | DNS 전환 중단 |
+| FE·CORS·CSRF·Forwarded Header 오류 | 외부 업무 공개 보류 |
+| 업무 쓰기 거래 실패 | 서비스 정상화 판정 보류 |
 | 데이터 정합성 오류 | 신규 쓰기 중단 및 사고 원인 분석 |
 | AWS·VM 동시 쓰기 위험 | 모든 신규 쓰기 중단, 단일 Primary 확보 |
-| 복귀용 데이터 재동기화 방법 미확정 | Failback 보류 |
+| Failback 재동기화 방법 미확정 또는 미검증 | AWS 복귀 및 DNS 원복 금지 |
 
 데이터 정합성 문제가 발생한 상태에서는 서비스의 빠른 재개보다 거래 데이터 보존과 원인 분석을 우선한다.
 
@@ -1036,7 +1245,7 @@ VM이 새로운 Primary로 거래를 처리한 상태다.
 - [ ] 격리 리허설 환경 및 실행 시점 확정
 - [ ] 원본 쓰기 차단 방법 확정
 - [ ] P5 API 기동 절차 인계
-- [ ] DNS 변경 권한과 경로 확인
+- [ ] DNS 변경 권한·기존 레코드·HTTPS 진입점 확인
 - [ ] 승인된 리허설 실행
 - [ ] RTO/RPO 측정
 - [ ] Failback 검증
