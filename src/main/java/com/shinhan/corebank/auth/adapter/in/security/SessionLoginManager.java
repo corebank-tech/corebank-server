@@ -17,7 +17,6 @@ import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.web.server.autoconfigure.ServerProperties;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.context.SecurityContext;
@@ -55,8 +54,12 @@ public class SessionLoginManager {
         AuthenticatedCustomer principal =
                 new AuthenticatedCustomer(loginResult.customerId(), loginResult.userId(), loginResult.userName());
 
-        Authentication authentication =
+        // 버전을 권한보다 먼저 읽는다. 그 사이에 회수가 끼면 버전이 낡아 이 세션은 다음 요청에서 거부된다.
+        final AdminPermissionStamp stamp = stampOf(loginResult);
+
+        UsernamePasswordAuthenticationToken authentication =
                 UsernamePasswordAuthenticationToken.authenticated(principal, null, authoritiesOf(loginResult));
+        authentication.setDetails(stamp);
 
         // 기존 세션이 있으면 인증정보 저장 전에 세션 ID를 변경
         sessionAuthenticationStrategy.onAuthentication(authentication, request, response);
@@ -92,9 +95,17 @@ public class SessionLoginManager {
         return serverProperties.getServlet().getSession().getTimeout();
     }
 
+    private AdminPermissionStamp stampOf(LoginResult loginResult) {
+        if (loginResult.role() != CustomerRole.ADMIN) {
+            return null;
+        }
+
+        return new AdminPermissionStamp(adminPermissionFacade.findPermissionVersion(loginResult.customerId()));
+    }
+
     /**
      * 관리자 권한을 로그인 때 한 번 읽어 세션 authority 로 싣는다. 인가는 SecurityConfig 의
-     * {@code hasAuthority} 가 이것만 보므로 요청마다 DB 를 읽지 않는다.
+     * {@code hasAuthority} 가 이것만 본다. 회수된 권한은 {@code AdminPermissionVersionFilter} 가 요청마다 버전으로 걸러낸다.
      *
      * <p>권한 회수 후 기존 세션을 즉시 끊으려면 JDBC 세션 무효화 계약을 사용한다.
      */

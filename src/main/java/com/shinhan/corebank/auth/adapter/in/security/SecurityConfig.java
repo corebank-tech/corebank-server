@@ -4,6 +4,7 @@ import static org.springframework.security.web.servlet.util.matcher.PathPatternR
 
 import com.shinhan.corebank.common.filter.CorrelationIdFilter;
 import com.shinhan.corebank.customer.api.AdminPermission;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -139,9 +140,13 @@ public class SecurityConfig {
             SessionLogoutSuccessHandler logoutSuccessHandler,
             CorsConfigurationSource corsConfigurationSource,
             CookieCsrfTokenRepository csrfTokenRepository,
-            CsrfTokenRequestAttributeHandler csrfTokenRequestHandler)
+            CsrfTokenRequestAttributeHandler csrfTokenRequestHandler,
+            AdminPermissionFacade adminPermissionFacade)
             throws Exception {
         http.addFilterBefore(new CorrelationIdFilter(), SecurityContextHolderFilter.class)
+                // 세션 인증이 복원된 직후에 낡은 관리자 권한을 걸러 이후 인가가 인증 없는 요청으로 본다.
+                .addFilterAfter(
+                        new AdminPermissionVersionFilter(adminPermissionFacade), SecurityContextHolderFilter.class)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 // 기본 CSRF 보호를 유지하고 로그인과 회원가입, ALB 헬스체크만 검사에서 제외
                 .csrf(csrf -> {
