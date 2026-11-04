@@ -128,7 +128,7 @@ class AdminPermissionGrantRevokeIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN0002"));
 
-        String key = UUID.randomUUID().toString();
+        final String key = UUID.randomUUID().toString();
         mockMvc.perform(grant(TARGET_ADMIN_ID, "GL_READ", key).with(grantor()).with(csrf()))
                 .andExpect(status().isOk());
         mockMvc.perform(grant(TARGET_ADMIN_ID, "GL_WRITE", key).with(grantor()).with(csrf()))
@@ -175,8 +175,8 @@ class AdminPermissionGrantRevokeIntegrationTest extends IntegrationTestSupport {
     @DisplayName("권한을 회수하면 행이 지워지고 대상 관리자의 로그인 세션도 함께 사라진다")
     void revokeDeletesPermissionAndSessions() throws Exception {
         AdminAccountFixture.grantAdmin(entityManager, TARGET_ADMIN_ID, AdminPermission.GL_READ);
-        String targetSessionId = insertSession(TARGET_ADMIN_ID);
-        String grantorSessionId = insertSession(GRANTOR_ID);
+        final String targetSessionId = insertSession(TARGET_ADMIN_ID);
+        final String grantorSessionId = insertSession(GRANTOR_ID);
 
         mockMvc.perform(delete("/admin/customers/{id}/permissions/{permission}", TARGET_ADMIN_ID, "GL_READ")
                         .header("Idempotency-Key", UUID.randomUUID().toString())
@@ -198,7 +198,7 @@ class AdminPermissionGrantRevokeIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("가진 적 없는 권한을 회수하면 200이고 세션은 그대로다")
     void revokeOfAbsentPermissionKeepsSessions() throws Exception {
-        String targetSessionId = insertSession(TARGET_ADMIN_ID);
+        final String targetSessionId = insertSession(TARGET_ADMIN_ID);
 
         mockMvc.perform(delete("/admin/customers/{id}/permissions/{permission}", TARGET_ADMIN_ID, "GL_READ")
                         .header("Idempotency-Key", UUID.randomUUID().toString())
@@ -215,14 +215,14 @@ class AdminPermissionGrantRevokeIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("회수 전에 권한을 읽어 간 세션은 회수 뒤 다음 요청에서 401로 거부된다")
     void rejectsSessionSavedAfterRevoke() throws Exception {
-        AdminPermissionCommand command = new AdminPermissionCommand(GRANTOR_ID, TARGET_ADMIN_ID, "127.0.0.1");
+        final AdminPermissionCommand command = new AdminPermissionCommand(GRANTOR_ID, TARGET_ADMIN_ID, "127.0.0.1");
         adminPermissionCommandUseCase.grantPermission(command, AdminPermission.CUSTOMER_READ);
-        UsernamePasswordAuthenticationToken lateLogin = UsernamePasswordAuthenticationToken.authenticated(
+        final UsernamePasswordAuthenticationToken lateLogin = UsernamePasswordAuthenticationToken.authenticated(
                 new AuthenticatedCustomer(TARGET_ADMIN_ID, "adm" + TARGET_ADMIN_ID, "관리자"),
                 null,
                 AuthorityUtils.createAuthorityList("ROLE_ADMIN", AdminPermission.CUSTOMER_READ.name()));
         lateLogin.setDetails(new AdminPermissionStamp(permissionVersionOf(TARGET_ADMIN_ID)));
-        RequestPostProcessor lateSession = authentication(lateLogin);
+        final RequestPostProcessor lateSession = authentication(lateLogin);
 
         adminPermissionCommandUseCase.revokePermission(command, AdminPermission.CUSTOMER_READ);
 
@@ -290,7 +290,7 @@ class AdminPermissionGrantRevokeIntegrationTest extends IntegrationTestSupport {
     }
 
     private String insertSession(long customerId) {
-        String sessionId = UUID.randomUUID().toString();
+        final String sessionId = UUID.randomUUID().toString();
         entityManager
                 .createNativeQuery("INSERT INTO SPRING_SESSION (PRIMARY_ID, SESSION_ID, CREATION_TIME, "
                         + "LAST_ACCESS_TIME, MAX_INACTIVE_INTERVAL, EXPIRY_TIME, PRINCIPAL_NAME) "

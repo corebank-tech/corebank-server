@@ -64,7 +64,7 @@ class AdminPermissionCommandServiceTest {
 
     @BeforeEach
     void setUp() {
-        Clock clock = Clock.fixed(Instant.parse("2026-09-21T01:00:00Z"), ZoneId.of("Asia/Seoul"));
+        final Clock clock = Clock.fixed(Instant.parse("2026-09-21T01:00:00Z"), ZoneId.of("Asia/Seoul"));
         service = new AdminPermissionCommandService(
                 customerPersistencePort, adminPermissionPort, customerSessionInvalidator, auditLogService, clock);
     }
@@ -77,7 +77,7 @@ class AdminPermissionCommandServiceTest {
                 .willReturn(true);
         given(adminPermissionPort.findPermissions(TARGET_ID)).willReturn(List.of(AdminPermission.GL_READ));
 
-        List<AdminPermission> result = service.grantPermission(command(TARGET_ID), AdminPermission.GL_READ);
+        final List<AdminPermission> result = service.grantPermission(command(TARGET_ID), AdminPermission.GL_READ);
 
         assertThat(result).containsExactly(AdminPermission.GL_READ);
         verify(adminPermissionPort).grant(TARGET_ID, AdminPermission.GL_READ, LocalDateTime.of(2026, 9, 21, 10, 0));
@@ -96,7 +96,7 @@ class AdminPermissionCommandServiceTest {
                 .willReturn(false);
         given(adminPermissionPort.findPermissions(TARGET_ID)).willReturn(List.of(AdminPermission.GL_READ));
 
-        List<AdminPermission> result = service.grantPermission(command(TARGET_ID), AdminPermission.GL_READ);
+        final List<AdminPermission> result = service.grantPermission(command(TARGET_ID), AdminPermission.GL_READ);
 
         assertThat(result).containsExactly(AdminPermission.GL_READ);
         Map<String, Object> detail = captureDetail(AuditEventType.ADMIN_PERMISSION_GRANT, true);
@@ -168,7 +168,7 @@ class AdminPermissionCommandServiceTest {
         given(adminPermissionPort.revoke(TARGET_ID, AdminPermission.GL_READ)).willReturn(true);
         given(adminPermissionPort.findPermissions(TARGET_ID)).willReturn(List.of());
 
-        List<AdminPermission> result = service.revokePermission(command(TARGET_ID), AdminPermission.GL_READ);
+        final List<AdminPermission> result = service.revokePermission(command(TARGET_ID), AdminPermission.GL_READ);
 
         assertThat(result).isEmpty();
         verify(customerSessionInvalidator).invalidateAll(TARGET_ID);
@@ -218,7 +218,7 @@ class AdminPermissionCommandServiceTest {
 
     // 대상이 관리자인 경우. role 만 다르고 나머지는 일반 고객 픽스처와 같다.
     private Customer adminCustomer() {
-        LocalDateTime joinedAt = LocalDateTime.of(2026, 1, 1, 9, 0);
+        final LocalDateTime joinedAt = LocalDateTime.of(2026, 1, 1, 9, 0);
         return Customer.restore(
                 TARGET_ID,
                 "adm449peer",
@@ -242,7 +242,7 @@ class AdminPermissionCommandServiceTest {
     }
 
     private Customer customer(int loginFailureCount, boolean accountLocked) {
-        LocalDateTime joinedAt = LocalDateTime.of(2026, 1, 1, 9, 0);
+        final LocalDateTime joinedAt = LocalDateTime.of(2026, 1, 1, 9, 0);
         return Customer.restore(
                 TARGET_ID,
                 "adm449user",

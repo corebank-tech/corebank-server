@@ -20,7 +20,7 @@ class AdminPermissionCommandValidationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("컨트롤러를 거치지 않아도 권한이 null이면 거부한다")
     void rejectsNullPermission() {
-        AdminPermissionCommand command = new AdminPermissionCommand(1L, 2L, "127.0.0.1");
+        final AdminPermissionCommand command = new AdminPermissionCommand(1L, 2L, "127.0.0.1");
 
         assertThatThrownBy(() -> useCase.grantPermission(command, null))
                 .isInstanceOf(ConstraintViolationException.class);

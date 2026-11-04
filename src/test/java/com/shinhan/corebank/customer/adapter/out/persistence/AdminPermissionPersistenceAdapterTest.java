@@ -44,14 +44,14 @@ class AdminPermissionPersistenceAdapterTest {
     @Test
     @DisplayName("없던 권한을 부여하면 행을 저장하고 true를 돌려준다")
     void grantSavesNewPermission() {
-        LocalDateTime grantedAt = LocalDateTime.of(2026, 10, 29, 10, 0);
+        final LocalDateTime grantedAt = LocalDateTime.of(2026, 10, 29, 10, 0);
         given(adminPermissionJpaRepository.existsByCustomerIdAndPermission(1L, AdminPermission.GL_READ))
                 .willReturn(false);
 
         boolean granted = adapter.grant(1L, AdminPermission.GL_READ, grantedAt);
 
         assertThat(granted).isTrue();
-        ArgumentCaptor<AdminPermissionJpaEntity> saved = ArgumentCaptor.forClass(AdminPermissionJpaEntity.class);
+        final ArgumentCaptor<AdminPermissionJpaEntity> saved = ArgumentCaptor.forClass(AdminPermissionJpaEntity.class);
         verify(adminPermissionJpaRepository).save(saved.capture());
         assertThat(saved.getValue().getCustomerId()).isEqualTo(1L);
         assertThat(saved.getValue().getPermission()).isEqualTo(AdminPermission.GL_READ);

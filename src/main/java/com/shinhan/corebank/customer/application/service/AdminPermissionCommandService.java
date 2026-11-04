@@ -46,7 +46,7 @@ public class AdminPermissionCommandService implements AdminPermissionCommandUseC
         rejectSelfTarget(command, AuditEventType.ADMIN_PERMISSION_GRANT);
 
         // 같은 대상의 부여·회수를 대상 행 락으로 직렬화하고, 중복은 PK 가 마지막에 막는다.
-        Customer customer = findTargetForUpdate(command, AuditEventType.ADMIN_PERMISSION_GRANT);
+        final Customer customer = findTargetForUpdate(command, AuditEventType.ADMIN_PERMISSION_GRANT);
         rejectNonAdminTarget(customer, command, AuditEventType.ADMIN_PERMISSION_GRANT);
 
         boolean granted = adminPermissionPort.grant(customer.getCustomerId(), permission, LocalDateTime.now(clock));
@@ -60,7 +60,7 @@ public class AdminPermissionCommandService implements AdminPermissionCommandUseC
     public List<AdminPermission> revokePermission(AdminPermissionCommand command, AdminPermission permission) {
         rejectSelfTarget(command, AuditEventType.ADMIN_PERMISSION_REVOKE);
 
-        Customer customer = findTargetForUpdate(command, AuditEventType.ADMIN_PERMISSION_REVOKE);
+        final Customer customer = findTargetForUpdate(command, AuditEventType.ADMIN_PERMISSION_REVOKE);
         rejectNonAdminTarget(customer, command, AuditEventType.ADMIN_PERMISSION_REVOKE);
 
         boolean revoked = adminPermissionPort.revoke(customer.getCustomerId(), permission);

@@ -27,7 +27,7 @@ class AdminPermissionVersionFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        final Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
         if (hasOutdatedPermissions(authentication)) {
             discardAuthentication(request);
@@ -50,7 +50,7 @@ class AdminPermissionVersionFilter extends OncePerRequestFilter {
     private void discardAuthentication(HttpServletRequest request) {
         SecurityContextHolder.clearContext();
 
-        HttpSession session = request.getSession(false);
+        final HttpSession session = request.getSession(false);
 
         if (session != null) {
             session.invalidate();

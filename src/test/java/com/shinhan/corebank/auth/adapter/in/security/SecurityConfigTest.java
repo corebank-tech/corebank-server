@@ -394,7 +394,7 @@ class SecurityConfigTest {
 
     private UsernamePasswordAuthenticationToken adminWithVersion(
             Long customerId, long version, AdminPermission... permissions) {
-        UsernamePasswordAuthenticationToken authentication = admin(customerId, permissions);
+        final UsernamePasswordAuthenticationToken authentication = admin(customerId, permissions);
         authentication.setDetails(new AdminPermissionStamp(version));
         return authentication;
     }

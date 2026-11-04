@@ -55,7 +55,7 @@ public class SessionLoginManager {
                 new AuthenticatedCustomer(loginResult.customerId(), loginResult.userId(), loginResult.userName());
 
         // 버전을 권한보다 먼저 읽는다. 그 사이에 회수가 끼면 버전이 낡아 이 세션은 다음 요청에서 거부된다.
-        AdminPermissionStamp stamp = stampOf(loginResult);
+        final AdminPermissionStamp stamp = stampOf(loginResult);
 
         UsernamePasswordAuthenticationToken authentication =
                 UsernamePasswordAuthenticationToken.authenticated(principal, null, authoritiesOf(loginResult));

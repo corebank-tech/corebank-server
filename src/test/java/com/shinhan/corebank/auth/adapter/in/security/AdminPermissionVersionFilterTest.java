@@ -41,7 +41,7 @@ class AdminPermissionVersionFilterTest {
         signIn(new AdminPermissionStamp(0L));
         given(adminPermissionFacade.findPermissionVersion(ADMIN_ID)).willReturn(1L);
 
-        MockHttpServletResponse response = new MockHttpServletResponse();
+        final MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, filterChain);
 
@@ -82,7 +82,7 @@ class AdminPermissionVersionFilterTest {
     }
 
     private void signIn(AdminPermissionStamp stamp) {
-        UsernamePasswordAuthenticationToken authentication = UsernamePasswordAuthenticationToken.authenticated(
+        final UsernamePasswordAuthenticationToken authentication = UsernamePasswordAuthenticationToken.authenticated(
                 new AuthenticatedCustomer(ADMIN_ID, "admin7", "관리자"),
                 null,
                 AuthorityUtils.createAuthorityList("ROLE_ADMIN"));
