@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202611031100__create_account_payment_stop.sql
+-- V202611041500__create_account_payment_stop.sql
 -- 대상 테이블: account_payment_stop (신규 · P3)
 --
 -- 이의제기 AI 심사 지원(D-36)의 계좌 지급정지 계약(account.api)이 쓰는 사건별 지급정지 기록이다.
