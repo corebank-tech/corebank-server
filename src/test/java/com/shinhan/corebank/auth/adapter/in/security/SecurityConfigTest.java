@@ -334,6 +334,42 @@ class SecurityConfigTest {
     }
 
     @Test
+    @DisplayName("이의제기 조회는 지급정지 조회 권한으로 통과한다")
+    void permitsObjectionReadWithPaymentStopRead() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/objections/test")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.PAYMENT_STOP_READ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("objection"));
+    }
+
+    @Test
+    @DisplayName("지급정지 조회 권한만 있으면 이의제기 접수와 판정 요청에서 403 CMN0102를 반환한다")
+    void rejectsObjectionWriteWithReadOnly() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/objections/test")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.PAYMENT_STOP_READ)))
+                        .with(csrf()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CMN0102"));
+    }
+
+    @Test
+    @DisplayName("지급정지 변경 권한이 있으면 이의제기 변경 요청이 통과하고, 다른 권한으로는 조회도 막힌다")
+    void permitsObjectionWriteWithPaymentStopWrite() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/objections/test")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.PAYMENT_STOP_WRITE)))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("objection-write"));
+        mockMvc.perform(get("/api/v1/admin/objections/test")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.CUSTOMER_READ))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @DisplayName("권한 매핑이 없는 관리자 경로는 권한을 가졌어도 403이다")
     void rejectsUnmappedAdminPath() throws Exception {
         mockMvc.perform(get("/api/v1/admin/unmapped/test")

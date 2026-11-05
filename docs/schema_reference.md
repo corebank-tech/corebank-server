@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 43개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 451개 컬럼
+**대상**: 48개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 494개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -78,6 +78,11 @@
 | 50 | `transfer_hold` | 이체 보류 | P4 | 20 |
 | 51 | `delayed_transfer_setting` | 고객별 지연이체 설정 | P4 | 6 |
 | 52 | `account_payment_stop` | 계좌 사건별 지급정지 기록 | P3 | 10 |
+| 53 | `payment_stop_case` | 지급정지 사건 | P3 | 8 |
+| 54 | `case_disputed_transfer` | 지급정지 사건의 다툼 거래 | P3 | 5 |
+| 55 | `objection` | 지급정지 이의제기 | P3 | 12 |
+| 56 | `objection_decision` | 이의제기 판정 | P3 | 9 |
+| 57 | `gate_evaluation` | 해제 게이트 계산 기록 | P3 | 9 |
 
 ---
 
@@ -505,6 +510,99 @@ COB의 `ACTIVE → MATURED` 전이, 고객 요청 만기해지의 `MATURED → C
 | CHECK | `ck_aps_status_before` | `status_before IN ('ACTIVE', 'SUSPENDED')` |
 | CHECK | `ck_aps_amount` | `requested_amount >= 0 AND applied_amount >= 0 AND applied_amount <= requested_amount` |
 | CHECK | `ck_aps_released` | 유효하면 `released_at IS NULL`, 해제됐으면 `released_at IS NOT NULL` |
+
+---
+
+## `payment_stop_case` · `case_disputed_transfer` · `objection` · `objection_decision` · `gate_evaluation`
+
+> 지급정지 사건과 이의제기 심사 (D-36, PA-04)
+
+`paymentstop` 도메인의 사건과 심사 기록이다. 계좌 상태와 보류액의 정본은 `account_payment_stop`이고 이 표들은 `account.api`로만 계좌를 바꾼다. `account`에는 FK를 걸지 않는다.
+판정 확정은 해제 게이트를 계좌 락 밖에서 계산한 뒤, `objection` 행을 잠그고 판정, 계좌 반영, 게이트 기록, 감사를 한 트랜잭션에 남긴다.
+
+**`payment_stop_case`** 지급정지 사건
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `case_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 사건 ID. `account_payment_stop.case_id`가 이 값이다 |
+| `account_id` | `BIGINT` | INDEX | X | | 지급정지 계좌 |
+| `sender_account_id` | `BIGINT` | | O | | 다툼 거래 송금인의 당행 계좌. 타행이거나 송금인이 여럿이면 NULL(관계 인정 불가) |
+| `objection_deadline` | `DATE` | | X | | 이의제기 신청 기한. 담당자가 등록 때 넣는다 |
+| `status` | `VARCHAR(12)` | | X | | `STOPPED` 전부 지급정지 / `PARTIAL` 일부 지급정지 / `RELEASED` 해제 |
+| `registered_by` | `BIGINT` | | X | | 등록한 관리자 `customer_id` |
+| `created_at` | `DATETIME(6)` | | X | | 생성 시각 |
+| `updated_at` | `DATETIME(6)` | | X | | 수정 시각 |
+
+**`case_disputed_transfer`** 사건의 다툼 거래. 등록 때 그 계좌의 최근 180일 성공 입금인지 확인하고 원장 값을 남긴다
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `disputed_transfer_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 식별자 |
+| `case_id` | `BIGINT` | FK | X | | `payment_stop_case.case_id` |
+| `transaction_number` | `CHAR(20)` | **UK** | X | | 다툼 입금 거래번호. 한 거래는 한 사건에만 |
+| `amount` | `BIGINT` | | X | | 등록 시점 원장 금액 |
+| `occurred_at` | `DATETIME(6)` | | X | | 등록 시점 원장 시각 |
+
+**`objection`** 이의제기. 사건당 1건
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `objection_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 이의제기 ID |
+| `case_id` | `BIGINT` | **UK**, FK | X | | `payment_stop_case.case_id` |
+| `clause` | `TINYINT` | | X | | 사유 조항(법 제7조제1항 1~3호). 해제 범위를 정한다 |
+| `statement` | `TEXT` | | X | | 명의인 소명 원문. 상세 조회는 조회 사유와 감사(`OBJECTION_DETAIL_VIEW`)를 남긴다 |
+| `simplified_requested` | `BOOLEAN` | | X | | 간소화(일부 지급정지) 절차 신청 |
+| `id_copy_confirmed` | `BOOLEAN` | | X | | 신분증 사본 확인(시행령 제7조). 확인 없이 접수하지 않는다 |
+| `litigation_pending` | `BOOLEAN` | | X | | 명의인과 피해자 사이 소송 계속. 참이면 수용과 일부 지급정지를 닫는다 |
+| `status` | `VARCHAR(12)` | | X | | `RECEIVED` 접수 / `DECIDED` 판정 확정 |
+| `received_by` | `BIGINT` | | X | | 접수한 관리자 `customer_id` |
+| `received_at` | `DATETIME(6)` | | X | | 접수 시각. 신청 기한과 비교한다 |
+| `created_at` | `DATETIME(6)` | | X | | 생성 시각 |
+| `updated_at` | `DATETIME(6)` | | X | | 수정 시각 |
+
+**`objection_decision`** 확정된 판정. 이의제기당 1건
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `decision_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 식별자 |
+| `objection_id` | `BIGINT` | **UK**, FK | X | | `objection.objection_id` |
+| `result` | `VARCHAR(10)` | | X | | `ACCEPTED` 수용 / `PARTIAL` 일부 지급정지 / `REJECTED` 불수용 |
+| `reason` | `VARCHAR(500)` | | X | | 판정 사유 |
+| `early_release_basis` | `VARCHAR(500)` | | O | | 조기 해제 근거. 수용과 일부 지급정지는 필수(법 제8조제2항제2호 단서) |
+| `requested_hold_amount` | `BIGINT` | | O | | 일부 지급정지 요청 보류액(다툼 입금액 합). `PARTIAL`만 |
+| `applied_hold_amount` | `BIGINT` | | O | | 실제로 묶은 보류액. `PARTIAL`만 |
+| `decided_by` | `BIGINT` | | X | | 확정한 관리자 `customer_id`. 2인 승인은 PA-10 |
+| `decided_at` | `DATETIME(6)` | | X | | 확정 시각 |
+
+**`gate_evaluation`** 해제 게이트 계산 기록. 같은 판정을 재현하려고 규칙 버전과 설정값을 함께 남긴다(D10)
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `gate_evaluation_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 식별자 |
+| `objection_id` | `BIGINT` | INDEX, FK | X | | `objection.objection_id` |
+| `purpose` | `VARCHAR(12)` | | X | | `DECISION` 판정 확정 직전 / `ANALYSIS` Agent 분석 시점(PA-05) |
+| `branch` | `VARCHAR(16)` | | X | | `FRAUD_PATTERN` / `NORMAL_ACCEPT` / `NORMAL_PARTIAL` / `UNDETERMINED` |
+| `simplified_excluded` | `BOOLEAN` | | X | | 간소화 신청이었지만 지급정지 이력으로 일반 심사가 됐는지 |
+| `rules_version` | `VARCHAR(20)` | | X | | 게이트 규칙 버전 |
+| `settings` | `JSON` | | X | | 계산에 쓴 설정값(`app.payment-stop.gate`) |
+| `rule_results` | `JSON` | | X | | 규칙별 성립 여부, 근거 구분, 근거 거래번호, 한 줄 설명 |
+| `evaluated_at` | `DATETIME(6)` | | X | | 계산 시각 |
+
+**인덱스와 제약**
+
+| 테이블 | 종류 | 이름 | 컬럼·조건 |
+| --- | --- | --- | --- |
+| `payment_stop_case` | INDEX | `ix_payment_stop_case_account` | `account_id` |
+| `payment_stop_case` | CHECK | `ck_payment_stop_case_status` | `status IN ('STOPPED', 'PARTIAL', 'RELEASED')` |
+| `case_disputed_transfer` | UNIQUE | `uk_case_disputed_transfer_txno` | `transaction_number` |
+| `case_disputed_transfer` | CHECK | `ck_case_disputed_transfer_amount` | `amount > 0` |
+| `objection` | UNIQUE | `uk_objection_case` | `case_id` |
+| `objection` | CHECK | `ck_objection_clause`, `ck_objection_status` | `clause BETWEEN 1 AND 3`, `status IN ('RECEIVED', 'DECIDED')` |
+| `objection_decision` | UNIQUE | `uk_objection_decision_objection` | `objection_id` |
+| `objection_decision` | CHECK | `ck_objection_decision_basis` | `result = 'REJECTED' OR early_release_basis IS NOT NULL` |
+| `objection_decision` | CHECK | `ck_objection_decision_hold` | `PARTIAL`이면 `requested_hold_amount > 0`이고 `0 ≤ applied_hold_amount ≤ requested_hold_amount`, 그 밖은 둘 다 NULL |
+| `gate_evaluation` | INDEX | `ix_gate_evaluation_objection` | `objection_id, evaluated_at` |
+| `gate_evaluation` | CHECK | `ck_gate_evaluation_purpose`, `ck_gate_evaluation_branch` | 위 값 목록 |
 
 ---
 

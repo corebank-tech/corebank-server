@@ -57,6 +57,19 @@ springdoc:
       header-name: X-XSRF-TOKEN
 
 app:
+  # 지급정지 이의제기 해제 게이트 설정값(D-36, Plan D10). 모두 내부 기준이고 화면과 Agent는 바꿀 수 없다.
+  payment-stop:
+    gate:
+      fraud-window-hours: 24
+      fraud-min-senders: 3
+      fraud-min-deposit: 10000
+      fraud-outflow-percent: 80
+      fraud-outflow-minutes: 60
+      relation-lookback-days: 180
+      relation-min-count: 3
+      relation-min-span-days: 30
+      relation-min-lead-days: 30
+      relation-max-amount-multiple: 5
   security:
     admin:
       # 관리자 세션 무조작 만료. 고객은 server.servlet.session.timeout(10m)을 그대로 쓴다 (admin_auth.md ④).

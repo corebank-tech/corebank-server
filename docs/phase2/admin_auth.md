@@ -210,6 +210,8 @@ SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS 
 | `/admin/trial-balance` | `GL_READ` | — (조회 전용) |
 | `/admin/gl/integrity-check` | `GL_READ` | — (조회 전용) |
 | `/admin/ledger-reconciliation` | `AUDIT_READ` | — (조회 전용) |
+| `/admin/payment-stops` | `PAYMENT_STOP_READ` | `PAYMENT_STOP_WRITE` (사건 등록, D-36) |
+| `/admin/objections` | `PAYMENT_STOP_READ` | `PAYMENT_STOP_WRITE` (접수, 판정 확정. 2인 승인 경로는 PA-10에서 `PAYMENT_STOP_APPROVE`로 나눈다) |
 
 조회 전용 경로는 GET 규칙만 두어 변경 요청이 맨 아래 `denyAll` 로 떨어진다. 쓰기 권한을 미리
 채워 두면 그 경로에 변경 API 가 붙는 순간 조회 권한만 가진 관리자가 통과하기 때문이다.
