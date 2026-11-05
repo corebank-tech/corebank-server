@@ -62,7 +62,7 @@ PH-49b(권한 부여, 회수 API와 Step-up 표기)도 릴리스 3에 들어가�
 | UAT 고객 6명 미가입 확인: 6명 각각 회원가입 본인확인(A03)까지만 진행해 "이미 가입" 오류(ATH0303)가 나오지 않는지 본다. 정하은은 11/3 시험으로 가입돼 있어 제외 | P3 | 11/5 오전 |
 | 중도해지 스위치 켜기: PH-16 API는 `app.subscription.early-termination.enabled`가 `true`일 때만 열린다(기본 `false`). 운영 서버 2대 모두 `APP_SUBSCRIPTION_EARLYTERMINATION_ENABLED=true`로 컨테이너를 다시 만든다. 재시작만으로는 반영되지 않는다. 켜지 않으면 U-C10이 404다 | P5 | UAT 시작 전 |
 | 중도해지 스위치 재확인: P2 요청 시 두 서버 모두 켜져 있는지 본다 | P5 | U-C10 직전 |
-| 중도해지 스위치 끄기: 컨테이너를 다시 만들어 되돌린다 | P5 | UAT 종료 직후 |
+| 중도해지 스위치 끄기: 운영 서버 2대 모두 `APP_SUBSCRIPTION_EARLYTERMINATION_ENABLED`를 빼거나 `false`로 바꿔 컨테이너를 다시 만들고, 두 서버 모두 U-C10과 같은 요청이 404인지 확인한다 | P5 | UAT 종료 직후 |
 | UAT 고객 6명 계정 정지 | P1 | 11/5 종료 직후 |
 
 ### 1-3. 당일 진행
