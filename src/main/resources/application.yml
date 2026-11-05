@@ -77,6 +77,9 @@ app:
       relation-min-span-days: 30
       relation-min-lead-days: 30
       relation-max-amount-multiple: 5
+      partial-small-amount: 3000000
+      partial-livelihood-days: 90
+      partial-livelihood-months: 2
   security:
     admin:
       # 관리자 세션 무조작 만료. 고객은 server.servlet.session.timeout(10m)을 그대로 쓴다 (admin_auth.md ④).

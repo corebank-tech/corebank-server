@@ -52,7 +52,9 @@ public class GateEvaluator {
                 otherStopHistory,
                 objection.isSimplifiedRequested(),
                 objection.getClause(),
-                objection.isLitigationPending());
+                objection.isLitigationPending(),
+                // 외부 확인 회신은 PA-10(모의 회신 저장)에서 붙인다
+                List.of());
 
         return ReleaseGate.evaluate(facts, settings);
     }
@@ -76,7 +78,9 @@ public class GateEvaluator {
                 .orElseThrow();
         return new Window(
                 firstDisputedAt,
-                firstDisputedAt.minusDays(settings.relationLookbackDays()).minusHours(settings.fraudWindowHours()),
+                firstDisputedAt
+                        .minusDays(Math.max(settings.relationLookbackDays(), settings.partialLivelihoodDays()))
+                        .minusHours(settings.fraudWindowHours()),
                 lastDisputedAt.plusHours(settings.fraudWindowHours()).plusMinutes(settings.fraudOutflowMinutes() + 1L));
     }
 

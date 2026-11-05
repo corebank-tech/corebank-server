@@ -118,7 +118,7 @@ class AdminObjectionControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.gate.branch").value("NORMAL_ACCEPT"))
                 .andExpect(jsonPath("$.data.gate.allowedResults.ACCEPTED").value(true))
                 .andExpect(jsonPath("$.data.gate.allowedResults.PARTIAL").value(false))
-                .andExpect(jsonPath("$.data.gate.rules.length()").value(3))
+                .andExpect(jsonPath("$.data.gate.rules.length()").value(5))
                 .andExpect(jsonPath("$.data.disputedTransfers[0].transactionNumber")
                         .value(s.disputed()))
                 .andExpect(jsonPath("$.data.decision").doesNotExist());

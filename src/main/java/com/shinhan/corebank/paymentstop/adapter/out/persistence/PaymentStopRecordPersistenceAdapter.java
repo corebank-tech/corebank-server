@@ -229,6 +229,9 @@ public class PaymentStopRecordPersistenceAdapter implements PaymentStopRecordPor
         snapshot.put("relationMinSpanDays", settings.relationMinSpanDays());
         snapshot.put("relationMinLeadDays", settings.relationMinLeadDays());
         snapshot.put("relationMaxAmountMultiple", settings.relationMaxAmountMultiple());
+        snapshot.put("partialSmallAmount", settings.partialSmallAmount());
+        snapshot.put("partialLivelihoodDays", settings.partialLivelihoodDays());
+        snapshot.put("partialLivelihoodMonths", settings.partialLivelihoodMonths());
         return snapshot;
     }
 

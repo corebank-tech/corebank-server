@@ -14,6 +14,9 @@ package com.shinhan.corebank.paymentstop.domain.gate;
  * @param relationMinSpanDays 관계 인정: 첫 거래와 마지막 거래 간격 하한(일)
  * @param relationMinLeadDays 관계 인정: 첫 관계 거래가 다툼 거래보다 앞선 기간 하한(일)
  * @param relationMaxAmountMultiple 관계 인정: 다툼 금액 합 ≤ 과거 관계 거래 최대액 × 이 배수
+ * @param partialSmallAmount 일부 지급정지 요건: 다툼 입금액 합 상한(원)
+ * @param partialLivelihoodDays 일부 지급정지 요건: 생활 거래를 보는 다툼 이전 기간(일)
+ * @param partialLivelihoodMonths 일부 지급정지 요건: 같은 상대와 정기 거래가 있어야 하는 달 수 하한
  */
 public record GateSettings(
         int fraudWindowHours,
@@ -25,11 +28,14 @@ public record GateSettings(
         int relationMinCount,
         int relationMinSpanDays,
         int relationMinLeadDays,
-        int relationMaxAmountMultiple) {
+        int relationMaxAmountMultiple,
+        long partialSmallAmount,
+        int partialLivelihoodDays,
+        int partialLivelihoodMonths) {
 
     // 게이트 규칙 절의 초기값
     public static GateSettings defaults() {
-        return new GateSettings(24, 3, 10_000L, 80, 60, 180, 3, 30, 30, 5);
+        return new GateSettings(24, 3, 10_000L, 80, 60, 180, 3, 30, 30, 5, 3_000_000L, 90, 2);
     }
 
     public GateSettings {
@@ -43,7 +49,10 @@ public record GateSettings(
                 || relationMinCount <= 0
                 || relationMinSpanDays < 0
                 || relationMinLeadDays < 0
-                || relationMaxAmountMultiple <= 0) {
+                || relationMaxAmountMultiple <= 0
+                || partialSmallAmount <= 0
+                || partialLivelihoodDays <= 0
+                || partialLivelihoodMonths <= 0) {
             throw new IllegalArgumentException("게이트 설정값이 올바르지 않습니다.");
         }
     }

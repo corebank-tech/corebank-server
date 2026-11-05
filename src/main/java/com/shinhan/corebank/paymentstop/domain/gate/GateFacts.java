@@ -12,6 +12,7 @@ import java.util.List;
  * @param simplifiedRequested 명의인이 간소화(일부 지급정지) 절차를 신청했는지
  * @param clause 이의제기 사유 조항(법 제7조제1항 1~3호)
  * @param litigationPending 명의인과 피해자 사이 소송 계속 여부(법 제8조제2항제1호의2)
+ * @param externalReplies 외부 확인 회신. 원장 밖 사실이지만 기관 회신이라 근거로 쓴다(순서 1, 4)
  */
 public record GateFacts(
         List<LedgerFact> disputedTransfers,
@@ -20,7 +21,8 @@ public record GateFacts(
         boolean otherStopHistory,
         boolean simplifiedRequested,
         int clause,
-        boolean litigationPending) {
+        boolean litigationPending,
+        List<ExternalReply> externalReplies) {
 
     public GateFacts {
         if (disputedTransfers == null || disputedTransfers.isEmpty()) {
@@ -34,5 +36,6 @@ public record GateFacts(
         }
         disputedTransfers = List.copyOf(disputedTransfers);
         accountTransfers = accountTransfers == null ? List.of() : List.copyOf(accountTransfers);
+        externalReplies = externalReplies == null ? List.of() : List.copyOf(externalReplies);
     }
 }
