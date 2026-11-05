@@ -142,11 +142,11 @@ public class LedgerAccumulatedBalancePersistenceAdapter implements LedgerAccumul
         String idsJson = accountIds.stream().distinct().map(String::valueOf).collect(Collectors.joining(",", "[", "]"));
 
         MapSqlParameterSource params = new MapSqlParameterSource()
-        .addValue("idsJson", idsJson)
-        .addValue("fromDate", fromInclusive)
-        .addValue("toDate", toExclusive)
-        .addValue("fromTimestamp", fromInclusive.atStartOfDay())
-        .addValue("toTimestamp", toExclusive.atStartOfDay());
+                .addValue("idsJson", idsJson)
+                .addValue("fromDate", fromInclusive)
+                .addValue("toDate", toExclusive)
+                .addValue("fromTimestamp", fromInclusive.atStartOfDay())
+                .addValue("toTimestamp", toExclusive.atStartOfDay());
 
         Map<Long, Long> result = new LinkedHashMap<>();
 
