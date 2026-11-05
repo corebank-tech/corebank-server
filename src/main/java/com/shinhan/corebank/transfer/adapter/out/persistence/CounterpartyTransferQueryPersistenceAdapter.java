@@ -23,7 +23,7 @@ public class CounterpartyTransferQueryPersistenceAdapter implements Counterparty
 
     private final JPAQueryFactory queryFactory;
 
-    // 원장을 계좌와 시각으로 범위 스캔(ix_le_account_time)하고 이체를 PK로 붙인다.
+    // 원장을 계좌와 시각 인덱스(ix_le_account_time 또는 ix_le_account_dir)로 범위 스캔하고 이체를 PK로 붙인다.
     // transfer 만으로 읽으면 입금 쪽(deposit_account_id, 시각) 인덱스가 없어 새로 달아야 한다.
     @Override
     public List<CounterpartyTransfer> findByAccount(
@@ -36,7 +36,8 @@ public class CounterpartyTransferQueryPersistenceAdapter implements Counterparty
                         transferJpaEntity.depositAccountId,
                         transferJpaEntity.payeeBankCode,
                         ledgerEntryJpaEntity.amount,
-                        ledgerEntryJpaEntity.occurredAt)
+                        ledgerEntryJpaEntity.occurredAt,
+                        transferJpaEntity.status)
                 .from(ledgerEntryJpaEntity)
                 .join(transferJpaEntity)
                 .on(transferJpaEntity.transferId.eq(ledgerEntryJpaEntity.transferId))
@@ -44,8 +45,9 @@ public class CounterpartyTransferQueryPersistenceAdapter implements Counterparty
                         ledgerEntryJpaEntity.accountId.eq(accountId),
                         ledgerEntryJpaEntity.occurredAt.goe(fromInclusive),
                         ledgerEntryJpaEntity.occurredAt.lt(toExclusive),
-                        // 성공한 유효 이체만. 무효화된 원거래와 반대 방향인 취소정정은 뺀다
-                        transferJpaEntity.status.eq(ProcessResultStatus.SUCCESS),
+                        // 성공과 처리 불명 이체. 처리 불명 타행 출금은 원장에서 돈이 이미 빠져 미확정으로 담는다.
+                        // 무효화된 원거래와 반대 방향인 취소정정은 뺀다
+                        transferJpaEntity.status.in(ProcessResultStatus.SUCCESS, ProcessResultStatus.TIMEOUT),
                         transferJpaEntity.invalidatedAt.isNull(),
                         transferJpaEntity
                                 .correctionType
@@ -72,6 +74,7 @@ public class CounterpartyTransferQueryPersistenceAdapter implements Counterparty
                 interbank ? CounterpartyKind.INTERBANK : CounterpartyKind.INTERNAL,
                 interbank ? null : counterpartyAccountId,
                 row.get(ledgerEntryJpaEntity.amount),
-                row.get(ledgerEntryJpaEntity.occurredAt));
+                row.get(ledgerEntryJpaEntity.occurredAt),
+                row.get(transferJpaEntity.status) == ProcessResultStatus.SUCCESS);
     }
 }
