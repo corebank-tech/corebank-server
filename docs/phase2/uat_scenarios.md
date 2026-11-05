@@ -219,12 +219,21 @@ U-A03, U-A04가 실패해 UAT 고객이 잠기거나 정지된 채로 남으면,
 
 | 지표 | 값 |
 |---|---|
-| 계획 건수 | |
-| 범위 밖 | |
-| 통과 / 실패 / 차단 | |
-| 통과율 | |
-| 실행률 | |
-| 결함 (차단 / 주요 / 경미) | |
+| 계획 건수 | 48 |
+| 범위 밖 | 0 |
+| 통과 / 실패 / 차단 | 45 / 2 / 0 (U-A07 11/6 오전 실행 전) |
+| 통과율 | 45 ÷ 47 = 95.7% |
+| 실행률 | 47 ÷ 48 = 97.9% |
+| 결함 (차단 / 주요 / 경미) | 2 / 3 / 2 |
 
 | 이슈 | 시나리오 | 심각도 | 요약 | 상태 |
 |---|---|---|---|---|
+| [#911](https://github.com/corebank-tech/corebank-server/issues/911) | U-C09 | 차단 | 만기해지가 영속성 컨텍스트의 계좌 버전 충돌(CMN0303)로 항상 실패한다. 롤백은 확인됐다 | 열림 |
+| [FE #211](https://github.com/corebank-tech/corebank-fe/issues/211) | U-C10 | 차단 | 상품가입 화면이 신규 계좌 비밀번호를 무작위로 만들어 보내, 해지 API의 계좌비밀번호 인증을 통과할 수 없다(REQ-PRDT-006과 해지 API 계약 불일치) | 열림 |
+| [#912](https://github.com/corebank-tech/corebank-server/issues/912) | U-A01 | 주요 | 관리자 세션이 고객 채널 API를 통과한다. [admin_auth.md](admin_auth.md) ③ 경로 분리 위반 | 열림 |
+| [#891](https://github.com/corebank-tech/corebank-server/issues/891) | U-C01 | 주요 | 서버 비밀번호 조합 규칙이 REQ-AUTH-011과 다르고 가입 검증에 길이와 금칙 검사가 없다 | 열림 |
+| [FE #203](https://github.com/corebank-tech/corebank-fe/issues/203) | U-C01 | 주요 | 계좌 인증 토큰 만료 시 처음으로 돌아갈 안내가 없다. 인증번호 입력란이 잘린다 | 1, 2번 FE PR #204 dev 머지 |
+| [#913](https://github.com/corebank-tech/corebank-server/issues/913) | U-C04 | 경미 | 표시내용 없이 이체하면 거래내역 거래내용이 비어 있다 | 열림 |
+| [FE #210](https://github.com/corebank-tech/corebank-fe/issues/210) | U-C05 | 경미 | 타행이체와 상품가입 거래내역의 적요가 비어 있다 | 열림 |
+
+심각도가 이슈에 "판단 필요"이거나 비어 있던 FE #211, #912, #891, FE #203은 P3가 §4-2 기준으로 분류했다.
