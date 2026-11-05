@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 48개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 494개 컬럼
+**대상**: 51개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 525개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -83,6 +83,9 @@
 | 55 | `objection` | 지급정지 이의제기 | P3 | 12 |
 | 56 | `objection_decision` | 이의제기 판정 | P3 | 9 |
 | 57 | `gate_evaluation` | 해제 게이트 계산 기록 | P3 | 9 |
+| 58 | `agent_run` | 이의제기 Agent 실행 | P3 | 15 |
+| 59 | `agent_run_step` | Agent 실행 단계 이벤트 | P3 | 10 |
+| 60 | `review_draft` | Agent 판정안 | P3 | 6 |
 
 ---
 
@@ -604,6 +607,70 @@ COB의 `ACTIVE → MATURED` 전이, 고객 요청 만기해지의 `MATURED → C
 | `gate_evaluation` | INDEX | `ix_gate_evaluation_objection` | `objection_id, evaluated_at` |
 | `gate_evaluation` | CHECK | `ck_gate_evaluation_purpose`, `ck_gate_evaluation_branch` | 위 값 목록 |
 
+
+
+## `agent_run` · `agent_run_step` · `review_draft`
+
+> 이의제기 Agent 실행, 단계 이벤트, 판정안 (D-36, PA-05)
+
+형식 정본은 [agent_run_step_schema.md](phase2/agent_run_step_schema.md), 내부 API는 [objection_agent_contract.md](phase2/objection_agent_contract.md)다. 대기열은 별도 큐 없이 `agent_run`의 `QUEUED` 행이고, 워커는 PK 조건부 UPDATE로 가져간다. 텍스트와 JSON 값은 저장 전에 가명 처리한다.
+
+**`agent_run`** Agent 실행 한 번
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `run_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 실행 ID |
+| `objection_id` | `BIGINT` | INDEX, FK | X | | `objection.objection_id` |
+| `status` | `VARCHAR(12)` | INDEX | X | | `QUEUED` / `RUNNING` / `COMPLETED` / `FAILED` |
+| `attempt` | `INT` | | X | `0` | 가져간 횟수. 3회째도 끝나지 않으면 `FAILED` |
+| `lease_until` | `DATETIME(6)` | | O | | 점유 만료 시각. `RUNNING`일 때만 있다 |
+| `model` | `VARCHAR(60)` | | O | | LLM 모델명 |
+| `prompt_version` | `VARCHAR(30)` | | O | | 프롬프트 버전 |
+| `input_tokens` | `BIGINT` | | O | | 입력 토큰 수 |
+| `output_tokens` | `BIGINT` | | O | | 출력 토큰 수 |
+| `cost_micro_usd` | `BIGINT` | | O | | 비용, 백만분의 1달러 정수 |
+| `requested_by` | `BIGINT` | | X | | 분석을 넣은 관리자 `customer_id` |
+| `queued_at` | `DATETIME(6)` | INDEX | X | | 대기열에 들어간 시각 |
+| `started_at` | `DATETIME(6)` | | O | | 처음 가져간 시각 |
+| `ended_at` | `DATETIME(6)` | | O | | 끝난 시각 |
+| `failure_reason` | `VARCHAR(200)` | | O | | 실패하거나 대기열로 돌아간 사유 |
+
+**`agent_run_step`** 실행 안의 단계
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `step_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 단계 행 ID |
+| `run_id` | `BIGINT` | **UK**, FK | X | | `agent_run.run_id` |
+| `seq` | `INT` | **UK** | X | | 실행 안 순번. 1부터 빈 번호 없이 |
+| `type` | `VARCHAR(20)` | | X | | 단계 종류(형식 문서 §4) |
+| `title` | `VARCHAR(200)` | | X | | 화면 한 줄 |
+| `summary` | `VARCHAR(500)` | | O | | 짧은 설명 |
+| `detail` | `JSON` | | O | | 종류별 상세 |
+| `status` | `VARCHAR(10)` | | X | | `RUNNING` / `DONE` / `FAILED` |
+| `started_at` | `DATETIME(6)` | | X | | 시작 시각 |
+| `ended_at` | `DATETIME(6)` | | O | | 종료 시각 |
+
+**`review_draft`** Agent 판정안. 실행당 1건
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `review_draft_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 식별자 |
+| `run_id` | `BIGINT` | **UK**, FK | X | | `agent_run.run_id` |
+| `objection_id` | `BIGINT` | INDEX, FK | X | | `objection.objection_id` |
+| `branch` | `VARCHAR(16)` | | X | | Agent 갈래. 해제 근거가 아니다 |
+| `content` | `JSON` | | X | | 근거 거래, 누락 소명자료, 주장, 모순, 추가 확인, 안내문 초안 |
+| `submitted_at` | `DATETIME(6)` | | X | | 제출 시각 |
+
+**인덱스와 제약**
+
+| 테이블 | 종류 | 이름 | 컬럼·조건 |
+| --- | --- | --- | --- |
+| `agent_run` | INDEX | `ix_agent_run_objection`, `ix_agent_run_status` | `objection_id, run_id` / `status, queued_at` |
+| `agent_run` | CHECK | `ck_agent_run_status`, `ck_agent_run_attempt`, `ck_agent_run_lease` | 상태 값 목록 / `attempt BETWEEN 0 AND 3` / `RUNNING`이면 `lease_until`이 있고 아니면 없다 |
+| `agent_run_step` | UNIQUE | `uk_agent_run_step_seq` | `run_id, seq` |
+| `agent_run_step` | CHECK | `ck_agent_run_step_seq`, `ck_agent_run_step_type`, `ck_agent_run_step_status` | `seq >= 1` / 종류 목록 / 상태 목록 |
+| `review_draft` | UNIQUE | `uk_review_draft_run` | `run_id` |
+| `review_draft` | CHECK | `ck_review_draft_branch` | 갈래 값 목록 |
 ---
 
 ## `interest_payment`

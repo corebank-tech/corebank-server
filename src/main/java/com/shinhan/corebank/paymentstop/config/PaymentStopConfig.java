@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties(GateSettingsProperties.class)
+@EnableConfigurationProperties({GateSettingsProperties.class, AgentProperties.class})
 public class PaymentStopConfig {
 
     @Bean

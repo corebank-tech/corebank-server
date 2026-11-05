@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ObjectionService implements ReceiveObjectionUseCase {
 
     private final PaymentStopRecordPort recordPort;
+    private final ReviewJobEnqueuer reviewJobEnqueuer;
     private final Clock clock;
 
     @Override
@@ -42,6 +43,11 @@ public class ObjectionService implements ReceiveObjectionUseCase {
                 actor.adminCustomerId(),
                 LocalDateTime.now(clock));
 
-        return recordPort.saveNewObjection(objection).getObjectionId();
+        long objectionId = recordPort.saveNewObjection(objection).getObjectionId();
+
+        // 접수와 함께 분석을 대기열에 넣는다(D35). 법정 기한 기산은 여기가 아니라 담당자의 소명 완비 확인이다(D12)
+        reviewJobEnqueuer.enqueue(objectionId, actor.adminCustomerId());
+
+        return objectionId;
     }
 }

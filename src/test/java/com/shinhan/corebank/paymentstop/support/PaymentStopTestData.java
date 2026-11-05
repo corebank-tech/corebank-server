@@ -96,6 +96,10 @@ public class PaymentStopTestData {
                 : String.join(",", accountIds.stream().map(String::valueOf).toList());
         String cases = "SELECT case_id FROM payment_stop_case WHERE account_id IN (" + ids + ")";
         String objections = "SELECT objection_id FROM objection WHERE case_id IN (" + cases + ")";
+        String runs = "SELECT run_id FROM agent_run WHERE objection_id IN (" + objections + ")";
+        jdbcTemplate.update("DELETE FROM agent_run_step WHERE run_id IN (" + runs + ")");
+        jdbcTemplate.update("DELETE FROM review_draft WHERE objection_id IN (" + objections + ")");
+        jdbcTemplate.update("DELETE FROM agent_run WHERE objection_id IN (" + objections + ")");
         jdbcTemplate.update("DELETE FROM gate_evaluation WHERE objection_id IN (" + objections + ")");
         jdbcTemplate.update("DELETE FROM objection_decision WHERE objection_id IN (" + objections + ")");
         jdbcTemplate.update("DELETE FROM objection WHERE case_id IN (" + cases + ")");
@@ -105,6 +109,8 @@ public class PaymentStopTestData {
         jdbcTemplate.update("DELETE FROM account_status_history WHERE account_id IN (" + ids + ")");
         jdbcTemplate.update("DELETE FROM audit_log WHERE customer_id = ?", customerId);
         jdbcTemplate.update("DELETE FROM idempotency_key WHERE customer_id = ?", customerId);
+        // MockMvc 인증 요청이 남긴 세션. 다른 테스트의 세션 테이블 잠금 간격에 끼어들지 않게 지운다(속성은 FK CASCADE)
+        jdbcTemplate.update("DELETE FROM SPRING_SESSION WHERE PRINCIPAL_NAME = ?", String.valueOf(customerId));
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (" + ids + ")");
         jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id IN (" + ids + ")");
         jdbcTemplate.update("DELETE FROM account WHERE customer_id = ?", customerId);

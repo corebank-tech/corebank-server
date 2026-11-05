@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 57개 테이블(48개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트·감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 494개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
+> **DBMS**: MySQL 8.4 / 60개 테이블(51개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트·감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 525개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -24,7 +24,7 @@ erDiagram
     SPRING_SESSION ||--o{ SPRING_SESSION_ATTRIBUTES : "ON DELETE CASCADE"
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 57개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
+    %% MySQL 8.4 / 60개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -188,6 +188,46 @@ erDiagram
         json settings "게이트 설정값"
         json rule_results "규칙별 결과와 근거 거래번호"
         datetime evaluated_at
+    }
+
+    agent_run {
+        bigint run_id PK "AUTO_INCREMENT"
+        bigint objection_id FK
+        varchar status "QUEUED / RUNNING / COMPLETED / FAILED"
+        int attempt "3회째 실패하면 FAILED"
+        datetime lease_until "RUNNING일 때만"
+        varchar model
+        varchar prompt_version
+        bigint input_tokens
+        bigint output_tokens
+        bigint cost_micro_usd "백만분의 1달러 정수"
+        bigint requested_by "관리자 customer_id"
+        datetime queued_at
+        datetime started_at
+        datetime ended_at
+        varchar failure_reason
+    }
+
+    agent_run_step {
+        bigint step_id PK "AUTO_INCREMENT"
+        bigint run_id FK "UK(run_id, seq)"
+        int seq "1부터 빈 번호 없이"
+        varchar type "CLAIMED ~ FAILED"
+        varchar title "가명 처리"
+        varchar summary
+        json detail
+        varchar status "RUNNING / DONE / FAILED"
+        datetime started_at
+        datetime ended_at
+    }
+
+    review_draft {
+        bigint review_draft_id PK "AUTO_INCREMENT"
+        bigint run_id UK,FK
+        bigint objection_id FK
+        varchar branch "Agent 갈래, 해제 근거 아님"
+        json content
+        datetime submitted_at
     }
 
     interest_payment {
@@ -660,6 +700,9 @@ erDiagram
     payment_stop_case ||--o| objection : "이의제기 (사건당 1건)"
     objection ||--o| objection_decision : "판정"
     objection ||--o{ gate_evaluation : "게이트 계산 기록"
+    objection ||--o{ agent_run : "AI 분석 실행"
+    agent_run ||--o{ agent_run_step : "단계 이벤트"
+    agent_run ||--o| review_draft : "판정안"
     product_subscription ||--o{ subscription_terms_agreement : "약관동의"
     terms ||--o{ subscription_terms_agreement : "약관동의"
     customer ||--o{ scheduled_transfer : "예약"

@@ -29,22 +29,10 @@ public class GateEvaluator {
     private final GateSettings settings;
 
     public GateResult evaluate(PaymentStopCase paymentStopCase, Objection objection) {
-        LocalDateTime firstDisputedAt = paymentStopCase.getDisputedTransfers().stream()
-                .map(DisputedTransfer::occurredAt)
-                .min(Comparator.naturalOrder())
-                .orElseThrow();
-        LocalDateTime lastDisputedAt = paymentStopCase.getDisputedTransfers().stream()
-                .map(DisputedTransfer::occurredAt)
-                .max(Comparator.naturalOrder())
-                .orElseThrow();
+        Window window = window(paymentStopCase);
 
-        // 관계 인정 조회 기간과 사기 패턴 창(전후 시간, 입금 뒤 출금 시간)을 모두 덮는다
-        LocalDateTime from =
-                firstDisputedAt.minusDays(settings.relationLookbackDays()).minusHours(settings.fraudWindowHours());
-        LocalDateTime to =
-                lastDisputedAt.plusHours(settings.fraudWindowHours()).plusMinutes(settings.fraudOutflowMinutes() + 1L);
-
-        List<LedgerFact> accountTransfers = ledgerFactPort.findByAccount(paymentStopCase.getAccountId(), from, to);
+        List<LedgerFact> accountTransfers =
+                ledgerFactPort.findByAccount(paymentStopCase.getAccountId(), window.from(), window.to());
         Map<String, LedgerFact> byNumber = accountTransfers.stream()
                 .collect(Collectors.toMap(LedgerFact::transactionNumber, Function.identity(), (a, b) -> a));
 
@@ -72,6 +60,28 @@ public class GateEvaluator {
     public GateSettings settings() {
         return settings;
     }
+
+    /**
+     * 게이트가 읽는 원장 기간. 관계 인정 조회 기간과 사기 패턴 창(전후 시간, 입금 뒤 출금 시간)을 모두 덮는다. Agent 의 원장 조회와 판정안
+     * 근거 검증도 이 기간 안으로 묶는다.
+     */
+    public Window window(PaymentStopCase paymentStopCase) {
+        LocalDateTime firstDisputedAt = paymentStopCase.getDisputedTransfers().stream()
+                .map(DisputedTransfer::occurredAt)
+                .min(Comparator.naturalOrder())
+                .orElseThrow();
+        LocalDateTime lastDisputedAt = paymentStopCase.getDisputedTransfers().stream()
+                .map(DisputedTransfer::occurredAt)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
+        return new Window(
+                firstDisputedAt,
+                firstDisputedAt.minusDays(settings.relationLookbackDays()).minusHours(settings.fraudWindowHours()),
+                lastDisputedAt.plusHours(settings.fraudWindowHours()).plusMinutes(settings.fraudOutflowMinutes() + 1L));
+    }
+
+    /** @param to 미포함 */
+    public record Window(LocalDateTime firstDisputedAt, LocalDateTime from, LocalDateTime to) {}
 
     private static LedgerFact snapshot(DisputedTransfer transfer, PaymentStopCase paymentStopCase) {
         Long sender = paymentStopCase.getSenderAccountId();

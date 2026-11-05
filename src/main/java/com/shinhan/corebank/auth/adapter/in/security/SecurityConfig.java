@@ -49,7 +49,12 @@ public class SecurityConfig {
         pathPattern(HttpMethod.POST, "/auth/email-verifications/{emailVerificationId}/verify"),
         pathPattern(HttpMethod.POST, "/auth/password-reset-requests"),
         pathPattern(HttpMethod.PUT, "/auth/password-reset-requests/{passwordResetRequestId}"),
-        pathPattern(HttpMethod.GET, "/actuator/health")
+        pathPattern(HttpMethod.GET, "/actuator/health"),
+        // 이의제기 Agent 워커 전용(D-36). 세션이 아니라 워커 서비스 키와 작업 토큰으로 인증하고, ALB 에 공개하지 않는다.
+        // /internal/** 전체를 열지 않는다. 나중에 생기는 내부 경로가 인증 없이 열리지 않게 접두어를 하나씩 적는다
+        pathPattern("/internal/review-jobs/**"),
+        pathPattern("/internal/objections/**"),
+        pathPattern("/internal/agent-runs/**")
     };
 
     // 공개하되 CSRF 보호는 유지하는 경로.
