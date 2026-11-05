@@ -201,6 +201,8 @@ tasks.withType(JavaCompile).configureEach {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // CI와 운영 환경의 JVM 시간대를 통일한다.
+    systemProperty 'user.timezone', 'Asia/Seoul'
     // #402: 공유 컨테이너의 수명은 테스트 JVM과 일치시키고 병렬 검증은 각 테스트 내부에서 수행한다.
     maxParallelForks = 1
     forkEvery = 0
