@@ -810,7 +810,7 @@ public enum JournalDirection { DEBIT, CREDIT }   // gl.domain 에서 gl.api 로 
 `gl_journal_entry(trade_date, account_code, dr_cr, amount)` 인덱스 1건과 시산표 조회 타임아웃 30초를 넣고, 기존 단일 EC2와 기존 RDS에서 다시 잰다. 마감잔액 테이블은 범위 밖이다.
 
 - **컬럼 순서는 거래일이 먼저다(10/28 변경).** 처음 적은 `(account_code, trade_date)`는 60b 로컬 비교에서 인덱스가 없을 때보다 약 2배 느렸다. 결과와 근거는 [ph28_baseline_results.md](ph28_baseline_results.md) §3이다.
-- 인덱스는 릴리스 3 배포 때 Flyway가 만든다. 기존 EC2에도 릴리스 3을 배포해 같은 RDS에서 개선 후를 잰다. 기존 EC2 배포는 11/3 릴리스 3 머지 뒤(P4), 측정은 11/4 오전이다([D-35](README.md#d-35--1030--p4)).
+- 인덱스는 릴리스 3 배포 때 Flyway가 만든다. 기존 EC2에도 릴리스 3을 배포해 같은 RDS에서 개선 후를 잰다. 기존 EC2 배포는 11/3 릴리스 3 머지 뒤(P4), 측정은 11/4 오전으로 계획했으나 11/5 오후에 쟀다([D-35](README.md#d-35--1030--p4)).
 - **개선 후 결과(11/5):** DB 평균이 하루 22.7초에서 1.1초(21.0배), 한 달 1.70배, 전 구간 1.36배 줄었고 집계 결과는 같다. 표는 [ph28_baseline_results.md](ph28_baseline_results.md) §3이다.
 
 ### PH-28b. 회계 결함 주입 · 탐지율
