@@ -2,6 +2,7 @@
 
 지급정지 이의제기 AI 심사 지원([D-36](README.md#d-36--113--리드))의 Agent 워커가 부르는 서버 내부 API다.
 단계 이벤트의 필드와 종류는 [agent_run_step_schema.md](agent_run_step_schema.md)를 따른다. 용어는 [glossary.md](glossary.md) 13~15번이다.
+워커와 평가는 별도 레포 [corebank-objection-agent](https://github.com/corebank-tech/corebank-objection-agent)에 있다. 이 문서가 계약 정본이고, 바꿀 때는 이 문서와 서버 구현을 먼저 고친 뒤 워커 레포의 호환 버전 표를 갱신한다.
 
 ## 1. 원칙
 
