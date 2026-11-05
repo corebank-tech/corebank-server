@@ -27,6 +27,8 @@ resource "aws_launch_template" "was" {
   metadata_options {
     http_tokens   = "required"
     http_endpoint = "enabled"
+    # 컨테이너 안 앱이 IMDSv2로 자격 증명을 받으려면 홉 제한 2가 필요하다.
+    http_put_response_hop_limit = 2
   }
 
   block_device_mappings {
