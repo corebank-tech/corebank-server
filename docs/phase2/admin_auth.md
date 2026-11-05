@@ -90,7 +90,7 @@ PH-49c의 Spring Session JDBC는 세션을 공용 MySQL에 저장한다. 두 변
 | `user_id` | 권한 | 쓰임 |
 |---|---|---|
 | `adminreader` | `GL_READ,CUSTOMER_READ,AUDIT_READ` | 조회 전용. ②의 DoD "변경 API 403" 확인 |
-| `adminoperator` | 5종 전부 | FE 관리자 채널 시연 |
+| `adminoperator` | 앞 5종 전부, `PAYMENT_STOP_READ`, `PAYMENT_STOP_WRITE` | FE 관리자 채널 시연. 해제 승인(`PAYMENT_STOP_APPROVE`)은 작성자와 다른 사람이 해야 해서 주지 않는다 |
 
 비밀번호는 둘 다 **`Admin1234!`**.
 

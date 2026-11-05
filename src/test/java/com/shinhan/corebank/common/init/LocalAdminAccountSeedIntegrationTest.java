@@ -42,7 +42,14 @@ class LocalAdminAccountSeedIntegrationTest extends IntegrationTestSupport {
 
         assertThat(permissionsOf("adminreader")).containsExactly("AUDIT_READ", "CUSTOMER_READ", "GL_READ");
         assertThat(permissionsOf("adminoperator"))
-                .containsExactly("AUDIT_READ", "CUSTOMER_READ", "CUSTOMER_WRITE", "GL_READ", "GL_WRITE");
+                .containsExactly(
+                        "AUDIT_READ",
+                        "CUSTOMER_READ",
+                        "CUSTOMER_WRITE",
+                        "GL_READ",
+                        "GL_WRITE",
+                        "PAYMENT_STOP_READ",
+                        "PAYMENT_STOP_WRITE");
         // 다른 테스트가 만든 ADMIN 행에 흔들리지 않도록 시드 계정만 센다.
         assertThat(count("SELECT COUNT(*) FROM customer WHERE role = 'ADMIN'"
                         + " AND user_id IN ('adminreader', 'adminoperator')"))
