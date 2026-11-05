@@ -4,8 +4,6 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.application.port.out.LedgerAccumulatedBalancePort;
 import java.math.BigDecimal;
-import java.sql.Date;
-import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -144,11 +142,11 @@ public class LedgerAccumulatedBalancePersistenceAdapter implements LedgerAccumul
         String idsJson = accountIds.stream().distinct().map(String::valueOf).collect(Collectors.joining(",", "[", "]"));
 
         MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("idsJson", idsJson)
-                .addValue("fromDate", Date.valueOf(fromInclusive))
-                .addValue("toDate", Date.valueOf(toExclusive))
-                .addValue("fromTimestamp", Timestamp.valueOf(fromInclusive.atStartOfDay()))
-                .addValue("toTimestamp", Timestamp.valueOf(toExclusive.atStartOfDay()));
+        .addValue("idsJson", idsJson)
+        .addValue("fromDate", fromInclusive)
+        .addValue("toDate", toExclusive)
+        .addValue("fromTimestamp", fromInclusive.atStartOfDay())
+        .addValue("toTimestamp", toExclusive.atStartOfDay());
 
         Map<Long, Long> result = new LinkedHashMap<>();
 
