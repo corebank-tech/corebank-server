@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 42개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 439개 컬럼
+**대상**: 42개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 441개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -26,7 +26,7 @@
 
 | # | 테이블 | 설명 | 담당 | 컬럼 |
 | --- | --- | --- | --- |----|
-| 1 | `customer` | 고객 | P6 | 22 |
+| 1 | `customer` | 고객 | P6 | 23 |
 | 2 | `terms` | 약관 | P6 | 10 |
 | 3 | `customer_terms_agreement` | 회원가입 약관 동의 | P6 | 4  |
 | 4 | `verification_request` | 인증 요청 | P6 | 13 |
@@ -65,7 +65,7 @@
 | 37 | `terms_view_history` | 상품 약관 열람 이력 | P4 | 4  |
 | 38 | `batch_execution_history` | 배치 스텝 실행 기록 | P5 | 8  |
 | 39 | `ledger_reconciliation_mismatch` | 원장-잔액 대사 불일치 목록 | P4 | 6  |
-| 40 | `admin_permission` | 관리자 권한 | P1 | 3  |
+| 40 | `admin_permission` | 관리자 권한 | P1 | 4  |
 | 41 | `account_status_history` | 계좌 상태 전이 이력 | P2 | 8 |
 | 42 | `business_date_cutoff` | 영업일 마감 cutoff | P5 | 4  |
 | 43 | `interest_payment` | 예적금 이자 지급 이력 | P2 | 9 |
@@ -135,6 +135,7 @@ Spring Session JDBC 표준 스키마. Flyway `V202610221420`으로만 생성하�
 | `email_ciphertext` | `VARCHAR(768)` | | O | | 이메일 AES-256-GCM 암호문. PH-18 전환 중에는 NULL 허용 |
 | `phone_number_ciphertext` | `VARCHAR(128)` | | O | | 휴대폰 번호 AES-256-GCM 암호문. PH-18 전환 중에는 NULL 허용 |
 | `email_search_hash` | `CHAR(64)` | **UK** | O | | 정규화 이메일의 HMAC-SHA256 검색 해시. 암호화 키와 별도 키 사용 |
+| `admin_permission_version` | `BIGINT` | | X | `0` | 관리자 권한 회수 때마다 1씩 증가. 로그인 때 세션에 실은 값과 다르면 그 세션은 낡은 권한을 들고 있어 거부한다 |
 
 **인덱스**
 
@@ -144,6 +145,7 @@ Spring Session JDBC 표준 스키마. Flyway `V202610221420`으로만 생성하�
 | UNIQUE | `uk_customer_email` | `email` |
 | UNIQUE | `uk_customer_existing_bank_customer_id` | `existing_bank_customer_id` |
 | UNIQUE | `uk_customer_email_search_hash` | `email_search_hash` |
+| UNIQUE | `uk_customer_id_role` | `(customer_id, role)` — `admin_permission`의 복합 FK 대상(PH-49b) |
 
 **CHECK 제약**
 
@@ -160,11 +162,12 @@ Spring Session JDBC 표준 스키마. Flyway `V202610221420`으로만 생성하�
 
 행 하나가 권한 하나다. 권한이 없는 관리자는 행이 0개이며, 관리자인지 아닌지는 `customer.role`로 가린다.
 CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_code`의 표시명과 값이 이어지지 않기
-때문이다(PR #572 리뷰). 부여·회수 API는 PH-49b 몫이고 이 시점에는 시드로만 넣는다.
+때문이다(PR #572 리뷰). 부여는 `POST /admin/customers/{customerId}/permissions`, 회수는 `DELETE /admin/customers/{customerId}/permissions/{permission}`(PH-49b)가 맡는다.
 
 | 컬럼 | 타입 | 키 | NULL | 기본값 | 설명 |
 | --- | --- | --- | --- | --- | --- |
-| `customer_id` | `BIGINT` | **PK, FK** | X |  | 권한을 가진 관리자. `customer.customer_id` 참조 |
+| `customer_id` | `BIGINT` | **PK, FK** | X |  | 권한을 가진 관리자. `customer(customer_id, role)` 참조 |
+| `role` | `VARCHAR(12)` | FK | X | `'ADMIN'` | 항상 `ADMIN`. `customer.role`과 함께 복합 FK를 이뤄 `CUSTOMER` 계정에 권한 행이 붙는 것을 막는다. 엔티티에 매핑하지 않고 DB 기본값을 쓴다 |
 | `permission` | `VARCHAR(20)` | **PK** | X |  | 권한 하나. `GL_READ`·`GL_WRITE`·`CUSTOMER_READ`·`CUSTOMER_WRITE`·`AUDIT_READ`. `common_code`의 `ADMIN_PERMISSION` 그룹과 값이 같다 |
 | `granted_at` | `DATETIME(6)` |  | X |  | 권한을 준 시각. 회수는 행 삭제라 이력은 `audit_log`가 맡는다 |
 
@@ -174,12 +177,13 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 
 | 이름 | 컬럼 | 참조 |
 | --- | --- | --- |
-| `fk_admin_permission_customer` | `customer_id` | `customer(customer_id)` |
+| `fk_admin_permission_admin` | `(customer_id, role)` | `customer(customer_id, role)` — 권한 행이 있는 관리자는 `CUSTOMER`로 바꿀 수 없다 |
 
 **CHECK 제약**
 
 | 이름 | 조건 | 설명 |
 | --- | --- | --- |
+| `ck_admin_permission_role` | `role = 'ADMIN'` | 권한은 관리자에게만 붙는다. |
 | `ck_admin_permission` | `permission COLLATE utf8mb4_0900_as_cs IN ('GL_READ', 'GL_WRITE', 'CUSTOMER_READ', 'CUSTOMER_WRITE', 'AUDIT_READ')` | 고정 5종만 허용한다. `common_code`는 `code_group`으로 여러 종류를 함께 담아 FK를 걸 수 없어 CHECK로 고정하고, 권한이 늘면 둘을 함께 바꾼다. |
 
 ---

@@ -17,6 +17,7 @@ import com.shinhan.corebank.auth.application.port.in.FindIdResult;
 import com.shinhan.corebank.auth.application.port.in.FindIdUseCase;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +35,9 @@ import org.springframework.test.web.servlet.MockMvc;
     SessionLogoutSuccessHandler.class
 })
 class FindIdControllerTest {
+
+    @MockitoBean
+    AdminPermissionFacade adminPermissionFacade;
 
     @Autowired
     private MockMvc mockMvc;

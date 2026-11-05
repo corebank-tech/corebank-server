@@ -15,6 +15,7 @@ import com.shinhan.corebank.auth.adapter.in.security.SessionAccessDeniedHandler;
 import com.shinhan.corebank.auth.adapter.in.security.SessionAuthenticationEntryPoint;
 import com.shinhan.corebank.auth.adapter.in.security.SessionLogoutSuccessHandler;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import com.shinhan.corebank.signup.application.port.in.VerifySignupAccountResult;
 import com.shinhan.corebank.signup.application.port.in.VerifySignupAccountUseCase;
 import com.shinhan.corebank.signup.domain.exception.AccountVerificationFailedException;
@@ -40,6 +41,9 @@ import org.springframework.test.web.servlet.MockMvc;
     ApiExceptionHandler.class
 })
 class SignupAccountVerificationControllerTest {
+
+    @MockitoBean
+    AdminPermissionFacade adminPermissionFacade;
 
     @Autowired
     MockMvc mockMvc;

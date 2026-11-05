@@ -49,6 +49,7 @@ erDiagram
         varchar email_ciphertext "AES-256-GCM, NULL 허용"
         varchar phone_number_ciphertext "AES-256-GCM, NULL 허용"
         char email_search_hash UK "CHAR(64), HMAC-SHA256, NULL 허용"
+        bigint admin_permission_version "권한 회수 때마다 증가, 세션 버전 대조"
     }
 
     terms {
@@ -242,7 +243,8 @@ erDiagram
 
     %% ---------- P1 ----------
     admin_permission {
-        bigint customer_id PK,FK "관리자"
+        bigint customer_id PK,FK "관리자. (customer_id, role)로 customer 참조"
+        varchar role FK "항상 ADMIN. DEFAULT ADMIN"
         varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ"
         datetime granted_at "권한 부여 시각"
     }
