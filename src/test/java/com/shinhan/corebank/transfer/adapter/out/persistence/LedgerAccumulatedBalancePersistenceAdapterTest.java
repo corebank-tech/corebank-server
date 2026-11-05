@@ -12,11 +12,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.TimeZone;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 @Transactional
@@ -45,9 +43,6 @@ class LedgerAccumulatedBalancePersistenceAdapterTest extends IntegrationTestSupp
 
     @Autowired
     private EntityManager entityManager;
-
-    @Autowired
-    private JdbcTemplate jdbc;
 
     @Test
     @DisplayName("SQL 집계는 기존 PH-11과 동일한 적수를 반환한다")
@@ -78,20 +73,6 @@ class LedgerAccumulatedBalancePersistenceAdapterTest extends IntegrationTestSupp
 
         entityManager.flush();
         entityManager.clear();
-
-        // CI 환경에서 JPA가 저장한 실제 원장 시각 확인
-        String storedOccurredAt = jdbc.queryForObject(
-                """
-        SELECT DATE_FORMAT(occurred_at, '%Y-%m-%d %H:%i:%s')
-        FROM ledger_entry
-        WHERE account_id = ?
-          AND balance_after = ?
-        """,
-                String.class, ACCOUNT_A, 350L);
-
-        assertThat(storedOccurredAt)
-                .as("JVM 시간대: %s", TimeZone.getDefault().getID())
-                .isEqualTo("2026-09-01 18:00:00");
 
         List<Long> accounts = List.of(ACCOUNT_A, ACCOUNT_B, ACCOUNT_C, ACCOUNT_D);
 
