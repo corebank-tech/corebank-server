@@ -9,6 +9,10 @@ import static org.mockito.Mockito.doAnswer;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.adapter.out.persistence.AccountStatusHistoryPersistenceAdapter;
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerification;
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
+import com.shinhan.corebank.account.application.port.out.AccountPasswordAuthTokenStorePort;
+import com.shinhan.corebank.account.domain.AccountPasswordAuthTokenPayload;
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.business.support.BusinessDateTestFixture;
@@ -27,6 +31,7 @@ import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -83,6 +88,12 @@ class EarlyTerminationIntegrationTest extends IntegrationTestSupport {
 
     @Autowired
     private Clock clock;
+
+    @Autowired
+    private AccountPasswordAuthTokenVerifier realPasswordVerifier;
+
+    @Autowired
+    private AccountPasswordAuthTokenStorePort tokenStorePort;
 
     @MockitoBean
     private MaturityTerminationPasswordVerificationPort passwordVerificationPort;
@@ -154,6 +165,14 @@ class EarlyTerminationIntegrationTest extends IntegrationTestSupport {
         jdbcTemplate.update("DELETE FROM account_status_history WHERE account_id = ?", PRODUCT_ACCOUNT_ID);
 
         jdbcTemplate.update("DELETE FROM product_subscription WHERE account_id = ?", PRODUCT_ACCOUNT_ID);
+
+        jdbcTemplate.update(
+                """
+        DELETE FROM auth_token
+        WHERE purpose = 'ACCOUNT_PASSWORD_AUTH'
+          AND customer_id = ?
+        """,
+                customerId);
 
         jdbcTemplate.update(
                 "DELETE FROM account WHERE account_id IN (?, ?)", PRODUCT_ACCOUNT_ID, WITHDRAWAL_ACCOUNT_ID);
@@ -416,6 +435,46 @@ class EarlyTerminationIntegrationTest extends IntegrationTestSupport {
 
         assertThat(account.get("closed_date")).isNull();
         assertThat(account.get("closed_trade_date")).isNull();
+    }
+
+    @Test
+    @DisplayName("#911 실제 비밀번호 토큰 검증 후 중도해지가 버전 충돌 없이 완료된다")
+    void terminate_withRealPasswordVerification_success() {
+        // given
+        String token = UUID.randomUUID().toString();
+
+        tokenStorePort.save(
+                token, new AccountPasswordAuthTokenPayload(customerId, PRODUCT_ACCOUNT_ID), Duration.ofMinutes(5));
+
+        doAnswer(invocation -> {
+                    realPasswordVerifier.verifyAndConsume(new AccountPasswordAuthTokenVerification(
+                            invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2)));
+                    return null;
+                })
+                .when(passwordVerificationPort)
+                .verifyAndConsumeAccountPasswordToken(eq(token), eq(customerId), eq(PRODUCT_ACCOUNT_ID));
+
+        // when
+        EarlyTerminationResult result =
+                terminationUseCase.terminate(new EarlyTerminationCommand(customerId, PRODUCT_ACCOUNT_ID, token));
+
+        // then
+        assertThat(result.principal()).isEqualTo(PRINCIPAL);
+        assertThat(result.totalTransferred()).isEqualTo(PRINCIPAL + result.netInterest());
+
+        assertThat(balanceOf(PRODUCT_ACCOUNT_ID)).isZero();
+        assertThat(balanceOf(WITHDRAWAL_ACCOUNT_ID)).isEqualTo(result.totalTransferred());
+
+        assertThat(ledgerSumOf(PRODUCT_ACCOUNT_ID)).isZero();
+        assertThat(ledgerSumOf(WITHDRAWAL_ACCOUNT_ID)).isEqualTo(result.totalTransferred());
+
+        assertThat(countTerminationLedger()).isEqualTo(2L);
+        assertThat(countClosureHistory()).isEqualTo(1L);
+
+        String status = jdbcTemplate.queryForObject(
+                "SELECT status FROM account WHERE account_id = ?", String.class, PRODUCT_ACCOUNT_ID);
+
+        assertThat(status).isEqualTo("CLOSED");
     }
 
     private EarlyTerminationCommand command() {
