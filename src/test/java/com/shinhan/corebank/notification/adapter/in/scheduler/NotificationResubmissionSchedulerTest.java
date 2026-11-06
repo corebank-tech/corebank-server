@@ -196,6 +196,28 @@ class NotificationResubmissionSchedulerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("즉시 재시도를 막 끝낸 기록과 다른 인스턴스가 방금 재제출해 실패한 기록은 2분이 지나기 전에 다시 가져가지 않는다")
+    void recentlyPublishedPublications_areNotResubmittedWithinInterval() {
+        // given — 다른 인스턴스가 재제출했지만 저장 장애가 이어져 다시 FAILED 가 된 기록
+        final long justFailedId = leaveJustFailedPublication();
+        final long resubmittedId = leaveFailedPublication();
+        notificationResubmissionScheduler.resubmitFailed();
+        await().atMost(LISTENER_TIMEOUT).untilAsserted(() -> {
+            final Map<String, Object> row = publicationRow(resubmittedId);
+            assertThat(row.get("STATUS")).isEqualTo("FAILED");
+            assertThat(row.get("COMPLETION_ATTEMPTS")).isEqualTo(ATTEMPTS_AFTER_FIRST_DELIVERY + 1);
+        });
+
+        // when — 이 인스턴스의 재제출
+        notificationResubmissionScheduler.resubmitFailed();
+
+        // then
+        assertThat(publicationRow(justFailedId).get("COMPLETION_ATTEMPTS")).isEqualTo(ATTEMPTS_AFTER_FIRST_DELIVERY);
+        assertThat(publicationRow(resubmittedId).get("COMPLETION_ATTEMPTS"))
+                .isEqualTo(ATTEMPTS_AFTER_FIRST_DELIVERY + 1);
+    }
+
+    @Test
     @DisplayName("포기한 기록이 읽기 묶음을 가득 채우면 그 뒤의 새 실패 기록은 밀리고, 경보가 묶음이 찼다고 알린다")
     void abandonedPublicationsFillingBatch_holdBackNewerOneAndRaiseAlarm(CapturedOutput output) {
         // given — 하루 전에 포기한 기록 100건이 오래된 순 읽기의 앞자리를 차지한다
@@ -214,9 +236,16 @@ class NotificationResubmissionSchedulerTest extends IntegrationTestSupport {
         assertThat(output).contains("그 뒤 실패 기록이 재제출되지 않는다");
     }
 
+    // 최소 재제출 간격(2분)이 지나 재제출 대상이 된 FAILED 기록
+    private long leaveFailedPublication() {
+        final long executionId = leaveJustFailedPublication();
+        markLastPublishedAt(executionId, Instant.now().minus(Duration.ofMinutes(6)));
+        return executionId;
+    }
+
     // 알림 저장을 DB 장애로 계속 실패시켜 즉시 재시도까지 소진한 FAILED 기록을 만든다. 포기 이벤트까지 기다려야 마지막
     // 시도가 기록을 다시 건드리지 않는다
-    private long leaveFailedPublication() {
+    private long leaveJustFailedPublication() {
         long executionId = EXECUTION_IDS.incrementAndGet();
         doThrow(new DataAccessResourceFailureException("저장 장애"))
                 .when(notificationCommandPort)
@@ -241,6 +270,14 @@ class NotificationResubmissionSchedulerTest extends IntegrationTestSupport {
             UPDATE EVENT_PUBLICATION SET STATUS = 'PROCESSING', PUBLICATION_DATE = ?, LAST_RESUBMISSION_DATE = ?
             WHERE SERIALIZED_EVENT LIKE ?
             """,
+                Timestamp.from(publishedAt),
+                Timestamp.from(publishedAt),
+                refIdPattern(executionId));
+    }
+
+    private void markLastPublishedAt(long executionId, Instant publishedAt) {
+        jdbcTemplate.update(
+                "UPDATE EVENT_PUBLICATION SET PUBLICATION_DATE = ?, LAST_RESUBMISSION_DATE = ? WHERE SERIALIZED_EVENT LIKE ?",
                 Timestamp.from(publishedAt),
                 Timestamp.from(publishedAt),
                 refIdPattern(executionId));

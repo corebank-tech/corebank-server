@@ -91,7 +91,7 @@ ADR-0005의 「MQ 대신 아웃박스」는 그대로다. 바뀌는 것은 §2�
 | 단계 | 쓰는 것 | 값 |
 |---|---|---|
 | 즉시 재시도 | `@Retryable` + `@EnableResilientMethods`(Spring 7) | 재시도 3번(기본값) · 간격 200ms에서 두 배씩 늘리고 ±지터(`multiplier = 2` · `jitter = 100`) — 동시에 실패한 재시도가 한 순간에 DB로 몰리지 않게 한다. 계약 위반(`ConstraintViolationException`)은 재시도하지 않는다 |
-| 주기 재제출 | `FailedEventPublications.resubmit` — `NotificationResubmissionScheduler` | 5분마다 · 묶음 100건(기본값) |
+| 주기 재제출 | `FailedEventPublications.resubmit` — `NotificationResubmissionScheduler` | 5분마다 · 묶음 100건(기본값) · 마지막 발행(재제출) 뒤 2분이 지난 기록만(최악 처리 약 14초의 6배 이상) |
 | 포기 | 재제출 필터 | 재제출을 3번 모두 쓴 기록은 다시 보내지 않고 행은 남긴다. `notification.publication.abandoned` 지표와 ERROR 로그(이벤트 종류 · 발행 ID) |
 | 멈춘 기록 정리 | `spring.modulith.events.staleness.*` | 처리 중 · 발행됨 · 재제출됨으로 10분 넘게 멈추면 `FAILED`. 점검 주기 1분(기본값). 재제출됨은 마지막 재제출 시각부터 잰다(2.0.9에서 고쳐짐 — 2.0.8은 처음 발행 시각이라 오래된 기록을 재제출하면 처리 중에 `FAILED`가 됐다) |
 | 재기동 후 전달 | 위 두 가지로 한다. `republish-outstanding-events-on-restart`는 켜지 않는다 | — |
@@ -100,7 +100,7 @@ ADR-0005의 「MQ 대신 아웃박스」는 그대로다. 바뀌는 것은 §2�
 |---|---|
 | 시도 횟수 시작값 | 기록을 만들 때 첫 전달이 시도 1번이다(`JdbcEventPublicationRepositoryV2.create`). 재제출 횟수 = 시도 − 1 |
 | 장애 중 횟수 | 시도는 재제출이 기록을 가져갈 때만 는다. DB가 죽어 있으면 늘지 않는다 |
-| 다중 인스턴스 | 재제출 중인 기록은 조건부 UPDATE가 막는다. 재제출된 실행이 바로 실패하면 다른 쪽이 또 가져갈 수 있다(한 JVM에서 두 스레드가 동시에 재제출하는 테스트로 시도 1 → 3 확인 — 별도 인스턴스로 띄워 잰 것은 아니다. 막는 곳이 DB라 인스턴스가 달라도 같은 UPDATE를 거친다). 알림은 1건 |
+| 다중 인스턴스 | 재제출 중인(`RESUBMITTED`) 기록은 조건부 UPDATE가 막는다 — 한 JVM 두 스레드 테스트에서 시도가 2에 그대로다(별도 인스턴스로 띄워 잰 것은 아니다). 선점 SQL에 시각 조건이 없어 재제출이 바로 실패해 `FAILED`로 돌아오면 다른 쪽이 또 가져갈 수 있고, 즉시 재시도 중인 기록도 이미 `FAILED`다. 그래서 마지막 발행 뒤 2분이 지난 기록만 재제출한다. 읽은 뒤 선점하기까지 몇 ms 사이의 경쟁은 남는다. 알림은 1건 |
 | 묶음 막힘 | 실패 기록을 오래된 순으로 100건 읽은 뒤 거른다. 포기한 기록이 100건이면 새 실패 기록이 밀린다. 공개 API로 포기 기록을 치울 수 없어 이때 「포기 기록이 재제출 대상을 모두 차지했다」 경보를 따로 낸다 |
 | 배치 락 | 두지 않는다. 기존 `BatchExecutionLockPort`는 죽은 인스턴스의 락이 6시간 풀리지 않는다 |
 
@@ -109,11 +109,11 @@ ADR-0005의 「MQ 대신 아웃박스」는 그대로다. 바뀌는 것은 §2�
 1. 대상 ID를 먼저 적어 둔다. 경보 로그의 `abandoned=[이벤트#ID]`나 이 쿼리로 찾는다.
    `SELECT ID, PUBLICATION_DATE, COMPLETION_ATTEMPTS FROM EVENT_PUBLICATION WHERE STATUS = 'FAILED' AND COMPLETION_ATTEMPTS >= 4;`
    그다음 로그 · 지표로 원인을 찾아 고친다.
-2. 적어 둔 ID만 시도 횟수를 첫 전달 상태로 되돌린다. 다음 재제출(5분 안)이 다시 보낸다.
+2. 적어 둔 ID만 시도 횟수를 첫 전달 상태로 되돌린다. 다음 재제출이 다시 보낸다 — 대기 기록이 100건을 넘으면 그다음 회차로 밀릴 수 있다.
    `UPDATE EVENT_PUBLICATION SET COMPLETION_ATTEMPTS = 1 WHERE STATUS = 'FAILED' AND ID IN (…);`
 3. 완료는 적어 둔 ID로 확인한다 — 1번 쿼리는 2번이 횟수를 바꾼 순간부터 비므로 쓰지 않는다.
    `SELECT ID, STATUS, COMPLETION_ATTEMPTS FROM EVENT_PUBLICATION WHERE ID IN (…);`가 0행이면 전달된 것이다.
-   행이 남아 있으면 다시 실패한 것이니 1번으로 돌아간다. `notification` 테이블에 그 `(type, ref_id)` 알림이 저장됐는지도 본다.
+   남아 있으면 상태로 가른다 — `FAILED` · 시도 1은 아직 재제출 대기, `RESUBMITTED` · `PROCESSING`은 처리 중, `FAILED` · 시도 2 이상은 다시 실패라 1번으로 돌아간다. `notification` 테이블에 그 `(type, ref_id)` 알림이 저장됐는지도 본다.
    같은 알림이 다시 가도 `(type, ref_id)`로 1건이다.
 
 ## 결과
