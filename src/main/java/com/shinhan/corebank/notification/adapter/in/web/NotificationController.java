@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 고객 본인의 알림함 API. 고객 식별자는 세션에서만 얻는다(REQ-NFR-007). */
@@ -16,6 +17,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class NotificationController implements NotificationControllerDocs {
 
     private final NotificationQueryUseCase notificationQueryUseCase;
+
+    @Override
+    @GetMapping
+    public ApiResponse<NotificationListResponse> getNotifications(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "false") boolean all,
+            @AuthenticationPrincipal AuthenticatedCustomer customer) {
+        return ApiResponse.success(NotificationListResponse.from(
+                notificationQueryUseCase.getNotifications(customer.customerId(), page, size, all)));
+    }
 
     @Override
     @GetMapping("/unread-count")

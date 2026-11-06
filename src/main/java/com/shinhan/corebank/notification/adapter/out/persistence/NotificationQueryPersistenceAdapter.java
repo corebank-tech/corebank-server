@@ -1,7 +1,10 @@
 package com.shinhan.corebank.notification.adapter.out.persistence;
 
 import com.shinhan.corebank.notification.application.port.out.NotificationQueryPort;
+import com.shinhan.corebank.notification.domain.NotificationInboxEntry;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -9,6 +12,13 @@ import org.springframework.stereotype.Component;
 public class NotificationQueryPersistenceAdapter implements NotificationQueryPort {
 
     private final NotificationJpaRepository notificationRepository;
+
+    @Override
+    public Page<NotificationInboxEntry> findInbox(Long customerId, Pageable pageable) {
+        return notificationRepository
+                .findByCustomerIdOrderByOccurredAtDescNotificationIdDesc(customerId, pageable)
+                .map(NotificationJpaEntity::toDomain);
+    }
 
     @Override
     public long countUnread(Long customerId) {
