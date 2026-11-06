@@ -35,6 +35,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 // 부여·회수 API가 인가·멱등키·감사·세션 종료·DB 제약까지 실제 MySQL 스키마에서 이어지는지 본다.
 // 테스트 ID는 다른 관리자 테스트(944900xxx)와 겹치지 않는 대역을 쓴다.
+// 이 클래스에서 세션을 지우는 호출(회수)은 HTTP 가 아니라 유스케이스로 부른다. 요청이 끝날 때 별도 트랜잭션으로 커밋되는
+// 요청 세션 INSERT 가 이 테스트 트랜잭션의 세션 삭제 락(연쇄 삭제되는 SPRING_SESSION_ATTRIBUTES 포함)에 걸려 간헐적으로 대기가 난다.
 @AutoConfigureMockMvc
 @Transactional
 @DisplayName("관리자 권한 부여·회수 API")
@@ -171,8 +173,6 @@ class AdminPermissionGrantRevokeIntegrationTest extends IntegrationTestSupport {
         assertThat(permissionsOf(PLAIN_CUSTOMER_ID)).isEmpty();
     }
 
-    // 세션을 지우는 회수는 HTTP 가 아니라 유스케이스로 부른다. 요청이 끝날 때 별도 트랜잭션으로 커밋되는 요청 세션 INSERT 가
-    // 이 테스트 트랜잭션의 세션 삭제 락(연쇄 삭제되는 SPRING_SESSION_ATTRIBUTES 포함)에 걸려 간헐적으로 대기가 난다.
     // 회수 API 의 응답 형식은 아래 「가진 적 없는 권한」 테스트가 HTTP 로 본다.
     @Test
     @DisplayName("권한을 회수하면 행이 지워지고 대상 관리자의 로그인 세션도 함께 사라진다")
@@ -214,8 +214,6 @@ class AdminPermissionGrantRevokeIntegrationTest extends IntegrationTestSupport {
     }
 
     // 로그인이 권한을 읽은 뒤 회수가 먼저 커밋되고 세션이 뒤늦게 저장되는 순서를 흉내 낸다.
-    // 부여·회수는 HTTP 가 아니라 유스케이스로 부른다 — 요청마다 별도 트랜잭션으로 커밋되는 세션 행이
-    // 이 테스트 트랜잭션의 세션 삭제 락과 겹쳐 대기가 난다.
     @Test
     @DisplayName("회수 전에 권한을 읽어 간 세션은 회수 뒤 다음 요청에서 401로 거부된다")
     void rejectsSessionSavedAfterRevoke() throws Exception {
