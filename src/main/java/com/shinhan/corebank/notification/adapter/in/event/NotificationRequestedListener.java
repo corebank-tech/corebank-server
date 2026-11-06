@@ -19,9 +19,9 @@ public class NotificationRequestedListener {
 
     private final NotificationCommandUseCase notificationCommandUseCase;
 
-    // 순간 장애는 그 자리에서 다시 시도한다. 계약 위반은 몇 번 해도 같으니 바로 실패로 남겨 재제출 · 포기 경로로 보낸다
+    // 순간 장애만 다시 시도한다(계약 위반은 바로 실패). 동시 실패한 재시도가 DB에 한꺼번에 몰리지 않게 간격을 늘리고 흩는다
     @ApplicationModuleListener
-    @Retryable(delay = 200, excludes = ConstraintViolationException.class)
+    @Retryable(delay = 200, multiplier = 2, jitter = 100, excludes = ConstraintViolationException.class)
     public void on(NotificationRequestCarrier event) {
         notificationCommandUseCase.createNotification(event.notification());
     }

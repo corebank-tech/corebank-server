@@ -90,7 +90,7 @@ ADR-0005의 「MQ 대신 아웃박스」는 그대로다. 바뀌는 것은 §2�
 
 | 단계 | 쓰는 것 | 값 |
 |---|---|---|
-| 즉시 재시도 | `@Retryable` + `@EnableResilientMethods`(Spring 7) | 재시도 3번(기본값) · 간격 200ms 고정. 계약 위반(`ConstraintViolationException`)은 재시도하지 않는다 |
+| 즉시 재시도 | `@Retryable` + `@EnableResilientMethods`(Spring 7) | 재시도 3번(기본값) · 간격 200ms에서 두 배씩 늘리고 ±지터(`multiplier = 2` · `jitter = 100`) — 동시에 실패한 재시도가 한 순간에 DB로 몰리지 않게 한다. 계약 위반(`ConstraintViolationException`)은 재시도하지 않는다 |
 | 주기 재제출 | `FailedEventPublications.resubmit` — `NotificationResubmissionScheduler` | 5분마다 · 묶음 100건(기본값) |
 | 포기 | 재제출 필터 | 재제출을 3번 모두 쓴 기록은 다시 보내지 않고 행은 남긴다. `notification.publication.abandoned` 지표와 ERROR 로그(이벤트 종류 · 발행 ID) |
 | 멈춘 기록 정리 | `spring.modulith.events.staleness.*` | 처리 중 · 발행됨 · 재제출됨으로 10분 넘게 멈추면 `FAILED`. 점검 주기 1분(기본값). 재제출됨은 마지막 재제출 시각부터 잰다(2.0.9에서 고쳐짐 — 2.0.8은 처음 발행 시각이라 오래된 기록을 재제출하면 처리 중에 `FAILED`가 됐다) |
