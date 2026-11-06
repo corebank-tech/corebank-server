@@ -626,7 +626,7 @@ COB의 `ACTIVE → MATURED` 전이, 고객 요청 만기해지의 `MATURED → C
 | `objection_decision` | UNIQUE | `uk_objection_decision_active` | `active_objection_id`. 반려되지 않은 판정은 이의제기당 하나 |
 | `objection_decision` | CHECK | `ck_objection_decision_basis` | `result = 'REJECTED' OR early_release_basis IS NOT NULL` |
 | `objection_decision` | CHECK | `ck_objection_decision_status` | `PENDING_APPROVAL`, `CONFIRMED`, `RETURNED` |
-| `objection_decision` | CHECK | `ck_objection_decision_hold` | 확정된 `PARTIAL`이면 `requested_hold_amount > 0`이고 `0 ≤ applied_hold_amount ≤ requested_hold_amount`, 그 밖은 둘 다 NULL |
+| `objection_decision` | CHECK | `ck_objection_decision_hold` | 확정된 `PARTIAL`이면 두 보류액이 모두 있고(NULL 불가) `requested_hold_amount > 0`, `0 ≤ applied_hold_amount ≤ requested_hold_amount`, 그 밖은 둘 다 NULL. 처음 만든 식은 NULL 비교가 UNKNOWN이 되어 통과해 `V202611060600`에서 `IS NOT NULL`을 넣어 다시 만들었다 |
 | `objection_decision` | CHECK | `ck_objection_decision_reject_single` | 불수용은 언제나 `CONFIRMED` |
 | `objection_decision` | CHECK | `ck_objection_decision_approval` | 확정된 수용과 일부 지급정지만 `approved_by`, `approved_at`이 있고 `approved_by <> decided_by` |
 | `objection_decision` | CHECK | `ck_objection_decision_return` | `RETURNED`면 `returned_by`, `returned_at`, `return_reason`이 모두 있고 아니면 모두 NULL |

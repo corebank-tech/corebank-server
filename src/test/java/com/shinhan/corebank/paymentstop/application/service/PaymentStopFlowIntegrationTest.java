@@ -44,6 +44,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -290,6 +291,12 @@ class PaymentStopFlowIntegrationTest extends IntegrationTestSupport {
         assertThat(data.holdAmount(s.target())).isEqualTo(DISPUTED_AMOUNT);
         assertThat(data.notices(objectionId))
                 .containsExactly("HOLDER:RECEIPT", "VICTIM:DECISION_PARTIAL", "FSS:DECISION_PARTIAL");
+        // 확정된 일부 지급정지에서 보류액이 빠지면 DB CHECK 가 막는다. NULL 비교가 UNKNOWN 으로 통과하지 않아야 한다
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                        "UPDATE objection_decision SET requested_hold_amount = NULL WHERE decision_id = ?",
+                        decision.decisionId()))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("ck_objection_decision_hold");
     }
 
     @Test

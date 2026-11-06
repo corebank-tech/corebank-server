@@ -243,8 +243,8 @@ erDiagram
         varchar result "ACCEPTED / PARTIAL / REJECTED"
         varchar reason
         varchar early_release_basis "수용, 일부 지급정지는 필수"
-        bigint requested_hold_amount "확정된 PARTIAL만"
-        bigint applied_hold_amount "확정된 PARTIAL만"
+        bigint requested_hold_amount "확정된 PARTIAL은 필수, 그 밖은 NULL"
+        bigint applied_hold_amount "확정된 PARTIAL은 필수, 그 밖은 NULL"
         varchar status "PENDING_APPROVAL / CONFIRMED / RETURNED"
         bigint decided_by "작성자 customer_id"
         datetime decided_at "작성 시각"
