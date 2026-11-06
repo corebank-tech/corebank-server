@@ -138,7 +138,7 @@ class NotificationResubmissionSchedulerTest extends IntegrationTestSupport {
         assertThat(row.get("STATUS")).isEqualTo("FAILED");
         assertThat(row.get("COMPLETION_ATTEMPTS")).isEqualTo(ATTEMPTS_AT_RESUBMISSION_LIMIT);
         assertThat(meterRegistry.get(ABANDONED_GAUGE).gauge().value()).isEqualTo(1.0);
-        assertThat(output).contains("재제출 상한");
+        assertThat(output).contains("재제출 상한").contains(String.valueOf(row.get("ID")));
     }
 
     @Test
@@ -211,7 +211,7 @@ class NotificationResubmissionSchedulerTest extends IntegrationTestSupport {
         assertThat(newer.get("STATUS")).isEqualTo("FAILED");
         assertThat(newer.get("COMPLETION_ATTEMPTS")).isEqualTo(ATTEMPTS_AFTER_FIRST_DELIVERY);
         assertThat(meterRegistry.get(ABANDONED_GAUGE).gauge().value()).isEqualTo((double) RESUBMISSION_BATCH_SIZE);
-        assertThat(output).contains("읽기 묶음이 포기한 기록으로 가득");
+        assertThat(output).contains("그 뒤 실패 기록이 재제출되지 않는다");
     }
 
     // 알림 저장을 DB 장애로 계속 실패시켜 즉시 재시도까지 소진한 FAILED 기록을 만든다. 포기 이벤트까지 기다려야 마지막
@@ -288,7 +288,7 @@ class NotificationResubmissionSchedulerTest extends IntegrationTestSupport {
     private Map<String, Object> publicationRow(long executionId) {
         return jdbcTemplate
                 .queryForList(
-                        "SELECT STATUS, COMPLETION_ATTEMPTS, LISTENER_ID, EVENT_TYPE, SERIALIZED_EVENT"
+                        "SELECT ID, STATUS, COMPLETION_ATTEMPTS, LISTENER_ID, EVENT_TYPE, SERIALIZED_EVENT"
                                 + " FROM EVENT_PUBLICATION WHERE SERIALIZED_EVENT LIKE ? ORDER BY PUBLICATION_DATE DESC LIMIT 1",
                         refIdPattern(executionId))
                 .stream()

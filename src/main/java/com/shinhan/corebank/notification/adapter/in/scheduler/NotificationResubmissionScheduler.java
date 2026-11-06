@@ -2,6 +2,8 @@ package com.shinhan.corebank.notification.adapter.in.scheduler;
 
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,26 +40,35 @@ public class NotificationResubmissionScheduler {
             fixedDelayString = "${app.notification.resubmission.fixed-delay}",
             initialDelayString = "${app.notification.resubmission.fixed-delay}")
     public void resubmitFailed() {
-        AtomicInteger abandonedCount = new AtomicInteger();
-        failedEventPublications.resubmit(
-                DEFAULT_OPTIONS.withFilter(publication -> isWithinResubmissionLimit(publication, abandonedCount)));
+        final List<String> abandonedPublications = new ArrayList<>();
+        failedEventPublications.resubmit(DEFAULT_OPTIONS.withFilter(
+                publication -> isWithinResubmissionLimit(publication, abandonedPublications)));
 
-        int abandoned = abandonedCount.get();
+        final int abandoned = abandonedPublications.size();
         abandonedInLastBatch.set(abandoned);
-        boolean isBatchFullOfAbandoned = abandoned == DEFAULT_OPTIONS.getBatchSize();
+        final boolean isBatchFullOfAbandoned = abandoned == DEFAULT_OPTIONS.getBatchSize();
         if (isBatchFullOfAbandoned) {
             log.error(
-                    "읽기 묶음이 포기한 기록으로 가득 차 새 실패 기록이 밀린다 - 재제출 상한={}번, abandonedCount={}", MAX_RESUBMISSIONS, abandoned);
+                    "포기한 기록이 재제출 대상 {}건을 모두 차지해 그 뒤 실패 기록이 재제출되지 않는다 - 런북으로 처리 필요, 재제출 상한={}번, abandoned={}",
+                    abandoned,
+                    MAX_RESUBMISSIONS,
+                    abandonedPublications);
         } else if (abandoned > 0) {
-            log.error("재제출 상한({}번)을 넘긴 알림 발행 기록 - abandonedCount={}", MAX_RESUBMISSIONS, abandoned);
+            log.error(
+                    "재제출 상한({}번)을 모두 쓴 알림 발행 기록 - abandonedCount={}, abandoned={}",
+                    MAX_RESUBMISSIONS,
+                    abandoned,
+                    abandonedPublications);
         }
     }
 
-    private static boolean isWithinResubmissionLimit(EventPublication publication, AtomicInteger abandonedCount) {
-        int resubmissions = publication.getCompletionAttempts() - FIRST_DELIVERY_ATTEMPTS;
-        boolean isWithinLimit = resubmissions < MAX_RESUBMISSIONS;
+    // 포기한 기록은 이벤트 종류와 발행 ID 로 남긴다 — 런북이 이 ID 로 대상을 집는다. 이벤트 본문은 고객 정보라 남기지 않는다
+    private static boolean isWithinResubmissionLimit(EventPublication publication, List<String> abandonedPublications) {
+        final int resubmissions = publication.getCompletionAttempts() - FIRST_DELIVERY_ATTEMPTS;
+        final boolean isWithinLimit = resubmissions < MAX_RESUBMISSIONS;
         if (!isWithinLimit) {
-            abandonedCount.incrementAndGet();
+            abandonedPublications.add(
+                    publication.getEvent().getClass().getSimpleName() + "#" + publication.getIdentifier());
         }
         return isWithinLimit;
     }
