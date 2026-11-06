@@ -56,6 +56,10 @@
 | `disputedTransfers` | 다툼 거래. 원장 항목 형식(아래) |
 | `commonDocuments` | 누락 서류를 짚을 때 기준으로 쓰는 공통 소명자료 목록(내부 목록) |
 | `ledgerFrom`, `ledgerTo` | 원장 조회와 판정안 근거가 허용되는 기간. `ledgerTo`는 미포함 |
+| `documents` | 증빙(`EVIDENCE`)만 `[{ documentId, round, ocrStatus, pages }]`. `pages`는 OCR이 끝난(`DONE`) 것만 가명 처리한 글자 영역이고 그 밖은 빈 배열이다. 신분증 사본은 없다(D37) |
+| `externalChecks` | 외부 확인 `[{ agency, status, reply }]`. `reply`는 null일 수 있다 |
+| `supplementRound` | 지금까지 보완 요청 횟수(0~2) |
+| `missingDocumentsRequested` | 가장 최근 보완 요청의 요청 서류. 보완 요청이 없었으면 빈 배열 |
 
 ### `GET /internal/objections/{objectionId}/ledger?from&to&counterparty`
 
@@ -90,12 +94,37 @@
 | `branch` | Agent 갈래. `FRAUD_PATTERN` / `NORMAL_ACCEPT` / `NORMAL_PARTIAL` / `UNDETERMINED` |
 | `evidenceTransactionNumbers` | 근거 거래번호. 허용 기간 안 거래여야 한다. 아니면 `PST0005` |
 | `missingDocuments`, `followUps` | 누락 소명자료, 추가 확인 항목 |
-| `claims` | 추출한 주장. 주장마다 근거 원문(`quote`)을 붙인다 |
+| `claims` | 추출한 주장. 주장마다 근거 원문(`quote`)을 붙인다. 선택 필드 `source`(`STATEMENT` / `DOCUMENT`), `documentId`, `regionIndex`는 서버가 그대로 저장한다(문자열 값만 가명 처리) |
 | `contradictions` | 주장과 원장의 모순. `transactionNumbers`도 허용 기간 안이어야 한다 |
 | `noticeDraft` | 안내문 초안 |
 | `model`, `promptVersion`, `inputTokens`, `outputTokens`, `costMicroUsd` | 사용량. 비용은 백만분의 1달러 정수 |
 
 응답은 `{ "runId", "agentBranch", "gateBranch" }`다. 서버는 같은 트랜잭션에서 판정안 저장, 게이트 계산 기록(`gate_evaluation`의 `ANALYSIS`), `GATE_EVALUATED` 단계, 실행 종료(`COMPLETED`)를 남긴다. 같은 토큰으로 다시 내면 처음 결과를 돌려주고 아무것도 더 남기지 않는다.
+
+### `GET /internal/objections/{objectionId}/documents`
+
+증빙만 `[{ documentId, contentType, round, ocrStatus }]`. 파일 이름은 주지 않는다. 신분증 사본은 목록에 없다(D37).
+
+### `GET /internal/objections/{objectionId}/documents/{documentId}/content`
+
+파일 바이트. 이 API만 `ApiResponse`로 감싸지 않고 `Content-Type`에 저장된 형식을 싣는다. 신분증 사본이나 다른 이의제기의 문서는 `PST0205`다.
+
+### `PUT /internal/objections/{objectionId}/documents/{documentId}/ocr`
+
+본문 `{ engine, status?, pages: [{ page, width, height, regions: [{ index, text, bbox: [x, y, w, h], confidence }] }] }`. `text`는 원문이다. `index`는 서류 전체에서 0부터 이어지는 번호다.
+
+- 서버는 `text`만 가명 처리하고 나머지는 그대로 저장한다. 원문은 저장하지 않는다.
+- `status`는 생략하면 `DONE`이다. 읽지 못했으면 `FAILED`로 보낼 수 있고 그때 `pages`는 저장하지 않는다. `PENDING`은 `CMN0001`.
+- 응답은 `{ documentId, pages }`(가명 처리한 값)다. 같은 문서에 다시 보내면 덮어쓴다.
+- 신분증 사본이나 다른 이의제기의 문서는 `PST0205`다.
+
+### `GET /internal/objections/{objectionId}/external-checks`
+
+`[{ agency, status, reply }]`. `agency`는 `POLICE` / `PEER_BANK`, `reply`는 `INVOLVEMENT_SUSPECTED` / `DOCUMENT_FORGED` / `OWNER_UNRELATED` / `NO_RECORD`이고 null일 수 있다. 회신은 게이트의 외부 확인 사실이지만 Agent에게는 참고용이고, 게이트는 서버가 계산한다.
+
+### 분석 작업이 들어가는 때
+
+접수(영업점 대리 접수, 고객 비대면 신청), 고객 보완 제출, 관리자 재분석 요청마다 실행 하나가 대기열에 들어간다. 단계 종류 `OCR`의 detail은 `{ documentId, pages, regions, lowConfidenceRegions, engine, error? }`(개수)다.
 
 ## 5. 관리자 화면용
 
@@ -106,4 +135,4 @@
 | `GET /admin/objections/{id}/review-draft` | 최근 판정안. 없으면 `data`가 null |
 | `POST /admin/objections/{id}/review-requests` | 재분석 요청. 멱등키 필수. 판정 확정 뒤면 `PST0302`, 진행 중 실행이 있으면 `PST0306` |
 
-권한은 다른 이의제기 API와 같다(조회 `PAYMENT_STOP_READ`, 요청 `PAYMENT_STOP_WRITE`).
+권한은 다른 이의제기 API와 같다(조회 `PAYMENT_STOP_READ`, 요청 `PAYMENT_STOP_WRITE`). 그 밖의 관리자 API와 고객 API는 [objection_admin_contract.md](objection_admin_contract.md)에 있다.

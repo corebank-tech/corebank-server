@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 60개 테이블(51개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트·감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 525개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
+> **DBMS**: MySQL 8.4 / 66개 테이블(57개 비즈니스 테이블 + 채번, 배치, cutoff, 체크포인트, 감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 585개 컬럼 / 금액 BIGINT, 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장과 표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -24,7 +24,7 @@ erDiagram
     SPRING_SESSION ||--o{ SPRING_SESSION_ATTRIBUTES : "ON DELETE CASCADE"
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 60개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
+    %% MySQL 8.4 / 66개 테이블 / 금액 BIGINT, 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -159,23 +159,101 @@ erDiagram
         boolean simplified_requested
         boolean id_copy_confirmed
         boolean litigation_pending
-        varchar status "RECEIVED / DECIDED"
-        bigint received_by "관리자 customer_id"
+        varchar status "RECEIVED / UNDER_REVIEW / SUPPLEMENT_REQUESTED / SUPPLEMENT_SUBMITTED / PENDING_APPROVAL / DECIDED"
+        bigint received_by "BRANCH면 관리자, ONLINE이면 명의인 customer_id"
+        varchar received_channel "BRANCH / ONLINE"
         datetime received_at
+        bigint completeness_confirmed_by "NULL 허용"
+        datetime completeness_confirmed_at "심사 기한 기산점"
+        date review_deadline "완비 확인일 + 5영업일, 보완 중 NULL"
+        tinyint supplement_round "0~2"
+        date supplement_due "보완 기한"
         datetime created_at
+        datetime updated_at
+    }
+
+    objection_supplement_request {
+        bigint supplement_request_id PK "AUTO_INCREMENT"
+        bigint objection_id FK "UK(objection_id, round)"
+        tinyint round "1 또는 2"
+        varchar reason
+        json missing_documents "요청 서류 이름"
+        date due_date
+        bigint requested_by "관리자 customer_id"
+        datetime requested_at
+        datetime submitted_at "명의인 제출 시각"
+        varchar submit_note
+    }
+
+    objection_review_session {
+        bigint review_session_id PK "AUTO_INCREMENT"
+        bigint objection_id FK
+        bigint admin_id "관리자 customer_id"
+        datetime started_at "상세 화면을 연 시각"
+    }
+
+    objection_external_check {
+        bigint external_check_id PK "AUTO_INCREMENT"
+        bigint objection_id FK "UK(objection_id, agency)"
+        varchar agency "POLICE / PEER_BANK"
+        varchar status "REQUESTED / REPLIED"
+        varchar reply "가담 의심, 위조 판명, 명의인 무관, 해당 없음"
+        bigint requested_by
+        datetime requested_at
+        datetime replied_at
+    }
+
+    objection_notice {
+        bigint notice_id PK "AUTO_INCREMENT"
+        bigint objection_id FK
+        varchar target "HOLDER / VICTIM / FSS / RELATED_BANK"
+        varchar kind "RECEIPT ~ STOP_TERMINATED"
+        varchar channel "SMS / DOCUMENT"
+        varchar basis "통지 근거"
+        datetime recorded_at
+    }
+
+    objection_document {
+        bigint document_id PK "AUTO_INCREMENT"
+        bigint objection_id FK
+        varchar kind "EVIDENCE / ID_COPY"
+        varchar file_name
+        varchar content_type "매직 바이트 판정"
+        bigint size_bytes "10MB 이하"
+        char sha256 "CHAR(64)"
+        varchar storage_key "{objectionId}/{documentId}"
+        boolean encrypted "ID_COPY는 AES-GCM"
+        tinyint round "0 접수, 1~2 보완"
+        bigint uploaded_by
+        varchar uploader_role "HOLDER / ADMIN"
+        datetime uploaded_at
+    }
+
+    objection_document_ocr {
+        bigint document_id PK,FK
+        varchar status "PENDING / DONE / FAILED"
+        json pages "가명 처리한 글자 영역"
+        varchar engine
         datetime updated_at
     }
 
     objection_decision {
         bigint decision_id PK "AUTO_INCREMENT"
-        bigint objection_id UK,FK
+        bigint objection_id FK
         varchar result "ACCEPTED / PARTIAL / REJECTED"
         varchar reason
         varchar early_release_basis "수용, 일부 지급정지는 필수"
-        bigint requested_hold_amount "PARTIAL만"
-        bigint applied_hold_amount "PARTIAL만"
-        bigint decided_by "관리자 customer_id"
-        datetime decided_at
+        bigint requested_hold_amount "확정된 PARTIAL만"
+        bigint applied_hold_amount "확정된 PARTIAL만"
+        varchar status "PENDING_APPROVAL / CONFIRMED / RETURNED"
+        bigint decided_by "작성자 customer_id"
+        datetime decided_at "작성 시각"
+        bigint approved_by "승인자, 작성자와 다름"
+        datetime approved_at
+        bigint returned_by
+        datetime returned_at
+        varchar return_reason
+        bigint active_objection_id UK "생성 열, 반려 아닌 판정은 이의제기당 1건"
     }
 
     gate_evaluation {
@@ -698,7 +776,13 @@ erDiagram
     account ||..o{ payment_stop_case : "지급정지 사건 (논리 관계, FK 없음)"
     payment_stop_case ||--|{ case_disputed_transfer : "다툼 거래"
     payment_stop_case ||--o| objection : "이의제기 (사건당 1건)"
-    objection ||--o| objection_decision : "판정"
+    objection ||--o{ objection_decision : "판정 (반려 제외 1건)"
+    objection ||--o{ objection_supplement_request : "보완 요청 (2회까지)"
+    objection ||--o{ objection_review_session : "심사 시작 기록"
+    objection ||--o{ objection_external_check : "외부 확인 (기관별 1건)"
+    objection ||--o{ objection_notice : "통지 기록"
+    objection ||--o{ objection_document : "첨부 서류"
+    objection_document ||--o| objection_document_ocr : "OCR 결과 (증빙만)"
     objection ||--o{ gate_evaluation : "게이트 계산 기록"
     objection ||--o{ agent_run : "AI 분석 실행"
     agent_run ||--o{ agent_run_step : "단계 이벤트"
