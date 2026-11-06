@@ -95,7 +95,7 @@ flowchart TB
 | **11/3** | **릴리스 3 = UAT 배포본** — 오전 머지 · 기존 EC2 CD 자동 배포, 운영 3-Tier 수동 반영. 10/30에서 바뀌었다([D-35](#d-35--1030--p4)) |
 | 11/4 13:00~16:30 | [PH-09](tasks.md#ph-09-uat-시나리오-실행) UAT — 운영 대상 측정 금지 |
 | 11/6 | 6인 리포트. 기존 EC2·RDS 유지 종료 |
-| 11/9 주 | [PH-48](tasks.md#ph-48-발표-자료) 발표 자료·리허설 · 3-Tier `terraform destroy`([D-30](#d-30--1020--리드). Object Lock 보존 1일이라 S4 재측정 다음 날부터) |
+| 11/9 주 | [PH-48](tasks.md#ph-48-발표-자료) 발표 자료·리허설 · DR 전환 검증 후 3-Tier 메인 스택 철거 검토([D-30](#d-30--1020--리드)). 감사 Object Lock 스택은 8일 보존 만료 확인 후 별도 철거(#867) |
 | **11/18** | **최종 발표** — 시연은 온프레미스 VM([D-30](#d-30--1020--리드)) |
 
 ---
@@ -169,14 +169,19 @@ flowchart TB
 
 ### 3-8. 3-Tier 수명과 destroy
 
-- 리허설(10/19)부터 S4 재측정이 끝날 때(11/6)까지 약 18일만 가동하고, 끝나는 대로 전부 `terraform destroy`한다([D-30](#d-30--1020--리드)). 예산 상한은 없다. **실행 주체는 P5**이고, S4에 리허설 1회를 한다([PH-55](tasks.md#ph-55-배포-파이프라인--destroy-리허설)).
-- **destroy가 한 번에 끝나도록 다음을 반드시 설정한다**([D-08](#d-08--91920--p1p2p5)).
-    - Secrets Manager는 `recovery_window_in_days = 0`으로 둔다. 기본값(30일 복구 유예)이면 삭제가 유예되고, 같은 이름으로 다시 만들 수도 없다.
-    - CloudTrail 로그 버킷과 Object Lock 버킷에는 `force_destroy = true`를 준다. 객체가 남은 버킷은 삭제가 실패하기 때문이다.
-    - Object Lock 버킷의 객체는 보존기간(1일)이 지나야 지워진다. 그 전에 destroy하려면 `s3:BypassGovernanceRetention` 권한이 필요하다. 그래서 destroy는 마지막 적재 후 1일이 지난 뒤에 한다.
-    - Object Lock은 **GOVERNANCE 모드 · 보존 1일**
-    - CloudFront는 비활성화 후 삭제까지 15~20분이 걸린다. destroy 순서에 반영한다.
-    - VPN 연결 · VPN Gateway · Customer Gateway도 destroy 대상이다. 온프레미스 SSM 등록은 따로 해제한다.
+- AWS 3-Tier는 S4 재측정 종료 후 DR 전환과 데이터 정합성을 검증한 다음 승인된 일정에 따라 철거한다([D-30](#d-30--1020--리드)).
+  실행 담당은 P5다([PH-55](tasks.md#ph-55-배포-파이프라인--destroy-리허설)).
+- Terraform은 메인 인프라와 감사 인프라를 별도 State로 관리하며, 두 스택의 destroy 시점을 구분한다.
+  - `terraform/main`: DR 전환, 원본 RDS 최종 GTID 검증, VM 서비스 정상화 및 복구 대응 계획 확인 후 철거한다.
+    VPN 연결·VPN Gateway·Customer Gateway도 해당 범위에 포함한다.
+  - `terraform/audit`: P1의 감사 로그 최종 적재 이후 모든 객체 버전의 실제 보존 만료일을 확인하고 별도로 철거한다.
+    Object Lock의 기본 보존 기간은 GOVERNANCE 모드 8일이다(#867).
+  - Secrets Manager는 `recovery_window_in_days = 0` 설정을 유지한다.
+    실제 삭제 시 비밀정보 및 암호화 키 보존 필요성을 확인한다.
+  - CloudTrail 로그 버킷과 Object Lock 버킷은`force_destroy = true` 설정을 사용하지만, 보호 중인 Object Lock 객체를 강제로 삭제할 수 있다는 뜻은 아니다.
+  - 감사 버킷의 기존 객체에는 새 기본 보존 기간 8일이 소급 적용되지 않는다.
+  - CloudFront 삭제와 온프레미스 SSM 등록 해제는 메인 인프라 철거 절차에 따라 진행한다.
+- 감사 버킷을 포함한 AWS 계정 종료·권한 회수 일정은 리드 및 계정 관리자와 확인한다.
 - 구성도: [핵심 흐름](../assets/infra-core.svg) · [상세 구성](../assets/infra-detail.svg). AWS와 온프레미스(신한DS 자체 서버)를 Site-to-Site VPN으로 잇는 하이브리드다([D-25](#d-25--927--리드-제안1020-팀-확정)).
 - 인프라 경계
     - P5: VPC·서브넷·NAT(AZ별)·SG·ALB·ASG(min 2, AZ별 1대)·인스턴스 프로파일·SSM 접속 · Site-to-Site VPN · 온프레미스 VM 1대([PH-100](tasks.md#ph-100-하이브리드-연결-①-온프레미스-vm-s2--②-vpn-연결-s3))
@@ -330,6 +335,13 @@ PH-08의 "IP 단위 전역 요청량 제한"을 P2 PH-58 WAF로 옮겼다. 계�
 
 Object Lock은 GOVERNANCE 모드·보존 1일이다. Object Lock 버킷은 생성 시 versioning이 필요하다. 잠긴 객체까지 지우는 `s3:BypassGovernanceRetention` 권한은 destroy 실행 역할에만 주고, 앱의 적재 역할에는 주지 않는다(주면 WORM 검증이 무의미해진다). 삭제·수정 거부 검증은 P1(PH-82)이 한다. destroy가 막히지 않도록 Secrets Manager 복구 유예 0일, 로그·Object Lock 버킷 `force_destroy`, CloudFront 삭제 순서를 반영한다(§3-8). 설정은 P2가 하고, destroy 리허설과 실행은 P5가 한다.
 
+**후속 변경 (#867, 2026-11):**
+PH-82의 최근 7일 감사 로그 재검증 범위를 Object Lock 보호 기간으로 뒷받침하기 위해 기본 보존 기간을 1일에서 8일로 변경한다.
+
+기존 GOVERNANCE 모드와 운영 적재 역할의 보존 우회 권한 금지 정책은 유지한다. 기본 정책 변경은 기존 객체에 소급 적용되지 않는다.
+
+3-Tier 메인 인프라는 DR 전환 검증 후 먼저 철거하고, 독립 `terraform/audit` 스택은 마지막 적재 객체의 실제 보존 만료일을 확인한 이후 별도로 철거한다.
+
 ### D-09 · 9/23 · 리드
 
 ADM-03 정보계 대시보드와 PH-77의 권한은 `GL_READ`다. 권한 집합 5종은 늘리지 않는다(FE 요구사항 1안).
@@ -468,7 +480,7 @@ PH-77 정보계 조회 API의 지표를 2개(일별 수신 잔액 추이 · 상�
 
 - 시연은 VM의 MySQL 레플리카를 승격하고 계정계 API를 띄워서 한다. [D-25](#d-25--927--리드-제안1020-팀-확정)의 AWS를 쓸 수 없을 때 전환하는 경로와 같다([PH-54](tasks.md#ph-54-dr-등급--복구-훈련)).
 - destroy하면 VPN이 끊겨 복제가 멈춘다. destroy 전에 레플리카가 마지막 거래까지 따라왔는지 확인한다.
-- Object Lock 보존 1일 때문에 destroy는 마지막 적재 다음 날부터 할 수 있다(§3-8).
+- 당초 Object Lock 기본 보존 기간이 1일이어서 마지막 적재 다음 날부터 destroy하는 계획이었으나, #867에서 기본 보존 기간을 8일로 변경하기로 했다. 감사 스택은 메인 인프라 철거와 분리하고, 모든 객체 버전의 실제 보존 만료일을 확인한 뒤 별도로 철거한다(§3-8).
 - FE를 포함한 시연 접속 경로와 데이터는 P5가 정한다. VM을 11/18까지 쓸 수 있는지는 강사님께 확인한다.
 
 ### D-31 · 10/19 · 팀 합의

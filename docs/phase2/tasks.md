@@ -401,12 +401,12 @@ PH-49a-① 문서로 정책을 대신한다. 별도 화면은 없다. FE 로그�
 
 ### PH-82. WORM 감사 저장소 · 무결성 해시
 
-- S3 Object Lock 버킷에 적재한다. 버킷과 IAM은 P2 PH-72가 **10/21까지** 만든다. 그 전에는 해시 컬럼·검증 배치·적재 어댑터(목 버킷)를 먼저 만든다. **GOVERNANCE 모드 · 보존 1일**이다([D-08](README.md#d-08--91920--p1p2p5)).
+- S3 Object Lock 버킷에 적재한다. 버킷과 IAM은 P2 PH-72가 **10/21까지** 만든다. 그 전에는 해시 컬럼·검증 배치·적재 어댑터(목 버킷)를 먼저 만든다. **GOVERNANCE 모드 · 기본 보존 기간 8일(#867 변경 대상)**이다([D-08](README.md#d-08--91920--p1p2p5)).
 - 적재 대상: 기존 `AuditLog`와 개인정보 접근로그(PH-89 조회 감사)
 - 거래 레코드에 SHA-256 해시 컬럼을 두고, 검증 배치가 불일치 리포트를 낸다.
 - **삭제·수정 거부 검증 시나리오는 P1이 한다.**
 - **완료 기준:** 보존기간 안에 객체 삭제를 시도하면 거부된다.
-현황: 해시는 `audit_log.row_hash`에만 둔다(P4 합의, 원장 변조 탐지는 범위 밖). 매일 00:30 최근 7일 중 적재가 끝나지 않은 날을 `audit/log/`·`audit/access/`에 올리고, 날짜·경로별 상태는 `audit_archive_execution`에 남긴다. 한 번 올린 사본은 덮어쓰지 않는다. 적재가 끝나는 즉시 그날을 DB와 대조하고(완료 이벤트), 01:00에 최근 7일 중 적재가 끝난 날을 다시 훑는다. 불일치는 `audit_integrity_mismatch`에 남긴다(#766, #788 리뷰). 재검증 7일은 놓친 날을 메우는 재시도 창이다. 사본 불변성은 버킷 보존(1일) 동안만 보장되므로 그 뒤의 대조는 DB만 바뀐 경우를 잡는다.
+현황: 해시는 `audit_log.row_hash`에만 둔다(P4 합의, 원장 변조 탐지는 범위 밖). 매일 00:30 최근 7일 중 적재가 끝나지 않은 날을 `audit/log/`·`audit/access/`에 올리고, 날짜·경로별 상태는 `audit_archive_execution`에 남긴다. 한 번 올린 사본은 덮어쓰지 않는다. 적재가 끝나는 즉시 그날을 DB와 대조하고(완료 이벤트), 01:00에 최근 7일 중 적재가 끝난 날을 다시 훑는다. 불일치는 `audit_integrity_mismatch`에 남긴다(#766, #788 리뷰). 재검증 7일은 놓친 날을 메우는 재시도 창이다. Object Lock은 각 객체 버전의 실제 보존 만료일까지 사본의 삭제·변조를 제한한다. 기본 보존 기간은 #867에서 1일 → 8일로 변경할 예정이며, 기존 객체에는 소급 적용되지 않는다. 따라서 적용 시점 이전 사본과 이후 사본의 보호 기간은 구분해 검증한다.
 
 ### FE C-7. 알림함 실연동
 
@@ -663,7 +663,7 @@ IAM 경계는 [D-11](README.md#d-11--920--p2p5)을 따른다. P5는 인스턴스
 - Secrets Manager 전환(현재 환경변수)
 - **PH-18 연계:** 고객 개인정보 암호화용 AES/HMAC 키를 Secrets Manager로 관리한다. 신규 RDS에 연결하는 WAS 2대와 일회성 백필·검증 프로세스가 같은 키 버전을 사용하도록 PH-51 서버 기동 과정 및 IAM 읽기 권한과 연동한다. 운영 암호화 키의 자동 회전은 재암호화·해시 재계산 절차가 마련되기 전까지 활성화하지 않는다.
 - CloudTrail · 콘솔 MFA 강제 · 자격증명 회전
-- **S3 Object Lock 버킷 + 적재용 IAM — GOVERNANCE 모드 · 보존 1일. 10/21까지 먼저 apply한다.** S3 버킷은 VPC·컴퓨트와 무관하다. 컷오버(10/27) 뒤로 미루면 P1 PH-82가 S3 마지막 3일에 몰리고, S4는 코드 금지라 넘길 곳이 없다. 나머지 IAM·Secrets Manager·CloudTrail은 PH-51 뒤다.
+- **S3 Object Lock 버킷 + 적재용 IAM:** 10/21에 GOVERNANCE 모드·기본 보존 기간 1일로 선적용했다. PH-82의 최근 7일 재검증 요구에 따라 #867에서 기본 보존 기간을 8일로 변경한다. 감사 버킷은 VPC·컴퓨트와 별도 Terraform State(`terraform/audit`)로 관리하며, 메인 인프라 철거 후에도 객체 보존 만료일까지 유지한다. 나머지 IAM·Secrets Manager·CloudTrail은 PH-72의 별도 범위다.
 - destroy 대비 설정: Secrets Manager는 `recovery_window_in_days = 0`, CloudTrail·Object Lock 버킷은 `force_destroy = true`로 둔다. 이유와 순서는 [README §3-8](README.md#3-8-3-tier-수명과-destroy)
 - **완료 기준:** AI 자격증명으로 쓰기를 시도하면 거부된다. 앱 비밀값이 Secrets Manager에서 읽힌다. Object Lock 객체 삭제가 거부된다(검증은 P1 PH-82). SSH 0은 PH-51 몫이다.
 
@@ -671,12 +671,21 @@ IAM 경계는 [D-11](README.md#d-11--920--p2p5)을 따른다. P5는 인스턴스
 
 - `terraform/audit/` 독립 루트 모듈 및 별도 S3 state(`audit/terraform.tfstate`) 구성.
 - 2차 AWS 계정에 Object Lock 감사 버킷(`corebank-audit-worm-853900964665`) 적용 완료.
-- GOVERNANCE 1일, Versioning Enabled, 퍼블릭 접근 차단, AES256 암호화 확인.
+- 2026-10-20 최초 검증: GOVERNANCE 1일, Versioning Enabled, 퍼블릭 접근 차단, AES256 암호화 확인.
 - 적재용 IAM 정책(`corebank-audit-writer`) 생성 및 `audit/lock-test/*`에 검증용 `s3:DeleteObjectVersion`, `s3:GetObjectVersion`, `s3:GetObjectRetention` 권한 반영. `s3:BypassGovernanceRetention`은 부여하지 않음.
 - P1 협의 완료: `audit/` 접두사, 감사로그·개인정보 접근로그 하위 경로 분리, AWS WAS 직접 적재.
 - **P5 연동:** 독립 state 운영 및 PH-55 별도 destroy 포함 합의 완료. WAS 역할에 정책 연결은 PH-51 apply 이후 예정.
 - **P1 검증:** PH-82 구현은 10/28까지 머지 예정, 실제 WAS 역할을 통한 적재·삭제·변조 거부 검증은 10/30부터 진행. 검증 완료 후 임시 IAM 권한 제거.
 - 사람·CI·AI IAM, Secrets Manager, CloudTrail 등 PH-72 잔여 작업은 PH-51 이후 진행.
+
+**PH-72-① 후속 변경 (#867)**
+
+- 감사 버킷 기본 보존 기간을 GOVERNANCE 1일에서 8일로 변경한다.
+- `terraform/audit`에서 Object Lock 설정의 in-place 변경만 허용한다.
+- 기존 객체의 보존 만료일은 소급 연장하지 않는다.
+- 메인 스택과 감사 스택의 destroy 시점을 분리한다.
+- P1의 최종 감사 로그 적재 시각 및 리드의 AWS 계정 종료 일정을 확인한다.
+- 적용 및 검증 완료 전에는 AWS 보존 정책 변경을 완료로 표시하지 않는다.
 
 ### FE C-1. 잔액/출금가능액 라벨 분리
 
