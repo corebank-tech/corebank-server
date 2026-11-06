@@ -15,6 +15,7 @@ import com.shinhan.corebank.paymentstop.application.port.in.AgentWorkerUseCase.C
 import com.shinhan.corebank.paymentstop.application.port.in.AgentWorkerUseCase.OcrCommand;
 import com.shinhan.corebank.paymentstop.application.port.in.DocumentUseCase;
 import com.shinhan.corebank.paymentstop.application.port.in.ExternalCheckUseCase;
+import com.shinhan.corebank.paymentstop.application.port.in.ObjectionQueryUseCase;
 import com.shinhan.corebank.paymentstop.application.port.in.ReceiveObjectionUseCase;
 import com.shinhan.corebank.paymentstop.application.port.in.RegisterPaymentStopCaseUseCase;
 import com.shinhan.corebank.paymentstop.domain.document.DocumentKind;
@@ -65,6 +66,9 @@ class ObjectionDocumentIntegrationTest extends IntegrationTestSupport {
 
     @Autowired
     private ReceiveObjectionUseCase receiveUseCase;
+
+    @Autowired
+    private ObjectionQueryUseCase queryUseCase;
 
     @Autowired
     private CustomerTestFixture customerTestFixture;
@@ -146,6 +150,11 @@ class ObjectionDocumentIntegrationTest extends IntegrationTestSupport {
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple(DocumentKind.ID_COPY, null),
                         org.assertj.core.groups.Tuple.tuple(DocumentKind.EVIDENCE, OcrStatus.PENDING));
+        // 상세의 서류 개수는 신분증 사본까지 센다
+        assertThat(queryUseCase
+                        .detail(objectionId, actor, AccessReason.OPERATION)
+                        .documentCount())
+                .isEqualTo(2);
         assertNotFound(() -> documentUseCase.ocr(objectionId, idCopy.documentId()));
     }
 

@@ -15,6 +15,8 @@ public interface ObjectionDocumentPort {
 
     List<ObjectionDocument> findDocuments(long objectionId);
 
+    int countDocuments(long objectionId);
+
     Optional<ObjectionDocument> findDocument(long objectionId, long documentId);
 
     Optional<DocumentOcr> findOcr(long documentId);

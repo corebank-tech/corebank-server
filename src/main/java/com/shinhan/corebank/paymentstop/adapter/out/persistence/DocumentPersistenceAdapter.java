@@ -55,6 +55,11 @@ public class DocumentPersistenceAdapter implements ObjectionDocumentPort {
     }
 
     @Override
+    public int countDocuments(long objectionId) {
+        return Math.toIntExact(documentRepository.countByObjectionId(objectionId));
+    }
+
+    @Override
     public Optional<ObjectionDocument> findDocument(long objectionId, long documentId) {
         return documentRepository
                 .findByDocumentIdAndObjectionId(documentId, objectionId)

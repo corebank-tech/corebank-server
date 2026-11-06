@@ -92,7 +92,7 @@ public class ObjectionQueryService implements ObjectionQueryUseCase {
                 objectionCalendar.snapshot().flags(objection),
                 reviewPort.findExternalChecks(objectionId),
                 reviewPort.findSupplementRequests(objectionId),
-                documentPort.findDocuments(objectionId).size());
+                documentPort.countDocuments(objectionId));
     }
 
     @Override

@@ -75,6 +75,8 @@ app:
       worker-key: ${PAYMENT_STOP_WORKER_KEY:}
       token-ttl: 10m
       lease: 5m
+      # DB 제약 ck_agent_run_attempt(attempt BETWEEN 0 AND 3, V202611051600)와 묶여 있다. 3보다 크게 올리면 가져가기의
+      # attempt + 1 이 CHECK 를 어겨 claim 이 500 으로 끝나므로, 올릴 때는 새 증분 마이그레이션으로 CHECK 도 함께 바꾼다
       max-attempts: 3
     gate:
       fraud-window-hours: 24
