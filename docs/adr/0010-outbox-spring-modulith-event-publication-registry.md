@@ -92,7 +92,7 @@ ADR-0005의 「MQ 대신 아웃박스」는 그대로다. 바뀌는 것은 §2�
 |---|---|---|
 | 즉시 재시도 | `@Retryable` + `@EnableResilientMethods`(Spring 7) | 재시도 3번(기본값) · 간격 200ms 고정. 계약 위반(`ConstraintViolationException`)은 재시도하지 않는다 |
 | 주기 재제출 | `FailedEventPublications.resubmit` — `NotificationResubmissionScheduler` | 5분마다 · 묶음 100건(기본값) |
-| 포기 | 재제출 필터 | 재제출 3번을 넘긴 기록은 다시 보내지 않고 행은 남긴다. `notification.publication.abandoned` 지표와 ERROR 로그 |
+| 포기 | 재제출 필터 | 재제출을 3번 모두 쓴 기록은 다시 보내지 않고 행은 남긴다. `notification.publication.abandoned` 지표와 ERROR 로그(이벤트 종류 · 발행 ID) |
 | 멈춘 기록 정리 | `spring.modulith.events.staleness.*` | 처리 중 · 발행됨 · 재제출됨으로 10분 넘게 멈추면 `FAILED`. 점검 주기 1분(기본값). 재제출됨은 마지막 재제출 시각부터 잰다(2.0.9에서 고쳐짐 — 2.0.8은 처음 발행 시각이라 오래된 기록을 재제출하면 처리 중에 `FAILED`가 됐다) |
 | 재기동 후 전달 | 위 두 가지로 한다. `republish-outstanding-events-on-restart`는 켜지 않는다 | — |
 
@@ -100,16 +100,21 @@ ADR-0005의 「MQ 대신 아웃박스」는 그대로다. 바뀌는 것은 §2�
 |---|---|
 | 시도 횟수 시작값 | 기록을 만들 때 첫 전달이 시도 1번이다(`JdbcEventPublicationRepositoryV2.create`). 재제출 횟수 = 시도 − 1 |
 | 장애 중 횟수 | 시도는 재제출이 기록을 가져갈 때만 는다. DB가 죽어 있으면 늘지 않는다 |
-| 다중 인스턴스 | 재제출 중인 기록은 조건부 UPDATE가 막는다. 재제출된 실행이 바로 실패하면 다른 쪽이 또 가져간다(시도 1 → 3 실측). 알림은 1건 |
-| 묶음 막힘 | 실패 기록을 오래된 순으로 100건 읽은 뒤 거른다. 포기한 기록이 100건이면 새 실패 기록이 밀린다. 공개 API로 포기 기록을 치울 수 없어 이때 「읽기 묶음이 가득 찼다」 경보를 따로 낸다 |
+| 다중 인스턴스 | 재제출 중인 기록은 조건부 UPDATE가 막는다. 재제출된 실행이 바로 실패하면 다른 쪽이 또 가져갈 수 있다(한 JVM에서 두 스레드가 동시에 재제출하는 테스트로 시도 1 → 3 확인 — 별도 인스턴스로 띄워 잰 것은 아니다. 막는 곳이 DB라 인스턴스가 달라도 같은 UPDATE를 거친다). 알림은 1건 |
+| 묶음 막힘 | 실패 기록을 오래된 순으로 100건 읽은 뒤 거른다. 포기한 기록이 100건이면 새 실패 기록이 밀린다. 공개 API로 포기 기록을 치울 수 없어 이때 「포기 기록이 재제출 대상을 모두 차지했다」 경보를 따로 낸다 |
 | 배치 락 | 두지 않는다. 기존 `BatchExecutionLockPort`는 죽은 인스턴스의 락이 6시간 풀리지 않는다 |
 
 **수동 재처리 런북** — 포기 경보가 오면:
 
-1. 로그 · 지표로 원인을 찾아 고친다. 포기 기록은 `SELECT ID, PUBLICATION_DATE, COMPLETION_ATTEMPTS FROM EVENT_PUBLICATION WHERE STATUS = 'FAILED' AND COMPLETION_ATTEMPTS >= 4;`
-2. 고친 뒤 시도 횟수를 첫 전달 상태로 되돌린다. 다음 재제출(5분 안)이 다시 보낸다.
-   `UPDATE EVENT_PUBLICATION SET COMPLETION_ATTEMPTS = 1 WHERE STATUS = 'FAILED' AND COMPLETION_ATTEMPTS >= 4;`
-3. 행이 사라졌는지(전달 완료) 1번 쿼리로 확인한다. 같은 알림이 다시 가도 `(type, ref_id)`로 1건이다.
+1. 대상 ID를 먼저 적어 둔다. 경보 로그의 `abandoned=[이벤트#ID]`나 이 쿼리로 찾는다.
+   `SELECT ID, PUBLICATION_DATE, COMPLETION_ATTEMPTS FROM EVENT_PUBLICATION WHERE STATUS = 'FAILED' AND COMPLETION_ATTEMPTS >= 4;`
+   그다음 로그 · 지표로 원인을 찾아 고친다.
+2. 적어 둔 ID만 시도 횟수를 첫 전달 상태로 되돌린다. 다음 재제출(5분 안)이 다시 보낸다.
+   `UPDATE EVENT_PUBLICATION SET COMPLETION_ATTEMPTS = 1 WHERE STATUS = 'FAILED' AND ID IN (…);`
+3. 완료는 적어 둔 ID로 확인한다 — 1번 쿼리는 2번이 횟수를 바꾼 순간부터 비므로 쓰지 않는다.
+   `SELECT ID, STATUS, COMPLETION_ATTEMPTS FROM EVENT_PUBLICATION WHERE ID IN (…);`가 0행이면 전달된 것이다.
+   행이 남아 있으면 다시 실패한 것이니 1번으로 돌아간다. `notification` 테이블에 그 `(type, ref_id)` 알림이 저장됐는지도 본다.
+   같은 알림이 다시 가도 `(type, ref_id)`로 1건이다.
 
 ## 결과
 
@@ -121,6 +126,6 @@ ADR-0005의 「MQ 대신 아웃박스」는 그대로다. 바뀌는 것은 §2�
   `TIMESTAMP(6)`은 jar DDL을 그대로 옮긴 결과이고, MySQL `TIMESTAMP`는 2038-01-19까지만 담는다.
 - **재기동 후에는 내용이 같은 기록이 함께 지워질 수 있다.** 진행 중이 아닌 기록은 `LISTENER_ID + SERIALIZED_EVENT`로
   찾아 지우기 때문이다. 구독자가 업무 키로 멱등하면(PH-96-②) 한 번만 실행돼도 결과가 같다.
-- **다중 인스턴스 재제출**은 같은 기록을 두 번 가져갈 수 있다(#709 실측, 아래 「구독 실패 처리」). 최소 한 번 전달
+- **다중 인스턴스 재제출**은 같은 기록을 두 번 가져갈 수 있다(#709 한 JVM 두 스레드 테스트, 위 「구독 실패 처리」). 최소 한 번 전달
   (At-Least-Once)이라 받는 쪽 멱등이 필요하고, 알림은 `(type, ref_id)`로 1건이다.
 - 직렬화는 Jackson 3이고, 버전은 Spring 공식 BOM `spring-modulith-bom` 2.0.9(Boot 4.0.x 대응)로 관리한다.
