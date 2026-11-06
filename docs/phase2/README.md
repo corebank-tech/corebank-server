@@ -178,7 +178,7 @@ flowchart TB
     Object Lock의 기본 보존 기간은 GOVERNANCE 모드 8일이다(#867).
   - Secrets Manager는 `recovery_window_in_days = 0` 설정을 유지한다.
     실제 삭제 시 비밀정보 및 암호화 키 보존 필요성을 확인한다.
-  - CloudTrail 로그 버킷과 Object Lock 버킷은`force_destroy = true` 설정을 사용하지만, 보호 중인 Object Lock 객체를 강제로 삭제할 수 있다는 뜻은 아니다.
+  - CloudTrail 로그 버킷과 Object Lock 버킷은 `force_destroy = true` 설정을 사용하지만, 보호 중인 Object Lock 객체를 강제로 삭제할 수 있다는 뜻은 아니다.
   - 감사 버킷의 기존 객체에는 새 기본 보존 기간 8일이 소급 적용되지 않는다.
   - CloudFront 삭제와 온프레미스 SSM 등록 해제는 메인 인프라 철거 절차에 따라 진행한다.
 - 감사 버킷을 포함한 AWS 계정 종료·권한 회수 일정은 리드 및 계정 관리자와 확인한다.
@@ -333,7 +333,7 @@ PH-08의 "IP 단위 전역 요청량 제한"을 P2 PH-58 WAF로 옮겼다. 계�
 
 ### D-08 · 9/19~20 · P1·P2·P5
 
-Object Lock은 GOVERNANCE 모드·보존 1일이다. Object Lock 버킷은 생성 시 versioning이 필요하다. 잠긴 객체까지 지우는 `s3:BypassGovernanceRetention` 권한은 destroy 실행 역할에만 주고, 앱의 적재 역할에는 주지 않는다(주면 WORM 검증이 무의미해진다). 삭제·수정 거부 검증은 P1(PH-82)이 한다. destroy가 막히지 않도록 Secrets Manager 복구 유예 0일, 로그·Object Lock 버킷 `force_destroy`, CloudFront 삭제 순서를 반영한다(§3-8). 설정은 P2가 하고, destroy 리허설과 실행은 P5가 한다.
+Object Lock은 GOVERNANCE 모드·보존 1일이었다(#867에서 8일로 변경). Object Lock 버킷은 생성 시 versioning이 필요하다. 잠긴 객체까지 지우는 `s3:BypassGovernanceRetention` 권한은 destroy 실행 역할에만 주고, 앱의 적재 역할에는 주지 않는다(주면 WORM 검증이 무의미해진다). 삭제·수정 거부 검증은 P1(PH-82)이 한다. destroy가 막히지 않도록 Secrets Manager 복구 유예 0일, 로그·Object Lock 버킷 `force_destroy`, CloudFront 삭제 순서를 반영한다(§3-8). 설정은 P2가 하고, destroy 리허설과 실행은 P5가 한다.
 
 **후속 변경 (#867, 2026-11):**
 PH-82의 최근 7일 감사 로그 재검증 범위를 Object Lock 보호 기간으로 뒷받침하기 위해 기본 보존 기간을 1일에서 8일로 변경한다.
