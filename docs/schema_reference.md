@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 42개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 441개 컬럼
+**대상**: 51개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 525개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -77,6 +77,15 @@
 | 49 | `audit_integrity_mismatch` | 감사 로그 무결성 불일치 목록 | P1 | 5 |
 | 50 | `transfer_hold` | 이체 보류 | P4 | 20 |
 | 51 | `delayed_transfer_setting` | 고객별 지연이체 설정 | P4 | 6 |
+| 52 | `account_payment_stop` | 계좌 사건별 지급정지 기록 | P3 | 10 |
+| 53 | `payment_stop_case` | 지급정지 사건 | P3 | 8 |
+| 54 | `case_disputed_transfer` | 지급정지 사건의 다툼 거래 | P3 | 5 |
+| 55 | `objection` | 지급정지 이의제기 | P3 | 12 |
+| 56 | `objection_decision` | 이의제기 판정 | P3 | 9 |
+| 57 | `gate_evaluation` | 해제 게이트 계산 기록 | P3 | 9 |
+| 58 | `agent_run` | 이의제기 Agent 실행 | P3 | 15 |
+| 59 | `agent_run_step` | Agent 실행 단계 이벤트 | P3 | 10 |
+| 60 | `review_draft` | Agent 판정안 | P3 | 6 |
 
 ---
 
@@ -168,7 +177,7 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | --- | --- | --- | --- | --- | --- |
 | `customer_id` | `BIGINT` | **PK, FK** | X |  | 권한을 가진 관리자. `customer(customer_id, role)` 참조 |
 | `role` | `VARCHAR(12)` | FK | X | `'ADMIN'` | 항상 `ADMIN`. `customer.role`과 함께 복합 FK를 이뤄 `CUSTOMER` 계정에 권한 행이 붙는 것을 막는다. 엔티티에 매핑하지 않고 DB 기본값을 쓴다 |
-| `permission` | `VARCHAR(20)` | **PK** | X |  | 권한 하나. `GL_READ`·`GL_WRITE`·`CUSTOMER_READ`·`CUSTOMER_WRITE`·`AUDIT_READ`. `common_code`의 `ADMIN_PERMISSION` 그룹과 값이 같다 |
+| `permission` | `VARCHAR(20)` | **PK** | X |  | 권한 하나. `GL_READ`·`GL_WRITE`·`CUSTOMER_READ`·`CUSTOMER_WRITE`·`AUDIT_READ`·`PAYMENT_STOP_READ`·`PAYMENT_STOP_WRITE`·`PAYMENT_STOP_APPROVE`. `common_code`의 `ADMIN_PERMISSION` 그룹과 값이 같다 |
 | `granted_at` | `DATETIME(6)` |  | X |  | 권한을 준 시각. 회수는 행 삭제라 이력은 `audit_log`가 맡는다 |
 
 **기본키** — `(customer_id, permission)` 복합. 같은 권한이 두 번 들어가지 않는다.
@@ -184,7 +193,7 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | 이름 | 조건 | 설명 |
 | --- | --- | --- |
 | `ck_admin_permission_role` | `role = 'ADMIN'` | 권한은 관리자에게만 붙는다. |
-| `ck_admin_permission` | `permission COLLATE utf8mb4_0900_as_cs IN ('GL_READ', 'GL_WRITE', 'CUSTOMER_READ', 'CUSTOMER_WRITE', 'AUDIT_READ')` | 고정 5종만 허용한다. `common_code`는 `code_group`으로 여러 종류를 함께 담아 FK를 걸 수 없어 CHECK로 고정하고, 권한이 늘면 둘을 함께 바꾼다. |
+| `ck_admin_permission` | `permission COLLATE utf8mb4_0900_as_cs IN ('GL_READ', 'GL_WRITE', 'CUSTOMER_READ', 'CUSTOMER_WRITE', 'AUDIT_READ', 'PAYMENT_STOP_READ', 'PAYMENT_STOP_WRITE', 'PAYMENT_STOP_APPROVE')` | 고정 8종만 허용한다(지급정지 3종은 `V202611051400`). `common_code`는 `code_group`으로 여러 종류를 함께 담아 FK를 걸 수 없어 CHECK로 고정하고, 권한이 늘면 둘을 함께 바꾼다. |
 
 ---
 
@@ -396,7 +405,7 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | `product_id`               | `BIGINT`      | **FK** | O    |          | 입출금계좌는 NULL → `product.product_id`                                                |
 | `account_type`             | `VARCHAR(24)` |        | X    |          | 계좌 종류. `DEMAND_DEPOSIT`(입출금) / `TIME_DEPOSIT`(정기예금) / `INSTALLMENT_SAVINGS`(정기적금) |
 | `balance`                  | `BIGINT`      |        | X    | `0`      | 현재 잔액. **조회 성능용 캐시**이며 진실의 원천은 `ledger_entry` 합계다. 배치로 대사한다                       |
-| `hold_amount` | `BIGINT` | | X | `0` | 지급정지 보류액. 출금가능액 계산 시 잔액에서 차감한다. |
+| `hold_amount` | `BIGINT` | | X | `0` | 지급정지 보류액. 출금가능액 계산 시 잔액에서 차감한다. 유효한 `account_payment_stop` 일부 지급정지 행의 `applied_amount` 합계로 계산한다(D-36) |
 | `status`                   | `VARCHAR(12)` |        | X    | `ACTIVE` | 계좌 상태. `ACTIVE`(정상) / `SUSPENDED`(거래정지) / `MATURED`(만기 도달) / `CLOSED`(해지) / `DORMANT`(휴면)                            |
 | `password_hash`            | `CHAR(60)`    |        | X    |          | 계좌비밀번호 4자리의 BCrypt 해시                                                             |
 | `password_failure_count`   | `TINYINT`     |        | X    | `0`      | 계좌비밀번호 연속 오류 횟수. 검증 실패 응답의 `errorCount`                                           |
@@ -446,7 +455,7 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 > 계좌 상태 전이 감사 이력 (PH-15, #671)
 
 계좌 상태 변경 시 전이 전·후 상태와 처리 시각을 기록하는 append-only 테이블이다.
-COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED → CLOSED` 전이를 기록한다.
+COB의 `ACTIVE → MATURED` 전이, 고객 요청 만기해지의 `MATURED → CLOSED` 전이, 지급정지 적용과 전환과 해제로 바뀐 `ACTIVE ↔ SUSPENDED` 전이를 기록한다. 지급정지로 상태가 바뀌지 않으면(원래 `SUSPENDED` 계좌 등) 남기지 않는다.
 
 | 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
 | --- | --- | --- | --- | --- | --- |
@@ -457,7 +466,7 @@ COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED →
 | `maturity_date` | `DATE` | | O | | 계약 만기일 |
 | `effective_business_date` | `DATE` | | O | | 만기 전이는 COB에서 계산한 만기 전이 기준일, 만기해지는 MATURITY 출금 원장의 실제 거래일(`tradeDate`) |
 | `changed_at` | `DATETIME(6)` | INDEX | X | | 실제 상태 전이 처리 시각 |
-| `trigger_type` | `VARCHAR(20)` | | X | | 전이 발생 원인. `COB`(배치 만기 전이) / `CUSTOMER`(고객 요청 만기해지) |
+| `trigger_type` | `VARCHAR(20)` | | X | | 전이 발생 원인. `COB`(배치 만기 전이) / `CUSTOMER`(고객 요청 만기해지) / `PAYMENT_STOP`(지급정지 적용, 전환, 해제) |
 
 **인덱스**
 
@@ -466,6 +475,202 @@ COB의 `ACTIVE → MATURED` 전이와 고객 요청 만기해지의 `MATURED →
 | PRIMARY | `PRIMARY` | `history_id` |
 | INDEX | `ix_account_status_history_account_time` | `account_id, changed_at` |
 
+---
+
+## `account_payment_stop`
+
+> 계좌 사건별 지급정지 기록 (이의제기 AI 심사 지원, [D-36](phase2/README.md#d-36--113--리드))
+
+`account.api.PaymentStopUseCase`가 쓰는 사건별 지급정지 기록이다. 계좌의 `status`와 `hold_amount`는 이 테이블의 유효한 행으로 계산한다.
+전부 지급정지(`FULL`)가 하나라도 있으면 `SUSPENDED`, 일부 지급정지(`PARTIAL`)만 있으면 정지 전 상태에 `applied_amount` 합계만큼 보류한다. 마지막 행이 해제되면 `status_before`로 돌아간다.
+해제해도 행을 지우지 않는다. 다른 사건의 지급정지 이력을 보는 데 쓴다.
+
+- **이력 책임 경계:** 이 테이블은 사건별 최종 상태와 생성, 해제 시각만 둔다. 일부 지급정지 전환 시각, 확정한 담당자, 판정 근거는 paymentstop 도메인의 판정 이력과 감사 로그(`audit_log`)가 남긴다. `account_status_history`에는 계좌 상태가 실제로 바뀐 경우만 남아, 여러 사건이 겹쳐 상태가 그대로인 전환과 해제는 남지 않는다.
+- **선행 조건:** 일부 지급정지를 운영에서 쓰려면 #521(락 이후 재검증을 출금가능액 기준으로)이 먼저 머지돼야 한다. 그 전에는 이체와 보류액 변경이 경합하면 `ck_account_hold_amount` 위반으로 이체가 DB 오류로 끝난다.
+- **입금 정책:** 전부 지급정지 계좌는 `SUSPENDED`라 출금뿐 아니라 입금(이체 수취, 상품 입금)도 `TRF0301`로 거부한다. 법령상 지급정지(「전기통신금융사기 피해 방지 및 피해금 환급에 관한 특별법」 제4조)는 지급을 막는 조치라 금융권은 입금을 받는다. 그래도 `SUSPENDED`를 쓰는 근거는 둘이다. 입금을 받으려면 `transfer`의 수취 계좌 검사(`TransferExecutionService`, `LedgerDepositService`의 `ACTIVE` 검사)가 지급정지만 통과시키도록 상태나 표시를 새로 나눠야 해 이 계약의 범위(이체와 입금 경로 무변경)를 넘는다. 또 이의제기 심사와 해제에 필요한 것은 출금 차단이고, 입금 차단은 명의인의 정상 입금을 막는 불편이 있어도 돈이 빠져나가는 경로를 열지 않는다. 알려진 한계로 공개하며, 1원 송금 뒤 신고로 계좌를 묶는 수법은 시연에서 합성 데이터로 재현한다. 운영에서 입금을 받아야 하면 출금만 막는 표현을 P2(계좌 상태), P4(이체 수취 검사)와 정하고 두 경로를 함께 고친다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `payment_stop_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 기록 식별자 |
+| `account_id` | `BIGINT` | **FK** **UK** | X | | 지급정지된 계좌 → `account.account_id` |
+| `case_id` | `BIGINT` | **UK** | X | | 지급정지 사건 ID(paymentstop 도메인). 그 테이블이 아직 없어 FK가 없다 |
+| `stop_type` | `VARCHAR(10)` | | X | | `FULL`(전부 지급정지) / `PARTIAL`(일부 지급정지) |
+| `requested_amount` | `BIGINT` | | X | `0` | 일부 지급정지 요청 보류액. `FULL`은 0 |
+| `applied_amount` | `BIGINT` | | X | `0` | 실제로 묶은 보류액. 잔액에서 다른 사건 보류액을 뺀 금액이 상한이다. `FULL`은 0 |
+| `status_before` | `VARCHAR(12)` | | X | | 첫 지급정지를 걸기 전 계좌 상태(`ACTIVE` / `SUSPENDED`). 같은 계좌의 유효한 행은 모두 같은 값이다 |
+| `active` | `BOOLEAN` | | X | `TRUE` | 유효 여부. 해제하면 `FALSE` |
+| `created_at` | `DATETIME(6)` | | X | | 지급정지를 건 시각 |
+| `released_at` | `DATETIME(6)` | | O | | 해제 시각. 유효한 행은 NULL |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 / 조건 |
+| --- | --- | --- |
+| PRIMARY | `PRIMARY` | `payment_stop_id` |
+| UNIQUE | `uk_account_payment_stop_account_case` | `account_id, case_id` |
+| FK | `fk_aps_account` | `account_id` → `account.account_id` |
+| CHECK | `ck_aps_stop_type` | `stop_type IN ('FULL', 'PARTIAL')` |
+| CHECK | `ck_aps_status_before` | `status_before IN ('ACTIVE', 'SUSPENDED')` |
+| CHECK | `ck_aps_amount` | `requested_amount >= 0 AND applied_amount >= 0 AND applied_amount <= requested_amount` |
+| CHECK | `ck_aps_released` | 유효하면 `released_at IS NULL`, 해제됐으면 `released_at IS NOT NULL` |
+
+---
+
+## `payment_stop_case` · `case_disputed_transfer` · `objection` · `objection_decision` · `gate_evaluation`
+
+> 지급정지 사건과 이의제기 심사 (D-36, PA-04)
+
+`paymentstop` 도메인의 사건과 심사 기록이다. 계좌 상태와 보류액의 정본은 `account_payment_stop`이고 이 표들은 `account.api`로만 계좌를 바꾼다. `account`에는 FK를 걸지 않는다.
+판정 확정은 해제 게이트를 계좌 락 밖에서 계산한 뒤, `objection` 행을 잠그고 판정, 계좌 반영, 게이트 기록, 감사를 한 트랜잭션에 남긴다.
+
+**`payment_stop_case`** 지급정지 사건
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `case_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 사건 ID. `account_payment_stop.case_id`가 이 값이다 |
+| `account_id` | `BIGINT` | INDEX | X | | 지급정지 계좌 |
+| `sender_account_id` | `BIGINT` | | O | | 다툼 거래 송금인의 당행 계좌. 타행이거나 송금인이 여럿이면 NULL(관계 인정 불가) |
+| `objection_deadline` | `DATE` | | X | | 이의제기 신청 기한. 담당자가 등록 때 넣는다 |
+| `status` | `VARCHAR(12)` | | X | | `STOPPED` 전부 지급정지 / `PARTIAL` 일부 지급정지 / `RELEASED` 해제 |
+| `registered_by` | `BIGINT` | | X | | 등록한 관리자 `customer_id` |
+| `created_at` | `DATETIME(6)` | | X | | 생성 시각 |
+| `updated_at` | `DATETIME(6)` | | X | | 수정 시각 |
+
+**`case_disputed_transfer`** 사건의 다툼 거래. 등록 때 그 계좌의 최근 180일 성공 입금인지 확인하고 원장 값을 남긴다
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `disputed_transfer_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 식별자 |
+| `case_id` | `BIGINT` | FK | X | | `payment_stop_case.case_id` |
+| `transaction_number` | `CHAR(20)` | **UK** | X | | 다툼 입금 거래번호. 한 거래는 한 사건에만 |
+| `amount` | `BIGINT` | | X | | 등록 시점 원장 금액 |
+| `occurred_at` | `DATETIME(6)` | | X | | 등록 시점 원장 시각 |
+
+**`objection`** 이의제기. 사건당 1건
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `objection_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 이의제기 ID |
+| `case_id` | `BIGINT` | **UK**, FK | X | | `payment_stop_case.case_id` |
+| `clause` | `TINYINT` | | X | | 사유 조항(법 제7조제1항 1~3호). 해제 범위를 정한다 |
+| `statement` | `TEXT` | | X | | 명의인 소명 원문. 상세 조회는 조회 사유와 감사(`OBJECTION_DETAIL_VIEW`)를 남긴다 |
+| `simplified_requested` | `BOOLEAN` | | X | | 간소화(일부 지급정지) 절차 신청 |
+| `id_copy_confirmed` | `BOOLEAN` | | X | | 신분증 사본 확인(시행령 제7조). 확인 없이 접수하지 않는다 |
+| `litigation_pending` | `BOOLEAN` | | X | | 명의인과 피해자 사이 소송 계속. 참이면 수용과 일부 지급정지를 닫는다 |
+| `status` | `VARCHAR(12)` | | X | | `RECEIVED` 접수 / `DECIDED` 판정 확정 |
+| `received_by` | `BIGINT` | | X | | 접수한 관리자 `customer_id` |
+| `received_at` | `DATETIME(6)` | | X | | 접수 시각. 신청 기한과 비교한다 |
+| `created_at` | `DATETIME(6)` | | X | | 생성 시각 |
+| `updated_at` | `DATETIME(6)` | | X | | 수정 시각 |
+
+**`objection_decision`** 확정된 판정. 이의제기당 1건
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `decision_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 식별자 |
+| `objection_id` | `BIGINT` | **UK**, FK | X | | `objection.objection_id` |
+| `result` | `VARCHAR(10)` | | X | | `ACCEPTED` 수용 / `PARTIAL` 일부 지급정지 / `REJECTED` 불수용 |
+| `reason` | `VARCHAR(500)` | | X | | 판정 사유 |
+| `early_release_basis` | `VARCHAR(500)` | | O | | 조기 해제 근거. 수용과 일부 지급정지는 필수(법 제8조제2항제2호 단서) |
+| `requested_hold_amount` | `BIGINT` | | O | | 일부 지급정지 요청 보류액(다툼 입금액 합). `PARTIAL`만 |
+| `applied_hold_amount` | `BIGINT` | | O | | 실제로 묶은 보류액. `PARTIAL`만 |
+| `decided_by` | `BIGINT` | | X | | 확정한 관리자 `customer_id`. 2인 승인은 PA-10 |
+| `decided_at` | `DATETIME(6)` | | X | | 확정 시각 |
+
+**`gate_evaluation`** 해제 게이트 계산 기록. 같은 판정을 재현하려고 규칙 버전과 설정값을 함께 남긴다(D10)
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `gate_evaluation_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 식별자 |
+| `objection_id` | `BIGINT` | INDEX, FK | X | | `objection.objection_id` |
+| `purpose` | `VARCHAR(12)` | | X | | `DECISION` 판정 확정 직전 / `ANALYSIS` Agent 분석 시점(PA-05) |
+| `branch` | `VARCHAR(16)` | | X | | `FRAUD_PATTERN` / `NORMAL_ACCEPT` / `NORMAL_PARTIAL` / `UNDETERMINED` |
+| `simplified_excluded` | `BOOLEAN` | | X | | 간소화 신청이었지만 지급정지 이력으로 일반 심사가 됐는지 |
+| `rules_version` | `VARCHAR(20)` | | X | | 게이트 규칙 버전 |
+| `settings` | `JSON` | | X | | 계산에 쓴 설정값(`app.payment-stop.gate`) |
+| `rule_results` | `JSON` | | X | | 규칙별 성립 여부, 근거 구분, 근거 거래번호, 한 줄 설명 |
+| `evaluated_at` | `DATETIME(6)` | | X | | 계산 시각 |
+
+**인덱스와 제약**
+
+| 테이블 | 종류 | 이름 | 컬럼·조건 |
+| --- | --- | --- | --- |
+| `payment_stop_case` | INDEX | `ix_payment_stop_case_account` | `account_id` |
+| `payment_stop_case` | CHECK | `ck_payment_stop_case_status` | `status IN ('STOPPED', 'PARTIAL', 'RELEASED')` |
+| `case_disputed_transfer` | UNIQUE | `uk_case_disputed_transfer_txno` | `transaction_number` |
+| `case_disputed_transfer` | CHECK | `ck_case_disputed_transfer_amount` | `amount > 0` |
+| `objection` | UNIQUE | `uk_objection_case` | `case_id` |
+| `objection` | CHECK | `ck_objection_clause`, `ck_objection_status` | `clause BETWEEN 1 AND 3`, `status IN ('RECEIVED', 'DECIDED')` |
+| `objection_decision` | UNIQUE | `uk_objection_decision_objection` | `objection_id` |
+| `objection_decision` | CHECK | `ck_objection_decision_basis` | `result = 'REJECTED' OR early_release_basis IS NOT NULL` |
+| `objection_decision` | CHECK | `ck_objection_decision_hold` | `PARTIAL`이면 `requested_hold_amount > 0`이고 `0 ≤ applied_hold_amount ≤ requested_hold_amount`, 그 밖은 둘 다 NULL |
+| `gate_evaluation` | INDEX | `ix_gate_evaluation_objection` | `objection_id, evaluated_at` |
+| `gate_evaluation` | CHECK | `ck_gate_evaluation_purpose`, `ck_gate_evaluation_branch` | 위 값 목록 |
+
+
+
+## `agent_run` · `agent_run_step` · `review_draft`
+
+> 이의제기 Agent 실행, 단계 이벤트, 판정안 (D-36, PA-05)
+
+형식 정본은 [agent_run_step_schema.md](phase2/agent_run_step_schema.md), 내부 API는 [objection_agent_contract.md](phase2/objection_agent_contract.md)다. 대기열은 별도 큐 없이 `agent_run`의 `QUEUED` 행이고, 워커는 PK 조건부 UPDATE로 가져간다. 텍스트와 JSON 값은 저장 전에 가명 처리한다.
+
+**`agent_run`** Agent 실행 한 번
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `run_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 실행 ID |
+| `objection_id` | `BIGINT` | INDEX, FK | X | | `objection.objection_id` |
+| `status` | `VARCHAR(12)` | INDEX | X | | `QUEUED` / `RUNNING` / `COMPLETED` / `FAILED` |
+| `attempt` | `INT` | | X | `0` | 가져간 횟수. 3회째도 끝나지 않으면 `FAILED` |
+| `lease_until` | `DATETIME(6)` | | O | | 점유 만료 시각. `RUNNING`일 때만 있다 |
+| `model` | `VARCHAR(60)` | | O | | LLM 모델명 |
+| `prompt_version` | `VARCHAR(30)` | | O | | 프롬프트 버전 |
+| `input_tokens` | `BIGINT` | | O | | 입력 토큰 수 |
+| `output_tokens` | `BIGINT` | | O | | 출력 토큰 수 |
+| `cost_micro_usd` | `BIGINT` | | O | | 비용, 백만분의 1달러 정수 |
+| `requested_by` | `BIGINT` | | X | | 분석을 넣은 관리자 `customer_id` |
+| `queued_at` | `DATETIME(6)` | INDEX | X | | 대기열에 들어간 시각 |
+| `started_at` | `DATETIME(6)` | | O | | 처음 가져간 시각 |
+| `ended_at` | `DATETIME(6)` | | O | | 끝난 시각 |
+| `failure_reason` | `VARCHAR(200)` | | O | | 실패하거나 대기열로 돌아간 사유 |
+
+**`agent_run_step`** 실행 안의 단계
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `step_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 단계 행 ID |
+| `run_id` | `BIGINT` | **UK**, FK | X | | `agent_run.run_id` |
+| `seq` | `INT` | **UK** | X | | 실행 안 순번. 1부터 빈 번호 없이 |
+| `type` | `VARCHAR(20)` | | X | | 단계 종류(형식 문서 §4) |
+| `title` | `VARCHAR(200)` | | X | | 화면 한 줄 |
+| `summary` | `VARCHAR(500)` | | O | | 짧은 설명 |
+| `detail` | `JSON` | | O | | 종류별 상세 |
+| `status` | `VARCHAR(10)` | | X | | `RUNNING` / `DONE` / `FAILED` |
+| `started_at` | `DATETIME(6)` | | X | | 시작 시각 |
+| `ended_at` | `DATETIME(6)` | | O | | 종료 시각 |
+
+**`review_draft`** Agent 판정안. 실행당 1건
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `review_draft_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 식별자 |
+| `run_id` | `BIGINT` | **UK**, FK | X | | `agent_run.run_id` |
+| `objection_id` | `BIGINT` | INDEX, FK | X | | `objection.objection_id` |
+| `branch` | `VARCHAR(16)` | | X | | Agent 갈래. 해제 근거가 아니다 |
+| `content` | `JSON` | | X | | 근거 거래, 누락 소명자료, 주장, 모순, 추가 확인, 안내문 초안 |
+| `submitted_at` | `DATETIME(6)` | | X | | 제출 시각 |
+
+**인덱스와 제약**
+
+| 테이블 | 종류 | 이름 | 컬럼·조건 |
+| --- | --- | --- | --- |
+| `agent_run` | INDEX | `ix_agent_run_objection`, `ix_agent_run_status` | `objection_id, run_id` / `status, queued_at` |
+| `agent_run` | CHECK | `ck_agent_run_status`, `ck_agent_run_attempt`, `ck_agent_run_lease` | 상태 값 목록 / `attempt BETWEEN 0 AND 3` / `RUNNING`이면 `lease_until`이 있고 아니면 없다 |
+| `agent_run_step` | UNIQUE | `uk_agent_run_step_seq` | `run_id, seq` |
+| `agent_run_step` | CHECK | `ck_agent_run_step_seq`, `ck_agent_run_step_type`, `ck_agent_run_step_status` | `seq >= 1` / 종류 목록 / 상태 목록 |
+| `review_draft` | UNIQUE | `uk_review_draft_run` | `run_id` |
+| `review_draft` | CHECK | `ck_review_draft_branch` | 갈래 값 목록 |
 ---
 
 ## `interest_payment`

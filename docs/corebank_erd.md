@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 51개 테이블(42개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트·감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 439개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
+> **DBMS**: MySQL 8.4 / 60개 테이블(51개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트·감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 525개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -24,7 +24,7 @@ erDiagram
     SPRING_SESSION ||--o{ SPRING_SESSION_ATTRIBUTES : "ON DELETE CASCADE"
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 51개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
+    %% MySQL 8.4 / 60개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -116,7 +116,118 @@ erDiagram
           date maturity_date "NULL 허용. 계약 만기일"
           date effective_business_date "NULL 허용. 상태 전이 기준 영업일"
           datetime changed_at "DATETIME(6)"
-          varchar trigger_type "VARCHAR(20). COB"
+          varchar trigger_type "VARCHAR(20). COB / CUSTOMER / PAYMENT_STOP"
+    }
+
+    account_payment_stop {
+        bigint payment_stop_id PK "AUTO_INCREMENT"
+        bigint account_id FK "UK(account_id, case_id)"
+        bigint case_id "지급정지 사건 ID. FK 없음 (paymentstop 테이블 전)"
+        varchar stop_type "FULL / PARTIAL"
+        bigint requested_amount "일부 지급정지 요청 보류액. FULL은 0"
+        bigint applied_amount "실제 보류액. 남은 잔액이 상한"
+        varchar status_before "ACTIVE / SUSPENDED. 마지막 해제 때 복원"
+        boolean active "해제하면 FALSE"
+        datetime created_at "DATETIME(6)"
+        datetime released_at "DATETIME(6). 유효하면 NULL"
+    }
+
+    payment_stop_case {
+        bigint case_id PK "AUTO_INCREMENT"
+        bigint account_id "지급정지 계좌, FK 없음(account.api로만)"
+        bigint sender_account_id "NULL 허용. 당행 송금인 한 명일 때만"
+        date objection_deadline "이의제기 신청 기한"
+        varchar status "STOPPED / PARTIAL / RELEASED"
+        bigint registered_by "관리자 customer_id"
+        datetime created_at
+        datetime updated_at
+    }
+
+    case_disputed_transfer {
+        bigint disputed_transfer_id PK "AUTO_INCREMENT"
+        bigint case_id FK
+        char transaction_number UK "CHAR(20), 한 거래는 한 사건에만"
+        bigint amount "등록 시점 원장 금액"
+        datetime occurred_at "등록 시점 원장 시각"
+    }
+
+    objection {
+        bigint objection_id PK "AUTO_INCREMENT"
+        bigint case_id UK,FK "사건당 1건"
+        tinyint clause "법 제7조제1항 1~3호"
+        text statement "소명 원문, 상세 조회 감사"
+        boolean simplified_requested
+        boolean id_copy_confirmed
+        boolean litigation_pending
+        varchar status "RECEIVED / DECIDED"
+        bigint received_by "관리자 customer_id"
+        datetime received_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    objection_decision {
+        bigint decision_id PK "AUTO_INCREMENT"
+        bigint objection_id UK,FK
+        varchar result "ACCEPTED / PARTIAL / REJECTED"
+        varchar reason
+        varchar early_release_basis "수용, 일부 지급정지는 필수"
+        bigint requested_hold_amount "PARTIAL만"
+        bigint applied_hold_amount "PARTIAL만"
+        bigint decided_by "관리자 customer_id"
+        datetime decided_at
+    }
+
+    gate_evaluation {
+        bigint gate_evaluation_id PK "AUTO_INCREMENT"
+        bigint objection_id FK
+        varchar purpose "DECISION / ANALYSIS"
+        varchar branch "FRAUD_PATTERN / NORMAL_ACCEPT / NORMAL_PARTIAL / UNDETERMINED"
+        boolean simplified_excluded
+        varchar rules_version
+        json settings "게이트 설정값"
+        json rule_results "규칙별 결과와 근거 거래번호"
+        datetime evaluated_at
+    }
+
+    agent_run {
+        bigint run_id PK "AUTO_INCREMENT"
+        bigint objection_id FK
+        varchar status "QUEUED / RUNNING / COMPLETED / FAILED"
+        int attempt "3회째 실패하면 FAILED"
+        datetime lease_until "RUNNING일 때만"
+        varchar model
+        varchar prompt_version
+        bigint input_tokens
+        bigint output_tokens
+        bigint cost_micro_usd "백만분의 1달러 정수"
+        bigint requested_by "관리자 customer_id"
+        datetime queued_at
+        datetime started_at
+        datetime ended_at
+        varchar failure_reason
+    }
+
+    agent_run_step {
+        bigint step_id PK "AUTO_INCREMENT"
+        bigint run_id FK "UK(run_id, seq)"
+        int seq "1부터 빈 번호 없이"
+        varchar type "CLAIMED ~ FAILED"
+        varchar title "가명 처리"
+        varchar summary
+        json detail
+        varchar status "RUNNING / DONE / FAILED"
+        datetime started_at
+        datetime ended_at
+    }
+
+    review_draft {
+        bigint review_draft_id PK "AUTO_INCREMENT"
+        bigint run_id UK,FK
+        bigint objection_id FK
+        varchar branch "Agent 갈래, 해제 근거 아님"
+        json content
+        datetime submitted_at
     }
 
     interest_payment {
@@ -245,7 +356,7 @@ erDiagram
     admin_permission {
         bigint customer_id PK,FK "관리자. (customer_id, role)로 customer 참조"
         varchar role FK "항상 ADMIN. DEFAULT ADMIN"
-        varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ"
+        varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ / PAYMENT_STOP_READ / PAYMENT_STOP_WRITE / PAYMENT_STOP_APPROVE"
         datetime granted_at "권한 부여 시각"
     }
     notification {
@@ -583,6 +694,15 @@ erDiagram
     product ||--o{ product_subscription : "가입대상"
     account ||--o| product_subscription : "개설계좌"
     account ||..o| interest_payment : "이자 지급 이력 (논리 관계, FK 없음)"
+    account ||--o{ account_payment_stop : "사건별 지급정지 기록 (D-36)"
+    account ||..o{ payment_stop_case : "지급정지 사건 (논리 관계, FK 없음)"
+    payment_stop_case ||--|{ case_disputed_transfer : "다툼 거래"
+    payment_stop_case ||--o| objection : "이의제기 (사건당 1건)"
+    objection ||--o| objection_decision : "판정"
+    objection ||--o{ gate_evaluation : "게이트 계산 기록"
+    objection ||--o{ agent_run : "AI 분석 실행"
+    agent_run ||--o{ agent_run_step : "단계 이벤트"
+    agent_run ||--o| review_draft : "판정안"
     product_subscription ||--o{ subscription_terms_agreement : "약관동의"
     terms ||--o{ subscription_terms_agreement : "약관동의"
     customer ||--o{ scheduled_transfer : "예약"

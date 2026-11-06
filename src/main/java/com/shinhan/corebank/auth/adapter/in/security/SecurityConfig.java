@@ -49,7 +49,12 @@ public class SecurityConfig {
         pathPattern(HttpMethod.POST, "/auth/email-verifications/{emailVerificationId}/verify"),
         pathPattern(HttpMethod.POST, "/auth/password-reset-requests"),
         pathPattern(HttpMethod.PUT, "/auth/password-reset-requests/{passwordResetRequestId}"),
-        pathPattern(HttpMethod.GET, "/actuator/health")
+        pathPattern(HttpMethod.GET, "/actuator/health"),
+        // 이의제기 Agent 워커 전용(D-36). 세션이 아니라 워커 서비스 키와 작업 토큰으로 인증하고, ALB 에 공개하지 않는다.
+        // /internal/** 전체를 열지 않는다. 나중에 생기는 내부 경로가 인증 없이 열리지 않게 접두어를 하나씩 적는다
+        pathPattern("/internal/review-jobs/**"),
+        pathPattern("/internal/objections/**"),
+        pathPattern("/internal/agent-runs/**")
     };
 
     // 공개하되 CSRF 보호는 유지하는 경로.
@@ -184,6 +189,16 @@ public class SecurityConfig {
                         .hasAuthority(AdminPermission.GL_READ.name())
                         .requestMatchers(pathPattern(HttpMethod.GET, "/admin/ledger-reconciliation/**"))
                         .hasAuthority(AdminPermission.AUDIT_READ.name())
+                        // 지급정지 사건과 이의제기(D-36). 판정 확정은 1인 확정 단계라 변경 권한으로 둔다.
+                        // 2인 승인(PA-10)이 붙으면 승인 경로만 PAYMENT_STOP_APPROVE 로 나눈다.
+                        .requestMatchers(pathPattern(HttpMethod.GET, "/admin/payment-stops/**"))
+                        .hasAuthority(AdminPermission.PAYMENT_STOP_READ.name())
+                        .requestMatchers(pathPattern(HttpMethod.GET, "/admin/objections/**"))
+                        .hasAuthority(AdminPermission.PAYMENT_STOP_READ.name())
+                        .requestMatchers(pathPattern(HttpMethod.POST, "/admin/payment-stops/**"))
+                        .hasAuthority(AdminPermission.PAYMENT_STOP_WRITE.name())
+                        .requestMatchers(pathPattern(HttpMethod.POST, "/admin/objections/**"))
+                        .hasAuthority(AdminPermission.PAYMENT_STOP_WRITE.name())
 
                         // 위에 걸리지 않은 /admin 경로는 거부한다. 새 관리자 API 를 열면서 규칙을
                         // 빠뜨려도 아무 관리자에게나 열리지 않게 한다.
