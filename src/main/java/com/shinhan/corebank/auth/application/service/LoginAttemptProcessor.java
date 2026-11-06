@@ -16,6 +16,11 @@ public class LoginAttemptProcessor {
         return new LoginAttemptResult(persistedErrorCount, MAX_LOGIN_FAILURE_COUNT - persistedErrorCount);
     }
 
+    // 이 횟수면 가입 계정과 같은 잠금 응답을 줘야 하는지 판정
+    public boolean isLockThresholdReached(int failureCount) {
+        return failureCount >= MAX_LOGIN_FAILURE_COUNT;
+    }
+
     // 실패 횟수 데이터가 노출되는 1회 이상 4회 이하만 허용
     private void validateErrorCount(int persistedErrorCount) {
         if (persistedErrorCount < 1 || persistedErrorCount >= MAX_LOGIN_FAILURE_COUNT) {

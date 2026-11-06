@@ -17,6 +17,7 @@ import com.shinhan.corebank.auth.application.port.out.LoginFailureUpdateResult;
 import com.shinhan.corebank.auth.application.port.out.LoginSuccessUpdateResult;
 import com.shinhan.corebank.auth.application.port.out.PasswordHashVerifierPort;
 import com.shinhan.corebank.auth.application.port.out.RecordLoginAuditPort;
+import com.shinhan.corebank.auth.application.port.out.UnregisteredLoginFailurePort;
 import com.shinhan.corebank.auth.domain.exception.AuthErrorCode;
 import com.shinhan.corebank.auth.domain.exception.LoginFailedException;
 import com.shinhan.corebank.auth.domain.model.LoginAttemptResult;
@@ -60,6 +61,9 @@ class LoginServiceTest {
     @Mock
     private RecordLoginAuditPort recordLoginAuditPort;
 
+    @Mock
+    private UnregisteredLoginFailurePort unregisteredLoginFailurePort;
+
     private LoginService service;
 
     @BeforeEach
@@ -72,6 +76,7 @@ class LoginServiceTest {
                 loginAttemptProcessor,
                 loginSuccessProcessor,
                 recordLoginAuditPort,
+                unregisteredLoginFailurePort,
                 clock);
     }
 
@@ -82,6 +87,7 @@ class LoginServiceTest {
         LoginCommand command = loginCommand();
         LoginAttemptResult decoyResult = new LoginAttemptResult(1, 4);
         given(loginCustomerPort.findByUserId(command.userId())).willReturn(Optional.empty());
+        given(unregisteredLoginFailurePort.recordFailure(command.userId())).willReturn(1);
         given(loginAttemptProcessor.process(1)).willReturn(decoyResult);
 
         LoginFailedException exception = catchThrowableOfType(LoginFailedException.class, () -> service.login(command));
@@ -92,6 +98,43 @@ class LoginServiceTest {
         verify(loginCustomerPort, never()).recordLoginFailure(1L);
         verify(recordLoginAuditPort)
                 .record(null, REQUEST_IP, false, LoginAuditReason.INVALID_CREDENTIALS, null, CustomerRole.CUSTOMER);
+    }
+
+    // 미가입 아이디가 5회 쌓이면 잠긴 가입 계정처럼 비밀번호를 비교하지 않고 바로 잠금으로 응답한다 (#900)
+    @Test
+    @DisplayName("미가입 아이디의 실패가 잠금 기준에 닿아 있으면 BCrypt 비교 없이 ATH0102를 반환한다")
+    void unregisteredUserIdAlreadyLocked() {
+        final LoginCommand command = loginCommand();
+        given(loginCustomerPort.findByUserId(command.userId())).willReturn(Optional.empty());
+        given(unregisteredLoginFailurePort.findActiveFailureCount(command.userId()))
+                .willReturn(5);
+        given(loginAttemptProcessor.isLockThresholdReached(5)).willReturn(true);
+
+        final LoginFailedException exception =
+                catchThrowableOfType(LoginFailedException.class, () -> service.login(command));
+
+        assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.ACCOUNT_LOCKED);
+        verifyNoInteractions(passwordHashVerifierPort);
+        verify(unregisteredLoginFailurePort, never()).recordFailure(command.userId());
+    }
+
+    // 미가입 아이디의 5번째 실패는 가입 계정의 5번째 실패와 같은 잠금 응답이다 (#900)
+    @Test
+    @DisplayName("미가입 아이디의 실패가 이번에 잠금 기준에 닿으면 ATH0102를 반환한다")
+    void unregisteredUserIdReachesLock() {
+        final LoginCommand command = loginCommand();
+        given(loginCustomerPort.findByUserId(command.userId())).willReturn(Optional.empty());
+        given(unregisteredLoginFailurePort.findActiveFailureCount(command.userId()))
+                .willReturn(4);
+        given(loginAttemptProcessor.isLockThresholdReached(4)).willReturn(false);
+        given(unregisteredLoginFailurePort.recordFailure(command.userId())).willReturn(5);
+        given(loginAttemptProcessor.isLockThresholdReached(5)).willReturn(true);
+
+        final LoginFailedException exception =
+                catchThrowableOfType(LoginFailedException.class, () -> service.login(command));
+
+        assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.ACCOUNT_LOCKED);
+        verify(passwordHashVerifierPort).matches(eq(RAW_PASSWORD), anyString());
     }
 
     // 이미 잠긴 계정은 비밀번호 검증과 실패 횟수 갱신을 생략
