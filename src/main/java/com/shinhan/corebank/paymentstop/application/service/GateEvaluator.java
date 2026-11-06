@@ -2,9 +2,12 @@ package com.shinhan.corebank.paymentstop.application.service;
 
 import com.shinhan.corebank.paymentstop.application.port.out.AccountStopPort;
 import com.shinhan.corebank.paymentstop.application.port.out.LedgerFactPort;
+import com.shinhan.corebank.paymentstop.application.port.out.ObjectionReviewPort;
 import com.shinhan.corebank.paymentstop.domain.DisputedTransfer;
 import com.shinhan.corebank.paymentstop.domain.Objection;
 import com.shinhan.corebank.paymentstop.domain.PaymentStopCase;
+import com.shinhan.corebank.paymentstop.domain.external.ExternalCheck;
+import com.shinhan.corebank.paymentstop.domain.gate.ExternalReply;
 import com.shinhan.corebank.paymentstop.domain.gate.GateFacts;
 import com.shinhan.corebank.paymentstop.domain.gate.GateResult;
 import com.shinhan.corebank.paymentstop.domain.gate.GateSettings;
@@ -14,18 +17,20 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-/** 사건과 이의제기로 게이트 입력을 모아 계산한다. 입력은 원장 사실과 접수 정보뿐이다(D9). */
+/** 사건과 이의제기로 게이트 입력을 모아 계산한다. 입력은 원장 사실, 외부 확인 회신, 접수 정보뿐이다(D9). */
 @Component
 @RequiredArgsConstructor
 public class GateEvaluator {
 
     private final LedgerFactPort ledgerFactPort;
     private final AccountStopPort accountStopPort;
+    private final ObjectionReviewPort reviewPort;
     private final GateSettings settings;
 
     public GateResult evaluate(PaymentStopCase paymentStopCase, Objection objection) {
@@ -45,6 +50,12 @@ public class GateEvaluator {
         boolean otherStopHistory =
                 accountStopPort.hasOtherStopHistory(paymentStopCase.getAccountId(), paymentStopCase.getCaseId());
 
+        // 회신이 온 외부 확인만 넣는다. 해당 기록 없음(NO_RECORD)은 게이트에 영향이 없다
+        List<ExternalReply> replies = reviewPort.findExternalChecks(objection.getObjectionId()).stream()
+                .map(ExternalCheck::gateReply)
+                .flatMap(Optional::stream)
+                .toList();
+
         GateFacts facts = new GateFacts(
                 disputed,
                 accountTransfers,
@@ -53,8 +64,7 @@ public class GateEvaluator {
                 objection.isSimplifiedRequested(),
                 objection.getClause(),
                 objection.isLitigationPending(),
-                // 외부 확인 회신은 PA-10(모의 회신 저장)에서 붙인다
-                List.of());
+                replies);
 
         return ReleaseGate.evaluate(facts, settings);
     }

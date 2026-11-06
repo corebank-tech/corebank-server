@@ -7,7 +7,10 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.paymentstop.application.port.out.AgentRunPort;
+import com.shinhan.corebank.paymentstop.application.port.out.DocumentStoragePort;
 import com.shinhan.corebank.paymentstop.application.port.out.LedgerFactPort;
+import com.shinhan.corebank.paymentstop.application.port.out.ObjectionDocumentPort;
+import com.shinhan.corebank.paymentstop.application.port.out.ObjectionReviewPort;
 import com.shinhan.corebank.paymentstop.application.port.out.PaymentStopRecordPort;
 import com.shinhan.corebank.paymentstop.config.AgentProperties;
 import com.shinhan.corebank.paymentstop.domain.exception.PaymentStopErrorCode;
@@ -47,6 +50,9 @@ class AgentJobServiceKillSwitchTest {
                 agentRunPort,
                 mock(PaymentStopRecordPort.class),
                 mock(LedgerFactPort.class),
+                mock(ObjectionReviewPort.class),
+                mock(ObjectionDocumentPort.class),
+                mock(DocumentStoragePort.class),
                 mock(GateEvaluator.class),
                 new JobTokenService(properties),
                 properties,

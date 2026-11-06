@@ -4,7 +4,10 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.paymentstop.application.port.in.AgentWorkerUseCase;
 import com.shinhan.corebank.paymentstop.application.port.out.AgentRunPort;
+import com.shinhan.corebank.paymentstop.application.port.out.DocumentStoragePort;
 import com.shinhan.corebank.paymentstop.application.port.out.LedgerFactPort;
+import com.shinhan.corebank.paymentstop.application.port.out.ObjectionDocumentPort;
+import com.shinhan.corebank.paymentstop.application.port.out.ObjectionReviewPort;
 import com.shinhan.corebank.paymentstop.application.port.out.PaymentStopRecordPort;
 import com.shinhan.corebank.paymentstop.application.service.JobTokenService.JobClaims;
 import com.shinhan.corebank.paymentstop.config.AgentProperties;
@@ -12,6 +15,7 @@ import com.shinhan.corebank.paymentstop.domain.DecisionResult;
 import com.shinhan.corebank.paymentstop.domain.DisputedTransfer;
 import com.shinhan.corebank.paymentstop.domain.Objection;
 import com.shinhan.corebank.paymentstop.domain.PaymentStopCase;
+import com.shinhan.corebank.paymentstop.domain.SupplementRequest;
 import com.shinhan.corebank.paymentstop.domain.agent.AgentRun;
 import com.shinhan.corebank.paymentstop.domain.agent.AgentRunStatus;
 import com.shinhan.corebank.paymentstop.domain.agent.AgentRunStep;
@@ -19,6 +23,11 @@ import com.shinhan.corebank.paymentstop.domain.agent.AgentStepStatus;
 import com.shinhan.corebank.paymentstop.domain.agent.AgentStepType;
 import com.shinhan.corebank.paymentstop.domain.agent.Pseudonymizer;
 import com.shinhan.corebank.paymentstop.domain.agent.ReviewDraft;
+import com.shinhan.corebank.paymentstop.domain.document.DocumentKind;
+import com.shinhan.corebank.paymentstop.domain.document.DocumentOcr;
+import com.shinhan.corebank.paymentstop.domain.document.ObjectionDocument;
+import com.shinhan.corebank.paymentstop.domain.document.OcrPage;
+import com.shinhan.corebank.paymentstop.domain.document.OcrStatus;
 import com.shinhan.corebank.paymentstop.domain.exception.PaymentStopErrorCode;
 import com.shinhan.corebank.paymentstop.domain.gate.GateResult;
 import com.shinhan.corebank.paymentstop.domain.gate.LedgerFact;
@@ -57,6 +66,9 @@ public class AgentJobService implements AgentWorkerUseCase {
     private final AgentRunPort agentRunPort;
     private final PaymentStopRecordPort recordPort;
     private final LedgerFactPort ledgerFactPort;
+    private final ObjectionReviewPort reviewPort;
+    private final ObjectionDocumentPort documentPort;
+    private final DocumentStoragePort storagePort;
     private final GateEvaluator gateEvaluator;
     private final JobTokenService jobTokenService;
     private final AgentProperties properties;
@@ -111,6 +123,21 @@ public class AgentJobService implements AgentWorkerUseCase {
                 .toList();
 
         Objection objection = target.objection();
+        List<ObjectionDocument> evidence = evidence(objectionId);
+        Map<Long, DocumentOcr> ocrs = documentPort.findOcrs(
+                evidence.stream().map(ObjectionDocument::documentId).toList());
+        List<ContextDocument> documents = evidence.stream()
+                .map(document -> {
+                    DocumentOcr ocr = ocrs.get(document.documentId());
+                    boolean done = ocr != null && ocr.status() == OcrStatus.DONE;
+                    return new ContextDocument(
+                            document.documentId(),
+                            document.round(),
+                            document.ocrStatus(),
+                            done ? ocr.pages() : List.of());
+                })
+                .toList();
+        List<SupplementRequest> supplements = reviewPort.findSupplementRequests(objectionId);
         return new Context(
                 objectionId,
                 run.runId(),
@@ -123,7 +150,77 @@ public class AgentJobService implements AgentWorkerUseCase {
                 disputed,
                 COMMON_DOCUMENTS,
                 window.from(),
-                window.to());
+                window.to(),
+                documents,
+                workerChecks(objectionId),
+                objection.getSupplementRound(),
+                supplements.isEmpty() ? List.of() : supplements.getLast().missingDocuments());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<WorkerDocument> documents(String jobToken, long objectionId) {
+        authorize(jobToken, objectionId, null, false);
+        return evidence(objectionId).stream()
+                .map(document -> new WorkerDocument(
+                        document.documentId(), document.contentType(), document.round(), document.ocrStatus()))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public WorkerDocumentContent documentContent(String jobToken, long objectionId, long documentId) {
+        authorize(jobToken, objectionId, null, false);
+        ObjectionDocument document = evidenceDocument(objectionId, documentId);
+        return new WorkerDocumentContent(
+                document.contentType(), storagePort.read(document.storageKey(), document.encrypted()));
+    }
+
+    @Override
+    @Transactional
+    public List<OcrPage> saveOcr(String jobToken, long objectionId, long documentId, OcrCommand command) {
+        authorize(jobToken, objectionId, null, false);
+        ObjectionDocument document = evidenceDocument(objectionId, documentId);
+        OcrStatus status = command.status() == null ? OcrStatus.DONE : command.status();
+        if (status == OcrStatus.PENDING) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT, "OCR 결과 상태는 DONE 이나 FAILED 입니다.");
+        }
+        // 원문은 저장하지 않는다. 가명 처리한 값만 남기고 돌려준다
+        DocumentOcr ocr = DocumentOcr.fromWorker(
+                document.documentId(),
+                status,
+                status == OcrStatus.DONE ? command.pages() : List.of(),
+                truncate(command.engine(), 40),
+                LocalDateTime.now(clock));
+        documentPort.saveOcr(ocr);
+        return ocr.pages();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<WorkerExternalCheck> externalChecks(String jobToken, long objectionId) {
+        authorize(jobToken, objectionId, null, false);
+        return workerChecks(objectionId);
+    }
+
+    // 신분증 사본은 Agent 에게 목록, 내용, OCR 모두 보이지 않는다(D37)
+    private List<ObjectionDocument> evidence(long objectionId) {
+        return documentPort.findDocuments(objectionId).stream()
+                .filter(document -> document.kind() == DocumentKind.EVIDENCE)
+                .toList();
+    }
+
+    private ObjectionDocument evidenceDocument(long objectionId, long documentId) {
+        return documentPort
+                .findDocument(objectionId, documentId)
+                .filter(document -> document.kind() == DocumentKind.EVIDENCE)
+                .orElseThrow(() -> new BusinessException(PaymentStopErrorCode.DOCUMENT_NOT_FOUND));
+    }
+
+    private List<WorkerExternalCheck> workerChecks(long objectionId) {
+        return reviewPort.findExternalChecks(objectionId).stream()
+                .map(check -> new WorkerExternalCheck(check.agency(), check.status(), check.reply()))
+                .toList();
     }
 
     @Override
@@ -377,7 +474,11 @@ public class AgentJobService implements AgentWorkerUseCase {
     }
 
     private static String truncate(String text) {
-        return text != null && text.length() > 200 ? text.substring(0, 200) : text;
+        return truncate(text, 200);
+    }
+
+    private static String truncate(String text, int max) {
+        return text != null && text.length() > max ? text.substring(0, max) : text;
     }
 
     private record Target(Objection objection, PaymentStopCase paymentStopCase) {}

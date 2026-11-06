@@ -7,9 +7,15 @@ import com.shinhan.corebank.paymentstop.application.port.in.AgentWorkerUseCase.C
 import com.shinhan.corebank.paymentstop.application.port.in.AgentWorkerUseCase.DraftCommand;
 import com.shinhan.corebank.paymentstop.application.port.in.AgentWorkerUseCase.DraftResult;
 import com.shinhan.corebank.paymentstop.application.port.in.AgentWorkerUseCase.LedgerItem;
+import com.shinhan.corebank.paymentstop.application.port.in.AgentWorkerUseCase.OcrCommand;
 import com.shinhan.corebank.paymentstop.application.port.in.AgentWorkerUseCase.StepCommand;
+import com.shinhan.corebank.paymentstop.application.port.in.AgentWorkerUseCase.WorkerDocument;
+import com.shinhan.corebank.paymentstop.application.port.in.AgentWorkerUseCase.WorkerDocumentContent;
+import com.shinhan.corebank.paymentstop.application.port.in.AgentWorkerUseCase.WorkerExternalCheck;
 import com.shinhan.corebank.paymentstop.domain.agent.AgentStepStatus;
 import com.shinhan.corebank.paymentstop.domain.agent.AgentStepType;
+import com.shinhan.corebank.paymentstop.domain.document.OcrPage;
+import com.shinhan.corebank.paymentstop.domain.document.OcrStatus;
 import com.shinhan.corebank.paymentstop.domain.gate.GateBranch;
 import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.validation.Valid;
@@ -25,6 +31,8 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -117,6 +125,87 @@ public class AgentInternalController {
                         request.outputTokens(),
                         request.costMicroUsd())));
     }
+
+    /** 증빙만. 신분증 사본은 목록에 없다(D37). */
+    @GetMapping("/objections/{objectionId}/documents")
+    public ApiResponse<List<WorkerDocument>> documents(
+            @RequestHeader(value = JOB_TOKEN, required = false) String jobToken,
+            @PathVariable @Positive Long objectionId) {
+        return ApiResponse.success(agentWorkerUseCase.documents(jobToken, objectionId));
+    }
+
+    /** 파일 바이트. ApiResponse 로 감싸지 않는다. 신분증 사본은 PST0205 다. */
+    @GetMapping("/objections/{objectionId}/documents/{documentId}/content")
+    public ResponseEntity<byte[]> documentContent(
+            @RequestHeader(value = JOB_TOKEN, required = false) String jobToken,
+            @PathVariable @Positive Long objectionId,
+            @PathVariable @Positive Long documentId) {
+        WorkerDocumentContent content = agentWorkerUseCase.documentContent(jobToken, objectionId, documentId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(content.contentType()))
+                .header("Cache-Control", "no-store")
+                .body(content.content());
+    }
+
+    /** OCR 원문을 받아 서버가 가명 처리해 저장하고, 저장한 값을 돌려준다. */
+    @PutMapping("/objections/{objectionId}/documents/{documentId}/ocr")
+    public ApiResponse<OcrResponse> saveOcr(
+            @RequestHeader(value = JOB_TOKEN, required = false) String jobToken,
+            @PathVariable @Positive Long objectionId,
+            @PathVariable @Positive Long documentId,
+            @Valid @RequestBody OcrRequest request) {
+        List<OcrPage> pages = agentWorkerUseCase.saveOcr(
+                jobToken,
+                objectionId,
+                documentId,
+                new OcrCommand(
+                        request.engine(),
+                        request.status(),
+                        request.pages() == null
+                                ? List.of()
+                                : request.pages().stream()
+                                        .map(OcrPageRequest::toPage)
+                                        .toList()));
+        return ApiResponse.success(new OcrResponse(documentId, pages));
+    }
+
+    @GetMapping("/objections/{objectionId}/external-checks")
+    public ApiResponse<List<WorkerExternalCheck>> externalChecks(
+            @RequestHeader(value = JOB_TOKEN, required = false) String jobToken,
+            @PathVariable @Positive Long objectionId) {
+        return ApiResponse.success(agentWorkerUseCase.externalChecks(jobToken, objectionId));
+    }
+
+    public record OcrRequest(
+            @Size(max = 40) String engine, OcrStatus status, @Size(max = 50) List<@Valid OcrPageRequest> pages) {}
+
+    public record OcrPageRequest(
+            @NotNull @Min(1) Integer page,
+            @PositiveOrZero Integer width,
+            @PositiveOrZero Integer height,
+            @Size(max = 2000) List<@Valid OcrRegionRequest> regions) {
+
+        OcrPage toPage() {
+            return new OcrPage(
+                    page,
+                    width,
+                    height,
+                    regions == null
+                            ? List.of()
+                            : regions.stream()
+                                    .map(region -> new OcrPage.OcrRegion(
+                                            region.index(), region.text(), region.bbox(), region.confidence()))
+                                    .toList());
+        }
+    }
+
+    public record OcrRegionRequest(
+            @NotNull @PositiveOrZero Integer index,
+            @Size(max = 2000) String text,
+            @Size(max = 4) List<@NotNull Double> bbox,
+            Double confidence) {}
+
+    public record OcrResponse(long documentId, List<OcrPage> pages) {}
 
     public record StepRequest(
             @NotNull @Min(1) @Max(10_000) Integer seq,

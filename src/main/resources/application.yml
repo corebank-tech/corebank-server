@@ -8,6 +8,11 @@ server:
         http-only: true
         same-site: lax
 spring:
+  # 이의제기 첨부(파일 하나 10MB, 합계 30MB)는 서버가 직접 검사해 PST0007 로 거절한다. 그 검사가 먼저 돌도록 여기 한도는 넉넉히 둔다
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 40MB
   session:
     timeout: ${server.servlet.session.timeout}
     jdbc:
@@ -59,6 +64,11 @@ springdoc:
 app:
   # 지급정지 이의제기 해제 게이트 설정값(D-36, Plan D10). 모두 내부 기준이고 화면과 Agent는 바꿀 수 없다.
   payment-stop:
+    # 이의제기 첨부 파일(contract §5). 루트는 .gitignore 의 /data/ 아래다. 신분증 사본 암호화 키는 32바이트 base64 를
+    # 환경변수로만 넣는다. 비어 있으면 신분증 사본을 받지 못한다
+    documents:
+      root: ${PAYMENT_STOP_DOCUMENT_ROOT:./data/objection-documents}
+      encryption-key: ${PAYMENT_STOP_DOCUMENT_KEY:}
     # Agent 워커 연동(Plan D15). 키는 저장소에 두지 않고 환경변수로만 넣는다. 키가 비면 내부 API 를 모두 거부한다
     agent:
       enabled: ${PAYMENT_STOP_AGENT_ENABLED:false}

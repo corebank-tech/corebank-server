@@ -24,6 +24,9 @@ public interface PaymentStopRecordPort {
 
     void updateCaseStatus(PaymentStopCase paymentStopCase);
 
+    // 고객 화면용. 그 고객의 계좌에 걸린 사건 전부
+    List<PaymentStopCase> findCasesByAccountIds(Collection<Long> accountIds);
+
     boolean existsObjectionByCaseId(long caseId);
 
     /** 사건당 하나뿐이라 동시 접수는 유니크 제약이 막는다. 걸리면 PST0304. */
@@ -34,13 +37,27 @@ public interface PaymentStopRecordPort {
     // 판정 확정 중복을 막으려고 이의제기 행을 잠근다. 반드시 트랜잭션 안에서 부른다
     Optional<Objection> findObjectionForUpdate(long objectionId);
 
-    void updateObjectionStatus(Objection objection);
+    /** 상태와 완비 확인, 기한, 보완 진행을 저장한다. */
+    void updateObjection(Objection objection);
 
     List<Objection> findRecentObjections(int limit);
 
-    void saveDecision(ObjectionDecision decision);
+    // 사건 ID 로 묶은 이의제기. 사건당 하나뿐이다
+    Map<Long, Objection> findObjectionsByCaseIds(Collection<Long> caseIds);
 
-    Optional<ObjectionDecision> findDecision(long objectionId);
+    /** 새 판정을 저장하고 ID 를 채워 돌려준다. 반려되지 않은 판정이 이미 있으면 유니크 키가 막는다. */
+    ObjectionDecision saveDecision(ObjectionDecision decision);
+
+    /** 승인, 반려로 바뀐 상태와 보류액을 저장한다. */
+    void updateDecision(ObjectionDecision decision);
+
+    Optional<ObjectionDecision> findDecisionById(long decisionId);
+
+    Optional<ObjectionDecision> findConfirmedDecision(long objectionId);
+
+    Optional<ObjectionDecision> findPendingDecision(long objectionId);
+
+    Map<Long, ObjectionDecision> findConfirmedDecisions(Collection<Long> objectionIds);
 
     void saveGateEvaluation(
             long objectionId, String purpose, GateResult result, GateSettings settings, LocalDateTime evaluatedAt);

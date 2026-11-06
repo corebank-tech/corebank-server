@@ -8,8 +8,11 @@ import com.shinhan.corebank.paymentstop.domain.agent.ReviewDraft;
 import com.shinhan.corebank.paymentstop.domain.gate.GateBranch;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
@@ -49,6 +52,25 @@ public class AgentRunPersistenceAdapter implements AgentRunPort {
     @Override
     public Optional<AgentRun> findLatestRun(long objectionId) {
         return runRepository.findFirstByObjectionIdOrderByRunIdDesc(objectionId).map(AgentRunPersistenceAdapter::toRun);
+    }
+
+    @Override
+    public Map<Long, AgentRun> findLatestRuns(Collection<Long> objectionIds) {
+        if (objectionIds.isEmpty()) {
+            return Map.of();
+        }
+        return runRepository.findLatestByObjectionIds(objectionIds).stream()
+                .map(AgentRunPersistenceAdapter::toRun)
+                .collect(Collectors.toMap(AgentRun::objectionId, run -> run));
+    }
+
+    @Override
+    public Map<Long, String> findLastStepTitles(Collection<Long> runIds) {
+        if (runIds.isEmpty()) {
+            return Map.of();
+        }
+        return stepRepository.findLastByRunIds(runIds).stream()
+                .collect(Collectors.toMap(AgentRunStepJpaEntity::getRunId, AgentRunStepJpaEntity::getTitle));
     }
 
     @Override

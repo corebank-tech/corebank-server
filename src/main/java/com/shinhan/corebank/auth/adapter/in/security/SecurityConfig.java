@@ -189,8 +189,18 @@ public class SecurityConfig {
                         .hasAuthority(AdminPermission.GL_READ.name())
                         .requestMatchers(pathPattern(HttpMethod.GET, "/admin/ledger-reconciliation/**"))
                         .hasAuthority(AdminPermission.AUDIT_READ.name())
-                        // 지급정지 사건과 이의제기(D-36). 판정 확정은 1인 확정 단계라 변경 권한으로 둔다.
-                        // 2인 승인(PA-10)이 붙으면 승인 경로만 PAYMENT_STOP_APPROVE 로 나눈다.
+                        // 지급정지 사건과 이의제기(D-36). 수용, 일부 지급정지 판정의 승인과 반려만 PAYMENT_STOP_APPROVE 다(D13).
+                        // 작성자와 승인자가 다른지는 paymentstop 이 직접 본다. 심사 시작 기록은 상세 화면을 여는 조회 권한으로 둔다.
+                        // 승인 줄이 아래 POST /admin/objections/** 줄보다 먼저 걸려야 한다.
+                        .requestMatchers(pathPattern(
+                                HttpMethod.POST, "/admin/objections/{objectionId}/decisions/{decisionId}/approve"))
+                        .hasAuthority(AdminPermission.PAYMENT_STOP_APPROVE.name())
+                        .requestMatchers(pathPattern(
+                                HttpMethod.POST, "/admin/objections/{objectionId}/decisions/{decisionId}/return"))
+                        .hasAuthority(AdminPermission.PAYMENT_STOP_APPROVE.name())
+                        .requestMatchers(
+                                pathPattern(HttpMethod.POST, "/admin/objections/{objectionId}/review-sessions"))
+                        .hasAuthority(AdminPermission.PAYMENT_STOP_READ.name())
                         .requestMatchers(pathPattern(HttpMethod.GET, "/admin/payment-stops/**"))
                         .hasAuthority(AdminPermission.PAYMENT_STOP_READ.name())
                         .requestMatchers(pathPattern(HttpMethod.GET, "/admin/objections/**"))
