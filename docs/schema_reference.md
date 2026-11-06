@@ -499,7 +499,7 @@ COB의 `ACTIVE → MATURED` 전이, 고객 요청 만기해지의 `MATURED → C
 | --- | --- | --- | --- | --- | --- |
 | `payment_stop_id` | `BIGINT` | **PK** | X | `AUTO_INCREMENT` | 기록 식별자 |
 | `account_id` | `BIGINT` | **FK** **UK** | X | | 지급정지된 계좌 → `account.account_id` |
-| `case_id` | `BIGINT` | **UK** | X | | 지급정지 사건 ID(paymentstop 도메인). 그 테이블이 아직 없어 FK가 없다 |
+| `case_id` | `BIGINT` | **UK** | X | | 지급정지 사건 ID → `payment_stop_case.case_id`(논리 관계). 이 테이블은 `account` 도메인 소유이고 사건은 `paymentstop` 도메인 소유라, 도메인 간에는 `api`로만 잇는다는 규칙(AGENTS.md 규칙 2)에 따라 FK를 걸지 않는다 |
 | `stop_type` | `VARCHAR(10)` | | X | | `FULL`(전부 지급정지) / `PARTIAL`(일부 지급정지) |
 | `requested_amount` | `BIGINT` | | X | `0` | 일부 지급정지 요청 보류액. `FULL`은 0 |
 | `applied_amount` | `BIGINT` | | X | `0` | 실제로 묶은 보류액. 잔액에서 다른 사건 보류액을 뺀 금액이 상한이다. `FULL`은 0 |
@@ -655,7 +655,7 @@ COB의 `ACTIVE → MATURED` 전이, 고객 요청 만기해지의 `MATURED → C
 | `input_tokens` | `BIGINT` | | O | | 입력 토큰 수 |
 | `output_tokens` | `BIGINT` | | O | | 출력 토큰 수 |
 | `cost_micro_usd` | `BIGINT` | | O | | 비용, 백만분의 1달러 정수 |
-| `requested_by` | `BIGINT` | | X | | 분석을 넣은 관리자 `customer_id` |
+| `requested_by` | `BIGINT` | | X | | 분석을 넣은 사람의 `customer_id`. 영업점 접수와 재분석 요청은 관리자, 비대면 신청과 보완 제출은 명의인 |
 | `queued_at` | `DATETIME(6)` | INDEX | X | | 대기열에 들어간 시각 |
 | `started_at` | `DATETIME(6)` | | O | | 처음 가져간 시각 |
 | `ended_at` | `DATETIME(6)` | | O | | 끝난 시각 |

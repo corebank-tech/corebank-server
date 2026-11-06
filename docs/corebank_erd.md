@@ -122,7 +122,7 @@ erDiagram
     account_payment_stop {
         bigint payment_stop_id PK "AUTO_INCREMENT"
         bigint account_id FK "UK(account_id, case_id)"
-        bigint case_id "지급정지 사건 ID. FK 없음 (paymentstop 테이블 전)"
+        bigint case_id "지급정지 사건 ID. 도메인 경계라 FK 없음(논리 관계)"
         varchar stop_type "FULL / PARTIAL"
         bigint requested_amount "일부 지급정지 요청 보류액. FULL은 0"
         bigint applied_amount "실제 보류액. 남은 잔액이 상한"
@@ -279,7 +279,7 @@ erDiagram
         bigint input_tokens
         bigint output_tokens
         bigint cost_micro_usd "백만분의 1달러 정수"
-        bigint requested_by "관리자 customer_id"
+        bigint requested_by "넣은 사람 customer_id, 관리자 또는 명의인"
         datetime queued_at
         datetime started_at
         datetime ended_at
@@ -774,6 +774,7 @@ erDiagram
     account ||..o| interest_payment : "이자 지급 이력 (논리 관계, FK 없음)"
     account ||--o{ account_payment_stop : "사건별 지급정지 기록 (D-36)"
     account ||..o{ payment_stop_case : "지급정지 사건 (논리 관계, FK 없음)"
+    payment_stop_case ||..o| account_payment_stop : "계좌 지급정지 기록 (논리 관계, FK 없음)"
     payment_stop_case ||--|{ case_disputed_transfer : "다툼 거래"
     payment_stop_case ||--o| objection : "이의제기 (사건당 1건)"
     objection ||--o{ objection_decision : "판정 (반려 제외 1건)"

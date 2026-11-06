@@ -51,7 +51,7 @@ Agent 워커가 부르는 내부 API는 [objection_agent_contract.md](objection_
 | `POST /{id}/external-checks` | WRITE | `{ agency: POLICE \| PEER_BANK, mockReply: INVOLVEMENT_SUSPECTED \| DOCUMENT_FORGED \| OWNER_UNRELATED \| NO_RECORD }` | ExternalCheck. 모의라 요청 즉시 `REPLIED`. 같은 기관에 이미 요청했으면 그 행을 그대로 돌려준다(회신 값도 처음 것). 확정 뒤 새 요청은 `PST0302` |
 | `GET /{id}/external-checks` | READ | | ExternalCheck 배열 |
 | `GET /{id}/notices` | READ | | `[{ noticeId, target, kind, channel, basis, recordedAt }]` |
-| `GET /{id}/ledger` | READ | | `[{ transactionNumber, direction, interbank, counterpartyAccountId, amount, occurredAt, disputed, afterDispute }]`. 게이트 창 기간의 지급정지 계좌 원장 |
+| `GET /{id}/ledger` | READ | | `[{ transactionNumber, direction, interbank, counterpartyAccountId, amount, occurredAt, disputed, afterDispute }]`. 게이트 창 기간의 지급정지 계좌 원장. `direction`은 `IN`(입금) / `OUT`(출금)이고 내부 API 원장과 같은 값이다 |
 | `POST /{id}/documents` | WRITE | multipart: `files`(1~10개), `kind`(`EVIDENCE` \| `ID_COPY`) | Document 배열(올린 것). `round`는 지금까지 보완 요청 횟수다. `PST0007`, `PST0302` |
 | `GET /{id}/documents` | READ | | Document 배열. 신분증 사본도 `kind=ID_COPY`로 보인다 |
 | `GET /{id}/documents/{documentId}/content` | READ + `X-Access-Reason` | | 파일 바이트(`ApiResponse` 아님). `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`. 조회 감사(`OBJECTION_DOCUMENT_VIEW`). `PST0205` |
@@ -60,7 +60,7 @@ Agent 워커가 부르는 내부 API는 [objection_agent_contract.md](objection_
 
 **Summary** (목록 행): `objectionId`, `caseId`, `accountId`, `clause`, `objectionStatus`, `caseStatus`, `disputedTotal`, `objectionDeadline`, `receivedAt`, `receivedChannel`(`BRANCH` / `ONLINE`), `reviewDeadline`, `deadlineAlert`, `supplementDue`, `supplementOverdue`, `latestRunStatus`(실행 없으면 null), `latestRunLastStepTitle`(단계 없으면 null). 실행 상태와 마지막 단계를 목록 조회 한 번에 함께 준다.
 
-**Detail** (상세): 기존 필드(사건, 다툼 거래, 소명, `gate`) + `receivedChannel`, `completenessConfirmedAt`, `reviewDeadline`, `deadlineAlert`, `supplementDue`, `supplementRound`, `supplementOverdue`, `supplementRequests`(`[{ round, reason, missingDocuments, dueDate, requestedAt, submittedAt, submitNote }]`), `decision`(확정된 판정 또는 null), `pendingDecision`(승인 대기 판정 또는 null), `externalChecks`, `documentCount`. `gate`는 조회 시점 원장과 외부 확인 회신으로 다시 계산한다.
+**Detail** (상세): 기존 필드(사건, 다툼 거래, 소명, `gate`) + `receivedChannel`, `completenessConfirmedAt`, `reviewDeadline`, `deadlineAlert`, `supplementDue`, `supplementRound`, `supplementOverdue`, `supplementRequests`(`[{ round, reason, missingDocuments, dueDate, requestedAt, submittedAt, submitNote }]`), `decision`(확정된 판정 또는 null), `pendingDecision`(승인 대기 판정 또는 null), `externalChecks`, `documentCount`. `gate`는 조회 시점 원장과 외부 확인 회신으로 다시 계산한다. `gate.allowedResults`(판정 결과별 true/false)는 해제 요건만 본 값이고 §2의 상태 제한(수용과 일부 지급정지는 `UNDER_REVIEW`에서만)은 넣지 않는다. 화면은 `objectionStatus`와 함께 보고 판정을 연다. 게이트가 열어도 상태가 맞지 않으면 `PST0308`이다.
 
 **Decision**: `decisionId`, `result`, `status`, `reason`, `earlyReleaseBasis`, `requestedHoldAmount`, `appliedHoldAmount`(확정된 `PARTIAL`만), `decidedBy`(작성자), `decidedAt`(작성 시각), `approvedBy`, `approvedAt`, `returnReason`.
 
@@ -77,7 +77,7 @@ Agent 워커가 부르는 내부 API는 [objection_agent_contract.md](objection_
 | `POST /objections/{objectionId}/supplements` | multipart: `evidence`(1~9개), `note`(≤1000, 생략 가능) | `[{ documentId, kind, fileName, contentType, size, round, uploadedAt }]` |
 
 - `objectionId`, `objectionStatus`는 아직 신청하지 않았으면 null이다. `supplementDue`와 `missingDocuments`는 `SUPPLEMENT_REQUESTED`일 때만 값이 있고 그 밖에는 null과 빈 배열이다. `decisionResult`는 확정된 심사결과이고 확정 전이면 null이다.
-- 신청: 본인 계좌의 지급정지 사건이 아니면(남의 사건, 없는 사건, 해제된 사건) 모두 `PST0201`이다(존재 여부 비노출, AGENTS 규칙 4). 신청 기한이 지났으면 `PST0002`, 신분증 사본이나 사유가 없으면 `PST0003`, 파일 위반은 `PST0007`, 이미 신청한 사건은 `PST0304`. 파일을 먼저 모두 검사하므로 위반이면 접수가 남지 않는다.
+- 신청: 본인 계좌의 지급정지 사건이 아니면(남의 사건, 없는 사건, 해제된 사건) 모두 `PST0201`이다(존재 여부 비노출, AGENTS 규칙 4). 신청 기한이 지났으면 `PST0002`, 신분증 사본이나 사유가 없으면 `PST0003`, 파일 위반은 `PST0007`, 이미 신청한 사건은 `PST0304`. 파일을 먼저 모두 검사하므로 위반이면 접수가 남지 않는다. 여러 개에 걸리면 남의 사건과 없는 사건(`PST0201`), 신분증 사본 없음(`PST0003`), 파일(`PST0007`), 해제된 사건(`PST0201`), 이미 신청(`PST0304`), 신청 기한(`PST0002`), 사유 없음(`PST0003`) 순서로 먼저 걸린 것을 준다.
 - 신청하면 같은 트랜잭션에서 접수(`receivedChannel=ONLINE`), 신분증 사본(암호화), 증빙, 분석 1건, 명의인 접수 통지를 남긴다.
 - 보완 제출: 본인 이의제기가 아니면 `PST0202`, `SUPPLEMENT_REQUESTED`가 아니면 `PST0308`. 제출하면 `SUPPLEMENT_SUBMITTED`가 되고 분석 1건이 들어간다. 소명 완비는 담당자가 다시 확인한다.
 - 파일 개수 10개와 합계 30MB 한도는 신분증 사본을 포함해 이의제기 전체로 센다.
@@ -111,3 +111,13 @@ Agent 워커가 부르는 내부 API는 [objection_agent_contract.md](objection_
 | `OBJECTION_DECISION_RETURN` | 반려 |
 | `PAYMENT_STOP_RELEASE` | 승인으로 계좌가 해제되거나 일부 지급정지로 바뀜 |
 | `OBJECTION_DETAIL_VIEW`, `OBJECTION_DOCUMENT_VIEW` | 상세 조회, 서류 열람(조회 사유 포함) |
+
+## 8. 운영 관리자 권한 부여
+
+`PAYMENT_STOP_*` 권한은 마이그레이션이나 시드로 운영 관리자에게 넣지 않는다. 누구에게 어떤 권한을 줄지는 사람마다 다르고, 운영 DB에 행을 직접 넣지 않는다. 배포 직후에는 지급정지 화면에 들어갈 수 있는 관리자가 없으므로 아래 순서로 준다.
+
+1. `CUSTOMER_WRITE`를 가진 관리자가 `POST /admin/customers/{customerId}/permissions`(본문 `{ "permission": "PAYMENT_STOP_READ" }`, `Idempotency-Key` 필수)로 권한을 하나씩 준다([admin_auth.md](admin_auth.md) PH-49b). 자기 자신에게는 줄 수 없다(`CMN0102`). 부여와 실패는 `ADMIN_PERMISSION_GRANT` 감사로 남는다.
+2. 2인 승인(§3) 때문에 관리자가 둘 이상 있어야 한다. 판정 작성자에게는 `PAYMENT_STOP_READ`, `PAYMENT_STOP_WRITE`, 승인자에게는 `PAYMENT_STOP_READ`, `PAYMENT_STOP_APPROVE`를 준다(로컬 시드 `adminoperator`, `adminapprover`와 같은 조합). 한 사람이 둘 다 가져도 자기 판정은 승인하지 못한다(`PST0309`).
+3. 새 권한은 대상이 다시 로그인한 뒤부터 적용된다. 회수는 `DELETE /admin/customers/{customerId}/permissions/{permission}`이고 대상의 세션을 바로 끊는다.
+
+관리자 계정을 새로 만드는 API는 없다. 운영 관리자가 한 명뿐이면 자기 자신에게 권한을 줄 수 없으므로, 두 번째 관리자 계정은 [admin_auth.md](admin_auth.md) §4 절차(P1 Runbook)로 만든다.
