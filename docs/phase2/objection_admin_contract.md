@@ -79,7 +79,7 @@ Agent 워커가 부르는 내부 API는 [objection_agent_contract.md](objection_
 - `objectionId`, `objectionStatus`는 아직 신청하지 않았으면 null이다. `supplementDue`와 `missingDocuments`는 `SUPPLEMENT_REQUESTED`일 때만 값이 있고 그 밖에는 null과 빈 배열이다. `decisionResult`는 확정된 심사결과이고 확정 전이면 null이다.
 - 신청: 본인 계좌의 지급정지 사건이 아니면(남의 사건, 없는 사건, 해제된 사건) 모두 `PST0201`이다(존재 여부 비노출, AGENTS 규칙 4). 신청 기한이 지났으면 `PST0002`, 신분증 사본이나 사유가 없으면 `PST0003`, 파일 위반은 `PST0007`, 이미 신청한 사건은 `PST0304`. 파일을 먼저 모두 검사하므로 위반이면 접수가 남지 않는다. 여러 개에 걸리면 남의 사건과 없는 사건(`PST0201`), 신분증 사본 없음(`PST0003`), 파일(`PST0007`), 해제된 사건(`PST0201`), 이미 신청(`PST0304`), 신청 기한(`PST0002`), 사유 없음(`PST0003`) 순서로 먼저 걸린 것을 준다.
 - 신청하면 같은 트랜잭션에서 접수(`receivedChannel=ONLINE`), 신분증 사본(암호화), 증빙, 분석 1건, 명의인 접수 통지를 남긴다.
-- 보완 제출: 본인 이의제기가 아니면 `PST0202`, `SUPPLEMENT_REQUESTED`가 아니면 `PST0308`. 제출하면 `SUPPLEMENT_SUBMITTED`가 되고 분석 1건이 들어간다. 소명 완비는 담당자가 다시 확인한다.
+- 보완 제출: 본인 이의제기가 아니면 `PST0202`, `SUPPLEMENT_REQUESTED`가 아니면 `PST0308`. 제출하면 `SUPPLEMENT_SUBMITTED`가 되고 분석 1건이 들어간다. 진행 중 분석이 있으면 새로 넣지 않는다([objection_agent_contract.md](objection_agent_contract.md) §4 분석 작업이 들어가는 때). 소명 완비는 담당자가 다시 확인한다.
 - 파일 개수 10개와 합계 30MB 한도는 신분증 사본을 포함해 이의제기 전체로 센다.
 
 ## 5. 파일 저장
