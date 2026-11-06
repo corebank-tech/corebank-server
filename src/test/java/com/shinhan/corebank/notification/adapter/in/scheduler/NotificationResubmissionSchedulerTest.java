@@ -234,9 +234,14 @@ class NotificationResubmissionSchedulerTest extends IntegrationTestSupport {
         doCallRealMethod().when(notificationCommandPort).saveIfAbsent(any());
     }
 
+    // 라이브러리는 기록을 만들 때 마지막 재제출 시각을 발행 시각과 같게 넣고, 멈춤은 마지막 재제출 시각으로 판정한다
     private void markProcessingSince(long executionId, Instant publishedAt) {
         jdbcTemplate.update(
-                "UPDATE EVENT_PUBLICATION SET STATUS = 'PROCESSING', PUBLICATION_DATE = ? WHERE SERIALIZED_EVENT LIKE ?",
+                """
+            UPDATE EVENT_PUBLICATION SET STATUS = 'PROCESSING', PUBLICATION_DATE = ?, LAST_RESUBMISSION_DATE = ?
+            WHERE SERIALIZED_EVENT LIKE ?
+            """,
+                Timestamp.from(publishedAt),
                 Timestamp.from(publishedAt),
                 refIdPattern(executionId));
     }
