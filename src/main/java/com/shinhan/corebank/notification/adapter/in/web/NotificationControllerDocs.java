@@ -9,6 +9,8 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Positive;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 /** 알림함 API 의 Swagger 명세. 제약은 메서드 검증 규칙상 여기에만 둔다. 매핑 애너테이션은 구현체가 갖는다. */
@@ -53,5 +55,45 @@ public interface NotificationControllerDocs {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     ApiResponse<NotificationUnreadCountResponse> getUnreadNotificationCount(
+            @AuthenticationPrincipal AuthenticatedCustomer customer);
+
+    @Operation(
+            operationId = "markNotificationAsRead",
+            summary = "알림 읽음 처리",
+            description =
+                    """
+                    로그인 고객의 알림을 읽음으로 표시하고 남은 미읽음 건수를 반환한다.
+                    이미 읽은 알림을 다시 처리해도 성공하며 최초 읽음 일시를 유지한다.
+                    """)
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "알림 읽음 처리 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "`CMN0001` 잘못된 알림 ID 또는 Idempotency-Key 형식 · `CMN0002` Idempotency-Key 누락",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "`CMN0101` 인증정보가 없거나 세션이 만료됨",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "`CMN0102` 다른 고객의 알림",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "`NTF0201` 알림을 찾을 수 없음",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "`CMN0301`/`CMN0302` 멱등키 충돌",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<ApiResponse<NotificationReadResponse>> markNotificationAsRead(
+            @Parameter(description = "알림 ID", required = true, example = "1") @Positive Long notificationId,
+            @Parameter(
+                            description = "멱등키. 동일 키와 동일 요청 재요청 시 저장된 응답 반환",
+                            required = true,
+                            example = "550e8400-e29b-41d4-a716-446655440000")
+                    String idempotencyKey,
             @AuthenticationPrincipal AuthenticatedCustomer customer);
 }

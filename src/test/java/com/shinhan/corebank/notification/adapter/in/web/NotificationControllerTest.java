@@ -1,20 +1,27 @@
 package com.shinhan.corebank.notification.adapter.in.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.common.idempotency.IdempotencyFingerprint;
+import com.shinhan.corebank.common.idempotency.IdempotencyService;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,6 +32,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import tools.jackson.databind.ObjectMapper;
 
 @AutoConfigureMockMvc
 class NotificationControllerTest extends IntegrationTestSupport {
@@ -40,6 +48,12 @@ class NotificationControllerTest extends IntegrationTestSupport {
 
     @Autowired
     CustomerTestFixture customerFixture;
+
+    @Autowired
+    IdempotencyService idempotencyService;
+
+    @Autowired
+    ObjectMapper objectMapper;
 
     private final List<Long> createdCustomerIds = new ArrayList<>();
 
@@ -205,8 +219,171 @@ class NotificationControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.code").value("CMN0101"));
     }
 
+    @Test
+    @DisplayName("최초 읽음 처리는 읽음 시각을 저장하고 남은 미읽음 건수를 반환한다")
+    void markAsRead_firstRequest_savesReadAtAndReturnsRemainingCount() throws Exception {
+        final Long customerId = createCustomer();
+        final Long notificationId = insertUnread(customerId, "TRANSFER", BASE_TIME);
+        insertUnread(customerId, "TRANSFER", BASE_TIME.plusMinutes(1));
+
+        markAsRead(customerId, notificationId, newKey())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"))
+                .andExpect(jsonPath("$.data.notificationId").value(notificationId))
+                .andExpect(jsonPath("$.data.read").value(true))
+                .andExpect(jsonPath("$.data.readAt").value(matchesPattern(OFFSET_DATE_TIME_PATTERN)))
+                .andExpect(jsonPath("$.data.unreadCount").value(1));
+
+        assertThat(savedIsRead(notificationId)).isTrue();
+        assertThat(savedReadAt(notificationId)).isNotNull();
+    }
+
+    @Test
+    @DisplayName("이미 읽은 알림을 새 키로 다시 처리해도 200이고 최초 읽음 시각을 유지한다")
+    void markAsRead_alreadyRead_keepsFirstReadAt() throws Exception {
+        final Long customerId = createCustomer();
+        final Long notificationId = insertRead(customerId, BASE_TIME);
+        final LocalDateTime firstReadAt = savedReadAt(notificationId);
+
+        markAsRead(customerId, notificationId, newKey())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.read").value(true))
+                .andExpect(jsonPath("$.data.readAt").value("2026-11-07T09:00:00.123456+09:00"))
+                .andExpect(jsonPath("$.data.unreadCount").value(0));
+
+        assertThat(savedReadAt(notificationId)).isEqualTo(firstReadAt);
+    }
+
+    @Test
+    @DisplayName("같은 키와 같은 요청은 다시 처리하지 않고 저장한 응답을 재생한다")
+    void markAsRead_sameKeySameRequest_replaysStoredResponse() throws Exception {
+        final Long customerId = createCustomer();
+        final Long notificationId = insertUnread(customerId, "TRANSFER", BASE_TIME);
+        final Long remainingId = insertUnread(customerId, "TRANSFER", BASE_TIME.plusMinutes(1));
+        final String idempotencyKey = newKey();
+        final String firstBody = markAsRead(customerId, notificationId, idempotencyKey)
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        markAsRead(customerId, remainingId, newKey()).andExpect(status().isOk());
+
+        final String replayedBody = markAsRead(customerId, notificationId, idempotencyKey)
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(replayedBody).isEqualTo(firstBody);
+    }
+
+    @Test
+    @DisplayName("같은 키가 처리 중이면 CMN0301로 거부한다")
+    void markAsRead_sameKeyInProgress_returnsCmn0301() throws Exception {
+        final Long customerId = createCustomer();
+        final Long notificationId = insertUnread(customerId, "TRANSFER", BASE_TIME);
+        final String idempotencyKey = newKey();
+        final String fingerprint = objectMapper.writeValueAsString(
+                IdempotencyFingerprint.of(customerId, null, Map.of("notificationId", notificationId)));
+        idempotencyService.begin(idempotencyKey, customerId, "PATCH /notifications/{notificationId}/read", fingerprint);
+
+        markAsRead(customerId, notificationId, idempotencyKey)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CMN0301"));
+    }
+
+    @Test
+    @DisplayName("같은 키로 다른 알림을 요청하면 CMN0302로 거부한다")
+    void markAsRead_sameKeyDifferentNotification_returnsCmn0302() throws Exception {
+        final Long customerId = createCustomer();
+        final Long firstId = insertUnread(customerId, "TRANSFER", BASE_TIME);
+        final Long secondId = insertUnread(customerId, "TRANSFER", BASE_TIME.plusMinutes(1));
+        final String idempotencyKey = newKey();
+        markAsRead(customerId, firstId, idempotencyKey).andExpect(status().isOk());
+
+        markAsRead(customerId, secondId, idempotencyKey)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CMN0302"));
+
+        assertThat(savedIsRead(secondId)).isFalse();
+    }
+
+    @Test
+    @DisplayName("없는 알림은 404 NTF0201이다")
+    void markAsRead_missingNotification_returnsNtf0201() throws Exception {
+        markAsRead(createCustomer(), Long.MAX_VALUE, newKey())
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NTF0201"));
+    }
+
+    @Test
+    @DisplayName("다른 고객의 알림은 403 CMN0102로 거부하고 읽음 상태를 바꾸지 않는다")
+    void markAsRead_otherCustomerNotification_returnsCmn0102WithoutChange() throws Exception {
+        final Long ownerId = createCustomer();
+        final Long notificationId = insertUnread(ownerId, "TRANSFER", BASE_TIME);
+
+        markAsRead(createCustomer(), notificationId, newKey())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CMN0102"));
+
+        assertThat(savedIsRead(notificationId)).isFalse();
+        assertThat(savedReadAt(notificationId)).isNull();
+    }
+
+    @Test
+    @DisplayName("양의 정수가 아닌 알림 ID는 CMN0001로 거부한다")
+    void markAsRead_notPositiveId_returnsCmn0001() throws Exception {
+        final Long customerId = createCustomer();
+
+        markAsRead(customerId, 0L, newKey())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
+        mockMvc.perform(patch("/notifications/abc/read")
+                        .with(csrf())
+                        .header("Idempotency-Key", newKey())
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
+    }
+
+    @Test
+    @DisplayName("멱등키가 없으면 CMN0002로 거부한다")
+    void markAsRead_withoutIdempotencyKey_returnsCmn0002() throws Exception {
+        final Long customerId = createCustomer();
+        final Long notificationId = insertUnread(customerId, "TRANSFER", BASE_TIME);
+
+        mockMvc.perform(patch("/notifications/{notificationId}/read", notificationId)
+                        .with(csrf())
+                        .with(authentication(authenticationOf(customerId))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0002"));
+    }
+
+    @Test
+    @DisplayName("API 문서에 알림 API 3개가 고정된 operationId로 노출된다")
+    void apiDocs_exposesNotificationOperationIds() throws Exception {
+        mockMvc.perform(get("/api/v1/v3/api-docs").contextPath("/api/v1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$['paths']['/notifications']['get']['operationId']")
+                        .value("getNotifications"))
+                .andExpect(jsonPath("$['paths']['/notifications/unread-count']['get']['operationId']")
+                        .value("getUnreadNotificationCount"))
+                .andExpect(jsonPath("$['paths']['/notifications/{notificationId}/read']['patch']['operationId']")
+                        .value("markNotificationAsRead"));
+    }
+
     private ResultActions getNotifications(Long customerId, String queryString) throws Exception {
         return mockMvc.perform(get("/notifications" + queryString).with(authentication(authenticationOf(customerId))));
+    }
+
+    private ResultActions markAsRead(Long customerId, Long notificationId, String idempotencyKey) throws Exception {
+        return mockMvc.perform(patch("/notifications/{notificationId}/read", notificationId)
+                .with(csrf())
+                .header("Idempotency-Key", idempotencyKey)
+                .with(authentication(authenticationOf(customerId))));
+    }
+
+    private String newKey() {
+        return UUID.randomUUID().toString();
     }
 
     private Long createCustomer() {
@@ -241,6 +418,16 @@ class NotificationControllerTest extends IntegrationTestSupport {
     private Long lastInsertedNotificationId(Long customerId) {
         return jdbcTemplate.queryForObject(
                 "SELECT MAX(notification_id) FROM notification WHERE customer_id = ?", Long.class, customerId);
+    }
+
+    private boolean savedIsRead(Long notificationId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "SELECT is_read FROM notification WHERE notification_id = ?", Boolean.class, notificationId));
+    }
+
+    private LocalDateTime savedReadAt(Long notificationId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT read_at FROM notification WHERE notification_id = ?", LocalDateTime.class, notificationId);
     }
 
     private UsernamePasswordAuthenticationToken authenticationOf(Long customerId) {
