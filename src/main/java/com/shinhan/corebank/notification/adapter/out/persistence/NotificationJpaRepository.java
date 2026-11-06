@@ -29,4 +29,6 @@ public interface NotificationJpaRepository extends JpaRepository<NotificationJpa
             @Param("title") String title,
             @Param("content") String content,
             @Param("occurredAt") LocalDateTime occurredAt);
+
+    long countByCustomerIdAndIsReadFalse(Long customerId);
 }
