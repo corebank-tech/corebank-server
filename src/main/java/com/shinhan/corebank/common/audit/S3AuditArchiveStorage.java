@@ -13,7 +13,7 @@ import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
-// 보존 기간은 버킷 기본값(GOVERNANCE · 1일, PH-72)이 객체마다 건다.
+// 객체 보존 기간은 S3 버킷의 Object Lock 기본 정책을 따른다(PH-72, #867).
 @Component
 @ConditionalOnProperty(name = "app.audit.archive.storage", havingValue = "s3")
 public class S3AuditArchiveStorage implements AuditArchiveStorage {
