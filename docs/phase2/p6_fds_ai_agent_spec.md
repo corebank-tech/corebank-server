@@ -276,7 +276,11 @@ Python pandas + scikit-learn + xgboost
 
 ### 6.4 추론 연동
 
-MVP에서는 **Python FastAPI에서 XGBoost 추론**하도록 통일해 Python/Java 라이브러리 호환 문제를 줄인다. 다만 이체 경로에서 Python 추론을 필수 동기 호출로 만들면 장애 결합이 생기므로, **서버 A/B 정책은 모델 결과 없이도 작동**해야 한다. 가능하면 FE 이벤트 제출 후 미리 점수를 계산·저장하거나, `HELD` 이후 Agent 조사 시 보조 점수로 제공한다. 모델 점수의 계산 시점과 사용 가능 시점을 API 계약에서 명시한다.
+MVP에서는 **Python FastAPI에서 XGBoost 추론**한다. 서버 A/B 정책은 모델 점수 없이 판정하고 훅 C에서 Python을 동기 호출하지 않는다. A/B를 통과해 보류되지 않은 이체에는 MVP에서 모델 점수를 생성하지 않는다.
+
+`HELD`가 커밋되고 조사 작업이 등록되면 점수 상태는 `PENDING`이다. 보류 사건의 **비동기 조사 워커**가 서버에서 소유권과 이벤트를 검증해 계산한 flow별 피처를 받아 Python FastAPI에 추론을 요청한다. FE가 전송한 점수나 미검증 원본 이벤트를 추론 입력으로 신뢰하지 않는다. 추론 성공 후 점수·모델 버전·피처 버전을 보류 사건의 보조 정보로 저장하고 상태를 `AVAILABLE`로 바꾼다. 이 점수는 Agent 조사 입력과 관리자 상세 조회에서 **저장된 뒤부터** 사용할 수 있다. 조사 워커는 점수 계산을 Agent 보고서 제출보다 먼저 시도하되, 점수 저장과 보고서 성공을 한 결과로 묶지 않는다.
+
+검증된 flow나 유효한 피처가 없으면 추론하지 않는다. 모델 부재, 입력 오류, 시간 초과, Python 장애가 있으면 점수는 null, 상태는 `UNAVAILABLE`로 기록하고 사유를 남긴다. Agent는 점수 없이도 가능한 조사를 계속하며, 조사 실패와 점수 실패는 별도로 표시한다. 점수의 `PENDING`/`AVAILABLE`/`UNAVAILABLE`은 이체 보류 상태 및 조사 상태와 별개다. 어떤 점수 상태도 `HELD` 생성·해제, 승인·거절 또는 원장 기표를 변경하지 않는다. 관리자 조회의 필드와 표시 의미는 [API 명세 §7](p6_fds_api_spec.md#7-관리자-보류-상세-조회)를 따른다.
 
 ---
 
@@ -352,8 +356,10 @@ assess_information_gap
     "backCount": 1,
     "amountRevisionCount": 2,
     "confirmActiveSeconds": 71,
+    "behaviorScoreStatus": "AVAILABLE",
     "behaviorRiskScore": 0.81,
-    "modelVersion": "xgb-demo-v1"
+    "modelVersion": "xgb-demo-v1",
+    "featureVersion": "p6-behavior-v1"
   },
   "transferSummary": {
     "amount": 500000,
