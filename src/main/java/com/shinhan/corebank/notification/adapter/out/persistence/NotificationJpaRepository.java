@@ -1,6 +1,8 @@
 package com.shinhan.corebank.notification.adapter.out.persistence;
 
 import java.time.LocalDateTime;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -29,6 +31,9 @@ public interface NotificationJpaRepository extends JpaRepository<NotificationJpa
             @Param("title") String title,
             @Param("content") String content,
             @Param("occurredAt") LocalDateTime occurredAt);
+
+    Page<NotificationJpaEntity> findByCustomerIdOrderByOccurredAtDescNotificationIdDesc(
+            Long customerId, Pageable pageable);
 
     long countByCustomerIdAndIsReadFalse(Long customerId);
 }
