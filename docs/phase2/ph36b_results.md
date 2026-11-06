@@ -1,7 +1,7 @@
 # PH-36b 최종 측정 결과
 
 > S4 [PH-36b](tasks.md#ph-36b-최종-측정--리포트) 측정 항목의 원자료와 판정을 모은다. 일정과 환경 배분은 [D-35](README.md#d-35--1030--p4) S4 일정표를 따랐다.
-> 이 문서는 측정이 끝날 때마다 절을 더한다. 11/5에 기존 EC2 측정 2건(무응답 중 당행 TPS, 지연이체 정상 지급률)을 기록했다. 11/6에 무응답 중 당행 TPS 2회차와 `execute()` 순환복잡도를 더했다. 3-Tier 한 줄은 11/6 오후에 더한다.
+> 이 문서는 측정이 끝날 때마다 절을 더한다. 11/5에 기존 EC2 측정 2건(무응답 중 당행 TPS, 지연이체 정상 지급률)을 기록했다. 11/6에 무응답 중 당행 TPS 2회차, `execute()` 순환복잡도, 3-Tier 한 줄을 더했다.
 
 ## 1. 결론
 
@@ -11,9 +11,9 @@
 | 타행 장애 뒤 자금 정합성 | 1회차 타행 232건, 2회차 414건 모두 SUCCESS로 확정, [§5 검사](transfer_correction.md#5-타행-장애-뒤-자금-정합성-ph-36) 4종 두 회차 모두 0행 | 통과 |
 | 지연이체 정상 지급률 | 50건 중 50건 지급, 전부 해제 시각부터 2분 안에 기표(최대 55.3초) | 100% |
 | `execute()` 순환복잡도 | 이체 실행 본체 CCN 23 → 13, 218줄 → 86줄. CCN 15 초과 메서드 1 → 0 | 감소 |
-| 3-Tier TPS · p99 한 줄 | 11/6 측정 예정 | - |
+| 3-Tier TPS · p99 한 줄 | 운영 3-Tier(WAS 2대)에서 10/s 1,800건 모두 성공, 10.00건/s, p95 448.2ms, p99 779.3ms | 10/s 견딤 |
 
-측정 중 결함 2건을 찾았다(6절). 두 측정의 판정에는 영향이 없다.
+측정 중 결함 2건을 찾았다(7절). 두 측정의 판정에는 영향이 없다.
 
 ## 2. 공통 측정 조건
 
@@ -126,7 +126,7 @@ k6 run --insecure-skip-tls-verify -e BASE_URL="$BASE" -e RATE=5 -e FAULT_MODE=NO
 - 414건 = NONE 성공 180 + 181, NO_RESPONSE TIMEOUT 53. 1회차와 같이 조회거래가 TIMEOUT을 모두 SUCCESS로 확정했다.
 - 서킷 거절 128건은 채번 전에 끊겨 `transfer` 행이 없다.
 
-실행한 SQL. [transfer_correction.md §5](transfer_correction.md#5-타행-장애-뒤-자금-정합성-ph-36) 원문에 `transaction_number` 범위만 더했다(6절 3번). 1회차는 구간과 범위를 `2026-11-05 16:11:00` ~ `16:26:00`, `20261105WB` ~ `20261105WC`로 바꿔 같은 SQL을 돌렸다.
+실행한 SQL. [transfer_correction.md §5](transfer_correction.md#5-타행-장애-뒤-자금-정합성-ph-36) 원문에 `transaction_number` 범위만 더했다(7절 3번). 1회차는 구간과 범위를 `2026-11-05 16:11:00` ~ `16:26:00`, `20261105WB` ~ `20261105WC`로 바꿔 같은 SQL을 돌렸다.
 
 ```sql
 SET @from_at = '2026-11-06 12:02:00';
@@ -196,7 +196,7 @@ HAVING withdrawals > 1
 | 시각(11/5) | 한 일 |
 |---|---|
 | 16:40 | 기존 EC2 compose에 `APP_DELAYED_TRANSFER_ENABLED=true`를 넣고 서버만 재생성(16:41 healthy). 모의 대외기관 컨테이너는 그대로 둠 |
-| 16:42 | 고객 50명에게 지연이체를 켜고(기준금액 1만 원, 지연 3시간) 1만 원 이상을 당행 이체해 보류. 37건 보류, 13건은 6절 결함으로 실패 |
+| 16:42 | 고객 50명에게 지연이체를 켜고(기준금액 1만 원, 지연 3시간) 1만 원 이상을 당행 이체해 보류. 37건 보류, 13건은 7절 결함으로 실패 |
 | 16:44 | 실패분을 채우려고 다른 고객 13명을 동시 1개로 다시 걸어 13건 보류. 보류 합계 50건(`transfer_hold_id` 1 ~ 50) |
 | 16:45 | 스위치를 빼고 서버만 재생성(16:46 healthy). 이미 보류된 건은 스위치가 꺼져 있어도 실행된다 |
 | 19:42:19 ~ 19:44:51 | 해제 시각. `TransferHoldReleaseScheduler`(1분 주기)가 실행 |
@@ -292,7 +292,49 @@ git show origin/main:"$F"  > $D/after.java
 - 릴리스 3에서 지연이체 보류 분기(`isHeldExecution` · `findHeldOrigin`)가 더해진 뒤에도 15를 넘는 메서드가 없다.
 - 개선 후 출력에서 메서드 앞에 `Posting::`이 붙은 것은 lizard가 파일 안 중첩 타입 이름을 잘못 읽은 것이다. 모두 `TransferExecutionService`의 메서드다.
 
-## 6. 측정 중 발견
+## 6. 3-Tier TPS · p99 한 줄
+
+### 6-1. 방법
+
+PH-30과 같은 `perf/k6/load.js`를 운영 3-Tier에 5/s · 10/s 고정 도착률로 각 3분, 1회씩 돌렸다. 운영 서버라 팀 채널에 공지하고 COB(23:20) 전에 끝냈다.
+
+| 항목 | 값 |
+|---|---|
+| 대상 | 운영 3-Tier, `https://api.corebank.cloud/api/v1` → ALB → WAS `t3.small` 2대 → RDS `db.t3.small` Multi-AZ |
+| 이미지 | 릴리스 3 (11/3 P5 수동 반영) |
+| 부하 생성 | 사용자 맥북에서 k6. `MAX_VUS = SESSION_POOL = 200` |
+| 시각(11/6) | smoke 22:59:20, 5/s 22:59:49 ~ 23:03:27, 10/s 23:06:47 ~ 23:10:17 |
+| 데이터 | 새 환경 PH-60 시드 고객(smoke 로그인 `customerId=6000001`) |
+
+```bash
+BASE="https://api.corebank.cloud/api/v1"
+STATS="avg,min,med,p(90),p(95),p(99),max"
+k6 run -e BASE_URL="$BASE" perf/k6/smoke.js
+k6 run -e BASE_URL="$BASE" -e RATE=5 -e DURATION=3m -e MAX_VUS=200 -e SESSION_POOL=200 \
+  --summary-trend-stats="$STATS" --summary-export=tier3_5.json perf/k6/load.js
+k6 run -e BASE_URL="$BASE" -e RATE=10 -e DURATION=3m -e MAX_VUS=200 -e SESSION_POOL=200 \
+  --summary-trend-stats="$STATS" --summary-export=tier3_10.json perf/k6/load.js
+```
+
+### 6-2. 결과
+
+| 항목 | 5/s | 10/s |
+|---|---|---|
+| 이체 `transfer_duration` avg | 223.5ms | 269.8ms |
+| 이체 p95 | 338.4ms | 448.2ms |
+| 이체 p99 | 549.7ms | 779.3ms |
+| 이체 max | 855.8ms | 1.85s |
+| 이체 성공 | 901 / 901 | 1,800 / 1,800 |
+| 성공 처리량(성공 ÷ 180초) | 5.01건/s | 10.00건/s |
+| HTTP 실패 | 0 / 3,804 | 0 / 7,400 |
+
+한 줄: **운영 3-Tier(WAS 2대)는 10/s에서 이체 1,800건을 모두 처리했다(10.00건/s, p95 448.2ms, p99 779.3ms).** 단일 EC2 C 기준선(3.27건/s, p95 9,469.9ms)은 10/s에서 포화였다.
+
+- 같은 10/s의 단일 EC2 E′2(같은 릴리스 3 · `hmac`, p95 135ms)보다 p95가 약 3배 길다. 3-Tier는 RDS Multi-AZ 동기 복제와 ALB → 사설 서브넷 WAS 구간이 더해지고, 부하 생성 기기도 다르다(E′2는 리눅스 4코어). 어느 쪽이 얼마인지는 나누지 않았다.
+- 10/s까지만 쟀으므로 3-Tier의 포화 도착률은 모른다. 단일 EC2 E′2는 15/s 근처가 한계였다(P4 리포트 2-2). WAS 2대의 확장 효율은 P5 PH-56 범위다.
+- 1회씩만 쟀다. 이 측정 거래 2,702건(smoke 1, 5/s 901, 10/s 1,800)은 11/6 운영 거래일에 들어 있다.
+
+## 7. 측정 중 발견
 
 | # | 내용 | 영향 | 처리 |
 |---|---|---|---|
@@ -302,7 +344,7 @@ git show origin/main:"$F"  > $D/after.java
 
 1번과 2번은 보류를 만들기 전 단계에서 났고 실패분은 다른 고객으로 다시 걸어 채웠으므로 지급률 판정에 영향이 없다. S4 결함 수정 규칙([D-35](README.md#d-35--1030--p4))에 따라 dev에만 머지하고, 이 문서의 수치는 수정 전 릴리스 3 기준이다.
 
-## 7. 한계
+## 8. 한계
 
 - 부하는 당행 5/s · 타행 1/s 각 3분, 지급률은 50건으로 시나리오 규모다. 같은 분에 수백 건이 해제되는 경우(스케줄러 한 번에 100건)는 재지 않았다.
 - 무응답 측정의 서킷 상태 전환은 로그가 없어 시각을 확인하지 못했다.
