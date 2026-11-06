@@ -1,7 +1,5 @@
 package com.shinhan.corebank.transfer.adapter.out.persistence;
 
-import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.application.port.out.LedgerAccumulatedBalancePort;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -114,18 +112,6 @@ public class LedgerAccumulatedBalancePersistenceAdapter implements LedgerAccumul
 
     @Override
     public Map<Long, Long> calculate(List<Long> accountIds, LocalDate fromInclusive, LocalDate toExclusive) {
-
-        if (accountIds == null
-                || accountIds.stream().anyMatch(id -> id == null || id <= 0)
-                || fromInclusive == null
-                || toExclusive == null) {
-
-            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
-        }
-
-        if (fromInclusive.isAfter(toExclusive)) {
-            throw new BusinessException(CommonErrorCode.INVALID_DATE_RANGE);
-        }
 
         if (accountIds.isEmpty()) {
             return Map.of();

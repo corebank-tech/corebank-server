@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.DefaultApplicationArguments;
 
 @ExtendWith(MockitoExtension.class)
 class Ph13MeasurementRunnerTest {
@@ -80,5 +81,31 @@ class Ph13MeasurementRunnerTest {
         assertThatThrownBy(runner::measure)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("accountId=101");
+    }
+
+    @Test
+    void run_recordsMeasurementResult() {
+        Ph13MeasurementProperties properties = new Ph13MeasurementProperties(100L, 1, 1, FROM, TO);
+
+        when(sqlPort.calculate(List.of(100L), FROM, TO)).thenReturn(Map.of(100L, 500L));
+
+        Ph13MeasurementRunner runner = new Ph13MeasurementRunner(sqlPort, properties);
+
+        runner.run(new DefaultApplicationArguments());
+
+        verify(sqlPort).calculate(List.of(100L), FROM, TO);
+    }
+
+    @Test
+    void measure_rejectsNullSqlResult() {
+        Ph13MeasurementProperties properties = new Ph13MeasurementProperties(100L, 1, 1, FROM, TO);
+
+        when(sqlPort.calculate(List.of(100L), FROM, TO)).thenReturn((Map<Long, Long>) null);
+
+        Ph13MeasurementRunner runner = new Ph13MeasurementRunner(sqlPort, properties);
+
+        assertThatThrownBy(runner::measure)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("SQL 집계 결과가 null");
     }
 }

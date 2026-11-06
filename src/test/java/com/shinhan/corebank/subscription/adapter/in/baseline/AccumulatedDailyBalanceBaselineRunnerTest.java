@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.env.MockEnvironment;
 
 @ExtendWith(MockitoExtension.class)
 class AccumulatedDailyBalanceBaselineRunnerTest {
@@ -35,8 +36,8 @@ class AccumulatedDailyBalanceBaselineRunnerTest {
         when(accumulatedDailyBalanceUseCase.calculate(60_000_003L, fromInclusive, toExclusive))
                 .thenReturn(300L);
 
-        AccumulatedDailyBalanceBaselineRunner runner =
-                new AccumulatedDailyBalanceBaselineRunner(accumulatedDailyBalanceUseCase, properties);
+        AccumulatedDailyBalanceBaselineRunner runner = new AccumulatedDailyBalanceBaselineRunner(
+                accumulatedDailyBalanceUseCase, properties, new MockEnvironment());
 
         AccumulatedDailyBalanceBaselineRunner.BaselineResult result = runner.measure();
 
@@ -86,8 +87,8 @@ class AccumulatedDailyBalanceBaselineRunnerTest {
         when(accumulatedDailyBalanceUseCase.calculate(60_000_002L, fromInclusive, toExclusive))
                 .thenReturn(0L);
 
-        AccumulatedDailyBalanceBaselineRunner runner =
-                new AccumulatedDailyBalanceBaselineRunner(accumulatedDailyBalanceUseCase, properties);
+        AccumulatedDailyBalanceBaselineRunner runner = new AccumulatedDailyBalanceBaselineRunner(
+                accumulatedDailyBalanceUseCase, properties, new MockEnvironment());
 
         AccumulatedDailyBalanceBaselineRunner.BaselineResult result = runner.measure();
 
