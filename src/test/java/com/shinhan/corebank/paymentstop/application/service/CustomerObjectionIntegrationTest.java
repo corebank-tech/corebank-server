@@ -150,7 +150,7 @@ class CustomerObjectionIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("보완은 요청, 제출, 완비 재확인을 두 번까지 돌고 세 번째 요청은 PST0006이다. 제출마다 분석이 1건씩 들어간다")
+    @DisplayName("보완은 요청, 제출, 완비 재확인을 두 번까지 돌고 세 번째 요청은 PST0006이다. 앞선 분석이 끝났으면 제출마다 분석이 1건씩 들어간다")
     void supplementRounds() {
         long caseId = register(data.scenario(true));
         long objectionId = customerUseCase.submit(holderId, command(caseId, List.of()));
@@ -169,6 +169,8 @@ class CustomerObjectionIntegrationTest extends IntegrationTestSupport {
                 () -> customerUseCase.submitSupplement(otherId, objectionId, evidence(), null),
                 PaymentStopErrorCode.OBJECTION_NOT_FOUND);
 
+        // 앞선 분석이 끝나야 보완 제출이 새 분석을 넣는다(진행 중 실행은 이의제기당 하나)
+        completeRuns(objectionId);
         assertThat(customerUseCase.submitSupplement(holderId, objectionId, evidence(), "계약서 첨부합니다"))
                 .singleElement()
                 .satisfies(document -> assertThat(document.round()).isEqualTo(1));
@@ -181,6 +183,7 @@ class CustomerObjectionIntegrationTest extends IntegrationTestSupport {
                 progressUseCase.requestSupplement(objectionId, "거래내역서가 필요합니다", List.of("거래내역서"), admin);
         assertThat(second.round()).isEqualTo(2);
         assertThat(second.supplementDue()).isBefore(first.supplementDue().plusDays(14));
+        completeRuns(objectionId);
         customerUseCase.submitSupplement(holderId, objectionId, evidence(), null);
 
         assertErrorCode(
@@ -194,6 +197,44 @@ class CustomerObjectionIntegrationTest extends IntegrationTestSupport {
                         String.class,
                         objectionId))
                 .containsExactly("1:1", "2:1");
+    }
+
+    @Test
+    @DisplayName("접수 분석이 아직 대기 중이면 보완 제출은 새 실행을 넣지 않는다(진행 중 실행은 이의제기당 하나)")
+    void supplementReusesQueuedRun() {
+        long caseId = register(data.scenario(true));
+        long objectionId = customerUseCase.submit(holderId, command(caseId, List.of()));
+        progressUseCase.requestSupplement(objectionId, "계약서가 필요합니다", List.of("물품 계약서"), admin);
+
+        customerUseCase.submitSupplement(holderId, objectionId, evidence(), null);
+
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT status FROM agent_run WHERE objection_id = ?", String.class, objectionId))
+                .containsExactly("QUEUED");
+    }
+
+    @Test
+    @DisplayName("앞선 분석이 끝났으면 보완 제출이 분석을 1건 새로 넣는다")
+    void supplementQueuesNewRunAfterCompletion() {
+        long caseId = register(data.scenario(true));
+        long objectionId = customerUseCase.submit(holderId, command(caseId, List.of()));
+        progressUseCase.requestSupplement(objectionId, "계약서가 필요합니다", List.of("물품 계약서"), admin);
+        completeRuns(objectionId);
+
+        customerUseCase.submitSupplement(holderId, objectionId, evidence(), null);
+
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT status FROM agent_run WHERE objection_id = ? ORDER BY run_id",
+                        String.class,
+                        objectionId))
+                .containsExactly("COMPLETED", "QUEUED");
+    }
+
+    private void completeRuns(long objectionId) {
+        jdbcTemplate.update(
+                "UPDATE agent_run SET status = 'COMPLETED', lease_until = NULL, ended_at = NOW(6)"
+                        + " WHERE objection_id = ? AND status IN ('QUEUED', 'RUNNING')",
+                objectionId);
     }
 
     private SubmitCommand command(long caseId, List<UploadFile> evidence) {

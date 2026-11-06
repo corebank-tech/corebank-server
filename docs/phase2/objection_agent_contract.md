@@ -128,7 +128,7 @@
 
 ### 분석 작업이 들어가는 때
 
-접수(영업점 대리 접수, 고객 비대면 신청), 고객 보완 제출, 관리자 재분석 요청마다 실행 하나가 대기열에 들어간다. 단계 종류 `OCR`의 detail은 `{ documentId, pages, regions, lowConfidenceRegions, engine, error? }`(개수)다.
+접수(영업점 대리 접수, 고객 비대면 신청), 고객 보완 제출, 관리자 재분석 요청마다 실행 하나가 대기열에 들어간다. 진행 중(`QUEUED`, `RUNNING`) 실행은 이의제기당 하나다. 고객 보완 제출 때 진행 중 실행이 있으면 새로 넣지 않는다. `QUEUED`면 워커가 가져갈 때 보완 서류까지 읽고, 이미 `RUNNING`이면 보완 서류가 그 실행에 빠질 수 있어 실행이 끝난 뒤 담당자가 재분석을 요청한다. 관리자 재분석 요청은 같은 경우 `PST0306`이다. 단계 종류 `OCR`의 detail은 `{ documentId, pages, regions, lowConfidenceRegions, engine, error? }`(개수)다.
 
 ## 5. 관리자 화면용
 
