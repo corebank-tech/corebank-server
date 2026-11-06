@@ -36,4 +36,17 @@ public interface NotificationJpaRepository extends JpaRepository<NotificationJpa
             Long customerId, Pageable pageable);
 
     long countByCustomerIdAndIsReadFalse(Long customerId);
+
+    /** 조건을 한 문장에 담아 동시 요청이 최초 readAt 을 덮어쓰지 못하게 한다. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+            """
+        UPDATE NotificationJpaEntity n
+        SET n.isRead = TRUE, n.readAt = :readAt
+        WHERE n.notificationId = :notificationId AND n.customerId = :customerId AND n.isRead = FALSE
+        """)
+    void markAsReadIfUnread(
+            @Param("notificationId") Long notificationId,
+            @Param("customerId") Long customerId,
+            @Param("readAt") LocalDateTime readAt);
 }
