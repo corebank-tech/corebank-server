@@ -25,3 +25,6 @@ management:
     web:
       exposure:
         include: health,prometheus
+
+# 미가입 아이디 실패 카운터의 검색 해시 키(PH-08). 개발·테스트 전용 값이고 운영은 환경변수로 따로 주입한다
+APP_LOGIN_ID_HMAC_KEY_BASE64: 42K9p6EjjVkK41I/p9GFs1Jnn5bq0wbfS/QtkkfQlT8=
