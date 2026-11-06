@@ -43,6 +43,12 @@ public interface AgentWorkerUseCase {
 
     List<WorkerExternalCheck> externalChecks(String jobToken, long objectionId);
 
+    /**
+     * 해제 요건 점검 결과(갈래만). 워커가 판정안을 낸 뒤 보정 규칙에만 쓰고 LLM 에는 넘기지 않는다. 수용 근거가 없는데 AI 가 수용 후보를 내지
+     * 않게 한다.
+     */
+    GateBranch gateBranch(String jobToken, long objectionId);
+
     /** nextSeq 는 이 시도가 다음에 보낼 단계 순번이다. 재시도면 앞선 시도의 단계 뒤에 이어 붙인다. */
     record ClaimedJob(long runId, long objectionId, int attempt, int nextSeq, String jobToken) {}
 

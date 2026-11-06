@@ -176,6 +176,15 @@ public class AgentInternalController {
         return ApiResponse.success(agentWorkerUseCase.externalChecks(jobToken, objectionId));
     }
 
+    @GetMapping("/objections/{objectionId}/gate")
+    public ApiResponse<GateBranchResponse> gate(
+            @RequestHeader(value = JOB_TOKEN, required = false) String jobToken,
+            @PathVariable @Positive Long objectionId) {
+        return ApiResponse.success(new GateBranchResponse(agentWorkerUseCase.gateBranch(jobToken, objectionId)));
+    }
+
+    public record GateBranchResponse(GateBranch branch) {}
+
     public record OcrRequest(
             @Size(max = 40) String engine, OcrStatus status, @Size(max = 50) List<@Valid OcrPageRequest> pages) {}
 

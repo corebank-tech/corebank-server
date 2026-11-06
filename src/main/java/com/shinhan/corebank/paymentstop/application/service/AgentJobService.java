@@ -29,6 +29,7 @@ import com.shinhan.corebank.paymentstop.domain.document.ObjectionDocument;
 import com.shinhan.corebank.paymentstop.domain.document.OcrPage;
 import com.shinhan.corebank.paymentstop.domain.document.OcrStatus;
 import com.shinhan.corebank.paymentstop.domain.exception.PaymentStopErrorCode;
+import com.shinhan.corebank.paymentstop.domain.gate.GateBranch;
 import com.shinhan.corebank.paymentstop.domain.gate.GateResult;
 import com.shinhan.corebank.paymentstop.domain.gate.LedgerFact;
 import com.shinhan.corebank.paymentstop.domain.gate.RuleResult;
@@ -201,6 +202,16 @@ public class AgentJobService implements AgentWorkerUseCase {
     public List<WorkerExternalCheck> externalChecks(String jobToken, long objectionId) {
         authorize(jobToken, objectionId, null, false);
         return workerChecks(objectionId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public GateBranch gateBranch(String jobToken, long objectionId) {
+        authorize(jobToken, objectionId, null, false);
+        Target target = target(objectionId);
+        return gateEvaluator
+                .evaluate(target.paymentStopCase(), target.objection())
+                .branch();
     }
 
     // 신분증 사본은 Agent 에게 목록, 내용, OCR 모두 보이지 않는다(D37)

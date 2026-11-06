@@ -118,6 +118,10 @@
 - 응답은 `{ documentId, pages }`(가명 처리한 값)다. 같은 문서에 다시 보내면 덮어쓴다.
 - 신분증 사본이나 다른 이의제기의 문서는 `PST0205`다.
 
+### `GET /internal/objections/{objectionId}/gate`
+
+해제 요건 점검 갈래 `{ "branch" }`. 워커가 판정안을 만든 뒤 보정 규칙에만 쓰고 LLM에는 넘기지 않는다. 규칙이 수용 근거를 인정하지 않으면(갈래가 `NORMAL_ACCEPT`, `NORMAL_PARTIAL`이 아니면) AI의 수용 계열 판정안을 판단 보류로, 규칙이 일부 지급정지만 인정하면 일부 지급정지로 낮춘다. 해제 여부는 여전히 확정 직전 게이트와 담당자가 정한다.
+
 ### `GET /internal/objections/{objectionId}/external-checks`
 
 `[{ agency, status, reply }]`. `agency`는 `POLICE` / `PEER_BANK`, `reply`는 `INVOLVEMENT_SUSPECTED` / `DOCUMENT_FORGED` / `OWNER_UNRELATED` / `NO_RECORD`이고 null일 수 있다. 회신은 게이트의 외부 확인 사실이지만 Agent에게는 참고용이고, 게이트는 서버가 계산한다.
