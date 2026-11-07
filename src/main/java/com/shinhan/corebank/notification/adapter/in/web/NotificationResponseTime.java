@@ -9,6 +9,8 @@ final class NotificationResponseTime {
 
     private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
 
+    private NotificationResponseTime() {}
+
     static OffsetDateTime toOffsetDateTime(LocalDateTime koreaTime) {
         return koreaTime.atZone(KOREA_ZONE).toOffsetDateTime();
     }
