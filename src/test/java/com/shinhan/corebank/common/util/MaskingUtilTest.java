@@ -111,6 +111,20 @@ class MaskingUtilTest {
                 .withMessageNotContaining(raw);
     }
 
+    @ParameterizedTest(name = "{0} -> {1}")
+    @CsvSource({"이산, 이*", "홍길동, 홍*동", "남궁민수, 남**수"})
+    @DisplayName("이름은 첫 글자를 남기고 3자 이상이면 마지막 글자도 남긴다")
+    void name_masksByLength(String name, String expected) {
+        assertThat(MaskingUtil.maskName(name)).isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("null 또는 빈 이름은 예외를 던진다")
+    void blankName_throws() {
+        assertThatIllegalArgumentException().isThrownBy(() -> MaskingUtil.maskName(null));
+        assertThatIllegalArgumentException().isThrownBy(() -> MaskingUtil.maskName(" "));
+    }
+
     @Test
     @DisplayName("정상 휴대폰번호는 앞 3자리·뒤 4자리만 남기고 중간 4자리가 마스킹된다")
     void validPhoneNumber_masked() {
