@@ -76,15 +76,13 @@ class NotificationReadConcurrencyIntegrationTest extends IntegrationTestSupport 
 
         final List<MockHttpServletResponse> responses = invokeConcurrently(notificationId);
 
-        final List<LocalDateTime> respondedReadAts = new ArrayList<>();
-        for (MockHttpServletResponse response : responses) {
-            assertThat(response.getStatus()).isEqualTo(200);
-            respondedReadAts.add(readAtOf(response));
-        }
         final LocalDateTime savedReadAt = jdbcTemplate.queryForObject(
                 "SELECT read_at FROM notification WHERE notification_id = ?", LocalDateTime.class, notificationId);
         assertThat(savedReadAt).isNotNull();
-        assertThat(respondedReadAts).containsOnly(savedReadAt);
+        assertThat(responses).allSatisfy(response -> {
+            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(readAtOf(response)).isEqualTo(savedReadAt);
+        });
     }
 
     @Test

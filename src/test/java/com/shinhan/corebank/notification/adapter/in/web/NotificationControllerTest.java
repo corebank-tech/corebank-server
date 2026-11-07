@@ -115,6 +115,17 @@ class NotificationControllerTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("읽은 알림 항목은 read가 true이고 readAt이 오프셋 포함 일시다")
+    void getNotifications_readItem_returnsReadAtWithOffset() throws Exception {
+        final Long customerId = createCustomer();
+        insertRead(customerId, BASE_TIME);
+
+        getNotifications(customerId, "")
+                .andExpect(jsonPath("$.data.items[0].read").value(true))
+                .andExpect(jsonPath("$.data.items[0].readAt").value("2026-11-07T09:00:00.123456+09:00"));
+    }
+
+    @Test
     @DisplayName("미읽음 건수는 현재 페이지가 아니라 고객의 전체 알림 기준이고 페이지 경계를 지킨다")
     void getNotifications_secondPage_keepsTotalUnreadCount() throws Exception {
         final Long customerId = createCustomer();
