@@ -36,10 +36,6 @@ public class NotificationMarkReadService implements NotificationMarkReadUseCase 
             throw new BusinessException(CommonErrorCode.FORBIDDEN);
         }
 
-        return NotificationMarkReadResult.builder()
-                .notificationId(notificationId)
-                .readAt(notification.readAt())
-                .unreadCount(notificationQueryPort.countUnread(customerId))
-                .build();
+        return NotificationMarkReadResult.from(notification, notificationQueryPort.countUnread(customerId));
     }
 }
