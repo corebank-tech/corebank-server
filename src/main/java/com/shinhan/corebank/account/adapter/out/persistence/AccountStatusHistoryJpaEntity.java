@@ -99,4 +99,19 @@ public class AccountStatusHistoryJpaEntity {
 
         return entity;
     }
+
+    /** 지급정지 적용, 전환, 해제로 상태가 바뀐 감사 이력. 만기일과 기준일은 없다. */
+    public static AccountStatusHistoryJpaEntity paymentStopTransition(
+            Long accountId, AccountStatus previousStatus, AccountStatus newStatus, LocalDateTime changedAt) {
+
+        AccountStatusHistoryJpaEntity entity = new AccountStatusHistoryJpaEntity();
+
+        entity.accountId = accountId;
+        entity.previousStatus = previousStatus.name();
+        entity.newStatus = newStatus.name();
+        entity.changedAt = changedAt;
+        entity.triggerType = "PAYMENT_STOP";
+
+        return entity;
+    }
 }

@@ -6,7 +6,9 @@ public enum AccountErrorCode implements ErrorCode {
     INVALID_ACCOUNT_ALIAS("ACC0001", 400, "계좌별명 길이 제한을 초과했습니다."),
     INVALID_DISPLAY_ORDER("ACC0002", 400, "표시 순서 정보가 올바르지 않습니다."),
     INVALID_WITHDRAWAL_ACCOUNT_TYPE("ACC0003", 400, "입출금계좌만 출금계좌로 등록할 수 있습니다."),
+    PAYMENT_STOP_UNSUPPORTED_ACCOUNT_TYPE("ACC0004", 400, "입출금계좌만 지급정지할 수 있습니다."),
     ACCOUNT_NOT_FOUND_OR_FORBIDDEN("ACC0201", 404, "계좌를 찾을 수 없거나 접근할 수 없습니다."),
+    PAYMENT_STOP_NOT_FOUND("ACC0202", 404, "지급정지 기록을 찾을 수 없습니다."),
     INVALID_ACCOUNT_STATUS("ACC0301", 409, "거래정지 또는 해지 상태의 계좌입니다."),
     WITHDRAWAL_ACCOUNT_UNREGISTRATION_RESTRICTED("ACC0302", 409, "예약이체 또는 자동이체가 등록된 출금계좌는 삭제할 수 없습니다."),
     ACCOUNT_NUMBER_SEQUENCE_EXHAUSTED("ACC0303", 409, "발급 가능한 계좌번호가 모두 사용되었습니다."),
@@ -15,6 +17,7 @@ public enum AccountErrorCode implements ErrorCode {
     MATURITY_DATE_NOT_REACHED("ACC0306", 409, "만기일이 도래하지 않았습니다."),
     MATURITY_BALANCE_NOT_ZERO("ACC0307", 409, "잔액이 남아 있는 계좌는 만기해지할 수 없습니다."),
     EARLY_TERMINATION_NOT_ALLOWED("ACC0308", 409, "중도해지할 수 없는 계좌 또는 해지일입니다."),
+    PAYMENT_STOP_STATE_CONFLICT("ACC0309", 409, "지급정지 기록의 현재 상태와 맞지 않는 요청입니다."),
     ACCOUNT_NUMBER_SEQUENCE_NOT_FOUND("ACC9001", 500, "계좌번호 발급 처리 중 오류가 발생했습니다.");
 
     private final String code;

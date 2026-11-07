@@ -1,5 +1,6 @@
 package com.shinhan.corebank.account.application.port.out;
 
+import com.shinhan.corebank.account.domain.AccountStatus;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -26,4 +27,8 @@ public interface AccountStatusHistoryPort {
      */
     void recordMaturityClosure(
             Long accountId, LocalDate maturityDate, LocalDate closedTradeDate, LocalDateTime changedAt);
+
+    /** 지급정지 적용, 전환, 해제로 계좌 상태가 바뀐 이력을 저장한다. 상태가 그대로면 부르지 않는다. */
+    void recordPaymentStopTransition(
+            Long accountId, AccountStatus previousStatus, AccountStatus newStatus, LocalDateTime changedAt);
 }

@@ -1,6 +1,7 @@
 package com.shinhan.corebank.account.adapter.out.persistence;
 
 import com.shinhan.corebank.account.application.port.out.AccountStatusHistoryPort;
+import com.shinhan.corebank.account.domain.AccountStatus;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -31,5 +32,13 @@ public class AccountStatusHistoryPersistenceAdapter implements AccountStatusHist
 
         repository.save(
                 AccountStatusHistoryJpaEntity.maturityClosed(accountId, maturityDate, closedTradeDate, changedAt));
+    }
+
+    @Override
+    public void recordPaymentStopTransition(
+            Long accountId, AccountStatus previousStatus, AccountStatus newStatus, LocalDateTime changedAt) {
+
+        repository.save(
+                AccountStatusHistoryJpaEntity.paymentStopTransition(accountId, previousStatus, newStatus, changedAt));
     }
 }
