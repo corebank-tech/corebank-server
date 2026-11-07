@@ -30,7 +30,7 @@ public interface NotificationControllerDocs {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "알림 목록 조회 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "`CMN0001` 음수 page · `CMN0005` 허용되지 않은 size",
+                description = "`CMN0001` 음수 page 또는 숫자·불리언이 아닌 값 · `CMN0005` 허용되지 않은 size",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
@@ -85,13 +85,13 @@ public interface NotificationControllerDocs {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
-                description = "`CMN0301`/`CMN0302` 멱등키 충돌",
+                description = "`CMN0301` 동일 요청 처리 중 · `CMN0302` 같은 키를 다른 요청에 재사용",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     ResponseEntity<ApiResponse<NotificationReadResponse>> markNotificationAsRead(
             @Parameter(description = "알림 ID", required = true, example = "1") @Positive Long notificationId,
             @Parameter(
-                            description = "멱등키. 동일 키와 동일 요청 재요청 시 저장된 응답 반환",
+                            description = "멱등키(UUID v4). 동일 키와 동일 요청 재요청 시 저장된 응답 반환",
                             required = true,
                             example = "550e8400-e29b-41d4-a716-446655440000")
                     String idempotencyKey,
