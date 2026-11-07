@@ -2,6 +2,7 @@ package com.shinhan.corebank.notification.adapter.out.persistence;
 
 import com.shinhan.corebank.notification.application.port.out.NotificationCommandPort;
 import com.shinhan.corebank.notification.domain.Notification;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -20,5 +21,10 @@ public class NotificationPersistenceAdapter implements NotificationCommandPort {
                 notification.title(),
                 notification.content(),
                 notification.occurredAt());
+    }
+
+    @Override
+    public void markAsReadIfUnread(Long notificationId, Long customerId, LocalDateTime readAt) {
+        notificationRepository.markAsReadIfUnread(notificationId, customerId, readAt);
     }
 }

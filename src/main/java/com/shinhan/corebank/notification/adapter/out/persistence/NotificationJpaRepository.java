@@ -1,6 +1,8 @@
 package com.shinhan.corebank.notification.adapter.out.persistence;
 
 import java.time.LocalDateTime;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -29,4 +31,22 @@ public interface NotificationJpaRepository extends JpaRepository<NotificationJpa
             @Param("title") String title,
             @Param("content") String content,
             @Param("occurredAt") LocalDateTime occurredAt);
+
+    Page<NotificationJpaEntity> findByCustomerIdOrderByOccurredAtDescNotificationIdDesc(
+            Long customerId, Pageable pageable);
+
+    long countByCustomerIdAndIsReadFalse(Long customerId);
+
+    /** 조건을 한 문장에 담아 동시 요청이 최초 readAt 을 덮어쓰지 못하게 한다. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+            """
+        UPDATE NotificationJpaEntity n
+        SET n.isRead = TRUE, n.readAt = :readAt
+        WHERE n.notificationId = :notificationId AND n.customerId = :customerId AND n.isRead = FALSE
+        """)
+    void markAsReadIfUnread(
+            @Param("notificationId") Long notificationId,
+            @Param("customerId") Long customerId,
+            @Param("readAt") LocalDateTime readAt);
 }
