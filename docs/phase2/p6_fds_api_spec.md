@@ -463,15 +463,22 @@ Idempotency-Key: N
 | `data.amount` | 원 단위 금액 | Long | 수정 불가 | X | `500000` |
 | `data.recipientAccountMasked` | 마스킹 수취계좌 | String |  | X | `"***-**-1234"` |
 | `data.serverPolicy` | A/B·임계값·판정 근거 | Object | AI 발견과 구분 | X | `{...}` |
-| `data.behaviorSummary` | 행동 요약 | Object | 없으면 null | O | `{...}` |
+| `data.behaviorSummary` | 검증된 행동 요약 | Object | 유효한 flow가 없으면 null | O | `{...}` |
+| `data.behaviorScoreStatus` | 보류 후 비동기 모델 점수 상태 | String(ENUM) | `PENDING`, `AVAILABLE`, `UNAVAILABLE`; 조사 상태와 별개 | X | `"AVAILABLE"` |
+| `data.behaviorRiskScore` | 합성 행동 모델 점수, 사기 확률 아님 | Number | `AVAILABLE`에서만 0~1; 그 외 null | O | `0.81` |
+| `data.modelVersion` | 점수를 산출한 모델 버전 | String | `AVAILABLE`에서만 제공; 그 외 null | O | `"xgb-demo-v1"` |
+| `data.featureVersion` | 점수에 사용한 피처 버전 | String | `AVAILABLE`에서만 제공; 그 외 null | O | `"p6-behavior-v1"` |
+| `data.behaviorScoreUnavailableReason` | 점수 참고 불가 사유 | String | `UNAVAILABLE`에서만 제공; 관리자에게 내부 예외·비밀값은 노출하지 않음 | O | `"MODEL_UNAVAILABLE"` |
 | `data.investigationStatus` | AI 조사 상태 | String(ENUM) |  | O | `"COMPLETED"` |
 | `data.secondaryFindings` | AI 추가 발견 | Array | 없으면 `[]` | X | `[{...}]` |
 | `data.callRecords` | 콜 기록 | Array | 없으면 `[]` | X | `[]` |
 
+모델 점수는 `HELD` 커밋 뒤 조사 워커가 검증된 피처로 FastAPI에 비동기 요청한다. `HELD` 직후부터 추론 결과 저장 전까지 `behaviorScoreStatus=PENDING`, 점수와 버전은 null이다. 저장 성공 후 `AVAILABLE`과 점수·버전을 제공한다. 유효한 flow/피처가 없거나 모델 부재·입력 오류·시간 초과·서비스 장애 시 `UNAVAILABLE`, 점수·버전 null 및 사유를 제공한다. 이 상태는 `investigationStatus`와 독립적이며, 점수 장애가 보류·관리자 검토를 막지 않는다. A/B를 통과한 비보류 이체에는 MVP 점수를 만들지 않는다. 훅 C는 Python을 호출하지 않는다.
+
 **Example**
 
 ```json
-{"code":"0000","message":"정상 처리되었습니다.","data":{"transferHoldId":123,"holdStatus":"HELD","amount":500000,"recipientAccountMasked":"***-**-1234","serverPolicy":{"policyCode":"A","count10m":3,"amount10m":1500000},"behaviorSummary":{"hesitationWarning":true},"investigationStatus":"COMPLETED","secondaryFindings":[{"code":"REGULAR_SPLIT_AMOUNTS","evidenceTransferIds":[101,102],"confidence":"OBSERVED"}],"callRecords":[]}}
+{"code":"0000","message":"정상 처리되었습니다.","data":{"transferHoldId":123,"holdStatus":"HELD","amount":500000,"recipientAccountMasked":"***-**-1234","serverPolicy":{"policyCode":"A","count10m":3,"amount10m":1500000},"behaviorSummary":{"hesitationWarning":true},"behaviorScoreStatus":"AVAILABLE","behaviorRiskScore":0.81,"modelVersion":"xgb-demo-v1","featureVersion":"p6-behavior-v1","behaviorScoreUnavailableReason":null,"investigationStatus":"COMPLETED","secondaryFindings":[{"code":"REGULAR_SPLIT_AMOUNTS","evidenceTransferIds":[101,102],"confidence":"OBSERVED"}],"callRecords":[]}}
 ```
 
 ### Status
