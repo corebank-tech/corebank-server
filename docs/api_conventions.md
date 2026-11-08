@@ -663,7 +663,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 |  | `AVAILABLE` | 점수와 모델·피처 버전 저장 완료 |
 |  | `UNAVAILABLE` | 점수 참고 불가; 아래 사유 필수 |
 | `BehaviorScoreUnavailableReason` | `FLOW_UNAVAILABLE` | 유효한 행동 흐름이 없어 피처를 만들 수 없음 |
-|  | `INVALID_FEATURES` | 서버에서 계산한 피처가 없거나 명세 범위·필수값 위반 |
+|  | `INVALID_FEATURES` | 유효한 flow는 있으나 서버 피처 계산 결과가 없거나 명세 범위·필수값을 위반함 |
 |  | `MODEL_UNAVAILABLE` | 모델 파일 부재·손상·버전 불일치로 모델을 사용할 수 없음 |
 |  | `INFERENCE_INPUT_INVALID` | FastAPI가 피처 버전·형식·값을 거부함 |
 |  | `INFERENCE_TIMEOUT` | 추론 요청 제한 시간 초과 |
@@ -671,9 +671,10 @@ public record ApiResponse<T>(String code, String message, T data) {
 |  | `INFERENCE_FAILED` | 위 범주에 속하지 않는 추론 실패 |
 |  | `SCORE_SAVE_FAILED` | 추론 결과의 영속화에 실패하고 복구 후에도 유효한 점수를 확인할 수 없음 |
 |  | `WORKER_FAILED_BEFORE_SCORING` | 조사 작업이 점수 시도 전에 최종 실패함 |
+|  | `SCORING_INTERRUPTED` | 점수 시도 시작이 기록됐지만 워커 중단·재시도 소진 뒤 유효한 저장 결과가 없어 추론 결과를 확인할 수 없음 |
 |  | `HOLD_CLOSED_BEFORE_SCORING` | 점수 시도 전에 보류가 종료됨 |
 
-사유 Enum은 관리자 응답의 분류값이며 내부 예외 문구·모델 경로·비밀값을 포함하지 않는다. `PENDING`·`AVAILABLE`에서는 사유가 null이다. Python 응답의 오류코드와 이 Enum의 매핑은 A2-1 내부 추론 계약에서 확정한다.
+사유 Enum은 관리자 응답의 분류값이며 내부 예외 문구·모델 경로·비밀값을 포함하지 않습니다. `PENDING`·`AVAILABLE`에서는 사유가 null입니다. Python 응답의 오류코드와 이 Enum의 매핑은 [P6 AI Agent 명세 §6.4](phase2/p6_fds_ai_agent_spec.md#64-추론-연동)의 A2 FastAPI 추론·B4 서버 연동 구현 시 확정합니다.
 
 ---
 

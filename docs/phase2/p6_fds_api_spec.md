@@ -473,7 +473,7 @@ Idempotency-Key: N
 | `data.secondaryFindings` | AI 추가 발견 | Array | 없으면 `[]` | X | `[{...}]` |
 | `data.callRecords` | 콜 기록 | Array | 없으면 `[]` | X | `[]` |
 
-모델 점수는 `HELD` 커밋 뒤 조사 워커가 Agent 조사 입력 생성 **전**에 검증된 피처로 FastAPI 추론과 결과 저장을 시도한다. `HELD` 직후부터 결과 저장 전까지 `behaviorScoreStatus=PENDING`, 점수와 버전은 null이다. 저장 성공 후 `AVAILABLE`과 점수·버전을 제공한다. 유효한 flow/피처가 없거나 모델 부재·입력 오류·시간 초과·서비스 장애, 점수 시도 전 작업의 최종 실패·보류 종료 시 `UNAVAILABLE`, 점수·버전 null 및 Enum 사유를 제공한다. 점수 저장 장애로 `PENDING`이 남으면 복구 작업이 미완료 조치와 조사 작업의 최종 상태를 대조해 `UNAVAILABLE`로 마감한다. 조사 재시도는 이미 기록된 `AVAILABLE`·`UNAVAILABLE`을 재계산하거나 덮어쓰지 않는다. Agent 입력에는 저장된 점수가 있을 때만 포함하고, 점수가 없어도 조사를 계속한다. 점수 상태는 `investigationStatus`와 독립적이며 보류·관리자 검토를 막지 않는다. A/B를 통과한 비보류 이체에는 MVP 점수를 만들지 않는다. 훅 C는 Python을 호출하지 않는다.
+모델 점수는 `HELD` 커밋 뒤 조사 워커가 Agent 조사 입력 생성 **전**에 검증된 피처로 FastAPI 추론과 결과 저장을 시도한다. `HELD` 직후부터 결과 저장 전까지 `behaviorScoreStatus=PENDING`, 점수와 버전은 null이다. 워커는 추론 호출 전에 점수 시도 시작 시각을 내구화한다. 저장 성공 후 `AVAILABLE`과 점수·버전을 제공한다. 유효한 flow가 없는 경우, flow는 있지만 피처가 유효하지 않은 경우, 모델 부재·입력 오류·시간 초과·서비스 장애, 조사 작업의 최종 실패·보류 종료 시 `UNAVAILABLE`, 점수·버전 null 및 Enum 사유를 제공한다. 점수 저장 장애나 워커 중단으로 `PENDING`이 남으면 **B4의 P6 BE 복구 작업**이 서버 기동 시와 1분 간격으로 미완료 조사 작업의 시도 기록·저장 결과·작업 임대·최종 상태를 대조해 마감한다. 시도 시작 뒤 결과를 확인할 수 없으면 `SCORING_INTERRUPTED`를 사용한다. 워커·조사 재시도·복구 작업은 모두 `PENDING` 조건부 갱신만 사용해 최초 `AVAILABLE`·`UNAVAILABLE`을 덮어쓰지 않는다. Agent 입력에는 저장된 점수가 있을 때만 포함하고, 점수가 없어도 조사를 계속한다. 점수 상태는 `investigationStatus`와 독립적이며 보류·관리자 검토를 막지 않는다. A/B를 통과한 비보류 이체에는 MVP 점수를 만들지 않는다. 훅 C는 Python을 호출하지 않는다.
 
 **Example**
 
