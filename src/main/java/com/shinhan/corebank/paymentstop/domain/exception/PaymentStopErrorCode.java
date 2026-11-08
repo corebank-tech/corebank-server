@@ -26,7 +26,9 @@ public enum PaymentStopErrorCode implements ErrorCode {
     AGENT_RUN_IN_PROGRESS("PST0306", 409, "진행 중인 분석이 있어 다시 요청할 수 없습니다."),
     STEP_CONFLICT("PST0307", 409, "같은 순번에 다른 단계가 이미 있습니다."),
     INVALID_OBJECTION_STATE("PST0308", 409, "지금 상태에서 할 수 없는 요청입니다."),
-    APPROVER_SAME_AS_AUTHOR("PST0309", 409, "판정 작성자는 그 판정을 승인할 수 없습니다.");
+    APPROVER_SAME_AS_AUTHOR("PST0309", 409, "판정 작성자는 그 판정을 승인할 수 없습니다."),
+    DISCRETIONARY_NOT_ALLOWED("PST0310", 409, "재량 판정으로도 넘을 수 없는 요건입니다."),
+    DISCRETIONARY_ACK_REQUIRED("PST0311", 409, "재량 판정 확인이 필요합니다.");
 
     private final String code;
     private final int status;

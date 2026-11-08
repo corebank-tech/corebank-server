@@ -344,6 +344,89 @@ class ReleaseGateTest {
     }
 
     @Nested
+    @DisplayName("재량 판정 허용")
+    class AllowsDiscretionary {
+
+        @Test
+        @DisplayName("근거가 없어 닫힌 판정은 사유 조항이 맞으면 재량으로 열리고, 불수용에는 재량이 없다")
+        void undetermined_opensMatchingClauseOnly() {
+            GateResult clauseOne = noEvidence(1, false, List.of());
+
+            assertThat(clauseOne.branch()).isEqualTo(GateBranch.UNDETERMINED);
+            assertThat(clauseOne.allowsDiscretionary(DecisionResult.ACCEPTED)).isTrue();
+            assertThat(clauseOne.allowsDiscretionary(DecisionResult.PARTIAL)).isFalse();
+            assertThat(clauseOne.allowsDiscretionary(DecisionResult.REJECTED)).isFalse();
+
+            GateResult clauseThree = noEvidence(3, false, List.of());
+
+            assertThat(clauseThree.allowsDiscretionary(DecisionResult.ACCEPTED)).isFalse();
+            assertThat(clauseThree.allowsDiscretionary(DecisionResult.PARTIAL)).isTrue();
+        }
+
+        @Test
+        @DisplayName("게이트가 이미 연 판정에는 재량이 필요 없어 false다")
+        void openedByGate_isNotDiscretionary() {
+            GateResult result = ReleaseGate.evaluate(
+                    new GateFacts(
+                            List.of(disputed(100_000L)),
+                            relation(100_000L, 30, 15, 0),
+                            SENDER,
+                            false,
+                            false,
+                            1,
+                            false,
+                            List.of()),
+                    SETTINGS);
+
+            assertThat(result.allowsRelease(DecisionResult.ACCEPTED)).isTrue();
+            assertThat(result.allowsDiscretionary(DecisionResult.ACCEPTED)).isFalse();
+        }
+
+        @Test
+        @DisplayName("원장 사기 패턴 갈래는 재량으로 넘을 수 있다")
+        void fraudPatternFromLedger_isDiscretionary() {
+            GateResult result = ReleaseGate.evaluate(
+                    new GateFacts(
+                            List.of(disputed(100_000L)), fraudAccount(), SENDER, false, false, 1, false, List.of()),
+                    SETTINGS);
+
+            assertThat(result.branch()).isEqualTo(GateBranch.FRAUD_PATTERN);
+            assertThat(result.negativeReply()).isFalse();
+            assertThat(result.allowsDiscretionary(DecisionResult.ACCEPTED)).isTrue();
+        }
+
+        @Test
+        @DisplayName("소송 계속, 부정 회신(가담 의심, 서류 위조)은 재량으로도 넘을 수 없다")
+        void hardBlocks_areNotDiscretionary() {
+            assertThat(noEvidence(1, true, List.of()).allowsDiscretionary(DecisionResult.ACCEPTED))
+                    .isFalse();
+            assertThat(noEvidence(3, true, List.of()).allowsDiscretionary(DecisionResult.PARTIAL))
+                    .isFalse();
+
+            for (ExternalReply reply : List.of(ExternalReply.INVOLVEMENT_SUSPECTED, ExternalReply.DOCUMENT_FORGED)) {
+                GateResult result = noEvidence(1, false, List.of(reply));
+
+                assertThat(result.negativeReply()).isTrue();
+                assertThat(result.allowsDiscretionary(DecisionResult.ACCEPTED)).isFalse();
+            }
+        }
+
+        private GateResult noEvidence(int clause, boolean litigationPending, List<ExternalReply> replies) {
+            return ReleaseGate.evaluate(
+                    new GateFacts(
+                            List.of(disputed(100_000L)),
+                            List.of(),
+                            SENDER,
+                            false,
+                            false,
+                            clause,
+                            litigationPending,
+                            replies),
+                    SETTINGS);
+        }
+    }
+
+    @Nested
     @DisplayName("외부 확인 회신")
     class ExternalCheck {
 

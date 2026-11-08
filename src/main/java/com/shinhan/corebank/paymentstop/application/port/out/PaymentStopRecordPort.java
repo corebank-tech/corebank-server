@@ -10,6 +10,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 // paymentstop 도메인의 사건, 이의제기, 판정, 게이트 기록 저장소.
 public interface PaymentStopRecordPort {
@@ -58,6 +59,9 @@ public interface PaymentStopRecordPort {
     Optional<ObjectionDecision> findPendingDecision(long objectionId);
 
     Map<Long, ObjectionDecision> findConfirmedDecisions(Collection<Long> objectionIds);
+
+    // 목록용. 승인 대기나 확정 판정이 재량 판정인 이의제기 ID(ADR-0011). 반려된 판정은 보지 않는다
+    Set<Long> findDiscretionaryObjectionIds(Collection<Long> objectionIds);
 
     void saveGateEvaluation(
             long objectionId, String purpose, GateResult result, GateSettings settings, LocalDateTime evaluatedAt);

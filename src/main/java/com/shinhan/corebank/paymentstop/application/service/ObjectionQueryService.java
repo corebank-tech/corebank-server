@@ -41,7 +41,7 @@ public class ObjectionQueryService implements ObjectionQueryUseCase {
     private final ObjectionCalendar objectionCalendar;
     private final AuditLogService auditLogService;
 
-    // 화면의 행마다 따로 부르지 않게(N+1) 사건, 최근 실행, 마지막 단계를 각각 한 번에 읽는다
+    // 화면의 행마다 따로 부르지 않게(N+1) 사건, 최근 실행, 마지막 단계, 재량 판정 여부를 각각 한 번에 읽는다
     @Override
     @Transactional(readOnly = true)
     public List<Summary> list() {
@@ -53,6 +53,7 @@ public class ObjectionQueryService implements ObjectionQueryUseCase {
         Map<Long, AgentRun> latestRuns = agentRunPort.findLatestRuns(objectionIds);
         Map<Long, String> lastStepTitles = agentRunPort.findLastStepTitles(
                 latestRuns.values().stream().map(AgentRun::runId).toList());
+        Set<Long> discretionary = recordPort.findDiscretionaryObjectionIds(objectionIds);
         ObjectionCalendar.Today today = objectionCalendar.snapshot();
 
         return objections.stream()
@@ -63,7 +64,8 @@ public class ObjectionQueryService implements ObjectionQueryUseCase {
                             cases.get(objection.getCaseId()),
                             today.flags(objection),
                             run == null ? null : run.status(),
-                            run == null ? null : lastStepTitles.get(run.runId()));
+                            run == null ? null : lastStepTitles.get(run.runId()),
+                            discretionary.contains(objection.getObjectionId()));
                 })
                 .toList();
     }

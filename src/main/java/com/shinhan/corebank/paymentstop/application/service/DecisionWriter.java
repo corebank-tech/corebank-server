@@ -51,6 +51,9 @@ class DecisionWriter {
                 command.result(),
                 command.reason(),
                 command.earlyReleaseBasis(),
+                command.discretionary(),
+                command.discretionaryReason(),
+                gate.branch(),
                 actor.adminCustomerId(),
                 now));
         recordPort.updateObjection(objection);
@@ -84,16 +87,16 @@ class DecisionWriter {
     }
 
     @Transactional
-    public ObjectionDecision approve(long objectionId, long decisionId, AdminActor actor, GateResult gate) {
+    public ObjectionDecision approve(
+            long objectionId, long decisionId, boolean discretionaryAcknowledged, AdminActor actor, GateResult gate) {
         // 동시 승인은 이 락에서 줄을 서고, 뒤에 온 요청은 DECIDED 를 보고 PST0302 로 끝난다
         Objection objection = lock(objectionId);
         objection.approve();
 
         ObjectionDecision pending = pending(objectionId, decisionId);
         pending.requireApprover(actor.adminCustomerId());
-        if (!gate.allowsRelease(pending.result())) {
-            throw new BusinessException(PaymentStopErrorCode.RELEASE_NOT_ALLOWED);
-        }
+        pending.requireDiscretionaryAcknowledged(discretionaryAcknowledged);
+        requireReleasable(pending, gate);
 
         PaymentStopCase paymentStopCase = caseOf(objection);
         long accountId = paymentStopCase.getAccountId();
@@ -121,6 +124,9 @@ class DecisionWriter {
 
         Map<String, Object> detail = auditDetail(confirmed, paymentStopCase, gate);
         detail.put("decidedBy", confirmed.decidedBy());
+        if (confirmed.discretionary()) {
+            detail.put("discretionaryAcknowledged", true);
+        }
         auditLogService.record(
                 actor.adminCustomerId(),
                 null,
@@ -171,6 +177,22 @@ class DecisionWriter {
         return returned;
     }
 
+    /**
+     * 확정 직전 게이트(D11)로 해제를 허용하는지 본다. 일반 판정은 게이트가 열어야 하고(PST0301), 재량 판정은 게이트가 열었거나 재량으로
+     * 넘을 수 있어야 한다(PST0310). 작성 뒤 게이트가 열린 재량 판정은 재량 표시를 남긴 채 확정한다.
+     */
+    private static void requireReleasable(ObjectionDecision pending, GateResult gate) {
+        if (gate.allowsRelease(pending.result())) {
+            return;
+        }
+        if (!pending.discretionary()) {
+            throw new BusinessException(PaymentStopErrorCode.RELEASE_NOT_ALLOWED);
+        }
+        if (!gate.allowsDiscretionary(pending.result())) {
+            throw new BusinessException(PaymentStopErrorCode.DISCRETIONARY_NOT_ALLOWED);
+        }
+    }
+
     private Objection lock(long objectionId) {
         return recordPort
                 .findObjectionForUpdate(objectionId)
@@ -201,6 +223,11 @@ class DecisionWriter {
         detail.put("status", decision.status().name());
         detail.put("gateBranch", gate.branch().name());
         detail.put("rulesVersion", gate.rulesVersion());
+        detail.put("discretionary", decision.discretionary());
+        if (decision.discretionary()) {
+            detail.put("discretionaryReason", decision.discretionaryReason());
+            detail.put("gateBranchAtWrite", decision.gateBranchAtWrite().name());
+        }
         return detail;
     }
 }

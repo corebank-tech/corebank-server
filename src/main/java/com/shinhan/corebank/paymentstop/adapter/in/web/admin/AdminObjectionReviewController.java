@@ -126,21 +126,26 @@ public class AdminObjectionReviewController {
             operationId = "approveObjectionDecision",
             summary = "판정 승인",
             description = "승인 대기 중인 수용 또는 일부 지급정지 판정을 승인해 확정하고 계좌에 반영한다. 확정 직전 해제 게이트를 다시 계산한다. "
-                    + "피해자, 금감원(종료면 명의인, 관련 금융회사까지) 통지를 기록한다. 오류: PST0204 승인할 판정 없음, "
-                    + "PST0301 해제 요건 미충족, PST0302 이미 확정, PST0309 작성자와 승인자가 같음. 멱등키 필수.")
+                    + "피해자, 금감원(종료면 명의인, 관련 금융회사까지) 통지를 기록한다. 본문은 선택이고, 재량 판정은 "
+                    + "{\"discretionaryAcknowledged\": true}로 승인자가 재량임을 확인해야 한다. 오류: PST0204 승인할 판정 없음, "
+                    + "PST0301 해제 요건 미충족, PST0302 이미 확정, PST0309 작성자와 승인자가 같음, PST0310 재량으로도 넘을 수 없는 "
+                    + "사유가 새로 생김, PST0311 재량 판정 확인 없음. 멱등키 필수.")
     public ResponseEntity<ApiResponse<DecisionResponse>> approve(
             @PathVariable @Positive Long objectionId,
             @PathVariable @Positive Long decisionId,
             @Parameter(description = "멱등키", required = true) @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody(required = false) ApproveRequest request,
             HttpServletRequest http) {
         AdminActor actor = actor(http);
+        boolean acknowledged = request != null && Boolean.TRUE.equals(request.discretionaryAcknowledged());
         return execute(
                 idempotencyKey,
                 actor,
                 "/decisions/" + decisionId + "/approve",
                 objectionId,
-                null,
-                () -> DecisionResponse.from(approveDecisionUseCase.approve(objectionId, decisionId, actor)));
+                request,
+                () -> DecisionResponse.from(
+                        approveDecisionUseCase.approve(objectionId, decisionId, acknowledged, actor)));
     }
 
     @PostMapping("/decisions/{decisionId}/return")
@@ -241,6 +246,9 @@ public class AdminObjectionReviewController {
             @NotNull @Size(max = 20) List<@NotBlank @Size(max = 100) String> missingDocuments) {}
 
     public record ReturnRequest(@NotBlank @Size(max = 500) String reason) {}
+
+    /** @param discretionaryAcknowledged 승인자가 재량 판정임을 확인했는지. 일반 판정은 보지 않는다 */
+    public record ApproveRequest(Boolean discretionaryAcknowledged) {}
 
     public record ExternalCheckRequest(@NotNull ExternalAgency agency, @NotNull ExternalCheckReply mockReply) {}
 

@@ -12,7 +12,8 @@ import java.util.stream.Collectors;
 
 /**
  * 이의제기 상세. 해제 요건 점검(gate)은 조회 시점 원장과 외부 확인 회신으로 다시 계산한 값이다. allowedResults 는 담당자가 고를 수 있는
- * 판정이고, 화면은 막힌 판정의 버튼을 잠그고 규칙별 결과로 이유를 보여 준다. decision 은 확정된 판정, pendingDecision 은 승인 대기
+ * 판정이고, 화면은 막힌 판정의 버튼을 잠그고 규칙별 결과로 이유를 보여 준다. discretionaryResults 는 게이트가 닫았지만 담당자 재량
+ * 판정으로 쓸 수 있는 판정이다(ADR-0011, 불수용은 언제나 false). decision 은 확정된 판정, pendingDecision 은 승인 대기
  * 판정이다(없으면 null).
  */
 public record ObjectionDetailResponse(
@@ -60,6 +61,7 @@ public record ObjectionDetailResponse(
             boolean simplifiedExcluded,
             String rulesVersion,
             Map<String, Boolean> allowedResults,
+            Map<String, Boolean> discretionaryResults,
             List<Rule> rules) {}
 
     public record Rule(
@@ -115,6 +117,12 @@ public record ObjectionDetailResponse(
                         Arrays.stream(DecisionResult.values())
                                 .collect(Collectors.toMap(
                                         DecisionResult::name, gate::allowsRelease, (a, b) -> a, LinkedHashMap::new)),
+                        Arrays.stream(DecisionResult.values())
+                                .collect(Collectors.toMap(
+                                        DecisionResult::name,
+                                        gate::allowsDiscretionary,
+                                        (a, b) -> a,
+                                        LinkedHashMap::new)),
                         gate.rules().stream()
                                 .map(r -> new Rule(
                                         r.rule().name(),

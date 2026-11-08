@@ -152,6 +152,9 @@ class AdminObjectionControllerTest extends IntegrationTestSupport {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.result").value("ACCEPTED"))
                     .andExpect(jsonPath("$.data.status").value("PENDING_APPROVAL"))
+                    .andExpect(jsonPath("$.data.discretionary").value(false))
+                    .andExpect(jsonPath("$.data.discretionaryReason").doesNotExist())
+                    .andExpect(jsonPath("$.data.gateBranchAtWrite").value("NORMAL_ACCEPT"))
                     .andReturn()
                     .getResponse()
                     .getContentAsString();
@@ -272,6 +275,93 @@ class AdminObjectionControllerTest extends IntegrationTestSupport {
                         .header("Idempotency-Key", UUID.randomUUID().toString()))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("PST0308"));
+    }
+
+    @Test
+    @DisplayName("재량 판정은 상세의 discretionaryResults 로 열리고, 사유 검증, 목록 표시, 승인자 확인(PST0311)이 HTTP로 돈다")
+    void discretionaryDecisionOverHttp() throws Exception {
+        Scenario s = data.scenario(false);
+        long objectionId = receiveObjection(s);
+        mockMvc.perform(post("/admin/objections/{id}/completeness", objectionId)
+                        .with(admin())
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/admin/objections/{id}", objectionId)
+                        .with(admin())
+                        .header(AccessReason.HEADER, AccessReason.OPERATION.name()))
+                .andExpect(jsonPath("$.data.gate.branch").value("UNDETERMINED"))
+                .andExpect(jsonPath("$.data.gate.allowedResults.ACCEPTED").value(false))
+                .andExpect(jsonPath("$.data.gate.discretionaryResults.ACCEPTED").value(true))
+                .andExpect(jsonPath("$.data.gate.discretionaryResults.PARTIAL").value(false))
+                .andExpect(jsonPath("$.data.gate.discretionaryResults.REJECTED").value(false));
+
+        mockMvc.perform(post("/admin/objections/{id}/decisions", objectionId)
+                        .with(admin())
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(discretionaryBody("짧은 사유")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN0001"));
+        mockMvc.perform(post("/admin/objections/{id}/decisions", objectionId)
+                        .with(admin())
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"result\":\"ACCEPTED\",\"reason\":\"계약서 확인\",\"earlyReleaseBasis\":\"계약서\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PST0301"));
+
+        String reason = "관계 거래는 없지만 판매 계약서와 대화 기록으로 정상 거래가 확인됩니다.";
+        String written = mockMvc.perform(post("/admin/objections/{id}/decisions", objectionId)
+                        .with(admin())
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(discretionaryBody(reason)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING_APPROVAL"))
+                .andExpect(jsonPath("$.data.discretionary").value(true))
+                .andExpect(jsonPath("$.data.discretionaryReason").value(reason))
+                .andExpect(jsonPath("$.data.gateBranchAtWrite").value("UNDETERMINED"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        long decisionId = ((Number) JsonPath.read(written, "$.data.decisionId")).longValue();
+
+        mockMvc.perform(get("/admin/objections").with(admin()))
+                .andExpect(jsonPath("$.data[?(@.objectionId == %d)].discretionary".formatted(objectionId))
+                        .value(true));
+
+        // 본문이 없으면 확인하지 않은 것이다
+        mockMvc.perform(post("/admin/objections/{id}/decisions/{decisionId}/approve", objectionId, decisionId)
+                        .with(approver())
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PST0311"));
+        assertThat(data.status(s.target())).isEqualTo("SUSPENDED");
+
+        mockMvc.perform(post("/admin/objections/{id}/decisions/{decisionId}/approve", objectionId, decisionId)
+                        .with(approver())
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"discretionaryAcknowledged\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CONFIRMED"))
+                .andExpect(jsonPath("$.data.discretionary").value(true));
+        assertThat(data.status(s.target())).isEqualTo("ACTIVE");
+    }
+
+    private static String discretionaryBody(String discretionaryReason) {
+        return """
+                {"result": "ACCEPTED", "reason": "계약서 확인", "earlyReleaseBasis": "판매 계약서",
+                 "discretionary": true, "discretionaryReason": "%s"}
+                """
+                .formatted(discretionaryReason);
     }
 
     @Test

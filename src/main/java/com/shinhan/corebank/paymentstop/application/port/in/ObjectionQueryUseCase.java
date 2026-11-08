@@ -28,13 +28,15 @@ public interface ObjectionQueryUseCase {
     /**
      * @param latestRunStatus 가장 최근 분석 실행 상태. 실행이 없으면 null
      * @param latestRunLastStepTitle 그 실행의 마지막 단계 제목. 단계가 없으면 null
+     * @param discretionary 승인 대기 또는 확정 판정이 재량 판정인지(ADR-0011)
      */
     record Summary(
             Objection objection,
             PaymentStopCase paymentStopCase,
             Flags flags,
             AgentRunStatus latestRunStatus,
-            String latestRunLastStepTitle) {}
+            String latestRunLastStepTitle,
+            boolean discretionary) {}
 
     record Detail(
             Objection objection,

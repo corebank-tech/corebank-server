@@ -3,6 +3,7 @@ package com.shinhan.corebank.paymentstop.adapter.out.persistence;
 import com.shinhan.corebank.paymentstop.domain.DecisionResult;
 import com.shinhan.corebank.paymentstop.domain.DecisionStatus;
 import com.shinhan.corebank.paymentstop.domain.ObjectionDecision;
+import com.shinhan.corebank.paymentstop.domain.gate.GateBranch;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -72,6 +73,16 @@ public class ObjectionDecisionJpaEntity {
     @Column(name = "return_reason", length = 500)
     private String returnReason;
 
+    @Column(name = "discretionary", nullable = false)
+    private boolean discretionary;
+
+    @Column(name = "discretionary_reason", length = 1000)
+    private String discretionaryReason;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gate_branch_at_write", length = 24)
+    private GateBranch gateBranchAtWrite;
+
     static ObjectionDecisionJpaEntity of(ObjectionDecision decision) {
         ObjectionDecisionJpaEntity entity = new ObjectionDecisionJpaEntity();
         entity.objectionId = decision.objectionId();
@@ -80,6 +91,9 @@ public class ObjectionDecisionJpaEntity {
         entity.earlyReleaseBasis = decision.earlyReleaseBasis();
         entity.decidedBy = decision.decidedBy();
         entity.decidedAt = decision.decidedAt();
+        entity.discretionary = decision.discretionary();
+        entity.discretionaryReason = decision.discretionaryReason();
+        entity.gateBranchAtWrite = decision.gateBranchAtWrite();
         entity.apply(decision);
         return entity;
     }
@@ -111,6 +125,9 @@ public class ObjectionDecisionJpaEntity {
                 approvedAt,
                 returnedBy,
                 returnedAt,
-                returnReason);
+                returnReason,
+                discretionary,
+                discretionaryReason,
+                gateBranchAtWrite);
     }
 }

@@ -9,6 +9,7 @@ import java.util.List;
  * @param simplifiedExcluded 간소화 신청이었지만 지급정지 이력 때문에 일반 심사로 넘어갔는지
  * @param rules 규칙별 결과. 화면 체크리스트와 gate_evaluation 기록에 쓴다
  * @param rulesVersion 규칙 버전. 설정값과 함께 기록해 나중에 같은 판정을 재현한다(D10)
+ * @param negativeReply 외부 확인 부정 회신(가담 의심, 서류 위조)이 있는지. 재량 판정으로도 넘지 못하는 사유다(ADR-0011)
  */
 public record GateResult(
         GateBranch branch,
@@ -16,7 +17,8 @@ public record GateResult(
         List<RuleResult> rules,
         String rulesVersion,
         int clause,
-        boolean litigationPending) {
+        boolean litigationPending,
+        boolean negativeReply) {
 
     public GateResult {
         rules = List.copyOf(rules);
@@ -37,6 +39,17 @@ public record GateResult(
                         && (branch == GateBranch.NORMAL_ACCEPT || branch == GateBranch.NORMAL_PARTIAL)
                         && clause == 3;
         };
+    }
+
+    /**
+     * 게이트가 닫은 판정을 담당자 재량으로 쓸 수 있는지(ADR-0011). 재량은 갈래 조건만 넘는다. 소송 계속(D31), 사유 조항과 판정 범위
+     * 불일치(D28), 외부 확인 부정 회신은 넘지 못한다. 게이트가 이미 연 판정과 불수용은 재량이 필요 없어 false 다.
+     */
+    public boolean allowsDiscretionary(DecisionResult result) {
+        if (result == DecisionResult.REJECTED || allowsRelease(result) || litigationPending || negativeReply) {
+            return false;
+        }
+        return result == DecisionResult.ACCEPTED ? clause == 1 || clause == 2 : clause == 3;
     }
 
     public RuleResult rule(GateRule rule) {

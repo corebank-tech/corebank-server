@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 66개 테이블(57개 비즈니스 테이블 + 채번, 배치, cutoff, 체크포인트, 감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 585개 컬럼 / 금액 BIGINT, 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장과 표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
+> **DBMS**: MySQL 8.4 / 66개 테이블(57개 비즈니스 테이블 + 채번, 배치, cutoff, 체크포인트, 감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 588개 컬럼 / 금액 BIGINT, 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장과 표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -253,6 +253,9 @@ erDiagram
         bigint returned_by
         datetime returned_at
         varchar return_reason
+        boolean discretionary "재량 판정, 사유 필수(ADR-0011)"
+        varchar discretionary_reason "재량 판정만"
+        varchar gate_branch_at_write "작성 시점 게이트 갈래"
         bigint active_objection_id UK "생성 열, 반려 아닌 판정은 이의제기당 1건"
     }
 

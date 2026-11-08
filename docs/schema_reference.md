@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 57개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`), 테이블 목록 기준 585개 컬럼
+**대상**: 57개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`), 테이블 목록 기준 588개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -81,7 +81,7 @@
 | 53 | `payment_stop_case` | 지급정지 사건 | P3 | 8 |
 | 54 | `case_disputed_transfer` | 지급정지 사건의 다툼 거래 | P3 | 5 |
 | 55 | `objection` | 지급정지 이의제기 | P3 | 18 |
-| 56 | `objection_decision` | 이의제기 판정 | P3 | 16 |
+| 56 | `objection_decision` | 이의제기 판정 | P3 | 19 |
 | 57 | `gate_evaluation` | 해제 게이트 계산 기록 | P3 | 9 |
 | 58 | `agent_run` | 이의제기 Agent 실행 | P3 | 15 |
 | 59 | `agent_run_step` | Agent 실행 단계 이벤트 | P3 | 10 |
@@ -595,6 +595,9 @@ COB의 `ACTIVE → MATURED` 전이, 고객 요청 만기해지의 `MATURED → C
 | `returned_by` | `BIGINT` | | O | | 반려한 관리자 `customer_id` |
 | `returned_at` | `DATETIME(6)` | | O | | 반려 시각 |
 | `return_reason` | `VARCHAR(500)` | | O | | 반려 사유 |
+| `discretionary` | `BOOLEAN` | | X | `FALSE` | 담당자 재량 판정인지. 게이트가 닫은 수용, 일부 지급정지를 사유와 2인 승인으로 쓴 판정(ADR-0011) |
+| `discretionary_reason` | `VARCHAR(1000)` | | O | | 재량 사유. 재량 판정만 갖고 20~1000자는 애플리케이션이 검사한다 |
+| `gate_branch_at_write` | `VARCHAR(24)` | | O | | 작성 시점 게이트 갈래. `V202611090100` 전에 쓴 판정은 NULL |
 | `active_objection_id` | `BIGINT` | **UK** | O | 생성 열 | `status`가 `RETURNED`가 아니면 `objection_id`, 반려면 NULL. JPA 엔티티는 매핑하지 않는다 |
 
 **`gate_evaluation`** 해제 게이트 계산 기록. 같은 판정을 재현하려고 규칙 버전과 설정값을 함께 남긴다(D10)
@@ -630,6 +633,7 @@ COB의 `ACTIVE → MATURED` 전이, 고객 요청 만기해지의 `MATURED → C
 | `objection_decision` | CHECK | `ck_objection_decision_reject_single` | 불수용은 언제나 `CONFIRMED` |
 | `objection_decision` | CHECK | `ck_objection_decision_approval` | 확정된 수용과 일부 지급정지만 `approved_by`, `approved_at`이 있고 `approved_by <> decided_by` |
 | `objection_decision` | CHECK | `ck_objection_decision_return` | `RETURNED`면 `returned_by`, `returned_at`, `return_reason`이 모두 있고 아니면 모두 NULL |
+| `objection_decision` | CHECK | `ck_objection_decision_discretionary` | `discretionary = FALSE OR discretionary_reason IS NOT NULL` |
 | `gate_evaluation` | INDEX | `ix_gate_evaluation_objection` | `objection_id, evaluated_at` |
 | `gate_evaluation` | CHECK | `ck_gate_evaluation_purpose`, `ck_gate_evaluation_branch` | 위 값 목록 |
 

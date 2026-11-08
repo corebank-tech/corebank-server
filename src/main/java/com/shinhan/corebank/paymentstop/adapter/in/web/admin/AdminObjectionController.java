@@ -112,8 +112,12 @@ public class AdminObjectionController {
             summary = "이의제기 판정 작성",
             description = "불수용은 바로 확정되고 지급정지는 유지된다. 수용과 일부 지급정지는 계좌를 건드리지 않고 승인 대기(PENDING_APPROVAL)로 "
                     + "저장되며, 작성자와 다른 승인자가 승인해야 해제된다. 해제 게이트가 열지 않는 판정은 쓰지 않는다. 수용과 일부 지급정지는 "
-                    + "소명 완비 확인 뒤(UNDER_REVIEW)에만 쓴다. 오류: PST0004 조기 해제 근거 없음, PST0202 이의제기 없음, "
-                    + "PST0301 해제 요건 미충족, PST0302 이미 확정, PST0308 지금 상태에서 쓸 수 없음(승인 대기 중 포함). "
+                    + "소명 완비 확인 뒤(UNDER_REVIEW)에만 쓴다. 게이트가 닫은 수용과 일부 지급정지는 discretionary=true 와 "
+                    + "discretionaryReason(20~1000자)으로 재량 판정을 쓸 수 있다(상세 gate.discretionaryResults). 재량 판정은 승인자가 "
+                    + "확인해야 확정된다. 오류: CMN0001 재량 사유 누락이나 길이 위반, 게이트가 이미 연 판정이나 불수용에 재량 표시, "
+                    + "PST0004 조기 해제 근거 없음, PST0202 이의제기 없음, PST0301 해제 요건 미충족(재량 표시 없음), "
+                    + "PST0302 이미 확정, PST0308 지금 상태에서 쓸 수 없음(승인 대기 중 포함), PST0310 재량으로도 넘을 수 없음"
+                    + "(소송 계속, 사유 조항과 판정 범위 불일치, 외부 확인 부정 회신). "
                     + "멱등키 필수. 응답 시간 초과 뒤 같은 키로 다시 보내면 처음 결과를 그대로 돌려준다.")
     public ResponseEntity<ApiResponse<DecisionResponse>> confirm(
             @PathVariable @Positive Long objectionId,
@@ -132,7 +136,12 @@ public class AdminObjectionController {
                 new TypeReference<>() {},
                 () -> ApiResponse.success(DecisionResponse.from(writeDecisionUseCase.write(
                         new WriteDecisionUseCase.Command(
-                                objectionId, request.result(), request.reason(), request.earlyReleaseBasis()),
+                                objectionId,
+                                request.result(),
+                                request.reason(),
+                                request.earlyReleaseBasis(),
+                                Boolean.TRUE.equals(request.discretionary()),
+                                request.discretionaryReason()),
                         actor))));
     }
 
@@ -150,8 +159,14 @@ public class AdminObjectionController {
 
     public record ReceiveResponse(long objectionId) {}
 
+    /**
+     * @param discretionary 재량 판정인지. 생략하면 false
+     * @param discretionaryReason 재량 사유. discretionary=true 면 20~1000자 필수, 아니면 버린다
+     */
     public record DecisionRequest(
             @NotNull DecisionResult result,
             @NotBlank @Size(max = 500) String reason,
-            @Size(max = 500) String earlyReleaseBasis) {}
+            @Size(max = 500) String earlyReleaseBasis,
+            Boolean discretionary,
+            String discretionaryReason) {}
 }

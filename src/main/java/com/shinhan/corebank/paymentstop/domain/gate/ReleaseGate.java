@@ -81,7 +81,8 @@ public final class ReleaseGate {
                 List.of(simplified, external, fraud, relationship, partial),
                 RULES_VERSION,
                 facts.clause(),
-                facts.litigationPending());
+                facts.litigationPending(),
+                negativeReply);
     }
 
     /**
