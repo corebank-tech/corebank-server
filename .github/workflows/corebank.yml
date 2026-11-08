@@ -222,6 +222,8 @@ jobs:
                 - APP_INTERBANK_PORT=9300
                 # COB 원장 대사 hard 임계 (#663). 불일치가 이 건수를 넘으면 마감이 멈춘다. 릴리스 2의 첫 대사 결과를 본 뒤 낮춘다.
                 - APP_LEDGER_RECONCILIATION_COB_HARD_THRESHOLD=1000
+                # 전수 대사 청크 제한. 기존 RDS는 60초 안에 한 청크를 못 읽어 COB가 멈춘다 (#944, 근본 해결은 #920). .env에 값이 있으면 그 값을 쓴다.
+                - APP_LEDGER_RECONCILIATION_FULL_SCAN_CHUNK_TIMEOUT_SECONDS=${APP_LEDGER_RECONCILIATION_FULL_SCAN_CHUNK_TIMEOUT_SECONDS:-1800}
                 # OTP 번호 해시를 HMAC-SHA256으로 돌린다 (#834). 키는 SSM 명령 본문에 평문으로 남지 않도록
                 # EC2 /home/ubuntu/corebank/.env 에서 읽는다. 없으면 compose가 여기서 멈춘다.
                 - APP_OTP_CODE_HASH_ALGORITHM=hmac
