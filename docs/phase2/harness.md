@@ -8,7 +8,7 @@
 
 | 문서 | 대상 | 측정 |
 |---|---|---|
-| [harness_results.md](harness_results.md) | PH-30 이체 TPS · 동시성 정합성, PH-24 훅 전후, PH-101-② 기준선 교체 | 2026-10-01 ~ 10-20 |
+| [harness_results.md](harness_results.md) | PH-30 이체 TPS · 동시성 정합성(S1 베이스라인 · S4 재측정), PH-24 훅 전후, PH-101-② 기준선 교체 | 2026-10-01 ~ 11-05 |
 | [ph101_redis_removal_results.md](ph101_redis_removal_results.md) | PH-101-② Redis 제거 판정 (A' vs B') — 근거와 회차별 원자료 | 2026-10-16 ~ 10-20 |
 | [ph11_baseline_results.md](ph11_baseline_results.md) | PH-11 적수 계산 베이스라인 | 2026-10-08 |
 | [ph28_baseline_results.md](ph28_baseline_results.md) | PH-28 시산표 원시집계 베이스라인 | PH-101-② 종료 뒤 |
