@@ -277,14 +277,14 @@ HAVING rows_ <> 2 OR w <> 1 OR d <> 1;
 
 ### 5-1. 방법
 
-[README 측정 지표](README.md)의 "`execute()` 순환복잡도 · #381 이후 · 재측정 · 정적 분석" 항목이다. 개선 전은 #381 리팩터링 PR #426 머지 직전 커밋 `50185247^1`, 개선 후는 릴리스 3 `origin/main`의 `TransferExecutionService.java`다. 두 파일을 같은 도구로 한 번에 쟀다.
+[README 측정 지표](README.md)의 "`execute()` 순환복잡도 · #381 이후 · 재측정 · 정적 분석" 항목이다. 개선 전은 #381 리팩터링 PR #426 머지 직전 커밋 `50185247^1`, 개선 후는 릴리스 3 커밋 `f72982e0`(2절 이미지와 같은 커밋)의 `TransferExecutionService.java`다. `origin/main`이 아니라 커밋으로 고정해 다음 릴리스 뒤에도 같은 파일을 잰다. 두 파일을 같은 도구로 한 번에 쟀다.
 
 ```bash
 python3 -m venv /tmp/lz && /tmp/lz/bin/pip install -q lizard   # lizard 1.25.0
 D=$(mktemp -d)
-F=$(git ls-tree -r --name-only origin/main | grep '/TransferExecutionService.java$')
+F=$(git ls-tree -r --name-only f72982e0 | grep '/TransferExecutionService.java$')
 git show 50185247^1:"$F" > $D/before.java
-git show origin/main:"$F"  > $D/after.java
+git show f72982e0:"$F"   > $D/after.java
 /tmp/lz/bin/lizard $D/before.java $D/after.java
 ```
 
