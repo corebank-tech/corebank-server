@@ -203,7 +203,17 @@ HAVING withdrawals > 1
 | 20:02 | 아래 SQL로 판정 |
 
 - 고객 대역은 출금 `ph60_user_08001` ~ `08063`, 수취 `09001` ~ `09063`이다. 금액은 19,876원 + 순번이다. 기준금액 · 지연시간 · 금액은 시나리오 값이다.
-- 보류를 만든 k6 스크립트는 저장소에 넣지 않았다. 로그인 → `PUT /transfers/delayed-transfer-setting` → 계좌비밀번호 · OTP 토큰 → `POST /transfers` 순서이고, 응답의 `transferHold`로 보류를 확인했다.
+- 보류는 `perf/k6/delayedHold.js`로 만들었다. 로그인 → `PUT /transfers/delayed-transfer-setting` → 계좌비밀번호 · OTP 토큰 → `POST /transfers` 순서이고, 응답의 `transferHold`로 보류를 확인한다. 측정 때는 `_workspace`에 두고 돌린 같은 스크립트를 import 경로만 고쳐 넣었다.
+
+```bash
+BASE="https://<기존 ALB DNS>/api/v1"
+# 16:42 동시 5개 50명
+k6 run --insecure-skip-tls-verify -e BASE_URL="$BASE" perf/k6/delayedHold.js
+# 16:44 실패분을 다른 고객 13명으로 동시 1개
+k6 run --insecure-skip-tls-verify -e BASE_URL="$BASE" -e FROM_SEQ=8051 -e COUNT=13 -e VUS=1 perf/k6/delayedHold.js
+```
+
+- 다시 돌리면 `transfer_hold_id`가 1 ~ 50이 아니다. 4-2 SQL의 `transfer_hold_id` 범위와 해제 시각을 HELD 로그의 `holdId` · `releaseAt`으로 바꾼다.
 
 ### 4-2. 결과
 
