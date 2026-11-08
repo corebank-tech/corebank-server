@@ -784,7 +784,9 @@ Python 서비스의 내부 오류 코드는 공개 BE `ErrorCode`가 아니다. 
 {"code":"SCORE_INFERENCE_FAILED","message":"행동 점수를 계산할 수 없습니다.","data":null}
 ```
 
-BE에서 연결 실패는 `INFERENCE_SERVICE_UNAVAILABLE`, BE 호출 제한 시간 초과는 `INFERENCE_TIMEOUT`으로 구분한다. 성공 HTTP라도 ID·피처 버전 불일치, 점수 범위 밖, 모델 버전 누락, 잘못된 JSON은 `INFERENCE_FAILED`로 처리하고 결과를 저장하지 않는다. 내부 오류 코드나 메시지를 관리자에게 그대로 반환하지 않고 #930의 `BehaviorScoreUnavailableReason`으로 매핑한다. BE가 피처 생성 전에 감지한 무효한 입력은 `FLOW_UNAVAILABLE` 또는 `INVALID_FEATURES`이며, Python의 `400`과 구분한다.
+Python은 요청을 받은 뒤 추론 처리에 최대 **3초**를 사용하고, 초과하면 `504 SCORE_INFERENCE_TIMEOUT`을 반환한다. BE의 Python 호출은 연결 제한 **1초**, 호출 전체 제한 **5초**를 적용한다(연결 시간 포함). 따라서 Python의 3초 제한이 먼저 끝나면 BE가 `504`를 받을 수 있고, 네트워크 지연이나 응답 유실로 5초가 지나면 BE도 기다림을 끝낸다. 두 제한 시간 모두 보류 건당 한 번의 점수 추론에 적용하며 자동 재시도하지 않는다. 점수 계산은 `HELD` 확정 후 Agent 입력 생성 전에 수행하므로, 이 5초는 별도의 **Agent 실행 60초 제한**에 포함하지 않는다. 점수가 없어도 Agent 조사는 계속한다. 이 수치는 시연 환경의 실행 보호값이며 정책 A/B 판정 기준이 아니다.
+
+BE에서 연결 실패는 `INFERENCE_SERVICE_UNAVAILABLE`, BE 호출 전체 제한 5초 초과는 `INFERENCE_TIMEOUT`으로 구분한다. 성공 HTTP라도 ID·피처 버전 불일치, 점수 범위 밖, 모델 버전 누락, 잘못된 JSON은 `INFERENCE_FAILED`로 처리하고 결과를 저장하지 않는다. 내부 오류 코드나 메시지를 관리자에게 그대로 반환하지 않고 #930의 `BehaviorScoreUnavailableReason`으로 매핑한다. BE가 피처 생성 전에 감지한 무효한 입력은 `FLOW_UNAVAILABLE` 또는 `INVALID_FEATURES`이며, Python의 `400`과 구분한다.
 
 ### 재시도·저장·표시 경계
 
