@@ -45,8 +45,8 @@ Agent 워커가 부르는 내부 API는 [objection_agent_contract.md](objection_
 | `POST /{id}/completeness` | WRITE | 없음 | `{ reviewDeadline }`. `RECEIVED`, `SUPPLEMENT_SUBMITTED`에서만, 아니면 `PST0308` |
 | `POST /{id}/supplement-requests` | WRITE | `{ reason(≤500), missingDocuments: string[](≤20, 각 ≤100) }` | `{ round, supplementDue }`. 명의인 통지 기록. `PST0006`, `PST0302`, `PST0308` |
 | `POST /{id}/review-sessions` | READ | 없음 | `{ sessionId, startedAt }`. 상세 화면을 연 시각 |
-| `POST /{id}/decisions` | WRITE | `{ result, reason(≤500), earlyReleaseBasis(≤500) }` | Decision. `REJECTED`는 바로 `CONFIRMED`이고 지급정지 유지. `ACCEPTED`, `PARTIAL`은 계좌를 건드리지 않고 `PENDING_APPROVAL`. 게이트가 열지 않으면 `PST0301` |
-| `POST /{id}/decisions/{decisionId}/approve` | APPROVE | 없음 | Decision(`CONFIRMED`). 작성자와 같으면 `PST0309`. 확정 직전 게이트를 락 밖에서 다시 계산하고(D11) 열리지 않으면 `PST0301`(판정은 승인 대기로 남는다). 동시 승인은 하나만 확정되고 나머지는 `PST0302` |
+| `POST /{id}/decisions` | WRITE | `{ result, reason(≤500), earlyReleaseBasis(≤500), discretionary(기본 false), discretionaryReason }` | Decision. `REJECTED`는 바로 `CONFIRMED`이고 지급정지 유지. `ACCEPTED`, `PARTIAL`은 계좌를 건드리지 않고 `PENDING_APPROVAL`. 게이트가 열지 않으면 `PST0301`, 다만 재량 판정은 아래 §3-1 |
+| `POST /{id}/decisions/{decisionId}/approve` | APPROVE | 선택. `{ discretionaryAcknowledged: boolean }` | Decision(`CONFIRMED`). 작성자와 같으면 `PST0309`. 재량 판정인데 `discretionaryAcknowledged`가 true가 아니면(본문 없음 포함) `PST0311`. 확정 직전 게이트를 락 밖에서 다시 계산하고(D11) 열리지 않으면 `PST0301`, 재량 판정은 §3-1(판정은 승인 대기로 남는다). 일반 판정은 본문 없이 이전과 같이 승인된다. 동시 승인은 하나만 확정되고 나머지는 `PST0302` |
 | `POST /{id}/decisions/{decisionId}/return` | APPROVE | `{ reason(≤500) }` | Decision(`RETURNED`, `returnReason`). 이의제기는 `UNDER_REVIEW`로 돌아가고 심사 기한은 그대로다 |
 | `POST /{id}/external-checks` | WRITE | `{ agency: POLICE \| PEER_BANK, mockReply: INVOLVEMENT_SUSPECTED \| DOCUMENT_FORGED \| OWNER_UNRELATED \| NO_RECORD }` | ExternalCheck. 모의라 요청 즉시 `REPLIED`. 같은 기관에 이미 요청했으면 그 행을 그대로 돌려준다(회신 값도 처음 것). 확정 뒤 새 요청은 `PST0302` |
 | `GET /{id}/external-checks` | READ | | ExternalCheck 배열 |
@@ -58,11 +58,27 @@ Agent 워커가 부르는 내부 API는 [objection_agent_contract.md](objection_
 | `GET /{id}/documents/{documentId}/ocr` | READ | | `{ documentId, status, engine, pages, updatedAt }`. 텍스트는 가명 처리한 값. OCR 전이면 `status=PENDING`, `pages=[]`. 신분증 사본은 OCR 하지 않아 `PST0205` |
 | `GET /{id}/agent-runs`, `/agent-runs/{runId}/steps`, `/review-draft`, `POST /review-requests` | | | 기존([objection_agent_contract.md](objection_agent_contract.md) §5). `after` 생략 시 전체 단계 |
 
-**Summary** (목록 행): `objectionId`, `caseId`, `accountId`, `clause`, `objectionStatus`, `caseStatus`, `disputedTotal`, `objectionDeadline`, `receivedAt`, `receivedChannel`(`BRANCH` / `ONLINE`), `reviewDeadline`, `deadlineAlert`, `supplementDue`, `supplementOverdue`, `latestRunStatus`(실행 없으면 null), `latestRunLastStepTitle`(단계 없으면 null). 실행 상태와 마지막 단계를 목록 조회 한 번에 함께 준다.
+**Summary** (목록 행): `objectionId`, `caseId`, `accountId`, `clause`, `objectionStatus`, `caseStatus`, `disputedTotal`, `objectionDeadline`, `receivedAt`, `receivedChannel`(`BRANCH` / `ONLINE`), `reviewDeadline`, `deadlineAlert`, `supplementDue`, `supplementOverdue`, `latestRunStatus`(실행 없으면 null), `latestRunLastStepTitle`(단계 없으면 null), `discretionary`(승인 대기 또는 확정 판정이 재량 판정이면 true, 반려된 판정은 보지 않는다). 실행 상태와 마지막 단계를 목록 조회 한 번에 함께 준다.
 
-**Detail** (상세): 기존 필드(사건, 다툼 거래, 소명, `gate`) + `receivedChannel`, `completenessConfirmedAt`, `reviewDeadline`, `deadlineAlert`, `supplementDue`, `supplementRound`, `supplementOverdue`, `supplementRequests`(`[{ round, reason, missingDocuments, dueDate, requestedAt, submittedAt, submitNote }]`), `decision`(확정된 판정 또는 null), `pendingDecision`(승인 대기 판정 또는 null), `externalChecks`, `documentCount`. `gate`는 조회 시점 원장과 외부 확인 회신으로 다시 계산한다. `gate.allowedResults`(판정 결과별 true/false)는 해제 요건만 본 값이고 §2의 상태 제한(수용과 일부 지급정지는 `UNDER_REVIEW`에서만)은 넣지 않는다. 화면은 `objectionStatus`와 함께 보고 판정을 연다. 게이트가 열어도 상태가 맞지 않으면 `PST0308`이다.
+**Detail** (상세): 기존 필드(사건, 다툼 거래, 소명, `gate`) + `receivedChannel`, `completenessConfirmedAt`, `reviewDeadline`, `deadlineAlert`, `supplementDue`, `supplementRound`, `supplementOverdue`, `supplementRequests`(`[{ round, reason, missingDocuments, dueDate, requestedAt, submittedAt, submitNote }]`), `decision`(확정된 판정 또는 null), `pendingDecision`(승인 대기 판정 또는 null), `externalChecks`, `documentCount`. `gate`는 조회 시점 원장과 외부 확인 회신으로 다시 계산한다. `gate.allowedResults`(판정 결과별 true/false)와 `gate.discretionaryResults`(같은 모양, 게이트가 닫았지만 재량 판정으로 쓸 수 있으면 true, `REJECTED`는 언제나 false)는 해제 요건만 본 값이고 §2의 상태 제한(수용과 일부 지급정지는 `UNDER_REVIEW`에서만)은 넣지 않는다. 화면은 `objectionStatus`와 함께 보고 판정을 연다. 게이트가 열어도 상태가 맞지 않으면 `PST0308`이다.
 
-**Decision**: `decisionId`, `result`, `status`, `reason`, `earlyReleaseBasis`, `requestedHoldAmount`, `appliedHoldAmount`(확정된 `PARTIAL`만), `decidedBy`(작성자), `decidedAt`(작성 시각), `approvedBy`, `approvedAt`, `returnReason`.
+**Decision**: `decisionId`, `result`, `status`, `reason`, `earlyReleaseBasis`, `requestedHoldAmount`, `appliedHoldAmount`(확정된 `PARTIAL`만), `decidedBy`(작성자), `decidedAt`(작성 시각), `approvedBy`, `approvedAt`, `returnReason`, `discretionary`(재량 판정인지), `discretionaryReason`(재량 판정만, 아니면 null), `gateBranchAtWrite`(작성 시점 게이트 갈래, 재량 판정 도입 전에 쓴 판정은 null).
+
+### 3-1. 재량 판정([ADR-0011](../adr/0011-objection-discretionary-decision.md))
+
+게이트는 기본 판단으로 남는다. 게이트가 닫은 수용과 일부 지급정지는 재량 판정으로만 쓴다.
+
+| 작성 조건 | 결과 |
+|---|---|
+| `discretionary=true`인데 `discretionaryReason`이 없거나 앞뒤 공백을 뺀 길이가 20자 미만, 1000자 초과 | `CMN0001` |
+| `discretionary=true`인데 `result=REJECTED`이거나 게이트가 이미 연 판정 | `CMN0001` |
+| 게이트가 닫았고 `discretionary`가 false | `PST0301`(이전과 같다) |
+| 게이트가 닫았고 소송 계속, 사유 조항과 판정 범위 불일치(수용은 1, 2호, 일부 지급정지는 3호만), 외부 확인 부정 회신(`INVOLVEMENT_SUSPECTED`, `DOCUMENT_FORGED`) 중 하나 | `PST0310` |
+| 게이트가 닫았고 위 금지 사유가 없음(`gate.discretionaryResults`가 true) | `PENDING_APPROVAL`, `discretionary=true` |
+
+- `discretionary`가 false면 `discretionaryReason`은 버리고 저장하지 않는다.
+- 승인: 작성자와 같으면 `PST0309`, 확인이 없으면 `PST0311`을 먼저 본다. 그다음 확정 직전 게이트 재계산에서 금지 사유가 새로 생겼으면 `PST0310`이고 판정은 승인 대기로 남는다. 그사이 게이트가 열렸으면 재량 표시를 남긴 채 확정한다.
+- 상세의 `gate.discretionaryResults`가 true인 판정만 재량 작성 버튼을 연다. `allowedResults`가 true면 재량 표시 없이 쓴다.
 
 **ExternalCheck**: `checkId`, `agency`, `status`, `reply`, `requestedAt`, `repliedAt`. 부정 회신(`INVOLVEMENT_SUSPECTED`, `DOCUMENT_FORGED`)은 게이트 순서 1(불수용 후보), `OWNER_UNRELATED`는 순서 4(수용 후보), `NO_RECORD`는 게이트에 영향이 없다.
 
@@ -106,8 +122,8 @@ Agent 워커가 부르는 내부 API는 [objection_agent_contract.md](objection_
 
 | 이벤트 | 남는 때 |
 |---|---|
-| `OBJECTION_DECISION_SUBMIT` | 수용, 일부 지급정지 작성(승인 대기) |
-| `OBJECTION_DECISION_CONFIRM` | 불수용 작성, 수용과 일부 지급정지 승인(승인자 이름으로, detail에 `decidedBy`) |
+| `OBJECTION_DECISION_SUBMIT` | 수용, 일부 지급정지 작성(승인 대기). detail에 `discretionary`, 재량 판정이면 `discretionaryReason`, `gateBranchAtWrite` |
+| `OBJECTION_DECISION_CONFIRM` | 불수용 작성, 수용과 일부 지급정지 승인(승인자 이름으로, detail에 `decidedBy`). 재량 판정 승인이면 `discretionaryAcknowledged=true`와 위 재량 항목 |
 | `OBJECTION_DECISION_RETURN` | 반려 |
 | `PAYMENT_STOP_RELEASE` | 승인으로 계좌가 해제되거나 일부 지급정지로 바뀜 |
 | `OBJECTION_DETAIL_VIEW`, `OBJECTION_DOCUMENT_VIEW` | 상세 조회, 서류 열람(조회 사유 포함) |
@@ -121,3 +137,9 @@ Agent 워커가 부르는 내부 API는 [objection_agent_contract.md](objection_
 3. 새 권한은 대상이 다시 로그인한 뒤부터 적용된다. 회수는 `DELETE /admin/customers/{customerId}/permissions/{permission}`이고 대상의 세션을 바로 끊는다.
 
 관리자 계정을 새로 만드는 API는 없다. 운영 관리자가 한 명뿐이면 자기 자신에게 권한을 줄 수 없으므로, 두 번째 관리자 계정은 [admin_auth.md](admin_auth.md) §4 절차(P1 Runbook)로 만든다.
+
+## 9. 변경 이력
+
+| 날짜 | 변경 |
+|---|---|
+| 2026-11-09 | 담당자 재량 판정(§3-1, [ADR-0011](../adr/0011-objection-discretionary-decision.md)). 판정 작성 본문 `discretionary`, `discretionaryReason`, 승인 본문 `discretionaryAcknowledged`(선택), Decision의 `discretionary`, `discretionaryReason`, `gateBranchAtWrite`, 상세 `gate.discretionaryResults`, 목록 `discretionary`, 오류 `PST0310`, `PST0311` |
