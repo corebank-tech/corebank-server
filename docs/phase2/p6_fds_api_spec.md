@@ -468,12 +468,12 @@ Idempotency-Key: N
 | `data.behaviorRiskScore` | 합성 행동 모델 점수, 사기 확률 아님 | Number | `AVAILABLE`에서만 0~1; 그 외 null | O | `0.81` |
 | `data.modelVersion` | 점수를 산출한 모델 버전 | String | `AVAILABLE`에서만 제공; 그 외 null | O | `"xgb-demo-v1"` |
 | `data.featureVersion` | 점수에 사용한 피처 버전 | String | `AVAILABLE`에서만 제공; 그 외 null | O | `"p6-behavior-v1"` |
-| `data.behaviorScoreUnavailableReason` | 점수 참고 불가 사유 | String | `UNAVAILABLE`에서만 제공; 관리자에게 내부 예외·비밀값은 노출하지 않음 | O | `"MODEL_UNAVAILABLE"` |
+| `data.behaviorScoreUnavailableReason` | 점수 참고 불가 사유 | String(ENUM) | `UNAVAILABLE`에서 필수; `PENDING`·`AVAILABLE`이면 null. 값은 [Enum 마스터 §5-11](../api_conventions.md#5-11-fds-행동-점수--p6-928). 내부 예외·비밀값 미노출 | O | `"MODEL_UNAVAILABLE"` |
 | `data.investigationStatus` | AI 조사 상태 | String(ENUM) |  | O | `"COMPLETED"` |
 | `data.secondaryFindings` | AI 추가 발견 | Array | 없으면 `[]` | X | `[{...}]` |
 | `data.callRecords` | 콜 기록 | Array | 없으면 `[]` | X | `[]` |
 
-모델 점수는 `HELD` 커밋 뒤 조사 워커가 검증된 피처로 FastAPI에 비동기 요청한다. `HELD` 직후부터 추론 결과 저장 전까지 `behaviorScoreStatus=PENDING`, 점수와 버전은 null이다. 저장 성공 후 `AVAILABLE`과 점수·버전을 제공한다. 유효한 flow/피처가 없거나 모델 부재·입력 오류·시간 초과·서비스 장애 시 `UNAVAILABLE`, 점수·버전 null 및 사유를 제공한다. 이 상태는 `investigationStatus`와 독립적이며, 점수 장애가 보류·관리자 검토를 막지 않는다. A/B를 통과한 비보류 이체에는 MVP 점수를 만들지 않는다. 훅 C는 Python을 호출하지 않는다.
+모델 점수는 `HELD` 커밋 뒤 조사 워커가 Agent 조사 입력 생성 **전**에 검증된 피처로 FastAPI 추론과 결과 저장을 시도한다. `HELD` 직후부터 결과 저장 전까지 `behaviorScoreStatus=PENDING`, 점수와 버전은 null이다. 저장 성공 후 `AVAILABLE`과 점수·버전을 제공한다. 유효한 flow/피처가 없거나 모델 부재·입력 오류·시간 초과·서비스 장애, 점수 시도 전 작업의 최종 실패·보류 종료 시 `UNAVAILABLE`, 점수·버전 null 및 Enum 사유를 제공한다. 점수 저장 장애로 `PENDING`이 남으면 복구 작업이 미완료 조치와 조사 작업의 최종 상태를 대조해 `UNAVAILABLE`로 마감한다. 조사 재시도는 이미 기록된 `AVAILABLE`·`UNAVAILABLE`을 재계산하거나 덮어쓰지 않는다. Agent 입력에는 저장된 점수가 있을 때만 포함하고, 점수가 없어도 조사를 계속한다. 점수 상태는 `investigationStatus`와 독립적이며 보류·관리자 검토를 막지 않는다. A/B를 통과한 비보류 이체에는 MVP 점수를 만들지 않는다. 훅 C는 Python을 호출하지 않는다.
 
 **Example**
 

@@ -655,6 +655,26 @@ public record ApiResponse<T>(String code, String message, T data) {
 - 조회 API 필터에서만 허용하고 기본값으로 씁니다.
 - 서버는 `ALL`과 파라미터 미전달을 동일하게 "조건 없음"으로 처리합니다.
 
+### 5-11. FDS 행동 점수 — P6 (#928)
+
+| Enum | 값 | 의미 |
+| --- | --- | --- |
+| `BehaviorScoreStatus` | `PENDING` | `HELD` 이후 점수 계산·결과 저장 전 |
+|  | `AVAILABLE` | 점수와 모델·피처 버전 저장 완료 |
+|  | `UNAVAILABLE` | 점수 참고 불가; 아래 사유 필수 |
+| `BehaviorScoreUnavailableReason` | `FLOW_UNAVAILABLE` | 유효한 행동 흐름이 없어 피처를 만들 수 없음 |
+|  | `INVALID_FEATURES` | 서버에서 계산한 피처가 없거나 명세 범위·필수값 위반 |
+|  | `MODEL_UNAVAILABLE` | 모델 파일 부재·손상·버전 불일치로 모델을 사용할 수 없음 |
+|  | `INFERENCE_INPUT_INVALID` | FastAPI가 피처 버전·형식·값을 거부함 |
+|  | `INFERENCE_TIMEOUT` | 추론 요청 제한 시간 초과 |
+|  | `INFERENCE_SERVICE_UNAVAILABLE` | Python 서비스 연결·가용성 장애 |
+|  | `INFERENCE_FAILED` | 위 범주에 속하지 않는 추론 실패 |
+|  | `SCORE_SAVE_FAILED` | 추론 결과의 영속화에 실패하고 복구 후에도 유효한 점수를 확인할 수 없음 |
+|  | `WORKER_FAILED_BEFORE_SCORING` | 조사 작업이 점수 시도 전에 최종 실패함 |
+|  | `HOLD_CLOSED_BEFORE_SCORING` | 점수 시도 전에 보류가 종료됨 |
+
+사유 Enum은 관리자 응답의 분류값이며 내부 예외 문구·모델 경로·비밀값을 포함하지 않는다. `PENDING`·`AVAILABLE`에서는 사유가 null이다. Python 응답의 오류코드와 이 Enum의 매핑은 A2-1 내부 추론 계약에서 확정한다.
+
 ---
 
 ## 6. 데이터 표기 규약
