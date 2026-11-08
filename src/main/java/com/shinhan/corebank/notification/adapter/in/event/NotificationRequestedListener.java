@@ -2,8 +2,10 @@ package com.shinhan.corebank.notification.adapter.in.event;
 
 import com.shinhan.corebank.notification.api.NotificationRequestCarrier;
 import com.shinhan.corebank.notification.application.port.in.NotificationCommandUseCase;
+import jakarta.validation.ConstraintViolationException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.modulith.events.ApplicationModuleListener;
+import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Component;
 
 /**
@@ -17,7 +19,9 @@ public class NotificationRequestedListener {
 
     private final NotificationCommandUseCase notificationCommandUseCase;
 
+    // 순간 장애만 다시 시도한다(계약 위반은 바로 실패). 동시 실패한 재시도가 DB에 한꺼번에 몰리지 않게 간격을 늘리고 흩는다
     @ApplicationModuleListener
+    @Retryable(delay = 200, multiplier = 2, jitter = 100, excludes = ConstraintViolationException.class)
     public void on(NotificationRequestCarrier event) {
         notificationCommandUseCase.createNotification(event.notification());
     }
