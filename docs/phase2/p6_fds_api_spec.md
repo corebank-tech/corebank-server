@@ -406,7 +406,7 @@ Idempotency-Key: N
 | `data.items[].policyCode` | 서버 A/B 정책 | String |  | X | `"A"` |
 | `data.items[].investigationStatus` | AI 조사 상태 | String(ENUM) | `QUEUED`, `RUNNING`, `COMPLETED`, `FAILED` | O | `"QUEUED"` |
 | `data.items[].amount` | 이체금액, 원 | Long |  | X | `500000` |
-| `data.items[].recipientAccountMasked` | 마스킹 수취계좌 | String | 공통 `MaskingUtil` 형식, 당행 앞 3·뒤 3자리만 표시 | X | `"088******006"` |
+| `data.items[].recipientAccountMasked` | 마스킹 수취계좌 | String | 정상 형식은 공통 `MaskingUtil` 형식으로 당행 앞 3·뒤 3자리만 표시; 원본 형식 오류는 원문 없이 `"확인 불가"` | X | `"088******006"` |
 | `data.items[].riskAccountCheck.status` | 위험 계좌 조회 상태 | String(ENUM) | `MATCH`, `NO_MATCH`, `UNAVAILABLE`; 조회 시점 안내값 | X | `"MATCH"` |
 | `data.items[].riskAccountCheck.label` | 관리자 목록 표시 문구 | String | 근거 ID·버전은 상세에서 제공 | X | `"위험 계좌 목록과 일치"` |
 
@@ -466,7 +466,7 @@ Idempotency-Key: N
 | `data.transferHoldId` | 보류 ID | Long |  | X | `123` |
 | `data.holdStatus` | 보류 상태 | String(ENUM) |  | X | `"HELD"` |
 | `data.amount` | 원 단위 금액 | Long | 수정 불가 | X | `500000` |
-| `data.recipientAccountMasked` | 마스킹 수취계좌 | String | 공통 `MaskingUtil` 형식, 당행 앞 3·뒤 3자리만 표시 | X | `"088******006"` |
+| `data.recipientAccountMasked` | 마스킹 수취계좌 | String | 정상 형식은 공통 `MaskingUtil` 형식으로 당행 앞 3·뒤 3자리만 표시; 원본 형식 오류는 원문 없이 `"확인 불가"` | X | `"088******006"` |
 | `data.riskAccountCheck.status` | 위험 계좌 조회 상태 | String(ENUM) | `MATCH`, `NO_MATCH`, `UNAVAILABLE` | X | `"MATCH"` |
 | `data.riskAccountCheck.label` | 관리자 표시 문구 | String | `MATCH`: 위험 계좌 목록과 일치; `NO_MATCH`: 위험 계좌 목록과 일치하지 않음; `UNAVAILABLE`: 위험 계좌 조회 불가 · 고객 확인 절차 필요 | X | `"위험 계좌 목록과 일치"` |
 | `data.riskAccountCheck.riskAccountId` | 일치한 위험 기록 ID | Long | `MATCH`에서만 값 | O | `501` |
@@ -638,7 +638,7 @@ URL: `/api/v1/admin/fds/holds/{transferHoldId}/reject`
 사용자: 관리자
 인증 필요: Y
 Idempotency-Key: Y
-기타: `CUSTOMER_WRITE` 권한과 기존 세션·CSRF 보호. `X-Access-Reason`은 현재 거절 요청의 필수 헤더가 아니다. `RISK_ACCOUNT_MATCH`는 처리 직전 활성 데이터셋과 보류 원본을 재조회해 `MATCH`일 때만 콜 없이 허용한다. `CUSTOMER_DENIED`는 `NO_MATCH`·`UNAVAILABLE`에서 해당 보류 건의 최신 콜 결과가 동일할 때 허용한다. P6이 관리자 ID·행위·거절 사유·콜 기록 ID(해당 시)·위험 기록 ID·데이터셋 버전(해당 시)·멱등 키를 PENDING 조치로 먼저 커밋한 뒤 P4 `reject()`를 호출하고, 결과 확인 뒤 기존 `AuditLog`를 멱등 기록한다([연동 계약 §6-1](p6_fds_integration_contract.md#6-1-관리자-권한csrf조회-감사-결정)). 아직 미구현.
+기타: `CUSTOMER_WRITE` 권한과 기존 세션·CSRF 보호. `X-Access-Reason`은 현재 거절 요청의 필수 헤더가 아니다. `RISK_ACCOUNT_MATCH`는 처리 직전 활성 데이터셋과 보류 원본을 재조회해 `MATCH`일 때만 콜 없이 허용한다. `CUSTOMER_DENIED`는 `NO_MATCH`·`UNAVAILABLE`에서 해당 보류 건의 최신 콜 결과가 동일할 때 허용한다. P6이 관리자 ID·행위·거절 사유·콜 기록 ID(해당 시)·멱등 키를 PENDING 조치로 먼저 커밋한다. 활성 버전 제어 행 잠금 아래 최종 위험 상태를 재검증하고, `RISK_ACCOUNT_MATCH`이면 그때 확인한 위험 기록 ID·데이터셋 버전을 **P4 호출 전에 PENDING에 내구화**한다. 재검증 실패로 P4를 호출하지 않으면 실패 결과·ABORTED를 기록한다. 성공하면 P4 `reject()` 결과를 확인하고 최종 근거로 기존 `AuditLog`를 멱등 기록한다([연동 계약 §6-1](p6_fds_integration_contract.md#6-1-관리자-권한csrf조회-감사-결정)). 아직 미구현.
 
 ### 요구사항 ID
 
@@ -706,14 +706,14 @@ Idempotency-Key: Y
 
 §6·§7·§9·§10에는 #946을 반영한 목표 계약을 기재했다. 현재 구현된 FDS 관리자 API가 아니며, P4 인계 전에는 `CUSTOMER_DENIED` 콜 경로만 기존 초안으로 취급한다. P6 소유 `fds_risk_account`에 실제로 적재한 합성 계좌 데이터셋을 조회하여, 활성 버전의 **은행코드 + 계좌번호 정확 일치**가 `MATCH`일 때만 `reasonCode="RISK_ACCOUNT_MATCH"`로 콜 없이 거절한다. 이 경우 승인은 금지한다. `NO_MATCH`·`UNAVAILABLE`은 기존 콜 결과를 요구하며, 조회 장애를 `NO_MATCH`로 취급하지 않는다. 합성 목록은 실제 사기 확정 정보가 아니며 고객 화면에는 조회 결과를 표시하지 않는다.
 
-첫 데이터셋 `demo-risk-v1`을 전부 적재·검증하고 활성화한다. 변경 시 불변의 새 버전을 전부 적재·검증한 뒤 단일 활성 포인터를 전환한다. **0건 버전은 활성화하지 않는다.** 시연 기간 이전 버전은 보존하고 프로젝트 종료 시 P4가 합성 행·활성 포인터의 삭제를 실행·확인한다. P6이 테이블·판정·검증 기준을 소유하며 P4에 운영 DB 적재 실행·버전 전환을 요청한다. 전화 없는 거절 직전에는 활성 버전 제어 행을 `SELECT ... FOR UPDATE`로 잠그고 P4 보류 원본의 은행코드·계좌번호와 활성 기록을 재검증한다. P4 전환도 같은 잠금을 사용한다. PENDING 조치는 P4 호출 전에 내구화한다. P4에 요청할 `transfer.api.findHoldForAdmin`의 반환 필드와 새 사유 수용·저장 계약은 [연동 계약 §6-0](p6_fds_integration_contract.md#6-0-합성-위험-계좌-조회와-전화-없는-거절-946-p4-인계-전)에 적었다. P4 수락과 동시성 검증 전에는 이 경로를 구현 완료로 표시하지 않는다.
+첫 데이터셋 `demo-risk-v1`의 전용 QA 수취계좌와 위험 행은 `local-demo-data.sql`에 PR로 추가하고, `local` 또는 시연용 운영 DB의 `prod,qa-seed` 기동에서 적재한다. P6이 건수·형식·중복·해시를 검증한 뒤에만 활성화한다. 변경 시 불변의 새 버전 전체를 시드 변경 PR로 추가하고 다음 배포에서 검증 후 단일 활성 포인터를 원자적으로 전환한다. **0건 버전은 활성화하지 않는다.** 시연 기간 이전 버전은 보존한다. 프로젝트 종료 시에는 시드 INSERT 삭제만으로 기존 DB 행이 없어지지 않으므로 P4가 별도 정리 PR·배포로 합성 행·활성 포인터를 삭제·검증한다. P6이 스키마·판정·시드·검증·전환 계약을 소유한다. 모든 관리자 승인·거절 직전에는 활성 버전 제어 행을 `SELECT ... FOR UPDATE`로 잠그고 P4 보류 원본과 현재 활성 기록을 재검증한다. `RISK_ACCOUNT_MATCH` 거절은 잠금 아래의 최종 기록 ID·버전을 PENDING에 내구화한 뒤 P4를 호출한다. 승인·콜 기반 거절도 P4 상태 전이 커밋까지 전환과 직렬화하며 승인 선점 커밋 순서는 P4와 합의한다. 시드 배포의 활성화도 같은 잠금을 사용한다. P4에 요청할 `transfer.api.findHoldForAdmin`의 반환 필드·결과 대조 필드와 새 사유 수용·저장 계약은 [연동 계약 §6-0](p6_fds_integration_contract.md#6-0-합성-위험-계좌-조회와-전화-없는-거절-946-p4-인계-전)에 적었다. P4 수락과 동시성 검증 전에는 이 경로를 구현 완료로 표시하지 않는다.
 
 **판정·조회:** 검증된 활성 버전에서 정확히 한 행이면 `MATCH`, 정상 조회 결과 0행이면 `NO_MATCH`다. 미적재·비활성·미검증, 위험 계좌 조회 장애·시간 초과, 중복·손상은 `UNAVAILABLE`이다. 관리자 인증·보류 원본 조회·조회 감사가 실패하면 상세 API 자체가 실패하며, 위험 계좌 조회만 실패하고 필수 조회·감사가 성공한 경우에만 HTTP 200·`code="0000"`으로 `UNAVAILABLE`을 반환한다. 위험 조회 실패를 빈 배열 또는 `NO_MATCH`로 바꾸지 않는다.
 
-**목록·상세 응답 확장:** §6 목록은 `heldAt` 오름차순, 동시각은 `transferHoldId` 오름차순으로 정렬한다. 각 목록 항목에는 `riskAccountCheck.status`와 `label`만 추가한다. §7 상세에는 아래 객체를 추가한다. `NO_MATCH`·`UNAVAILABLE`이면 `riskAccountId`는 `null`이다. `datasetVersion`은 활성 버전을 읽었을 때만 값이 있고, 그렇지 않으면 `null`이다. `checkedAt`은 위험 조회를 시도한 서버 시각이다. 목록·상세 계좌번호는 기존 `MaskingUtil`에 따라 당행 앞 3·뒤 3자리만 표시한다.
+**목록·상세 응답 확장:** §6 목록은 `heldAt` 오름차순, 동시각은 `transferHoldId` 오름차순으로 정렬한다. 각 목록 항목에는 `riskAccountCheck.status`와 `label`만 추가한다. §7 상세에는 아래 객체를 추가한다. `NO_MATCH`·`UNAVAILABLE`이면 `riskAccountId`는 `null`이다. `datasetVersion`은 활성 버전을 읽었을 때만 값이 있고, 그렇지 않으면 `null`이다. `checkedAt`은 위험 조회를 시도한 서버 시각이다. 목록·상세 계좌번호는 정상 형식일 때 기존 `MaskingUtil`에 따라 당행 앞 3·뒤 3자리만 표시하고, 형식 오류는 `MaskingUtil`을 호출하지 않고 `"확인 불가"`와 위험 상태 `UNAVAILABLE`을 반환한다.
 
 ```json
-{"riskAccountCheck":{"status":"MATCH","label":"위험 계좌 목록과 일치","riskAccountId":501,"datasetVersion":"demo-risk-v1","checkedAt":"2026-11-08T14:00:00+09:00","sourceNotice":"이 목록은 프로젝트 시연용 합성 데이터이며 실제 사기 확정 정보가 아닙니다."}}
+{"riskAccountCheck":{"status":"MATCH","label":"위험 계좌 목록과 일치","riskAccountId":501,"datasetVersion":"demo-risk-v1","checkedAt":"2026-11-08T14:00:00+09:00","sourceNotice":"프로젝트 시연용 합성 데이터이며 실제 사기 확정 정보가 아닙니다."}}
 ```
 
 `NO_MATCH`의 label은 `위험 계좌 목록과 일치하지 않음`, `UNAVAILABLE`의 label은 `위험 계좌 조회 불가 · 고객 확인 절차 필요`다. `sourceNotice`와 근거 ID·버전은 상세에서만 표시한다. 고객 화면에는 위험 조회 결과를 표시하지 않는다. 관리자 전체 계좌번호·수취인 이름·생년월일은 현재 조회 계약에 없으며 추가하지 않는다.
