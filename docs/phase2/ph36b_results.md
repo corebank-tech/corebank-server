@@ -88,15 +88,27 @@ k6 run --insecure-skip-tls-verify -e BASE_URL="$BASE" -e RATE=5 -e FAULT_MODE=NO
 |---|---|---|---|---|
 | NONE 16:11 ~ 16:16 | 1,262 | 0 | 0 | 0 |
 | NO_RESPONSE 16:20:30 ~ 16:25 | 1,051 | 0 | 0 | 53 |
-| (11/6) NONE ① 12:02:30 ~ 12:06:10 | 1,260 | 0 | 0 | `Read timed out` 0 |
-| (11/6) NO_RESPONSE 12:08:10 ~ 12:12:00 | 1,053 | 0 | 0 | `Read timed out` 53 |
-| (11/6) NONE ② 12:12:30 ~ 12:16:10 | 1,374 | 0 | 0 | `Read timed out` 0 |
+| (11/6) NONE ① 12:02:30 ~ 12:06:10 | 1,260 | 0 | 0 | 0 |
+| (11/6) NO_RESPONSE 12:08:10 ~ 12:12:00 | 1,053 | 0 | 0 | 53 |
+| (11/6) NONE ② 12:12:30 ~ 12:16:10 | 1,374 | 0 | 0 | 0 |
 
 - WARN 53건은 모두 `InterbankSocketClient` `타행 응답 수신 실패 ... SocketTimeoutException: Read timed out`이다. 요청 스레드 52건은 k6 TIMEOUT 52건과 같고, 1건은 조회거래 스케줄러(`scheduling`)다.
-- 11/6은 `' WARN '` 문자열 검색이 0건으로 나와 `Read timed out` 줄 수로 셌다. 53건은 k6 TIMEOUT 53건과 같다.
+- 11/6 WARN 53건도 모두 `Read timed out`이고 k6 TIMEOUT 53건과 같다.
 - 타행 요청이 3초씩 잡혀 있어도 커넥션 풀 10이 바닥나지 않았다. 2회차도 같다.
 - 11/6 세 구간 내내 `swpd`가 352,780KB로 고정이고 `so`는 0, `si`는 최대 71KB/s였다. 스왑 입출력은 NONE ①이 느린 원인이 아니다. 5/s에서 CPU 사용률(`us`)은 30 ~ 48%다.
 - TIMEOUT 52건은 10건 안팎씩 몰려 났다(16:23:19 ~ 28, 16:24:02 ~ 10). 서킷이 반쯤 열린 상태에서 시험 요청을 보낸 구간으로 보이지만, 서킷 상태 전환 로그가 없어 확인하지 못했다.
+
+서버 로그는 JSON(`"level":"WARN"`)이라 공백을 둔 `' WARN '` · `' ERROR '` 검색은 맞지 않는다. 11/6 세 구간은 11/9에 아래 명령으로 다시 셌고 위 표와 같았다. 11/5 구간은 11/5 20:17 컨테이너 재생성으로 `docker logs`와 파일 로그(`corebank.2026-11-05.0.log`가 20:17:06부터 시작) 모두 남아 있지 않아 다시 세지 못했다. 1회차 값은 측정 당일 집계 그대로다.
+
+```bash
+# 기존 EC2에서
+cnt() { docker logs --since "$1" --until "$2" corebank-server 2>&1 | awk -v a="$1" '
+  {n++} /"level":"ERROR"/{e++} /"level":"WARN"/{w++} /HikariPool/{h++} /Read timed out/{r++}
+  END{printf "%s lines=%d ERROR=%d WARN=%d Hikari=%d ReadTimedOut=%d\n",a,n,e,w,h,r}'; }
+cnt 2026-11-06T12:02:30+09:00 2026-11-06T12:06:10+09:00
+cnt 2026-11-06T12:08:10+09:00 2026-11-06T12:12:00+09:00
+cnt 2026-11-06T12:12:30+09:00 2026-11-06T12:16:10+09:00
+```
 
 ### 3-4. 정합성
 
