@@ -1,9 +1,12 @@
 package com.shinhan.corebank.notification.adapter.out.persistence;
 
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -37,16 +40,12 @@ public interface NotificationJpaRepository extends JpaRepository<NotificationJpa
 
     long countByCustomerIdAndIsReadFalse(Long customerId);
 
-    /** 조건을 한 문장에 담아 동시 요청이 최초 readAt 을 덮어쓰지 못하게 한다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT n FROM NotificationJpaEntity n WHERE n.notificationId = :notificationId")
+    Optional<NotificationJpaEntity> findByIdForUpdate(@Param("notificationId") Long notificationId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(
-            """
-        UPDATE NotificationJpaEntity n
-        SET n.isRead = TRUE, n.readAt = :readAt
-        WHERE n.notificationId = :notificationId AND n.customerId = :customerId AND n.isRead = FALSE
-        """)
-    void markAsReadIfUnread(
-            @Param("notificationId") Long notificationId,
-            @Param("customerId") Long customerId,
-            @Param("readAt") LocalDateTime readAt);
+            "UPDATE NotificationJpaEntity n SET n.isRead = TRUE, n.readAt = :readAt WHERE n.notificationId = :notificationId")
+    void markAsRead(@Param("notificationId") Long notificationId, @Param("readAt") LocalDateTime readAt);
 }

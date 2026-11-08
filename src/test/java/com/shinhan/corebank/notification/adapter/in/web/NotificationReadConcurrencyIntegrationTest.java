@@ -11,6 +11,8 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.notification.application.port.out.NotificationCommandPort;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -23,6 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.RepeatedTest;
@@ -43,6 +46,7 @@ class NotificationReadConcurrencyIntegrationTest extends IntegrationTestSupport 
 
     private static final int CONCURRENT_REQUESTS = 4;
     private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
+    private static final long RIVAL_COMMIT_DELAY_MILLIS = 300;
 
     @Autowired
     MockMvc mockMvc;
@@ -52,6 +56,9 @@ class NotificationReadConcurrencyIntegrationTest extends IntegrationTestSupport 
 
     @Autowired
     JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    DataSource dataSource;
 
     @Autowired
     CustomerTestFixture customerFixture;
@@ -86,48 +93,59 @@ class NotificationReadConcurrencyIntegrationTest extends IntegrationTestSupport 
     }
 
     @Test
-    @DisplayName("트랜잭션 시작 뒤 UPDATE 전에 경합 상대가 먼저 커밋하면 상대의 읽음 시각을 응답한다")
-    void markAsRead_rivalCommitsBeforeUpdate_returnsRivalReadAt() throws Exception {
+    @DisplayName("경합 상대가 행을 잠근 채 커밋 전이면 기다렸다가 상대의 읽음 시각을 응답하고 덮어쓰지 않는다")
+    void markAsRead_rivalHoldsRowLock_waitsAndReturnsRivalReadAt() throws Exception {
         customerId = customerFixture.createCustomer();
         final Long notificationId = insertUnread();
         final LocalDateTime rivalReadAt = LocalDateTime.of(2026, 11, 7, 9, 0, 0, 123_456_000);
-        // 같은 스레드의 JdbcTemplate 은 요청 트랜잭션에 합류하므로 상대는 다른 스레드에서 커밋한다
+        final CountDownLatch requestReading = new CountDownLatch(1);
         doAnswer(invocation -> {
-                    commitRivalRead(notificationId, rivalReadAt);
+                    requestReading.countDown();
                     return invocation.callRealMethod();
                 })
                 .when(notificationCommandPort)
-                .markAsReadIfUnread(any(), any(), any());
+                .findByIdForUpdate(any());
 
-        final MockHttpServletResponse response = mockMvc.perform(
-                        patch("/notifications/{notificationId}/read", notificationId)
-                                .with(csrf())
-                                .header("Idempotency-Key", UUID.randomUUID().toString())
-                                .with(authentication(customerAuthentication())))
-                .andReturn()
-                .getResponse();
+        final ExecutorService requestExecutor = Executors.newSingleThreadExecutor();
+        try (Connection rival = dataSource.getConnection()) {
+            rival.setAutoCommit(false);
+            updateReadAt(rival, notificationId, rivalReadAt);
+            final Future<MockHttpServletResponse> request =
+                    requestExecutor.submit(() -> performMarkAsRead(notificationId));
+            assertThat(requestReading.await(10, TimeUnit.SECONDS)).isTrue();
+            // 요청이 행을 읽으러 들어간 뒤에 커밋해야, 잠금 없이 읽는 구현이면 미읽음을 보고 덮어쓴다
+            Thread.sleep(RIVAL_COMMIT_DELAY_MILLIS);
+            rival.commit();
 
-        assertThat(response.getStatus()).isEqualTo(200);
-        assertThat(readAtOf(response)).isEqualTo(rivalReadAt);
-        assertThat(jdbcTemplate.queryForObject(
-                        "SELECT read_at FROM notification WHERE notification_id = ?",
-                        LocalDateTime.class,
-                        notificationId))
-                .isEqualTo(rivalReadAt);
+            final MockHttpServletResponse response = request.get(30, TimeUnit.SECONDS);
+            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(readAtOf(response)).isEqualTo(rivalReadAt);
+            assertThat(jdbcTemplate.queryForObject(
+                            "SELECT read_at FROM notification WHERE notification_id = ?",
+                            LocalDateTime.class,
+                            notificationId))
+                    .isEqualTo(rivalReadAt);
+        } finally {
+            requestExecutor.shutdownNow();
+        }
     }
 
-    private void commitRivalRead(Long notificationId, LocalDateTime rivalReadAt) throws Exception {
-        final ExecutorService rivalExecutor = Executors.newSingleThreadExecutor();
-        try {
-            rivalExecutor
-                    .submit(() -> jdbcTemplate.update(
-                            "UPDATE notification SET is_read = TRUE, read_at = ? WHERE notification_id = ?",
-                            Timestamp.valueOf(rivalReadAt),
-                            notificationId))
-                    .get(10, TimeUnit.SECONDS);
-        } finally {
-            rivalExecutor.shutdownNow();
+    private void updateReadAt(Connection connection, Long notificationId, LocalDateTime readAt) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE notification SET is_read = TRUE, read_at = ? WHERE notification_id = ?")) {
+            statement.setTimestamp(1, Timestamp.valueOf(readAt));
+            statement.setLong(2, notificationId);
+            statement.executeUpdate();
         }
+    }
+
+    private MockHttpServletResponse performMarkAsRead(Long notificationId) throws Exception {
+        return mockMvc.perform(patch("/notifications/{notificationId}/read", notificationId)
+                        .with(csrf())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .with(authentication(customerAuthentication())))
+                .andReturn()
+                .getResponse();
     }
 
     private List<MockHttpServletResponse> invokeConcurrently(Long notificationId) throws Exception {
@@ -140,12 +158,7 @@ class NotificationReadConcurrencyIntegrationTest extends IntegrationTestSupport 
                 futures.add(executor.submit(() -> {
                     ready.countDown();
                     start.await();
-                    return mockMvc.perform(patch("/notifications/{notificationId}/read", notificationId)
-                                    .with(csrf())
-                                    .header("Idempotency-Key", UUID.randomUUID().toString())
-                                    .with(authentication(customerAuthentication())))
-                            .andReturn()
-                            .getResponse();
+                    return performMarkAsRead(notificationId);
                 }));
             }
             assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();

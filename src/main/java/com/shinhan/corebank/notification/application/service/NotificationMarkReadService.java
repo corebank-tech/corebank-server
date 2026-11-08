@@ -27,15 +27,18 @@ public class NotificationMarkReadService implements NotificationMarkReadUseCase 
 
     @Override
     public NotificationMarkReadResult markAsRead(Long customerId, Long notificationId) {
-        // UPDATE 를 먼저 해야 뒤 SELECT 의 스냅샷이 경합 상대의 커밋 뒤에 잡혀 최초 readAt 을 읽는다
-        notificationCommandPort.markAsReadIfUnread(notificationId, customerId, LocalDateTime.now(clock));
-        final NotificationInboxEntry notification = notificationQueryPort
-                .findById(notificationId)
+        // 일반 SELECT 는 REPEATABLE READ 스냅샷이라 경합 상대의 커밋을 못 보므로 잠금 읽기로 최신 행을 본다
+        final NotificationInboxEntry notification = notificationCommandPort
+                .findByIdForUpdate(notificationId)
                 .orElseThrow(() -> new BusinessException(NotificationErrorCode.NOTIFICATION_NOT_FOUND));
         if (!notification.isOwnedBy(customerId)) {
             throw new BusinessException(CommonErrorCode.FORBIDDEN);
         }
 
-        return NotificationMarkReadResult.from(notification, notificationQueryPort.countUnread(customerId));
+        final NotificationInboxEntry readNotification = notification.markAsRead(LocalDateTime.now(clock));
+        if (!notification.isRead()) {
+            notificationCommandPort.markAsRead(notificationId, readNotification.readAt());
+        }
+        return NotificationMarkReadResult.from(readNotification, notificationQueryPort.countUnread(customerId));
     }
 }
