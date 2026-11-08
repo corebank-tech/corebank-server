@@ -192,6 +192,8 @@ public enum TransferHoldCloseReason { CANCELLED, EXPIRED }
 
 FastAPI Agent는 고객·관리자 `JSESSIONID`나 CSRF 쿠키를 전달받지 않는다. Agent 전용 **서비스 Bearer 토큰**을 비밀 환경변수로 각 서비스에 주입하고, `Authorization: Bearer <token>`을 `GET /internal/fds/holds/**` 두 Tool과 `PUT /internal/fds/investigations/{investigationId}/report`에만 허용한다. 발표 VM에는 Git 저장소 밖의 비공개 `env_file`을 배치하고 파일 접근 권한을 제한한다. 배포용 Compose가 그 파일을 BE·Agent 서비스의 환경변수로 주입하며, 두 서비스는 같은 토큰을 읽는다. 토큰 값은 문서·Git·Compose YAML·요청 로그에 남기지 않는다. 서버는 토큰을 안전하게 비교하고 인증 성공 시 이 경로에서만 통하는 서비스 principal을 부여한다. 이 principal에 고객·관리자 권한이나 다른 API 접근 권한은 주지 않는다.
 
+**BE → FastAPI 점수 추론(#932):** 반대 방향의 `POST /internal/fds/behavior-score/predict`는 Python 서비스의 사설 경로이며 위 Agent→BE 토큰을 재사용하지 않는다. 별도 `FDS_SCORE_SERVICE_TOKEN`을 양 서비스에 비공개 환경변수로 주입하고 Python이 Bearer 토큰을 검증한다. 이 토큰으로 BE의 Tool·보고서 API를 호출할 수 없고, Agent 토큰으로 Python 추론 API를 호출할 수 없다. 고객·관리자 세션과 CSRF 쿠키는 이 호출에 사용하지 않는다. 네트워크·TLS·비밀값 보관·로그 제외 기준은 이 절의 내부 서비스 기준을 동일하게 적용한다. 요청·오류·점수 저장 책임은 [API 명세 §12](p6_fds_api_spec.md#12-내부-fastapi-행동-점수-추론-932)를 따른다.
+
 Spring Security에는 `/internal/fds/**` 전용 **우선 순위가 높은 stateless filter chain**을 두고, 허용한 메서드·경로 외에는 거부한다. 이 체인에서만 CSRF 검사를 제외하고 브라우저 CORS를 허용하지 않는다. 기존 세션 기반 체인의 `anyRequest().authenticated()`만으로 내부 API를 보호하지 않는다. 발표 VM의 BE·Agent는 같은 Docker Compose 사설 브리지 네트워크에서 서비스 이름으로 통신한다. Agent 포트와 BE의 직접 포트는 호스트에 공개하지 않고, 외부 HTTPS는 리버스 프록시에서 종료한다. 프록시는 `/api/v1/internal/fds/**`를 외부로 라우팅하지 않는다. **같은 VM 내부 브리지 통신만 HTTP**로 두며, 두 서비스를 다른 호스트로 옮기면 내부 연결에도 TLS를 적용한다. 서비스 토큰이 없거나 틀리면 401, 권한 밖 경로는 403으로 처리한다. 토큰 교체는 비공개 환경 파일 갱신 후 두 컨테이너를 재생성해 반영한다(`docker restart`만으로는 환경변수가 갱신되지 않는다). 실제 VM의 프록시·Compose 서비스 이름과 접근 규칙은 배포 시 확인한다.
 
 ## 7. FE 화면 인계 예시 (#854)
