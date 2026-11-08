@@ -2,6 +2,7 @@ package com.shinhan.corebank.signup.application.service;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.signup.application.port.in.GetSignupConfirmationUseCase;
 import com.shinhan.corebank.signup.application.port.in.SignupConfirmationResult;
 import com.shinhan.corebank.signup.application.port.out.ExistingBankCustomerProfilePort;
@@ -16,7 +17,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class SignupConfirmationService implements GetSignupConfirmationUseCase {
 
-    private static final DateTimeFormatter BIRTH_FORMAT = DateTimeFormatter.ofPattern("yy.MM.dd");
+    private static final DateTimeFormatter BIRTH_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE;
 
     private final TempSignupTokenPort tempTokenPort;
     private final ExistingBankCustomerProfilePort profilePort;
@@ -36,35 +37,11 @@ public class SignupConfirmationService implements GetSignupConfirmationUseCase {
                 .orElseThrow(() -> new IllegalStateException("Mock 은행 고객을 찾을 수 없습니다."));
 
         SignupConfirmation confirmation = new SignupConfirmation(
-                maskName(profile.userName()),
+                MaskingUtil.maskName(profile.userName()),
                 payload.userId(),
                 profile.birthDate().format(BIRTH_FORMAT),
-                maskPhone(payload.phoneNumber()),
-                maskEmail(payload.email()));
+                MaskingUtil.maskPhoneNumber(payload.phoneNumber()),
+                MaskingUtil.maskEmail(payload.email()));
         return SignupConfirmationResult.from(confirmation);
-    }
-
-    private String maskName(String name) {
-        if (name.length() <= 1) {
-            return "*";
-        }
-        if (name.length() == 2) {
-            return name.substring(0, 1) + "*";
-        }
-        return name.substring(0, 1) + "*".repeat(name.length() - 2) + name.substring(name.length() - 1);
-    }
-
-    private String maskPhone(String phoneNumber) {
-        return phoneNumber.substring(0, 3) + "-****-" + phoneNumber.substring(7);
-    }
-
-    private String maskEmail(String email) {
-        int atIndex = email.indexOf('@');
-        String local = email.substring(0, atIndex);
-        String domain = email.substring(atIndex);
-        int visibleLength = Math.min(3, Math.max(0, local.length() - 1));
-        int maskedLength = local.length() - visibleLength;
-
-        return local.substring(0, visibleLength) + "*".repeat(maskedLength) + domain;
     }
 }
