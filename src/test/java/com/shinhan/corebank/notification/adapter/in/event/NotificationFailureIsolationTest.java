@@ -41,6 +41,8 @@ class NotificationFailureIsolationTest extends IntegrationTestSupport {
     private static final long INITIAL_BALANCE = 100_000L;
     private static final long AMOUNT = 30_000L;
     private static final Duration LISTENER_TIMEOUT = Duration.ofSeconds(10);
+    // 첫 시도 + @Retryable 기본 재시도 3번
+    private static final int ATTEMPTS_WITH_IMMEDIATE_RETRIES = 4;
 
     // 이체 실행에 필요한 인증 경계만 대역으로 둔다 — 이체 통합 테스트와 같은 구성
     @MockitoBean
@@ -90,8 +92,9 @@ class NotificationFailureIsolationTest extends IntegrationTestSupport {
         // when
         TransferResult result = transferExecutionUseCase.execute(immediateTransfer());
 
-        // then — 커밋 뒤 리스너가 알림 저장을 시도했다가 실패한다
-        verify(notificationCommandPort, timeout(LISTENER_TIMEOUT.toMillis())).saveIfAbsent(any());
+        // then — 커밋 뒤 리스너가 알림 저장을 시도했다가 실패한다(즉시 재시도까지 모두 실패)
+        verify(notificationCommandPort, timeout(LISTENER_TIMEOUT.toMillis()).times(ATTEMPTS_WITH_IMMEDIATE_RETRIES))
+                .saveIfAbsent(any());
         assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
         assertThat(transferStatus(result.transactionNumber())).isEqualTo("SUCCESS");
         assertThat(ledgerRowCount(result.transactionNumber())).isEqualTo(2);
@@ -139,7 +142,7 @@ class NotificationFailureIsolationTest extends IntegrationTestSupport {
                 transactionNumber);
     }
 
-    // 완료 기록이 없는 알림 리스너의 발행 기록 — 재제출(IncompleteEventPublications)이 다시 보낼 대상이다
+    // 완료 기록이 없는 알림 리스너의 발행 기록 — 재제출(FailedEventPublications)이 다시 보낼 대상이다
     private int incompleteNotificationPublicationCount(String transactionNumber) {
         Long transferId = jdbcTemplate.queryForObject(
                 "SELECT transfer_id FROM transfer WHERE transaction_number = ?", Long.class, transactionNumber);
