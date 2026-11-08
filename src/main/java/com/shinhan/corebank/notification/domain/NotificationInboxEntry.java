@@ -2,6 +2,7 @@ package com.shinhan.corebank.notification.domain;
 
 import com.shinhan.corebank.notification.api.NotificationType;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import lombok.Builder;
 
 /** 알림함에 보이는 저장된 알림 한 건. 미읽음이면 readAt 이 null 이다. */
@@ -25,6 +26,10 @@ public record NotificationInboxEntry(
         if (isRead) {
             return this;
         }
-        return toBuilder().isRead(true).readAt(now).build();
+        // DATETIME(6) 에 담기는 값으로 잘라야 응답과 저장된 readAt 이 같다
+        return toBuilder()
+                .isRead(true)
+                .readAt(now.truncatedTo(ChronoUnit.MICROS))
+                .build();
     }
 }
