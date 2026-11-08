@@ -20,9 +20,15 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 // @SpringBootTest는 지표 내보내기를 꺼 두므로 Prometheus 내보내기를 직접 켠다. 이 설정이 달라 컨텍스트를 따로 띄운다.
 @AutoConfigureMockMvc
-@TestPropertySource(properties = "management.prometheus.metrics.export.enabled=true")
+@TestPropertySource(
+        properties = {
+            "management.prometheus.metrics.export.enabled=true",
+            "app.security.metrics-allowed-ip=" + PrometheusEndpointTest.ALLOWED_IP
+        })
 @DisplayName("/actuator/prometheus 메트릭 노출")
 class PrometheusEndpointTest extends IntegrationTestSupport {
+
+    static final String ALLOWED_IP = "192.168.0.211";
 
     private static final String URL = "/actuator/prometheus";
 
@@ -30,15 +36,24 @@ class PrometheusEndpointTest extends IntegrationTestSupport {
     MockMvc mockMvc;
 
     @Test
-    @DisplayName("로그인 없이 부르면 401이다 — prod에서 열기 전까지 세션 인증 뒤에 둔다")
+    @DisplayName("허용 IP가 아닌 곳에서 로그인 없이 부르면 401이다")
     void anonymous_unauthorized() throws Exception {
         mockMvc.perform(get(URL)).andExpect(status().isUnauthorized());
     }
 
     @Test
-    @DisplayName("이체·COB가 한 번도 안 돌았어도 transfer·cob 메트릭과 이체 histogram 구간이 나온다 (#541)")
-    void authenticated_exposesTransferAndCobMetrics() throws Exception {
-        mockMvc.perform(get(URL).with(customer()))
+    @DisplayName("로그인한 고객이라도 허용 IP가 아니면 403이다 — 로그인으로는 열리지 않는다")
+    void authenticatedCustomerFromOtherIp_forbidden() throws Exception {
+        mockMvc.perform(get(URL).with(customer())).andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("허용 IP에서는 로그인 없이 읽고, 이체·COB가 한 번도 안 돌았어도 transfer·cob 메트릭과 이체 histogram 구간이 나온다 (#541)")
+    void allowedIp_exposesTransferAndCobMetrics() throws Exception {
+        mockMvc.perform(get(URL).with(request -> {
+                    request.setRemoteAddr(ALLOWED_IP);
+                    return request;
+                }))
                 .andExpect(status().isOk())
                 .andExpect(content().string(Matchers.containsString("transfer_count_total")))
                 .andExpect(content().string(Matchers.containsString("transfer_duration_seconds_bucket")))
