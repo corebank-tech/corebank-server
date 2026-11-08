@@ -47,6 +47,12 @@ jobs:
           CHANGED=""
           DELETED=""
           while IFS=$'\t' read -r status path1 path2; do
+            # 경로 목록을 공백으로 나눠 넘기므로 공백이 든 경로는 둘로 쪼개진다. 지금 docs에는 없으니
+            # 조용히 잘못 동기화하지 않도록 여기서 멈춘다. 생기면 구분자를 NUL로 바꾼다.
+            if [[ "$path1$path2" =~ [[:space:]] ]]; then
+              echo "::error::공백이 든 문서 경로는 동기화하지 않는다: $path1 $path2"
+              exit 1
+            fi
             case "$status" in
               A*|M*|C*) CHANGED="$CHANGED $path1" ;;
               D*) DELETED="$DELETED $path1" ;;
