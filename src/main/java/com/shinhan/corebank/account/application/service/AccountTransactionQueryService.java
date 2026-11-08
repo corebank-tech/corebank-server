@@ -5,6 +5,7 @@ import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.exception.AccountErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.common.util.PageableResolver;
 import com.shinhan.corebank.transfer.application.port.in.LedgerHistoryDirection;
 import com.shinhan.corebank.transfer.application.port.in.LedgerHistoryQuery;
 import com.shinhan.corebank.transfer.application.port.in.LedgerHistoryQueryUseCase;
@@ -13,7 +14,6 @@ import com.shinhan.corebank.transfer.application.port.in.LedgerHistorySort;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,8 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class AccountTransactionQueryService implements AccountTransactionQueryUseCase {
-
-    private static final Set<Integer> ALLOWED_PAGE_SIZE = Set.of(5, 10, 20, 30, 50);
 
     private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
 
@@ -105,7 +103,7 @@ public class AccountTransactionQueryService implements AccountTransactionQueryUs
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
 
-        if (!ALLOWED_PAGE_SIZE.contains(size)) {
+        if (!PageableResolver.ALLOWED_PAGE_SIZES.contains(size)) {
             throw new BusinessException(CommonErrorCode.INVALID_PAGE_SIZE);
         }
     }

@@ -21,7 +21,6 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
-import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -31,7 +30,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class TransferHistoryQueryService implements TransferHistoryQueryUseCase {
 
-    private static final Set<Integer> ALLOWED_PAGE_SIZE = Set.of(5, 10, 20, 30, 50);
     private static final int MAX_RANGE_DAYS = 365;
     private static final int DEFAULT_PERIOD_MONTHS = 1;
 
@@ -65,7 +63,7 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
         if (customerId == null || withdrawalAccountId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
-        Pageable pageable = PageableResolver.resolve(page, size, all, ALLOWED_PAGE_SIZE);
+        Pageable pageable = PageableResolver.resolve(page, size, all, PageableResolver.ALLOWED_PAGE_SIZES);
         requireOwnership(customerId, withdrawalAccountId);
 
         LocalDate today = LocalDate.now(clock);
