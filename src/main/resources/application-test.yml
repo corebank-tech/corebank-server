@@ -33,6 +33,10 @@ app:
     agent:
       enabled: true
       worker-key: test-worker-key-not-for-production
+    # 첨부 파일은 빌드 폴더에 쓴다. 키는 0 바이트 32개의 base64 로 테스트 전용이다. 운영 키는 환경변수로만 넣는다
+    documents:
+      root: build/objection-documents-test
+      encryption-key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 
 management:
   endpoints:

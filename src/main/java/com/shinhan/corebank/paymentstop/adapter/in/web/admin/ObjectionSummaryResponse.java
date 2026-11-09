@@ -4,6 +4,10 @@ import com.shinhan.corebank.paymentstop.application.port.in.ObjectionQueryUseCas
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+/**
+ * 이의제기 목록 행. 분석 실행 상태와 마지막 단계 제목을 함께 줘서 화면이 행마다 실행을 따로 부르지 않게 한다. supplementOverdue 는 보완
+ * 기한이 지난 불수용 대상이다(D32). discretionary 는 승인 대기 또는 확정 판정이 재량 판정이면 true 다(ADR-0011).
+ */
 public record ObjectionSummaryResponse(
         long objectionId,
         long caseId,
@@ -13,7 +17,15 @@ public record ObjectionSummaryResponse(
         String caseStatus,
         long disputedTotal,
         LocalDate objectionDeadline,
-        LocalDateTime receivedAt) {
+        LocalDateTime receivedAt,
+        String receivedChannel,
+        LocalDate reviewDeadline,
+        boolean deadlineAlert,
+        LocalDate supplementDue,
+        boolean supplementOverdue,
+        String latestRunStatus,
+        String latestRunLastStepTitle,
+        boolean discretionary) {
 
     static ObjectionSummaryResponse from(ObjectionQueryUseCase.Summary summary) {
         var objection = summary.objection();
@@ -27,6 +39,16 @@ public record ObjectionSummaryResponse(
                 paymentStopCase.getStatus().name(),
                 paymentStopCase.disputedTotal(),
                 paymentStopCase.getObjectionDeadline(),
-                objection.getReceivedAt());
+                objection.getReceivedAt(),
+                objection.getReceivedChannel().name(),
+                objection.getReviewDeadline(),
+                summary.flags().deadlineAlert(),
+                objection.getSupplementDue(),
+                summary.flags().supplementOverdue(),
+                summary.latestRunStatus() == null
+                        ? null
+                        : summary.latestRunStatus().name(),
+                summary.latestRunLastStepTitle(),
+                summary.discretionary());
     }
 }

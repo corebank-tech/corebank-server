@@ -205,6 +205,20 @@ class AgentWorkerIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("워커는 작업 토큰으로 해제 요건 점검 갈래를 받는다. 관계가 있으면 수용 후보, 없으면 판단 불가이고 다른 이의제기 토큰은 거부된다")
+    void gateBranchForWorkerGuard() {
+        long related = receiveObjection(data.scenario(true));
+        long stranger = receiveObjection(data.scenario(false));
+        ClaimedJob relatedJob = claimOwn(related);
+        ClaimedJob strangerJob = claimOwn(stranger);
+
+        assertThat(worker.gateBranch(relatedJob.jobToken(), related)).isEqualTo(GateBranch.NORMAL_ACCEPT);
+        assertThat(worker.gateBranch(strangerJob.jobToken(), stranger)).isEqualTo(GateBranch.UNDETERMINED);
+        assertErrorCode(
+                () -> worker.gateBranch(relatedJob.jobToken(), stranger), PaymentStopErrorCode.JOB_TOKEN_INVALID);
+    }
+
+    @Test
     @DisplayName("사건 정보의 소명은 가명 처리되고, 원장은 게이트 기간 안만 상대 가명 키로 준다")
     void contextAndLedgerArePseudonymizedAndBounded() {
         Scenario s = data.scenario(true);

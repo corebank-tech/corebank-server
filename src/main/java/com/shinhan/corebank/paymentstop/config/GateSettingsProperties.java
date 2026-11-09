@@ -19,7 +19,10 @@ public record GateSettingsProperties(
         @DefaultValue("3") int relationMinCount,
         @DefaultValue("30") int relationMinSpanDays,
         @DefaultValue("30") int relationMinLeadDays,
-        @DefaultValue("5") int relationMaxAmountMultiple) {
+        @DefaultValue("5") int relationMaxAmountMultiple,
+        @DefaultValue("3000000") long partialSmallAmount,
+        @DefaultValue("90") int partialLivelihoodDays,
+        @DefaultValue("2") int partialLivelihoodMonths) {
 
     // 범위 검사는 GateSettings 생성자가 한다. 잘못된 값이면 기동에서 실패한다
     public GateSettings toSettings() {
@@ -33,6 +36,9 @@ public record GateSettingsProperties(
                 relationMinCount,
                 relationMinSpanDays,
                 relationMinLeadDays,
-                relationMaxAmountMultiple);
+                relationMaxAmountMultiple,
+                partialSmallAmount,
+                partialLivelihoodDays,
+                partialLivelihoodMonths);
     }
 }

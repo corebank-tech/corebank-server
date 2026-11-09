@@ -97,6 +97,13 @@ public class PaymentStopTestData {
         String cases = "SELECT case_id FROM payment_stop_case WHERE account_id IN (" + ids + ")";
         String objections = "SELECT objection_id FROM objection WHERE case_id IN (" + cases + ")";
         String runs = "SELECT run_id FROM agent_run WHERE objection_id IN (" + objections + ")";
+        String documents = "SELECT document_id FROM objection_document WHERE objection_id IN (" + objections + ")";
+        jdbcTemplate.update("DELETE FROM objection_document_ocr WHERE document_id IN (" + documents + ")");
+        jdbcTemplate.update("DELETE FROM objection_document WHERE objection_id IN (" + objections + ")");
+        jdbcTemplate.update("DELETE FROM objection_notice WHERE objection_id IN (" + objections + ")");
+        jdbcTemplate.update("DELETE FROM objection_external_check WHERE objection_id IN (" + objections + ")");
+        jdbcTemplate.update("DELETE FROM objection_review_session WHERE objection_id IN (" + objections + ")");
+        jdbcTemplate.update("DELETE FROM objection_supplement_request WHERE objection_id IN (" + objections + ")");
         jdbcTemplate.update("DELETE FROM agent_run_step WHERE run_id IN (" + runs + ")");
         jdbcTemplate.update("DELETE FROM review_draft WHERE objection_id IN (" + objections + ")");
         jdbcTemplate.update("DELETE FROM agent_run WHERE objection_id IN (" + objections + ")");
@@ -114,6 +121,34 @@ public class PaymentStopTestData {
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (" + ids + ")");
         jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id IN (" + ids + ")");
         jdbcTemplate.update("DELETE FROM account WHERE customer_id = ?", customerId);
+    }
+
+    /** 승인자처럼 계좌 없이 요청만 한 다른 관리자의 감사, 멱등키, 세션 행을 지운다. 고객 행은 호출자가 지운다. */
+    public void cleanupActor(long actorId) {
+        jdbcTemplate.update("DELETE FROM audit_log WHERE customer_id = ?", actorId);
+        jdbcTemplate.update("DELETE FROM idempotency_key WHERE customer_id = ?", actorId);
+        jdbcTemplate.update("DELETE FROM SPRING_SESSION WHERE PRINCIPAL_NAME = ?", String.valueOf(actorId));
+    }
+
+    public String objectionStatus(long objectionId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT status FROM objection WHERE objection_id = ?", String.class, objectionId);
+    }
+
+    /** 통지 기록을 "대상:종류" 로 기록 순서대로 */
+    public List<String> notices(long objectionId) {
+        return jdbcTemplate.queryForList(
+                "SELECT CONCAT(target, ':', kind) FROM objection_notice WHERE objection_id = ? ORDER BY notice_id",
+                String.class,
+                objectionId);
+    }
+
+    public long countAudit(long actorId, String eventType) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_log WHERE customer_id = ? AND event_type = ?",
+                Long.class,
+                actorId,
+                eventType);
     }
 
     public String status(long accountId) {

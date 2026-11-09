@@ -3,6 +3,7 @@ package com.shinhan.corebank.paymentstop.adapter.out.persistence;
 import com.shinhan.corebank.paymentstop.domain.agent.AgentRunStatus;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Pageable;
@@ -21,6 +22,14 @@ public interface AgentRunJpaRepository extends JpaRepository<AgentRunJpaEntity, 
     List<AgentRunJpaEntity> findByObjectionIdOrderByRunIdDesc(Long objectionId);
 
     Optional<AgentRunJpaEntity> findFirstByObjectionIdOrderByRunIdDesc(Long objectionId);
+
+    @Query(
+            """
+            select r from AgentRunJpaEntity r
+             where r.runId in (select max(r2.runId) from AgentRunJpaEntity r2
+                                where r2.objectionId in :objectionIds group by r2.objectionId)
+            """)
+    List<AgentRunJpaEntity> findLatestByObjectionIds(@Param("objectionIds") Collection<Long> objectionIds);
 
     // 범위 UPDATE 로 닫으면 상태 인덱스에 범위 잠금이 걸려, 동시에 가져가는 워커의 상태 변경과 데드락이 난다.
     // 그래서 대상 ID 는 잠금 없이 읽고 PK 로 한 건씩 조건부로 닫는다

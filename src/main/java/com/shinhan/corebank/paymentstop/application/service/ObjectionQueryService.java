@@ -6,12 +6,20 @@ import com.shinhan.corebank.common.audit.PersonalDataAccessEventType;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.paymentstop.application.port.in.AdminActor;
 import com.shinhan.corebank.paymentstop.application.port.in.ObjectionQueryUseCase;
+import com.shinhan.corebank.paymentstop.application.port.out.AgentRunPort;
+import com.shinhan.corebank.paymentstop.application.port.out.LedgerFactPort;
+import com.shinhan.corebank.paymentstop.application.port.out.ObjectionDocumentPort;
+import com.shinhan.corebank.paymentstop.application.port.out.ObjectionReviewPort;
 import com.shinhan.corebank.paymentstop.application.port.out.PaymentStopRecordPort;
+import com.shinhan.corebank.paymentstop.domain.DisputedTransfer;
 import com.shinhan.corebank.paymentstop.domain.Objection;
 import com.shinhan.corebank.paymentstop.domain.PaymentStopCase;
+import com.shinhan.corebank.paymentstop.domain.agent.AgentRun;
 import com.shinhan.corebank.paymentstop.domain.exception.PaymentStopErrorCode;
+import com.shinhan.corebank.paymentstop.domain.notice.ObjectionNotice;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,17 +33,40 @@ public class ObjectionQueryService implements ObjectionQueryUseCase {
     private static final int LIST_LIMIT = 200;
 
     private final PaymentStopRecordPort recordPort;
+    private final ObjectionReviewPort reviewPort;
+    private final ObjectionDocumentPort documentPort;
+    private final AgentRunPort agentRunPort;
+    private final LedgerFactPort ledgerFactPort;
     private final GateEvaluator gateEvaluator;
+    private final ObjectionCalendar objectionCalendar;
     private final AuditLogService auditLogService;
 
+    // 화면의 행마다 따로 부르지 않게(N+1) 사건, 최근 실행, 마지막 단계, 재량 판정 여부를 각각 한 번에 읽는다
     @Override
     @Transactional(readOnly = true)
     public List<Summary> list() {
         List<Objection> objections = recordPort.findRecentObjections(LIST_LIMIT);
+        Set<Long> objectionIds =
+                objections.stream().map(Objection::getObjectionId).collect(Collectors.toSet());
         Map<Long, PaymentStopCase> cases = recordPort.findCases(
                 objections.stream().map(Objection::getCaseId).collect(Collectors.toSet()));
+        Map<Long, AgentRun> latestRuns = agentRunPort.findLatestRuns(objectionIds);
+        Map<Long, String> lastStepTitles = agentRunPort.findLastStepTitles(
+                latestRuns.values().stream().map(AgentRun::runId).toList());
+        Set<Long> discretionary = recordPort.findDiscretionaryObjectionIds(objectionIds);
+        ObjectionCalendar.Today today = objectionCalendar.snapshot();
+
         return objections.stream()
-                .map(objection -> new Summary(objection, cases.get(objection.getCaseId())))
+                .map(objection -> {
+                    AgentRun run = latestRuns.get(objection.getObjectionId());
+                    return new Summary(
+                            objection,
+                            cases.get(objection.getCaseId()),
+                            today.flags(objection),
+                            run == null ? null : run.status(),
+                            run == null ? null : lastStepTitles.get(run.runId()),
+                            discretionary.contains(objection.getObjectionId()));
+                })
                 .toList();
     }
 
@@ -43,9 +74,7 @@ public class ObjectionQueryService implements ObjectionQueryUseCase {
     @Override
     @Transactional
     public Detail detail(long objectionId, AdminActor actor, AccessReason accessReason) {
-        Objection objection = recordPort
-                .findObjection(objectionId)
-                .orElseThrow(() -> new BusinessException(PaymentStopErrorCode.OBJECTION_NOT_FOUND));
+        Objection objection = objection(objectionId);
         PaymentStopCase paymentStopCase = caseOf(objection);
 
         auditLogService.recordPersonalDataAccess(
@@ -60,7 +89,47 @@ public class ObjectionQueryService implements ObjectionQueryUseCase {
                 objection,
                 paymentStopCase,
                 gateEvaluator.evaluate(paymentStopCase, objection),
-                recordPort.findDecision(objectionId));
+                recordPort.findConfirmedDecision(objectionId),
+                recordPort.findPendingDecision(objectionId),
+                objectionCalendar.snapshot().flags(objection),
+                reviewPort.findExternalChecks(objectionId),
+                reviewPort.findSupplementRequests(objectionId),
+                documentPort.countDocuments(objectionId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ObjectionNotice> notices(long objectionId) {
+        objection(objectionId);
+        return reviewPort.findNotices(objectionId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<LedgerEntry> ledger(long objectionId) {
+        PaymentStopCase paymentStopCase = caseOf(objection(objectionId));
+        GateEvaluator.Window window = gateEvaluator.window(paymentStopCase);
+        Set<String> disputed = paymentStopCase.getDisputedTransfers().stream()
+                .map(DisputedTransfer::transactionNumber)
+                .collect(Collectors.toSet());
+        return ledgerFactPort.findByAccount(paymentStopCase.getAccountId(), window.from(), window.to()).stream()
+                .map(fact -> new LedgerEntry(
+                        fact.transactionNumber(),
+                        fact.incoming() ? "IN" : "OUT",
+                        fact.interbank(),
+                        fact.counterpartyAccountId(),
+                        fact.amount(),
+                        fact.occurredAt(),
+                        disputed.contains(fact.transactionNumber()),
+                        !fact.occurredAt().isBefore(window.firstDisputedAt())
+                                && !disputed.contains(fact.transactionNumber())))
+                .toList();
+    }
+
+    private Objection objection(long objectionId) {
+        return recordPort
+                .findObjection(objectionId)
+                .orElseThrow(() -> new BusinessException(PaymentStopErrorCode.OBJECTION_NOT_FOUND));
     }
 
     private PaymentStopCase caseOf(Objection objection) {

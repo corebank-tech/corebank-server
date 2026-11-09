@@ -9,7 +9,8 @@
 --
 -- 조회 전용과 변경 가능을 각각 한 명 둬서, PH-49a-② 의 권한 검사가 같은
 -- /admin/** 요청을 어떻게 갈라내는지 로컬에서 바로 확인할 수 있게 한다.
--- 두 계정의 비밀번호는 Admin1234! 다.
+-- 지급정지 해제 승인은 작성자와 다른 사람이 해야 해서(D-36 2인 승인) 승인 전용
+-- adminapprover 를 따로 둔다. 세 계정의 비밀번호는 Admin1234! 다.
 --
 -- 관리자는 이체를 하지 않아 transfer_limit 행을 만들지 않는다.
 --
@@ -58,6 +59,20 @@ INSERT INTO customer (
     '2026-07-01 09:00:00.000000',
     '2026-07-01 09:00:00.000000',
     '2026-07-01 09:00:00.000000'
+  ),
+  (
+    'adminapprover',
+    '$2a$10$E3kJMsKgJnqVwXhO/EFCzeviMHKdUD1KCc5r4yeqWxRQzuk5IwQWK',
+    '승인담당자',
+    '1981-11-02',
+    'adminapprover@example.com',
+    '01099990003',
+    0,
+    FALSE,
+    'ADMIN',
+    '2026-07-01 09:00:00.000000',
+    '2026-07-01 09:00:00.000000',
+    '2026-07-01 09:00:00.000000'
   )
 ON DUPLICATE KEY UPDATE
   -- 실제 고객과 아이디·이메일이 겹치면 그 행은 건드리지 않고, 정확한 관리자
@@ -81,14 +96,15 @@ ON DUPLICATE KEY UPDATE
 -- 권한은 지우고 다시 넣는다. INSERT IGNORE 로만 두면 손으로 더해 둔 권한이 남아
 -- 시드가 정한 조합과 달라진다.
 --
--- 아래 세 문장이 user_id 와 email 을 함께 보는 이유는 위 ON DUPLICATE KEY UPDATE 와
+-- 아래 네 문장이 user_id 와 email 을 함께 보는 이유는 위 ON DUPLICATE KEY UPDATE 와
 -- 같다. user_id 만 맞는 실제 고객이 있으면 그 행은 역할이 바뀌지 않는데, 권한만
 -- 시드 조합으로 덮이면 두 판정이 어긋난다(PR #572 리뷰).
 DELETE ap FROM admin_permission ap
   JOIN customer c ON c.customer_id = ap.customer_id
  WHERE (c.user_id, c.email) IN (
            ('adminreader', 'adminreader@example.com'),
-           ('adminoperator', 'adminoperator@example.com')
+           ('adminoperator', 'adminoperator@example.com'),
+           ('adminapprover', 'adminapprover@example.com')
        );
 
 -- 조회 전용 — PH-49a-② 의 DoD "변경 API 403" 을 확인하는 계정이다.
@@ -119,3 +135,15 @@ SELECT c.customer_id, p.permission, '2026-07-01 09:00:00.000000'
        ) p
  WHERE c.user_id = 'adminoperator'
    AND c.email = 'adminoperator@example.com';
+
+-- 해제 승인 — adminoperator 가 쓴 수용, 일부 지급정지 판정을 승인하거나 반려한다(D-36 2인 승인).
+-- 판정을 쓰지 못하게 PAYMENT_STOP_WRITE 는 주지 않는다.
+INSERT INTO admin_permission (customer_id, permission, granted_at)
+SELECT c.customer_id, p.permission, '2026-07-01 09:00:00.000000'
+  FROM customer c
+  JOIN (
+        SELECT 'PAYMENT_STOP_READ' AS permission
+         UNION ALL SELECT 'PAYMENT_STOP_APPROVE'
+       ) p
+ WHERE c.user_id = 'adminapprover'
+   AND c.email = 'adminapprover@example.com';

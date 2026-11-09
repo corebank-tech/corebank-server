@@ -4,7 +4,9 @@ import com.shinhan.corebank.paymentstop.domain.agent.AgentRun;
 import com.shinhan.corebank.paymentstop.domain.agent.AgentRunStep;
 import com.shinhan.corebank.paymentstop.domain.agent.ReviewDraft;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 // Agent 실행, 단계, 판정안 저장소. 대기열은 QUEUED 행이다.
@@ -20,6 +22,12 @@ public interface AgentRunPort {
     List<AgentRun> findRunsByObjection(long objectionId);
 
     Optional<AgentRun> findLatestRun(long objectionId);
+
+    // 목록용. 이의제기마다 가장 최근 실행. 이의제기 수와 무관하게 한 번의 조회다
+    Map<Long, AgentRun> findLatestRuns(Collection<Long> objectionIds);
+
+    // 목록용. 실행마다 마지막 단계의 제목
+    Map<Long, String> findLastStepTitles(Collection<Long> runIds);
 
     /** 점유가 끝났는데 더 가져갈 수 없는 실행을 FAILED 로 닫는다. 닫은 실행 ID 를 돌려준다. */
     List<Long> failExhausted(LocalDateTime now, int maxAttempts, String reason);

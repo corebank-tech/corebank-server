@@ -2,6 +2,7 @@ package com.shinhan.corebank.paymentstop.adapter.out.persistence;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.paymentstop.application.port.out.PaymentStopRecordPort;
+import com.shinhan.corebank.paymentstop.domain.DecisionStatus;
 import com.shinhan.corebank.paymentstop.domain.DisputedTransfer;
 import com.shinhan.corebank.paymentstop.domain.Objection;
 import com.shinhan.corebank.paymentstop.domain.ObjectionDecision;
@@ -16,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -87,6 +89,18 @@ public class PaymentStopRecordPersistenceAdapter implements PaymentStopRecordPor
     }
 
     @Override
+    public List<PaymentStopCase> findCasesByAccountIds(Collection<Long> accountIds) {
+        if (accountIds.isEmpty()) {
+            return List.of();
+        }
+        List<Long> caseIds = caseRepository.findByAccountIdInOrderByCaseIdDesc(accountIds).stream()
+                .map(PaymentStopCaseJpaEntity::getCaseId)
+                .toList();
+        Map<Long, PaymentStopCase> cases = findCases(caseIds);
+        return caseIds.stream().map(cases::get).toList();
+    }
+
+    @Override
     public boolean existsObjectionByCaseId(long caseId) {
         return objectionRepository.existsByCaseId(caseId);
     }
@@ -103,6 +117,7 @@ public class PaymentStopRecordPersistenceAdapter implements PaymentStopRecordPor
                     objection.isLitigationPending(),
                     objection.getStatus(),
                     objection.getReceivedBy(),
+                    objection.getReceivedChannel(),
                     objection.getReceivedAt())));
         } catch (DataIntegrityViolationException e) {
             throw uniqueViolation(e, "uk_objection_case", PaymentStopErrorCode.OBJECTION_ALREADY_RECEIVED);
@@ -120,11 +135,11 @@ public class PaymentStopRecordPersistenceAdapter implements PaymentStopRecordPor
     }
 
     @Override
-    public void updateObjectionStatus(Objection objection) {
+    public void updateObjection(Objection objection) {
         objectionRepository
                 .findById(objection.getObjectionId())
                 .orElseThrow(() -> new IllegalStateException("이의제기가 없습니다. objectionId=" + objection.getObjectionId()))
-                .changeStatus(objection.getStatus());
+                .apply(objection.getStatus(), objection.progress());
     }
 
     @Override
@@ -135,31 +150,71 @@ public class PaymentStopRecordPersistenceAdapter implements PaymentStopRecordPor
     }
 
     @Override
-    public void saveDecision(ObjectionDecision decision) {
-        decisionRepository.save(ObjectionDecisionJpaEntity.of(
-                decision.objectionId(),
-                decision.result(),
-                decision.reason(),
-                decision.earlyReleaseBasis(),
-                decision.requestedHoldAmount(),
-                decision.appliedHoldAmount(),
-                decision.decidedBy(),
-                decision.decidedAt()));
+    public Map<Long, Objection> findObjectionsByCaseIds(Collection<Long> caseIds) {
+        if (caseIds.isEmpty()) {
+            return Map.of();
+        }
+        return objectionRepository.findByCaseIdIn(caseIds).stream()
+                .map(PaymentStopRecordPersistenceAdapter::toObjection)
+                .collect(Collectors.toMap(Objection::getCaseId, Function.identity()));
     }
 
     @Override
-    public Optional<ObjectionDecision> findDecision(long objectionId) {
+    public ObjectionDecision saveDecision(ObjectionDecision decision) {
+        try {
+            // 반려되지 않은 판정이 이미 있으면 uk_objection_decision_active 가 막는다. 호출자는 이의제기 행 락을 쥐고 있어 정상
+            // 흐름에서는 걸리지 않는다
+            return decisionRepository
+                    .saveAndFlush(ObjectionDecisionJpaEntity.of(decision))
+                    .toDomain();
+        } catch (DataIntegrityViolationException e) {
+            throw uniqueViolation(e, "uk_objection_decision_active", PaymentStopErrorCode.INVALID_OBJECTION_STATE);
+        }
+    }
+
+    @Override
+    public void updateDecision(ObjectionDecision decision) {
+        decisionRepository
+                .findById(decision.decisionId())
+                .orElseThrow(() -> new IllegalStateException("판정이 없습니다. decisionId=" + decision.decisionId()))
+                .apply(decision);
+    }
+
+    @Override
+    public Optional<ObjectionDecision> findDecisionById(long decisionId) {
+        return decisionRepository.findById(decisionId).map(ObjectionDecisionJpaEntity::toDomain);
+    }
+
+    @Override
+    public Optional<ObjectionDecision> findConfirmedDecision(long objectionId) {
         return decisionRepository
-                .findByObjectionId(objectionId)
-                .map(entity -> new ObjectionDecision(
-                        entity.getObjectionId(),
-                        entity.getResult(),
-                        entity.getReason(),
-                        entity.getEarlyReleaseBasis(),
-                        entity.getRequestedHoldAmount(),
-                        entity.getAppliedHoldAmount(),
-                        entity.getDecidedBy(),
-                        entity.getDecidedAt()));
+                .findFirstByObjectionIdAndStatus(objectionId, DecisionStatus.CONFIRMED)
+                .map(ObjectionDecisionJpaEntity::toDomain);
+    }
+
+    @Override
+    public Optional<ObjectionDecision> findPendingDecision(long objectionId) {
+        return decisionRepository
+                .findFirstByObjectionIdAndStatus(objectionId, DecisionStatus.PENDING_APPROVAL)
+                .map(ObjectionDecisionJpaEntity::toDomain);
+    }
+
+    @Override
+    public Map<Long, ObjectionDecision> findConfirmedDecisions(Collection<Long> objectionIds) {
+        if (objectionIds.isEmpty()) {
+            return Map.of();
+        }
+        return decisionRepository.findByObjectionIdInAndStatus(objectionIds, DecisionStatus.CONFIRMED).stream()
+                .map(ObjectionDecisionJpaEntity::toDomain)
+                .collect(Collectors.toMap(ObjectionDecision::objectionId, Function.identity(), (a, b) -> a));
+    }
+
+    @Override
+    public Set<Long> findDiscretionaryObjectionIds(Collection<Long> objectionIds) {
+        if (objectionIds.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(decisionRepository.findDiscretionaryObjectionIds(objectionIds, DecisionStatus.RETURNED));
     }
 
     @Override
@@ -214,7 +269,9 @@ public class PaymentStopRecordPersistenceAdapter implements PaymentStopRecordPor
                 entity.isLitigationPending(),
                 entity.getStatus(),
                 entity.getReceivedBy(),
-                entity.getReceivedAt());
+                entity.getReceivedChannel(),
+                entity.getReceivedAt(),
+                entity.progress());
     }
 
     private static Map<String, Object> settingsSnapshot(GateSettings settings) {
@@ -229,6 +286,9 @@ public class PaymentStopRecordPersistenceAdapter implements PaymentStopRecordPor
         snapshot.put("relationMinSpanDays", settings.relationMinSpanDays());
         snapshot.put("relationMinLeadDays", settings.relationMinLeadDays());
         snapshot.put("relationMaxAmountMultiple", settings.relationMaxAmountMultiple());
+        snapshot.put("partialSmallAmount", settings.partialSmallAmount());
+        snapshot.put("partialLivelihoodDays", settings.partialLivelihoodDays());
+        snapshot.put("partialLivelihoodMonths", settings.partialLivelihoodMonths());
         return snapshot;
     }
 

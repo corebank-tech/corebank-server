@@ -411,6 +411,38 @@ class SecurityConfigTest {
     }
 
     @Test
+    @DisplayName("판정 승인과 반려는 지급정지 승인 권한만 통과하고 변경 권한으로는 403이다")
+    void objectionApprovalRequiresApprovePermission() throws Exception {
+        for (String path : new String[] {
+            "/api/v1/admin/objections/1/decisions/2/approve", "/api/v1/admin/objections/1/decisions/2/return"
+        }) {
+            mockMvc.perform(post(path)
+                            .contextPath("/api/v1")
+                            .with(authentication(
+                                    admin(7L, AdminPermission.PAYMENT_STOP_READ, AdminPermission.PAYMENT_STOP_WRITE)))
+                            .with(csrf()))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("CMN0102"));
+            mockMvc.perform(post(path)
+                            .contextPath("/api/v1")
+                            .with(authentication(admin(8L, AdminPermission.PAYMENT_STOP_APPROVE)))
+                            .with(csrf()))
+                    .andExpect(status().isOk());
+        }
+    }
+
+    @Test
+    @DisplayName("심사 시작 기록은 지급정지 조회 권한으로 통과한다")
+    void reviewSessionNeedsOnlyRead() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/objections/1/review-sessions")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.PAYMENT_STOP_READ)))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("objection-review-session"));
+    }
+
+    @Test
     @DisplayName("권한 매핑이 없는 관리자 경로는 권한을 가졌어도 403이다")
     void rejectsUnmappedAdminPath() throws Exception {
         mockMvc.perform(get("/api/v1/admin/unmapped/test")

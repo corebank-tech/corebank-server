@@ -1,6 +1,8 @@
 package com.shinhan.corebank.paymentstop.adapter.out.persistence;
 
 import com.shinhan.corebank.common.entity.BaseEntity;
+import com.shinhan.corebank.paymentstop.domain.Objection;
+import com.shinhan.corebank.paymentstop.domain.ObjectionChannel;
 import com.shinhan.corebank.paymentstop.domain.ObjectionStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -10,6 +12,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -45,14 +48,33 @@ public class ObjectionJpaEntity extends BaseEntity {
     private boolean litigationPending;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 12)
+    @Column(name = "status", nullable = false, length = 20)
     private ObjectionStatus status;
 
     @Column(name = "received_by", nullable = false)
     private Long receivedBy;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "received_channel", nullable = false, length = 10)
+    private ObjectionChannel receivedChannel;
+
     @Column(name = "received_at", nullable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime receivedAt;
+
+    @Column(name = "completeness_confirmed_by")
+    private Long completenessConfirmedBy;
+
+    @Column(name = "completeness_confirmed_at", columnDefinition = "DATETIME(6)")
+    private LocalDateTime completenessConfirmedAt;
+
+    @Column(name = "review_deadline")
+    private LocalDate reviewDeadline;
+
+    @Column(name = "supplement_round", nullable = false, columnDefinition = "TINYINT")
+    private Byte supplementRound;
+
+    @Column(name = "supplement_due")
+    private LocalDate supplementDue;
 
     static ObjectionJpaEntity of(
             long caseId,
@@ -63,6 +85,7 @@ public class ObjectionJpaEntity extends BaseEntity {
             boolean litigationPending,
             ObjectionStatus status,
             long receivedBy,
+            ObjectionChannel receivedChannel,
             LocalDateTime receivedAt) {
         ObjectionJpaEntity entity = new ObjectionJpaEntity();
         entity.caseId = caseId;
@@ -73,11 +96,23 @@ public class ObjectionJpaEntity extends BaseEntity {
         entity.litigationPending = litigationPending;
         entity.status = status;
         entity.receivedBy = receivedBy;
+        entity.receivedChannel = receivedChannel;
         entity.receivedAt = receivedAt;
+        entity.supplementRound = 0;
         return entity;
     }
 
-    void changeStatus(ObjectionStatus status) {
+    void apply(ObjectionStatus status, Objection.Progress progress) {
         this.status = status;
+        this.completenessConfirmedBy = progress.completenessConfirmedBy();
+        this.completenessConfirmedAt = progress.completenessConfirmedAt();
+        this.reviewDeadline = progress.reviewDeadline();
+        this.supplementRound = (byte) progress.supplementRound();
+        this.supplementDue = progress.supplementDue();
+    }
+
+    Objection.Progress progress() {
+        return new Objection.Progress(
+                completenessConfirmedBy, completenessConfirmedAt, reviewDeadline, supplementRound, supplementDue);
     }
 }

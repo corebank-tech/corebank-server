@@ -72,6 +72,21 @@ class SecurityTestController {
         return ApiResponse.success("objection-write");
     }
 
+    @PostMapping("/admin/objections/1/decisions/2/approve")
+    ApiResponse<String> objectionApprove() {
+        return ApiResponse.success("objection-approve");
+    }
+
+    @PostMapping("/admin/objections/1/decisions/2/return")
+    ApiResponse<String> objectionReturn() {
+        return ApiResponse.success("objection-return");
+    }
+
+    @PostMapping("/admin/objections/1/review-sessions")
+    ApiResponse<String> objectionReviewSession() {
+        return ApiResponse.success("objection-review-session");
+    }
+
     // 매핑표에 없는 접두어. 권한을 정하지 않은 경로가 열리지 않는지 본다.
     @GetMapping("/admin/unmapped/test")
     ApiResponse<String> adminUnmapped() {

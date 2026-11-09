@@ -2,6 +2,11 @@ package com.shinhan.corebank.paymentstop.application.port.in;
 
 import com.shinhan.corebank.paymentstop.domain.agent.AgentStepStatus;
 import com.shinhan.corebank.paymentstop.domain.agent.AgentStepType;
+import com.shinhan.corebank.paymentstop.domain.document.OcrPage;
+import com.shinhan.corebank.paymentstop.domain.document.OcrStatus;
+import com.shinhan.corebank.paymentstop.domain.external.ExternalAgency;
+import com.shinhan.corebank.paymentstop.domain.external.ExternalCheckReply;
+import com.shinhan.corebank.paymentstop.domain.external.ExternalCheckStatus;
 import com.shinhan.corebank.paymentstop.domain.gate.GateBranch;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -27,10 +32,32 @@ public interface AgentWorkerUseCase {
 
     DraftResult submitDraft(String jobToken, long objectionId, DraftCommand command);
 
+    /** 증빙 목록. 신분증 사본은 목록에 없다(D37). 파일 이름은 주지 않는다. */
+    List<WorkerDocument> documents(String jobToken, long objectionId);
+
+    /** 증빙 파일 본문. 신분증 사본이나 다른 이의제기 문서는 PST0205 다. */
+    WorkerDocumentContent documentContent(String jobToken, long objectionId, long documentId);
+
+    /** 워커가 읽은 OCR 원문을 받아 서버가 가명 처리한 뒤 저장한다. 저장한 값을 돌려준다. */
+    List<OcrPage> saveOcr(String jobToken, long objectionId, long documentId, OcrCommand command);
+
+    List<WorkerExternalCheck> externalChecks(String jobToken, long objectionId);
+
+    /**
+     * 해제 요건 점검 결과(갈래만). 워커가 판정안을 낸 뒤 보정 규칙에만 쓰고 LLM 에는 넘기지 않는다. 수용 근거가 없는데 AI 가 수용 후보를 내지
+     * 않게 한다.
+     */
+    GateBranch gateBranch(String jobToken, long objectionId);
+
     /** nextSeq 는 이 시도가 다음에 보낼 단계 순번이다. 재시도면 앞선 시도의 단계 뒤에 이어 붙인다. */
     record ClaimedJob(long runId, long objectionId, int attempt, int nextSeq, String jobToken) {}
 
-    /** 가명 처리한 소명과 접수 정보. 신분증 사본은 확인 여부만 준다(D37). */
+    /**
+     * 가명 처리한 소명과 접수 정보. 신분증 사본은 확인 여부만 준다(D37).
+     *
+     * @param documents 증빙만. OCR 이 끝난 것만 pages 가 있다
+     * @param missingDocumentsRequested 가장 최근 보완 요청의 요청 서류. 보완 요청이 없었으면 빈 목록
+     */
     record Context(
             long objectionId,
             long runId,
@@ -43,7 +70,22 @@ public interface AgentWorkerUseCase {
             List<LedgerItem> disputedTransfers,
             List<String> commonDocuments,
             LocalDateTime ledgerFrom,
-            LocalDateTime ledgerTo) {}
+            LocalDateTime ledgerTo,
+            List<ContextDocument> documents,
+            List<WorkerExternalCheck> externalChecks,
+            int supplementRound,
+            List<String> missingDocumentsRequested) {}
+
+    record ContextDocument(long documentId, int round, OcrStatus ocrStatus, List<OcrPage> pages) {}
+
+    record WorkerDocument(long documentId, String contentType, int round, OcrStatus ocrStatus) {}
+
+    record WorkerDocumentContent(String contentType, byte[] content) {}
+
+    record WorkerExternalCheck(ExternalAgency agency, ExternalCheckStatus status, ExternalCheckReply reply) {}
+
+    /** @param status DONE 이 기본이다. 읽지 못했으면 FAILED 로 보낸다 */
+    record OcrCommand(String engine, OcrStatus status, List<OcrPage> pages) {}
 
     /**
      * 원장 거래 하나. 상대는 가명 키로만 준다.
