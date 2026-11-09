@@ -263,7 +263,7 @@ erDiagram
     }
     notification {
         bigint notification_id PK
-        bigint customer_id FK
+        bigint customer_id FK "INDEX ix_noti_customer(customer_id, is_read, occurred_at DESC), ix_noti_customer_occurred(customer_id, occurred_at DESC, notification_id DESC)"
         varchar type UK "TRANSFER / SCHEDULED_TRANSFER / AUTO_TRANSFER / PRODUCT_SUBSCRIPTION"
         bigint ref_id UK "uk_noti_type_ref(type, ref_id). 다형 참조: TRANSFER->transfer.transfer_id / SCHEDULED_TRANSFER->scheduled_transfer_id / AUTO_TRANSFER->auto_transfer_execution.execution_id / PRODUCT_SUBSCRIPTION->subscription_id"
         varchar title "VARCHAR(100)"

@@ -287,7 +287,8 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 
 | 종류 | 이름 | 컬럼 |
 | --- | --- | --- |
-| INDEX | `ix_noti_customer` | `customer_id, is_read, occurred_at DESC` |
+| INDEX | `ix_noti_customer` | `customer_id, is_read, occurred_at DESC` — 미읽음 건수 집계 |
+| INDEX | `ix_noti_customer_occurred` | `customer_id, occurred_at DESC, notification_id DESC` — 알림 목록 최신순 정렬 |
 | UNIQUE | `uk_noti_type_ref` | `type, ref_id` — 구독자가 같은 이벤트를 두 번 받아도 알림은 1건(#706) |
 
 ---
