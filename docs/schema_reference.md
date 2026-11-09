@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 43개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 451개 컬럼
+**대상**: 44개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 455개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -78,6 +78,7 @@
 | 50 | `transfer_hold` | 이체 보류 | P4 | 20 |
 | 51 | `delayed_transfer_setting` | 고객별 지연이체 설정 | P4 | 6 |
 | 52 | `account_payment_stop` | 계좌 사건별 지급정지 기록 | P3 | 10 |
+| 53 | `unregistered_login_failure` | 미가입 아이디 로그인 실패 횟수 | P1 | 4 |
 
 ---
 
@@ -1319,6 +1320,27 @@ PRD0301(1인 1계좌 제한)은 `product.single_account_limit = TRUE`인 상품�
 | 종류 | 이름 | 컬럼 |
 | --- | --- | --- |
 | INDEX | `ix_terms_view_history_expires` | `expires_at` |
+
+---
+
+## `unregistered_login_failure`
+
+> 가입되지 않은 아이디의 로그인 실패 횟수 (PH-08, #900)
+
+가입 계정은 `customer.login_failure_count`로 아이디 기준 실패를 세고 5회째에 `ATH0102`로 잠긴다. 없는 아이디도 같은 기준으로 세어 5회째에 같은 응답을 주므로 로그인 응답으로는 반복 요청해도 계정 존재 여부를 구분할 수 없다. 회원가입의 아이디 중복 확인(`POST /auth/check-id`)은 가입 여부를 바로 알려 주는 기능이라 이 범위 밖이다. 남은 한계로, 가입 계정의 횟수는 로그인 성공·비밀번호 재설정·관리자 잠금 해제 때 0이 되지만 이 테이블의 횟수는 만료(마지막 실패 후 30일) 전까지 줄지 않는다. 그래서 시간을 두고 시도하면 횟수가 줄어드는지로 가입 계정임을 알 수 있다. 계정 주인이 그 사이에 로그인해야 드러나는 차이라 공격 비용이 높아 막지 않고 기록만 한다. 아이디는 소문자로 정규화한 뒤 전용 키의 HMAC-SHA256 hex로만 저장하고 원문은 두지 않는다. 실패마다 `INSERT … ON DUPLICATE KEY UPDATE` 한 문장으로 1을 더하고, 만료된 행이면 1부터 다시 센다. 잠긴 뒤의 시도는 만료 시각을 늘리지 않는다. 행 삭제는 매일 04:40에 도는 `UNREGISTERED_LOGIN_FAILURE_CLEANUP` 배치가 맡는다. 같은 DB를 쓰는 새벽 작업인 RDS 자동 백업(03:00~03:30, `terraform/main/modules/data/main.tf` `backup_window`), 정보계 ETL(03:30, [PH-76](phase2/ph76_etl_first_load.md)), RDS 점검 창(월 04:00~04:30, `maintenance_window`)이 모두 끝난 뒤로 잡았다. 백업은 창을 넘겨도 끝날 때까지 계속되므로([AWS RDS 백업 창](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_ManagingAutomatedBackups.html#USER_WorkingWithAutomatedBackups.BackupWindow)) 바로 뒤에 붙이지 않았다.
+
+| 컬럼 | 타입 | 키 | Null | 기본값 | 담기는 정보 |
+| --- | --- | --- | --- | --- | --- |
+| `user_id_hash` | `CHAR(64)` | **PK** | X |  | 소문자 정규화한 로그인 아이디의 HMAC-SHA256 hex |
+| `failure_count` | `INT` |  | X |  | 만료 전 누적 실패 횟수 |
+| `last_failed_at` | `DATETIME(6)` |  | X |  | 마지막 실패 시각 |
+| `expires_at` | `DATETIME(6)` |  | X |  | 마지막 실패 후 30일 |
+
+**인덱스**
+
+| 종류 | 이름 | 컬럼 |
+| --- | --- | --- |
+| INDEX | `ix_unregistered_login_failure_expires` | `expires_at` |
 
 ---
 
