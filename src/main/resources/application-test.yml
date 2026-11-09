@@ -10,6 +10,11 @@ spring:
       # 작으면 일부 스레드가 커넥션을 기다리다 Future#get(30s) 타임아웃이 나는데, 이게 실제
       # 데드락 회귀인지 커넥션 풀 대기인지 구분할 수 없어 워커 수와 맞춰 명시한다.
       maximum-pool-size: 16
+  modulith:
+    events:
+      staleness:
+        # 멈춘 기록 테스트가 1분을 기다리지 않게 한다. 멈춤 기준(10분)은 운영과 같다
+        check-interval: 1s
 
 app:
   # 컨텍스트를 같이 쓰는 테스트끼리 메모리 묶음이 이어지지 않게 한 개씩 받는다. 묶음 동작은 SequenceGeneratorBlockTest가 본다
@@ -18,6 +23,10 @@ app:
   delayed-transfer:
     release:
       # 스위트가 도는 동안 해제 스케줄러가 다른 테스트의 보류를 실행하지 않게 한다. 테스트는 배치 서비스를 직접 부른다
+      fixed-delay: 24h
+  notification:
+    resubmission:
+      # 테스트는 재제출을 직접 부른다. 스케줄이 끼어들어 남의 테스트가 남긴 실패 기록을 가져가지 않게 한다
       fixed-delay: 24h
   # 이의제기 Agent 내부 API 테스트용 워커 키. 운영 키는 환경변수로만 넣는다
   payment-stop:
@@ -30,3 +39,6 @@ management:
     web:
       exposure:
         include: health,prometheus
+
+# 미가입 아이디 실패 카운터의 검색 해시 키(PH-08). 개발·테스트 전용 값이고 운영은 환경변수로 따로 주입한다
+APP_LOGIN_ID_HMAC_KEY_BASE64: 42K9p6EjjVkK41I/p9GFs1Jnn5bq0wbfS/QtkkfQlT8=

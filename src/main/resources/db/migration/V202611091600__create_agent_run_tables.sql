@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202611051600__create_agent_run_tables.sql
+-- V202611091600__create_agent_run_tables.sql
 -- 대상 테이블: agent_run, agent_run_step, review_draft (신규 · P3)
 --
 -- 이의제기 AI 심사 지원(D-36) PA-05. Agent 실행 한 번, 그 안의 단계 이벤트, Agent 가 낸 판정안.

@@ -104,7 +104,7 @@ SELECT c.customer_id, p.permission, '2026-07-01 09:00:00.000000'
    AND c.email = 'adminreader@example.com';
 
 -- 변경 가능 — FE 관리자 채널 시연용. 지급정지 해제 승인(PAYMENT_STOP_APPROVE)은 작성자와 다른
--- 사람이 해야 하므로(V202611051400) 이 계정에는 주지 않는다.
+-- 사람이 해야 하므로(V202611091400) 이 계정에는 주지 않는다.
 INSERT INTO admin_permission (customer_id, permission, granted_at)
 SELECT c.customer_id, p.permission, '2026-07-01 09:00:00.000000'
   FROM customer c

@@ -31,6 +31,11 @@ class SecurityTestController {
         return ApiResponse.success();
     }
 
+    @GetMapping("/actuator/prometheus")
+    ApiResponse<String> prometheus() {
+        return ApiResponse.success("metrics");
+    }
+
     @GetMapping("/products/test")
     ApiResponse<String> publicProduct() {
         return ApiResponse.success("product");

@@ -19,3 +19,6 @@ spring:
               create-source: metadata
   flyway:
     enabled: false
+
+# 미가입 아이디 실패 카운터의 검색 해시 키(PH-08). application-local.yml과 같은 개발 전용 값이다
+APP_LOGIN_ID_HMAC_KEY_BASE64: 42K9p6EjjVkK41I/p9GFs1Jnn5bq0wbfS/QtkkfQlT8=

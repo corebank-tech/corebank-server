@@ -44,4 +44,6 @@ public interface AccountPersistencePort {
 
     /** JPA 엔티티를 로딩하지 않고 계좌번호만 조회한다. */
     Optional<String> findAccountNumberByIdAndCustomerId(Long accountId, Long customerId);
+
+    Optional<Boolean> findPasswordLockedByAccountIdAndCustomerId(Long accountId, Long customerId);
 }

@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202611051400__add_payment_stop_admin_permissions.sql
+-- V202611091400__add_payment_stop_admin_permissions.sql
 -- 대상 테이블: admin_permission (CHECK 재생성)
 --
 -- 이의제기 AI 심사 지원(D-36)의 관리자 권한 3종을 더한다(Plan D14).

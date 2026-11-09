@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202611051401__insert_payment_stop_admin_permission_codes.sql
+-- V202611091401__insert_payment_stop_admin_permission_codes.sql
 -- 대상 테이블: common_code (ADMIN_PERMISSION 그룹)
 --
 -- 직전 파일에서 CHECK 에 넣은 지급정지 권한 3종의 공통코드다.

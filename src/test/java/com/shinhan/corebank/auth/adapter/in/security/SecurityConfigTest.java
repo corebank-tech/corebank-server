@@ -37,7 +37,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = SecurityTestController.class)
-@TestPropertySource(properties = {"app.security.cors.allowed-origins=http://localhost:5173,https://www.corebank.cloud"})
+@TestPropertySource(
+        properties = {
+            "app.security.cors.allowed-origins=http://localhost:5173,https://www.corebank.cloud",
+            "app.security.metrics-allowed-ip=192.168.0.211"
+        })
 @Import({
     SecurityTestController.class,
     SecurityConfig.class,
@@ -102,6 +106,43 @@ class SecurityConfigTest {
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST"))
                 .andExpect(status().isForbidden())
                 .andExpect(header().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
+    }
+
+    @Test
+    @DisplayName("Prometheus 지표는 허용한 IP에서 온 요청만 읽을 수 있다")
+    void permitsPrometheusOnlyFromAllowedIp() throws Exception {
+        mockMvc.perform(get("/api/v1/actuator/prometheus")
+                        .contextPath("/api/v1")
+                        .with(request -> {
+                            request.setRemoteAddr("192.168.0.211");
+                            return request;
+                        }))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"));
+    }
+
+    @ParameterizedTest(name = "{0}에서 온 Prometheus 요청은 거부한다")
+    @ValueSource(strings = {"192.168.0.212", "10.30.1.5", "203.0.113.7"})
+    void rejectsPrometheusFromOtherIp(String remoteAddr) throws Exception {
+        mockMvc.perform(get("/api/v1/actuator/prometheus")
+                        .contextPath("/api/v1")
+                        .with(request -> {
+                            request.setRemoteAddr(remoteAddr);
+                            return request;
+                        }))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("허용 IP가 있어도 경로가 조금 달라지면 로그인 없이 읽을 수 없다")
+    void rejectsPrometheusLookalikePath() throws Exception {
+        mockMvc.perform(get("/api/v1/actuator/prometheus/")
+                        .contextPath("/api/v1")
+                        .with(request -> {
+                            request.setRemoteAddr("192.168.0.211");
+                            return request;
+                        }))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -30,7 +30,7 @@ resource "aws_s3_bucket_object_lock_configuration" "audit" {
   rule {
     default_retention {
       mode = "GOVERNANCE"
-      days = 1
+      days = 8
     }
   }
 

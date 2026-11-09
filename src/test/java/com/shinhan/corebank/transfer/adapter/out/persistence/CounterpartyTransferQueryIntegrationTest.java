@@ -60,11 +60,26 @@ class CounterpartyTransferQueryIntegrationTest extends IntegrationTestSupport {
                         CounterpartyTransfer::counterpartyKind,
                         CounterpartyTransfer::counterpartyAccountId,
                         CounterpartyTransfer::amount,
-                        CounterpartyTransfer::occurredAt)
+                        CounterpartyTransfer::occurredAt,
+                        CounterpartyTransfer::settled)
                 .containsExactly(
-                        tuple(deposit, Direction.IN, CounterpartyKind.INTERNAL, SENDER, 30_000L, T0.plusHours(1)),
-                        tuple(withdrawal, Direction.OUT, CounterpartyKind.INTERNAL, PAYEE, 10_000L, T0.plusHours(2)),
-                        tuple(interbank, Direction.OUT, CounterpartyKind.INTERBANK, null, 5_000L, T0.plusHours(3)));
+                        tuple(deposit, Direction.IN, CounterpartyKind.INTERNAL, SENDER, 30_000L, T0.plusHours(1), true),
+                        tuple(
+                                withdrawal,
+                                Direction.OUT,
+                                CounterpartyKind.INTERNAL,
+                                PAYEE,
+                                10_000L,
+                                T0.plusHours(2),
+                                true),
+                        tuple(
+                                interbank,
+                                Direction.OUT,
+                                CounterpartyKind.INTERBANK,
+                                null,
+                                5_000L,
+                                T0.plusHours(3),
+                                true));
 
         // 같은 거래를 송금인 계좌에서 보면 출금이고 상대는 조회 계좌다
         assertThat(query.findByAccount(SENDER, FROM, TO))
@@ -76,9 +91,15 @@ class CounterpartyTransferQueryIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("처리 불명, 무효화된 원거래, 취소정정, 이체가 아닌 입금은 빼고 정상거래(REPOST)는 담는다")
-    void excludesUnknownCorrectedAndNonTransferEntries() {
-        interbank(TARGET, 7_000L, "TIMEOUT", T0.plusHours(1));
+    @DisplayName("처리 불명 타행 출금은 미확정으로 담고, 실패, 무효화된 원거래, 취소정정, 이체가 아닌 입금은 빼고 정상거래(REPOST)는 담는다")
+    void includesUnknownAsUnsettledAndExcludesFailedCorrectedAndNonTransferEntries() {
+        String unknown = interbank(TARGET, 7_000L, "TIMEOUT", T0.plusHours(1));
+
+        // 실패로 확정된 타행 출금은 출금과 되돌린 입금 원장이 모두 남지만 둘 다 뺀다
+        long failed = insertTransfer(TARGET, null, "088", 6_000L, "ERROR", T0.plusMinutes(90), null, null);
+        String failedNumber = transactionNumberOf(failed);
+        insertLedger(TARGET, failed, failedNumber, "WITHDRAWAL", 6_000L, T0.plusMinutes(90));
+        insertLedger(TARGET, failed, failedNumber, "DEPOSIT", 6_000L, T0.plusMinutes(100));
 
         long original = insertTransfer(SENDER, TARGET, null, 20_000L, "SUCCESS", T0.plusHours(2), null, null);
         String originalNumber = transactionNumberOf(original);
@@ -96,8 +117,13 @@ class CounterpartyTransferQueryIntegrationTest extends IntegrationTestSupport {
         insertLedger(TARGET, null, "20310701BT8930000099", "DEPOSIT", 70L, T0.plusHours(5));
 
         assertThat(query.findByAccount(TARGET, FROM, TO))
-                .extracting(CounterpartyTransfer::transactionNumber, CounterpartyTransfer::amount)
-                .containsExactly(tuple(repostNumber, 2_000L));
+                .extracting(
+                        CounterpartyTransfer::transactionNumber,
+                        CounterpartyTransfer::direction,
+                        CounterpartyTransfer::amount,
+                        CounterpartyTransfer::settled)
+                .containsExactly(
+                        tuple(unknown, Direction.OUT, 7_000L, false), tuple(repostNumber, Direction.IN, 2_000L, true));
     }
 
     @Test

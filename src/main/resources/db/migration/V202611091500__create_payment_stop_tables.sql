@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202611051500__create_payment_stop_tables.sql
+-- V202611091500__create_payment_stop_tables.sql
 -- 대상 테이블: payment_stop_case, case_disputed_transfer, objection, objection_decision, gate_evaluation (신규 · P3)
 --
 -- 이의제기 AI 심사 지원(D-36)의 paymentstop 도메인 뼈대(PA-04).
