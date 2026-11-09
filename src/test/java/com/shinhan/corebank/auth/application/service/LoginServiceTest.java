@@ -160,6 +160,20 @@ class LoginServiceTest {
                         CustomerRole.CUSTOMER);
     }
 
+    // 잠긴 가입 계정과 잠긴 미가입 아이디의 연산을 맞춰 응답 시간 차이를 없앤다 (#900 측정에서 약 2ms 차이 확인)
+    @Test
+    @DisplayName("이미 잠긴 고객도 가짜 잠금과 같은 미가입 실패 횟수 조회를 거친다")
+    void accountAlreadyLockedMatchesPhantomLockCost() {
+        LoginCommand command = loginCommand();
+        given(loginCustomerPort.findByUserId(command.userId())).willReturn(Optional.of(loginCustomer(5, true)));
+
+        LoginFailedException exception = catchThrowableOfType(LoginFailedException.class, () -> service.login(command));
+
+        assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.ACCOUNT_LOCKED);
+        verify(unregisteredLoginFailurePort).findActiveFailureCount(command.userId());
+        verify(unregisteredLoginFailurePort, never()).recordFailure(anyString());
+    }
+
     // 비밀번호가 일치하면 로그인 상태와 성공 감사를 기록
     @Test
     @DisplayName("올바른 비밀번호는 로그인 성공 상태를 저장하고 결과를 반환한다")
