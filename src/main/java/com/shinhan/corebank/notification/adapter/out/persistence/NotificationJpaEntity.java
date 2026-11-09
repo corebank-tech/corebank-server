@@ -1,6 +1,7 @@
 package com.shinhan.corebank.notification.adapter.out.persistence;
 
 import com.shinhan.corebank.notification.api.NotificationType;
+import com.shinhan.corebank.notification.domain.NotificationInboxEntry;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -50,4 +51,17 @@ public class NotificationJpaEntity {
 
     @Column(name = "occurred_at", nullable = false)
     private LocalDateTime occurredAt;
+
+    NotificationInboxEntry toDomain() {
+        return NotificationInboxEntry.builder()
+                .notificationId(notificationId)
+                .customerId(customerId)
+                .type(type)
+                .title(title)
+                .content(content)
+                .isRead(isRead)
+                .readAt(readAt)
+                .occurredAt(occurredAt)
+                .build();
+    }
 }

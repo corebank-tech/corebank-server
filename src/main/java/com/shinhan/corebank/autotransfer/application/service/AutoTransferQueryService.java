@@ -11,7 +11,6 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.util.PageableResolver;
 import java.time.Clock;
 import java.time.LocalDate;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,8 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class AutoTransferQueryService implements AutoTransferQueryUseCase {
-    private static final Set<Integer> ALLOWED_PAGE_SIZE = Set.of(5, 10, 20, 30, 50);
-
     private final AutoTransferQueryPort autoTransferQueryPort;
     private final AccountStatusPort accountStatusPort;
     private final Clock clock;
@@ -34,7 +31,7 @@ public class AutoTransferQueryService implements AutoTransferQueryUseCase {
         if (customerId == null || withdrawalAccountId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
-        Pageable pageable = PageableResolver.resolve(page, size, all, ALLOWED_PAGE_SIZE);
+        Pageable pageable = PageableResolver.resolve(page, size, all, PageableResolver.ALLOWED_PAGE_SIZES);
         // withdrawalAccountId가 필수 파라미터라 페이지 안 모든 행이 같은 계좌 - 별칭은 요청당 1회만 조회
         String fromAlias =
                 accountStatusPort.findAccountAlias(withdrawalAccountId).orElse(null);

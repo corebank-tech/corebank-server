@@ -245,6 +245,44 @@ class CorebankApplicationTest {
         }
     }
 
+    @Test
+    @DisplayName("PH-13 측정 완료 후 애플리케이션을 종료한다")
+    void closesCompletedPh13MeasureProcess() {
+        GenericApplicationContext context = new GenericApplicationContext();
+
+        context.getEnvironment().setActiveProfiles("ph13-measure");
+
+        context.getEnvironment()
+                .getPropertySources()
+                .addFirst(new MapPropertySource("ph13MeasureTest", Map.of("app.ph13-measure.execute", "true")));
+
+        context.refresh();
+
+        boolean closed = Phase2SeedProcessRunner.closeCompletedSeedProcess(context);
+
+        assertThat(closed).isTrue();
+        assertThat(context.isActive()).isFalse();
+    }
+
+    @Test
+    @DisplayName("PH-13 측정 명령이면 DevTools 재시작을 끈다")
+    void disablesDevToolsRestartForPh13Measure() {
+        String previous = System.getProperty(DEVTOOLS_RESTART_PROPERTY);
+
+        try {
+            System.clearProperty(DEVTOOLS_RESTART_PROPERTY);
+
+            boolean disabled = Phase2SeedProcessRunner.disableDevToolsRestartForSeed(
+                    new String[] {"--spring.profiles.active=prod,ph13-measure", "--app.ph13-measure.execute=true"});
+
+            assertThat(disabled).isTrue();
+
+            assertThat(System.getProperty(DEVTOOLS_RESTART_PROPERTY)).isEqualTo("false");
+        } finally {
+            restoreSystemProperty(previous);
+        }
+    }
+
     private void restoreSystemProperty(String previous) {
         if (previous == null) {
             System.clearProperty(DEVTOOLS_RESTART_PROPERTY);
