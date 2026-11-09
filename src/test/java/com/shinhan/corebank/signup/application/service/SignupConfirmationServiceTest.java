@@ -55,8 +55,8 @@ class SignupConfirmationServiceTest {
 
         assertThat(result.userName()).isEqualTo("홍*동");
         assertThat(result.userId()).isEqualTo("honggildong");
-        assertThat(result.birthDate()).isEqualTo("90.01.01");
-        assertThat(result.phoneNumber()).isEqualTo("010-****-5678");
+        assertThat(result.birthDate()).isEqualTo("1990-01-01");
+        assertThat(result.phoneNumber()).isEqualTo("010****5678");
         assertThat(result.email()).isEqualTo("hon*@corebank.example.com");
         verify(tempTokenPort, never()).consume("TEMP");
     }
@@ -78,9 +78,9 @@ class SignupConfirmationServiceTest {
         "ab@example.com,    'a*@example.com'",
         "abc@example.com,   'ab*@example.com'",
         "abcd@example.com,  'abc*@example.com'",
-        "abcde@example.com, 'abc**@example.com'"
+        "abcde@example.com, 'abcd*@example.com'"
     })
-    void masksAtLeastOneEmailCharacterAndExposesAtMostThree(String email, String expected) {
+    void masksAtLeastOneEmailCharacterAndExposesAtMostFour(String email, String expected) {
         TempSignupTokenPayload payload = new TempSignupTokenPayload(
                 List.of(),
                 "BANK_CUSTOMER_001",

@@ -12,6 +12,7 @@ import com.shinhan.corebank.auth.adapter.in.security.SessionAccessDeniedHandler;
 import com.shinhan.corebank.auth.adapter.in.security.SessionAuthenticationEntryPoint;
 import com.shinhan.corebank.auth.adapter.in.security.SessionLogoutSuccessHandler;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import com.shinhan.corebank.signup.application.port.in.CheckUserIdResult;
 import com.shinhan.corebank.signup.application.port.in.CheckUserIdUseCase;
 import com.shinhan.corebank.signup.application.port.in.IssueEmailVerificationResult;
@@ -38,6 +39,9 @@ import org.springframework.test.web.servlet.MockMvc;
     SessionLogoutSuccessHandler.class
 })
 class SignupIdentityControllerTest {
+
+    @MockitoBean
+    AdminPermissionFacade adminPermissionFacade;
 
     @Autowired
     MockMvc mockMvc;

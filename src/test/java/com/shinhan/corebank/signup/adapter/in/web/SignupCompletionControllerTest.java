@@ -18,6 +18,7 @@ import com.shinhan.corebank.auth.adapter.in.security.SessionLogoutSuccessHandler
 import com.shinhan.corebank.common.idempotency.IdempotencyResult;
 import com.shinhan.corebank.common.idempotency.IdempotencyService;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import com.shinhan.corebank.signup.application.port.in.CompleteSignupResult;
 import com.shinhan.corebank.signup.application.port.in.CompleteSignupUseCase;
 import java.time.OffsetDateTime;
@@ -40,6 +41,9 @@ import org.springframework.test.web.servlet.MockMvc;
     IdempotentRequestExecutor.class
 })
 class SignupCompletionControllerTest {
+
+    @MockitoBean
+    AdminPermissionFacade adminPermissionFacade;
 
     @Autowired
     MockMvc mockMvc;

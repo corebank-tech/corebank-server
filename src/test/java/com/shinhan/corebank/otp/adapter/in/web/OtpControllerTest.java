@@ -17,6 +17,7 @@ import com.shinhan.corebank.auth.adapter.in.security.SessionAccessDeniedHandler;
 import com.shinhan.corebank.auth.adapter.in.security.SessionAuthenticationEntryPoint;
 import com.shinhan.corebank.auth.adapter.in.security.SessionLogoutSuccessHandler;
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import com.shinhan.corebank.otp.application.port.in.IssueOtpResult;
 import com.shinhan.corebank.otp.application.port.in.IssueOtpUseCase;
 import com.shinhan.corebank.otp.application.port.in.VerifyOtpResult;
@@ -45,6 +46,9 @@ import org.springframework.test.web.servlet.MockMvc;
     SecurityContextCurrentCustomerProvider.class
 })
 class OtpControllerTest {
+
+    @MockitoBean
+    AdminPermissionFacade adminPermissionFacade;
 
     @Autowired
     MockMvc mockMvc;

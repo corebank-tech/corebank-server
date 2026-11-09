@@ -20,6 +20,7 @@ import com.shinhan.corebank.auth.application.port.in.LoginResult;
 import com.shinhan.corebank.auth.application.port.in.LoginUseCase;
 import com.shinhan.corebank.auth.domain.exception.LoginFailedException;
 import com.shinhan.corebank.auth.domain.model.LoginAttemptResult;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import com.shinhan.corebank.customer.api.CustomerRole;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -41,6 +42,9 @@ import org.springframework.test.web.servlet.MockMvc;
     SessionLogoutSuccessHandler.class
 })
 class AdminLoginControllerTest {
+
+    @MockitoBean
+    AdminPermissionFacade adminPermissionFacade;
 
     private static final String PASSWORD = "correct-password";
     private static final String REQUEST_IP = "203.0.113.10";

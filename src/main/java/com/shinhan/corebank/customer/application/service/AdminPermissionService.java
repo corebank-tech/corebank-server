@@ -20,4 +20,9 @@ public class AdminPermissionService implements AdminPermissionFacade {
     public List<AdminPermission> findPermissions(Long customerId) {
         return adminPermissionPort.findPermissions(customerId);
     }
+
+    @Override
+    public long findPermissionVersion(Long customerId) {
+        return adminPermissionPort.findPermissionVersion(customerId);
+    }
 }

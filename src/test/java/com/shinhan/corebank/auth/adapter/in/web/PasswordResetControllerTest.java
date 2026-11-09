@@ -25,6 +25,7 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.idempotency.IdempotencyResult;
 import com.shinhan.corebank.common.idempotency.IdempotencyService;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import java.time.OffsetDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,6 +45,9 @@ import org.springframework.test.web.servlet.MockMvc;
 })
 @DisplayName("비밀번호 재설정 Controller 테스트")
 class PasswordResetControllerTest {
+
+    @MockitoBean
+    AdminPermissionFacade adminPermissionFacade;
 
     private static final String IDEMPOTENCY_KEY = "550e8400-e29b-41d4-a716-446655440000";
 

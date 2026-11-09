@@ -3,13 +3,13 @@ package com.shinhan.corebank.subscription.adapter.in.baseline;
 import com.shinhan.corebank.subscription.application.port.in.AccumulatedDailyBalanceUseCase;
 import java.util.Arrays;
 import java.util.Locale;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -17,14 +17,29 @@ import org.springframework.stereotype.Component;
 @Profile("ph11-baseline")
 @ConditionalOnProperty(name = "app.ph11-baseline.execute", havingValue = "true")
 @EnableConfigurationProperties(AccumulatedDailyBalanceBaselineProperties.class)
-@RequiredArgsConstructor
 public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner {
 
     private final AccumulatedDailyBalanceUseCase accumulatedDailyBalanceUseCase;
     private final AccumulatedDailyBalanceBaselineProperties properties;
+    private final Environment environment;
+
+    public AccumulatedDailyBalanceBaselineRunner(
+            AccumulatedDailyBalanceUseCase accumulatedDailyBalanceUseCase,
+            AccumulatedDailyBalanceBaselineProperties properties,
+            Environment environment) {
+
+        this.accumulatedDailyBalanceUseCase = accumulatedDailyBalanceUseCase;
+        this.properties = properties;
+        this.environment = environment;
+    }
 
     @Override
     public void run(ApplicationArguments args) {
+
+        if (environment.getProperty("app.ph13.sql-enabled", Boolean.class, false)) {
+            throw new IllegalStateException("PH-11 기준선 측정에서는 app.ph13.sql-enabled=false여야 합니다.");
+        }
+
         BaselineResult result = measure();
 
         String totalSecondsForLog = String.format(Locale.ROOT, "%.3f", result.totalSeconds());
@@ -46,6 +61,7 @@ public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner 
             p99Ms={}
             checksum={}
             zeroResultCount={}
+            fingerprintSha256={}
             """,
                 properties.accountIdStart(),
                 properties.accountCount(),
@@ -56,7 +72,8 @@ public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner 
                 p95MsForLog,
                 p99MsForLog,
                 checksumForLog,
-                result.zeroResultCount());
+                result.zeroResultCount(),
+                result.fingerprintSha256());
     }
 
     BaselineResult measure() {
@@ -65,6 +82,8 @@ public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner 
 
         long checksum = 0L;
         int zeroResultCount = 0;
+        AccumulatedBalanceFingerprint fingerprint = new AccumulatedBalanceFingerprint();
+
         long totalStart = System.nanoTime();
 
         for (int i = 0; i < properties.accountCount(); i++) {
@@ -82,6 +101,8 @@ public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner 
             }
 
             checksum = Math.addExact(checksum, accumulatedDailyBalance);
+
+            fingerprint.update(accountId, accumulatedDailyBalance);
         }
 
         long totalElapsedNanos = System.nanoTime() - totalStart;
@@ -95,7 +116,8 @@ public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner 
                 percentile(sorted, 0.95) / 1_000_000.0,
                 percentile(sorted, 0.99) / 1_000_000.0,
                 checksum,
-                zeroResultCount);
+                zeroResultCount,
+                fingerprint.hex());
     }
 
     private long percentile(long[] sorted, double percentile) {
@@ -104,5 +126,11 @@ public class AccumulatedDailyBalanceBaselineRunner implements ApplicationRunner 
     }
 
     record BaselineResult(
-            double totalSeconds, double averageMs, double p95Ms, double p99Ms, long checksum, int zeroResultCount) {}
+            double totalSeconds,
+            double averageMs,
+            double p95Ms,
+            double p99Ms,
+            long checksum,
+            int zeroResultCount,
+            String fingerprintSha256) {}
 }

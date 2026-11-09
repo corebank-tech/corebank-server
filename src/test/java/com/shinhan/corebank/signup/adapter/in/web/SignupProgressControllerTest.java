@@ -17,6 +17,7 @@ import com.shinhan.corebank.auth.adapter.in.security.SessionAuthenticationEntryP
 import com.shinhan.corebank.auth.adapter.in.security.SessionLogoutSuccessHandler;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import com.shinhan.corebank.signup.application.port.in.GetSignupConfirmationUseCase;
 import com.shinhan.corebank.signup.application.port.in.SignupConfirmationResult;
 import com.shinhan.corebank.signup.application.port.in.ValidateSignupResult;
@@ -39,6 +40,9 @@ import org.springframework.test.web.servlet.MockMvc;
     SessionLogoutSuccessHandler.class
 })
 class SignupProgressControllerTest {
+
+    @MockitoBean
+    AdminPermissionFacade adminPermissionFacade;
 
     @Autowired
     MockMvc mockMvc;
@@ -98,15 +102,15 @@ class SignupProgressControllerTest {
     void returnsMaskedConfirmationWithoutAuthentication() throws Exception {
         given(confirmationUseCase.getConfirmation("TEMP_SIGNUP_token"))
                 .willReturn(new SignupConfirmationResult(
-                        "홍*동", "honggildong", "90.01.01", "010-****-5678", "hon*@corebank.example.com"));
+                        "홍*동", "honggildong", "1990-01-01", "010****5678", "hon*@corebank.example.com"));
 
         mockMvc.perform(get("/api/v1/auth/signup/confirm-info")
                         .contextPath("/api/v1")
                         .header("X-Signup-Token", "TEMP_SIGNUP_token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.userName").value("홍*동"))
-                .andExpect(jsonPath("$.data.birthDate").value("90.01.01"))
-                .andExpect(jsonPath("$.data.phoneNumber").value("010-****-5678"))
+                .andExpect(jsonPath("$.data.birthDate").value("1990-01-01"))
+                .andExpect(jsonPath("$.data.phoneNumber").value("010****5678"))
                 .andExpect(jsonPath("$.data.email").value("hon*@corebank.example.com"));
     }
 

@@ -12,7 +12,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDate;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,8 +25,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @Tag(name = "관리자 원장 대사", description = "원장-잔액 대사 불일치 조회 API")
 public class AdminLedgerReconciliationController {
-
-    private static final Set<Integer> ALLOWED_PAGE_SIZES = Set.of(5, 10, 20, 30, 50);
 
     private final LedgerReconciliationMismatchQueryUseCase queryUseCase;
 
@@ -66,7 +63,7 @@ public class AdminLedgerReconciliationController {
             @Parameter(description = "true면 그 영업일 전체를 반환(최대 100건)", example = "false")
                     @RequestParam(defaultValue = "false")
                     boolean all) {
-        var pageable = PageableResolver.resolve(page, size, all, ALLOWED_PAGE_SIZES);
+        var pageable = PageableResolver.resolve(page, size, all, PageableResolver.ALLOWED_PAGE_SIZES);
         var result = queryUseCase.find(businessDate, pageable);
         return ApiResponse.success(PageResponse.from(
                 result.mismatches(), view -> LedgerReconciliationMismatchResponse.from(result.businessDate(), view)));

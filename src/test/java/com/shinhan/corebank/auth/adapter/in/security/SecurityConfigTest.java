@@ -1,6 +1,7 @@
 package com.shinhan.corebank.auth.adapter.in.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.BDDMockito.given;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -15,6 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.customer.api.AdminPermission;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import jakarta.servlet.http.Cookie;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -31,10 +33,15 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = SecurityTestController.class)
-@TestPropertySource(properties = {"app.security.cors.allowed-origins=http://localhost:5173,https://www.corebank.cloud"})
+@TestPropertySource(
+        properties = {
+            "app.security.cors.allowed-origins=http://localhost:5173,https://www.corebank.cloud",
+            "app.security.metrics-allowed-ip=192.168.0.211"
+        })
 @Import({
     SecurityTestController.class,
     SecurityConfig.class,
@@ -43,6 +50,9 @@ import org.springframework.test.web.servlet.MockMvc;
     SessionLogoutSuccessHandler.class
 })
 class SecurityConfigTest {
+
+    @MockitoBean
+    AdminPermissionFacade adminPermissionFacade;
 
     @Autowired
     MockMvc mockMvc;
@@ -96,6 +106,43 @@ class SecurityConfigTest {
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST"))
                 .andExpect(status().isForbidden())
                 .andExpect(header().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
+    }
+
+    @Test
+    @DisplayName("Prometheus 지표는 허용한 IP에서 온 요청만 읽을 수 있다")
+    void permitsPrometheusOnlyFromAllowedIp() throws Exception {
+        mockMvc.perform(get("/api/v1/actuator/prometheus")
+                        .contextPath("/api/v1")
+                        .with(request -> {
+                            request.setRemoteAddr("192.168.0.211");
+                            return request;
+                        }))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"));
+    }
+
+    @ParameterizedTest(name = "{0}에서 온 Prometheus 요청은 거부한다")
+    @ValueSource(strings = {"192.168.0.212", "10.30.1.5", "203.0.113.7"})
+    void rejectsPrometheusFromOtherIp(String remoteAddr) throws Exception {
+        mockMvc.perform(get("/api/v1/actuator/prometheus")
+                        .contextPath("/api/v1")
+                        .with(request -> {
+                            request.setRemoteAddr(remoteAddr);
+                            return request;
+                        }))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("허용 IP가 있어도 경로가 조금 달라지면 로그인 없이 읽을 수 없다")
+    void rejectsPrometheusLookalikePath() throws Exception {
+        mockMvc.perform(get("/api/v1/actuator/prometheus/")
+                        .contextPath("/api/v1")
+                        .with(request -> {
+                            request.setRemoteAddr("192.168.0.211");
+                            return request;
+                        }))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -360,6 +407,37 @@ class SecurityConfigTest {
             int status = result.getResponse().getStatus();
             assertThat(status).isNotIn(401, 403);
         });
+    }
+
+    // 회수와 겹친 로그인이 권한을 읽고 뒤늦게 저장한 세션을 흉내 낸다 — 세션의 버전이 DB보다 낡았다.
+    @Test
+    @DisplayName("권한 버전이 낡은 관리자 세션은 401 CMN0101을 반환한다")
+    void rejectsAdminSessionWithOutdatedPermissionVersion() throws Exception {
+        given(adminPermissionFacade.findPermissionVersion(7L)).willReturn(1L);
+
+        mockMvc.perform(get("/api/v1/admin/customers/test")
+                        .contextPath("/api/v1")
+                        .with(authentication(adminWithVersion(7L, 0L, AdminPermission.CUSTOMER_READ))))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("CMN0101"));
+    }
+
+    @Test
+    @DisplayName("권한 버전이 같은 관리자 세션은 그대로 통과한다")
+    void keepsAdminSessionWithCurrentPermissionVersion() throws Exception {
+        given(adminPermissionFacade.findPermissionVersion(7L)).willReturn(1L);
+
+        mockMvc.perform(get("/api/v1/admin/customers/test")
+                        .contextPath("/api/v1")
+                        .with(authentication(adminWithVersion(7L, 1L, AdminPermission.CUSTOMER_READ))))
+                .andExpect(status().isOk());
+    }
+
+    private UsernamePasswordAuthenticationToken adminWithVersion(
+            Long customerId, long version, AdminPermission... permissions) {
+        final UsernamePasswordAuthenticationToken authentication = admin(customerId, permissions);
+        authentication.setDetails(new AdminPermissionStamp(version));
+        return authentication;
     }
 
     // 로그인 때 실린 세션 권한을 흉내 낸다 — SessionLoginManager 가 ROLE_ADMIN 과 권한 이름을 함께 싣는다.

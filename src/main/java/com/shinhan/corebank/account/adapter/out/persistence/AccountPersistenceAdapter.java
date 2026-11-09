@@ -168,6 +168,12 @@ public class AccountPersistenceAdapter implements AccountPersistencePort {
         return accountJpaRepository.findAccountNumberByIdAndCustomerId(accountId, customerId);
     }
 
+    @Override
+    public Optional<Boolean> findPasswordLockedByAccountIdAndCustomerId(Long accountId, Long customerId) {
+
+        return accountJpaRepository.findPasswordLockedByAccountIdAndCustomerId(accountId, customerId);
+    }
+
     private void validateVersion(Account account, AccountJpaEntity entity) {
         if (!Objects.equals(account.getVersion(), entity.getVersion())) {
             throw new BusinessException(CommonErrorCode.CONCURRENT_MODIFICATION);
