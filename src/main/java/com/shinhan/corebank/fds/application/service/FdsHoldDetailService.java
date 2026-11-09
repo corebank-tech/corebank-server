@@ -4,6 +4,7 @@ import com.shinhan.corebank.common.audit.AccessReason;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.audit.PersonalDataAccessEventType;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.util.MaskingUtil;
 import com.shinhan.corebank.fds.api.BehaviorScoreView;
 import com.shinhan.corebank.fds.api.FdsHoldDetail;
 import com.shinhan.corebank.fds.application.port.out.BehaviorScorePort;
@@ -59,7 +60,10 @@ public class FdsHoldDetailService {
     }
 
     private static String mask(String accountNumber) {
-        if (accountNumber == null || accountNumber.length() < 4) return "****";
-        return "***-**-" + accountNumber.substring(accountNumber.length() - 4);
+        try {
+            return MaskingUtil.maskAccountNumber(accountNumber);
+        } catch (IllegalArgumentException e) {
+            return "확인 불가";
+        }
     }
 }

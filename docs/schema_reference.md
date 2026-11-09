@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 47개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 476개 컬럼
+**대상**: 47개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 477개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -81,7 +81,7 @@
 | 53 | `unregistered_login_failure` | 미가입 아이디 로그인 실패 횟수 | P1 | 4 |
 | 54 | `fds_behavior_flow` | 고객 행동 흐름 | P6 | 6 |
 | 55 | `fds_behavior_event` | 행동 이벤트 | P6 | 6 |
-| 56 | `fds_behavior_score` | 보류 후 행동 점수 | P6 | 9 |
+| 56 | `fds_behavior_score` | 보류 후 행동 점수 | P6 | 10 |
 
 ---
 

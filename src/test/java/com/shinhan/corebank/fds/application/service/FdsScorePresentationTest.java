@@ -46,6 +46,7 @@ class FdsScorePresentationTest {
         assertThat(admin.modelVersion()).isEqualTo("xgb-demo-v1");
         assertThat(admin.featureVersion()).isEqualTo("p6-behavior-v1");
         assertThat(admin.behaviorScoreUnavailableReason()).isNull();
+        assertThat(admin.recipientAccountMasked()).isEqualTo("08******67");
         assertThat(agent.behaviorSummary().behaviorRiskScore()).isEqualTo(admin.behaviorRiskScore());
         assertThat(agent.behaviorSummary().modelVersion()).isEqualTo(admin.modelVersion());
         assertThat(agent.behaviorSummary().featureVersion()).isEqualTo(admin.featureVersion());

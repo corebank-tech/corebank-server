@@ -108,7 +108,7 @@ class FdsPythonLiveFlowIntegrationTest extends IntegrationTestSupport {
         assertThat(detail.behaviorRiskScore()).isBetween(0.0, 1.0);
         assertThat(input.behaviorSummary().behaviorRiskScore()).isEqualTo(detail.behaviorRiskScore());
         assertThat(input.behaviorSummary().modelVersion()).isEqualTo(detail.modelVersion());
-        assertThat(detail.recipientAccountMasked()).endsWith("4567");
+        assertThat(detail.recipientAccountMasked()).isEqualTo("08******67");
         assertThat(holds.findForFds(holdId).status()).isEqualTo("HELD");
         assertThat(jdbc.queryForObject(
                         "SELECT COUNT(*) FROM audit_log WHERE event_type = 'FDS_HOLD_DETAIL_VIEW' AND customer_id = ?",
