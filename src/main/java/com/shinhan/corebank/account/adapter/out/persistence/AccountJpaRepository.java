@@ -112,6 +112,16 @@ public interface AccountJpaRepository extends JpaRepository<AccountJpaEntity, Lo
     Optional<String> findAccountNumberByIdAndCustomerId(
             @Param("accountId") Long accountId, @Param("customerId") Long customerId);
 
+    @Query(
+            """
+    SELECT a.passwordLocked
+    FROM AccountJpaEntity a
+    WHERE a.accountId = :accountId
+      AND a.customerId = :customerId
+    """)
+    Optional<Boolean> findPasswordLockedByAccountIdAndCustomerId(
+            @Param("accountId") Long accountId, @Param("customerId") Long customerId);
+
     interface AccountBalanceProjection {
         Long getAccountId();
 

@@ -30,7 +30,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import java.util.Map;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -54,8 +53,6 @@ import tools.jackson.core.type.TypeReference;
 @Validated
 @Tag(name = "관리자 고객 계정 운영", description = "관리자의 고객 검색·잠금 해제·로그인 비밀번호 초기화·계정 상태 변경·관리자 권한 부여·회수 API")
 public class AdminCustomerController {
-
-    private static final Set<Integer> ALLOWED_PAGE_SIZES = Set.of(5, 10, 20, 30, 50);
 
     private final AdminCustomerQueryUseCase adminCustomerQueryUseCase;
     private final AdminCustomerCommandUseCase adminCustomerCommandUseCase;
@@ -113,7 +110,7 @@ public class AdminCustomerController {
             @Parameter(description = "조회 사유(D-10)", example = "CUSTOMER_REQUEST") @RequestHeader(AccessReason.HEADER)
                     AccessReason accessReason,
             HttpServletRequest httpRequest) {
-        var pageable = PageableResolver.resolve(page, size, all, ALLOWED_PAGE_SIZES);
+        var pageable = PageableResolver.resolve(page, size, all, PageableResolver.ALLOWED_PAGE_SIZES);
         var query = new AdminCustomerSearchQuery(userId, userName, email, accountLocked, status);
         var result = adminCustomerQueryUseCase.search(query, pageable);
         adminCustomerViewAuditUseCase.recordSearch(createAccessContext(accessReason, httpRequest), query, result);

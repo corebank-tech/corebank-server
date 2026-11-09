@@ -1,7 +1,12 @@
 package com.shinhan.corebank.notification.adapter.out.persistence;
 
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
+import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -29,4 +34,18 @@ public interface NotificationJpaRepository extends JpaRepository<NotificationJpa
             @Param("title") String title,
             @Param("content") String content,
             @Param("occurredAt") LocalDateTime occurredAt);
+
+    Page<NotificationJpaEntity> findByCustomerIdOrderByOccurredAtDescNotificationIdDesc(
+            Long customerId, Pageable pageable);
+
+    long countByCustomerIdAndIsReadFalse(Long customerId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT n FROM NotificationJpaEntity n WHERE n.notificationId = :notificationId")
+    Optional<NotificationJpaEntity> findByIdForUpdate(@Param("notificationId") Long notificationId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+            "UPDATE NotificationJpaEntity n SET n.isRead = TRUE, n.readAt = :readAt WHERE n.notificationId = :notificationId")
+    void markAsRead(@Param("notificationId") Long notificationId, @Param("readAt") LocalDateTime readAt);
 }

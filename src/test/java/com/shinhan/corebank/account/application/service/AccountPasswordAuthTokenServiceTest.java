@@ -1,6 +1,7 @@
 package com.shinhan.corebank.account.application.service;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -9,7 +10,6 @@ import static org.mockito.Mockito.verify;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerification;
 import com.shinhan.corebank.account.application.port.out.AccountPasswordAuthTokenStorePort;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
-import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountPasswordAuthTokenPayload;
 import com.shinhan.corebank.common.exception.BusinessException;
 import java.util.Optional;
@@ -20,8 +20,14 @@ import org.junit.jupiter.api.Test;
 @DisplayName("계좌비밀번호 인증 토큰 서비스 단위 테스트")
 class AccountPasswordAuthTokenServiceTest {
 
+    private static final Long CUSTOMER_ID = 1L;
+    private static final Long ACCOUNT_ID = 101L;
+    private static final String TOKEN = "token";
+
     private final AccountPasswordAuthTokenStorePort tokenStorePort = mock(AccountPasswordAuthTokenStorePort.class);
+
     private final AccountPersistencePort accountPersistencePort = mock(AccountPersistencePort.class);
+
     private AccountPasswordAuthTokenService service;
 
     @BeforeEach
@@ -30,98 +36,132 @@ class AccountPasswordAuthTokenServiceTest {
     }
 
     @Test
-    @DisplayName("동일 고객에게 발급된 토큰을 고객 기준으로 소비한다")
+    @DisplayName("고객 기준 인증 토큰을 정상 소비한다")
     void consumesTokenForCustomer() {
-        given(tokenStorePort.consumeIfCustomerMatches("token", 1L)).willReturn(true);
+        given(tokenStorePort.consumeIfCustomerMatches(TOKEN, CUSTOMER_ID)).willReturn(true);
 
-        service.verifyAndConsume("token", 1L);
+        service.verifyAndConsume(TOKEN, CUSTOMER_ID);
 
-        verify(tokenStorePort).consumeIfCustomerMatches("token", 1L);
+        verify(tokenStorePort).consumeIfCustomerMatches(TOKEN, CUSTOMER_ID);
     }
 
     @Test
-    @DisplayName("고객이 다르거나 토큰이 없으면 APW0102를 반환한다")
+    @DisplayName("고객 기준 토큰이 일치하지 않으면 APW0102")
     void rejectsInvalidCustomerToken() {
-        given(tokenStorePort.consumeIfCustomerMatches("token", 2L)).willReturn(false);
+        given(tokenStorePort.consumeIfCustomerMatches(TOKEN, CUSTOMER_ID)).willReturn(false);
 
-        assertInvalidToken(() -> service.verifyAndConsume("token", 2L));
+        assertInvalidToken(() -> service.verifyAndConsume(TOKEN, CUSTOMER_ID));
     }
 
     @Test
-    @DisplayName("고객 기준 검증 입력값이 없으면 토큰 저장소를 호출하지 않는다")
-    void rejectsMissingCustomerVerificationInput() {
-        assertInvalidToken(() -> service.verifyAndConsume((String) null, 1L));
-        assertInvalidToken(() -> service.verifyAndConsume(" ", 1L));
-        assertInvalidToken(() -> service.verifyAndConsume("token", null));
+    @DisplayName("고객 기준 필수 입력이 없으면 토큰을 소비하지 않는다")
+    void rejectsMissingCustomerInput() {
+        assertInvalidToken(() -> service.verifyAndConsume((String) null, CUSTOMER_ID));
+        assertInvalidToken(() -> service.verifyAndConsume(" ", CUSTOMER_ID));
+        assertInvalidToken(() -> service.verifyAndConsume(TOKEN, null));
 
-        verify(tokenStorePort, never()).consumeIfCustomerMatches(" ", 1L);
-        verify(tokenStorePort, never()).consumeIfCustomerMatches("token", null);
+        verify(tokenStorePort, never()).consumeIfCustomerMatches(any(), any());
     }
 
     @Test
-    @DisplayName("기존 고객과 계좌 기준 검증·소비 동작을 유지한다")
-    void keepsCustomerAndAccountVerification() {
-        Account account = mock(Account.class);
-        given(accountPersistencePort.findByAccountIdAndCustomerId(101L, 1L)).willReturn(Optional.of(account));
-        given(account.isPasswordLocked()).willReturn(false);
-        given(tokenStorePort.consumeIfMatches("token", new AccountPasswordAuthTokenPayload(1L, 101L)))
-                .willReturn(true);
+    @DisplayName("소유 계좌의 잠금 상태만 조회하고 토큰을 정상 소비한다")
+    void consumesValidAccountToken() {
+        given(accountPersistencePort.findPasswordLockedByAccountIdAndCustomerId(ACCOUNT_ID, CUSTOMER_ID))
+                .willReturn(Optional.of(false));
 
-        service.verifyAndConsume(new AccountPasswordAuthTokenVerification("token", 1L, 101L));
+        given(tokenStorePort.consumeIfMatches(TOKEN, payload())).willReturn(true);
 
-        verify(tokenStorePort).consumeIfMatches("token", new AccountPasswordAuthTokenPayload(1L, 101L));
+        service.verifyAndConsume(verification());
+
+        verify(accountPersistencePort).findPasswordLockedByAccountIdAndCustomerId(ACCOUNT_ID, CUSTOMER_ID);
+
+        verify(accountPersistencePort, never()).findByAccountIdAndCustomerId(any(), any());
+
+        verify(tokenStorePort).consumeIfMatches(TOKEN, payload());
     }
 
     @Test
-    @DisplayName("기존 고객·계좌 검증의 잘못된 입력을 모두 거부한다")
-    void rejectsInvalidCustomerAndAccountVerificationInput() {
+    @DisplayName("계좌 기준 검증 입력이 잘못되면 조회와 소비를 하지 않는다")
+    void rejectsInvalidAccountVerificationInput() {
         assertInvalidToken(() -> service.verifyAndConsume((AccountPasswordAuthTokenVerification) null));
-        assertInvalidToken(() -> service.verifyAndConsume(new AccountPasswordAuthTokenVerification(null, 1L, 101L)));
-        assertInvalidToken(() -> service.verifyAndConsume(new AccountPasswordAuthTokenVerification(" ", 1L, 101L)));
+
+        assertInvalidToken(() ->
+                service.verifyAndConsume(new AccountPasswordAuthTokenVerification(null, CUSTOMER_ID, ACCOUNT_ID)));
+
         assertInvalidToken(
-                () -> service.verifyAndConsume(new AccountPasswordAuthTokenVerification("token", null, 101L)));
-        assertInvalidToken(() -> service.verifyAndConsume(new AccountPasswordAuthTokenVerification("token", 1L, null)));
+                () -> service.verifyAndConsume(new AccountPasswordAuthTokenVerification(" ", CUSTOMER_ID, ACCOUNT_ID)));
 
-        verify(accountPersistencePort, never())
-                .findByAccountIdAndCustomerId(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        assertInvalidToken(
+                () -> service.verifyAndConsume(new AccountPasswordAuthTokenVerification(TOKEN, null, ACCOUNT_ID)));
+
+        assertInvalidToken(
+                () -> service.verifyAndConsume(new AccountPasswordAuthTokenVerification(TOKEN, CUSTOMER_ID, null)));
+
+        verify(accountPersistencePort, never()).findPasswordLockedByAccountIdAndCustomerId(any(), any());
+
+        verify(tokenStorePort, never()).consumeIfMatches(any(), any());
     }
 
     @Test
-    @DisplayName("고객 소유 계좌가 없으면 APW0102를 반환한다")
+    @DisplayName("존재하지 않거나 타인 소유 계좌면 APW0102")
     void rejectsUnknownOwnedAccount() {
-        given(accountPersistencePort.findByAccountIdAndCustomerId(101L, 1L)).willReturn(Optional.empty());
+        given(accountPersistencePort.findPasswordLockedByAccountIdAndCustomerId(ACCOUNT_ID, CUSTOMER_ID))
+                .willReturn(Optional.empty());
 
-        assertInvalidToken(() -> service.verifyAndConsume(new AccountPasswordAuthTokenVerification("token", 1L, 101L)));
+        assertInvalidToken(() -> service.verifyAndConsume(verification()));
+
+        verify(tokenStorePort, never()).consumeIfMatches(any(), any());
     }
 
     @Test
-    @DisplayName("계좌비밀번호가 잠긴 계좌의 토큰을 소비하지 않는다")
+    @DisplayName("계좌비밀번호가 잠긴 계좌는 APW0101, 토큰 소비 안 함")
     void rejectsPasswordLockedAccount() {
-        Account account = mock(Account.class);
-        given(accountPersistencePort.findByAccountIdAndCustomerId(101L, 1L)).willReturn(Optional.of(account));
-        given(account.isPasswordLocked()).willReturn(true);
+        given(accountPersistencePort.findPasswordLockedByAccountIdAndCustomerId(ACCOUNT_ID, CUSTOMER_ID))
+                .willReturn(Optional.of(true));
 
-        assertThatThrownBy(() -> service.verifyAndConsume(new AccountPasswordAuthTokenVerification("token", 1L, 101L)))
+        assertThatThrownBy(() -> service.verifyAndConsume(verification()))
                 .isInstanceOfSatisfying(
                         BusinessException.class, exception -> org.assertj.core.api.Assertions.assertThat(
                                         exception.getErrorCode().getCode())
                                 .isEqualTo("APW0101"));
-        verify(tokenStorePort, never()).consumeIfMatches("token", new AccountPasswordAuthTokenPayload(1L, 101L));
+
+        verify(tokenStorePort, never()).consumeIfMatches(any(), any());
     }
 
     @Test
-    @DisplayName("고객·계좌가 일치해도 토큰을 소비하지 못하면 APW0102를 반환한다")
-    void rejectsUnconsumableCustomerAndAccountToken() {
-        Account account = mock(Account.class);
-        given(accountPersistencePort.findByAccountIdAndCustomerId(101L, 1L)).willReturn(Optional.of(account));
-        given(account.isPasswordLocked()).willReturn(false);
-        given(tokenStorePort.consumeIfMatches("token", new AccountPasswordAuthTokenPayload(1L, 101L)))
-                .willReturn(false);
+    @DisplayName("잘못되거나 이미 소비된 계좌 토큰은 APW0102")
+    void rejectsUnconsumableToken() {
+        given(accountPersistencePort.findPasswordLockedByAccountIdAndCustomerId(ACCOUNT_ID, CUSTOMER_ID))
+                .willReturn(Optional.of(false));
 
-        assertInvalidToken(() -> service.verifyAndConsume(new AccountPasswordAuthTokenVerification("token", 1L, 101L)));
+        given(tokenStorePort.consumeIfMatches(TOKEN, payload())).willReturn(false);
+
+        assertInvalidToken(() -> service.verifyAndConsume(verification()));
+    }
+
+    @Test
+    @DisplayName("계좌 인증 토큰은 한 번만 소비할 수 있다")
+    void tokenIsSingleUse() {
+        given(accountPersistencePort.findPasswordLockedByAccountIdAndCustomerId(ACCOUNT_ID, CUSTOMER_ID))
+                .willReturn(Optional.of(false));
+
+        given(tokenStorePort.consumeIfMatches(TOKEN, payload())).willReturn(true, false);
+
+        service.verifyAndConsume(verification());
+
+        assertInvalidToken(() -> service.verifyAndConsume(verification()));
+    }
+
+    private AccountPasswordAuthTokenVerification verification() {
+        return new AccountPasswordAuthTokenVerification(TOKEN, CUSTOMER_ID, ACCOUNT_ID);
+    }
+
+    private AccountPasswordAuthTokenPayload payload() {
+        return new AccountPasswordAuthTokenPayload(CUSTOMER_ID, ACCOUNT_ID);
     }
 
     private void assertInvalidToken(org.assertj.core.api.ThrowableAssert.ThrowingCallable action) {
+
         assertThatThrownBy(action)
                 .isInstanceOfSatisfying(
                         BusinessException.class, exception -> org.assertj.core.api.Assertions.assertThat(

@@ -4,7 +4,6 @@ import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerification;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.account.application.port.out.AccountPasswordAuthTokenStorePort;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
-import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountPasswordAuthTokenPayload;
 import com.shinhan.corebank.account.domain.exception.AccountPasswordErrorCode;
 import com.shinhan.corebank.common.exception.BusinessException;
@@ -23,11 +22,11 @@ public class AccountPasswordAuthTokenService implements AccountPasswordAuthToken
     public void verifyAndConsume(AccountPasswordAuthTokenVerification verification) {
         validateVerification(verification);
 
-        Account account = accountPersistencePort
-                .findByAccountIdAndCustomerId(verification.accountId(), verification.customerId())
+        boolean passwordLocked = accountPersistencePort
+                .findPasswordLockedByAccountIdAndCustomerId(verification.accountId(), verification.customerId())
                 .orElseThrow(this::invalidToken);
 
-        if (account.isPasswordLocked()) {
+        if (passwordLocked) {
             throw new BusinessException(AccountPasswordErrorCode.PASSWORD_LOCKED);
         }
 
