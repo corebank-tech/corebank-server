@@ -48,12 +48,24 @@ public class BehaviorScoreService implements BehaviorScoreQuery {
             finishUnavailable(event.transferHoldId(), "HOLD_CLOSED_BEFORE_SCORING");
             return;
         }
-        Flow flow = event.flowId() == null ? null : flows.find(event.flowId());
+        Flow flow;
+        try {
+            flow = event.flowId() == null ? null : flows.find(event.flowId());
+        } catch (RuntimeException e) {
+            finishUnavailable(event.transferHoldId(), "FLOW_UNAVAILABLE");
+            return;
+        }
         if (flow == null || flow.customerId() != event.customerId() || flow.finalizedAt() == null) {
             finishUnavailable(event.transferHoldId(), "FLOW_UNAVAILABLE");
             return;
         }
-        BehaviorScoreInferencePort.Features features = features(flows.events(event.flowId()), flow);
+        BehaviorScoreInferencePort.Features features;
+        try {
+            features = features(flows.events(event.flowId()), flow);
+        } catch (RuntimeException e) {
+            finishUnavailable(event.transferHoldId(), "INVALID_FEATURES");
+            return;
+        }
         if (features == null) {
             finishUnavailable(event.transferHoldId(), "INVALID_FEATURES");
             return;

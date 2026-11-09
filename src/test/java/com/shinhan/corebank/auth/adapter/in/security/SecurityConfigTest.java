@@ -380,9 +380,7 @@ class SecurityConfigTest {
         var path = "/api/v1/admin/fds/holds/123";
         mockMvc.perform(get(path).contextPath("/api/v1").with(authentication(admin(7L))))
                 .andExpect(status().isForbidden());
-        mockMvc.perform(get(path)
-                        .contextPath("/api/v1")
-                        .with(authentication(admin(7L, AdminPermission.CUSTOMER_READ))))
+        mockMvc.perform(get(path).contextPath("/api/v1").with(authentication(admin(7L, AdminPermission.CUSTOMER_READ))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").value("fds-hold"));
         mockMvc.perform(post(path)

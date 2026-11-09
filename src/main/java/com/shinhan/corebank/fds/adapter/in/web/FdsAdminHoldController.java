@@ -28,7 +28,9 @@ public class FdsAdminHoldController {
     private final CurrentCustomerProvider currentCustomer;
 
     @GetMapping("/{transferHoldId}")
-    @Operation(summary = "보류 상세 조회", description = "저장된 행동 점수만 표시하며 조회 사유를 감사에 남깁니다.")
+    @Operation(
+            summary = "보류 상세 조회",
+            description = "CUSTOMER_READ 권한과 X-Access-Reason이 필요합니다. P6에 저장된 행동 점수만 표시하며 조회 사유를 감사에 남깁니다.")
     public ApiResponse<FdsHoldDetail> get(
             @PathVariable @Positive long transferHoldId,
             @RequestHeader(AccessReason.HEADER) AccessReason accessReason,

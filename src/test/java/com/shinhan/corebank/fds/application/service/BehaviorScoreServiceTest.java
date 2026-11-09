@@ -107,6 +107,25 @@ class BehaviorScoreServiceTest {
     }
 
     @Test
+    void flowReadFailureBecomesUnavailableWithoutPythonCall() {
+        flows.failFind = true;
+        service.onHeld(held);
+        assertThat(scores.view.unavailableReason()).isEqualTo("FLOW_UNAVAILABLE");
+        assertThat(inference.calls).isZero();
+        assertThat(holdStatus).isEqualTo("HELD");
+    }
+
+    @Test
+    void eventReadFailureBecomesUnavailableWithoutPythonCall() {
+        completeFlow();
+        flows.failEvents = true;
+        service.onHeld(held);
+        assertThat(scores.view.unavailableReason()).isEqualTo("INVALID_FEATURES");
+        assertThat(inference.calls).isZero();
+        assertThat(holdStatus).isEqualTo("HELD");
+    }
+
+    @Test
     void timeoutDoesNotRunOrRejectTransfer() {
         completeFlow();
         inference.result = BehaviorScoreInferencePort.Result.unavailable(BehaviorScoreInferencePort.Failure.TIMEOUT);
@@ -234,14 +253,18 @@ class BehaviorScoreServiceTest {
     private static class FlowStub implements BehaviorFlowPort {
         Flow flow;
         List<Event> events = List.of();
+        boolean failFind;
+        boolean failEvents;
 
         @Override
         public Flow find(String id) {
+            if (failFind) throw new IllegalStateException("test flow read failure");
             return flow;
         }
 
         @Override
         public List<Event> events(String id) {
+            if (failEvents) throw new IllegalStateException("test event read failure");
             return events;
         }
 
