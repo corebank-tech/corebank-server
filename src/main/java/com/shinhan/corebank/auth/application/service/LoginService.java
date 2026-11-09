@@ -8,6 +8,7 @@ import com.shinhan.corebank.auth.application.port.out.LoginFailureUpdateResult;
 import com.shinhan.corebank.auth.application.port.out.LoginSuccessUpdateResult;
 import com.shinhan.corebank.auth.application.port.out.PasswordHashVerifierPort;
 import com.shinhan.corebank.auth.application.port.out.RecordLoginAuditPort;
+import com.shinhan.corebank.auth.application.port.out.UnregisteredLoginFailurePort;
 import com.shinhan.corebank.auth.domain.exception.LoginFailedException;
 import com.shinhan.corebank.auth.domain.model.LoginAttemptResult;
 import com.shinhan.corebank.auth.domain.model.LoginAuditReason;
@@ -15,6 +16,7 @@ import com.shinhan.corebank.auth.domain.model.LoginCustomer;
 import com.shinhan.corebank.customer.api.CustomerRole;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -36,15 +38,20 @@ public class LoginService implements LoginUseCase {
     private final LoginAttemptProcessor loginAttemptProcessor;
     private final LoginSuccessProcessor loginSuccessProcessor;
     private final RecordLoginAuditPort recordLoginAuditPort;
+    private final UnregisteredLoginFailurePort unregisteredLoginFailurePort;
     private final Clock clock;
 
     @Override
     public LoginResult login(LoginCommand command) {
         Objects.requireNonNull(command, "command must not be null");
 
+        // DB 정렬 규칙이 대소문자를 구분하지 않으므로 미가입 아이디 실패 횟수도 같은 아이디로 묶이게 소문자로 맞춘다
+        final String normalizedUserId = command.userId().toLowerCase(Locale.ROOT);
+
         LoginCustomer loginCustomer = loginCustomerPort
-                .findByUserId(command.userId())
-                .orElseThrow(() -> customerNotFound(command.password(), command.requestIp(), command.requiredRole()));
+                .findByUserId(normalizedUserId)
+                .orElseThrow(() -> customerNotFound(
+                        normalizedUserId, command.password(), command.requestIp(), command.requiredRole()));
 
         if (loginCustomer.isAccountLocked()) {
             recordFailureAudit(
@@ -66,7 +73,7 @@ public class LoginService implements LoginUseCase {
         // 역할이 맞지 않아도 비밀번호가 틀렸을 때와 같은 응답을 주어 관리자 계정의 존재가
         // 드러나지 않게 한다(admin_auth.md ③ · REQ-NFR-017).
         // 실패 횟수는 올리지 않는다 — 비밀번호는 맞았고, 경로를 잘못 고른 것만으로
-        // 계정이 잠기면 안 된다. 존재하지 않는 아이디와 같은 「최초 실패」 모양만 만든다.
+        // 계정이 잠기면 안 된다. 비밀번호를 알아야 들어오는 경로라 계정 열거 차단(#900) 범위에서 뺐다.
         if (loginCustomer.getRole() != command.requiredRole()) {
             recordFailureAudit(
                     loginCustomer.getCustomerId(),
@@ -111,14 +118,27 @@ public class LoginService implements LoginUseCase {
                 loginCustomer.getRole());
     }
 
-    // 존재하지 않는 아이디도 최초 실패처럼 보이는 값과 시간으로 계정 존재 여부 노출을 방지 (REQ-AUTH-023)
-    private LoginFailedException customerNotFound(String rawPassword, String requestIp, CustomerRole requiredRole) {
+    // 존재하지 않는 아이디도 가입 계정과 같은 기준(아이디)으로 실패를 쌓아 5회째에 같은 잠금 응답을 준다 (REQ-AUTH-023, #900)
+    private LoginFailedException customerNotFound(
+            String normalizedUserId, String rawPassword, String requestIp, CustomerRole requiredRole) {
+        // 잠긴 가입 계정이 비밀번호를 비교하지 않고 바로 잠금으로 응답하므로 같은 경로를 탄다
+        if (loginAttemptProcessor.isLockThresholdReached(
+                unregisteredLoginFailurePort.findActiveFailureCount(normalizedUserId))) {
+            recordFailureAudit(null, requestIp, LoginAuditReason.INVALID_CREDENTIALS, null, requiredRole);
+            return LoginFailedException.accountLocked();
+        }
+
         // BCrypt 비교를 생략하면 응답 시간 차이로 계정 존재 여부가 드러나 더미 해시로 시간을 맞춘다
         passwordHashVerifierPort.matches(rawPassword, DUMMY_PASSWORD_HASH);
 
+        int failureCount = unregisteredLoginFailurePort.recordFailure(normalizedUserId);
+
         recordFailureAudit(null, requestIp, LoginAuditReason.INVALID_CREDENTIALS, null, requiredRole);
 
-        return LoginFailedException.invalidCredentials(loginAttemptProcessor.process(1));
+        if (loginAttemptProcessor.isLockThresholdReached(failureCount)) {
+            return LoginFailedException.accountLocked();
+        }
+        return LoginFailedException.invalidCredentials(loginAttemptProcessor.process(failureCount));
     }
 
     // 저장된 최신 실패 상태를 기준으로 오류와 노출 데이터를 결정

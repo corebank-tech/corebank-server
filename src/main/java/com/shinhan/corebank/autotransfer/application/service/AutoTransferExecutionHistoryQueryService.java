@@ -33,7 +33,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class AutoTransferExecutionHistoryQueryService implements AutoTransferExecutionHistoryQueryUseCase {
-    private static final Set<Integer> ALLOWED_PAGE_SIZE = Set.of(5, 10, 20, 30, 50);
     private static final int DEFAULT_PERIOD_MONTHS = 1;
     private static final int MAX_RANGE_DAYS = 365;
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
@@ -54,7 +53,7 @@ public class AutoTransferExecutionHistoryQueryService implements AutoTransferExe
         if (customerId == null || withdrawalAccountId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
-        Pageable pageable = PageableResolver.resolve(page, size, all, ALLOWED_PAGE_SIZE);
+        Pageable pageable = PageableResolver.resolve(page, size, all, PageableResolver.ALLOWED_PAGE_SIZES);
         // REQ-AUTO-018: 조회기간 기본값은 1개월 — toDate 없으면 오늘, fromDate 없으면 toDate-1개월
         LocalDate today = LocalDate.now(clock.withZone(SEOUL));
         LocalDate resolvedToDate = toDate != null ? toDate : today;

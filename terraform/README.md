@@ -14,7 +14,7 @@
      - `AmazonEC2FullAccess`
      - `AmazonS3FullAccess`
      - `IAMReadOnlyAccess`
-   - 컴퓨트 모듈(IAM 역할·인스턴스 프로파일)을 apply하는 사람은 위 4개 외에 IAM 쓰기 권한이 추가로 필요하다: `iam:CreateRole`, `iam:PutRolePolicy`, `iam:AttachRolePolicy`, `iam:CreateInstanceProfile`, `iam:AddRoleToInstanceProfile`, `iam:PassRole`. 없으면 IAM 리소스 생성 단계에서 `AccessDenied`가 난다. 통합 apply 담당자는 apply 전에 정하고 이 권한을 미리 받는다(P5 사용자에게는 정책 `corebank-p5-compute-iam`이 붙어 있다)
+   - 컴퓨트 모듈(IAM 역할·인스턴스 프로파일)을 apply하는 사람은 위 4개 외에 IAM 쓰기 권한이 추가로 필요하다: `iam:CreateRole`, `iam:PutRolePolicy`, `iam:AttachRolePolicy`, `iam:CreateInstanceProfile`, `iam:AddRoleToInstanceProfile`, `iam:PassRole`. 역할에서 관리형 정책을 떼는 `iam:DetachRolePolicy`도 필요하다. 온프레미스 SSM 역할의 자체 정책(`corebank-onprem-ssm-agent`, #775)을 만들고 바꾸고 지우려면 `iam:CreatePolicy`, `iam:DeletePolicy`, `iam:CreatePolicyVersion`, `iam:DeletePolicyVersion`이 그 정책 하나에 대해서만 필요하다(모든 정책에 허용하면 자기 권한 정책을 고쳐 쓸 수 있다). 없으면 IAM 리소스 생성 단계에서 `AccessDenied`가 난다. 통합 apply 담당자는 apply 전에 정하고 이 권한을 미리 받는다(P5 사용자에게는 정책 `corebank-p5-compute-iam`이 붙어 있다)
    - 작업하다 `AccessDenied` 에러가 나면, 에러 메시지에 나온 서비스의 정책을 그때 추가로 붙인다 (미리 다 예측해서 넓히지 않는다)
    - 액세스 키 생성 → 사용 사례 "CLI" 선택 → CSV 다운로드
 3. 로컬에 자격증명 등록

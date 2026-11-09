@@ -19,7 +19,6 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,7 +29,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ScheduledTransferQueryService implements ScheduledTransferQueryUseCase {
-    private static final Set<Integer> ALLOWED_PAGE_SIZE = Set.of(5, 10, 20, 30, 50);
     private static final int MAX_RANGE_DAYS = 365;
     private static final int MAX_ALL_QUERY_SIZE = 100;
     private static final int DEFAULT_PERIOD_MONTHS = 1;
@@ -53,7 +51,7 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
         if (customerId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
-        Pageable pageable = PageableResolver.resolve(page, size, all, ALLOWED_PAGE_SIZE);
+        Pageable pageable = PageableResolver.resolve(page, size, all, PageableResolver.ALLOWED_PAGE_SIZES);
         // REQ-SCD-007: fromDate/toDate 둘 다 선택값이라 기본값을 주입하지 않는다 — 둘 다 있을 때만 검증
         if (fromDate != null && toDate != null) {
             if (fromDate.isAfter(toDate)) {
@@ -99,7 +97,7 @@ public class ScheduledTransferQueryService implements ScheduledTransferQueryUseC
         if (customerId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
-        Pageable pageable = PageableResolver.resolve(page, size, all, ALLOWED_PAGE_SIZE);
+        Pageable pageable = PageableResolver.resolve(page, size, all, PageableResolver.ALLOWED_PAGE_SIZES);
         // REQ-SCD-014: 조회기간 기본값 1개월 — toDate 없으면 오늘, fromDate 없으면 toDate-1개월
         LocalDate today = LocalDate.now(clock);
         LocalDate resolvedToDate = toDate != null ? toDate : today;
