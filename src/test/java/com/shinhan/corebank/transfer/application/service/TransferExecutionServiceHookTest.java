@@ -2,15 +2,25 @@ package com.shinhan.corebank.transfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.business.support.BusinessDateTestFixture;
+import com.shinhan.corebank.common.audit.AccessReason;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.fds.adapter.out.http.FastApiBehaviorScoreClient;
+import com.shinhan.corebank.fds.application.port.out.BehaviorFlowPort;
+import com.shinhan.corebank.fds.application.port.out.BehaviorScorePort;
+import com.shinhan.corebank.fds.application.service.BehaviorFlowService;
+import com.shinhan.corebank.fds.application.service.BehaviorScoreService;
+import com.shinhan.corebank.fds.application.service.FdsHoldDetailService;
+import com.shinhan.corebank.fds.application.service.FdsInvestigationInputService;
+import com.shinhan.corebank.fds.application.service.FdsRepeatTransferHoldPolicy;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
@@ -20,6 +30,7 @@ import com.shinhan.corebank.transfer.api.TransferHeld;
 import com.shinhan.corebank.transfer.api.TransferHoldContext;
 import com.shinhan.corebank.transfer.api.TransferHoldDecision;
 import com.shinhan.corebank.transfer.api.TransferHoldPolicy;
+import com.shinhan.corebank.transfer.api.TransferHoldUseCase;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
 import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
@@ -41,13 +52,17 @@ import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityManager;
+import java.net.URI;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -63,9 +78,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * 이체 확장점(PH-99) 훅이 execute()의 약속한 자리에서, 약속한 트랜잭션 규칙대로 호출되는지 검증한다.
@@ -124,6 +141,24 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
     private RecentTransferQuery recentTransferQuery;
 
     @Autowired
+    private BehaviorFlowService behaviorFlows;
+
+    @Autowired
+    private BehaviorFlowPort behaviorFlowPort;
+
+    @Autowired
+    private BehaviorScorePort behaviorScores;
+
+    @Autowired
+    private TransferHoldUseCase fdsHolds;
+
+    @Autowired
+    private FdsHoldDetailService fdsDetail;
+
+    @Autowired
+    private FdsInvestigationInputService fdsInput;
+
+    @Autowired
     private BusinessDateGate businessDateGate;
 
     @Autowired
@@ -163,6 +198,106 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
         jdbcTemplate.update("UPDATE account SET balance = 100000, status = 'ACTIVE' WHERE account_id IN (101, 202)");
         jdbcTemplate.update("DELETE FROM transfer_limit_daily_usage WHERE customer_id = 1");
         jdbcTemplate.update("DELETE FROM transfer_hold WHERE customer_id = 1");
+    }
+
+    @Test
+    @DisplayName("[FDS 정책 B] 직전 성공 두 건 뒤 실제 이체를 기표 전 ON_APPROVAL로 보류한다")
+    void fdsRepeatPolicyHoldsActualTransferBeforePosting() {
+        LocalDateTime previousAt = LocalDateTime.now(clock).minusMinutes(1);
+        jdbcTemplate.update("UPDATE account SET balance = 3000000 WHERE account_id = 101");
+        for (int i = 0; i < 2; i++) {
+            jdbcTemplate.update(
+                    """
+                    INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id,
+                                          deposit_account_number, payee_name, amount, fee,
+                                          transfer_type, channel, status, transferred_at, created_at)
+                    VALUES (?, 101, 202, '110222222222', '테스터', 1000000, 0,
+                            'IMMEDIATE', 'WB', 'SUCCESS', ?, NOW(6))
+                    """,
+                    "20310601FDS951" + i,
+                    previousAt);
+        }
+        FdsRepeatTransferHoldPolicy policy = new FdsRepeatTransferHoldPolicy(recentTransferQuery);
+        ReflectionTestUtils.setField(policy, "enabled", true);
+        TransferExecutionService service = serviceWithHoldPolicies(List.of(policy));
+        long ledgerBefore = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ledger_entry", Long.class);
+
+        TransferResult result = service.execute(immediateCommand(1_000_000L));
+
+        assertThat(result.held()).isTrue();
+        assertThat(jdbcTemplate.queryForMap(
+                        "SELECT policy_code, release_mode, status FROM transfer_hold WHERE transfer_hold_id = ?",
+                        result.transferHoldId()))
+                .containsEntry("policy_code", "B")
+                .containsEntry("release_mode", "ON_APPROVAL")
+                .containsEntry("status", "HELD");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ledger_entry", Long.class))
+                .isEqualTo(ledgerBefore);
+        assertThat(balanceOf(101)).isEqualTo(3_000_000L);
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM transfer_limit_daily_usage WHERE customer_id = 1", Long.class))
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("[FDS #951] 실제 이체 보류에서 Python 점수와 관리자·Agent 입력까지 연결한다")
+    void actualTransferHoldToPythonScoreAndStoredPresentation() {
+        String url = System.getenv("FDS_SCORE_TEST_URL");
+        String token = System.getenv("FDS_SCORE_SERVICE_TOKEN");
+        assumeTrue(url != null && token != null, "실제 Python 점수 서비스가 실행 중일 때 검증");
+        UUID flowId = UUID.randomUUID();
+        OffsetDateTime start = OffsetDateTime.now(ZoneOffset.ofHours(9)).minusSeconds(100);
+        behaviorFlows.submit(
+                flowId,
+                1,
+                new BehaviorFlowService.Batch(
+                        List.of(
+                                new BehaviorFlowService.EventInput(flowId, 1, "TRANSFER_ENTER", start, "D-01"),
+                                new BehaviorFlowService.EventInput(
+                                        flowId, 2, "SUBMIT_REQUESTED", start.plusSeconds(99), "D-02")),
+                        65));
+        LocalDateTime previousAt = LocalDateTime.now(clock).minusMinutes(1);
+        jdbcTemplate.update("UPDATE account SET balance = 3000000 WHERE account_id = 101");
+        for (int i = 0; i < 2; i++) {
+            jdbcTemplate.update(
+                    """
+                    INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id,
+                                          deposit_account_number, payee_name, amount, fee,
+                                          transfer_type, channel, status, transferred_at, created_at)
+                    VALUES (?, 101, 202, '110222222222', '테스터', 1000000, 0,
+                            'IMMEDIATE', 'WB', 'SUCCESS', ?, NOW(6))
+                    """,
+                    "20310601FDS951L" + i,
+                    previousAt);
+        }
+        FdsRepeatTransferHoldPolicy policy = new FdsRepeatTransferHoldPolicy(recentTransferQuery);
+        ReflectionTestUtils.setField(policy, "enabled", true);
+        TransferResult held = serviceWithHoldPolicies(List.of(policy))
+                .execute(immediateCommandWithFlowId(1_000_000L, flowId.toString()));
+        assertThat(held.held()).isTrue();
+        assertThat(fdsHolds.findForFds(held.transferHoldId()).policyCode()).isEqualTo("B");
+        var scoring = new BehaviorScoreService(
+                fdsHolds,
+                behaviorFlowPort,
+                behaviorScores,
+                new FastApiBehaviorScoreClient(URI.create(url), token, new ObjectMapper()),
+                transactionManager,
+                clock);
+        scoring.onHeld(new TransferHeld(
+                held.transferHoldId(),
+                1,
+                "B",
+                com.shinhan.corebank.transfer.api.TransferHoldReleaseMode.ON_APPROVAL,
+                null,
+                flowId.toString(),
+                LocalDateTime.now(clock)));
+        var detail = fdsDetail.get(held.transferHoldId(), 1, "127.0.0.1", AccessReason.OPERATION);
+        var input = fdsInput.build(held.transferHoldId(), "inv-" + held.transferHoldId());
+        assertThat(detail.behaviorScoreStatus()).isEqualTo("AVAILABLE");
+        assertThat(input.behaviorSummary().behaviorRiskScore()).isEqualTo(detail.behaviorRiskScore());
+        assertThat(input.behaviorSummary().modelVersion()).isEqualTo(detail.modelVersion());
+        assertThat(input.behaviorSummary().featureVersion()).isEqualTo(detail.featureVersion());
+        assertThat(fdsHolds.findForFds(held.transferHoldId()).status()).isEqualTo("HELD");
     }
 
     @Test

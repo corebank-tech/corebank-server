@@ -14,6 +14,9 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -62,5 +65,35 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
         assertThat(scores.find(id).status()).isEqualTo("AVAILABLE");
         assertThat(scores.find(id).behaviorRiskScore()).isEqualTo(0.81);
         assertThat(scores.find(id).modelVersion()).isEqualTo("xgb-demo-v1");
+    }
+
+    @Test
+    void concurrentWorkersClaimOneAttemptAndReplayCannotOverwriteUnavailable() throws Exception {
+        long id = 951000000L + Math.abs(UUID.randomUUID().getLeastSignificantBits() % 1000000);
+        LocalDateTime now = LocalDateTime.now();
+        scores.createIfAbsent(id, null, now);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var workers = Executors.newFixedThreadPool(2)) {
+            var first = workers.submit(() -> {
+                start.await();
+                return scores.markStarted(id, now);
+            });
+            var second = workers.submit(() -> {
+                start.await();
+                return scores.markStarted(id, now);
+            });
+            start.countDown();
+            assertThat(List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(true, false);
+        }
+
+        assertThat(scores.unavailable(id, "SCORING_INTERRUPTED", now)).isTrue();
+        scores.createIfAbsent(id, null, now);
+        assertThat(scores.markStarted(id, now)).isFalse();
+        assertThat(scores.available(id, new Score(0.81, "late-model", "p6-behavior-v1"), now))
+                .isFalse();
+        assertThat(scores.find(id).status()).isEqualTo("UNAVAILABLE");
+        assertThat(scores.find(id).unavailableReason()).isEqualTo("SCORING_INTERRUPTED");
+        assertThat(scores.find(id).behaviorRiskScore()).isNull();
     }
 }

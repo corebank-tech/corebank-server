@@ -63,6 +63,8 @@ springdoc:
 
 app:
   fds:
+    policy:
+      enabled: ${APP_FDS_POLICY_ENABLED:false}
     score:
       # 로컬 기본값은 비활성화하고 Python 주소와 전용 토큰을 주입할 때 켠다.
       enabled: ${APP_FDS_SCORE_ENABLED:false}

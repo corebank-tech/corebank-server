@@ -30,7 +30,8 @@ public class FdsAdminHoldController {
     @GetMapping("/{transferHoldId}")
     @Operation(
             summary = "보류 상세 조회",
-            description = "CUSTOMER_READ 권한과 X-Access-Reason이 필요합니다. P6에 저장된 행동 점수만 표시하며 조회 사유를 감사에 남깁니다.")
+            description =
+                    "CUSTOMER_READ 권한과 X-Access-Reason이 필요합니다. P6에 저장된 점수 상태(PENDING/AVAILABLE/UNAVAILABLE), 점수·모델·피처 버전, 사용 불가 사유를 표시하며 조회 사유를 감사에 남깁니다.")
     public ApiResponse<FdsHoldDetail> get(
             @PathVariable @Positive long transferHoldId,
             @RequestHeader(AccessReason.HEADER) AccessReason accessReason,
