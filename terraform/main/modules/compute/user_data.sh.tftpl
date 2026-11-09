@@ -23,11 +23,12 @@ get() { aws ssm get-parameter --region "$REGION" --with-decryption --name "/core
 LOADED=0
 for i in $(seq 1 60); do
   if DB_USER=$(get db-user) && DB_PASSWORD=$(get db-password) && FLYWAY_USER=$(get flyway-user) \
-     && FLYWAY_PASSWORD=$(get flyway-password) && CORS=$(get cors-allowed-origins); then LOADED=1; break; fi
+     && FLYWAY_PASSWORD=$(get flyway-password) && CORS=$(get cors-allowed-origins) \
+     && LOGIN_ID_KEY=$(get login-id-hmac-key); then LOADED=1; break; fi
   sleep 10
 done
 if [ "$LOADED" != 1 ]; then
-  echo "Parameter Store 값을 읽지 못해 부팅을 중단한다: /corebank/{db-user,db-password,flyway-user,flyway-password,cors-allowed-origins}" >&2
+  echo "Parameter Store 값을 읽지 못해 부팅을 중단한다: /corebank/{db-user,db-password,flyway-user,flyway-password,cors-allowed-origins,login-id-hmac-key}" >&2
   exit 1
 fi
 
@@ -43,6 +44,7 @@ FLYWAY_PASSWORD=$FLYWAY_PASSWORD
 APP_INTERBANK_HOST=%{ if interbank_host == "" }mock-external%{ else }${interbank_host}%{ endif }
 APP_INTERBANK_PORT=9300
 CORS_ALLOWED_ORIGINS=$CORS
+APP_LOGIN_ID_HMAC_KEY_BASE64=$LOGIN_ID_KEY
 EOF
 
 %{ if info_api_base_url != "" ~}

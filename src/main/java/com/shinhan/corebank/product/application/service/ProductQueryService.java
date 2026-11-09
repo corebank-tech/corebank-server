@@ -17,7 +17,6 @@ import com.shinhan.corebank.terms.api.TermsSummary;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -32,16 +31,13 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ProductQueryService implements ProductQueryUseCase {
-    // 상수명 통일(ALLOWED_PAGE_SIZES -> ALLOWED_PAGE_SIZE) - 다른 도메인 서비스들과 동일하게 맞춤(#297 리뷰)
-    private static final Set<Integer> ALLOWED_PAGE_SIZE = Set.of(5, 10, 20, 30, 50);
-
     private final ProductQueryPort productQueryPort;
     private final TermsQueryPort termsQueryPort;
 
     @Override
     public Page<Product> search(
             ProductGroup productGroup, String keyword, ProductSortType sort, int page, int size, boolean all) {
-        Pageable pageable = PageableResolver.resolve(page, size, all, ALLOWED_PAGE_SIZE);
+        Pageable pageable = PageableResolver.resolve(page, size, all, PageableResolver.ALLOWED_PAGE_SIZES);
 
         return productQueryPort.search(productGroup, keyword, sort, pageable);
     }

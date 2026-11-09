@@ -123,6 +123,7 @@ class DualWasJdbcSessionIntegrationTest extends IntegrationTestSupport {
         List<String> arguments = List.of(
                 "-Xmx256m",
                 "-Dfile.encoding=UTF-8",
+                "-Duser.timezone=Asia/Seoul",
                 "-Dspring.devtools.restart.enabled=false",
                 "-cp",
                 Files.readString(

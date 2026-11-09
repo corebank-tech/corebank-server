@@ -17,6 +17,7 @@ import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.customer.api.AdminPermission;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,9 @@ import org.springframework.test.web.servlet.MockMvc;
     ClientIpResolver.class
 })
 class LogoutAuditEventListenerTest {
+
+    @MockitoBean
+    AdminPermissionFacade adminPermissionFacade;
 
     @Autowired
     MockMvc mockMvc;

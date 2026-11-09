@@ -43,7 +43,7 @@ S3 Object Lock 버킷 (P2 관리)
 | IAM 정책 ARN | `arn:aws:iam::853900964665:policy/corebank-audit-writer` |
 | Object Lock | Enabled |
 | 보존 모드 | GOVERNANCE |
-| 기본 보존기간 | 1일 |
+| 기본 보존기간 | 8일 (#867, Terraform 변경 목표·AWS 적용 확인 전) |
 | Versioning | Enabled |
 | 퍼블릭 접근 차단 | 4개 항목 모두 활성화 |
 | 서버 측 암호화 | SSE-S3 (`AES256`) |
@@ -177,6 +177,22 @@ aws iam list-entities-for-policy \
 - 이후 리소스 설정 검증과 Terraform 상태 일치 확인에 성공했다.
 - IAM 정책은 P1 요청에 따라 검증용 `DeleteObjectVersion` 권한을 추가하여 재적용했다.
 
+### Object Lock 보존 기간 변경 (#867, 2026-11)
+
+기존 기본 보존 기간은 GOVERNANCE 1일이며, PH-82의 최근 7일
+감사 로그 재검증 범위를 보호하기 위해 8일로 변경한다.
+
+- 변경 대상: aws_s3_bucket_object_lock_configuration.audit
+- 변경 내용: default_retention.days = 1 → 8
+- 적용 순서: VPN Terraform State 정리 확인 → audit plan → 승인 후 apply
+- 적용 조건: Object Lock 설정 리소스의 in-place 변경만 허용
+- 중단 조건: S3 버킷 교체·삭제 또는 예상하지 못한 리소스 변경
+- 기존 객체: 기본 정책 변경이 기존 객체 버전의 보존 만료일에 소급 적용되지 않음
+- 검증: 적용 후 기본 보존 설정과 신규 객체 버전의 RetainUntilDate 확인
+
+적용 결과: 미실시
+실제 AWS 설정 검증: 미실시
+
 ## 7. 팀 연동 및 남은 검증
 
 ### P1 — PH-82
@@ -272,10 +288,27 @@ S3 Object Lock은 보존기간 중인 객체 버전의 삭제를 제한한다.
 
 **기본 원칙: 보존기간이 지난 뒤에만 destroy한다.**
 
-1. P1의 감사 로그 적재를 중지한다.
-2. 객체의 각 버전에 설정된 보존 만료일을 확인한다.
-3. 모든 객체 버전의 보존기간이 지난 뒤 `terraform/audit`에서 destroy한다.
-4. 삭제 마커 및 객체 버전의 잔존 여부를 확인한다.
+### Destroy 실행 순서 (#867)
+
+`terraform/main`과 `terraform/audit`은 독립된 State를 사용하므로
+각각의 철거 시점과 실행 조건을 구분한다.
+
+1. P1과 WAS의 최종 감사 로그 적재 시각을 확인하고 추가 적재를 중단한다.
+2. DR 전환과 최종 GTID·데이터 정합성 검증을 완료한 뒤,
+   P5가 승인된 절차에 따라 `terraform/main`을 먼저 철거한다.
+3. 감사 버킷은 계속 유지한다.
+4. 감사 버킷의 모든 객체 버전에서 실제 `RetainUntilDate`를 확인한다.
+5. 마지막 객체 적재 후 기본 보존 기간 8일을 고려하되,
+   실제 모든 보호 대상 버전의 보존 만료가 확인된 이후에만
+   `terraform/audit`을 별도로 destroy한다.
+6. 삭제 마커와 객체 버전의 잔존 여부를 확인한다.
+
+주의사항:
+- `force_destroy = true`여도 Object Lock 보존 기간을 무시할 수 없다.
+- 기본 보존 기간 8일은 변경 이후 새로 적재되는 객체에 적용된다.
+- 기존 객체의 보존 만료일은 기본 정책 변경만으로 연장되지 않는다.
+- 운영 WAS 적재 역할에는 `s3:BypassGovernanceRetention`을 부여하지 않는다.
+- AWS 계정 및 IAM 권한 종료 일정은 리드와 별도로 확인한다.
 
 P5의 destroy 실행 주체에는 S3 버킷·객체 버전 조회와 삭제에 필요한
 권한(`s3:ListBucketVersions`, `s3:DeleteObject`,

@@ -11,7 +11,11 @@ import static org.mockito.Mockito.doThrow;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.adapter.out.persistence.AccountStatusHistoryPersistenceAdapter;
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerification;
+import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
+import com.shinhan.corebank.account.application.port.out.AccountPasswordAuthTokenStorePort;
 import com.shinhan.corebank.account.application.service.MaturityAccountSettlementService;
+import com.shinhan.corebank.account.domain.AccountPasswordAuthTokenPayload;
 import com.shinhan.corebank.account.support.CustomerTestFixture;
 import com.shinhan.corebank.business.support.BusinessDateTestFixture;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
@@ -30,6 +34,7 @@ import com.shinhan.corebank.subscription.domain.MaturityHandling;
 import com.shinhan.corebank.subscription.domain.exception.SubscriptionErrorCode;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -89,6 +94,12 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
 
     @Autowired
     private EntityManager entityManager;
+
+    @Autowired
+    private AccountPasswordAuthTokenVerifier realPasswordVerifier;
+
+    @Autowired
+    private AccountPasswordAuthTokenStorePort tokenStorePort;
 
     // 정상 처리에서는 실제 메서드를 실행한다.
     // 롤백 테스트에서만 closeMatured 실패를 주입한다.
@@ -173,6 +184,14 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
 
         jdbcTemplate.update(
                 "DELETE FROM account WHERE account_id IN (?, ?)", PRODUCT_ACCOUNT_ID, WITHDRAWAL_ACCOUNT_ID);
+
+        jdbcTemplate.update(
+                """
+        DELETE FROM auth_token
+        WHERE purpose = 'ACCOUNT_PASSWORD_AUTH'
+          AND customer_id = ?
+        """,
+                customerId);
 
         if (productId != null) {
             productRepository.deleteById(productId);
@@ -810,6 +829,47 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
         assertThat(account.get("status")).isEqualTo("MATURED");
         assertThat(account.get("closed_date")).isNull();
         assertThat(account.get("closed_trade_date")).isNull();
+    }
+
+    @Test
+    @DisplayName("#911 실제 비밀번호 토큰 검증 후 만기해지가 버전 충돌 없이 완료된다")
+    void terminate_withRealPasswordVerification_success() {
+        // given: 실제 MySQL 인증 토큰 저장소에 발급
+        String token = UUID.randomUUID().toString();
+
+        tokenStorePort.save(
+                token, new AccountPasswordAuthTokenPayload(customerId, PRODUCT_ACCOUNT_ID), Duration.ofMinutes(5));
+
+        // 이 테스트에서만 실제 계좌비밀번호 검증 서비스 호출
+        doAnswer(invocation -> {
+                    realPasswordVerifier.verifyAndConsume(new AccountPasswordAuthTokenVerification(
+                            invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2)));
+                    return null;
+                })
+                .when(passwordVerificationPort)
+                .verifyAndConsumeAccountPasswordToken(eq(token), eq(customerId), eq(PRODUCT_ACCOUNT_ID));
+
+        // when: 인증 검증 -> 이자 지급 -> 원리금 이체 -> CLOSED
+        MaturityTerminationResult result =
+                terminationUseCase.terminate(new MaturityTerminationCommand(customerId, PRODUCT_ACCOUNT_ID, token));
+
+        // then: 버전 충돌 없이 정상 완료
+        assertThat(result.principal()).isEqualTo(PRINCIPAL);
+        assertThat(result.totalTransferred()).isEqualTo(PRINCIPAL + result.netInterest());
+
+        assertThat(balanceOf(PRODUCT_ACCOUNT_ID)).isZero();
+        assertThat(balanceOf(WITHDRAWAL_ACCOUNT_ID)).isEqualTo(result.totalTransferred());
+
+        assertThat(ledgerSumOf(PRODUCT_ACCOUNT_ID)).isZero();
+        assertThat(ledgerSumOf(WITHDRAWAL_ACCOUNT_ID)).isEqualTo(result.totalTransferred());
+
+        assertThat(countMaturityLedger()).isEqualTo(2L);
+        assertThat(countClosureHistory()).isEqualTo(1L);
+
+        String status = jdbcTemplate.queryForObject(
+                "SELECT status FROM account WHERE account_id = ?", String.class, PRODUCT_ACCOUNT_ID);
+
+        assertThat(status).isEqualTo("CLOSED");
     }
 
     private MaturityTerminationCommand command() {

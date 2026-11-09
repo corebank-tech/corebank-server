@@ -8,4 +8,7 @@ public interface AdminPermissionFacade {
 
     // 그 관리자에게 부여된 권한 전부. 권한이 없으면 빈 목록이다.
     List<AdminPermission> findPermissions(Long customerId);
+
+    // 그 관리자의 권한 회수 횟수. 로그인 때 받아 둔 값과 달라지면 그 세션은 낡은 권한을 들고 있다.
+    long findPermissionVersion(Long customerId);
 }

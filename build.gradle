@@ -113,7 +113,7 @@ ext {
 
 dependencyManagement {
     imports {
-        mavenBom 'org.springframework.modulith:spring-modulith-bom:2.0.8'
+        mavenBom 'org.springframework.modulith:spring-modulith-bom:2.0.9'
         mavenBom 'software.amazon.awssdk:bom:2.55.16'
     }
 }
@@ -201,6 +201,8 @@ tasks.withType(JavaCompile).configureEach {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // 테스트 JVM의 기본 시간대를 Asia/Seoul로 고정한다.
+    systemProperty 'user.timezone', 'Asia/Seoul'
     // #402: 공유 컨테이너의 수명은 테스트 JVM과 일치시키고 병렬 검증은 각 테스트 내부에서 수행한다.
     maxParallelForks = 1
     forkEvery = 0

@@ -4,12 +4,14 @@ import static org.springframework.security.web.servlet.util.matcher.PathPatternR
 
 import com.shinhan.corebank.common.filter.CorrelationIdFilter;
 import com.shinhan.corebank.customer.api.AdminPermission;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -24,6 +26,7 @@ import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.util.matcher.IpAddressMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -139,9 +142,14 @@ public class SecurityConfig {
             SessionLogoutSuccessHandler logoutSuccessHandler,
             CorsConfigurationSource corsConfigurationSource,
             CookieCsrfTokenRepository csrfTokenRepository,
-            CsrfTokenRequestAttributeHandler csrfTokenRequestHandler)
+            CsrfTokenRequestAttributeHandler csrfTokenRequestHandler,
+            AdminPermissionFacade adminPermissionFacade,
+            @Value("${app.security.metrics-allowed-ip:}") String metricsAllowedIp)
             throws Exception {
         http.addFilterBefore(new CorrelationIdFilter(), SecurityContextHolderFilter.class)
+                // 세션 인증이 복원된 직후에 낡은 관리자 권한을 걸러 이후 인가가 인증 없는 요청으로 본다.
+                .addFilterAfter(
+                        new AdminPermissionVersionFilter(adminPermissionFacade), SecurityContextHolderFilter.class)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 // 기본 CSRF 보호를 유지하고 로그인과 회원가입, ALB 헬스체크만 검사에서 제외
                 .csrf(csrf -> {
@@ -158,6 +166,11 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers(SWAGGER_ENDPOINTS)
                         .permitAll()
+
+                        // Prometheus 수집은 지정한 IP(온프레미스 VM) 한 곳에서 온 요청만 받는다. 값이 비면 아무도 못 읽는다.
+                        .requestMatchers(pathPattern(HttpMethod.GET, "/actuator/prometheus"))
+                        .access((authentication, context) -> new AuthorizationDecision(!metricsAllowedIp.isBlank()
+                                && new IpAddressMatcher(metricsAllowedIp).matches(context.getRequest())))
 
                         // 약관 열람만 인증을 요구한다 — 누가 봤는지 이력을 남겨야 한다.
                         .requestMatchers(pathPattern(HttpMethod.GET, "/products/*/terms/*"))

@@ -46,13 +46,13 @@ variable "db_host" {
 variable "app_image" {
   description = "서버가 받아 실행할 앱 이미지 (컷오버에 쓰는 릴리스의 커밋 SHA 태그로 고정)"
   type        = string
-  default     = "corebank/corebank-server:176fe574b6b5d2a1008ce9ce9359753b4d658cdb"
+  default     = "corebank/corebank-server:e6dfafe4dfe64bb3fb94a82382e7a93d72ed3284"
 }
 
 variable "mock_external_image" {
   description = "서버가 받아 실행할 모의 대외기관 이미지 (앱과 같은 SHA 태그로 고정)"
   type        = string
-  default     = "corebank/corebank-mock-external:176fe574b6b5d2a1008ce9ce9359753b4d658cdb"
+  default     = "corebank/corebank-mock-external:e6dfafe4dfe64bb3fb94a82382e7a93d72ed3284"
 }
 
 variable "interbank_host" {

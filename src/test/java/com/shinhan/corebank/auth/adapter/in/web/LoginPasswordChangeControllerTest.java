@@ -23,6 +23,7 @@ import com.shinhan.corebank.auth.application.port.in.ChangeLoginPasswordUseCase;
 import com.shinhan.corebank.common.idempotency.IdempotencyResult;
 import com.shinhan.corebank.common.idempotency.IdempotencyService;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
+import com.shinhan.corebank.customer.api.AdminPermissionFacade;
 import java.time.OffsetDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,10 @@ import org.springframework.test.web.servlet.MockMvc;
     ClientIpResolver.class
 })
 class LoginPasswordChangeControllerTest {
+
+    @MockitoBean
+    AdminPermissionFacade adminPermissionFacade;
+
     private static final String KEY = "550e8400-e29b-41d4-a716-446655440000";
 
     @Autowired

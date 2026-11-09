@@ -15,6 +15,8 @@ final class Phase2SeedProcessRunner {
     private static final String PH11_BASELINE_EXECUTION_FLAG = "--app.ph11-baseline.execute=true";
     private static final String PH38_BASELINE_PROFILE = "ph38-baseline";
     private static final String PH38_BASELINE_EXECUTION_FLAG = "--app.ph38-baseline.execute=true";
+    private static final String PH13_MEASURE_PROFILE = "ph13-measure";
+    private static final String PH13_MEASURE_EXECUTION_FLAG = "--app.ph13-measure.execute=true";
 
     private Phase2SeedProcessRunner() {}
 
@@ -32,11 +34,14 @@ final class Phase2SeedProcessRunner {
         boolean ph11BaselineExecutionEnabled = Arrays.asList(args).contains(PH11_BASELINE_EXECUTION_FLAG);
         boolean ph38BaselineProfileActive = hasProfile(args, PH38_BASELINE_PROFILE);
         boolean ph38BaselineExecutionEnabled = Arrays.asList(args).contains(PH38_BASELINE_EXECUTION_FLAG);
+        boolean ph13MeasureProfileActive = hasProfile(args, PH13_MEASURE_PROFILE);
+        boolean ph13MeasureExecutionEnabled = Arrays.asList(args).contains(PH13_MEASURE_EXECUTION_FLAG);
 
         if ((seedProfileActive && seedExecutionEnabled)
                 || (ph11BaselineProfileActive && ph11BaselineExecutionEnabled)
-                || (ph38BaselineProfileActive && ph38BaselineExecutionEnabled)) {
-            // 일회성 프로세스가 컨텍스트를 닫을 때 DevTools 재시작으로 종료 코드가 바뀌지 않게 한다.
+                || (ph38BaselineProfileActive && ph38BaselineExecutionEnabled)
+                || (ph13MeasureProfileActive && ph13MeasureExecutionEnabled)) {
+
             System.setProperty("spring.devtools.restart.enabled", "false");
             return true;
         }
@@ -60,10 +65,14 @@ final class Phase2SeedProcessRunner {
                 context.getEnvironment().acceptsProfiles(Profiles.of(PH38_BASELINE_PROFILE));
         boolean ph38BaselineExecutionEnabled =
                 context.getEnvironment().getProperty("app.ph38-baseline.execute", Boolean.class, false);
+        boolean ph13MeasureProfileActive = context.getEnvironment().acceptsProfiles(Profiles.of(PH13_MEASURE_PROFILE));
+        boolean ph13MeasureExecutionEnabled =
+                context.getEnvironment().getProperty("app.ph13-measure.execute", Boolean.class, false);
 
         boolean oneShotProcessCompleted = (phase2SeedProfileActive && (minimumEnabled || bulkEnabled))
                 || (ph11BaselineProfileActive && ph11BaselineExecutionEnabled)
-                || (ph38BaselineProfileActive && ph38BaselineExecutionEnabled);
+                || (ph38BaselineProfileActive && ph38BaselineExecutionEnabled)
+                || (ph13MeasureProfileActive && ph13MeasureExecutionEnabled);
         if (oneShotProcessCompleted) {
             context.close();
             return true;
