@@ -26,3 +26,9 @@ variable "info_api_base_url" {
   type        = string
   default     = "http://192.168.0.211:8081"
 }
+
+variable "interbank_host" {
+  description = "WAS가 타행이체 때 접속할 모의 대외기관 주소(온프레미스 VM). 비우면 서버마다 모의 서버 컨테이너를 띄운다"
+  type        = string
+  default     = "192.168.0.211"
+}

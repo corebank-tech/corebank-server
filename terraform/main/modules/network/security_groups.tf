@@ -68,6 +68,14 @@ resource "aws_security_group" "was" {
     cidr_blocks = [var.onprem_info_api_cidr]
   }
 
+  egress {
+    description = "On-premises mock external over VPN"
+    from_port   = 9300
+    to_port     = 9300
+    protocol    = "tcp"
+    cidr_blocks = [var.onprem_info_api_cidr]
+  }
+
   tags = { Name = "${var.name_prefix}-sg-was" }
 }
 

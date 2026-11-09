@@ -38,6 +38,7 @@ module "compute" {
   app_subnet_ids          = module.network.app_subnet_ids
   db_host                 = module.data.db_address
   info_api_base_url       = var.info_api_base_url
+  interbank_host          = var.interbank_host
 }
 
 module "vpn" {
