@@ -8,9 +8,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+/** 행동 흐름과 이벤트를 순번 유니크 제약으로 저장한다. */
 @Repository
 @RequiredArgsConstructor
-/** 행동 흐름과 이벤트를 순번 유니크 제약으로 저장한다. */
 public class JdbcBehaviorFlowAdapter implements BehaviorFlowPort {
 
     private final JdbcTemplate jdbc;

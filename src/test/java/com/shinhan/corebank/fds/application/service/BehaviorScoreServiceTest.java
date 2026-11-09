@@ -53,7 +53,8 @@ class BehaviorScoreServiceTest {
         TransferHoldUseCase holdApi = new TransferHoldUseCase() {
             @Override
             public TransferHoldForFds findForFds(long id) {
-                return new TransferHoldForFds(id, holdCustomerId, holdFlowId, holdStatus, held.heldAt());
+                return new TransferHoldForFds(
+                        id, holdCustomerId, holdFlowId, holdStatus, held.heldAt(), 500000, "0881234567", "A");
             }
 
             @Override

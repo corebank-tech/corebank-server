@@ -1,6 +1,6 @@
 # FDS API 명세 초안 (#854)
 
-> **상태: 부분 구현 중인 계약 초안.** 첨부된 노션 API 명세의 속성 8종과 본문 순서를 따른다. P6 신규 경로는 외부 호출 기준 `/api/v1/fds/**`·`/api/v1/admin/fds/**`·`/api/v1/internal/fds/**`로 결정했다. 행동 이벤트 제출은 #951 작업 브랜치에서 구현 중이며 관리자·Agent 경로는 아직 구현되지 않았다. 전체 연동 책임과 미결 사항은 [연동 계약](p6_fds_integration_contract.md), 보류·실행의 정본은 [이체 계약 §9](transfer_seam.md#9-훅-c--이체-보류-771)이다.
+> **상태: 부분 구현 중인 계약 초안.** 첨부된 노션 API 명세의 속성 8종과 본문 순서를 따른다. P6 신규 경로는 외부 호출 기준 `/api/v1/fds/**`·`/api/v1/admin/fds/**`·`/api/v1/internal/fds/**`로 결정했다. #951 작업 브랜치에는 행동 이벤트 제출과 관리자 보류 상세의 기본 조회·점수 필드가 있다. Agent Tool·보고서·실행 워커는 아직 구현되지 않았다. 전체 연동 책임과 미결 사항은 [연동 계약](p6_fds_integration_contract.md), 보류·실행의 정본은 [이체 계약 §9](transfer_seam.md#9-훅-c--이체-보류-771)이다.
 > **오류코드:** 기존 `CMN`·`TRF`·`OTP`·`APW`는 재사용하고 FDS 고유 조건만 [api_conventions.md §4-17](../api_conventions.md#4-17-fds-이상거래탐지보류-사건-조사--p6-854)에 등록했다. 새 코드의 Java 구현과 관리자 권한 설정은 별도 구현 작업이다. 아래 성공 예시는 모두 HTTP 200·`code="0000"`; 오류는 `{ "code": "...", "message": "...", "data": null }`이다.
 > **인증 계약 결정:** 고객 API는 로그인 고객 세션, 관리자 조회는 기존 `CUSTOMER_READ`, 콜·승인·거절은 기존 `CUSTOMER_WRITE`를 쓴다. 관리자 목록·상세·콜 기록은 `X-Access-Reason`과 감사 기록이 필수다. 관리자 변경은 기존 CSRF 보호를 유지한다. `/admin/fds/**` matcher는 기본 `denyAll`보다 앞에 11/7 이후 구현한다. Agent 내부 API는 고객·관리자 세션을 받지 않고 서비스 Bearer 토큰·전용 stateless 보안 체인·사설망 접근 제한을 사용한다. 발표 VM에서는 Git 밖의 접근 제한된 `env_file`로 양 서비스에 토큰 환경변수를 주입하고, 동일 Compose 사설 브리지로 연결한다. Agent·BE 직접 포트와 내부 API 경로는 외부에 공개하지 않는다. 외부 HTTPS는 프록시에서 종료하고 VM 내부 브리지는 HTTP, 호스트 분리 시 내부 TLS를 적용한다. 구현·배포 전에는 열지 않는다. 상세 결정은 [연동 계약 §6](p6_fds_integration_contract.md#6-관리자-api-계약-초안)을 따른다.
 
@@ -432,7 +432,7 @@ URL: `/api/v1/admin/fds/holds/{transferHoldId}`
 사용자: 관리자
 인증 필요: Y
 Idempotency-Key: N
-기타: `CUSTOMER_READ` 권한·`X-Access-Reason` 필수, 조회 감사. P4 원본·상태 조회 공개 API 선행. 아직 미구현.
+기타: `CUSTOMER_READ` 권한·`X-Access-Reason` 필수, 조회 감사. #951 브랜치에서 P4 원본·상태 조회와 저장 점수 필드는 연결했다. 정책 집계 근거·행동 요약·조사 상태·보고서·콜 기록의 실제 데이터 연결은 후속 구현 대상이다.
 
 ### 요구사항 ID
 

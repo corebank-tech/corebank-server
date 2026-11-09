@@ -27,4 +27,14 @@ BE → Python 연결 제한은 1초, 호출 전체 제한은 5초다. Python 추
 ./gradlew test --tests '*ArchitectureTest'
 ```
 
-관리자 상세와 Agent 입력은 `BehaviorScoreQuery`의 저장 결과를 사용한다. 해당 화면·Agent 조사 API가 아직 구현되지 않아 최종 연결은 그 구현과 함께 검증해야 한다. Docker가 있어야 Flyway·JDBC 통합 테스트를 실행할 수 있다.
+관리자 상세 `GET /api/v1/admin/fds/holds/{transferHoldId}`와 `FdsInvestigationInputService`는 `fds_behavior_score`에 저장된 결과만 읽는다. 상세 조회는 `CUSTOMER_READ`와 `X-Access-Reason`이 필요하고 조회 감사를 남긴다. 실제 LangGraph Agent 실행 API·조사 워커·보고서 저장은 아직 구현되지 않았다.
+
+실제 Python 모델과 MySQL을 함께 검증할 때는 두 서비스를 띄운 뒤 같은 토큰을 주입한다. 아래 테스트는 보류 상태 유지, 관리자 상세·Agent 입력의 점수 일치를 확인한다.
+
+```powershell
+$env:FDS_SCORE_TEST_URL = 'http://127.0.0.1:8000'
+$env:FDS_SCORE_SERVICE_TOKEN = '<Python과 같은 비공개 토큰>'
+./gradlew test --tests '*FdsPythonLiveFlowIntegrationTest' --tests '*FastApiPythonLiveIntegrationTest'
+```
+
+Docker가 있어야 Flyway·JDBC 통합 테스트를 실행할 수 있다. 환경변수가 없으면 실제 Python 통합 테스트는 건너뛴다.
