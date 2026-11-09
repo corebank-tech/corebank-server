@@ -665,7 +665,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `BehaviorScoreUnavailableReason` | `FLOW_UNAVAILABLE` | 유효한 행동 흐름이 없어 피처를 만들 수 없음 |
 |  | `INVALID_FEATURES` | 유효한 flow는 있으나 서버 피처 계산 결과가 없거나 명세 범위·필수값을 위반함 |
 |  | `MODEL_UNAVAILABLE` | 모델 파일 부재·손상·버전 불일치로 모델을 사용할 수 없음 |
-|  | `INFERENCE_INPUT_INVALID` | FastAPI가 피처 버전·형식·값을 거부함 |
+|  | `INFERENCE_INPUT_INVALID` | FastAPI가 요청 형식·값을 거부함 |
 |  | `INFERENCE_TIMEOUT` | 추론 요청 제한 시간 초과 |
 |  | `INFERENCE_SERVICE_UNAVAILABLE` | Python 서비스 연결·가용성 장애 |
 |  | `INFERENCE_FAILED` | 위 범주에 속하지 않는 추론 실패 |
