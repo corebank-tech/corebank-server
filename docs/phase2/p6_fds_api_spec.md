@@ -764,7 +764,7 @@ BE는 사설 Compose 네트워크의 Python 서비스 이름으로만 호출한�
 | `features.backCount` | 확인 화면에서 입력 화면으로 완료된 뒤로가기 횟수 | Integer | 0~100; 완전한 flow에서 이벤트가 없으면 0 | X | `1` |
 | `features.amountRevisionCount` | 첫 확정 금액 뒤 수정 횟수 | Integer | 0~100; 완전한 flow에서 수정이 없으면 0 | X | `2` |
 | `features.confirmActiveSeconds` | 보이는 확인 화면의 활성 체류 | Integer | 0~1800초; visible 밀리초 합산 후 한 번 버림 | O | `71` |
-| `features.recipientConfirmSeconds` | 이체 진입부터 수취인 확인까지 경과 | Integer | 0 이상, 초 단위 버림; 확인 이벤트가 없으면 null | O | `15` |
+| `features.recipientConfirmSeconds` | 이체 진입부터 첫 수취인 확인까지 경과 | Integer | 0 이상, 초 단위 버림; 같은 flow에서 확인이 반복되면 첫 `RECIPIENT_CONFIRMED`를 사용; 확인 이벤트가 없으면 null | O | `15` |
 | `features.totalFlowSeconds` | 이체 진입부터 최종 제출까지 경과 | Integer | 0 이상, 초 단위 버림; 완전한 flow의 양 끝 이벤트 필수 | X | `100` |
 
 다섯 피처의 **순서는** Python 저장소 `fds_agent/feature_schema.json`의 `modelInputOrder`와 동일하게 `backCount`, `amountRevisionCount`, `confirmActiveSeconds`, `recipientConfirmSeconds`, `totalFlowSeconds`다. JSON 객체의 키 순서에 의존하지 않고 Python이 이 순서로 모델 벡터를 만든다. 두 선택 피처의 `null`은 측정 불가이며 Python은 `numpy.nan`으로 전달하고 0으로 대체하지 않는다. 키 생략, 문자열 숫자, 음수, 소수, `NaN`·무한대는 거부한다. 유효한 flow 자체가 없거나 필수 피처가 없고 계산 불가하면 BE가 Python을 호출하지 않고 #930의 `UNAVAILABLE` 사유를 저장한다. `recipientConfirmSeconds`가 값이면 `totalFlowSeconds`를 넘을 수 없다. `backCount`·`amountRevisionCount` 상한은 행동 흐름의 이벤트 최대 100건에서 온다. 시간 피처에는 이벤트 계약에 없는 임의의 추가 상한을 만들지 않는다.
@@ -806,7 +806,7 @@ Python 서비스의 내부 오류 코드는 공개 BE `ErrorCode`가 아니다. 
 | `200` | `0000` | 추론 완료 | 결과 검증·저장 성공 시 `AVAILABLE` |
 | `400` | `SCORE_INVALID_REQUEST` | 필수 필드 누락, 형식·범위·null 위반 | `INFERENCE_INPUT_INVALID` |
 | `401` | `SCORE_UNAUTHORIZED` | 서비스 토큰 없음·무효 | `INFERENCE_SERVICE_UNAVAILABLE` 및 운영 알림 |
-| `409` | `SCORE_FEATURE_VERSION_MISMATCH` | 요청 피처 버전과 로드 모델의 기대 버전 불일치 | `MODEL_UNAVAILABLE` 및 배포 버전 확인 |
+| `409` | `SCORE_FEATURE_VERSION_MISMATCH` | 요청 피처 버전과 로드 모델의 기대 버전 불일치 | `MODEL_UNAVAILABLE` 및 배포 버전 확인. `INFERENCE_INPUT_INVALID`로 매핑하지 않음 |
 | `503` | `SCORE_MODEL_UNAVAILABLE` | 모델 미적재·손상·로딩 실패 | `MODEL_UNAVAILABLE` |
 | `504` | `SCORE_INFERENCE_TIMEOUT` | Python 내부 추론 제한 시간 초과 | `INFERENCE_TIMEOUT` |
 | `500` | `SCORE_INFERENCE_FAILED` | 위 범주 밖의 추론 실패 | `INFERENCE_FAILED` |
@@ -829,7 +829,7 @@ Python 서비스의 내부 오류 코드는 공개 BE `ErrorCode`가 아니다. 
 
 Python은 요청을 받은 뒤 추론 처리에 최대 **3초**를 사용하고, 초과하면 `504 SCORE_INFERENCE_TIMEOUT`을 반환한다. BE의 Python 호출은 연결 제한 **1초**, 호출 전체 제한 **5초**를 적용한다(연결 시간 포함). 따라서 Python의 3초 제한이 먼저 끝나면 BE가 `504`를 받을 수 있고, 네트워크 지연이나 응답 유실로 5초가 지나면 BE도 기다림을 끝낸다. 두 제한 시간 모두 보류 건당 한 번의 점수 추론에 적용하며 자동 재시도하지 않는다. 점수 계산은 `HELD` 확정 후 Agent 입력 생성 전에 수행하므로, 이 5초는 별도의 **Agent 실행 60초 제한**에 포함하지 않는다. 점수가 없어도 Agent 조사는 계속한다. 이 수치는 시연 환경의 실행 보호값이며 정책 A/B 판정 기준이 아니다.
 
-BE에서 연결 실패는 `INFERENCE_SERVICE_UNAVAILABLE`, BE 호출 전체 제한 5초 초과는 `INFERENCE_TIMEOUT`으로 구분한다. 성공 HTTP라도 ID·피처 버전 불일치, 점수 범위 밖, 모델 버전 누락, 잘못된 JSON은 `INFERENCE_FAILED`로 처리하고 결과를 저장하지 않는다. 내부 오류 코드나 메시지를 관리자에게 그대로 반환하지 않고 #930의 `BehaviorScoreUnavailableReason`으로 매핑한다. BE가 피처 생성 전에 감지한 무효한 입력은 `FLOW_UNAVAILABLE` 또는 `INVALID_FEATURES`이며, Python의 `400`과 구분한다.
+BE에서 연결 실패는 `INFERENCE_SERVICE_UNAVAILABLE`, BE 호출 전체 제한 5초 초과는 `INFERENCE_TIMEOUT`으로 구분한다. 성공 HTTP라도 ID·피처 버전 불일치, 점수 범위 밖, 모델 버전 누락, 잘못된 JSON은 `INFERENCE_FAILED`로 처리하고 결과를 저장하지 않는다. 표에 없는 HTTP 상태나 정의되지 않은 오류 응답도 기본 사유 `INFERENCE_FAILED`로 `UNAVAILABLE`을 기록하고 점수 없이 후속 조사를 계속한다. 내부 오류 코드나 메시지를 관리자에게 그대로 반환하지 않고 #930의 `BehaviorScoreUnavailableReason`으로 매핑한다. BE가 피처 생성 전에 감지한 무효한 입력은 `FLOW_UNAVAILABLE` 또는 `INVALID_FEATURES`이며, Python의 `400`과 구분한다.
 
 ### 재시도·저장·표시 경계
 
