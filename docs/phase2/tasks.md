@@ -795,7 +795,7 @@ public enum JournalDirection { DEBIT, CREDIT }   // gl.domain 에서 gl.api 로 
 - 상품가입 초입금 기표(`LedgerPair.forProductSubscription` 완료 지점). `ProductSubscriptionDepositService` 가 원장 저장 직후 훅 B 를 부른다.
 - 정정 체인(#548) 기표. `TransferCorrectionService` 가 원장 저장 직후 훅 B 를 부른다 — 취소정정은 `REVERSAL`(`REV`), 정상거래는 `TRF`.
 - 채번은 전용 커넥션 풀(3개)로 한다. 이체 트랜잭션 안에서 메인 풀 커넥션을 하나 더 꺼내면 동시 기표 수가 풀 크기에 닿을 때 순환 대기로 멈춘다.
-- 훅 전/후 이체 성능 저하율은 훅이 릴리스 1에 함께 나가 운영에서 잴 수 없어 P3가 로컬(PH-60b 적재)에서 쟀다. 결과는 [harness_results.md §7](harness_results.md#7-ph-24-훅-b-전후--2026-10-1920-로컬)이다.
+- 훅 전/후 이체 성능 저하율은 훅이 릴리스 1에 함께 나가 운영에서 잴 수 없어 P3가 로컬(PH-60b 적재)에서 쟀다. 판정 요약은 [harness_results.md §7](harness_results.md#7-ph-24-훅-b-전후--2026-10-1920-로컬), 측정 조건과 원자료는 [ph24_hook_b_results.md](ph24_hook_b_results.md)에 있다.
 - **완료 기준:** 이체 1건당 전표 1건, 차대변 일치. 훅에서 예외가 나면 이체가 롤백된다(테스트).
 
 ### PH-28. 시산표 API · 베이스라인
