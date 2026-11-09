@@ -4,6 +4,9 @@ module "network" {
   onprem_replica_cidr  = var.onprem_replica_cidr
   onprem_info_api_cidr = var.onprem_info_api_cidr
   info_api_port        = var.info_api_port
+
+  # 모의 서버 주소와 egress 목적지가 어긋나지 않게 interbank_host에서 만든다. 비면 정보계 VM 주소를 그대로 둔다
+  onprem_interbank_cidr = var.interbank_host == "" ? var.onprem_info_api_cidr : "${var.interbank_host}/32"
 }
 
 data "terraform_remote_state" "acm" {
