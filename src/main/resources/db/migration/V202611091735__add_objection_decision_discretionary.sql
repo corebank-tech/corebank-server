@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202611090100__add_objection_decision_discretionary.sql
+-- V202611091735__add_objection_decision_discretionary.sql
 -- 대상 테이블: objection_decision (컬럼 추가 · 제약 추가 · P3)
 --
 -- 담당자 재량 판정(ADR-0011). 해제 게이트가 닫은 수용과 일부 지급정지를 담당자가 사유를 남기고 쓸 수 있게 한다.

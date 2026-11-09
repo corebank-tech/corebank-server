@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202611060100__add_objection_review_workflow.sql
+-- V202611091705__add_objection_review_workflow.sql
 -- 대상 테이블: objection (컬럼 추가 · 상태 확장), objection_supplement_request, objection_review_session (신규 · P3)
 --
 -- 이의제기 AI 심사 지원(D-36) PA-10. 소명 완비 확인과 심사 기한, 보완 요청과 보완 기한, 심사 시작 기록.

@@ -2,7 +2,7 @@
 
 - 상태: 수락됨 (2026-11-09)
 - 관련: [D-36](../phase2/README.md#d-36--113--리드), [objection_admin_contract.md](../phase2/objection_admin_contract.md) §3, §7,
-  [api_conventions.md](../api_conventions.md) §4-18(`PST0310`, `PST0311`), `V202611090100`
+  [api_conventions.md](../api_conventions.md) §4-18(`PST0310`, `PST0311`), `V202611091735`
 - 보완: 해제 게이트 원칙(D9)의 "보류를 줄이는 판정은 근거가 있을 때만 열린다"를 "기본 판단"으로 낮추고 예외 경로를 정한다
 
 **요약:** 해제 게이트는 그대로 기본 판단으로 두되, 게이트가 갈래 조건 때문에 닫은 수용과 일부 지급정지는 담당자가 사유를 남기고

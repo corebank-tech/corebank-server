@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202611060300__create_objection_external_check.sql
+-- V202611091715__create_objection_external_check.sql
 -- 대상 테이블: objection_external_check (신규 · P3)
 --
 -- 이의제기 AI 심사 지원(D-36) PA-10 외부 확인 모의. 수사기관(POLICE)과 관련 금융회사(PEER_BANK)에 확인을 요청하고

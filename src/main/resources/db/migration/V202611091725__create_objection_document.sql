@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202611060500__create_objection_document.sql
+-- V202611091725__create_objection_document.sql
 -- 대상 테이블: objection_document, objection_document_ocr (신규 · P3)
 --
 -- 이의제기 AI 심사 지원(D-36) PA-12, PA-20 서류 첨부. 파일 본문은 DB 에 두지 않고 저장소

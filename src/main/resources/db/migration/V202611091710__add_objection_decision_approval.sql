@@ -1,5 +1,5 @@
 -- ====================================================================
--- V202611060200__add_objection_decision_approval.sql
+-- V202611091710__add_objection_decision_approval.sql
 -- 대상 테이블: objection_decision (컬럼 추가 · 제약 변경 · P3)
 --
 -- 이의제기 AI 심사 지원(D-36) PA-10 2인 승인(Plan D13). 보류를 줄이는 판정(수용, 일부 지급정지)은 작성자와 다른
