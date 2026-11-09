@@ -3,6 +3,7 @@ package com.shinhan.corebank.transfer.application.service;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.api.TransferHoldExecutionResult;
+import com.shinhan.corebank.transfer.api.TransferHoldForFds;
 import com.shinhan.corebank.transfer.api.TransferHoldUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
@@ -37,6 +38,18 @@ public class TransferHoldService implements TransferHoldUseCase {
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final TransferLookupPort transferLookupPort;
     private final Clock clock;
+
+    @Override
+    public TransferHoldForFds findForFds(long transferHoldId) {
+        // P6에는 보류 판정에 필요한 소유권·flow·상태만 공개한다.
+        TransferHold hold = load(transferHoldId);
+        return new TransferHoldForFds(
+                transferHoldId,
+                hold.getCustomerId(),
+                hold.getFlowId(),
+                hold.getStatus().name(),
+                hold.getHeldAt());
+    }
 
     /** 관리자 승인(FDS). 승인으로 푸는 보류만 실행한다. 시각으로 푸는 보류는 TRF0310이다. */
     @Override

@@ -8,6 +8,9 @@ package com.shinhan.corebank.transfer.api;
  */
 public interface TransferHoldUseCase {
 
+    /** 보류 사건의 고객·flow 소유권과 현재 상태를 P6에 제공한다. */
+    TransferHoldForFds findForFds(long transferHoldId);
+
     /**
      * 원본 요청 그대로 한 번 실행한다. 다시 부르면 앞선 결과를 돌려준다. 토큰은 받지 않는다(인증은 보류 시점에 끝났다).
      *
