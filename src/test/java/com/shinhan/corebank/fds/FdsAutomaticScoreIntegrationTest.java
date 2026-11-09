@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
@@ -35,6 +36,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /** 실제 TransferHeld 커밋 이후 Modulith 리스너가 Python 점수를 저장하는지 확인한다. */
 @TestPropertySource(properties = {"app.fds.policy.enabled=true", "app.fds.score.enabled=true"})
+@EnabledIfEnvironmentVariable(named = "FDS_SCORE_SERVICE_TOKEN", matches = ".+")
 class FdsAutomaticScoreIntegrationTest extends IntegrationTestSupport {
     @Autowired
     private EntityManager entityManager;
