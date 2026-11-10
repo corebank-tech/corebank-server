@@ -5,6 +5,7 @@ import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.gl.api.JournalPostingUseCase;
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
 import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
 import com.shinhan.corebank.transfer.application.port.in.InterbankTransferCommand;
@@ -198,8 +199,12 @@ public class InterbankTransferService implements InterbankTransferUseCase {
             if (locked.status() != LockedAccountStatus.ACTIVE) {
                 throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
             }
+            // 당행 이체와 같은 규칙이다 — 잔액 부족은 TRF0303, 보류액 때문이면 LMT0001(#521).
             if (locked.balance() < command.amount()) {
                 throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
+            }
+            if (locked.availableBalance() < command.amount()) {
+                throw new BusinessException(LmtErrorCode.INSUFFICIENT_WITHDRAWABLE_AMOUNT);
             }
 
             Transfer transfer = transferSavePort.save(created);

@@ -11,6 +11,9 @@ import static org.mockito.Mockito.when;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.event.DomainEvent;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
+import com.shinhan.corebank.transfer.api.TransferPreCheck;
+import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
 import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.application.port.in.InterbankTransferResult;
 import com.shinhan.corebank.transfer.application.port.out.InterbankGatewayPort;
@@ -19,11 +22,14 @@ import com.shinhan.corebank.transfer.application.port.out.InterbankReply;
 import com.shinhan.corebank.transfer.application.port.out.InterbankRequest;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 class InterbankTransferServiceTest extends InterbankIntegrationTestSupport {
 
@@ -157,6 +163,42 @@ class InterbankTransferServiceTest extends InterbankIntegrationTestSupport {
 
         assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
         assertThat(result.transactionNumber()).isNotNull();
+        assertThat(balance()).isEqualTo(INITIAL_BALANCE);
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM ledger_entry WHERE transaction_number = ?",
+                        Long.class,
+                        result.transactionNumber()))
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("[#521] 훅 A 통과 뒤 락 전에 보류액이 늘면 송신하지 않고 LMT0001로 거부하며 잔액·원장은 그대로다")
+    void holdIncreasedAfterPreCheck_failsBeforeSend() {
+        long amount = INITIAL_BALANCE - 1;
+        TransferPreCheck holdAfterPreCheck = new TransferPreCheck() {
+            // 실제 훅 A(출금가능액 검사)가 통과시킨 뒤에 돈다.
+            @Override
+            public int order() {
+                return Integer.MAX_VALUE;
+            }
+
+            @Override
+            public void check(TransferPreCheckContext context) {
+                TransactionTemplate requiresNew = new TransactionTemplate(transactionManager);
+                requiresNew.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+                requiresNew.executeWithoutResult(status -> jdbcTemplate.update(
+                        "UPDATE account SET hold_amount = ? WHERE account_id = ?",
+                        INITIAL_BALANCE / 2,
+                        WITHDRAWAL_ACCOUNT_ID));
+            }
+        };
+        List<TransferPreCheck> preChecks = new ArrayList<>(transferPreChecks);
+        preChecks.add(holdAfterPreCheck);
+
+        InterbankTransferResult result = service(client, preChecks).execute(command("004", "1234567890123", amount));
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(LmtErrorCode.INSUFFICIENT_WITHDRAWABLE_AMOUNT.getCode());
         assertThat(balance()).isEqualTo(INITIAL_BALANCE);
         assertThat(jdbcTemplate.queryForObject(
                         "SELECT COUNT(*) FROM ledger_entry WHERE transaction_number = ?",
