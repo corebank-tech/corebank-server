@@ -23,7 +23,11 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-/** 사건과 이의제기로 게이트 입력을 모아 계산한다. 입력은 원장 사실, 외부 확인 회신, 접수 정보뿐이다(D9). */
+/**
+ * 사건과 이의제기로 게이트 입력을 모아 계산한다. 입력은 원장 사실, 외부 확인 회신, 접수 정보뿐이다(D9).
+ *
+ * <p>두 단계로 나눌 수 있다. {@link #prepare}는 락 밖에서 원장 사실을, {@link #finish}는 락 안에서 바뀔 수 있는 입력을 읽는다.
+ */
 @Component
 @RequiredArgsConstructor
 public class GateEvaluator {
@@ -34,6 +38,14 @@ public class GateEvaluator {
     private final GateSettings settings;
 
     public GateResult evaluate(PaymentStopCase paymentStopCase, Objection objection) {
+        return finish(prepare(paymentStopCase), objection);
+    }
+
+    /**
+     * 락 밖에서 미리 계산해 둘 수 있는 원장 사실. 전부 지급정지 중에는 입출금이 막혀 원장이 바뀌지 않으므로, 180일 원장 조회를 락을 쥐지
+     * 않고 한다.
+     */
+    public LedgerInputs prepare(PaymentStopCase paymentStopCase) {
         Window window = window(paymentStopCase);
 
         List<LedgerFact> accountTransfers =
@@ -47,8 +59,20 @@ public class GateEvaluator {
                         byNumber.getOrDefault(transfer.transactionNumber(), snapshot(transfer, paymentStopCase)))
                 .toList();
 
-        boolean otherStopHistory =
-                accountStopPort.hasOtherStopHistory(paymentStopCase.getAccountId(), paymentStopCase.getCaseId());
+        return new LedgerInputs(
+                paymentStopCase.getAccountId(),
+                paymentStopCase.getCaseId(),
+                paymentStopCase.getSenderAccountId(),
+                disputed,
+                accountTransfers);
+    }
+
+    /**
+     * 바뀔 수 있는 입력(외부 확인 회신, 다른 지급정지 이력, 접수 정보)을 지금 읽어 최종 결과를 만든다. 확정 직전에는 이의제기 행 락을 잡은
+     * 뒤 부른다. 외부 확인 회신은 같은 락 안에서 저장되므로, 락을 잡은 뒤 읽으면 먼저 커밋된 회신을 놓치지 않는다(PR #919 리뷰 R1).
+     */
+    public GateResult finish(LedgerInputs ledger, Objection objection) {
+        boolean otherStopHistory = accountStopPort.hasOtherStopHistory(ledger.accountId(), ledger.caseId());
 
         // 회신이 온 외부 확인만 넣는다. 해당 기록 없음(NO_RECORD)은 게이트에 영향이 없다
         List<ExternalReply> replies = reviewPort.findExternalChecks(objection.getObjectionId()).stream()
@@ -57,9 +81,9 @@ public class GateEvaluator {
                 .toList();
 
         GateFacts facts = new GateFacts(
-                disputed,
-                accountTransfers,
-                paymentStopCase.getSenderAccountId(),
+                ledger.disputed(),
+                ledger.accountTransfers(),
+                ledger.senderAccountId(),
                 otherStopHistory,
                 objection.isSimplifiedRequested(),
                 objection.getClause(),
@@ -96,6 +120,20 @@ public class GateEvaluator {
 
     /** @param to 미포함 */
     public record Window(LocalDateTime firstDisputedAt, LocalDateTime from, LocalDateTime to) {}
+
+    /** 락 밖에서 계산한 원장 사실. {@link #finish}가 락 안에서 바뀔 수 있는 입력과 합친다. */
+    public record LedgerInputs(
+            long accountId,
+            long caseId,
+            Long senderAccountId,
+            List<LedgerFact> disputed,
+            List<LedgerFact> accountTransfers) {
+
+        public LedgerInputs {
+            disputed = List.copyOf(disputed);
+            accountTransfers = List.copyOf(accountTransfers);
+        }
+    }
 
     private static LedgerFact snapshot(DisputedTransfer transfer, PaymentStopCase paymentStopCase) {
         Long sender = paymentStopCase.getSenderAccountId();

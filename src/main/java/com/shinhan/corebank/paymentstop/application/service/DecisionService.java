@@ -15,8 +15,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 /**
- * 판정 작성과 2인 승인(D13). 게이트는 트랜잭션과 락 밖에서 계산하고(180일 원장 조회 중 락을 쥐지 않으려는 것), 기록 반영은
- * {@link DecisionWriter}가 이의제기 행 락 안에서 한다(D11). 전부 지급정지 중에는 입출금이 막혀 원장이 바뀌지 않으므로 락 밖 계산이 안전하다.
+ * 판정 작성과 2인 승인(D13). 게이트의 원장 사실은 트랜잭션과 락 밖에서 계산하고(180일 원장 조회 중 락을 쥐지 않으려는 것), 기록
+ * 반영은 {@link DecisionWriter}가 이의제기 행 락 안에서 한다(D11). 전부 지급정지 중에는 입출금이 막혀 원장이 바뀌지 않으므로 원장 사실은
+ * 락 밖 계산이 안전하다. 외부 확인 회신처럼 락 밖에서 바뀔 수 있는 입력은 승인 때 락 안에서 다시 읽는다.
  *
  * <p>여기서 하는 상태와 승인자 확인은 빠른 거절용이다. 같은 확인을 락 안에서 다시 한다.
  *
@@ -65,10 +66,11 @@ public class DecisionService implements WriteDecisionUseCase, ApproveDecisionUse
         pending.requireApprover(actor.adminCustomerId());
         pending.requireDiscretionaryAcknowledged(discretionaryAcknowledged);
 
-        // 확정 직전 게이트 재계산(D11). 분석 이후 외부 확인 회신이 들어왔으면 여기서 반영된다
-        GateResult gate = gateEvaluator.evaluate(caseOf(objection), objection);
+        // 확정 직전 게이트 재계산(D11). 무거운 원장 조회만 락 밖에서 하고, 외부 확인 회신 같은 바뀔 수 있는 입력은
+        // DecisionWriter 가 이의제기 행 락을 잡은 뒤 다시 읽어 최종 게이트를 만든다(PR #919 리뷰 R1)
+        GateEvaluator.LedgerInputs ledger = gateEvaluator.prepare(caseOf(objection));
 
-        return decisionWriter.approve(objectionId, decisionId, discretionaryAcknowledged, actor, gate);
+        return decisionWriter.approve(objectionId, decisionId, discretionaryAcknowledged, actor, ledger);
     }
 
     @Override

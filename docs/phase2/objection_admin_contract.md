@@ -46,7 +46,7 @@ Agent 워커가 부르는 내부 API는 [objection_agent_contract.md](objection_
 | `POST /{id}/supplement-requests` | WRITE | `{ reason(≤500), missingDocuments: string[](≤20, 각 ≤100) }` | `{ round, supplementDue }`. 명의인 통지 기록. `PST0006`, `PST0302`, `PST0308` |
 | `POST /{id}/review-sessions` | READ | 없음 | `{ sessionId, startedAt }`. 상세 화면을 연 시각 |
 | `POST /{id}/decisions` | WRITE | `{ result, reason(≤500), earlyReleaseBasis(≤500), discretionary(기본 false), discretionaryReason }` | Decision. `REJECTED`는 바로 `CONFIRMED`이고 지급정지 유지. `ACCEPTED`, `PARTIAL`은 계좌를 건드리지 않고 `PENDING_APPROVAL`. 게이트가 열지 않으면 `PST0301`, 다만 재량 판정은 아래 §3-1 |
-| `POST /{id}/decisions/{decisionId}/approve` | APPROVE | 선택. `{ discretionaryAcknowledged: boolean }` | Decision(`CONFIRMED`). 작성자와 같으면 `PST0309`. 재량 판정인데 `discretionaryAcknowledged`가 true가 아니면(본문 없음 포함) `PST0311`. 확정 직전 게이트를 락 밖에서 다시 계산하고(D11) 열리지 않으면 `PST0301`, 재량 판정은 §3-1(판정은 승인 대기로 남는다). 일반 판정은 본문 없이 이전과 같이 승인된다. 동시 승인은 하나만 확정되고 나머지는 `PST0302` |
+| `POST /{id}/decisions/{decisionId}/approve` | APPROVE | 선택. `{ discretionaryAcknowledged: boolean }` | Decision(`CONFIRMED`). 작성자와 같으면 `PST0309`. 재량 판정인데 `discretionaryAcknowledged`가 true가 아니면(본문 없음 포함) `PST0311`. 확정 직전 게이트를 다시 계산하고(D11) 열리지 않으면 `PST0301`. 원장 사실은 락 밖에서, 외부 확인 회신과 접수 정보는 이의제기 행 락을 잡은 뒤 다시 읽어 그사이 들어온 부정 회신도 반영한다, 재량 판정은 §3-1(판정은 승인 대기로 남는다). 일반 판정은 본문 없이 이전과 같이 승인된다. 동시 승인은 하나만 확정되고 나머지는 `PST0302` |
 | `POST /{id}/decisions/{decisionId}/return` | APPROVE | `{ reason(≤500) }` | Decision(`RETURNED`, `returnReason`). 이의제기는 `UNDER_REVIEW`로 돌아가고 심사 기한은 그대로다 |
 | `POST /{id}/external-checks` | WRITE | `{ agency: POLICE \| PEER_BANK, mockReply: INVOLVEMENT_SUSPECTED \| DOCUMENT_FORGED \| OWNER_UNRELATED \| NO_RECORD }` | ExternalCheck. 모의라 요청 즉시 `REPLIED`. 같은 기관에 이미 요청했으면 그 행을 그대로 돌려준다(회신 값도 처음 것). 확정 뒤 새 요청은 `PST0302` |
 | `GET /{id}/external-checks` | READ | | ExternalCheck 배열 |
@@ -143,3 +143,4 @@ Agent 워커가 부르는 내부 API는 [objection_agent_contract.md](objection_
 | 날짜 | 변경 |
 |---|---|
 | 2026-11-09 | 담당자 재량 판정(§3-1, [ADR-0011](../adr/0011-objection-discretionary-decision.md)). 판정 작성 본문 `discretionary`, `discretionaryReason`, 승인 본문 `discretionaryAcknowledged`(선택), Decision의 `discretionary`, `discretionaryReason`, `gateBranchAtWrite`, 상세 `gate.discretionaryResults`, 목록 `discretionary`, 오류 `PST0310`, `PST0311` |
+| 2026-11-10 | 승인 직전 게이트에서 외부 확인 회신과 접수 정보를 이의제기 행 락 안에서 다시 읽는다. 원장 사실 계산은 락 밖에 남긴다(PR #919 리뷰 R1). API 응답과 오류코드는 바뀌지 않는다 |

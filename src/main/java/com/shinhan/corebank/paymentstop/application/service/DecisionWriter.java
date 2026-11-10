@@ -88,10 +88,18 @@ class DecisionWriter {
 
     @Transactional
     public ObjectionDecision approve(
-            long objectionId, long decisionId, boolean discretionaryAcknowledged, AdminActor actor, GateResult gate) {
+            long objectionId,
+            long decisionId,
+            boolean discretionaryAcknowledged,
+            AdminActor actor,
+            GateEvaluator.LedgerInputs ledger) {
         // 동시 승인은 이 락에서 줄을 서고, 뒤에 온 요청은 DECIDED 를 보고 PST0302 로 끝난다
         Objection objection = lock(objectionId);
         objection.approve();
+
+        // 외부 확인 회신은 같은 이의제기 행 락 안에서 저장된다. 락을 잡은 뒤 다시 읽어야 락을 기다리는 동안 커밋된 부정 회신을
+        // 놓치지 않는다. 락이 이 트랜잭션의 첫 조회라 이후 일반 조회의 스냅샷도 락을 잡은 뒤 시점이다(PR #919 리뷰 R1)
+        GateResult gate = gateEvaluator.finish(ledger, objection);
 
         ObjectionDecision pending = pending(objectionId, decisionId);
         pending.requireApprover(actor.adminCustomerId());
