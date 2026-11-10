@@ -1,9 +1,12 @@
 package com.shinhan.corebank.transfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.business.support.BusinessDateTestFixture;
+import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase;
 import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase.ProductSubscriptionDepositCommand;
 import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase.ProductSubscriptionDepositResult;
@@ -71,6 +74,29 @@ class ProductSubscriptionDepositServiceTest extends IntegrationTestSupport {
                         LocalDate.class,
                         result.transactionNumber()))
                 .isEqualTo(BUSINESS_DATE);
+    }
+
+    @Test
+    @DisplayName("[#521] 잔액은 충분해도 보류액을 빼면 모자라면 LMT0001로 거부하고 잔액·원장은 그대로다")
+    void deposit_rejectsWhenHoldAmountLeavesTooLittle() {
+        // given: 잔액 10,000 중 6,000이 묶여 출금가능액은 4,000
+        jdbcTemplate.update("UPDATE account SET hold_amount = 6000 WHERE account_id = ?", WITHDRAWAL_ACCOUNT);
+
+        // when · then
+        assertThatThrownBy(() -> productSubscriptionDepositUseCase.deposit(
+                        new ProductSubscriptionDepositCommand(WITHDRAWAL_ACCOUNT, SUBSCRIPTION_ACCOUNT, 5_000L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(LmtErrorCode.INSUFFICIENT_WITHDRAWABLE_AMOUNT);
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT balance FROM account WHERE account_id = ?", Long.class, WITHDRAWAL_ACCOUNT))
+                .isEqualTo(10_000L);
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM ledger_entry WHERE account_id IN (?, ?)",
+                        Long.class,
+                        WITHDRAWAL_ACCOUNT,
+                        SUBSCRIPTION_ACCOUNT))
+                .isZero();
     }
 
     private void seed() {
