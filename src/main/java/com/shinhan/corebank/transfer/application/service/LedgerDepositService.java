@@ -3,6 +3,7 @@ package com.shinhan.corebank.transfer.application.service;
 import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import com.shinhan.corebank.transfer.api.DepositChannel;
 import com.shinhan.corebank.transfer.api.DepositType;
 import com.shinhan.corebank.transfer.api.LedgerDepositResult;
@@ -80,6 +81,9 @@ public class LedgerDepositService implements LedgerDepositUseCase {
         }
         if (locked.withdrawal().balance() < amount) {
             throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
+        }
+        if (locked.withdrawal().availableBalance() < amount) {
+            throw new BusinessException(LmtErrorCode.INSUFFICIENT_WITHDRAWABLE_AMOUNT);
         }
 
         TransferBalances balances = accountLockPort.applyTransfer(locked, amount, executedAt);
