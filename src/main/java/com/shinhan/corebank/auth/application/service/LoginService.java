@@ -54,6 +54,8 @@ public class LoginService implements LoginUseCase {
                         normalizedUserId, command.password(), command.requestIp(), command.requiredRole()));
 
         if (loginCustomer.isAccountLocked()) {
+            // 잠긴 미가입 아이디와 같은 조회를 거쳐 응답 시간으로 가입 여부가 드러나지 않게 한다 (#900)
+            unregisteredLoginFailurePort.findActiveFailureCount(normalizedUserId);
             recordFailureAudit(
                     loginCustomer.getCustomerId(),
                     command.requestIp(),

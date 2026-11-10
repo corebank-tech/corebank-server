@@ -276,7 +276,7 @@ Python pandas + scikit-learn + xgboost
 
 ### 6.4 추론 연동
 
-MVP에서는 **Python FastAPI에서 XGBoost 추론**한다. 서버는 이체 실행 전 훅 C에서 Python을 호출하지 않고 A/B 정책을 모델 점수 없이 판정한다. `HELD`가 커밋된 뒤 P6 비동기 점수 처리 리스너가 서버에서 검증·계산한 flow별 피처로 [API 명세 §12](p6_fds_api_spec.md#12-내부-fastapi-행동-점수-추론-932)를 호출하고, 결과를 저장한다. 후속 B4 조사 워커는 P6에 저장된 결과로 Agent 입력을 만든다. 저장된 점수가 있으면 Agent 입력과 관리자 상세에 보조 정보로 제공한다. 피처가 없거나 추론·저장에 실패하면 점수 없이 조사를 계속하며 보류·원장·관리자 조치를 변경하지 않는다. 점수는 합성 행동 모델의 출력이지 실제 사기 확률이 아니다. 관리자 점수 상태의 `PENDING`·`AVAILABLE`·`UNAVAILABLE` 전이는 #930 계약을 따르며, 이 문서의 Agent 입력 예시는 `AVAILABLE`인 사건이다.
+MVP에서는 **Python FastAPI에서 XGBoost 추론**한다. 서버는 이체 실행 전 훅 C에서 Python을 호출하지 않고 A/B 정책을 모델 점수 없이 판정한다. `HELD`가 커밋된 뒤 P6 비동기 점수 처리 리스너가 서버에서 검증·계산한 flow별 피처로 [API 명세 §12](p6_fds_api_spec.md#12-내부-fastapi-행동-점수-추론-932)를 호출하고, 결과를 저장한다. 후속 B4 조사 워커는 P6에 저장된 결과로 Agent 입력을 만든다. 저장된 `AVAILABLE` 점수가 있으면 Agent 입력과 관리자 상세에 보조 정보로 제공한다. 피처가 없거나 추론·저장에 실패하면 점수 없이 조사를 계속하며 보류·원장·관리자 조치를 변경하지 않는다. 점수는 합성 행동 모델의 출력이지 실제 사기 확률이 아니다. 관리자 점수 상태의 `PENDING`·`AVAILABLE`·`UNAVAILABLE` 전이는 #930 계약을 따르며, 이 문서의 Agent 입력 예시는 `AVAILABLE`인 사건이다.
 
 ---
 
