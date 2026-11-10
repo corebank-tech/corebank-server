@@ -25,6 +25,7 @@
 | `APP_LOGIN_ID_HMAC_KEY_BASE64` | 릴리스 4부터 필수. 없으면 기동하지 않는다 |
 | `APP_AUDIT_ARCHIVE_STORAGE` | `local`. 감사 로그를 AWS 보관함이 아니라 서버 안에 저장한다 |
 | `APP_LEDGER_RECONCILIATION_FULL_SCAN_CHUNK_TIMEOUT_SECONDS` | `1800`. 코드 기본값은 60초다 |
+| `APP_INFO_API_BASE_URL` `APP_INFO_API_SECRET` | VM 정보계 API(`http://192.168.0.211:8081`)와 그 비밀. 비밀은 `info-api` 컨테이너의 `INFO_API_SECRET`과 같은 값이고 화면에 내지 않고 옮겼다. 호출 자체는 시험 전이다 |
 
 기동할 때 덧붙이는 값(환경 파일에 넣지 않는다): `APP_INTERBANK_HOST=192.168.0.211`(VM 모의 대외기관, 포트 9300), 승격 뒤에는 `SERVER_ADDRESS=127.0.0.1`과 `APP_METRICS_ALLOWED_IP`(§5).
 
@@ -95,15 +96,46 @@ sudo docker run -d --name corebank-drtest-recon --network corebank-drtest-net --
 - 레플리카 TLS 접속(`sslMode=REQUIRED` 조건).
 - VM 안에서 `/actuator/prometheus`를 부르면 `401`로 거부된다(컨테이너 안의 앱은 호스트 요청을 도커 게이트웨이 주소로 본다).
 - 전수 대사 리허설(§6).
+- 접속 경로: 인터넷의 `www.corebank.cloud` 화면이 VM의 Nginx(`192.168.0.211:443`)를 불러 `200 OK`(§8).
 
 **하지 않음**
 - 승격된 DB로의 기동, 호스트 네트워크 방식(§5)의 DB 접속. 포트가 3306으로 고정이라 격리 DB(`127.0.0.1:3310`)로는 시험하지 못했다.
 - 로그인 · 이체 · 해지 화면 동작(#849 완료 조건). 접속 경로(Nginx · 인증서 · hosts)가 있어야 화면으로 눌러 볼 수 있다. 해지는 설정 스위치(`APP_SUBSCRIPTION_EARLYTERMINATION_ENABLED`)가 따로 있는 것으로 알고 VM 환경 파일에는 이 변수가 없다. 스위치 기본값은 확인하지 못했으니 시험 전에 확인한다.
 - 정보계 API 호출. `APP_INFO_API_BASE_URL`을 넣으면 `APP_INFO_API_SECRET`도 필요한데 값의 위치를 확인하지 못했다.
 - `APP_METRICS_ALLOWED_IP=127.0.0.1`로 `/actuator/prometheus`가 200이 되는지.
-- Nginx · 인증서 · 발표 노트북 hosts를 통한 접속.
+- Nginx가 요청을 진짜 API로 넘기는 구성과 그 위의 로그인 · 쿠키 · CSRF 흐름. (11/10에는 고정 응답만 하는 Nginx로 크롬 접속까지만 확인했다, §8)
 
-## 8. 관련 문서
+## 8. 접속 경로 (시연용, 11/10 시험)
+
+화면(FE)은 Cloudflare의 `www.corebank.cloud` 그대로 두고, `api.corebank.cloud`만 VM으로 보낸다. 발표 노트북이 교육장 안에 있어야 한다. 인터넷에서는 VM(`192.168.0.211`)에 닿지 않는다.
+
+**VM의 Nginx** (`nginx:1.27-alpine`, 컨테이너 `demo-nginx`, `-p 192.168.0.211:443:443`, `--restart unless-stopped`)
+- 설정과 인증서는 `/etc/corebank-demo-test/`(폴더 `700`, `key.pem`은 `600`). 개인 키는 VM 밖으로 내보내지 않는다.
+- 지금은 **시험용 고정 응답**(`{"status":"UP"}`)과 CORS 헤더만 준다. 시연용은 요청을 `127.0.0.1:8080`의 API로 넘기고 `/actuator/`를 막는 설정으로 바꿀 계획이며, CORS는 앱의 `CORS_ALLOWED_ORIGINS`가 응답하게 한다. **이 설정은 시험 전이다.**
+- 설정을 바꾼 뒤에는 파일을 같은 파일 그대로 덮어쓰고(`cat 새파일 > 기존파일`, `sed -i`는 도커가 파일 연결을 놓친다) `docker exec demo-nginx nginx -t && docker exec demo-nginx nginx -s reload`로 다시 읽힌다.
+
+**인증서**: 자체 인증서(`CN=api.corebank.cloud`, 이름 `DNS:api.corebank.cloud`), 30일(2026-12-10 만료).
+```bash
+sudo openssl req -x509 -newkey rsa:2048 -nodes -keyout /etc/corebank-demo-test/key.pem -out /etc/corebank-demo-test/cert.pem \
+  -days 30 -subj "/CN=api.corebank.cloud" -addext "subjectAltName=DNS:api.corebank.cloud"
+```
+
+**발표 노트북(맥)**: 인증서 지문(SHA-256)을 VM과 대조한 뒤 시스템 키체인에서 신뢰하고, hosts에 한 줄을 넣는다. 시연 날과 리허설 때만 넣고 끝나면 지운다. 안 지우면 그 노트북은 진짜 AWS `api.corebank.cloud`를 못 쓴다.
+```bash
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain <cert.pem>
+echo '192.168.0.211 api.corebank.cloud' | sudo tee -a /etc/hosts; sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
+# 원복
+sudo sed -i '' '/192.168.0.211 api.corebank.cloud/d' /etc/hosts; sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
+```
+
+**크롬 (157에서 확인)**
+- 인터넷 화면이 내부 주소를 부르면 **"로컬 네트워크의 다른 기기에서 액세스" 확인창**이 뜬다. **허용**하면 요청이 성공한다(`/api/v1/customers/me` 200 OK, 원격 주소 `192.168.0.211:443`). **차단**을 누르면 크롬이 기억해서 계속 실패한다.
+- 그러므로 발표 때 쓸 크롬 **프로필에서 미리 허용**해 둔다. 시크릿 창과 게스트 창은 허용 기록이 매번 지워지니 쓰지 않는다. 다른 사람이 자기 기기로 접속하면 각자 한 번씩 허용해야 한다.
+- 첫 시도는 CORS 사전 요청이 `x-correlation-id`를 허용 헤더에 없어서 실패했다(시험용 Nginx 허용 목록이 모자랐고, 헤더를 추가하자 성공). 진짜 API로 넘길 때는 Nginx가 CORS 헤더를 덧붙이지 않는다.
+
+**다른 사람도 접속하게 하려면 (11/13 이후, 시험 전)**: 공개 DNS의 `api.corebank.cloud`를 `192.168.0.211`로 바꾸고(가비아, P2와 도메인 소유자), 어느 기기에서나 믿어지는 인증서(Let's Encrypt DNS-01, 가비아에 TXT 레코드)로 교체한다. 접속할 수 있는 사람은 교육장 네트워크 안에 있는 사람뿐이다. 3-Tier가 쓰는 동안(11/13 전)에는 `api` 레코드를 바꾸지 않는다.
+
+## 9. 관련 문서
 
 - [PH-54 DR 런북](ph54_onprem_dr_runbook.md): 승격, 쓰기 차단, GTID 동기화
 - [VPN · VM 런북](ph100_vpn_vm_runbook.md): 터널 복구와 복제 확인
