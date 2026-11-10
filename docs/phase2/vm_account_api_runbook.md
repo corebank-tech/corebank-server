@@ -22,7 +22,7 @@
 | `DB_USER` `DB_PASSWORD` `FLYWAY_USER` `FLYWAY_PASSWORD` | 격리 DB와 승격 DB(RDS에서 복제된 계정)가 다를 수 있다 |
 | `DB_POOL_SIZE` | 시험은 3 |
 | `APP_OTP_CODE_HASH_ALGORITHM` `APP_OTP_CODE_HASH_KEY_BASE64` | 키는 VM에서 직접 생성한다 |
-| `APP_LOGIN_ID_HMAC_KEY_BASE64` | 릴리스 4부터 필수. 없으면 기동하지 않는다 |
+| `APP_LOGIN_ID_HMAC_KEY_BASE64` | 릴리스 4부터 필수. 없으면 기동하지 않는다. 용도와 재사용 기준은 아래 「로그인 아이디 키」 |
 | `APP_AUDIT_ARCHIVE_STORAGE` | `local`. 감사 로그를 AWS 보관함이 아니라 서버 안에 저장한다 |
 | `APP_LEDGER_RECONCILIATION_FULL_SCAN_CHUNK_TIMEOUT_SECONDS` | `1800`. 코드 기본값은 60초다 |
 | `APP_INFO_API_BASE_URL` `APP_INFO_API_SECRET` | VM 정보계 API(`http://192.168.0.211:8081`)와 그 비밀. 비밀은 `info-api` 컨테이너의 `INFO_API_SECRET`과 같은 값이고 화면에 내지 않고 옮겼다. 호출 자체는 시험 전이다 |
@@ -30,6 +30,12 @@
 기동할 때 덧붙이는 값(환경 파일에 넣지 않는다): `APP_INTERBANK_HOST=192.168.0.211`(VM 모의 대외기관, 포트 9300), 승격 뒤에는 `SERVER_ADDRESS=127.0.0.1`과 `APP_METRICS_ALLOWED_IP`(§5).
 
 DB 접속 URL은 포트가 `3306`으로 고정이고 `sslMode=REQUIRED`다. 레플리카는 TLS 접속을 받는다(`--ssl-mode=REQUIRED`로 확인, `TLSv1.2,TLSv1.3`).
+
+**로그인 아이디 키 (`APP_LOGIN_ID_HMAC_KEY_BASE64`)**
+- 코드(`LoginIdBlindIndex`)에서 이 키는 **미가입 아이디의 로그인 실패 횟수를 아이디 원문 없이 찾는 검색 해시**에만 쓰인다(11/10 `dev` 기준 쓰는 곳은 `UnregisteredLoginFailurePersistenceAdapter` 하나). 가입 계정의 로그인 판정에는 쓰이지 않는다. 같은 아이디가 항상 같은 값이어야 해서 비밀키 HMAC을 쓴다.
+- 키가 달라지면 이미 쌓인 미가입 아이디 실패 횟수는 다른 키로 만든 해시라 찾아지지 않고 **새로 시작**한다.
+- **재사용 기준**: ① 승격 DB에 쌓인 실패 횟수를 이어가야 하는 **운영 전환**이면 AWS와 같은 키(Parameter Store `/corebank/login-id-hmac-key`, P1이 등록한 값)를 쓴다. 값은 화면 · 채팅에 내지 않고 VM에서 환경 파일로 옮기며, 한 번 정하면 바꾸지 않는다. ② **11/18 시연**은 연속성이 필요 없어 VM에서 새로 만든 키(11/9)를 쓴다. 현재 VM 환경 파일은 ②다. 어느 쪽으로 할지는 P1과 정하며 아직 정하지 않았다.
+- OTP 키(`APP_OTP_CODE_HASH_KEY_BASE64`)는 다르다. OTP는 180초 만료라 환경마다 달라도 되고 VM에서 따로 만든다.
 
 ## 3. 격리 DB 위 기동 (승격 전 시험)
 
@@ -61,8 +67,10 @@ sudo docker stop corebank-drtest-api && sudo docker rm corebank-drtest-api
 레플리카는 기본 `bridge` 네트워크에서 호스트 `127.0.0.1:3306`으로만 열려 있고, 정보계 API(`info-api`)가 이미 호스트 네트워크로 붙는다. 계정계 API도 같은 방식으로 붙인다. 레플리카 컨테이너는 건드리지 않는다.
 
 ```bash
+sudo mkdir -p /var/lib/corebank-audit && sudo chmod 700 /var/lib/corebank-audit
 sudo docker run -d --name corebank-server --network host --cpus 1 --memory 2g \
   --env-file <승격 DB용 환경 파일> \
+  -v /var/lib/corebank-audit:/audit -e APP_AUDIT_ARCHIVE_LOCAL_DIR=/audit \
   -e SERVER_ADDRESS=127.0.0.1 -e APP_INTERBANK_HOST=192.168.0.211 -e APP_METRICS_ALLOWED_IP=127.0.0.1 \
   corebank/corebank-server:e6dfafe4dfe64bb3fb94a82382e7a93d72ed3284
 ```
@@ -71,6 +79,24 @@ sudo docker run -d --name corebank-server --network host --cpus 1 --memory 2g \
 - `SERVER_ADDRESS=127.0.0.1`로 VM 안에서만 받게 한다. 호스트 네트워크로 띄우면 이 값이 없을 때 교육장 전체에 열린다.
 - `APP_METRICS_ALLOWED_IP=127.0.0.1`은 Prometheus가 호스트에서 `127.0.0.1:8080`을 부른다는 가정이다. 기본값 `192.168.0.211`은 VM 안의 요청에서 거부된다(§7).
 - 승격 전 시험 때와 달리 `--network host`라 `-p`를 쓰지 않는다.
+
+**헬스체크 · 로그 · 정지 (승격 뒤 실제 컨테이너 `corebank-server`)**
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/api/v1/actuator/health   # 200
+sudo docker logs corebank-server 2>&1 | grep -E "ERROR|환경변수가 없습니다|APPLICATION FAILED" | cut -c1-200 | head
+sudo docker stop corebank-server && sudo docker rm corebank-server
+```
+
+- 호스트 네트워크라 포트 매핑이 없고 8080은 VM 안에서만 열린다(`SERVER_ADDRESS`). 기동까지 약 20~60초 걸린다.
+- 정지해도 환경 파일 · 이미지 · 감사 보관 디렉터리(`/var/lib/corebank-audit`)는 지우지 않는다. 값을 바꾼 뒤에는 `restart`가 아니라 지우고 다시 만든다.
+- 자동 재기동(`--restart`)은 붙이지 않았다. VM이 재부팅된 뒤 의도하지 않게 COB(23:30)나 감사 적재(00:30)가 도는 것을 피하려는 것이다. 이 선택은 시연 운영 방식과 함께 팀과 정한다.
+- 정지 전에 승격 DB에 대한 쓰기가 끝났는지(진행 중인 이체 · COB 없음)를 먼저 확인한다. 이 확인 절차는 P2의 [DR 런북](ph54_onprem_dr_runbook.md) §6을 따른다.
+
+**감사 로그 로컬 보관 (`APP_AUDIT_ARCHIVE_STORAGE=local`)**
+- 기본 보관 경로는 컨테이너 안 `/app/build/audit-archive`(`Dockerfile`의 `WORKDIR /app`, 설정 `app.audit.archive.local-dir`의 기본값 `build/audit-archive`)라 **컨테이너를 지우면 보관 파일도 사라진다.** 그래서 VM 디렉터리 `/var/lib/corebank-audit`를 `/audit`로 연결하고 `APP_AUDIT_ARCHIVE_LOCAL_DIR=/audit`를 준다. 컨테이너가 root로 실행되므로(`Dockerfile`에 `USER` 없음) 별도 권한 조정은 필요 없을 것으로 본다. **시험 전이다.**
+- 매일 01:00 감사 무결성 검사가 같은 저장소를 읽으므로, 보관 파일이 사라지면 DB 기록과 어긋나는 것으로 보일 수 있다.
+- **한계**: 로컬 보관은 S3 Object Lock(WORM)과 달리 VM에 접근할 수 있는 사람이 지우거나 고칠 수 있다. 시연 환경은 원본 감사 기록이 DB에 남고 AWS 보관함 적재는 일부러 하지 않는다. 운영 전환으로 쓰려면 S3 적재(WORM)를 되살리거나 별도 보존 대책이 필요하며, 이는 팀 결정이다.
 
 ## 6. 전수 대사 리허설 (PH-38 실행기)
 
@@ -99,6 +125,8 @@ sudo docker run -d --name corebank-drtest-recon --network corebank-drtest-net --
 - 접속 경로: 인터넷의 `www.corebank.cloud` 화면이 VM의 Nginx(`192.168.0.211:443`)를 불러 `200 OK`(§8).
 
 **하지 않음**
+- 감사 로컬 보관 볼륨(§5)이 컨테이너를 지우고 다시 만든 뒤에도 파일을 유지하는지, 01:00 무결성 검사가 로컬 파일로 통과하는지.
+- 로그인 아이디 키를 시연과 운영 전환 중 어느 쪽 기준으로 쓸지(P1과 결정 전, §2).
 - 승격된 DB로의 기동, 호스트 네트워크 방식(§5)의 DB 접속. 포트가 3306으로 고정이라 격리 DB(`127.0.0.1:3310`)로는 시험하지 못했다.
 - 로그인 · 이체 · 해지 화면 동작(#849 완료 조건). 접속 경로(Nginx · 인증서 · hosts)가 있어야 화면으로 눌러 볼 수 있다. 해지는 설정 스위치(`APP_SUBSCRIPTION_EARLYTERMINATION_ENABLED`)가 따로 있는 것으로 알고 VM 환경 파일에는 이 변수가 없다. 스위치 기본값은 확인하지 못했으니 시험 전에 확인한다.
 - 정보계 API 호출. `APP_INFO_API_BASE_URL`을 넣으면 `APP_INFO_API_SECRET`도 필요한데 값의 위치를 확인하지 못했다.
