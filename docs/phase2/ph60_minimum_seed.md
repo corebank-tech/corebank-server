@@ -37,16 +37,16 @@ CREATE DATABASE IF NOT EXISTS minicore_ph60
 Git Bash:
 
 ```bash
-./gradlew bootRun --args='--spring.profiles.active=phase2-seed --app.phase2-seed.minimum.execute=true --spring.datasource.url=jdbc:mysql://localhost:3306/minicore_ph60?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true --spring.datasource.username=root --spring.datasource.password=localpw --spring.jpa.hibernate.ddl-auto=validate --spring.main.web-application-type=none --spring.task.scheduling.enabled=false --spring.devtools.restart.enabled=false'
+./gradlew bootRun --args='--spring.profiles.active=phase2-seed --app.phase2-seed.minimum.execute=true --spring.datasource.url=jdbc:mysql://localhost:3306/minicore_ph60?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true --spring.datasource.username=root --spring.datasource.password=localpw --spring.jpa.hibernate.ddl-auto=validate --spring.main.web-application-type=none --spring.task.scheduling.enabled=false --spring.devtools.restart.enabled=false --APP_LOGIN_ID_HMAC_KEY_BASE64=42K9p6EjjVkK41I/p9GFs1Jnn5bq0wbfS/QtkkfQlT8='
 ```
 
 Windows PowerShell:
 
 ```powershell
-.\gradlew.bat bootRun --args="--spring.profiles.active=phase2-seed --app.phase2-seed.minimum.execute=true --spring.datasource.url=jdbc:mysql://localhost:3306/minicore_ph60?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true --spring.datasource.username=root --spring.datasource.password=localpw --spring.jpa.hibernate.ddl-auto=validate --spring.main.web-application-type=none --spring.task.scheduling.enabled=false --spring.devtools.restart.enabled=false"
+.\gradlew.bat bootRun --args="--spring.profiles.active=phase2-seed --app.phase2-seed.minimum.execute=true --spring.datasource.url=jdbc:mysql://localhost:3306/minicore_ph60?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true --spring.datasource.username=root --spring.datasource.password=localpw --spring.jpa.hibernate.ddl-auto=validate --spring.main.web-application-type=none --spring.task.scheduling.enabled=false --spring.devtools.restart.enabled=false --APP_LOGIN_ID_HMAC_KEY_BASE64=42K9p6EjjVkK41I/p9GFs1Jnn5bq0wbfS/QtkkfQlT8="
 ```
 
-Git Bash에서는 JDBC URL의 `&`가 셸 명령 구분자로 해석되지 않도록 `--args` 전체를 작은따옴표로 감싼다. 위 `root`와 `localpw`는 `compose.yaml`의 기본 로컬 계정 기준이며, 로컬 설정을 바꿨다면 실제 값으로 교체한다.
+Git Bash에서는 JDBC URL의 `&`가 셸 명령 구분자로 해석되지 않도록 `--args` 전체를 작은따옴표로 감싼다. 위 `root`와 `localpw`는 `compose.yaml`의 기본 로컬 계정 기준이며, 로컬 설정을 바꿨다면 실제 값으로 교체한다. `APP_LOGIN_ID_HMAC_KEY_BASE64`는 로그인 아이디 해시 키가 없으면 앱이 기동하지 않아 넣은 값이고, `application-local.yml`과 같은 개발 전용 값이다.
 
 4. `PH-60 minimum seed ready` 로그와 종료 코드 `0`을 확인하고 §5의 검수 SQL을 `minicore_ph60`에서 실행한다. 이미 이 성공 로그가 출력됐다면 이후 Gradle 종료 코드만 실패했더라도 시드는 커밋된 상태일 수 있으므로, 바로 재실행하지 말고 먼저 건수와 정합성을 검사한다.
 5. 처음부터 다시 시험하려면 운영 데이터에 손대지 말고 `minicore_ph60`만 삭제한 뒤 2단계부터 반복한다.

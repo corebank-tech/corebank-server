@@ -93,10 +93,14 @@ class NotificationRequestedListenerTest extends IntegrationTestSupport {
     @Test
     @DisplayName("같은 알림을 두 번 받아도 1건이다 — 재제출은 최소 한 번 전달이다")
     void sameNotificationTwice_keepsOneNotification() {
+        // given — 같은 알림을 실은 두 업무 이벤트. 필드까지 같은 이벤트는 Modulith 가 처리 중 발행을 구분하지 못해 시각만 다르게 둔다
+        final NotificationRequest sameNotification = notification(CUSTOMER_ID, "이체 완료", "1,000,000원을 보냈습니다.");
+        final TransferSettled firstSettled = settledWith(sameNotification, OCCURRED_AT);
+        final TransferSettled secondSettled = settledWith(sameNotification, OCCURRED_AT.plusMinutes(1));
+
         // when
-        TransferSettled settled = settledWith(notification(CUSTOMER_ID, "이체 완료", "1,000,000원을 보냈습니다."));
-        publishInsideTransaction(settled);
-        publishInsideTransaction(settled);
+        publishInsideTransaction(firstSettled);
+        publishInsideTransaction(secondSettled);
 
         // then — 두 발행 기록이 모두 처리돼 지워질 때까지 기다린 뒤 센다
         await().atMost(LISTENER_TIMEOUT)
@@ -163,12 +167,16 @@ class NotificationRequestedListenerTest extends IntegrationTestSupport {
     }
 
     private static TransferSettled settledWith(NotificationRequest notification) {
+        return settledWith(notification, OCCURRED_AT);
+    }
+
+    private static TransferSettled settledWith(NotificationRequest notification, LocalDateTime occurredAt) {
         return TransferSettled.builder()
                 .customerId(notification == null ? Long.valueOf(CUSTOMER_ID) : notification.customerId())
                 .refId(TRANSFER_ID)
                 .txType("IMMEDIATE_TRANSFER")
                 .status(ProcessResultStatus.SUCCESS)
-                .occurredAt(OCCURRED_AT)
+                .occurredAt(occurredAt)
                 .notificationRequest(notification)
                 .build();
     }
