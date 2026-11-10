@@ -48,6 +48,9 @@ class LayerArchitectureTest {
     static final ArchRule customer = layerRule("customer");
 
     @ArchTest
+    static final ArchRule fds = layerRule("fds");
+
+    @ArchTest
     static final ArchRule gl = layerRule("gl");
 
     @ArchTest

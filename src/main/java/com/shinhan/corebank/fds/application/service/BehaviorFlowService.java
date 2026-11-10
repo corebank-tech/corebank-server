@@ -53,12 +53,9 @@ public class BehaviorFlowService {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
         LocalDateTime receivedAt = LocalDateTime.now(clock.withZone(KST));
-        Flow flow = port.find(flowId.toString());
-        if (flow == null) {
-            port.create(flowId.toString(), customerId, receivedAt);
-        }
+        port.create(flowId.toString(), customerId, receivedAt);
         port.lock(flowId.toString());
-        flow = port.find(flowId.toString());
+        Flow flow = port.find(flowId.toString());
         if (flow.customerId() != customerId) {
             throw new BusinessException(CommonErrorCode.FORBIDDEN);
         }

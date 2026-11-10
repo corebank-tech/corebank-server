@@ -90,7 +90,7 @@ class BehaviorFlowControllerTest {
 
         @Override
         public void create(String id, long customerId, LocalDateTime receivedAt) {
-            flow = new Flow(id, customerId, receivedAt, null, null);
+            if (flow == null) flow = new Flow(id, customerId, receivedAt, null, null);
         }
 
         @Override

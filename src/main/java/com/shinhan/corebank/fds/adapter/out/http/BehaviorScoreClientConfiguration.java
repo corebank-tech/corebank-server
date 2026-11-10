@@ -1,6 +1,5 @@
-package com.shinhan.corebank.fds.config;
+package com.shinhan.corebank.fds.adapter.out.http;
 
-import com.shinhan.corebank.fds.adapter.out.http.FastApiBehaviorScoreClient;
 import com.shinhan.corebank.fds.application.port.out.BehaviorScoreInferencePort;
 import java.net.URI;
 import org.springframework.beans.factory.annotation.Value;

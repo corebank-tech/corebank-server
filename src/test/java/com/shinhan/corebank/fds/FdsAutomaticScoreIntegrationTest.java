@@ -26,9 +26,11 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -36,8 +38,29 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /** 실제 TransferHeld 커밋 이후 Modulith 리스너가 Python 점수를 저장하는지 확인한다. */
 @TestPropertySource(properties = {"app.fds.policy.enabled=true", "app.fds.score.enabled=true"})
-@EnabledIfEnvironmentVariable(named = "FDS_SCORE_SERVICE_TOKEN", matches = ".+")
+@EnabledIf("scoreServiceConfigured")
 class FdsAutomaticScoreIntegrationTest extends IntegrationTestSupport {
+
+    @DynamicPropertySource
+    static void scoreServiceProperties(DynamicPropertyRegistry registry) {
+        registry.add("app.fds.score.base-url", FdsAutomaticScoreIntegrationTest::scoreServiceUrl);
+    }
+
+    static boolean scoreServiceConfigured() {
+        return hasText(System.getenv("FDS_SCORE_SERVICE_TOKEN")) && scoreServiceUrl() != null;
+    }
+
+    private static String scoreServiceUrl() {
+        String testUrl = System.getenv("FDS_SCORE_TEST_URL");
+        if (hasText(testUrl)) return testUrl;
+        String applicationUrl = System.getenv("APP_FDS_SCORE_BASE_URL");
+        return hasText(applicationUrl) ? applicationUrl : null;
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
     @Autowired
     private EntityManager entityManager;
 

@@ -102,6 +102,7 @@ class FdsPythonLiveFlowIntegrationTest extends IntegrationTestSupport {
                 flowId.toString(),
                 LocalDateTime.now(clock)));
 
+        long detailViewsBefore = detailViewCount();
         FdsHoldDetail detail = adminDetail.get(holdId, 951009, "127.0.0.1", AccessReason.OPERATION);
         FdsInvestigationInput input = agentInput.build(holdId, "inv-" + holdId);
         assertThat(detail.behaviorScoreStatus()).isEqualTo("AVAILABLE");
@@ -110,11 +111,7 @@ class FdsPythonLiveFlowIntegrationTest extends IntegrationTestSupport {
         assertThat(input.behaviorSummary().modelVersion()).isEqualTo(detail.modelVersion());
         assertThat(detail.recipientAccountMasked()).isEqualTo("08******67");
         assertThat(holds.findForFds(holdId).status()).isEqualTo("HELD");
-        assertThat(jdbc.queryForObject(
-                        "SELECT COUNT(*) FROM audit_log WHERE event_type = 'FDS_HOLD_DETAIL_VIEW' AND customer_id = ?",
-                        Long.class,
-                        951009L))
-                .isEqualTo(1L);
+        assertThat(detailViewCount()).isEqualTo(detailViewsBefore + 1);
 
         long missingFlowHoldId = saveHold(UUID.randomUUID());
         scoring.onHeld(new TransferHeld(
@@ -185,6 +182,13 @@ class FdsPythonLiveFlowIntegrationTest extends IntegrationTestSupport {
                 .isNull();
         assertThat(holds.findForFds(holdId).status()).isEqualTo("HELD");
         assertThat(financialState()).isEqualTo(financialStateBefore);
+    }
+
+    private long detailViewCount() {
+        return jdbc.queryForObject(
+                "SELECT COUNT(*) FROM audit_log WHERE event_type = 'FDS_HOLD_DETAIL_VIEW' AND customer_id = ?",
+                Long.class,
+                951009L);
     }
 
     @ParameterizedTest
