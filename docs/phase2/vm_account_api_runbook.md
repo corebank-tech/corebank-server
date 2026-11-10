@@ -132,14 +132,16 @@ sudo docker run -d --name corebank-drtest-recon --network corebank-drtest-net --
 - 정보계 API 호출. `APP_INFO_API_BASE_URL`을 넣으면 `APP_INFO_API_SECRET`도 필요한데 값의 위치를 확인하지 못했다.
 - `APP_METRICS_ALLOWED_IP=127.0.0.1`로 `/actuator/prometheus`가 200이 되는지.
 - Nginx가 요청을 진짜 API로 넘기는 구성과 그 위의 로그인 · 쿠키 · CSRF 흐름. (11/10에는 고정 응답만 하는 Nginx로 크롬 접속까지만 확인했다, §8)
+- 호스트 네트워크 Nginx(`listen 192.168.0.211:443`)로 바꾼 구성. 시험할 것: 호스트의 다른 컨테이너가 443을 쓰고 있지 않은지, `ss -ltn`에서 443이 `192.168.0.211`에만 열렸는지, 노트북의 로그인 요청이 API까지 가는지.
 
 ## 8. 접속 경로 (시연용, 11/10 시험)
 
 화면(FE)은 Cloudflare의 `www.corebank.cloud` 그대로 두고, `api.corebank.cloud`만 VM으로 보낸다. 발표 노트북이 교육장 안에 있어야 한다. 인터넷에서는 VM(`192.168.0.211`)에 닿지 않는다.
 
-**VM의 Nginx** (`nginx:1.27-alpine`, 컨테이너 `demo-nginx`, `-p 192.168.0.211:443:443`, `--restart unless-stopped`)
+**VM의 Nginx** (`nginx:1.27-alpine`, 컨테이너 `demo-nginx`, `--restart unless-stopped`)
+- 지금 시험용은 `-p 192.168.0.211:443:443`(bridge)이다. 이 방식에서는 컨테이너 안의 `127.0.0.1`이 Nginx 자신이라 호스트 네트워크로 뜬 API(§5)에 닿지 않는다. 시연용은 `--network host`로 띄우고 `-p`는 쓰지 않는다. 호스트 네트워크에서는 `-p`로 IP를 못 정하므로 `nginx.conf`에 `listen 192.168.0.211:443 ssl;`로 VM 사설 IP의 443만 받게 한다.
 - 설정과 인증서는 `/etc/corebank-demo-test/`(폴더 `700`, `key.pem`은 `600`). 개인 키는 VM 밖으로 내보내지 않는다.
-- 지금은 **시험용 고정 응답**(`{"status":"UP"}`)과 CORS 헤더만 준다. 시연용은 요청을 `127.0.0.1:8080`의 API로 넘기고 `/actuator/`를 막는 설정으로 바꿀 계획이며, CORS는 앱의 `CORS_ALLOWED_ORIGINS`가 응답하게 한다. **이 설정은 시험 전이다.**
+- 지금은 **시험용 고정 응답**(`{"status":"UP"}`)과 CORS 헤더만 준다. 시연용은 호스트 네트워크 Nginx가 요청을 `127.0.0.1:8080`의 API로 넘기고 `/actuator/`를 막는 설정으로 바꿀 계획이며, CORS는 앱의 `CORS_ALLOWED_ORIGINS`가 응답하게 한다. **이 설정은 시험 전이다.**
 - 설정을 바꾼 뒤에는 파일을 같은 파일 그대로 덮어쓰고(`cat 새파일 > 기존파일`, `sed -i`는 도커가 파일 연결을 놓친다) `docker exec demo-nginx nginx -t && docker exec demo-nginx nginx -s reload`로 다시 읽힌다.
 
 **인증서**: 자체 인증서(`CN=api.corebank.cloud`, 이름 `DNS:api.corebank.cloud`), 30일(2026-12-10 만료).
