@@ -276,7 +276,7 @@ Python pandas + scikit-learn + xgboost
 
 ### 6.4 추론 연동
 
-MVP에서는 **Python FastAPI에서 XGBoost 추론**하도록 통일해 Python/Java 라이브러리 호환 문제를 줄인다. 다만 이체 경로에서 Python 추론을 필수 동기 호출로 만들면 장애 결합이 생기므로, **서버 A/B 정책은 모델 결과 없이도 작동**해야 한다. 가능하면 FE 이벤트 제출 후 미리 점수를 계산·저장하거나, `HELD` 이후 Agent 조사 시 보조 점수로 제공한다. 모델 점수의 계산 시점과 사용 가능 시점을 API 계약에서 명시한다.
+MVP에서는 **Python FastAPI에서 XGBoost 추론**한다. 서버는 이체 실행 전 훅 C에서 Python을 호출하지 않고 A/B 정책을 모델 점수 없이 판정한다. `HELD`가 커밋된 뒤 P6 비동기 조사 워커가 서버에서 검증·계산한 flow별 피처로 [API 명세 §12](p6_fds_api_spec.md#12-내부-fastapi-행동-점수-추론-932)를 호출하고, 결과 저장을 시도한 뒤 Agent 입력을 만든다. 저장된 점수가 있으면 Agent 입력과 관리자 상세에 보조 정보로 제공한다. 피처가 없거나 추론·저장에 실패하면 점수 없이 조사를 계속하며 보류·원장·관리자 조치를 변경하지 않는다. 점수는 합성 행동 모델의 출력이지 실제 사기 확률이 아니다. 관리자 점수 상태의 `PENDING`·`AVAILABLE`·`UNAVAILABLE` 전이는 #930 계약을 따르며, 이 문서의 Agent 입력 예시는 `AVAILABLE`인 사건이다.
 
 ---
 
@@ -352,8 +352,10 @@ assess_information_gap
     "backCount": 1,
     "amountRevisionCount": 2,
     "confirmActiveSeconds": 71,
+    "behaviorScoreStatus": "AVAILABLE",
     "behaviorRiskScore": 0.81,
-    "modelVersion": "xgb-demo-v1"
+    "modelVersion": "xgb-demo-v1",
+    "featureVersion": "p6-behavior-v1"
   },
   "transferSummary": {
     "amount": 500000,
