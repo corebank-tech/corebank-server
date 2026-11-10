@@ -84,8 +84,10 @@ public class BehaviorFlowService {
                     || input.seqNo() < 1
                     || input.seqNo() > 100
                     || !seen.add(input.seqNo())
+                    || input.eventType() == null
                     || !TYPES.contains(input.eventType())
                     || input.occurredAt() == null
+                    || input.step() == null
                     || !Set.of("D-01", "D-02").contains(input.step())) {
                 throw new BusinessException(FdsErrorCode.INVALID_EVENT);
             }

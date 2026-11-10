@@ -7,6 +7,7 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.fds.application.port.out.BehaviorFlowPort;
 import com.shinhan.corebank.fds.application.port.out.BehaviorFlowPort.Event;
 import com.shinhan.corebank.fds.application.port.out.BehaviorFlowPort.Flow;
+import com.shinhan.corebank.fds.domain.exception.FdsErrorCode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -55,6 +56,22 @@ class BehaviorFlowServiceTest {
         assertThatThrownBy(() -> service.submit(flowId, 7, missing)).isInstanceOf(BusinessException.class);
         var tooOld = new BehaviorFlowService.Batch(List.of(event(1, "TRANSFER_ENTER", -1801, "D-01")), null);
         assertThatThrownBy(() -> service.submit(flowId, 7, tooOld)).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void rejectsNullEventTypeAndStepAsInvalidEvent() {
+        var nullType = new BehaviorFlowService.Batch(List.of(event(1, null, -1, "D-01")), null);
+        assertThatThrownBy(() -> service.submit(flowId, 7, nullType))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(FdsErrorCode.INVALID_EVENT);
+
+        port.flow = null;
+        var nullStep = new BehaviorFlowService.Batch(List.of(event(1, "TRANSFER_ENTER", -1, null)), null);
+        assertThatThrownBy(() -> service.submit(flowId, 7, nullStep))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(FdsErrorCode.INVALID_EVENT);
     }
 
     @Test
