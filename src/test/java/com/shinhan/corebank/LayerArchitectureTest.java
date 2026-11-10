@@ -99,6 +99,7 @@ class LayerArchitectureTest {
     /**
      * 도메인 {@code ErrorCode}는 {@code domain/exception/} 밑에 둔다. 이 규칙이 없으면 {@code ErrorCode}를
      * {@code application/}이나 {@code domain/} 루트에 만들어도 CI가 통과한다(#416이 그렇게 생겼다).
+     * 다른 도메인이 같이 쓰는 {@code ErrorCode}는 소유 도메인의 {@code api/}에 둔다(ADR-0006 §2).
      *
      * <p>{@code areTopLevelClasses()}가 필요한 이유: {@code ProductSubscriptionExecuteService}의 private 중첩
      * record {@code ViolationErrorCode implements ErrorCode}까지 이 규칙이 잡으면 오탐이다.
@@ -112,8 +113,8 @@ class LayerArchitectureTest {
             .and()
             .resideOutsideOfPackage("com.shinhan.corebank.common..")
             .should()
-            .resideInAPackage("..domain.exception..")
-            .because("도메인 ErrorCode는 domain/exception/ 밑에 둔다");
+            .resideInAnyPackage("..domain.exception..", "..api..")
+            .because("도메인 ErrorCode는 domain/exception/, 공유 ErrorCode는 api/ 밑에 둔다");
 
     /**
      * 비어 있어도 되는 계층은 optionalLayers로 명시한다. 기본을 withOptionalLayers(false)로 두는 이유는, 전 계층을 optional로
