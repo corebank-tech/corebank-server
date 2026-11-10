@@ -61,6 +61,22 @@
 관측 평균 비용 = 11,559.77ms / 424건 = 27.26ms/건
 ```
 
+### 참고: 고정비와 건당 비용의 탐색적 추정
+
+신규 RDS 운영 8회에 대해 실제 전이 건수(x)와 만기 감지 스텝 전체 실행시간(y)을 단순 선형회귀했다.
+
+- 추정식: 실행시간(ms) ≈ 940.39 + 9.52 × 전이 건수
+- 결정계수(R²): 약 0.735
+- 표본: 신규 RDS 운영 이력 8회
+
+940.39ms는 모형의 절편으로, 후보 조회 등의 고정성 비용이 포함된 것으로 추정할 수 있다. 9.52ms/건은 전이 건수가 1건 증가할 때의 실행시간 증가분에 대한 추정치다.
+
+단, 동일하게 38건을 처리한 4회에서도 실행시간이 1,192.39~1,563.90ms로 371.51ms 차이를 보였다.
+
+따라서 이 추정치는 고정비와 건수 의존 비용을 구분하기 위한 참고값이며, 실제 단건 처리시간이나 인과적으로 분리된 비용을 의미하지 않는다.
+
+기존 관측 평균인 27.26ms/건도 함께 유지한다. P5의 COB 전체 실행시간이 이미 만기 감지 스텝을 포함한다면 추정값을 추가 합산하지 않는다.
+
 **해석**
 
 1. 신규 RDS의 조회된 8회 모두 `account-maturity` 스텝 `SUCCESS`였다. 단, 이것만으로 모든 만기 후보가 성공 처리됐거나 실패 후보가 0건이라는 사실까지 증명되지는 않는다. 별도 애플리케이션 로그의 `failedCandidates`·`failedChunks` 대조가 필요하다.
@@ -89,8 +105,9 @@ SELECT
 FROM batch_execution_history
 WHERE job_name = 'COB'
   AND step_name = 'account-maturity'
-ORDER BY started_at DESC
-LIMIT 20;
+  AND started_at >= '2026-10-28 00:00:00'
+  AND started_at < '2026-11-07 00:00:00'
+ORDER BY started_at DESC;
 ```
 
 ### 5-2. 실제 상태 전이 이력과 연결
@@ -112,8 +129,8 @@ FROM (
     FROM batch_execution_history
     WHERE job_name = 'COB'
       AND step_name = 'account-maturity'
-    ORDER BY started_at DESC
-    LIMIT 20
+      AND started_at >= '2026-10-28 00:00:00'
+      AND started_at < '2026-11-07 00:00:00'
 ) b
 LEFT JOIN account_status_history h
     ON h.changed_at >= b.started_at
