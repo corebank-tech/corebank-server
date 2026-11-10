@@ -8,7 +8,8 @@ on:
 
 concurrency:
   # 짧은 간격으로 병합된 docs PR들이 같은 EC2 대상에 동시에 SSM 명령을 보내
-  # sync.sh 실행이 겹치는 걸 막는다. 취소 대신 순서대로 큐잉한다.
+  # sync.sh 실행이 겹치는 걸 막는다. 실행 중인 것은 취소하지 않지만 대기는 하나만 남고
+  # 그 사이 대기하던 실행은 취소된다. 그래서 각 실행은 자기 push가 아니라 마지막 반영 커밋부터 diff한다.
   group: knowledge-rag-sync
   cancel-in-progress: false
 
@@ -32,31 +33,57 @@ jobs:
           # 이후 단계는 인증된 git 명령을 쓰지 않는다. 토큰을 .git/config에 남기지 않는다
           persist-credentials: false
 
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_KNOWLEDGE_RAG_ROLE_ARN }}
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+
       - name: Compute changed/deleted docs
         id: diff
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          LAST_SYNCED_PARAM: /corebank-knowledge-rag/last-synced/${{ github.ref_name }}
         run: |
-          BEFORE="${{ github.event.before }}"
-          AFTER="${{ github.sha }}"
           # 새 브랜치 최초 push는 before가 전부 0 — 부모 커밋 존재를 가정하지 않고
           # git의 빈 트리 오브젝트를 기준점으로 쓴다.
           if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
             BEFORE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
           fi
 
+          # 취소되거나 실패한 실행의 변경도 다음 실행이 가져가도록 마지막 반영 커밋부터 diff한다.
+          # 기록이 없거나(첫 실행) 이 브랜치 히스토리에 없으면(force push) 이번 push 범위로 대신한다.
+          BASE="$BEFORE"
+          if LAST=$(aws ssm get-parameter --name "$LAST_SYNCED_PARAM" --query Parameter.Value --output text 2>/tmp/last-err); then
+            if git merge-base --is-ancestor "$LAST" "$AFTER" 2>/dev/null; then
+              BASE="$LAST"
+            else
+              echo "::warning::마지막 반영 커밋 $LAST 이 $AFTER 의 조상이 아니라 이번 push 범위만 동기화한다"
+            fi
+          elif grep -q ParameterNotFound /tmp/last-err; then
+            echo "::warning::마지막 반영 커밋 기록이 없어 이번 push 범위만 동기화한다"
+          else
+            cat /tmp/last-err
+            exit 1
+          fi
+          echo "diff 범위: $BASE..$AFTER"
+
           # --name-only만 쓰면 rename이 새 경로로만 잡히고 옛 경로가 안 지워진 채 남는다.
           # --name-status -M으로 rename을 "R100<TAB>old<TAB>new" 형태로 받아
           # 옛 경로는 DELETED, 새 경로는 CHANGED로 나눈다.
           # 프로세스 치환 안의 git diff 실패는 셸이 못 잡아 빈 목록으로 조용히 넘어간다. 먼저 변수에 받는다
-          DIFF=$(git diff --name-status -M --diff-filter=ACMRD "$BEFORE" "$AFTER" -- 'docs/**.md')
+          DIFF=$(git diff --name-status -M --diff-filter=ACMRD "$BASE" "$AFTER" -- 'docs/**.md')
 
           CHANGED=""
           DELETED=""
           while IFS=$'\t' read -r status path1 path2; do
             [ -z "$status" ] && continue
-            # 경로 목록을 공백으로 나눠 넘기므로 공백이 든 경로는 둘로 쪼개진다. 지금 docs에는 없으니
-            # 조용히 잘못 동기화하지 않도록 여기서 멈춘다. 생기면 구분자를 NUL로 바꾼다.
-            if [[ "$path1$path2" =~ [[:space:]] ]]; then
-              echo "::error::공백이 든 문서 경로는 동기화하지 않는다: $path1 $path2"
+            # 경로 목록을 따옴표 없이 공백으로 나눠 넘기므로(이후 단계와 EC2 sync.sh) 공백은 경로를 쪼개고
+            # *, ?, [ 는 다른 파일명으로 확장된다. 지금 docs에는 없으니 조용히 잘못 동기화하지 않도록
+            # 여기서 멈춘다. 생기면 구분자를 NUL로 바꾼다.
+            if [[ "$path1$path2" =~ [[:space:]*?[] ]]; then
+              echo "::error::공백이나 와일드카드 문자가 든 문서 경로는 동기화하지 않는다: $path1 $path2"
               exit 1
             fi
             case "$status" in
@@ -82,13 +109,6 @@ jobs:
             echo "changed_b64=$CHANGED_B64"
             echo "deleted_b64=$DELETED_B64"
           } >> "$GITHUB_OUTPUT"
-
-      - name: Configure AWS Credentials via OIDC
-        if: steps.diff.outputs.changed != '' || steps.diff.outputs.deleted != ''
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_KNOWLEDGE_RAG_ROLE_ARN }}
-          aws-region: ${{ env.AWS_DEFAULT_REGION }}
 
       - name: Upload changed docs to sync bucket
         if: steps.diff.outputs.changed != ''
@@ -162,3 +182,12 @@ jobs:
             echo "::error::knowledge-rag 동기화 실패: $STATUS"
             exit 1
           fi
+
+      - name: Record last synced commit
+        # 앞 단계가 모두 성공했을 때만 기록한다. 실패하면 다음 실행이 같은 범위를 다시 가져간다.
+        env:
+          AFTER: ${{ github.sha }}
+          LAST_SYNCED_PARAM: /corebank-knowledge-rag/last-synced/${{ github.ref_name }}
+        run: |
+          aws ssm put-parameter --name "$LAST_SYNCED_PARAM" --type String --value "$AFTER" --overwrite > /dev/null
+          echo "마지막 반영 커밋: $AFTER"
