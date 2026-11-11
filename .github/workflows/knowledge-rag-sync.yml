@@ -22,8 +22,9 @@ jobs:
   sync:
     name: Sync docs/**.md changes to knowledge-rag index
     runs-on: ubuntu-latest
-    # EC2 쪽 sync.sh는 PR, Fineract cron 색인과 잠금을 공유해 최대 25분 기다릴 수 있다
-    timeout-minutes: 35
+    # EC2 쪽 sync.sh는 PR, Fineract cron 색인과 잠금을 공유해 최대 25분 기다리고, 색인은 문서당 약 1분이다.
+    # 쌓인 변경을 한 번에 따라잡을 때도 끝나도록 SSM 실행 한도 70분, 폴링 65분, job 75분으로 둔다.
+    timeout-minutes: 75
     permissions:
       id-token: write
       contents: read
@@ -145,20 +146,25 @@ jobs:
           CHANGED_B64: ${{ steps.diff.outputs.changed_b64 }}
           DELETED_B64: ${{ steps.diff.outputs.deleted_b64 }}
         run: |
+          # CLI 단축 문법(commands="...")은 값 안의 작은따옴표를 파싱하지 못해 JSON으로 넘긴다.
+          # 기본 실행 한도(3600초)는 잠금 대기와 큰 색인을 합치면 모자라 늘린다.
+          PARAMS=$(jq -n \
+            --arg cmd "/home/ubuntu/knowledge-mcp/scripts/sync.sh '$SYNC_BUCKET' '$SHA' '$CHANGED_B64' '$DELETED_B64'" \
+            '{commands: [$cmd], executionTimeout: ["4200"]}')
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --parameters commands="/home/ubuntu/knowledge-mcp/scripts/sync.sh '$SYNC_BUCKET' '$SHA' '$CHANGED_B64' '$DELETED_B64'" \
+            --parameters "$PARAMS" \
             --comment "Knowledge RAG sync ($SHA)" \
             --query 'Command.CommandId' \
             --output text)
 
           # aws ssm wait의 기본 대기 한도(약 100초)로는 큰 문서 색인(청크당 약 1초)과 잠금 대기를 못 기다린다.
-          # 10초 간격으로 최대 30분 폴링한다.
+          # 10초 간격으로 최대 65분 폴링한다.
           # 조회 직후의 InvocationDoesNotExist만 잠깐 기다리고, 조회 오류가 1분 넘게 이어지면 실패로 끝낸다.
           STATUS=Pending
           ERRORS=0
-          for _ in $(seq 1 180); do
+          for _ in $(seq 1 390); do
             sleep 10
             if ! STATUS=$(aws ssm get-command-invocation \
               --command-id "$COMMAND_ID" \
