@@ -8,7 +8,7 @@ package com.shinhan.corebank.transfer.api;
  */
 public interface TransferHoldUseCase {
 
-    /** 보류 사건의 고객·flow 소유권과 현재 상태를 P6에 제공한다. */
+    /** 보류 원본과 현재 상태·처리 결과를 P6에 제공한다. 끝난 보류도 반환한다. 없으면 TRF0203이다. */
     TransferHoldForFds findForFds(long transferHoldId);
 
     /**

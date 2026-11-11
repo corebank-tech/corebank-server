@@ -115,7 +115,20 @@ class FdsScorePresentationTest {
         @Override
         public TransferHoldForFds findForFds(long id) {
             return new TransferHoldForFds(
-                    id, 7, "flow-123", "HELD", LocalDateTime.of(2026, 11, 9, 14, 0), 500000, "0881234567", "A");
+                    id,
+                    7,
+                    "flow-123",
+                    "HELD",
+                    LocalDateTime.of(2026, 11, 9, 14, 0),
+                    500000,
+                    "0881234567",
+                    "A",
+                    101L,
+                    "088",
+                    "ON_APPROVAL",
+                    null,
+                    null,
+                    null);
         }
 
         @Override
