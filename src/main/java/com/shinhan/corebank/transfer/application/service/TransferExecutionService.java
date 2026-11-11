@@ -4,6 +4,7 @@ import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
 import com.shinhan.corebank.transfer.api.TransferHeld;
@@ -491,9 +492,12 @@ public class TransferExecutionService implements TransferExecutionUseCase {
                 throw new BusinessException(TransferErrorCode.PAYEE_ACCOUNT_SUSPENDED);
             }
 
-            // [자리] PH-90: hold_amount가 생기면 락으로 읽은 잔액 − 보류액으로 판정한다. 훅 A는 락 이전이라 최종 판정이 아니다.
+            // 훅 A 뒤 늘어난 보류액은 여기서만 잡힌다. 락 이전과 같은 코드가 나가게 잔액부터 본다(#521).
             if (locked.withdrawal().balance() < command.amount()) {
                 throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
+            }
+            if (locked.withdrawal().availableBalance() < command.amount()) {
+                throw new BusinessException(LmtErrorCode.INSUFFICIENT_WITHDRAWABLE_AMOUNT);
             }
 
             Transfer transfer = transferSavePort.save(createdTransfer);

@@ -9,6 +9,7 @@ import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
 import com.shinhan.corebank.business.support.BusinessDateTestFixture;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
 import com.shinhan.corebank.notification.application.port.in.NotificationCommandUseCase;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
@@ -223,6 +224,24 @@ class TransferCorrectionServiceIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("[#521] 받은 계좌에 보류액이 걸려 출금가능액이 모자라면 잔액이 충분해도 TRF0306으로 거부되고 원거래는 무효화되지 않는다")
+    void reverse_whenPayeeHoldAmountLeavesTooLittle_throws() {
+        // given: A → B 50,000원, 이후 B에 30,000원 보류 — B 출금가능액 20,000원
+        TransferResult original = transfer(ACCOUNT_A, ACCOUNT_B_NUMBER, AMOUNT);
+        jdbcTemplate.update("UPDATE account SET hold_amount = 30000 WHERE account_id = ?", ACCOUNT_B);
+
+        // when & then
+        assertThatThrownBy(() -> transferCorrectionService.reverse(original.transactionNumber()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(TransferErrorCode.REVERSAL_INSUFFICIENT_BALANCE);
+        assertThat(transferRow(original.transactionNumber()).get("invalidated_at"))
+                .isNull();
+        assertThat(reversedLedgerCount(original.transactionNumber())).isZero();
+        assertThat(balanceOf(ACCOUNT_B)).isEqualTo(AMOUNT);
+    }
+
+    @Test
     @DisplayName("같은 이체를 동시에 두 번 되돌려도 정확히 한 번만 되돌려진다")
     void concurrentReverse_onlyOneSucceeds() throws Exception {
         // given
@@ -332,6 +351,23 @@ class TransferCorrectionServiceIntegrationTest extends IntegrationTestSupport {
                 .isEqualTo(TransferErrorCode.NOT_CORRECTABLE);
         assertThat(countTransfers()).isEqualTo(1);
         assertThat(balanceOf(ACCOUNT_B)).isEqualTo(AMOUNT);
+    }
+
+    @Test
+    @DisplayName("[#521] 정상거래 출금계좌의 보류액 때문에 출금가능액이 모자라면 LMT0001로 거부되고 잔액은 그대로다")
+    void repost_whenHoldAmountLeavesTooLittle_throws() {
+        // given: 되돌린 뒤 A 잔액 100,000원 중 80,000원 보류 — 출금가능액 20,000원
+        TransferResult original = transfer(ACCOUNT_A, ACCOUNT_B_NUMBER, AMOUNT);
+        transferCorrectionService.reverse(original.transactionNumber());
+        jdbcTemplate.update("UPDATE account SET hold_amount = 80000 WHERE account_id = ?", ACCOUNT_A);
+
+        // when & then
+        assertThatThrownBy(() -> transferCorrectionService.repost(original.transactionNumber(), 30_000L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(LmtErrorCode.INSUFFICIENT_WITHDRAWABLE_AMOUNT);
+        assertThat(countTransfers()).isEqualTo(2);
+        assertThat(balanceOf(ACCOUNT_A)).isEqualTo(STARTING_BALANCE_A);
     }
 
     @Test

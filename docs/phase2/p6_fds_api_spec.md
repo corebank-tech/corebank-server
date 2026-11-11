@@ -485,16 +485,16 @@ Idempotency-Key: N
 | `data.riskAccountCheck.sourceNotice` | 데이터 출처 설명 | String | 실제 사기 확정이 아님을 명시 | X | `"프로젝트 시연용 합성 데이터이며 실제 사기 확정 정보가 아닙니다."` |
 | `data.serverPolicy` | A/B·임계값·판정 근거 | Object | AI 발견과 구분 | X | `{...}` |
 | `data.behaviorSummary` | 검증된 행동 요약 | Object | 유효한 flow가 없으면 null | O | `{...}` |
-| `data.behaviorScoreStatus` | 보류 후 비동기 점수 상태 | String(ENUM) | `PENDING`, `AVAILABLE`, `UNAVAILABLE`; 조사 상태와 별개 | X | `"AVAILABLE"` |
-| `data.behaviorRiskScore` | 합성 행동 모델 점수, 사기 확률 아님 | Number | `AVAILABLE`일 때만 0~1; 그 외 null | O | `0.81` |
-| `data.modelVersion` | 점수를 산출한 모델 버전 | String | `AVAILABLE`일 때만 값; 그 외 null | O | `"xgb-demo-v1"` |
-| `data.featureVersion` | 점수에 사용한 피처 버전 | String | `AVAILABLE`일 때만 값; 그 외 null | O | `"p6-behavior-v1"` |
-| `data.behaviorScoreUnavailableReason` | 점수 참고 불가 사유 | String(ENUM) | `UNAVAILABLE`일 때 필수; 그 외 null. 허용 값은 #930의 `BehaviorScoreUnavailableReason` 계약 | O | `"MODEL_UNAVAILABLE"` |
+| `data.behaviorScoreStatus` | 보류 후 비동기 모델 점수 상태 | String(ENUM) | `PENDING`, `AVAILABLE`, `UNAVAILABLE`; 조사 상태와 별개 | X | `"AVAILABLE"` |
+| `data.behaviorRiskScore` | 합성 행동 모델 점수, 사기 확률 아님 | Number | `AVAILABLE`에서만 0~1; 그 외 null | O | `0.81` |
+| `data.modelVersion` | 점수를 산출한 모델 버전 | String | `AVAILABLE`에서만 제공; 그 외 null | O | `"xgb-demo-v1"` |
+| `data.featureVersion` | 점수에 사용한 피처 버전 | String | `AVAILABLE`에서만 제공; 그 외 null | O | `"p6-behavior-v1"` |
+| `data.behaviorScoreUnavailableReason` | 점수 참고 불가 사유 | String(ENUM) | `UNAVAILABLE`에서 필수; `PENDING`·`AVAILABLE`이면 null. 값은 [Enum 마스터 §5-11](../api_conventions.md#5-11-fds-행동-점수--p6-928). 내부 예외·비밀값 미노출 | O | `"MODEL_UNAVAILABLE"` |
 | `data.investigationStatus` | AI 조사 상태 | String(ENUM) |  | O | `"COMPLETED"` |
 | `data.secondaryFindings` | AI 추가 발견 | Array | 없으면 `[]` | X | `[{...}]` |
 | `data.callRecords` | 콜 기록 | Array | 없으면 `[]` | X | `[]` |
 
-`HELD` 직후 점수는 `PENDING`이고 점수·버전·사유는 null이다. 서버가 [§12](#12-내부-fastapi-행동-점수-추론-932)의 응답을 검증해 저장하면 `AVAILABLE`, 피처 부재·추론 오류·저장 실패 등이 확정되면 사유와 함께 `UNAVAILABLE`이다. 점수 상태는 `investigationStatus`와 독립적이다. #930의 `PENDING` 조건부 종료·복구 계약과 함께 적용한다. Agent 입력에는 저장된 `AVAILABLE` 점수만 포함한다.
+모델 점수는 `HELD` 커밋 뒤 **P6 점수 처리 리스너**가 검증된 피처로 [§12](#12-내부-fastapi-행동-점수-추론-932)의 FastAPI 추론과 결과 저장을 시도한다. `HELD` 직후부터 결과 저장 전까지 `behaviorScoreStatus=PENDING`, 점수와 버전은 null이다. 리스너는 추론 호출 전에 점수 시도 시작 시각을 내구화한다. 저장 성공 후 `AVAILABLE`과 점수·버전을 제공한다. 유효한 flow가 없는 경우, flow는 있지만 피처가 유효하지 않은 경우, 모델 부재·입력 오류·시간 초과·서비스 장애, 점수 작업의 최종 실패·보류 종료 시 `UNAVAILABLE`, 점수·버전 null 및 Enum 사유를 제공한다. 점수 저장 장애나 리스너 중단으로 `PENDING`이 남으면 **P6 BE 점수 복구 작업**이 서버 기동 시와 1분 간격으로 시도 기록·저장 결과·보류 상태를 대조해 마감한다. 시도 시작 뒤 결과를 확인할 수 없으면 `SCORING_INTERRUPTED`를 사용한다. 리스너 재전달·중복 실행·복구 작업은 모두 `PENDING` 조건부 갱신만 사용해 최초 `AVAILABLE`·`UNAVAILABLE`을 덮어쓰지 않는다. **후속 B4 조사 워커는 Python 점수 API를 직접 호출하거나 점수 처리를 기다리지 않고, P6에 저장된 `AVAILABLE` 점수만 Agent 입력에 포함한다.** 점수가 없거나 `PENDING`·`UNAVAILABLE`이어도 조사를 시작·계속한다. 점수 상태는 `investigationStatus`와 독립적이며 보류·관리자 검토를 막지 않는다. A/B를 통과한 비보류 이체에는 MVP 점수를 만들지 않는다. 훅 C는 Python을 호출하지 않는다.
 
 **목표 Example (#946·B4 포함)**
 
@@ -752,7 +752,7 @@ Idempotency-Key: Y
 ## 12. 내부 FastAPI 행동 점수 추론 (#932)
 
 카테고리: FDS 내부 추론
-설명: `HELD` 커밋 뒤 P6 점수 처리 리스너가 검증된 행동 flow의 피처 5개를 Python FastAPI에 보내 합성 행동 모델 점수를 받는다.
+설명: `HELD` 커밋 뒤 P6 점수 처리 리스너가 검증된 행동 flow의 피처 5개를 Python FastAPI에 보내 합성 행동 모델 점수를 받는다. 점수 처리 리스너·저장은 #951, 저장 점수를 사용하는 Agent 조사는 후속 B4의 책임이다.
 Method: POST
 URL: Python 서비스의 `/internal/fds/behavior-score/predict` (`/api/v1` 접두어 없음, 외부 프록시 라우트 없음)
 사용자: P6 BE 점수 처리 리스너
@@ -837,12 +837,12 @@ Python 서비스의 내부 오류 코드는 공개 BE `ErrorCode`가 아니다. 
 {"code":"SCORE_INFERENCE_FAILED","message":"행동 점수를 계산할 수 없습니다.","data":null}
 ```
 
-Python은 요청을 받은 뒤 추론 처리에 최대 **3초**를 사용하고, 초과하면 `504 SCORE_INFERENCE_TIMEOUT`을 반환한다. BE의 Python 호출은 연결 제한 **1초**, 호출 전체 제한 **5초**를 적용한다(연결 시간 포함). 따라서 Python의 3초 제한이 먼저 끝나면 BE가 `504`를 받을 수 있고, 네트워크 지연이나 응답 유실로 5초가 지나면 BE도 기다림을 끝낸다. 두 제한 시간 모두 보류 건당 한 번의 점수 추론에 적용하며 자동 재시도하지 않는다. 점수 계산은 `HELD` 확정 후 Agent 입력 생성 전에 수행하므로, 이 5초는 별도의 **Agent 실행 60초 제한**에 포함하지 않는다. 점수가 없어도 Agent 조사는 계속한다. 이 수치는 시연 환경의 실행 보호값이며 정책 A/B 판정 기준이 아니다.
+Python은 요청을 받은 뒤 추론 처리에 최대 **3초**를 사용하고, 초과하면 `504 SCORE_INFERENCE_TIMEOUT`을 반환한다. BE의 Python 호출은 연결 제한 **1초**, 호출 전체 제한 **5초**를 적용한다(연결 시간 포함). 따라서 Python의 3초 제한이 먼저 끝나면 BE가 `504`를 받을 수 있고, 네트워크 지연이나 응답 유실로 5초가 지나면 BE도 기다림을 끝낸다. 두 제한 시간 모두 보류 건당 한 번의 점수 추론에 적용하며 자동 재시도하지 않는다. 점수 처리 리스너는 B4 Agent 조사와 별개로 실행되므로 이 5초는 **Agent 실행 60초 제한**과 관계없다. B4는 점수 처리를 기다리지 않으며, 점수가 없어도 Agent 조사를 시작·계속한다. 이 수치는 시연 환경의 실행 보호값이며 정책 A/B 판정 기준이 아니다.
 
 BE에서 연결 실패는 `INFERENCE_SERVICE_UNAVAILABLE`, BE 호출 전체 제한 5초 초과는 `INFERENCE_TIMEOUT`으로 구분한다. 성공 HTTP라도 ID·피처 버전 불일치, 점수 범위 밖, 모델 버전 누락, 잘못된 JSON은 `INFERENCE_FAILED`로 처리하고 결과를 저장하지 않는다. 표에 없는 HTTP 상태나 정의되지 않은 오류 응답도 기본 사유 `INFERENCE_FAILED`로 `UNAVAILABLE`을 기록하고 점수 없이 후속 조사를 계속한다. 내부 오류 코드나 메시지를 관리자에게 그대로 반환하지 않고 #930의 `BehaviorScoreUnavailableReason`으로 매핑한다. BE가 피처 생성 전에 감지한 무효한 입력은 `FLOW_UNAVAILABLE` 또는 `INVALID_FEATURES`이며, Python의 `400`과 구분한다.
 
 ### 재시도·저장·표시 경계
 
-FastAPI는 호출마다 로드된 모델로 점수만 계산한다. 보류 사건·점수·멱등 키를 저장하거나 `HELD`·조사 상태를 바꾸지 않는다. 같은 본문의 중복 호출은 부작용이 없으나, 모델 버전이 교체되면 점수도 달라질 수 있어 BE는 응답의 `modelVersion`을 기록한다. BE는 한 보류 건의 추론 시작을 내구화하고, 결과가 불명확한 시간 초과·응답 유실 뒤에는 같은 보류를 자동 재추론하지 않는다. 연결 전에 실패했음이 확실한 경우에도 보류 건당 한 번 시도 원칙을 유지한다. 점수 처리 리스너 재실행은 이미 저장된 `AVAILABLE`·`UNAVAILABLE`을 덮어쓰지 않는다. #930의 `PENDING` 조건부 전이·복구 작업과 같은 트랜잭션 경계를 사용한다.
+FastAPI는 호출마다 로드된 모델로 점수만 계산한다. 보류 사건·점수·멱등 키를 저장하거나 `HELD`·조사 상태를 바꾸지 않는다. 같은 본문의 중복 호출은 부작용이 없으나, 모델 버전이 교체되면 점수도 달라질 수 있어 BE는 응답의 `modelVersion`을 기록한다. BE는 `scoreStatus=PENDING AND scoreAttemptStartedAt IS NULL`인 점수 기록을 원자적으로 선점한 리스너만 Python을 호출한다. 결과가 불명확한 시간 초과·응답 유실 뒤에는 같은 보류를 자동 재추론하지 않으며, 연결 전에 실패했음이 확실한 경우에도 보류 건당 한 번 시도 원칙을 유지한다. 점수 처리 리스너의 재전달·중복 실행은 이미 선점됐거나 저장된 `AVAILABLE`·`UNAVAILABLE`을 덮어쓰지 않고, 위 `PENDING` 조건부 전이·복구 작업과 같은 트랜잭션 경계를 사용한다. B4 조사 재시도는 이 점수 상태를 변경하지 않는다.
 
 BE는 응답의 `transferHoldId`·`flowId`·`featureVersion`과 점수·버전을 검증한 뒤 점수, 모델 버전, 피처 버전을 저장하고 `PENDING → AVAILABLE`을 한 번만 커밋한다. FastAPI 오류나 점수 저장 실패는 `UNAVAILABLE` 사유와 복구 경로를 따른다. Agent 입력 생성 시 P6에 저장된 **`AVAILABLE` 점수만** 보조 정보로 포함하고, 관리자 상세 §7도 저장된 뒤에만 `AVAILABLE`로 표시한다. 저장 실패나 조사 실패가 `HELD`를 풀거나 이체를 기표하지 않는다. 모델 점수만으로 승인·거절하거나 서버 A/B 정책 결과를 바꾸지 않는다. 훅 C는 Python을 호출하지 않는다.

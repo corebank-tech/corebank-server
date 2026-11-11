@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
 import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitCommand;
 import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitResult;
 import com.shinhan.corebank.limit.application.port.out.AuthTokenVerificationPort;
@@ -20,7 +21,6 @@ import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
 import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
 import com.shinhan.corebank.limit.domain.TransferLimitHistory;
-import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import com.shinhan.corebank.otp.domain.exception.OtpErrorCode;
 import java.time.Clock;
 import java.time.LocalDate;
