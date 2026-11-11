@@ -20,6 +20,12 @@ public interface PaymentStopRecordPort {
 
     Optional<PaymentStopCase> findCase(long caseId);
 
+    /** 사건의 계좌 ID. 본인 확인 전용이라 다툼 거래를 읽지 않는다. */
+    Optional<Long> findCaseAccountId(long caseId);
+
+    /** 이의제기가 속한 사건의 계좌 ID. 이의제기와 사건을 한 번에 읽는다. 본인 확인 전용이다. */
+    Optional<Long> findObjectionAccountId(long objectionId);
+
     // 목록용. 사건과 다툼 거래를 사건 수와 무관하게 두 번의 조회로 읽는다
     Map<Long, PaymentStopCase> findCases(Collection<Long> caseIds);
 

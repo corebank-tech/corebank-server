@@ -28,8 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 고객 비대면 이의제기(D34). 본인 계좌 사건인지는 account.api 로 고객 명의 계좌를 읽어 확인한다. 남의 사건, 없는 사건, 해제된 사건은 모두
- * 같은 오류(사건은 PST0201, 이의제기는 PST0202)로 거부한다. 두 경로 모두 계좌 조회와 사건 조회를 같은 순서로 한 번씩 해 연산량도 같다(AGENTS
- * 규칙 4).
+ * 같은 오류(사건은 PST0201, 이의제기는 PST0202)로 거부한다. 거부되는 경로는 모두 고객 계좌 조회와 사건 계좌 ID 조회를 한 번씩만 해
+ * 연산량도 같다(AGENTS 규칙 4). 사건 본문과 다툼 거래는 본인 확인을 통과한 뒤에 읽는다.
  */
 @Service
 @RequiredArgsConstructor
@@ -119,9 +119,8 @@ public class CustomerObjectionService implements CustomerObjectionUseCase {
             long customerId, long objectionId, List<UploadFile> evidence, String note) {
         Map<Long, String> accounts = customerAccountPort.accountNumbersOf(customerId);
         boolean owned = recordPort
-                .findObjection(objectionId)
-                .flatMap(found -> recordPort.findCase(found.getCaseId()))
-                .filter(paymentStopCase -> accounts.containsKey(paymentStopCase.getAccountId()))
+                .findObjectionAccountId(objectionId)
+                .filter(accounts::containsKey)
                 .isPresent();
         if (!owned) {
             throw new BusinessException(PaymentStopErrorCode.OBJECTION_NOT_FOUND);
@@ -151,9 +150,15 @@ public class CustomerObjectionService implements CustomerObjectionUseCase {
 
     private PaymentStopCase ownedCase(long customerId, long caseId) {
         Map<Long, String> accounts = customerAccountPort.accountNumbersOf(customerId);
+        boolean owned = recordPort
+                .findCaseAccountId(caseId)
+                .filter(accounts::containsKey)
+                .isPresent();
+        if (!owned) {
+            throw new BusinessException(PaymentStopErrorCode.CASE_NOT_FOUND);
+        }
         return recordPort
                 .findCase(caseId)
-                .filter(paymentStopCase -> accounts.containsKey(paymentStopCase.getAccountId()))
                 .orElseThrow(() -> new BusinessException(PaymentStopErrorCode.CASE_NOT_FOUND));
     }
 }

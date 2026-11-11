@@ -65,6 +65,16 @@ public class PaymentStopRecordPersistenceAdapter implements PaymentStopRecordPor
     }
 
     @Override
+    public Optional<Long> findCaseAccountId(long caseId) {
+        return caseRepository.findAccountIdByCaseId(caseId);
+    }
+
+    @Override
+    public Optional<Long> findObjectionAccountId(long objectionId) {
+        return caseRepository.findAccountIdByObjectionId(objectionId);
+    }
+
+    @Override
     public Map<Long, PaymentStopCase> findCases(Collection<Long> caseIds) {
         if (caseIds.isEmpty()) {
             return Map.of();
