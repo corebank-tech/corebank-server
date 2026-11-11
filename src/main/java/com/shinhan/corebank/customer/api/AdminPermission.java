@@ -8,5 +8,9 @@ public enum AdminPermission {
     GL_WRITE,
     CUSTOMER_READ,
     CUSTOMER_WRITE,
-    AUDIT_READ
+    AUDIT_READ,
+    PAYMENT_STOP_READ,
+    PAYMENT_STOP_WRITE,
+    // 보류를 줄이는 판정(수용, 일부 지급정지)의 승인. 작성자와 다른 관리자가 한다
+    PAYMENT_STOP_APPROVE
 }

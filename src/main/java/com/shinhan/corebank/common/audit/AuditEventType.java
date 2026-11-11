@@ -24,7 +24,12 @@ public enum AuditEventType {
     LOGIN, // 로그인 (REQ-CMN-025 접속이력)
     LOGOUT, // 로그아웃 (PH-49a-②)
     ADMIN_PERMISSION_GRANT, // 관리자 권한 부여(PH-49b)
-    ADMIN_PERMISSION_REVOKE; // 관리자 권한 회수(PH-49b)
+    ADMIN_PERMISSION_REVOKE, // 관리자 권한 회수(PH-49b)
+    PAYMENT_STOP_APPLY, // 관리자 지급정지 사건 등록과 전부 지급정지(D-36)
+    OBJECTION_DECISION_SUBMIT, // 관리자 이의제기 수용, 일부 지급정지 판정 작성. 승인 대기(D-36)
+    OBJECTION_DECISION_CONFIRM, // 관리자 이의제기 판정 확정. 불수용 작성 또는 수용, 일부 지급정지 승인(D-36)
+    OBJECTION_DECISION_RETURN, // 관리자 이의제기 승인 대기 판정 반려(D-36)
+    PAYMENT_STOP_RELEASE; // 판정에 따른 지급정지 해제 또는 일부 지급정지 전환(D-36)
 
     /** 원장 변경 여부. true 면 transaction_number 가 있어야 한다 */
     public boolean isLedgerChanging() {
