@@ -47,6 +47,8 @@ public class TransferHoldMapper {
                 entity.getAuthenticatedAt(),
                 entity.getHeldAt(),
                 entity.getTransferId(),
-                entity.getReasonCode());
+                entity.getReasonCode(),
+                entity.getActorId(),
+                entity.getCompletedAt());
     }
 }
