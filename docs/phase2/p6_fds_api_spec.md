@@ -437,7 +437,7 @@ URL: `/api/v1/admin/fds/holds/{transferHoldId}`
 사용자: 관리자
 인증 필요: Y
 Idempotency-Key: N
-기타: `CUSTOMER_READ` 권한·`X-Access-Reason` 필수, 조회 감사. P4 원본·상태 조회 공개 API 선행. 아직 미구현.
+기타: `CUSTOMER_READ` 권한·`X-Access-Reason` 필수, 조회 감사. #951은 P4 공개 API로 보류 원본과 P6 저장 점수를 조회하는 범위까지 구현했다.
 
 ### 요구사항 ID
 
@@ -457,7 +457,17 @@ Idempotency-Key: N
 
 없음
 
-### Response
+### 현재 Response (#951)
+
+#951 구현은 보류 원본과 P6에 저장된 행동 점수만 반환한다. `serverPolicy`에는 `policyCode`만 있으며,
+`behaviorSummary`·`investigationStatus`는 null, `secondaryFindings`·`callRecords`는 빈 배열이다.
+`riskAccountCheck`와 상세 정책 근거는 #946 후속 구현 범위이므로 현재 응답에 포함되지 않는다.
+
+```json
+{"code":"0000","message":"정상 처리되었습니다.","data":{"transferHoldId":123,"holdStatus":"HELD","amount":500000,"recipientAccountMasked":"088******006","serverPolicy":{"policyCode":"B"},"behaviorSummary":null,"behaviorScoreStatus":"AVAILABLE","behaviorRiskScore":0.81,"modelVersion":"xgb-demo-v1","featureVersion":"p6-behavior-v1","behaviorScoreUnavailableReason":null,"investigationStatus":null,"secondaryFindings":[],"callRecords":[]}}
+```
+
+### 목표 Response (#946·B4 포함)
 
 | key | 설명 | value 타입 | 옵션 | Nullable | 예시 |
 |---|---|---|---|---|---|
@@ -486,7 +496,7 @@ Idempotency-Key: N
 
 모델 점수는 `HELD` 커밋 뒤 **P6 점수 처리 리스너**가 검증된 피처로 [§12](#12-내부-fastapi-행동-점수-추론-932)의 FastAPI 추론과 결과 저장을 시도한다. `HELD` 직후부터 결과 저장 전까지 `behaviorScoreStatus=PENDING`, 점수와 버전은 null이다. 리스너는 추론 호출 전에 점수 시도 시작 시각을 내구화한다. 저장 성공 후 `AVAILABLE`과 점수·버전을 제공한다. 유효한 flow가 없는 경우, flow는 있지만 피처가 유효하지 않은 경우, 모델 부재·입력 오류·시간 초과·서비스 장애, 점수 작업의 최종 실패·보류 종료 시 `UNAVAILABLE`, 점수·버전 null 및 Enum 사유를 제공한다. 점수 저장 장애나 리스너 중단으로 `PENDING`이 남으면 **P6 BE 점수 복구 작업**이 서버 기동 시와 1분 간격으로 시도 기록·저장 결과·보류 상태를 대조해 마감한다. 시도 시작 뒤 결과를 확인할 수 없으면 `SCORING_INTERRUPTED`를 사용한다. 리스너 재전달·중복 실행·복구 작업은 모두 `PENDING` 조건부 갱신만 사용해 최초 `AVAILABLE`·`UNAVAILABLE`을 덮어쓰지 않는다. **후속 B4 조사 워커는 Python 점수 API를 직접 호출하거나 점수 처리를 기다리지 않고, P6에 저장된 `AVAILABLE` 점수만 Agent 입력에 포함한다.** 점수가 없거나 `PENDING`·`UNAVAILABLE`이어도 조사를 시작·계속한다. 점수 상태는 `investigationStatus`와 독립적이며 보류·관리자 검토를 막지 않는다. A/B를 통과한 비보류 이체에는 MVP 점수를 만들지 않는다. 훅 C는 Python을 호출하지 않는다.
 
-**Example**
+**목표 Example (#946·B4 포함)**
 
 ```json
 {"code":"0000","message":"정상 처리되었습니다.","data":{"transferHoldId":123,"holdStatus":"HELD","amount":500000,"recipientAccountMasked":"088******006","riskAccountCheck":{"status":"MATCH","label":"위험 계좌 목록과 일치","riskAccountId":501,"datasetVersion":"demo-risk-v1","checkedAt":"2026-11-08T14:00:00+09:00","sourceNotice":"프로젝트 시연용 합성 데이터이며 실제 사기 확정 정보가 아닙니다."},"serverPolicy":{"policyCode":"A","count10m":3,"amount10m":1500000},"behaviorSummary":{"hesitationWarning":true},"behaviorScoreStatus":"AVAILABLE","behaviorRiskScore":0.81,"modelVersion":"xgb-demo-v1","featureVersion":"p6-behavior-v1","behaviorScoreUnavailableReason":null,"investigationStatus":"COMPLETED","secondaryFindings":[{"code":"REGULAR_SPLIT_AMOUNTS","evidenceTransferIds":[101,102],"confidence":"OBSERVED"}],"callRecords":[]}}

@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 44개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 455개 컬럼
+**대상**: 47개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`) · 테이블 목록 기준 477개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -79,6 +79,9 @@
 | 51 | `delayed_transfer_setting` | 고객별 지연이체 설정 | P4 | 6 |
 | 52 | `account_payment_stop` | 계좌 사건별 지급정지 기록 | P3 | 10 |
 | 53 | `unregistered_login_failure` | 미가입 아이디 로그인 실패 횟수 | P1 | 4 |
+| 54 | `fds_behavior_flow` | 고객 행동 흐름 | P6 | 6 |
+| 55 | `fds_behavior_event` | 행동 이벤트 | P6 | 6 |
+| 56 | `fds_behavior_score` | 보류 후 행동 점수 | P6 | 10 |
 
 ---
 
@@ -1565,6 +1568,16 @@ COB의 영업일 전환(`advanceFrom`)과 달력 따라잡기(`catchUpTo`)가 `B
 | UNIQUE | `uk_cob_checkpoint_date_step` | `cob_date, step_name` |
 
 ---
+
+## `fds_behavior_flow` · `fds_behavior_event` · `fds_behavior_score` (#951)
+
+P6이 행동 흐름과 보류 후 보조 점수를 소유한다. `transfer_hold`와는 식별자로만 연결하며 보류 상태나 원장을 변경하지 않는다.
+
+| 테이블 | 주요 컬럼 | 제약·인덱스 |
+| --- | --- | --- |
+| `fds_behavior_flow` | `flow_id CHAR(36)` PK, `customer_id BIGINT`, `first_received_at`·`last_received_at DATETIME(6)`, `finalized_at DATETIME(6)` NULL, `confirm_active_seconds INT` NULL | `ix_fds_behavior_flow_customer(customer_id, first_received_at)`, 체류 0~1800 또는 NULL |
+| `fds_behavior_event` | `flow_id CHAR(36)`, `seq_no INT`, `event_type VARCHAR(30)`, `occurred_at DATETIME(6)`, `step_code VARCHAR(4)`, `received_at DATETIME(6)` | PK `(flow_id, seq_no)`, `flow_id`는 flow FK, 순번 1~100 |
+| `fds_behavior_score` | `transfer_hold_id BIGINT` PK, `flow_id CHAR(36)` NULL, `score_status VARCHAR(12)`, `behavior_risk_score DOUBLE` NULL, `model_version`·`feature_version VARCHAR(80)` NULL, `unavailable_reason VARCHAR(40)` NULL, `score_attempt_started_at`·`created_at`·`updated_at DATETIME(6)` | `ix_fds_behavior_score_status(score_status, score_attempt_started_at)`, 점수 0~1 또는 NULL |
 
 ## `holiday`
 

@@ -182,13 +182,13 @@ public enum TransferHoldCloseReason { CANCELLED, EXPIRED }
 
 **관리자 조치와 버전 전환 경합:** P6은 기존 §6-1 방식으로 PENDING 조치를 먼저 커밋한다. 승인·콜 기반 거절·전화 없는 거절 모두 활성 데이터셋 제어 행을 `SELECT ... FOR UPDATE`로 잠근 뒤 보류 원본과 현재 활성 버전의 위험 상태를 최종 재검증한다. 전화 없는 거절은 `MATCH`에서만, 승인·콜 기반 거절은 `NO_MATCH`·`UNAVAILABLE`에서만 진행한다. `MATCH` 거절에서는 잠금 아래 확인한 위험 기록 ID와 데이터셋 버전을 P4 호출 **전에 PENDING 조치에 내구화**하고, 이후 거절 결과·감사는 이 최종 근거를 사용한다. 재검증 실패로 P4를 호출하지 않은 조치는 실패 결과와 ABORTED를 기록해 미완료 조치 차단을 해제한다. 모든 경로에서 P4 상태 전이 커밋까지 제어 행 잠금을 유지하고, 시드 배포에 따른 활성 버전 전환도 같은 잠금 아래 수행한다. 승인에서는 P4의 `HELD → EXECUTING` 선점이 실행보다 먼저 커밋되어야 하므로 잠금 해제 시점과 P4 선점 커밋의 순서를 P4와 합의한다. P4 상태 전이 결과가 모호하면 잠금만 무기한 유지하지 않고 PENDING을 남겨 §6-1의 결과 대조 경로를 따른다. 재조회로 조치 결과를 확인하기 전까지 같은 보류의 새 조치는 차단한다. 잠금 대기·P4 호출 타임아웃과 승인·거절·전환 동시성 테스트를 인계한다. 이 잠금·트랜잭션 순서는 P4 수락 전 제안이며, 확정 전에는 해당 관리자 조치 경로를 구현 완료로 취급하지 않는다.
 
-**P4 인계 요청:** P6이 P4의 저장소를 직접 읽지 않도록 읽기 전용 `transfer.api.findHoldForAdmin(transferHoldId)`를 제공한다. 반환 필드는 `transferHoldId`, `customerId`, `recipientBankCode`, `depositAccountNumber`, `releaseMode`, `status`, `heldAt`이며, 거절 결과 대조용 `actorId`·`reasonCode`도 함께 제공하거나 별도 읽기 전용 결과 조회 API로 제공한다. 복구 시 `REJECTED` 상태만으로 성공 처리하지 않고 실제 행위자·사유를 PENDING과 대조한다. 현재 당행 보류의 `recipientBankCode`는 `088`로 명시한다. P4는 새 사유 `RISK_ACCOUNT_MATCH`의 수용·`transfer_hold.reason_code` 보존 및 거절 후 상태 재조회 계약을 확인한다. 기존 `reject(id, actorId, reasonCode)` 시그니처는 유지할 수 있다. `CUSTOMER_DENIED`는 기존 최신 콜 결과와 콜 기록 ID가 필요한 사유로 유지한다. P4의 필드·사유 수락 전에는 제안으로 표시한다.
+**P4 인계 요청:** P6이 P4의 저장소를 직접 읽지 않도록 #951에서 추가한 읽기 전용 `transfer.api.findForFds(transferHoldId)`를 확장해 재사용한다. #946에서 별도 `findHoldForAdmin`을 중복 추가하지 않는다. 반환 계약에 `recipientBankCode`, `releaseMode`를 추가하고, 거절 결과 대조용 `actorId`·`reasonCode`도 함께 제공하거나 별도 읽기 전용 결과 조회 API로 제공한다. 복구 시 `REJECTED` 상태만으로 성공 처리하지 않고 실제 행위자·사유를 PENDING과 대조한다. 현재 당행 보류의 `recipientBankCode`는 `088`로 명시한다. P4는 새 사유 `RISK_ACCOUNT_MATCH`의 수용·`transfer_hold.reason_code` 보존 및 거절 후 상태 재조회 계약을 확인한다. 기존 `reject(id, actorId, reasonCode)` 시그니처는 유지할 수 있다. `CUSTOMER_DENIED`는 기존 최신 콜 결과와 콜 기록 ID가 필요한 사유로 유지한다. P4의 필드·사유 수락 전에는 제안으로 표시한다.
 
 **#946 P4와 합의할 항목 (인계 요청, 수락 전):**
 
 | 항목 | P4에 확인할 결정 |
 |---|---|
-| 보류 원본·결과 조회 | `findHoldForAdmin` 제공 여부와 원본 7개 필드의 의미·당행 은행코드 `088` 표현, 종료된 보류의 조회 가능 여부, 거절 결과의 `actorId`·`reasonCode` 제공 방식 |
+| 보류 원본·결과 조회 | 기존 `findForFds` 확장 필드의 의미·당행 은행코드 `088` 표현, 종료된 보류의 조회 가능 여부, 거절 결과의 `actorId`·`reasonCode` 제공 방식 |
 | 거절 사유·결과 | `RISK_ACCOUNT_MATCH` 수용과 `reason_code` 보존, 같은 거절 재시도의 결과 및 최종 상태 조회 방식 |
 | 경합·장애 | P6 승인·콜 기반 거절·전화 없는 거절과 버전 전환이 공유할 제어 행 잠금의 트랜잭션 경계, 승인 선점 커밋 순서, 잠금·호출 타임아웃, P4 호출 실패·응답 유실 시 재조회·복구 방식 |
 
@@ -405,7 +405,7 @@ Idempotency-Key: 9fa61214-4817-47ad-b08f-5279af78df43
 | 이벤트 제출 API 필드·시각·크기·오류 응답 및 화면 연결 | P6 FE·BE | 경로·입력 제한·재전송 결정 완료; 구현 대기 |
 | 실제 `HELD` 응답 필드·승인 실행 실패·응답 유실 뒤 결과 조회 | P4 → P6 | 공용 보류 저장·실행 부품 #838(#772 PR-a)은 11/3 머지 완료. `TransferResponse.transferHold` 중첩 DTO는 구현됨. FDS `ON_APPROVAL` 실제 응답·추가 필드 필요 여부와 결과 조회 형태는 P4 인계 대기 |
 | 보류 원본·상태 `transfer.api` 조회 | P4 → P6 | `transfer_seam.md` §10의 P4 소유 경계는 확정; 공개 조회 메서드·반환 필드 구현 인계 대기 |
-| #946 위험 계좌 데이터셋·거절 인계 | P6 스키마·`qa-seed` 시드·검증·전환, P4 보류 조회·거절 계약 | §6-0의 합성 데이터 버전·전환 잠금은 P6 시드 배포 경로에 반영하고, `findHoldForAdmin` 필드·`RISK_ACCOUNT_MATCH` 저장·승인 선점 순서를 P4와 합의 후 구현. P4 수락·동시성 검증 대기 |
+| #946 위험 계좌 데이터셋·거절 인계 | P6 스키마·`qa-seed` 시드·검증·전환, P4 보류 조회·거절 계약 | §6-0의 합성 데이터 버전·전환 잠금은 P6 시드 배포 경로에 반영하고, 기존 `findForFds` 확장 필드·`RISK_ACCOUNT_MATCH` 저장·승인 선점 순서를 P4와 합의 후 구현. P4 수락·동시성 검증 대기 |
 | Agent Tool용 이체 목록·수취인 집계 `transfer.api` 조회 | P4 → P6 | §5와 API 명세 §3·§4의 24시간·최대 100건 목록(`refId`·금액·시각·마스킹 수취계좌, `hasMore`), 최초 SUCCESS 시각, 현재 보류 건 출금계좌 외 다른 출금계좌 수(DISTINCT)는 기존 `RecentTransferQuery`의 건수·합계·존재 여부만으로 만들 수 없음. P4 공개 조회 계약·성능 검증 인계 대기; P6은 `transfer` 테이블 직접 조회 금지 |
 | 고객 취소·`ON_APPROVAL` 만료 종료 신호 | P4·P6 | `transfer_seam.md` §10 미결. 이 문서 §5-1 `TransferHoldClosed`는 P6 제안이며 P4 합의 전; 리스너 미구현 |
 | `TransferSettled.flowId` 성공 이벤트와 `refId` 멱등 저장 | P4 → P6 | `transfer_seam.md` §9-2 연결 순서·`refId` 멱등 규칙 확정; P4 필드 PR 머지 뒤 P6 리스너 연결. P6 저장·조회 부품은 선행 가능 |
