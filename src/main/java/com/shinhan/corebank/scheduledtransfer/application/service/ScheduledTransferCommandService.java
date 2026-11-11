@@ -6,7 +6,7 @@ import com.shinhan.corebank.common.audit.AuditEventType;
 import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelCommand;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelResult;
 import com.shinhan.corebank.scheduledtransfer.application.port.in.ScheduledTransferCancelUseCase;

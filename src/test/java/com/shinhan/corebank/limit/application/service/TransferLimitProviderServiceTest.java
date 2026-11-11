@@ -8,9 +8,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
-import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
