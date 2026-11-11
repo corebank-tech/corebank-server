@@ -50,8 +50,8 @@ class SucceededTransferHistoryQueryIntegrationTest extends IntegrationTestSuppor
     void findRecent_returnsCustomersSucceededTransfersNewestFirst() {
         LocalDateTime to = T0.plusHours(1);
         long first = insertTransfer(101L, 202L, PAYEE, null, 5_000L, "SUCCESS", T0);
-        long otherAccountOtherPayee =
-                insertTransfer(SECOND_ACCOUNT, OTHER_CUSTOMER_ACCOUNT, OTHER_PAYEE, null, 6_000L, "SUCCESS", T0.plusMinutes(1));
+        long otherAccountOtherPayee = insertTransfer(
+                SECOND_ACCOUNT, OTHER_CUSTOMER_ACCOUNT, OTHER_PAYEE, null, 6_000L, "SUCCESS", T0.plusMinutes(1));
         long invalidated = insertTransfer(101L, 202L, PAYEE, null, 7_000L, "SUCCESS", T0.plusMinutes(2));
         markInvalidated(invalidated);
         insertCorrection(101L, 202L, PAYEE, 7_000L, T0.plusMinutes(3), invalidated, "REVERSAL");
