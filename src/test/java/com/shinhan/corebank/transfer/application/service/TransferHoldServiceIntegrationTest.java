@@ -33,6 +33,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -182,6 +183,23 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
                     assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
                     assertThat(event.flowId()).isEqualTo("flow-978");
                 });
+    }
+
+    @Test
+    @DisplayName("[#998] 어제 보류한 승인 대기 건은 승인해도 기표하지 않고 EXPIRED로 닫으며 TRF0311이다")
+    void release_heldYesterday_expiresWithoutPosting() {
+        LocalDateTime yesterday = LocalDate.now(clock).atStartOfDay().minusMinutes(1);
+        long holdId = save(TransferHoldDecision.holdForApproval("FDS_TEST"), 30_000L, null, yesterday);
+
+        assertBusinessError(
+                () -> transferHoldService.release(holdId, ADMIN_ID), TransferErrorCode.TRANSFER_HOLD_ALREADY_CLOSED);
+
+        Map<String, Object> hold = holdRow(holdId);
+        assertThat(hold.get("status")).isEqualTo("EXPIRED");
+        assertThat(hold.get("actor_id")).isNull();
+        assertThat(hold.get("completed_at")).isNotNull();
+        assertThat(balanceOf(101)).isEqualTo(100_000L);
+        assertThat(ledgerRows()).isZero();
     }
 
     @Test
@@ -545,7 +563,18 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
     }
 
     private long save(TransferHoldDecision decision, long amount, String flowId) {
-        LocalDateTime heldAt = LocalDateTime.now(clock).minusHours(3);
+        return save(decision, amount, flowId, sameDayHeldAt());
+    }
+
+    // 3시간 전 보류이되 오늘 0시보다 앞서지 않는다. 승인 대기 보류는 날이 바뀌면 만료돼 자정 직후 실행이 깨진다(#998)
+    private LocalDateTime sameDayHeldAt() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime threeHoursAgo = now.minusHours(3);
+        LocalDateTime startOfToday = now.toLocalDate().atStartOfDay();
+        return threeHoursAgo.isBefore(startOfToday) ? startOfToday : threeHoursAgo;
+    }
+
+    private long save(TransferHoldDecision decision, long amount, String flowId, LocalDateTime heldAt) {
         return transferHoldPort
                 .save(TransferHold.hold(
                         CUSTOMER_ID,
