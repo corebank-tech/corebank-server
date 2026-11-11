@@ -276,7 +276,15 @@ Python pandas + scikit-learn + xgboost
 
 ### 6.4 추론 연동
 
-MVP에서는 **Python FastAPI에서 XGBoost 추론**한다. 서버는 이체 실행 전 훅 C에서 Python을 호출하지 않고 A/B 정책을 모델 점수 없이 판정한다. `HELD`가 커밋된 뒤 P6 비동기 조사 워커가 서버에서 검증·계산한 flow별 피처로 [API 명세 §12](p6_fds_api_spec.md#12-내부-fastapi-행동-점수-추론-932)를 호출하고, 결과 저장을 시도한 뒤 Agent 입력을 만든다. 저장된 점수가 있으면 Agent 입력과 관리자 상세에 보조 정보로 제공한다. 피처가 없거나 추론·저장에 실패하면 점수 없이 조사를 계속하며 보류·원장·관리자 조치를 변경하지 않는다. 점수는 합성 행동 모델의 출력이지 실제 사기 확률이 아니다. 관리자 점수 상태의 `PENDING`·`AVAILABLE`·`UNAVAILABLE` 전이는 #930 계약을 따르며, 이 문서의 Agent 입력 예시는 `AVAILABLE`인 사건이다.
+MVP에서는 **Python FastAPI에서 XGBoost 추론**한다. 서버 A/B 정책은 모델 점수 없이 판정하고 훅 C에서 Python을 동기 호출하지 않는다. A/B를 통과해 보류되지 않은 이체에는 MVP에서 모델 점수를 생성하지 않는다.
+
+`HELD`가 커밋되면 P6의 **비동기 점수 처리 리스너**가 점수 상태를 `PENDING`으로 만들고, 서버에서 소유권·이벤트를 검증해 flow별 피처를 계산한 뒤 [API 명세 §12](p6_fds_api_spec.md#12-내부-fastapi-행동-점수-추론-932)의 Python FastAPI 추론과 결과 저장을 시도한다. FE가 전송한 점수나 미검증 원본 이벤트를 추론 입력으로 신뢰하지 않는다. 추론·저장 성공 시 점수·모델 버전·피처 버전을 보조 정보로 저장하고 상태를 `AVAILABLE`로 바꾼다. **후속 B4 조사 워커는 FastAPI 점수 API를 호출하거나 점수 처리를 기다리지 않고, P6에 이미 저장된 `AVAILABLE` 점수만 Agent 입력에 포함한다.** 점수가 없거나 `PENDING`·`UNAVAILABLE`이어도 Agent 조사를 시작·계속한다. 관리자 상세 조회도 Python 응답을 직접 사용하지 않고 P6 저장 상태만 제공한다. 점수 저장과 Agent 보고서 성공을 한 결과로 묶지 않는다.
+
+검증된 flow가 없으면 `FLOW_UNAVAILABLE`, flow는 있으나 피처 계산 결과가 없거나 유효하지 않으면 `INVALID_FEATURES`로 추론 없이 마감한다. 모델 부재, 입력 오류, 시간 초과, Python 장애가 있으면 점수는 null, 상태는 `UNAVAILABLE`로 기록하고 [Enum 마스터 §5-11](../api_conventions.md#5-11-fds-행동-점수--p6-928)의 사유를 남긴다.
+
+**점수 시도·종료 조건:** 점수 처리 리스너는 `scoreStatus=PENDING AND scoreAttemptStartedAt IS NULL`인 점수 기록만 조건부 갱신해 추론 시작을 원자적으로 선점한다. 갱신 건수가 1인 리스너만 `scoreAttemptStartedAt`을 내구화한 뒤 Python을 호출하며, 이미 선점됐거나 종료된 기록을 본 리스너는 호출하지 않는다. 이 값은 추론 **시작 절차에 진입했다는 근거**이며 Python이 요청을 실제 처리했거나 점수를 반환했다는 증거는 아니다. 점수·버전 저장과 `PENDING → AVAILABLE`, 사유 저장과 `PENDING → UNAVAILABLE`은 각각 하나의 트랜잭션에서 `PENDING` 조건부 갱신으로 한 번만 수행한다. 이미 종료 상태면 리스너 재전달·중복 실행·복구 작업 모두 덮어쓰지 않는다. 보류 종료 이벤트와 점수 기록이 경합해도 먼저 커밋한 종료 전이만 유효하다. 점수 저장 실패를 확인하면 복구 작업이 저장 결과를 재조회하고, 유효한 점수가 없을 때 `SCORE_SAVE_FAILED`로 마감한다. 시도 시작 기록 뒤 점수 리스너가 중단되거나 응답이 유실되어 추론 결과를 확인할 수 없으면 `SCORING_INTERRUPTED`로 마감한다. 시도 기록 없이 점수 작업이 최종 실패하면 `WORKER_FAILED_BEFORE_SCORING`, 시도 기록 없이 보류가 먼저 종료되면 `HOLD_CLOSED_BEFORE_SCORING`으로 마감한다. 시작 기록만으로 추론 성공이나 저장 실패를 추정하지 않는다. 재전달에서도 시작 기록이 있으면 추론을 중복 호출하지 않고 저장 결과와 점수 상태를 먼저 대조한다. B4 Agent는 점수 없이도 조사를 계속하며, 조사 실패와 점수 실패는 별도로 표시한다. 점수의 `PENDING`/`AVAILABLE`/`UNAVAILABLE`은 이체 보류 상태 및 조사 상태와 별개다. 어떤 점수 상태도 `HELD` 생성·해제, 승인·거절 또는 원장 기표를 변경하지 않는다. 관리자 조회의 필드와 표시 의미는 [API 명세 §7](p6_fds_api_spec.md#7-관리자-보류-상세-조회)를 따른다.
+
+**점수 복구 작업(P6 BE):** 서버 기동 시와 1분 간격으로 오래된 `PENDING` 점수 기록을 조회한다. 점수 저장 결과·`scoreAttemptStartedAt`·보류 종료 여부를 대조해 유효한 점수가 있으면 `AVAILABLE`을 복원하고, 최종 실패 또는 보류 종료가 확인되면 위 사유로 `UNAVAILABLE`을 기록한다. 복구 작업과 점수 처리 리스너는 동일한 `PENDING` 조건부 갱신을 사용하며, 복구 중 DB 조회·저장이 실패하면 다음 실행에서 다시 확인한다. 리스너 중단·응답 유실 뒤에도 `PENDING`이 남지 않는지 장애 주입으로 검증한다. 이 복구 작업은 B4 조사 재시도와 별개이며 Agent 조사 작업의 상태를 변경하지 않는다.
 
 ---
 
@@ -447,8 +455,15 @@ fds_investigation
   secondary_findings_json, summary, error_code
   created_at, completed_at
 
+fds_behavior_score (#951 소유)
+  transfer_hold_id (PK), flow_id, score_status, score_attempt_started_at
+  behavior_risk_score, model_version, feature_version, unavailable_reason, created_at, updated_at
+
 P6 조사 작업 (테이블명 미정)
-  transfer_hold_id (UNIQUE), investigation_id (안정적인 작업 ID), 상태, 시도 횟수, 다음 재시도 시각
+  transfer_hold_id (UNIQUE), investigation_id (안정적인 작업 ID), 상태, 시도 횟수, 다음 재시도 시각,
+  작업 임대 만료 시각
+
+`fds_behavior_score`의 생성·선점·종료·재전달·복구는 #951 점수 리스너와 점수 복구 작업의 책임이다. B4는 별도 조사 작업의 등록·임대·재시도·보고서 저장만 담당하며 점수 상태를 변경하지 않는다. 따라서 점수 리스너가 B4 조사 작업보다 먼저 실행되어도 점수 저장 행이 보장되고, 조사 작업의 실패만으로 점수를 `UNAVAILABLE`로 마감하지 않는다.
 
 fds_audit_log
   actor, action, transfer_hold_id, before_status, after_status, occurred_at (FDS 상세 보조 기록)
@@ -506,7 +521,8 @@ P4의 토큰 소비·보류 저장·해제 계약은 문서로 확정됐으며, 
 | FE → BE | `POST /fds/behavior-flows/{flowId}/events` | 이벤트 일괄 저장 |
 | FE → BE | `POST /transfers` | 기존 즉시이체 + 선택 `flowId`, 멱등키 |
 | BE → FE | 이체 응답 | 정상 실행 또는 `HELD` + `transferHoldId` |
-| 내부 작업 | `TransferHeld` 이벤트 → P6 조사 작업 | P4 보류 저장·발행은 같은 커밋, P6 작업 등록·재시도는 별도 설계 |
+| 내부 작업 | `TransferHeld` 이벤트 → P6 점수 기록·처리 | #951 점수 리스너가 `fds_behavior_score`를 멱등 생성하고 추론 시작을 원자적으로 선점·복구 |
+| 내부 작업 | `TransferHeld` 이벤트 → P6 조사 작업 | B4가 조사 작업을 내구성 있게 등록하고 임대·재시도·보고서를 관리하며 점수 처리와 독립 |
 | AI → BE | `GET /internal/fds/holds/{transferHoldId}/history` | Tool 1 거래 이력 |
 | AI → BE | `GET /internal/fds/holds/{transferHoldId}/recipient-context` | Tool 2 수취인 맥락 |
 | AI → BE | `PUT /internal/fds/investigations/{investigationId}/report` | 조사 결과 멱등 저장 |
@@ -574,10 +590,11 @@ P4의 토큰 소비·보류 저장·해제 계약은 문서로 확정됐으며, 
 | B2 | P6 BE, P4 이벤트 필드 PR과 분리 | 성공 이체 `refId`–`flowId` 연결의 P6 소유 저장·조회 부품을 먼저 만든다. `refId` 유니크와 재전달 멱등을 검증한다. **`TransferSettled.flowId` 필드 PR 머지 뒤** 성공 이벤트 리스너를 붙인다. 연결 지연 중에도 정책 B는 독립 판정한다. |
 | A1 | P6 AI, C2 뒤 | 정상·의심 행동 시퀀스와 망설임 없는 반복 송금의 합성 데이터 생성기·시드·라벨 이유를 보존한다. 시나리오 원형 기준으로 학습/검증/시험을 분리하고 규칙 3개 중 2개를 라벨 공식으로 복사하지 않는다. XGBoost 학습 결과와 `model.json`·피처 명세·버전·평가 지표를 남긴다. |
 | A2 | P6 AI, C1·A1 뒤 | **Python FastAPI**에서 모델 점수를 계산한다. 서버 A/B는 점수 없이 동작하고 훅 C는 Python을 동기 호출하지 않는다. 모델 부재·장애 시 점수는 참고 불가로 표시한다. Java WAS에 XGBoost4J를 넣는 이전 안은 사용하지 않는다. |
+| A2-BE (#951) | P6 BE, A2·P4 공용 부품 뒤 | `TransferHeld` 수신 후 `fds_behavior_score`를 멱등 생성하고 추론 시작을 원자적으로 선점한다. FastAPI 호출·검증·점수 저장, `PENDING` 조건부 종료, 리스너 재전달과 기동 시·1분 간격의 점수 복구를 담당한다. B4 조사 작업과 독립적으로 동작한다. |
 | A3 | P6 AI, C1 뒤 | LangGraph 단일 Agent의 보류 사건 검증 → 거래 이력 Tool → 정보 부족 판단 → 필요한 경우 수취인 맥락 Tool → `secondaryFindings` 보고서 흐름을 구현한다. Tool 호출 수·조회 범위·시간·재시도를 제한하고, 없는 근거 ID·외부 문자열의 지시문을 거부한다. |
 | B3 | P6 BE, #771 PR-b 뒤·S4 밖 | 훅 C에 읽기 전용 FDS 정책을 등록한다. P4 `RecentTransferQuery`를 사용해 현재 요청을 한 번 더해 A/B를 판정한다. 고객 락 안에서 외부 호출·쓰기를 하지 않는다. FDS `order`는 지연이체보다 작게, 전역 스위치가 꺼져 있으면 DB 조회 0회로 만든다. 정책 코드·근거·행동 요약을 P6이 기록할 경계를 설계한다. |
 | P4 | P4, #771 PR-b → #772 PR-a | 공용 `transfer_hold` 저장·`TransferHeld`·조건부 상태 전이·`release() → execute()`와 `transferHoldId` 원본·상태 조회를 제공한다. **#772 PR-a는 P6 실제 보류 통합의 선행 조건**이며 PR-b의 지연이체 설정·스케줄러는 별도다. 토큰 소비·보류 저장을 한 트랜잭션으로 다시 묶지 않는다. |
-| B4 | P6 BE, P4 공용 부품 뒤·S4 밖 | `TransferHeld` 수신 후 조사 작업을 내구성 있게 등록하고 중복 사건·워커 재시도·최종 실패를 관리한다. P4 원본·상태 조회를 호출하는 읽기 전용 Tool API, 보고서 스키마·실제 근거 ID 검증·멱등 저장, 서비스 간 인증·마스킹을 구현한다. |
+| B4 | P6 BE, P4 공용 부품 뒤·S4 밖 | `TransferHeld` 수신 후 조사 작업을 내구성 있게 등록하고 중복 사건·조사 워커의 임대·재시도·최종 실패를 관리한다. P4 원본·상태 조회를 호출하는 읽기 전용 Tool API, 보고서 스키마·실제 근거 ID 검증·멱등 저장, 서비스 간 인증·마스킹을 구현한다. 저장된 `AVAILABLE` 점수만 Agent 입력에 포함하며 점수 기록의 상태를 변경하지 않는다. |
 | B5 | P6 BE·FE, P4 공용 부품 뒤·S4 밖 | 관리자 목록·상세에 서버 보류 사유와 Agent 추가 발견·상태를 분리한다. 관리자 권한·콜 결과·감사 기록을 확인한 뒤 P4 `release()`/`reject()`를 호출한다. `ON_APPROVAL` 영업일 만료, 고객 취소·만료에 따른 P6 사건 종료 방식, 중복 승인·응답 유실 처리를 구현·검증한다. 별도 종료 이벤트 필요 여부는 P4와 FDS 착수 때 정한다. |
 | O1 | P6·FE·운영, 통합 전 | Python 실행·배포 경로, 서버↔Agent 주소·인증·비밀값 주입, 모델 버전, 타임아웃·재시도·로그 마스킹·FDS 전역 스위치를 고정한다. S4 측정 중 FDS를 끄고, 측정 종료 후 실제 통합 환경에서 켠다. |
 | T1 | 공동, 각 기능 뒤 | 정상/A/B/AI 장애, 10분·금액 경계, 신규 수취인·다계좌·정정 이력, FE 중복·누락·순서 오류, 동시 세 번째 요청, 보류 중 원장·잔액·한도 불변, 보류 저장 실패 후 재인증, 만료·취소·중복 승인, 실행 시점 잔액·계좌 변경, `sourceId` 인증 우회 방지, 이벤트 재전달·응답 유실을 검증한다. 목 시연과 실제 FE–BE–AI 통합 결과를 분리해 기록한다. |
@@ -709,6 +726,8 @@ P4 부품 지연은 §10.4의 인계 조건으로 다루고, 아래는 **P6이 �
 | T09a | 행동 정보가 정상 조회됐으나 없음 / 행동 저장소 조회 자체가 실패 | 전자는 A 불성립·B 계속 검사, 후자는 훅 C 예외로 `ERROR`·미기표 |
 | T10 | Agent 정상 조사 | 조건에 따른 Tool 호출·서버 보류 사유와 구별되는 추가 발견·보고서 저장 |
 | T11 | Agent 장애·타임아웃, 조사 작업 저장 실패·`TransferHeld` 재전달·중복 | `HELD` 유지, 저장 실패 시 이벤트 재전달, 보류 ID당 작업 한 행·같은 `investigationId` 재사용 |
+| T11a | 점수 시도 전·추론 시작 기록 뒤·점수 저장 중 리스너 중단, 이벤트 재전달, 서버 재시작 | P6 점수 복구 작업이 기동 시·1분 간격으로 오래된 점수 기록을 찾고, 저장된 점수·시도 기록·보류 상태를 대조해 `PENDING`을 한 번만 마감. 시작 기록 뒤 결과 불명은 `SCORING_INTERRUPTED`, 확인된 저장 실패는 `SCORE_SAVE_FAILED`; B4 조사 재시도와 독립 |
+| T11b | 점수 추론 중 보류 종료, 점수 리스너·복구 작업의 동시 갱신, 리스너 재전달 | `PENDING` 조건부 갱신으로 최초 종료만 반영하고 이후 `AVAILABLE`·`UNAVAILABLE`을 덮어쓰지 않음. 원자적 시작 선점에 실패했거나 이미 기록된 점수는 재추론하지 않음 |
 | T12 | 관리자 승인·콜 기록 있음 | 재인증·OTP 재사용 없이 승인된 보류 원본 요청을 재검증해 정확히 한 번 실행 |
 | T13 | 콜 기록 없이 승인 | 정책에 따라 거부 |
 | T13a | 관리자 목록·상세의 조회 사유 누락·오류, 콜 기록의 사유 누락, 승인·거절 감사 저장 실패 | 적용 대상은 거부·조회 감사 확인. 콜 기록과 감사는 함께 롤백한다. P4 호출 뒤 P6 감사 실패·재시작 시 선행 PENDING 조치와 보류 결과를 대조해 관리자·사유를 복원하고 감사는 한 건만 남긴다 |
