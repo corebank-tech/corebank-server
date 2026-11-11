@@ -128,9 +128,9 @@ sudo docker run -d --name corebank-drtest-recon --network corebank-drtest-net --
 - 감사 로컬 보관 볼륨(§5)이 컨테이너를 지우고 다시 만든 뒤에도 파일을 유지하는지, 01:00 무결성 검사가 로컬 파일로 통과하는지.
 - 로그인 아이디 키를 시연과 운영 전환 중 어느 쪽 기준으로 쓸지(P1과 결정 전, §2).
 - 승격된 DB로의 기동, 호스트 네트워크 방식(§5)의 DB 접속. 포트가 3306으로 고정이라 격리 DB(`127.0.0.1:3310`)로는 시험하지 못했다.
-- 로그인 · 이체 · 해지 화면 동작(#849 완료 조건). 접속 경로(Nginx · 인증서 · hosts)가 있어야 화면으로 눌러 볼 수 있다. 해지는 설정 스위치(`APP_SUBSCRIPTION_EARLYTERMINATION_ENABLED`)가 따로 있는 것으로 알고 VM 환경 파일에는 이 변수가 없다. 스위치 기본값은 확인하지 못했으니 시험 전에 확인한다.
+- 로그인 · 이체 · 해지 화면 동작(#849 완료 조건). 접속 경로(Nginx · 인증서 · hosts)가 있어야 화면으로 눌러 볼 수 있다. 해지는 설정 스위치(`APP_SUBSCRIPTION_EARLYTERMINATION_ENABLED`)가 따로 있고 기본값이 `false`라(`application.yml`), 켜지 않으면 해지 API가 404다. VM 환경 파일에는 이 변수가 없으며 시연에 해지가 들어가므로 승격 DB용 환경 파일에 `true`로 넣는다.
 - 정보계 API 호출. `APP_INFO_API_BASE_URL`을 넣으면 `APP_INFO_API_SECRET`도 필요한데 값의 위치를 확인하지 못했다.
-- `APP_METRICS_ALLOWED_IP=127.0.0.1`로 `/actuator/prometheus`가 200이 되는지.
+- `APP_METRICS_ALLOWED_IP=127.0.0.1`로 `/api/v1/actuator/prometheus`가 200이 되는지. 이때 Nginx를 거친 외부 요청은 거부되고 VM 안의 직접 요청만 성공하는지도 같이 본다(프록시 요청을 앱이 `127.0.0.1`로 보면 지표가 밖으로 나갈 수 있다).
 - Nginx가 요청을 진짜 API로 넘기는 구성과 그 위의 로그인 · 쿠키 · CSRF 흐름. (11/10에는 고정 응답만 하는 Nginx로 크롬 접속까지만 확인했다, §8)
 - 호스트 네트워크 Nginx(`listen 192.168.0.211:443`)로 바꾼 구성. 시험할 것: 호스트의 다른 컨테이너가 443을 쓰고 있지 않은지, `ss -ltn`에서 443이 `192.168.0.211`에만 열렸는지, 노트북의 로그인 요청이 API까지 가는지.
 
@@ -141,7 +141,7 @@ sudo docker run -d --name corebank-drtest-recon --network corebank-drtest-net --
 **VM의 Nginx** (`nginx:1.27-alpine`, 컨테이너 `demo-nginx`, `--restart unless-stopped`)
 - 지금 시험용은 `-p 192.168.0.211:443:443`(bridge)이다. 이 방식에서는 컨테이너 안의 `127.0.0.1`이 Nginx 자신이라 호스트 네트워크로 뜬 API(§5)에 닿지 않는다. 시연용은 `--network host`로 띄우고 `-p`는 쓰지 않는다. 호스트 네트워크에서는 `-p`로 IP를 못 정하므로 `nginx.conf`에 `listen 192.168.0.211:443 ssl;`로 VM 사설 IP의 443만 받게 한다.
 - 설정과 인증서는 `/etc/corebank-demo-test/`(폴더 `700`, `key.pem`은 `600`). 개인 키는 VM 밖으로 내보내지 않는다.
-- 지금은 **시험용 고정 응답**(`{"status":"UP"}`)과 CORS 헤더만 준다. 시연용은 호스트 네트워크 Nginx가 요청을 `127.0.0.1:8080`의 API로 넘기고 `/actuator/`를 막는 설정으로 바꿀 계획이며, CORS는 앱의 `CORS_ALLOWED_ORIGINS`가 응답하게 한다. **이 설정은 시험 전이다.**
+- 지금은 **시험용 고정 응답**(`{"status":"UP"}`)과 CORS 헤더만 준다. 시연용은 호스트 네트워크 Nginx가 요청을 `127.0.0.1:8080`의 API로 넘기고 `/api/v1/actuator/`와 그 하위 경로를 막는 설정으로 바꿀 계획이며, CORS는 앱의 `CORS_ALLOWED_ORIGINS`가 응답하게 한다. **이 설정은 시험 전이다.**
 - 설정을 바꾼 뒤에는 파일을 같은 파일 그대로 덮어쓰고(`cat 새파일 > 기존파일`, `sed -i`는 도커가 파일 연결을 놓친다) `docker exec demo-nginx nginx -t && docker exec demo-nginx nginx -s reload`로 다시 읽힌다.
 
 **인증서**: 자체 인증서(`CN=api.corebank.cloud`, 이름 `DNS:api.corebank.cloud`), 30일(2026-12-10 만료).
