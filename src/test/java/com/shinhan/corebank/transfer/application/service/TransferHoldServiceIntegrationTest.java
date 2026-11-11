@@ -13,6 +13,7 @@ import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixture
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
 import com.shinhan.corebank.transfer.api.TransferHoldDecision;
 import com.shinhan.corebank.transfer.api.TransferHoldExecutionResult;
+import com.shinhan.corebank.transfer.api.TransferHoldForFds;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
 import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
 import com.shinhan.corebank.transfer.api.TransferSettled;
@@ -28,6 +29,7 @@ import com.shinhan.corebank.transfer.application.port.out.TransferSavePort;
 import com.shinhan.corebank.transfer.application.port.out.TransferSequencePort;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferHold;
+import com.shinhan.corebank.transfer.domain.TransferHoldStatus;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityManager;
@@ -308,6 +310,80 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
                 () -> transferHoldService.cancel(MISSING_HOLD_ID, CUSTOMER_ID),
                 TransferErrorCode.TRANSFER_HOLD_NOT_FOUND);
         assertThat(holdRow(holdId).get("status")).isEqualTo("HELD");
+    }
+
+    @Test
+    @DisplayName("FDS 조회: 보류 직후에는 원본·은행코드 088·해제 방식을 주고, 처리 결과 칸은 비어 있다 (#971)")
+    void findForFds_held_returnsOriginalWithoutResult() {
+        long holdId = save(TransferHoldDecision.holdForApproval("FDS_TEST"), 30_000L, "flow-971");
+
+        TransferHoldForFds hold = transferHoldService.findForFds(holdId);
+
+        assertThat(hold.transferHoldId()).isEqualTo(holdId);
+        assertThat(hold.customerId()).isEqualTo(CUSTOMER_ID);
+        assertThat(hold.withdrawalAccountId()).isEqualTo(101L);
+        assertThat(hold.recipientBankCode()).isEqualTo("088");
+        assertThat(hold.depositAccountNumber()).isEqualTo("110222222222");
+        assertThat(hold.amount()).isEqualTo(30_000L);
+        assertThat(hold.flowId()).isEqualTo("flow-971");
+        assertThat(hold.policyCode()).isEqualTo("FDS_TEST");
+        assertThat(hold.releaseMode()).isEqualTo("ON_APPROVAL");
+        assertThat(hold.status()).isEqualTo("HELD");
+        assertThat(hold.heldAt()).isNotNull();
+        assertThat(hold.actorId()).isNull();
+        assertThat(hold.reasonCode()).isNull();
+        assertThat(hold.completedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("FDS 조회: RISK_ACCOUNT_MATCH로 거절한 뒤 다시 읽으면 거절한 관리자·사유·종료 시각이 나온다 (#971)")
+    void findForFds_afterRiskAccountReject_returnsActorAndReason() {
+        long holdId = awaitingApproval(30_000L);
+
+        transferHoldService.reject(holdId, ADMIN_ID, "RISK_ACCOUNT_MATCH");
+
+        TransferHoldForFds hold = transferHoldService.findForFds(holdId);
+        assertThat(hold.status()).isEqualTo("REJECTED");
+        assertThat(hold.actorId()).isEqualTo(ADMIN_ID);
+        assertThat(hold.reasonCode()).isEqualTo("RISK_ACCOUNT_MATCH");
+        assertThat(hold.completedAt()).isEqualTo(holdRow(holdId).get("completed_at"));
+        assertThat(holdRow(holdId).get("reason_code")).isEqualTo("RISK_ACCOUNT_MATCH");
+    }
+
+    @Test
+    @DisplayName("FDS 조회: 끝난 보류도 읽힌다. actorId는 승인·실패면 관리자, 고객 취소면 고객, 만료면 없음이다 (#971)")
+    void findForFds_closedHolds_areReadable() {
+        long executed = awaitingApproval(30_000L);
+        transferHoldService.release(executed, ADMIN_ID);
+        jdbcTemplate.update("UPDATE account SET balance = 1000 WHERE account_id = 101");
+        long failed = awaitingApproval(30_000L);
+        transferHoldService.release(failed, ADMIN_ID);
+        long cancelled = awaitingApproval(30_000L);
+        transferHoldService.cancel(cancelled, CUSTOMER_ID);
+        long expired = awaitingApproval(30_000L);
+        transferHoldPort.close(expired, TransferHoldStatus.EXPIRED, null, null, LocalDateTime.now(clock));
+
+        assertThat(transferHoldService.findForFds(executed)).satisfies(hold -> {
+            assertThat(hold.status()).isEqualTo("EXECUTED");
+            assertThat(hold.actorId()).isEqualTo(ADMIN_ID);
+            assertThat(hold.reasonCode()).isNull();
+            assertThat(hold.completedAt()).isNotNull();
+        });
+        // 이체 행 없이 거부된 실행은 오류코드를 reasonCode에 남긴다
+        assertThat(transferHoldService.findForFds(failed)).satisfies(hold -> {
+            assertThat(hold.status()).isEqualTo("FAILED");
+            assertThat(hold.actorId()).isEqualTo(ADMIN_ID);
+            assertThat(hold.reasonCode()).isEqualTo("LMT0001");
+        });
+        assertThat(transferHoldService.findForFds(cancelled)).satisfies(hold -> {
+            assertThat(hold.status()).isEqualTo("CANCELLED");
+            assertThat(hold.actorId()).isEqualTo(CUSTOMER_ID);
+        });
+        assertThat(transferHoldService.findForFds(expired)).satisfies(hold -> {
+            assertThat(hold.status()).isEqualTo("EXPIRED");
+            assertThat(hold.actorId()).isNull();
+            assertThat(hold.completedAt()).isNotNull();
+        });
     }
 
     @Test
