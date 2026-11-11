@@ -58,7 +58,9 @@ public class TransferHoldService implements TransferHoldUseCase {
     @Override
     public TransferHoldExecutionResult release(long transferHoldId, long actorId) {
         LocalDateTime claimedAt = now();
-        if (transferHoldPort.markApprovedExecuting(transferHoldId, actorId, claimedAt)) {
+        // 보류한 날 안에서만 승인 실행한다. 날짜 조건을 선점 UPDATE에 넣어 확인과 선점 사이에 자정이 끼지 않는다(#998)
+        if (transferHoldPort.markApprovedExecuting(
+                transferHoldId, actorId, claimedAt, claimedAt.toLocalDate().atStartOfDay())) {
             return executeAndFinish(load(transferHoldId), claimedAt);
         }
         return afterLostClaim(transferHoldId);
