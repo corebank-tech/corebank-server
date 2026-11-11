@@ -15,6 +15,7 @@ import com.shinhan.corebank.transfer.api.TransferHoldDecision;
 import com.shinhan.corebank.transfer.api.TransferHoldExecutionResult;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
 import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
+import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.LedgerSavePort;
@@ -52,11 +53,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /** 단계마다 따로 커밋하는 서비스라 @Transactional을 두지 않고 직접 지운다. MockitoBean 구성은 다른 이체 통합 테스트와 같다. */
 @DisplayName("이체 보류 실행·거절·취소(TransferHoldService) 통합 테스트")
+@RecordApplicationEvents
 class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
 
     private static final long CUSTOMER_ID = 1L;
@@ -66,6 +70,9 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
 
     @Autowired
     private TransferHoldService transferHoldService;
+
+    @Autowired
+    private ApplicationEvents applicationEvents;
 
     @Autowired
     private TransferHoldPort transferHoldPort;
@@ -160,6 +167,21 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
         assertThat(((Number) hold.get("transfer_id")).longValue()).isEqualTo(transferIdOf(first.transactionNumber()));
         assertThat(balanceOf(101)).isEqualTo(70_000L);
         assertThat(ledgerRows()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("보류할 때 저장한 flowId가 승인 실행의 TransferSettled 에 실린다 (#978)")
+    void release_publishesFlowIdSavedAtHold() {
+        long holdId = save(TransferHoldDecision.holdForApproval("FDS_TEST"), 30_000L, "flow-978");
+
+        transferHoldService.release(holdId, ADMIN_ID);
+
+        assertThat(applicationEvents.stream(TransferSettled.class))
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
+                    assertThat(event.flowId()).isEqualTo("flow-978");
+                });
     }
 
     @Test
@@ -519,6 +541,10 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
     }
 
     private long save(TransferHoldDecision decision, long amount) {
+        return save(decision, amount, null);
+    }
+
+    private long save(TransferHoldDecision decision, long amount, String flowId) {
         LocalDateTime heldAt = LocalDateTime.now(clock).minusHours(3);
         return transferHoldPort
                 .save(TransferHold.hold(
@@ -529,7 +555,7 @@ class TransferHoldServiceIntegrationTest extends IntegrationTestSupport {
                         null,
                         null,
                         TransferChannel.WB,
-                        null,
+                        flowId,
                         decision,
                         heldAt,
                         heldAt))

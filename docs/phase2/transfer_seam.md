@@ -244,9 +244,9 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 - `flowId`는 `POST /transfers` 요청 본문의 선택 필드로 받고 멱등 지문(fingerprint)에 넣습니다. 이체는 값을 전달만 하고, 그 흐름이 이 고객 것인지는 FDS가 검사합니다.
 - `RecentTransferQuery`는 기존 인덱스 `ix_transfer_wacc`(출금계좌, 처리시각)로 고객의 출금계좌마다 읽습니다. `transfer`에 인덱스를 새로 달지 않습니다(§9-5 규칙 6).
 - `RecentTransferQuery`는 당행 즉시·예약·자동이체의 SUCCESS 행을 셉니다. 정정 체인으로 무효화된 행(`invalidated_at`)은 뺍니다. `firstTransferredAt`은 "반복 묶음 첫 이체 이전에 보낸 적 있는가"를 `hasSucceededBefore`로 물을 때 씁니다.
-- **정책 A가 보는 과거 성공 이체와 `flowId`의 연결은 P6이 소유합니다.** `transfer`에 컬럼을 더하지 않습니다(§9-5 규칙 6). P4는 `TransferSettled`에 nullable `String flowId`를 더하고, P6은 성공 커밋 뒤 이 이벤트를 받는 시점에 성공 이체 ID(`refId`)와 `flowId`의 연결을 자기 테이블에 저장해 반복 묶음 단위로 조회합니다.
-    - P4 구현은 PH-103(#747, 같은 이벤트를 고친다) 머지 뒤, S4 측정이 끝난 11/6 이후 첫 PR입니다. FDS는 11/6까지 꺼 두므로 P6은 그 전에 이 시그니처로 리스너를 만들어 둘 수 있습니다.
-    - **연결 순서:** 지금 `TransferSettled`에는 `flowId`가 없습니다. P6은 연결 저장 부품을 먼저 준비하고, 이벤트를 읽는 리스너는 P4가 필드를 추가한 PR이 머지된 뒤 연결합니다. P4는 그 PR이 머지되면 P6에 알립니다.
+- **정책 A가 보는 과거 성공 이체와 `flowId`의 연결은 P6이 소유합니다.** `transfer`에 컬럼을 더하지 않습니다(§9-5 규칙 6). `TransferSettled`에는 nullable `String flowId`가 있고(#978), P6은 성공 커밋 뒤 이 이벤트를 받는 시점에 성공 이체 ID(`refId`)와 `flowId`의 연결을 자기 테이블에 저장해 반복 묶음 단위로 조회합니다.
+    - 값: 즉시이체는 요청의 `flowId`, 보류됐다 실행된 건은 보류할 때 저장한 `flowId`, 보내지 않았거나 타행이면 null입니다.
+    - **연결 순서:** 필드는 #978로 들어갔습니다. P6은 연결 저장 부품(#976) 위에 이 이벤트를 읽는 리스너를 연결합니다.
     - **멱등 저장:** 같은 이벤트가 다시 전달될 수 있으므로, P6은 성공 이체 ID(`refId`)를 키로 한 번만 저장합니다. 같은 `refId`가 다시 오면 새 행을 만들지 않습니다.
     - 이벤트는 커밋 뒤 따로 처리되므로, 연달아 들어온 이체에서는 앞 건의 연결이 잠깐 안 보일 수 있습니다. 이때도 정책 B는 `RecentTransferQuery`만으로 판정합니다.
 - 이름과 필드는 PR-b 리뷰에서 바뀔 수 있습니다. 바뀌면 이 절을 같은 PR에서 고칩니다.
@@ -260,7 +260,7 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 | 토큰 | 계좌비밀번호 토큰과 OTP는 지금처럼 판정 전에 소비합니다. 토큰 원문은 저장하지 않습니다. **#771·#772 초안의 "토큰 소비와 보류 저장을 한 트랜잭션으로"에서 바꾼 계약입니다.** 일반 즉시이체의 인증 순서를 바꾸지 않기 위해서입니다. 보류 저장이 실패하면 기표 중 내부 오류와 같은 경로로 `transfer`에 ERROR 행을 남기고 실패 응답을 돌려줍니다. 토큰은 이미 소비돼서, 같은 멱등 키로 다시 보내도 인증 토큰 오류로 끝나고 보류·기표는 생기지 않습니다. 자동 재시도는 없고, 고객은 다시 인증해 새 요청을 보냅니다 |
 | 거래번호 | 판정 전에 받은 거래번호는 쓰이지 않고 빕니다(롤백 때와 같습니다). 실행할 때 새로 받습니다 |
 | 응답 | HTTP 200 + `code="0000"`. `data`에 보류 상태와 `transferHoldId`, 지연이체면 실행 예정 시각을 담습니다. `ProcessResultStatus`에는 값을 더하지 않습니다. `TransferResult`는 `status`가 null이고 `transferHoldId`가 있습니다(`held()`). 메트릭은 `transfer.count{result=HELD}`로 셉니다 |
-| 확정 이벤트 | `TransferSettled`는 보류 시점에 발행하지 않습니다. 이체 결과가 아직 없어서입니다. 실행될 때 지금처럼 발행됩니다 |
+| 확정 이벤트 | `TransferSettled`는 보류 시점에 발행하지 않습니다. 이체 결과가 아직 없어서입니다. 실행될 때 지금처럼 발행되고, 보류할 때 저장한 `flowId`를 싣습니다 |
 
 ### 9-4. 실행·거절·취소
 

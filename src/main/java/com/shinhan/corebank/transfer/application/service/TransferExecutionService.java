@@ -702,7 +702,11 @@ public class TransferExecutionService implements TransferExecutionUseCase {
             return;
         }
         eventPublisher.publishEvent(TransferSettledFactory.create(
-                transfer, command.customerId(), command.transferType().ledgerTransactionType(), occurredAt));
+                transfer,
+                command.customerId(),
+                command.transferType().ledgerTransactionType(),
+                occurredAt,
+                command.flowId()));
     }
 
     private static boolean isCustomerInitiatedTransfer(Transfer transfer) {

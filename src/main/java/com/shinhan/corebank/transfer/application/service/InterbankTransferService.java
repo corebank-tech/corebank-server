@@ -263,7 +263,8 @@ public class InterbankTransferService implements InterbankTransferUseCase {
                     failed,
                     command.customerId(),
                     InterbankSettlementService.LEDGER_TRANSACTION_TYPE,
-                    LocalDateTime.now(clock)));
+                    LocalDateTime.now(clock),
+                    null));
             return failed;
         });
     }
