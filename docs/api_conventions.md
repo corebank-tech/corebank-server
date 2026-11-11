@@ -338,7 +338,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 | 코드 | HTTP | 메시지 | 의미 |
 | --- | --- | --- | --- |
-| `LMT0001` | 400 | 출금가능금액이 부족합니다. | 잔액 부족. REQ-TRSF-013. 금액 비교 전용이며 계좌 상태 위반은 `TRF0304` |
+| `LMT0001` | 400 | 출금가능금액이 부족합니다. | 출금가능액(잔액 − 보류액) 부족. REQ-TRSF-013. 잔액은 충분한데 보류액 때문에 모자랄 때 난다(잔액 자체 부족은 `TRF0303`). 금액 비교 전용이며 계좌 상태 위반은 `TRF0304` |
 | `LMT0002` | 400 | 1회 이체한도를 초과했습니다. | REQ-TRSF-010 · POL-015 |
 | `LMT0003` | 400 | 1일 이체한도를 초과했습니다. | REQ-TRSF-011 · POL-016 |
 | `LMT0004` | 400 | 1회 한도는 1일 한도를 초과할 수 없습니다. | 한도 변경 시 정합성 위반 |
@@ -362,6 +362,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `TRF0203` | 404 | 보류 이체를 찾을 수 없습니다. | 이체 보류(#772) — 없는 보류 ID와 남의 보류를 구분하지 않는다(보류 존재 노출 방지). 조회 1회로 연산량도 같다 |
 | `TRF0301` | 409 | 거래정지 또는 해지 상태의 입금계좌입니다. | 입금계좌 상태 위반 |
 | `TRF0302` | 409 | 이미 처리 완료(SUCCESS/ERROR)된 이체는 상태를 변경할 수 없습니다. | `Transfer.complete`/`fail`의 상태 전이 가드 |
+| `TRF0303` | 409 | 출금계좌 잔액이 부족합니다. | 이체 경로에서 잔액 자체가 금액보다 적다. 잔액은 충분한데 보류액 때문이면 `LMT0001`(#521). 이체 실행은 `200` + `status=ERROR`로 내려간다 |
 | `TRF0304` | 409 | 거래정지 또는 해지 상태의 출금계좌입니다. | 출금계좌 상태 위반 |
 | `TRF0305` | 409 | 정정할 수 없는 이체입니다. | 정정 체인 가드(PH-80) — SUCCESS가 아니거나 이미 무효화된 원거래, 취소정정 거래의 재취소, 확정된 거래에 원거래 연결. HTTP로 노출되는 경로는 아직 없다 |
 | `TRF0306` | 409 | 입금계좌 잔액이 부족해 이체를 되돌릴 수 없습니다. | 정정 체인 취소정정(PH-80) — 원거래 입금계좌가 받은 돈을 이미 써서 되돌릴 잔액이 없다. HTTP로 노출되는 경로는 아직 없다 |
@@ -376,7 +377,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 > 예금주 조회의 문장형 코드 매핑: `ACCOUNT_NOT_FOUND`→`TRF0201` · `ACCOUNT_SUSPENDED`/`ACCOUNT_CLOSED`→`TRF0301` · `UNSUPPORTED_ACCOUNT_TYPE`→`TRF0004` · `SAME_ACCOUNT_TRANSFER`→`TRF0002`
 
-> `TRF0303`(잔액 부족)은 사용하지 않습니다. 같은 의미의 `LMT0001`(§4-8)로 통일했습니다 — REQ-TRSF-013이 P1 배정이고, 잔액 부족은 요청 금액 오류에 가까워 `400`이 맞습니다. 계좌 상태 위반은 `TRF0304`로 계속 구분합니다.
+> 이체 경로의 금액 부족은 원인으로 나눕니다. 잔액 자체가 모자라면 `TRF0303`, 잔액은 충분한데 보류액 때문에 출금가능액이 모자라면 `LMT0001`(§4-8)입니다. 락 이후 재검증은 즉시이체의 락 이전 순서(잔액 사전 체크 → 훅 A)와 같은 기준이라 경합 타이밍과 상관없이 같은 코드가 나갑니다(#521). 단, OTP가 없는 예약·자동이체는 잔액 사전 체크를 건너뛰어 잔액 부족도 훅 A의 `LMT0001`로 먼저 거부됩니다. 상품가입 초입금은 사전검증과 맞춰 `LMT0001` 하나, 취소정정은 `TRF0306` 하나입니다. 계좌 상태 위반은 `TRF0304`로 계속 구분합니다.
 
 ### 4-10. `FAV` 자주 쓰는 계좌 — P4
 
@@ -694,6 +695,27 @@ public record ApiResponse<T>(String code, String message, T data) {
 - 도메인 Enum에 `ALL`을 넣지 않습니다.
 - 조회 API 필터에서만 허용하고 기본값으로 씁니다.
 - 서버는 `ALL`과 파라미터 미전달을 동일하게 "조건 없음"으로 처리합니다.
+
+### 5-11. FDS 행동 점수 — P6 (#928)
+
+| Enum | 값 | 의미 |
+| --- | --- | --- |
+| `BehaviorScoreStatus` | `PENDING` | `HELD` 이후 점수 계산·결과 저장 전 |
+|  | `AVAILABLE` | 점수와 모델·피처 버전 저장 완료 |
+|  | `UNAVAILABLE` | 점수 참고 불가; 아래 사유 필수 |
+| `BehaviorScoreUnavailableReason` | `FLOW_UNAVAILABLE` | 유효한 행동 흐름이 없어 피처를 만들 수 없음 |
+|  | `INVALID_FEATURES` | 유효한 flow는 있으나 서버 피처 계산 결과가 없거나 명세 범위·필수값을 위반함 |
+|  | `MODEL_UNAVAILABLE` | 모델 파일 부재·손상·버전 불일치로 모델을 사용할 수 없음 |
+|  | `INFERENCE_INPUT_INVALID` | FastAPI가 요청 형식·값을 거부함 |
+|  | `INFERENCE_TIMEOUT` | 추론 요청 제한 시간 초과 |
+|  | `INFERENCE_SERVICE_UNAVAILABLE` | Python 서비스 연결·가용성 장애 |
+|  | `INFERENCE_FAILED` | 위 범주에 속하지 않는 추론 실패 |
+|  | `SCORE_SAVE_FAILED` | 추론 결과의 영속화에 실패하고 복구 후에도 유효한 점수를 확인할 수 없음 |
+|  | `WORKER_FAILED_BEFORE_SCORING` | 점수 작업이 추론 시도 전에 최종 실패함. B4 조사 작업의 실패만으로 적용하지 않음 |
+|  | `SCORING_INTERRUPTED` | 점수 시도 시작이 기록됐지만 점수 리스너 중단·응답 유실 뒤 유효한 저장 결과가 없어 추론 결과를 확인할 수 없음 |
+|  | `HOLD_CLOSED_BEFORE_SCORING` | 점수 시도 전에 보류가 종료됨 |
+
+사유 Enum은 관리자 응답의 분류값이며 내부 예외 문구·모델 경로·비밀값을 포함하지 않습니다. `PENDING`·`AVAILABLE`에서는 사유가 null입니다. Python 응답의 오류코드와 이 Enum의 매핑은 [P6 AI Agent 명세 §6.4](phase2/p6_fds_ai_agent_spec.md#64-추론-연동)의 A2 FastAPI 추론·#951 P6 BE 점수 연동에서 확정합니다.
 
 ---
 

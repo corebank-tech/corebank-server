@@ -9,7 +9,7 @@ import static org.mockito.Mockito.when;
 import com.shinhan.corebank.account.application.port.in.AvailableBalanceQueryUseCase;
 import com.shinhan.corebank.account.application.port.in.AvailableBalanceQueryUseCase.AvailableBalanceSnapshot;
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
 import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

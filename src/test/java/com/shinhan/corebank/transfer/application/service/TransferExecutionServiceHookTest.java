@@ -11,6 +11,8 @@ import com.shinhan.corebank.business.support.BusinessDateTestFixture;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.fds.application.service.FdsRepeatTransferHoldPolicy;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
 import com.shinhan.corebank.otp.api.OtpAuthTokenVerifier;
 import com.shinhan.corebank.transfer.adapter.out.persistence.TransferTestFixtures;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
@@ -63,7 +65,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -160,9 +164,49 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
     void cleanUpCommittedData() {
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id IN (101, 202)");
         jdbcTemplate.update("DELETE FROM transfer WHERE withdrawal_account_id = 101 AND deposit_account_id = 202");
-        jdbcTemplate.update("UPDATE account SET balance = 100000, status = 'ACTIVE' WHERE account_id IN (101, 202)");
+        jdbcTemplate.update(
+                "UPDATE account SET balance = 100000, hold_amount = 0, status = 'ACTIVE' WHERE account_id IN (101, 202)");
         jdbcTemplate.update("DELETE FROM transfer_limit_daily_usage WHERE customer_id = 1");
         jdbcTemplate.update("DELETE FROM transfer_hold WHERE customer_id = 1");
+    }
+
+    @Test
+    @DisplayName("[FDS 정책 B] 직전 성공 두 건 뒤 실제 이체를 기표 전 ON_APPROVAL로 보류한다")
+    void fdsRepeatPolicyHoldsActualTransferBeforePosting() {
+        LocalDateTime previousAt = LocalDateTime.now(clock).minusMinutes(1);
+        jdbcTemplate.update("UPDATE account SET balance = 3000000 WHERE account_id = 101");
+        for (int i = 0; i < 2; i++) {
+            jdbcTemplate.update(
+                    """
+                    INSERT INTO transfer (transaction_number, withdrawal_account_id, deposit_account_id,
+                                          deposit_account_number, payee_name, amount, fee,
+                                          transfer_type, channel, status, transferred_at, created_at)
+                    VALUES (?, 101, 202, '110222222222', '테스터', 1000000, 0,
+                            'IMMEDIATE', 'WB', 'SUCCESS', ?, NOW(6))
+                    """,
+                    "20310601FDS951" + i,
+                    previousAt);
+        }
+        FdsRepeatTransferHoldPolicy policy = new FdsRepeatTransferHoldPolicy(recentTransferQuery);
+        ReflectionTestUtils.setField(policy, "enabled", true);
+        TransferExecutionService service = serviceWithHoldPolicies(List.of(policy));
+        long ledgerBefore = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ledger_entry", Long.class);
+
+        TransferResult result = service.execute(immediateCommand(1_000_000L));
+
+        assertThat(result.held()).isTrue();
+        assertThat(jdbcTemplate.queryForMap(
+                        "SELECT policy_code, release_mode, status FROM transfer_hold WHERE transfer_hold_id = ?",
+                        result.transferHoldId()))
+                .containsEntry("policy_code", "B")
+                .containsEntry("release_mode", "ON_APPROVAL")
+                .containsEntry("status", "HELD");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ledger_entry", Long.class))
+                .isEqualTo(ledgerBefore);
+        assertThat(balanceOf(101)).isEqualTo(3_000_000L);
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM transfer_limit_daily_usage WHERE customer_id = 1", Long.class))
+                .isZero();
     }
 
     @Test
@@ -213,6 +257,34 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
         assertThat(result.status()).isEqualTo(ProcessResultStatus.SUCCESS);
         assertThat(called).containsExactly(10, 20);
         assertThat(received).containsExactly(new TransferPreCheckContext(1L, 101L, 30000L));
+    }
+
+    @Test
+    @DisplayName("[#521] 훅 A 통과 뒤 락 전에 보류액이 늘면 락 이후 재검증이 LMT0001로 거부하고 잔액·원장은 그대로다")
+    void holdIncreasedAfterPreCheck_rejectsWithInsufficientWithdrawableAmount() {
+        TransferExecutionService service = serviceWith(
+                List.of(committingPreCheck("UPDATE account SET hold_amount = 50000 WHERE account_id = 101")),
+                List.of());
+
+        TransferResult result = service.execute(immediateCommand(80000L));
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(LmtErrorCode.INSUFFICIENT_WITHDRAWABLE_AMOUNT.getCode());
+        assertThat(transferStatuses()).containsExactly("ERROR");
+        assertRolledBack();
+    }
+
+    @Test
+    @DisplayName("[#521] 훅 A 통과 뒤 락 전에 잔액 자체가 줄면 락 이후 재검증은 기존 TRF0303으로 거부한다")
+    void balanceDecreasedAfterPreCheck_rejectsWithInsufficientBalance() {
+        TransferExecutionService service = serviceWith(
+                List.of(committingPreCheck("UPDATE account SET balance = 50000 WHERE account_id = 101")), List.of());
+
+        TransferResult result = service.execute(immediateCommand(80000L));
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(TransferErrorCode.INSUFFICIENT_BALANCE.getCode());
+        assertThat(balanceOf(101)).isEqualTo(50000L);
     }
 
     @Test
@@ -659,6 +731,23 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
                 if (reject) {
                     throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
                 }
+            }
+        };
+    }
+
+    // 훅 A와 락 사이에 다른 요청이 계좌 행을 바꿔 커밋한 상황을 순서대로 재현한다.
+    private TransferPreCheck committingPreCheck(String sql) {
+        TransactionTemplate requiresNew = new TransactionTemplate(transactionManager);
+        requiresNew.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        return new TransferPreCheck() {
+            @Override
+            public int order() {
+                return 1;
+            }
+
+            @Override
+            public void check(TransferPreCheckContext context) {
+                requiresNew.executeWithoutResult(status -> jdbcTemplate.update(sql));
             }
         };
     }

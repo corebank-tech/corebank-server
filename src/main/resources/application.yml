@@ -100,6 +100,13 @@ app:
       partial-small-amount: 3000000
       partial-livelihood-days: 90
       partial-livelihood-months: 2
+  fds:
+    policy:
+      enabled: ${APP_FDS_POLICY_ENABLED:false}
+    score:
+      # 로컬 기본값은 비활성화하고 Python 주소와 전용 토큰을 주입할 때 켠다.
+      enabled: ${APP_FDS_SCORE_ENABLED:false}
+      base-url: ${APP_FDS_SCORE_BASE_URL:http://127.0.0.1:8000}
   security:
     admin:
       # 관리자 세션 무조작 만료. 고객은 server.servlet.session.timeout(10m)을 그대로 쓴다 (admin_auth.md ④).

@@ -4,6 +4,5 @@ package com.shinhan.corebank.auth.application.port.out;
 public enum FindIdAccountVerificationStatus {
     VERIFIED,
     INFORMATION_MISMATCH,
-    PASSWORD_MISMATCH,
-    LOCKED
+    PASSWORD_MISMATCH
 }

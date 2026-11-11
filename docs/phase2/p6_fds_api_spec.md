@@ -437,7 +437,7 @@ URL: `/api/v1/admin/fds/holds/{transferHoldId}`
 사용자: 관리자
 인증 필요: Y
 Idempotency-Key: N
-기타: `CUSTOMER_READ` 권한·`X-Access-Reason` 필수, 조회 감사. P4 원본·상태 조회 공개 API 선행. 아직 미구현.
+기타: `CUSTOMER_READ` 권한·`X-Access-Reason` 필수, 조회 감사. #951은 P4 공개 API로 보류 원본과 P6 저장 점수를 조회하는 범위까지 구현했다.
 
 ### 요구사항 ID
 
@@ -457,7 +457,17 @@ Idempotency-Key: N
 
 없음
 
-### Response
+### 현재 Response (#951)
+
+#951 구현은 보류 원본과 P6에 저장된 행동 점수만 반환한다. `serverPolicy`에는 `policyCode`만 있으며,
+`behaviorSummary`·`investigationStatus`는 null, `secondaryFindings`·`callRecords`는 빈 배열이다.
+`riskAccountCheck`와 상세 정책 근거는 #946 후속 구현 범위이므로 현재 응답에 포함되지 않는다.
+
+```json
+{"code":"0000","message":"정상 처리되었습니다.","data":{"transferHoldId":123,"holdStatus":"HELD","amount":500000,"recipientAccountMasked":"088******006","serverPolicy":{"policyCode":"B"},"behaviorSummary":null,"behaviorScoreStatus":"AVAILABLE","behaviorRiskScore":0.81,"modelVersion":"xgb-demo-v1","featureVersion":"p6-behavior-v1","behaviorScoreUnavailableReason":null,"investigationStatus":null,"secondaryFindings":[],"callRecords":[]}}
+```
+
+### 목표 Response (#946·B4 포함)
 
 | key | 설명 | value 타입 | 옵션 | Nullable | 예시 |
 |---|---|---|---|---|---|
@@ -474,15 +484,22 @@ Idempotency-Key: N
 | `data.riskAccountCheck.checkedAt` | 위험 조회 시도 서버 시각 | String(DateTime) | ISO-8601 오프셋 포함 | X | `"2026-11-08T14:00:00+09:00"` |
 | `data.riskAccountCheck.sourceNotice` | 데이터 출처 설명 | String | 실제 사기 확정이 아님을 명시 | X | `"프로젝트 시연용 합성 데이터이며 실제 사기 확정 정보가 아닙니다."` |
 | `data.serverPolicy` | A/B·임계값·판정 근거 | Object | AI 발견과 구분 | X | `{...}` |
-| `data.behaviorSummary` | 행동 요약 | Object | 없으면 null | O | `{...}` |
+| `data.behaviorSummary` | 검증된 행동 요약 | Object | 유효한 flow가 없으면 null | O | `{...}` |
+| `data.behaviorScoreStatus` | 보류 후 비동기 모델 점수 상태 | String(ENUM) | `PENDING`, `AVAILABLE`, `UNAVAILABLE`; 조사 상태와 별개 | X | `"AVAILABLE"` |
+| `data.behaviorRiskScore` | 합성 행동 모델 점수, 사기 확률 아님 | Number | `AVAILABLE`에서만 0~1; 그 외 null | O | `0.81` |
+| `data.modelVersion` | 점수를 산출한 모델 버전 | String | `AVAILABLE`에서만 제공; 그 외 null | O | `"xgb-demo-v1"` |
+| `data.featureVersion` | 점수에 사용한 피처 버전 | String | `AVAILABLE`에서만 제공; 그 외 null | O | `"p6-behavior-v1"` |
+| `data.behaviorScoreUnavailableReason` | 점수 참고 불가 사유 | String(ENUM) | `UNAVAILABLE`에서 필수; `PENDING`·`AVAILABLE`이면 null. 값은 [Enum 마스터 §5-11](../api_conventions.md#5-11-fds-행동-점수--p6-928). 내부 예외·비밀값 미노출 | O | `"MODEL_UNAVAILABLE"` |
 | `data.investigationStatus` | AI 조사 상태 | String(ENUM) |  | O | `"COMPLETED"` |
 | `data.secondaryFindings` | AI 추가 발견 | Array | 없으면 `[]` | X | `[{...}]` |
 | `data.callRecords` | 콜 기록 | Array | 없으면 `[]` | X | `[]` |
 
-**Example**
+모델 점수는 `HELD` 커밋 뒤 **P6 점수 처리 리스너**가 검증된 피처로 [§12](#12-내부-fastapi-행동-점수-추론-932)의 FastAPI 추론과 결과 저장을 시도한다. `HELD` 직후부터 결과 저장 전까지 `behaviorScoreStatus=PENDING`, 점수와 버전은 null이다. 리스너는 추론 호출 전에 점수 시도 시작 시각을 내구화한다. 저장 성공 후 `AVAILABLE`과 점수·버전을 제공한다. 유효한 flow가 없는 경우, flow는 있지만 피처가 유효하지 않은 경우, 모델 부재·입력 오류·시간 초과·서비스 장애, 점수 작업의 최종 실패·보류 종료 시 `UNAVAILABLE`, 점수·버전 null 및 Enum 사유를 제공한다. 점수 저장 장애나 리스너 중단으로 `PENDING`이 남으면 **P6 BE 점수 복구 작업**이 서버 기동 시와 1분 간격으로 시도 기록·저장 결과·보류 상태를 대조해 마감한다. 시도 시작 뒤 결과를 확인할 수 없으면 `SCORING_INTERRUPTED`를 사용한다. 리스너 재전달·중복 실행·복구 작업은 모두 `PENDING` 조건부 갱신만 사용해 최초 `AVAILABLE`·`UNAVAILABLE`을 덮어쓰지 않는다. **후속 B4 조사 워커는 Python 점수 API를 직접 호출하거나 점수 처리를 기다리지 않고, P6에 저장된 `AVAILABLE` 점수만 Agent 입력에 포함한다.** 점수가 없거나 `PENDING`·`UNAVAILABLE`이어도 조사를 시작·계속한다. 점수 상태는 `investigationStatus`와 독립적이며 보류·관리자 검토를 막지 않는다. A/B를 통과한 비보류 이체에는 MVP 점수를 만들지 않는다. 훅 C는 Python을 호출하지 않는다.
+
+**목표 Example (#946·B4 포함)**
 
 ```json
-{"code":"0000","message":"정상 처리되었습니다.","data":{"transferHoldId":123,"holdStatus":"HELD","amount":500000,"recipientAccountMasked":"088******006","riskAccountCheck":{"status":"MATCH","label":"위험 계좌 목록과 일치","riskAccountId":501,"datasetVersion":"demo-risk-v1","checkedAt":"2026-11-08T14:00:00+09:00","sourceNotice":"프로젝트 시연용 합성 데이터이며 실제 사기 확정 정보가 아닙니다."},"serverPolicy":{"policyCode":"A","count10m":3,"amount10m":1500000},"behaviorSummary":{"hesitationWarning":true},"investigationStatus":"COMPLETED","secondaryFindings":[{"code":"REGULAR_SPLIT_AMOUNTS","evidenceTransferIds":[101,102],"confidence":"OBSERVED"}],"callRecords":[]}}
+{"code":"0000","message":"정상 처리되었습니다.","data":{"transferHoldId":123,"holdStatus":"HELD","amount":500000,"recipientAccountMasked":"088******006","riskAccountCheck":{"status":"MATCH","label":"위험 계좌 목록과 일치","riskAccountId":501,"datasetVersion":"demo-risk-v1","checkedAt":"2026-11-08T14:00:00+09:00","sourceNotice":"프로젝트 시연용 합성 데이터이며 실제 사기 확정 정보가 아닙니다."},"serverPolicy":{"policyCode":"A","count10m":3,"amount10m":1500000},"behaviorSummary":{"hesitationWarning":true},"behaviorScoreStatus":"AVAILABLE","behaviorRiskScore":0.81,"modelVersion":"xgb-demo-v1","featureVersion":"p6-behavior-v1","behaviorScoreUnavailableReason":null,"investigationStatus":"COMPLETED","secondaryFindings":[{"code":"REGULAR_SPLIT_AMOUNTS","evidenceTransferIds":[101,102],"confidence":"OBSERVED"}],"callRecords":[]}}
 ```
 
 ### Status
@@ -731,3 +748,101 @@ Idempotency-Key: Y
 3. P6은 확정한 이벤트 입력 제한·재전송 규칙·콜 결과 4종, 새로고침 복원, `confirmActiveSeconds` 검증, 보고서 발견 코드·권고값 및 거절 enum을 구현한다. 각 이벤트의 `flowId`는 경로와 대조하고, 보고서 16 KiB·문자열·배열 상한과 조사 작업 3회·**시도별 실행 60초(대기 제외)**·Tool 호출별 5초 제한을 적용한다. 최근 이력 Tool은 24시간·100건과 `hasMore`를 적용하고, 수취인 전체 과거 거래 여부는 §4의 별도 집계로 확인한다.
 4. `FDS` 새 오류코드를 Java `ErrorCode`에 구현할 때 API 명세·[오류코드 마스터](../api_conventions.md#4-17-fds-이상거래탐지보류-사건-조사--p6-854)와 일치시키고 Swagger UI로 실제 응답을 확인한다.
 5. 노션 페이지로 옮길 때는 API별로 별도 페이지를 만들고 속성 8종과 본문 섹션 순서를 유지한다. **이 문서의 제안 응답을 구현 완료로 표시하지 않는다.**
+
+## 12. 내부 FastAPI 행동 점수 추론 (#932)
+
+카테고리: FDS 내부 추론
+설명: `HELD` 커밋 뒤 P6 점수 처리 리스너가 검증된 행동 flow의 피처 5개를 Python FastAPI에 보내 합성 행동 모델 점수를 받는다. 점수 처리 리스너·저장은 #951, 저장 점수를 사용하는 Agent 조사는 후속 B4의 책임이다.
+Method: POST
+URL: Python 서비스의 `/internal/fds/behavior-score/predict` (`/api/v1` 접두어 없음, 외부 프록시 라우트 없음)
+사용자: P6 BE 점수 처리 리스너
+인증 필요: Y
+Idempotency-Key: N. Python은 점수나 사건을 저장하지 않는 순수 추론 서비스다.
+
+### 요청 경로·인증
+
+BE는 사설 Compose 네트워크의 Python 서비스 이름으로만 호출한다. 기존 Agent→BE의 Tool·보고서용 서비스 토큰과 **별개의** `FDS_SCORE_SERVICE_TOKEN`을 양 서비스의 Git 외부 비공개 환경 파일로 주입한다. `Authorization: Bearer <FDS_SCORE_SERVICE_TOKEN>`을 FastAPI가 검증한다. 고객·관리자 세션, CSRF 쿠키, 계좌번호·고객 ID·이름·인증 토큰 원문은 보내지 않는다. 인증 실패는 HTTP 401이며 토큰 원문을 응답·로그에 남기지 않는다. 브라우저 CORS와 외부 접근을 허용하지 않는다. 같은 VM 내부 브리지만 HTTP로 통신하고 호스트가 분리되면 내부 TLS를 적용한다([연동 계약 §6-2](p6_fds_integration_contract.md#6-2-agent-내부-api-인증-결정)).
+
+### Request
+
+| key | 설명 | value 타입 | 옵션 | Nullable | 예시 |
+|---|---|---|---|---|---|
+| `transferHoldId` | 서버가 확정한 보류 ID | Long | 1 이상; Python은 상관관계 식별에만 사용 | X | `123` |
+| `flowId` | 보류 원본에 연결되고 인증 고객 소유로 검증된 행동 flow | String(UUID) | 서버가 원본·소유권·최종 제출을 먼저 검증 | X | `"3f1c2b7e-8a4d-4f0e-9c1a-2b6d5e7f8a90"` |
+| `featureVersion` | 피처 계약 버전 | String | 현재 `p6-behavior-v1`; 모델의 기대 버전과 정확히 일치 | X | `"p6-behavior-v1"` |
+| `features` | 모델 입력 | Object | 아래 다섯 키를 모두 포함; 다른 피처는 거부 | X | `{...}` |
+| `features.backCount` | 확인 화면에서 입력 화면으로 완료된 뒤로가기 횟수 | Integer | 0~100; 완전한 flow에서 이벤트가 없으면 0 | X | `1` |
+| `features.amountRevisionCount` | 첫 확정 금액 뒤 수정 횟수 | Integer | 0~100; 완전한 flow에서 수정이 없으면 0 | X | `2` |
+| `features.confirmActiveSeconds` | 보이는 확인 화면의 활성 체류 | Integer | 0~1800초; visible 밀리초 합산 후 한 번 버림 | O | `71` |
+| `features.recipientConfirmSeconds` | 이체 진입부터 첫 수취인 확인까지 경과 | Integer | 0 이상, 초 단위 버림; 같은 flow에서 확인이 반복되면 첫 `RECIPIENT_CONFIRMED`를 사용; 확인 이벤트가 없으면 null | O | `15` |
+| `features.totalFlowSeconds` | 이체 진입부터 최종 제출까지 경과 | Integer | 0 이상, 초 단위 버림; 완전한 flow의 양 끝 이벤트 필수 | X | `100` |
+
+다섯 피처의 **순서는** Python 저장소 `fds_agent/feature_schema.json`의 `modelInputOrder`와 동일하게 `backCount`, `amountRevisionCount`, `confirmActiveSeconds`, `recipientConfirmSeconds`, `totalFlowSeconds`다. JSON 객체의 키 순서에 의존하지 않고 Python이 이 순서로 모델 벡터를 만든다. 두 선택 피처의 `null`은 측정 불가이며 Python은 `numpy.nan`으로 전달하고 0으로 대체하지 않는다. 키 생략, 문자열 숫자, 음수, 소수, `NaN`·무한대는 거부한다. 유효한 flow 자체가 없거나 필수 피처가 없고 계산 불가하면 BE가 Python을 호출하지 않고 #930의 `UNAVAILABLE` 사유를 저장한다. `recipientConfirmSeconds`가 값이면 `totalFlowSeconds`를 넘을 수 없다. `backCount`·`amountRevisionCount` 상한은 행동 흐름의 이벤트 최대 100건에서 온다. 시간 피처에는 이벤트 계약에 없는 임의의 추가 상한을 만들지 않는다.
+
+**Example**
+
+```json
+{"transferHoldId":123,"flowId":"3f1c2b7e-8a4d-4f0e-9c1a-2b6d5e7f8a90","featureVersion":"p6-behavior-v1","features":{"backCount":1,"amountRevisionCount":2,"confirmActiveSeconds":71,"recipientConfirmSeconds":15,"totalFlowSeconds":100}}
+```
+
+### Query parameter
+
+없음
+
+### Response
+
+| key | 설명 | value 타입 | 옵션 | Nullable | 예시 |
+|---|---|---|---|---|---|
+| `code` | 내부 성공 코드 | String | `0000` | X | `"0000"` |
+| `message` | 응답 메시지 | String | 내부 정보 미포함 | X | `"정상 처리되었습니다."` |
+| `data.transferHoldId` | 요청 보류 ID 재확인 | Long | 요청과 같아야 함 | X | `123` |
+| `data.flowId` | 요청 flow ID 재확인 | String(UUID) | 요청과 같아야 함 | X | `"3f1c..."` |
+| `data.behaviorRiskScore` | 합성 행동 모델의 보조 점수 | Number | 유한한 0~1; 실제 사기 확률 아님 | X | `0.81` |
+| `data.modelVersion` | 로드한 모델 버전 | String | 비어 있지 않음 | X | `"xgb-demo-v1"` |
+| `data.featureVersion` | 사용한 피처 버전 | String | 요청과 같아야 함 | X | `"p6-behavior-v1"` |
+
+**Example**
+
+```json
+{"code":"0000","message":"정상 처리되었습니다.","data":{"transferHoldId":123,"flowId":"3f1c2b7e-8a4d-4f0e-9c1a-2b6d5e7f8a90","behaviorRiskScore":0.81,"modelVersion":"xgb-demo-v1","featureVersion":"p6-behavior-v1"}}
+```
+
+### Status
+
+Python 서비스의 내부 오류 코드는 공개 BE `ErrorCode`가 아니다. 이 엔드포인트에서만 아래 공통 모양 `{"code":"...","message":"...","data":null}`을 쓴다. FastAPI 기본 검증 오류 422와 상세 필드 위치·스택트레이스는 그대로 반환하지 않는다.
+
+| HTTP | 내부 오류 코드 | 조건 | BE 점수 사유 |
+|---|---|---|---|
+| `200` | `0000` | 추론 완료 | 결과 검증·저장 성공 시 `AVAILABLE` |
+| `400` | `SCORE_INVALID_REQUEST` | 필수 필드 누락, 형식·범위·null 위반 | `INFERENCE_INPUT_INVALID` |
+| `401` | `SCORE_UNAUTHORIZED` | 서비스 토큰 없음·무효 | `INFERENCE_SERVICE_UNAVAILABLE` 및 운영 알림 |
+| `409` | `SCORE_FEATURE_VERSION_MISMATCH` | 요청 피처 버전과 로드 모델의 기대 버전 불일치 | `MODEL_UNAVAILABLE` 및 배포 버전 확인. `INFERENCE_INPUT_INVALID`로 매핑하지 않음 |
+| `503` | `SCORE_MODEL_UNAVAILABLE` | 모델 미적재·손상·로딩 실패 | `MODEL_UNAVAILABLE` |
+| `504` | `SCORE_INFERENCE_TIMEOUT` | Python 내부 추론 제한 시간 초과 | `INFERENCE_TIMEOUT` |
+| `500` | `SCORE_INFERENCE_FAILED` | 위 범주 밖의 추론 실패 | `INFERENCE_FAILED` |
+
+```json
+{"code":"SCORE_INVALID_REQUEST","message":"추론 입력을 확인할 수 없습니다.","data":null}
+```
+
+```json
+{"code":"SCORE_FEATURE_VERSION_MISMATCH","message":"피처 버전이 맞지 않습니다.","data":null}
+```
+
+```json
+{"code":"SCORE_MODEL_UNAVAILABLE","message":"행동 모델을 사용할 수 없습니다.","data":null}
+```
+
+```json
+{"code":"SCORE_INFERENCE_FAILED","message":"행동 점수를 계산할 수 없습니다.","data":null}
+```
+
+Python은 요청을 받은 뒤 추론 처리에 최대 **3초**를 사용하고, 초과하면 `504 SCORE_INFERENCE_TIMEOUT`을 반환한다. BE의 Python 호출은 연결 제한 **1초**, 호출 전체 제한 **5초**를 적용한다(연결 시간 포함). 따라서 Python의 3초 제한이 먼저 끝나면 BE가 `504`를 받을 수 있고, 네트워크 지연이나 응답 유실로 5초가 지나면 BE도 기다림을 끝낸다. 두 제한 시간 모두 보류 건당 한 번의 점수 추론에 적용하며 자동 재시도하지 않는다. 점수 처리 리스너는 B4 Agent 조사와 별개로 실행되므로 이 5초는 **Agent 실행 60초 제한**과 관계없다. B4는 점수 처리를 기다리지 않으며, 점수가 없어도 Agent 조사를 시작·계속한다. 이 수치는 시연 환경의 실행 보호값이며 정책 A/B 판정 기준이 아니다.
+
+BE에서 연결 실패는 `INFERENCE_SERVICE_UNAVAILABLE`, BE 호출 전체 제한 5초 초과는 `INFERENCE_TIMEOUT`으로 구분한다. 성공 HTTP라도 ID·피처 버전 불일치, 점수 범위 밖, 모델 버전 누락, 잘못된 JSON은 `INFERENCE_FAILED`로 처리하고 결과를 저장하지 않는다. 표에 없는 HTTP 상태나 정의되지 않은 오류 응답도 기본 사유 `INFERENCE_FAILED`로 `UNAVAILABLE`을 기록하고 점수 없이 후속 조사를 계속한다. 내부 오류 코드나 메시지를 관리자에게 그대로 반환하지 않고 #930의 `BehaviorScoreUnavailableReason`으로 매핑한다. BE가 피처 생성 전에 감지한 무효한 입력은 `FLOW_UNAVAILABLE` 또는 `INVALID_FEATURES`이며, Python의 `400`과 구분한다.
+
+### 재시도·저장·표시 경계
+
+FastAPI는 호출마다 로드된 모델로 점수만 계산한다. 보류 사건·점수·멱등 키를 저장하거나 `HELD`·조사 상태를 바꾸지 않는다. 같은 본문의 중복 호출은 부작용이 없으나, 모델 버전이 교체되면 점수도 달라질 수 있어 BE는 응답의 `modelVersion`을 기록한다. BE는 `scoreStatus=PENDING AND scoreAttemptStartedAt IS NULL`인 점수 기록을 원자적으로 선점한 리스너만 Python을 호출한다. 결과가 불명확한 시간 초과·응답 유실 뒤에는 같은 보류를 자동 재추론하지 않으며, 연결 전에 실패했음이 확실한 경우에도 보류 건당 한 번 시도 원칙을 유지한다. 점수 처리 리스너의 재전달·중복 실행은 이미 선점됐거나 저장된 `AVAILABLE`·`UNAVAILABLE`을 덮어쓰지 않고, 위 `PENDING` 조건부 전이·복구 작업과 같은 트랜잭션 경계를 사용한다. B4 조사 재시도는 이 점수 상태를 변경하지 않는다.
+
+BE는 응답의 `transferHoldId`·`flowId`·`featureVersion`과 점수·버전을 검증한 뒤 점수, 모델 버전, 피처 버전을 저장하고 `PENDING → AVAILABLE`을 한 번만 커밋한다. FastAPI 오류나 점수 저장 실패는 `UNAVAILABLE` 사유와 복구 경로를 따른다. Agent 입력 생성 시 P6에 저장된 **`AVAILABLE` 점수만** 보조 정보로 포함하고, 관리자 상세 §7도 저장된 뒤에만 `AVAILABLE`로 표시한다. 저장 실패나 조사 실패가 `HELD`를 풀거나 이체를 기표하지 않는다. 모델 점수만으로 승인·거절하거나 서버 A/B 정책 결과를 바꾸지 않는다. 훅 C는 Python을 호출하지 않는다.

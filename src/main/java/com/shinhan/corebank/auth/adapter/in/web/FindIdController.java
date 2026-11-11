@@ -37,7 +37,7 @@ public class FindIdController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "403",
-                description = "`ATH0102` 계좌비밀번호 5회 오류로 계좌 잠금",
+                description = "`APW0101` 계좌비밀번호 5회 오류로 거래가 정지되었습니다.",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",

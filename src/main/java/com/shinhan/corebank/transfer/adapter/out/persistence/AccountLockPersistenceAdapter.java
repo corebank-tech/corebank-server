@@ -143,6 +143,7 @@ public class AccountLockPersistenceAdapter implements AccountLockPort {
                 entity.getAccountId(),
                 entity.getAccountNumber(),
                 entity.getBalance(),
+                entity.getHoldAmount(),
                 LockedAccountStatus.valueOf(entity.getStatus()));
     }
 }

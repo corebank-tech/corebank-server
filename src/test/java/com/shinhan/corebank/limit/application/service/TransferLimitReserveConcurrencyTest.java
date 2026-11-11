@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;

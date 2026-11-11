@@ -182,6 +182,26 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("락으로 읽은 출금계좌에 보류액이 함께 실리고, 출금가능액은 잔액 − 보류액이다")
+    void lockForTransfer_returnsHoldAmountAndAvailableBalance() {
+        // given
+        TransferTestFixtures.seedCustomerAndAccounts(entityManager);
+        entityManager
+                .createNativeQuery("UPDATE account SET hold_amount = 30000 WHERE account_id = 101")
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        LockedAccountsForTransfer locked = adapter.lockForTransfer(101L, 202L);
+
+        // then
+        assertThat(locked.withdrawal().holdAmount()).isEqualTo(30000L);
+        assertThat(locked.withdrawal().availableBalance()).isEqualTo(70000L);
+        assertThat(locked.deposit().holdAmount()).isZero();
+    }
+
+    @Test
     @DisplayName("출금/입금 계좌 ID 순서를 반대로 호출해도 방향 매핑은 그대로 유지된다")
     void lockForTransfer_preservesDirectionRegardlessOfIdOrder() {
         // given
@@ -355,7 +375,7 @@ class AccountLockPersistenceAdapterTest extends IntegrationTestSupport {
         LockedAccount locked = adapter.lockForCredit(202L);
 
         // then
-        assertThat(locked).isEqualTo(new LockedAccount(202L, "110222222222", 100000L, LockedAccountStatus.MATURED));
+        assertThat(locked).isEqualTo(new LockedAccount(202L, "110222222222", 100000L, 0L, LockedAccountStatus.MATURED));
     }
 
     @Test

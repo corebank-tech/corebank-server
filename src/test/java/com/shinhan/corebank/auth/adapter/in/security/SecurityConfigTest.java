@@ -411,6 +411,22 @@ class SecurityConfigTest {
     }
 
     @Test
+    @DisplayName("FDS 보류 상세는 CUSTOMER_READ 관리자만 조회한다")
+    void fdsHoldDetailRequiresCustomerRead() throws Exception {
+        var path = "/api/v1/admin/fds/holds/123";
+        mockMvc.perform(get(path).contextPath("/api/v1").with(authentication(admin(7L))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get(path).contextPath("/api/v1").with(authentication(admin(7L, AdminPermission.CUSTOMER_READ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("fds-hold"));
+        mockMvc.perform(post(path)
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.CUSTOMER_WRITE)))
+                        .with(csrf()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @DisplayName("판정 승인과 반려는 지급정지 승인 권한만 통과하고 변경 권한으로는 403이다")
     void objectionApprovalRequiresApprovePermission() throws Exception {
         for (String path : new String[] {
