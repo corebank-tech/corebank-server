@@ -212,11 +212,14 @@ class InterbankTransferServiceTest extends InterbankIntegrationTestSupport {
     void approved_settledEventCarriesTransferNotification() {
         service(client).execute(command("004", "1234567890123", AMOUNT));
 
-        assertThat(publishedTransferSettled().notification()).satisfies(notification -> {
+        TransferSettled settled = publishedTransferSettled();
+        assertThat(settled.notification()).satisfies(notification -> {
             assertThat(notification.customerId()).isEqualTo(1L);
             assertThat(notification.title()).isEqualTo("이체 완료");
             assertThat(notification.content()).isEqualTo("김*수님에게 30,000원을 보냈습니다.");
         });
+        // 타행은 FDS 보류 대상이 아니라 행동 흐름이 없다(#978)
+        assertThat(settled.flowId()).isNull();
     }
 
     @Test

@@ -671,11 +671,38 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
             assertThat(event.txType()).isEqualTo("IMMEDIATE_TRANSFER");
             assertThat(event.status()).isEqualTo(ProcessResultStatus.SUCCESS);
             assertThat(event.errorCode()).isNull();
+            assertThat(event.flowId()).isNull();
             assertThat(event.notification()).satisfies(notification -> {
                 assertThat(notification.title()).isEqualTo("이체 완료");
                 assertThat(notification.content()).contains("*").contains("30,000원을 보냈습니다.");
             });
         });
+    }
+
+    @Test
+    @DisplayName("요청에 flowId가 있으면 TransferSettled 에 그대로 실린다. FDS가 성공 이체와 행동 흐름을 잇는다 (#978)")
+    void execute_immediateWithFlowId_publishesFlowId() {
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> TransferTestFixtures.seedCustomerAndAccounts(entityManager));
+        TransferCommand command = TransferCommand.builder()
+                .customerId(1L)
+                .authToken("dummy-auth-token")
+                .otpAuthToken("dummy-otp-token")
+                .withdrawalAccountId(101L)
+                .depositAccountNumber("110222222222")
+                .amount(30000L)
+                .transferType(TransferType.IMMEDIATE)
+                .channel(TransferChannel.WB)
+                .flowId("flow-978")
+                .build();
+
+        transferExecutionService.execute(command);
+
+        ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(domainEventSink).record(published.capture());
+        assertThat(published.getValue())
+                .isInstanceOfSatisfying(
+                        TransferSettled.class, event -> assertThat(event.flowId()).isEqualTo("flow-978"));
     }
 
     @Test
