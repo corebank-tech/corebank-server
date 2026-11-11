@@ -26,6 +26,7 @@
 | `APP_AUDIT_ARCHIVE_STORAGE` | `local`. 감사 로그를 AWS 보관함이 아니라 서버 안에 저장한다 |
 | `APP_LEDGER_RECONCILIATION_FULL_SCAN_CHUNK_TIMEOUT_SECONDS` | `1800`. 코드 기본값은 60초다 |
 | `APP_INFO_API_BASE_URL` `APP_INFO_API_SECRET` | VM 정보계 API(`http://192.168.0.211:8081`)와 그 비밀. 비밀은 `info-api` 컨테이너의 `INFO_API_SECRET`과 같은 값이고 화면에 내지 않고 옮겼다. 호출 자체는 시험 전이다 |
+| `CORS_ALLOWED_ORIGINS` | `https://www.corebank.cloud`(화면 출처). 비우면 허용 출처가 없어 화면에서 API 호출이 막힌다(`application-prod.yml`). Nginx는 CORS 헤더를 덧붙이지 않으므로 이 값이 유일한 설정이다(§8) |
 
 기동할 때 덧붙이는 값(환경 파일에 넣지 않는다): `APP_INTERBANK_HOST=192.168.0.211`(VM 모의 대외기관, 포트 9300), 승격 뒤에는 `SERVER_ADDRESS=127.0.0.1`과 `APP_METRICS_ALLOWED_IP`(§5).
 
@@ -132,6 +133,7 @@ sudo docker run -d --name corebank-drtest-recon --network corebank-drtest-net --
 - 정보계 API 호출. `APP_INFO_API_BASE_URL`을 넣으면 `APP_INFO_API_SECRET`도 필요한데 값의 위치를 확인하지 못했다.
 - `APP_METRICS_ALLOWED_IP=127.0.0.1`로 `/api/v1/actuator/prometheus`가 200이 되는지. 이때 Nginx를 거친 외부 요청은 거부되고 VM 안의 직접 요청만 성공하는지도 같이 본다(프록시 요청을 앱이 `127.0.0.1`로 보면 지표가 밖으로 나갈 수 있다).
 - Nginx가 요청을 진짜 API로 넘기는 구성과 그 위의 로그인 · 쿠키 · CSRF 흐름. (11/10에는 고정 응답만 하는 Nginx로 크롬 접속까지만 확인했다, §8)
+- `CORS_ALLOWED_ORIGINS=https://www.corebank.cloud`를 승격용 환경 파일에 넣은 뒤, Nginx가 API로 넘기는 구성에서 `www.corebank.cloud` 화면의 OPTIONS 사전 요청과 실제 로그인 요청이 통과하는지(브라우저에서 확인).
 - 호스트 네트워크 Nginx(`listen 192.168.0.211:443`)로 바꾼 구성. 시험할 것: 호스트의 다른 컨테이너가 443을 쓰고 있지 않은지, `ss -ltn`에서 443이 `192.168.0.211`에만 열렸는지, 노트북의 로그인 요청이 API까지 가는지.
 
 ## 8. 접속 경로 (시연용, 11/10 시험)
