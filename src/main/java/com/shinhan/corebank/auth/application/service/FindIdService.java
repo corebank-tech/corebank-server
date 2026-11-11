@@ -48,7 +48,6 @@ public class FindIdService implements FindIdUseCase {
         return switch (verification.status()) {
             case INFORMATION_MISMATCH, PASSWORD_MISMATCH ->
                 throw new BusinessException(AuthErrorCode.IDENTITY_INFORMATION_MISMATCH);
-            case LOCKED -> throw new BusinessException(AuthErrorCode.ACCOUNT_LOCKED);
             case VERIFIED -> new FindIdResult(findUserId(candidates, verification.customerId()));
         };
     }

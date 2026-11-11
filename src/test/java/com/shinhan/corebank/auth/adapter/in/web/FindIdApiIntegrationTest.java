@@ -57,7 +57,7 @@ class FindIdApiIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("계좌비밀번호가 5회 틀리면 계좌를 잠그고 ATH0102를 반환한다")
+    @DisplayName("계좌비밀번호 5회 실패 시 APW0101을 반환하고 로그인 계정은 잠그지 않는다")
     void locksAccountAfterFivePasswordFailures() throws Exception {
         for (int attempt = 1; attempt < 5; attempt++) {
             mockMvc.perform(findIdRequest("9999"))
@@ -65,16 +65,37 @@ class FindIdApiIntegrationTest extends IntegrationTestSupport {
                     .andExpect(jsonPath("$.code").value("ATH0009"));
         }
 
+        // 다섯 번째 실패: 계좌비밀번호 잠금
         mockMvc.perform(findIdRequest("9999"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ATH0102"));
+                .andExpect(jsonPath("$.code").value("APW0101"))
+                .andExpect(jsonPath("$.message").value("계좌비밀번호 5회 오류로 거래가 정지되었습니다."));
+
+        // 이미 잠긴 계좌는 올바른 비밀번호로 재시도해도 잠금 유지
+        mockMvc.perform(findIdRequest("1234"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("APW0101"));
 
         Integer failureCount = jdbcTemplate.queryForObject(
                 "SELECT password_failure_count FROM account WHERE account_number = ?", Integer.class, ACCOUNT_NUMBER);
-        Boolean locked = jdbcTemplate.queryForObject(
+
+        Boolean passwordLocked = jdbcTemplate.queryForObject(
                 "SELECT password_locked FROM account WHERE account_number = ?", Boolean.class, ACCOUNT_NUMBER);
+
+        String accountStatus = jdbcTemplate.queryForObject(
+                "SELECT status FROM account WHERE account_number = ?", String.class, ACCOUNT_NUMBER);
+
+        Integer loginFailureCount = jdbcTemplate.queryForObject(
+                "SELECT login_failure_count FROM customer WHERE user_id = ?", Integer.class, USER_ID);
+
+        Boolean loginAccountLocked = jdbcTemplate.queryForObject(
+                "SELECT account_locked FROM customer WHERE user_id = ?", Boolean.class, USER_ID);
+
         assertThat(failureCount).isEqualTo(5);
-        assertThat(locked).isTrue();
+        assertThat(passwordLocked).isTrue();
+        assertThat(accountStatus).isEqualTo("ACTIVE");
+        assertThat(loginFailureCount).isZero();
+        assertThat(loginAccountLocked).isFalse();
     }
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder findIdRequest(
