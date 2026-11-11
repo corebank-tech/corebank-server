@@ -11,8 +11,10 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -49,7 +51,8 @@ public class BehaviorFlowService {
                 || customerId <= 0
                 || batch == null
                 || batch.events() == null
-                || batch.events().isEmpty()) {
+                || batch.events().isEmpty()
+                || batch.events().size() > 100) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
         LocalDateTime receivedAt = LocalDateTime.now(clock.withZone(KST));
@@ -63,7 +66,7 @@ public class BehaviorFlowService {
             throw new BusinessException(FdsErrorCode.FLOW_CONFLICT);
         }
         List<Event> existing = port.events(flowId.toString());
-        if (existing.size() + batch.events().size() > 200) {
+        if (existing.size() > 100) {
             throw new BusinessException(FdsErrorCode.INVALID_EVENT);
         }
         int next = existing.size() + 1;
@@ -75,8 +78,9 @@ public class BehaviorFlowService {
             if ("CONFIRM_LEAVE".equals(stored.eventType())) confirmOpen = false;
         }
         Set<Integer> seen = new HashSet<>();
-        int appended = 0;
+        List<Event> toAppend = new ArrayList<>();
         boolean finalEvent = false;
+        boolean batchContainsFinalEvent = false;
         for (EventInput input : batch.events()) {
             if (input == null
                     || input.flowId() == null
@@ -98,6 +102,7 @@ public class BehaviorFlowService {
                 throw new BusinessException(FdsErrorCode.INVALID_EVENT);
             }
             Event current = new Event(input.seqNo(), input.eventType(), occurredAt, input.step());
+            batchContainsFinalEvent |= "SUBMIT_REQUESTED".equals(input.eventType());
             if (input.seqNo() <= existing.size()) {
                 if (!existing.get(input.seqNo() - 1).equals(current)) {
                     throw new BusinessException(FdsErrorCode.FLOW_CONFLICT);
@@ -129,27 +134,30 @@ public class BehaviorFlowService {
             if ("CONFIRM_ENTER".equals(input.eventType())) confirmOpen = true;
             if ("CONFIRM_LEAVE".equals(input.eventType())) confirmOpen = false;
             finalEvent = "SUBMIT_REQUESTED".equals(input.eventType());
-            port.append(flowId.toString(), current, receivedAt);
+            toAppend.add(current);
             previousAt = occurredAt;
             next++;
-            appended++;
         }
-        if (next > 101
+        if (existing.size() + toAppend.size() > 100
                 || batch.confirmActiveSeconds() != null
                         && (batch.confirmActiveSeconds() < 0 || batch.confirmActiveSeconds() > 1800)) {
             throw new BusinessException(FdsErrorCode.INVALID_EVENT);
         }
-        if (batch.confirmActiveSeconds() != null && !finalEvent && flow.finalizedAt() == null) {
+        if (batch.confirmActiveSeconds() != null && !batchContainsFinalEvent) {
             throw new BusinessException(FdsErrorCode.INVALID_EVENT);
         }
         if (flow.finalizedAt() != null
-                && appended == 0
-                && !java.util.Objects.equals(flow.confirmActiveSeconds(), batch.confirmActiveSeconds())) {
+                && batchContainsFinalEvent
+                && !Objects.equals(flow.confirmActiveSeconds(), batch.confirmActiveSeconds())) {
             throw new BusinessException(FdsErrorCode.FLOW_CONFLICT);
+        }
+        // 전체 묶음 검증이 끝난 뒤에만 쓰기를 시작해 부분 저장 가능성을 없앤다.
+        for (Event event : toAppend) {
+            port.append(flowId.toString(), event, receivedAt);
         }
         if (finalEvent) {
             port.finalizeFlow(flowId.toString(), batch.confirmActiveSeconds(), receivedAt);
         }
-        return new Accepted(flowId, appended);
+        return new Accepted(flowId, toAppend.size());
     }
 }

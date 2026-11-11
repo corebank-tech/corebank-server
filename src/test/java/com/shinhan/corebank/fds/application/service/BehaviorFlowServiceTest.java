@@ -100,6 +100,59 @@ class BehaviorFlowServiceTest {
         assertThatThrownBy(() -> service.submit(flowId, 7, changedSeconds)).isInstanceOf(BusinessException.class);
     }
 
+    @Test
+    void validatesWholeBatchBeforeAppendingAndLimitsRequestToOneHundred() {
+        var invalidTail = new BehaviorFlowService.Batch(
+                List.of(event(1, "TRANSFER_ENTER", -3, "D-01"), event(2, "CONFIRM_LEAVE", -2, "D-02")), null);
+
+        assertThatThrownBy(() -> service.submit(flowId, 7, invalidTail)).isInstanceOf(BusinessException.class);
+        assertThat(port.events).isEmpty();
+
+        port.flow = null;
+        var tooMany = new ArrayList<BehaviorFlowService.EventInput>();
+        for (int sequence = 1; sequence <= 101; sequence++) {
+            tooMany.add(event(sequence, sequence == 1 ? "TRANSFER_ENTER" : "AMOUNT_EDITED", -1, "D-01"));
+        }
+        assertThatThrownBy(() -> service.submit(flowId, 7, new BehaviorFlowService.Batch(tooMany, null)))
+                .isInstanceOf(BusinessException.class);
+        assertThat(port.events).isEmpty();
+    }
+
+    @Test
+    void acceptsAllSevenTypesAndCountsOnlyNewEventsInMixedReplay() {
+        var first = new BehaviorFlowService.Batch(
+                List.of(
+                        event(1, "TRANSFER_ENTER", -10, "D-01"),
+                        event(2, "RECIPIENT_CONFIRMED", -9, "D-01"),
+                        event(3, "AMOUNT_EDITED", -8, "D-01"),
+                        event(4, "STEP_BACK", -7, "D-01")),
+                null);
+        service.submit(flowId, 7, first);
+
+        var mixed = new BehaviorFlowService.Batch(
+                List.of(
+                        event(4, "STEP_BACK", -7, "D-01"),
+                        event(5, "CONFIRM_ENTER", -6, "D-02"),
+                        event(6, "CONFIRM_LEAVE", -2, "D-02"),
+                        event(7, "SUBMIT_REQUESTED", -1, "D-02")),
+                4);
+
+        assertThat(service.submit(flowId, 7, mixed).acceptedCount()).isEqualTo(3);
+        assertThat(port.events).hasSize(7);
+    }
+
+    @Test
+    void finalizedFlowAllowsPureIdenticalEventReplayWithoutActiveSeconds() {
+        var finalBatch = new BehaviorFlowService.Batch(
+                List.of(event(1, "TRANSFER_ENTER", -3, "D-01"), event(2, "SUBMIT_REQUESTED", -1, "D-02")), 2);
+        service.submit(flowId, 7, finalBatch);
+
+        var earlierReplay = new BehaviorFlowService.Batch(List.of(event(1, "TRANSFER_ENTER", -3, "D-01")), null);
+
+        assertThat(service.submit(flowId, 7, earlierReplay).acceptedCount()).isZero();
+        assertThat(port.events).hasSize(2);
+    }
+
     private BehaviorFlowService.EventInput event(int seq, String type, long seconds, String step) {
         return new BehaviorFlowService.EventInput(
                 flowId,
