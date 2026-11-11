@@ -701,8 +701,8 @@ class TransferExecutionServiceTest extends IntegrationTestSupport {
         ArgumentCaptor<DomainEvent> published = ArgumentCaptor.forClass(DomainEvent.class);
         verify(domainEventSink).record(published.capture());
         assertThat(published.getValue())
-                .isInstanceOfSatisfying(
-                        TransferSettled.class, event -> assertThat(event.flowId()).isEqualTo("flow-978"));
+                .isInstanceOfSatisfying(TransferSettled.class, event -> assertThat(event.flowId())
+                        .isEqualTo("flow-978"));
     }
 
     @Test
