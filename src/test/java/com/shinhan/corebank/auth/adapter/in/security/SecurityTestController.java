@@ -62,6 +62,31 @@ class SecurityTestController {
         return ApiResponse.success("admin-write");
     }
 
+    @GetMapping("/admin/objections/test")
+    ApiResponse<String> objectionRead() {
+        return ApiResponse.success("objection");
+    }
+
+    @PostMapping("/admin/objections/test")
+    ApiResponse<String> objectionWrite() {
+        return ApiResponse.success("objection-write");
+    }
+
+    @PostMapping("/admin/objections/1/decisions/2/approve")
+    ApiResponse<String> objectionApprove() {
+        return ApiResponse.success("objection-approve");
+    }
+
+    @PostMapping("/admin/objections/1/decisions/2/return")
+    ApiResponse<String> objectionReturn() {
+        return ApiResponse.success("objection-return");
+    }
+
+    @PostMapping("/admin/objections/1/review-sessions")
+    ApiResponse<String> objectionReviewSession() {
+        return ApiResponse.success("objection-review-session");
+    }
+
     @GetMapping("/admin/fds/holds/123")
     ApiResponse<String> fdsHoldDetail() {
         return ApiResponse.success("fds-hold");
