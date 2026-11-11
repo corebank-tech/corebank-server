@@ -19,6 +19,23 @@ PH-11의 기존 Java 적수 계산 방식과 PH-13의 SQL 집계 방식을 비�
 
 이 결과는 초기 기준선으로 보존한다. PH-13의 15만 계좌 측정과는 환경 및 데이터 규모가 달라 개선율 계산에 사용하지 않는다.
 
+측정 시각: **2026-10-08 12:36~12:38 KST**
+
+기존 문서에 기록된 PH-11 실행 명령:
+
+```bash
+docker compose run --rm corebank-server \
+  --spring.profiles.active=prod,ph11-baseline \
+  --app.ph11-baseline.execute=true \
+  --app.ph11-baseline.account-id-start=60000001 \
+  --app.ph11-baseline.account-count=30000 \
+  --app.ph11-baseline.from-inclusive=2026-09-01 \
+  --app.ph11-baseline.to-exclusive=2026-10-01 \
+  --spring.main.web-application-type=none
+```
+
+위 명령은 당시 측정 기록 보존용이다. 현재 이미지에서는 `web-application-type=none` 사용 시 `ServerProperties` 의존성 오류가 발생하므로, 재측정 시 해당 옵션을 제거하고 `--server.port=0`을 사용해야 한다.
+
 ## 2. PH-13 대량 배치 성능 비교 (2026-11-10)
 
 ### 측정 조건
@@ -74,6 +91,13 @@ Fingerprint:
 
 6회 모두 Checksum·Fingerprint·0원 적수 건수가 일치했다. Fingerprint는 계좌 ID와 계산 결과를 순서대로 반영하므로 계좌별 정합성을 뒷받침한다. 단, 계좌별 결과 파일을 별도 추출해 직접 비교한 것은 아니다.
 
+### 제한사항
+
+- 최초 Java 측정 중 Spring Session 만료 세션 정리 작업이 읽기 전용 DB 연결에서 DELETE를 시도해 오류가 발생했다. DELETE는 차단됐고 적수 계산은 완료됐다. 오류 확인을 위해 중단한 별도 실행은 결과에서 제외했다.
+- 운영 WAS의 읽기 부하와 RDS 내부 작업을 완전히 격리하지 못했다.
+- Java·SQL 각 2·3회차는 종료 코드 0을 확인했다. 각 1회차는 측정 완료 로그만 확인했고 종료 코드는 보존하지 않았다.
+- SQL 2회차의 배치 p99는 882.921ms로 다른 회차보다 높았다. 개별 배치 소요시간을 보존하지 않아 원인은 확인하지 못했다.
+
 ## 3. PH-13 단건 적수 계산 성능 비교 (2026-11-10)
 
 대량 배치 집계와 별개로, 계좌 하나씩 계산할 때의 성능을 확인했다.
@@ -111,7 +135,9 @@ Fingerprint:
 
 `133f4ce752880b5db85fa778e9098b6e3a89cc43002f774ae587ad5b3feae658`
 
-Java Checksum은 3회 모두 `95,173,500,000`이었다. SQL Checksum은 제공된 로그에서 마스킹되어 원문 대조가 불가능했다.
+Java Checksum은 3회 모두 `95,173,500,000`이었다. SQL Checksum은 11자리 숫자를 전화번호로 인식하는 로그 마스킹(`MaskingConverter`)으로 인해 가려졌다.
+
+두 측정기는 계좌 ID와 적수값을 동일한 순서로 SHA-256 Fingerprint에 반영하며, 6회 모두 Fingerprint가 일치했다. 따라서 계좌별 계산 결과가 일치한다는 강한 정합성 근거를 확보했다. 다만 SQL Checksum 원문은 별도로 확인하지 않았다.
 
 **측정 한계:** Java 측정기는 서비스 UseCase를 호출하지만 SQL 측정기는 집계 포트를 직접 호출한다. 또한 측정기의 로깅 오버헤드가 다르다. 따라서 이번 결과는 단건 계산 방식의 예비 성능 비교이며, 실제 만기해지·중도해지 API 응답시간의 개선율로 해석하지 않는다.
 
