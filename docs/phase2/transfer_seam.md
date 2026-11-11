@@ -239,11 +239,24 @@ public interface RecentTransferQuery {
 }
 
 public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime firstTransferredAt) {}
+
+// 훅 C 밖(FDS Agent 읽기 Tool)에서 쓴다. 기준은 RecentTransferQuery와 같다(#995)
+public interface SucceededTransferHistoryQuery {
+    List<SucceededTransfer> findRecent(long customerId, LocalDateTime fromInclusive, LocalDateTime toExclusive, int limit);
+    RecipientHistory summarizeRecipient(long customerId, String depositAccountNumber, long excludeWithdrawalAccountId);
+}
+
+public record SucceededTransfer(long refId, long amount, LocalDateTime transferredAt, String depositAccountNumber) {}
+public record RecipientHistory(LocalDateTime firstSucceededAt, int otherWithdrawalAccountCount) {}
 ```
 
 - `flowId`는 `POST /transfers` 요청 본문의 선택 필드로 받고 멱등 지문(fingerprint)에 넣습니다. 이체는 값을 전달만 하고, 그 흐름이 이 고객 것인지는 FDS가 검사합니다.
 - `RecentTransferQuery`는 기존 인덱스 `ix_transfer_wacc`(출금계좌, 처리시각)로 고객의 출금계좌마다 읽습니다. `transfer`에 인덱스를 새로 달지 않습니다(§9-5 규칙 6).
 - `RecentTransferQuery`는 당행 즉시·예약·자동이체의 SUCCESS 행을 셉니다. 정정 체인으로 무효화된 행(`invalidated_at`)은 뺍니다. `firstTransferredAt`은 "반복 묶음 첫 이체 이전에 보낸 적 있는가"를 `hasSucceededBefore`로 물을 때 씁니다.
+- `SucceededTransferHistoryQuery`(#995)는 P6 Agent의 읽기 Tool 2개([API 명세](p6_fds_api_spec.md) §3 거래 이력, §4 수취인 맥락)가 쓰는 조회입니다. `RecentTransferQuery`의 건수·합계·존재 여부로는 Tool이 요구하는 `refId`·금액·시각·수취계좌·최초 성공 시각·다른 출금계좌 수를 만들 수 없어서 따로 둡니다.
+    - **기준은 `RecentTransferQuery`와 같습니다.** 영속 어댑터가 같은 성공 조건을 씁니다. 훅 C가 성공으로 센 이체와 Agent가 보는 이체가 어긋나지 않습니다.
+    - **훅 C 안에서 부르지 않습니다.** `summarizeRecipient`는 기간 하한 없이 고객 이력 전체를 `ix_transfer_wacc`로 읽은 뒤 수취계좌로 거릅니다. 비용이 고객의 총 이체 건수에 비례합니다. `findRecent`는 같은 인덱스로 시각 범위만 읽습니다.
+    - 수취계좌번호는 원문으로 주고 P6가 마스킹합니다. `hasMore`는 P6가 `limit=101`로 불러 판단하고, `hasSucceededBeforeWindow`는 `firstSucceededAt < 반복 묶음 첫 이체 시각`으로 구합니다.
 - **정책 A가 보는 과거 성공 이체와 `flowId`의 연결은 P6이 소유합니다.** `transfer`에 컬럼을 더하지 않습니다(§9-5 규칙 6). `TransferSettled`에는 nullable `String flowId`가 있고(#978), P6은 성공 커밋 뒤 이 이벤트를 받는 시점에 성공 이체 ID(`refId`)와 `flowId`의 연결을 자기 테이블에 저장해 반복 묶음 단위로 조회합니다.
     - 값: 즉시이체는 요청의 `flowId`, 보류됐다 실행된 건은 보류할 때 저장한 `flowId`, 보내지 않았거나 타행이면 null입니다.
     - **연결 순서:** 필드는 #978로 들어갔습니다. P6은 연결 저장 부품(#976) 위에 이 이벤트를 읽는 리스너를 연결합니다.
