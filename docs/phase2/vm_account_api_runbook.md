@@ -121,7 +121,7 @@ sudo docker run -d --name corebank-drtest-recon --network corebank-drtest-net --
 - 릴리스 4 이미지가 기동하고 헬스 200, 로그인 키 · OTP 키 관련 오류 없음.
 - `APP_INTERBANK_HOST=192.168.0.211`로 기동, 컨테이너에서 `192.168.0.211:9300` · `:8081`에 접속됨.
 - 레플리카 TLS 접속(`sslMode=REQUIRED` 조건).
-- VM 안에서 `/actuator/prometheus`를 부르면 `401`로 거부된다(컨테이너 안의 앱은 호스트 요청을 도커 게이트웨이 주소로 본다).
+- VM 안에서 지표 경로를 부르면 `401`로 거부됐다(컨테이너 안의 앱은 호스트 요청을 도커 게이트웨이 주소로 본다). 당시 부른 경로가 `/actuator/prometheus`인지 `/api/v1/actuator/prometheus`인지 기록이 없어, 이 줄은 실제 `/api/v1/actuator/prometheus` 접근통제 검증으로 보지 않는다. 그 경로의 외부 차단과 허용 IP 검증은 아래 「하지 않음」에서 시험한다.
 - 전수 대사 리허설(§6).
 - 접속 경로: 인터넷의 `www.corebank.cloud` 화면이 VM의 Nginx(`192.168.0.211:443`)를 불러 `200 OK`(§8).
 
