@@ -9,6 +9,7 @@ import com.shinhan.corebank.fds.application.port.out.BehaviorFlowPort.Event;
 import com.shinhan.corebank.fds.application.port.out.BehaviorFlowPort.Flow;
 import com.shinhan.corebank.fds.domain.exception.FdsErrorCode;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -151,6 +152,35 @@ class BehaviorFlowServiceTest {
 
         assertThat(service.submit(flowId, 7, earlierReplay).acceptedCount()).isZero();
         assertThat(port.events).hasSize(2);
+    }
+
+    @Test
+    void rejectsReplayedEventsInReverseSequenceOrder() {
+        var stored = new BehaviorFlowService.Batch(
+                List.of(
+                        event(1, "TRANSFER_ENTER", -4, "D-01"),
+                        event(2, "RECIPIENT_CONFIRMED", -3, "D-01"),
+                        event(3, "AMOUNT_EDITED", -2, "D-01"),
+                        event(4, "STEP_BACK", -1, "D-01")),
+                null);
+        service.submit(flowId, 7, stored);
+        var reversed = new BehaviorFlowService.Batch(
+                List.of(event(4, "STEP_BACK", -1, "D-01"), event(3, "AMOUNT_EDITED", -2, "D-01")), null);
+
+        assertThatThrownBy(() -> service.submit(flowId, 7, reversed))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(FdsErrorCode.INVALID_EVENT);
+    }
+
+    @Test
+    void identicalReplayRemainsIdempotentAfterOccurrenceFallsOutsideCurrentWindow() {
+        var original = new BehaviorFlowService.Batch(List.of(event(1, "TRANSFER_ENTER", -1799, "D-01")), null);
+        service.submit(flowId, 7, original);
+        BehaviorFlowService laterService = new BehaviorFlowService(port, Clock.offset(clock, Duration.ofSeconds(2)));
+
+        assertThat(laterService.submit(flowId, 7, original).acceptedCount()).isZero();
+        assertThat(port.events).hasSize(1);
     }
 
     private BehaviorFlowService.EventInput event(int seq, String type, long seconds, String step) {

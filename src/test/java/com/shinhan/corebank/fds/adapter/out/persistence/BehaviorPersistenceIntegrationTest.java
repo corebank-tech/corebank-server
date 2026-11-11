@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.fds.api.BehaviorFlowMappingUseCase;
 import com.shinhan.corebank.fds.application.port.out.BehaviorFlowPort;
 import com.shinhan.corebank.fds.application.port.out.BehaviorScoreInferencePort.Score;
@@ -11,6 +12,7 @@ import com.shinhan.corebank.fds.application.port.out.BehaviorScorePort;
 import com.shinhan.corebank.fds.application.service.BehaviorFlowService;
 import com.shinhan.corebank.fds.application.service.BehaviorFlowService.Batch;
 import com.shinhan.corebank.fds.application.service.BehaviorFlowService.EventInput;
+import com.shinhan.corebank.fds.domain.exception.FdsErrorCode;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -169,6 +171,7 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
 
         String storedFlow = mappings.findByRefId(refId).flowId();
         assertThat(storedFlow).isIn(firstFlow.toString(), secondFlow.toString());
+        assertThat(mappings.findByFlowId(storedFlow).refId()).isEqualTo(refId);
         assertThat(jdbc.queryForObject(
                         "SELECT COUNT(*) FROM fds_transfer_behavior_flow WHERE ref_id = ?", Integer.class, refId))
                 .isEqualTo(1);
@@ -220,7 +223,8 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
         try {
             mappings.save(refId, flowId.toString(), customerId);
             return true;
-        } catch (com.shinhan.corebank.common.exception.BusinessException exception) {
+        } catch (BusinessException exception) {
+            assertThat(exception.getErrorCode()).isEqualTo(FdsErrorCode.FLOW_CONFLICT);
             return false;
         }
     }

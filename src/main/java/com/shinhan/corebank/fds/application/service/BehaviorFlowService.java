@@ -81,12 +81,14 @@ public class BehaviorFlowService {
         List<Event> toAppend = new ArrayList<>();
         boolean finalEvent = false;
         boolean batchContainsFinalEvent = false;
+        int previousRequestSequence = 0;
         for (EventInput input : batch.events()) {
             if (input == null
                     || input.flowId() == null
                     || !input.flowId().equals(flowId)
                     || input.seqNo() < 1
                     || input.seqNo() > 100
+                    || input.seqNo() <= previousRequestSequence
                     || !seen.add(input.seqNo())
                     || input.eventType() == null
                     || !TYPES.contains(input.eventType())
@@ -95,12 +97,10 @@ public class BehaviorFlowService {
                     || !Set.of("D-01", "D-02").contains(input.step())) {
                 throw new BusinessException(FdsErrorCode.INVALID_EVENT);
             }
+            previousRequestSequence = input.seqNo();
             LocalDateTime occurredAt = input.occurredAt().atZoneSameInstant(KST).toLocalDateTime();
             // MySQL DATETIME(6) 정밀도로 맞춰 동일 이벤트 재전송을 정확히 비교한다.
             occurredAt = occurredAt.withNano(occurredAt.getNano() / 1_000 * 1_000);
-            if (occurredAt.isBefore(receivedAt.minusMinutes(30)) || occurredAt.isAfter(receivedAt.plusMinutes(5))) {
-                throw new BusinessException(FdsErrorCode.INVALID_EVENT);
-            }
             Event current = new Event(input.seqNo(), input.eventType(), occurredAt, input.step());
             batchContainsFinalEvent |= "SUBMIT_REQUESTED".equals(input.eventType());
             if (input.seqNo() <= existing.size()) {
@@ -108,6 +108,9 @@ public class BehaviorFlowService {
                     throw new BusinessException(FdsErrorCode.FLOW_CONFLICT);
                 }
                 continue;
+            }
+            if (occurredAt.isBefore(receivedAt.minusMinutes(30)) || occurredAt.isAfter(receivedAt.plusMinutes(5))) {
+                throw new BusinessException(FdsErrorCode.INVALID_EVENT);
             }
             if (flow.finalizedAt() != null
                     || input.seqNo() != next
