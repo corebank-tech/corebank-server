@@ -227,10 +227,17 @@ public record TransferHeld(
         LocalDateTime releaseAt, String flowId, LocalDateTime heldAt) {}
 
 public interface TransferHoldUseCase {
+    TransferHoldForFds findForFds(long transferHoldId);                     // 보류 원본·상태·처리 결과. 끝난 보류도 반환
     TransferHoldExecutionResult release(long transferHoldId, long actorId); // 원본 요청 그대로 1회 실행
     void reject(long transferHoldId, long actorId, String reasonCode);     // 관리자 거절
     void cancel(long transferHoldId, long customerId);                      // 고객 취소
 }
+
+// P6 읽기 전용. actorId·reasonCode는 status마다 뜻이 다르다(레코드 주석의 표). recipientBankCode는 "088" 고정
+public record TransferHoldForFds(
+        long transferHoldId, long customerId, String flowId, String status, LocalDateTime heldAt,
+        long amount, String depositAccountNumber, String policyCode, long withdrawalAccountId,
+        String recipientBankCode, String releaseMode, Long actorId, String reasonCode, LocalDateTime completedAt) {}
 
 // 커밋된 SUCCESS만 센다. 현재 요청은 넣지 않는다. 고객의 모든 출금계좌가 기준이다.
 public interface RecentTransferQuery {
@@ -276,7 +283,8 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 - **승인하면 바로 실행합니다.** 지연이체 설정이 함께 해당하는 건이어도 다시 지연하지 않습니다. 승인 실행은 훅 C를 지나지 않고, 승인 과정의 고객 확인 콜이 지연이체의 보호 목적을 채웁니다.
 - **`ON_APPROVAL` 건은 보류한 영업일 안에 승인되지 않으면 `EXPIRED`입니다.** 실행할 때 `execution_date`가 보류한 날짜라, 며칠 뒤 승인하면 오래된 요청이 뒤늦게 기표되기 때문입니다. 만료 처리는 FDS 착수 때 구현하고, #772는 `AT_TIME`만 다룹니다. `AT_TIME` 건은 만료하지 않고 실행 시점 검사에서 거부되면 `FAILED`입니다.
 - **승인 권한과 콜 기록 검증은 호출자 몫입니다.** `release`·`reject`는 `actorId`와 사유만 남깁니다. 관리자 권한과 콜 결과 입력은 FDS가 부르기 전에 확인합니다.
-- **#946 P6 인계 요청(미합의):** P6은 합성 위험 계좌 `MATCH`에 한해 최신 콜 결과 없이 `RISK_ACCOUNT_MATCH` 사유로 거절하려고 합니다. 이 사유의 `reason_code` 저장·재조회, 보류 원본·상태의 읽기 전용 `transfer.api.findHoldForAdmin(transferHoldId)`(`transferHoldId`, `customerId`, `recipientBankCode`, `depositAccountNumber`, `releaseMode`, `status`, `heldAt`) 제공을 P4와 합의해야 합니다. 현재 당행 보류의 은행코드는 `088`입니다. P6 소유 데이터셋의 운영 DB 적재·버전 전환 실행도 P4에 요청하며, 전환과 거절 직전 재검증은 같은 활성 버전 제어 행 잠금을 사용합니다. 상세 제안은 [P6 연동 계약 §6-0](p6_fds_integration_contract.md#6-0-합성-위험-계좌-조회와-전화-없는-거절-946-p4-인계-전)을 따릅니다. 기존 `CUSTOMER_DENIED` 콜 경로는 유지합니다.
+- **#946 위험 계좌 거절 (11/11 합의, #971):** P6은 합성 위험 계좌 `MATCH`에 한해 콜 결과 없이 `reject(id, actorId, "RISK_ACCOUNT_MATCH")`로 거절합니다. `reject()`는 사유를 거르지 않고 `reason_code`에 그대로 저장합니다. 결과 대조와 위험 계좌 판정은 별도 API 없이 `findForFds()`로 합니다. 끝난 보류도 반환하고, `actorId`·`reasonCode`는 상태마다 뜻이 달라 `status`를 먼저 봅니다(`TransferHoldForFds` 주석). 은행코드는 저장하지 않고 `"088"`로 채웁니다.
+- **P6은 `release()`·`reject()`를 자기 트랜잭션 밖에서 부릅니다.** `release()`는 선점을 먼저 커밋해야 해서 트랜잭션 없이 돌고, 기표 단계가 새 트랜잭션에서 보류 행을 `FOR UPDATE`로 다시 잠급니다. P6 트랜잭션 안에서 부르면 선점이 커밋되지 않아 기표 단계가 락 대기로 실패합니다. 위험 데이터셋 적재·버전 전환은 P6 소유이고 기동할 때만 일어나므로, P6은 DB 잠금 대신 PENDING 조치에 저장한 위험 기록 ID·버전을 근거로 씁니다.
 - **구현(#772 PR-a).** `TransferHoldService`가 `TransferHoldUseCase`를 구현합니다. 트랜잭션 없이 단계마다 커밋합니다. 선점(`HELD → EXECUTING`)이 먼저 커밋돼야 `execute()`가 그 행을 `EXECUTING`으로 봅니다.
     - **해제 조건은 이 부품이 보장합니다(#838 리뷰 R3).** 호출자 확인에 맡기지 않고 선점 UPDATE 조건에 넣습니다.
         - `release(id, actorId)`(관리자 승인, FDS)는 `ON_APPROVAL` 보류만 선점합니다. 권한과 콜 기록 확인은 지금처럼 호출자 몫입니다.
