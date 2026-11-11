@@ -1,18 +1,18 @@
 name: Knowledge RAG Sync
 
+# 색인은 기본 브랜치(dev) 하나만 담는다. main 문서는 릴리스 때 dev를 병합한 과거본이라(협업 가이드)
+# 같이 색인하면 늦게 돈 main 실행이 dev의 새 내용을 옛 내용으로 덮는다.
 on:
   push:
-    branches: [main, dev]
+    branches: [dev]
     paths:
       - 'docs/**.md'
 
 concurrency:
-  # 마지막 반영 커밋을 브랜치별로 기록하므로 그룹도 브랜치별로 나눈다. 같은 그룹에서는 실행 중인 것은
-  # 취소하지 않지만 대기는 하나만 남고 그 사이 대기하던 실행은 취소된다. 그래서 각 실행은 자기 push가 아니라
-  # 그 브랜치의 마지막 반영 커밋부터 diff해 취소된 실행의 변경까지 가져간다.
-  # main과 dev 실행은 동시에 SSM 명령을 보낼 수 있고, EC2 sync.sh가 cron 색인과 같이 쓰는 잠금(최대 25분 대기)으로
-  # 차례로 돈다. 잠금 대기가 넘치면 job이 실패하고 기록을 갱신하지 않아 다음 실행이나 Re-run이 같은 범위를 다시 가져간다.
-  group: knowledge-rag-sync-${{ github.ref_name }}
+  # push는 동기화 신호일 뿐이다. 각 실행은 push된 커밋이 아니라 실행 시점의 dev 끝을 받아
+  # 마지막 반영 커밋부터 그 끝까지 맞추므로, 대기 실행이 취소되거나 Re-run이 늦게 돌아도 결과는 항상 현재 dev다.
+  # 실행 중인 것은 취소하지 않는다(EC2에서 색인 중인 명령을 끊지 않으려고).
+  group: knowledge-rag-sync
   cancel-in-progress: false
 
 env:
@@ -22,7 +22,7 @@ jobs:
   sync:
     name: Sync docs/**.md changes to knowledge-rag index
     runs-on: ubuntu-latest
-    # EC2 쪽 sync.sh는 PR, Fineract cron 색인과 다른 브랜치 동기화와 잠금을 공유해 최대 25분 기다릴 수 있다
+    # EC2 쪽 sync.sh는 PR, Fineract cron 색인과 잠금을 공유해 최대 25분 기다릴 수 있다
     timeout-minutes: 35
     permissions:
       id-token: write
@@ -31,6 +31,8 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
         with:
+          # push된 커밋이 아니라 지금의 dev 끝을 받는다
+          ref: dev
           fetch-depth: 0
           # 이후 단계는 인증된 git 명령을 쓰지 않는다. 토큰을 .git/config에 남기지 않는다
           persist-credentials: false
@@ -45,23 +47,25 @@ jobs:
         id: diff
         env:
           BEFORE: ${{ github.event.before }}
-          AFTER: ${{ github.sha }}
-          LAST_SYNCED_PARAM: /corebank-knowledge-rag/last-synced/${{ github.ref_name }}
+          LAST_SYNCED_PARAM: /corebank-knowledge-rag/last-synced/dev
         run: |
+          AFTER=$(git rev-parse HEAD)
+
           # 새 브랜치 최초 push는 before가 전부 0 — 부모 커밋 존재를 가정하지 않고
           # git의 빈 트리 오브젝트를 기준점으로 쓴다.
           if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
             BEFORE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
           fi
 
-          # 취소되거나 실패한 실행의 변경도 다음 실행이 가져가도록 마지막 반영 커밋부터 diff한다.
-          # 기록이 없거나(첫 실행) 이 브랜치 히스토리에 없으면(force push) 이번 push 범위로 대신한다.
+          # 색인은 마지막 반영 커밋의 트리와 같다. 그 트리와 지금 dev 트리의 차이만 반영하면 색인이 현재 dev가 된다.
+          # 트리 비교라 조상 관계는 따지지 않는다. 기록이 없거나 그 커밋이 이 clone에 없으면(force push로 사라짐)
+          # 이번 push 범위로 대신한다.
           BASE="$BEFORE"
           if LAST=$(aws ssm get-parameter --name "$LAST_SYNCED_PARAM" --query Parameter.Value --output text 2>/tmp/last-err); then
-            if git merge-base --is-ancestor "$LAST" "$AFTER" 2>/dev/null; then
+            if git cat-file -e "$LAST^{commit}" 2>/dev/null; then
               BASE="$LAST"
             else
-              echo "::warning::마지막 반영 커밋 $LAST 이 $AFTER 의 조상이 아니라 이번 push 범위만 동기화한다"
+              echo "::warning::마지막 반영 커밋 $LAST 이 저장소에 없어 이번 push 범위만 동기화한다"
             fi
           elif grep -q ParameterNotFound /tmp/last-err; then
             echo "::warning::마지막 반영 커밋 기록이 없어 이번 push 범위만 동기화한다"
@@ -106,6 +110,7 @@ jobs:
 
           # 아래 단계의 조건이 deleted를 본다. 이 출력이 없으면 삭제만 있는 push에서 동기화가 돌지 않는다
           {
+            echo "after=$AFTER"
             echo "changed=$CHANGED"
             echo "deleted=$DELETED"
             echo "changed_b64=$CHANGED_B64"
@@ -120,7 +125,7 @@ jobs:
           # 다루게 한다.
           CHANGED_FILES: ${{ steps.diff.outputs.changed }}
           SYNC_BUCKET: ${{ secrets.KNOWLEDGE_RAG_SYNC_BUCKET }}
-          SHA: ${{ github.sha }}
+          SHA: ${{ steps.diff.outputs.after }}
         run: |
           for path in $CHANGED_FILES; do
             # 링크는 docs 밖 파일을 가리킬 수 있다. 일반 파일만 올린다
@@ -136,7 +141,7 @@ jobs:
         env:
           SYNC_BUCKET: ${{ secrets.KNOWLEDGE_RAG_SYNC_BUCKET }}
           INSTANCE_ID: ${{ secrets.KNOWLEDGE_RAG_EC2_INSTANCE_ID }}
-          SHA: ${{ github.sha }}
+          SHA: ${{ steps.diff.outputs.after }}
           CHANGED_B64: ${{ steps.diff.outputs.changed_b64 }}
           DELETED_B64: ${{ steps.diff.outputs.deleted_b64 }}
         run: |
@@ -188,8 +193,8 @@ jobs:
       - name: Record last synced commit
         # 앞 단계가 모두 성공했을 때만 기록한다. 실패하면 다음 실행이 같은 범위를 다시 가져간다.
         env:
-          AFTER: ${{ github.sha }}
-          LAST_SYNCED_PARAM: /corebank-knowledge-rag/last-synced/${{ github.ref_name }}
+          AFTER: ${{ steps.diff.outputs.after }}
+          LAST_SYNCED_PARAM: /corebank-knowledge-rag/last-synced/dev
         run: |
           aws ssm put-parameter --name "$LAST_SYNCED_PARAM" --type String --value "$AFTER" --overwrite > /dev/null
           echo "마지막 반영 커밋: $AFTER"
