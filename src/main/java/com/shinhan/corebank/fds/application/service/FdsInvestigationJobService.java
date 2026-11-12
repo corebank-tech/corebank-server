@@ -55,9 +55,9 @@ public class FdsInvestigationJobService {
     }
 
     public void runDue(FdsInvestigationAgentPort agent, int limit) {
-        LocalDateTime now = now();
-        for (Long holdId : jobs.findDue(now, limit)) {
-            runOne(agent, holdId, now);
+        for (Long holdId : jobs.findDue(now(), limit)) {
+            // 뒤쪽 작업도 실행 전에 온전한 임대 시간을 갖도록 선점 시각을 매번 계산한다.
+            runOne(agent, holdId, now());
         }
     }
 
@@ -126,8 +126,9 @@ public class FdsInvestigationJobService {
                 || result.reportJson().getBytes(StandardCharsets.UTF_8).length > MAX_REPORT_BYTES) {
             throw new BusinessException(FdsErrorCode.INVALID_INVESTIGATION_REPORT);
         }
+        JsonNode root;
         try {
-            JsonNode root = REPORT_MAPPER.readTree(result.reportJson());
+            root = REPORT_MAPPER.readTree(result.reportJson());
             if (!result.schemaVersion().equals(root.path("schemaVersion").asText())
                     || !job.investigationId()
                             .equals(root.path("investigationId").asText())
@@ -139,22 +140,23 @@ public class FdsInvestigationJobService {
                     || !validStringArray(root.path("suggestedQuestions"), 3, 200)) {
                 throw new BusinessException(FdsErrorCode.INVALID_INVESTIGATION_REPORT);
             }
-            Set<Long> providedEvidenceIds = jobs.findEvidenceIds(job.investigationId());
-            for (JsonNode finding : root.path("secondaryFindings")) {
-                if (!FINDING_CODES.contains(finding.path("code").asText())
-                        || !validText(finding.path("description"), 1, 300)
-                        || !Set.of("OBSERVED", "INFERRED")
-                                .contains(finding.path("confidence").asText())
-                        || !validEvidenceIds(finding.path("evidenceTransferIds"), providedEvidenceIds)) {
-                    throw new BusinessException(FdsErrorCode.INVALID_INVESTIGATION_REPORT);
-                }
-            }
-            return new ValidatedReport(result.schemaVersion(), result.reportJson());
         } catch (BusinessException exception) {
             throw exception;
         } catch (Exception exception) {
             throw new BusinessException(FdsErrorCode.INVALID_INVESTIGATION_REPORT);
         }
+        // 근거 조회 장애는 인프라 실패로 재시도되도록 JSON 계약 검증과 분리한다.
+        Set<Long> providedEvidenceIds = jobs.findEvidenceIds(job.investigationId());
+        for (JsonNode finding : root.path("secondaryFindings")) {
+            if (!FINDING_CODES.contains(finding.path("code").asText())
+                    || !validText(finding.path("description"), 1, 300)
+                    || !Set.of("OBSERVED", "INFERRED")
+                            .contains(finding.path("confidence").asText())
+                    || !validEvidenceIds(finding.path("evidenceTransferIds"), providedEvidenceIds)) {
+                throw new BusinessException(FdsErrorCode.INVALID_INVESTIGATION_REPORT);
+            }
+        }
+        return new ValidatedReport(result.schemaVersion(), result.reportJson());
     }
 
     private static boolean validEvidenceIds(JsonNode node, Set<Long> providedIds) {

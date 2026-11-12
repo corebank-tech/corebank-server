@@ -114,6 +114,98 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    void investigationRetryFailureAndExpiredLeaseRecoveryPersistTransitions() {
+        LocalDateTime now = LocalDateTime.now();
+        long retryHoldId = investigationHoldId();
+        String retryId = UUID.randomUUID().toString();
+        investigationJobs.createIfAbsent(retryHoldId, retryId, now);
+        assertThat(investigationJobs.findDue(now, 100)).contains(retryHoldId);
+        assertThat(investigationJobs.claim(retryHoldId, now, now.plusSeconds(70)))
+                .isTrue();
+        assertThat(investigationJobs.retry(retryHoldId, now.plusMinutes(1), "AGENT_UNAVAILABLE", now))
+                .isTrue();
+        assertThat(investigationJobs.findByInvestigationId(retryId).status()).isEqualTo("PENDING");
+        assertThat(investigationJobs.findDue(now, 100)).doesNotContain(retryHoldId);
+        assertThat(investigationJobs.findDue(now.plusMinutes(1), 100)).contains(retryHoldId);
+
+        assertThat(investigationJobs.claim(retryHoldId, now.plusMinutes(1), now.plusMinutes(2)))
+                .isTrue();
+        assertThat(investigationJobs.fail(retryHoldId, "FINAL_FAILURE", now.plusMinutes(1)))
+                .isTrue();
+        assertThat(investigationJobs.findByHoldId(retryHoldId).status()).isEqualTo("FAILED");
+        assertThat(investigationJobs.claim(retryHoldId, now.plusMinutes(2), now.plusMinutes(3)))
+                .isFalse();
+
+        long pendingRecoveryHoldId = investigationHoldId();
+        long failedRecoveryHoldId = investigationHoldId();
+        investigationJobs.createIfAbsent(
+                pendingRecoveryHoldId, UUID.randomUUID().toString(), now);
+        investigationJobs.createIfAbsent(failedRecoveryHoldId, UUID.randomUUID().toString(), now);
+        jdbc.update(
+                "UPDATE fds_investigation_job SET job_status='RUNNING', attempt_count=1, lease_expires_at=? "
+                        + "WHERE transfer_hold_id=?",
+                now.minusSeconds(1),
+                pendingRecoveryHoldId);
+        jdbc.update(
+                "UPDATE fds_investigation_job SET job_status='RUNNING', attempt_count=3, lease_expires_at=? "
+                        + "WHERE transfer_hold_id=?",
+                now.minusSeconds(1),
+                failedRecoveryHoldId);
+
+        assertThat(investigationJobs.recoverExpired(now)).isGreaterThanOrEqualTo(2);
+        assertThat(investigationJobs.findByHoldId(pendingRecoveryHoldId).status())
+                .isEqualTo("PENDING");
+        assertThat(investigationJobs.findByHoldId(pendingRecoveryHoldId).lastFailureReason())
+                .isEqualTo("LEASE_EXPIRED");
+        assertThat(investigationJobs.findByHoldId(failedRecoveryHoldId).status())
+                .isEqualTo("FAILED");
+    }
+
+    @Test
+    void investigationEvidenceRejectsInvalidScopeAndUnknownJob() {
+        LocalDateTime now = LocalDateTime.now();
+        long holdId = investigationHoldId();
+        String investigationId = UUID.randomUUID().toString();
+        investigationJobs.createIfAbsent(holdId, investigationId, now);
+
+        assertThatThrownBy(() ->
+                        investigationJobs.recordEvidence(investigationId, holdId, 992001L, null, now, List.of(1L), now))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() ->
+                        investigationJobs.recordEvidence(investigationId, holdId, 992001L, now, now, List.of(1L), now))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> investigationJobs.recordEvidence(
+                        investigationId, holdId, 992001L, now.minusHours(1), now, List.of(0L), now))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> investigationJobs.recordEvidence(
+                        UUID.randomUUID().toString(), holdId, 992001L, now.minusHours(1), now, List.of(1L), now))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> investigationJobs.recordEvidence(
+                        investigationId, holdId + 1, 992001L, now.minusHours(1), now, List.of(1L), now))
+                .isInstanceOf(BusinessException.class);
+        assertThat(investigationJobs.findByHoldId(Long.MAX_VALUE)).isNull();
+        assertThat(investigationJobs.findByInvestigationId(UUID.randomUUID().toString()))
+                .isNull();
+    }
+
+    @Test
+    void investigationReportCannotCompletePendingJob() {
+        LocalDateTime now = LocalDateTime.now();
+        long holdId = investigationHoldId();
+        String investigationId = UUID.randomUUID().toString();
+        investigationJobs.createIfAbsent(holdId, investigationId, now);
+
+        assertThatThrownBy(() -> investigationJobs.completeWithReport(
+                        holdId, investigationId, "p6-investigation-v1", "{\"result\":\"ok\"}", "c".repeat(64), now))
+                .isInstanceOf(BusinessException.class);
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_investigation_report WHERE investigation_id=?",
+                        Integer.class,
+                        investigationId))
+                .isZero();
+    }
+
+    @Test
     void finalBatchIsAtomicAndReplayDoesNotDuplicateEvents() {
         UUID id = UUID.randomUUID();
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.ofHours(9)).minusSeconds(10);
@@ -308,6 +400,10 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
 
     private static long positiveRefId() {
         return 975000000L + Math.abs(UUID.randomUUID().getLeastSignificantBits() % 1000000);
+    }
+
+    private static long investigationHoldId() {
+        return 992000000L + Math.abs(UUID.randomUUID().getLeastSignificantBits() % 1000000);
     }
 
     private boolean saveAfter(CountDownLatch start, long refId, UUID flowId, long customerId) throws Exception {

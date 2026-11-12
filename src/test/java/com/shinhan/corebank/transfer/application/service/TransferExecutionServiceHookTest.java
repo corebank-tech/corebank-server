@@ -2,6 +2,7 @@ package com.shinhan.corebank.transfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -52,6 +53,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -187,6 +189,8 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
         jdbcTemplate.update(
                 "UPDATE account SET balance = 100000, hold_amount = 0, status = 'ACTIVE' WHERE account_id IN (101, 202)");
         jdbcTemplate.update("DELETE FROM transfer_limit_daily_usage WHERE customer_id = 1");
+        jdbcTemplate.update("DELETE j FROM fds_investigation_job j JOIN transfer_hold h "
+                + "ON h.transfer_hold_id=j.transfer_hold_id WHERE h.customer_id=1");
         jdbcTemplate.update("DELETE FROM transfer_hold WHERE customer_id = 1");
         jdbcTemplate.update("DELETE FROM fds_transfer_behavior_flow WHERE customer_id = 1");
         jdbcTemplate.update("DELETE e FROM fds_behavior_event e JOIN fds_behavior_flow f ON f.flow_id = e.flow_id "
@@ -708,6 +712,11 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
             assertThat(held.flowId()).isEqualTo("flow-1");
         });
         assertThat(publishedInTransaction).containsExactly(true);
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM fds_investigation_job WHERE transfer_hold_id=?",
+                        Integer.class,
+                        result.transferHoldId()))
+                .isEqualTo(1));
     }
 
     @Test

@@ -10,10 +10,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.fds.api.FdsInvestigationInput;
 import com.shinhan.corebank.fds.api.FdsInvestigationJob;
 import com.shinhan.corebank.fds.application.port.out.FdsInvestigationAgentPort;
 import com.shinhan.corebank.fds.application.port.out.FdsInvestigationJobPort;
+import com.shinhan.corebank.fds.domain.exception.FdsErrorCode;
 import com.shinhan.corebank.transfer.api.TransferHeld;
 import com.shinhan.corebank.transfer.api.TransferHoldForFds;
 import com.shinhan.corebank.transfer.api.TransferHoldReleaseMode;
@@ -22,8 +24,10 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -173,6 +177,143 @@ class FdsInvestigationJobServiceTest {
     }
 
     @Test
+    void secondTransientFailureRetriesAfterFiveMinutes() {
+        when(jobs.findByHoldId(92L)).thenReturn(job(2));
+        when(agent.investigate(any())).thenThrow(new IllegalStateException("timeout"));
+
+        service.runDue(agent, 20);
+
+        verify(jobs).retry(92L, LocalDateTime.now(CLOCK).plusMinutes(5), "AGENT_UNAVAILABLE", LocalDateTime.now(CLOCK));
+    }
+
+    @Test
+    void doesNothingWhenAnotherWorkerAlreadyClaimedJob() {
+        when(jobs.claim(anyLong(), any(), any())).thenReturn(false);
+
+        service.runDue(agent, 20);
+
+        verify(jobs, never()).findByHoldId(anyLong());
+        verify(agent, never()).investigate(any());
+    }
+
+    @Test
+    void doesNothingWhenClaimedJobDisappears() {
+        when(jobs.findByHoldId(92L)).thenReturn(null);
+
+        service.runDue(agent, 20);
+
+        verify(holds, never()).findForFds(anyLong());
+        verify(agent, never()).investigate(any());
+    }
+
+    @Test
+    void retriesInfrastructureFailureWhenEvidenceLookupFails() {
+        String json =
+                """
+                {"schemaVersion":"p6-investigation-v1","investigationId":"00000000-0000-0000-0000-000000000992",
+                "transferHoldId":92,"status":"COMPLETED","summary":"확인 필요","secondaryFindings":[],
+                "missingInformation":[],"suggestedQuestions":[]}
+                """;
+        when(agent.investigate(any())).thenReturn(new FdsInvestigationAgentPort.Result("p6-investigation-v1", json));
+        when(jobs.findEvidenceIds(anyString())).thenThrow(new IllegalStateException("database unavailable"));
+
+        service.runDue(agent, 20);
+
+        verify(jobs)
+                .retry(
+                        92L,
+                        LocalDateTime.now(CLOCK).plusMinutes(1),
+                        "INVESTIGATION_INFRA_FAILURE",
+                        LocalDateTime.now(CLOCK));
+        verify(jobs, never()).fail(92L, "FDS0002", LocalDateTime.now(CLOCK));
+    }
+
+    @Test
+    void retriesBusinessFailureFromHoldLookupWithContractCode() {
+        when(holds.findForFds(92L)).thenThrow(new BusinessException(FdsErrorCode.NOT_FOUND));
+
+        service.runDue(agent, 20);
+
+        verify(jobs)
+                .retry(
+                        92L,
+                        LocalDateTime.now(CLOCK).plusMinutes(1),
+                        "HOLD_OR_INPUT_" + FdsErrorCode.NOT_FOUND.getCode(),
+                        LocalDateTime.now(CLOCK));
+    }
+
+    @Test
+    void reportPersistenceConflictFailsClaimedJob() {
+        String json =
+                """
+                {"schemaVersion":"p6-investigation-v1","investigationId":"00000000-0000-0000-0000-000000000992",
+                "transferHoldId":92,"status":"COMPLETED","summary":"확인 필요","secondaryFindings":[],
+                "missingInformation":[],"suggestedQuestions":[]}
+                """;
+        when(agent.investigate(any())).thenReturn(new FdsInvestigationAgentPort.Result("p6-investigation-v1", json));
+        org.mockito.Mockito.doThrow(new BusinessException(FdsErrorCode.FLOW_CONFLICT))
+                .when(jobs)
+                .completeWithReport(anyLong(), anyString(), anyString(), anyString(), anyString(), any());
+
+        service.runDue(agent, 20);
+
+        verify(jobs).fail(92L, FdsErrorCode.FLOW_CONFLICT.getCode(), LocalDateTime.now(CLOCK));
+    }
+
+    @Test
+    void rejectsMalformedAndOutOfContractReports() {
+        FdsInvestigationAgentPort.Result wrongIdentity = new FdsInvestigationAgentPort.Result(
+                "p6-investigation-v1",
+                """
+                {"schemaVersion":"p6-investigation-v1","investigationId":"wrong","transferHoldId":92,
+                "status":"COMPLETED","summary":"확인 필요","secondaryFindings":[],"missingInformation":[],
+                "suggestedQuestions":[]}
+                """);
+        FdsInvestigationAgentPort.Result malformed = new FdsInvestigationAgentPort.Result("p6-investigation-v1", "{");
+        FdsInvestigationAgentPort.Result invalidStringArray = new FdsInvestigationAgentPort.Result(
+                "p6-investigation-v1",
+                """
+                {"schemaVersion":"p6-investigation-v1","investigationId":"00000000-0000-0000-0000-000000000992",
+                "transferHoldId":92,"status":"COMPLETED","summary":"확인 필요","secondaryFindings":[],
+                "missingInformation":"없음","suggestedQuestions":[]}
+                """);
+        FdsInvestigationAgentPort.Result invalidEvidenceArray = new FdsInvestigationAgentPort.Result(
+                "p6-investigation-v1",
+                """
+                {"schemaVersion":"p6-investigation-v1","investigationId":"00000000-0000-0000-0000-000000000992",
+                "transferHoldId":92,"status":"COMPLETED","summary":"확인 필요","secondaryFindings":[
+                {"code":"REGULAR_SPLIT_AMOUNTS","description":"분할 이체","confidence":"OBSERVED",
+                "evidenceTransferIds":"101"}],"missingInformation":[],"suggestedQuestions":[]}
+                """);
+        when(agent.investigate(any()))
+                .thenReturn(null, wrongIdentity, malformed, invalidStringArray, invalidEvidenceArray);
+
+        for (int attempt = 0; attempt < 5; attempt++) service.runDue(agent, 20);
+
+        verify(jobs, org.mockito.Mockito.times(5))
+                .fail(92L, FdsErrorCode.INVALID_INVESTIGATION_REPORT.getCode(), LocalDateTime.now(CLOCK));
+    }
+
+    @Test
+    void eachDueJobReceivesFreshLeaseStart() {
+        StepClock stepClock = new StepClock();
+        FdsInvestigationJobService stepService = new FdsInvestigationJobService(jobs, inputs, holds, stepClock);
+        when(jobs.findDue(any(), anyInt())).thenReturn(List.of(92L, 93L));
+        when(jobs.claim(anyLong(), any(), any())).thenReturn(false);
+        ArgumentCaptor<LocalDateTime> starts = ArgumentCaptor.forClass(LocalDateTime.class);
+        ArgumentCaptor<LocalDateTime> leases = ArgumentCaptor.forClass(LocalDateTime.class);
+
+        stepService.runDue(agent, 20);
+
+        verify(jobs, org.mockito.Mockito.times(2)).claim(anyLong(), starts.capture(), leases.capture());
+        assertThat(starts.getAllValues().get(1)).isAfter(starts.getAllValues().get(0));
+        assertThat(leases.getAllValues().get(0))
+                .isEqualTo(starts.getAllValues().get(0).plusSeconds(70));
+        assertThat(leases.getAllValues().get(1))
+                .isEqualTo(starts.getAllValues().get(1).plusSeconds(70));
+    }
+
+    @Test
     void delegatesExpiredLeaseRecovery() {
         when(jobs.recoverExpired(LocalDateTime.now(CLOCK))).thenReturn(2);
 
@@ -204,5 +345,24 @@ class FdsInvestigationJobServiceTest {
                 1_500_000L,
                 true,
                 true);
+    }
+
+    private static final class StepClock extends Clock {
+        private final AtomicInteger seconds = new AtomicInteger();
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return Instant.parse("2026-11-12T03:00:00Z").plusSeconds(seconds.getAndIncrement());
+        }
     }
 }
