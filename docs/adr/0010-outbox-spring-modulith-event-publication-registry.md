@@ -85,14 +85,14 @@ ADR-0005의 「MQ 대신 아웃박스」는 그대로다. 바뀌는 것은 §2�
 
 ## 구독 실패 처리 (2026-11-03 추가, #709)
 
-**요약:** 알림 리스너가 실패하면 즉시 재시도 → 5분마다 재제출 → 상한을 넘으면 포기 · 경보 → 사람이 원인을 고친 뒤 재처리한다.
-재시도 · 재제출 · 멈춘 기록 정리는 프레임워크가 하고, 직접 짠 것은 재제출 상한 판정과 경보다.
+**요약:** 알림은 실패 직후 재시도하고, 남은 알림·FDS 매핑 발행 기록은 5분마다 재제출 → 상한을 넘으면 포기 · 경보 → 사람이 원인을 고친 뒤 재처리한다.
+알림의 즉시 재시도와 공통 재제출 · 멈춘 기록 정리는 프레임워크가 하고, 직접 짠 것은 재제출 상한 판정과 경보다.
 
 | 단계 | 쓰는 것 | 값 |
 |---|---|---|
-| 즉시 재시도 | `@Retryable` + `@EnableResilientMethods`(Spring 7) | 재시도 3번(기본값) · 간격 200ms에서 두 배씩 늘리고 ±지터(`multiplier = 2` · `jitter = 100`) — 동시에 실패한 재시도가 한 순간에 DB로 몰리지 않게 한다. 계약 위반(`ConstraintViolationException`)은 재시도하지 않는다 |
+| 알림 즉시 재시도 | `@Retryable` + `@EnableResilientMethods`(Spring 7) | 재시도 3번(기본값) · 간격 200ms에서 두 배씩 늘리고 ±지터(`multiplier = 2` · `jitter = 100`) — 동시에 실패한 재시도가 한 순간에 DB로 몰리지 않게 한다. 계약 위반(`ConstraintViolationException`)은 재시도하지 않는다. FDS 매핑 리스너에는 이 즉시 재시도를 적용하지 않는다 |
 | 주기 재제출 | `FailedEventPublications.resubmit` — `NotificationResubmissionScheduler` | 5분마다 · 묶음 100건(기본값) · 마지막 발행(재제출) 뒤 2분이 지난 기록만(최악 처리 약 14초의 6배 이상) |
-| 포기 | 재제출 필터 | 재제출을 3번 모두 쓴 기록은 다시 보내지 않고 행은 남긴다. `notification.publication.abandoned` 지표와 ERROR 로그(이벤트 종류 · 발행 ID) |
+| 포기 | 재제출 필터 | 재제출을 3번 모두 쓴 기록은 다시 보내지 않고 행은 남긴다. 기존 이름을 유지한 `notification.publication.abandoned` 지표와 ERROR 로그(이벤트 종류 · 발행 ID)는 알림과 FDS 매핑 기록을 함께 센다 |
 | 멈춘 기록 정리 | `spring.modulith.events.staleness.*` | 처리 중 · 발행됨 · 재제출됨으로 10분 넘게 멈추면 `FAILED`. 점검 주기 1분(기본값). 재제출됨은 마지막 재제출 시각부터 잰다(2.0.9에서 고쳐짐 — 2.0.8은 처음 발행 시각이라 오래된 기록을 재제출하면 처리 중에 `FAILED`가 됐다) |
 | 재기동 후 전달 | 위 두 가지로 한다. `republish-outstanding-events-on-restart`는 켜지 않는다 | — |
 
@@ -113,15 +113,15 @@ ADR-0005의 「MQ 대신 아웃박스」는 그대로다. 바뀌는 것은 §2�
    `UPDATE EVENT_PUBLICATION SET COMPLETION_ATTEMPTS = 1 WHERE STATUS = 'FAILED' AND ID IN (…);`
 3. 완료는 적어 둔 ID로 확인한다 — 1번 쿼리는 2번이 횟수를 바꾼 순간부터 비므로 쓰지 않는다.
    `SELECT ID, STATUS, COMPLETION_ATTEMPTS FROM EVENT_PUBLICATION WHERE ID IN (…);`가 0행이면 전달된 것이다.
-   남아 있으면 상태로 가른다 — `FAILED` · 시도 1은 아직 재제출 대기, `RESUBMITTED` · `PROCESSING`은 처리 중, `FAILED` · 시도 2 이상은 다시 실패라 1번으로 돌아간다. `notification` 테이블에 그 `(type, ref_id)` 알림이 저장됐는지도 본다.
-   같은 알림이 다시 가도 `(type, ref_id)`로 1건이다.
+   남아 있으면 상태로 가른다 — `FAILED` · 시도 1은 아직 재제출 대기, `RESUBMITTED` · `PROCESSING`은 처리 중, `FAILED` · 시도 2 이상은 다시 실패라 1번으로 돌아간다. 이벤트 종류가 알림이면 `notification` 테이블에 그 `(type, ref_id)`가 저장됐는지 보고, `TransferSettledBehaviorFlowListener`이면 `fds_behavior_flow_mapping`에 해당 `ref_id` 매핑이 저장됐는지 본다.
+   같은 이벤트가 다시 가도 알림은 `(type, ref_id)`, FDS 매핑은 `ref_id` 유니크 제약으로 한 건이다.
 
 ## 결과
 
 - **AFTER_COMMIT 리스너는 모두 기록된다.** 2.0.9에도 대상을 좁히는 설정이 없다(BEFORE_COMMIT 리스너는 기록되지 않는다).
   auth의 `LoginPasswordChangedSessionListener`는 #641(PH-49c)에서 BEFORE_COMMIT으로 바뀌어 기록되지 않는다 —
   세션 삭제가 실패하면 비밀번호 변경도 함께 롤백된다. 그래서 이 결정 시점의 기록 대상은 0개이고, 첫 대상은 PH-96-②의
-  알림 구독자다. 세션 정리는 발행 기록 · 재제출로 복구하는 대상이 아니다.
+  알림 구독자다. #990부터 `TransferSettledBehaviorFlowListener`도 기록 대상이며, 성공 이체의 `refId`와 행동 흐름 매핑을 멱등 저장한다. 세션 정리는 발행 기록 · 재제출로 복구하는 대상이 아니다.
 - **테이블은 저장소 규약의 예외다.** 이름이 대문자인 것은 라이브러리가 그 이름으로 조회하기 때문이다.
   `TIMESTAMP(6)`은 jar DDL을 그대로 옮긴 결과이고, MySQL `TIMESTAMP`는 2038-01-19까지만 담는다.
 - **재기동 후에는 내용이 같은 기록이 함께 지워질 수 있다.** 진행 중이 아닌 기록은 `LISTENER_ID + SERIALIZED_EVENT`로

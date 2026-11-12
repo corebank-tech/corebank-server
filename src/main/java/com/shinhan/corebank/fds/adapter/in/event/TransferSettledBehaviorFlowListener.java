@@ -2,6 +2,7 @@ package com.shinhan.corebank.fds.adapter.in.event;
 
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.fds.api.BehaviorFlowMappingUseCase;
 import com.shinhan.corebank.fds.domain.exception.FdsErrorCode;
 import com.shinhan.corebank.transfer.api.TransferSettled;
@@ -27,10 +28,11 @@ public class TransferSettledBehaviorFlowListener {
             mappings.save(event.refId(), event.flowId(), event.customerId());
         } catch (BusinessException exception) {
             if (exception.getErrorCode() != FdsErrorCode.NOT_FOUND
-                    && exception.getErrorCode() != FdsErrorCode.FLOW_CONFLICT) {
+                    && exception.getErrorCode() != FdsErrorCode.FLOW_CONFLICT
+                    && exception.getErrorCode() != CommonErrorCode.INVALID_INPUT) {
                 throw exception;
             }
-            // 잘못된 소유권·충돌은 재시도로 회복되지 않으므로 기존 매핑을 보존하고 발행을 마감한다.
+            // 계약 위반은 재시도로 회복되지 않으므로 기존 매핑을 보존하고 발행을 마감한다.
             log.warn(
                     "FDS 행동 흐름 연결 거부: refId={}, code={}",
                     event.refId(),

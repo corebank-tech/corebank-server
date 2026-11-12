@@ -248,7 +248,8 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
         long firstRefId = insertSuccessfulTransfer("20310601FDS990A1", 500_000, previousAt);
         insertSuccessfulTransfer("20310601FDS990A2", 500_000, previousAt.plusMinutes(1));
         UUID flowId = UUID.randomUUID();
-        OffsetDateTime occurredAt = OffsetDateTime.now(ZoneOffset.ofHours(9)).minusSeconds(10);
+        OffsetDateTime occurredAt =
+                OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.ofHours(9)).minusSeconds(10);
         behaviorFlows.submit(
                 flowId,
                 1,
@@ -256,13 +257,17 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
                         List.of(
                                 new BehaviorFlowService.EventInput(flowId, 1, "TRANSFER_ENTER", occurredAt, "D-01"),
                                 new BehaviorFlowService.EventInput(
-                                        flowId, 2, "STEP_BACK", occurredAt.plusSeconds(1), "D-01"),
+                                        flowId, 2, "AMOUNT_EDITED", occurredAt.plusSeconds(1), "D-01"),
                                 new BehaviorFlowService.EventInput(
-                                        flowId, 3, "AMOUNT_EDITED", occurredAt.plusSeconds(2), "D-01"),
+                                        flowId, 3, "CONFIRM_ENTER", occurredAt.plusSeconds(2), "D-02"),
                                 new BehaviorFlowService.EventInput(
-                                        flowId, 4, "AMOUNT_EDITED", occurredAt.plusSeconds(3), "D-01"),
+                                        flowId, 4, "CONFIRM_LEAVE", occurredAt.plusSeconds(3), "D-02"),
                                 new BehaviorFlowService.EventInput(
-                                        flowId, 5, "SUBMIT_REQUESTED", occurredAt.plusSeconds(4), "D-02")),
+                                        flowId, 5, "STEP_BACK", occurredAt.plusSeconds(4), "D-01"),
+                                new BehaviorFlowService.EventInput(
+                                        flowId, 6, "AMOUNT_EDITED", occurredAt.plusSeconds(5), "D-01"),
+                                new BehaviorFlowService.EventInput(
+                                        flowId, 7, "SUBMIT_REQUESTED", occurredAt.plusSeconds(6), "D-02")),
                         null));
         behaviorMappings.save(firstRefId, flowId.toString(), 1);
         FdsRepeatTransferHoldPolicy policy = new FdsRepeatTransferHoldPolicy(recentTransferQuery, behaviorHesitation);

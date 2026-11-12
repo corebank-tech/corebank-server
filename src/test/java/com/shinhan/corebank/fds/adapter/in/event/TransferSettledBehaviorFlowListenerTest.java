@@ -50,6 +50,15 @@ class TransferSettledBehaviorFlowListenerTest {
     }
 
     @Test
+    void invalidFlowIdIsConsumedBecauseRedeliveryCannotRecoverIt() {
+        when(mappings.save(101, "flow-1", 7)).thenThrow(new BusinessException(CommonErrorCode.INVALID_INPUT));
+
+        listener.on(event(ProcessResultStatus.SUCCESS, "flow-1"));
+
+        verify(mappings).save(101, "flow-1", 7);
+    }
+
+    @Test
     void otherBusinessFailureIsPropagatedForRedelivery() {
         BusinessException failure = new BusinessException(CommonErrorCode.INTERNAL_ERROR);
         when(mappings.save(101, "flow-1", 7)).thenThrow(failure);
