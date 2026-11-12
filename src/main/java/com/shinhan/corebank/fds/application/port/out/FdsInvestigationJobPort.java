@@ -3,6 +3,7 @@ package com.shinhan.corebank.fds.application.port.out;
 import com.shinhan.corebank.fds.api.FdsInvestigationJob;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 /** 조사 작업의 멱등 등록과 조건부 상태 전이를 제공한다. */
 public interface FdsInvestigationJobPort {
@@ -21,6 +22,17 @@ public interface FdsInvestigationJobPort {
     boolean fail(long transferHoldId, String reason, LocalDateTime now);
 
     int recoverExpired(LocalDateTime now);
+
+    void recordEvidence(
+            String investigationId,
+            long transferHoldId,
+            long customerId,
+            LocalDateTime rangeFrom,
+            LocalDateTime rangeTo,
+            List<Long> refIds,
+            LocalDateTime now);
+
+    Set<Long> findEvidenceIds(String investigationId);
 
     void completeWithReport(
             long transferHoldId,

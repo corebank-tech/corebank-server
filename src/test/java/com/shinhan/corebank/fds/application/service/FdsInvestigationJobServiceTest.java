@@ -23,6 +23,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -41,6 +42,7 @@ class FdsInvestigationJobServiceTest {
         when(jobs.findDue(any(), anyInt())).thenReturn(List.of(92L));
         when(jobs.claim(anyLong(), any(), any())).thenReturn(true);
         when(jobs.findByHoldId(92L)).thenReturn(job(1));
+        when(jobs.findEvidenceIds(anyString())).thenReturn(Set.of());
         when(holds.findForFds(92L)).thenReturn(hold("HELD"));
         when(inputs.build(92L, "00000000-0000-0000-0000-000000000992")).thenReturn(mock(FdsInvestigationInput.class));
     }
@@ -104,6 +106,77 @@ class FdsInvestigationJobServiceTest {
 
         verify(jobs).fail(92L, "HOLD_CLOSED", LocalDateTime.now(CLOCK));
         verify(agent, never()).investigate(any());
+    }
+
+    @Test
+    void rejectsEvidenceThatWasNotProvidedWithoutRetrying() {
+        String json =
+                """
+                {"schemaVersion":"p6-investigation-v1","investigationId":"00000000-0000-0000-0000-000000000992",
+                "transferHoldId":92,"status":"COMPLETED","summary":"확인 필요","secondaryFindings":[
+                {"code":"REGULAR_SPLIT_AMOUNTS","description":"분할 이체","confidence":"OBSERVED",
+                "evidenceTransferIds":[999]}],"missingInformation":[],"suggestedQuestions":[]}
+                """;
+        when(agent.investigate(any())).thenReturn(new FdsInvestigationAgentPort.Result("p6-investigation-v1", json));
+
+        service.runDue(agent, 20);
+
+        verify(jobs).fail(92L, "FDS0002", LocalDateTime.now(CLOCK));
+        verify(jobs, never()).retry(anyLong(), any(), anyString(), any());
+    }
+
+    @Test
+    void acceptsOnlyEvidenceRecordedForInvestigation() {
+        String json =
+                """
+                {"schemaVersion":"p6-investigation-v1","investigationId":"00000000-0000-0000-0000-000000000992",
+                "transferHoldId":92,"status":"COMPLETED","summary":"확인 필요","secondaryFindings":[
+                {"code":"REGULAR_SPLIT_AMOUNTS","description":"분할 이체","confidence":"OBSERVED",
+                "evidenceTransferIds":[101]}],"missingInformation":[],"suggestedQuestions":[]}
+                """;
+        when(jobs.findEvidenceIds("00000000-0000-0000-0000-000000000992")).thenReturn(Set.of(101L));
+        when(agent.investigate(any())).thenReturn(new FdsInvestigationAgentPort.Result("p6-investigation-v1", json));
+
+        service.runDue(agent, 20);
+
+        verify(jobs).completeWithReport(anyLong(), anyString(), anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void doesNotStoreLateReportAfterHoldIsExecuted() {
+        when(holds.findForFds(92L)).thenReturn(hold("HELD"), hold("EXECUTED"));
+        when(agent.investigate(any()))
+                .thenReturn(
+                        new FdsInvestigationAgentPort.Result(
+                                "p6-investigation-v1",
+                                """
+                {"schemaVersion":"p6-investigation-v1","investigationId":"00000000-0000-0000-0000-000000000992",
+                "transferHoldId":92,"status":"COMPLETED","summary":"확인 필요","secondaryFindings":[],
+                "missingInformation":[],"suggestedQuestions":[]}
+                """));
+
+        service.runDue(agent, 20);
+
+        verify(jobs).fail(92L, "HOLD_CLOSED", LocalDateTime.now(CLOCK));
+        verify(jobs, never()).completeWithReport(anyLong(), anyString(), anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void thirdTransientFailureBecomesFailed() {
+        when(jobs.findByHoldId(92L)).thenReturn(job(3));
+        when(agent.investigate(any())).thenThrow(new IllegalStateException("timeout"));
+
+        service.runDue(agent, 20);
+
+        verify(jobs).fail(92L, "AGENT_UNAVAILABLE", LocalDateTime.now(CLOCK));
+        verify(jobs, never()).retry(anyLong(), any(), anyString(), any());
+    }
+
+    @Test
+    void delegatesExpiredLeaseRecovery() {
+        when(jobs.recoverExpired(LocalDateTime.now(CLOCK))).thenReturn(2);
+
+        assertThat(service.recoverExpired()).isEqualTo(2);
     }
 
     private static FdsInvestigationJob job(int attempts) {

@@ -7,6 +7,8 @@ import com.shinhan.corebank.fds.domain.exception.FdsErrorCode;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -123,6 +125,53 @@ public class JdbcFdsInvestigationJobAdapter implements FdsInvestigationJobPort {
                 timestamp(now),
                 timestamp(now),
                 timestamp(now));
+    }
+
+    @Override
+    @Transactional
+    public void recordEvidence(
+            String investigationId,
+            long holdId,
+            long customerId,
+            LocalDateTime rangeFrom,
+            LocalDateTime rangeTo,
+            List<Long> refIds,
+            LocalDateTime now) {
+        if (rangeFrom == null
+                || rangeTo == null
+                || !rangeFrom.isBefore(rangeTo)
+                || refIds == null
+                || refIds.stream().anyMatch(refId -> refId == null || refId <= 0)) {
+            throw new BusinessException(FdsErrorCode.INVALID_INVESTIGATION_REPORT);
+        }
+        FdsInvestigationJob job = findByInvestigationId(investigationId);
+        if (job == null || job.transferHoldId() != holdId) {
+            throw new BusinessException(FdsErrorCode.NOT_FOUND);
+        }
+        for (Long refId : refIds) {
+            jdbc.update(
+                    "INSERT INTO fds_investigation_evidence "
+                            + "(investigation_id, ref_id, transfer_hold_id, customer_id, range_from, range_to, provided_at) "
+                            + "VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ref_id=ref_id",
+                    investigationId,
+                    refId,
+                    holdId,
+                    customerId,
+                    timestamp(rangeFrom),
+                    timestamp(rangeTo),
+                    timestamp(now));
+        }
+    }
+
+    @Override
+    public Set<Long> findEvidenceIds(String investigationId) {
+        return jdbc
+                .queryForList(
+                        "SELECT ref_id FROM fds_investigation_evidence WHERE investigation_id=?",
+                        Long.class,
+                        investigationId)
+                .stream()
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     @Override

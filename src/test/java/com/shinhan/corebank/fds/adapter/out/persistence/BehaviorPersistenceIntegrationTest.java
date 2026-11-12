@@ -60,15 +60,56 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
                 .isEqualTo(firstId);
         assertThat(investigationJobs.claim(holdId, now, now.plusSeconds(70))).isTrue();
         assertThat(investigationJobs.claim(holdId, now, now.plusSeconds(70))).isFalse();
+        investigationJobs.recordEvidence(firstId, holdId, 992001L, now.minusHours(24), now, List.of(101L), now);
+        investigationJobs.recordEvidence(firstId, holdId, 992001L, now.minusHours(24), now, List.of(101L), now);
 
         investigationJobs.completeWithReport(
                 holdId, firstId, "p6-investigation-v1", "{\"result\":\"ok\"}", "a".repeat(64), now);
+        investigationJobs.completeWithReport(
+                holdId, firstId, "p6-investigation-v1", "{\"result\":\"ok\"}", "a".repeat(64), now);
+
+        assertThatThrownBy(() -> investigationJobs.completeWithReport(
+                        holdId, firstId, "p6-investigation-v1", "{\"result\":\"different\"}", "b".repeat(64), now))
+                .isInstanceOf(BusinessException.class);
 
         assertThat(investigationJobs.findByHoldId(holdId).status()).isEqualTo("COMPLETED");
+        assertThat(investigationJobs.findEvidenceIds(firstId)).containsExactly(101L);
         assertThat(jdbc.queryForObject(
                         "SELECT COUNT(*) FROM fds_investigation_report WHERE investigation_id=?",
                         Integer.class,
                         firstId))
+                .isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                        "SELECT report_sha256 FROM fds_investigation_report WHERE investigation_id=?",
+                        String.class,
+                        firstId))
+                .isEqualTo("a".repeat(64));
+    }
+
+    @Test
+    void concurrentInvestigationRegistrationKeepsOneStableId() throws Exception {
+        long holdId = 992000000L + Math.abs(UUID.randomUUID().getLeastSignificantBits() % 1000000);
+        String firstId = UUID.randomUUID().toString();
+        String secondId = UUID.randomUUID().toString();
+        LocalDateTime now = LocalDateTime.now();
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (var workers = Executors.newFixedThreadPool(2)) {
+            var first = workers.submit(() -> {
+                start.await();
+                return investigationJobs.createIfAbsent(holdId, firstId, now).investigationId();
+            });
+            var second = workers.submit(() -> {
+                start.await();
+                return investigationJobs.createIfAbsent(holdId, secondId, now).investigationId();
+            });
+            start.countDown();
+
+            assertThat(first.get(10, TimeUnit.SECONDS)).isEqualTo(second.get(10, TimeUnit.SECONDS));
+        }
+
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_investigation_job WHERE transfer_hold_id=?", Integer.class, holdId))
                 .isEqualTo(1);
     }
 

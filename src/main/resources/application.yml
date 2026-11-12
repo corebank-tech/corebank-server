@@ -108,7 +108,7 @@ app:
       enabled: ${APP_FDS_SCORE_ENABLED:false}
       base-url: ${APP_FDS_SCORE_BASE_URL:http://127.0.0.1:8000}
     investigation:
-      # Python 조사 실행 계약과 전용 토큰이 배포 환경에 준비된 경우에만 켠다.
+      # 작업 등록은 항상 수행하고, Python 조사 워커는 계약과 전용 토큰이 준비된 경우에만 켠다.
       enabled: ${APP_FDS_INVESTIGATION_ENABLED:false}
   security:
     admin:

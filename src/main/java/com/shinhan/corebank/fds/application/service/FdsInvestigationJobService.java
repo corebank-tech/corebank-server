@@ -16,6 +16,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.Set;
 import java.util.UUID;
@@ -29,7 +30,8 @@ import tools.jackson.databind.json.JsonMapper;
 @RequiredArgsConstructor
 public class FdsInvestigationJobService {
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-    private static final Set<String> TERMINAL_HOLD_STATUSES = Set.of("CANCELLED", "EXPIRED");
+    private static final Set<String> TERMINAL_HOLD_STATUSES =
+            Set.of("EXECUTED", "REJECTED", "FAILED", "CANCELLED", "EXPIRED");
     private static final Set<String> FINDING_CODES = Set.of(
             "REGULAR_SPLIT_AMOUNTS",
             "MULTIPLE_SOURCE_ACCOUNTS",
@@ -62,25 +64,52 @@ public class FdsInvestigationJobService {
     void runOne(FdsInvestigationAgentPort agent, long holdId, LocalDateTime startedAt) {
         if (!jobs.claim(holdId, startedAt, startedAt.plusSeconds(70))) return;
         FdsInvestigationJob job = jobs.findByHoldId(holdId);
+        if (job == null) return;
         try {
             TransferHoldForFds hold = holds.findForFds(holdId);
-            if (hold == null || TERMINAL_HOLD_STATUSES.contains(hold.status())) {
+            if (closed(hold)) {
                 jobs.fail(holdId, "HOLD_CLOSED", now());
                 return;
             }
             FdsInvestigationInput input = inputs.build(holdId, job.investigationId());
-            FdsInvestigationAgentPort.Result result = agent.investigate(input);
-            ValidatedReport report = validate(result, job);
-            jobs.completeWithReport(
-                    holdId, job.investigationId(), report.schemaVersion(), report.json(), sha256(report.json()), now());
+            FdsInvestigationAgentPort.Result result;
+            try {
+                result = agent.investigate(input);
+            } catch (RuntimeException exception) {
+                finishTransientFailure(job, "AGENT_UNAVAILABLE");
+                return;
+            }
+            ValidatedReport report;
+            try {
+                report = validate(result, job);
+            } catch (BusinessException exception) {
+                jobs.fail(holdId, exception.getErrorCode().getCode(), now());
+                return;
+            }
+            if (closed(holds.findForFds(holdId))) {
+                jobs.fail(holdId, "HOLD_CLOSED", now());
+                return;
+            }
+            try {
+                jobs.completeWithReport(
+                        holdId,
+                        job.investigationId(),
+                        report.schemaVersion(),
+                        report.json(),
+                        sha256(report.json()),
+                        now());
+            } catch (BusinessException exception) {
+                jobs.fail(holdId, exception.getErrorCode().getCode(), now());
+            }
         } catch (BusinessException exception) {
-            finishFailure(job, exception.getErrorCode().getCode());
+            finishTransientFailure(
+                    job, "HOLD_OR_INPUT_" + exception.getErrorCode().getCode());
         } catch (RuntimeException exception) {
-            finishFailure(job, "AGENT_UNAVAILABLE");
+            finishTransientFailure(job, "INVESTIGATION_INFRA_FAILURE");
         }
     }
 
-    private void finishFailure(FdsInvestigationJob job, String reason) {
+    private void finishTransientFailure(FdsInvestigationJob job, String reason) {
         LocalDateTime now = now();
         if (job.attemptCount() >= 3) {
             jobs.fail(job.transferHoldId(), reason, now);
@@ -110,12 +139,13 @@ public class FdsInvestigationJobService {
                     || !validStringArray(root.path("suggestedQuestions"), 3, 200)) {
                 throw new BusinessException(FdsErrorCode.INVALID_INVESTIGATION_REPORT);
             }
+            Set<Long> providedEvidenceIds = jobs.findEvidenceIds(job.investigationId());
             for (JsonNode finding : root.path("secondaryFindings")) {
                 if (!FINDING_CODES.contains(finding.path("code").asText())
                         || !validText(finding.path("description"), 1, 300)
                         || !Set.of("OBSERVED", "INFERRED")
                                 .contains(finding.path("confidence").asText())
-                        || !validEvidenceIds(finding.path("evidenceTransferIds"))) {
+                        || !validEvidenceIds(finding.path("evidenceTransferIds"), providedEvidenceIds)) {
                     throw new BusinessException(FdsErrorCode.INVALID_INVESTIGATION_REPORT);
                 }
             }
@@ -127,10 +157,20 @@ public class FdsInvestigationJobService {
         }
     }
 
-    private static boolean validEvidenceIds(JsonNode node) {
+    private static boolean validEvidenceIds(JsonNode node, Set<Long> providedIds) {
         if (!validArray(node, 10)) return false;
-        for (JsonNode value : node) if (!value.canConvertToLong() || value.asLong() <= 0) return false;
+        Set<Long> seen = new HashSet<>();
+        for (JsonNode value : node) {
+            if (!value.canConvertToLong()
+                    || value.asLong() <= 0
+                    || !providedIds.contains(value.asLong())
+                    || !seen.add(value.asLong())) return false;
+        }
         return true;
+    }
+
+    private static boolean closed(TransferHoldForFds hold) {
+        return hold == null || TERMINAL_HOLD_STATUSES.contains(hold.status());
     }
 
     private static boolean validStringArray(JsonNode node, int maxItems, int maxLength) {
