@@ -447,7 +447,7 @@ transfer_hold
 fds_behavior_flow / fds_behavior_event
   flow_id, customer_id, event fields, derived features
 
-P6 성공 이체·행동 연결 (테이블명 미정)
+P6 성공 이체·행동 연결 (`fds_transfer_behavior_flow`)
   성공 transfer ref_id (UNIQUE), flow_id; P4 TransferSettled.flowId 추가 PR 머지 뒤 리스너 연결
 
 fds_investigation

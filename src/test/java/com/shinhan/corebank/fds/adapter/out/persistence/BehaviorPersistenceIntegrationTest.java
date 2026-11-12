@@ -128,6 +128,28 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    void differentRefCannotReuseFlowAlreadyLinkedToAnotherTransfer() {
+        long customerId = 975001L;
+        long firstRefId = positiveRefId();
+        long secondRefId = firstRefId + 1;
+        UUID flowId = createFlow(customerId);
+
+        mappings.save(firstRefId, flowId.toString(), customerId);
+
+        assertThatThrownBy(() -> mappings.save(secondRefId, flowId.toString(), customerId))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(FdsErrorCode.FLOW_CONFLICT);
+        assertThat(mappings.findByFlowId(flowId.toString()).refId()).isEqualTo(firstRefId);
+        assertThat(mappings.findByRefId(secondRefId)).isNull();
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_transfer_behavior_flow WHERE flow_id = ?",
+                        Integer.class,
+                        flowId.toString()))
+                .isEqualTo(1);
+    }
+
+    @Test
     void concurrentSameMappingKeepsOneDatabaseRow() throws Exception {
         long customerId = 975001L;
         long refId = positiveRefId();

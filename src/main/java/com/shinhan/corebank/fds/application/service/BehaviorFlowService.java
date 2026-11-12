@@ -51,9 +51,11 @@ public class BehaviorFlowService {
                 || customerId <= 0
                 || batch == null
                 || batch.events() == null
-                || batch.events().isEmpty()
-                || batch.events().size() > 100) {
+                || batch.events().isEmpty()) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        }
+        if (batch.events().size() > 100) {
+            throw new BusinessException(FdsErrorCode.INVALID_EVENT);
         }
         LocalDateTime receivedAt = LocalDateTime.now(clock.withZone(KST));
         port.create(flowId.toString(), customerId, receivedAt);
@@ -73,8 +75,12 @@ public class BehaviorFlowService {
         LocalDateTime previousAt =
                 existing.isEmpty() ? null : existing.getLast().occurredAt();
         boolean confirmOpen = false;
+        boolean confirmEntered = false;
         for (Event stored : existing) {
-            if ("CONFIRM_ENTER".equals(stored.eventType())) confirmOpen = true;
+            if ("CONFIRM_ENTER".equals(stored.eventType())) {
+                confirmOpen = true;
+                confirmEntered = true;
+            }
             if ("CONFIRM_LEAVE".equals(stored.eventType())) confirmOpen = false;
         }
         Set<Integer> seen = new HashSet<>();
@@ -131,10 +137,14 @@ public class BehaviorFlowService {
                             && !"D-02".equals(input.step())
                     || "CONFIRM_ENTER".equals(input.eventType()) && confirmOpen
                     || "CONFIRM_LEAVE".equals(input.eventType()) && !confirmOpen
+                    || "STEP_BACK".equals(input.eventType()) && !confirmEntered
                     || "SUBMIT_REQUESTED".equals(input.eventType()) && confirmOpen) {
                 throw new BusinessException(FdsErrorCode.INVALID_EVENT);
             }
-            if ("CONFIRM_ENTER".equals(input.eventType())) confirmOpen = true;
+            if ("CONFIRM_ENTER".equals(input.eventType())) {
+                confirmOpen = true;
+                confirmEntered = true;
+            }
             if ("CONFIRM_LEAVE".equals(input.eventType())) confirmOpen = false;
             finalEvent = "SUBMIT_REQUESTED".equals(input.eventType());
             toAppend.add(current);
