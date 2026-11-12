@@ -2,8 +2,12 @@ package com.shinhan.corebank.transfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.account.api.AccountPasswordAuthTokenVerifier;
@@ -287,6 +291,108 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
                         "20310601FDS990A1",
                         "20310601FDS990A2"))
                 .isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("[FDS 동시성] 성공 두 건 뒤 같은 고객의 동시 요청 둘을 실제 정책 B가 각각 한 번만 보류한다")
+    void fdsPolicyB_concurrentThirdRequestsAreSerializedAndHeldOnceEach() throws Exception {
+        jdbcTemplate.update("UPDATE account SET balance = 3000000 WHERE account_id = 101");
+        LocalDateTime previousAt = LocalDateTime.now(clock).minusMinutes(1);
+        insertSuccessfulTransfer("20310601FDS990C1", 1_000_000, previousAt);
+        insertSuccessfulTransfer("20310601FDS990C2", 1_000_000, previousAt.plusSeconds(1));
+        FdsRepeatTransferHoldPolicy policy =
+                new FdsRepeatTransferHoldPolicy(recentTransferQuery, mock(BehaviorHesitationService.class));
+        ReflectionTestUtils.setField(policy, "enabled", true);
+        TransferExecutionService service = serviceWithHoldPolicies(List.of(policy));
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<TransferResult> first = executor.submit(() -> {
+                start.await(10, TimeUnit.SECONDS);
+                return service.execute(immediateCommand(1_000_000));
+            });
+            Future<TransferResult> second = executor.submit(() -> {
+                start.await(10, TimeUnit.SECONDS);
+                return service.execute(immediateCommand(1_000_000));
+            });
+            start.countDown();
+
+            assertThat(first.get(30, TimeUnit.SECONDS).held()).isTrue();
+            assertThat(second.get(30, TimeUnit.SECONDS).held()).isTrue();
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM transfer_hold WHERE customer_id = 1 AND policy_code = 'B'", Long.class))
+                .isEqualTo(2);
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 101 AND status = 'SUCCESS'",
+                        Long.class))
+                .isEqualTo(2);
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM ledger_entry WHERE account_id IN (101, 202)", Long.class))
+                .isZero();
+        assertThat(balanceOf(101)).isEqualTo(3_000_000L);
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM transfer_limit_daily_usage WHERE customer_id = 1", Long.class))
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("[FDS 장애] 성공 이체 조회 실패는 실제 이체를 ERROR로 끝내고 자금을 변경하지 않는다")
+    void fdsPolicy_recentTransferQueryFailureStopsActualTransfer() {
+        RecentTransferQuery failingTransfers = mock(RecentTransferQuery.class);
+        IllegalStateException failure = new IllegalStateException("transfer DB unavailable");
+        when(failingTransfers.findSucceeded(anyLong(), anyString(), any(LocalDateTime.class)))
+                .thenThrow(failure);
+        FdsRepeatTransferHoldPolicy policy =
+                new FdsRepeatTransferHoldPolicy(failingTransfers, mock(BehaviorHesitationService.class));
+        ReflectionTestUtils.setField(policy, "enabled", true);
+
+        assertThatThrownBy(() -> serviceWithHoldPolicies(List.of(policy)).execute(immediateCommand(30_000)))
+                .isSameAs(failure);
+
+        assertThat(transferStatuses()).containsExactly("ERROR");
+        assertRolledBack();
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM transfer_hold WHERE customer_id = 1", Long.class))
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("[FDS 장애] 행동 저장소 조회 실패는 정책 B로 우회하지 않고 실제 이체를 ERROR로 끝낸다")
+    void fdsPolicy_behaviorStorageFailureStopsActualTransfer() {
+        jdbcTemplate.update("UPDATE account SET balance = 3000000 WHERE account_id = 101");
+        LocalDateTime previousAt = LocalDateTime.now(clock).minusMinutes(1);
+        insertSuccessfulTransfer("20310601FDS990E1", 1_000_000, previousAt);
+        insertSuccessfulTransfer("20310601FDS990E2", 1_000_000, previousAt.plusSeconds(1));
+        BehaviorHesitationService failingHesitation = mock(BehaviorHesitationService.class);
+        IllegalStateException failure = new IllegalStateException("behavior DB unavailable");
+        when(failingHesitation.anyHesitation(anyLong(), any(), any())).thenThrow(failure);
+        FdsRepeatTransferHoldPolicy policy = new FdsRepeatTransferHoldPolicy(recentTransferQuery, failingHesitation);
+        ReflectionTestUtils.setField(policy, "enabled", true);
+
+        assertThatThrownBy(() -> serviceWithHoldPolicies(List.of(policy)).execute(immediateCommand(1_000_000)))
+                .isSameAs(failure);
+
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 101 AND status = 'SUCCESS'",
+                        Long.class))
+                .isEqualTo(2);
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM transfer WHERE withdrawal_account_id = 101 AND status = 'ERROR'",
+                        Long.class))
+                .isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM ledger_entry WHERE account_id IN (101, 202)", Long.class))
+                .isZero();
+        assertThat(balanceOf(101)).isEqualTo(3_000_000L);
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM transfer_limit_daily_usage WHERE customer_id = 1", Long.class))
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM transfer_hold WHERE customer_id = 1", Long.class))
+                .isZero();
     }
 
     @Test

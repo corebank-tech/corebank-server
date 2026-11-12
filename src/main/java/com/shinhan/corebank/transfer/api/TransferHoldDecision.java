@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
  * @param policyCode  보류를 정한 정책 코드. 바로 실행이면 null
  * @param releaseMode 푸는 방식. 바로 실행이면 null
  * @param releaseAt   AT_TIME일 때 실행할 시각. 그 밖에는 null
+ * @param evidence    FDS 정책이 계산한 보류 근거. 다른 정책과 바로 실행이면 null
  */
 public record TransferHoldDecision(
         boolean hold,
