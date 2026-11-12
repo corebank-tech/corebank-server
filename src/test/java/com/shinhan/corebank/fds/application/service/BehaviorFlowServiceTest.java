@@ -115,7 +115,9 @@ class BehaviorFlowServiceTest {
             tooMany.add(event(sequence, sequence == 1 ? "TRANSFER_ENTER" : "AMOUNT_EDITED", -1, "D-01"));
         }
         assertThatThrownBy(() -> service.submit(flowId, 7, new BehaviorFlowService.Batch(tooMany, null)))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(FdsErrorCode.INVALID_EVENT);
         assertThat(port.events).isEmpty();
     }
 
@@ -126,20 +128,32 @@ class BehaviorFlowServiceTest {
                         event(1, "TRANSFER_ENTER", -10, "D-01"),
                         event(2, "RECIPIENT_CONFIRMED", -9, "D-01"),
                         event(3, "AMOUNT_EDITED", -8, "D-01"),
-                        event(4, "STEP_BACK", -7, "D-01")),
+                        event(4, "CONFIRM_ENTER", -7, "D-02"),
+                        event(5, "CONFIRM_LEAVE", -6, "D-02")),
                 null);
         service.submit(flowId, 7, first);
 
         var mixed = new BehaviorFlowService.Batch(
                 List.of(
-                        event(4, "STEP_BACK", -7, "D-01"),
-                        event(5, "CONFIRM_ENTER", -6, "D-02"),
-                        event(6, "CONFIRM_LEAVE", -2, "D-02"),
+                        event(5, "CONFIRM_LEAVE", -6, "D-02"),
+                        event(6, "STEP_BACK", -5, "D-01"),
                         event(7, "SUBMIT_REQUESTED", -1, "D-02")),
                 4);
 
-        assertThat(service.submit(flowId, 7, mixed).acceptedCount()).isEqualTo(3);
+        assertThat(service.submit(flowId, 7, mixed).acceptedCount()).isEqualTo(2);
         assertThat(port.events).hasSize(7);
+    }
+
+    @Test
+    void rejectsStepBackBeforeEnteringConfirmation() {
+        var batch = new BehaviorFlowService.Batch(
+                List.of(event(1, "TRANSFER_ENTER", -2, "D-01"), event(2, "STEP_BACK", -1, "D-01")), null);
+
+        assertThatThrownBy(() -> service.submit(flowId, 7, batch))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(FdsErrorCode.INVALID_EVENT);
+        assertThat(port.events).isEmpty();
     }
 
     @Test
@@ -158,14 +172,15 @@ class BehaviorFlowServiceTest {
     void rejectsReplayedEventsInReverseSequenceOrder() {
         var stored = new BehaviorFlowService.Batch(
                 List.of(
-                        event(1, "TRANSFER_ENTER", -4, "D-01"),
-                        event(2, "RECIPIENT_CONFIRMED", -3, "D-01"),
-                        event(3, "AMOUNT_EDITED", -2, "D-01"),
-                        event(4, "STEP_BACK", -1, "D-01")),
+                        event(1, "TRANSFER_ENTER", -6, "D-01"),
+                        event(2, "RECIPIENT_CONFIRMED", -5, "D-01"),
+                        event(3, "CONFIRM_ENTER", -4, "D-02"),
+                        event(4, "CONFIRM_LEAVE", -3, "D-02"),
+                        event(5, "STEP_BACK", -2, "D-01")),
                 null);
         service.submit(flowId, 7, stored);
         var reversed = new BehaviorFlowService.Batch(
-                List.of(event(4, "STEP_BACK", -1, "D-01"), event(3, "AMOUNT_EDITED", -2, "D-01")), null);
+                List.of(event(5, "STEP_BACK", -2, "D-01"), event(4, "CONFIRM_LEAVE", -3, "D-02")), null);
 
         assertThatThrownBy(() -> service.submit(flowId, 7, reversed))
                 .isInstanceOf(BusinessException.class)

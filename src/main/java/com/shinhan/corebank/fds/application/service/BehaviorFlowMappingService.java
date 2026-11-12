@@ -38,6 +38,7 @@ public class BehaviorFlowMappingService implements BehaviorFlowMappingUseCase {
             throw new BusinessException(FdsErrorCode.NOT_FOUND);
         }
 
+        // 성공 이체와의 연결은 보존하고, flow 완성 여부는 이를 소비하는 정책·점수 단계에서 검증한다.
         mappings.insertOrKeepExisting(refId, flowId, customerId, LocalDateTime.now(clock.withZone(KST)));
         BehaviorFlowMappingPort.Mapping stored = mappings.findByRefIdForUpdate(refId);
         if (stored == null || !stored.flowId().equals(flowId) || stored.customerId() != customerId) {
