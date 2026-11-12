@@ -1013,6 +1013,11 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
         }
 
         @Override
+        public List<Long> findOverdueApprovalIds(LocalDateTime heldBefore, int limit) {
+            return delegate.findOverdueApprovalIds(heldBefore, limit);
+        }
+
+        @Override
         public List<Long> findStuckExecutingIds(LocalDateTime executingBefore, int limit) {
             return delegate.findStuckExecutingIds(executingBefore, limit);
         }
@@ -1023,8 +1028,9 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
         }
 
         @Override
-        public boolean markApprovedExecuting(long transferHoldId, long actorId, LocalDateTime executingAt) {
-            return delegate.markApprovedExecuting(transferHoldId, actorId, executingAt);
+        public boolean markApprovedExecuting(
+                long transferHoldId, long actorId, LocalDateTime executingAt, LocalDateTime heldFrom) {
+            return delegate.markApprovedExecuting(transferHoldId, actorId, executingAt, heldFrom);
         }
 
         @Override

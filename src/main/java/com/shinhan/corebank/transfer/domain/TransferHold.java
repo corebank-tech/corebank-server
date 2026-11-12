@@ -188,6 +188,13 @@ public class TransferHold {
                 && this.amount == amount;
     }
 
+    /** 승인으로 푸는 HELD인데 heldFrom 전에 보류했으면 만료 대상이다. 실행 날짜가 보류한 날이라 지난 요청을 실행하지 않는다(#998). */
+    public boolean isOverdueApproval(LocalDateTime heldFrom) {
+        return status == TransferHoldStatus.HELD
+                && releaseMode == TransferHoldReleaseMode.ON_APPROVAL
+                && heldAt.isBefore(heldFrom);
+    }
+
     /** 고객이 취소할 수 있는 마지막 시각. 승인으로 푸는 보류는 시각이 없어 null이다. */
     public LocalDateTime cancellableUntil() {
         return releaseAt == null ? null : releaseAt.minus(CANCEL_CUTOFF);
