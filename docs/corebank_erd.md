@@ -427,6 +427,34 @@ erDiagram
         bigint customer_id "소유 고객"
         datetime created_at
     }
+    fds_investigation_job {
+        bigint transfer_hold_id PK "P4 보류 ID"
+        char investigation_id UK "안정적인 조사 UUID"
+        varchar job_status "PENDING/RUNNING/COMPLETED/FAILED"
+        int attempt_count "0~3"
+        datetime next_attempt_at
+        datetime lease_expires_at
+        varchar last_failure_reason
+        datetime created_at
+        datetime updated_at
+    }
+    fds_investigation_evidence {
+        char investigation_id PK,FK
+        bigint ref_id PK "Agent에게 제공한 transfer ID"
+        bigint transfer_hold_id
+        bigint customer_id
+        datetime range_from
+        datetime range_to
+        datetime provided_at
+    }
+    fds_investigation_report {
+        char investigation_id PK,FK
+        bigint transfer_hold_id UK
+        varchar schema_version
+        text report_json "최대 16 KiB"
+        char report_sha256 "SHA-256"
+        datetime created_at
+    }
     delayed_transfer_setting {
         bigint customer_id PK "고객당 1행. 없으면 꺼짐"
         boolean enabled
@@ -871,6 +899,9 @@ erDiagram
     fds_behavior_flow ||--o{ fds_behavior_event : "행동 이벤트"
     fds_behavior_flow ||--o| fds_transfer_behavior_flow : "성공 이체 연결"
     transfer_hold |o..o| fds_behavior_score : "보류 후 보조 점수 (FK 없음)"
+    transfer_hold |o..o| fds_investigation_job : "Agent 조사 작업 (FK 없음)"
+    fds_investigation_job ||--o{ fds_investigation_evidence : "제공 근거"
+    fds_investigation_job ||--o| fds_investigation_report : "확정 보고서"
     customer ||..o| delayed_transfer_setting : "지연이체 설정 (FK 없음)"
 ```
 

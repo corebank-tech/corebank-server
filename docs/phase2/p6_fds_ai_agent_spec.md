@@ -461,9 +461,12 @@ fds_behavior_score (#951 소유)
   transfer_hold_id (PK), flow_id, score_status, score_attempt_started_at
   behavior_risk_score, model_version, feature_version, unavailable_reason, created_at, updated_at
 
-P6 조사 작업 (테이블명 미정)
+P6 조사 작업 (`fds_investigation_job`)
   transfer_hold_id (UNIQUE), investigation_id (안정적인 작업 ID), 상태, 시도 횟수, 다음 재시도 시각,
   작업 임대 만료 시각
+
+P6 조사 근거·보고서 (`fds_investigation_evidence`, `fds_investigation_report`)
+  Agent에게 실제 제공한 ref_id와 조회 범위, investigation_id당 검증 완료 보고서 한 건
 
 `fds_behavior_score`의 생성·선점·종료·재전달·복구는 #951 점수 리스너와 점수 복구 작업의 책임이다. B4는 별도 조사 작업의 등록·임대·재시도·보고서 저장만 담당하며 점수 상태를 변경하지 않는다. 따라서 점수 리스너가 B4 조사 작업보다 먼저 실행되어도 점수 저장 행이 보장되고, 조사 작업의 실패만으로 점수를 `UNAVAILABLE`로 마감하지 않는다.
 

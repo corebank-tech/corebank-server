@@ -9,6 +9,7 @@ import com.shinhan.corebank.fds.api.BehaviorFlowMappingUseCase;
 import com.shinhan.corebank.fds.application.port.out.BehaviorFlowPort;
 import com.shinhan.corebank.fds.application.port.out.BehaviorScoreInferencePort.Score;
 import com.shinhan.corebank.fds.application.port.out.BehaviorScorePort;
+import com.shinhan.corebank.fds.application.port.out.FdsInvestigationJobPort;
 import com.shinhan.corebank.fds.application.service.BehaviorFlowService;
 import com.shinhan.corebank.fds.application.service.BehaviorFlowService.Batch;
 import com.shinhan.corebank.fds.application.service.BehaviorFlowService.EventInput;
@@ -41,7 +42,35 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
     private BehaviorFlowMappingUseCase mappings;
 
     @Autowired
+    private FdsInvestigationJobPort investigationJobs;
+
+    @Autowired
     private JdbcTemplate jdbc;
+
+    @Test
+    void investigationJobKeepsStableIdAndCompletesWithOneReport() {
+        long holdId = 992000000L + Math.abs(UUID.randomUUID().getLeastSignificantBits() % 1000000);
+        String firstId = UUID.randomUUID().toString();
+        String replayId = UUID.randomUUID().toString();
+        LocalDateTime now = LocalDateTime.now();
+
+        assertThat(investigationJobs.createIfAbsent(holdId, firstId, now).investigationId())
+                .isEqualTo(firstId);
+        assertThat(investigationJobs.createIfAbsent(holdId, replayId, now).investigationId())
+                .isEqualTo(firstId);
+        assertThat(investigationJobs.claim(holdId, now, now.plusSeconds(70))).isTrue();
+        assertThat(investigationJobs.claim(holdId, now, now.plusSeconds(70))).isFalse();
+
+        investigationJobs.completeWithReport(
+                holdId, firstId, "p6-investigation-v1", "{\"result\":\"ok\"}", "a".repeat(64), now);
+
+        assertThat(investigationJobs.findByHoldId(holdId).status()).isEqualTo("COMPLETED");
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_investigation_report WHERE investigation_id=?",
+                        Integer.class,
+                        firstId))
+                .isEqualTo(1);
+    }
 
     @Test
     void finalBatchIsAtomicAndReplayDoesNotDuplicateEvents() {

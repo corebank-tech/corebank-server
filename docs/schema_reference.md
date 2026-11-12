@@ -97,6 +97,9 @@
 | 69 | `fds_behavior_event` | 행동 이벤트 | P6 | 6 |
 | 70 | `fds_behavior_score` | 보류 후 행동 점수 | P6 | 10 |
 | 71 | `fds_transfer_behavior_flow` | 성공 이체-행동 흐름 매핑 | P6 | 4 |
+| 72 | `fds_investigation_job` | Agent 조사 작업·임대·재시도 | P6 | 9 |
+| 73 | `fds_investigation_evidence` | Agent에게 제공한 이체 근거 | P6 | 7 |
+| 74 | `fds_investigation_report` | 검증 완료된 Agent 조사 보고서 | P6 | 6 |
 
 ---
 
@@ -1889,6 +1892,16 @@ P6이 행동 흐름과 보류 후 보조 점수를 소유한다. `transfer_hold`
 | `fds_behavior_event` | `flow_id CHAR(36)`, `seq_no INT`, `event_type VARCHAR(30)`, `occurred_at DATETIME(6)`, `step_code VARCHAR(4)`, `received_at DATETIME(6)` | PK `(flow_id, seq_no)`, `flow_id`는 flow FK, 순번 1~100 |
 | `fds_behavior_score` | `transfer_hold_id BIGINT` PK, `flow_id CHAR(36)` NULL, `score_status VARCHAR(12)`, `behavior_risk_score DOUBLE` NULL, `model_version`·`feature_version VARCHAR(80)` NULL, `unavailable_reason VARCHAR(40)` NULL, `score_attempt_started_at`·`created_at`·`updated_at DATETIME(6)` | `ix_fds_behavior_score_status(score_status, score_attempt_started_at)`, 점수 0~1 또는 NULL |
 | `fds_transfer_behavior_flow` | `ref_id BIGINT` PK, `flow_id CHAR(36)`, `customer_id BIGINT`, `created_at DATETIME(6)` | `uk_fds_transfer_behavior_flow_flow(flow_id)`, `flow_id`는 행동 흐름 FK; 성공 이체와 흐름을 일대일로 연결 |
+
+## `fds_investigation_job` · `fds_investigation_evidence` · `fds_investigation_report` (#992)
+
+P6 Agent 조사는 점수 처리와 별도 작업으로 등록한다. 보류 상태와 원장에는 쓰지 않으며 조건부 갱신과 임대로 중복 실행을 막는다.
+
+| 테이블 | 주요 컬럼 | 제약·인덱스 |
+| --- | --- | --- |
+| `fds_investigation_job` | `transfer_hold_id BIGINT` PK, `investigation_id CHAR(36)`, `job_status VARCHAR(12)`, `attempt_count INT`, `next_attempt_at`·`lease_expires_at DATETIME(6)`, `last_failure_reason VARCHAR(40)`, `created_at`·`updated_at DATETIME(6)` | `investigation_id` UK, `(job_status, next_attempt_at, lease_expires_at)` 인덱스, 상태·시도 횟수 CHECK |
+| `fds_investigation_evidence` | `investigation_id CHAR(36)`, `ref_id BIGINT`, `transfer_hold_id BIGINT`, `customer_id BIGINT`, `range_from`·`range_to`·`provided_at DATETIME(6)` | PK `(investigation_id, ref_id)`, 조사 작업 FK |
+| `fds_investigation_report` | `investigation_id CHAR(36)` PK, `transfer_hold_id BIGINT`, `schema_version VARCHAR(30)`, `report_json MEDIUMTEXT`, `report_sha256 CHAR(64)`, `created_at DATETIME(6)` | `transfer_hold_id` UK, 조사 작업 FK; 같은 ID의 다른 보고서는 해시 충돌로 거부 |
 
 ## `holiday`
 

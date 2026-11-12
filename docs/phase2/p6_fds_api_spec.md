@@ -292,7 +292,7 @@ URL: `/api/v1/internal/fds/investigations/{investigationId}/report`
 사용자: 시스템
 인증 필요: Y
 Idempotency-Key: Y
-기타: `Authorization: Bearer <Agent 서비스 토큰>` 필수. 전용 stateless 체인·발표 VM의 사설 Compose 브리지로 보호하고 호스트 분리 시 내부 TLS를 적용한다. 이 경로에서만 CSRF 제외. 본문 최대 16 KiB. 같은 조사 ID·같은 본문은 재전달해도 보고서 1개, 다른 본문은 충돌. 실제 근거 이체 ID를 BE에서 검증한다. 조사 작업은 같은 ID로 총 3회(즉시·1분 뒤·5분 뒤) 시도한다. **60초는 각 시도의 Agent 실행 제한이며 재시도 대기 시간은 제외한다.** 각 Tool HTTP 호출 제한은 5초다. 최종 실패는 **P6 조사 상태만 `FAILED`**, P4 이체 보류 상태는 `HELD`를 유지한다. `HELD`는 `transfer.status`가 아니다. 아직 미구현.
+기타: `Authorization: Bearer <Agent 서비스 토큰>` 필수. 전용 stateless 체인·발표 VM의 사설 Compose 브리지로 보호하고 호스트 분리 시 내부 TLS를 적용한다. 이 경로에서만 CSRF 제외. 본문 최대 16 KiB. 같은 조사 ID·같은 본문은 재전달해도 보고서 1개, 다른 본문은 충돌. 실제 근거 이체 ID를 BE에서 검증한다. 조사 작업은 같은 ID로 총 3회(즉시·1분 뒤·5분 뒤) 시도한다. **60초는 각 시도의 Agent 실행 제한이며 재시도 대기 시간은 제외한다.** 각 Tool HTTP 호출 제한은 5초다. 최종 실패는 **P6 조사 상태만 `FAILED`**, P4 이체 보류 상태는 `HELD`를 유지한다. `HELD`는 `transfer.status`가 아니다. #992에서 조사 작업·임대·보고서 저장 기반을 추가했으며, 실제 엔드포인트와 근거 ID 검증은 Python 조사 API 및 #994 계약 반영 뒤 완료한다.
 
 ### 요구사항 ID
 
