@@ -51,7 +51,11 @@ public class TransferHoldService implements TransferHoldUseCase {
                 hold.getHeldAt(),
                 hold.getAmount(),
                 hold.getDepositAccountNumber(),
-                hold.getPolicyCode());
+                hold.getPolicyCode(),
+                hold.getPolicyCount10m(),
+                hold.getPolicyAmount10m(),
+                hold.getPolicyHesitationInWindow(),
+                hold.getPolicyNewRecipientAtWindowStart());
     }
 
     /** 관리자 승인(FDS). 승인으로 푸는 보류만 실행한다. 시각으로 푸는 보류는 TRF0310이다. */

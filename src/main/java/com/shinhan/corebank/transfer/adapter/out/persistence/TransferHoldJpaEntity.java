@@ -60,6 +60,18 @@ public class TransferHoldJpaEntity {
     @Column(name = "policy_code", nullable = false, length = 30)
     private String policyCode;
 
+    @Column(name = "policy_count_10m")
+    private Integer policyCount10m;
+
+    @Column(name = "policy_amount_10m")
+    private Long policyAmount10m;
+
+    @Column(name = "policy_hesitation_in_window")
+    private Boolean policyHesitationInWindow;
+
+    @Column(name = "policy_new_recipient_at_window_start")
+    private Boolean policyNewRecipientAtWindowStart;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "release_mode", nullable = false, length = 12)
     private TransferHoldReleaseMode releaseMode;

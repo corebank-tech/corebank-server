@@ -15,12 +15,13 @@ Spring Boot 프로세스에도 같은 토큰을 비공개 환경변수로 주입
 
 ```powershell
 $env:APP_FDS_SCORE_ENABLED = 'true'
+$env:APP_FDS_POLICY_ENABLED = 'true'
 $env:APP_FDS_SCORE_BASE_URL = 'http://127.0.0.1:8000'
 $env:FDS_SCORE_SERVICE_TOKEN = '<Python과 같은 비공개 토큰>'
 ./gradlew bootRun
 ```
 
-BE → Python 연결 제한은 1초, 호출 전체 제한은 5초다. Python 추론 자체는 3초 제한이다. 같은 보류 ID의 추론 시작 표식을 먼저 커밋하며 재전달 시 다시 호출하지 않는다. 1분 이상 `PENDING`인 시작 작업은 1분 간격 복구 작업이 `SCORING_INTERRUPTED`로 닫는다. `APP_FDS_SCORE_ENABLED` 기본값은 `false`다.
+BE → Python 연결 제한은 1초, 호출 전체 제한은 5초다. Python 추론 자체는 3초 제한이다. 같은 보류 ID의 추론 시작 표식을 먼저 커밋하며 재전달 시 다시 호출하지 않는다. 1분 이상 `PENDING`인 시작 작업은 1분 간격 복구 작업이 `SCORING_INTERRUPTED`로 닫는다. `APP_FDS_SCORE_ENABLED`와 원장 전 정책 A/B를 켜는 `APP_FDS_POLICY_ENABLED`의 기본값은 모두 `false`다.
 
 ```powershell
 ./gradlew test --tests '*BehaviorFlowServiceTest' --tests '*BehaviorScoreServiceTest' --tests '*FastApiBehaviorScoreClientTest'

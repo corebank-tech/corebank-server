@@ -27,5 +27,13 @@ public record FdsHoldDetail(
         String investigationStatus,
         List<Object> secondaryFindings,
         List<Object> callRecords) {
-    public record ServerPolicy(String policyCode) {}
+    public record ServerPolicy(
+            @Schema(
+                            description = "원장 기표 전에 성립한 서버 정책",
+                            allowableValues = {"A", "B"})
+                    String policyCode,
+            @Schema(description = "현재 요청을 한 번 포함한 동일 수취계좌 10분 이체 건수") Integer count10m,
+            @Schema(description = "현재 요청을 한 번 포함한 동일 수취계좌 10분 누적액(원)") Long amount10m,
+            @Schema(description = "현재 또는 반복 묶음의 검증 행동 흐름에서 확인된 망설임") Boolean hesitationInWindow,
+            @Schema(description = "반복 묶음 첫 성공 이체 이전에 같은 수취인 성공 이력이 없는지") Boolean newRecipientAtWindowStart) {}
 }

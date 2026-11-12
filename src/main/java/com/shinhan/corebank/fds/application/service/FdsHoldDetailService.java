@@ -47,7 +47,12 @@ public class FdsHoldDetailService {
                 hold.status(),
                 hold.amount(),
                 mask(hold.depositAccountNumber()),
-                new FdsHoldDetail.ServerPolicy(hold.policyCode()),
+                new FdsHoldDetail.ServerPolicy(
+                        hold.policyCode(),
+                        hold.policyCount10m(),
+                        hold.policyAmount10m(),
+                        hold.policyHesitationInWindow(),
+                        hold.policyNewRecipientAtWindowStart()),
                 null,
                 score == null ? "PENDING" : score.status(),
                 available ? score.behaviorRiskScore() : null,

@@ -20,6 +20,10 @@ public class TransferHoldMapper {
                 .channel(domain.getChannel())
                 .flowId(domain.getFlowId())
                 .policyCode(domain.getPolicyCode())
+                .policyCount10m(domain.getPolicyCount10m())
+                .policyAmount10m(domain.getPolicyAmount10m())
+                .policyHesitationInWindow(domain.getPolicyHesitationInWindow())
+                .policyNewRecipientAtWindowStart(domain.getPolicyNewRecipientAtWindowStart())
                 .releaseMode(domain.getReleaseMode())
                 .releaseAt(domain.getReleaseAt())
                 .status(domain.getStatus())
@@ -41,6 +45,10 @@ public class TransferHoldMapper {
                 entity.getChannel(),
                 entity.getFlowId(),
                 entity.getPolicyCode(),
+                entity.getPolicyCount10m(),
+                entity.getPolicyAmount10m(),
+                entity.getPolicyHesitationInWindow(),
+                entity.getPolicyNewRecipientAtWindowStart(),
                 entity.getReleaseMode(),
                 entity.getReleaseAt(),
                 entity.getStatus(),

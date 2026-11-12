@@ -11,4 +11,33 @@ public record TransferHoldForFds(
         LocalDateTime heldAt,
         long amount,
         String depositAccountNumber,
-        String policyCode) {}
+        String policyCode,
+        Integer policyCount10m,
+        Long policyAmount10m,
+        Boolean policyHesitationInWindow,
+        Boolean policyNewRecipientAtWindowStart) {
+
+    public TransferHoldForFds(
+            long transferHoldId,
+            long customerId,
+            String flowId,
+            String status,
+            LocalDateTime heldAt,
+            long amount,
+            String depositAccountNumber,
+            String policyCode) {
+        this(
+                transferHoldId,
+                customerId,
+                flowId,
+                status,
+                heldAt,
+                amount,
+                depositAccountNumber,
+                policyCode,
+                null,
+                null,
+                null,
+                null);
+    }
+}

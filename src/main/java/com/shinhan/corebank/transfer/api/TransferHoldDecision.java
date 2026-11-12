@@ -13,9 +13,18 @@ import java.time.LocalDateTime;
  * @param releaseAt   AT_TIME일 때 실행할 시각. 그 밖에는 null
  */
 public record TransferHoldDecision(
-        boolean hold, String policyCode, TransferHoldReleaseMode releaseMode, LocalDateTime releaseAt) {
+        boolean hold,
+        String policyCode,
+        TransferHoldReleaseMode releaseMode,
+        LocalDateTime releaseAt,
+        TransferHoldEvidence evidence) {
 
-    private static final TransferHoldDecision PROCEED = new TransferHoldDecision(false, null, null, null);
+    private static final TransferHoldDecision PROCEED = new TransferHoldDecision(false, null, null, null, null);
+
+    public TransferHoldDecision(
+            boolean hold, String policyCode, TransferHoldReleaseMode releaseMode, LocalDateTime releaseAt) {
+        this(hold, policyCode, releaseMode, releaseAt, null);
+    }
 
     // 구현체가 값을 잘못 조합한 건 고객 입력 오류가 아니라 내부 결함이라 INTERNAL_ERROR로 막는다
     public TransferHoldDecision {
@@ -24,7 +33,7 @@ public record TransferHoldDecision(
                         && !policyCode.isBlank()
                         && releaseMode != null
                         && (releaseMode == TransferHoldReleaseMode.AT_TIME) == (releaseAt != null)
-                : policyCode == null && releaseMode == null && releaseAt == null;
+                : policyCode == null && releaseMode == null && releaseAt == null && evidence == null;
         if (!valid) {
             throw new BusinessException(CommonErrorCode.INTERNAL_ERROR);
         }
@@ -35,10 +44,14 @@ public record TransferHoldDecision(
     }
 
     public static TransferHoldDecision holdUntil(String policyCode, LocalDateTime releaseAt) {
-        return new TransferHoldDecision(true, policyCode, TransferHoldReleaseMode.AT_TIME, releaseAt);
+        return new TransferHoldDecision(true, policyCode, TransferHoldReleaseMode.AT_TIME, releaseAt, null);
     }
 
     public static TransferHoldDecision holdForApproval(String policyCode) {
-        return new TransferHoldDecision(true, policyCode, TransferHoldReleaseMode.ON_APPROVAL, null);
+        return new TransferHoldDecision(true, policyCode, TransferHoldReleaseMode.ON_APPROVAL, null, null);
+    }
+
+    public static TransferHoldDecision holdForApproval(String policyCode, TransferHoldEvidence evidence) {
+        return new TransferHoldDecision(true, policyCode, TransferHoldReleaseMode.ON_APPROVAL, null, evidence);
     }
 }
