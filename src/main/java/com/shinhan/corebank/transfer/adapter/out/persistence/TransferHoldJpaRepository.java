@@ -26,6 +26,17 @@ public interface TransferHoldJpaRepository extends JpaRepository<TransferHoldJpa
             """)
     List<Long> findReleasableIds(@Param("now") LocalDateTime now, Limit limit);
 
+    // status가 앞 컬럼인 ix_transfer_hold_status_release로 HELD만 좁힌다. HELD는 하루 수십 건 규모다
+    @Query(
+            """
+            SELECT h.transferHoldId FROM TransferHoldJpaEntity h
+             WHERE h.status = com.shinhan.corebank.transfer.domain.TransferHoldStatus.HELD
+               AND h.releaseMode = com.shinhan.corebank.transfer.api.TransferHoldReleaseMode.ON_APPROVAL
+               AND h.heldAt < :heldBefore
+             ORDER BY h.heldAt
+            """)
+    List<Long> findOverdueApprovalIds(@Param("heldBefore") LocalDateTime heldBefore, Limit limit);
+
     @Query(
             """
             SELECT h.transferHoldId FROM TransferHoldJpaEntity h
@@ -73,11 +84,13 @@ public interface TransferHoldJpaRepository extends JpaRepository<TransferHoldJpa
              WHERE h.transferHoldId = :transferHoldId
                AND h.status = com.shinhan.corebank.transfer.domain.TransferHoldStatus.HELD
                AND h.releaseMode = com.shinhan.corebank.transfer.api.TransferHoldReleaseMode.ON_APPROVAL
+               AND h.heldAt >= :heldFrom
             """)
     int markApprovedExecuting(
             @Param("transferHoldId") long transferHoldId,
             @Param("actorId") long actorId,
-            @Param("executingAt") LocalDateTime executingAt);
+            @Param("executingAt") LocalDateTime executingAt,
+            @Param("heldFrom") LocalDateTime heldFrom);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional

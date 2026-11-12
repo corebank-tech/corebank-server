@@ -41,6 +41,11 @@ public class TransferHoldPersistenceAdapter implements TransferHoldPort {
     }
 
     @Override
+    public List<Long> findOverdueApprovalIds(LocalDateTime heldBefore, int limit) {
+        return repository.findOverdueApprovalIds(heldBefore, Limit.of(limit));
+    }
+
+    @Override
     public List<Long> findStuckExecutingIds(LocalDateTime executingBefore, int limit) {
         return repository.findStuckExecutingIds(executingBefore, Limit.of(limit));
     }
@@ -51,8 +56,9 @@ public class TransferHoldPersistenceAdapter implements TransferHoldPort {
     }
 
     @Override
-    public boolean markApprovedExecuting(long transferHoldId, long actorId, LocalDateTime executingAt) {
-        return repository.markApprovedExecuting(transferHoldId, actorId, executingAt) == 1;
+    public boolean markApprovedExecuting(
+            long transferHoldId, long actorId, LocalDateTime executingAt, LocalDateTime heldFrom) {
+        return repository.markApprovedExecuting(transferHoldId, actorId, executingAt, heldFrom) == 1;
     }
 
     @Override
