@@ -26,6 +26,9 @@
 | 14:40 | `ReplaceUnhealthy` 중단, `i-0df4f11f…` 대상 그룹 등록 취소 | 대상 그룹 1대 healthy, ASG 2대 InService 유지 |
 | 14:42 | 1대 상태에서 20초 시험(1/s) | 21/21 성공, 이체 중앙값 215ms |
 | 14:43 | `i-0df4f11f…` 재등록, `ReplaceUnhealthy` 재개 | 대상 그룹 2대 healthy, 중단 프로세스 없음 |
+| 15:27 | `ReplaceUnhealthy` 중단, `i-0df4f11f…` 대상 그룹 등록 취소(1대 구간 시작) | 대상 그룹 1대 healthy, ASG 2대 InService 유지 |
+| 15:59 | `i-0df4f11f…` 재등록, `ReplaceUnhealthy` 재개(1대 구간 끝) | 대상 그룹 2대 healthy, ASG 2대 InService·Healthy, 희망 용량 2, 중단 프로세스 없음, 1대 구간 동안 서버 교체 없음(마지막 ASG 활동 11/11 13:50) |
+| 16:11 | 측정 끝, 정합성 판정 | §6 |
 
 ## 3. 핫스팟 회차(2대)
 
