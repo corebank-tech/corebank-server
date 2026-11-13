@@ -19,7 +19,19 @@ public class FdsInvestigationInputService {
 
     public FdsInvestigationInput build(long holdId, String investigationId) {
         TransferHoldForFds hold = holds.findForFds(holdId);
-        BehaviorScoreView score = scores.find(holdId);
+        FdsInvestigationInput.BehaviorSummary behavior = behaviorSummary(hold);
+        return new FdsInvestigationInput(
+                investigationId,
+                holdId,
+                hold.policyCode(),
+                new FdsInvestigationInput.PolicyEvidence(
+                        requiredCount(hold.policyCount10m()), requiredAmount(hold.policyAmount10m())),
+                behavior,
+                new FdsInvestigationInput.TransferSummary(hold.amount(), mask(hold.depositAccountNumber())));
+    }
+
+    public FdsInvestigationInput.BehaviorSummary behaviorSummary(TransferHoldForFds hold) {
+        BehaviorScoreView score = scores.find(hold.transferHoldId());
         BehaviorFlowPort.Flow flow = hold.flowId() == null ? null : flows.find(hold.flowId());
         int back = 0;
         int revisions = 0;
@@ -31,7 +43,7 @@ public class FdsInvestigationInputService {
         }
         boolean hasFlow = flow != null && flow.customerId() == hold.customerId() && flow.finalizedAt() != null;
         boolean available = score != null && "AVAILABLE".equals(score.status());
-        FdsInvestigationInput.BehaviorSummary behavior = new FdsInvestigationInput.BehaviorSummary(
+        return new FdsInvestigationInput.BehaviorSummary(
                 hasFlow ? back : null,
                 hasFlow ? revisions : null,
                 hasFlow ? flow.confirmActiveSeconds() : null,
@@ -39,12 +51,16 @@ public class FdsInvestigationInputService {
                 available ? score.behaviorRiskScore() : null,
                 available ? score.modelVersion() : null,
                 available ? score.featureVersion() : null);
-        return new FdsInvestigationInput(
-                investigationId,
-                holdId,
-                hold.policyCode(),
-                behavior,
-                new FdsInvestigationInput.TransferSummary(hold.amount(), mask(hold.depositAccountNumber())));
+    }
+
+    private static int requiredCount(Integer value) {
+        if (value == null || value < 1) throw new IllegalStateException("FDS 정책 횟수 근거가 없습니다.");
+        return value;
+    }
+
+    private static long requiredAmount(Long value) {
+        if (value == null || value < 1) throw new IllegalStateException("FDS 정책 금액 근거가 없습니다.");
+        return value;
     }
 
     private static String mask(String accountNumber) {

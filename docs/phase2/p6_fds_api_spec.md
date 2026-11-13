@@ -366,7 +366,7 @@ URL: `/api/v1/admin/fds/holds`
 사용자: 관리자
 인증 필요: Y
 Idempotency-Key: N
-기타: `CUSTOMER_READ` 권한. `X-Access-Reason` 유효값 필수, 조회 감사 기록. 수취계좌 마스킹. 아직 미구현.
+기타: `CUSTOMER_READ` 권한. `X-Access-Reason` 유효값 필수, 조회 감사 기록. 수취계좌 마스킹. P6 조사 사건을 기준으로 P4 공개 `findForFds` 원본과 저장된 조사·위험·콜·조치 상태를 결합한다.
 
 ### 요구사항 ID
 
@@ -410,7 +410,7 @@ Idempotency-Key: N
 | `data.items[].riskAccountCheck.status` | 위험 계좌 조회 상태 | String(ENUM) | `MATCH`, `NO_MATCH`, `UNAVAILABLE`; 조회 시점 안내값 | X | `"MATCH"` |
 | `data.items[].riskAccountCheck.label` | 관리자 목록 표시 문구 | String | 근거 ID·버전은 상세에서 제공 | X | `"위험 계좌 목록과 일치"` |
 
-목록은 `heldAt ASC, transferHoldId ASC`로 정렬한다. `all=true`는 최대 100건이며 초과하면 `CMN0006`이다. 전체 조회 응답의 `page=0`, `size=totalCount`, `totalPages=1`은 공통 목록 규약을 따른다. 조회 상태는 목록을 만든 시점의 참고값이고 관리자 조치 전에 서버가 다시 판정한다. 위험 조회만 실패하면 해당 항목의 상태를 `UNAVAILABLE`로 반환한다. 보류 원본 조회나 감사 저장 실패는 성공 목록으로 반환하지 않는다.
+목록은 `heldAt DESC, transferHoldId DESC` 최신순으로 정렬하고 `page`·`size(1~100)`를 적용한다. 조회 상태는 목록을 만든 시점의 참고값이고 관리자 조치 전에 서버가 다시 판정한다. 위험 조회만 실패하면 해당 항목의 상태를 `UNAVAILABLE`로 반환한다. 보류 원본 조회나 감사 저장 실패는 성공 목록으로 반환하지 않는다.
 
 **Example**
 

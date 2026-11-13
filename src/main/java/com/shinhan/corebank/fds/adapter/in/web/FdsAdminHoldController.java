@@ -4,7 +4,9 @@ import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
 import com.shinhan.corebank.common.audit.AccessReason;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.fds.api.FdsHoldDetail;
+import com.shinhan.corebank.fds.api.FdsHoldListPage;
 import com.shinhan.corebank.fds.application.service.FdsHoldDetailService;
+import com.shinhan.corebank.fds.application.service.FdsHoldListService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 관리자에게 보류 원본과 서버에 저장된 행동 점수를 제공한다. */
@@ -25,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "FDS 관리자", description = "보류 상세 조회")
 public class FdsAdminHoldController {
     private final FdsHoldDetailService detail;
+    private final FdsHoldListService list;
     private final CurrentCustomerProvider currentCustomer;
 
     @GetMapping("/{transferHoldId}")
@@ -38,5 +42,31 @@ public class FdsAdminHoldController {
             HttpServletRequest request) {
         return ApiResponse.success(detail.get(
                 transferHoldId, currentCustomer.getCurrentCustomerId(), request.getRemoteAddr(), accessReason));
+    }
+
+    @GetMapping
+    @Operation(summary = "FDS 보류 거래 목록", description = "최신 조사 사건을 위험·조사·처리 상태와 함께 페이지로 조회합니다.")
+    public ApiResponse<FdsHoldListPage> list(
+            @RequestParam(defaultValue = "0") @jakarta.validation.constraints.Min(0) int page,
+            @RequestParam(defaultValue = "20")
+                    @jakarta.validation.constraints.Min(1)
+                    @jakarta.validation.constraints.Max(100)
+                    int size,
+            @RequestParam(required = false) String holdStatus,
+            @RequestParam(required = false) String policyCode,
+            @RequestParam(required = false) String riskStatus,
+            @RequestParam(required = false) String investigationStatus,
+            @RequestHeader(AccessReason.HEADER) AccessReason accessReason,
+            HttpServletRequest request) {
+        return ApiResponse.success(list.find(
+                page,
+                size,
+                holdStatus,
+                policyCode,
+                riskStatus,
+                investigationStatus,
+                currentCustomer.getCurrentCustomerId(),
+                request.getRemoteAddr(),
+                accessReason));
     }
 }

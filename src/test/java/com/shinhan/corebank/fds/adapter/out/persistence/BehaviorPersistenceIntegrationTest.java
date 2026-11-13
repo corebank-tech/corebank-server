@@ -9,7 +9,9 @@ import com.shinhan.corebank.fds.api.BehaviorFlowMappingUseCase;
 import com.shinhan.corebank.fds.application.port.out.BehaviorFlowPort;
 import com.shinhan.corebank.fds.application.port.out.BehaviorScoreInferencePort.Score;
 import com.shinhan.corebank.fds.application.port.out.BehaviorScorePort;
+import com.shinhan.corebank.fds.application.port.out.FdsAdminReadPort;
 import com.shinhan.corebank.fds.application.port.out.FdsInvestigationJobPort;
+import com.shinhan.corebank.fds.application.port.out.FdsInvestigationJobPort.HistorySnapshotItem;
 import com.shinhan.corebank.fds.application.service.BehaviorFlowService;
 import com.shinhan.corebank.fds.application.service.BehaviorFlowService.Batch;
 import com.shinhan.corebank.fds.application.service.BehaviorFlowService.EventInput;
@@ -45,6 +47,9 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
     private FdsInvestigationJobPort investigationJobs;
 
     @Autowired
+    private FdsAdminReadPort adminReads;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     @Test
@@ -62,6 +67,16 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
         assertThat(investigationJobs.claim(holdId, now, now.plusSeconds(70))).isFalse();
         investigationJobs.recordEvidence(firstId, holdId, 992001L, now.minusHours(24), now, List.of(101L), now);
         investigationJobs.recordEvidence(firstId, holdId, 992001L, now.minusHours(24), now, List.of(101L), now);
+        investigationJobs.recordHistorySnapshot(
+                firstId,
+                holdId,
+                992001L,
+                now.minusHours(24),
+                now,
+                true,
+                List.of(new HistorySnapshotItem(101L, 500_000L, now.minusMinutes(1), "***-**-0000")),
+                now);
+        investigationJobs.recordRecipientSnapshot(firstId, holdId, 992001L, now.minusDays(1), true, 2, now);
 
         investigationJobs.completeWithReport(
                 holdId, firstId, "p6-investigation-v1", "{\"result\":\"ok\"}", "a".repeat(64), now);
@@ -84,6 +99,12 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
                         String.class,
                         firstId))
                 .isEqualTo("a".repeat(64));
+        assertThat(adminReads.findToolResults(firstId).history().hasMore()).isTrue();
+        assertThat(adminReads.findToolResults(firstId).history().items()).hasSize(1);
+        assertThat(adminReads.findToolResults(firstId).recipient().otherWithdrawalAccountCount())
+                .isEqualTo(2);
+        assertThat(adminReads.findReport(firstId).schemaVersion()).isEqualTo("p6-investigation-v1");
+        assertThat(adminReads.findHoldIds()).contains(holdId);
     }
 
     @Test

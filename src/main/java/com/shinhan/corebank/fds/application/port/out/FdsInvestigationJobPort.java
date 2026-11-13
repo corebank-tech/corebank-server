@@ -32,6 +32,25 @@ public interface FdsInvestigationJobPort {
             List<Long> refIds,
             LocalDateTime now);
 
+    void recordHistorySnapshot(
+            String investigationId,
+            long transferHoldId,
+            long customerId,
+            LocalDateTime rangeFrom,
+            LocalDateTime rangeTo,
+            boolean hasMore,
+            List<HistorySnapshotItem> items,
+            LocalDateTime now);
+
+    void recordRecipientSnapshot(
+            String investigationId,
+            long transferHoldId,
+            long customerId,
+            LocalDateTime firstSucceededAt,
+            boolean hasSucceededBeforeWindow,
+            int otherWithdrawalAccountCount,
+            LocalDateTime now);
+
     Set<Long> findEvidenceIds(String investigationId);
 
     void completeWithReport(
@@ -41,4 +60,6 @@ public interface FdsInvestigationJobPort {
             String reportJson,
             String reportSha256,
             LocalDateTime now);
+
+    record HistorySnapshotItem(long refId, long amount, LocalDateTime transferredAt, String recipientAccountMasked) {}
 }

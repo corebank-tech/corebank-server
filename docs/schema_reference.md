@@ -100,6 +100,15 @@
 | 72 | `fds_investigation_job` | Agent 조사 작업·임대·재시도 | P6 | 9 |
 | 73 | `fds_investigation_evidence` | Agent에게 제공한 이체 근거 | P6 | 7 |
 | 74 | `fds_investigation_report` | 검증 완료된 Agent 조사 보고서 | P6 | 6 |
+| 75 | `fds_risk_dataset` | 위험 계좌 데이터셋 버전 | P6 | 6 |
+| 76 | `fds_risk_account` | 버전별 위험 계좌 | P6 | 7 |
+| 77 | `fds_risk_active_version` | 활성 위험 데이터셋 포인터 | P6 | 3 |
+| 78 | `fds_admin_call_record` | 관리자 고객 콜 결과 | P6 | 8 |
+| 79 | `fds_admin_action` | P4 호출 전 관리자 조치 의도 | P6 | 21 |
+| 80 | `fds_admin_action_audit` | 확정 관리자 조치 감사 | P6 | 13 |
+| 81 | `fds_investigation_history_snapshot` | 최근 이체 Tool 호출 스냅샷 | P6 | 7 |
+| 82 | `fds_investigation_history_item` | Agent에게 제공한 최근 이체 항목 | P6 | 5 |
+| 83 | `fds_investigation_recipient_snapshot` | 수취인 맥락 Tool 호출 스냅샷 | P6 | 7 |
 
 ---
 
@@ -1902,6 +1911,9 @@ P6 Agent 조사는 점수 처리와 별도 작업으로 등록한다. 보류 상
 | `fds_investigation_job` | `transfer_hold_id BIGINT` PK, `investigation_id CHAR(36)`, `job_status VARCHAR(12)`, `attempt_count INT`, `next_attempt_at`·`lease_expires_at DATETIME(6)`, `last_failure_reason VARCHAR(40)`, `created_at`·`updated_at DATETIME(6)` | `investigation_id` UK, `(job_status, next_attempt_at, lease_expires_at)` 인덱스, 상태·시도 횟수 CHECK |
 | `fds_investigation_evidence` | `investigation_id CHAR(36)`, `ref_id BIGINT`, `transfer_hold_id BIGINT`, `customer_id BIGINT`, `range_from`·`range_to`·`provided_at DATETIME(6)` | PK `(investigation_id, ref_id)`, 조사 작업 FK |
 | `fds_investigation_report` | `investigation_id CHAR(36)` PK, `transfer_hold_id BIGINT`, `schema_version VARCHAR(30)`, `report_json MEDIUMTEXT`, `report_sha256 CHAR(64)`, `created_at DATETIME(6)` | `transfer_hold_id` UK, 조사 작업 FK; 같은 ID의 다른 보고서는 해시 충돌로 거부 |
+| `fds_investigation_history_snapshot` | 조사·보류·고객 ID, 조회 기간, `has_more`, 제공 시각 | 조사 ID PK·FK; 빈 결과도 Tool 실행 사실을 보존 |
+| `fds_investigation_history_item` | 조사 ID, `ref_id`, 금액, 이체 시각, 마스킹 수취계좌 | PK `(investigation_id, ref_id)`; 관리자 조회에서 P4를 재호출하지 않음 |
+| `fds_investigation_recipient_snapshot` | 조사·보류·고객 ID, 최초 성공 시각, 구간 이전 성공 여부, 다른 출금계좌 수, 제공 시각 | 조사 ID PK·FK; 집계 결과만 저장하고 허위 refId는 만들지 않음 |
 
 ## `holiday`
 

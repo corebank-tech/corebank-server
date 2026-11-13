@@ -160,6 +160,8 @@ public enum TransferHoldCloseReason { CANCELLED, EXPIRED }
 
 **보고서 입력 상한:** JSON 본문 최대 16 KiB, `secondaryFindings` 최대 4건, 각 `description` 1~300자, 항목별 `evidenceTransferIds` 최대 10개다. `missingInformation` 최대 5개(각 1~100자), `suggestedQuestions` 최대 3개(각 1~200자), `summary` 1~500자다. 배열이 비어 있으면 `[]`를 보낸다. 근거 ID가 있는 경우 Tool에서 실제 조회한 해당 고객 이체만 허용하고, 근거가 집계값뿐이면 ID를 만들지 않고 빈 배열과 `missingInformation`으로 한계를 설명한다. Agent의 문자열은 관리자 화면에서 텍스트로 렌더링하고 실행 지시로 처리하지 않는다.
 
+**관리자 조회 스냅샷:** P6은 Tool 응답을 Agent에게 반환하기 전에 조사 ID·보류 ID·고객·조회 기간과 함께 내구화한다. 최근 이체는 금액·시각·마스킹 계좌·`hasMore`, 수취인 맥락은 최초 성공 시각·반복 구간 이전 성공 여부·다른 출금계좌 수를 저장한다. 관리자 목록·상세은 저장 스냅샷을 읽고 P4 Tool을 다시 호출하지 않는다.
+
 ## 6. 관리자 API 계약 초안
 
 | 화면·행동 | 제안 요청 | 필수 검증·응답 |

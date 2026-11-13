@@ -164,6 +164,77 @@ public class JdbcFdsInvestigationJobAdapter implements FdsInvestigationJobPort {
     }
 
     @Override
+    @Transactional
+    public void recordHistorySnapshot(
+            String investigationId,
+            long holdId,
+            long customerId,
+            LocalDateTime rangeFrom,
+            LocalDateTime rangeTo,
+            boolean hasMore,
+            List<HistorySnapshotItem> items,
+            LocalDateTime now) {
+        recordEvidence(
+                investigationId,
+                holdId,
+                customerId,
+                rangeFrom,
+                rangeTo,
+                items.stream().map(HistorySnapshotItem::refId).toList(),
+                now);
+        jdbc.update(
+                "INSERT INTO fds_investigation_history_snapshot "
+                        + "(investigation_id,transfer_hold_id,customer_id,range_from,range_to,has_more,provided_at) "
+                        + "VALUES (?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE investigation_id=investigation_id",
+                investigationId,
+                holdId,
+                customerId,
+                timestamp(rangeFrom),
+                timestamp(rangeTo),
+                hasMore,
+                timestamp(now));
+        for (HistorySnapshotItem item : items) {
+            jdbc.update(
+                    "INSERT INTO fds_investigation_history_item "
+                            + "(investigation_id,ref_id,amount,transferred_at,recipient_account_masked) VALUES (?,?,?,?,?) "
+                            + "ON DUPLICATE KEY UPDATE ref_id=ref_id",
+                    investigationId,
+                    item.refId(),
+                    item.amount(),
+                    timestamp(item.transferredAt()),
+                    item.recipientAccountMasked());
+        }
+    }
+
+    @Override
+    @Transactional
+    public void recordRecipientSnapshot(
+            String investigationId,
+            long holdId,
+            long customerId,
+            LocalDateTime firstSucceededAt,
+            boolean hasSucceededBeforeWindow,
+            int otherWithdrawalAccountCount,
+            LocalDateTime now) {
+        FdsInvestigationJob job = findByInvestigationId(investigationId);
+        if (job == null || job.transferHoldId() != holdId || otherWithdrawalAccountCount < 0) {
+            throw new BusinessException(FdsErrorCode.NOT_FOUND);
+        }
+        jdbc.update(
+                "INSERT INTO fds_investigation_recipient_snapshot "
+                        + "(investigation_id,transfer_hold_id,customer_id,first_succeeded_at,succeeded_before_window,"
+                        + "other_withdrawal_account_count,provided_at) VALUES (?,?,?,?,?,?,?) "
+                        + "ON DUPLICATE KEY UPDATE investigation_id=investigation_id",
+                investigationId,
+                holdId,
+                customerId,
+                firstSucceededAt == null ? null : timestamp(firstSucceededAt),
+                hasSucceededBeforeWindow,
+                otherWithdrawalAccountCount,
+                timestamp(now));
+    }
+
+    @Override
     public Set<Long> findEvidenceIds(String investigationId) {
         return jdbc
                 .queryForList(

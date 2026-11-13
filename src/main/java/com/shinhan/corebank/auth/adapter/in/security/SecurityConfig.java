@@ -189,7 +189,7 @@ public class SecurityConfig {
                         .hasAuthority(AdminPermission.CUSTOMER_READ.name())
                         .requestMatchers(pathPattern("/admin/customers/**"))
                         .hasAuthority(AdminPermission.CUSTOMER_WRITE.name())
-                        .requestMatchers(pathPattern(HttpMethod.GET, "/admin/fds/holds/*"))
+                        .requestMatchers(pathPattern(HttpMethod.GET, "/admin/fds/holds/**"))
                         .hasAuthority(AdminPermission.CUSTOMER_READ.name())
                         .requestMatchers(pathPattern(HttpMethod.GET, "/admin/trial-balance/**"))
                         .hasAuthority(AdminPermission.GL_READ.name())
