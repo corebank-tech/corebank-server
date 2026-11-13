@@ -40,7 +40,11 @@ public class BehaviorFlowController {
     private final ObjectMapper mapper;
 
     @PostMapping("/{flowId}/events")
-    @Operation(summary = "행동 이벤트 제출", description = "한 flow의 순번·소유권을 검증하고 중복 이벤트는 다시 저장하지 않습니다.")
+    @Operation(
+            operationId = "submitFdsBehaviorEvents",
+            summary = "행동 이벤트 제출",
+            description =
+                    "FE가 생성한 flowId를 최초 제출 고객에게 귀속합니다. 한 flow는 최초 수신부터 30분, 최대 100개와 요청 본문 32 KiB 제한을 적용하며 동일 이벤트 재전송은 멱등 처리하고 충돌·종료 후 추가 제출은 거부합니다.")
     public ResponseEntity<ApiResponse<Accepted>> submit(
             @PathVariable UUID flowId,
             @RequestHeader("Idempotency-Key") String idempotencyKey,

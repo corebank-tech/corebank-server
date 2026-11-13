@@ -11,8 +11,10 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +54,9 @@ public class BehaviorFlowService {
                 || batch.events().isEmpty()) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
+        if (batch.events().size() > 100) {
+            throw new BusinessException(FdsErrorCode.INVALID_EVENT);
+        }
         LocalDateTime receivedAt = LocalDateTime.now(clock.withZone(KST));
         port.create(flowId.toString(), customerId, receivedAt);
         port.lock(flowId.toString());
@@ -63,26 +68,33 @@ public class BehaviorFlowService {
             throw new BusinessException(FdsErrorCode.FLOW_CONFLICT);
         }
         List<Event> existing = port.events(flowId.toString());
-        if (existing.size() + batch.events().size() > 200) {
+        if (existing.size() > 100) {
             throw new BusinessException(FdsErrorCode.INVALID_EVENT);
         }
         int next = existing.size() + 1;
         LocalDateTime previousAt =
                 existing.isEmpty() ? null : existing.getLast().occurredAt();
         boolean confirmOpen = false;
+        boolean confirmEntered = false;
         for (Event stored : existing) {
-            if ("CONFIRM_ENTER".equals(stored.eventType())) confirmOpen = true;
+            if ("CONFIRM_ENTER".equals(stored.eventType())) {
+                confirmOpen = true;
+                confirmEntered = true;
+            }
             if ("CONFIRM_LEAVE".equals(stored.eventType())) confirmOpen = false;
         }
         Set<Integer> seen = new HashSet<>();
-        int appended = 0;
+        List<Event> toAppend = new ArrayList<>();
         boolean finalEvent = false;
+        boolean batchContainsFinalEvent = false;
+        int previousRequestSequence = 0;
         for (EventInput input : batch.events()) {
             if (input == null
                     || input.flowId() == null
                     || !input.flowId().equals(flowId)
                     || input.seqNo() < 1
                     || input.seqNo() > 100
+                    || input.seqNo() <= previousRequestSequence
                     || !seen.add(input.seqNo())
                     || input.eventType() == null
                     || !TYPES.contains(input.eventType())
@@ -91,18 +103,20 @@ public class BehaviorFlowService {
                     || !Set.of("D-01", "D-02").contains(input.step())) {
                 throw new BusinessException(FdsErrorCode.INVALID_EVENT);
             }
+            previousRequestSequence = input.seqNo();
             LocalDateTime occurredAt = input.occurredAt().atZoneSameInstant(KST).toLocalDateTime();
             // MySQL DATETIME(6) 정밀도로 맞춰 동일 이벤트 재전송을 정확히 비교한다.
             occurredAt = occurredAt.withNano(occurredAt.getNano() / 1_000 * 1_000);
-            if (occurredAt.isBefore(receivedAt.minusMinutes(30)) || occurredAt.isAfter(receivedAt.plusMinutes(5))) {
-                throw new BusinessException(FdsErrorCode.INVALID_EVENT);
-            }
             Event current = new Event(input.seqNo(), input.eventType(), occurredAt, input.step());
+            batchContainsFinalEvent |= "SUBMIT_REQUESTED".equals(input.eventType());
             if (input.seqNo() <= existing.size()) {
                 if (!existing.get(input.seqNo() - 1).equals(current)) {
                     throw new BusinessException(FdsErrorCode.FLOW_CONFLICT);
                 }
                 continue;
+            }
+            if (occurredAt.isBefore(receivedAt.minusMinutes(30)) || occurredAt.isAfter(receivedAt.plusMinutes(5))) {
+                throw new BusinessException(FdsErrorCode.INVALID_EVENT);
             }
             if (flow.finalizedAt() != null
                     || input.seqNo() != next
@@ -123,33 +137,40 @@ public class BehaviorFlowService {
                             && !"D-02".equals(input.step())
                     || "CONFIRM_ENTER".equals(input.eventType()) && confirmOpen
                     || "CONFIRM_LEAVE".equals(input.eventType()) && !confirmOpen
+                    || "STEP_BACK".equals(input.eventType()) && !confirmEntered
                     || "SUBMIT_REQUESTED".equals(input.eventType()) && confirmOpen) {
                 throw new BusinessException(FdsErrorCode.INVALID_EVENT);
             }
-            if ("CONFIRM_ENTER".equals(input.eventType())) confirmOpen = true;
+            if ("CONFIRM_ENTER".equals(input.eventType())) {
+                confirmOpen = true;
+                confirmEntered = true;
+            }
             if ("CONFIRM_LEAVE".equals(input.eventType())) confirmOpen = false;
             finalEvent = "SUBMIT_REQUESTED".equals(input.eventType());
-            port.append(flowId.toString(), current, receivedAt);
+            toAppend.add(current);
             previousAt = occurredAt;
             next++;
-            appended++;
         }
-        if (next > 101
+        if (existing.size() + toAppend.size() > 100
                 || batch.confirmActiveSeconds() != null
                         && (batch.confirmActiveSeconds() < 0 || batch.confirmActiveSeconds() > 1800)) {
             throw new BusinessException(FdsErrorCode.INVALID_EVENT);
         }
-        if (batch.confirmActiveSeconds() != null && !finalEvent && flow.finalizedAt() == null) {
+        if (batch.confirmActiveSeconds() != null && !batchContainsFinalEvent) {
             throw new BusinessException(FdsErrorCode.INVALID_EVENT);
         }
         if (flow.finalizedAt() != null
-                && appended == 0
-                && !java.util.Objects.equals(flow.confirmActiveSeconds(), batch.confirmActiveSeconds())) {
+                && batchContainsFinalEvent
+                && !Objects.equals(flow.confirmActiveSeconds(), batch.confirmActiveSeconds())) {
             throw new BusinessException(FdsErrorCode.FLOW_CONFLICT);
+        }
+        // 전체 묶음 검증이 끝난 뒤에만 쓰기를 시작해 부분 저장 가능성을 없앤다.
+        for (Event event : toAppend) {
+            port.append(flowId.toString(), event, receivedAt);
         }
         if (finalEvent) {
             port.finalizeFlow(flowId.toString(), batch.confirmActiveSeconds(), receivedAt);
         }
-        return new Accepted(flowId, appended);
+        return new Accepted(flowId, toAppend.size());
     }
 }

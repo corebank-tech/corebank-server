@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 70개 테이블(61개 비즈니스 테이블 + 채번, 배치, cutoff, 체크포인트, 감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 614개 컬럼 / 금액 BIGINT, 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장과 표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
+> **DBMS**: MySQL 8.4 / 71개 테이블(62개 비즈니스 테이블 + 채번, 배치, cutoff, 체크포인트, 감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 618개 컬럼 / 금액 BIGINT, 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장과 표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -24,7 +24,7 @@ erDiagram
     SPRING_SESSION ||--o{ SPRING_SESSION_ATTRIBUTES : "ON DELETE CASCADE"
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 70개 테이블 / 금액 BIGINT, 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
+    %% MySQL 8.4 / 71개 테이블 / 금액 BIGINT, 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -416,6 +416,12 @@ erDiagram
         datetime score_attempt_started_at
         datetime created_at
         datetime updated_at
+    }
+    fds_transfer_behavior_flow {
+        bigint ref_id PK "성공 transfer ID"
+        char flow_id UK,FK "FE 행동 흐름"
+        bigint customer_id "소유 고객"
+        datetime created_at
     }
     delayed_transfer_setting {
         bigint customer_id PK "고객당 1행. 없으면 꺼짐"
@@ -859,6 +865,7 @@ erDiagram
     auto_transfer_execution |o--o| transfer : "실행결과 (ERROR 는 없음)"
     transfer_hold |o..o| transfer : "실행결과 (source_type=HELD, FK 없음)"
     fds_behavior_flow ||--o{ fds_behavior_event : "행동 이벤트"
+    fds_behavior_flow ||--o| fds_transfer_behavior_flow : "성공 이체 연결"
     transfer_hold |o..o| fds_behavior_score : "보류 후 보조 점수 (FK 없음)"
     customer ||..o| delayed_transfer_setting : "지연이체 설정 (FK 없음)"
 ```

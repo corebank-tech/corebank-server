@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 61개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`), 테이블 목록 기준 614개 컬럼
+**대상**: 62개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`), 테이블 목록 기준 618개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -96,6 +96,7 @@
 | 68 | `fds_behavior_flow` | 고객 행동 흐름 | P6 | 6 |
 | 69 | `fds_behavior_event` | 행동 이벤트 | P6 | 6 |
 | 70 | `fds_behavior_score` | 보류 후 행동 점수 | P6 | 10 |
+| 71 | `fds_transfer_behavior_flow` | 성공 이체-행동 흐름 매핑 | P6 | 4 |
 
 ---
 
@@ -1874,7 +1875,7 @@ COB의 영업일 전환(`advanceFrom`)과 달력 따라잡기(`catchUpTo`)가 `B
 
 ---
 
-## `fds_behavior_flow` · `fds_behavior_event` · `fds_behavior_score` (#951)
+## `fds_behavior_flow` · `fds_behavior_event` · `fds_behavior_score` · `fds_transfer_behavior_flow` (#951, #975)
 
 P6이 행동 흐름과 보류 후 보조 점수를 소유한다. `transfer_hold`와는 식별자로만 연결하며 보류 상태나 원장을 변경하지 않는다.
 
@@ -1883,6 +1884,7 @@ P6이 행동 흐름과 보류 후 보조 점수를 소유한다. `transfer_hold`
 | `fds_behavior_flow` | `flow_id CHAR(36)` PK, `customer_id BIGINT`, `first_received_at`·`last_received_at DATETIME(6)`, `finalized_at DATETIME(6)` NULL, `confirm_active_seconds INT` NULL | `ix_fds_behavior_flow_customer(customer_id, first_received_at)`, 체류 0~1800 또는 NULL |
 | `fds_behavior_event` | `flow_id CHAR(36)`, `seq_no INT`, `event_type VARCHAR(30)`, `occurred_at DATETIME(6)`, `step_code VARCHAR(4)`, `received_at DATETIME(6)` | PK `(flow_id, seq_no)`, `flow_id`는 flow FK, 순번 1~100 |
 | `fds_behavior_score` | `transfer_hold_id BIGINT` PK, `flow_id CHAR(36)` NULL, `score_status VARCHAR(12)`, `behavior_risk_score DOUBLE` NULL, `model_version`·`feature_version VARCHAR(80)` NULL, `unavailable_reason VARCHAR(40)` NULL, `score_attempt_started_at`·`created_at`·`updated_at DATETIME(6)` | `ix_fds_behavior_score_status(score_status, score_attempt_started_at)`, 점수 0~1 또는 NULL |
+| `fds_transfer_behavior_flow` | `ref_id BIGINT` PK, `flow_id CHAR(36)`, `customer_id BIGINT`, `created_at DATETIME(6)` | `uk_fds_transfer_behavior_flow_flow(flow_id)`, `flow_id`는 행동 흐름 FK; 성공 이체와 흐름을 일대일로 연결 |
 
 ## `holiday`
 
