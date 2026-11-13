@@ -574,6 +574,8 @@ public record ApiResponse<T>(String code, String message, T data) {
 |  | `DEPOSIT` | 정기예금 |
 | `ProductSaleStatus` | `ON_SALE` | 판매중 |
 |  | `SUSPENDED` | 판매중지 |
+| `TerminationType` | `MATURITY` | 만기해지 예상 조회 |
+| | `EARLY_TERMINATION` | 중도해지 예상 조회 |
 
 | ProductGroup (P3) | AccountType (P2) | AccountGroup (P2, 화면) |
 | --- | --- | --- |
