@@ -12,6 +12,7 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.product.api.InterestCalculationMode;
 import com.shinhan.corebank.subscription.api.TerminationPreviewResult;
+import com.shinhan.corebank.subscription.api.TerminationType;
 import com.shinhan.corebank.subscription.application.port.in.InterestCalculationCommand;
 import com.shinhan.corebank.subscription.application.port.in.InterestCalculationUseCase;
 import com.shinhan.corebank.subscription.application.port.out.InterestPaymentHistoryPort;
@@ -91,7 +92,7 @@ class TerminationPreviewServiceTest {
 
         assertThat(result.accountId()).isEqualTo(ACCOUNT_ID);
         assertThat(result.withdrawalAccountId()).isEqualTo(WITHDRAWAL_ACCOUNT_ID);
-        assertThat(result.terminationType()).isEqualTo("MATURITY");
+        assertThat(result.terminationType()).isEqualTo(TerminationType.MATURITY);
 
         assertThat(result.principal()).isEqualTo(1_000_000L);
         assertThat(result.grossInterest()).isEqualTo(10_000L);
@@ -158,7 +159,7 @@ class TerminationPreviewServiceTest {
 
         TerminationPreviewResult result = service.previewEarly(CUSTOMER_ID, ACCOUNT_ID);
 
-        assertThat(result.terminationType()).isEqualTo("EARLY_TERMINATION");
+        assertThat(result.terminationType()).isEqualTo(TerminationType.EARLY_TERMINATION);
         assertThat(result.principal()).isEqualTo(100_000L);
         assertThat(result.netInterest()).isZero();
         assertThat(result.totalExpectedAmount()).isEqualTo(100_000L);
@@ -205,6 +206,33 @@ class TerminationPreviewServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(CommonErrorCode.INTERNAL_ERROR);
+    }
+
+    @Test
+    @DisplayName("중도해지 계산 기준일은 조회 시각이 아닌 이자 계산 종료일을 사용한다")
+    void previewEarly_usesCalculationEndDate() {
+        LocalDate terminationDate = LocalDate.of(2026, 11, 11);
+        BigDecimal earlyRate = new BigDecimal("0.25");
+
+        when(earlyValidationService.validate(CUSTOMER_ID, ACCOUNT_ID))
+                .thenReturn(new EarlyTerminationValidationService.Validated(
+                        ACCOUNT_ID,
+                        WITHDRAWAL_ACCOUNT_ID,
+                        LocalDate.of(2026, 11, 1),
+                        terminationDate,
+                        earlyRate,
+                        100_000L,
+                        true));
+
+        when(interestCalculationUseCase.calculate(any())).thenReturn(new InterestResult(0L, 0L, 0L, earlyRate));
+
+        when(balanceUseCase.requireCurrentBalance(ACCOUNT_ID, CUSTOMER_ID)).thenReturn(100_000L);
+
+        TerminationPreviewResult result = service.previewEarly(CUSTOMER_ID, ACCOUNT_ID);
+
+        assertThat(result.calculationDate()).isEqualTo(terminationDate);
+
+        assertThat(result.calculatedAt().toLocalDate()).isEqualTo(LocalDate.of(2026, 11, 12));
     }
 
     private static MaturityTerminationValidationService.Validated maturityValidated(

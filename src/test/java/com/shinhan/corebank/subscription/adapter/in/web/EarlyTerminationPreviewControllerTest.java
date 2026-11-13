@@ -15,6 +15,7 @@ import com.shinhan.corebank.auth.api.AuthenticatedCustomer;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.subscription.api.TerminationPreviewResult;
 import com.shinhan.corebank.subscription.api.TerminationPreviewUseCase;
+import com.shinhan.corebank.subscription.api.TerminationType;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import org.junit.jupiter.api.DisplayName;
@@ -100,7 +101,7 @@ class EarlyTerminationPreviewControllerTest extends IntegrationTestSupport {
     private static TerminationPreviewResult result() {
         return new TerminationPreviewResult(
                 ACCOUNT_ID,
-                "EARLY_TERMINATION",
+                TerminationType.EARLY_TERMINATION,
                 WITHDRAWAL_ACCOUNT_ID,
                 100_000L,
                 0L,

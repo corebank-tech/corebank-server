@@ -5,6 +5,7 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.subscription.api.TerminationPreviewResult;
 import com.shinhan.corebank.subscription.api.TerminationPreviewUseCase;
+import com.shinhan.corebank.subscription.api.TerminationType;
 import com.shinhan.corebank.subscription.application.port.in.InterestCalculationCommand;
 import com.shinhan.corebank.subscription.application.port.in.InterestCalculationUseCase;
 import com.shinhan.corebank.subscription.application.port.out.InterestPaymentHistoryPort;
@@ -12,6 +13,7 @@ import com.shinhan.corebank.subscription.domain.InterestResult;
 import com.shinhan.corebank.subscription.domain.exception.SubscriptionErrorCode;
 import com.shinhan.corebank.transfer.api.LedgerPrincipalBalanceQuery;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
@@ -53,7 +55,8 @@ public class TerminationPreviewService implements TerminationPreviewUseCase {
                 customerId,
                 accountId,
                 validated.withdrawalAccountId(),
-                "MATURITY",
+                TerminationType.MATURITY,
+                validated.maturityDate(),
                 validated.timeDeposit(),
                 validated.subscriptionAmount(),
                 interest);
@@ -77,7 +80,8 @@ public class TerminationPreviewService implements TerminationPreviewUseCase {
                 customerId,
                 accountId,
                 validated.withdrawalAccountId(),
-                "EARLY_TERMINATION",
+                TerminationType.EARLY_TERMINATION,
+                validated.terminationDate(),
                 validated.timeDeposit(),
                 validated.subscriptionAmount(),
                 interest);
@@ -93,7 +97,8 @@ public class TerminationPreviewService implements TerminationPreviewUseCase {
             Long customerId,
             Long accountId,
             Long withdrawalAccountId,
-            String type,
+            TerminationType type,
+            LocalDate calculationDate,
             boolean timeDeposit,
             Long subscriptionAmount,
             InterestResult interest) {
@@ -128,7 +133,7 @@ public class TerminationPreviewService implements TerminationPreviewUseCase {
 
         if (total <= 0) {
             throw new BusinessException(
-                    type.equals("MATURITY")
+                    type == TerminationType.MATURITY
                             ? SubscriptionErrorCode.MATURITY_PAYOUT_AMOUNT_ZERO
                             : SubscriptionErrorCode.EARLY_TERMINATION_PAYOUT_ZERO);
         }
@@ -144,7 +149,7 @@ public class TerminationPreviewService implements TerminationPreviewUseCase {
                 interest.tax(),
                 interest.net(),
                 total,
-                calculatedAt.toLocalDate(),
+                calculationDate,
                 calculatedAt);
     }
 }

@@ -31,6 +31,7 @@ import com.shinhan.corebank.subscription.api.MaturityTerminationResult;
 import com.shinhan.corebank.subscription.api.MaturityTerminationUseCase;
 import com.shinhan.corebank.subscription.api.TerminationPreviewResult;
 import com.shinhan.corebank.subscription.api.TerminationPreviewUseCase;
+import com.shinhan.corebank.subscription.api.TerminationType;
 import com.shinhan.corebank.subscription.application.port.out.MaturityTerminationPasswordVerificationPort;
 import com.shinhan.corebank.subscription.domain.MaturityHandling;
 import com.shinhan.corebank.subscription.domain.exception.SubscriptionErrorCode;
@@ -886,7 +887,7 @@ class MaturityTerminationIntegrationTest extends IntegrationTestSupport {
         TerminationPreviewResult second = previewUseCase.previewMaturity(customerId, PRODUCT_ACCOUNT_ID);
 
         // 2. 예상 금액 검증
-        assertThat(first.terminationType()).isEqualTo("MATURITY");
+        assertThat(first.terminationType()).isEqualTo(TerminationType.MATURITY);
         assertThat(first.withdrawalAccountId()).isEqualTo(WITHDRAWAL_ACCOUNT_ID);
         assertThat(first.principal()).isEqualTo(PRINCIPAL);
         assertThat(first.totalExpectedAmount()).isEqualTo(PRINCIPAL + first.netInterest());

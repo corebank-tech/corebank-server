@@ -1,12 +1,13 @@
 package com.shinhan.corebank.subscription.adapter.in.web;
 
 import com.shinhan.corebank.subscription.api.TerminationPreviewResult;
+import com.shinhan.corebank.subscription.api.TerminationType;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 public record TerminationPreviewResponse(
         Long accountId,
-        String terminationType,
+        TerminationType terminationType,
         Long withdrawalAccountId,
         long principal,
         long grossInterest,

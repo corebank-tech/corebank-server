@@ -27,6 +27,7 @@ import com.shinhan.corebank.subscription.api.EarlyTerminationResult;
 import com.shinhan.corebank.subscription.api.EarlyTerminationUseCase;
 import com.shinhan.corebank.subscription.api.TerminationPreviewResult;
 import com.shinhan.corebank.subscription.api.TerminationPreviewUseCase;
+import com.shinhan.corebank.subscription.api.TerminationType;
 import com.shinhan.corebank.subscription.application.port.out.MaturityTerminationPasswordVerificationPort;
 import com.shinhan.corebank.subscription.domain.MaturityHandling;
 import jakarta.persistence.EntityManager;
@@ -491,7 +492,7 @@ class EarlyTerminationIntegrationTest extends IntegrationTestSupport {
         TerminationPreviewResult second = previewUseCase.previewEarly(customerId, PRODUCT_ACCOUNT_ID);
 
         // 2. 예상 금액 검증
-        assertThat(first.terminationType()).isEqualTo("EARLY_TERMINATION");
+        assertThat(first.terminationType()).isEqualTo(TerminationType.EARLY_TERMINATION);
         assertThat(first.withdrawalAccountId()).isEqualTo(WITHDRAWAL_ACCOUNT_ID);
         assertThat(first.principal()).isEqualTo(PRINCIPAL);
         assertThat(first.totalExpectedAmount()).isEqualTo(PRINCIPAL + first.netInterest());

@@ -5,7 +5,7 @@ import java.time.OffsetDateTime;
 
 public record TerminationPreviewResult(
         Long accountId,
-        String terminationType,
+        TerminationType terminationType,
         Long withdrawalAccountId,
         long principal,
         long grossInterest,
