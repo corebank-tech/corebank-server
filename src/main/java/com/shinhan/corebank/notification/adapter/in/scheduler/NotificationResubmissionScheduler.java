@@ -16,8 +16,8 @@ import org.springframework.modulith.events.ResubmissionOptions;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-// 실패했거나 멈춘 발행 기록을 다시 보낸다(#709). 기록 대상 리스너는 알림 하나뿐이다(ADR-0010). 배치 락은 두지 않는다 —
-// 처리 중인 기록은 조건부 UPDATE 가 막고, 다른 인스턴스가 한 번 더 보내도 알림은 (type, ref_id) 로 한 건이다.
+// 실패했거나 멈춘 알림·FDS 매핑 발행 기록을 함께 다시 보낸다(#709, ADR-0010). 배치 락은 두지 않는다 —
+// 처리 중인 기록은 조건부 UPDATE가 막고, 구독자는 업무 키로 중복 처리를 방지한다.
 @Component
 public class NotificationResubmissionScheduler {
     private static final Logger log = LoggerFactory.getLogger(NotificationResubmissionScheduler.class);
@@ -39,7 +39,7 @@ public class NotificationResubmissionScheduler {
         this.failedEventPublications = failedEventPublications;
         this.clock = clock;
         Gauge.builder("notification.publication.abandoned", abandonedInLastBatch, AtomicInteger::get)
-                .description("재제출 상한을 넘겨 다시 보내지 않는 알림 발행 기록 수(마지막 재제출 묶음 기준)")
+                .description("재제출 상한을 넘겨 다시 보내지 않는 이벤트 발행 기록 수(마지막 재제출 묶음 기준)")
                 .register(meterRegistry);
     }
 
@@ -64,7 +64,7 @@ public class NotificationResubmissionScheduler {
                     abandonedPublications);
         } else if (abandoned > 0) {
             log.error(
-                    "재제출 상한({}번)을 모두 쓴 알림 발행 기록 - abandonedCount={}, abandoned={}",
+                    "재제출 상한({}번)을 모두 쓴 이벤트 발행 기록 - abandonedCount={}, abandoned={}",
                     MAX_RESUBMISSIONS,
                     abandoned,
                     abandonedPublications);

@@ -3,7 +3,6 @@ package com.shinhan.corebank.fds.application.service;
 import com.shinhan.corebank.fds.api.BehaviorScoreQuery;
 import com.shinhan.corebank.fds.api.BehaviorScoreView;
 import com.shinhan.corebank.fds.application.port.out.BehaviorFlowPort;
-import com.shinhan.corebank.fds.application.port.out.BehaviorFlowPort.Event;
 import com.shinhan.corebank.fds.application.port.out.BehaviorFlowPort.Flow;
 import com.shinhan.corebank.fds.application.port.out.BehaviorScoreInferencePort;
 import com.shinhan.corebank.fds.application.port.out.BehaviorScorePort;
@@ -11,9 +10,7 @@ import com.shinhan.corebank.transfer.api.TransferHeld;
 import com.shinhan.corebank.transfer.api.TransferHoldForFds;
 import com.shinhan.corebank.transfer.api.TransferHoldUseCase;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -61,7 +58,16 @@ public class BehaviorScoreService implements BehaviorScoreQuery {
         }
         BehaviorScoreInferencePort.Features features;
         try {
-            features = features(flows.events(event.flowId()), flow);
+            BehaviorFeatureExtractor.Features extracted =
+                    BehaviorFeatureExtractor.extract(flows.events(event.flowId()), flow);
+            features = extracted == null
+                    ? null
+                    : new BehaviorScoreInferencePort.Features(
+                            extracted.backCount(),
+                            extracted.amountRevisionCount(),
+                            extracted.confirmActiveSeconds(),
+                            extracted.recipientConfirmSeconds(),
+                            extracted.totalFlowSeconds());
         } catch (RuntimeException e) {
             finishUnavailable(event.transferHoldId(), "INVALID_FEATURES");
             return;
@@ -126,35 +132,6 @@ public class BehaviorScoreService implements BehaviorScoreQuery {
         for (Long holdId : scores.startedBefore(LocalDateTime.now(clock).minusMinutes(1), 100)) {
             finishUnavailable(holdId, "SCORING_INTERRUPTED");
         }
-    }
-
-    private static BehaviorScoreInferencePort.Features features(List<Event> events, Flow flow) {
-        if (events.isEmpty()
-                || !"TRANSFER_ENTER".equals(events.getFirst().eventType())
-                || !"SUBMIT_REQUESTED".equals(events.getLast().eventType())) {
-            return null;
-        }
-        LocalDateTime entered = events.getFirst().occurredAt();
-        LocalDateTime submitted = events.getLast().occurredAt();
-        long total = Duration.between(entered, submitted).toSeconds();
-        if (total < 0 || total > Integer.MAX_VALUE) {
-            return null;
-        }
-        int back = 0;
-        int revisions = 0;
-        Integer recipient = null;
-        for (Event event : events) {
-            if ("STEP_BACK".equals(event.eventType())) back++;
-            if ("AMOUNT_EDITED".equals(event.eventType())) revisions++;
-            if ("RECIPIENT_CONFIRMED".equals(event.eventType()) && recipient == null) {
-                long seconds = Duration.between(entered, event.occurredAt()).toSeconds();
-                if (seconds < 0 || seconds > total) return null;
-                recipient = (int) seconds;
-            }
-        }
-        if (back > 100 || revisions > 100) return null;
-        return new BehaviorScoreInferencePort.Features(
-                back, revisions, flow.confirmActiveSeconds(), recipient, (int) total);
     }
 
     @Override

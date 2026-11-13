@@ -1,6 +1,7 @@
 package com.shinhan.corebank.transfer.api;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 고객이 한 수취계좌로 보낸 성공 이체를 읽는 계약(#771). 훅 C 구현체가 반복 이체를 판정할 때 쓴다.
@@ -14,6 +15,9 @@ public interface RecentTransferQuery {
 
     /** since 이후(포함) 성공 이체의 건수·합계·첫 시각. 없으면 건수 0. */
     RecentTransferAggregate aggregateSucceeded(long customerId, String depositAccountNumber, LocalDateTime since);
+
+    /** since 이후(포함) 성공 이체. 훅 조회 시각까지 커밋된 행을 오래된 순서로 반환한다. */
+    List<RecentSuccessfulTransfer> findSucceeded(long customerId, String depositAccountNumber, LocalDateTime since);
 
     /**
      * before 이전(미포함)에 성공 이체가 한 건이라도 있는지.

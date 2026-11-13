@@ -328,7 +328,7 @@ X-Access-Reason: INCIDENT
 ```
 
 ```json
-{"code":"0000","message":"정상 처리되었습니다.","data":{"transferHoldId":123,"holdStatus":"HELD","amount":500000,"recipientAccountMasked":"***-**-1234","serverPolicy":{"policyCode":"A","count10m":3,"amount10m":1500000},"behaviorSummary":{"hesitationWarning":true},"investigationStatus":"COMPLETED","secondaryFindings":[{"code":"REGULAR_SPLIT_AMOUNTS","evidenceTransferIds":[101,102],"confidence":"OBSERVED"}],"callRecords":[]}}
+{"code":"0000","message":"정상 처리되었습니다.","data":{"transferHoldId":123,"holdStatus":"HELD","amount":500000,"recipientAccountMasked":"***-**-1234","serverPolicy":{"policyCode":"A","count10m":3,"amount10m":1500000,"hesitationInWindow":true,"newRecipientAtWindowStart":true},"behaviorSummary":{"hesitationWarning":true},"investigationStatus":"COMPLETED","secondaryFindings":[{"code":"REGULAR_SPLIT_AMOUNTS","evidenceTransferIds":[101,102],"confidence":"OBSERVED"}],"callRecords":[]}}
 ```
 
 `investigationStatus=QUEUED`·`RUNNING`·`FAILED`여도 서버 판정 근거와 콜 결과가 있으면 관리자 수동 검토가 가능하다. 목록·상세의 고객정보와 계좌번호는 필요한 범위만 마스킹해 표시한다.

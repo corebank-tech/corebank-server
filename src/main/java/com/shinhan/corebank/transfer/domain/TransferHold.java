@@ -3,6 +3,7 @@ package com.shinhan.corebank.transfer.domain;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.api.TransferHoldDecision;
+import com.shinhan.corebank.transfer.api.TransferHoldEvidence;
 import com.shinhan.corebank.transfer.api.TransferHoldReleaseMode;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -28,6 +29,10 @@ public class TransferHold {
     private final TransferChannel channel;
     private final String flowId;
     private final String policyCode;
+    private final Integer policyCount10m;
+    private final Long policyAmount10m;
+    private final Boolean policyHesitationInWindow;
+    private final Boolean policyNewRecipientAtWindowStart;
     private final TransferHoldReleaseMode releaseMode;
     private final LocalDateTime releaseAt;
     private final TransferHoldStatus status;
@@ -49,6 +54,10 @@ public class TransferHold {
             TransferChannel channel,
             String flowId,
             String policyCode,
+            Integer policyCount10m,
+            Long policyAmount10m,
+            Boolean policyHesitationInWindow,
+            Boolean policyNewRecipientAtWindowStart,
             TransferHoldReleaseMode releaseMode,
             LocalDateTime releaseAt,
             TransferHoldStatus status,
@@ -68,6 +77,10 @@ public class TransferHold {
         this.channel = channel;
         this.flowId = flowId;
         this.policyCode = policyCode;
+        this.policyCount10m = policyCount10m;
+        this.policyAmount10m = policyAmount10m;
+        this.policyHesitationInWindow = policyHesitationInWindow;
+        this.policyNewRecipientAtWindowStart = policyNewRecipientAtWindowStart;
         this.releaseMode = releaseMode;
         this.releaseAt = releaseAt;
         this.status = status;
@@ -96,6 +109,7 @@ public class TransferHold {
         if (!decision.hold()) {
             throw new BusinessException(CommonErrorCode.INTERNAL_ERROR);
         }
+        TransferHoldEvidence evidence = decision.evidence();
         return new TransferHold(
                 null,
                 customerId,
@@ -107,6 +121,10 @@ public class TransferHold {
                 channel,
                 flowId,
                 decision.policyCode(),
+                evidence == null ? null : evidence.count10m(),
+                evidence == null ? null : evidence.amount10m(),
+                evidence == null ? null : evidence.hesitationInWindow(),
+                evidence == null ? null : evidence.newRecipientAtWindowStart(),
                 decision.releaseMode(),
                 decision.releaseAt(),
                 TransferHoldStatus.HELD,
@@ -129,6 +147,10 @@ public class TransferHold {
             TransferChannel channel,
             String flowId,
             String policyCode,
+            Integer policyCount10m,
+            Long policyAmount10m,
+            Boolean policyHesitationInWindow,
+            Boolean policyNewRecipientAtWindowStart,
             TransferHoldReleaseMode releaseMode,
             LocalDateTime releaseAt,
             TransferHoldStatus status,
@@ -149,6 +171,10 @@ public class TransferHold {
                 channel,
                 flowId,
                 policyCode,
+                policyCount10m,
+                policyAmount10m,
+                policyHesitationInWindow,
+                policyNewRecipientAtWindowStart,
                 releaseMode,
                 releaseAt,
                 status,
@@ -224,6 +250,22 @@ public class TransferHold {
 
     public String getPolicyCode() {
         return policyCode;
+    }
+
+    public Integer getPolicyCount10m() {
+        return policyCount10m;
+    }
+
+    public Long getPolicyAmount10m() {
+        return policyAmount10m;
+    }
+
+    public Boolean getPolicyHesitationInWindow() {
+        return policyHesitationInWindow;
+    }
+
+    public Boolean getPolicyNewRecipientAtWindowStart() {
+        return policyNewRecipientAtWindowStart;
     }
 
     public TransferHoldReleaseMode getReleaseMode() {

@@ -264,9 +264,9 @@ public record RecipientHistory(LocalDateTime firstSucceededAt, int otherWithdraw
     - **기준은 `RecentTransferQuery`와 같습니다.** 영속 어댑터가 같은 성공 조건을 씁니다. 훅 C가 성공으로 센 이체와 Agent가 보는 이체가 어긋나지 않습니다.
     - **훅 C 안에서 부르지 않습니다.** `summarizeRecipient`는 기간 하한 없이 고객 이력 전체를 `ix_transfer_wacc`로 읽은 뒤 수취계좌로 거릅니다. 비용이 고객의 총 이체 건수에 비례합니다. `findRecent`는 같은 인덱스로 시각 범위만 읽습니다.
     - 수취계좌번호는 원문으로 주고 P6가 마스킹합니다. `hasMore`는 P6가 `limit=101`로 불러 판단하고, `hasSucceededBeforeWindow`는 `firstSucceededAt < 반복 묶음 첫 이체 시각`으로 구합니다.
-- **정책 A가 보는 과거 성공 이체와 `flowId`의 연결은 P6이 소유합니다.** `transfer`에 컬럼을 더하지 않습니다(§9-5 규칙 6). `TransferSettled`에는 nullable `String flowId`가 있고(#978), P6은 성공 커밋 뒤 이 이벤트를 받는 시점에 성공 이체 ID(`refId`)와 `flowId`의 연결을 자기 테이블에 저장해 반복 묶음 단위로 조회합니다.
+- **정책 A가 보는 과거 성공 이체와 `flowId`의 연결은 P6이 소유합니다.** `transfer`에 컬럼을 더하지 않습니다(§9-5 규칙 6). `TransferSettled`에는 nullable `String flowId`가 있고(#979), P6은 성공 커밋 뒤 이 이벤트를 받는 시점에 성공 이체 ID(`refId`)와 `flowId`의 연결을 자기 테이블에 저장해 반복 묶음 단위로 조회합니다.
     - 값: 즉시이체는 요청의 `flowId`, 보류됐다 실행된 건은 보류할 때 저장한 `flowId`, 보내지 않았거나 타행이면 null입니다.
-    - **연결 순서:** 필드는 #978로 들어갔습니다. P6은 연결 저장 부품(#976) 위에 이 이벤트를 읽는 리스너를 연결합니다.
+    - **연결 순서:** 필드는 #979로 들어갔습니다. P6은 연결 저장 부품(#976) 위에 이 이벤트를 읽는 리스너를 연결합니다.
     - **멱등 저장:** 같은 이벤트가 다시 전달될 수 있으므로, P6은 성공 이체 ID(`refId`)를 키로 한 번만 저장합니다. 같은 `refId`가 다시 오면 새 행을 만들지 않습니다.
     - 이벤트는 커밋 뒤 따로 처리되므로, 연달아 들어온 이체에서는 앞 건의 연결이 잠깐 안 보일 수 있습니다. 이때도 정책 B는 `RecentTransferQuery`만으로 판정합니다.
 - 이름과 필드는 PR-b 리뷰에서 바뀔 수 있습니다. 바뀌면 이 절을 같은 PR에서 고칩니다.

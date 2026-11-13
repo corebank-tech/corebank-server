@@ -1,7 +1,7 @@
 # 📐 CoreBank 미니 코어뱅킹 — 테이블 스키마 레퍼런스
 
 **DBMS**: MySQL 8.4 · InnoDB · `utf8mb4_0900_ai_ci`
-**대상**: 62개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`), 테이블 목록 기준 618개 컬럼
+**대상**: 62개 비즈니스 테이블 + 9개 비즈니스 외 테이블 (`ledger_entry_id_sequence`, `batch_execution_lock`, `batch_execution_history`, `business_date_cutoff`, `cob_checkpoint`, `audit_archive_execution`, `SPRING_SESSION`, `SPRING_SESSION_ATTRIBUTES`, `EVENT_PUBLICATION`), 테이블 목록 기준 622개 컬럼
 **근거 DDL**: `src/main/resources/db/migration/` 내 V 파일들
 
 > 순수 스키마 레퍼런스입니다. 개정 이력·감축 근거·확인 필요 항목은 [DB_ERD_v3.md](corebank_erd.md)에 있습니다.
@@ -75,7 +75,7 @@
 | 47 | `cob_checkpoint` | COB 재시작 체크포인트 | P5 | 5 |
 | 48 | `audit_archive_execution` | 감사 로그 WORM 적재 상태 | P1 | 9 |
 | 49 | `audit_integrity_mismatch` | 감사 로그 무결성 불일치 목록 | P1 | 5 |
-| 50 | `transfer_hold` | 이체 보류 | P4 | 20 |
+| 50 | `transfer_hold` | 이체 보류 | P4 | 24 |
 | 51 | `delayed_transfer_setting` | 고객별 지연이체 설정 | P4 | 6 |
 | 52 | `account_payment_stop` | 계좌 사건별 지급정지 기록 | P3 | 10 |
 | 53 | `unregistered_login_failure` | 미가입 아이디 로그인 실패 횟수 | P1 | 4 |
@@ -1115,6 +1115,10 @@ COB 대사 스텝이 원장 누적 합계와 `account.balance`가 다른 계좌�
 | `channel` | `CHAR(2)` |  | X |  | 요청 채널. 실행할 때도 이 채널로 채번한다 |
 | `flow_id` | `VARCHAR(64)` |  | O |  | FE 행동 흐름 식별자 |
 | `policy_code` | `VARCHAR(30)` |  | X |  | 보류를 정한 정책 코드 |
+| `policy_count_10m` | `INT` |  | O |  | FDS 판정 시 현재 요청을 포함한 최근 10분 이체 건수 |
+| `policy_amount_10m` | `BIGINT` |  | O |  | FDS 판정 시 현재 요청을 포함한 최근 10분 누적액 |
+| `policy_hesitation_in_window` | `BOOLEAN` |  | O |  | FDS 반복 묶음에서 검증된 망설임이 있었는지 |
+| `policy_new_recipient_at_window_start` | `BOOLEAN` |  | O |  | 반복 묶음 첫 성공 이체 이전 기준 신규 수취인 여부 |
 | `release_mode` | `VARCHAR(12)` |  | X |  | 푸는 방식. `AT_TIME`(시각 도래, 지연이체) / `ON_APPROVAL`(관리자 승인, FDS) |
 | `release_at` | `DATETIME(6)` |  | O |  | `AT_TIME`일 때 실행할 시각. 그 밖에는 NULL |
 | `status` | `VARCHAR(10)` |  | X |  | `HELD`(보류 중) / `EXECUTING`(실행 선점) / `EXECUTED`(실행 성공) / `FAILED`(실행 시점 검사에서 거부) / `REJECTED`(관리자 거절) / `CANCELLED`(고객 취소) / `EXPIRED`(승인 기한 지남) |

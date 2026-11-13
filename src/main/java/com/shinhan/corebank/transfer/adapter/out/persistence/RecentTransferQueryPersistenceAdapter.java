@@ -7,6 +7,7 @@ import com.querydsl.core.Tuple;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.transfer.api.RecentSuccessfulTransfer;
 import com.shinhan.corebank.transfer.api.RecentTransferAggregate;
 import com.shinhan.corebank.transfer.api.RecipientHistory;
 import com.shinhan.corebank.transfer.api.SucceededTransfer;
@@ -48,6 +49,27 @@ public class RecentTransferQueryPersistenceAdapter implements RecentTransferQuer
                 (int) count,
                 row.get(transferJpaEntity.amount.sumLong()),
                 row.get(transferJpaEntity.transferredAt.min()));
+    }
+
+    @Override
+    public List<RecentSuccessfulTransfer> findSucceeded(
+            long customerId, String depositAccountNumber, LocalDateTime since) {
+        List<Long> accountIds = accountIdsOf(customerId);
+        if (accountIds.isEmpty()) {
+            return List.of();
+        }
+        return queryFactory
+                .select(transferJpaEntity.transferId, transferJpaEntity.amount, transferJpaEntity.transferredAt)
+                .from(transferJpaEntity)
+                .where(succeededTo(accountIds, depositAccountNumber), transferJpaEntity.transferredAt.goe(since))
+                .orderBy(transferJpaEntity.transferredAt.asc(), transferJpaEntity.transferId.asc())
+                .fetch()
+                .stream()
+                .map(row -> new RecentSuccessfulTransfer(
+                        row.get(transferJpaEntity.transferId),
+                        row.get(transferJpaEntity.amount),
+                        row.get(transferJpaEntity.transferredAt)))
+                .toList();
     }
 
     @Override

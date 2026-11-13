@@ -28,4 +28,39 @@ public record TransferHoldForFds(
         String releaseMode,
         Long actorId,
         String reasonCode,
-        LocalDateTime completedAt) {}
+        LocalDateTime completedAt,
+        Integer policyCount10m,
+        Long policyAmount10m,
+        Boolean policyHesitationInWindow,
+        Boolean policyNewRecipientAtWindowStart) {
+
+    public TransferHoldForFds(
+            long transferHoldId,
+            long customerId,
+            String flowId,
+            String status,
+            LocalDateTime heldAt,
+            long amount,
+            String depositAccountNumber,
+            String policyCode) {
+        this(
+                transferHoldId,
+                customerId,
+                flowId,
+                status,
+                heldAt,
+                amount,
+                depositAccountNumber,
+                policyCode,
+                0L,
+                "088",
+                "ON_APPROVAL",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+    }
+}

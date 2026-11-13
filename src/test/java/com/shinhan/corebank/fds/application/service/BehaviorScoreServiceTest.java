@@ -67,6 +67,10 @@ class BehaviorScoreServiceTest {
                         "ON_APPROVAL",
                         null,
                         null,
+                        null,
+                        null,
+                        null,
+                        null,
                         null);
             }
 
