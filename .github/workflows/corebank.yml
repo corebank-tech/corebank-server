@@ -9,10 +9,7 @@ env:
   JAVA_VERSION: '21'
   JAVA_DISTRIBUTION: 'corretto'
   DOCKER_IMAGE_NAME: 'corebank-server'
-  CONTAINER_NAME: 'corebank-server'
   MOCK_EXTERNAL_IMAGE_NAME: 'corebank-mock-external'
-  SERVER_PORT: '8080'
-  AWS_DEFAULT_REGION: 'ap-northeast-2'
 
 jobs:
   # -------------------------------------------------------------------------
