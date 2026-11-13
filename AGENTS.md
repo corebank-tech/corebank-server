@@ -131,5 +131,5 @@ docker compose up -d minicore-mysql                 # 로컬 인프라 (MySQL)
 - 일반 PR 제목: `[type/도메인] 작업 내용` — 예 `[fix/account] 상품 채번 행 누락으로 가입 실패 (#342)`
 - 전역 변경 PR 제목: `[type] 작업 내용` — 예 `[docs] README에 문서 색인 추가`
 - 릴리스 PR 제목: `[RELEASE] dev → main 릴리스 배포`
-- **PR base는 기본적으로 `dev`.** `dev → main` 릴리스 PR만 예외로 `main`을 base로 한다. `main` 머지는 곧 EC2 배포다.
+- **PR base는 기본적으로 `dev`.** `dev → main` 릴리스 PR만 예외로 `main`을 base로 한다. `main` 머지는 Docker 이미지 빌드·푸시까지만 하고, 서버 반영은 사람이 이미지 태그를 정해 직접 한다.
 - 리뷰 등급 `R1`~`R5`와 로테이션은 [team_collaboration_guide.md](docs/team_collaboration_guide.md) §5.

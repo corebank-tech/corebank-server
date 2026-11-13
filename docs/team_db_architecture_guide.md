@@ -47,7 +47,7 @@ flowchart TD
 ### 🔹 3단계: 환경별 시드 데이터 로딩 및 서비스 오픈
 - 검증이 통과되면 서버가 오픈됩니다. `DemoDataLoader`는 `local` 또는 명시적인 `qa-seed` 프로필에서 더미 데이터(`local-demo-data.sql`)를 자동 삽입합니다. 팀 QA 배포는 `prod,qa-seed`를 사용하고, `prod` 단독 실행에서는 시드가 차단됩니다.
 - 배포 QA의 세 계정은 팀원이 공유하는 공개 픽스처입니다. 실패 횟수 누적으로 잠기거나 계좌 상태가 변경되면 재배포로 정확한 시드 행의 잠금·잔액·상태를 복구하며, 고객 비밀번호와 개인정보는 덮어쓰지 않습니다.
-- `corebank-server` healthcheck가 통과하고 SSM 명령이 성공해야 배포 Job이 완료되므로, QA 시드 적재 실패가 서비스의 무한 재시작 뒤에 숨지 않습니다.
+- GitHub Actions Job 성공은 이미지 빌드·푸시까지만 뜻합니다. QA 시드 적재 실패는 Job에 드러나지 않으므로, 수동 반영 뒤 [vm_account_api_runbook.md](phase2/vm_account_api_runbook.md) §4 헬스체크와 기동 로그로 확인합니다.
 
 ---
 
