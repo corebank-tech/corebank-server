@@ -40,6 +40,8 @@ public class TransferHold {
     private final LocalDateTime heldAt;
     private final Long transferId;
     private final String reasonCode;
+    private final Long actorId; // 실행·거절·취소한 주체. 스케줄러 실행과 만료는 null
+    private final LocalDateTime completedAt; // 종료 상태가 된 시각
 
     private TransferHold(
             Long transferHoldId,
@@ -62,7 +64,9 @@ public class TransferHold {
             LocalDateTime authenticatedAt,
             LocalDateTime heldAt,
             Long transferId,
-            String reasonCode) {
+            String reasonCode,
+            Long actorId,
+            LocalDateTime completedAt) {
         this.transferHoldId = transferHoldId;
         this.customerId = customerId;
         this.withdrawalAccountId = withdrawalAccountId;
@@ -84,6 +88,8 @@ public class TransferHold {
         this.heldAt = heldAt;
         this.transferId = transferId;
         this.reasonCode = reasonCode;
+        this.actorId = actorId;
+        this.completedAt = completedAt;
     }
 
     /** 훅 C가 보류로 판정한 요청을 HELD로 만든다. 판정 값의 조합은 TransferHoldDecision이 이미 검증했다. */
@@ -125,6 +131,8 @@ public class TransferHold {
                 authenticatedAt,
                 heldAt,
                 null,
+                null,
+                null,
                 null);
     }
 
@@ -149,7 +157,9 @@ public class TransferHold {
             LocalDateTime authenticatedAt,
             LocalDateTime heldAt,
             Long transferId,
-            String reasonCode) {
+            String reasonCode,
+            Long actorId,
+            LocalDateTime completedAt) {
         return new TransferHold(
                 transferHoldId,
                 customerId,
@@ -171,7 +181,9 @@ public class TransferHold {
                 authenticatedAt,
                 heldAt,
                 transferId,
-                reasonCode);
+                reasonCode,
+                actorId,
+                completedAt);
     }
 
     // 실행일자는 중복 기표를 막는 유니크 키의 일부라 보류한 날짜와 같아야 한다
@@ -283,5 +295,13 @@ public class TransferHold {
     /** 거절 사유 코드, 또는 FAILED일 때 실행이 거부된 오류코드 */
     public String getReasonCode() {
         return reasonCode;
+    }
+
+    public Long getActorId() {
+        return actorId;
+    }
+
+    public LocalDateTime getCompletedAt() {
+        return completedAt;
     }
 }
