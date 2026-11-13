@@ -81,38 +81,45 @@ public class JdbcFdsInvestigationJobAdapter implements FdsInvestigationJobPort {
     }
 
     @Override
-    public boolean claim(long holdId, LocalDateTime now, LocalDateTime leaseExpiresAt) {
-        return jdbc.update(
-                        "UPDATE fds_investigation_job SET job_status='RUNNING', attempt_count=attempt_count+1, "
-                                + "lease_expires_at=?, updated_at=? WHERE transfer_hold_id=? AND job_status='PENDING' "
-                                + "AND next_attempt_at<=? AND attempt_count<3",
-                        timestamp(leaseExpiresAt),
-                        timestamp(now),
-                        holdId,
-                        timestamp(now))
-                == 1;
+    @Transactional
+    public Integer claim(long holdId, LocalDateTime now, LocalDateTime leaseExpiresAt) {
+        int updated = jdbc.update(
+                "UPDATE fds_investigation_job SET job_status='RUNNING', attempt_count=attempt_count+1, "
+                        + "lease_expires_at=?, updated_at=? WHERE transfer_hold_id=? AND job_status='PENDING' "
+                        + "AND next_attempt_at<=? AND attempt_count<3",
+                timestamp(leaseExpiresAt),
+                timestamp(now),
+                holdId,
+                timestamp(now));
+        if (updated != 1) return null;
+        return jdbc.queryForObject(
+                "SELECT attempt_count FROM fds_investigation_job WHERE transfer_hold_id=?", Integer.class, holdId);
     }
 
     @Override
-    public boolean retry(long holdId, LocalDateTime nextAttemptAt, String reason, LocalDateTime now) {
+    public boolean retry(long holdId, int attemptNo, LocalDateTime nextAttemptAt, String reason, LocalDateTime now) {
         return jdbc.update(
                         "UPDATE fds_investigation_job SET job_status='PENDING', next_attempt_at=?, lease_expires_at=NULL, "
-                                + "last_failure_reason=?, updated_at=? WHERE transfer_hold_id=? AND job_status='RUNNING'",
+                                + "last_failure_reason=?, updated_at=? WHERE transfer_hold_id=? AND job_status='RUNNING' "
+                                + "AND attempt_count=?",
                         timestamp(nextAttemptAt),
                         reason,
                         timestamp(now),
-                        holdId)
+                        holdId,
+                        attemptNo)
                 == 1;
     }
 
     @Override
-    public boolean fail(long holdId, String reason, LocalDateTime now) {
+    public boolean fail(long holdId, int attemptNo, String reason, LocalDateTime now) {
         return jdbc.update(
                         "UPDATE fds_investigation_job SET job_status='FAILED', lease_expires_at=NULL, "
-                                + "last_failure_reason=?, updated_at=? WHERE transfer_hold_id=? AND job_status='RUNNING'",
+                                + "last_failure_reason=?, updated_at=? WHERE transfer_hold_id=? AND job_status='RUNNING' "
+                                + "AND attempt_count=?",
                         reason,
                         timestamp(now),
-                        holdId)
+                        holdId,
+                        attemptNo)
                 == 1;
     }
 
@@ -248,7 +255,13 @@ public class JdbcFdsInvestigationJobAdapter implements FdsInvestigationJobPort {
     @Override
     @Transactional
     public void completeWithReport(
-            long holdId, String investigationId, String schemaVersion, String json, String hash, LocalDateTime now) {
+            long holdId,
+            String investigationId,
+            int attemptNo,
+            String schemaVersion,
+            String json,
+            String hash,
+            LocalDateTime now) {
         jdbc.update(
                 "INSERT INTO fds_investigation_report "
                         + "(investigation_id, transfer_hold_id, schema_version, report_json, report_sha256, created_at) "
@@ -266,10 +279,12 @@ public class JdbcFdsInvestigationJobAdapter implements FdsInvestigationJobPort {
         if (!hash.equals(storedHash)) throw new BusinessException(FdsErrorCode.FLOW_CONFLICT);
         int updated = jdbc.update(
                 "UPDATE fds_investigation_job SET job_status='COMPLETED', lease_expires_at=NULL, updated_at=? "
-                        + "WHERE transfer_hold_id=? AND investigation_id=? AND job_status IN ('RUNNING','COMPLETED')",
+                        + "WHERE transfer_hold_id=? AND investigation_id=? AND attempt_count=? "
+                        + "AND job_status IN ('RUNNING','COMPLETED')",
                 timestamp(now),
                 holdId,
-                investigationId);
+                investigationId,
+                attemptNo);
         if (updated != 1) throw new BusinessException(FdsErrorCode.FLOW_CONFLICT);
     }
 

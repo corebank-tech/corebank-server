@@ -5,6 +5,7 @@ import java.util.Map;
 import org.springframework.boot.test.context.TestComponent;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /** SecurityConfig의 경로별 접근 정책만 검증하기 위한 테스트 전용 컨트롤러 */
@@ -90,6 +91,21 @@ class SecurityTestController {
     @GetMapping("/admin/fds/holds/123")
     ApiResponse<String> fdsHoldDetail() {
         return ApiResponse.success("fds-hold");
+    }
+
+    @PostMapping("/admin/fds/holds/123/approve")
+    ApiResponse<String> fdsHoldApprove() {
+        return ApiResponse.success("fds-approve");
+    }
+
+    @GetMapping("/internal/fds/holds/123/history")
+    ApiResponse<String> fdsAgentHistory() {
+        return ApiResponse.success("fds-history");
+    }
+
+    @PutMapping("/internal/fds/investigations/inv-123/report")
+    ApiResponse<String> fdsAgentReport() {
+        return ApiResponse.success("fds-report");
     }
 
     // 매핑표에 없는 접두어. 권한을 정하지 않은 경로가 열리지 않는지 본다.

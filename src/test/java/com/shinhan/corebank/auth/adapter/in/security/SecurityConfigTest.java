@@ -9,6 +9,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -419,11 +420,24 @@ class SecurityConfigTest {
         mockMvc.perform(get(path).contextPath("/api/v1").with(authentication(admin(7L, AdminPermission.CUSTOMER_READ))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").value("fds-hold"));
-        mockMvc.perform(post(path)
+        mockMvc.perform(post(path + "/approve")
                         .contextPath("/api/v1")
                         .with(authentication(admin(7L, AdminPermission.CUSTOMER_WRITE)))
                         .with(csrf()))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("fds-approve"));
+    }
+
+    @Test
+    @DisplayName("FDS Agent 내부 API는 세션과 CSRF 없이 Controller 토큰 검증 단계까지 통과한다")
+    void fdsAgentApiBypassesSessionAndCsrfAtSecurityFilter() throws Exception {
+        mockMvc.perform(get("/api/v1/internal/fds/holds/123/history").contextPath("/api/v1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("fds-history"));
+        mockMvc.perform(put("/api/v1/internal/fds/investigations/inv-123/report")
+                        .contextPath("/api/v1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("fds-report"));
     }
 
     @Test

@@ -63,8 +63,8 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
                 .isEqualTo(firstId);
         assertThat(investigationJobs.createIfAbsent(holdId, replayId, now).investigationId())
                 .isEqualTo(firstId);
-        assertThat(investigationJobs.claim(holdId, now, now.plusSeconds(70))).isTrue();
-        assertThat(investigationJobs.claim(holdId, now, now.plusSeconds(70))).isFalse();
+        assertThat(investigationJobs.claim(holdId, now, now.plusSeconds(70))).isEqualTo(1);
+        assertThat(investigationJobs.claim(holdId, now, now.plusSeconds(70))).isNull();
         investigationJobs.recordEvidence(firstId, holdId, 992001L, now.minusHours(24), now, List.of(101L), now);
         investigationJobs.recordEvidence(firstId, holdId, 992001L, now.minusHours(24), now, List.of(101L), now);
         investigationJobs.recordHistorySnapshot(
@@ -79,12 +79,12 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
         investigationJobs.recordRecipientSnapshot(firstId, holdId, 992001L, now.minusDays(1), true, 2, now);
 
         investigationJobs.completeWithReport(
-                holdId, firstId, "p6-investigation-v1", "{\"result\":\"ok\"}", "a".repeat(64), now);
+                holdId, firstId, 1, "p6-investigation-v1", "{\"result\":\"ok\"}", "a".repeat(64), now);
         investigationJobs.completeWithReport(
-                holdId, firstId, "p6-investigation-v1", "{\"result\":\"ok\"}", "a".repeat(64), now);
+                holdId, firstId, 1, "p6-investigation-v1", "{\"result\":\"ok\"}", "a".repeat(64), now);
 
         assertThatThrownBy(() -> investigationJobs.completeWithReport(
-                        holdId, firstId, "p6-investigation-v1", "{\"result\":\"different\"}", "b".repeat(64), now))
+                        holdId, firstId, 1, "p6-investigation-v1", "{\"result\":\"different\"}", "b".repeat(64), now))
                 .isInstanceOf(BusinessException.class);
 
         assertThat(investigationJobs.findByHoldId(holdId).status()).isEqualTo("COMPLETED");
@@ -142,20 +142,31 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
         investigationJobs.createIfAbsent(retryHoldId, retryId, now);
         assertThat(investigationJobs.findDue(now, 100)).contains(retryHoldId);
         assertThat(investigationJobs.claim(retryHoldId, now, now.plusSeconds(70)))
-                .isTrue();
-        assertThat(investigationJobs.retry(retryHoldId, now.plusMinutes(1), "AGENT_UNAVAILABLE", now))
+                .isEqualTo(1);
+        assertThat(investigationJobs.retry(retryHoldId, 1, now.plusMinutes(1), "AGENT_UNAVAILABLE", now))
                 .isTrue();
         assertThat(investigationJobs.findByInvestigationId(retryId).status()).isEqualTo("PENDING");
         assertThat(investigationJobs.findDue(now, 100)).doesNotContain(retryHoldId);
         assertThat(investigationJobs.findDue(now.plusMinutes(1), 100)).contains(retryHoldId);
 
         assertThat(investigationJobs.claim(retryHoldId, now.plusMinutes(1), now.plusMinutes(2)))
-                .isTrue();
-        assertThat(investigationJobs.fail(retryHoldId, "FINAL_FAILURE", now.plusMinutes(1)))
+                .isEqualTo(2);
+        assertThat(investigationJobs.retry(retryHoldId, 1, now.plusMinutes(2), "STALE_RETRY", now))
+                .isFalse();
+        assertThat(investigationJobs.fail(retryHoldId, 1, "STALE_FAILURE", now)).isFalse();
+        assertThatThrownBy(() -> investigationJobs.completeWithReport(
+                        retryHoldId, retryId, 1, "p6-investigation-v1", "{\"result\":\"stale\"}", "d".repeat(64), now))
+                .isInstanceOf(BusinessException.class);
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_investigation_report WHERE investigation_id=?",
+                        Integer.class,
+                        retryId))
+                .isZero();
+        assertThat(investigationJobs.fail(retryHoldId, 2, "FINAL_FAILURE", now.plusMinutes(1)))
                 .isTrue();
         assertThat(investigationJobs.findByHoldId(retryHoldId).status()).isEqualTo("FAILED");
         assertThat(investigationJobs.claim(retryHoldId, now.plusMinutes(2), now.plusMinutes(3)))
-                .isFalse();
+                .isNull();
 
         long pendingRecoveryHoldId = investigationHoldId();
         long failedRecoveryHoldId = investigationHoldId();
@@ -217,7 +228,7 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
         investigationJobs.createIfAbsent(holdId, investigationId, now);
 
         assertThatThrownBy(() -> investigationJobs.completeWithReport(
-                        holdId, investigationId, "p6-investigation-v1", "{\"result\":\"ok\"}", "c".repeat(64), now))
+                        holdId, investigationId, 0, "p6-investigation-v1", "{\"result\":\"ok\"}", "c".repeat(64), now))
                 .isInstanceOf(BusinessException.class);
         assertThat(jdbc.queryForObject(
                         "SELECT COUNT(*) FROM fds_investigation_report WHERE investigation_id=?",

@@ -62,6 +62,8 @@ class FdsAdminActionStoreIntegrationTest extends IntegrationTestSupport {
 
         var completed = store.reconcile(pending, hold(holdId, "EXECUTED", "99999999999", 7L, null));
         assertThat(completed.status()).isEqualTo("COMPLETED");
+        when(holds.findForFds(holdId)).thenReturn(hold(holdId, "EXECUTED", "99999999999", 7L, null));
+        assertThat(store.prepare(holdId, actionKey, 7L, "APPROVE", null)).isEqualTo(completed);
         assertThat(jdbc.queryForObject(
                         "SELECT COUNT(*) FROM fds_admin_action_audit WHERE action_id=?",
                         Integer.class,

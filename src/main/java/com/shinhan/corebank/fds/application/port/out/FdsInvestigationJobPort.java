@@ -15,11 +15,11 @@ public interface FdsInvestigationJobPort {
 
     List<Long> findDue(LocalDateTime now, int limit);
 
-    boolean claim(long transferHoldId, LocalDateTime now, LocalDateTime leaseExpiresAt);
+    Integer claim(long transferHoldId, LocalDateTime now, LocalDateTime leaseExpiresAt);
 
-    boolean retry(long transferHoldId, LocalDateTime nextAttemptAt, String reason, LocalDateTime now);
+    boolean retry(long transferHoldId, int attemptNo, LocalDateTime nextAttemptAt, String reason, LocalDateTime now);
 
-    boolean fail(long transferHoldId, String reason, LocalDateTime now);
+    boolean fail(long transferHoldId, int attemptNo, String reason, LocalDateTime now);
 
     int recoverExpired(LocalDateTime now);
 
@@ -56,6 +56,7 @@ public interface FdsInvestigationJobPort {
     void completeWithReport(
             long transferHoldId,
             String investigationId,
+            int attemptNo,
             String schemaVersion,
             String reportJson,
             String reportSha256,
