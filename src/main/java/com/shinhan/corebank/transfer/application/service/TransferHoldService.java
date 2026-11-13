@@ -34,6 +34,9 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class TransferHoldService implements TransferHoldUseCase {
 
+    // 보류는 당행 즉시이체에만 생겨 은행코드를 저장하지 않는다
+    private static final String OWN_BANK_CODE = "088";
+
     private final TransferHoldPort transferHoldPort;
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final TransferLookupPort transferLookupPort;
@@ -41,7 +44,6 @@ public class TransferHoldService implements TransferHoldUseCase {
 
     @Override
     public TransferHoldForFds findForFds(long transferHoldId) {
-        // P6에는 보류 판정에 필요한 소유권·flow·상태만 공개한다.
         TransferHold hold = load(transferHoldId);
         return new TransferHoldForFds(
                 transferHoldId,
@@ -51,7 +53,17 @@ public class TransferHoldService implements TransferHoldUseCase {
                 hold.getHeldAt(),
                 hold.getAmount(),
                 hold.getDepositAccountNumber(),
-                hold.getPolicyCode());
+                hold.getPolicyCode(),
+                hold.getWithdrawalAccountId(),
+                OWN_BANK_CODE,
+                hold.getReleaseMode().name(),
+                hold.getActorId(),
+                hold.getReasonCode(),
+                hold.getCompletedAt(),
+                hold.getPolicyCount10m(),
+                hold.getPolicyAmount10m(),
+                hold.getPolicyHesitationInWindow(),
+                hold.getPolicyNewRecipientAtWindowStart());
     }
 
     /** 관리자 승인(FDS). 승인으로 푸는 보류만 실행한다. 시각으로 푸는 보류는 TRF0310이다. */

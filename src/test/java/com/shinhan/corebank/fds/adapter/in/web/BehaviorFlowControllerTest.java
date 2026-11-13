@@ -79,6 +79,23 @@ class BehaviorFlowControllerTest {
         assertThat(port.events).isEmpty();
     }
 
+    @Test
+    void acceptsBodyAtExactlyThirtyTwoKibibytes() {
+        UUID id = UUID.randomUUID();
+        String json =
+                """
+                {"events":[{"flowId":"%s","seqNo":1,"eventType":"TRANSFER_ENTER",
+                "occurredAt":"2026-11-09T13:59:59+09:00","step":"D-01"}]}
+                """
+                        .formatted(id)
+                        .trim();
+        String body = json + " ".repeat(32 * 1024 - json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
+
+        assertThat(body.getBytes(java.nio.charset.StandardCharsets.UTF_8)).hasSize(32 * 1024);
+        assertThat(controller.submit(id, "test-key", body).getBody().data().acceptedCount())
+                .isEqualTo(1);
+    }
+
     private static class MemoryFlowPort implements BehaviorFlowPort {
         Flow flow;
         List<Event> events = new ArrayList<>();

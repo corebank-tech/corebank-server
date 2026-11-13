@@ -54,7 +54,24 @@ class BehaviorScoreServiceTest {
             @Override
             public TransferHoldForFds findForFds(long id) {
                 return new TransferHoldForFds(
-                        id, holdCustomerId, holdFlowId, holdStatus, held.heldAt(), 500000, "0881234567", "A");
+                        id,
+                        holdCustomerId,
+                        holdFlowId,
+                        holdStatus,
+                        held.heldAt(),
+                        500000,
+                        "0881234567",
+                        "A",
+                        101L,
+                        "088",
+                        "ON_APPROVAL",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null);
             }
 
             @Override

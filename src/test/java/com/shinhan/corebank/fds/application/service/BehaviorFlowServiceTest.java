@@ -9,6 +9,7 @@ import com.shinhan.corebank.fds.application.port.out.BehaviorFlowPort.Event;
 import com.shinhan.corebank.fds.application.port.out.BehaviorFlowPort.Flow;
 import com.shinhan.corebank.fds.domain.exception.FdsErrorCode;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -98,6 +99,103 @@ class BehaviorFlowServiceTest {
         service.submit(flowId, 7, finalized);
         var changedSeconds = new BehaviorFlowService.Batch(finalized.events(), 5);
         assertThatThrownBy(() -> service.submit(flowId, 7, changedSeconds)).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void validatesWholeBatchBeforeAppendingAndLimitsRequestToOneHundred() {
+        var invalidTail = new BehaviorFlowService.Batch(
+                List.of(event(1, "TRANSFER_ENTER", -3, "D-01"), event(2, "CONFIRM_LEAVE", -2, "D-02")), null);
+
+        assertThatThrownBy(() -> service.submit(flowId, 7, invalidTail)).isInstanceOf(BusinessException.class);
+        assertThat(port.events).isEmpty();
+
+        port.flow = null;
+        var tooMany = new ArrayList<BehaviorFlowService.EventInput>();
+        for (int sequence = 1; sequence <= 101; sequence++) {
+            tooMany.add(event(sequence, sequence == 1 ? "TRANSFER_ENTER" : "AMOUNT_EDITED", -1, "D-01"));
+        }
+        assertThatThrownBy(() -> service.submit(flowId, 7, new BehaviorFlowService.Batch(tooMany, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(FdsErrorCode.INVALID_EVENT);
+        assertThat(port.events).isEmpty();
+    }
+
+    @Test
+    void acceptsAllSevenTypesAndCountsOnlyNewEventsInMixedReplay() {
+        var first = new BehaviorFlowService.Batch(
+                List.of(
+                        event(1, "TRANSFER_ENTER", -10, "D-01"),
+                        event(2, "RECIPIENT_CONFIRMED", -9, "D-01"),
+                        event(3, "AMOUNT_EDITED", -8, "D-01"),
+                        event(4, "CONFIRM_ENTER", -7, "D-02"),
+                        event(5, "CONFIRM_LEAVE", -6, "D-02")),
+                null);
+        service.submit(flowId, 7, first);
+
+        var mixed = new BehaviorFlowService.Batch(
+                List.of(
+                        event(5, "CONFIRM_LEAVE", -6, "D-02"),
+                        event(6, "STEP_BACK", -5, "D-01"),
+                        event(7, "SUBMIT_REQUESTED", -1, "D-02")),
+                4);
+
+        assertThat(service.submit(flowId, 7, mixed).acceptedCount()).isEqualTo(2);
+        assertThat(port.events).hasSize(7);
+    }
+
+    @Test
+    void rejectsStepBackBeforeEnteringConfirmation() {
+        var batch = new BehaviorFlowService.Batch(
+                List.of(event(1, "TRANSFER_ENTER", -2, "D-01"), event(2, "STEP_BACK", -1, "D-01")), null);
+
+        assertThatThrownBy(() -> service.submit(flowId, 7, batch))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(FdsErrorCode.INVALID_EVENT);
+        assertThat(port.events).isEmpty();
+    }
+
+    @Test
+    void finalizedFlowAllowsPureIdenticalEventReplayWithoutActiveSeconds() {
+        var finalBatch = new BehaviorFlowService.Batch(
+                List.of(event(1, "TRANSFER_ENTER", -3, "D-01"), event(2, "SUBMIT_REQUESTED", -1, "D-02")), 2);
+        service.submit(flowId, 7, finalBatch);
+
+        var earlierReplay = new BehaviorFlowService.Batch(List.of(event(1, "TRANSFER_ENTER", -3, "D-01")), null);
+
+        assertThat(service.submit(flowId, 7, earlierReplay).acceptedCount()).isZero();
+        assertThat(port.events).hasSize(2);
+    }
+
+    @Test
+    void rejectsReplayedEventsInReverseSequenceOrder() {
+        var stored = new BehaviorFlowService.Batch(
+                List.of(
+                        event(1, "TRANSFER_ENTER", -6, "D-01"),
+                        event(2, "RECIPIENT_CONFIRMED", -5, "D-01"),
+                        event(3, "CONFIRM_ENTER", -4, "D-02"),
+                        event(4, "CONFIRM_LEAVE", -3, "D-02"),
+                        event(5, "STEP_BACK", -2, "D-01")),
+                null);
+        service.submit(flowId, 7, stored);
+        var reversed = new BehaviorFlowService.Batch(
+                List.of(event(5, "STEP_BACK", -2, "D-01"), event(4, "CONFIRM_LEAVE", -3, "D-02")), null);
+
+        assertThatThrownBy(() -> service.submit(flowId, 7, reversed))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(FdsErrorCode.INVALID_EVENT);
+    }
+
+    @Test
+    void identicalReplayRemainsIdempotentAfterOccurrenceFallsOutsideCurrentWindow() {
+        var original = new BehaviorFlowService.Batch(List.of(event(1, "TRANSFER_ENTER", -1799, "D-01")), null);
+        service.submit(flowId, 7, original);
+        BehaviorFlowService laterService = new BehaviorFlowService(port, Clock.offset(clock, Duration.ofSeconds(2)));
+
+        assertThat(laterService.submit(flowId, 7, original).acceptedCount()).isZero();
+        assertThat(port.events).hasSize(1);
     }
 
     private BehaviorFlowService.EventInput event(int seq, String type, long seconds, String step) {

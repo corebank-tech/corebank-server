@@ -13,7 +13,7 @@ URL: `/api/v1/fds/behavior-flows/{flowId}/events`
 사용자: 유저
 인증 필요: Y
 Idempotency-Key: Y
-기타: `Idempotency-Key`는 같은 이벤트 묶음 재전송에 쓴다. `(flowId, seqNo)`도 유니크다. 계좌번호·메모·인증 토큰 원문을 받지 않는다. 한 흐름 최대 100개, 한 요청 본문 최대 32 KiB, 첫 서버 수신부터 30분 유효. 아직 미구현.
+기타: `flowId`는 FE가 이체 시도마다 UUID로 생성하며 최초 이벤트 제출 시 P6이 인증 고객에게 귀속한다. 별도 흐름 생성 API는 없다. `Idempotency-Key`는 같은 이벤트 묶음 재전송에 쓴다. `(flowId, seqNo)`도 유니크다. 계좌번호·메모·인증 토큰 원문을 받지 않는다. 한 흐름 최대 100개, 한 요청 본문 최대 32 KiB, 첫 서버 수신부터 30분 유효. #951에서 기반을 구현했고 #975에서 원자성·경계 계약을 완성한다.
 
 ### 요구사항 ID
 
@@ -499,7 +499,7 @@ Idempotency-Key: N
 **목표 Example (#946·B4 포함)**
 
 ```json
-{"code":"0000","message":"정상 처리되었습니다.","data":{"transferHoldId":123,"holdStatus":"HELD","amount":500000,"recipientAccountMasked":"088******006","riskAccountCheck":{"status":"MATCH","label":"위험 계좌 목록과 일치","riskAccountId":501,"datasetVersion":"demo-risk-v1","checkedAt":"2026-11-08T14:00:00+09:00","sourceNotice":"프로젝트 시연용 합성 데이터이며 실제 사기 확정 정보가 아닙니다."},"serverPolicy":{"policyCode":"A","count10m":3,"amount10m":1500000},"behaviorSummary":{"hesitationWarning":true},"behaviorScoreStatus":"AVAILABLE","behaviorRiskScore":0.81,"modelVersion":"xgb-demo-v1","featureVersion":"p6-behavior-v1","behaviorScoreUnavailableReason":null,"investigationStatus":"COMPLETED","secondaryFindings":[{"code":"REGULAR_SPLIT_AMOUNTS","evidenceTransferIds":[101,102],"confidence":"OBSERVED"}],"callRecords":[]}}
+{"code":"0000","message":"정상 처리되었습니다.","data":{"transferHoldId":123,"holdStatus":"HELD","amount":500000,"recipientAccountMasked":"088******006","riskAccountCheck":{"status":"MATCH","label":"위험 계좌 목록과 일치","riskAccountId":501,"datasetVersion":"demo-risk-v1","checkedAt":"2026-11-08T14:00:00+09:00","sourceNotice":"프로젝트 시연용 합성 데이터이며 실제 사기 확정 정보가 아닙니다."},"serverPolicy":{"policyCode":"A","count10m":3,"amount10m":1500000,"hesitationInWindow":true,"newRecipientAtWindowStart":true},"behaviorSummary":{"hesitationWarning":true},"behaviorScoreStatus":"AVAILABLE","behaviorRiskScore":0.81,"modelVersion":"xgb-demo-v1","featureVersion":"p6-behavior-v1","behaviorScoreUnavailableReason":null,"investigationStatus":"COMPLETED","secondaryFindings":[{"code":"REGULAR_SPLIT_AMOUNTS","evidenceTransferIds":[101,102],"confidence":"OBSERVED"}],"callRecords":[]}}
 ```
 
 ### Status

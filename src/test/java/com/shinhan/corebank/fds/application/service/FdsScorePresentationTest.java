@@ -47,6 +47,11 @@ class FdsScorePresentationTest {
         assertThat(admin.featureVersion()).isEqualTo("p6-behavior-v1");
         assertThat(admin.behaviorScoreUnavailableReason()).isNull();
         assertThat(admin.recipientAccountMasked()).isEqualTo("08******67");
+        assertThat(admin.serverPolicy().policyCode()).isEqualTo("A");
+        assertThat(admin.serverPolicy().count10m()).isEqualTo(3);
+        assertThat(admin.serverPolicy().amount10m()).isEqualTo(1_500_000);
+        assertThat(admin.serverPolicy().hesitationInWindow()).isTrue();
+        assertThat(admin.serverPolicy().newRecipientAtWindowStart()).isTrue();
         assertThat(agent.behaviorSummary().behaviorRiskScore()).isEqualTo(admin.behaviorRiskScore());
         assertThat(agent.behaviorSummary().modelVersion()).isEqualTo(admin.modelVersion());
         assertThat(agent.behaviorSummary().featureVersion()).isEqualTo(admin.featureVersion());
@@ -115,7 +120,24 @@ class FdsScorePresentationTest {
         @Override
         public TransferHoldForFds findForFds(long id) {
             return new TransferHoldForFds(
-                    id, 7, "flow-123", "HELD", LocalDateTime.of(2026, 11, 9, 14, 0), 500000, "0881234567", "A");
+                    id,
+                    7,
+                    "flow-123",
+                    "HELD",
+                    LocalDateTime.of(2026, 11, 9, 14, 0),
+                    500000,
+                    "0881234567",
+                    "A",
+                    101L,
+                    "088",
+                    "ON_APPROVAL",
+                    null,
+                    null,
+                    null,
+                    3,
+                    1_500_000L,
+                    true,
+                    true);
         }
 
         @Override
