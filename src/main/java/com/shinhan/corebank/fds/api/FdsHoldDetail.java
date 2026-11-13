@@ -6,6 +6,17 @@ import java.util.List;
 
 /** 관리자 화면이 서버 근거·Agent 보조 발견·최종 조치를 구분해 표시하는 상세 응답이다. */
 public record FdsHoldDetail(
+        long transferHoldId,
+        long amount,
+        String holdStatus,
+        String recipientAccountMasked,
+        String investigationStatus,
+        String behaviorScoreStatus,
+        Double behaviorRiskScore,
+        String modelVersion,
+        String featureVersion,
+        String behaviorScoreUnavailableReason,
+        List<Finding> secondaryFindings,
         OriginalTransfer originalTransfer,
         ServerPolicy serverPolicy,
         FdsInvestigationInput.BehaviorSummary behaviorSummary,
@@ -16,34 +27,6 @@ public record FdsHoldDetail(
         AgentReport agentReport,
         List<CallRecord> callRecords,
         AdminAction adminAction) {
-    /** 기존 FE 계약을 상세 영역 전환 기간에도 유지한다. */
-    public String holdStatus() {
-        return originalTransfer.holdStatus();
-    }
-
-    public String recipientAccountMasked() {
-        return originalTransfer.recipientAccountMasked();
-    }
-
-    public String behaviorScoreStatus() {
-        return behaviorScore.status();
-    }
-
-    public Double behaviorRiskScore() {
-        return behaviorScore.score();
-    }
-
-    public String modelVersion() {
-        return behaviorScore.modelVersion();
-    }
-
-    public String featureVersion() {
-        return behaviorScore.featureVersion();
-    }
-
-    public String behaviorScoreUnavailableReason() {
-        return behaviorScore.unavailableReason();
-    }
 
     public record OriginalTransfer(
             long transferHoldId,

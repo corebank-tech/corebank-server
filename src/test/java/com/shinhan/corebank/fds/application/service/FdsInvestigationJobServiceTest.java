@@ -59,6 +59,8 @@ class FdsInvestigationJobServiceTest {
     @Test
     void workerOnlyConfirmsReportAlreadyCompletedByCallback() {
         when(agent.investigate(any())).thenAnswer(invocation -> {
+            assertThat(invocation.<FdsInvestigationInput>getArgument(0).attemptNo())
+                    .isEqualTo(1);
             when(jobs.findByHoldId(92L)).thenReturn(job("COMPLETED"));
             when(jobs.hasReport(INVESTIGATION_ID)).thenReturn(true);
             return new FdsInvestigationAgentPort.Result(INVESTIGATION_ID, 92L, "COMPLETED");

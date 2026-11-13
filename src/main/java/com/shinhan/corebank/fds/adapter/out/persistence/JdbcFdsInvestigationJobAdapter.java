@@ -253,6 +253,15 @@ public class JdbcFdsInvestigationJobAdapter implements FdsInvestigationJobPort {
     }
 
     @Override
+    public boolean hasReport(String investigationId) {
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM fds_investigation_report WHERE investigation_id=?",
+                Integer.class,
+                investigationId);
+        return count != null && count == 1;
+    }
+
+    @Override
     @Transactional
     public void completeWithReport(
             long holdId,

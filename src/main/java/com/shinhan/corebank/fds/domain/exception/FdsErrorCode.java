@@ -6,6 +6,8 @@ import com.shinhan.corebank.common.exception.ErrorCode;
 public enum FdsErrorCode implements ErrorCode {
     INVALID_EVENT("FDS0001", 400, "행동 이벤트의 순서 또는 시간이 올바르지 않습니다."),
     INVALID_INVESTIGATION_REPORT("FDS0002", 400, "조사 근거를 확인할 수 없습니다."),
+    INVALID_RISK_DATASET("FDS0003", 400, "위험 계좌 데이터셋을 확인할 수 없습니다."),
+    AGENT_UNAUTHORIZED("FDS0101", 401, "Agent 서비스를 인증할 수 없습니다."),
     NOT_FOUND("FDS0201", 404, "FDS 자료를 찾을 수 없습니다."),
     FLOW_CONFLICT("FDS0301", 409, "현재 상태에서는 요청을 처리할 수 없습니다.");
 

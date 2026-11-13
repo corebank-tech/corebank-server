@@ -53,6 +53,8 @@ public interface FdsInvestigationJobPort {
 
     Set<Long> findEvidenceIds(String investigationId);
 
+    boolean hasReport(String investigationId);
+
     void completeWithReport(
             long transferHoldId,
             String investigationId,

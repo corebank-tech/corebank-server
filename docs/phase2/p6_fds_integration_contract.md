@@ -113,17 +113,18 @@ P6은 FE에서 보류를 이체 완료로 표시하지 않는다. 승인 대기�
 
 ## 5. Agent Tool·보고서 계약 초안
 
-`TransferHeld`는 비동기 조사 시작 신호다. P6은 같은 `transferHoldId`의 조사 작업을 중복 등록하지 않고, Agent에는 `investigationId`, 정수 `transferHoldId`, P6의 정책 근거·행동 요약·마스킹된 이체 요약만 제공한다. P4는 `transfer.api`를 통해 보류 원본·상태를 제공하고 P6은 그 영속성 구현을 직접 읽지 않는다.
+`TransferHeld`는 비동기 조사 시작 신호다. P6은 같은 `transferHoldId`의 조사 작업을 중복 등록하지 않고, Agent에는 `investigationId`, 정수 `transferHoldId`, 실행 세대 `attemptNo`, P6의 정책 근거·행동 요약·마스킹된 이체 요약만 제공한다. P4는 `transfer.api`를 통해 보류 원본·상태를 제공하고 P6은 그 영속성 구현을 직접 읽지 않는다.
 
 | API | 요청 입력 | 응답의 최소 내용 | 실패 처리 |
 |---|---|---|---|
 | `GET .../history` | `transferHoldId`; 보류 직전 최대 24시간 | 최근 성공 이체 최신순 최대 100건의 `refId`·시각·금액·마스킹 수취계좌와 잘림 여부 `hasMore` | P4 `transfer.api`의 이체 목록 조회 인계 대기. 권한·보류 조회 실패면 조사 실패; 거래가 없음은 빈 배열 |
 | `GET .../recipient-context` | `transferHoldId` | 해당 고객·수취인의 **전체 과거 성공 이력** 존재 여부·최초 성공 시각·현재 보류 건 출금계좌를 제외한 다른 출금계좌 수(`withdrawalAccountId` DISTINCT)의 좁은 집계(목록 미반환) | P4 `transfer.api`의 수취인 집계 조회 인계 대기. 정보 없음과 조회 장애 구분; 최근 목록에 없다는 이유로 신규 수취인으로 취급하지 않음 |
-| `PUT .../report` | 경로 `investigationId`, 본문 `transferHoldId`, 조사 상태·`secondaryFindings`·근거 ID | 저장된 조사 ID·상태 | 같은 조사 ID 재제출은 멱등; 근거 ID가 허용된 조회 결과 밖이면 거부 |
+| `PUT .../report` | 경로 `investigationId`, 본문 `transferHoldId`·실행 요청에서 받은 `attemptNo`·조사 상태·`secondaryFindings`·근거 ID | 저장된 조사 ID·상태 | 같은 조사 ID·세대의 재제출은 멱등; 이전 실행 세대와 허용 조회 결과 밖의 근거 ID는 거부 |
 
 ```json
 {
   "transferHoldId": 123,
+  "attemptNo": 1,
   "status": "COMPLETED",
   "secondaryFindings": [{
     "code": "REGULAR_SPLIT_AMOUNTS",
@@ -202,7 +203,7 @@ public enum TransferHoldCloseReason { CANCELLED, EXPIRED }
 
 **일치 키 형식:** 은행코드는 앞의 0을 보존하는 숫자 문자열 3자리이며 현재 보류 범위는 당행 `088`이다. 당행 계좌번호는 하이픈 없는 숫자 12자리다. 관리자 API는 키를 클라이언트에서 받지 않고 P4 보류 원본의 `recipientBankCode`·`depositAccountNumber`를 사용한다. 시드 입력은 하이픈·공백·문자·길이 오류를 **거부**하며 서버가 조용히 제거·보정하지 않는다. FE가 표시용 하이픈을 사용하더라도 이체 요청 전 제거해 기존 이체 API의 숫자 전용 계약을 따른다. 타행으로 범위를 넓힐 때는 은행코드와 1~16자리 숫자 계좌번호를 별도 계약으로 검증한다. 형식 오류가 있는 보류 원본은 `NO_MATCH`로 취급하지 않고 위험 조회 `UNAVAILABLE`로 표시하며 조치 전 원본 조회 경계를 대조한다.
 
-**관리자 표시·감사안:** 목록은 `heldAt` 오래된 순, 동시각이면 `transferHoldId` 오름차순으로 정렬한다. 목록의 위험 상태는 안내용이며 상세에 `MATCH`이면 **“위험 계좌 목록과 일치”**, `NO_MATCH`이면 **“위험 계좌 목록과 일치하지 않음”**, `UNAVAILABLE`이면 **“위험 계좌 조회 불가 · 고객 확인 절차 필요”**를 표시한다. `MATCH`에는 위험 기록 ID·데이터셋 버전·조회 시각과 목록의 출처가 합성 데이터라는 설명을 상세 근거 영역에 표시한다. 일치가 실제 사기 확정을 뜻한다고 표현하지 않는다. 고객 화면에는 위험 조회 결과를 표시하지 않는다. 관리자 목록·상세 계좌번호는 정상 형식일 때 기존 `MaskingUtil` 규칙(당행 12자리면 앞 3·뒤 3자리 표시)을 따른다. 보류 원본의 계좌번호 형식이 잘못되면 `MaskingUtil`을 호출하지 않고 필수 문자열 `recipientAccountMasked`를 `"확인 불가"`로 반환하며 위험 상태는 `UNAVAILABLE`로 둔다. 전체 번호 확인이 정말 필요하면 별도 권한·조회 사유·감사가 있는 상세 조회로 설계한다. 현재 계약에 없는 수취인 이름·생년월일은 생성하거나 표시하지 않는다. 조회 감사에는 관리자 ID·보류 ID·조회 사유·시각, 거절 감사에는 조치 ID·`RISK_ACCOUNT_MATCH` 또는 `CUSTOMER_DENIED`·위험 기록 ID·버전(해당 시)·처리 결과를 남긴다. 감사 상세에는 계좌번호 원문·이름·생년월일을 복제하지 않고 기록 ID로 원본을 추적한다.
+**관리자 표시·감사안:** 목록은 `heldAt` 최신순, 동시각이면 `transferHoldId` 내림차순으로 정렬한다. 목록의 위험 상태는 안내용이며 상세에 `MATCH`이면 **“위험 계좌 목록과 일치”**, `NO_MATCH`이면 **“위험 계좌 목록과 일치하지 않음”**, `UNAVAILABLE`이면 **“위험 계좌 조회 불가 · 고객 확인 절차 필요”**를 표시한다. `MATCH`에는 위험 기록 ID·데이터셋 버전·조회 시각과 목록의 출처가 합성 데이터라는 설명을 상세 근거 영역에 표시한다. 일치가 실제 사기 확정을 뜻한다고 표현하지 않는다. 고객 화면에는 위험 조회 결과를 표시하지 않는다. 관리자 목록·상세 계좌번호는 정상 형식일 때 기존 `MaskingUtil` 규칙(당행 12자리면 앞 3·뒤 3자리 표시)을 따른다. 보류 원본의 계좌번호 형식이 잘못되면 `MaskingUtil`을 호출하지 않고 필수 문자열 `recipientAccountMasked`를 `"확인 불가"`로 반환하며 위험 상태는 `UNAVAILABLE`로 둔다. 전체 번호 확인이 정말 필요하면 별도 권한·조회 사유·감사가 있는 상세 조회로 설계한다. 현재 계약에 없는 수취인 이름·생년월일은 생성하거나 표시하지 않는다. 조회 감사에는 관리자 ID·보류 ID·조회 사유·시각, 거절 감사에는 조치 ID·`RISK_ACCOUNT_MATCH` 또는 `CUSTOMER_DENIED`·위험 기록 ID·버전(해당 시)·처리 결과를 남긴다. 감사 상세에는 계좌번호 원문·이름·생년월일을 복제하지 않고 기록 ID로 원본을 추적한다.
 
 **P6 멱등·FE안:** 거절 요청은 서버가 보류 원본·활성 버전·계좌 일치·현재 보류 상태를 처리 직전에 재확인한다. 동일 멱등 키·본문의 재요청은 같은 조치 결과를 재사용하고, 처리 중이거나 본문이 다르면 기존 `CMN0301`·`CMN0302`를 따른다. 응답 유실 시 새 키로 조치를 만들지 않고 기존 키로 결과를 확인하거나 상세를 재조회한다. FE는 `MATCH`에 거절만, `NO_MATCH`·`UNAVAILABLE`에 콜 기록 후 승인·거절을 제공한다. 조치 직전 상태가 달라지면 화면을 재조회한다. P4 호출·버전 전환 경합의 실제 트랜잭션 경계와 결과 조회는 위 P4 인계가 선행한다. 오류코드와 JSON 예시는 [API 명세 §11](p6_fds_api_spec.md#11-구현-전-확정할-항목)을 따른다.
 
@@ -321,7 +322,7 @@ X-Access-Reason: INCIDENT
 ```
 
 ```json
-{"code":"0000","message":"정상 처리되었습니다.","data":{"page":0,"size":10,"totalCount":1,"totalPages":1,"items":[{"transferHoldId":123,"heldAt":"2026-11-03T13:02:00+09:00","holdStatus":"HELD","policyCode":"A","investigationStatus":"QUEUED","amount":500000,"recipientAccountMasked":"***-**-1234"}]}}
+{"code":"0000","message":"정상 처리되었습니다.","data":{"page":0,"size":20,"totalElements":1,"totalPages":1,"items":[{"transferHoldId":123,"heldAt":"2026-11-03T13:02:00+09:00","holdStatus":"HELD","policyCode":"A","investigationStatus":"PENDING","amount":500000,"recipientAccountMasked":"***-**-1234"}]}}
 ```
 
 ```http
@@ -333,7 +334,7 @@ X-Access-Reason: INCIDENT
 {"code":"0000","message":"정상 처리되었습니다.","data":{"transferHoldId":123,"holdStatus":"HELD","amount":500000,"recipientAccountMasked":"***-**-1234","serverPolicy":{"policyCode":"A","count10m":3,"amount10m":1500000,"hesitationInWindow":true,"newRecipientAtWindowStart":true},"behaviorSummary":{"hesitationWarning":true},"investigationStatus":"COMPLETED","secondaryFindings":[{"code":"REGULAR_SPLIT_AMOUNTS","evidenceTransferIds":[101,102],"confidence":"OBSERVED"}],"callRecords":[]}}
 ```
 
-`investigationStatus=QUEUED`·`RUNNING`·`FAILED`여도 서버 판정 근거와 콜 결과가 있으면 관리자 수동 검토가 가능하다. 목록·상세의 고객정보와 계좌번호는 필요한 범위만 마스킹해 표시한다.
+`investigationStatus=PENDING`·`RUNNING`·`FAILED`여도 서버 판정 근거와 콜 결과가 있으면 관리자 수동 검토가 가능하다. 목록·상세의 고객정보와 계좌번호는 필요한 범위만 마스킹해 표시한다.
 
 ```http
 POST /api/v1/admin/fds/holds/123/call-record

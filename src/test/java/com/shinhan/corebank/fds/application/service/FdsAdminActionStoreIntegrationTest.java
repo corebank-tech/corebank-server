@@ -17,6 +17,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,6 +65,8 @@ class FdsAdminActionStoreIntegrationTest extends IntegrationTestSupport {
 
         var completed = store.reconcile(pending, hold(holdId, "EXECUTED", "99999999999", 7L, null));
         assertThat(completed.status()).isEqualTo("COMPLETED");
+        assertThat(store.reconcile(completed, hold(holdId, "EXECUTED", "99999999999", 7L, null)))
+                .isEqualTo(completed);
         when(holds.findForFds(holdId)).thenReturn(hold(holdId, "EXECUTED", "99999999999", 7L, null));
         assertThat(store.prepare(holdId, actionKey, 7L, "APPROVE", null)).isEqualTo(completed);
         assertThat(jdbc.queryForObject(
@@ -73,6 +78,11 @@ class FdsAdminActionStoreIntegrationTest extends IntegrationTestSupport {
             assertThat(stored.callResult()).isEqualTo("CUSTOMER_CONFIRMED");
             assertThat(stored.selectedByAction()).isTrue();
         });
+        assertThat(reads.findLatestCallRecord(holdId)).satisfies(stored -> {
+            assertThat(stored.callResult()).isEqualTo("CUSTOMER_CONFIRMED");
+            assertThat(stored.selectedByAction()).isTrue();
+        });
+        assertThat(reads.findLatestCallRecord(holdId())).isNull();
         assertThat(reads.findLatestAction(holdId).actionStatus()).isEqualTo("COMPLETED");
     }
 
@@ -113,6 +123,66 @@ class FdsAdminActionStoreIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    void executingP4StateKeepsActionPendingWithoutAudit() {
+        long holdId = holdId();
+        activate("110039200000");
+        when(holds.findForFds(holdId)).thenReturn(hold(holdId, "HELD", "99999999999", null, null));
+        store.recordCall(holdId, key(), 7L, "CUSTOMER_CONFIRMED", "본인 확인");
+        var pending = store.prepare(holdId, key(), 7L, "APPROVE", null);
+
+        var stillPending = store.reconcile(pending, hold(holdId, "EXECUTING", "99999999999", 7L, null));
+
+        assertThat(stillPending.status()).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_admin_action_audit WHERE action_id=?",
+                        Integer.class,
+                        pending.actionId()))
+                .isZero();
+    }
+
+    @Test
+    void concurrentIdempotentCallsConvergeToOneStoredResult() throws Exception {
+        long holdId = holdId();
+        when(holds.findForFds(holdId)).thenReturn(hold(holdId, "HELD", "99999999999", null, null));
+        String idempotencyKey = key();
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first =
+                    CompletableFuture.supplyAsync(() -> recordAfterBarrier(barrier, holdId, idempotencyKey), executor);
+            var second =
+                    CompletableFuture.supplyAsync(() -> recordAfterBarrier(barrier, holdId, idempotencyKey), executor);
+
+            assertThat(first.get()).isEqualTo(second.get());
+        }
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_admin_call_record WHERE idempotency_key=?",
+                        Integer.class,
+                        idempotencyKey))
+                .isEqualTo(1);
+    }
+
+    @Test
+    void concurrentIdempotentActionsConvergeToOnePendingResult() throws Exception {
+        long holdId = holdId();
+        activate("110039200000");
+        when(holds.findForFds(holdId)).thenReturn(hold(holdId, "HELD", "99999999999", null, null));
+        store.recordCall(holdId, key(), 7L, "CUSTOMER_CONFIRMED", "본인 확인");
+        String idempotencyKey = key();
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first =
+                    CompletableFuture.supplyAsync(() -> prepareAfterBarrier(barrier, holdId, idempotencyKey), executor);
+            var second =
+                    CompletableFuture.supplyAsync(() -> prepareAfterBarrier(barrier, holdId, idempotencyKey), executor);
+
+            assertThat(first.get()).isEqualTo(second.get());
+        }
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_admin_action WHERE idempotency_key=?", Integer.class, idempotencyKey))
+                .isEqualTo(1);
+    }
+
+    @Test
     void rejectsInvalidCallActionAndNonHeldState() {
         long holdId = holdId();
         when(holds.findForFds(holdId)).thenReturn(hold(holdId, "EXPIRED", "99999999999", null, null));
@@ -127,6 +197,25 @@ class FdsAdminActionStoreIntegrationTest extends IntegrationTestSupport {
     private void activate(String account) {
         String version = "admin-" + UUID.randomUUID().toString().substring(0, 8);
         risks.loadAndActivate(version, 1, "d".repeat(64), List.of(new RiskRow("088", account, "합성")));
+    }
+
+    private FdsAdminActionStore.CallRecord recordAfterBarrier(
+            CyclicBarrier barrier, long holdId, String idempotencyKey) {
+        try {
+            barrier.await();
+            return store.recordCall(holdId, idempotencyKey, 7L, "CUSTOMER_CONFIRMED", "본인 확인");
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    private FdsAdminActionStore.Action prepareAfterBarrier(CyclicBarrier barrier, long holdId, String idempotencyKey) {
+        try {
+            barrier.await();
+            return store.prepare(holdId, idempotencyKey, 7L, "APPROVE", null);
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
     private static TransferHoldForFds hold(
@@ -145,7 +234,11 @@ class FdsAdminActionStoreIntegrationTest extends IntegrationTestSupport {
                 "ON_APPROVAL",
                 actorId,
                 reasonCode,
-                status.equals("HELD") ? null : LocalDateTime.now(CLOCK));
+                status.equals("HELD") ? null : LocalDateTime.now(CLOCK),
+                3,
+                1_500_000L,
+                true,
+                true);
     }
 
     private static long holdId() {

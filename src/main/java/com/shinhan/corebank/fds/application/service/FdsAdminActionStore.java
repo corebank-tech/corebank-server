@@ -13,6 +13,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -44,23 +45,31 @@ public class FdsAdminActionStore {
         }
         LocalDateTime now = LocalDateTime.now(clock);
         KeyHolder key = new GeneratedKeyHolder();
-        jdbc.update(
-                connection -> {
-                    var statement = connection.prepareStatement(
-                            "INSERT INTO fds_admin_call_record "
-                                    + "(transfer_hold_id,idempotency_key,request_fingerprint,call_result,admin_id,investigation_reason,recorded_at) "
-                                    + "VALUES (?,?,?,?,?,?,?)",
-                            new String[] {"call_record_id"});
-                    statement.setLong(1, holdId);
-                    statement.setString(2, idempotencyKey);
-                    statement.setString(3, fingerprint);
-                    statement.setString(4, result);
-                    statement.setLong(5, adminId);
-                    statement.setString(6, investigationReason);
-                    statement.setObject(7, now);
-                    return statement;
-                },
-                key);
+        try {
+            jdbc.update(
+                    connection -> {
+                        var statement = connection.prepareStatement(
+                                "INSERT INTO fds_admin_call_record "
+                                        + "(transfer_hold_id,idempotency_key,request_fingerprint,call_result,admin_id,investigation_reason,recorded_at) "
+                                        + "VALUES (?,?,?,?,?,?,?)",
+                                new String[] {"call_record_id"});
+                        statement.setLong(1, holdId);
+                        statement.setString(2, idempotencyKey);
+                        statement.setString(3, fingerprint);
+                        statement.setString(4, result);
+                        statement.setLong(5, adminId);
+                        statement.setString(6, investigationReason);
+                        statement.setObject(7, now);
+                        return statement;
+                    },
+                    key);
+        } catch (DuplicateKeyException exception) {
+            // 동시 동일 요청은 유니크 제약의 승자 행을 다시 읽어 같은 결과로 수렴시킨다.
+            CallRecord concurrent = callByKeyForUpdate(idempotencyKey);
+            if (concurrent == null) conflict();
+            if (!fingerprint.equals(concurrent.fingerprint())) conflict();
+            return concurrent;
+        }
         return new CallRecord(key.getKey().longValue(), fingerprint, result, now);
     }
 
@@ -79,25 +88,33 @@ public class FdsAdminActionStore {
         validateAction(actionType, reasonCode, risk, call);
         String actionId = UUID.randomUUID().toString();
         LocalDateTime now = LocalDateTime.now(clock);
-        jdbc.update(
-                "INSERT INTO fds_admin_action "
-                        + "(action_id,transfer_hold_id,idempotency_key,request_fingerprint,actor_id,action_type,reason_code,"
-                        + "call_record_id,risk_status,risk_account_id,dataset_version,unavailable_reason,action_status,created_at,updated_at) "
-                        + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'PENDING',?,?)",
-                actionId,
-                holdId,
-                idempotencyKey,
-                fingerprint,
-                actorId,
-                actionType,
-                reasonCode,
-                call == null ? null : call.id(),
-                risk.status(),
-                risk.riskAccountId(),
-                risk.datasetVersion(),
-                risk.unavailableReason(),
-                now,
-                now);
+        try {
+            jdbc.update(
+                    "INSERT INTO fds_admin_action "
+                            + "(action_id,transfer_hold_id,idempotency_key,request_fingerprint,actor_id,action_type,reason_code,"
+                            + "call_record_id,risk_status,risk_account_id,dataset_version,unavailable_reason,action_status,created_at,updated_at) "
+                            + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'PENDING',?,?)",
+                    actionId,
+                    holdId,
+                    idempotencyKey,
+                    fingerprint,
+                    actorId,
+                    actionType,
+                    reasonCode,
+                    call == null ? null : call.id(),
+                    risk.status(),
+                    risk.riskAccountId(),
+                    risk.datasetVersion(),
+                    risk.unavailableReason(),
+                    now,
+                    now);
+        } catch (DuplicateKeyException exception) {
+            // 동일 키 경합은 승자 결과를 복구하고 다른 미완료 조치 제약은 계약 충돌로 숨긴다.
+            Action concurrent = actionByKeyForUpdate(idempotencyKey);
+            if (concurrent == null) conflict();
+            if (!fingerprint.equals(concurrent.fingerprint())) conflict();
+            return concurrent;
+        }
         return actionById(actionId);
     }
 
@@ -109,8 +126,10 @@ public class FdsAdminActionStore {
                 : "REJECTED".equals(actual.status())
                         && java.util.Objects.equals(action.actorId(), actual.actorId())
                         && java.util.Objects.equals(action.reasonCode(), actual.reasonCode());
-        String target = matches ? "COMPLETED" : terminal(actual.status()) ? "CONFLICT" : "FAILED";
-        jdbc.update(
+        // EXECUTING 같은 중간 상태는 PENDING으로 남겨 다음 복구 주기에 다시 대조한다.
+        if (!matches && !terminal(actual.status())) return actionById(action.actionId());
+        String target = matches ? "COMPLETED" : "CONFLICT";
+        int updated = jdbc.update(
                 "UPDATE fds_admin_action SET action_status=?,failure_reason=?,p4_status=?,p4_actor_id=?,"
                         + "p4_reason_code=?,updated_at=? WHERE action_id=? AND action_status='PENDING'",
                 target,
@@ -120,7 +139,7 @@ public class FdsAdminActionStore {
                 actual.reasonCode(),
                 LocalDateTime.now(clock),
                 action.actionId());
-        if (matches) {
+        if (matches && updated == 1) {
             jdbc.update(
                     "INSERT INTO fds_admin_action_audit "
                             + "(action_id,transfer_hold_id,actor_id,action_type,reason_code,call_record_id,risk_status,"
@@ -161,8 +180,17 @@ public class FdsAdminActionStore {
     }
 
     private CallRecord callByKey(String key) {
+        return callByKey(key, "");
+    }
+
+    private CallRecord callByKeyForUpdate(String key) {
+        return callByKey(key, " FOR UPDATE");
+    }
+
+    private CallRecord callByKey(String key, String lockClause) {
         return jdbc.query(
-                "SELECT call_record_id,request_fingerprint,call_result,recorded_at FROM fds_admin_call_record WHERE idempotency_key=?",
+                "SELECT call_record_id,request_fingerprint,call_result,recorded_at FROM fds_admin_call_record "
+                        + "WHERE idempotency_key=?" + lockClause,
                 rs -> rs.next()
                         ? new CallRecord(
                                 rs.getLong(1),
@@ -185,15 +213,23 @@ public class FdsAdminActionStore {
         return actionQuery("idempotency_key", key);
     }
 
+    private Action actionByKeyForUpdate(String key) {
+        return actionQuery("idempotency_key", key, " FOR UPDATE");
+    }
+
     public Action actionById(String id) {
         return actionQuery("action_id", id);
     }
 
     private Action actionQuery(String column, String value) {
+        return actionQuery(column, value, "");
+    }
+
+    private Action actionQuery(String column, String value, String lockClause) {
         return jdbc.query(
                 "SELECT action_id,transfer_hold_id,request_fingerprint,actor_id,action_type,reason_code,call_record_id,"
                         + "risk_status,risk_account_id,dataset_version,action_status FROM fds_admin_action WHERE "
-                        + column + "=?",
+                        + column + "=?" + lockClause,
                 rs -> rs.next()
                         ? new Action(
                                 rs.getString(1),

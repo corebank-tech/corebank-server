@@ -33,9 +33,10 @@ public class FdsAdminHoldController {
 
     @GetMapping("/{transferHoldId}")
     @Operation(
+            operationId = "getFdsHeldTransferDetail",
             summary = "보류 상세 조회",
             description =
-                    "CUSTOMER_READ 권한과 X-Access-Reason이 필요합니다. P6에 저장된 점수 상태(PENDING/AVAILABLE/UNAVAILABLE), 점수·모델·피처 버전, 사용 불가 사유를 표시하며 조회 사유를 감사에 남깁니다.")
+                    "CUSTOMER_READ 권한과 X-Access-Reason이 필요합니다. 기존 최상위 필드와 확장 상세 객체를 함께 반환하며 Agent가 실제 인용한 Tool 이력만 usedAsEvidence=true로 표시합니다.")
     public ApiResponse<FdsHoldDetail> get(
             @PathVariable @Positive long transferHoldId,
             @RequestHeader(AccessReason.HEADER) AccessReason accessReason,
@@ -45,7 +46,11 @@ public class FdsAdminHoldController {
     }
 
     @GetMapping
-    @Operation(summary = "FDS 보류 거래 목록", description = "최신 조사 사건을 위험·조사·처리 상태와 함께 페이지로 조회합니다.")
+    @Operation(
+            operationId = "getFdsHeldTransfers",
+            summary = "FDS 보류 거래 목록",
+            description =
+                    "CUSTOMER_READ 권한과 X-Access-Reason이 필요합니다. heldAt·transferHoldId 내림차순이며 page는 0 이상, size는 1~100(기본 20)입니다.")
     public ApiResponse<FdsHoldListPage> list(
             @RequestParam(defaultValue = "0") @jakarta.validation.constraints.Min(0) int page,
             @RequestParam(defaultValue = "20")

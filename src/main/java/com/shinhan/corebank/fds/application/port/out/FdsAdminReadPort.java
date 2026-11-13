@@ -13,6 +13,8 @@ public interface FdsAdminReadPort {
 
     List<CallRecord> findCallRecords(long transferHoldId);
 
+    CallRecord findLatestCallRecord(long transferHoldId);
+
     AdminAction findLatestAction(long transferHoldId);
 
     record Report(String schemaVersion, String reportJson, LocalDateTime completedAt) {}

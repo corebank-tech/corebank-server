@@ -78,18 +78,32 @@ public class FdsHoldDetailService {
                 reads == null || investigationId == null ? null : reads.findReport(investigationId);
         FdsAdminReadPort.ToolResults storedTools =
                 reads == null || investigationId == null ? null : reads.findToolResults(investigationId);
-        Set<Long> evidence = jobs == null || investigationId == null ? Set.of() : jobs.findEvidenceIds(investigationId);
         boolean available = score != null && "AVAILABLE".equals(score.status());
+        FdsHoldDetail.BehaviorScore behaviorScore = new FdsHoldDetail.BehaviorScore(
+                score == null ? "PENDING" : score.status(),
+                available ? score.behaviorRiskScore() : null,
+                available ? score.modelVersion() : null,
+                available ? score.featureVersion() : null,
+                score != null && "UNAVAILABLE".equals(score.status()) ? score.unavailableReason() : null);
+        FdsHoldDetail.OriginalTransfer originalTransfer = original(hold);
+        FdsHoldDetail.AgentReport agentReport = report(investigationId, storedReport);
+        Set<Long> citedEvidence = citedEvidence(agentReport);
         return new FdsHoldDetail(
-                original(hold),
+                hold.transferHoldId(),
+                hold.amount(),
+                originalTransfer.holdStatus(),
+                originalTransfer.recipientAccountMasked(),
+                job == null ? null : job.status(),
+                behaviorScore.status(),
+                behaviorScore.score(),
+                behaviorScore.modelVersion(),
+                behaviorScore.featureVersion(),
+                behaviorScore.unavailableReason(),
+                agentReport == null ? List.of() : agentReport.secondaryFindings(),
+                originalTransfer,
                 policy(hold),
                 behavior(hold),
-                new FdsHoldDetail.BehaviorScore(
-                        score == null ? "PENDING" : score.status(),
-                        available ? score.behaviorRiskScore() : null,
-                        available ? score.modelVersion() : null,
-                        available ? score.featureVersion() : null,
-                        score != null && "UNAVAILABLE".equals(score.status()) ? score.unavailableReason() : null),
+                behaviorScore,
                 new FdsHoldDetail.RiskAccountCheck(
                         risk.status(), risk.riskAccountId(), risk.datasetVersion(), risk.unavailableReason(), true),
                 job == null
@@ -101,8 +115,8 @@ public class FdsHoldDetailService {
                                 job.nextAttemptAt(),
                                 job.leaseExpiresAt(),
                                 job.lastFailureReason()),
-                tools(storedTools, evidence),
-                report(investigationId, storedReport),
+                tools(storedTools, citedEvidence),
+                agentReport,
                 reads == null
                         ? List.of()
                         : reads.findCallRecords(holdId).stream()
@@ -178,6 +192,13 @@ public class FdsHoldDetailService {
                                 recipient.hasSucceededBeforeWindow(),
                                 recipient.otherWithdrawalAccountCount(),
                                 recipient.providedAt()));
+    }
+
+    private static Set<Long> citedEvidence(FdsHoldDetail.AgentReport report) {
+        if (report == null) return Set.of();
+        return report.secondaryFindings().stream()
+                .flatMap(finding -> finding.evidenceTransferIds().stream())
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     private static FdsHoldDetail.AgentReport report(String investigationId, FdsAdminReadPort.Report stored) {

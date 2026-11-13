@@ -18,12 +18,12 @@ import com.shinhan.corebank.transfer.api.TransferHoldForFds;
 import com.shinhan.corebank.transfer.api.TransferHoldUseCase;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import tools.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
 class FdsHoldDetailServiceTest {
@@ -61,8 +61,8 @@ class FdsHoldDetailServiceTest {
                 .thenReturn(new FdsRiskAccountService.Check("NO_MATCH", null, "risk-v1", null));
         when(jobs.findByHoldId(10L))
                 .thenReturn(new FdsInvestigationJob(10L, "inv-10", "COMPLETED", 1, NOW, null, null));
-        when(jobs.findEvidenceIds("inv-10")).thenReturn(Set.of(101L));
-        when(inputs.behaviorSummary(org.mockito.ArgumentMatchers.any()))
+        lenient()
+                .when(inputs.behaviorSummary(org.mockito.ArgumentMatchers.any()))
                 .thenReturn(new FdsInvestigationInput.BehaviorSummary(1, 2, 71, "AVAILABLE", 0.8, "m1", "f1"));
         when(reads.findToolResults("inv-10"))
                 .thenReturn(new FdsAdminReadPort.ToolResults(
@@ -71,8 +71,11 @@ class FdsHoldDetailServiceTest {
                                 NOW,
                                 false,
                                 NOW,
-                                List.of(new FdsAdminReadPort.HistoryItem(
-                                        101L, 500_000L, NOW.minusMinutes(1), "***-**-0000"))),
+                                List.of(
+                                        new FdsAdminReadPort.HistoryItem(
+                                                101L, 500_000L, NOW.minusMinutes(1), "***-**-0000"),
+                                        new FdsAdminReadPort.HistoryItem(
+                                                102L, 400_000L, NOW.minusMinutes(2), "***-**-0001"))),
                         new FdsAdminReadPort.Recipient(NOW.minusDays(1), true, 2, NOW)));
         lenient()
                 .when(reads.findCallRecords(10L))
@@ -115,6 +118,8 @@ class FdsHoldDetailServiceTest {
         });
         assertThat(detail.toolResults().history().items().getFirst().usedAsEvidence())
                 .isTrue();
+        assertThat(detail.toolResults().history().items().get(1).usedAsEvidence())
+                .isFalse();
         assertThat(detail.toolResults().recipientContext().executed()).isTrue();
         assertThat(detail.callRecords())
                 .singleElement()
@@ -122,6 +127,33 @@ class FdsHoldDetailServiceTest {
                 .isEqualTo(true);
         assertThat(detail.adminAction().recoveryRequired()).isTrue();
         assertThat(detail.originalTransfer().recipientAccountMasked()).doesNotContain("110039200000");
+    }
+
+    @Test
+    void keepsLegacyTopLevelFieldsInSerializedResponse() throws Exception {
+        when(reads.findReport("inv-10"))
+                .thenReturn(new FdsAdminReadPort.Report(
+                        "p6-investigation-v1",
+                        "{\"status\":\"COMPLETED\",\"secondaryFindings\":[],\"missingInformation\":[],"
+                                + "\"suggestedQuestions\":[],\"summary\":\"확인 필요\"}",
+                        NOW));
+
+        String json = new ObjectMapper().writeValueAsString(service.get(10L, 7L, "127.0.0.1", AccessReason.OPERATION));
+
+        assertThat(json)
+                .contains("\"transferHoldId\":10")
+                .contains("\"amount\":500000")
+                .contains("\"holdStatus\":\"HELD\"")
+                .contains("\"recipientAccountMasked\"")
+                .contains("\"investigationStatus\":\"COMPLETED\"")
+                .contains("\"behaviorScoreStatus\":\"AVAILABLE\"")
+                .contains("\"behaviorRiskScore\":0.8")
+                .contains("\"modelVersion\":\"m1\"")
+                .contains("\"featureVersion\":\"f1\"")
+                .contains("\"behaviorScoreUnavailableReason\":null")
+                .contains("\"secondaryFindings\":[]")
+                .contains("\"originalTransfer\"")
+                .contains("\"behaviorScore\"");
     }
 
     @Test
@@ -155,15 +187,15 @@ class FdsHoldDetailServiceTest {
                 500_000L,
                 "110039200000",
                 "A",
-                3,
-                1_500_000L,
-                true,
-                true,
                 30L,
                 "088",
                 "ON_APPROVAL",
                 actorId,
                 reason,
-                "HELD".equals(status) ? null : NOW);
+                "HELD".equals(status) ? null : NOW,
+                3,
+                1_500_000L,
+                true,
+                true);
     }
 }

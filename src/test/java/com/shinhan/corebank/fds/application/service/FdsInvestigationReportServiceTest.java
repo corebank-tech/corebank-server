@@ -78,6 +78,17 @@ class FdsInvestigationReportServiceTest {
     }
 
     @Test
+    void rejectsMissingOrNonPositiveAttemptNumber() {
+        stubRunningJob();
+        String valid = report("[101]");
+
+        assertThatThrownBy(() -> service.submit("inv-123", valid.replace("\"attemptNo\":1,", "")))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.submit("inv-123", valid.replace("\"attemptNo\":1", "\"attemptNo\":0")))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
     void evidenceLookupInfrastructureFailureIsNotConvertedToInvalidReport() {
         stubRunningJob();
         IllegalStateException failure = new IllegalStateException("database unavailable");
@@ -86,8 +97,20 @@ class FdsInvestigationReportServiceTest {
         assertThatThrownBy(() -> service.submit("inv-123", report("[101]"))).isSameAs(failure);
     }
 
+    @Test
+    void staleCallbackKeepsItsOriginalAttemptNumber() {
+        when(jobs.findByInvestigationId("inv-123"))
+                .thenReturn(
+                        new FdsInvestigationJob(123L, "inv-123", "RUNNING", 2, LocalDateTime.now(CLOCK), null, null));
+        when(jobs.findEvidenceIds("inv-123")).thenReturn(Set.of(101L));
+
+        service.submit("inv-123", report("[101]"));
+
+        verify(jobs).completeWithReport(eq(123L), eq("inv-123"), eq(1), eq("p6-investigation-v1"), any(), any(), any());
+    }
+
     private static String report(String evidence) {
-        return "{\"transferHoldId\":123,\"status\":\"COMPLETED\",\"secondaryFindings\":[{"
+        return "{\"transferHoldId\":123,\"attemptNo\":1,\"status\":\"COMPLETED\",\"secondaryFindings\":[{"
                 + "\"code\":\"REGULAR_SPLIT_AMOUNTS\",\"description\":\"반복\","
                 + "\"evidenceTransferIds\":" + evidence + ",\"confidence\":\"OBSERVED\"}],"
                 + "\"missingInformation\":[],\"recommendedAction\":\"MANUAL_CUSTOMER_CONFIRMATION\","

@@ -125,6 +125,23 @@ class FdsAgentToolServiceTest {
 
     private static TransferHoldForFds hold(String account) {
         return new TransferHoldForFds(
-                10L, 20L, null, "HELD", HELD_AT, 1000L, account, "A", 30L, "088", "ON_APPROVAL", null, null, null);
+                10L,
+                20L,
+                null,
+                "HELD",
+                HELD_AT,
+                1000L,
+                account,
+                "A",
+                30L,
+                "088",
+                "ON_APPROVAL",
+                null,
+                null,
+                null,
+                3,
+                1_500_000L,
+                true,
+                true);
     }
 }

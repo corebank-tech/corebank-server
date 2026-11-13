@@ -38,12 +38,12 @@ public class FdsInvestigationReportService {
     public Acknowledgement submit(String investigationId, String reportJson) {
         FdsInvestigationJob job = jobs.findByInvestigationId(investigationId);
         if (job == null) throw new BusinessException(FdsErrorCode.NOT_FOUND);
-        validate(reportJson, job);
-        // 보고서 저장과 완료 전이도 현재 선점 세대가 유지될 때만 함께 확정한다.
+        int callbackAttemptNo = validate(reportJson, job);
+        // DB 최신값이 아니라 Python이 실행 시작 때 받은 세대로 늦은 콜백을 차단한다.
         jobs.completeWithReport(
                 job.transferHoldId(),
                 investigationId,
-                job.attemptCount(),
+                callbackAttemptNo,
                 SCHEMA_VERSION,
                 reportJson,
                 sha256(reportJson),
@@ -51,12 +51,14 @@ public class FdsInvestigationReportService {
         return new Acknowledgement(investigationId, "COMPLETED");
     }
 
-    private void validate(String json, FdsInvestigationJob job) {
+    private int validate(String json, FdsInvestigationJob job) {
         if (json == null || json.getBytes(StandardCharsets.UTF_8).length > MAX_REPORT_BYTES) invalid();
         JsonNode root;
         try {
             root = MAPPER.readTree(json);
             if (job.transferHoldId() != root.path("transferHoldId").asLong(-1)
+                    || !root.path("attemptNo").isIntegralNumber()
+                    || root.path("attemptNo").asInt(-1) <= 0
                     || !"COMPLETED".equals(root.path("status").asText())
                     || !"MANUAL_CUSTOMER_CONFIRMATION"
                             .equals(root.path("recommendedAction").asText())
@@ -74,13 +76,14 @@ public class FdsInvestigationReportService {
             throw exception;
         } catch (RuntimeException exception) {
             invalid();
-            return;
+            return -1;
         }
         // DB 장애는 잘못된 JSON으로 축약하지 않고 워커가 재시도할 수 있게 그대로 전파한다.
         Set<Long> provided = jobs.findEvidenceIds(job.investigationId());
         for (JsonNode finding : root.path("secondaryFindings")) {
             if (!validEvidence(finding.path("evidenceTransferIds"), provided)) invalid();
         }
+        return root.path("attemptNo").asInt();
     }
 
     private static boolean validEvidence(JsonNode node, Set<Long> provided) {

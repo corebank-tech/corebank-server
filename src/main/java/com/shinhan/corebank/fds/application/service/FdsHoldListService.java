@@ -9,6 +9,7 @@ import com.shinhan.corebank.fds.application.port.out.FdsAdminReadPort;
 import com.shinhan.corebank.fds.application.port.out.FdsInvestigationJobPort;
 import com.shinhan.corebank.transfer.api.TransferHoldForFds;
 import com.shinhan.corebank.transfer.api.TransferHoldUseCase;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +27,7 @@ public class FdsHoldListService {
     private final FdsRiskAccountService risks;
     private final AuditLogService audit;
 
-    @Transactional(readOnly = true)
+    @Transactional
     public FdsHoldListPage find(
             int page,
             int size,
@@ -37,15 +38,23 @@ public class FdsHoldListService {
             long adminId,
             String requestIp,
             AccessReason reason) {
-        List<FdsHoldListPage.FdsHoldListItem> filtered = reads.findHoldIds().stream()
-                .map(this::item)
-                .filter(item -> matches(holdStatus, item.holdStatus()))
-                .filter(item -> matches(policyCode, item.policyCode()))
-                .filter(item -> matches(riskStatus, item.riskAccountStatus()))
+        List<Candidate> filtered = reads.findHoldIds().stream()
+                .map(this::candidate)
+                .filter(item -> matches(holdStatus, item.hold().status()))
+                .filter(item -> matches(policyCode, item.hold().policyCode()))
+                .filter(item -> matches(riskStatus, item.risk().status()))
                 .filter(item -> matches(investigationStatus, item.investigationStatus()))
+                .sorted(Comparator.comparing((Candidate item) -> item.hold().heldAt())
+                        .reversed()
+                        .thenComparing(item -> item.hold().transferHoldId(), Comparator.reverseOrder()))
                 .toList();
-        int from = Math.min(page * size, filtered.size());
+        // 최대 int 페이지에서도 곱셈 오버플로 없이 빈 페이지로 제한한다.
+        int from = (int) Math.min((long) page * size, filtered.size());
         int to = Math.min(from + size, filtered.size());
+        // 필터 결과의 페이지를 먼저 확정해 점수·콜·조치 조회가 전체 사건 수에 비례하지 않게 한다.
+        List<FdsHoldListPage.FdsHoldListItem> items =
+                filtered.subList(from, to).stream().map(this::item).toList();
+        // 성공 감사도 목록 조회와 원자적으로 남기기 위해 쓰기 가능한 같은 트랜잭션을 사용한다.
         audit.recordPersonalDataAccess(
                 adminId,
                 PersonalDataAccessEventType.FDS_HOLD_LIST_VIEW,
@@ -54,21 +63,23 @@ public class FdsHoldListService {
                 Map.of("page", page, "size", size),
                 reason);
         return new FdsHoldListPage(
-                filtered.subList(from, to),
-                page,
-                size,
-                filtered.size(),
-                filtered.isEmpty() ? 0 : (filtered.size() + size - 1) / size);
+                items, page, size, filtered.size(), filtered.isEmpty() ? 0 : (filtered.size() + size - 1) / size);
     }
 
-    private FdsHoldListPage.FdsHoldListItem item(long holdId) {
+    private Candidate candidate(long holdId) {
         TransferHoldForFds hold = holds.findForFds(holdId);
         var job = jobs.findByHoldId(holdId);
-        var score = scores.find(holdId);
         var risk = risks.check(hold.recipientBankCode(), hold.depositAccountNumber());
-        var calls = reads.findCallRecords(holdId);
+        return new Candidate(hold, job == null ? null : job.status(), risk);
+    }
+
+    private FdsHoldListPage.FdsHoldListItem item(Candidate candidate) {
+        TransferHoldForFds hold = candidate.hold();
+        long holdId = hold.transferHoldId();
+        var score = scores.find(holdId);
+        var latestCall = reads.findLatestCallRecord(holdId);
         var action = reads.findLatestAction(holdId);
-        String path = path(hold.status(), risk.status(), action == null ? null : action.actionStatus());
+        String path = path(hold.status(), candidate.risk().status(), action == null ? null : action.actionStatus());
         return new FdsHoldListPage.FdsHoldListItem(
                 holdId,
                 hold.heldAt(),
@@ -77,12 +88,12 @@ public class FdsHoldListService {
                 mask(hold.depositAccountNumber()),
                 hold.policyCode(),
                 hold.status(),
-                job == null ? null : job.status(),
+                candidate.investigationStatus(),
                 score == null ? "PENDING" : score.status(),
-                risk.status(),
-                risk.riskAccountId(),
-                risk.datasetVersion(),
-                calls.isEmpty() ? null : calls.getFirst().callResult(),
+                candidate.risk().status(),
+                candidate.risk().riskAccountId(),
+                candidate.risk().datasetVersion(),
+                latestCall == null ? null : latestCall.callResult(),
                 action == null ? null : action.actionStatus(),
                 path);
     }
@@ -104,4 +115,6 @@ public class FdsHoldListService {
         if (value == null || value.length() < 4) return "****";
         return "***-**-" + value.substring(value.length() - 4);
     }
+
+    private record Candidate(TransferHoldForFds hold, String investigationStatus, FdsRiskAccountService.Check risk) {}
 }

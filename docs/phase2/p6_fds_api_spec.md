@@ -309,6 +309,7 @@ Idempotency-Key: Y
 | key | 설명 | value 타입 | 옵션 | Nullable | 예시 |
 |---|---|---|---|---|---|
 | `transferHoldId` | 보류 ID | Long | 조사 작업과 일치 | X | `123` |
+| `attemptNo` | 조사 실행 세대 | Integer | BE 실행 요청에서 받은 양의 정수를 그대로 반환 | X | `1` |
 | `status` | 제출된 조사 결과 | String(ENUM) | `COMPLETED`만 허용. 시도 실패는 보고서를 제출하지 않고, 최종 `FAILED`는 BE가 조사 작업에 기록 | X | `"COMPLETED"` |
 | `secondaryFindings` | 서버 보류 사유 외의 발견 | Array | 최대 4건, 없으면 `[]` | X | `[{...}]` |
 | `secondaryFindings[].code` | 추가 발견 유형 | String(ENUM) | `REGULAR_SPLIT_AMOUNTS`, `MULTIPLE_SOURCE_ACCOUNTS`, `LIMITED_RECIPIENT_HISTORY`, `BEHAVIOR_TRANSFER_MISMATCH` | X | `"REGULAR_SPLIT_AMOUNTS"` |
@@ -323,7 +324,7 @@ Idempotency-Key: Y
 **Example**
 
 ```json
-{"transferHoldId":123,"status":"COMPLETED","secondaryFindings":[{"code":"REGULAR_SPLIT_AMOUNTS","description":"반복 금액 패턴","evidenceTransferIds":[101,102],"confidence":"OBSERVED"}],"missingInformation":[],"recommendedAction":"MANUAL_CUSTOMER_CONFIRMATION","suggestedQuestions":["송금 목적을 확인해 주세요."],"summary":"서버 보류 사유 외에 반복 금액 패턴 확인"}
+{"transferHoldId":123,"attemptNo":1,"status":"COMPLETED","secondaryFindings":[{"code":"REGULAR_SPLIT_AMOUNTS","description":"반복 금액 패턴","evidenceTransferIds":[101,102],"confidence":"OBSERVED"}],"missingInformation":[],"recommendedAction":"MANUAL_CUSTOMER_CONFIRMATION","suggestedQuestions":["송금 목적을 확인해 주세요."],"summary":"서버 보류 사유 외에 반복 금액 패턴 확인"}
 ```
 
 ### Query parameter
@@ -385,8 +386,7 @@ Idempotency-Key: N
 | key | 설명 | value 타입 | 옵션 | Nullable | 예시 |
 |---|---|---|---|---|---|
 | `page` | 페이지 번호 | Integer | 0부터, 기본 0 | O | `0` |
-| `size` | 페이지 크기 | Integer | 5·10·20·30·50, 기본 10 | O | `10` |
-| `all` | 전체 조회 | Boolean | 기본 `false`; `true`이면 `page`·`size` 무시, 최대 100건 | O | `false` |
+| `size` | 페이지 크기 | Integer | 1~100, 기본 20 | O | `20` |
 | `holdStatus` | 보류 상태 필터 | String(ENUM) | P4 상태값과 확정 | O | `"HELD"` |
 
 ### Response
@@ -397,14 +397,14 @@ Idempotency-Key: N
 | `message` | 응답 메시지 | String |  | X | `"정상 처리되었습니다."` |
 | `data.page` | 페이지 번호 | Integer |  | X | `0` |
 | `data.size` | 페이지 크기 | Integer |  | X | `10` |
-| `data.totalCount` | 전체 건수 | Long |  | X | `1` |
+| `data.totalElements` | 전체 건수 | Long |  | X | `1` |
 | `data.totalPages` | 전체 페이지 | Integer |  | X | `1` |
 | `data.items` | 보류 목록 | Array | 0건이면 `[]` | X | `[{...}]` |
 | `data.items[].transferHoldId` | 보류 ID | Long |  | X | `123` |
 | `data.items[].heldAt` | 보류 시각 | String(DateTime) |  | X | `"2026-11-03T13:02:00+09:00"` |
 | `data.items[].holdStatus` | 보류 상태 | String(ENUM) |  | X | `"HELD"` |
 | `data.items[].policyCode` | 서버 A/B 정책 | String |  | X | `"A"` |
-| `data.items[].investigationStatus` | AI 조사 상태 | String(ENUM) | `QUEUED`, `RUNNING`, `COMPLETED`, `FAILED` | O | `"QUEUED"` |
+| `data.items[].investigationStatus` | AI 조사 상태 | String(ENUM) | `PENDING`, `RUNNING`, `COMPLETED`, `FAILED` | O | `"PENDING"` |
 | `data.items[].amount` | 이체금액, 원 | Long |  | X | `500000` |
 | `data.items[].recipientAccountMasked` | 마스킹 수취계좌 | String | 정상 형식은 공통 `MaskingUtil` 형식으로 당행 앞 3·뒤 3자리만 표시; 원본 형식 오류는 원문 없이 `"확인 불가"` | X | `"088******006"` |
 | `data.items[].riskAccountCheck.status` | 위험 계좌 조회 상태 | String(ENUM) | `MATCH`, `NO_MATCH`, `UNAVAILABLE`; 조회 시점 안내값 | X | `"MATCH"` |
@@ -415,7 +415,7 @@ Idempotency-Key: N
 **Example**
 
 ```json
-{"code":"0000","message":"정상 처리되었습니다.","data":{"page":0,"size":10,"totalCount":1,"totalPages":1,"items":[{"transferHoldId":123,"heldAt":"2026-11-03T13:02:00+09:00","holdStatus":"HELD","policyCode":"A","investigationStatus":"QUEUED","amount":500000,"recipientAccountMasked":"088******006","riskAccountCheck":{"status":"MATCH","label":"위험 계좌 목록과 일치"}}]}}
+{"code":"0000","message":"정상 처리되었습니다.","data":{"page":0,"size":20,"totalElements":1,"totalPages":1,"items":[{"transferHoldId":123,"heldAt":"2026-11-03T13:02:00+09:00","holdStatus":"HELD","policyCode":"A","investigationStatus":"PENDING","amount":500000,"recipientAccountMasked":"088******006","riskAccountCheck":{"status":"MATCH","label":"위험 계좌 목록과 일치"}}]}}
 ```
 
 ### Status
@@ -727,7 +727,7 @@ Idempotency-Key: Y
 
 **판정·조회:** 검증된 활성 버전에서 정확히 한 행이면 `MATCH`, 정상 조회 결과 0행이면 `NO_MATCH`다. 미적재·비활성·미검증, 위험 계좌 조회 장애·시간 초과, 중복·손상은 `UNAVAILABLE`이다. 관리자 인증·보류 원본 조회·조회 감사가 실패하면 상세 API 자체가 실패하며, 위험 계좌 조회만 실패하고 필수 조회·감사가 성공한 경우에만 HTTP 200·`code="0000"`으로 `UNAVAILABLE`을 반환한다. 위험 조회 실패를 빈 배열 또는 `NO_MATCH`로 바꾸지 않는다.
 
-**목록·상세 응답 확장:** §6 목록은 `heldAt` 오름차순, 동시각은 `transferHoldId` 오름차순으로 정렬한다. 각 목록 항목에는 `riskAccountCheck.status`와 `label`만 추가한다. §7 상세에는 아래 객체를 추가한다. `NO_MATCH`·`UNAVAILABLE`이면 `riskAccountId`는 `null`이다. `datasetVersion`은 활성 버전을 읽었을 때만 값이 있고, 그렇지 않으면 `null`이다. `checkedAt`은 위험 조회를 시도한 서버 시각이다. 목록·상세 계좌번호는 정상 형식일 때 기존 `MaskingUtil`에 따라 당행 앞 3·뒤 3자리만 표시하고, 형식 오류는 `MaskingUtil`을 호출하지 않고 `"확인 불가"`와 위험 상태 `UNAVAILABLE`을 반환한다.
+**목록·상세 응답 확장:** §6 목록은 `heldAt` 내림차순, 동시각은 `transferHoldId` 내림차순으로 정렬한다. 각 목록 항목에는 `riskAccountCheck.status`와 `label`만 추가한다. §7 상세에는 아래 객체를 추가한다. `NO_MATCH`·`UNAVAILABLE`이면 `riskAccountId`는 `null`이다. `datasetVersion`은 활성 버전을 읽었을 때만 값이 있고, 그렇지 않으면 `null`이다. `checkedAt`은 위험 조회를 시도한 서버 시각이다. 목록·상세 계좌번호는 정상 형식일 때 기존 `MaskingUtil`에 따라 당행 앞 3·뒤 3자리만 표시하고, 형식 오류는 `MaskingUtil`을 호출하지 않고 `"확인 불가"`와 위험 상태 `UNAVAILABLE`을 반환한다.
 
 ```json
 {"riskAccountCheck":{"status":"MATCH","label":"위험 계좌 목록과 일치","riskAccountId":501,"datasetVersion":"demo-risk-v1","checkedAt":"2026-11-08T14:00:00+09:00","sourceNotice":"프로젝트 시연용 합성 데이터이며 실제 사기 확정 정보가 아닙니다."}}

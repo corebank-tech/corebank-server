@@ -60,7 +60,7 @@ public class FdsAgentToolController {
             operationId = "submitFdsInvestigationReport",
             summary = "조사 보고서 제출",
             description =
-                    "FDS_AGENT_SERVICE_TOKEN과 investigationId와 같은 Idempotency-Key가 필요합니다. 동일 보고서는 멱등 성공하고 다른 본문이나 선점 세대가 바뀐 늦은 보고서는 거부합니다.")
+                    "FDS_AGENT_SERVICE_TOKEN과 investigationId와 같은 Idempotency-Key가 필요합니다. 실행 요청에서 받은 attemptNo를 본문에 그대로 포함해야 하며 이전 세대의 늦은 보고서는 거부합니다.")
     public ApiResponse<FdsInvestigationReportService.Acknowledgement> report(
             @PathVariable String investigationId,
             @RequestHeader(name = "Authorization", required = false) String authorization,

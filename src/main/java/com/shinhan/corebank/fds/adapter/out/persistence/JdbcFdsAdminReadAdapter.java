@@ -95,6 +95,27 @@ public class JdbcFdsAdminReadAdapter implements FdsAdminReadPort {
     }
 
     @Override
+    public CallRecord findLatestCallRecord(long holdId) {
+        return jdbc
+                .query(
+                        "SELECT c.call_record_id,c.call_result,c.admin_id,c.investigation_reason,c.recorded_at,"
+                                + "EXISTS(SELECT 1 FROM fds_admin_action a WHERE a.call_record_id=c.call_record_id) "
+                                + "FROM fds_admin_call_record c WHERE c.transfer_hold_id=? "
+                                + "ORDER BY c.recorded_at DESC,c.call_record_id DESC LIMIT 1",
+                        (rs, row) -> new CallRecord(
+                                rs.getLong(1),
+                                rs.getString(2),
+                                rs.getLong(3),
+                                rs.getString(4),
+                                rs.getTimestamp(5).toLocalDateTime(),
+                                rs.getBoolean(6)),
+                        holdId)
+                .stream()
+                .findFirst()
+                .orElse(null);
+    }
+
+    @Override
     public AdminAction findLatestAction(long holdId) {
         return jdbc
                 .query(

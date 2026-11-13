@@ -360,6 +360,7 @@ assess_information_gap
 {
   "investigationId": "inv-123",
   "transferHoldId": 123,
+  "attemptNo": 1,
   "policyCode": "A",
   "behaviorSummary": {
     "hesitationWarning": true,
@@ -383,6 +384,7 @@ assess_information_gap
 ```json
 {
   "transferHoldId": 123,
+  "attemptNo": 1,
   "status": "COMPLETED",
   "secondaryFindings": [
     {
@@ -469,7 +471,7 @@ P6 조사 작업 (`fds_investigation_job`)
   transfer_hold_id (UNIQUE), investigation_id (안정적인 작업 ID), 상태, 시도 횟수, 다음 재시도 시각,
   작업 임대 만료 시각
 
-워커는 선점 UPDATE가 증가시킨 `attempt_count`를 같은 트랜잭션에서 반환받아 펜싱 토큰으로 사용한다. 재시도·실패·보고서 완료 전이는 `RUNNING` 상태와 해당 시도 번호가 모두 일치할 때만 허용하므로, 임대가 만료된 이전 실행의 늦은 응답이 새 실행을 덮어쓰지 못한다.
+워커는 선점 UPDATE가 증가시킨 `attempt_count`를 같은 트랜잭션에서 반환받아 펜싱 토큰으로 사용한다. 실행 요청에는 이를 `attemptNo`로 포함하고 Python은 보고서 콜백 본문에 같은 값을 그대로 반환한다. 재시도·실패·보고서 완료 전이는 `RUNNING` 상태와 콜백의 시도 번호가 모두 일치할 때만 허용하므로, 임대가 만료된 이전 실행의 늦은 콜백이 DB 최신 세대를 빌려 새 실행을 덮어쓰지 못한다.
 
 P6 조사 근거·보고서 (`fds_investigation_evidence`, `fds_investigation_report`)
   Agent에게 실제 제공한 ref_id와 조회 범위, investigation_id당 검증 완료 보고서 한 건

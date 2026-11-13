@@ -1,6 +1,8 @@
 package com.shinhan.corebank.fds.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -73,6 +75,9 @@ class FdsHoldListServiceTest {
                         org.mockito.ArgumentMatchers.eq(true),
                         org.mockito.ArgumentMatchers.anyMap(),
                         org.mockito.ArgumentMatchers.eq(AccessReason.OPERATION));
+        verify(scores, never()).find(1L);
+        verify(reads, never()).findLatestCallRecord(1L);
+        verify(reads, never()).findLatestAction(1L);
     }
 
     @Test
@@ -92,39 +97,101 @@ class FdsHoldListServiceTest {
         assertThat(page.totalPages()).isZero();
     }
 
+    @Test
+    void maximumPageNumberCannotOverflowOffset() {
+        var page = service.find(Integer.MAX_VALUE, 100, null, null, null, null, 7L, "ip", AccessReason.OPERATION);
+
+        assertThat(page.items()).isEmpty();
+        assertThat(page.totalElements()).isEqualTo(2);
+    }
+
+    @Test
+    void sortsByHeldAtAndHoldIdDescending() {
+        var page = service.find(0, 20, null, null, null, null, 7L, "ip", AccessReason.OPERATION);
+
+        assertThat(page.items()).extracting("transferHoldId").containsExactly(1L, 2L);
+    }
+
+    @Test
+    void missingOptionalDataUsesSafeDefaultsAndCallPath() {
+        when(holds.findForFds(2L)).thenReturn(hold(2L, "HELD", "B", "12", NOW));
+        when(jobs.findByHoldId(2L)).thenReturn(null);
+        when(scores.find(2L)).thenReturn(null);
+        when(risks.check("088", "12")).thenReturn(new FdsRiskAccountService.Check("NO_MATCH", null, "v1", null));
+        when(reads.findLatestAction(2L)).thenReturn(null);
+
+        var page = service.find(0, 20, "HELD", "B", "NO_MATCH", null, 7L, "ip", AccessReason.OPERATION);
+
+        assertThat(page.items()).singleElement().satisfies(item -> {
+            assertThat(item.investigationStatus()).isNull();
+            assertThat(item.behaviorScoreStatus()).isEqualTo("PENDING");
+            assertThat(item.recipientAccountMasked()).isEqualTo("****");
+            assertThat(item.availablePath()).isEqualTo("CALL_THEN_DECIDE");
+        });
+    }
+
+    @Test
+    void pendingActionRequiresRecoveryAndEqualTimesUseHoldIdOrder() {
+        when(holds.findForFds(2L)).thenReturn(hold(2L, "HELD", "B", "110039200002", NOW));
+        when(holds.findForFds(1L)).thenReturn(hold(1L, "HELD", "A", "110039200001", NOW));
+        when(reads.findLatestAction(2L)).thenReturn(action("PENDING"));
+
+        var page = service.find(0, 20, "HELD", null, null, null, 7L, "ip", AccessReason.OPERATION);
+
+        assertThat(page.items()).extracting("transferHoldId").containsExactly(2L, 1L);
+        assertThat(page.items().getFirst().availablePath()).isEqualTo("RECOVERY_REQUIRED");
+    }
+
+    @Test
+    void blankFiltersAreIgnoredAndNullAccountIsSafelyMasked() {
+        when(holds.findForFds(2L)).thenReturn(hold(2L, "HELD", "B", null, NOW));
+        when(risks.check("088", null)).thenReturn(new FdsRiskAccountService.Check("UNAVAILABLE", null, null, "EMPTY"));
+
+        var page = service.find(0, 20, " ", " ", " ", " ", 7L, "ip", AccessReason.OPERATION);
+
+        assertThat(page.items()).hasSize(2);
+        assertThat(page.items().getFirst().recipientAccountMasked()).isEqualTo("****");
+    }
+
     private void stub(
             long id, String holdStatus, String policy, String risk, String investigation, String call, String action) {
-        when(holds.findForFds(id))
-                .thenReturn(new TransferHoldForFds(
-                        id,
-                        20L,
-                        null,
-                        holdStatus,
-                        NOW.minusMinutes(id),
-                        500_000L,
-                        "11003920000" + id,
-                        policy,
-                        3,
-                        1_500_000L,
-                        true,
-                        true,
-                        30L,
-                        "088",
-                        "ON_APPROVAL",
-                        null,
-                        null,
-                        null));
-        when(jobs.findByHoldId(id))
+        lenient()
+                .when(holds.findForFds(id))
+                .thenReturn(hold(id, holdStatus, policy, "11003920000" + id, NOW.minusMinutes(id)));
+        lenient()
+                .when(jobs.findByHoldId(id))
                 .thenReturn(new FdsInvestigationJob(id, "inv-" + id, investigation, 1, NOW, null, null));
-        when(scores.find(id)).thenReturn(new BehaviorScoreView(id, "AVAILABLE", 0.8, "m", "f", null));
-        when(risks.check("088", "11003920000" + id))
+        lenient().when(scores.find(id)).thenReturn(new BehaviorScoreView(id, "AVAILABLE", 0.8, "m", "f", null));
+        lenient()
+                .when(risks.check("088", "11003920000" + id))
                 .thenReturn(new FdsRiskAccountService.Check(risk, "MATCH".equals(risk) ? 1L : null, "v1", null));
-        when(reads.findCallRecords(id))
-                .thenReturn(
-                        call == null
-                                ? List.of()
-                                : List.of(new FdsAdminReadPort.CallRecord(1L, call, 7L, "확인", NOW, true)));
-        when(reads.findLatestAction(id)).thenReturn(action == null ? null : action(action));
+        lenient()
+                .when(reads.findLatestCallRecord(id))
+                .thenReturn(call == null ? null : new FdsAdminReadPort.CallRecord(1L, call, 7L, "확인", NOW, true));
+        lenient().when(reads.findLatestAction(id)).thenReturn(action == null ? null : action(action));
+    }
+
+    private static TransferHoldForFds hold(
+            long id, String status, String policy, String accountNumber, LocalDateTime heldAt) {
+        return new TransferHoldForFds(
+                id,
+                20L,
+                null,
+                status,
+                heldAt,
+                500_000L,
+                accountNumber,
+                policy,
+                30L,
+                "088",
+                "ON_APPROVAL",
+                null,
+                null,
+                null,
+                3,
+                1_500_000L,
+                true,
+                true);
     }
 
     private static FdsAdminReadPort.AdminAction action(String status) {

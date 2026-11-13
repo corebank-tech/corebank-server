@@ -55,7 +55,9 @@ public class FdsInvestigationJobService {
                 jobs.fail(holdId, attemptNo, "HOLD_CLOSED", now());
                 return;
             }
-            FdsInvestigationInput input = inputs.build(holdId, job.investigationId());
+            // Python 콜백도 같은 실행 세대를 돌려주도록 선점 번호를 조사 입력에 고정한다.
+            FdsInvestigationInput input =
+                    inputs.build(holdId, job.investigationId()).withAttemptNo(attemptNo);
             FdsInvestigationAgentPort.Result result;
             try {
                 result = agent.investigate(input);
