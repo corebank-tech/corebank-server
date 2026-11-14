@@ -111,6 +111,43 @@ public class FdsAdminActionStore {
                     risk.unavailableReason(),
                     now,
                     now);
+            if ("FRAUD_REJECT".equals(actionType)) {
+                // P4 호출 전에 등록 의도와 당시 정책·점수·조사 참조를 같은 트랜잭션으로 고정한다.
+                jdbc.update(
+                        "INSERT INTO fds_risk_registration "
+                                + "(registration_id,action_id,transfer_hold_id,investigation_id,actor_id,"
+                                + "recipient_bank_code,recipient_account_number,call_record_id,reason_code,policy_code,"
+                                + "policy_count_10m,policy_amount_10m,policy_hesitation_in_window,"
+                                + "policy_new_recipient_at_window_start,report_investigation_id,score_status,"
+                                + "behavior_score,model_version,feature_version,registration_status,"
+                                + "decision_dataset_version,created_at,updated_at) "
+                                + "SELECT ?,?,?,j.investigation_id,?,?,?,?,?,?,?,?,?,?,"
+                                + "CASE WHEN r.investigation_id IS NULL THEN NULL ELSE j.investigation_id END,"
+                                + "s.score_status,CASE WHEN s.score_status='AVAILABLE' THEN s.behavior_risk_score END,"
+                                + "CASE WHEN s.score_status='AVAILABLE' THEN s.model_version END,"
+                                + "CASE WHEN s.score_status='AVAILABLE' THEN s.feature_version END,'PENDING',?,?,? "
+                                + "FROM (SELECT 1) x LEFT JOIN fds_investigation_job j ON j.transfer_hold_id=? "
+                                + "LEFT JOIN fds_investigation_report r ON r.investigation_id=j.investigation_id "
+                                + "LEFT JOIN fds_behavior_score s ON s.transfer_hold_id=?",
+                        UUID.randomUUID().toString(),
+                        actionId,
+                        holdId,
+                        actorId,
+                        hold.recipientBankCode(),
+                        normalizeAccount(hold.depositAccountNumber()),
+                        call.id(),
+                        reasonCode,
+                        hold.policyCode(),
+                        hold.policyCount10m(),
+                        hold.policyAmount10m(),
+                        hold.policyHesitationInWindow(),
+                        hold.policyNewRecipientAtWindowStart(),
+                        risk.datasetVersion(),
+                        now,
+                        now,
+                        holdId,
+                        holdId);
+            }
         } catch (DuplicateKeyException exception) {
             // 동일 키 경합은 승자 결과를 복구하고 다른 미완료 조치 제약은 계약 충돌로 숨긴다.
             Action concurrent = actionByKeyForUpdate(idempotencyKey);
@@ -131,6 +168,12 @@ public class FdsAdminActionStore {
                         && java.util.Objects.equals(action.reasonCode(), actual.reasonCode());
         // EXECUTING 같은 중간 상태는 PENDING으로 남겨 다음 복구 주기에 다시 대조한다.
         if (!matches && !terminal(actual.status())) return actionById(action.actionId());
+        FdsRiskAccountService.Activation activation = null;
+        if (matches && "FRAUD_REJECT".equals(action.actionType())) {
+            activation = risks.activateAdminConfirmed(action.actionId());
+        } else if (!matches && terminal(actual.status()) && "FRAUD_REJECT".equals(action.actionType())) {
+            risks.markRegistrationFailed(action.actionId(), "P4_RESULT_MISMATCH");
+        }
         String target = matches ? "COMPLETED" : "CONFLICT";
         int updated = jdbc.update(
                 "UPDATE fds_admin_action SET action_status=?,failure_reason=?,p4_status=?,p4_actor_id=?,"
@@ -155,8 +198,8 @@ public class FdsAdminActionStore {
                     action.reasonCode(),
                     action.callRecordId(),
                     action.riskStatus(),
-                    action.riskAccountId(),
-                    action.datasetVersion(),
+                    activation == null ? action.riskAccountId() : Long.valueOf(activation.riskAccountId()),
+                    activation == null ? action.datasetVersion() : activation.datasetVersion(),
                     actual.status(),
                     actual.actorId(),
                     actual.reasonCode(),
@@ -171,6 +214,12 @@ public class FdsAdminActionStore {
                 (rs, row) -> actionById(rs.getString(1)));
     }
 
+    @Transactional
+    public void markRegistrationFailed(String actionId) {
+        // 활성화 트랜잭션 롤백이 끝난 뒤 실패 상태를 별도 업무 트랜잭션으로 남긴다.
+        risks.markRegistrationFailed(actionId, "ACTIVATION_FAILED");
+    }
+
     private void validateAction(String type, String reason, Check risk, CallRow call) {
         if ("MATCH".equals(risk.status())) {
             if (!"REJECT".equals(type) || !"RISK_ACCOUNT_MATCH".equals(reason)) conflict();
@@ -182,7 +231,9 @@ public class FdsAdminActionStore {
         if (call == null) conflict();
         if ("REJECT".equals(type) && (!"CUSTOMER_DENIED".equals(call.result()) || !"CUSTOMER_DENIED".equals(reason)))
             conflict();
-        if (!("APPROVE".equals(type) || "REJECT".equals(type))) invalid();
+        if ("FRAUD_REJECT".equals(type)
+                && (!"CUSTOMER_DENIED".equals(call.result()) || !"FRAUD_CONFIRMED".equals(reason))) conflict();
+        if (!("APPROVE".equals(type) || "REJECT".equals(type) || "FRAUD_REJECT".equals(type))) invalid();
     }
 
     private CallRecord callByKey(String key) {
@@ -264,6 +315,13 @@ public class FdsAdminActionStore {
         } catch (Exception exception) {
             throw new IllegalStateException(exception);
         }
+    }
+
+    private static String normalizeAccount(String value) {
+        if (value == null) invalid();
+        String normalized = value.replaceAll("[^0-9]", "");
+        if (!normalized.matches("[0-9]{8,20}")) invalid();
+        return normalized;
     }
 
     private static void invalid() {

@@ -26,7 +26,8 @@ public record FdsHoldDetail(
         ToolResults toolResults,
         AgentReport agentReport,
         List<CallRecord> callRecords,
-        AdminAction adminAction) {
+        AdminAction adminAction,
+        RiskRegistration riskRegistration) {
 
     public record OriginalTransfer(
             long transferHoldId,
@@ -129,6 +130,18 @@ public record FdsHoldDetail(
             String p4ReasonCode,
             String failureReason,
             LocalDateTime createdAt,
+            LocalDateTime updatedAt,
+            boolean recoveryRequired) {}
+
+    public record RiskRegistration(
+            String registrationId,
+            @Schema(allowableValues = {"PENDING", "ACTIVE", "FAILED"}) String status,
+            Long riskAccountId,
+            String decisionDatasetVersion,
+            String datasetVersion,
+            String failureReason,
+            LocalDateTime createdAt,
+            LocalDateTime activatedAt,
             LocalDateTime updatedAt,
             boolean recoveryRequired) {}
 }

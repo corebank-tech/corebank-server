@@ -109,6 +109,8 @@
 | 81 | `fds_investigation_history_snapshot` | 최근 이체 Tool 호출 스냅샷 | P6 | 7 |
 | 82 | `fds_investigation_history_item` | Agent에게 제공한 최근 이체 항목 | P6 | 5 |
 | 83 | `fds_investigation_recipient_snapshot` | 수취인 맥락 Tool 호출 스냅샷 | P6 | 7 |
+| 84 | `fds_risk_registration` | 관리자 사기 확정 위험 계좌 등록 의도 | P6 | 28 |
+| 85 | `fds_risk_account_evidence` | 위험 계좌의 사건별 선정 근거 | P6 | 18 |
 
 ---
 
@@ -200,7 +202,7 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | --- | --- | --- | --- | --- | --- |
 | `customer_id` | `BIGINT` | **PK, FK** | X |  | 권한을 가진 관리자. `customer(customer_id, role)` 참조 |
 | `role` | `VARCHAR(12)` | FK | X | `'ADMIN'` | 항상 `ADMIN`. `customer.role`과 함께 복합 FK를 이뤄 `CUSTOMER` 계정에 권한 행이 붙는 것을 막는다. 엔티티에 매핑하지 않고 DB 기본값을 쓴다 |
-| `permission` | `VARCHAR(20)` | **PK** | X |  | 권한 하나. `GL_READ`·`GL_WRITE`·`CUSTOMER_READ`·`CUSTOMER_WRITE`·`AUDIT_READ`·`PAYMENT_STOP_READ`·`PAYMENT_STOP_WRITE`·`PAYMENT_STOP_APPROVE`. `common_code`의 `ADMIN_PERMISSION` 그룹과 값이 같다 |
+| `permission` | `VARCHAR(20)` | **PK** | X |  | 권한 하나. `GL_READ`·`GL_WRITE`·`CUSTOMER_READ`·`CUSTOMER_WRITE`·`AUDIT_READ`·`PAYMENT_STOP_READ`·`PAYMENT_STOP_WRITE`·`PAYMENT_STOP_APPROVE`·`FDS_FRAUD_CONFIRM`. `common_code`의 `ADMIN_PERMISSION` 그룹과 값이 같다 |
 | `granted_at` | `DATETIME(6)` |  | X |  | 권한을 준 시각. 회수는 행 삭제라 이력은 `audit_log`가 맡는다 |
 
 **기본키** — `(customer_id, permission)` 복합. 같은 권한이 두 번 들어가지 않는다.
@@ -216,7 +218,7 @@ CSV 한 칸에 담지 않는 이유는 오타를 DB가 막지 못하고 `common_
 | 이름 | 조건 | 설명 |
 | --- | --- | --- |
 | `ck_admin_permission_role` | `role = 'ADMIN'` | 권한은 관리자에게만 붙는다. |
-| `ck_admin_permission` | `permission COLLATE utf8mb4_0900_as_cs IN ('GL_READ', 'GL_WRITE', 'CUSTOMER_READ', 'CUSTOMER_WRITE', 'AUDIT_READ', 'PAYMENT_STOP_READ', 'PAYMENT_STOP_WRITE', 'PAYMENT_STOP_APPROVE')` | 고정 8종만 허용한다(지급정지 3종은 `V202611091400`). `common_code`는 `code_group`으로 여러 종류를 함께 담아 FK를 걸 수 없어 CHECK로 고정하고, 권한이 늘면 둘을 함께 바꾼다. |
+| `ck_admin_permission` | `permission COLLATE utf8mb4_0900_as_cs IN ('GL_READ', 'GL_WRITE', 'CUSTOMER_READ', 'CUSTOMER_WRITE', 'AUDIT_READ', 'PAYMENT_STOP_READ', 'PAYMENT_STOP_WRITE', 'PAYMENT_STOP_APPROVE', 'FDS_FRAUD_CONFIRM')` | 고정 9종만 허용한다(`FDS_FRAUD_CONFIRM`은 `V202611141010`). `common_code`는 `code_group`으로 여러 종류를 함께 담아 FK를 걸 수 없어 CHECK로 고정하고, 권한이 늘면 둘을 함께 바꾼다. |
 
 ---
 
@@ -1920,11 +1922,13 @@ P6 Agent 조사는 점수 처리와 별도 작업으로 등록한다. 보류 상
 | 테이블 | 주요 컬럼 | 제약·용도 |
 |---|---|---|
 | `fds_risk_dataset` | `dataset_version` PK, 상태·예상 건수·SHA-256·활성 시각 | 검증된 버전과 이전 버전을 보존 |
-| `fds_risk_account` | 자동 ID, 버전, 은행코드, 정규화 계좌, 출처·사유 | `(dataset_version, bank_code, account_number)` UK |
+| `fds_risk_account` | 자동 ID, 버전, 은행코드, 정규화 계좌, 출처·사유, 관리자 계좌 생성 키 | `(dataset_version, bank_code, account_number)` UK, `ADMIN_CONFIRMED` 은행·계좌 전역 UK |
 | `fds_risk_active_version` | `singleton_id=1`, `dataset_version`, `updated_at` | 활성 포인터 전환을 한 행 잠금으로 직렬화 |
 | `fds_admin_call_record` | 보류 ID, 멱등 키, 지문, 콜 결과, 관리자·사유·시각 | 기존 기록을 수정하지 않는 추가형 기록 |
 | `fds_admin_action` | 조치 ID, 보류·행위자·콜·위험 버전·P4 결과·상태 | 멱등 키 UK, 생성 컬럼 `open_hold_id` UK로 보류당 PENDING 한 건 |
 | `fds_admin_action_audit` | 조치·P4 최종 결과·판정 근거·완료 시각 | `action_id` PK로 응답 유실 재처리에도 한 건 |
+| `fds_risk_registration` | 등록 ID, 조치·보류·조사·관리자·콜, 정규화 수취계좌, 정책·점수 스냅샷, PENDING/ACTIVE/FAILED | `action_id` UK; P4 결과 대조 전에는 MATCH 판정에서 제외 |
+| `fds_risk_account_evidence` | 위험 계좌·등록·사건·관리자·콜·정책·Agent 보고서·점수·버전 | 등록·조치별 UK; 같은 계좌의 여러 사건 근거는 보존 |
 
 ## `holiday`
 

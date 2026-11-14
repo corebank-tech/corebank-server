@@ -130,6 +130,30 @@ public class JdbcFdsAdminReadAdapter implements FdsAdminReadPort {
                 .orElse(null);
     }
 
+    @Override
+    public RiskRegistration findRiskRegistration(long holdId) {
+        return jdbc
+                .query(
+                        "SELECT registration_id,registration_status,risk_account_id,decision_dataset_version,"
+                                + "dataset_version,failure_reason,created_at,activated_at,updated_at "
+                                + "FROM fds_risk_registration "
+                                + "WHERE transfer_hold_id=? ORDER BY created_at DESC,registration_id DESC LIMIT 1",
+                        (rs, row) -> new RiskRegistration(
+                                rs.getString(1),
+                                rs.getString(2),
+                                (Long) rs.getObject(3),
+                                rs.getString(4),
+                                rs.getString(5),
+                                rs.getString(6),
+                                rs.getTimestamp(7).toLocalDateTime(),
+                                nullableTime(rs, 8),
+                                rs.getTimestamp(9).toLocalDateTime()),
+                        holdId)
+                .stream()
+                .findFirst()
+                .orElse(null);
+    }
+
     private static AdminAction action(ResultSet rs) throws SQLException {
         return new AdminAction(
                 rs.getString(1),

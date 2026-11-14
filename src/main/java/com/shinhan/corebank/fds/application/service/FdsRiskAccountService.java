@@ -4,17 +4,22 @@ import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.fds.domain.exception.FdsErrorCode;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /** 활성 P6 데이터셋만 정본으로 위험 계좌를 판정하고 버전 전환을 직렬화한다. */
 @Service
 @RequiredArgsConstructor
 public class FdsRiskAccountService {
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
     private final JdbcTemplate jdbc;
     private final Clock clock;
 
@@ -36,7 +41,8 @@ public class FdsRiskAccountService {
             if (version == null) return Check.unavailable(null, "ACTIVE_DATASET_MISSING");
             List<Long> ids = jdbc.queryForList(
                     "SELECT risk_account_id FROM fds_risk_account "
-                            + "WHERE dataset_version=? AND bank_code=? AND account_number=?"
+                            + "WHERE (dataset_version=? OR source_type='ADMIN_CONFIRMED') AND bank_code=? AND account_number=? "
+                            + "ORDER BY (source_type='ADMIN_CONFIRMED') DESC, risk_account_id"
                             + (lockActiveVersion ? " FOR UPDATE" : ""),
                     Long.class,
                     version,
@@ -46,6 +52,183 @@ public class FdsRiskAccountService {
             return ids.isEmpty() ? Check.noMatch(version) : Check.match(ids.getFirst(), version);
         } catch (DataAccessException exception) {
             return Check.unavailable(null, "RISK_LOOKUP_FAILED");
+        }
+    }
+
+    @Transactional
+    public Activation activateAdminConfirmed(String actionId) {
+        // 활성 포인터를 먼저 잠가 데이터셋 전환과 관리자 등록이 같은 잠금 순서를 사용하게 한다.
+        String activeVersion = jdbc.query(
+                "SELECT dataset_version FROM fds_risk_active_version WHERE singleton_id=1 FOR UPDATE",
+                rs -> rs.next() ? rs.getString(1) : null);
+        if (activeVersion == null) throw new BusinessException(FdsErrorCode.RISK_REGISTRATION_FAILED);
+        Registration registration = registrationForUpdate(actionId);
+        if (registration == null) throw new BusinessException(FdsErrorCode.NOT_FOUND);
+        if ("ACTIVE".equals(registration.status())) {
+            return new Activation(registration.registrationId(), registration.riskAccountId(), activeVersion, true);
+        }
+        LocalDateTime now = LocalDateTime.now(clock);
+        Long existing = findExistingRiskAccount(activeVersion, registration.bankCode(), registration.accountNumber());
+        if (existing == null) {
+            try {
+                jdbc.update(
+                        "INSERT INTO fds_risk_account "
+                                + "(dataset_version,bank_code,account_number,source_type,reason,created_at) "
+                                + "VALUES (?,?,?,'ADMIN_CONFIRMED','FRAUD_CONFIRMED',?)",
+                        activeVersion,
+                        registration.bankCode(),
+                        registration.accountNumber(),
+                        now);
+            } catch (org.springframework.dao.DuplicateKeyException ignored) {
+                // 동시 등록은 전역 관리자 계좌 유니크 제약의 승자 행로 수렴한다.
+            }
+            existing = findExistingRiskAccount(activeVersion, registration.bankCode(), registration.accountNumber());
+        }
+        if (existing == null) throw new BusinessException(FdsErrorCode.RISK_REGISTRATION_FAILED);
+        jdbc.update(
+                "UPDATE fds_risk_registration SET registration_status='ACTIVE',failure_reason=NULL,dataset_version=?,"
+                        + "risk_account_id=?,activated_at=?,updated_at=? "
+                        + "WHERE registration_id=? AND registration_status IN ('PENDING','FAILED')",
+                activeVersion,
+                existing,
+                now,
+                now,
+                registration.registrationId());
+        jdbc.update(
+                "INSERT INTO fds_risk_account_evidence "
+                        + "(risk_account_id,registration_id,action_id,transfer_hold_id,investigation_id,actor_id,"
+                        + "call_record_id,reason_code,policy_code,agent_report_json,evidence_transfer_ids_json,"
+                        + "score_status,behavior_score,model_version,feature_version,dataset_version,registered_at,activated_at) "
+                        + "SELECT ?,r.registration_id,r.action_id,r.transfer_hold_id,r.investigation_id,r.actor_id,"
+                        + "r.call_record_id,r.reason_code,r.policy_code,rep.report_json,"
+                        + "(SELECT JSON_ARRAYAGG(e.ref_id) FROM fds_investigation_evidence e "
+                        + " WHERE e.investigation_id=r.investigation_id),r.score_status,r.behavior_score,"
+                        + "r.model_version,r.feature_version,?,r.created_at,? FROM fds_risk_registration r "
+                        + "LEFT JOIN fds_investigation_report rep ON rep.investigation_id=r.report_investigation_id "
+                        + "WHERE r.registration_id=? ON DUPLICATE KEY UPDATE evidence_id=evidence_id",
+                existing,
+                activeVersion,
+                now,
+                registration.registrationId());
+        return new Activation(registration.registrationId(), existing, activeVersion, false);
+    }
+
+    @Transactional
+    public void markRegistrationFailed(String actionId, String reason) {
+        jdbc.update(
+                "UPDATE fds_risk_registration SET registration_status='FAILED',failure_reason=?,updated_at=? "
+                        + "WHERE action_id=? AND registration_status='PENDING'",
+                reason,
+                LocalDateTime.now(clock),
+                actionId);
+    }
+
+    public List<RiskAccountSummary> findActiveAccounts() {
+        return jdbc.query(
+                "SELECT r.risk_account_id,r.bank_code,r.account_number,r.source_type,r.created_at,"
+                        + "COALESCE(g.activated_at,d.activated_at),r.dataset_version,COUNT(e.evidence_id) "
+                        + "FROM fds_risk_account r JOIN fds_risk_dataset d ON d.dataset_version=r.dataset_version "
+                        + "LEFT JOIN fds_risk_registration g ON g.risk_account_id=r.risk_account_id AND g.registration_status='ACTIVE' "
+                        + "LEFT JOIN fds_risk_account_evidence e ON e.risk_account_id=r.risk_account_id "
+                        + "WHERE r.source_type='ADMIN_CONFIRMED' OR r.dataset_version=(SELECT dataset_version FROM fds_risk_active_version WHERE singleton_id=1) "
+                        + "GROUP BY r.risk_account_id,r.bank_code,r.account_number,r.source_type,r.created_at,g.activated_at,d.activated_at,r.dataset_version "
+                        + "ORDER BY COALESCE(g.activated_at,d.activated_at) DESC,r.risk_account_id DESC",
+                (rs, row) -> new RiskAccountSummary(
+                        rs.getLong(1),
+                        rs.getString(2),
+                        mask(rs.getString(3)),
+                        rs.getString(4),
+                        rs.getTimestamp(5).toLocalDateTime(),
+                        rs.getTimestamp(6).toLocalDateTime(),
+                        rs.getString(7),
+                        rs.getInt(8)));
+    }
+
+    public RiskAccountDetail findActiveAccount(long riskAccountId) {
+        RiskAccountSummary summary = findActiveAccounts().stream()
+                .filter(row -> row.riskAccountId() == riskAccountId)
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(FdsErrorCode.NOT_FOUND));
+        List<RiskEvidence> evidence = jdbc.query(
+                "SELECT evidence_id,transfer_hold_id,action_id,investigation_id,actor_id,call_record_id,reason_code,"
+                        + "policy_code,agent_report_json,evidence_transfer_ids_json,score_status,behavior_score,"
+                        + "model_version,feature_version,dataset_version,activated_at "
+                        + "FROM fds_risk_account_evidence WHERE risk_account_id=? ORDER BY activated_at,evidence_id",
+                (rs, row) -> new RiskEvidence(
+                        rs.getLong(1),
+                        rs.getLong(2),
+                        rs.getString(3),
+                        rs.getString(4),
+                        rs.getLong(5),
+                        rs.getLong(6),
+                        rs.getString(7),
+                        rs.getString(8),
+                        findings(rs.getString(9)),
+                        evidenceIds(rs.getString(10)),
+                        rs.getString(11),
+                        rs.getBigDecimal(12) == null
+                                ? null
+                                : rs.getBigDecimal(12).doubleValue(),
+                        rs.getString(13),
+                        rs.getString(14),
+                        rs.getString(15),
+                        rs.getTimestamp(16).toLocalDateTime()),
+                riskAccountId);
+        return new RiskAccountDetail(summary, evidence);
+    }
+
+    private Registration registrationForUpdate(String actionId) {
+        return jdbc.query(
+                "SELECT registration_id,recipient_bank_code,recipient_account_number,registration_status,risk_account_id "
+                        + "FROM fds_risk_registration WHERE action_id=? FOR UPDATE",
+                rs -> rs.next()
+                        ? new Registration(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), (Long)
+                                rs.getObject(5))
+                        : null,
+                actionId);
+    }
+
+    private Long findExistingRiskAccount(String version, String bankCode, String accountNumber) {
+        return jdbc.query(
+                "SELECT risk_account_id FROM fds_risk_account WHERE bank_code=? AND account_number=? "
+                        + "AND (dataset_version=? OR source_type='ADMIN_CONFIRMED') "
+                        + "ORDER BY (source_type='ADMIN_CONFIRMED') DESC,risk_account_id LIMIT 1 FOR UPDATE",
+                rs -> rs.next() ? rs.getLong(1) : null,
+                bankCode,
+                accountNumber,
+                version);
+    }
+
+    private static String mask(String account) {
+        return account.length() <= 4
+                ? "****"
+                : "*".repeat(account.length() - 4) + account.substring(account.length() - 4);
+    }
+
+    private static List<AgentFinding> findings(String reportJson) {
+        if (reportJson == null) return List.of();
+        try {
+            List<AgentFinding> result = new ArrayList<>();
+            for (JsonNode node : JSON.readTree(reportJson).path("secondaryFindings")) {
+                result.add(new AgentFinding(
+                        node.path("code").asText(),
+                        node.path("description").asText(),
+                        node.path("confidence").asText()));
+            }
+            return List.copyOf(result);
+        } catch (RuntimeException exception) {
+            throw new BusinessException(FdsErrorCode.INVALID_INVESTIGATION_REPORT, exception);
+        }
+    }
+
+    private static List<Long> evidenceIds(String evidenceJson) {
+        if (evidenceJson == null) return List.of();
+        try {
+            List<Long> result = new ArrayList<>();
+            for (JsonNode node : JSON.readTree(evidenceJson)) result.add(node.asLong());
+            return List.copyOf(result);
+        } catch (RuntimeException exception) {
+            throw new BusinessException(FdsErrorCode.INVALID_INVESTIGATION_REPORT, exception);
         }
     }
 
@@ -120,6 +303,43 @@ public class FdsRiskAccountService {
     }
 
     public record RiskRow(String bankCode, String accountNumber, String reason) {}
+
+    private record Registration(
+            String registrationId, String bankCode, String accountNumber, String status, Long riskAccountId) {}
+
+    public record Activation(String registrationId, long riskAccountId, String datasetVersion, boolean replay) {}
+
+    public record RiskAccountSummary(
+            long riskAccountId,
+            String bankCode,
+            String accountNumberMasked,
+            String source,
+            LocalDateTime registeredAt,
+            LocalDateTime activatedAt,
+            String datasetVersion,
+            int evidenceCount) {}
+
+    public record RiskEvidence(
+            long evidenceId,
+            long transferHoldId,
+            String actionId,
+            String investigationId,
+            long actorId,
+            long callRecordId,
+            String reasonCode,
+            String policyCode,
+            List<AgentFinding> agentFindings,
+            List<Long> evidenceTransferIds,
+            String scoreStatus,
+            Double score,
+            String modelVersion,
+            String featureVersion,
+            String datasetVersion,
+            LocalDateTime activatedAt) {}
+
+    public record AgentFinding(String code, String description, String confidence) {}
+
+    public record RiskAccountDetail(RiskAccountSummary account, List<RiskEvidence> evidence) {}
 
     public record Check(String status, Long riskAccountId, String datasetVersion, String unavailableReason) {
         static Check match(long id, String version) {

@@ -19,7 +19,7 @@
 `SessionLoginManager`를 그대로 쓰기 때문이다.
 
 **권한은 조인 테이블로 둔다.** 처음에는 `customer.permissions`에 CSV로 담으려 했으나 PR #572 리뷰에서
-바꿨다. 값이 5종 고정이라 CSV로도 담기지만,
+바꿨다. 권한은 Enum·DB CHECK·공통코드를 함께 바꾸는 허용 목록으로 관리하며,
 
 - CSV는 글자일 뿐이라 `GL_RAED` 같은 **오타를 DB가 막지 못하고**,
 - 표시명을 등록한 `common_code`(`ADMIN_PERMISSION`)와 **값이 이어지지 않으며**,
@@ -43,6 +43,7 @@
 | `PAYMENT_STOP_READ` | 지급정지 조회 | 이의제기 AI 심사 지원([D-36](README.md#d-36--113--리드)) 사건과 이의제기 조회 |
 | `PAYMENT_STOP_WRITE` | 지급정지 변경 | 사건 등록, 이의제기 접수, 판정 작성 |
 | `PAYMENT_STOP_APPROVE` | 지급정지 해제 승인 | 수용, 일부 지급정지 판정의 승인. 작성자와 다른 관리자 |
+| `FDS_FRAUD_CONFIRM` | FDS 사기 확정 | 사기 확정 거절과 위험 계좌 자동 등록 |
 
 `api_conventions.md` §5-8에 `CustomerRole`·`AdminPermission`으로 등록했다. 값을 늘리면 `/admin/**`
 권한 매핑표(②)와 부여·회수 API(PH-49b)를 함께 고쳐야 한다. ①·② 시점에는 시드와 Runbook SQL로만 넣었고, PH-49b부터 API로도 넣는다.
@@ -213,6 +214,7 @@ SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS 
 | `/admin/ledger-reconciliation` | `AUDIT_READ` | — (조회 전용) |
 | `/admin/payment-stops` | `PAYMENT_STOP_READ` | `PAYMENT_STOP_WRITE` (사건 등록, D-36) |
 | `/admin/objections` | `PAYMENT_STOP_READ` | `PAYMENT_STOP_WRITE` (접수, 완비 확인, 보완 요청, 판정 작성, 외부 확인, 서류 업로드). 판정 승인과 반려(`/decisions/{decisionId}/approve`, `/return`)만 `PAYMENT_STOP_APPROVE`, 심사 시작 기록(`/review-sessions`)은 `PAYMENT_STOP_READ` |
+| `/admin/fds` | `CUSTOMER_READ` | 콜·승인·일반 거절은 `CUSTOMER_WRITE`, 사기 확정 거절(`/holds/{id}/fraud-reject`)은 `FDS_FRAUD_CONFIRM` |
 
 조회 전용 경로는 GET 규칙만 두어 변경 요청이 맨 아래 `denyAll` 로 떨어진다. 쓰기 권한을 미리
 채워 두면 그 경로에 변경 API 가 붙는 순간 조회 권한만 가진 관리자가 통과하기 때문이다.
@@ -234,7 +236,7 @@ SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS 
 | 항목 | 결정 |
 |---|---|
 | API | `POST /admin/customers/{customerId}/permissions`(본문 `permission`) · `DELETE /admin/customers/{customerId}/permissions/{permission}`. 둘 다 `Idempotency-Key` 필수, 이미 가진 권한 부여·없는 권한 회수는 200 |
-| 인가 | `CUSTOMER_WRITE`. 5종 고정을 유지하려고 새 권한을 만들지 않았다. 그래서 `CUSTOMER_WRITE` 보유자는 자기를 뺀 어느 관리자에게도 5종을 줄 수 있고, 보유자끼리 서로 줄 수도 있다 |
+| 인가 | `CUSTOMER_WRITE`. 보유자는 자기를 뺀 다른 관리자에게 현재 `AdminPermission` 허용 목록의 권한을 부여·회수할 수 있다 |
 | 모순 방지 | `customer`에 `UNIQUE(customer_id, role)`, `admin_permission.role`(`ADMIN` 고정)과 복합 FK. `CUSTOMER` 계정에는 권한 행이 붙지 않고, 권한 행이 남은 관리자는 `CUSTOMER`로 바꿀 수 없다. **배포 전** `SELECT ap.customer_id, c.role, ap.permission FROM admin_permission ap JOIN customer c ON c.customer_id = ap.customer_id WHERE c.role <> 'ADMIN';`가 0건인지 확인한다 — 있으면 FK 적용이 실패하고, 그때 앞서 만든 `uk_customer_id_role`이 남을 수 있다 |
 | 세션 | 권한이 로그인 때 세션 authority로 실리므로 회수는 같은 트랜잭션에서 `CustomerSessionInvalidator.invalidateAll`을 부른다. 회수와 겹친 로그인이 권한을 읽고 뒤늦게 저장한 세션은 이 삭제에 걸리지 않아, `customer.admin_permission_version`을 회수 때마다 올리고, `AdminPermissionVersionFilter`가 관리자 요청마다 로그인 때 세션에 실은 값과 맞춰 달라졌으면 401로 거부한다. 부여는 대상의 다음 로그인부터 적용된다 |
 | 감사 | `ADMIN_PERMISSION_GRANT`·`ADMIN_PERMISSION_REVOKE`. 행위자는 호출한 관리자, 대상은 `targetCustomerId`, 바뀐 권한은 `changes`. 자기 대상·비관리자 대상 거부도 실패로 남는다 |

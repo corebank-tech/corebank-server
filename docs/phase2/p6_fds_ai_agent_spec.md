@@ -886,3 +886,20 @@ P4 부품 지연은 §10.4의 인계 조건으로 다루고, 아래는 **P6이 �
 - 원안의 **29.5인일(27~35인일)**은 Python LangGraph 조사 서비스를 포함하지 않은 추정이다. 이번 문서는 보류·토큰·승인 실행 경계를 5~8인일로 다시 추정하고 내구성 있는 조사 작업·워커를 별도 산정해 **약 25~38인일의 팀 전체 작업량**으로 계산했다. 병렬화는 인일 합계를 줄이지 않고 달력상 기간에만 영향을 준다.
 - `PENDING_REVIEW` 제거 및 Agent의 보류 후 조사 전환은 **새 설계 결정**이다. 원안에 이미 존재하던 사실로 취급하지 않는다.
 - 이체 보류·토큰·실행은 [transfer_seam.md §9](transfer_seam.md#9-훅-c--이체-보류-771)의 계약을 따른다. P6 API 경로는 [연동 계약 §1](p6_fds_integration_contract.md#1-url-검증-결과와-상태)에서 결정했으나 미구현이다. 조사 Tool 2, 조사 작업 저장 방식, 공수는 구현·검증 상태를 별도로 확인한다.
+## 관리자 사기 확정 위험 계좌 등록 (#1005)
+
+관리자 조치는 `APPROVE`, 일반 `REJECT`, `FRAUD_REJECT` 세 종류다. 일반 거절은
+`CUSTOMER_DENIED`, 사기 확정 거절은 `FRAUD_CONFIRMED`, 기존 활성 위험 계좌 일치 거절은
+`RISK_ACCOUNT_MATCH`를 사용한다. Agent 보고서와 행동 점수는 보조 근거이며 관리자 사기 확정 없이
+위험 계좌를 등록하지 않는다.
+
+`FRAUD_REJECT`는 관리자 조치와 `fds_risk_registration(PENDING)`을 먼저 커밋한 뒤 P6 트랜잭션
+밖에서 P4 `reject()`를 호출한다. `findForFds()`의 최종 상태가 `REJECTED`이고 actorId와
+`FRAUD_CONFIRMED`가 현재 조치와 일치할 때만 등록 의도를 `ACTIVE`로 전환한다. 같은 은행·정규화
+계좌는 관리자 등록 행 하나로 수렴하지만, 각 사건의 선정 근거는 `fds_risk_account_evidence`에 별도로
+보존한다. 활성화 실패는 P4 거절을 되돌리지 않고 `FAILED` 등록 의도를 주기 복구에서 재처리한다.
+
+`MATCH`는 콜 없이 `RISK_ACCOUNT_MATCH` 거절만 허용한다. `NO_MATCH`와 `UNAVAILABLE`은 최신 고객
+콜 결과가 있어야 승인·일반 거절·사기 확정 거절을 허용한다. `UNAVAILABLE` 자체는 자동 판단 근거가
+아니다. 관리자 등록 계좌는 `ADMIN_CONFIRMED` 출처로 기존 데이터셋 버전 전환 후에도 판정 대상에
+남고, 조치가 고정한 datasetVersion과 riskRecordId는 전환 중 바뀌지 않는다.

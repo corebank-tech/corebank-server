@@ -179,7 +179,7 @@ public enum TransferHoldCloseReason { CANCELLED, EXPIRED }
 
 ### 6-0. 합성 위험 계좌 조회와 전화 없는 거절 (#946, P4 계약 합의 #971)
 
-위 콜 결과 계약에 추가할 **제안 경로**다. 현재 P6 API에 구현된 기능으로 취급하지 않는다. P4 조회·거절 계약은 #971에서 합의해 #994로 구현했다. 실제 고객이 접속하지 않는 프로젝트 시연용 운영 환경에서 P6 소유 `fds_risk_account`의 **합성 계좌 행을 실제 DB에 적재·조회**한다. 이는 외부 기관의 확인 자료나 실제 사기 확정 정보가 아니다. 관리자 등록·정정·해제와 외부 정보 연동은 이번 범위 밖이다. 일치 키는 `은행코드 + 계좌번호`의 정확한 일치이며, 현재 당행 보류의 은행코드는 `088`이다. 조회 결과 `MATCH`에서는 전화 없이 **거절만** 허용하고 승인은 금지한다. `NO_MATCH`·`UNAVAILABLE`은 기존 콜 결과 계약을 따른다. 조회 장애를 `NO_MATCH`로 바꾸지 않는다. 고객 화면에는 위험 계좌 조회 결과를 표시하지 않는다.
+이 경로는 #992에서 구현되었다. P4 조회·거절 계약은 #971에서 합의해 #994로 구현했다. P6 소유 `fds_risk_account`의 검증된 활성 데이터와 #1005의 `ADMIN_CONFIRMED` 계좌를 실제 DB에서 조회한다. 시드·외부 데이터와 관리자 사기 확정 출처는 구분한다. 관리자 정정·해제와 외부 기관 자동 공유는 범위 밖이다. 일치 키는 `은행코드 + 계좌번호`의 정확한 일치이며, 현재 당행 보류의 은행코드는 `088`이다. 조회 결과 `MATCH`에서는 전화 없이 **거절만** 허용하고 승인은 금지한다. `NO_MATCH`·`UNAVAILABLE`은 기존 콜 결과 계약을 따른다. 조회 장애를 `NO_MATCH`로 바꾸지 않는다. 고객 화면에는 위험 조회 결과를 표시하지 않는다.
 
 **데이터셋 수명:** 첫 버전은 `demo-risk-v1`이다. P6이 전용 QA 수취계좌와 위험 계좌 행을 `src/main/resources/db/seed/local-demo-data.sql`에 함께 추가하고 PR로 검증한다. 로컬은 `local`, 시연용 운영 DB는 `prod,qa-seed` 기동에서 기존 `DemoDataLoader` 경로로 적재하며 `prod` 단독 기동은 합성 행을 적재하지 않는다([Flyway 파일 역할 가이드](../flyway_file_role_guide.md) §3). 다음 버전은 기존 행을 수정하지 않고 시드 파일에 전체 행을 추가한다. 적재된 새 버전의 건수·형식·중복·해시를 검증한 **뒤에만** 단일 활성 포인터를 원자적으로 전환한다. 버전 전환도 시드 변경 PR과 다음 배포를 통해 수행하며 수동 DB 적재·전환은 하지 않는다. 현재 `DemoDataLoader`의 일반 SQL 오류 전파와 QA 계좌 소유 검증만으로는 위험 데이터셋 검증·원자적 활성화가 보장되지 않으므로 P6 구현에서 기동 검증과 활성화 순서를 추가한다. 활성 버전은 하나이며 미적재·검증 실패 시 `UNAVAILABLE`이다. **0건 버전의 활성화는 금지한다.** 시연 기간에는 이전 버전을 보존해 과거 거절을 재현한다. 프로젝트 종료 시 P4가 합성 행과 활성 포인터의 삭제를 별도 정리 PR·배포 절차로 실행하고 완료를 검증한다. 시드 파일에서 INSERT만 제거해도 이미 적재된 DB 행은 삭제되지 않는다. 감사 기록은 기존 감사 보존 기준을 따른다. 합성 행은 Flyway `V__`·`R__`에 넣지 않는다. P6이 스키마·판정·시드·검증·전환 계약을 소유하고 배포 담당자와 배포 절차를 확인한다.
 
@@ -209,9 +209,9 @@ public enum TransferHoldCloseReason { CANCELLED, EXPIRED }
 
 ### 6-1. 관리자 권한·CSRF·조회 감사 결정
 
-기존 5종 `AdminPermission`을 재사용한다. FDS 보류 목록·상세 조회에는 **`CUSTOMER_READ`**, 콜 결과 기록·승인·거절에는 **`CUSTOMER_WRITE`**를 요구한다. 보류 건이 고객의 이체 요청과 개인정보를 포함하므로 기존 고객 조회·변경 권한과 같은 경계로 둔다. FDS 전용 권한을 추가하면 `AdminPermission`·DB CHECK·공통코드·권한 부여·회수 API까지 바뀌므로 현재 범위에서는 만들지 않는다. 관리자 역할만으로 허용하지 않고 각 authority를 검사한다.
+일반 FDS 보류 조회는 **`CUSTOMER_READ`**, 콜 기록·승인·일반 거절은 **`CUSTOMER_WRITE`**를 재사용한다. 위험 계좌를 즉시 활성화하는 사기 확정 거절은 **`FDS_FRAUD_CONFIRM`**으로 분리하며, Enum·DB CHECK·공통코드·권한 부여·회수 API가 같은 값을 사용한다. 관리자 역할만으로 허용하지 않고 각 authority를 검사한다.
 
-**BE 구현 재개 시(11/7 이후)** `SecurityConfig`의 `/admin/**` 기본 `denyAll`보다 앞에 `GET /admin/fds/** → CUSTOMER_READ`, 필요한 `POST /admin/fds/** → CUSTOMER_WRITE` matcher를 이 순서로 둔다. `GET` 외 조회나 허용하지 않은 메서드는 계속 거부한다. 실제 구현에서는 콜·승인·거절 경로만 POST로 허용한다. 고객·관리자 브라우저는 기존 `JSESSIONID`, `XSRF-TOKEN` 쿠키와 `X-XSRF-TOKEN` 헤더를 그대로 사용하고 FDS 관리자 변경 요청에 CSRF 예외를 추가하지 않는다.
+실제 `SecurityConfig`는 `/admin/**` 기본 `denyAll`보다 앞에 `GET /admin/fds/** → CUSTOMER_READ`, `POST /admin/fds/holds/*/fraud-reject → FDS_FRAUD_CONFIRM`, 그 밖의 허용된 FDS POST는 `CUSTOMER_WRITE` matcher를 이 순서로 둔다. 허용하지 않은 메서드는 계속 거부하고 기존 `JSESSIONID`, `XSRF-TOKEN` 쿠키와 `X-XSRF-TOKEN` 헤더를 사용하며 CSRF 예외를 추가하지 않는다.
 
 이 경로를 구현하는 PR에서 [admin_auth.md §권한 매핑표](admin_auth.md#권한-매핑표)에 `/admin/fds/holds`의 GET/POST 권한을 추가하고 `SecurityConfig`와 함께 갱신한다. 기존 관리자 권한은 로그인 때 세션에 적재되므로 `CUSTOMER_READ`·`CUSTOMER_WRITE`를 회수해도 이미 로그인한 세션에는 즉시 반영되지 않는다. 즉시 차단이 필요한 회수에서는 `admin_auth.md`의 `CustomerSessionInvalidator` 경계를 따른다.
 
@@ -314,7 +314,7 @@ Idempotency-Key: 6fa61214-4817-47ad-b08f-5279af78df40
 
 위 보류 응답은 **기존 중첩 DTO 구조를 따른 `ON_APPROVAL` 예상값**이다. 실제 FDS 응답은 P4 구현 뒤 확인한다. FE는 `data.status`에 `HELD`가 온다고 가정하지 않고 `data.transferHold?.status`로 보류를 구분한다. `SUCCESS`는 기존 이체 완료 화면, 보류는 승인 대기 안내, `ERROR`는 실패 안내로 구분한다. 행동 이벤트 전송 실패를 이체 성공이나 실패로 오인하지 않는다.
 
-**관리자 화면 → 조회·콜·조치** — 관리자 세션으로 `GET /api/v1/admin/fds/holds`와 `GET /api/v1/admin/fds/holds/{transferHoldId}`를 호출해 서버 A/B 근거와 AI 추가 발견을 별도 영역에 표시한다. 두 조회와 콜 기록에는 `X-Access-Reason`을 전송한다. 현행 경로는 콜 결과를 먼저 기록한 뒤 승인하거나 거절한다. #946의 합성 위험 계좌 `MATCH` 전화 없는 거절은 §6-0의 P4 인계와 API 계약 확정 후에만 예외로 추가한다. 다음은 **경로·콜 enum이 결정된 신규 FDS API의 미구현 예시**이며, P4 실행 결과를 담는 응답 필드는 P4 인계 대기다.
+**관리자 화면 → 조회·콜·조치** — 관리자 세션으로 `GET /api/v1/admin/fds/holds`와 `GET /api/v1/admin/fds/holds/{transferHoldId}`를 호출해 서버 A/B 근거와 AI 추가 발견을 별도 영역에 표시한다. 두 조회와 콜 기록에는 `X-Access-Reason`을 전송한다. `MATCH`는 전화 없이 `RISK_ACCOUNT_MATCH` 거절만, `NO_MATCH`·`UNAVAILABLE`은 콜 결과 뒤 승인·일반 거절·사기 확정 거절을 허용한다. 아래 경로와 콜 enum은 #992에서 구현됐고 #1005가 사기 확정 등록 경로를 추가한다.
 
 ```http
 GET /api/v1/admin/fds/holds?page=0&size=10&holdStatus=HELD
@@ -418,3 +418,15 @@ Idempotency-Key: 9fa61214-4817-47ad-b08f-5279af78df43
 | 조사 작업 재시도·보고서 멱등·AI 장애 시 수동 검토 화면 | P6 FE·BE·AI | #992에서 조사 작업 등록·조건부 선점·임대 복구·3회 재시도·보고서 원자 저장 기반 구현; Python 조사 API·Tool 근거 검증·화면 및 실행 검증 대기 |
 
 P4 인계·합의 대기 항목은 실제 계약이 정해지면 상태와 관련 PR을 갱신한다. P6이 결정한 항목도 구현·검증 전에는 완료로 표시하지 않는다. #855는 이벤트·피처 계약을 정책 사례와 최종 대조한다.
+## 관리자 사기 확정 거절 연동 (#1005)
+
+P4는 보류 원본·상태·거절 결과의 정본이고 P6은 관리자 조치·위험 계좌·선정 근거·복구를 소유한다.
+P6은 `FRAUD_REJECT/FRAUD_CONFIRMED` 조치와 위험 계좌 등록 의도를 별도 트랜잭션으로 먼저 커밋한
+뒤 P4 `reject()`를 호출한다. 응답 성공만으로 완료하지 않고 `findForFds()`의 `REJECTED`, actorId,
+reasonCode를 모두 대조한다. 다른 관리자 결과, `CANCELLED`, `EXPIRED`, `FAILED`는 현재 조치의
+성공으로 간주하지 않는다.
+
+P4 결과가 일치하면 활성 포인터와 등록 의도를 잠근 뒤 `ADMIN_CONFIRMED` 계좌를 생성하거나 기존
+계좌를 재사용하고 사건별 근거를 멱등 저장한다. P4 응답 유실 시 이미 일치하는 결과면 reject를 다시
+호출하지 않는다. P4 거절 뒤 활성화가 실패하면 등록 상태와 실패 사유만 남기며 P4 상태를 되돌리지
+않는다. 복구는 P4 정본을 먼저 재조회하고 일치하는 조치만 재활성화한다.

@@ -105,6 +105,92 @@ class FdsAdminActionStoreIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    void fraudRejectionActivatesOneRiskAccountAndPreservesIncidentEvidence() {
+        long holdId = holdId();
+        String recipient = "99999999991";
+        activate("110039200000");
+        doReturn(hold(holdId, "HELD", recipient, null, null)).when(holds).findForFds(holdId);
+        store.recordCall(holdId, key(), 7L, "CUSTOMER_DENIED", "사기 계좌 확인");
+
+        var pending = store.prepare(holdId, key(), 7L, "FRAUD_REJECT", "FRAUD_CONFIRMED");
+
+        assertThat(jdbc.queryForObject(
+                        "SELECT registration_status FROM fds_risk_registration WHERE action_id=?",
+                        String.class,
+                        pending.actionId()))
+                .isEqualTo("PENDING");
+        var completed = store.reconcile(pending, hold(holdId, "REJECTED", recipient, 7L, "FRAUD_CONFIRMED"));
+        assertThat(completed.status()).isEqualTo("COMPLETED");
+        assertThat(risks.check("088", recipient).status()).isEqualTo("MATCH");
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_risk_account_evidence WHERE action_id=?",
+                        Integer.class,
+                        pending.actionId()))
+                .isEqualTo(1);
+        Long riskAccountId = jdbc.queryForObject(
+                "SELECT risk_account_id FROM fds_risk_registration WHERE action_id=?", Long.class, pending.actionId());
+        jdbc.update(
+                "UPDATE fds_risk_account_evidence SET agent_report_json=?,evidence_transfer_ids_json=? "
+                        + "WHERE action_id=?",
+                "{\"secondaryFindings\":[{\"code\":\"NEW_RECIPIENT\",\"description\":\"신규 수취인\","
+                        + "\"confidence\":\"OBSERVED\"}]}",
+                "[101,102]",
+                pending.actionId());
+        var detail = risks.findActiveAccount(riskAccountId);
+        assertThat(detail.account().accountNumberMasked()).endsWith("9991");
+        assertThat(detail.evidence().getFirst().agentFindings()).hasSize(1);
+        assertThat(detail.evidence().getFirst().evidenceTransferIds()).containsExactly(101L, 102L);
+        assertThat(store.reconcile(completed, hold(holdId, "REJECTED", recipient, 7L, "FRAUD_CONFIRMED")))
+                .isEqualTo(completed);
+    }
+
+    @Test
+    void ordinaryRejectionDoesNotCreateRiskRegistration() {
+        long holdId = holdId();
+        activate("110039200000");
+        doReturn(hold(holdId, "HELD", "99999999992", null, null)).when(holds).findForFds(holdId);
+        store.recordCall(holdId, key(), 7L, "CUSTOMER_DENIED", "이체 실수 확인");
+
+        var pending = store.prepare(holdId, key(), 7L, "REJECT", "CUSTOMER_DENIED");
+
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_risk_registration WHERE action_id=?",
+                        Integer.class,
+                        pending.actionId()))
+                .isZero();
+    }
+
+    @Test
+    void twoPreparedIncidentsForSameAccountShareRiskAccountAndKeepBothEvidenceRows() {
+        long firstHoldId = holdId();
+        long secondHoldId = holdId();
+        String recipient = "99999999993";
+        activate("110039200000");
+        doReturn(hold(firstHoldId, "HELD", recipient, null, null)).when(holds).findForFds(firstHoldId);
+        doReturn(hold(secondHoldId, "HELD", recipient, null, null)).when(holds).findForFds(secondHoldId);
+        store.recordCall(firstHoldId, key(), 7L, "CUSTOMER_DENIED", "첫 사건 사기 확인");
+        store.recordCall(secondHoldId, key(), 8L, "CUSTOMER_DENIED", "두 번째 사건 사기 확인");
+        var first = store.prepare(firstHoldId, key(), 7L, "FRAUD_REJECT", "FRAUD_CONFIRMED");
+        var second = store.prepare(secondHoldId, key(), 8L, "FRAUD_REJECT", "FRAUD_CONFIRMED");
+
+        store.reconcile(first, hold(firstHoldId, "REJECTED", recipient, 7L, "FRAUD_CONFIRMED"));
+        store.reconcile(second, hold(secondHoldId, "REJECTED", recipient, 8L, "FRAUD_CONFIRMED"));
+
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_risk_account WHERE bank_code='088' AND account_number=? "
+                                + "AND source_type='ADMIN_CONFIRMED'",
+                        Integer.class,
+                        recipient))
+                .isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_risk_account_evidence e JOIN fds_risk_account r "
+                                + "ON r.risk_account_id=e.risk_account_id WHERE r.bank_code='088' AND r.account_number=?",
+                        Integer.class,
+                        recipient))
+                .isEqualTo(2);
+    }
+
+    @Test
     void noMatchRequiresCompatibleCallAndMismatchedP4ResultConflicts() {
         long holdId = holdId();
         activate("110039200000");

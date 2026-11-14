@@ -28,7 +28,13 @@ public class FdsAdminActionService {
         }
         // P4 응답 유실과 상태 전이 후 예외를 구분하려면 반드시 정본 상태를 다시 읽는다.
         TransferHoldForFds actual = holds.findForFds(holdId);
-        Action result = store.reconcile(action, actual);
+        Action result;
+        try {
+            result = store.reconcile(action, actual);
+        } catch (RuntimeException exception) {
+            if ("FRAUD_REJECT".equals(action.actionType())) store.markRegistrationFailed(action.actionId());
+            throw exception;
+        }
         if ("CONFLICT".equals(result.status())
                 || ("EXPIRED".equals(actual.status()) && "APPROVE".equals(action.actionType()))) {
             throw new BusinessException(FdsErrorCode.FLOW_CONFLICT);
@@ -41,7 +47,12 @@ public class FdsAdminActionService {
         for (Action action : store.pending()) {
             try {
                 invokeIfNeeded(action);
-                store.reconcile(action, holds.findForFds(action.holdId()));
+                try {
+                    store.reconcile(action, holds.findForFds(action.holdId()));
+                } catch (RuntimeException exception) {
+                    if ("FRAUD_REJECT".equals(action.actionType())) store.markRegistrationFailed(action.actionId());
+                    throw exception;
+                }
             } catch (RuntimeException ignored) {
                 // 다음 주기에도 PENDING 의도와 P4 정본을 다시 대조한다.
             }

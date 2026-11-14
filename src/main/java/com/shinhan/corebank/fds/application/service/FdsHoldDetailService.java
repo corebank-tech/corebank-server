@@ -122,7 +122,8 @@ public class FdsHoldDetailService {
                         : reads.findCallRecords(holdId).stream()
                                 .map(FdsHoldDetailService::call)
                                 .toList(),
-                reads == null ? null : action(reads.findLatestAction(holdId)));
+                reads == null ? null : action(reads.findLatestAction(holdId)),
+                reads == null ? null : registration(reads.findRiskRegistration(holdId)));
     }
 
     private TransferHoldForFds findHold(long holdId) {
@@ -268,6 +269,21 @@ public class FdsHoldDetailService {
                 action.createdAt(),
                 action.updatedAt(),
                 "PENDING".equals(action.actionStatus()) || "CONFLICT".equals(action.actionStatus()));
+    }
+
+    private static FdsHoldDetail.RiskRegistration registration(FdsAdminReadPort.RiskRegistration registration) {
+        if (registration == null) return null;
+        return new FdsHoldDetail.RiskRegistration(
+                registration.registrationId(),
+                registration.status(),
+                registration.riskAccountId(),
+                registration.decisionDatasetVersion(),
+                registration.datasetVersion(),
+                registration.failureReason(),
+                registration.createdAt(),
+                registration.activatedAt(),
+                registration.updatedAt(),
+                "PENDING".equals(registration.status()) || "FAILED".equals(registration.status()));
     }
 
     private static FdsHoldDetail.HistoryTool emptyHistory() {

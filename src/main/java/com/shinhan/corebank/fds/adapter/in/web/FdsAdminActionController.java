@@ -81,6 +81,23 @@ public class FdsAdminActionController {
                 request.reasonCode()));
     }
 
+    @PostMapping("/{transferHoldId}/fraud-reject")
+    @Operation(
+            operationId = "confirmFraudAndRejectFdsHeldTransfer",
+            summary = "사기 확정 및 보류 거절",
+            description =
+                    "FDS_FRAUD_CONFIRM 권한, CSRF, Idempotency-Key와 최신 CUSTOMER_DENIED 콜이 필요합니다. P4의 REJECTED·actorId·FRAUD_CONFIRMED가 일치한 뒤 등록 의도를 ACTIVE로 전환합니다.")
+    public ApiResponse<FdsAdminActionStore.Action> fraudReject(
+            @PathVariable @Positive long transferHoldId,
+            @RequestHeader(name = "Idempotency-Key") @NotBlank String idempotencyKey) {
+        return ApiResponse.success(actions.act(
+                transferHoldId,
+                idempotencyKey,
+                currentCustomer.getCurrentCustomerId(),
+                "FRAUD_REJECT",
+                "FRAUD_CONFIRMED"));
+    }
+
     public record CallRequest(
             @Schema(
                             description = "고객 확인 결과",
