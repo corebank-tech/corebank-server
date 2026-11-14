@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.fds.application.service.FdsAdminActionStore.Action;
+import com.shinhan.corebank.fds.domain.exception.FdsErrorCode;
 import com.shinhan.corebank.transfer.api.TransferHoldForFds;
 import com.shinhan.corebank.transfer.api.TransferHoldUseCase;
 import java.time.LocalDateTime;
@@ -68,6 +69,32 @@ class FdsAdminActionServiceTest {
     }
 
     @Test
+    void conflictReplayReturnsTheSameBusinessErrorWithoutCallingP4() {
+        Action conflict = action("CONFLICT", "APPROVE", null);
+        when(store.prepare(10L, "key", 7L, "APPROVE", null)).thenReturn(conflict);
+
+        assertThatThrownBy(() -> service.act(10L, "key", 7L, "APPROVE", null))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(FdsErrorCode.FLOW_CONFLICT));
+
+        verify(holds, never()).findForFds(10L);
+    }
+
+    @Test
+    void reconciliationConflictIsNotReturnedAsSuccessfulData() {
+        Action pending = action("PENDING", "REJECT", "CUSTOMER_DENIED");
+        Action conflict = action("CONFLICT", "REJECT", "CUSTOMER_DENIED");
+        TransferHoldForFds cancelled = hold("CANCELLED", 20L, null);
+        when(store.prepare(10L, "key", 7L, "REJECT", "CUSTOMER_DENIED")).thenReturn(pending);
+        when(holds.findForFds(10L)).thenReturn(cancelled, cancelled);
+        when(store.reconcile(pending, cancelled)).thenReturn(conflict);
+
+        assertThatThrownBy(() -> service.act(10L, "key", 7L, "REJECT", "CUSTOMER_DENIED"))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(FdsErrorCode.FLOW_CONFLICT));
+    }
+
+    @Test
     void approvalCallsReleaseAndReconcilesFinalState() {
         Action pending = action("PENDING", "APPROVE", null);
         Action completed = action("COMPLETED", "APPROVE", null);
@@ -84,12 +111,11 @@ class FdsAdminActionServiceTest {
     @Test
     void invocationFailureIsRethrownWhenReconciliationIsNotCompleted() {
         Action pending = action("PENDING", "REJECT", "CUSTOMER_DENIED");
-        Action conflict = action("CONFLICT", "REJECT", "CUSTOMER_DENIED");
         RuntimeException failure = new RuntimeException("p4 unavailable");
         when(store.prepare(10L, "key", 7L, "REJECT", "CUSTOMER_DENIED")).thenReturn(pending);
         when(holds.findForFds(10L)).thenReturn(held(), held());
         doThrow(failure).when(holds).reject(10L, 7L, "CUSTOMER_DENIED");
-        when(store.reconcile(pending, held())).thenReturn(conflict);
+        when(store.reconcile(pending, held())).thenReturn(pending);
 
         assertThatThrownBy(() -> service.act(10L, "key", 7L, "REJECT", "CUSTOMER_DENIED"))
                 .isSameAs(failure);

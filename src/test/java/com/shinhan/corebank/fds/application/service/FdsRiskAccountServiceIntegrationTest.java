@@ -6,9 +6,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.fds.application.service.FdsRiskAccountService.RiskRow;
-import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -17,9 +19,11 @@ class FdsRiskAccountServiceIntegrationTest extends IntegrationTestSupport {
     @Autowired
     JdbcTemplate jdbc;
 
+    @Autowired
+    FdsRiskAccountService service;
+
     @Test
     void loadsActivatesAndLooksUpDatasetIdempotently() {
-        var service = new FdsRiskAccountService(jdbc, Clock.systemUTC());
         String version = version();
         String hash = "a".repeat(64);
         List<RiskRow> rows = List.of(
@@ -41,7 +45,6 @@ class FdsRiskAccountServiceIntegrationTest extends IntegrationTestSupport {
 
     @Test
     void rejectsInvalidManifestRowsDuplicatesAndChangedContent() {
-        var service = new FdsRiskAccountService(jdbc, Clock.systemUTC());
         String version = version();
         RiskRow row = new RiskRow("088", "110039200000", "합성");
 
@@ -64,9 +67,31 @@ class FdsRiskAccountServiceIntegrationTest extends IntegrationTestSupport {
     @Test
     void returnsUnavailableWhenNoActiveDatasetExists() {
         jdbc.update("DELETE FROM fds_risk_active_version");
-        var service = new FdsRiskAccountService(jdbc, Clock.systemUTC());
-
         assertThat(service.check("088", "110039200000").status()).isEqualTo("UNAVAILABLE");
+    }
+
+    @Test
+    void reactivationAndActionLookupUseOneLockOrderWithoutDeadlock() throws Exception {
+        String version = version();
+        String hash = "d".repeat(64);
+        List<RiskRow> rows = List.of(new RiskRow("088", "110039200000", "합성"));
+        service.loadAndActivate(version, 1, hash, rows);
+        CyclicBarrier start = new CyclicBarrier(2);
+
+        try (var workers = Executors.newFixedThreadPool(2)) {
+            var reload = workers.submit(() -> {
+                start.await();
+                service.loadAndActivate(version, 1, hash, rows);
+                return true;
+            });
+            var lookup = workers.submit(() -> {
+                start.await();
+                return service.checkForAction("088", "110039200000");
+            });
+
+            assertThat(reload.get(10, TimeUnit.SECONDS)).isTrue();
+            assertThat(lookup.get(10, TimeUnit.SECONDS).status()).isEqualTo("MATCH");
+        }
     }
 
     private static String version() {

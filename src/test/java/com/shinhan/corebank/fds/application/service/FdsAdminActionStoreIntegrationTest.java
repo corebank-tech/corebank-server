@@ -8,6 +8,7 @@ import com.shinhan.corebank.IntegrationTestSupport;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.fds.application.port.out.FdsAdminReadPort;
 import com.shinhan.corebank.fds.application.service.FdsRiskAccountService.RiskRow;
+import com.shinhan.corebank.fds.domain.exception.FdsErrorCode;
 import com.shinhan.corebank.transfer.api.TransferHoldForFds;
 import com.shinhan.corebank.transfer.api.TransferHoldUseCase;
 import java.time.Clock;
@@ -109,9 +110,15 @@ class FdsAdminActionStoreIntegrationTest extends IntegrationTestSupport {
         activate("110039200000");
         doReturn(hold(holdId, "HELD", "99999999999", null, null)).when(holds).findForFds(holdId);
 
+        assertThatThrownBy(() -> store.prepare(holdId, key(), 7L, "APPROVE", null))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(FdsErrorCode.APPROVAL_CALL_REQUIRED));
         assertThatThrownBy(() -> store.prepare(holdId, key(), 7L, "REJECT", "CUSTOMER_DENIED"))
                 .isInstanceOf(BusinessException.class);
         store.recordCall(holdId, key(), 7L, "CUSTOMER_DENIED", "고객 거절");
+        assertThatThrownBy(() -> store.prepare(holdId, key(), 7L, "APPROVE", null))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(FdsErrorCode.APPROVAL_CALL_REQUIRED));
         assertThatThrownBy(() -> store.prepare(holdId, key(), 7L, "REJECT", "RISK_ACCOUNT_MATCH"))
                 .isInstanceOf(BusinessException.class);
         var pending = store.prepare(holdId, key(), 7L, "REJECT", "CUSTOMER_DENIED");

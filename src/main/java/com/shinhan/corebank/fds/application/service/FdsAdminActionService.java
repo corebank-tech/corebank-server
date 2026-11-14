@@ -17,6 +17,8 @@ public class FdsAdminActionService {
 
     public Action act(long holdId, String idempotencyKey, long actorId, String type, String reasonCode) {
         Action action = store.prepare(holdId, idempotencyKey, actorId, type, reasonCode);
+        // 충돌로 확정된 멱등 재요청도 성공 응답으로 바꾸지 않고 최초 요청과 같은 오류를 반환한다.
+        if ("CONFLICT".equals(action.status())) throw new BusinessException(FdsErrorCode.FLOW_CONFLICT);
         if (!"PENDING".equals(action.status())) return action;
         RuntimeException invocationFailure = null;
         try {
@@ -27,7 +29,8 @@ public class FdsAdminActionService {
         // P4 응답 유실과 상태 전이 후 예외를 구분하려면 반드시 정본 상태를 다시 읽는다.
         TransferHoldForFds actual = holds.findForFds(holdId);
         Action result = store.reconcile(action, actual);
-        if ("EXPIRED".equals(actual.status()) && "APPROVE".equals(action.actionType())) {
+        if ("CONFLICT".equals(result.status())
+                || ("EXPIRED".equals(actual.status()) && "APPROVE".equals(action.actionType()))) {
             throw new BusinessException(FdsErrorCode.FLOW_CONFLICT);
         }
         if (invocationFailure != null && !"COMPLETED".equals(result.status())) throw invocationFailure;

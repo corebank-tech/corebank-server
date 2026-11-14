@@ -9,7 +9,8 @@ public enum FdsErrorCode implements ErrorCode {
     INVALID_RISK_DATASET("FDS0003", 400, "위험 계좌 데이터셋을 확인할 수 없습니다."),
     AGENT_UNAUTHORIZED("FDS0101", 401, "Agent 서비스를 인증할 수 없습니다."),
     NOT_FOUND("FDS0201", 404, "FDS 자료를 찾을 수 없습니다."),
-    FLOW_CONFLICT("FDS0301", 409, "현재 상태에서는 요청을 처리할 수 없습니다.");
+    FLOW_CONFLICT("FDS0301", 409, "현재 상태에서는 요청을 처리할 수 없습니다."),
+    APPROVAL_CALL_REQUIRED("FDS0302", 409, "고객 확인 결과를 기록한 뒤 승인할 수 있습니다.");
 
     private final String code;
     private final int status;

@@ -55,7 +55,7 @@ public class FdsAdminActionController {
             operationId = "approveFdsHeldTransfer",
             summary = "보류 승인",
             description =
-                    "CUSTOMER_WRITE와 CSRF, Idempotency-Key가 필요합니다. NO_MATCH·UNAVAILABLE이고 최신 CUSTOMER_CONFIRMED 콜이 있어야 하며 동일 요청은 완료 후에도 기존 결과를 반환합니다.")
+                    "CUSTOMER_WRITE와 CSRF, Idempotency-Key가 필요합니다. NO_MATCH·UNAVAILABLE이고 최신 CUSTOMER_CONFIRMED 콜이 있어야 합니다. 콜 조건 실패는 FDS0302, 충돌로 확정된 요청과 재전달은 FDS0301을 반환합니다.")
     public ApiResponse<FdsAdminActionStore.Action> approve(
             @PathVariable @Positive long transferHoldId,
             @RequestHeader(name = "Idempotency-Key") @NotBlank String idempotencyKey) {
@@ -68,7 +68,7 @@ public class FdsAdminActionController {
             operationId = "rejectFdsHeldTransfer",
             summary = "보류 거절",
             description =
-                    "CUSTOMER_WRITE와 CSRF, Idempotency-Key가 필요합니다. MATCH는 RISK_ACCOUNT_MATCH만, 그 외는 최신 CUSTOMER_DENIED 콜 뒤 거절하며 동일 요청은 완료 후에도 기존 결과를 반환합니다.")
+                    "CUSTOMER_WRITE와 CSRF, Idempotency-Key가 필요합니다. MATCH는 RISK_ACCOUNT_MATCH만, 그 외는 최신 CUSTOMER_DENIED 콜 뒤 거절합니다. 충돌로 확정된 요청과 재전달은 FDS0301을 반환합니다.")
     public ApiResponse<FdsAdminActionStore.Action> reject(
             @PathVariable @Positive long transferHoldId,
             @RequestHeader(name = "Idempotency-Key") @NotBlank String idempotencyKey,

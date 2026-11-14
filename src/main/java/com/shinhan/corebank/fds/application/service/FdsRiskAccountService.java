@@ -64,6 +64,8 @@ public class FdsRiskAccountService {
                 .count();
         if (distinct != rows.size()) throw new BusinessException(FdsErrorCode.INVALID_RISK_DATASET);
         LocalDateTime now = LocalDateTime.now(clock);
+        // 적재와 관리자 판정 모두 활성 포인터를 먼저 잠가 계좌 행과의 교착 순서를 제거한다.
+        jdbc.query("SELECT singleton_id FROM fds_risk_active_version WHERE singleton_id=1 FOR UPDATE", rs -> null);
         jdbc.update(
                 "INSERT INTO fds_risk_dataset "
                         + "(dataset_version,dataset_status,expected_count,content_sha256,created_at) "
@@ -89,8 +91,6 @@ public class FdsRiskAccountService {
         Integer count = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM fds_risk_account WHERE dataset_version=?", Integer.class, version);
         if (count == null || count != expectedCount) throw new BusinessException(FdsErrorCode.INVALID_RISK_DATASET);
-        // 단일 제어 행 잠금으로 조회 조치와 활성 버전 전환의 순서를 고정한다.
-        jdbc.query("SELECT singleton_id FROM fds_risk_active_version WHERE singleton_id=1 FOR UPDATE", rs -> null);
         jdbc.update(
                 "INSERT INTO fds_risk_active_version(singleton_id,dataset_version,updated_at) VALUES(1,?,?) "
                         + "ON DUPLICATE KEY UPDATE dataset_version=VALUES(dataset_version),updated_at=VALUES(updated_at)",

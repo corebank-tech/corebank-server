@@ -176,8 +176,10 @@ public class FdsAdminActionStore {
             if (!"REJECT".equals(type) || !"RISK_ACCOUNT_MATCH".equals(reason)) conflict();
             return;
         }
+        if ("APPROVE".equals(type) && (call == null || !"CUSTOMER_CONFIRMED".equals(call.result()))) {
+            throw new BusinessException(FdsErrorCode.APPROVAL_CALL_REQUIRED);
+        }
         if (call == null) conflict();
-        if ("APPROVE".equals(type) && !"CUSTOMER_CONFIRMED".equals(call.result())) conflict();
         if ("REJECT".equals(type) && (!"CUSTOMER_DENIED".equals(call.result()) || !"CUSTOMER_DENIED".equals(reason)))
             conflict();
         if (!("APPROVE".equals(type) || "REJECT".equals(type))) invalid();
