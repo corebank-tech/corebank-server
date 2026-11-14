@@ -1915,6 +1915,17 @@ P6 Agent 조사는 점수 처리와 별도 작업으로 등록한다. 보류 상
 | `fds_investigation_history_item` | 조사 ID, `ref_id`, 금액, 이체 시각, 마스킹 수취계좌 | PK `(investigation_id, ref_id)`; 관리자 조회에서 P4를 재호출하지 않음 |
 | `fds_investigation_recipient_snapshot` | 조사·보류·고객 ID, 최초 성공 시각, 구간 이전 성공 여부, 다른 출금계좌 수, 제공 시각 | 조사 ID PK·FK; 집계 결과만 저장하고 허위 refId는 만들지 않음 |
 
+## FDS 위험 데이터셋·관리자 조치 (#992)
+
+| 테이블 | 주요 컬럼 | 제약·용도 |
+|---|---|---|
+| `fds_risk_dataset` | `dataset_version` PK, 상태·예상 건수·SHA-256·활성 시각 | 검증된 버전과 이전 버전을 보존 |
+| `fds_risk_account` | 자동 ID, 버전, 은행코드, 정규화 계좌, 출처·사유 | `(dataset_version, bank_code, account_number)` UK |
+| `fds_risk_active_version` | `singleton_id=1`, `dataset_version`, `updated_at` | 활성 포인터 전환을 한 행 잠금으로 직렬화 |
+| `fds_admin_call_record` | 보류 ID, 멱등 키, 지문, 콜 결과, 관리자·사유·시각 | 기존 기록을 수정하지 않는 추가형 기록 |
+| `fds_admin_action` | 조치 ID, 보류·행위자·콜·위험 버전·P4 결과·상태 | 멱등 키 UK, 생성 컬럼 `open_hold_id` UK로 보류당 PENDING 한 건 |
+| `fds_admin_action_audit` | 조치·P4 최종 결과·판정 근거·완료 시각 | `action_id` PK로 응답 유실 재처리에도 한 건 |
+
 ## `holiday`
 
 > 휴일 달력 — 주말을 제외한 공휴일

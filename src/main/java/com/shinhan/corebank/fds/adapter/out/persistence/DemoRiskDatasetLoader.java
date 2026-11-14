@@ -30,14 +30,18 @@ public class DemoRiskDatasetLoader implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) throws Exception {
         byte[] csv = new ClassPathResource("fds/demo-risk-v1/accounts.csv").getContentAsByteArray();
+        // 텍스트 데이터셋 해시는 운영체제 checkout과 무관하도록 LF를 정본으로 계산한다.
+        byte[] canonicalCsv =
+                new String(csv, StandardCharsets.UTF_8).replace("\r\n", "\n").getBytes(StandardCharsets.UTF_8);
         Manifest manifest = mapper.readValue(
                 new ClassPathResource("fds/demo-risk-v1/manifest.json").getContentAsByteArray(), Manifest.class);
         String actualHash =
-                HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(csv));
+                HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(canonicalCsv));
         if (!actualHash.equals(manifest.sha256())) {
             throw new BusinessException(FdsErrorCode.INVALID_RISK_DATASET);
         }
-        List<FdsRiskAccountService.RiskRow> rows = Arrays.stream(new String(csv, StandardCharsets.UTF_8).split("\\R"))
+        List<FdsRiskAccountService.RiskRow> rows = Arrays.stream(
+                        new String(canonicalCsv, StandardCharsets.UTF_8).split("\\R"))
                 .skip(1)
                 .filter(line -> !line.isBlank())
                 .map(DemoRiskDatasetLoader::row)
