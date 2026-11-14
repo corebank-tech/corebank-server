@@ -2,7 +2,7 @@ package com.shinhan.corebank.transfer.application.service;
 
 import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
 import com.shinhan.corebank.transfer.application.port.in.ProductSubscriptionDepositUseCase;
@@ -74,7 +74,8 @@ public class ProductSubscriptionDepositService implements ProductSubscriptionDep
         if (locked.withdrawal().status() != LockedAccountStatus.ACTIVE) {
             throw new BusinessException(TransferErrorCode.WITHDRAWAL_ACCOUNT_SUSPENDED);
         }
-        if (locked.withdrawal().balance() < command.amount()) {
+        // 사전검증과 같은 LMT0001이라 잔액 부족과 나누지 않는다(#521).
+        if (locked.withdrawal().availableBalance() < command.amount()) {
             throw new BusinessException(LmtErrorCode.INSUFFICIENT_WITHDRAWABLE_AMOUNT);
         }
 

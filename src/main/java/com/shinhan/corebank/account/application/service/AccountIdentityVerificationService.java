@@ -7,6 +7,8 @@ import com.shinhan.corebank.account.api.AccountIdentityVerifier;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountPasswordAttemptResult;
+import com.shinhan.corebank.account.domain.exception.AccountPasswordErrorCode;
+import com.shinhan.corebank.common.exception.BusinessException;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -37,7 +39,7 @@ public class AccountIdentityVerificationService implements AccountIdentityVerifi
                 account.getCustomerId(), account.getAccountId(), verification.accountPassword());
 
         if (attempt.locked()) {
-            return result(AccountIdentityVerificationStatus.LOCKED, account.getCustomerId());
+            throw new BusinessException(AccountPasswordErrorCode.PASSWORD_LOCKED);
         }
         if (!attempt.matched()) {
             return result(AccountIdentityVerificationStatus.PASSWORD_MISMATCH, account.getCustomerId());

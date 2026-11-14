@@ -1,6 +1,6 @@
 # CoreBank 미니 코어뱅킹 — DB ERD v3.0
 
-> **DBMS**: MySQL 8.4 / 52개 테이블(43개 비즈니스 테이블 + 채번·배치·cutoff·체크포인트·감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 445개 컬럼 / 금액 BIGINT · 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장·표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
+> **DBMS**: MySQL 8.4 / 71개 테이블(62개 비즈니스 테이블 + 채번, 배치, cutoff, 체크포인트, 감사 적재 상태 6개 + Spring Session 2개 + Spring Modulith 발행 기록 `EVENT_PUBLICATION` 1개), [스키마 목록](schema_reference.md#테이블-목록) 기준 622개 컬럼 / 금액 BIGINT, 업무 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 저장과 표시 계약). Spring Session 시각은 프레임워크 표준인 UTC epoch 밀리초 BIGINT, `EVENT_PUBLICATION` 시각은 라이브러리 DDL 그대로 TIMESTAMP(6).
 > **스키마 권한**: Flyway 단독 (`spring.jpa.hibernate.ddl-auto: validate`)
 
 ---
@@ -24,7 +24,7 @@ erDiagram
     SPRING_SESSION ||--o{ SPRING_SESSION_ATTRIBUTES : "ON DELETE CASCADE"
     %% =================================================================
     %% CoreBank 미니 코어뱅킹 - DB ERD v1.0
-    %% MySQL 8.4 / 52개 테이블 / 금액 BIGINT · 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
+    %% MySQL 8.4 / 71개 테이블 / 금액 BIGINT, 시각 DATETIME(6)(시간대 없는 벽시각, KST는 애플리케이션 계약)
     %% =================================================================
 
     %% ---------- P6 ----------
@@ -122,7 +122,7 @@ erDiagram
     account_payment_stop {
         bigint payment_stop_id PK "AUTO_INCREMENT"
         bigint account_id FK "UK(account_id, case_id)"
-        bigint case_id "지급정지 사건 ID. FK 없음 (paymentstop 테이블 전)"
+        bigint case_id "지급정지 사건 ID. 도메인 경계라 FK 없음(논리 관계)"
         varchar stop_type "FULL / PARTIAL"
         bigint requested_amount "일부 지급정지 요청 보류액. FULL은 0"
         bigint applied_amount "실제 보류액. 남은 잔액이 상한"
@@ -130,6 +130,185 @@ erDiagram
         boolean active "해제하면 FALSE"
         datetime created_at "DATETIME(6)"
         datetime released_at "DATETIME(6). 유효하면 NULL"
+    }
+
+    payment_stop_case {
+        bigint case_id PK "AUTO_INCREMENT"
+        bigint account_id "지급정지 계좌, FK 없음(account.api로만)"
+        bigint sender_account_id "NULL 허용. 당행 송금인 한 명일 때만"
+        date objection_deadline "이의제기 신청 기한"
+        varchar status "STOPPED / PARTIAL / RELEASED"
+        bigint registered_by "관리자 customer_id"
+        datetime created_at
+        datetime updated_at
+    }
+
+    case_disputed_transfer {
+        bigint disputed_transfer_id PK "AUTO_INCREMENT"
+        bigint case_id FK
+        char transaction_number UK "CHAR(20), 한 거래는 한 사건에만"
+        bigint amount "등록 시점 원장 금액"
+        datetime occurred_at "등록 시점 원장 시각"
+    }
+
+    objection {
+        bigint objection_id PK "AUTO_INCREMENT"
+        bigint case_id UK,FK "사건당 1건"
+        tinyint clause "법 제7조제1항 1~3호"
+        text statement "소명 원문, 상세 조회 감사"
+        boolean simplified_requested
+        boolean id_copy_confirmed
+        boolean litigation_pending
+        varchar status "RECEIVED / UNDER_REVIEW / SUPPLEMENT_REQUESTED / SUPPLEMENT_SUBMITTED / PENDING_APPROVAL / DECIDED"
+        bigint received_by "BRANCH면 관리자, ONLINE이면 명의인 customer_id"
+        varchar received_channel "BRANCH / ONLINE"
+        datetime received_at
+        bigint completeness_confirmed_by "NULL 허용"
+        datetime completeness_confirmed_at "심사 기한 기산점"
+        date review_deadline "완비 확인일 + 5영업일, 보완 중 NULL"
+        tinyint supplement_round "0~2"
+        date supplement_due "보완 기한"
+        datetime created_at
+        datetime updated_at
+    }
+
+    objection_supplement_request {
+        bigint supplement_request_id PK "AUTO_INCREMENT"
+        bigint objection_id FK "UK(objection_id, round)"
+        tinyint round "1 또는 2"
+        varchar reason
+        json missing_documents "요청 서류 이름"
+        date due_date
+        bigint requested_by "관리자 customer_id"
+        datetime requested_at
+        datetime submitted_at "명의인 제출 시각"
+        varchar submit_note
+    }
+
+    objection_review_session {
+        bigint review_session_id PK "AUTO_INCREMENT"
+        bigint objection_id FK
+        bigint admin_id "관리자 customer_id"
+        datetime started_at "상세 화면을 연 시각"
+    }
+
+    objection_external_check {
+        bigint external_check_id PK "AUTO_INCREMENT"
+        bigint objection_id FK "UK(objection_id, agency)"
+        varchar agency "POLICE / PEER_BANK"
+        varchar status "REQUESTED / REPLIED"
+        varchar reply "가담 의심, 위조 판명, 명의인 무관, 해당 없음"
+        bigint requested_by
+        datetime requested_at
+        datetime replied_at
+    }
+
+    objection_notice {
+        bigint notice_id PK "AUTO_INCREMENT"
+        bigint objection_id FK
+        varchar target "HOLDER / VICTIM / FSS / RELATED_BANK"
+        varchar kind "RECEIPT ~ STOP_TERMINATED"
+        varchar channel "SMS / DOCUMENT"
+        varchar basis "통지 근거"
+        datetime recorded_at
+    }
+
+    objection_document {
+        bigint document_id PK "AUTO_INCREMENT"
+        bigint objection_id FK
+        varchar kind "EVIDENCE / ID_COPY"
+        varchar file_name
+        varchar content_type "매직 바이트 판정"
+        bigint size_bytes "10MB 이하"
+        char sha256 "CHAR(64)"
+        varchar storage_key "{objectionId}/{documentId}"
+        boolean encrypted "ID_COPY는 AES-GCM"
+        tinyint round "0 접수, 1~2 보완"
+        bigint uploaded_by
+        varchar uploader_role "HOLDER / ADMIN"
+        datetime uploaded_at
+    }
+
+    objection_document_ocr {
+        bigint document_id PK,FK
+        varchar status "PENDING / DONE / FAILED"
+        json pages "가명 처리한 글자 영역"
+        varchar engine
+        datetime updated_at
+    }
+
+    objection_decision {
+        bigint decision_id PK "AUTO_INCREMENT"
+        bigint objection_id FK
+        varchar result "ACCEPTED / PARTIAL / REJECTED"
+        varchar reason
+        varchar early_release_basis "수용, 일부 지급정지는 필수"
+        bigint requested_hold_amount "확정된 PARTIAL은 필수, 그 밖은 NULL"
+        bigint applied_hold_amount "확정된 PARTIAL은 필수, 그 밖은 NULL"
+        varchar status "PENDING_APPROVAL / CONFIRMED / RETURNED"
+        bigint decided_by "작성자 customer_id"
+        datetime decided_at "작성 시각"
+        bigint approved_by "승인자, 작성자와 다름"
+        datetime approved_at
+        bigint returned_by
+        datetime returned_at
+        varchar return_reason
+        boolean discretionary "재량 판정, 사유 필수(ADR-0011)"
+        varchar discretionary_reason "재량 판정만"
+        varchar gate_branch_at_write "작성 시점 게이트 갈래"
+        bigint active_objection_id UK "생성 열, 반려 아닌 판정은 이의제기당 1건"
+    }
+
+    gate_evaluation {
+        bigint gate_evaluation_id PK "AUTO_INCREMENT"
+        bigint objection_id FK
+        varchar purpose "DECISION / ANALYSIS"
+        varchar branch "FRAUD_PATTERN / NORMAL_ACCEPT / NORMAL_PARTIAL / UNDETERMINED"
+        boolean simplified_excluded
+        varchar rules_version
+        json settings "게이트 설정값"
+        json rule_results "규칙별 결과와 근거 거래번호"
+        datetime evaluated_at
+    }
+
+    agent_run {
+        bigint run_id PK "AUTO_INCREMENT"
+        bigint objection_id FK
+        varchar status "QUEUED / RUNNING / COMPLETED / FAILED"
+        int attempt "3회째 실패하면 FAILED"
+        datetime lease_until "RUNNING일 때만"
+        varchar model
+        varchar prompt_version
+        bigint input_tokens
+        bigint output_tokens
+        bigint cost_micro_usd "백만분의 1달러 정수"
+        bigint requested_by "넣은 사람 customer_id, 관리자 또는 명의인"
+        datetime queued_at
+        datetime started_at
+        datetime ended_at
+        varchar failure_reason
+    }
+
+    agent_run_step {
+        bigint step_id PK "AUTO_INCREMENT"
+        bigint run_id FK "UK(run_id, seq)"
+        int seq "1부터 빈 번호 없이"
+        varchar type "CLAIMED ~ FAILED"
+        varchar title "가명 처리"
+        varchar summary
+        json detail
+        varchar status "RUNNING / DONE / FAILED"
+        datetime started_at
+        datetime ended_at
+    }
+
+    review_draft {
+        bigint review_draft_id PK "AUTO_INCREMENT"
+        bigint run_id UK,FK
+        bigint objection_id FK
+        varchar branch "Agent 갈래, 해제 근거 아님"
+        json content
+        datetime submitted_at
     }
 
     interest_payment {
@@ -199,6 +378,10 @@ erDiagram
         char channel "WB"
         varchar flow_id "VARCHAR(64). FE 행동 흐름"
         varchar policy_code "보류를 정한 정책"
+        int policy_count_10m "현재 요청 포함 최근 10분 건수"
+        bigint policy_amount_10m "현재 요청 포함 최근 10분 누적액"
+        boolean policy_hesitation_in_window "반복 묶음 망설임"
+        boolean policy_new_recipient_at_window_start "묶음 시작 기준 신규 수취인"
         varchar release_mode "AT_TIME / ON_APPROVAL"
         datetime release_at "AT_TIME일 때만"
         varchar status "HELD / EXECUTING / EXECUTED / FAILED / REJECTED / CANCELLED / EXPIRED"
@@ -209,6 +392,139 @@ erDiagram
         varchar reason_code "거절 사유"
         datetime executing_at "실행 선점 시각"
         datetime completed_at "DATETIME(6)"
+    }
+    fds_behavior_flow {
+        char flow_id PK "UUID 문자열"
+        bigint customer_id "소유 고객"
+        datetime first_received_at
+        datetime last_received_at
+        datetime finalized_at "최종 제출 시각"
+        int confirm_active_seconds "NULL은 미확인"
+    }
+    fds_behavior_event {
+        char flow_id PK,FK
+        int seq_no PK "1~100"
+        varchar event_type
+        datetime occurred_at
+        varchar step_code
+        datetime received_at
+    }
+    fds_behavior_score {
+        bigint transfer_hold_id PK "P4 보류 ID"
+        char flow_id "행동 흐름"
+        varchar score_status "PENDING / AVAILABLE / UNAVAILABLE"
+        double behavior_risk_score "0~1 보조 점수"
+        varchar model_version
+        varchar feature_version
+        varchar unavailable_reason
+        datetime score_attempt_started_at
+        datetime created_at
+        datetime updated_at
+    }
+    fds_transfer_behavior_flow {
+        bigint ref_id PK "성공 transfer ID"
+        char flow_id UK,FK "FE 행동 흐름"
+        bigint customer_id "소유 고객"
+        datetime created_at
+    }
+    fds_investigation_job {
+        bigint transfer_hold_id PK "P4 보류 ID"
+        char investigation_id UK "안정적인 조사 UUID"
+        varchar job_status "PENDING/RUNNING/COMPLETED/FAILED"
+        int attempt_count "0~3"
+        datetime next_attempt_at
+        datetime lease_expires_at
+        varchar last_failure_reason
+        datetime created_at
+        datetime updated_at
+    }
+    fds_investigation_evidence {
+        char investigation_id PK,FK
+        bigint ref_id PK "Agent에게 제공한 transfer ID"
+        bigint transfer_hold_id
+        bigint customer_id
+        datetime range_from
+        datetime range_to
+        datetime provided_at
+    }
+    fds_investigation_report {
+        char investigation_id PK,FK
+        bigint transfer_hold_id UK
+        varchar schema_version
+        text report_json "최대 16 KiB"
+        char report_sha256 "SHA-256"
+        datetime created_at
+    }
+    fds_investigation_history_snapshot {
+        char investigation_id PK,FK
+        bigint transfer_hold_id
+        bigint customer_id
+        datetime range_from
+        datetime range_to
+        boolean has_more
+        datetime provided_at
+    }
+    fds_investigation_history_item {
+        char investigation_id PK,FK
+        bigint ref_id PK
+        bigint amount
+        datetime transferred_at
+        varchar recipient_account_masked
+    }
+    fds_investigation_recipient_snapshot {
+        char investigation_id PK,FK
+        bigint transfer_hold_id
+        bigint customer_id
+        datetime first_succeeded_at
+        boolean succeeded_before_window
+        int other_withdrawal_account_count
+        datetime provided_at
+    }
+    fds_risk_dataset {
+        VARCHAR dataset_version PK
+        VARCHAR dataset_status
+        INT expected_count
+        CHAR content_sha256
+        DATETIME created_at
+        DATETIME activated_at
+    }
+    fds_risk_account {
+        BIGINT risk_account_id PK
+        VARCHAR dataset_version FK
+        CHAR bank_code
+        VARCHAR account_number
+        VARCHAR source_type
+        VARCHAR reason
+        DATETIME created_at
+    }
+    fds_risk_active_version {
+        TINYINT singleton_id PK
+        VARCHAR dataset_version FK
+        DATETIME updated_at
+    }
+    fds_admin_call_record {
+        BIGINT call_record_id PK
+        BIGINT transfer_hold_id
+        VARCHAR idempotency_key UK
+        VARCHAR call_result
+        BIGINT admin_id
+        DATETIME recorded_at
+    }
+    fds_admin_action {
+        CHAR action_id PK
+        BIGINT transfer_hold_id
+        VARCHAR idempotency_key UK
+        BIGINT actor_id
+        VARCHAR action_type
+        VARCHAR action_status
+        BIGINT open_hold_id UK
+    }
+    fds_admin_action_audit {
+        CHAR action_id PK
+        BIGINT transfer_hold_id
+        BIGINT actor_id
+        VARCHAR p4_status
+        DATETIME completed_at
     }
     delayed_transfer_setting {
         bigint customer_id PK "고객당 1행. 없으면 꺼짐"
@@ -258,7 +574,7 @@ erDiagram
     admin_permission {
         bigint customer_id PK,FK "관리자. (customer_id, role)로 customer 참조"
         varchar role FK "항상 ADMIN. DEFAULT ADMIN"
-        varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ"
+        varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ / PAYMENT_STOP_READ / PAYMENT_STOP_WRITE / PAYMENT_STOP_APPROVE"
         datetime granted_at "권한 부여 시각"
     }
     notification {
@@ -603,6 +919,21 @@ erDiagram
     account ||--o| product_subscription : "개설계좌"
     account ||..o| interest_payment : "이자 지급 이력 (논리 관계, FK 없음)"
     account ||--o{ account_payment_stop : "사건별 지급정지 기록 (D-36)"
+    account ||..o{ payment_stop_case : "지급정지 사건 (논리 관계, FK 없음)"
+    payment_stop_case ||..o| account_payment_stop : "계좌 지급정지 기록 (논리 관계, FK 없음)"
+    payment_stop_case ||--|{ case_disputed_transfer : "다툼 거래"
+    payment_stop_case ||--o| objection : "이의제기 (사건당 1건)"
+    objection ||--o{ objection_decision : "판정 (반려 제외 1건)"
+    objection ||--o{ objection_supplement_request : "보완 요청 (2회까지)"
+    objection ||--o{ objection_review_session : "심사 시작 기록"
+    objection ||--o{ objection_external_check : "외부 확인 (기관별 1건)"
+    objection ||--o{ objection_notice : "통지 기록"
+    objection ||--o{ objection_document : "첨부 서류"
+    objection_document ||--o| objection_document_ocr : "OCR 결과 (증빙만)"
+    objection ||--o{ gate_evaluation : "게이트 계산 기록"
+    objection ||--o{ agent_run : "AI 분석 실행"
+    agent_run ||--o{ agent_run_step : "단계 이벤트"
+    agent_run ||--o| review_draft : "판정안"
     product_subscription ||--o{ subscription_terms_agreement : "약관동의"
     terms ||--o{ subscription_terms_agreement : "약관동의"
     customer ||--o{ scheduled_transfer : "예약"
@@ -636,6 +967,19 @@ erDiagram
     scheduled_transfer      |o--o| transfer : "실행결과 (WAITING 은 없음)"
     auto_transfer_execution |o--o| transfer : "실행결과 (ERROR 는 없음)"
     transfer_hold |o..o| transfer : "실행결과 (source_type=HELD, FK 없음)"
+    fds_behavior_flow ||--o{ fds_behavior_event : "행동 이벤트"
+    fds_behavior_flow ||--o| fds_transfer_behavior_flow : "성공 이체 연결"
+    transfer_hold |o..o| fds_behavior_score : "보류 후 보조 점수 (FK 없음)"
+    transfer_hold |o..o| fds_investigation_job : "Agent 조사 작업 (FK 없음)"
+    fds_investigation_job ||--o{ fds_investigation_evidence : "제공 근거"
+    fds_investigation_job ||--o| fds_investigation_report : "확정 보고서"
+    fds_investigation_job ||--o| fds_investigation_history_snapshot : "최근 이체 Tool 스냅샷"
+    fds_investigation_history_snapshot ||--o{ fds_investigation_history_item : "제공 이체 항목"
+    fds_investigation_job ||--o| fds_investigation_recipient_snapshot : "수취인 맥락 스냅샷"
+    fds_risk_dataset ||--o{ fds_risk_account : "버전별 위험 계좌"
+    fds_risk_dataset ||--o| fds_risk_active_version : "활성 버전"
+    fds_admin_call_record |o--o{ fds_admin_action : "고정된 콜 근거"
+    fds_admin_action ||--o| fds_admin_action_audit : "확정 감사"
     customer ||..o| delayed_transfer_setting : "지연이체 설정 (FK 없음)"
 ```
 

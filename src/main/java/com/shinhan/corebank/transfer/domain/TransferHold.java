@@ -3,6 +3,7 @@ package com.shinhan.corebank.transfer.domain;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.api.TransferHoldDecision;
+import com.shinhan.corebank.transfer.api.TransferHoldEvidence;
 import com.shinhan.corebank.transfer.api.TransferHoldReleaseMode;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -28,6 +29,10 @@ public class TransferHold {
     private final TransferChannel channel;
     private final String flowId;
     private final String policyCode;
+    private final Integer policyCount10m;
+    private final Long policyAmount10m;
+    private final Boolean policyHesitationInWindow;
+    private final Boolean policyNewRecipientAtWindowStart;
     private final TransferHoldReleaseMode releaseMode;
     private final LocalDateTime releaseAt;
     private final TransferHoldStatus status;
@@ -35,6 +40,8 @@ public class TransferHold {
     private final LocalDateTime heldAt;
     private final Long transferId;
     private final String reasonCode;
+    private final Long actorId; // 실행·거절·취소한 주체. 스케줄러 실행과 만료는 null
+    private final LocalDateTime completedAt; // 종료 상태가 된 시각
 
     private TransferHold(
             Long transferHoldId,
@@ -47,13 +54,19 @@ public class TransferHold {
             TransferChannel channel,
             String flowId,
             String policyCode,
+            Integer policyCount10m,
+            Long policyAmount10m,
+            Boolean policyHesitationInWindow,
+            Boolean policyNewRecipientAtWindowStart,
             TransferHoldReleaseMode releaseMode,
             LocalDateTime releaseAt,
             TransferHoldStatus status,
             LocalDateTime authenticatedAt,
             LocalDateTime heldAt,
             Long transferId,
-            String reasonCode) {
+            String reasonCode,
+            Long actorId,
+            LocalDateTime completedAt) {
         this.transferHoldId = transferHoldId;
         this.customerId = customerId;
         this.withdrawalAccountId = withdrawalAccountId;
@@ -64,6 +77,10 @@ public class TransferHold {
         this.channel = channel;
         this.flowId = flowId;
         this.policyCode = policyCode;
+        this.policyCount10m = policyCount10m;
+        this.policyAmount10m = policyAmount10m;
+        this.policyHesitationInWindow = policyHesitationInWindow;
+        this.policyNewRecipientAtWindowStart = policyNewRecipientAtWindowStart;
         this.releaseMode = releaseMode;
         this.releaseAt = releaseAt;
         this.status = status;
@@ -71,6 +88,8 @@ public class TransferHold {
         this.heldAt = heldAt;
         this.transferId = transferId;
         this.reasonCode = reasonCode;
+        this.actorId = actorId;
+        this.completedAt = completedAt;
     }
 
     /** 훅 C가 보류로 판정한 요청을 HELD로 만든다. 판정 값의 조합은 TransferHoldDecision이 이미 검증했다. */
@@ -90,6 +109,7 @@ public class TransferHold {
         if (!decision.hold()) {
             throw new BusinessException(CommonErrorCode.INTERNAL_ERROR);
         }
+        TransferHoldEvidence evidence = decision.evidence();
         return new TransferHold(
                 null,
                 customerId,
@@ -101,11 +121,17 @@ public class TransferHold {
                 channel,
                 flowId,
                 decision.policyCode(),
+                evidence == null ? null : evidence.count10m(),
+                evidence == null ? null : evidence.amount10m(),
+                evidence == null ? null : evidence.hesitationInWindow(),
+                evidence == null ? null : evidence.newRecipientAtWindowStart(),
                 decision.releaseMode(),
                 decision.releaseAt(),
                 TransferHoldStatus.HELD,
                 authenticatedAt,
                 heldAt,
+                null,
+                null,
                 null,
                 null);
     }
@@ -121,13 +147,19 @@ public class TransferHold {
             TransferChannel channel,
             String flowId,
             String policyCode,
+            Integer policyCount10m,
+            Long policyAmount10m,
+            Boolean policyHesitationInWindow,
+            Boolean policyNewRecipientAtWindowStart,
             TransferHoldReleaseMode releaseMode,
             LocalDateTime releaseAt,
             TransferHoldStatus status,
             LocalDateTime authenticatedAt,
             LocalDateTime heldAt,
             Long transferId,
-            String reasonCode) {
+            String reasonCode,
+            Long actorId,
+            LocalDateTime completedAt) {
         return new TransferHold(
                 transferHoldId,
                 customerId,
@@ -139,13 +171,19 @@ public class TransferHold {
                 channel,
                 flowId,
                 policyCode,
+                policyCount10m,
+                policyAmount10m,
+                policyHesitationInWindow,
+                policyNewRecipientAtWindowStart,
                 releaseMode,
                 releaseAt,
                 status,
                 authenticatedAt,
                 heldAt,
                 transferId,
-                reasonCode);
+                reasonCode,
+                actorId,
+                completedAt);
     }
 
     // 실행일자는 중복 기표를 막는 유니크 키의 일부라 보류한 날짜와 같아야 한다
@@ -160,6 +198,13 @@ public class TransferHold {
                 && this.withdrawalAccountId == withdrawalAccountId
                 && this.depositAccountNumber.equals(depositAccountNumber)
                 && this.amount == amount;
+    }
+
+    /** 승인으로 푸는 HELD인데 heldFrom 전에 보류했으면 만료 대상이다. 실행 날짜가 보류한 날이라 지난 요청을 실행하지 않는다(#998). */
+    public boolean isOverdueApproval(LocalDateTime heldFrom) {
+        return status == TransferHoldStatus.HELD
+                && releaseMode == TransferHoldReleaseMode.ON_APPROVAL
+                && heldAt.isBefore(heldFrom);
     }
 
     /** 고객이 취소할 수 있는 마지막 시각. 승인으로 푸는 보류는 시각이 없어 null이다. */
@@ -207,6 +252,22 @@ public class TransferHold {
         return policyCode;
     }
 
+    public Integer getPolicyCount10m() {
+        return policyCount10m;
+    }
+
+    public Long getPolicyAmount10m() {
+        return policyAmount10m;
+    }
+
+    public Boolean getPolicyHesitationInWindow() {
+        return policyHesitationInWindow;
+    }
+
+    public Boolean getPolicyNewRecipientAtWindowStart() {
+        return policyNewRecipientAtWindowStart;
+    }
+
     public TransferHoldReleaseMode getReleaseMode() {
         return releaseMode;
     }
@@ -234,5 +295,13 @@ public class TransferHold {
     /** 거절 사유 코드, 또는 FAILED일 때 실행이 거부된 오류코드 */
     public String getReasonCode() {
         return reasonCode;
+    }
+
+    public Long getActorId() {
+        return actorId;
+    }
+
+    public LocalDateTime getCompletedAt() {
+        return completedAt;
     }
 }

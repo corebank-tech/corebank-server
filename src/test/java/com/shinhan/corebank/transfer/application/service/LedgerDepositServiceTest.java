@@ -10,6 +10,7 @@ import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.business.support.BusinessDateTestFixture;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
 import com.shinhan.corebank.transfer.api.DepositChannel;
 import com.shinhan.corebank.transfer.api.DepositType;
 import com.shinhan.corebank.transfer.api.LedgerDepositResult;
@@ -294,6 +295,17 @@ class LedgerDepositServiceTest extends IntegrationTestSupport {
                 () -> ledgerDepositUseCase.transferBetween(
                         PRODUCT_ACCOUNT, CUSTOMER_ACCOUNT, PRINCIPAL + 1, DepositType.TERMINATION, DepositChannel.WB),
                 TransferErrorCode.INSUFFICIENT_BALANCE);
+    }
+
+    @Test
+    @DisplayName("[#521] 상품 계좌에 보류액이 걸려 출금가능액이 모자라면 잔액이 충분해도 LMT0001로 거부한다")
+    void transferBetween_rejectsWhenHoldAmountLeavesTooLittle() {
+        jdbcTemplate.update("UPDATE account SET hold_amount = 1 WHERE account_id = ?", PRODUCT_ACCOUNT);
+
+        assertRejected(
+                () -> ledgerDepositUseCase.transferBetween(
+                        PRODUCT_ACCOUNT, CUSTOMER_ACCOUNT, PRINCIPAL, DepositType.TERMINATION, DepositChannel.WB),
+                LmtErrorCode.INSUFFICIENT_WITHDRAWABLE_AMOUNT);
     }
 
     @Test

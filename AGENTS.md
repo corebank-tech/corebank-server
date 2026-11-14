@@ -93,7 +93,7 @@ docker compose up -d minicore-mysql                 # 로컬 인프라 (MySQL)
 | [hexagonal_architecture_guide.md](docs/hexagonal_architecture_guide.md) | 패키지 배치·레이어 책임·요청이 DB까지 가는 흐름 |
 | [api_conventions.md](docs/api_conventions.md) | 공통 응답·HTTP 상태·오류코드 마스터·Enum·필드명 |
 | [error_handling_guide.md](docs/error_handling_guide.md) | `ErrorCode`/`BusinessException` 구현, 도메인 오류코드 추가 |
-| [adr/](docs/adr/) | 되돌리기 어려운 설계 결정 — 0001 상품가입 검증, 0002 도메인 간 계좌 조회, 0003 `batch.api` 도메인 간 락 재사용, 0004 COB 스텝 순서, 0005 Spring Batch·MQ·Gateway 미도입, 0006 도메인 간 계약면, 0007 Redis 제거, 0008 영업일 gate·cutoff, 0009 GL 정합성 통제, 0010 아웃박스 Spring Modulith |
+| [adr/](docs/adr/) | 되돌리기 어려운 설계 결정 — 0001 상품가입 검증, 0002 도메인 간 계좌 조회, 0003 `batch.api` 도메인 간 락 재사용, 0004 COB 스텝 순서, 0005 Spring Batch·MQ·Gateway 미도입, 0006 도메인 간 계약면, 0007 Redis 제거, 0008 영업일 gate·cutoff, 0009 GL 정합성 통제, 0010 아웃박스 Spring Modulith, 0011 이의제기 재량 판정 |
 | [phase2/README.md](docs/phase2/README.md) · [tasks.md](docs/phase2/tasks.md) | 2차 계획 정본 — 태스크 ID(PH-xx) 착수 전, 소유자·기한·트랙 간 계약 확인 |
 | [phase2/glossary.md](docs/phase2/glossary.md) | 2차 핵심 용어(PH-87) — 새 필드·Enum·화면 라벨 이름을 정하기 전 |
 
@@ -101,7 +101,7 @@ docker compose up -d minicore-mysql                 # 로컬 인프라 (MySQL)
 
 | 문서 | 언제 여는가 |
 |---|---|
-| [schema_reference.md](docs/schema_reference.md) | 52개 테이블 445개 컬럼 정의 |
+| [schema_reference.md](docs/schema_reference.md) | 67개 테이블 592개 컬럼 정의 |
 | [corebank_erd.md](docs/corebank_erd.md) | 테이블 관계, 금액·시각 타입 계약 |
 | [flyway_guide.md](docs/flyway_guide.md) | Flyway 설정과 마이그레이션 작성 규칙 |
 | [flyway_file_role_guide.md](docs/flyway_file_role_guide.md) | `V__`·`R__`·`seed` 파일명과 역할 구분 |
@@ -131,5 +131,5 @@ docker compose up -d minicore-mysql                 # 로컬 인프라 (MySQL)
 - 일반 PR 제목: `[type/도메인] 작업 내용` — 예 `[fix/account] 상품 채번 행 누락으로 가입 실패 (#342)`
 - 전역 변경 PR 제목: `[type] 작업 내용` — 예 `[docs] README에 문서 색인 추가`
 - 릴리스 PR 제목: `[RELEASE] dev → main 릴리스 배포`
-- **PR base는 기본적으로 `dev`.** `dev → main` 릴리스 PR만 예외로 `main`을 base로 한다. `main` 머지는 곧 EC2 배포다.
+- **PR base는 기본적으로 `dev`.** `dev → main` 릴리스 PR만 예외로 `main`을 base로 한다. `main` 머지는 Docker 이미지 빌드·푸시까지만 하고, 서버 반영은 사람이 이미지 태그를 정해 직접 한다.
 - 리뷰 등급 `R1`~`R5`와 로테이션은 [team_collaboration_guide.md](docs/team_collaboration_guide.md) §5.

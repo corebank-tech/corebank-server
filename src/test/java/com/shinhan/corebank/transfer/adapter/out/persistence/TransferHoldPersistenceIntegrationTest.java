@@ -33,6 +33,7 @@ class TransferHoldPersistenceIntegrationTest extends IntegrationTestSupport {
     // 시드와 다른 테스트가 쓰지 않는 고객 ID 대역(772_0xx). transfer_hold는 FK가 없어 계좌 시드가 필요 없다.
     private static final long CUSTOMER_ID = 772_001L;
     private static final LocalDateTime NOW = LocalDateTime.of(2031, 7, 1, 10, 0);
+    private static final LocalDateTime START_OF_DAY = NOW.toLocalDate().atStartOfDay();
 
     @Autowired
     private TransferHoldPort port;
@@ -145,10 +146,39 @@ class TransferHoldPersistenceIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("시각으로 푸는 선점은 해제 시각이 지나야 되고, 승인 대기는 승인 선점으로만 된다")
+    @DisplayName("시각으로 푸는 선점은 해제 시각이 지나야 되고, 승인 대기는 승인 선점으로만 되며 heldFrom 이후 보류만 된다")
     void markExecuting_respectsReleaseMode() {
         long atTime = port.save(newHold()).getTransferHoldId();
-        long approval = port.save(TransferHold.hold(
+        long approval = saveApproval();
+
+        assertThat(port.markDueExecuting(atTime, NOW.plusHours(3).minusSeconds(1)))
+                .isFalse();
+        assertThat(port.markApprovedExecuting(atTime, 9L, NOW.plusHours(3), START_OF_DAY))
+                .isFalse();
+        assertThat(port.markDueExecuting(approval, NOW.plusHours(3))).isFalse();
+        // 보류 시각이 기준보다 이르면 지난 날 보류다(#998). 같은 시각은 포함한다
+        assertThat(port.markApprovedExecuting(approval, 9L, NOW, NOW.plusNanos(1_000)))
+                .isFalse();
+        assertThat(port.markApprovedExecuting(approval, 9L, NOW, NOW)).isTrue();
+        assertThat(port.markDueExecuting(atTime, NOW.plusHours(3))).isTrue();
+    }
+
+    @Test
+    @DisplayName("[#998] 만료 대상은 heldBefore 전에 보류한 승인 대기 HELD뿐이다. 지연이체 보류는 넣지 않는다")
+    void findOverdueApprovalIds_onlyApprovalHeldBefore() {
+        long atTime = port.save(newHold()).getTransferHoldId();
+        long approval = saveApproval();
+
+        assertThat(port.findOverdueApprovalIds(NOW, 10)).doesNotContain(approval, atTime);
+        assertThat(port.findOverdueApprovalIds(NOW.plusNanos(1_000), 10))
+                .contains(approval)
+                .doesNotContain(atTime);
+        port.close(approval, TransferHoldStatus.REJECTED, 9L, "TEST", NOW);
+        assertThat(port.findOverdueApprovalIds(NOW.plusNanos(1_000), 10)).doesNotContain(approval);
+    }
+
+    private long saveApproval() {
+        return port.save(TransferHold.hold(
                         CUSTOMER_ID,
                         101L,
                         "110222222222",
@@ -161,13 +191,6 @@ class TransferHoldPersistenceIntegrationTest extends IntegrationTestSupport {
                         NOW,
                         NOW))
                 .getTransferHoldId();
-
-        assertThat(port.markDueExecuting(atTime, NOW.plusHours(3).minusSeconds(1)))
-                .isFalse();
-        assertThat(port.markApprovedExecuting(atTime, 9L, NOW.plusHours(3))).isFalse();
-        assertThat(port.markDueExecuting(approval, NOW.plusHours(3))).isFalse();
-        assertThat(port.markApprovedExecuting(approval, 9L, NOW)).isTrue();
-        assertThat(port.markDueExecuting(atTime, NOW.plusHours(3))).isTrue();
     }
 
     @Test

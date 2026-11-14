@@ -8,12 +8,15 @@ package com.shinhan.corebank.transfer.api;
  */
 public interface TransferHoldUseCase {
 
+    /** 보류 원본과 현재 상태·처리 결과를 P6에 제공한다. 끝난 보류도 반환한다. 없으면 TRF0203이다. */
+    TransferHoldForFds findForFds(long transferHoldId);
+
     /**
      * 원본 요청 그대로 한 번 실행한다. 다시 부르면 앞선 결과를 돌려준다. 토큰은 받지 않는다(인증은 보류 시점에 끝났다).
      *
      * 잔액·한도·계좌 상태와 훅 A는 실행 시점 기준으로 다시 검사하고, 거부되면 ERROR로 끝난다. 자동 재시도는 없다.
      * 훅 C는 다시 지나지 않는다. 승인하면 지연이체 설정이 함께 해당해도 바로 실행한다.
-     * ON_APPROVAL 건은 보류한 영업일 안에 승인하지 않으면 만료돼 실행할 수 없다.
+     * ON_APPROVAL 건은 보류한 날(달력 날짜) 안에만 실행한다. 날이 지난 건은 EXPIRED로 닫고 TRF0311이다(#998).
      */
     TransferHoldExecutionResult release(long transferHoldId, long actorId);
 

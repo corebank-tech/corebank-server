@@ -33,7 +33,7 @@ import com.shinhan.corebank.common.audit.AuditLogService;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
-import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;

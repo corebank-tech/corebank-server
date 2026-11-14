@@ -28,6 +28,15 @@ app:
     resubmission:
       # 테스트는 재제출을 직접 부른다. 스케줄이 끼어들어 남의 테스트가 남긴 실패 기록을 가져가지 않게 한다
       fixed-delay: 24h
+  # 이의제기 Agent 내부 API 테스트용 워커 키. 운영 키는 환경변수로만 넣는다
+  payment-stop:
+    agent:
+      enabled: true
+      worker-key: test-worker-key-not-for-production
+    # 첨부 파일은 빌드 폴더에 쓴다. 키는 0 바이트 32개의 base64 로 테스트 전용이다. 운영 키는 환경변수로만 넣는다
+    documents:
+      root: build/objection-documents-test
+      encryption-key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 
 management:
   endpoints:

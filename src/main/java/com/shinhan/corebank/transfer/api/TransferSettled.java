@@ -16,6 +16,8 @@ import lombok.Builder;
  *
  * <p>고객 알림은 transfer 가 문구까지 완성해 notificationRequest 로 싣는다(PR #723 리뷰). 예약·자동이체는 발행하지 않고
  * 배치 이벤트가 알림을 싣는다.
+ *
+ * flowId 는 FDS가 성공 이체와 FE 행동 흐름을 잇는 식별자다. 보내지 않았거나 타행이면 null 이다(#978).
  */
 @Builder
 public record TransferSettled(
@@ -25,6 +27,7 @@ public record TransferSettled(
         ProcessResultStatus status,
         String errorCode,
         LocalDateTime occurredAt,
+        String flowId,
         NotificationRequest notificationRequest)
         implements DomainEvent, NotificationRequestCarrier {
 

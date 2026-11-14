@@ -16,7 +16,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 
-// 로컬 관리자 시드가 조회 전용·변경 가능 두 계정을 멱등하게 적재하는지 검증한다.
+// 로컬 관리자 시드가 조회 전용, 변경 가능, 지급정지 승인 세 계정을 멱등하게 적재하는지 검증한다.
 class LocalAdminAccountSeedIntegrationTest extends IntegrationTestSupport {
 
     private static final String ADMIN_SEED_SCRIPT = "db/seed/local-admin-accounts.sql";
@@ -42,11 +42,19 @@ class LocalAdminAccountSeedIntegrationTest extends IntegrationTestSupport {
 
         assertThat(permissionsOf("adminreader")).containsExactly("AUDIT_READ", "CUSTOMER_READ", "GL_READ");
         assertThat(permissionsOf("adminoperator"))
-                .containsExactly("AUDIT_READ", "CUSTOMER_READ", "CUSTOMER_WRITE", "GL_READ", "GL_WRITE");
+                .containsExactly(
+                        "AUDIT_READ",
+                        "CUSTOMER_READ",
+                        "CUSTOMER_WRITE",
+                        "GL_READ",
+                        "GL_WRITE",
+                        "PAYMENT_STOP_READ",
+                        "PAYMENT_STOP_WRITE");
+        assertThat(permissionsOf("adminapprover")).containsExactly("PAYMENT_STOP_APPROVE", "PAYMENT_STOP_READ");
         // 다른 테스트가 만든 ADMIN 행에 흔들리지 않도록 시드 계정만 센다.
         assertThat(count("SELECT COUNT(*) FROM customer WHERE role = 'ADMIN'"
-                        + " AND user_id IN ('adminreader', 'adminoperator')"))
-                .isEqualTo(2);
+                        + " AND user_id IN ('adminreader', 'adminoperator', 'adminapprover')"))
+                .isEqualTo(3);
         assertThat(count("SELECT COUNT(*) FROM customer WHERE user_id = 'adminreader' AND account_locked = FALSE"))
                 .isEqualTo(1);
     }
@@ -55,14 +63,14 @@ class LocalAdminAccountSeedIntegrationTest extends IntegrationTestSupport {
     @DisplayName("로더가 관리자 시드 스크립트를 실제로 적재한다")
     void loadsSeedThroughLoader() {
         jdbcTemplate.update("DELETE ap FROM admin_permission ap JOIN customer c ON c.customer_id = ap.customer_id"
-                + " WHERE c.user_id IN ('adminreader', 'adminoperator')");
-        jdbcTemplate.update("DELETE FROM customer WHERE user_id IN ('adminreader', 'adminoperator')");
+                + " WHERE c.user_id IN ('adminreader', 'adminoperator', 'adminapprover')");
+        jdbcTemplate.update("DELETE FROM customer WHERE user_id IN ('adminreader', 'adminoperator', 'adminapprover')");
 
         new LocalAdminAccountLoader(dataSource).run(new DefaultApplicationArguments());
 
         assertThat(count("SELECT COUNT(*) FROM customer WHERE role = 'ADMIN'"
-                        + " AND user_id IN ('adminreader', 'adminoperator')"))
-                .isEqualTo(2);
+                        + " AND user_id IN ('adminreader', 'adminoperator', 'adminapprover')"))
+                .isEqualTo(3);
         assertThat(permissionsOf("adminreader")).containsExactly("AUDIT_READ", "CUSTOMER_READ", "GL_READ");
     }
 

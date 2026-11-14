@@ -2,7 +2,7 @@ package com.shinhan.corebank.account.adapter.in.transfer;
 
 import com.shinhan.corebank.account.application.port.in.AvailableBalanceQueryUseCase;
 import com.shinhan.corebank.common.exception.BusinessException;
-import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
 import com.shinhan.corebank.transfer.api.TransferPreCheck;
 import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
 import lombok.RequiredArgsConstructor;
