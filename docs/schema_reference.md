@@ -1927,7 +1927,7 @@ P6 Agent 조사는 점수 처리와 별도 작업으로 등록한다. 보류 상
 | `fds_admin_call_record` | 보류 ID, 멱등 키, 지문, 콜 결과, 관리자·사유·시각 | 기존 기록을 수정하지 않는 추가형 기록 |
 | `fds_admin_action` | 조치 ID, 보류·행위자·콜·위험 버전·P4 결과·상태 | 멱등 키 UK, 생성 컬럼 `open_hold_id` UK로 보류당 PENDING 한 건 |
 | `fds_admin_action_audit` | 조치·P4 최종 결과·판정 근거·완료 시각 | `action_id` PK로 응답 유실 재처리에도 한 건 |
-| `fds_risk_registration` | 등록 ID, 조치·보류·조사·관리자·콜, 정규화 수취계좌, 정책·점수 스냅샷, PENDING/ACTIVE/FAILED | `action_id` UK; P4 결과 대조 전에는 MATCH 판정에서 제외 |
+| `fds_risk_registration` | 등록 ID, 조치·보류·조사·관리자·콜, 정규화 수취계좌, 정책·점수 스냅샷, PENDING/ACTIVE/FAILED | `action_id` UK; P4 결과 대조 전에는 MATCH 판정에서 제외. nullable `recipient_name`은 호환용 예약 컬럼이며 현재 P4 계약·API·신규 저장 흐름에서는 사용하지 않음 |
 | `fds_risk_account_evidence` | 위험 계좌·등록·사건·관리자·콜·정책·Agent 보고서·점수·버전 | 등록·조치별 UK; 같은 계좌의 여러 사건 근거는 보존 |
 
 ## `holiday`

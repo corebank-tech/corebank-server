@@ -893,6 +893,11 @@ P4 부품 지연은 §10.4의 인계 조건으로 다루고, 아래는 **P6이 �
 `RISK_ACCOUNT_MATCH`를 사용한다. Agent 보고서와 행동 점수는 보조 근거이며 관리자 사기 확정 없이
 위험 계좌를 등록하지 않는다.
 
+관리자 목록·상세·확인 화면에는 P4 공개 계약이 제공하는 수취은행 코드와 마스킹 계좌만 표시한다.
+수취인명은 계약에 추가하거나 다른 내부 데이터로 추론하지 않으며 API·Swagger 응답에도 제공하지 않는다.
+기존 `fds_risk_registration.recipient_name` nullable 컬럼은 하위 호환을 위해 남기되 신규 처리에서는 읽거나
+기록하지 않는다.
+
 `FRAUD_REJECT`는 관리자 조치와 `fds_risk_registration(PENDING)`을 먼저 커밋한 뒤 P6 트랜잭션
 밖에서 P4 `reject()`를 호출한다. `findForFds()`의 최종 상태가 `REJECTED`이고 actorId와
 `FRAUD_CONFIRMED`가 현재 조치와 일치할 때만 등록 의도를 `ACTIVE`로 전환한다. 같은 은행·정규화

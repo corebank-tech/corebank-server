@@ -733,7 +733,7 @@ Idempotency-Key: Y
 {"riskAccountCheck":{"status":"MATCH","label":"위험 계좌 목록과 일치","riskAccountId":501,"datasetVersion":"demo-risk-v1","checkedAt":"2026-11-08T14:00:00+09:00","sourceNotice":"프로젝트 시연용 합성 데이터이며 실제 사기 확정 정보가 아닙니다."}}
 ```
 
-`NO_MATCH`의 label은 `위험 계좌 목록과 일치하지 않음`, `UNAVAILABLE`의 label은 `위험 계좌 조회 불가 · 고객 확인 절차 필요`다. `sourceNotice`와 근거 ID·버전은 상세에서만 표시한다. 고객 화면에는 위험 조회 결과를 표시하지 않는다. 관리자 전체 계좌번호·수취인 이름·생년월일은 현재 조회 계약에 없으며 추가하지 않는다.
+`NO_MATCH`의 label은 `위험 계좌 목록과 일치하지 않음`, `UNAVAILABLE`의 label은 `위험 계좌 조회 불가 · 고객 확인 절차 필요`다. `sourceNotice`와 근거 ID·버전은 상세에서만 표시한다. 고객 화면에는 위험 조회 결과를 표시하지 않는다. 관리자 전체 계좌번호·수취인 이름·생년월일은 현재 조회 계약에 없으며 추가하지 않는다. 따라서 관리자 목록·상세·사기 확정 확인 API에는 `recipientName` 필드가 없고, FE도 수취인명 영역을 표시하지 않는다.
 
 **조치 요청과 FE:** `MATCH`의 §10 요청 예시는 `{"reasonCode":"RISK_ACCOUNT_MATCH","note":"위험 계좌 목록 일치 확인"}`이며 콜 기록을 요구하지 않는다. `NO_MATCH`·`UNAVAILABLE`은 기존 `CUSTOMER_DENIED` 거절과 `CUSTOMER_CONFIRMED` 승인 조건을 따른다. FE는 `MATCH`에 거절 버튼만, 나머지 두 상태에 콜 기록 뒤 승인·거절 버튼을 제공한다. 목록의 상태나 클라이언트가 보낸 위험 기록 ID를 조치 근거로 신뢰하지 않는다. 서버가 조치 직전에 활성 버전·계좌 일치·보류 상태를 다시 확인한다. 상태가 바뀌면 `FDS0301` 또는 아래 사유 충돌 코드로 거부하고 FE가 상세를 다시 조회한다. 같은 `Idempotency-Key`·본문의 재요청은 저장된 결과를 반환하고, 처리 중·다른 본문은 기존 `CMN0301`·`CMN0302`다. 응답 유실 뒤에는 새 키로 다시 조치하지 않고 같은 키로 확인하거나 보류 상세를 조회한다.
 

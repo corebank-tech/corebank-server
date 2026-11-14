@@ -29,6 +29,7 @@ public record FdsHoldDetail(
         AdminAction adminAction,
         RiskRegistration riskRegistration) {
 
+    @Schema(description = "P4 공개 계약에 없는 수취인명은 제공하지 않고 마스킹 계좌만 표시한다.")
     public record OriginalTransfer(
             long transferHoldId,
             String holdStatus,
