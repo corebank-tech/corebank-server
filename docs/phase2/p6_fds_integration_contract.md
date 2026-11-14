@@ -13,8 +13,8 @@
 |---|---|---|---|
 | FE → BE 행동 제출 | `POST /fds/behavior-flows/{flowId}/events` | `POST /api/v1/fds/behavior-flows/{flowId}/events` | P6 경로 결정·미구현 |
 | FE → BE 즉시이체 | `POST /transfers` | `POST /api/v1/transfers` | P4 **기존 구현**. `flowId` 선택 필드·멱등 지문 포함 구현됨 |
-| Agent → BE 거래 이력 | `GET /internal/fds/holds/{transferHoldId}/history` | `GET /api/v1/internal/fds/holds/{transferHoldId}/history` | P6 경로 결정·미구현; P4 보류 원본·상태 조회 계약 필요 |
-| Agent → BE 수취인 맥락 | `GET /internal/fds/holds/{transferHoldId}/recipient-context` | `GET /api/v1/internal/fds/holds/{transferHoldId}/recipient-context` | P6 경로 결정·미구현 |
+| Agent → BE 거래 이력 | `GET /internal/fds/holds/{transferHoldId}/history?attemptNo={attemptNo}` | 동일 | 현재 실행 세대와 작업 상태를 잠금 검증한 뒤 제공 스냅샷 저장 |
+| Agent → BE 수취인 맥락 | `GET /internal/fds/holds/{transferHoldId}/recipient-context?attemptNo={attemptNo}` | 동일 | 현재 실행 세대와 작업 상태를 잠금 검증한 뒤 제공 스냅샷 저장 |
 | Agent → BE 보고서 제출 | `PUT /internal/fds/investigations/{investigationId}/report` | `PUT /api/v1/internal/fds/investigations/{investigationId}/report` | P6 경로 결정·미구현 |
 | 관리자 목록·상세 | `GET /admin/fds/holds`, `GET /admin/fds/holds/{transferHoldId}` | `GET /api/v1/admin/fds/holds`, `GET /api/v1/admin/fds/holds/{transferHoldId}` | P6 경로 결정·미구현 |
 | 관리자 콜 기록 | `POST /admin/fds/holds/{transferHoldId}/call-record` | `POST /api/v1/admin/fds/holds/{transferHoldId}/call-record` | P6 경로 결정·미구현 |
@@ -113,17 +113,18 @@ P6은 FE에서 보류를 이체 완료로 표시하지 않는다. 승인 대기�
 
 ## 5. Agent Tool·보고서 계약 초안
 
-`TransferHeld`는 비동기 조사 시작 신호다. P6은 같은 `transferHoldId`의 조사 작업을 중복 등록하지 않고, Agent에는 `investigationId`, 정수 `transferHoldId`, P6의 정책 근거·행동 요약·마스킹된 이체 요약만 제공한다. P4는 `transfer.api`를 통해 보류 원본·상태를 제공하고 P6은 그 영속성 구현을 직접 읽지 않는다.
+`TransferHeld`는 비동기 조사 시작 신호다. P6은 같은 `transferHoldId`의 조사 작업을 중복 등록하지 않고, Agent에는 `investigationId`, 정수 `transferHoldId`, 실행 세대 `attemptNo`, P6의 정책 근거·행동 요약·마스킹된 이체 요약만 제공한다. P4는 `transfer.api`를 통해 보류 원본·상태를 제공하고 P6은 그 영속성 구현을 직접 읽지 않는다.
 
 | API | 요청 입력 | 응답의 최소 내용 | 실패 처리 |
 |---|---|---|---|
 | `GET .../history` | `transferHoldId`; 보류 직전 최대 24시간 | 최근 성공 이체 최신순 최대 100건의 `refId`·시각·금액·마스킹 수취계좌와 잘림 여부 `hasMore` | P4 `transfer.api`의 이체 목록 조회 인계 대기. 권한·보류 조회 실패면 조사 실패; 거래가 없음은 빈 배열 |
-| `GET .../recipient-context` | `transferHoldId` | 해당 고객·수취인의 **전체 과거 성공 이력** 존재 여부·최초 성공 시각·현재 보류 건 출금계좌를 제외한 다른 출금계좌 수(`withdrawalAccountId` DISTINCT)의 좁은 집계(목록 미반환) | P4 `transfer.api`의 수취인 집계 조회 인계 대기. 정보 없음과 조회 장애 구분; 최근 목록에 없다는 이유로 신규 수취인으로 취급하지 않음 |
-| `PUT .../report` | 경로 `investigationId`, 본문 `transferHoldId`, 조사 상태·`secondaryFindings`·근거 ID | 저장된 조사 ID·상태 | 같은 조사 ID 재제출은 멱등; 근거 ID가 허용된 조회 결과 밖이면 거부 |
+| `GET .../recipient-context` | `transferHoldId`, 실행 요청에서 받은 `attemptNo` | 해당 고객·수취인의 **전체 과거 성공 이력** 존재 여부·최초 성공 시각·현재 보류 건 출금계좌를 제외한 다른 출금계좌 수(`withdrawalAccountId` DISTINCT)의 좁은 집계(목록 미반환) | 작업 행 잠금 아래 `RUNNING`·현재 실행 세대 일치 검증; 정보 없음과 조회 장애 구분; 최근 목록에 없다는 이유로 신규 수취인으로 취급하지 않음 |
+| `PUT .../report` | 경로 `investigationId`, 본문 `transferHoldId`·실행 요청에서 받은 `attemptNo`·조사 상태·`secondaryFindings`·근거 ID | 저장된 조사 ID·상태 | 같은 조사 ID·세대의 재제출은 멱등; 이전 실행 세대와 허용 조회 결과 밖의 근거 ID는 거부 |
 
 ```json
 {
   "transferHoldId": 123,
+  "attemptNo": 1,
   "status": "COMPLETED",
   "secondaryFindings": [{
     "code": "REGULAR_SPLIT_AMOUNTS",
@@ -159,6 +160,8 @@ public enum TransferHoldCloseReason { CANCELLED, EXPIRED }
 예: `TransferHoldClosed(123, CANCELLED, 2026-11-03T15:00:00)`을 받으면 P6은 보류 ID 123의 조사 작업을 닫고 예약된 재시도를 중단한다. 이벤트 중복은 `transferHoldId`와 종료 사유로 멱등 처리하고, 늦게 도착한 Agent 보고서는 관리자에게 활성 조사 결과로 표시하지 않는다. 이벤트와 승인·거절이 경합하면 P4의 현재 보류 상태를 다시 확인해 이미 종료된 건을 실행하지 않는다. P6의 사건 종료 기록은 멱등하게 저장하고, 리스너 저장 실패는 이벤트 재전달로 복구한다. P4가 종료 이벤트를 제공할 수 없으면 보류 상태 조회 기반 동기화로 전환하되, 취소·만료를 즉시 반영하는 보장은 별도로 검증한다.
 
 **보고서 입력 상한:** JSON 본문 최대 16 KiB, `secondaryFindings` 최대 4건, 각 `description` 1~300자, 항목별 `evidenceTransferIds` 최대 10개다. `missingInformation` 최대 5개(각 1~100자), `suggestedQuestions` 최대 3개(각 1~200자), `summary` 1~500자다. 배열이 비어 있으면 `[]`를 보낸다. 근거 ID가 있는 경우 Tool에서 실제 조회한 해당 고객 이체만 허용하고, 근거가 집계값뿐이면 ID를 만들지 않고 빈 배열과 `missingInformation`으로 한계를 설명한다. Agent의 문자열은 관리자 화면에서 텍스트로 렌더링하고 실행 지시로 처리하지 않는다.
+
+**관리자 조회 스냅샷:** P6은 Tool 응답을 Agent에게 반환하기 전에 조사 ID·보류 ID·고객·조회 기간과 함께 내구화한다. 최근 이체는 금액·시각·마스킹 계좌·`hasMore`, 수취인 맥락은 최초 성공 시각·반복 구간 이전 성공 여부·다른 출금계좌 수를 저장한다. 관리자 목록·상세은 저장 스냅샷을 읽고 P4 Tool을 다시 호출하지 않는다.
 
 ## 6. 관리자 API 계약 초안
 
@@ -200,7 +203,7 @@ public enum TransferHoldCloseReason { CANCELLED, EXPIRED }
 
 **일치 키 형식:** 은행코드는 앞의 0을 보존하는 숫자 문자열 3자리이며 현재 보류 범위는 당행 `088`이다. 당행 계좌번호는 하이픈 없는 숫자 12자리다. 관리자 API는 키를 클라이언트에서 받지 않고 P4 보류 원본의 `recipientBankCode`·`depositAccountNumber`를 사용한다. 시드 입력은 하이픈·공백·문자·길이 오류를 **거부**하며 서버가 조용히 제거·보정하지 않는다. FE가 표시용 하이픈을 사용하더라도 이체 요청 전 제거해 기존 이체 API의 숫자 전용 계약을 따른다. 타행으로 범위를 넓힐 때는 은행코드와 1~16자리 숫자 계좌번호를 별도 계약으로 검증한다. 형식 오류가 있는 보류 원본은 `NO_MATCH`로 취급하지 않고 위험 조회 `UNAVAILABLE`로 표시하며 조치 전 원본 조회 경계를 대조한다.
 
-**관리자 표시·감사안:** 목록은 `heldAt` 오래된 순, 동시각이면 `transferHoldId` 오름차순으로 정렬한다. 목록의 위험 상태는 안내용이며 상세에 `MATCH`이면 **“위험 계좌 목록과 일치”**, `NO_MATCH`이면 **“위험 계좌 목록과 일치하지 않음”**, `UNAVAILABLE`이면 **“위험 계좌 조회 불가 · 고객 확인 절차 필요”**를 표시한다. `MATCH`에는 위험 기록 ID·데이터셋 버전·조회 시각과 목록의 출처가 합성 데이터라는 설명을 상세 근거 영역에 표시한다. 일치가 실제 사기 확정을 뜻한다고 표현하지 않는다. 고객 화면에는 위험 조회 결과를 표시하지 않는다. 관리자 목록·상세 계좌번호는 정상 형식일 때 기존 `MaskingUtil` 규칙(당행 12자리면 앞 3·뒤 3자리 표시)을 따른다. 보류 원본의 계좌번호 형식이 잘못되면 `MaskingUtil`을 호출하지 않고 필수 문자열 `recipientAccountMasked`를 `"확인 불가"`로 반환하며 위험 상태는 `UNAVAILABLE`로 둔다. 전체 번호 확인이 정말 필요하면 별도 권한·조회 사유·감사가 있는 상세 조회로 설계한다. 현재 계약에 없는 수취인 이름·생년월일은 생성하거나 표시하지 않는다. 조회 감사에는 관리자 ID·보류 ID·조회 사유·시각, 거절 감사에는 조치 ID·`RISK_ACCOUNT_MATCH` 또는 `CUSTOMER_DENIED`·위험 기록 ID·버전(해당 시)·처리 결과를 남긴다. 감사 상세에는 계좌번호 원문·이름·생년월일을 복제하지 않고 기록 ID로 원본을 추적한다.
+**관리자 표시·감사안:** 목록은 `heldAt` 최신순, 동시각이면 `transferHoldId` 내림차순으로 정렬한다. 목록의 위험 상태는 안내용이며 상세에 `MATCH`이면 **“위험 계좌 목록과 일치”**, `NO_MATCH`이면 **“위험 계좌 목록과 일치하지 않음”**, `UNAVAILABLE`이면 **“위험 계좌 조회 불가 · 고객 확인 절차 필요”**를 표시한다. `MATCH`에는 위험 기록 ID·데이터셋 버전·조회 시각과 목록의 출처가 합성 데이터라는 설명을 상세 근거 영역에 표시한다. 일치가 실제 사기 확정을 뜻한다고 표현하지 않는다. 고객 화면에는 위험 조회 결과를 표시하지 않는다. 관리자 목록·상세 계좌번호는 정상 형식일 때 기존 `MaskingUtil` 규칙(당행 12자리면 앞 3·뒤 3자리 표시)을 따른다. 보류 원본의 계좌번호 형식이 잘못되면 `MaskingUtil`을 호출하지 않고 필수 문자열 `recipientAccountMasked`를 `"확인 불가"`로 반환하며 위험 상태는 `UNAVAILABLE`로 둔다. 전체 번호 확인이 정말 필요하면 별도 권한·조회 사유·감사가 있는 상세 조회로 설계한다. 현재 계약에 없는 수취인 이름·생년월일은 생성하거나 표시하지 않는다. 조회 감사에는 관리자 ID·보류 ID·조회 사유·시각, 거절 감사에는 조치 ID·`RISK_ACCOUNT_MATCH` 또는 `CUSTOMER_DENIED`·위험 기록 ID·버전(해당 시)·처리 결과를 남긴다. 감사 상세에는 계좌번호 원문·이름·생년월일을 복제하지 않고 기록 ID로 원본을 추적한다.
 
 **P6 멱등·FE안:** 거절 요청은 서버가 보류 원본·활성 버전·계좌 일치·현재 보류 상태를 처리 직전에 재확인한다. 동일 멱등 키·본문의 재요청은 같은 조치 결과를 재사용하고, 처리 중이거나 본문이 다르면 기존 `CMN0301`·`CMN0302`를 따른다. 응답 유실 시 새 키로 조치를 만들지 않고 기존 키로 결과를 확인하거나 상세를 재조회한다. FE는 `MATCH`에 거절만, `NO_MATCH`·`UNAVAILABLE`에 콜 기록 후 승인·거절을 제공한다. 조치 직전 상태가 달라지면 화면을 재조회한다. P4 호출·버전 전환 경합의 실제 트랜잭션 경계와 결과 조회는 위 P4 인계가 선행한다. 오류코드와 JSON 예시는 [API 명세 §11](p6_fds_api_spec.md#11-구현-전-확정할-항목)을 따른다.
 
@@ -319,7 +322,7 @@ X-Access-Reason: INCIDENT
 ```
 
 ```json
-{"code":"0000","message":"정상 처리되었습니다.","data":{"page":0,"size":10,"totalCount":1,"totalPages":1,"items":[{"transferHoldId":123,"heldAt":"2026-11-03T13:02:00+09:00","holdStatus":"HELD","policyCode":"A","investigationStatus":"QUEUED","amount":500000,"recipientAccountMasked":"***-**-1234"}]}}
+{"code":"0000","message":"정상 처리되었습니다.","data":{"page":0,"size":20,"totalElements":1,"totalPages":1,"items":[{"transferHoldId":123,"heldAt":"2026-11-03T13:02:00+09:00","holdStatus":"HELD","policyCode":"A","investigationStatus":"PENDING","amount":500000,"recipientAccountMasked":"***-**-1234"}]}}
 ```
 
 ```http
@@ -331,7 +334,7 @@ X-Access-Reason: INCIDENT
 {"code":"0000","message":"정상 처리되었습니다.","data":{"transferHoldId":123,"holdStatus":"HELD","amount":500000,"recipientAccountMasked":"***-**-1234","serverPolicy":{"policyCode":"A","count10m":3,"amount10m":1500000,"hesitationInWindow":true,"newRecipientAtWindowStart":true},"behaviorSummary":{"hesitationWarning":true},"investigationStatus":"COMPLETED","secondaryFindings":[{"code":"REGULAR_SPLIT_AMOUNTS","evidenceTransferIds":[101,102],"confidence":"OBSERVED"}],"callRecords":[]}}
 ```
 
-`investigationStatus=QUEUED`·`RUNNING`·`FAILED`여도 서버 판정 근거와 콜 결과가 있으면 관리자 수동 검토가 가능하다. 목록·상세의 고객정보와 계좌번호는 필요한 범위만 마스킹해 표시한다.
+`investigationStatus=PENDING`·`RUNNING`·`FAILED`여도 서버 판정 근거와 콜 결과가 있으면 관리자 수동 검토가 가능하다. 목록·상세의 고객정보와 계좌번호는 필요한 범위만 마스킹해 표시한다.
 
 ```http
 POST /api/v1/admin/fds/holds/123/call-record
@@ -412,6 +415,6 @@ Idempotency-Key: 9fa61214-4817-47ad-b08f-5279af78df43
 | 내부 Tool 인증·네트워크·CSRF·권한 | P6·인프라 | §6-2의 환경변수 주입·같은 VM 브리지·외부 HTTPS·내부 HTTP 결정; 실제 VM 설정 검증·코드 구현 대기 |
 | FDS 관리자 권한 matcher·사유·감사·콜 결과와 화면 API 연결 | P6 FE·BE | §6의 권한·CSRF·사유·감사·콜 결과 4종과 승인 허용 조건 결정; 코드·화면 연결 대기 |
 | 관리자 승인·거절의 PENDING 조치와 감사 복구 | P6 FE·BE, P4 결과 조회 인계 | §6-1의 사전 내구화·멱등 재생 계약 작성; 조치 행 스키마·P4 결과 대조 필드·장애 주입 검증 대기. 상태만으로 행위자·사유를 추정하지 않음 |
-| 조사 작업 재시도·보고서 멱등·AI 장애 시 수동 검토 화면 | P6 FE·BE·AI | §5의 조사 ID 멱등·3회 재시도·시도별 60초(대기 제외)/Tool 5초 제한·보고서 상한·수동 검토 원칙 결정; 코드·화면 검증 대기 |
+| 조사 작업 재시도·보고서 멱등·AI 장애 시 수동 검토 화면 | P6 FE·BE·AI | #992에서 조사 작업 등록·조건부 선점·임대 복구·3회 재시도·보고서 원자 저장 기반 구현; Python 조사 API·Tool 근거 검증·화면 및 실행 검증 대기 |
 
 P4 인계·합의 대기 항목은 실제 계약이 정해지면 상태와 관련 PR을 갱신한다. P6이 결정한 항목도 구현·검증 전에는 완료로 표시하지 않는다. #855는 이벤트·피처 계약을 정책 사례와 최종 대조한다.

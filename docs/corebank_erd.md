@@ -427,6 +427,105 @@ erDiagram
         bigint customer_id "소유 고객"
         datetime created_at
     }
+    fds_investigation_job {
+        bigint transfer_hold_id PK "P4 보류 ID"
+        char investigation_id UK "안정적인 조사 UUID"
+        varchar job_status "PENDING/RUNNING/COMPLETED/FAILED"
+        int attempt_count "0~3"
+        datetime next_attempt_at
+        datetime lease_expires_at
+        varchar last_failure_reason
+        datetime created_at
+        datetime updated_at
+    }
+    fds_investigation_evidence {
+        char investigation_id PK,FK
+        bigint ref_id PK "Agent에게 제공한 transfer ID"
+        bigint transfer_hold_id
+        bigint customer_id
+        datetime range_from
+        datetime range_to
+        datetime provided_at
+    }
+    fds_investigation_report {
+        char investigation_id PK,FK
+        bigint transfer_hold_id UK
+        varchar schema_version
+        text report_json "최대 16 KiB"
+        char report_sha256 "SHA-256"
+        datetime created_at
+    }
+    fds_investigation_history_snapshot {
+        char investigation_id PK,FK
+        bigint transfer_hold_id
+        bigint customer_id
+        datetime range_from
+        datetime range_to
+        boolean has_more
+        datetime provided_at
+    }
+    fds_investigation_history_item {
+        char investigation_id PK,FK
+        bigint ref_id PK
+        bigint amount
+        datetime transferred_at
+        varchar recipient_account_masked
+    }
+    fds_investigation_recipient_snapshot {
+        char investigation_id PK,FK
+        bigint transfer_hold_id
+        bigint customer_id
+        datetime first_succeeded_at
+        boolean succeeded_before_window
+        int other_withdrawal_account_count
+        datetime provided_at
+    }
+    fds_risk_dataset {
+        VARCHAR dataset_version PK
+        VARCHAR dataset_status
+        INT expected_count
+        CHAR content_sha256
+        DATETIME created_at
+        DATETIME activated_at
+    }
+    fds_risk_account {
+        BIGINT risk_account_id PK
+        VARCHAR dataset_version FK
+        CHAR bank_code
+        VARCHAR account_number
+        VARCHAR source_type
+        VARCHAR reason
+        DATETIME created_at
+    }
+    fds_risk_active_version {
+        TINYINT singleton_id PK
+        VARCHAR dataset_version FK
+        DATETIME updated_at
+    }
+    fds_admin_call_record {
+        BIGINT call_record_id PK
+        BIGINT transfer_hold_id
+        VARCHAR idempotency_key UK
+        VARCHAR call_result
+        BIGINT admin_id
+        DATETIME recorded_at
+    }
+    fds_admin_action {
+        CHAR action_id PK
+        BIGINT transfer_hold_id
+        VARCHAR idempotency_key UK
+        BIGINT actor_id
+        VARCHAR action_type
+        VARCHAR action_status
+        BIGINT open_hold_id UK
+    }
+    fds_admin_action_audit {
+        CHAR action_id PK
+        BIGINT transfer_hold_id
+        BIGINT actor_id
+        VARCHAR p4_status
+        DATETIME completed_at
+    }
     delayed_transfer_setting {
         bigint customer_id PK "고객당 1행. 없으면 꺼짐"
         boolean enabled
@@ -871,6 +970,16 @@ erDiagram
     fds_behavior_flow ||--o{ fds_behavior_event : "행동 이벤트"
     fds_behavior_flow ||--o| fds_transfer_behavior_flow : "성공 이체 연결"
     transfer_hold |o..o| fds_behavior_score : "보류 후 보조 점수 (FK 없음)"
+    transfer_hold |o..o| fds_investigation_job : "Agent 조사 작업 (FK 없음)"
+    fds_investigation_job ||--o{ fds_investigation_evidence : "제공 근거"
+    fds_investigation_job ||--o| fds_investigation_report : "확정 보고서"
+    fds_investigation_job ||--o| fds_investigation_history_snapshot : "최근 이체 Tool 스냅샷"
+    fds_investigation_history_snapshot ||--o{ fds_investigation_history_item : "제공 이체 항목"
+    fds_investigation_job ||--o| fds_investigation_recipient_snapshot : "수취인 맥락 스냅샷"
+    fds_risk_dataset ||--o{ fds_risk_account : "버전별 위험 계좌"
+    fds_risk_dataset ||--o| fds_risk_active_version : "활성 버전"
+    fds_admin_call_record |o--o{ fds_admin_action : "고정된 콜 근거"
+    fds_admin_action ||--o| fds_admin_action_audit : "확정 감사"
     customer ||..o| delayed_transfer_setting : "지연이체 설정 (FK 없음)"
 ```
 

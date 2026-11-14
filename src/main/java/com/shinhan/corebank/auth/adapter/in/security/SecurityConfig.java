@@ -56,7 +56,9 @@ public class SecurityConfig {
         // /internal/** 전체를 열지 않는다. 나중에 생기는 내부 경로가 인증 없이 열리지 않게 접두어를 하나씩 적는다
         pathPattern("/internal/review-jobs/**"),
         pathPattern("/internal/objections/**"),
-        pathPattern("/internal/agent-runs/**")
+        pathPattern("/internal/agent-runs/**"),
+        // FDS Agent는 세션 대신 전용 Bearer 토큰을 각 Controller 진입점에서 검증한다.
+        pathPattern("/internal/fds/**")
     };
 
     // 공개하되 CSRF 보호는 유지하는 경로.
@@ -189,8 +191,10 @@ public class SecurityConfig {
                         .hasAuthority(AdminPermission.CUSTOMER_READ.name())
                         .requestMatchers(pathPattern("/admin/customers/**"))
                         .hasAuthority(AdminPermission.CUSTOMER_WRITE.name())
-                        .requestMatchers(pathPattern(HttpMethod.GET, "/admin/fds/holds/*"))
+                        .requestMatchers(pathPattern(HttpMethod.GET, "/admin/fds/holds/**"))
                         .hasAuthority(AdminPermission.CUSTOMER_READ.name())
+                        .requestMatchers(pathPattern(HttpMethod.POST, "/admin/fds/holds/**"))
+                        .hasAuthority(AdminPermission.CUSTOMER_WRITE.name())
                         .requestMatchers(pathPattern(HttpMethod.GET, "/admin/trial-balance/**"))
                         .hasAuthority(AdminPermission.GL_READ.name())
                         .requestMatchers(pathPattern(HttpMethod.GET, "/admin/info/**"))

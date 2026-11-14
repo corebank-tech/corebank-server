@@ -1,0 +1,6 @@
+{
+  "datasetVersion": "demo-risk-v1",
+  "expectedCount": 2,
+  "sha256": "28e3a4f3c12914795ef09c543d0a68ffa6f9d1e5beb98976e609b3922a083a79",
+  "sourceNotice": "프로젝트 시연용 합성 데이터이며 실제 사기 확정 정보가 아닙니다."
+}

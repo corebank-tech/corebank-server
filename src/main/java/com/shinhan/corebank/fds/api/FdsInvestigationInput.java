@@ -4,9 +4,34 @@ package com.shinhan.corebank.fds.api;
 public record FdsInvestigationInput(
         String investigationId,
         long transferHoldId,
+        Integer attemptNo,
         String policyCode,
+        PolicyEvidence policyEvidence,
         BehaviorSummary behaviorSummary,
         TransferSummary transferSummary) {
+    public FdsInvestigationInput(
+            String investigationId,
+            long transferHoldId,
+            String policyCode,
+            PolicyEvidence policyEvidence,
+            BehaviorSummary behaviorSummary,
+            TransferSummary transferSummary) {
+        this(investigationId, transferHoldId, null, policyCode, policyEvidence, behaviorSummary, transferSummary);
+    }
+
+    public FdsInvestigationInput withAttemptNo(int attemptNo) {
+        return new FdsInvestigationInput(
+                investigationId,
+                transferHoldId,
+                attemptNo,
+                policyCode,
+                policyEvidence,
+                behaviorSummary,
+                transferSummary);
+    }
+
+    public record PolicyEvidence(int count10m, long amount10m) {}
+
     public record BehaviorSummary(
             Integer backCount,
             Integer amountRevisionCount,

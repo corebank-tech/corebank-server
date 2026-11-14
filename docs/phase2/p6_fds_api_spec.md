@@ -169,11 +169,11 @@ P4가 보류 응답을 확정하기 전까지 제안 필드로 FE를 고정 구�
 카테고리: FDS
 설명: 보류 사건 고객에게 허용된 과거 이체만 Agent에 제공한다.
 Method: GET
-URL: `/api/v1/internal/fds/holds/{transferHoldId}/history`
+URL: `/internal/fds/holds/{transferHoldId}/history?attemptNo={attemptNo}`
 사용자: 시스템
 인증 필요: Y
 Idempotency-Key: N
-기타: `Authorization: Bearer <Agent 서비스 토큰>` 필수. 전용 stateless 체인·발표 VM의 사설 Compose 브리지로 보호한다. 호스트 분리 시 내부 TLS를 적용한다. `transferHoldId`로 조회 고객을 제한하고 계좌번호를 마스킹한다. 이 Tool은 보류 시각 직전 최대 24시간의 성공 이체를 최신순으로 최대 100건 보여 준다. 100건을 넘어 잘렸으면 `hasMore=true`로 알린다. 수취인과의 전체 과거 거래 여부는 §4의 별도 집계로 확인한다. 아직 미구현.
+기타: `Authorization: Bearer <Agent 서비스 토큰>`과 조사 실행 요청에서 받은 양의 `attemptNo`가 필수다. 서버는 작업 행 잠금 아래 `RUNNING` 상태와 현재 `attempt_count` 일치를 확인한 뒤 스냅샷을 저장하여 이전 실행 세대의 늦은 Tool 응답을 거부한다. 전용 stateless 체인·발표 VM의 사설 Compose 브리지로 보호한다. 호스트 분리 시 내부 TLS를 적용한다. `transferHoldId`로 조회 고객을 제한하고 계좌번호를 마스킹한다. 이 Tool은 보류 시각 직전 최대 24시간의 성공 이체를 최신순으로 최대 100건 보여 준다. 100건을 넘어 잘렸으면 `hasMore=true`로 알린다. 수취인과의 전체 과거 거래 여부는 §4의 별도 집계로 확인한다.
 
 ### 요구사항 ID
 
@@ -231,11 +231,11 @@ Idempotency-Key: N
 카테고리: FDS
 설명: 보류 사건 고객의 수취인 관계와 다른 출금계좌 송금 맥락을 추가 조사한다.
 Method: GET
-URL: `/api/v1/internal/fds/holds/{transferHoldId}/recipient-context`
+URL: `/internal/fds/holds/{transferHoldId}/recipient-context?attemptNo={attemptNo}`
 사용자: 시스템
 인증 필요: Y
 Idempotency-Key: N
-기타: `Authorization: Bearer <Agent 서비스 토큰>` 필수. 전용 stateless 체인·발표 VM의 사설 Compose 브리지로 보호한다. 호스트 분리 시 내부 TLS를 적용한다. P4 보류 원본·상태 조회 계약 선행. 해당 수취인과의 과거 성공 이체 존재 여부는 최근 이력 Tool의 조회 기간과 무관하게 전체 과거 성공 이력의 좁은 집계로 조회한다. 거래 목록은 반환하지 않는다. 최근 이력 Tool에서 거래가 없다는 이유만으로 신규 수취인이나 사기를 판정하지 않는다. 아직 미구현.
+기타: `Authorization: Bearer <Agent 서비스 토큰>`과 조사 실행 요청에서 받은 양의 `attemptNo`가 필수다. 서버는 작업 행 잠금 아래 현재 실행 세대를 검증하고 해당 세대의 스냅샷만 저장한다. 전용 stateless 체인·발표 VM의 사설 Compose 브리지로 보호한다. 호스트 분리 시 내부 TLS를 적용한다. 해당 수취인과의 과거 성공 이체 존재 여부는 최근 이력 Tool의 조회 기간과 무관하게 전체 과거 성공 이력의 좁은 집계로 조회한다. 거래 목록은 반환하지 않는다. 최근 이력 Tool에서 거래가 없다는 이유만으로 신규 수취인이나 사기를 판정하지 않는다.
 
 ### 요구사항 ID
 
@@ -292,7 +292,7 @@ URL: `/api/v1/internal/fds/investigations/{investigationId}/report`
 사용자: 시스템
 인증 필요: Y
 Idempotency-Key: Y
-기타: `Authorization: Bearer <Agent 서비스 토큰>` 필수. 전용 stateless 체인·발표 VM의 사설 Compose 브리지로 보호하고 호스트 분리 시 내부 TLS를 적용한다. 이 경로에서만 CSRF 제외. 본문 최대 16 KiB. 같은 조사 ID·같은 본문은 재전달해도 보고서 1개, 다른 본문은 충돌. 실제 근거 이체 ID를 BE에서 검증한다. 조사 작업은 같은 ID로 총 3회(즉시·1분 뒤·5분 뒤) 시도한다. **60초는 각 시도의 Agent 실행 제한이며 재시도 대기 시간은 제외한다.** 각 Tool HTTP 호출 제한은 5초다. 최종 실패는 **P6 조사 상태만 `FAILED`**, P4 이체 보류 상태는 `HELD`를 유지한다. `HELD`는 `transfer.status`가 아니다. 아직 미구현.
+기타: `Authorization: Bearer <Agent 서비스 토큰>` 필수. 전용 stateless 체인·발표 VM의 사설 Compose 브리지로 보호하고 호스트 분리 시 내부 TLS를 적용한다. 이 경로에서만 CSRF 제외. 본문 최대 16 KiB. 같은 조사 ID·같은 본문은 재전달해도 보고서 1개, 다른 본문은 충돌. 실제 근거 이체 ID를 BE에서 검증한다. 조사 작업은 같은 ID로 총 3회(즉시·1분 뒤·5분 뒤) 시도한다. **60초는 각 시도의 Agent 실행 제한이며 재시도 대기 시간은 제외한다.** 각 Tool HTTP 호출 제한은 5초다. 최종 실패는 **P6 조사 상태만 `FAILED`**, P4 이체 보류 상태는 `HELD`를 유지한다. `HELD`는 `transfer.status`가 아니다. #992에서 조사 작업·임대·보고서 저장 기반을 추가했으며, 실제 엔드포인트와 근거 ID 검증은 Python 조사 API 및 #994 계약 반영 뒤 완료한다.
 
 ### 요구사항 ID
 
@@ -309,6 +309,7 @@ Idempotency-Key: Y
 | key | 설명 | value 타입 | 옵션 | Nullable | 예시 |
 |---|---|---|---|---|---|
 | `transferHoldId` | 보류 ID | Long | 조사 작업과 일치 | X | `123` |
+| `attemptNo` | 조사 실행 세대 | Integer | BE 실행 요청에서 받은 양의 정수를 그대로 반환 | X | `1` |
 | `status` | 제출된 조사 결과 | String(ENUM) | `COMPLETED`만 허용. 시도 실패는 보고서를 제출하지 않고, 최종 `FAILED`는 BE가 조사 작업에 기록 | X | `"COMPLETED"` |
 | `secondaryFindings` | 서버 보류 사유 외의 발견 | Array | 최대 4건, 없으면 `[]` | X | `[{...}]` |
 | `secondaryFindings[].code` | 추가 발견 유형 | String(ENUM) | `REGULAR_SPLIT_AMOUNTS`, `MULTIPLE_SOURCE_ACCOUNTS`, `LIMITED_RECIPIENT_HISTORY`, `BEHAVIOR_TRANSFER_MISMATCH` | X | `"REGULAR_SPLIT_AMOUNTS"` |
@@ -323,7 +324,7 @@ Idempotency-Key: Y
 **Example**
 
 ```json
-{"transferHoldId":123,"status":"COMPLETED","secondaryFindings":[{"code":"REGULAR_SPLIT_AMOUNTS","description":"반복 금액 패턴","evidenceTransferIds":[101,102],"confidence":"OBSERVED"}],"missingInformation":[],"recommendedAction":"MANUAL_CUSTOMER_CONFIRMATION","suggestedQuestions":["송금 목적을 확인해 주세요."],"summary":"서버 보류 사유 외에 반복 금액 패턴 확인"}
+{"transferHoldId":123,"attemptNo":1,"status":"COMPLETED","secondaryFindings":[{"code":"REGULAR_SPLIT_AMOUNTS","description":"반복 금액 패턴","evidenceTransferIds":[101,102],"confidence":"OBSERVED"}],"missingInformation":[],"recommendedAction":"MANUAL_CUSTOMER_CONFIRMATION","suggestedQuestions":["송금 목적을 확인해 주세요."],"summary":"서버 보류 사유 외에 반복 금액 패턴 확인"}
 ```
 
 ### Query parameter
@@ -366,7 +367,7 @@ URL: `/api/v1/admin/fds/holds`
 사용자: 관리자
 인증 필요: Y
 Idempotency-Key: N
-기타: `CUSTOMER_READ` 권한. `X-Access-Reason` 유효값 필수, 조회 감사 기록. 수취계좌 마스킹. 아직 미구현.
+기타: `CUSTOMER_READ` 권한. `X-Access-Reason` 유효값 필수, 조회 감사 기록. 수취계좌 마스킹. P6 조사 사건을 기준으로 P4 공개 `findForFds` 원본과 저장된 조사·위험·콜·조치 상태를 결합한다.
 
 ### 요구사항 ID
 
@@ -385,8 +386,7 @@ Idempotency-Key: N
 | key | 설명 | value 타입 | 옵션 | Nullable | 예시 |
 |---|---|---|---|---|---|
 | `page` | 페이지 번호 | Integer | 0부터, 기본 0 | O | `0` |
-| `size` | 페이지 크기 | Integer | 5·10·20·30·50, 기본 10 | O | `10` |
-| `all` | 전체 조회 | Boolean | 기본 `false`; `true`이면 `page`·`size` 무시, 최대 100건 | O | `false` |
+| `size` | 페이지 크기 | Integer | 1~100, 기본 20 | O | `20` |
 | `holdStatus` | 보류 상태 필터 | String(ENUM) | P4 상태값과 확정 | O | `"HELD"` |
 
 ### Response
@@ -397,25 +397,25 @@ Idempotency-Key: N
 | `message` | 응답 메시지 | String |  | X | `"정상 처리되었습니다."` |
 | `data.page` | 페이지 번호 | Integer |  | X | `0` |
 | `data.size` | 페이지 크기 | Integer |  | X | `10` |
-| `data.totalCount` | 전체 건수 | Long |  | X | `1` |
+| `data.totalElements` | 전체 건수 | Long |  | X | `1` |
 | `data.totalPages` | 전체 페이지 | Integer |  | X | `1` |
 | `data.items` | 보류 목록 | Array | 0건이면 `[]` | X | `[{...}]` |
 | `data.items[].transferHoldId` | 보류 ID | Long |  | X | `123` |
 | `data.items[].heldAt` | 보류 시각 | String(DateTime) |  | X | `"2026-11-03T13:02:00+09:00"` |
 | `data.items[].holdStatus` | 보류 상태 | String(ENUM) |  | X | `"HELD"` |
 | `data.items[].policyCode` | 서버 A/B 정책 | String |  | X | `"A"` |
-| `data.items[].investigationStatus` | AI 조사 상태 | String(ENUM) | `QUEUED`, `RUNNING`, `COMPLETED`, `FAILED` | O | `"QUEUED"` |
+| `data.items[].investigationStatus` | AI 조사 상태 | String(ENUM) | `PENDING`, `RUNNING`, `COMPLETED`, `FAILED` | O | `"PENDING"` |
 | `data.items[].amount` | 이체금액, 원 | Long |  | X | `500000` |
 | `data.items[].recipientAccountMasked` | 마스킹 수취계좌 | String | 정상 형식은 공통 `MaskingUtil` 형식으로 당행 앞 3·뒤 3자리만 표시; 원본 형식 오류는 원문 없이 `"확인 불가"` | X | `"088******006"` |
 | `data.items[].riskAccountCheck.status` | 위험 계좌 조회 상태 | String(ENUM) | `MATCH`, `NO_MATCH`, `UNAVAILABLE`; 조회 시점 안내값 | X | `"MATCH"` |
 | `data.items[].riskAccountCheck.label` | 관리자 목록 표시 문구 | String | 근거 ID·버전은 상세에서 제공 | X | `"위험 계좌 목록과 일치"` |
 
-목록은 `heldAt ASC, transferHoldId ASC`로 정렬한다. `all=true`는 최대 100건이며 초과하면 `CMN0006`이다. 전체 조회 응답의 `page=0`, `size=totalCount`, `totalPages=1`은 공통 목록 규약을 따른다. 조회 상태는 목록을 만든 시점의 참고값이고 관리자 조치 전에 서버가 다시 판정한다. 위험 조회만 실패하면 해당 항목의 상태를 `UNAVAILABLE`로 반환한다. 보류 원본 조회나 감사 저장 실패는 성공 목록으로 반환하지 않는다.
+목록은 `heldAt DESC, transferHoldId DESC` 최신순으로 정렬하고 `page`·`size(1~100)`를 적용한다. 조회 상태는 목록을 만든 시점의 참고값이고 관리자 조치 전에 서버가 다시 판정한다. 위험 조회만 실패하면 해당 항목의 상태를 `UNAVAILABLE`로 반환한다. 보류 원본 조회나 감사 저장 실패는 성공 목록으로 반환하지 않는다.
 
 **Example**
 
 ```json
-{"code":"0000","message":"정상 처리되었습니다.","data":{"page":0,"size":10,"totalCount":1,"totalPages":1,"items":[{"transferHoldId":123,"heldAt":"2026-11-03T13:02:00+09:00","holdStatus":"HELD","policyCode":"A","investigationStatus":"QUEUED","amount":500000,"recipientAccountMasked":"088******006","riskAccountCheck":{"status":"MATCH","label":"위험 계좌 목록과 일치"}}]}}
+{"code":"0000","message":"정상 처리되었습니다.","data":{"page":0,"size":20,"totalElements":1,"totalPages":1,"items":[{"transferHoldId":123,"heldAt":"2026-11-03T13:02:00+09:00","holdStatus":"HELD","policyCode":"A","investigationStatus":"PENDING","amount":500000,"recipientAccountMasked":"088******006","riskAccountCheck":{"status":"MATCH","label":"위험 계좌 목록과 일치"}}]}}
 ```
 
 ### Status
@@ -727,7 +727,7 @@ Idempotency-Key: Y
 
 **판정·조회:** 검증된 활성 버전에서 정확히 한 행이면 `MATCH`, 정상 조회 결과 0행이면 `NO_MATCH`다. 미적재·비활성·미검증, 위험 계좌 조회 장애·시간 초과, 중복·손상은 `UNAVAILABLE`이다. 관리자 인증·보류 원본 조회·조회 감사가 실패하면 상세 API 자체가 실패하며, 위험 계좌 조회만 실패하고 필수 조회·감사가 성공한 경우에만 HTTP 200·`code="0000"`으로 `UNAVAILABLE`을 반환한다. 위험 조회 실패를 빈 배열 또는 `NO_MATCH`로 바꾸지 않는다.
 
-**목록·상세 응답 확장:** §6 목록은 `heldAt` 오름차순, 동시각은 `transferHoldId` 오름차순으로 정렬한다. 각 목록 항목에는 `riskAccountCheck.status`와 `label`만 추가한다. §7 상세에는 아래 객체를 추가한다. `NO_MATCH`·`UNAVAILABLE`이면 `riskAccountId`는 `null`이다. `datasetVersion`은 활성 버전을 읽었을 때만 값이 있고, 그렇지 않으면 `null`이다. `checkedAt`은 위험 조회를 시도한 서버 시각이다. 목록·상세 계좌번호는 정상 형식일 때 기존 `MaskingUtil`에 따라 당행 앞 3·뒤 3자리만 표시하고, 형식 오류는 `MaskingUtil`을 호출하지 않고 `"확인 불가"`와 위험 상태 `UNAVAILABLE`을 반환한다.
+**목록·상세 응답 확장:** §6 목록은 `heldAt` 내림차순, 동시각은 `transferHoldId` 내림차순으로 정렬한다. 각 목록 항목에는 `riskAccountCheck.status`와 `label`만 추가한다. §7 상세에는 아래 객체를 추가한다. `NO_MATCH`·`UNAVAILABLE`이면 `riskAccountId`는 `null`이다. `datasetVersion`은 활성 버전을 읽었을 때만 값이 있고, 그렇지 않으면 `null`이다. `checkedAt`은 위험 조회를 시도한 서버 시각이다. 목록·상세 계좌번호는 정상 형식일 때 기존 `MaskingUtil`에 따라 당행 앞 3·뒤 3자리만 표시하고, 형식 오류는 `MaskingUtil`을 호출하지 않고 `"확인 불가"`와 위험 상태 `UNAVAILABLE`을 반환한다.
 
 ```json
 {"riskAccountCheck":{"status":"MATCH","label":"위험 계좌 목록과 일치","riskAccountId":501,"datasetVersion":"demo-risk-v1","checkedAt":"2026-11-08T14:00:00+09:00","sourceNotice":"프로젝트 시연용 합성 데이터이며 실제 사기 확정 정보가 아닙니다."}}

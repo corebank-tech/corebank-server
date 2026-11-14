@@ -9,6 +9,9 @@ import com.shinhan.corebank.fds.api.BehaviorFlowMappingUseCase;
 import com.shinhan.corebank.fds.application.port.out.BehaviorFlowPort;
 import com.shinhan.corebank.fds.application.port.out.BehaviorScoreInferencePort.Score;
 import com.shinhan.corebank.fds.application.port.out.BehaviorScorePort;
+import com.shinhan.corebank.fds.application.port.out.FdsAdminReadPort;
+import com.shinhan.corebank.fds.application.port.out.FdsInvestigationJobPort;
+import com.shinhan.corebank.fds.application.port.out.FdsInvestigationJobPort.HistorySnapshotItem;
 import com.shinhan.corebank.fds.application.service.BehaviorFlowService;
 import com.shinhan.corebank.fds.application.service.BehaviorFlowService.Batch;
 import com.shinhan.corebank.fds.application.service.BehaviorFlowService.EventInput;
@@ -41,7 +44,202 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
     private BehaviorFlowMappingUseCase mappings;
 
     @Autowired
+    private FdsInvestigationJobPort investigationJobs;
+
+    @Autowired
+    private FdsAdminReadPort adminReads;
+
+    @Autowired
     private JdbcTemplate jdbc;
+
+    @Test
+    void investigationJobKeepsStableIdAndCompletesWithOneReport() {
+        long holdId = 992000000L + Math.abs(UUID.randomUUID().getLeastSignificantBits() % 1000000);
+        String firstId = UUID.randomUUID().toString();
+        String replayId = UUID.randomUUID().toString();
+        LocalDateTime now = LocalDateTime.now();
+
+        assertThat(investigationJobs.createIfAbsent(holdId, firstId, now).investigationId())
+                .isEqualTo(firstId);
+        assertThat(investigationJobs.createIfAbsent(holdId, replayId, now).investigationId())
+                .isEqualTo(firstId);
+        assertThat(investigationJobs.claim(holdId, now, now.plusSeconds(70))).isEqualTo(1);
+        assertThat(investigationJobs.claim(holdId, now, now.plusSeconds(70))).isNull();
+        investigationJobs.recordEvidence(firstId, holdId, 992001L, now.minusHours(24), now, List.of(101L), now);
+        investigationJobs.recordEvidence(firstId, holdId, 992001L, now.minusHours(24), now, List.of(101L), now);
+        assertThatThrownBy(() -> investigationJobs.recordRecipientSnapshot(
+                        firstId, holdId, 2, 992001L, now.minusDays(1), true, 2, now))
+                .isInstanceOf(BusinessException.class);
+        investigationJobs.recordHistorySnapshot(
+                firstId,
+                holdId,
+                1,
+                992001L,
+                now.minusHours(24),
+                now,
+                true,
+                List.of(new HistorySnapshotItem(101L, 500_000L, now.minusMinutes(1), "***-**-0000")),
+                now);
+        investigationJobs.recordRecipientSnapshot(firstId, holdId, 1, 992001L, now.minusDays(1), true, 2, now);
+
+        investigationJobs.completeWithReport(
+                holdId, firstId, 1, "p6-investigation-v1", "{\"result\":\"ok\"}", "a".repeat(64), now);
+        investigationJobs.completeWithReport(
+                holdId, firstId, 1, "p6-investigation-v1", "{\"result\":\"ok\"}", "a".repeat(64), now);
+
+        assertThatThrownBy(() -> investigationJobs.completeWithReport(
+                        holdId, firstId, 1, "p6-investigation-v1", "{\"result\":\"different\"}", "b".repeat(64), now))
+                .isInstanceOf(BusinessException.class);
+
+        assertThat(investigationJobs.findByHoldId(holdId).status()).isEqualTo("COMPLETED");
+        assertThat(investigationJobs.findEvidenceIds(firstId)).containsExactly(101L);
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_investigation_report WHERE investigation_id=?",
+                        Integer.class,
+                        firstId))
+                .isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                        "SELECT report_sha256 FROM fds_investigation_report WHERE investigation_id=?",
+                        String.class,
+                        firstId))
+                .isEqualTo("a".repeat(64));
+        assertThat(adminReads.findToolResults(firstId).history().hasMore()).isTrue();
+        assertThat(adminReads.findToolResults(firstId).history().items()).hasSize(1);
+        assertThat(adminReads.findToolResults(firstId).recipient().otherWithdrawalAccountCount())
+                .isEqualTo(2);
+        assertThat(adminReads.findReport(firstId).schemaVersion()).isEqualTo("p6-investigation-v1");
+        assertThat(adminReads.findHoldIds()).contains(holdId);
+    }
+
+    @Test
+    void concurrentInvestigationRegistrationKeepsOneStableId() throws Exception {
+        long holdId = 992000000L + Math.abs(UUID.randomUUID().getLeastSignificantBits() % 1000000);
+        String firstId = UUID.randomUUID().toString();
+        String secondId = UUID.randomUUID().toString();
+        LocalDateTime now = LocalDateTime.now();
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (var workers = Executors.newFixedThreadPool(2)) {
+            var first = workers.submit(() -> {
+                start.await();
+                return investigationJobs.createIfAbsent(holdId, firstId, now).investigationId();
+            });
+            var second = workers.submit(() -> {
+                start.await();
+                return investigationJobs.createIfAbsent(holdId, secondId, now).investigationId();
+            });
+            start.countDown();
+
+            assertThat(first.get(10, TimeUnit.SECONDS)).isEqualTo(second.get(10, TimeUnit.SECONDS));
+        }
+
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_investigation_job WHERE transfer_hold_id=?", Integer.class, holdId))
+                .isEqualTo(1);
+    }
+
+    @Test
+    void investigationRetryFailureAndExpiredLeaseRecoveryPersistTransitions() {
+        LocalDateTime now = LocalDateTime.now();
+        long retryHoldId = investigationHoldId();
+        String retryId = UUID.randomUUID().toString();
+        investigationJobs.createIfAbsent(retryHoldId, retryId, now);
+        assertThat(investigationJobs.findDue(now, 100)).contains(retryHoldId);
+        assertThat(investigationJobs.claim(retryHoldId, now, now.plusSeconds(70)))
+                .isEqualTo(1);
+        assertThat(investigationJobs.retry(retryHoldId, 1, now.plusMinutes(1), "AGENT_UNAVAILABLE", now))
+                .isTrue();
+        assertThat(investigationJobs.findByInvestigationId(retryId).status()).isEqualTo("PENDING");
+        assertThat(investigationJobs.findDue(now, 100)).doesNotContain(retryHoldId);
+        assertThat(investigationJobs.findDue(now.plusMinutes(1), 100)).contains(retryHoldId);
+
+        assertThat(investigationJobs.claim(retryHoldId, now.plusMinutes(1), now.plusMinutes(2)))
+                .isEqualTo(2);
+        assertThat(investigationJobs.retry(retryHoldId, 1, now.plusMinutes(2), "STALE_RETRY", now))
+                .isFalse();
+        assertThat(investigationJobs.fail(retryHoldId, 1, "STALE_FAILURE", now)).isFalse();
+        assertThatThrownBy(() -> investigationJobs.completeWithReport(
+                        retryHoldId, retryId, 1, "p6-investigation-v1", "{\"result\":\"stale\"}", "d".repeat(64), now))
+                .isInstanceOf(BusinessException.class);
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_investigation_report WHERE investigation_id=?",
+                        Integer.class,
+                        retryId))
+                .isZero();
+        assertThat(investigationJobs.fail(retryHoldId, 2, "FINAL_FAILURE", now.plusMinutes(1)))
+                .isTrue();
+        assertThat(investigationJobs.findByHoldId(retryHoldId).status()).isEqualTo("FAILED");
+        assertThat(investigationJobs.claim(retryHoldId, now.plusMinutes(2), now.plusMinutes(3)))
+                .isNull();
+
+        long pendingRecoveryHoldId = investigationHoldId();
+        long failedRecoveryHoldId = investigationHoldId();
+        investigationJobs.createIfAbsent(
+                pendingRecoveryHoldId, UUID.randomUUID().toString(), now);
+        investigationJobs.createIfAbsent(failedRecoveryHoldId, UUID.randomUUID().toString(), now);
+        jdbc.update(
+                "UPDATE fds_investigation_job SET job_status='RUNNING', attempt_count=1, lease_expires_at=? "
+                        + "WHERE transfer_hold_id=?",
+                now.minusSeconds(1),
+                pendingRecoveryHoldId);
+        jdbc.update(
+                "UPDATE fds_investigation_job SET job_status='RUNNING', attempt_count=3, lease_expires_at=? "
+                        + "WHERE transfer_hold_id=?",
+                now.minusSeconds(1),
+                failedRecoveryHoldId);
+
+        assertThat(investigationJobs.recoverExpired(now)).isGreaterThanOrEqualTo(2);
+        assertThat(investigationJobs.findByHoldId(pendingRecoveryHoldId).status())
+                .isEqualTo("PENDING");
+        assertThat(investigationJobs.findByHoldId(pendingRecoveryHoldId).lastFailureReason())
+                .isEqualTo("LEASE_EXPIRED");
+        assertThat(investigationJobs.findByHoldId(failedRecoveryHoldId).status())
+                .isEqualTo("FAILED");
+    }
+
+    @Test
+    void investigationEvidenceRejectsInvalidScopeAndUnknownJob() {
+        LocalDateTime now = LocalDateTime.now();
+        long holdId = investigationHoldId();
+        String investigationId = UUID.randomUUID().toString();
+        investigationJobs.createIfAbsent(holdId, investigationId, now);
+
+        assertThatThrownBy(() ->
+                        investigationJobs.recordEvidence(investigationId, holdId, 992001L, null, now, List.of(1L), now))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() ->
+                        investigationJobs.recordEvidence(investigationId, holdId, 992001L, now, now, List.of(1L), now))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> investigationJobs.recordEvidence(
+                        investigationId, holdId, 992001L, now.minusHours(1), now, List.of(0L), now))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> investigationJobs.recordEvidence(
+                        UUID.randomUUID().toString(), holdId, 992001L, now.minusHours(1), now, List.of(1L), now))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> investigationJobs.recordEvidence(
+                        investigationId, holdId + 1, 992001L, now.minusHours(1), now, List.of(1L), now))
+                .isInstanceOf(BusinessException.class);
+        assertThat(investigationJobs.findByHoldId(Long.MAX_VALUE)).isNull();
+        assertThat(investigationJobs.findByInvestigationId(UUID.randomUUID().toString()))
+                .isNull();
+    }
+
+    @Test
+    void investigationReportCannotCompletePendingJob() {
+        LocalDateTime now = LocalDateTime.now();
+        long holdId = investigationHoldId();
+        String investigationId = UUID.randomUUID().toString();
+        investigationJobs.createIfAbsent(holdId, investigationId, now);
+
+        assertThatThrownBy(() -> investigationJobs.completeWithReport(
+                        holdId, investigationId, 0, "p6-investigation-v1", "{\"result\":\"ok\"}", "c".repeat(64), now))
+                .isInstanceOf(BusinessException.class);
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM fds_investigation_report WHERE investigation_id=?",
+                        Integer.class,
+                        investigationId))
+                .isZero();
+    }
 
     @Test
     void finalBatchIsAtomicAndReplayDoesNotDuplicateEvents() {
@@ -238,6 +436,10 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
 
     private static long positiveRefId() {
         return 975000000L + Math.abs(UUID.randomUUID().getLeastSignificantBits() % 1000000);
+    }
+
+    private static long investigationHoldId() {
+        return 992000000L + Math.abs(UUID.randomUUID().getLeastSignificantBits() % 1000000);
     }
 
     private boolean saveAfter(CountDownLatch start, long refId, UUID flowId, long customerId) throws Exception {

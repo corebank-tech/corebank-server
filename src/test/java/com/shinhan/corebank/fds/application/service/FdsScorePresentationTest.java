@@ -41,20 +41,23 @@ class FdsScorePresentationTest {
         scores.view = new BehaviorScoreView(123, "AVAILABLE", 0.81, "xgb-demo-v1", "p6-behavior-v1", null);
         FdsHoldDetail admin = detail.get(123, 9, "127.0.0.1", AccessReason.OPERATION);
         FdsInvestigationInput agent = input.build(123, "inv-123");
-        assertThat(admin.behaviorScoreStatus()).isEqualTo("AVAILABLE");
-        assertThat(admin.behaviorRiskScore()).isEqualTo(0.81);
-        assertThat(admin.modelVersion()).isEqualTo("xgb-demo-v1");
-        assertThat(admin.featureVersion()).isEqualTo("p6-behavior-v1");
-        assertThat(admin.behaviorScoreUnavailableReason()).isNull();
-        assertThat(admin.recipientAccountMasked()).isEqualTo("08******67");
+        assertThat(admin.behaviorScore().status()).isEqualTo("AVAILABLE");
+        assertThat(admin.behaviorScore().score()).isEqualTo(0.81);
+        assertThat(admin.behaviorScore().modelVersion()).isEqualTo("xgb-demo-v1");
+        assertThat(admin.behaviorScore().featureVersion()).isEqualTo("p6-behavior-v1");
+        assertThat(admin.behaviorScore().unavailableReason()).isNull();
+        assertThat(admin.originalTransfer().recipientAccountMasked()).isEqualTo("08******67");
         assertThat(admin.serverPolicy().policyCode()).isEqualTo("A");
         assertThat(admin.serverPolicy().count10m()).isEqualTo(3);
         assertThat(admin.serverPolicy().amount10m()).isEqualTo(1_500_000);
         assertThat(admin.serverPolicy().hesitationInWindow()).isTrue();
         assertThat(admin.serverPolicy().newRecipientAtWindowStart()).isTrue();
-        assertThat(agent.behaviorSummary().behaviorRiskScore()).isEqualTo(admin.behaviorRiskScore());
-        assertThat(agent.behaviorSummary().modelVersion()).isEqualTo(admin.modelVersion());
-        assertThat(agent.behaviorSummary().featureVersion()).isEqualTo(admin.featureVersion());
+        assertThat(agent.behaviorSummary().behaviorRiskScore())
+                .isEqualTo(admin.behaviorScore().score());
+        assertThat(agent.behaviorSummary().modelVersion())
+                .isEqualTo(admin.behaviorScore().modelVersion());
+        assertThat(agent.behaviorSummary().featureVersion())
+                .isEqualTo(admin.behaviorScore().featureVersion());
         assertThat(agent.transferSummary().recipientAccountMasked()).isEqualTo("***-**-4567");
         assertThat(audit.lastHoldId).isEqualTo(123);
     }
@@ -76,10 +79,11 @@ class FdsScorePresentationTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRemoteAddr("127.0.0.1");
 
-        var response = new FdsAdminHoldController(detail, currentCustomer).get(123, AccessReason.OPERATION, request);
+        var response =
+                new FdsAdminHoldController(detail, null, currentCustomer).get(123, AccessReason.OPERATION, request);
 
         assertThat(response.code()).isEqualTo("0000");
-        assertThat(response.data().behaviorRiskScore()).isEqualTo(0.81);
+        assertThat(response.data().behaviorScore().score()).isEqualTo(0.81);
         assertThat(audit.lastAdminId).isEqualTo(9L);
         assertThat(audit.lastIp).isEqualTo("127.0.0.1");
     }
@@ -104,11 +108,11 @@ class FdsScorePresentationTest {
     private void assertNoScore(String status, String reason) {
         FdsHoldDetail admin = detail.get(123, 9, "127.0.0.1", AccessReason.OPERATION);
         FdsInvestigationInput agent = input.build(123, "inv-123");
-        assertThat(admin.behaviorScoreStatus()).isEqualTo(status);
-        assertThat(admin.behaviorRiskScore()).isNull();
-        assertThat(admin.modelVersion()).isNull();
-        assertThat(admin.featureVersion()).isNull();
-        assertThat(admin.behaviorScoreUnavailableReason()).isEqualTo(reason);
+        assertThat(admin.behaviorScore().status()).isEqualTo(status);
+        assertThat(admin.behaviorScore().score()).isNull();
+        assertThat(admin.behaviorScore().modelVersion()).isNull();
+        assertThat(admin.behaviorScore().featureVersion()).isNull();
+        assertThat(admin.behaviorScore().unavailableReason()).isEqualTo(reason);
         assertThat(agent.behaviorSummary().behaviorScoreStatus()).isEqualTo(status);
         assertThat(agent.behaviorSummary().behaviorRiskScore()).isNull();
         assertThat(agent.behaviorSummary().modelVersion()).isNull();
