@@ -246,7 +246,7 @@ sudo cp /etc/letsencrypt/live/api.corebank.cloud/privkey.pem /etc/corebank-demo/
 sudo docker exec demo-nginx nginx -s reload
 ```
 
-**VM 접속**: VM은 AWS SSM 하이브리드 노드(`mi-0be0137569259c33f`)로 등록돼 있어 AWS 콘솔의 Systems Manager 세션으로 교육장 밖에서도 접속된다(세션 사용자 `ssm-user`, `sudo` 가능, 쓰기와 DB 접속 확인). 이 등록은 터라폼 밖에서 수동으로 했고, 3-Tier를 철거해도 등록을 해제하지 않으면 유지된다.
+**VM 접속**: VM은 AWS SSM 하이브리드 노드(`mi-0be0137569259c33f`)로 등록돼 있어 AWS 콘솔의 Systems Manager 세션으로 교육장 밖에서도 접속된다(세션 사용자 `ssm-user`, `sudo` 가능, 쓰기와 DB 접속 확인). 등록 자체는 수동으로 했지만 VM의 SSM Agent가 쓰는 IAM 역할(`${name_prefix}-onprem-ssm-role`)은 터라폼(`terraform/main`의 compute 모듈 `iam.tf`)이 관리한다. **`terraform/main`을 destroy하면 이 역할이 지워져 VM이 `ConnectionLost`가 되고 콘솔 세션이 열리지 않을 것으로 본다**(AWS가 실제로 어떻게 처리하는지는 시험하지 못했다). 철거 뒤에도 쓰려면 철거 전에 이 역할과 정책을 destroy 대상에서 빼야 하고(예: state에서 분리한 뒤 `terraform plan`으로 destroy 목록에서 빠지는지 확인), 공유 state라 팀과 조율한다. 가장 안전한 것은 철거 전에 VM 작업을 끝내 두는 것이다.
 
 ## 9. 관련 문서
 
