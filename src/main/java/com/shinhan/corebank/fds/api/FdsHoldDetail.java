@@ -105,6 +105,7 @@ public record FdsHoldDetail(
 
     public record Finding(String code, String description, String confidence, List<Long> evidenceTransferIds) {}
 
+    @Schema(name = "FdsHoldCallRecord")
     public record CallRecord(
             long callRecordId,
             String callResult,

@@ -35,6 +35,7 @@ public interface FdsInvestigationJobPort {
     void recordHistorySnapshot(
             String investigationId,
             long transferHoldId,
+            int attemptNo,
             long customerId,
             LocalDateTime rangeFrom,
             LocalDateTime rangeTo,
@@ -45,6 +46,7 @@ public interface FdsInvestigationJobPort {
     void recordRecipientSnapshot(
             String investigationId,
             long transferHoldId,
+            int attemptNo,
             long customerId,
             LocalDateTime firstSucceededAt,
             boolean hasSucceededBeforeWindow,

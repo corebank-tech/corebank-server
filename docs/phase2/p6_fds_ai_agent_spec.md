@@ -284,7 +284,7 @@ MVP에서는 **Python FastAPI에서 XGBoost 추론**한다. 서버 A/B 정책은
 
 조사 워커는 `FDS_INVESTIGATION_SERVICE_TOKEN`으로 Python의 `POST /internal/fds/investigations/run`을 호출한다. Python은 `FDS_AGENT_SERVICE_TOKEN`으로 P6 Tool API를 조회하고 `PUT /api/v1/internal/fds/investigations/{investigationId}/report`에 보고서를 먼저 제출한다. **보고서 콜백 서비스만** 보고서 저장과 `RUNNING → COMPLETED` 전이를 소유한다. Python이 `COMPLETED`를 반환한 뒤 워커는 동일 조사 ID의 완료 상태와 보고서 존재만 재조회하며 보고서를 다시 저장하지 않는다. 응답만 성공이고 콜백 결과가 없으면 성공으로 추정하지 않는다.
 
-P6은 Agent에게 실제 제공한 최근 이체 항목과 수취인 맥락을 조사 ID별 스냅샷으로 저장한다. 관리자 상세은 이 스냅샷과 확정 보고서를 읽으며 P4 Tool을 다시 호출하지 않는다. 보고서의 `evidenceTransferIds`는 같은 조사 스냅샷에 실제 포함된 `refId`만 허용한다.
+P6은 Tool 요청의 `attemptNo`를 작업 행 잠금 아래 현재 `RUNNING` 실행 세대와 대조하고, Agent에게 실제 제공한 최근 이체 항목과 수취인 맥락을 조사 ID별 스냅샷으로 저장한다. 이전 시도의 늦은 요청은 새 실행 세대의 근거로 저장하지 않는다. 관리자 상세은 이 스냅샷과 확정 보고서를 읽으며 P4 Tool을 다시 호출하지 않는다. 보고서의 `evidenceTransferIds`는 같은 조사 스냅샷에 실제 포함된 `refId`만 허용한다.
 
 검증된 flow가 없으면 `FLOW_UNAVAILABLE`, flow는 있으나 피처 계산 결과가 없거나 유효하지 않으면 `INVALID_FEATURES`로 추론 없이 마감한다. 모델 부재, 입력 오류, 시간 초과, Python 장애가 있으면 점수는 null, 상태는 `UNAVAILABLE`로 기록하고 [Enum 마스터 §5-11](../api_conventions.md#5-11-fds-행동-점수--p6-928)의 사유를 남긴다.
 
@@ -536,8 +536,8 @@ P4의 토큰 소비·보류 저장·해제 계약은 문서로 확정됐으며, 
 | BE → FE | 이체 응답 | 정상 실행 또는 `HELD` + `transferHoldId` |
 | 내부 작업 | `TransferHeld` 이벤트 → P6 점수 기록·처리 | #951 점수 리스너가 `fds_behavior_score`를 멱등 생성하고 추론 시작을 원자적으로 선점·복구 |
 | 내부 작업 | `TransferHeld` 이벤트 → P6 조사 작업 | B4가 조사 작업을 내구성 있게 등록하고 임대·재시도·보고서를 관리하며 점수 처리와 독립 |
-| AI → BE | `GET /internal/fds/holds/{transferHoldId}/history` | Tool 1 거래 이력 |
-| AI → BE | `GET /internal/fds/holds/{transferHoldId}/recipient-context` | Tool 2 수취인 맥락 |
+| AI → BE | `GET /internal/fds/holds/{transferHoldId}/history?attemptNo={attemptNo}` | Tool 1 거래 이력·현재 실행 세대 검증 |
+| AI → BE | `GET /internal/fds/holds/{transferHoldId}/recipient-context?attemptNo={attemptNo}` | Tool 2 수취인 맥락·현재 실행 세대 검증 |
 | AI → BE | `PUT /internal/fds/investigations/{investigationId}/report` | 조사 결과 멱등 저장 |
 | 관리자 | `GET /admin/fds/holds` | 목록 |
 | 관리자 | `GET /admin/fds/holds/{transferHoldId}` | 상세·조사 결과 |

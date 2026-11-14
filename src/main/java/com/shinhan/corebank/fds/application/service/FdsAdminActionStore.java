@@ -70,7 +70,10 @@ public class FdsAdminActionStore {
             if (!fingerprint.equals(concurrent.fingerprint())) conflict();
             return concurrent;
         }
-        return new CallRecord(key.getKey().longValue(), fingerprint, result, now);
+        // 최초 요청도 DB 정본을 반환해 재전달 응답의 ID와 DATETIME(6) 정밀도를 동일하게 유지한다.
+        CallRecord stored = callByKey(idempotencyKey);
+        if (stored == null) conflict();
+        return stored;
     }
 
     @Transactional
@@ -175,7 +178,8 @@ public class FdsAdminActionStore {
         }
         if (call == null) conflict();
         if ("APPROVE".equals(type) && !"CUSTOMER_CONFIRMED".equals(call.result())) conflict();
-        if ("REJECT".equals(type) && !"CUSTOMER_DENIED".equals(call.result())) conflict();
+        if ("REJECT".equals(type) && (!"CUSTOMER_DENIED".equals(call.result()) || !"CUSTOMER_DENIED".equals(reason)))
+            conflict();
         if (!("APPROVE".equals(type) || "REJECT".equals(type))) invalid();
     }
 

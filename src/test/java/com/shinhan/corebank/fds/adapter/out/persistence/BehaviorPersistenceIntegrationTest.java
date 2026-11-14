@@ -67,16 +67,20 @@ class BehaviorPersistenceIntegrationTest extends IntegrationTestSupport {
         assertThat(investigationJobs.claim(holdId, now, now.plusSeconds(70))).isNull();
         investigationJobs.recordEvidence(firstId, holdId, 992001L, now.minusHours(24), now, List.of(101L), now);
         investigationJobs.recordEvidence(firstId, holdId, 992001L, now.minusHours(24), now, List.of(101L), now);
+        assertThatThrownBy(() -> investigationJobs.recordRecipientSnapshot(
+                        firstId, holdId, 2, 992001L, now.minusDays(1), true, 2, now))
+                .isInstanceOf(BusinessException.class);
         investigationJobs.recordHistorySnapshot(
                 firstId,
                 holdId,
+                1,
                 992001L,
                 now.minusHours(24),
                 now,
                 true,
                 List.of(new HistorySnapshotItem(101L, 500_000L, now.minusMinutes(1), "***-**-0000")),
                 now);
-        investigationJobs.recordRecipientSnapshot(firstId, holdId, 992001L, now.minusDays(1), true, 2, now);
+        investigationJobs.recordRecipientSnapshot(firstId, holdId, 1, 992001L, now.minusDays(1), true, 2, now);
 
         investigationJobs.completeWithReport(
                 holdId, firstId, 1, "p6-investigation-v1", "{\"result\":\"ok\"}", "a".repeat(64), now);

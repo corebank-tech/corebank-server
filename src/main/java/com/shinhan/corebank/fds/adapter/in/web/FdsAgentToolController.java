@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Python Agent 전용 읽기 Tool과 멱등 보고서 콜백 계약. */
@@ -35,24 +36,28 @@ public class FdsAgentToolController {
     @Operation(
             operationId = "getFdsAgentTransferHistory",
             summary = "최근 성공 이체 조회",
-            description = "FDS_AGENT_SERVICE_TOKEN으로 보류 고객의 heldAt 이전 24시간을 최신순 100건까지 조회합니다.")
+            description =
+                    "FDS_AGENT_SERVICE_TOKEN과 실행 요청에서 받은 attemptNo로 현재 실행 세대를 검증한 뒤, 보류 고객의 heldAt 이전 24시간을 최신순 100건까지 조회합니다.")
     public ApiResponse<FdsAgentToolService.HistoryData> history(
             @PathVariable @Positive long transferHoldId,
+            @RequestParam @Positive int attemptNo,
             @RequestHeader(name = "Authorization", required = false) String authorization) {
         tokens.verify(authorization);
-        return ApiResponse.success(tools.history(transferHoldId));
+        return ApiResponse.success(tools.history(transferHoldId, attemptNo));
     }
 
     @GetMapping("/holds/{transferHoldId}/recipient-context")
     @Operation(
             operationId = "getFdsAgentRecipientContext",
             summary = "수취인 성공 이력 요약",
-            description = "FDS_AGENT_SERVICE_TOKEN으로 보류 원본의 고객·수취계좌·출금계좌 범위만 조회합니다.")
+            description =
+                    "FDS_AGENT_SERVICE_TOKEN과 실행 요청에서 받은 attemptNo로 현재 실행 세대를 검증한 뒤, 보류 원본의 고객·수취계좌·출금계좌 범위만 조회합니다.")
     public ApiResponse<FdsAgentToolService.RecipientData> recipient(
             @PathVariable @Positive long transferHoldId,
+            @RequestParam @Positive int attemptNo,
             @RequestHeader(name = "Authorization", required = false) String authorization) {
         tokens.verify(authorization);
-        return ApiResponse.success(tools.recipient(transferHoldId));
+        return ApiResponse.success(tools.recipient(transferHoldId, attemptNo));
     }
 
     @PutMapping(value = "/investigations/{investigationId}/report", consumes = MediaType.APPLICATION_JSON_VALUE)

@@ -175,12 +175,14 @@ public class JdbcFdsInvestigationJobAdapter implements FdsInvestigationJobPort {
     public void recordHistorySnapshot(
             String investigationId,
             long holdId,
+            int attemptNo,
             long customerId,
             LocalDateTime rangeFrom,
             LocalDateTime rangeTo,
             boolean hasMore,
             List<HistorySnapshotItem> items,
             LocalDateTime now) {
+        lockCurrentAttempt(investigationId, holdId, attemptNo);
         recordEvidence(
                 investigationId,
                 holdId,
@@ -218,13 +220,14 @@ public class JdbcFdsInvestigationJobAdapter implements FdsInvestigationJobPort {
     public void recordRecipientSnapshot(
             String investigationId,
             long holdId,
+            int attemptNo,
             long customerId,
             LocalDateTime firstSucceededAt,
             boolean hasSucceededBeforeWindow,
             int otherWithdrawalAccountCount,
             LocalDateTime now) {
-        FdsInvestigationJob job = findByInvestigationId(investigationId);
-        if (job == null || job.transferHoldId() != holdId || otherWithdrawalAccountCount < 0) {
+        lockCurrentAttempt(investigationId, holdId, attemptNo);
+        if (otherWithdrawalAccountCount < 0) {
             throw new BusinessException(FdsErrorCode.NOT_FOUND);
         }
         jdbc.update(
@@ -239,6 +242,18 @@ public class JdbcFdsInvestigationJobAdapter implements FdsInvestigationJobPort {
                 hasSucceededBeforeWindow,
                 otherWithdrawalAccountCount,
                 timestamp(now));
+    }
+
+    private void lockCurrentAttempt(String investigationId, long holdId, int attemptNo) {
+        // 작업 행 잠금 안에서 실행 세대를 검증해 늦은 Tool 응답이 새 시도 근거를 오염시키지 못하게 한다.
+        Integer matchedAttempt = jdbc.query(
+                "SELECT attempt_count FROM fds_investigation_job WHERE investigation_id=? AND transfer_hold_id=? "
+                        + "AND job_status='RUNNING' AND attempt_count=? FOR UPDATE",
+                rs -> rs.next() ? rs.getInt(1) : null,
+                investigationId,
+                holdId,
+                attemptNo);
+        if (matchedAttempt == null) throw new BusinessException(FdsErrorCode.FLOW_CONFLICT);
     }
 
     @Override

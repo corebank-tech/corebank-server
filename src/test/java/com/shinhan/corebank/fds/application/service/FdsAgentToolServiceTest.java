@@ -57,7 +57,7 @@ class FdsAgentToolServiceTest {
                 .toList();
         when(history.findRecent(20L, HELD_AT.minusHours(24), HELD_AT, 101)).thenReturn(transfers);
 
-        var result = service.history(10L);
+        var result = service.history(10L, 1);
 
         assertThat(result.hasMore()).isTrue();
         assertThat(result.items()).hasSize(100);
@@ -66,6 +66,7 @@ class FdsAgentToolServiceTest {
                 .recordHistorySnapshot(
                         eq("inv-10"),
                         eq(10L),
+                        eq(1),
                         eq(20L),
                         eq(HELD_AT.minusHours(24)),
                         eq(HELD_AT),
@@ -78,24 +79,27 @@ class FdsAgentToolServiceTest {
 
     @Test
     void recipientContextUsesHoldOwnedScopeAndWindowStart() {
-        stubContext("COMPLETED");
+        stubContext("RUNNING");
         when(history.summarizeRecipient(20L, "110039200000", 30L))
                 .thenReturn(new RecipientHistory(HELD_AT.minusMinutes(11), 2));
 
-        var result = service.recipient(10L);
+        var result = service.recipient(10L, 1);
 
         assertThat(result.hasSucceededBeforeWindow()).isTrue();
         assertThat(result.otherWithdrawalAccountCount()).isEqualTo(2);
-        verify(jobs).recordRecipientSnapshot("inv-10", 10L, 20L, HELD_AT.minusMinutes(11), true, 2, HELD_AT);
+        verify(jobs).recordRecipientSnapshot("inv-10", 10L, 1, 20L, HELD_AT.minusMinutes(11), true, 2, HELD_AT);
     }
 
     @Test
     void rejectsMissingOrInactiveInvestigation() {
         when(jobs.findByHoldId(10L)).thenReturn(null);
-        assertThatThrownBy(() -> service.history(10L)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.history(10L, 1)).isInstanceOf(BusinessException.class);
 
         when(jobs.findByHoldId(10L)).thenReturn(job("FAILED"));
-        assertThatThrownBy(() -> service.recipient(10L)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.recipient(10L, 1)).isInstanceOf(BusinessException.class);
+
+        when(jobs.findByHoldId(10L)).thenReturn(job("RUNNING"));
+        assertThatThrownBy(() -> service.history(10L, 2)).isInstanceOf(BusinessException.class);
     }
 
     @Test
@@ -103,11 +107,11 @@ class FdsAgentToolServiceTest {
         stubContext("RUNNING", "123");
         when(history.findRecent(eq(20L), any(), eq(HELD_AT), eq(101)))
                 .thenReturn(List.of(new SucceededTransfer(1L, 1000L, HELD_AT.minusMinutes(1), null)));
-        assertThat(service.history(10L).items().getFirst().recipientAccountMasked())
+        assertThat(service.history(10L, 1).items().getFirst().recipientAccountMasked())
                 .isEqualTo("****");
 
         when(history.summarizeRecipient(20L, "123", 30L)).thenReturn(new RecipientHistory(null, 0));
-        assertThat(service.recipient(10L).hasSucceededBeforeWindow()).isFalse();
+        assertThat(service.recipient(10L, 1).hasSucceededBeforeWindow()).isFalse();
     }
 
     private void stubContext(String status) {

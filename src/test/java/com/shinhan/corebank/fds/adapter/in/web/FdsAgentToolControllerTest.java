@@ -21,19 +21,20 @@ class FdsAgentToolControllerTest {
         var history = new FdsAgentToolService.HistoryData(10L, List.of(), false);
         var recipient = new FdsAgentToolService.RecipientData(10L, false, null, 0);
         var acknowledgement = new FdsInvestigationReportService.Acknowledgement("inv-1", "COMPLETED");
-        when(tools.history(10L)).thenReturn(history);
-        when(tools.recipient(10L)).thenReturn(recipient);
+        when(tools.history(10L, 1)).thenReturn(history);
+        when(tools.recipient(10L, 1)).thenReturn(recipient);
         when(reports.submit("inv-1", "{}")).thenReturn(acknowledgement);
         FdsAgentToolController controller = new FdsAgentToolController(tokens, tools, reports);
 
-        assertThat(controller.history(10L, "Bearer agent-secret").data()).isSameAs(history);
-        assertThat(controller.recipient(10L, "Bearer agent-secret").data()).isSameAs(recipient);
+        assertThat(controller.history(10L, 1, "Bearer agent-secret").data()).isSameAs(history);
+        assertThat(controller.recipient(10L, 1, "Bearer agent-secret").data()).isSameAs(recipient);
         assertThat(controller
                         .report("inv-1", "Bearer agent-secret", "inv-1", "{}")
                         .data())
                 .isSameAs(acknowledgement);
         assertThatThrownBy(() -> controller.report("inv-1", "Bearer agent-secret", "other", "{}"))
                 .isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> controller.history(10L, "Bearer score-secret")).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> controller.history(10L, 1, "Bearer score-secret"))
+                .isInstanceOf(BusinessException.class);
     }
 }

@@ -13,8 +13,8 @@
 |---|---|---|---|
 | FE → BE 행동 제출 | `POST /fds/behavior-flows/{flowId}/events` | `POST /api/v1/fds/behavior-flows/{flowId}/events` | P6 경로 결정·미구현 |
 | FE → BE 즉시이체 | `POST /transfers` | `POST /api/v1/transfers` | P4 **기존 구현**. `flowId` 선택 필드·멱등 지문 포함 구현됨 |
-| Agent → BE 거래 이력 | `GET /internal/fds/holds/{transferHoldId}/history` | `GET /api/v1/internal/fds/holds/{transferHoldId}/history` | P6 경로 결정·미구현; P4 보류 원본·상태 조회 계약 필요 |
-| Agent → BE 수취인 맥락 | `GET /internal/fds/holds/{transferHoldId}/recipient-context` | `GET /api/v1/internal/fds/holds/{transferHoldId}/recipient-context` | P6 경로 결정·미구현 |
+| Agent → BE 거래 이력 | `GET /internal/fds/holds/{transferHoldId}/history?attemptNo={attemptNo}` | 동일 | 현재 실행 세대와 작업 상태를 잠금 검증한 뒤 제공 스냅샷 저장 |
+| Agent → BE 수취인 맥락 | `GET /internal/fds/holds/{transferHoldId}/recipient-context?attemptNo={attemptNo}` | 동일 | 현재 실행 세대와 작업 상태를 잠금 검증한 뒤 제공 스냅샷 저장 |
 | Agent → BE 보고서 제출 | `PUT /internal/fds/investigations/{investigationId}/report` | `PUT /api/v1/internal/fds/investigations/{investigationId}/report` | P6 경로 결정·미구현 |
 | 관리자 목록·상세 | `GET /admin/fds/holds`, `GET /admin/fds/holds/{transferHoldId}` | `GET /api/v1/admin/fds/holds`, `GET /api/v1/admin/fds/holds/{transferHoldId}` | P6 경로 결정·미구현 |
 | 관리자 콜 기록 | `POST /admin/fds/holds/{transferHoldId}/call-record` | `POST /api/v1/admin/fds/holds/{transferHoldId}/call-record` | P6 경로 결정·미구현 |
@@ -118,7 +118,7 @@ P6은 FE에서 보류를 이체 완료로 표시하지 않는다. 승인 대기�
 | API | 요청 입력 | 응답의 최소 내용 | 실패 처리 |
 |---|---|---|---|
 | `GET .../history` | `transferHoldId`; 보류 직전 최대 24시간 | 최근 성공 이체 최신순 최대 100건의 `refId`·시각·금액·마스킹 수취계좌와 잘림 여부 `hasMore` | P4 `transfer.api`의 이체 목록 조회 인계 대기. 권한·보류 조회 실패면 조사 실패; 거래가 없음은 빈 배열 |
-| `GET .../recipient-context` | `transferHoldId` | 해당 고객·수취인의 **전체 과거 성공 이력** 존재 여부·최초 성공 시각·현재 보류 건 출금계좌를 제외한 다른 출금계좌 수(`withdrawalAccountId` DISTINCT)의 좁은 집계(목록 미반환) | P4 `transfer.api`의 수취인 집계 조회 인계 대기. 정보 없음과 조회 장애 구분; 최근 목록에 없다는 이유로 신규 수취인으로 취급하지 않음 |
+| `GET .../recipient-context` | `transferHoldId`, 실행 요청에서 받은 `attemptNo` | 해당 고객·수취인의 **전체 과거 성공 이력** 존재 여부·최초 성공 시각·현재 보류 건 출금계좌를 제외한 다른 출금계좌 수(`withdrawalAccountId` DISTINCT)의 좁은 집계(목록 미반환) | 작업 행 잠금 아래 `RUNNING`·현재 실행 세대 일치 검증; 정보 없음과 조회 장애 구분; 최근 목록에 없다는 이유로 신규 수취인으로 취급하지 않음 |
 | `PUT .../report` | 경로 `investigationId`, 본문 `transferHoldId`·실행 요청에서 받은 `attemptNo`·조사 상태·`secondaryFindings`·근거 ID | 저장된 조사 ID·상태 | 같은 조사 ID·세대의 재제출은 멱등; 이전 실행 세대와 허용 조회 결과 밖의 근거 ID는 거부 |
 
 ```json

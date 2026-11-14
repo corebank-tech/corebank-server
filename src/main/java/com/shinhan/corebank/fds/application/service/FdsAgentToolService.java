@@ -25,8 +25,8 @@ public class FdsAgentToolService {
     private final SucceededTransferHistoryQuery history;
     private final Clock clock;
 
-    public HistoryData history(long holdId) {
-        Context context = context(holdId);
+    public HistoryData history(long holdId, int attemptNo) {
+        Context context = context(holdId, attemptNo);
         LocalDateTime to = context.hold().heldAt();
         LocalDateTime from = to.minusHours(24);
         List<SucceededTransfer> found = history.findRecent(context.hold().customerId(), from, to, 101);
@@ -36,6 +36,7 @@ public class FdsAgentToolService {
         jobs.recordHistorySnapshot(
                 context.job().investigationId(),
                 holdId,
+                attemptNo,
                 context.hold().customerId(),
                 from,
                 to,
@@ -48,8 +49,8 @@ public class FdsAgentToolService {
         return new HistoryData(holdId, items, hasMore);
     }
 
-    public RecipientData recipient(long holdId) {
-        Context context = context(holdId);
+    public RecipientData recipient(long holdId, int attemptNo) {
+        Context context = context(holdId, attemptNo);
         RecipientHistory summary = history.summarizeRecipient(
                 context.hold().customerId(),
                 context.hold().depositAccountNumber(),
@@ -59,6 +60,7 @@ public class FdsAgentToolService {
         jobs.recordRecipientSnapshot(
                 context.job().investigationId(),
                 holdId,
+                attemptNo,
                 context.hold().customerId(),
                 summary.firstSucceededAt(),
                 beforeWindow,
@@ -68,9 +70,9 @@ public class FdsAgentToolService {
                 holdId, beforeWindow, summary.firstSucceededAt(), summary.otherWithdrawalAccountCount());
     }
 
-    private Context context(long holdId) {
+    private Context context(long holdId, int attemptNo) {
         FdsInvestigationJob job = jobs.findByHoldId(holdId);
-        if (job == null || !("RUNNING".equals(job.status()) || "COMPLETED".equals(job.status()))) {
+        if (job == null || !"RUNNING".equals(job.status()) || job.attemptCount() != attemptNo) {
             throw new BusinessException(FdsErrorCode.NOT_FOUND);
         }
         TransferHoldForFds hold = holds.findForFds(holdId);

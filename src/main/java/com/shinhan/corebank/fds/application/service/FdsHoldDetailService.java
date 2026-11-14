@@ -58,7 +58,7 @@ public class FdsHoldDetailService {
         this(holds, scores, audit, null, null, null, null);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public FdsHoldDetail get(long holdId, long adminId, String requestIp, AccessReason reason) {
         TransferHoldForFds hold = findHold(holdId);
         BehaviorScoreView score = scores.find(holdId);

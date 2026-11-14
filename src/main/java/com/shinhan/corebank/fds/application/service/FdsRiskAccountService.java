@@ -36,11 +36,13 @@ public class FdsRiskAccountService {
             if (version == null) return Check.unavailable(null, "ACTIVE_DATASET_MISSING");
             List<Long> ids = jdbc.queryForList(
                     "SELECT risk_account_id FROM fds_risk_account "
-                            + "WHERE dataset_version=? AND bank_code=? AND account_number=?",
+                            + "WHERE dataset_version=? AND bank_code=? AND account_number=?"
+                            + (lockActiveVersion ? " FOR UPDATE" : ""),
                     Long.class,
                     version,
                     normalizeBank(bankCode),
                     normalizeAccount(accountNumber));
+            // 관리자 조치는 복합 유니크 키의 행·갭 잠금으로 활성 버전 전환과 동일 스냅샷을 유지한다.
             return ids.isEmpty() ? Check.noMatch(version) : Check.match(ids.getFirst(), version);
         } catch (DataAccessException exception) {
             return Check.unavailable(null, "RISK_LOOKUP_FAILED");

@@ -169,11 +169,11 @@ P4가 보류 응답을 확정하기 전까지 제안 필드로 FE를 고정 구�
 카테고리: FDS
 설명: 보류 사건 고객에게 허용된 과거 이체만 Agent에 제공한다.
 Method: GET
-URL: `/api/v1/internal/fds/holds/{transferHoldId}/history`
+URL: `/internal/fds/holds/{transferHoldId}/history?attemptNo={attemptNo}`
 사용자: 시스템
 인증 필요: Y
 Idempotency-Key: N
-기타: `Authorization: Bearer <Agent 서비스 토큰>` 필수. 전용 stateless 체인·발표 VM의 사설 Compose 브리지로 보호한다. 호스트 분리 시 내부 TLS를 적용한다. `transferHoldId`로 조회 고객을 제한하고 계좌번호를 마스킹한다. 이 Tool은 보류 시각 직전 최대 24시간의 성공 이체를 최신순으로 최대 100건 보여 준다. 100건을 넘어 잘렸으면 `hasMore=true`로 알린다. 수취인과의 전체 과거 거래 여부는 §4의 별도 집계로 확인한다. 아직 미구현.
+기타: `Authorization: Bearer <Agent 서비스 토큰>`과 조사 실행 요청에서 받은 양의 `attemptNo`가 필수다. 서버는 작업 행 잠금 아래 `RUNNING` 상태와 현재 `attempt_count` 일치를 확인한 뒤 스냅샷을 저장하여 이전 실행 세대의 늦은 Tool 응답을 거부한다. 전용 stateless 체인·발표 VM의 사설 Compose 브리지로 보호한다. 호스트 분리 시 내부 TLS를 적용한다. `transferHoldId`로 조회 고객을 제한하고 계좌번호를 마스킹한다. 이 Tool은 보류 시각 직전 최대 24시간의 성공 이체를 최신순으로 최대 100건 보여 준다. 100건을 넘어 잘렸으면 `hasMore=true`로 알린다. 수취인과의 전체 과거 거래 여부는 §4의 별도 집계로 확인한다.
 
 ### 요구사항 ID
 
@@ -231,11 +231,11 @@ Idempotency-Key: N
 카테고리: FDS
 설명: 보류 사건 고객의 수취인 관계와 다른 출금계좌 송금 맥락을 추가 조사한다.
 Method: GET
-URL: `/api/v1/internal/fds/holds/{transferHoldId}/recipient-context`
+URL: `/internal/fds/holds/{transferHoldId}/recipient-context?attemptNo={attemptNo}`
 사용자: 시스템
 인증 필요: Y
 Idempotency-Key: N
-기타: `Authorization: Bearer <Agent 서비스 토큰>` 필수. 전용 stateless 체인·발표 VM의 사설 Compose 브리지로 보호한다. 호스트 분리 시 내부 TLS를 적용한다. P4 보류 원본·상태 조회 계약 선행. 해당 수취인과의 과거 성공 이체 존재 여부는 최근 이력 Tool의 조회 기간과 무관하게 전체 과거 성공 이력의 좁은 집계로 조회한다. 거래 목록은 반환하지 않는다. 최근 이력 Tool에서 거래가 없다는 이유만으로 신규 수취인이나 사기를 판정하지 않는다. 아직 미구현.
+기타: `Authorization: Bearer <Agent 서비스 토큰>`과 조사 실행 요청에서 받은 양의 `attemptNo`가 필수다. 서버는 작업 행 잠금 아래 현재 실행 세대를 검증하고 해당 세대의 스냅샷만 저장한다. 전용 stateless 체인·발표 VM의 사설 Compose 브리지로 보호한다. 호스트 분리 시 내부 TLS를 적용한다. 해당 수취인과의 과거 성공 이체 존재 여부는 최근 이력 Tool의 조회 기간과 무관하게 전체 과거 성공 이력의 좁은 집계로 조회한다. 거래 목록은 반환하지 않는다. 최근 이력 Tool에서 거래가 없다는 이유만으로 신규 수취인이나 사기를 판정하지 않는다.
 
 ### 요구사항 ID
 
