@@ -79,6 +79,7 @@ echo "$A1" | sudo bash -c 'MYSQL_PWD=$(cat /etc/info-etl/replica-root.pw) docker
 echo "$A2" | sudo bash -c 'MYSQL_PWD=$(cat /etc/info-etl/replica-root.pw) docker exec -i -e MYSQL_PWD info-replica-mysql mysql -uroot'
 ```
 
+- **이 블록은 한 번만 실행한다.** 계정이 이미 있으면 `CREATE USER`는 실패하는데 비밀번호 변수는 새로 만들어져, 뒤의 환경 파일 값과 DB 계정의 비밀번호가 어긋나 API가 DB에 붙지 못한다. 다시 실행하기 전에 `SELECT user, host FROM mysql.user`로 계정이 없는지 확인한다(`flyway_user` 단계만 실패했다면 그 줄만 따로 실행하고 `FLY_PW`만 새로 만든다).
 - 두 계정 모두 `REQUIRE SSL`이다(앱 접속이 `sslMode=REQUIRED`). Host는 기존 계정(`etl_replica_reader`, `root`)처럼 `%`로 만들었다.
 - `sql_log_bin=0`으로 만들어 복제 기록(GTID)에 남기지 않았고, 생성 직후 `gtid_executed`가 승격 시점 값(`...:1-91316`) 그대로임을 확인했다.
 - `app_user`는 데이터 읽기 · 쓰기만, `flyway_user`는 릴리스 6의 마이그레이션(CREATE · ALTER · DROP · INDEX · REFERENCES와 `common_code` INSERT)에 필요한 권한이다. 릴리스 6을 적용하기 전에 권한을 한 번 더 확인한다(#989).
@@ -95,6 +96,8 @@ echo 'CORS_ALLOWED_ORIGINS=https://www.corebank.cloud' | sudo tee -a /etc/coreba
 sudo cut -d= -f1 /etc/corebank/app.env | sort | tr '\n' ' '      # 변수 이름만 확인
 ```
 
+- 시험용 파일을 통째로 복사하므로 **시드 실행 플래그(`APP_PHASE2_SEED_*`)가 섞여 있으면 지운다**(`sudo sed -i '/^APP_PHASE2_SEED_/d' /etc/corebank/app.env`). `phase2-seed` 프로필에서는 최소 시드 플래그 하나만 있어도 가드가 막지 않아 기동 때 승격 DB에 시드가 적재될 수 있다. 11/13 14:23 기동 뒤 11/14 15:42에 시연 계정이 들어오기 전까지 새 고객이 생기지 않았으므로 이번에는 적재되지 않았다.
+
 ### 5-3. 기동
 
 ```bash
@@ -108,7 +111,7 @@ sudo docker run -d --name corebank-server --network host --cpus 1 --memory 2g \
 ```
 
 - `DB_HOST=127.0.0.1`, DB 계정은 §5-1에서 만든 `app_user` · `flyway_user`다. 11/13 14:23에 이 명령으로 기동했고 헬스 200, `Started CorebankApplication` 약 25초였다.
-- **첫 기동은 `-e SPRING_PROFILES_ACTIVE=prod,phase2-seed`로 했다.** 스케줄러(COB 23:30, 일일 이체 배치)를 끄려는 것이었다(승격 DB의 영업일이 2026-11-12에서 멈춰 있었다). **그러나 이 프로필로도 스케줄러가 돌았다(2026-11-14 확인).** 로그상 활성 프로필은 `prod`, `phase2-seed`인데, 11/13 23:30에 이 서버가 COB를 실행해 영업일이 11/12 → 11/13이 됐고(`business_date_cutoff` 11/12 `CLOSED`, `ledger-reconciliation` · `account-maturity` `SUCCESS`), 11/14 00:10~00:14에 일일 이체 배치가 385건을 만들었다. 스케줄링이 켜지는 경로는 확인하지 못했다. **이 프로필을 스케줄러 차단 수단으로 믿지 않는다.** 스케줄러를 켠 채 운영할지는 팀과 정한다.
+- **첫 기동은 `-e SPRING_PROFILES_ACTIVE=prod,phase2-seed`로 했다.** 스케줄러(COB 23:30, 일일 이체 배치)를 끄려는 것이었다(승격 DB의 영업일이 2026-11-12에서 멈춰 있었다). **그러나 이 프로필로도 스케줄러가 돌았다(2026-11-14 확인).** 로그상 활성 프로필은 `prod`, `phase2-seed`인데, 11/13 23:30에 이 서버가 COB를 실행해 영업일이 11/12 → 11/13이 됐고(`business_date_cutoff` 11/12 `CLOSED`, `ledger-reconciliation` · `account-maturity` `SUCCESS`), 11/14 00:10~00:14에 일일 이체 배치가 385건을 만들었다. 스케줄링이 켜지는 경로는 확인하지 못했다. **이 프로필을 스케줄러 차단 수단으로 믿지 않는다.** **스케줄러를 켠 채 운영하기로 정했다(2026-11-14).**
 - `SERVER_ADDRESS=127.0.0.1`로 VM 안에서만 받게 한다. 호스트 네트워크로 띄우면 이 값이 없을 때 교육장 전체에 열린다.
 - `APP_METRICS_ALLOWED_IP=127.0.0.1`은 Prometheus가 호스트에서 `127.0.0.1:8080`을 부른다는 가정이다. 기본값 `192.168.0.211`은 VM 안의 요청에서 거부된다(§7).
 - 승격 전 시험 때와 달리 `--network host`라 `-p`를 쓰지 않는다.
@@ -171,7 +174,7 @@ sudo docker run -d --name corebank-drtest-recon --network corebank-drtest-net --
 - 정보계 API 호출. 환경 파일에 `APP_INFO_API_BASE_URL` · `APP_INFO_API_SECRET`이 시험용에서 복사돼 있지만 호출은 시험하지 않았다.
 - `APP_METRICS_ALLOWED_IP=127.0.0.1`로 VM 안에서 `/api/v1/actuator/prometheus`가 200이 되는지(Nginx를 거친 외부 요청이 404로 막히는 것은 확인함).
 - 화면에서의 상품가입 · 중도해지(API로는 확인했다).
-- 스케줄러를 켠 채 운영하는 방식에 대한 팀 합의(§5), 11/14 밤 이후 COB의 영업일 이동(영업일이 달력보다 앞서면 COB를 건너뛰는 규칙이 시연일 11/18에 영업일을 맞추는지), 만기 해지, 자동 · 예약이체 개별 시험.
+- 11/14 밤 이후 COB의 영업일 이동(영업일이 달력보다 앞서면 COB를 건너뛰는 규칙이 시연일 11/18에 영업일을 맞추는지), 만기 해지, 자동 · 예약이체 개별 시험.
 - 릴리스 6 적용(격리 DB 시험, 백업, 마이그레이션)과 Agent 두 개(#989).
 - 부스처럼 여러 명이 동시에 접속할 때의 VM 용량.
 
