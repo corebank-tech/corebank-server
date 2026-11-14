@@ -2,7 +2,7 @@
 
 > 11/18 시연과 [DR 전환](ph54_onprem_dr_runbook.md) 때 온프레미스 VM(`192.168.0.211`)에서 계정계 API를 켜고 끄는 절차다.
 > 승격과 복제 정지는 P2([DR 런북](ph54_onprem_dr_runbook.md) §6)가 하고, 이 문서는 그 절차가 부르는 **기동 · 정지 한 칸**만 다룬다.
-> 작성 2026-11-10. **격리 DB 위 기동은 확인했고, 승격된 DB로의 기동은 아직 해 보지 않았다.** 확인한 것과 하지 않은 것을 §7에 나눠 적는다.
+> 작성 2026-11-10, 2026-11-13 갱신: 승격(14:16:40) 뒤 승격 DB 위 기동, 계좌 업무 확인. **2026-11-14 갱신: 외부 인터넷에서 닿는 경로를 Cloudflare 터널로 열고(§8) 집에서 로그인 · 이체 · 거래내역 조회를 확인했다.** 확인한 것과 하지 않은 것을 §7에 나눠 적는다.
 
 ## 1. 전제
 
@@ -19,7 +19,7 @@
 |---|---|
 | `SPRING_PROFILES_ACTIVE` | `prod` |
 | `DB_HOST` | 격리 DB는 컨테이너 이름, 승격 뒤는 `127.0.0.1`(§5) |
-| `DB_USER` `DB_PASSWORD` `FLYWAY_USER` `FLYWAY_PASSWORD` | 격리 DB와 승격 DB(RDS에서 복제된 계정)가 다를 수 있다 |
+| `DB_USER` `DB_PASSWORD` `FLYWAY_USER` `FLYWAY_PASSWORD` | 승격 DB에는 앱 계정이 **없다**(복제는 `minicore` 데이터만 가져오고 계정은 가져오지 않는다). 승격 뒤 VM에서 새로 만든다(§5-1) |
 | `DB_POOL_SIZE` | 시험은 3 |
 | `APP_OTP_CODE_HASH_ALGORITHM` `APP_OTP_CODE_HASH_KEY_BASE64` | 키는 VM에서 직접 생성한다 |
 | `APP_LOGIN_ID_HMAC_KEY_BASE64` | 릴리스 4부터 필수. 없으면 기동하지 않는다. 용도와 재사용 기준은 아래 「로그인 아이디 키」 |
@@ -63,20 +63,55 @@ sudo docker stop corebank-drtest-api && sudo docker rm corebank-drtest-api
 
 - 환경 파일, 이미지, DB는 지우지 않는다. 값을 바꾼 뒤에는 `restart`가 아니라 지우고 다시 만든다(`docker restart`는 환경 파일을 다시 읽지 않는다).
 
-## 5. 승격 뒤 기동 (계획, 시험 전)
+## 5. 승격 뒤 기동 (2026-11-13 실행)
 
 레플리카는 기본 `bridge` 네트워크에서 호스트 `127.0.0.1:3306`으로만 열려 있고, 정보계 API(`info-api`)가 이미 호스트 네트워크로 붙는다. 계정계 API도 같은 방식으로 붙인다. 레플리카 컨테이너는 건드리지 않는다.
+
+### 5-1. DB 계정 만들기 (승격 직후, 읽기 전용 해제 뒤)
+
+승격 DB(`info-replica-mysql`)의 `mysql.user`에는 `etl_replica_reader`와 `root`만 있고 **`app_user` · `flyway_user`가 없다.** 복제는 `minicore` 데이터만 가져오고 계정(`mysql` 스키마)은 가져오지 않는다. 그래서 승격 직후 VM에서 새로 만든다. 비밀번호는 이 DB에서만 쓰이므로 RDS 값과 같을 필요가 없고, 무작위로 만들어 변수에만 담았다가 환경 파일에 넣는다(화면 · 채팅 · 이슈에 남기지 않는다).
+
+```bash
+APP_PW=$(openssl rand -hex 16); FLY_PW=$(openssl rand -hex 16)      # 출력하지 않는다
+A1="SET sql_log_bin=0; CREATE USER 'app_user'@'%' IDENTIFIED BY '$APP_PW' REQUIRE SSL; GRANT SELECT, INSERT, UPDATE, DELETE ON minicore.* TO 'app_user'@'%'"
+A2="SET sql_log_bin=0; CREATE USER 'flyway_user'@'%' IDENTIFIED BY '$FLY_PW' REQUIRE SSL; GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES ON minicore.* TO 'flyway_user'@'%'"
+echo "$A1" | sudo bash -c 'MYSQL_PWD=$(cat /etc/info-etl/replica-root.pw) docker exec -i -e MYSQL_PWD info-replica-mysql mysql -uroot'
+echo "$A2" | sudo bash -c 'MYSQL_PWD=$(cat /etc/info-etl/replica-root.pw) docker exec -i -e MYSQL_PWD info-replica-mysql mysql -uroot'
+```
+
+- **이 블록은 한 번만 실행한다.** 계정이 이미 있으면 `CREATE USER`는 실패하는데 비밀번호 변수는 새로 만들어져, 뒤의 환경 파일 값과 DB 계정의 비밀번호가 어긋나 API가 DB에 붙지 못한다. 다시 실행하기 전에 `SELECT user, host FROM mysql.user`로 계정이 없는지 확인한다(`flyway_user` 단계만 실패했다면 그 줄만 따로 실행하고 `FLY_PW`만 새로 만든다).
+- 두 계정 모두 `REQUIRE SSL`이다(앱 접속이 `sslMode=REQUIRED`). Host는 기존 계정(`etl_replica_reader`, `root`)처럼 `%`로 만들었다.
+- `sql_log_bin=0`으로 만들어 복제 기록(GTID)에 남기지 않았고, 생성 직후 `gtid_executed`가 승격 시점 값(`...:1-91316`) 그대로임을 확인했다.
+- `app_user`는 데이터 읽기 · 쓰기만, `flyway_user`는 릴리스 6의 마이그레이션(CREATE · ALTER · DROP · INDEX · REFERENCES와 `common_code` INSERT)에 필요한 권한이다. 릴리스 6을 적용하기 전에 권한을 한 번 더 확인한다(#989).
+
+### 5-2. 환경 파일 만들기 (`/etc/corebank/app.env`)
+
+시험용 파일(`/etc/corebank-drtest/app.env`)의 키 변수(OTP · 로그인 ID · 정보계 등)는 그대로 쓰고, DB와 스위치만 바꾼다. 폴더 `700`, 파일 `600`, root 소유이고 값은 화면에 내지 않는다.
+
+```bash
+sudo mkdir -p /etc/corebank && sudo chmod 700 /etc/corebank && sudo cp /etc/corebank-drtest/app.env /etc/corebank/app.env && sudo chmod 600 /etc/corebank/app.env
+sudo sed -i '/^DB_HOST=/d;/^DB_USER=/d;/^DB_PASSWORD=/d;/^FLYWAY_USER=/d;/^FLYWAY_PASSWORD=/d;/^DB_POOL_SIZE=/d;/^APP_SUBSCRIPTION_EARLYTERMINATION_ENABLED=/d' /etc/corebank/app.env
+printf 'DB_HOST=127.0.0.1\nDB_USER=app_user\nDB_PASSWORD=%s\nFLYWAY_USER=flyway_user\nFLYWAY_PASSWORD=%s\nDB_POOL_SIZE=10\nAPP_SUBSCRIPTION_EARLYTERMINATION_ENABLED=true\n' "$APP_PW" "$FLY_PW" | sudo tee -a /etc/corebank/app.env >/dev/null
+echo 'CORS_ALLOWED_ORIGINS=https://www.corebank.cloud' | sudo tee -a /etc/corebank/app.env >/dev/null
+sudo cut -d= -f1 /etc/corebank/app.env | sort | tr '\n' ' '      # 변수 이름만 확인
+```
+
+- 시험용 파일을 통째로 복사하므로 **시드 실행 플래그(`APP_PHASE2_SEED_*`)가 섞여 있으면 지운다**(`sudo sed -i '/^APP_PHASE2_SEED_/d' /etc/corebank/app.env`). `phase2-seed` 프로필에서는 최소 시드 플래그 하나만 있어도 가드가 막지 않아 기동 때 승격 DB에 시드가 적재될 수 있다. 11/13 14:23 기동 뒤 11/14 15:42에 시연 계정이 들어오기 전까지 새 고객이 생기지 않았으므로 이번에는 적재되지 않았다.
+
+### 5-3. 기동
 
 ```bash
 sudo mkdir -p /var/lib/corebank-audit && sudo chmod 700 /var/lib/corebank-audit
 sudo docker run -d --name corebank-server --network host --cpus 1 --memory 2g \
-  --env-file <승격 DB용 환경 파일> \
+  --env-file /etc/corebank/app.env \
   -v /var/lib/corebank-audit:/audit -e APP_AUDIT_ARCHIVE_LOCAL_DIR=/audit \
   -e SERVER_ADDRESS=127.0.0.1 -e APP_INTERBANK_HOST=192.168.0.211 -e APP_METRICS_ALLOWED_IP=127.0.0.1 \
+  -e SPRING_PROFILES_ACTIVE=prod,phase2-seed \
   corebank/corebank-server:e6dfafe4dfe64bb3fb94a82382e7a93d72ed3284
 ```
 
-- `DB_HOST=127.0.0.1`, DB 계정은 승격 뒤 P2가 확인한 `app_user` · `flyway_user` 값을 VM에서 직접 입력한다.
+- `DB_HOST=127.0.0.1`, DB 계정은 §5-1에서 만든 `app_user` · `flyway_user`다. 11/13 14:23에 이 명령으로 기동했고 헬스 200, `Started CorebankApplication` 약 25초였다.
+- **첫 기동은 `-e SPRING_PROFILES_ACTIVE=prod,phase2-seed`로 했다.** 스케줄러(COB 23:30, 일일 이체 배치)를 끄려는 것이었다(승격 DB의 영업일이 2026-11-12에서 멈춰 있었다). **그러나 이 프로필로도 스케줄러가 돌았다(2026-11-14 확인).** 로그상 활성 프로필은 `prod`, `phase2-seed`인데, 11/13 23:30에 이 서버가 COB를 실행해 영업일이 11/12 → 11/13이 됐고(`business_date_cutoff` 11/12 `CLOSED`, `ledger-reconciliation` · `account-maturity` `SUCCESS`), 11/14 00:10~00:14에 일일 이체 배치가 385건을 만들었다. 스케줄링이 켜지는 경로는 확인하지 못했다. **이 프로필을 스케줄러 차단 수단으로 믿지 않는다.** **스케줄러를 켠 채 운영하기로 정했다(2026-11-14).**
 - `SERVER_ADDRESS=127.0.0.1`로 VM 안에서만 받게 한다. 호스트 네트워크로 띄우면 이 값이 없을 때 교육장 전체에 열린다.
 - `APP_METRICS_ALLOWED_IP=127.0.0.1`은 Prometheus가 호스트에서 `127.0.0.1:8080`을 부른다는 가정이다. 기본값 `192.168.0.211`은 VM 안의 요청에서 거부된다(§7).
 - 승격 전 시험 때와 달리 `--network host`라 `-p`를 쓰지 않는다.
@@ -101,7 +136,7 @@ sudo docker stop corebank-server && sudo docker rm corebank-server
 
 ## 6. 전수 대사 리허설 (PH-38 실행기)
 
-격리 DB에서 전수 대사를 돌려 시간과 불일치 수를 로그에 남기고 스스로 종료한다. 스케줄러가 같이 돌지 않도록 `phase2-seed` 프로필을 붙이고, 시드 실행 플래그는 켜지 않는다.
+격리 DB에서 전수 대사를 돌려 시간과 불일치 수를 로그에 남기고 스스로 종료한다. `phase2-seed` 프로필을 붙이고 시드 실행 플래그는 켜지 않는다(이 프로필이 스케줄러를 확실히 막지는 않는다, §5).
 
 ```bash
 sudo docker run -d --name corebank-drtest-recon --network corebank-drtest-net --cpus 1 --memory 2g \
@@ -117,6 +152,15 @@ sudo docker run -d --name corebank-drtest-recon --network corebank-drtest-net --
 
 ## 7. 확인한 것과 하지 않은 것
 
+**확인함 (2026-11-13, 승격 DB)**
+- 승격 DB(`info-replica-mysql`, 읽기 전용 해제 14:16:40)에 릴리스 4 API를 기동(§5): 헬스 200, Flyway 검증 통과(마지막 버전 `202611082006`), 새 앱 계정으로 TLS 접속.
+- 비공개 경로(`127.0.0.1:8080`, 시드 고객 `ph60_user_00001`): 로그인 · 계좌 비밀번호 검증 · OTP · 당행 이체(1,111원), 타행이체(1,111원, VM 모의 서버 경유, 받는 은행 `004`), 상품가입(코어 정기예금 10만 원 12개월), 중도해지(원금 전액 반환, 가입 당일이라 이자 0). 당행 이체는 DB에서 원장 짝과 잔액이 맞는지 확인했다.
+- 상품가입은 필수 약관을 먼저 열람(`GET /products/{productId}/terms/{termsId}`)해야 하고, 열람 이력이 없으면 `PRD0005`로 거절된다(규칙대로 동작).
+- 공개 경로(§8): 11/13에는 사설 IP라 교육장 안에서만 로그인 · 이체가 됐다(15:03, 1,234원). **11/14에 Cloudflare 터널로 바꾼 뒤 교육장 밖(집)에서 `www.corebank.cloud` 로그인, 이체(1,000원), 거래내역 조회가 성공했다**(18:35). 로그인 기록의 접속 IP도 집 공인 IP로 남는다. 이 이체의 원장 2행(출금 · 입금), GL 전표(차변 = 대변), 두 계좌의 잔액과 마지막 원장 잔액이 일치하고 11/13 이후 차변 ≠ 대변 전표는 0건이다.
+- 스케줄러: 승격 뒤 서버가 COB와 일일 이체 배치를 실제로 실행했다(§5).
+- Nginx를 거친 `/api/v1/internal/`과 `/api/v1/actuator/prometheus`는 404, 건강 확인은 통과, CORS 사전 요청의 허용 헤더는 중복 없이 한 번씩 나온다.
+- 로그인 아이디 키는 시연에서 VM에서 새로 만든 키를 쓴다(11/11 P1 확인, §2).
+
 **확인함 (2026-11-10, 격리 DB)**
 - 릴리스 4 이미지가 기동하고 헬스 200, 로그인 키 · OTP 키 관련 오류 없음.
 - `APP_INTERBANK_HOST=192.168.0.211`로 기동, 컨테이너에서 `192.168.0.211:9300` · `:8081`에 접속됨.
@@ -127,45 +171,85 @@ sudo docker run -d --name corebank-drtest-recon --network corebank-drtest-net --
 
 **하지 않음**
 - 감사 로컬 보관 볼륨(§5)이 컨테이너를 지우고 다시 만든 뒤에도 파일을 유지하는지, 01:00 무결성 검사가 로컬 파일로 통과하는지.
-- 로그인 아이디 키를 시연과 운영 전환 중 어느 쪽 기준으로 쓸지(P1과 결정 전, §2).
-- 승격된 DB로의 기동, 호스트 네트워크 방식(§5)의 DB 접속. 포트가 3306으로 고정이라 격리 DB(`127.0.0.1:3310`)로는 시험하지 못했다.
-- 로그인 · 이체 · 해지 화면 동작(#849 완료 조건). 접속 경로(Nginx · 인증서 · hosts)가 있어야 화면으로 눌러 볼 수 있다. 해지는 설정 스위치(`APP_SUBSCRIPTION_EARLYTERMINATION_ENABLED`)가 따로 있고 기본값이 `false`라(`application.yml`), 켜지 않으면 해지 API가 404다. VM 환경 파일에는 이 변수가 없으며 시연에 해지가 들어가므로 승격 DB용 환경 파일에 `true`로 넣는다.
-- 정보계 API 호출. `APP_INFO_API_BASE_URL`을 넣으면 `APP_INFO_API_SECRET`도 필요한데 값의 위치를 확인하지 못했다.
-- `APP_METRICS_ALLOWED_IP=127.0.0.1`로 `/api/v1/actuator/prometheus`가 200이 되는지. 이때 Nginx를 거친 외부 요청은 거부되고 VM 안의 직접 요청만 성공하는지도 같이 본다(프록시 요청을 앱이 `127.0.0.1`로 보면 지표가 밖으로 나갈 수 있다).
-- Nginx가 요청을 진짜 API로 넘기는 구성과 그 위의 로그인 · 쿠키 · CSRF 흐름. (11/10에는 고정 응답만 하는 Nginx로 크롬 접속까지만 확인했다, §8)
-- `CORS_ALLOWED_ORIGINS=https://www.corebank.cloud`를 승격용 환경 파일에 넣은 뒤, Nginx가 API로 넘기는 구성에서 `www.corebank.cloud` 화면의 OPTIONS 사전 요청과 실제 로그인 요청이 통과하는지(브라우저에서 확인).
-- 호스트 네트워크 Nginx(`listen 192.168.0.211:443`)로 바꾼 구성. 시험할 것: 호스트의 다른 컨테이너가 443을 쓰고 있지 않은지, `ss -ltn`에서 443이 `192.168.0.211`에만 열렸는지, 노트북의 로그인 요청이 API까지 가는지.
+- 정보계 API 호출. 환경 파일에 `APP_INFO_API_BASE_URL` · `APP_INFO_API_SECRET`이 시험용에서 복사돼 있지만 호출은 시험하지 않았다.
+- `APP_METRICS_ALLOWED_IP=127.0.0.1`로 VM 안에서 `/api/v1/actuator/prometheus`가 200이 되는지(Nginx를 거친 외부 요청이 404로 막히는 것은 확인함).
+- 화면에서의 상품가입 · 중도해지(API로는 확인했다).
+- 11/14 밤 이후 COB의 영업일 이동(영업일이 달력보다 앞서면 COB를 건너뛰는 규칙이 시연일 11/18에 영업일을 맞추는지), 만기 해지, 자동 · 예약이체 개별 시험.
+- 릴리스 6 적용(격리 DB 시험, 백업, 마이그레이션)과 Agent 두 개(#989).
+- 부스처럼 여러 명이 동시에 접속할 때의 VM 용량.
 
-## 8. 접속 경로 (시연용, 11/10 시험)
+## 8. 접속 경로 (시연용, 2026-11-14 Cloudflare 터널)
 
-화면(FE)은 Cloudflare의 `www.corebank.cloud` 그대로 두고, `api.corebank.cloud`만 VM으로 보낸다. 발표 노트북이 교육장 안에 있어야 한다. 인터넷에서는 VM(`192.168.0.211`)에 닿지 않는다.
+**한 줄 구조**: 사용자 → Cloudflare(`www`는 Pages, `api`는 터널) → VM의 `cloudflared` → VM의 Nginx(`192.168.0.211:443`) → 계정계 API(`127.0.0.1:8080`). VM은 사설 IP이지만 `cloudflared`가 VM에서 Cloudflare로 **바깥으로** 연결하므로 외부 인터넷에서도 `api.corebank.cloud`가 열린다. 교육장 공인 IP의 80 · 443은 다른 서비스가 쓰고 있어 VM으로 오는 길이 없었다. 11/13에는 `api`를 사설 IP(`A 192.168.0.211`)로 바꿔 교육장 안에서만 닿았고, 11/14에 아래로 바꿨다.
 
-**VM의 Nginx** (`nginx:1.27-alpine`, 컨테이너 `demo-nginx`, `--restart unless-stopped`)
-- 지금 시험용은 `-p 192.168.0.211:443:443`(bridge)이다. 이 방식에서는 컨테이너 안의 `127.0.0.1`이 Nginx 자신이라 호스트 네트워크로 뜬 API(§5)에 닿지 않는다. 시연용은 `--network host`로 띄우고 `-p`는 쓰지 않는다. 호스트 네트워크에서는 `-p`로 IP를 못 정하므로 `nginx.conf`에 `listen 192.168.0.211:443 ssl;`로 VM 사설 IP의 443만 받게 한다.
-- 설정과 인증서는 `/etc/corebank-demo-test/`(폴더 `700`, `key.pem`은 `600`). 개인 키는 VM 밖으로 내보내지 않는다.
-- 지금은 **시험용 고정 응답**(`{"status":"UP"}`)과 CORS 헤더만 준다. 시연용은 호스트 네트워크 Nginx가 요청을 `127.0.0.1:8080`의 API로 넘기고 `/api/v1/actuator/`와 그 하위 경로를 막는 설정으로 바꿀 계획이며, CORS는 앱의 `CORS_ALLOWED_ORIGINS`가 응답하게 한다. **이 설정은 시험 전이다.**
-- 설정을 바꾼 뒤에는 파일을 같은 파일 그대로 덮어쓰고(`cat 새파일 > 기존파일`, `sed -i`는 도커가 파일 연결을 놓친다) `docker exec demo-nginx nginx -t && docker exec demo-nginx nginx -s reload`로 다시 읽힌다.
+**DNS**: 도메인 `corebank.cloud`의 네임서버를 가비아에서 Cloudflare(`ollie.ns.cloudflare.com`, `yadiel.ns.cloudflare.com`)로 옮겼다(11/14 18:27 반영, DNSSEC는 꺼져 있었다). 레코드는 Cloudflare에서 관리한다: `www` → `corebank-fe.pages.dev`(Pages 커스텀 도메인), `api` → 터널(자동 생성). 옛 `A 192.168.0.211`은 지웠다. 가비아에 남은 ACM 검증 CNAME 2개와 `_acme-challenge.api` TXT는 더 쓰지 않는다. 영역과 Pages는 같은 Cloudflare 계정에 있어야 한다(다른 계정이면 CNAME이 막힌다).
 
-**인증서**: 자체 인증서(`CN=api.corebank.cloud`, 이름 `DNS:api.corebank.cloud`), 30일(2026-12-10 만료).
+**터널 (`corebank-api`)**: Public Hostname `api.corebank.cloud` → `https://192.168.0.211:443`, 원본 서버 이름 `api.corebank.cloud`. VM에는 `cloudflared`를 systemd 서비스로 설치했고(`sudo systemctl is-active cloudflared`, 로그의 `Registered tunnel connection`이 4개) 토큰은 서비스 설정에만 있다. **토큰은 문서 · 채팅 · 이슈에 쓰지 않고, `systemctl status` 출력에는 토큰이 보이니 공유하기 전에 가린다.** 시작 직후 `No ingress rules were defined` 경고가 한 줄 나오는 것은 Cloudflare에서 설정을 받기 전의 정상 메시지다(바로 뒤에 `Updated to new configuration`이 나온다).
+
+**VM의 Nginx** (`nginx:1.27-alpine`, 컨테이너 `demo-nginx`, `--network host`, `--restart unless-stopped`): 설정 `/etc/corebank-demo/nginx.conf`, 인증서 `/etc/corebank-demo/ssl/{cert,key}.pem`(`key.pem`은 `600`, 개인 키는 VM 밖으로 내보내지 않는다).
+```nginx
+events {}
+http {
+  server_tokens off;
+  client_max_body_size 45m;
+  server {
+    listen 192.168.0.211:443 ssl;
+    server_name api.corebank.cloud;
+    ssl_certificate /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    set_real_ip_from 192.168.0.211;
+    real_ip_header CF-Connecting-IP;
+    add_header Access-Control-Allow-Private-Network "true" always;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 120s;
+    location ^~ /api/v1/internal/ { return 404; }
+    location = /api/v1/actuator/health { proxy_pass http://127.0.0.1:8080; }
+    location ^~ /api/v1/actuator { return 404; }
+    location / { proxy_pass http://127.0.0.1:8080; }
+  }
+  server {
+    listen 192.168.0.211:80 default_server;
+    server_name _;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_read_timeout 120s;
+    location ^~ /api/v1/internal/ { return 404; }
+    location = /api/v1/actuator/health { proxy_pass http://127.0.0.1:8080; }
+    location ^~ /api/v1/actuator { return 404; }
+    location / { proxy_pass http://127.0.0.1:8080; }
+  }
+}
+```
 ```bash
-sudo openssl req -x509 -newkey rsa:2048 -nodes -keyout /etc/corebank-demo-test/key.pem -out /etc/corebank-demo-test/cert.pem \
-  -days 30 -subj "/CN=api.corebank.cloud" -addext "subjectAltName=DNS:api.corebank.cloud"
+sudo docker run -d --name demo-nginx --network host --restart unless-stopped \
+  -v /etc/corebank-demo/nginx.conf:/etc/nginx/nginx.conf:ro -v /etc/corebank-demo/ssl:/etc/nginx/ssl:ro nginx:1.27-alpine
+```
+- 호스트 네트워크라 `-p`를 쓰지 않고 사설 IP의 443과 80만 받는다(`ss -ltnp | grep -E ':80 |:443 '`). 계정계 API가 `127.0.0.1:8080`에만 열려 있어 `bridge` 컨테이너에서는 닿지 않으므로 호스트 네트워크가 필요하다.
+- **접속자 IP**: `cloudflared`가 VM 안에서 Nginx에 연결하므로 Nginx가 보는 원격 주소는 늘 `192.168.0.211`이다. 처음에는 `X-Forwarded-For`가 이 값으로 덮여 로그인 기록과 감사 로그에 모든 접속자가 `192.168.0.211`로 남았다. `set_real_ip_from`(`cloudflared`의 연결 주소만 신뢰)과 `real_ip_header CF-Connecting-IP`를 넣어 실제 접속자 IP가 남는다(집 공인 IP로 확인).
+- CORS는 API(`CORS_ALLOWED_ORIGINS`)가 응답하고 Nginx는 덧붙이지 않는다(같은 헤더가 둘이면 브라우저가 거부한다). `Access-Control-Allow-Private-Network: true`는 사설 IP로 부를 때 크롬이 요구하던 헤더라 지금은 필요 없지만 남겨 두었다(앱은 이 헤더를 만들지 않는다).
+- 운영 프로필의 세션 쿠키가 `Secure`라 HTTPS가 아니면 로그인이 유지되지 않는다. 앱은 `forward-headers-strategy: native`라 `X-Forwarded-Proto`를 넘겨야 한다.
+- `/api/v1/internal/`(이의제기 Agent 내부 API)과 `/api/v1/actuator`(health 제외)는 외부에 막는다(외부에서 404 확인). 업로드 한도 45MB는 이의제기 첨부(앱 한도 40MB) 때문이다.
+- 설정을 바꾼 뒤에는 `sudo docker exec demo-nginx nginx -t && sudo docker exec demo-nginx nginx -s reload`로 다시 읽힌다(바인드 마운트한 파일은 `sed -i`로 바꾸면 도커가 연결을 놓치니 같은 파일을 덮어쓴다).
+
+**80번 경로(예비)**: 교육장이 제공한 도메인 `corebank.shinhanacademy.co.kr`은 외부 → HTTPS(443) → VM의 80번으로 이어진다. 위 80번 서버 블록이 이를 받는다(11/13 외부에서 health 200, `/internal/` 404 확인). 이 도메인은 `corebank.cloud`와 다른 사이트라 화면의 로그인 쿠키가 따라가지 않아 화면용 경로로는 쓰지 않는다. 터널이 막혔을 때의 예비다.
+
+**인증서 (Let's Encrypt)**: 브라우저가 보는 인증서는 Cloudflare가 발급한 것이고, VM의 인증서는 `cloudflared`가 원본 서버 이름 `api.corebank.cloud`로 Nginx에 연결할 때 쓰인다. 2026-11-13 발급, 만료 **2027-02-11**, DNS-01 수동 방식이라 자동 갱신되지 않는다. 갱신이 필요하면 `_acme-challenge.api` TXT를 이제는 **Cloudflare**에 추가한다.
+```bash
+sudo certbot certonly --manual --preferred-challenges dns -d api.corebank.cloud --agree-tos --register-unsafely-without-email
+sudo cp /etc/letsencrypt/live/api.corebank.cloud/fullchain.pem /etc/corebank-demo/ssl/cert.pem
+sudo cp /etc/letsencrypt/live/api.corebank.cloud/privkey.pem /etc/corebank-demo/ssl/key.pem && sudo chmod 600 /etc/corebank-demo/ssl/key.pem
+sudo docker exec demo-nginx nginx -s reload
 ```
 
-**발표 노트북(맥)**: 인증서 지문(SHA-256)을 VM과 대조한 뒤 시스템 키체인에서 신뢰하고, hosts에 한 줄을 넣는다. 시연 날과 리허설 때만 넣고 끝나면 지운다. 안 지우면 그 노트북은 진짜 AWS `api.corebank.cloud`를 못 쓴다.
-```bash
-sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain <cert.pem>
-echo '192.168.0.211 api.corebank.cloud' | sudo tee -a /etc/hosts; sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
-# 원복
-sudo sed -i '' '/192.168.0.211 api.corebank.cloud/d' /etc/hosts; sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
-```
-
-**크롬 (157에서 확인)**
-- 인터넷 화면이 내부 주소를 부르면 **"로컬 네트워크의 다른 기기에서 액세스" 확인창**이 뜬다. **허용**하면 요청이 성공한다(`/api/v1/customers/me` 200 OK, 원격 주소 `192.168.0.211:443`). **차단**을 누르면 크롬이 기억해서 계속 실패한다.
-- 그러므로 발표 때 쓸 크롬 **프로필에서 미리 허용**해 둔다. 시크릿 창과 게스트 창은 허용 기록이 매번 지워지니 쓰지 않는다. 다른 사람이 자기 기기로 접속하면 각자 한 번씩 허용해야 한다.
-- 첫 시도는 CORS 사전 요청이 `x-correlation-id`를 허용 헤더에 없어서 실패했다(시험용 Nginx 허용 목록이 모자랐고, 헤더를 추가하자 성공). 진짜 API로 넘길 때는 Nginx가 CORS 헤더를 덧붙이지 않는다.
-
-**다른 사람도 접속하게 하려면 (11/13 이후, 시험 전)**: 공개 DNS의 `api.corebank.cloud`를 `192.168.0.211`로 바꾸고(가비아, P2와 도메인 소유자), 어느 기기에서나 믿어지는 인증서(Let's Encrypt DNS-01, 가비아에 TXT 레코드)로 교체한다. 접속할 수 있는 사람은 교육장 네트워크 안에 있는 사람뿐이다. 3-Tier가 쓰는 동안(11/13 전)에는 `api` 레코드를 바꾸지 않는다.
+**VM 접속**: VM은 AWS SSM 하이브리드 노드(`mi-0be0137569259c33f`)로 등록돼 있어 AWS 콘솔의 Systems Manager 세션으로 교육장 밖에서도 접속된다(세션 사용자 `ssm-user`, `sudo` 가능, 쓰기와 DB 접속 확인). 등록 자체는 수동으로 했지만 VM의 SSM Agent가 쓰는 IAM 역할(`${name_prefix}-onprem-ssm-role`)은 터라폼(`terraform/main`의 compute 모듈 `iam.tf`)이 관리한다. **`terraform/main`을 destroy하면 이 역할이 지워져 VM이 `ConnectionLost`가 되고 콘솔 세션이 열리지 않을 것으로 본다**(AWS가 실제로 어떻게 처리하는지는 시험하지 못했다). 철거 뒤에도 쓰려면 철거 전에 이 역할과 정책을 destroy 대상에서 빼야 하고(예: state에서 분리한 뒤 `terraform plan`으로 destroy 목록에서 빠지는지 확인), 공유 state라 팀과 조율한다. 가장 안전한 것은 철거 전에 VM 작업을 끝내 두는 것이다.
 
 ## 9. 관련 문서
 
