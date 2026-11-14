@@ -177,7 +177,7 @@ behaviorRiskScore         : XGBoost 보조 위험 점수
 
 다음 세 조건 중 **확인된 참이 2개 이상**이면 `hesitationWarning=true`. 이벤트 제출 API에서 선택 필드인 `confirmActiveSeconds`가 없으면 해당 조건은 미확인으로 두며 참으로 추정하지 않는다. 나머지 두 조건이 모두 확인된 참이면 망설임은 성립한다. 흐름 자체가 없거나 확인된 참이 2개 미만이면 A의 망설임 근거로 쓰지 않는다([#855 사례 C27–C28](p6_fds_policy_cases.md#행동연결오류-사례)).
 
-1. `backCount >= 1`
+1. `backCount >= 2`
 2. `amountRevisionCount >= 2`
 3. `confirmActiveSeconds >= 60`. FE는 visible 구간의 `performance.now()` 밀리초 차이를 모두 합산한 뒤 마지막에 1000으로 나누어 소수 초를 버린다(`Math.floor`). 59.999초는 59초로 미충족, 60.000초는 60초로 충족한다.
 
@@ -364,7 +364,7 @@ assess_information_gap
   "policyCode": "A",
   "behaviorSummary": {
     "hesitationWarning": true,
-    "backCount": 1,
+    "backCount": 2,
     "amountRevisionCount": 2,
     "confirmActiveSeconds": 71,
     "behaviorScoreStatus": "AVAILABLE",
@@ -772,7 +772,7 @@ P4 부품 지연은 §10.4의 인계 조건으로 다루고, 아래는 **P6이 �
 ### 시나리오 A — 망설임 + 신규 수취인 반복 이체
 
 1. 신규 수취인에게 50만 원씩 2회 이체 성공.
-2. 세 번째 50만 원 이체에서 뒤로 가기 1회 + 금액 재수정 2회 발생.
+2. 세 번째 50만 원 이체에서 뒤로 가기 2회 + 금액 재수정 2회 발생.
 3. 서버가 반복 묶음의 망설임·신규 수취인·3회·150만 원을 확인.
 4. **세 번째 요청만 `HELD`**, 잔액·원장 불변 확인.
 5. Agent 비동기 실행 → 거래 이력 Tool 호출 → 필요 시 수취인 맥락 Tool 호출.

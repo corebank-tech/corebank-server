@@ -269,9 +269,11 @@ class TransferExecutionServiceHookTest extends IntegrationTestSupport {
                                 new BehaviorFlowService.EventInput(
                                         flowId, 5, "STEP_BACK", occurredAt.plusSeconds(4), "D-01"),
                                 new BehaviorFlowService.EventInput(
-                                        flowId, 6, "AMOUNT_EDITED", occurredAt.plusSeconds(5), "D-01"),
+                                        flowId, 6, "STEP_BACK", occurredAt.plusSeconds(5), "D-01"),
                                 new BehaviorFlowService.EventInput(
-                                        flowId, 7, "SUBMIT_REQUESTED", occurredAt.plusSeconds(6), "D-02")),
+                                        flowId, 7, "AMOUNT_EDITED", occurredAt.plusSeconds(6), "D-01"),
+                                new BehaviorFlowService.EventInput(
+                                        flowId, 8, "SUBMIT_REQUESTED", occurredAt.plusSeconds(7), "D-02")),
                         null));
         behaviorMappings.save(firstRefId, flowId.toString(), 1);
         FdsRepeatTransferHoldPolicy policy = new FdsRepeatTransferHoldPolicy(recentTransferQuery, behaviorHesitation);

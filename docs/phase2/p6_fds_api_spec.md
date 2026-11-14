@@ -771,7 +771,7 @@ BE는 사설 Compose 네트워크의 Python 서비스 이름으로만 호출한�
 | `flowId` | 보류 원본에 연결되고 인증 고객 소유로 검증된 행동 flow | String(UUID) | 서버가 원본·소유권·최종 제출을 먼저 검증 | X | `"3f1c2b7e-8a4d-4f0e-9c1a-2b6d5e7f8a90"` |
 | `featureVersion` | 피처 계약 버전 | String | 현재 `p6-behavior-v1`; 모델의 기대 버전과 정확히 일치 | X | `"p6-behavior-v1"` |
 | `features` | 모델 입력 | Object | 아래 다섯 키를 모두 포함; 다른 피처는 거부 | X | `{...}` |
-| `features.backCount` | 확인 화면에서 입력 화면으로 완료된 뒤로가기 횟수 | Integer | 0~100; 완전한 flow에서 이벤트가 없으면 0 | X | `1` |
+| `features.backCount` | 확인 화면에서 입력 화면으로 완료된 뒤로가기 횟수 | Integer | 0~100; 정책 망설임 신호는 2회 이상이며 완전한 flow에서 이벤트가 없으면 0 | X | `2` |
 | `features.amountRevisionCount` | 첫 확정 금액 뒤 수정 횟수 | Integer | 0~100; 완전한 flow에서 수정이 없으면 0 | X | `2` |
 | `features.confirmActiveSeconds` | 보이는 확인 화면의 활성 체류 | Integer | 0~1800초; visible 밀리초 합산 후 한 번 버림 | O | `71` |
 | `features.recipientConfirmSeconds` | 이체 진입부터 첫 수취인 확인까지 경과 | Integer | 0 이상, 초 단위 버림; 같은 flow에서 확인이 반복되면 첫 `RECIPIENT_CONFIRMED`를 사용; 확인 이벤트가 없으면 null | O | `15` |
@@ -782,7 +782,7 @@ BE는 사설 Compose 네트워크의 Python 서비스 이름으로만 호출한�
 **Example**
 
 ```json
-{"transferHoldId":123,"flowId":"3f1c2b7e-8a4d-4f0e-9c1a-2b6d5e7f8a90","featureVersion":"p6-behavior-v1","features":{"backCount":1,"amountRevisionCount":2,"confirmActiveSeconds":71,"recipientConfirmSeconds":15,"totalFlowSeconds":100}}
+{"transferHoldId":123,"flowId":"3f1c2b7e-8a4d-4f0e-9c1a-2b6d5e7f8a90","featureVersion":"p6-behavior-v1","features":{"backCount":2,"amountRevisionCount":2,"confirmActiveSeconds":71,"recipientConfirmSeconds":15,"totalFlowSeconds":100}}
 ```
 
 ### Query parameter
