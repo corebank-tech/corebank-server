@@ -109,6 +109,37 @@ class FdsAdminActionServiceTest {
     }
 
     @Test
+    void fraudConfirmationUsesDedicatedReasonAndRejectsOutsideP6Transaction() {
+        Action pending = action("PENDING", "FRAUD_REJECT", "FRAUD_CONFIRMED");
+        Action completed = action("COMPLETED", "FRAUD_REJECT", "FRAUD_CONFIRMED");
+        TransferHoldForFds rejected = hold("REJECTED", 7L, "FRAUD_CONFIRMED");
+        when(store.prepare(10L, "key", 7L, "FRAUD_REJECT", "FRAUD_CONFIRMED")).thenReturn(pending);
+        when(holds.findForFds(10L)).thenReturn(held(), rejected);
+        when(store.reconcile(pending, rejected)).thenReturn(completed);
+
+        assertThat(service.act(10L, "key", 7L, "FRAUD_REJECT", "FRAUD_CONFIRMED"))
+                .isSameAs(completed);
+
+        verify(holds).reject(10L, 7L, "FRAUD_CONFIRMED");
+    }
+
+    @Test
+    void activationFailureLeavesRecoverableRegistrationFailure() {
+        Action pending = action("PENDING", "FRAUD_REJECT", "FRAUD_CONFIRMED");
+        TransferHoldForFds rejected = hold("REJECTED", 7L, "FRAUD_CONFIRMED");
+        RuntimeException failure = new RuntimeException("activation failed");
+        when(store.prepare(10L, "key", 7L, "FRAUD_REJECT", "FRAUD_CONFIRMED")).thenReturn(pending);
+        when(holds.findForFds(10L)).thenReturn(rejected, rejected);
+        when(store.reconcile(pending, rejected)).thenThrow(failure);
+
+        assertThatThrownBy(() -> service.act(10L, "key", 7L, "FRAUD_REJECT", "FRAUD_CONFIRMED"))
+                .isSameAs(failure);
+
+        verify(holds, never()).reject(10L, 7L, "FRAUD_CONFIRMED");
+        verify(store).markRegistrationFailed("action");
+    }
+
+    @Test
     void invocationFailureIsRethrownWhenReconciliationIsNotCompleted() {
         Action pending = action("PENDING", "REJECT", "CUSTOMER_DENIED");
         RuntimeException failure = new RuntimeException("p4 unavailable");

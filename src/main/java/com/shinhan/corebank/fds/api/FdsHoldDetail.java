@@ -26,8 +26,10 @@ public record FdsHoldDetail(
         ToolResults toolResults,
         AgentReport agentReport,
         List<CallRecord> callRecords,
-        AdminAction adminAction) {
+        AdminAction adminAction,
+        RiskRegistration riskRegistration) {
 
+    @Schema(description = "P4 공개 계약에 없는 수취인명은 제공하지 않고 마스킹 계좌만 표시한다.")
     public record OriginalTransfer(
             long transferHoldId,
             String holdStatus,
@@ -129,6 +131,18 @@ public record FdsHoldDetail(
             String p4ReasonCode,
             String failureReason,
             LocalDateTime createdAt,
+            LocalDateTime updatedAt,
+            boolean recoveryRequired) {}
+
+    public record RiskRegistration(
+            String registrationId,
+            @Schema(allowableValues = {"PENDING", "ACTIVE", "FAILED"}) String status,
+            Long riskAccountId,
+            String decisionDatasetVersion,
+            String datasetVersion,
+            String failureReason,
+            LocalDateTime createdAt,
+            LocalDateTime activatedAt,
             LocalDateTime updatedAt,
             boolean recoveryRequired) {}
 }

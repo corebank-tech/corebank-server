@@ -8,6 +8,7 @@ public enum AdminPermission {
     GL_WRITE,
     CUSTOMER_READ,
     CUSTOMER_WRITE,
+    FDS_FRAUD_CONFIRM,
     AUDIT_READ,
     PAYMENT_STOP_READ,
     PAYMENT_STOP_WRITE,

@@ -24,7 +24,7 @@ class BehaviorHesitationServiceTest {
 
     @Test
     void currentFinalizedFlowIsHesitantWithTwoConfirmedSignals() {
-        givenFlow("current", 7, 65, "STEP_BACK");
+        givenFlow("current", 7, 65, "STEP_BACK", "STEP_BACK");
 
         assertThat(service.anyHesitation(7, "current", List.of())).isTrue();
     }
@@ -32,9 +32,16 @@ class BehaviorHesitationServiceTest {
     @Test
     void previousSuccessfulTransferFlowCanSupplyHesitation() {
         when(mappings.findByRefId(11)).thenReturn(new BehaviorFlowMapping(11, "past", 7));
-        givenFlow("past", 7, null, "STEP_BACK", "AMOUNT_EDITED", "AMOUNT_EDITED");
+        givenFlow("past", 7, null, "STEP_BACK", "STEP_BACK", "AMOUNT_EDITED", "AMOUNT_EDITED");
 
         assertThat(service.anyHesitation(7, null, List.of(11L))).isTrue();
+    }
+
+    @Test
+    void oneStepBackDoesNotMeetTheRevisedThreshold() {
+        givenFlow("one-back", 7, 65, "STEP_BACK");
+
+        assertThat(service.anyHesitation(7, "one-back", List.of())).isFalse();
     }
 
     @Test

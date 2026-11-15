@@ -495,6 +495,7 @@ erDiagram
         VARCHAR account_number
         VARCHAR source_type
         VARCHAR reason
+        VARCHAR admin_account_key UK
         DATETIME created_at
     }
     fds_risk_active_version {
@@ -525,6 +526,32 @@ erDiagram
         BIGINT actor_id
         VARCHAR p4_status
         DATETIME completed_at
+    }
+    fds_risk_registration {
+        CHAR registration_id PK
+        CHAR action_id FK,UK
+        BIGINT transfer_hold_id
+        CHAR investigation_id FK
+        BIGINT actor_id
+        CHAR recipient_bank_code
+        VARCHAR recipient_account_number
+        BIGINT call_record_id FK
+        VARCHAR registration_status
+        VARCHAR decision_dataset_version
+        VARCHAR dataset_version
+        BIGINT risk_account_id FK
+        DATETIME activated_at
+    }
+    fds_risk_account_evidence {
+        BIGINT evidence_id PK
+        BIGINT risk_account_id FK
+        CHAR registration_id FK,UK
+        CHAR action_id FK,UK
+        BIGINT transfer_hold_id
+        BIGINT actor_id
+        BIGINT call_record_id FK
+        VARCHAR dataset_version
+        DATETIME activated_at
     }
     delayed_transfer_setting {
         bigint customer_id PK "고객당 1행. 없으면 꺼짐"
@@ -574,7 +601,7 @@ erDiagram
     admin_permission {
         bigint customer_id PK,FK "관리자. (customer_id, role)로 customer 참조"
         varchar role FK "항상 ADMIN. DEFAULT ADMIN"
-        varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ / PAYMENT_STOP_READ / PAYMENT_STOP_WRITE / PAYMENT_STOP_APPROVE"
+        varchar permission PK "GL_READ / GL_WRITE / CUSTOMER_READ / CUSTOMER_WRITE / AUDIT_READ / PAYMENT_STOP_READ / PAYMENT_STOP_WRITE / PAYMENT_STOP_APPROVE / FDS_FRAUD_CONFIRM"
         datetime granted_at "권한 부여 시각"
     }
     notification {
@@ -980,6 +1007,10 @@ erDiagram
     fds_risk_dataset ||--o| fds_risk_active_version : "활성 버전"
     fds_admin_call_record |o--o{ fds_admin_action : "고정된 콜 근거"
     fds_admin_action ||--o| fds_admin_action_audit : "확정 감사"
+    fds_admin_action ||--o| fds_risk_registration : "사기 확정 등록 의도"
+    fds_investigation_job |o--o{ fds_risk_registration : "조사 참조"
+    fds_risk_registration ||--o| fds_risk_account_evidence : "사건별 선정 근거"
+    fds_risk_account ||--o{ fds_risk_account_evidence : "여러 사건 근거"
     customer ||..o| delayed_transfer_setting : "지연이체 설정 (FK 없음)"
 ```
 

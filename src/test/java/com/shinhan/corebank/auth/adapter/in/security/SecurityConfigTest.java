@@ -429,6 +429,27 @@ class SecurityConfigTest {
     }
 
     @Test
+    @DisplayName("FDS 위험 계좌는 조회 권한, 사기 확정은 전용 권한이 필요하다")
+    void fdsFraudConfirmationUsesDedicatedPermission() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/fds/risk-accounts/1")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.CUSTOMER_READ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("fds-risk-account"));
+        mockMvc.perform(post("/api/v1/admin/fds/holds/123/fraud-reject")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.CUSTOMER_WRITE)))
+                        .with(csrf()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/admin/fds/holds/123/fraud-reject")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.FDS_FRAUD_CONFIRM)))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("fds-fraud-reject"));
+    }
+
+    @Test
     @DisplayName("FDS Agent 내부 API는 세션과 CSRF 없이 Controller 토큰 검증 단계까지 통과한다")
     void fdsAgentApiBypassesSessionAndCsrfAtSecurityFilter() throws Exception {
         mockMvc.perform(get("/api/v1/internal/fds/holds/123/history").contextPath("/api/v1"))

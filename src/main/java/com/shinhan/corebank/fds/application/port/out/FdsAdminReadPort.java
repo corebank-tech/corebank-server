@@ -17,6 +17,8 @@ public interface FdsAdminReadPort {
 
     AdminAction findLatestAction(long transferHoldId);
 
+    RiskRegistration findRiskRegistration(long transferHoldId);
+
     record Report(String schemaVersion, String reportJson, LocalDateTime completedAt) {}
 
     record ToolResults(History history, Recipient recipient) {}
@@ -59,5 +61,16 @@ public interface FdsAdminReadPort {
             String p4ReasonCode,
             String failureReason,
             LocalDateTime createdAt,
+            LocalDateTime updatedAt) {}
+
+    record RiskRegistration(
+            String registrationId,
+            String status,
+            Long riskAccountId,
+            String decisionDatasetVersion,
+            String datasetVersion,
+            String failureReason,
+            LocalDateTime createdAt,
+            LocalDateTime activatedAt,
             LocalDateTime updatedAt) {}
 }

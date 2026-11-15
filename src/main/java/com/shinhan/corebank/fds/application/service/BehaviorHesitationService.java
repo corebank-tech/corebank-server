@@ -52,7 +52,7 @@ public class BehaviorHesitationService {
         BehaviorFeatureExtractor.Features features = BehaviorFeatureExtractor.extract(flows.events(flowId), flow);
         if (features == null) return false;
         int confirmedSignals = 0;
-        if (features.backCount() >= 1) confirmedSignals++;
+        if (features.backCount() >= 2) confirmedSignals++;
         if (features.amountRevisionCount() >= 2) confirmedSignals++;
         if (features.confirmActiveSeconds() != null && features.confirmActiveSeconds() >= 60) confirmedSignals++;
         return confirmedSignals >= 2;
