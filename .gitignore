@@ -66,3 +66,6 @@ out/
 crash.log
 crash.*.log
 *.tfplan
+
+### 이의제기 첨부 파일 로컬 저장소 (app.payment-stop.documents.root) ###
+/data/

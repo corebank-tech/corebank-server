@@ -34,10 +34,16 @@ public class MaturityTerminationValidationService {
 
     @Transactional(readOnly = true)
     public Validated validate(MaturityTerminationCommand command) {
-        validateCommand(command);
+        if (command == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
 
-        Long customerId = command.customerId();
-        Long accountId = command.accountId();
+        return validate(command.customerId(), command.accountId());
+    }
+
+    @Transactional(readOnly = true)
+    public Validated validate(Long customerId, Long accountId) {
+        validateIds(customerId, accountId);
 
         // 1. 계좌 및 고객 기준으로 가입 정보 조회
         ProductSubscription subscription = subscriptionQueryPort
@@ -101,12 +107,12 @@ public class MaturityTerminationValidationService {
                 account.timeDeposit());
     }
 
-    private static void validateCommand(MaturityTerminationCommand command) {
-        if (command == null || command.customerId() == null || command.accountId() == null) {
+    private static void validateIds(Long customerId, Long accountId) {
+        if (customerId == null || accountId == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
 
-        if (command.customerId() <= 0 || command.accountId() <= 0) {
+        if (customerId <= 0 || accountId <= 0) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
     }

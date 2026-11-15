@@ -17,8 +17,8 @@ import lombok.NonNull;
 /**
  * account 테이블을 겨냥한 transfer 도메인 전용 경량 매핑.
  * account 모듈의 AccountJpaEntity(정식/대표 엔티티)와는 별개의 부분 매핑이며, 이체 실행 중
- * 계좌 락·잔액 변경에 필요한 컬럼(account_id, account_number, customer_id, balance, status,
- * last_transaction_at, version)만 다룬다.
+ * 계좌 락·잔액 변경에 필요한 컬럼(account_id, account_number, customer_id, balance, hold_amount,
+ * status, last_transaction_at, version)만 다룬다.
  * account 패키지를 import하지 않는다.
  * BaseEntity(createdAt/updatedAt)는 의도적으로 상속하지 않는다 — 이 엔티티는 어디서도
  * 감사 필드를 읽지 않고, 상속 시 debit/credit마다 P2 소유 감사 컬럼(updated_at)에
@@ -52,6 +52,10 @@ public class AccountLockJpaEntity {
     @Column(name = "balance", nullable = false)
     @NonNull
     private Long balance;
+
+    /** 보류액(일부 지급정지 합계). P2만 바꾸는 값이라 조회 전용이다(#521). */
+    @Column(name = "hold_amount", nullable = false, insertable = false, updatable = false)
+    private Long holdAmount;
 
     /** 상태는 조회 전용이다. 이 어댑터는 status를 변경하지 않으므로 UPDATE SET절에서 제외한다. */
     @Column(name = "status", nullable = false, length = 12, insertable = false, updatable = false)

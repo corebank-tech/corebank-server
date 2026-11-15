@@ -39,6 +39,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 class TransferSettledPublicationAtomicityTest extends IntegrationTestSupport {
 
+    private static final int TRANSFER_SETTLED_LISTENER_COUNT = 2;
     private static final long WITHDRAWAL_ACCOUNT_ID = 101L;
     private static final long DEPOSIT_ACCOUNT_ID = 202L;
     private static final long INITIAL_BALANCE = 100_000L;
@@ -107,7 +108,7 @@ class TransferSettledPublicationAtomicityTest extends IntegrationTestSupport {
         assertThat(transferStatuses()).containsExactly("SUCCESS");
         assertThat(ledgerRowCount()).isEqualTo(2);
         assertThat(balance(WITHDRAWAL_ACCOUNT_ID)).isEqualTo(INITIAL_BALANCE - AMOUNT);
-        assertThat(publicationCount(ProcessResultStatus.SUCCESS)).isEqualTo(1);
+        assertThat(publicationCount(ProcessResultStatus.SUCCESS)).isEqualTo(TRANSFER_SETTLED_LISTENER_COUNT);
     }
 
     @Test
@@ -148,7 +149,8 @@ class TransferSettledPublicationAtomicityTest extends IntegrationTestSupport {
         assertThat(ledgerRowCount()).isZero();
         assertThat(publicationCount(ProcessResultStatus.SUCCESS)).isZero();
         assertThat(transferStatuses()).containsExactly("ERROR");
-        assertThat(publicationCount(ProcessResultStatus.ERROR)).isEqualTo(1);
+        // ERROR를 즉시 무시하는 FDS 리스너의 완료 정리 시점과 무관하게 알림 발행 기록은 함께 커밋된다.
+        assertThat(publicationCount(ProcessResultStatus.ERROR)).isBetween(1, TRANSFER_SETTLED_LISTENER_COUNT);
     }
 
     private void dropRejectSuccessPublicationConstraint() {

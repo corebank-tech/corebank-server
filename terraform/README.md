@@ -126,19 +126,25 @@ terraform apply main.tfplan
 
 ## 모의 대외기관을 VM 한 곳으로 옮기기 (VPN 터널 성립 뒤)
 
-컷오버 때는 서버마다 모의 대외기관 컨테이너를 띄운다(`interbank_host`가 비어 있는 기본값). 서버가 2대라 거래 장부가 따로 생기므로, 터널이 선 뒤 VM의 모의 서버 한 곳으로 옮긴다.
+컷오버 때는 서버마다 모의 대외기관 컨테이너를 띄웠다(`interbank_host`를 비운 구성). 서버가 2대라 거래 장부가 따로 생기므로, 터널이 선 뒤 VM의 모의 서버 한 곳으로 옮긴다. 루트 `interbank_host`의 기본값이 VM 주소(`192.168.0.211`)이고, 이 값이 있으면 서버는 모의 서버 컨테이너를 띄우지 않는다.
 
 1. VM에서 모의 서버를 띄우고 9300 포트를 확인한다.
 2. `modules/network/security_groups.tf`에서 WAS 보안 그룹에 VM으로 나가는 TCP 9300 egress를 추가한다.
-3. `modules/compute`의 `interbank_host`에 VM 주소를 넣고 apply한다. 시작 템플릿 새 버전만 생기고 떠 있는 서버는 그대로다.
-4. 서버를 교체하기 전에 미확정(`TIMEOUT`) 타행이체 **전체**가 0건인지 확인한다. 경과 시간(`minAge`)이나 배치 크기(`batchSize`) 제한 없이 모두 센다. 스케줄러(`InterbankInquiryService`)는 `minAge`보다 오래된 거래만 `batchSize`만큼 조회하므로, 같은 조건으로 세면 최근 거래가 남아 있어도 0건으로 나온다. 남아 있으면 교체하지 않는다. VM의 모의 서버 장부는 비어 있어서 원거래를 3001(미수신)로 답하고, 실제 승인된 거래를 미처리로 확정할 수 있다.
-5. 교체가 끝날 때까지 신규 타행이체를 실행하지 않는다(제한 방법은 팀과 정한다). 교체 중에는 옛 모의 서버와 VM의 모의 서버가 함께 쓰이기 때문이다.
+3. 신규 타행이체를 중단하고 진행 중인 타행이체가 끝났는지 확인한다(중단 방법은 팀과 정한다). 교체가 끝날 때까지 중단을 유지한다. 교체 중에는 옛 모의 서버와 VM의 모의 서버가 함께 쓰이기 때문이다.
+4. 중단한 뒤, apply하기 전에 미확정(`TIMEOUT`) 타행이체 **전체**가 0건인지 확인한다. 경과 시간(`minAge`)이나 배치 크기(`batchSize`) 제한 없이 모두 센다. 스케줄러(`InterbankInquiryService`)는 `minAge`보다 오래된 거래만 `batchSize`만큼 조회하므로, 같은 조건으로 세면 최근 거래가 남아 있어도 0건으로 나온다. 남아 있으면 교체하지 않는다. VM의 모의 서버 장부는 비어 있어서 원거래를 3001(미수신)로 답하고, 실제 승인된 거래를 미처리로 확정할 수 있다.
+5. 루트 `interbank_host`에 VM 주소를 넣고 apply한다. 시작 템플릿 새 버전과 WAS 보안 그룹 규칙만 바뀌고 떠 있는 서버는 그대로다. ASG가 시작 템플릿 `$Latest`를 쓰므로 apply 뒤에 새로 뜨는 서버는 바로 VM을 본다. 그래서 3 · 4번을 먼저 하고, apply 직후 곧바로 6번으로 간다.
 6. 서버를 한 대씩 종료한다. ASG에 `instance_refresh`가 없어서 apply만으로는 떠 있는 서버가 바뀌지 않는다. 새 서버가 `corebank-tg-was`에서 healthy가 된 것을 확인한 뒤 다음 대를 종료한다.
    ```bash
    aws autoscaling terminate-instance-in-auto-scaling-group --instance-id <ID> --no-should-decrement-desired-capacity
    ```
 7. 완료 조건: 두 서버가 같은 VM 주소를 쓰고, 두 서버 모두 `docker ps`에 `corebank-mock-external`이 없으며, 대상 그룹 healthy가 2대이고, 교체 뒤에 미확정 타행이체 전체를 다시 세어도 0건이다.
-8. 되돌릴 때는 `interbank_host`를 비우고 같은 방식으로 교체한다.
+8. 되돌릴 때는 루트 `variables.tf`의 `interbank_host` 기본값을 `""`로 바꾸는 PR을 머지한 뒤 plan · apply하고 같은 방식으로 교체한다. `-var`는 그 `plan` 실행에만 적용되므로 코드 기본값을 그대로 두면 다음 일반 plan에서 VM 주소로 다시 바뀌는 계획이 나온다. 저장한 plan을 쓸 때 변수는 `apply`가 아니라 `plan`에 지정한다.
+   ```bash
+   # 기본값을 ""로 바꾸는 PR을 머지한 뒤
+   (umask 077; terraform plan -out=main.tfplan -var="snapshot_identifier=<스냅샷 ID>")
+   terraform apply main.tfplan   # -var는 쓸 수 없다. 끝나면 main.tfplan을 삭제한다
+   ```
+   급해서 PR 없이 한 번만 되돌릴 때는 `plan`에 `-var="interbank_host="`를 더한다. 다만 그 뒤 일반 plan에는 VM 주소가 다시 나오므로 같은 날 기본값을 바꾸는 PR을 올린다.
 
 모의 서버 장부는 컨테이너 메모리에만 있어서 교체하면 사라진다.
 

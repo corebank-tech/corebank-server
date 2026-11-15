@@ -63,6 +63,7 @@ class AccountLockPersistenceAdapterOrderingTest {
         return AccountLockJpaEntity.builder()
                 .accountId(accountId)
                 .balance(100_000L)
+                .holdAmount(0L)
                 .status("ACTIVE")
                 .build();
     }

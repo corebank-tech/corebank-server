@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class EarlyTerminationValidationService {
+
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final ProductSubscriptionQueryPort subscriptionQueryPort;
@@ -48,48 +49,79 @@ public class EarlyTerminationValidationService {
 
     @Transactional(readOnly = true)
     public Validated validate(EarlyTerminationCommand command) {
-        if (command == null || command.customerId() == null || command.accountId() == null) {
+        if (command == null) {
             throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
         }
-        if (command.customerId() <= 0 || command.accountId() <= 0) {
-            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
-        }
+
+        return validate(command.customerId(), command.accountId());
+    }
+
+    @Transactional(readOnly = true)
+    public Validated validate(Long customerId, Long accountId) {
+        validateIds(customerId, accountId);
+
+        // 1. 가입 정보 조회
         ProductSubscription subscription = subscriptionQueryPort
-                .findByAccountIdAndCustomerId(command.accountId(), command.customerId())
+                .findByAccountIdAndCustomerId(accountId, customerId)
                 .orElseThrow(() -> new BusinessException(SubscriptionErrorCode.SUBSCRIPTION_NOT_FOUND));
+
         if (subscription.getStatus() != ProcessResultStatus.SUCCESS) {
             throw new BusinessException(SubscriptionErrorCode.SUBSCRIPTION_NOT_COMPLETED);
         }
+
         if (subscription.getMaturityHandling() != MaturityHandling.TRANSFER) {
             throw new BusinessException(SubscriptionErrorCode.MATURITY_RENEW_UNSUPPORTED);
         }
+
+        // 2. 중도해지 가능한 계좌인지 검증
         LocalDate today = LocalDate.now(clock.withZone(KST));
-        EarlyTerminationAccountView account =
-                accountQueryUseCase.requireEarlyTerminable(command.accountId(), command.customerId(), today);
+
+        EarlyTerminationAccountView account = accountQueryUseCase.requireEarlyTerminable(accountId, customerId, today);
+
+        // 3. 가입 정보와 계좌 정보 일치 여부 확인
         if (!Objects.equals(subscription.getAccountId(), account.accountId())
                 || !Objects.equals(subscription.getProductId(), account.productId())
                 || !Objects.equals(subscription.getMaturityDate(), account.maturityDate())) {
             throw new BusinessException(SubscriptionErrorCode.SUBSCRIPTION_ACCOUNT_NOT_FOUND);
         }
+
+        // 4. 수취 계좌 검증
         Long destination = subscription.getWithdrawalAccountId();
-        if (destination == null || Objects.equals(destination, command.accountId())) {
+
+        if (destination == null || Objects.equals(destination, accountId)) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
-        maturityAccountQueryUseCase.requireWithdrawalDestination(destination, command.customerId());
+
+        maturityAccountQueryUseCase.requireWithdrawalDestination(destination, customerId);
+
+        // 5. 가입 당시 이자 계산 조건 검증
         if (subscription.getOpenedDate() == null
                 || subscription.getAppliedRate() == null
                 || subscription.getOpenedDate().isAfter(today)) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
+
+        // 6. 경과기간에 따른 중도해지 적용금리 산출
         BigDecimal rate = ratePolicy.calculate(subscription.getOpenedDate(), today, subscription.getAppliedRate());
+
         return new Validated(
-                command.accountId(),
+                accountId,
                 destination,
                 subscription.getOpenedDate(),
                 today,
                 rate,
                 subscription.getSubscriptionAmount(),
                 account.timeDeposit());
+    }
+
+    private static void validateIds(Long customerId, Long accountId) {
+        if (customerId == null || accountId == null) {
+            throw new BusinessException(CommonErrorCode.REQUIRED_FIELD_MISSING);
+        }
+
+        if (customerId <= 0 || accountId <= 0) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        }
     }
 
     public record Validated(

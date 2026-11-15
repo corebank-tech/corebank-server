@@ -136,7 +136,7 @@ abstract class InterbankIntegrationTestSupport extends IntegrationTestSupport {
         jdbcTemplate.update("DELETE FROM ledger_entry WHERE account_id = ?", WITHDRAWAL_ACCOUNT_ID);
         jdbcTemplate.update("DELETE FROM transfer WHERE payee_bank_code IS NOT NULL");
         jdbcTemplate.update(
-                "UPDATE account SET balance = ?, status = 'ACTIVE' WHERE account_id = ?",
+                "UPDATE account SET balance = ?, hold_amount = 0, status = 'ACTIVE' WHERE account_id = ?",
                 INITIAL_BALANCE,
                 WITHDRAWAL_ACCOUNT_ID);
         jdbcTemplate.update("DELETE FROM transfer_limit_daily_usage WHERE customer_id = 1");
@@ -153,6 +153,10 @@ abstract class InterbankIntegrationTestSupport extends IntegrationTestSupport {
     }
 
     InterbankTransferService service(InterbankGatewayPort gateway) {
+        return service(gateway, transferPreChecks);
+    }
+
+    InterbankTransferService service(InterbankGatewayPort gateway, List<TransferPreCheck> preChecks) {
         return new InterbankTransferService(
                 accountLockPort,
                 interbankBankPort,
@@ -165,7 +169,7 @@ abstract class InterbankIntegrationTestSupport extends IntegrationTestSupport {
                 transferSavePort,
                 ledgerSavePort,
                 journalPostingUseCase,
-                transferPreChecks,
+                preChecks,
                 businessDateGate,
                 eventPublisher,
                 clock,

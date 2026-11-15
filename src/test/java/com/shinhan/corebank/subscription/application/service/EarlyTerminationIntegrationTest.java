@@ -25,6 +25,9 @@ import com.shinhan.corebank.subscription.adapter.out.persistence.ProductSubscrip
 import com.shinhan.corebank.subscription.api.EarlyTerminationCommand;
 import com.shinhan.corebank.subscription.api.EarlyTerminationResult;
 import com.shinhan.corebank.subscription.api.EarlyTerminationUseCase;
+import com.shinhan.corebank.subscription.api.TerminationPreviewResult;
+import com.shinhan.corebank.subscription.api.TerminationPreviewUseCase;
+import com.shinhan.corebank.subscription.api.TerminationType;
 import com.shinhan.corebank.subscription.application.port.out.MaturityTerminationPasswordVerificationPort;
 import com.shinhan.corebank.subscription.domain.MaturityHandling;
 import jakarta.persistence.EntityManager;
@@ -67,6 +70,9 @@ class EarlyTerminationIntegrationTest extends IntegrationTestSupport {
 
     @Autowired
     private EarlyTerminationUseCase terminationUseCase;
+
+    @Autowired
+    private TerminationPreviewUseCase previewUseCase;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -475,6 +481,54 @@ class EarlyTerminationIntegrationTest extends IntegrationTestSupport {
                 "SELECT status FROM account WHERE account_id = ?", String.class, PRODUCT_ACCOUNT_ID);
 
         assertThat(status).isEqualTo("CLOSED");
+    }
+
+    @Test
+    @DisplayName("중도해지 예상 조회는 DB를 변경하지 않으며 실제 지급액과 일치한다")
+    void preview_matchesActualTermination_withoutSideEffects() {
+        // 1. 예상 조회 2회
+        TerminationPreviewResult first = previewUseCase.previewEarly(customerId, PRODUCT_ACCOUNT_ID);
+
+        TerminationPreviewResult second = previewUseCase.previewEarly(customerId, PRODUCT_ACCOUNT_ID);
+
+        // 2. 예상 금액 검증
+        assertThat(first.terminationType()).isEqualTo(TerminationType.EARLY_TERMINATION);
+        assertThat(first.withdrawalAccountId()).isEqualTo(WITHDRAWAL_ACCOUNT_ID);
+        assertThat(first.principal()).isEqualTo(PRINCIPAL);
+        assertThat(first.totalExpectedAmount()).isEqualTo(PRINCIPAL + first.netInterest());
+
+        assertThat(second.grossInterest()).isEqualTo(first.grossInterest());
+        assertThat(second.tax()).isEqualTo(first.tax());
+        assertThat(second.netInterest()).isEqualTo(first.netInterest());
+        assertThat(second.totalExpectedAmount()).isEqualTo(first.totalExpectedAmount());
+
+        // 3. 예상 조회 후 DB 변경이 없어야 한다
+        assertThat(balanceOf(PRODUCT_ACCOUNT_ID)).isEqualTo(PRINCIPAL);
+        assertThat(balanceOf(WITHDRAWAL_ACCOUNT_ID)).isZero();
+        assertThat(accountStatus()).isEqualTo("ACTIVE");
+
+        assertThat(countInterestLedger()).isZero();
+        assertThat(countTerminationLedger()).isZero();
+        assertThat(countInterestHistory()).isZero();
+        assertThat(countVoucher("INTEREST")).isZero();
+        assertThat(countVoucher("TERMINATION")).isZero();
+        assertThat(countClosureHistory()).isZero();
+
+        // 4. 실제 중도해지 실행
+        EarlyTerminationResult actual = terminationUseCase.terminate(command());
+
+        // 5. 예상 금액과 실제 지급 금액 비교
+        assertThat(actual.principal()).isEqualTo(first.principal());
+        assertThat(actual.grossInterest()).isEqualTo(first.grossInterest());
+        assertThat(actual.tax()).isEqualTo(first.tax());
+        assertThat(actual.netInterest()).isEqualTo(first.netInterest());
+        assertThat(actual.totalTransferred()).isEqualTo(first.totalExpectedAmount());
+
+        // 6. 실제 해지 이후에만 CLOSED 전이
+        assertThat(accountStatus()).isEqualTo("CLOSED");
+        assertThat(balanceOf(PRODUCT_ACCOUNT_ID)).isZero();
+        assertThat(countInterestHistory()).isEqualTo(1L);
+        assertThat(countTerminationLedger()).isEqualTo(2L);
     }
 
     private EarlyTerminationCommand command() {

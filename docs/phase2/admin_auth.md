@@ -31,7 +31,7 @@
 `customer.role`로 갈린다. 둘이 모순되는 상태(`CUSTOMER`인데 권한 행이 있음)는 PH-49b에서 복합 FK
 `fk_admin_permission_admin`으로 막았다([아래](#부여회수-api와-maker-checker-검토-ph-49b)).
 
-**② 권한 5종 고정**
+**② 권한 고정** (5종, 11/3 지급정지 3종 추가로 8종)
 
 | 권한 | 의미 | 쓰는 곳 |
 |---|---|---|
@@ -40,6 +40,9 @@
 | `CUSTOMER_READ` | 고객 조회 | PH-97 검색·상세 |
 | `CUSTOMER_WRITE` | 고객 변경 | PH-97 잠금해제·비밀번호 초기화·상태 변경 |
 | `AUDIT_READ` | 감사로그 조회 | 대사 불일치(ADM-04·PH-38) · PH-89 |
+| `PAYMENT_STOP_READ` | 지급정지 조회 | 이의제기 AI 심사 지원([D-36](README.md#d-36--113--리드)) 사건과 이의제기 조회 |
+| `PAYMENT_STOP_WRITE` | 지급정지 변경 | 사건 등록, 이의제기 접수, 판정 작성 |
+| `PAYMENT_STOP_APPROVE` | 지급정지 해제 승인 | 수용, 일부 지급정지 판정의 승인. 작성자와 다른 관리자 |
 
 `api_conventions.md` §5-8에 `CustomerRole`·`AdminPermission`으로 등록했다. 값을 늘리면 `/admin/**`
 권한 매핑표(②)와 부여·회수 API(PH-49b)를 함께 고쳐야 한다. ①·② 시점에는 시드와 Runbook SQL로만 넣었고, PH-49b부터 API로도 넣는다.
@@ -87,9 +90,10 @@ PH-49c의 Spring Session JDBC는 세션을 공용 MySQL에 저장한다. 두 변
 | `user_id` | 권한 | 쓰임 |
 |---|---|---|
 | `adminreader` | `GL_READ,CUSTOMER_READ,AUDIT_READ` | 조회 전용. ②의 DoD "변경 API 403" 확인 |
-| `adminoperator` | 5종 전부 | FE 관리자 채널 시연 |
+| `adminoperator` | 앞 5종 전부, `PAYMENT_STOP_READ`, `PAYMENT_STOP_WRITE` | FE 관리자 채널 시연. 해제 승인(`PAYMENT_STOP_APPROVE`)은 작성자와 다른 사람이 해야 해서 주지 않는다 |
+| `adminapprover` | `PAYMENT_STOP_READ`, `PAYMENT_STOP_APPROVE` | `adminoperator`가 쓴 수용, 일부 지급정지 판정의 승인과 반려. 판정을 쓰지 못하게 `PAYMENT_STOP_WRITE`는 주지 않는다 |
 
-비밀번호는 둘 다 **`Admin1234!`**.
+비밀번호는 셋 다 **`Admin1234!`**.
 
 QA 데모 데이터(`local-demo-data.sql`)와 **파일을 나눈 이유**는 `DemoDataLoader`가
 `@Profile("!phase2-seed & (local | qa-seed)")`이고 팀 QA 배포는 `prod,qa-seed`로 **운영 RDS**에
@@ -207,6 +211,8 @@ SELECT c.user_id, c.role, GROUP_CONCAT(ap.permission ORDER BY ap.permission) AS 
 | `/admin/trial-balance` | `GL_READ` | — (조회 전용) |
 | `/admin/gl/integrity-check` | `GL_READ` | — (조회 전용) |
 | `/admin/ledger-reconciliation` | `AUDIT_READ` | — (조회 전용) |
+| `/admin/payment-stops` | `PAYMENT_STOP_READ` | `PAYMENT_STOP_WRITE` (사건 등록, D-36) |
+| `/admin/objections` | `PAYMENT_STOP_READ` | `PAYMENT_STOP_WRITE` (접수, 완비 확인, 보완 요청, 판정 작성, 외부 확인, 서류 업로드). 판정 승인과 반려(`/decisions/{decisionId}/approve`, `/return`)만 `PAYMENT_STOP_APPROVE`, 심사 시작 기록(`/review-sessions`)은 `PAYMENT_STOP_READ` |
 
 조회 전용 경로는 GET 규칙만 두어 변경 요청이 맨 아래 `denyAll` 로 떨어진다. 쓰기 권한을 미리
 채워 두면 그 경로에 변경 API 가 붙는 순간 조회 권한만 가진 관리자가 통과하기 때문이다.

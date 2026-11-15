@@ -1,9 +1,11 @@
 package com.shinhan.corebank.transfer.application.service;
 
+import com.shinhan.corebank.transfer.api.RecentSuccessfulTransfer;
 import com.shinhan.corebank.transfer.api.RecentTransferAggregate;
 import com.shinhan.corebank.transfer.api.RecentTransferQuery;
 import com.shinhan.corebank.transfer.application.port.out.RecentTransferQueryPort;
 import java.time.LocalDateTime;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +21,12 @@ public class RecentTransferQueryService implements RecentTransferQuery {
     public RecentTransferAggregate aggregateSucceeded(
             long customerId, String depositAccountNumber, LocalDateTime since) {
         return recentTransferQueryPort.aggregateSucceeded(customerId, depositAccountNumber, since);
+    }
+
+    @Override
+    public List<RecentSuccessfulTransfer> findSucceeded(
+            long customerId, String depositAccountNumber, LocalDateTime since) {
+        return recentTransferQueryPort.findSucceeded(customerId, depositAccountNumber, since);
     }
 
     @Override

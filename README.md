@@ -189,8 +189,8 @@ git config blame.ignoreRevsFile .git-blame-ignore-revs
 
 | 워크플로 | 역할 |
 |---|---|
-| [`corebank.yml`](.github/workflows/corebank.yml) | PR · push 시 빌드 · 테스트 / `main` push 시 EC2 배포 |
+| [`corebank.yml`](.github/workflows/corebank.yml) | PR · push 시 빌드 · 테스트 / `main` push 시 Docker 이미지 빌드 · 푸시(서버에는 배포하지 않음) |
 | [`pr_agent.yml`](.github/workflows/pr_agent.yml) | PR 자동 리뷰 ([가이드](docs/pr_agent_guide.md)) |
 
 기본 브랜치는 `dev`이고 평소 PR은 `dev`로 보냅니다. `main`에 머지되면
-`corebank.yml`이 Docker 이미지를 빌드해 EC2에 배포하므로, `main` 머지는 곧 배포입니다.
+`corebank.yml`이 Docker 이미지를 빌드해 Docker Hub에 올립니다. 서버에는 자동으로 배포하지 않으므로 서버 반영은 사람이 이미지 태그를 정해 직접 합니다(절차는 [phase2/README.md](docs/phase2/README.md)와 [VM 런북](docs/phase2/vm_account_api_runbook.md) 참고).

@@ -51,7 +51,14 @@ public class SecurityConfig {
         pathPattern(HttpMethod.POST, "/auth/email-verifications/{emailVerificationId}/verify"),
         pathPattern(HttpMethod.POST, "/auth/password-reset-requests"),
         pathPattern(HttpMethod.PUT, "/auth/password-reset-requests/{passwordResetRequestId}"),
-        pathPattern(HttpMethod.GET, "/actuator/health")
+        pathPattern(HttpMethod.GET, "/actuator/health"),
+        // 이의제기 Agent 워커 전용(D-36). 세션이 아니라 워커 서비스 키와 작업 토큰으로 인증하고, ALB 에 공개하지 않는다.
+        // /internal/** 전체를 열지 않는다. 나중에 생기는 내부 경로가 인증 없이 열리지 않게 접두어를 하나씩 적는다
+        pathPattern("/internal/review-jobs/**"),
+        pathPattern("/internal/objections/**"),
+        pathPattern("/internal/agent-runs/**"),
+        // FDS Agent는 세션 대신 전용 Bearer 토큰을 각 Controller 진입점에서 검증한다.
+        pathPattern("/internal/fds/**")
     };
 
     // 공개하되 CSRF 보호는 유지하는 경로.
@@ -184,6 +191,10 @@ public class SecurityConfig {
                         .hasAuthority(AdminPermission.CUSTOMER_READ.name())
                         .requestMatchers(pathPattern("/admin/customers/**"))
                         .hasAuthority(AdminPermission.CUSTOMER_WRITE.name())
+                        .requestMatchers(pathPattern(HttpMethod.GET, "/admin/fds/holds/**"))
+                        .hasAuthority(AdminPermission.CUSTOMER_READ.name())
+                        .requestMatchers(pathPattern(HttpMethod.POST, "/admin/fds/holds/**"))
+                        .hasAuthority(AdminPermission.CUSTOMER_WRITE.name())
                         .requestMatchers(pathPattern(HttpMethod.GET, "/admin/trial-balance/**"))
                         .hasAuthority(AdminPermission.GL_READ.name())
                         .requestMatchers(pathPattern(HttpMethod.GET, "/admin/info/**"))
@@ -192,6 +203,26 @@ public class SecurityConfig {
                         .hasAuthority(AdminPermission.GL_READ.name())
                         .requestMatchers(pathPattern(HttpMethod.GET, "/admin/ledger-reconciliation/**"))
                         .hasAuthority(AdminPermission.AUDIT_READ.name())
+                        // 지급정지 사건과 이의제기(D-36). 수용, 일부 지급정지 판정의 승인과 반려만 PAYMENT_STOP_APPROVE 다(D13).
+                        // 작성자와 승인자가 다른지는 paymentstop 이 직접 본다. 심사 시작 기록은 상세 화면을 여는 조회 권한으로 둔다.
+                        // 승인 줄이 아래 POST /admin/objections/** 줄보다 먼저 걸려야 한다.
+                        .requestMatchers(pathPattern(
+                                HttpMethod.POST, "/admin/objections/{objectionId}/decisions/{decisionId}/approve"))
+                        .hasAuthority(AdminPermission.PAYMENT_STOP_APPROVE.name())
+                        .requestMatchers(pathPattern(
+                                HttpMethod.POST, "/admin/objections/{objectionId}/decisions/{decisionId}/return"))
+                        .hasAuthority(AdminPermission.PAYMENT_STOP_APPROVE.name())
+                        .requestMatchers(
+                                pathPattern(HttpMethod.POST, "/admin/objections/{objectionId}/review-sessions"))
+                        .hasAuthority(AdminPermission.PAYMENT_STOP_READ.name())
+                        .requestMatchers(pathPattern(HttpMethod.GET, "/admin/payment-stops/**"))
+                        .hasAuthority(AdminPermission.PAYMENT_STOP_READ.name())
+                        .requestMatchers(pathPattern(HttpMethod.GET, "/admin/objections/**"))
+                        .hasAuthority(AdminPermission.PAYMENT_STOP_READ.name())
+                        .requestMatchers(pathPattern(HttpMethod.POST, "/admin/payment-stops/**"))
+                        .hasAuthority(AdminPermission.PAYMENT_STOP_WRITE.name())
+                        .requestMatchers(pathPattern(HttpMethod.POST, "/admin/objections/**"))
+                        .hasAuthority(AdminPermission.PAYMENT_STOP_WRITE.name())
 
                         // 위에 걸리지 않은 /admin 경로는 거부한다. 새 관리자 API 를 열면서 규칙을
                         // 빠뜨려도 아무 관리자에게나 열리지 않게 한다.

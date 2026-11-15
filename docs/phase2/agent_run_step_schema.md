@@ -26,12 +26,15 @@ AI Agent가 한 번 실행되는 동안 무엇을 했는지 단계별로 남기�
 | `model`, `prompt_version` | 사용한 LLM 모델명과 프롬프트 버전 |
 | `input_tokens`, `output_tokens` | 토큰 수 |
 | `cost_micro_usd` | 비용, 백만분의 1달러 정수(`BIGINT`). `BigDecimal`은 금리 전용이다(AGENTS.md 규칙 5) |
-| `started_at`, `ended_at` | 시작과 종료 시각 |
+| `requested_by` | 분석을 넣은 관리자. 접수 때 자동으로 들어간 실행은 접수한 관리자 |
+| `queued_at`, `started_at`, `ended_at` | 대기열에 들어간 시각, 처음 가져간 시각, 끝난 시각 |
+| `failure_reason` | 실패하거나 대기열로 돌아간 사유(가명 처리) |
 
 ## 3. `agent_run_step` — 실행 안의 단계
 
 | 필드 | 뜻 |
 |---|---|
+| `step_id` | 단계 행 ID. 화면에는 쓰지 않는다 |
 | `run_id`, `seq` | 실행 ID와 실행 안 순번. 두 값의 조합이 유일하다. 같은 `seq`를 다시 보내면 무시한다(멱등). 다만 이미 저장된 단계와 `type`이나 내용이 다르면 무시하지 않고 충돌로 거절한다. 점유 만료로 서버가 `FAILED`를 먼저 남긴 뒤 Agent가 같은 번호를 보내는 경우다. `seq`는 실행마다 1부터 빈 번호 없이 매긴다. Agent는 앞 단계가 저장된 뒤 다음 번호를 보내고, 서버 단계(`GATE_EVALUATED`)는 판정안 제출을 처리한 트랜잭션에서 그다음 번호로 남긴다. 그래서 큰 번호가 작은 번호보다 먼저 저장되지 않는다 |
 | `type` | 단계 종류(§4) |
 | `title` | 화면에 보일 한 줄 |
@@ -58,5 +61,5 @@ AI Agent가 한 번 실행되는 동안 무엇을 했는지 단계별로 남기�
 
 ## 5. 조회
 
-- 관리자 화면: `GET /admin/objections/{id}/agent-runs/{runId}/steps?after={seq}` — `seq`가 `after`보다 큰 단계만 순서대로 준다.
-- 내부 API 전체 계약은 이의제기 AI 심사 지원 구현 PR에서 `objection_agent_contract.md`로 따로 둔다.
+- 관리자 화면: `GET /admin/objections/{id}/agent-runs/{runId}/steps?after={seq}` — `seq`가 `after`보다 큰 단계만 순서대로 준다. 실행 목록은 `GET /admin/objections/{id}/agent-runs`다.
+- 내부 API 전체 계약은 [objection_agent_contract.md](objection_agent_contract.md)다.

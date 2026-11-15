@@ -37,6 +37,11 @@ variable "onprem_info_api_cidr" {
   default     = "192.168.0.211/32"
 }
 
+variable "onprem_interbank_cidr" {
+  description = "WAS가 모의 대외기관(9300)을 부르러 나가는 온프레미스 VM의 /32. 정보계 API 주소와 따로 정한다"
+  default     = "192.168.0.211/32"
+}
+
 variable "info_api_port" {
   description = "온프레미스 정보계 API가 받는 포트"
   default     = 8081

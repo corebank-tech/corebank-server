@@ -1,10 +1,10 @@
 package com.shinhan.corebank.limit.application.service;
 
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
 import com.shinhan.corebank.limit.api.TransferLimitProvider;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
-import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

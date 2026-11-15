@@ -2,6 +2,7 @@ package com.shinhan.corebank.transfer.application.service;
 
 import com.shinhan.corebank.business.api.BusinessDateGate;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
 import com.shinhan.corebank.transfer.api.LedgerPostingContext;
 import com.shinhan.corebank.transfer.api.LedgerPostingHook;
 import com.shinhan.corebank.transfer.application.port.in.TransferCorrectionUseCase;
@@ -83,7 +84,8 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
         original.invalidate(executedAt);
         Transfer reversal = claimReversal(original, locked, transactionNumber, executedAt, tradeDate);
         requireActiveAccounts(locked);
-        if (locked.withdrawal().balance() < original.getAmount()) {
+        // 보류액 때문이어도 운영자에게는 "되돌릴 수 없음"이 핵심이라 TRF0306 하나로 둔다(#521).
+        if (locked.withdrawal().availableBalance() < original.getAmount()) {
             throw new BusinessException(TransferErrorCode.REVERSAL_INSUFFICIENT_BALANCE);
         }
 
@@ -142,6 +144,9 @@ public class TransferCorrectionService implements TransferCorrectionUseCase {
         requireActiveAccounts(locked);
         if (locked.withdrawal().balance() < correctedAmount) {
             throw new BusinessException(TransferErrorCode.INSUFFICIENT_BALANCE);
+        }
+        if (locked.withdrawal().availableBalance() < correctedAmount) {
+            throw new BusinessException(LmtErrorCode.INSUFFICIENT_WITHDRAWABLE_AMOUNT);
         }
 
         TransferBalances balances = accountLockPort.applyTransfer(locked, correctedAmount, executedAt);

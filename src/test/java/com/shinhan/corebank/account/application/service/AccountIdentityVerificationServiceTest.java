@@ -1,6 +1,7 @@
 package com.shinhan.corebank.account.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -12,6 +13,8 @@ import com.shinhan.corebank.account.api.AccountIdentityVerificationStatus;
 import com.shinhan.corebank.account.application.port.out.AccountPersistencePort;
 import com.shinhan.corebank.account.domain.Account;
 import com.shinhan.corebank.account.domain.AccountPasswordAttemptResult;
+import com.shinhan.corebank.account.domain.exception.AccountPasswordErrorCode;
+import com.shinhan.corebank.common.exception.BusinessException;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
@@ -74,15 +77,17 @@ class AccountIdentityVerificationServiceTest {
     }
 
     @Test
-    @DisplayName("비밀번호 불일치와 잠금 상태를 구분해 반환한다")
-    void returnsPasswordAttemptStatus() {
+    @DisplayName("계좌비밀번호 잠금 시 APW0101 예외를 발생시킨다")
+    void rejectsLockedAccountPassword() {
         Account account = account(101L, 1L);
+
         given(persistencePort.findByAccountNumber("110550051877")).willReturn(Optional.of(account));
+
         given(processor.verify(1L, 101L, "1234")).willReturn(new AccountPasswordAttemptResult(101L, false, 5, 0, true));
 
-        AccountIdentityVerificationResult result = service.verify(verification(Set.of(1L)));
-
-        assertThat(result.status()).isEqualTo(AccountIdentityVerificationStatus.LOCKED);
+        assertThatThrownBy(() -> service.verify(verification(Set.of(1L))))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(AccountPasswordErrorCode.PASSWORD_LOCKED));
     }
 
     @Test

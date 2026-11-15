@@ -9,6 +9,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -372,6 +373,103 @@ class SecurityConfigTest {
                         .with(authentication(admin(7L))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CMN0102"));
+    }
+
+    @Test
+    @DisplayName("이의제기 조회는 지급정지 조회 권한으로 통과한다")
+    void permitsObjectionReadWithPaymentStopRead() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/objections/test")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.PAYMENT_STOP_READ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("objection"));
+    }
+
+    @Test
+    @DisplayName("지급정지 조회 권한만 있으면 이의제기 접수와 판정 요청에서 403 CMN0102를 반환한다")
+    void rejectsObjectionWriteWithReadOnly() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/objections/test")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.PAYMENT_STOP_READ)))
+                        .with(csrf()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CMN0102"));
+    }
+
+    @Test
+    @DisplayName("지급정지 변경 권한이 있으면 이의제기 변경 요청이 통과하고, 다른 권한으로는 조회도 막힌다")
+    void permitsObjectionWriteWithPaymentStopWrite() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/objections/test")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.PAYMENT_STOP_WRITE)))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("objection-write"));
+        mockMvc.perform(get("/api/v1/admin/objections/test")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.CUSTOMER_READ))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("FDS 보류 상세는 CUSTOMER_READ 관리자만 조회한다")
+    void fdsHoldDetailRequiresCustomerRead() throws Exception {
+        var path = "/api/v1/admin/fds/holds/123";
+        mockMvc.perform(get(path).contextPath("/api/v1").with(authentication(admin(7L))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get(path).contextPath("/api/v1").with(authentication(admin(7L, AdminPermission.CUSTOMER_READ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("fds-hold"));
+        mockMvc.perform(post(path + "/approve")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.CUSTOMER_WRITE)))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("fds-approve"));
+    }
+
+    @Test
+    @DisplayName("FDS Agent 내부 API는 세션과 CSRF 없이 Controller 토큰 검증 단계까지 통과한다")
+    void fdsAgentApiBypassesSessionAndCsrfAtSecurityFilter() throws Exception {
+        mockMvc.perform(get("/api/v1/internal/fds/holds/123/history").contextPath("/api/v1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("fds-history"));
+        mockMvc.perform(put("/api/v1/internal/fds/investigations/inv-123/report")
+                        .contextPath("/api/v1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("fds-report"));
+    }
+
+    @Test
+    @DisplayName("판정 승인과 반려는 지급정지 승인 권한만 통과하고 변경 권한으로는 403이다")
+    void objectionApprovalRequiresApprovePermission() throws Exception {
+        for (String path : new String[] {
+            "/api/v1/admin/objections/1/decisions/2/approve", "/api/v1/admin/objections/1/decisions/2/return"
+        }) {
+            mockMvc.perform(post(path)
+                            .contextPath("/api/v1")
+                            .with(authentication(
+                                    admin(7L, AdminPermission.PAYMENT_STOP_READ, AdminPermission.PAYMENT_STOP_WRITE)))
+                            .with(csrf()))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("CMN0102"));
+            mockMvc.perform(post(path)
+                            .contextPath("/api/v1")
+                            .with(authentication(admin(8L, AdminPermission.PAYMENT_STOP_APPROVE)))
+                            .with(csrf()))
+                    .andExpect(status().isOk());
+        }
+    }
+
+    @Test
+    @DisplayName("심사 시작 기록은 지급정지 조회 권한으로 통과한다")
+    void reviewSessionNeedsOnlyRead() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/objections/1/review-sessions")
+                        .contextPath("/api/v1")
+                        .with(authentication(admin(7L, AdminPermission.PAYMENT_STOP_READ)))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("objection-review-session"));
     }
 
     @Test

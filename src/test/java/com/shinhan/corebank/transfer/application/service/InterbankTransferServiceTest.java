@@ -11,6 +11,9 @@ import static org.mockito.Mockito.when;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.event.DomainEvent;
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
+import com.shinhan.corebank.transfer.api.TransferPreCheck;
+import com.shinhan.corebank.transfer.api.TransferPreCheckContext;
 import com.shinhan.corebank.transfer.api.TransferSettled;
 import com.shinhan.corebank.transfer.application.port.in.InterbankTransferResult;
 import com.shinhan.corebank.transfer.application.port.out.InterbankGatewayPort;
@@ -19,11 +22,14 @@ import com.shinhan.corebank.transfer.application.port.out.InterbankReply;
 import com.shinhan.corebank.transfer.application.port.out.InterbankRequest;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 class InterbankTransferServiceTest extends InterbankIntegrationTestSupport {
 
@@ -166,15 +172,54 @@ class InterbankTransferServiceTest extends InterbankIntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("[#521] 훅 A 통과 뒤 락 전에 보류액이 늘면 송신하지 않고 LMT0001로 거부하며 잔액·원장은 그대로다")
+    void holdIncreasedAfterPreCheck_failsBeforeSend() {
+        long amount = INITIAL_BALANCE - 1;
+        TransferPreCheck holdAfterPreCheck = new TransferPreCheck() {
+            // 실제 훅 A(출금가능액 검사)가 통과시킨 뒤에 돈다.
+            @Override
+            public int order() {
+                return Integer.MAX_VALUE;
+            }
+
+            @Override
+            public void check(TransferPreCheckContext context) {
+                TransactionTemplate requiresNew = new TransactionTemplate(transactionManager);
+                requiresNew.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+                requiresNew.executeWithoutResult(status -> jdbcTemplate.update(
+                        "UPDATE account SET hold_amount = ? WHERE account_id = ?",
+                        INITIAL_BALANCE / 2,
+                        WITHDRAWAL_ACCOUNT_ID));
+            }
+        };
+        List<TransferPreCheck> preChecks = new ArrayList<>(transferPreChecks);
+        preChecks.add(holdAfterPreCheck);
+
+        InterbankTransferResult result = service(client, preChecks).execute(command("004", "1234567890123", amount));
+
+        assertThat(result.status()).isEqualTo(ProcessResultStatus.ERROR);
+        assertThat(result.errorCode()).isEqualTo(LmtErrorCode.INSUFFICIENT_WITHDRAWABLE_AMOUNT.getCode());
+        assertThat(balance()).isEqualTo(INITIAL_BALANCE);
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM ledger_entry WHERE transaction_number = ?",
+                        Long.class,
+                        result.transactionNumber()))
+                .isZero();
+    }
+
+    @Test
     @DisplayName("타행 확정 이벤트는 출금계좌 주인에게 마스킹한 수취인과 금액으로 이체 완료 알림을 싣는다(#706)")
     void approved_settledEventCarriesTransferNotification() {
         service(client).execute(command("004", "1234567890123", AMOUNT));
 
-        assertThat(publishedTransferSettled().notification()).satisfies(notification -> {
+        TransferSettled settled = publishedTransferSettled();
+        assertThat(settled.notification()).satisfies(notification -> {
             assertThat(notification.customerId()).isEqualTo(1L);
             assertThat(notification.title()).isEqualTo("이체 완료");
             assertThat(notification.content()).isEqualTo("김*수님에게 30,000원을 보냈습니다.");
         });
+        // 타행은 FDS 보류 대상이 아니라 행동 흐름이 없다(#978)
+        assertThat(settled.flowId()).isNull();
     }
 
     @Test

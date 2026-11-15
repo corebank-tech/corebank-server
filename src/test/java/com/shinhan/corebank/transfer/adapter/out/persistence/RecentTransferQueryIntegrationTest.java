@@ -3,6 +3,7 @@ package com.shinhan.corebank.transfer.adapter.out.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.shinhan.corebank.IntegrationTestSupport;
+import com.shinhan.corebank.transfer.api.RecentSuccessfulTransfer;
 import com.shinhan.corebank.transfer.api.RecentTransferAggregate;
 import com.shinhan.corebank.transfer.api.RecentTransferQuery;
 import jakarta.persistence.EntityManager;
@@ -43,13 +44,13 @@ class RecentTransferQueryIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("고객의 모든 출금계좌에서 since 이후(포함) 보낸 당행 SUCCESS만 세고, 실패·무효화·타행·취소정정·다른 수취인·다른 고객은 뺀다")
     void aggregateSucceeded_countsOnlyCustomersSuccessfulTransfersToPayee() {
-        insertTransfer(101L, 202L, PAYEE, null, 5_000L, "SUCCESS", SINCE);
-        insertTransfer(101L, 202L, PAYEE, null, 10_000L, "SUCCESS", SINCE.plusMinutes(1));
-        insertTransfer(SECOND_ACCOUNT, 202L, PAYEE, null, 20_000L, "SUCCESS", SINCE.plusMinutes(2));
+        long first = insertTransfer(101L, 202L, PAYEE, null, 5_000L, "SUCCESS", SINCE);
+        long second = insertTransfer(101L, 202L, PAYEE, null, 10_000L, "SUCCESS", SINCE.plusMinutes(1));
+        long third = insertTransfer(SECOND_ACCOUNT, 202L, PAYEE, null, 20_000L, "SUCCESS", SINCE.plusMinutes(2));
         long invalidated = insertTransfer(101L, 202L, PAYEE, null, 7_000L, "SUCCESS", SINCE.plusMinutes(3));
         markInvalidated(invalidated);
         insertCorrection(101L, 202L, PAYEE, 7_000L, SINCE.plusMinutes(4), invalidated, "REVERSAL");
-        insertCorrection(101L, 202L, PAYEE, 1_000L, SINCE.plusMinutes(5), invalidated, "REPOST");
+        long repost = insertCorrection(101L, 202L, PAYEE, 1_000L, SINCE.plusMinutes(5), invalidated, "REPOST");
 
         insertTransfer(101L, 202L, PAYEE, null, 90_000L, "ERROR", SINCE.plusMinutes(6));
         insertTransfer(101L, null, PAYEE, "088", 90_000L, "SUCCESS", SINCE.plusMinutes(7));
@@ -62,6 +63,9 @@ class RecentTransferQueryIntegrationTest extends IntegrationTestSupport {
         assertThat(aggregate.count()).isEqualTo(4);
         assertThat(aggregate.totalAmount()).isEqualTo(36_000L);
         assertThat(aggregate.firstTransferredAt()).isEqualTo(SINCE);
+        assertThat(query.findSucceeded(1L, PAYEE, SINCE))
+                .extracting(RecentSuccessfulTransfer::refId)
+                .containsExactly(first, second, third, repost);
     }
 
     @Test
@@ -121,7 +125,7 @@ class RecentTransferQueryIntegrationTest extends IntegrationTestSupport {
                 null);
     }
 
-    private void insertCorrection(
+    private long insertCorrection(
             long withdrawalAccountId,
             long depositAccountId,
             String depositAccountNumber,
@@ -129,7 +133,7 @@ class RecentTransferQueryIntegrationTest extends IntegrationTestSupport {
             LocalDateTime transferredAt,
             long refTransferId,
             String correctionType) {
-        insert(
+        return insert(
                 withdrawalAccountId,
                 depositAccountId,
                 depositAccountNumber,

@@ -29,7 +29,7 @@ execute(command)
        한도 적립                ← 고객 단위 행 락. 커밋까지 쥔다
        [훅 C] TransferHoldPolicy 체인 (즉시이체만, #771 PR-b에서 연결)   ← HOLD면 이 트랜잭션을 롤백하고 보류 저장 (§9)
        계좌 락 → 재검증 → transfer INSERT → 잔액 UPDATE
-         [자리] PH-90 재검증을 출금가능액(잔액 − 보류액) 기준으로 바꾼다
+         재검증은 락으로 읽은 행의 잔액(TRF0303) → 출금가능액 = 잔액 − 보류액(LMT0001) 순서 (#521)
        executedAt 캡처
        원장 2행 저장
        [훅 B] LedgerPostingHook.afterLedger(ctx)
@@ -91,7 +91,7 @@ class AvailableBalancePreCheck implements TransferPreCheck {
 1. **훅 A는 모든 이체 경로에서 돕니다.** 즉시이체뿐 아니라 예약·자동이체 배치도 지납니다. OTP 유무와 무관합니다. 배치 이체를 거부하면 그 ERROR 행이 멱등키(`sourceId`+`executionDate`)로 남아, 같은 회차를 다시 실행해도 새로 처리하지 않고 그 ERROR 결과를 돌려받습니다.
 2. **훅 A의 거부는 `BusinessException`으로만 합니다.** 그 밖의 예외는 내부 오류로 ERROR 확정 후 호출자에게 다시 던집니다.
 3. **훅 A는 락을 잡지 않습니다.** 최종 판정은 락 이후 재검증입니다. 훅 A는 "통과 못 할 요청을 싸게 먼저 거르는" 자리입니다.
-   **출금가능액의 최종 판정은 P4가 락 이후 재검증에 넣습니다.** 훅 A만으로는 검사와 출금 사이에 보류액이 바뀌는 경우를 막지 못합니다. `account.hold_amount`가 PH-90에서 생기므로, PH-90 머지 때 P4가 락으로 읽은 행의 `잔액 − 보류액`으로 검사를 바꿉니다. 보류액을 바꾸는 쪽(P2)도 계좌 행 락을 잡아야 이 검사가 유효합니다.
+   **출금가능액의 최종 판정은 락 이후 재검증입니다(#521).** 훅 A만으로는 검사와 출금 사이에 보류액이 바뀌는 경우를 막지 못해서, 락으로 읽은 행의 `잔액 − 보류액`으로 다시 봅니다. 잔액 자체가 모자라면 `TRF0303`, 보류액 때문이면 `LMT0001`로 락 이전과 같은 코드를 냅니다. 훅 A를 거치지 않는 경로(상품가입 초입금·취소정정·정상거래·`LedgerDepositService`, 타행 1단계)도 같은 기준입니다. 보류액을 바꾸는 쪽(P2 `PaymentStopService`)도 계좌 행 락을 잡으므로 이 검사가 유효합니다.
 4. **훅 B는 예외를 삼키지 않습니다.** GL 기표 실패는 이체 실패입니다. 이벤트가 아니라 동기 호출인 이유는, 다른 커밋에 들어가면 "원장은 있는데 전표가 없는" 상태가 정상이 되기 때문입니다.
    **훅 B는 같은 트랜잭션의 DB 쓰기만 합니다.** 롤백이 되돌리는 건 DB뿐이라 외부 호출은 아웃박스(정책 8)로 넘깁니다. 훅 B 실패 시 즉시이체는 OTP가 이미 소비돼 재인증이 필요하고, 배치 이체는 정책 1처럼 ERROR 결과가 멱등키로 남습니다.
 5. **훅 B는 `order()`가 없습니다.** 등록자가 P3 하나뿐입니다. 둘 이상이 필요해지면 P4와 순서 규칙을 먼저 정합니다.
@@ -154,6 +154,7 @@ record LedgerDepositResult(String transactionNumber, long depositBalanceAfter, L
 | 빠지는 계좌 상태가 `type`과 맞지 않음 (예: `ACTIVE`에 `MATURITY`) | `TRF0307` |
 | 들어가는 계좌 상태가 위 표와 다름 | `TRF0301` |
 | 빠지는 계좌 잔액 부족 | `TRF0303` |
+| 잔액은 충분하나 보류액 때문에 출금가능액 부족 | `LMT0001` |
 | 계좌가 없음 | `TRF9001` |
 
 **정책**
@@ -226,10 +227,17 @@ public record TransferHeld(
         LocalDateTime releaseAt, String flowId, LocalDateTime heldAt) {}
 
 public interface TransferHoldUseCase {
+    TransferHoldForFds findForFds(long transferHoldId);                     // 보류 원본·상태·처리 결과. 끝난 보류도 반환
     TransferHoldExecutionResult release(long transferHoldId, long actorId); // 원본 요청 그대로 1회 실행
     void reject(long transferHoldId, long actorId, String reasonCode);     // 관리자 거절
     void cancel(long transferHoldId, long customerId);                      // 고객 취소
 }
+
+// P6 읽기 전용. actorId·reasonCode는 status마다 뜻이 다르다(레코드 주석의 표). recipientBankCode는 "088" 고정
+public record TransferHoldForFds(
+        long transferHoldId, long customerId, String flowId, String status, LocalDateTime heldAt,
+        long amount, String depositAccountNumber, String policyCode, long withdrawalAccountId,
+        String recipientBankCode, String releaseMode, Long actorId, String reasonCode, LocalDateTime completedAt) {}
 
 // 커밋된 SUCCESS만 센다. 현재 요청은 넣지 않는다. 고객의 모든 출금계좌가 기준이다.
 public interface RecentTransferQuery {
@@ -238,14 +246,27 @@ public interface RecentTransferQuery {
 }
 
 public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime firstTransferredAt) {}
+
+// 훅 C 밖(FDS Agent 읽기 Tool)에서 쓴다. 기준은 RecentTransferQuery와 같다(#995)
+public interface SucceededTransferHistoryQuery {
+    List<SucceededTransfer> findRecent(long customerId, LocalDateTime fromInclusive, LocalDateTime toExclusive, int limit);
+    RecipientHistory summarizeRecipient(long customerId, String depositAccountNumber, long excludeWithdrawalAccountId);
+}
+
+public record SucceededTransfer(long refId, long amount, LocalDateTime transferredAt, String depositAccountNumber) {}
+public record RecipientHistory(LocalDateTime firstSucceededAt, int otherWithdrawalAccountCount) {}
 ```
 
 - `flowId`는 `POST /transfers` 요청 본문의 선택 필드로 받고 멱등 지문(fingerprint)에 넣습니다. 이체는 값을 전달만 하고, 그 흐름이 이 고객 것인지는 FDS가 검사합니다.
 - `RecentTransferQuery`는 기존 인덱스 `ix_transfer_wacc`(출금계좌, 처리시각)로 고객의 출금계좌마다 읽습니다. `transfer`에 인덱스를 새로 달지 않습니다(§9-5 규칙 6).
 - `RecentTransferQuery`는 당행 즉시·예약·자동이체의 SUCCESS 행을 셉니다. 정정 체인으로 무효화된 행(`invalidated_at`)은 뺍니다. `firstTransferredAt`은 "반복 묶음 첫 이체 이전에 보낸 적 있는가"를 `hasSucceededBefore`로 물을 때 씁니다.
-- **정책 A가 보는 과거 성공 이체와 `flowId`의 연결은 P6이 소유합니다.** `transfer`에 컬럼을 더하지 않습니다(§9-5 규칙 6). P4는 `TransferSettled`에 nullable `String flowId`를 더하고, P6은 성공 커밋 뒤 이 이벤트를 받는 시점에 성공 이체 ID(`refId`)와 `flowId`의 연결을 자기 테이블에 저장해 반복 묶음 단위로 조회합니다.
-    - P4 구현은 PH-103(#747, 같은 이벤트를 고친다) 머지 뒤, S4 측정이 끝난 11/6 이후 첫 PR입니다. FDS는 11/6까지 꺼 두므로 P6은 그 전에 이 시그니처로 리스너를 만들어 둘 수 있습니다.
-    - **연결 순서:** 지금 `TransferSettled`에는 `flowId`가 없습니다. P6은 연결 저장 부품을 먼저 준비하고, 이벤트를 읽는 리스너는 P4가 필드를 추가한 PR이 머지된 뒤 연결합니다. P4는 그 PR이 머지되면 P6에 알립니다.
+- `SucceededTransferHistoryQuery`(#995)는 P6 Agent의 읽기 Tool 2개([API 명세](p6_fds_api_spec.md) §3 거래 이력, §4 수취인 맥락)가 쓰는 조회입니다. `RecentTransferQuery`의 건수·합계·존재 여부로는 Tool이 요구하는 `refId`·금액·시각·수취계좌·최초 성공 시각·다른 출금계좌 수를 만들 수 없어서 따로 둡니다.
+    - **기준은 `RecentTransferQuery`와 같습니다.** 영속 어댑터가 같은 성공 조건을 씁니다. 훅 C가 성공으로 센 이체와 Agent가 보는 이체가 어긋나지 않습니다.
+    - **훅 C 안에서 부르지 않습니다.** `summarizeRecipient`는 기간 하한 없이 고객 이력 전체를 `ix_transfer_wacc`로 읽은 뒤 수취계좌로 거릅니다. 비용이 고객의 총 이체 건수에 비례합니다. `findRecent`는 같은 인덱스로 시각 범위만 읽습니다.
+    - 수취계좌번호는 원문으로 주고 P6가 마스킹합니다. `hasMore`는 P6가 `limit=101`로 불러 판단하고, `hasSucceededBeforeWindow`는 `firstSucceededAt < 반복 묶음 첫 이체 시각`으로 구합니다.
+- **정책 A가 보는 과거 성공 이체와 `flowId`의 연결은 P6이 소유합니다.** `transfer`에 컬럼을 더하지 않습니다(§9-5 규칙 6). `TransferSettled`에는 nullable `String flowId`가 있고(#979), P6은 성공 커밋 뒤 이 이벤트를 받는 시점에 성공 이체 ID(`refId`)와 `flowId`의 연결을 자기 테이블에 저장해 반복 묶음 단위로 조회합니다.
+    - 값: 즉시이체는 요청의 `flowId`, 보류됐다 실행된 건은 보류할 때 저장한 `flowId`, 보내지 않았거나 타행이면 null입니다.
+    - **연결 순서:** 필드는 #979로 들어갔습니다. P6은 연결 저장 부품(#976) 위에 이 이벤트를 읽는 리스너를 연결합니다.
     - **멱등 저장:** 같은 이벤트가 다시 전달될 수 있으므로, P6은 성공 이체 ID(`refId`)를 키로 한 번만 저장합니다. 같은 `refId`가 다시 오면 새 행을 만들지 않습니다.
     - 이벤트는 커밋 뒤 따로 처리되므로, 연달아 들어온 이체에서는 앞 건의 연결이 잠깐 안 보일 수 있습니다. 이때도 정책 B는 `RecentTransferQuery`만으로 판정합니다.
 - 이름과 필드는 PR-b 리뷰에서 바뀔 수 있습니다. 바뀌면 이 절을 같은 PR에서 고칩니다.
@@ -259,7 +280,7 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
 | 토큰 | 계좌비밀번호 토큰과 OTP는 지금처럼 판정 전에 소비합니다. 토큰 원문은 저장하지 않습니다. **#771·#772 초안의 "토큰 소비와 보류 저장을 한 트랜잭션으로"에서 바꾼 계약입니다.** 일반 즉시이체의 인증 순서를 바꾸지 않기 위해서입니다. 보류 저장이 실패하면 기표 중 내부 오류와 같은 경로로 `transfer`에 ERROR 행을 남기고 실패 응답을 돌려줍니다. 토큰은 이미 소비돼서, 같은 멱등 키로 다시 보내도 인증 토큰 오류로 끝나고 보류·기표는 생기지 않습니다. 자동 재시도는 없고, 고객은 다시 인증해 새 요청을 보냅니다 |
 | 거래번호 | 판정 전에 받은 거래번호는 쓰이지 않고 빕니다(롤백 때와 같습니다). 실행할 때 새로 받습니다 |
 | 응답 | HTTP 200 + `code="0000"`. `data`에 보류 상태와 `transferHoldId`, 지연이체면 실행 예정 시각을 담습니다. `ProcessResultStatus`에는 값을 더하지 않습니다. `TransferResult`는 `status`가 null이고 `transferHoldId`가 있습니다(`held()`). 메트릭은 `transfer.count{result=HELD}`로 셉니다 |
-| 확정 이벤트 | `TransferSettled`는 보류 시점에 발행하지 않습니다. 이체 결과가 아직 없어서입니다. 실행될 때 지금처럼 발행됩니다 |
+| 확정 이벤트 | `TransferSettled`는 보류 시점에 발행하지 않습니다. 이체 결과가 아직 없어서입니다. 실행될 때 지금처럼 발행되고, 보류할 때 저장한 `flowId`를 싣습니다 |
 
 ### 9-4. 실행·거절·취소
 
@@ -273,9 +294,13 @@ public record RecentTransferAggregate(int count, long totalAmount, LocalDateTime
     - `execute()`는 인증을 건너뛰기 전에 `sourceId`의 `transfer_hold` 행이 `EXECUTING`인지(`release()`가 조건부 UPDATE로 선점한 상태), 출금계좌·수취계좌번호·금액이 저장된 원본과 같은지 확인합니다. 아니면 기표 없이 거부합니다.
     - 이 확인은 `sourceId`가 있을 때만 돕니다. 일반 즉시이체 경로에는 쿼리가 늘지 않습니다(§9-5 규칙 6).
 - **승인하면 바로 실행합니다.** 지연이체 설정이 함께 해당하는 건이어도 다시 지연하지 않습니다. 승인 실행은 훅 C를 지나지 않고, 승인 과정의 고객 확인 콜이 지연이체의 보호 목적을 채웁니다.
-- **`ON_APPROVAL` 건은 보류한 영업일 안에 승인되지 않으면 `EXPIRED`입니다.** 실행할 때 `execution_date`가 보류한 날짜라, 며칠 뒤 승인하면 오래된 요청이 뒤늦게 기표되기 때문입니다. 만료 처리는 FDS 착수 때 구현하고, #772는 `AT_TIME`만 다룹니다. `AT_TIME` 건은 만료하지 않고 실행 시점 검사에서 거부되면 `FAILED`입니다.
+- **`ON_APPROVAL` 건은 보류한 날(달력 날짜) 안에 승인되지 않으면 `EXPIRED`입니다(#998).** 실행할 때 `execution_date`가 `held_at`의 날짜라, 며칠 뒤 승인하면 오래된 요청이 뒤늦게 기표되기 때문입니다. 영업일이 아니라 달력 날짜인 것도 이 `execution_date`에 맞추려는 것입니다(COB가 23:30에 영업일을 넘겨도 만료는 자정입니다). `AT_TIME` 건은 만료하지 않고 실행 시점 검사에서 거부되면 `FAILED`입니다.
+    - **승인 시점:** `release()`의 선점 UPDATE가 `held_at >= 오늘 0시`일 때만 선점합니다. 확인과 선점이 한 UPDATE라 그사이 자정이 끼지 않습니다. 선점에 실패한 지난 보류는 그 자리에서 `EXPIRED`로 닫고 `TRF0311`을 돌려줍니다. 호출자(P6 승인 API)는 날짜를 따로 검사하지 않아도 됩니다.
+    - **정리:** 보류 해제 스케줄러가 회차마다 지난 승인 대기 보류의 ID를 꺼내 한 건씩 조건부 UPDATE로 `EXPIRED`로 닫습니다. 고객 취소·관리자 거절이 먼저 닫은 건은 건너뜁니다. 한 건씩 닫는 것은 나중에 종료 이벤트(`TransferHoldClosed`, §10)를 같은 트랜잭션에 붙일 자리를 남기려는 것입니다.
+    - 고객 취소와 관리자 거절은 만료 전이라도 막지 않습니다. 돈이 움직이지 않는 종료입니다.
 - **승인 권한과 콜 기록 검증은 호출자 몫입니다.** `release`·`reject`는 `actorId`와 사유만 남깁니다. 관리자 권한과 콜 결과 입력은 FDS가 부르기 전에 확인합니다.
-- **#946 P6 인계 요청(미합의):** P6은 합성 위험 계좌 `MATCH`에 한해 최신 콜 결과 없이 `RISK_ACCOUNT_MATCH` 사유로 거절하려고 합니다. 이 사유의 `reason_code` 저장·재조회, 보류 원본·상태의 읽기 전용 `transfer.api.findHoldForAdmin(transferHoldId)`(`transferHoldId`, `customerId`, `recipientBankCode`, `depositAccountNumber`, `releaseMode`, `status`, `heldAt`) 제공을 P4와 합의해야 합니다. 현재 당행 보류의 은행코드는 `088`입니다. P6 소유 데이터셋의 운영 DB 적재·버전 전환 실행도 P4에 요청하며, 전환과 거절 직전 재검증은 같은 활성 버전 제어 행 잠금을 사용합니다. 상세 제안은 [P6 연동 계약 §6-0](p6_fds_integration_contract.md#6-0-합성-위험-계좌-조회와-전화-없는-거절-946-p4-인계-전)을 따릅니다. 기존 `CUSTOMER_DENIED` 콜 경로는 유지합니다.
+- **#946 위험 계좌 거절 (11/11 합의, #971):** P6은 합성 위험 계좌 `MATCH`에 한해 콜 결과 없이 `reject(id, actorId, "RISK_ACCOUNT_MATCH")`로 거절합니다. `reject()`는 사유를 거르지 않고 `reason_code`에 그대로 저장합니다. 결과 대조와 위험 계좌 판정은 별도 API 없이 `findForFds()`로 합니다. 끝난 보류도 반환하고, `actorId`·`reasonCode`는 상태마다 뜻이 달라 `status`를 먼저 봅니다(`TransferHoldForFds` 주석). 은행코드는 저장하지 않고 `"088"`로 채웁니다.
+- **P6은 `release()`·`reject()`를 자기 트랜잭션 밖에서 부릅니다.** `release()`는 선점을 먼저 커밋해야 해서 트랜잭션 없이 돌고, 기표 단계가 새 트랜잭션에서 보류 행을 `FOR UPDATE`로 다시 잠급니다. P6 트랜잭션 안에서 부르면 선점이 커밋되지 않아 기표 단계가 락 대기로 실패합니다. 위험 데이터셋 적재·버전 전환은 P6 소유이고 기동할 때만 일어나므로, P6은 DB 잠금 대신 PENDING 조치에 저장한 위험 기록 ID·버전을 근거로 씁니다.
 - **구현(#772 PR-a).** `TransferHoldService`가 `TransferHoldUseCase`를 구현합니다. 트랜잭션 없이 단계마다 커밋합니다. 선점(`HELD → EXECUTING`)이 먼저 커밋돼야 `execute()`가 그 행을 `EXECUTING`으로 봅니다.
     - **해제 조건은 이 부품이 보장합니다(#838 리뷰 R3).** 호출자 확인에 맡기지 않고 선점 UPDATE 조건에 넣습니다.
         - `release(id, actorId)`(관리자 승인, FDS)는 `ON_APPROVAL` 보류만 선점합니다. 권한과 콜 기록 확인은 지금처럼 호출자 몫입니다.

@@ -7,9 +7,13 @@ import java.util.Arrays;
 public enum PersonalDataAccessEventType {
     CUSTOMER_SEARCH, // 관리자 고객 검색
     CUSTOMER_DETAIL_VIEW, // 관리자 고객 상세 조회
+    FDS_HOLD_LIST_VIEW, // 관리자 FDS 보류 목록 조회
+    FDS_HOLD_DETAIL_VIEW, // 관리자 FDS 보류 상세 조회
     ACCOUNT_UNLOCK, // 관리자 계정 잠금 해제
     LOGIN_PASSWORD_RESET_BY_ADMIN, // 관리자 로그인 비밀번호 초기화(잠금 해제 포함, #449)
-    CUSTOMER_STATUS_CHANGE; // 관리자 고객 계정 상태 변경(이용정지·해제, #450)
+    CUSTOMER_STATUS_CHANGE, // 관리자 고객 계정 상태 변경(이용정지·해제, #450)
+    OBJECTION_DETAIL_VIEW, // 관리자 이의제기 상세 조회. 명의인 소명 원문이 보인다(D-36)
+    OBJECTION_DOCUMENT_VIEW; // 관리자 이의제기 첨부 서류 열람. 신분증 사본이 있을 수 있다(D-36, D37)
 
     // DB에 문자열로 저장된 event_type이 이 타입인지. 사본 경로를 정할 때 쓴다
     public static boolean includes(String eventTypeName) {

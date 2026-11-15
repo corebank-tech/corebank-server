@@ -3,6 +3,7 @@ package com.shinhan.corebank.transfer.application.service;
 import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.transfer.api.TransferHoldExecutionResult;
+import com.shinhan.corebank.transfer.api.TransferHoldForFds;
 import com.shinhan.corebank.transfer.api.TransferHoldUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferCommand;
 import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCase;
@@ -33,19 +34,56 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class TransferHoldService implements TransferHoldUseCase {
 
+    // 보류는 당행 즉시이체에만 생겨 은행코드를 저장하지 않는다
+    private static final String OWN_BANK_CODE = "088";
+
     private final TransferHoldPort transferHoldPort;
     private final TransferExecutionUseCase transferExecutionUseCase;
     private final TransferLookupPort transferLookupPort;
     private final Clock clock;
 
+    @Override
+    public TransferHoldForFds findForFds(long transferHoldId) {
+        TransferHold hold = load(transferHoldId);
+        return new TransferHoldForFds(
+                transferHoldId,
+                hold.getCustomerId(),
+                hold.getFlowId(),
+                hold.getStatus().name(),
+                hold.getHeldAt(),
+                hold.getAmount(),
+                hold.getDepositAccountNumber(),
+                hold.getPolicyCode(),
+                hold.getWithdrawalAccountId(),
+                OWN_BANK_CODE,
+                hold.getReleaseMode().name(),
+                hold.getActorId(),
+                hold.getReasonCode(),
+                hold.getCompletedAt(),
+                hold.getPolicyCount10m(),
+                hold.getPolicyAmount10m(),
+                hold.getPolicyHesitationInWindow(),
+                hold.getPolicyNewRecipientAtWindowStart());
+    }
+
     /** 관리자 승인(FDS). 승인으로 푸는 보류만 실행한다. 시각으로 푸는 보류는 TRF0310이다. */
     @Override
     public TransferHoldExecutionResult release(long transferHoldId, long actorId) {
         LocalDateTime claimedAt = now();
-        if (transferHoldPort.markApprovedExecuting(transferHoldId, actorId, claimedAt)) {
+        LocalDateTime startOfDay = claimedAt.toLocalDate().atStartOfDay();
+        // 보류한 날 안에서만 승인 실행한다. 날짜 조건을 선점 UPDATE에 넣어 확인과 선점 사이에 자정이 끼지 않는다(#998)
+        if (transferHoldPort.markApprovedExecuting(transferHoldId, actorId, claimedAt, startOfDay)) {
             return executeAndFinish(load(transferHoldId), claimedAt);
         }
+        expireIfOverdue(transferHoldId, startOfDay, claimedAt);
         return afterLostClaim(transferHoldId);
+    }
+
+    // 다른 곳이 먼저 닫았으면 close가 실패하고, afterLostClaim이 그 상태를 그대로 돌려준다
+    private void expireIfOverdue(long transferHoldId, LocalDateTime heldFrom, LocalDateTime now) {
+        if (load(transferHoldId).isOverdueApproval(heldFrom)) {
+            transferHoldPort.close(transferHoldId, TransferHoldStatus.EXPIRED, null, null, now);
+        }
     }
 
     /** 스케줄러 해제. 시각으로 푸는 보류 중 해제 시각이 지난 것만 실행한다. 승인 대기·시각 전은 TRF0310이다. */

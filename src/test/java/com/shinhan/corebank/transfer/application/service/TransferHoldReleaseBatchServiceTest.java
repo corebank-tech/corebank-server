@@ -32,6 +32,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -183,6 +184,33 @@ class TransferHoldReleaseBatchServiceTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("[#998] 어제 보류한 승인 대기 건만 EXPIRED로 닫는다. 오늘 보류한 승인 대기·어제 보류한 지연이체는 그대로다")
+    void overdueApproval_isExpired() {
+        LocalDateTime yesterday = LocalDate.now(clock).atStartOfDay().minusMinutes(1);
+        long overdue = transferHoldPort
+                .save(hold(TransferHoldDecision.holdForApproval("FDS_TEST"), 30_000L, yesterday))
+                .getTransferHoldId();
+        long today = transferHoldPort
+                .save(hold(TransferHoldDecision.holdForApproval("FDS_TEST"), 30_000L))
+                .getTransferHoldId();
+        long delayed = transferHoldPort
+                .save(hold(
+                        TransferHoldDecision.holdUntil(
+                                "DELAYED_TRANSFER", LocalDateTime.now(clock).plusHours(1)),
+                        30_000L,
+                        yesterday))
+                .getTransferHoldId();
+
+        TransferHoldReleaseSummary summary = batchService.releaseDue();
+
+        assertThat(summary.expired()).isEqualTo(1);
+        assertThat(holdStatus(overdue)).isEqualTo("EXPIRED");
+        assertThat(holdStatus(today)).isEqualTo("HELD");
+        assertThat(holdStatus(delayed)).isEqualTo("HELD");
+        assertThat(ledgerRows()).isZero();
+    }
+
+    @Test
     @DisplayName("실행 중 멈춘 지 오래된 보류는 먼저 마무리하고, 최근에 선점된 건은 건드리지 않는다")
     void stuckExecuting_isResumed() {
         LocalDateTime now = LocalDateTime.now(clock);
@@ -247,7 +275,18 @@ class TransferHoldReleaseBatchServiceTest extends IntegrationTestSupport {
     }
 
     private TransferHold hold(TransferHoldDecision decision, long amount) {
-        LocalDateTime heldAt = LocalDateTime.now(clock).minusHours(3);
+        return hold(decision, amount, sameDayHeldAt());
+    }
+
+    // 3시간 전 보류이되 오늘 0시보다 앞서지 않는다. 승인 대기 보류는 날이 바뀌면 만료돼 자정 직후 실행이 깨진다(#998)
+    private LocalDateTime sameDayHeldAt() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime threeHoursAgo = now.minusHours(3);
+        LocalDateTime startOfToday = now.toLocalDate().atStartOfDay();
+        return threeHoursAgo.isBefore(startOfToday) ? startOfToday : threeHoursAgo;
+    }
+
+    private TransferHold hold(TransferHoldDecision decision, long amount, LocalDateTime heldAt) {
         return TransferHold.hold(
                 1L, 101L, "110222222222", amount, null, null, TransferChannel.WB, null, decision, heldAt, heldAt);
     }

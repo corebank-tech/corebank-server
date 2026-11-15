@@ -4,6 +4,5 @@ package com.shinhan.corebank.account.api;
 public enum AccountIdentityVerificationStatus {
     VERIFIED,
     INFORMATION_MISMATCH,
-    PASSWORD_MISMATCH,
-    LOCKED
+    PASSWORD_MISMATCH
 }

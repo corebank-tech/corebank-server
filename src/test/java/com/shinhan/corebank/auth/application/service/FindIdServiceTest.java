@@ -107,18 +107,6 @@ class FindIdServiceTest {
                         .isEqualTo(AuthErrorCode.IDENTITY_INFORMATION_MISMATCH));
     }
 
-    @Test
-    @DisplayName("계좌비밀번호가 5회 실패해 잠기면 ATH0102를 반환한다")
-    void rejectsLockedAccountPassword() {
-        givenCandidate();
-        given(accountPort.verify(Set.of(1L), "110550051877", "1234"))
-                .willReturn(new FindIdAccountVerificationResult(FindIdAccountVerificationStatus.LOCKED, 1L));
-
-        assertThatThrownBy(() -> service.findId(validCommand()))
-                .isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(exception.getErrorCode())
-                        .isEqualTo(AuthErrorCode.ACCOUNT_LOCKED));
-    }
-
     private void givenCandidate() {
         given(customerPort.findAllByIdentity("홍길동", LocalDate.of(1999, 1, 1)))
                 .willReturn(List.of(new FindIdCustomerCandidate(1L, "DUDGNS389")));

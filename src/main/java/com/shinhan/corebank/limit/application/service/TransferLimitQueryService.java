@@ -1,12 +1,12 @@
 package com.shinhan.corebank.limit.application.service;
 
 import com.shinhan.corebank.common.exception.BusinessException;
+import com.shinhan.corebank.limit.api.LmtErrorCode;
 import com.shinhan.corebank.limit.application.port.in.TransferLimitQueryUseCase;
 import com.shinhan.corebank.limit.application.port.in.dto.TransferLimitResult;
 import com.shinhan.corebank.limit.application.port.out.TransferLimitQueryPort;
 import com.shinhan.corebank.limit.domain.TransferLimit;
 import com.shinhan.corebank.limit.domain.TransferLimitDailyUsage;
-import com.shinhan.corebank.limit.domain.exception.LmtErrorCode;
 import java.time.Clock;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;

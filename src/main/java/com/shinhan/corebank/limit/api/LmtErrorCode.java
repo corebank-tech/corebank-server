@@ -1,4 +1,4 @@
-package com.shinhan.corebank.limit.domain.exception;
+package com.shinhan.corebank.limit.api;
 
 import com.shinhan.corebank.common.exception.ErrorCode;
 import lombok.Getter;
