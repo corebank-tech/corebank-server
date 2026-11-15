@@ -16,15 +16,12 @@ services:
       - APP_FDS_SCORE_BASE_URL=http://corebank-fds-agent:8000
       - APP_FDS_INVESTIGATION_ENABLED=${APP_FDS_INVESTIGATION_ENABLED:-true}
       - APP_FDS_INVESTIGATION_BASE_URL=http://corebank-fds-agent:8000
-    depends_on:
-      corebank-fds-agent:
-        condition: service_healthy
     networks:
       - corebank-net
 
   # Python FDS Agent는 사설 네트워크에서만 접근하며 호스트 포트를 공개하지 않는다.
   corebank-fds-agent:
-    image: ${FDS_AGENT_IMAGE:-corebank-fds-agent}:${FDS_AGENT_TAG:-local}
+    image: ${FDS_AGENT_IMAGE:-corebank-fds-agent}:${FDS_AGENT_TAG:?FDS_AGENT_TAG must be an immutable Git SHA}
     build:
       context: ${FDS_AGENT_BUILD_CONTEXT:-../corebank-fds-agent}
       args:
