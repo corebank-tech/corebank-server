@@ -56,6 +56,8 @@ out/
 .env
 .env.*
 !.env.example
+!.env.fds-agent.example
+!.env.corebank.example
 
 ### Terraform (상태 파일·시크릿 변수는 로컬/S3 전용, 커밋 금지) ###
 **/.terraform/

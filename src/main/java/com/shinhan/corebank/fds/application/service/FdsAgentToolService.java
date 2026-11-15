@@ -12,6 +12,8 @@ import com.shinhan.corebank.transfer.api.TransferHoldForFds;
 import com.shinhan.corebank.transfer.api.TransferHoldUseCase;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,7 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class FdsAgentToolService {
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
     private final FdsInvestigationJobPort jobs;
     private final TransferHoldUseCase holds;
     private final SucceededTransferHistoryQuery history;
@@ -43,7 +46,10 @@ public class FdsAgentToolService {
                 hasMore,
                 items.stream()
                         .map(item -> new HistorySnapshotItem(
-                                item.refId(), item.amount(), item.transferredAt(), item.recipientAccountMasked()))
+                                item.refId(),
+                                item.amount(),
+                                item.transferredAt().toLocalDateTime(),
+                                item.recipientAccountMasked()))
                         .toList(),
                 LocalDateTime.now(clock));
         return new HistoryData(holdId, items, hasMore);
@@ -67,7 +73,7 @@ public class FdsAgentToolService {
                 summary.otherWithdrawalAccountCount(),
                 LocalDateTime.now(clock));
         return new RecipientData(
-                holdId, beforeWindow, summary.firstSucceededAt(), summary.otherWithdrawalAccountCount());
+                holdId, beforeWindow, withKstOffset(summary.firstSucceededAt()), summary.otherWithdrawalAccountCount());
     }
 
     private Context context(long holdId, int attemptNo) {
@@ -82,7 +88,14 @@ public class FdsAgentToolService {
 
     private static HistoryItem item(SucceededTransfer transfer) {
         return new HistoryItem(
-                transfer.refId(), transfer.amount(), transfer.transferredAt(), mask(transfer.depositAccountNumber()));
+                transfer.refId(),
+                transfer.amount(),
+                withKstOffset(transfer.transferredAt()),
+                mask(transfer.depositAccountNumber()));
+    }
+
+    private static OffsetDateTime withKstOffset(LocalDateTime value) {
+        return value == null ? null : value.atZone(KST).toOffsetDateTime();
     }
 
     private static String mask(String value) {
@@ -94,11 +107,11 @@ public class FdsAgentToolService {
 
     public record HistoryData(long transferHoldId, List<HistoryItem> items, boolean hasMore) {}
 
-    public record HistoryItem(long refId, long amount, LocalDateTime transferredAt, String recipientAccountMasked) {}
+    public record HistoryItem(long refId, long amount, OffsetDateTime transferredAt, String recipientAccountMasked) {}
 
     public record RecipientData(
             long transferHoldId,
             boolean hasSucceededBeforeWindow,
-            LocalDateTime firstSucceededAt,
+            OffsetDateTime firstSucceededAt,
             int otherWithdrawalAccountCount) {}
 }

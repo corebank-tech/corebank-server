@@ -302,7 +302,8 @@ public class JdbcFdsInvestigationJobAdapter implements FdsInvestigationJobPort {
                 investigationId);
         if (!hash.equals(storedHash)) throw new BusinessException(FdsErrorCode.FLOW_CONFLICT);
         int updated = jdbc.update(
-                "UPDATE fds_investigation_job SET job_status='COMPLETED', lease_expires_at=NULL, updated_at=? "
+                "UPDATE fds_investigation_job SET job_status='COMPLETED', lease_expires_at=NULL, "
+                        + "last_failure_reason=NULL, updated_at=? "
                         + "WHERE transfer_hold_id=? AND investigation_id=? AND attempt_count=? "
                         + "AND job_status IN ('RUNNING','COMPLETED')",
                 timestamp(now),
