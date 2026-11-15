@@ -26,7 +26,29 @@ class FdsAdminControllersTest {
         FdsHoldListService lists = mock(FdsHoldListService.class);
         CurrentCustomerProvider current = mock(CurrentCustomerProvider.class);
         HttpServletRequest request = mock(HttpServletRequest.class);
-        FdsHoldDetail detail = mock(FdsHoldDetail.class);
+        FdsHoldDetail detail = new FdsHoldDetail(
+                10L,
+                1000L,
+                "HELD",
+                "****1234",
+                "RUNNING",
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                null,
+                null);
         FdsHoldListPage page = new FdsHoldListPage(List.of(), 0, 20, 0, 0);
         when(current.getCurrentCustomerId()).thenReturn(7L);
         when(request.getRemoteAddr()).thenReturn("127.0.0.1");

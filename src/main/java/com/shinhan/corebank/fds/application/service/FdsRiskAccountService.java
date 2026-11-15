@@ -23,10 +23,12 @@ public class FdsRiskAccountService {
     private final JdbcTemplate jdbc;
     private final Clock clock;
 
+    /** 계좌가 활성 데이터셋 또는 관리자 확정 위험 계좌인지 판정한다. */
     public Check check(String bankCode, String accountNumber) {
         return check(bankCode, accountNumber, false);
     }
 
+    /** 관리자 조치 시 활성 버전 포인터를 잠그고 위험 계좌 여부를 판정한다. */
     @Transactional
     public Check checkForAction(String bankCode, String accountNumber) {
         return check(bankCode, accountNumber, true);
@@ -55,6 +57,7 @@ public class FdsRiskAccountService {
         }
     }
 
+    /** 사기 확정된 조치의 위험 계좌 등록 의도를 ACTIVE로 전환하고 사건 근거를 보존한다. */
     @Transactional
     public Activation activateAdminConfirmed(String actionId) {
         // 활성 포인터를 먼저 잠가 데이터셋 전환과 관리자 등록이 같은 잠금 순서를 사용하게 한다.
@@ -68,7 +71,8 @@ public class FdsRiskAccountService {
             return new Activation(registration.registrationId(), registration.riskAccountId(), activeVersion, true);
         }
         LocalDateTime now = LocalDateTime.now(clock);
-        Long existing = findExistingRiskAccount(activeVersion, registration.bankCode(), registration.accountNumber());
+        // 활성 버전의 SEED 행을 단순 재사용하지 않고 ADMIN_CONFIRMED 행을 정본으로 관리한다.
+        Long existing = findExistingAdminRiskAccount(registration.bankCode(), registration.accountNumber());
         if (existing == null) {
             try {
                 jdbc.update(
@@ -80,9 +84,15 @@ public class FdsRiskAccountService {
                         registration.accountNumber(),
                         now);
             } catch (org.springframework.dao.DuplicateKeyException ignored) {
-                // 동시 등록은 전역 관리자 계좌 유니크 제약의 승자 행로 수렴한다.
+                // 동일 버전에 이미 SEED 행이 존재하면 ADMIN_CONFIRMED로 상태를 승격하여 영구 보존한다.
+                jdbc.update(
+                        "UPDATE fds_risk_account SET source_type='ADMIN_CONFIRMED', reason='FRAUD_CONFIRMED' "
+                                + "WHERE bank_code=? AND account_number=? AND dataset_version=?",
+                        registration.bankCode(),
+                        registration.accountNumber(),
+                        activeVersion);
             }
-            existing = findExistingRiskAccount(activeVersion, registration.bankCode(), registration.accountNumber());
+            existing = findExistingAdminRiskAccount(registration.bankCode(), registration.accountNumber());
         }
         if (existing == null) throw new BusinessException(FdsErrorCode.RISK_REGISTRATION_FAILED);
         jdbc.update(
@@ -113,6 +123,7 @@ public class FdsRiskAccountService {
         return new Activation(registration.registrationId(), existing, activeVersion, false);
     }
 
+    /** P4 거절 결과 대조 실패 등으로 위험 계좌 등록 의도를 FAILED 상태로 갱신한다. */
     @Transactional
     public void markRegistrationFailed(String actionId, String reason) {
         jdbc.update(
@@ -123,16 +134,22 @@ public class FdsRiskAccountService {
                 actionId);
     }
 
+    /** 활성 데이터셋과 관리자 사기 확정 위험 계좌 목록을 조회한다. */
     public List<RiskAccountSummary> findActiveAccounts() {
+        // 등록과 근거를 계좌별로 집계한 뒤 조인하여 카테시안 곱 및 다중 행 분리를 방지한다.
         return jdbc.query(
                 "SELECT r.risk_account_id,r.bank_code,r.account_number,r.source_type,r.created_at,"
-                        + "COALESCE(g.activated_at,d.activated_at),r.dataset_version,COUNT(e.evidence_id) "
-                        + "FROM fds_risk_account r JOIN fds_risk_dataset d ON d.dataset_version=r.dataset_version "
-                        + "LEFT JOIN fds_risk_registration g ON g.risk_account_id=r.risk_account_id AND g.registration_status='ACTIVE' "
-                        + "LEFT JOIN fds_risk_account_evidence e ON e.risk_account_id=r.risk_account_id "
+                        + "COALESCE(reg.activated_at,d.activated_at,r.created_at),r.dataset_version,COALESCE(ev.evidence_count,0) "
+                        + "FROM fds_risk_account r "
+                        + "JOIN fds_risk_dataset d ON d.dataset_version=r.dataset_version "
+                        + "LEFT JOIN (SELECT risk_account_id,MAX(activated_at) activated_at "
+                        + "           FROM fds_risk_registration WHERE registration_status='ACTIVE' "
+                        + "           GROUP BY risk_account_id) reg ON reg.risk_account_id=r.risk_account_id "
+                        + "LEFT JOIN (SELECT risk_account_id,COUNT(*) evidence_count "
+                        + "           FROM fds_risk_account_evidence GROUP BY risk_account_id) ev "
+                        + "          ON ev.risk_account_id=r.risk_account_id "
                         + "WHERE r.source_type='ADMIN_CONFIRMED' OR r.dataset_version=(SELECT dataset_version FROM fds_risk_active_version WHERE singleton_id=1) "
-                        + "GROUP BY r.risk_account_id,r.bank_code,r.account_number,r.source_type,r.created_at,g.activated_at,d.activated_at,r.dataset_version "
-                        + "ORDER BY COALESCE(g.activated_at,d.activated_at) DESC,r.risk_account_id DESC",
+                        + "ORDER BY COALESCE(reg.activated_at,d.activated_at,r.created_at) DESC,r.risk_account_id DESC",
                 (rs, row) -> new RiskAccountSummary(
                         rs.getLong(1),
                         rs.getString(2),
@@ -144,11 +161,33 @@ public class FdsRiskAccountService {
                         rs.getInt(8)));
     }
 
+    /** 특정 위험 계좌의 요약 및 사건별 선정 근거 목록을 단건 조회한다. */
     public RiskAccountDetail findActiveAccount(long riskAccountId) {
-        RiskAccountSummary summary = findActiveAccounts().stream()
-                .filter(row -> row.riskAccountId() == riskAccountId)
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(FdsErrorCode.NOT_FOUND));
+        // 전체 목록 생성을 피하고 단건 쿼리로 위험 계좌 요약을 조회한다.
+        List<RiskAccountSummary> rows = jdbc.query(
+                "SELECT r.risk_account_id,r.bank_code,r.account_number,r.source_type,r.created_at,"
+                        + "COALESCE(reg.activated_at,d.activated_at,r.created_at),r.dataset_version,COALESCE(ev.evidence_count,0) "
+                        + "FROM fds_risk_account r "
+                        + "JOIN fds_risk_dataset d ON d.dataset_version=r.dataset_version "
+                        + "LEFT JOIN (SELECT risk_account_id,MAX(activated_at) activated_at "
+                        + "           FROM fds_risk_registration WHERE registration_status='ACTIVE' "
+                        + "           GROUP BY risk_account_id) reg ON reg.risk_account_id=r.risk_account_id "
+                        + "LEFT JOIN (SELECT risk_account_id,COUNT(*) evidence_count "
+                        + "           FROM fds_risk_account_evidence GROUP BY risk_account_id) ev "
+                        + "          ON ev.risk_account_id=r.risk_account_id "
+                        + "WHERE r.risk_account_id=?",
+                (rs, row) -> new RiskAccountSummary(
+                        rs.getLong(1),
+                        rs.getString(2),
+                        mask(rs.getString(3)),
+                        rs.getString(4),
+                        rs.getTimestamp(5).toLocalDateTime(),
+                        rs.getTimestamp(6).toLocalDateTime(),
+                        rs.getString(7),
+                        rs.getInt(8)),
+                riskAccountId);
+        RiskAccountSummary summary =
+                rows.stream().findFirst().orElseThrow(() -> new BusinessException(FdsErrorCode.NOT_FOUND));
         List<RiskEvidence> evidence = jdbc.query(
                 "SELECT evidence_id,transfer_hold_id,action_id,investigation_id,actor_id,call_record_id,reason_code,"
                         + "policy_code,agent_report_json,evidence_transfer_ids_json,score_status,behavior_score,"
@@ -188,15 +227,14 @@ public class FdsRiskAccountService {
                 actionId);
     }
 
-    private Long findExistingRiskAccount(String version, String bankCode, String accountNumber) {
+    private Long findExistingAdminRiskAccount(String bankCode, String accountNumber) {
+        // 관리자 확정 출처의 위험 계좌만 조회하여 활성 데이터셋 SEED 행과의 혼동을 방지한다.
         return jdbc.query(
                 "SELECT risk_account_id FROM fds_risk_account WHERE bank_code=? AND account_number=? "
-                        + "AND (dataset_version=? OR source_type='ADMIN_CONFIRMED') "
-                        + "ORDER BY (source_type='ADMIN_CONFIRMED') DESC,risk_account_id LIMIT 1 FOR UPDATE",
+                        + "AND source_type='ADMIN_CONFIRMED' LIMIT 1 FOR UPDATE",
                 rs -> rs.next() ? rs.getLong(1) : null,
                 bankCode,
-                accountNumber,
-                version);
+                accountNumber);
     }
 
     private static String mask(String account) {
@@ -232,6 +270,7 @@ public class FdsRiskAccountService {
         }
     }
 
+    /** 새 위험 데이터셋 버전을 검증 적재하고 활성 버전으로 전환한다. */
     @Transactional
     public void loadAndActivate(String version, int expectedCount, String sha256, List<RiskRow> rows) {
         if (version == null
@@ -271,8 +310,11 @@ public class FdsRiskAccountService {
                     row.reason(),
                     now);
         }
+        // 관리자 등록 행을 제외하고 원본 SEED 데이터셋 행 건수만 검증한다.
         Integer count = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM fds_risk_account WHERE dataset_version=?", Integer.class, version);
+                "SELECT COUNT(*) FROM fds_risk_account WHERE dataset_version=? AND source_type='SEED'",
+                Integer.class,
+                version);
         if (count == null || count != expectedCount) throw new BusinessException(FdsErrorCode.INVALID_RISK_DATASET);
         jdbc.update(
                 "INSERT INTO fds_risk_active_version(singleton_id,dataset_version,updated_at) VALUES(1,?,?) "

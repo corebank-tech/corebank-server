@@ -7,6 +7,7 @@ import com.shinhan.corebank.common.audit.PersonalDataAccessEventType;
 import com.shinhan.corebank.common.response.ApiResponse;
 import com.shinhan.corebank.fds.application.service.FdsRiskAccountService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Positive;
@@ -31,8 +32,15 @@ public class FdsRiskAccountController {
     private final CurrentCustomerProvider currentCustomer;
     private final AuditLogService audit;
 
+    /** 활성 데이터셋 및 관리자 사기 확정 위험 계좌 목록을 조회하고 감사 로그를 남긴다. */
     @GetMapping
-    @Operation(operationId = "findFdsRiskAccounts", summary = "활성 위험 계좌 목록")
+    @Operation(
+            operationId = "findFdsRiskAccounts",
+            summary = "활성 위험 계좌 목록",
+            description = "CUSTOMER_READ와 X-Access-Reason 헤더가 필요하며 마스킹된 계좌번호와 선정 근거 수를 반환합니다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "성공: 위험 계좌 목록 반환")
+    })
     public ApiResponse<List<FdsRiskAccountService.RiskAccountSummary>> findAll(
             @RequestHeader(name = AccessReason.HEADER) AccessReason accessReason, HttpServletRequest request) {
         List<FdsRiskAccountService.RiskAccountSummary> result = risks.findActiveAccounts();
@@ -46,8 +54,18 @@ public class FdsRiskAccountController {
         return ApiResponse.success(result);
     }
 
+    /** 특정 위험 계좌의 요약 및 사건별 선정 근거 상세를 조회하고 감사 로그를 남긴다. */
     @GetMapping("/{riskAccountId}")
-    @Operation(operationId = "findFdsRiskAccount", summary = "위험 계좌와 사건별 선정 근거 상세")
+    @Operation(
+            operationId = "findFdsRiskAccount",
+            summary = "위험 계좌와 사건별 선정 근거 상세",
+            description = "CUSTOMER_READ와 X-Access-Reason 헤더가 필요하며 사건별 선정 근거 목록을 반환합니다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "성공: 위험 계좌 상세 및 근거 반환"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "CMN0401 위험 계좌 미존재")
+    })
     public ApiResponse<FdsRiskAccountService.RiskAccountDetail> find(
             @PathVariable @Positive long riskAccountId,
             @RequestHeader(name = AccessReason.HEADER) AccessReason accessReason,

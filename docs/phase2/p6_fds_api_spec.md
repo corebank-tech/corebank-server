@@ -855,6 +855,7 @@ BE는 응답의 `transferHoldId`·`flowId`·`featureVersion`과 점수·버전�
 - 사용자: 관리자
 - 인증: 세션, CSRF, `FDS_FRAUD_CONFIRM`
 - Idempotency-Key: 필수
+- 호출 조건: 최신 콜 결과가 `CUSTOMER_DENIED`이고 위험 상태가 `NO_MATCH` 또는 `UNAVAILABLE`일 때만 호출 가능 (`MATCH` 상태에서는 `FRAUD_REJECT` 불허)
 - Request body: 없음
 - 성공: HTTP 200, `code="0000"`, `data.actionType="FRAUD_REJECT"`
 - 처리: PENDING 조치·등록 의도 커밋 후 P4 호출, 최종 상태·actorId·`FRAUD_CONFIRMED` 대조 후 ACTIVE
