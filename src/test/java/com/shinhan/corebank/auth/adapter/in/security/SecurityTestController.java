@@ -98,6 +98,16 @@ class SecurityTestController {
         return ApiResponse.success("fds-approve");
     }
 
+    @PostMapping("/admin/fds/holds/123/fraud-reject")
+    ApiResponse<String> fdsFraudReject() {
+        return ApiResponse.success("fds-fraud-reject");
+    }
+
+    @GetMapping("/admin/fds/risk-accounts/1")
+    ApiResponse<String> fdsRiskAccount() {
+        return ApiResponse.success("fds-risk-account");
+    }
+
     @GetMapping("/internal/fds/holds/123/history")
     ApiResponse<String> fdsAgentHistory() {
         return ApiResponse.success("fds-history");

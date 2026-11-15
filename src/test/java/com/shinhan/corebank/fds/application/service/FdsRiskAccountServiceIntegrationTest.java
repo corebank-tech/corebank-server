@@ -94,6 +94,42 @@ class FdsRiskAccountServiceIntegrationTest extends IntegrationTestSupport {
         }
     }
 
+    @Test
+    void marksRegistrationFailedWhenPending() {
+        // P4 거절 결과 대조 실패 시 등록 의도가 FAILED 및 실패 사유로 갱신됨을 검증한다.
+        String actionId = UUID.randomUUID().toString();
+        jdbc.update(
+                "INSERT INTO fds_admin_action "
+                        + "(action_id,transfer_hold_id,idempotency_key,request_fingerprint,actor_id,action_type,"
+                        + "risk_status,action_status,created_at,updated_at) "
+                        + "VALUES (?,1001,?,?,1,'FRAUD_REJECT','NO_MATCH','PENDING',NOW(),NOW())",
+                actionId,
+                UUID.randomUUID().toString(),
+                "f".repeat(64));
+        jdbc.update(
+                "INSERT INTO fds_admin_call_record "
+                        + "(call_record_id,transfer_hold_id,idempotency_key,request_fingerprint,call_result,admin_id,investigation_reason,recorded_at) "
+                        + "VALUES (9901,1001,?,?,'CUSTOMER_DENIED',1,'사기',NOW()) ON DUPLICATE KEY UPDATE call_record_id=call_record_id",
+                UUID.randomUUID().toString(),
+                "f".repeat(64));
+        jdbc.update(
+                "INSERT INTO fds_risk_registration "
+                        + "(registration_id,action_id,transfer_hold_id,actor_id,recipient_bank_code,"
+                        + "recipient_account_number,call_record_id,reason_code,registration_status,created_at,updated_at) "
+                        + "VALUES (?,?,1001,1,'088','110039200000',9901,'FRAUD_CONFIRMED','PENDING',NOW(),NOW())",
+                UUID.randomUUID().toString(),
+                actionId);
+
+        service.markRegistrationFailed(actionId, "P4_MISMATCH");
+
+        String status = jdbc.queryForObject(
+                "SELECT registration_status FROM fds_risk_registration WHERE action_id=?", String.class, actionId);
+        String reason = jdbc.queryForObject(
+                "SELECT failure_reason FROM fds_risk_registration WHERE action_id=?", String.class, actionId);
+        assertThat(status).isEqualTo("FAILED");
+        assertThat(reason).isEqualTo("P4_MISMATCH");
+    }
+
     private static String version() {
         return "test-risk-" + UUID.randomUUID().toString().substring(0, 8);
     }

@@ -7,6 +7,7 @@ import com.shinhan.corebank.fds.application.service.FdsAdminActionService;
 import com.shinhan.corebank.fds.application.service.FdsAdminActionStore;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -32,11 +33,18 @@ public class FdsAdminActionController {
     private final FdsAdminActionService actions;
     private final CurrentCustomerProvider currentCustomer;
 
+    /** 관리자가 고객과 유선 확인한 콜 결과를 저장한다. */
     @PostMapping("/{transferHoldId}/call-record")
     @Operation(
             operationId = "recordFdsAdminCallResult",
             summary = "고객 콜 결과 추가",
             description = "CUSTOMER_WRITE와 CSRF, Idempotency-Key가 필요하며 기존 기록을 수정하지 않고 추가합니다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "성공: 고객 콜 결과 저장 완료"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "FDS0301 동일 멱등키 다른 요청 충돌")
+    })
     public ApiResponse<FdsAdminActionStore.CallRecord> call(
             @PathVariable @Positive long transferHoldId,
             @RequestHeader(name = "Idempotency-Key") @NotBlank String idempotencyKey,
@@ -50,12 +58,22 @@ public class FdsAdminActionController {
                 request.investigationReason()));
     }
 
+    /** 위험 상태 및 콜 결과를 확인한 뒤 이체 보류를 승인한다. */
     @PostMapping("/{transferHoldId}/approve")
     @Operation(
             operationId = "approveFdsHeldTransfer",
             summary = "보류 승인",
             description =
                     "CUSTOMER_WRITE와 CSRF, Idempotency-Key가 필요합니다. NO_MATCH·UNAVAILABLE이고 최신 CUSTOMER_CONFIRMED 콜이 있어야 합니다. 콜 조건 실패는 FDS0302, 충돌로 확정된 요청과 재전달은 FDS0301을 반환합니다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "성공: 보류 승인 완료"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "FDS0302 승인 가능한 콜 결과 조건 미충족"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "FDS0301 멱등키 충돌 또는 보류 상태 충돌")
+    })
     public ApiResponse<FdsAdminActionStore.Action> approve(
             @PathVariable @Positive long transferHoldId,
             @RequestHeader(name = "Idempotency-Key") @NotBlank String idempotencyKey) {
@@ -63,12 +81,22 @@ public class FdsAdminActionController {
                 actions.act(transferHoldId, idempotencyKey, currentCustomer.getCurrentCustomerId(), "APPROVE", null));
     }
 
+    /** 위험 상태 및 콜 결과를 확인한 뒤 이체 보류를 일반 거절한다. */
     @PostMapping("/{transferHoldId}/reject")
     @Operation(
             operationId = "rejectFdsHeldTransfer",
             summary = "보류 거절",
             description =
                     "CUSTOMER_WRITE와 CSRF, Idempotency-Key가 필요합니다. MATCH는 RISK_ACCOUNT_MATCH만, 그 외는 최신 CUSTOMER_DENIED 콜 뒤 거절합니다. 충돌로 확정된 요청과 재전달은 FDS0301을 반환합니다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "성공: 보류 거절 완료"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "FDS0302 거절 가능한 콜 결과 조건 미충족"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "FDS0301 멱등키 충돌 또는 보류 상태 충돌")
+    })
     public ApiResponse<FdsAdminActionStore.Action> reject(
             @PathVariable @Positive long transferHoldId,
             @RequestHeader(name = "Idempotency-Key") @NotBlank String idempotencyKey,
@@ -79,6 +107,39 @@ public class FdsAdminActionController {
                 currentCustomer.getCurrentCustomerId(),
                 "REJECT",
                 request.reasonCode()));
+    }
+
+    /** 사기 확정 및 보류 거절을 수행하고 수취계좌를 활성 위험 계좌로 등록한다. */
+    @PostMapping("/{transferHoldId}/fraud-reject")
+    @Operation(
+            operationId = "confirmFraudAndRejectFdsHeldTransfer",
+            summary = "사기 확정 및 보류 거절",
+            description = "FDS_FRAUD_CONFIRM 권한, CSRF, Idempotency-Key와 최신 CUSTOMER_DENIED 콜이 필요합니다. "
+                    + "보류 위험 상태가 NO_MATCH 또는 UNAVAILABLE이어야 하며 MATCH 상태에서는 FRAUD_REJECT가 불가합니다. "
+                    + "P4의 REJECTED·actorId·FRAUD_CONFIRMED가 일치한 뒤 등록 의도를 ACTIVE로 전환합니다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "성공: 사기 확정 거절 및 위험 계좌 활성화 완료"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "FDS0302 최신 CUSTOMER_DENIED 콜 누락 또는 MATCH 상태에서 호출"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "FDS0301 멱등키 충돌 또는 상태 충돌"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "500",
+                description = "FDS9002 P4 거절 후 위험 계좌 활성화 실패")
+    })
+    public ApiResponse<FdsAdminActionStore.Action> fraudReject(
+            @PathVariable @Positive long transferHoldId,
+            @RequestHeader(name = "Idempotency-Key") @NotBlank String idempotencyKey) {
+        return ApiResponse.success(actions.act(
+                transferHoldId,
+                idempotencyKey,
+                currentCustomer.getCurrentCustomerId(),
+                "FRAUD_REJECT",
+                "FRAUD_CONFIRMED"));
     }
 
     public record CallRequest(

@@ -177,7 +177,7 @@ behaviorRiskScore         : XGBoost 보조 위험 점수
 
 다음 세 조건 중 **확인된 참이 2개 이상**이면 `hesitationWarning=true`. 이벤트 제출 API에서 선택 필드인 `confirmActiveSeconds`가 없으면 해당 조건은 미확인으로 두며 참으로 추정하지 않는다. 나머지 두 조건이 모두 확인된 참이면 망설임은 성립한다. 흐름 자체가 없거나 확인된 참이 2개 미만이면 A의 망설임 근거로 쓰지 않는다([#855 사례 C27–C28](p6_fds_policy_cases.md#행동연결오류-사례)).
 
-1. `backCount >= 1`
+1. `backCount >= 2`
 2. `amountRevisionCount >= 2`
 3. `confirmActiveSeconds >= 60`. FE는 visible 구간의 `performance.now()` 밀리초 차이를 모두 합산한 뒤 마지막에 1000으로 나누어 소수 초를 버린다(`Math.floor`). 59.999초는 59초로 미충족, 60.000초는 60초로 충족한다.
 
@@ -364,7 +364,7 @@ assess_information_gap
   "policyCode": "A",
   "behaviorSummary": {
     "hesitationWarning": true,
-    "backCount": 1,
+    "backCount": 2,
     "amountRevisionCount": 2,
     "confirmActiveSeconds": 71,
     "behaviorScoreStatus": "AVAILABLE",
@@ -772,7 +772,7 @@ P4 부품 지연은 §10.4의 인계 조건으로 다루고, 아래는 **P6이 �
 ### 시나리오 A — 망설임 + 신규 수취인 반복 이체
 
 1. 신규 수취인에게 50만 원씩 2회 이체 성공.
-2. 세 번째 50만 원 이체에서 뒤로 가기 1회 + 금액 재수정 2회 발생.
+2. 세 번째 50만 원 이체에서 뒤로 가기 2회 + 금액 재수정 2회 발생.
 3. 서버가 반복 묶음의 망설임·신규 수취인·3회·150만 원을 확인.
 4. **세 번째 요청만 `HELD`**, 잔액·원장 불변 확인.
 5. Agent 비동기 실행 → 거래 이력 Tool 호출 → 필요 시 수취인 맥락 Tool 호출.
@@ -886,3 +886,25 @@ P4 부품 지연은 §10.4의 인계 조건으로 다루고, 아래는 **P6이 �
 - 원안의 **29.5인일(27~35인일)**은 Python LangGraph 조사 서비스를 포함하지 않은 추정이다. 이번 문서는 보류·토큰·승인 실행 경계를 5~8인일로 다시 추정하고 내구성 있는 조사 작업·워커를 별도 산정해 **약 25~38인일의 팀 전체 작업량**으로 계산했다. 병렬화는 인일 합계를 줄이지 않고 달력상 기간에만 영향을 준다.
 - `PENDING_REVIEW` 제거 및 Agent의 보류 후 조사 전환은 **새 설계 결정**이다. 원안에 이미 존재하던 사실로 취급하지 않는다.
 - 이체 보류·토큰·실행은 [transfer_seam.md §9](transfer_seam.md#9-훅-c--이체-보류-771)의 계약을 따른다. P6 API 경로는 [연동 계약 §1](p6_fds_integration_contract.md#1-url-검증-결과와-상태)에서 결정했으나 미구현이다. 조사 Tool 2, 조사 작업 저장 방식, 공수는 구현·검증 상태를 별도로 확인한다.
+## 관리자 사기 확정 위험 계좌 등록 (#1005)
+
+관리자 조치는 `APPROVE`, 일반 `REJECT`, `FRAUD_REJECT` 세 종류다. 일반 거절은
+`CUSTOMER_DENIED`, 사기 확정 거절은 `FRAUD_CONFIRMED`, 기존 활성 위험 계좌 일치 거절은
+`RISK_ACCOUNT_MATCH`를 사용한다. Agent 보고서와 행동 점수는 보조 근거이며 관리자 사기 확정 없이
+위험 계좌를 등록하지 않는다.
+
+관리자 목록·상세·확인 화면에는 P4 공개 계약이 제공하는 수취은행 코드와 마스킹 계좌만 표시한다.
+수취인명은 계약에 추가하거나 다른 내부 데이터로 추론하지 않으며 API·Swagger 응답에도 제공하지 않는다.
+기존 `fds_risk_registration.recipient_name` nullable 컬럼은 하위 호환을 위해 남기되 신규 처리에서는 읽거나
+기록하지 않는다.
+
+`FRAUD_REJECT`는 관리자 조치와 `fds_risk_registration(PENDING)`을 먼저 커밋한 뒤 P6 트랜잭션
+밖에서 P4 `reject()`를 호출한다. `findForFds()`의 최종 상태가 `REJECTED`이고 actorId와
+`FRAUD_CONFIRMED`가 현재 조치와 일치할 때만 등록 의도를 `ACTIVE`로 전환한다. 같은 은행·정규화
+계좌는 관리자 등록 행 하나로 수렴하지만, 각 사건의 선정 근거는 `fds_risk_account_evidence`에 별도로
+보존한다. 활성화 실패는 P4 거절을 되돌리지 않고 `FAILED` 등록 의도를 주기 복구에서 재처리한다.
+
+`MATCH`는 콜 없이 `RISK_ACCOUNT_MATCH` 거절만 허용한다. `NO_MATCH`와 `UNAVAILABLE`은 최신 고객
+콜 결과가 있어야 승인·일반 거절·사기 확정 거절을 허용한다. `UNAVAILABLE` 자체는 자동 판단 근거가
+아니다. 관리자 등록 계좌는 `ADMIN_CONFIRMED` 출처로 기존 데이터셋 버전 전환 후에도 판정 대상에
+남고, 조치가 고정한 datasetVersion과 riskRecordId는 전환 중 바뀌지 않는다.

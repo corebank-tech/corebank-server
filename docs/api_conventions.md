@@ -496,6 +496,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | `FDS0303` | 409 | 위험 계좌 조회 결과와 요청한 조치가 맞지 않습니다. 다시 확인해 주세요. | #946 목표 계약: `MATCH` 승인·콜 기반 거절 또는 처리 직전 `MATCH`가 아닌 건의 `RISK_ACCOUNT_MATCH` 거절. 조회 결과가 달라졌으면 상세 재조회 |
 | `FDS0304` | 409 | 고객 확인 결과를 기록한 뒤 거절할 수 있습니다. | #946 목표 계약: `NO_MATCH`·`UNAVAILABLE`에서 최신 `CUSTOMER_DENIED` 없이 `CUSTOMER_DENIED` 사유로 거절 요청 |
 | `FDS9001` | 500 | FDS 조회 정보를 확인할 수 없습니다. | 행동·거래 근거 조회 자체가 실패함. 정상 조회 결과 0건과 구분하며 훅 C에서는 이체 `ERROR` 경로를 따름 |
+| `FDS9002` | 500 | 위험 계좌 등록을 완료하지 못했습니다. | 사기 확정 거절은 P4에서 확정됐으나 활성 데이터셋 또는 등록 의도 전이가 실패해 복구가 필요함 |
 
 > #854 문서의 API 초안에 배정한 코드다. 실제 엔드포인트 구현 시 `ErrorCode`와 `BusinessException`으로 매핑하고, 상태·메시지 변경이 필요하면 이 표와 API 명세를 같은 PR에서 고친다. 세션·권한·페이징·요청 형식·멱등키 충돌에는 기존 `CMN` 코드를 재사용한다.
 
@@ -672,6 +673,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 |  | `PAYMENT_STOP_READ` | 지급정지 조회 |
 |  | `PAYMENT_STOP_WRITE` | 지급정지 변경 (사건 등록, 이의제기 접수, 판정 작성) |
 |  | `PAYMENT_STOP_APPROVE` | 지급정지 해제 승인 (작성자와 다른 관리자, D-36) |
+|  | `FDS_FRAUD_CONFIRM` | FDS 사기 확정 및 거절·위험 계좌 등록 |
 | `AccessReason` | `CUSTOMER_REQUEST` | 고객 요청 (`X-Access-Reason` 헤더, PH-89) |
 |  | `INCIDENT` | 사고·민원 대응 |
 |  | `AUDIT` | 감사·점검 |
@@ -679,7 +681,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 > 폐기: `TRANSFER`, `PRODUCT_SIGN`, `LIMIT_CHANGE`, `ACC_REGISTER`, `PROFILE_CHANGE` (기존 OTP 발급 명세의 약어)
 
-> `CustomerRole` · `AdminPermission`은 관리자 인증(PH-49a, P1)이 맡습니다. `AdminPermission`은 5종 고정입니다. 값을 늘리면 `/admin/**` 권한 매핑표(PH-49a-②)와 부여·회수 API(PH-49b)를 함께 고쳐야 합니다.
+> `CustomerRole` · `AdminPermission`은 관리자 인증(PH-49a, P1)이 맡습니다. 권한 값을 늘리면 `/admin/**` 권한 매핑표(PH-49a-②)와 부여·회수 API(PH-49b), DB CHECK·공통코드를 함께 고쳐야 합니다.
 
 ### 5-9. 알림 — P1
 

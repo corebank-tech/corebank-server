@@ -526,7 +526,7 @@ URL: `/api/v1/admin/fds/holds/{transferHoldId}/call-record`
 사용자: 관리자
 인증 필요: Y
 Idempotency-Key: Y
-기타: `CUSTOMER_WRITE` 권한, `X-Access-Reason` 필수. 기존 세션·CSRF 보호를 적용한다. 관리자 ID·시각은 세션·서버에서 정한다. 기존 `AuditLog`와 업무 변경을 함께 커밋한다. 아직 미구현.
+기타: `CUSTOMER_WRITE` 권한, `X-Access-Reason` 필수. 기존 세션·CSRF 보호를 적용한다. 관리자 ID·시각은 세션·서버에서 정한다. 콜 기록은 추가형으로 저장하며 같은 멱등 키의 동일 요청은 기존 결과를 반환한다.
 
 콜 결과는 기존 기록을 수정하지 않고 추가한다. 해당 보류 건의 최신 서버 기록 시각 기준 `CUSTOMER_CONFIRMED`일 때만 승인 가능하다. `CUSTOMER_DENIED`는 거절 근거이고 `NO_ANSWER`·`INCONCLUSIVE`는 추가 확인할 때까지 보류를 유지한다.
 
@@ -593,7 +593,7 @@ URL: `/api/v1/admin/fds/holds/{transferHoldId}/approve`
 사용자: 관리자
 인증 필요: Y
 Idempotency-Key: Y
-기타: `CUSTOMER_WRITE` 권한과 기존 세션·CSRF 보호. `X-Access-Reason`은 현재 승인 요청의 필수 헤더가 아니다. `ON_APPROVAL`·당일 유효·해당 보류 건의 최신 콜 결과 `CUSTOMER_CONFIRMED`를 확인한다. **#946에서는 최신 위험 계좌 조회가 `MATCH`이면 콜 결과와 무관하게 승인을 거부한다.** `NO_MATCH`·`UNAVAILABLE`이면 기존 콜 요건을 적용한다. P6은 관리자 ID·행위·콜 기록 ID·멱등 키를 PENDING 조치로 먼저 커밋하고 P4 `release()`를 호출한다. 결과 확인 뒤 기존 `AuditLog`를 멱등 기록한다([연동 계약 §6-1](p6_fds_integration_contract.md#6-1-관리자-권한csrf조회-감사-결정)). AI 보고서 완료는 승인 필수 조건이 아니다. 응답 유실 시 결과 재조회가 가능해야 한다. 아직 미구현.
+기타: `CUSTOMER_WRITE` 권한과 기존 세션·CSRF 보호. `ON_APPROVAL`·당일 유효·해당 보류 건의 최신 콜 결과 `CUSTOMER_CONFIRMED`를 확인한다. 최신 위험 계좌 조회가 `MATCH`이면 콜 결과와 무관하게 승인을 거부한다. `NO_MATCH`·`UNAVAILABLE`이면 기존 콜 요건을 적용한다. P6은 관리자 ID·행위·콜 기록 ID·멱등 키를 PENDING 조치로 먼저 커밋하고 P4 `release()`를 호출한다. AI 보고서 완료는 승인 필수 조건이 아니다. 응답 유실 시 P4 정본과 상세를 재조회한다.
 
 ### 요구사항 ID
 
@@ -655,7 +655,7 @@ URL: `/api/v1/admin/fds/holds/{transferHoldId}/reject`
 사용자: 관리자
 인증 필요: Y
 Idempotency-Key: Y
-기타: `CUSTOMER_WRITE` 권한과 기존 세션·CSRF 보호. `X-Access-Reason`은 현재 거절 요청의 필수 헤더가 아니다. `RISK_ACCOUNT_MATCH`는 처리 직전 활성 데이터셋과 보류 원본을 재조회해 `MATCH`일 때만 콜 없이 허용한다. `CUSTOMER_DENIED`는 `NO_MATCH`·`UNAVAILABLE`에서 해당 보류 건의 최신 콜 결과가 동일할 때 허용한다. P6이 관리자 ID·행위·거절 사유·콜 기록 ID(해당 시)·멱등 키를 PENDING 조치로 먼저 커밋한다. 활성 버전 제어 행 잠금 아래 최종 위험 상태를 재검증하고, `RISK_ACCOUNT_MATCH`이면 그때 확인한 위험 기록 ID·데이터셋 버전을 **P4 호출 전에 PENDING에 내구화**한다. 재검증 실패로 P4를 호출하지 않으면 실패 결과·ABORTED를 기록한다. 성공하면 P4 `reject()` 결과를 확인하고 최종 근거로 기존 `AuditLog`를 멱등 기록한다([연동 계약 §6-1](p6_fds_integration_contract.md#6-1-관리자-권한csrf조회-감사-결정)). 아직 미구현.
+기타: `CUSTOMER_WRITE` 권한과 기존 세션·CSRF 보호. `RISK_ACCOUNT_MATCH`는 처리 직전 활성 데이터셋과 보류 원본을 재조회해 `MATCH`일 때만 콜 없이 허용한다. `CUSTOMER_DENIED`는 `NO_MATCH`·`UNAVAILABLE`에서 해당 보류 건의 최신 콜 결과가 동일할 때 허용한다. P6은 관리자 ID·행위·거절 사유·콜 기록 ID·멱등 키를 PENDING으로 먼저 커밋한다. `FRAUD_CONFIRMED`는 별도 `FDS_FRAUD_CONFIRM` 권한과 등록 의도를 사용한다.
 
 ### 요구사항 ID
 
@@ -733,7 +733,7 @@ Idempotency-Key: Y
 {"riskAccountCheck":{"status":"MATCH","label":"위험 계좌 목록과 일치","riskAccountId":501,"datasetVersion":"demo-risk-v1","checkedAt":"2026-11-08T14:00:00+09:00","sourceNotice":"프로젝트 시연용 합성 데이터이며 실제 사기 확정 정보가 아닙니다."}}
 ```
 
-`NO_MATCH`의 label은 `위험 계좌 목록과 일치하지 않음`, `UNAVAILABLE`의 label은 `위험 계좌 조회 불가 · 고객 확인 절차 필요`다. `sourceNotice`와 근거 ID·버전은 상세에서만 표시한다. 고객 화면에는 위험 조회 결과를 표시하지 않는다. 관리자 전체 계좌번호·수취인 이름·생년월일은 현재 조회 계약에 없으며 추가하지 않는다.
+`NO_MATCH`의 label은 `위험 계좌 목록과 일치하지 않음`, `UNAVAILABLE`의 label은 `위험 계좌 조회 불가 · 고객 확인 절차 필요`다. `sourceNotice`와 근거 ID·버전은 상세에서만 표시한다. 고객 화면에는 위험 조회 결과를 표시하지 않는다. 관리자 전체 계좌번호·수취인 이름·생년월일은 현재 조회 계약에 없으며 추가하지 않는다. 따라서 관리자 목록·상세·사기 확정 확인 API에는 `recipientName` 필드가 없고, FE도 수취인명 영역을 표시하지 않는다.
 
 **조치 요청과 FE:** `MATCH`의 §10 요청 예시는 `{"reasonCode":"RISK_ACCOUNT_MATCH","note":"위험 계좌 목록 일치 확인"}`이며 콜 기록을 요구하지 않는다. `NO_MATCH`·`UNAVAILABLE`은 기존 `CUSTOMER_DENIED` 거절과 `CUSTOMER_CONFIRMED` 승인 조건을 따른다. FE는 `MATCH`에 거절 버튼만, 나머지 두 상태에 콜 기록 뒤 승인·거절 버튼을 제공한다. 목록의 상태나 클라이언트가 보낸 위험 기록 ID를 조치 근거로 신뢰하지 않는다. 서버가 조치 직전에 활성 버전·계좌 일치·보류 상태를 다시 확인한다. 상태가 바뀌면 `FDS0301` 또는 아래 사유 충돌 코드로 거부하고 FE가 상세를 다시 조회한다. 같은 `Idempotency-Key`·본문의 재요청은 저장된 결과를 반환하고, 처리 중·다른 본문은 기존 `CMN0301`·`CMN0302`다. 응답 유실 뒤에는 새 키로 다시 조치하지 않고 같은 키로 확인하거나 보류 상세를 조회한다.
 
@@ -744,7 +744,7 @@ Idempotency-Key: Y
 **P4 합의 전 종료 이벤트 제안:** 고객 취소(`CANCELLED`) 또는 `ON_APPROVAL` 만료(`EXPIRED`)가 확정되는 같은 트랜잭션에서 P4가 `transfer.api.TransferHoldClosed(transferHoldId, reason, closedAt)`를 발행하고, P6은 중복 전달을 멱등 처리해 조사 작업·재시도를 닫는다. 늦게 도착한 Agent 보고서는 활성 조사 결과로 표시하지 않는다. 관리자 거절은 P6이 직접 처리하므로 이 이벤트에서 제외한다. 이벤트 확정 전까지 이 항목을 구현 완료 계약으로 취급하지 않는다. 상세 예시는 [연동 계약 §5-1](p6_fds_integration_contract.md#5-1-고객-취소만료-종료-이벤트-제안--p4-합의-전)을 따른다.
 
 1. **P4 소유·구현:** 현재 `TransferResponse.transferHold` 중첩 필드와 `TransferHoldResponse`의 `transferHoldId`·`status`·`releaseAt`·`cancellableUntil`은 구현돼 있다. FDS `ON_APPROVAL` 보류의 실제 응답 및 해제 방식 표시가 추가로 필요한지는 P4와 맞춘다. `transfer.api` 원본·상태 조회, 승인 실행 실패·응답 유실 시 결과 조회 계약도 P4가 결정·제공한다. P6은 FDS 관리자 API·FE 화면에 이를 연결하고 응답 유실 시 보류 상세를 재조회한다.
-2. §6의 인증 계약대로 **기존 관리자 권한**(`CUSTOMER_READ`·`CUSTOMER_WRITE`)을 재사용한다. 11/7 이후 `/admin/fds/**` matcher와 Agent 서비스 Bearer 토큰·전용 stateless 체인·CSRF 분리·네트워크 접근 제한을 구현하고 테스트한다. `AdminPermission`은 5종 고정이므로 새 권한을 추가하지 않는다. 실제 배포의 비밀값 주입·TLS 경로는 인프라 설정과 대조한다.
+2. §6의 인증 계약대로 조회는 `CUSTOMER_READ`, 콜·승인·일반 거절은 `CUSTOMER_WRITE`, 사기 확정 거절은 `FDS_FRAUD_CONFIRM`을 사용한다. `/admin/fds/**` matcher와 Agent 서비스 Bearer 토큰·전용 stateless 체인·CSRF 분리·네트워크 접근 제한을 테스트한다. 실제 배포의 비밀값 주입·TLS 경로는 인프라 설정과 대조한다.
 3. P6은 확정한 이벤트 입력 제한·재전송 규칙·콜 결과 4종, 새로고침 복원, `confirmActiveSeconds` 검증, 보고서 발견 코드·권고값 및 거절 enum을 구현한다. 각 이벤트의 `flowId`는 경로와 대조하고, 보고서 16 KiB·문자열·배열 상한과 조사 작업 3회·**시도별 실행 60초(대기 제외)**·Tool 호출별 5초 제한을 적용한다. 최근 이력 Tool은 24시간·100건과 `hasMore`를 적용하고, 수취인 전체 과거 거래 여부는 §4의 별도 집계로 확인한다.
 4. `FDS` 새 오류코드를 Java `ErrorCode`에 구현할 때 API 명세·[오류코드 마스터](../api_conventions.md#4-17-fds-이상거래탐지보류-사건-조사--p6-854)와 일치시키고 Swagger UI로 실제 응답을 확인한다.
 5. 노션 페이지로 옮길 때는 API별로 별도 페이지를 만들고 속성 8종과 본문 섹션 순서를 유지한다. **이 문서의 제안 응답을 구현 완료로 표시하지 않는다.**
@@ -771,7 +771,7 @@ BE는 사설 Compose 네트워크의 Python 서비스 이름으로만 호출한�
 | `flowId` | 보류 원본에 연결되고 인증 고객 소유로 검증된 행동 flow | String(UUID) | 서버가 원본·소유권·최종 제출을 먼저 검증 | X | `"3f1c2b7e-8a4d-4f0e-9c1a-2b6d5e7f8a90"` |
 | `featureVersion` | 피처 계약 버전 | String | 현재 `p6-behavior-v1`; 모델의 기대 버전과 정확히 일치 | X | `"p6-behavior-v1"` |
 | `features` | 모델 입력 | Object | 아래 다섯 키를 모두 포함; 다른 피처는 거부 | X | `{...}` |
-| `features.backCount` | 확인 화면에서 입력 화면으로 완료된 뒤로가기 횟수 | Integer | 0~100; 완전한 flow에서 이벤트가 없으면 0 | X | `1` |
+| `features.backCount` | 확인 화면에서 입력 화면으로 완료된 뒤로가기 횟수 | Integer | 0~100; 정책 망설임 신호는 2회 이상이며 완전한 flow에서 이벤트가 없으면 0 | X | `2` |
 | `features.amountRevisionCount` | 첫 확정 금액 뒤 수정 횟수 | Integer | 0~100; 완전한 flow에서 수정이 없으면 0 | X | `2` |
 | `features.confirmActiveSeconds` | 보이는 확인 화면의 활성 체류 | Integer | 0~1800초; visible 밀리초 합산 후 한 번 버림 | O | `71` |
 | `features.recipientConfirmSeconds` | 이체 진입부터 첫 수취인 확인까지 경과 | Integer | 0 이상, 초 단위 버림; 같은 flow에서 확인이 반복되면 첫 `RECIPIENT_CONFIRMED`를 사용; 확인 이벤트가 없으면 null | O | `15` |
@@ -782,7 +782,7 @@ BE는 사설 Compose 네트워크의 Python 서비스 이름으로만 호출한�
 **Example**
 
 ```json
-{"transferHoldId":123,"flowId":"3f1c2b7e-8a4d-4f0e-9c1a-2b6d5e7f8a90","featureVersion":"p6-behavior-v1","features":{"backCount":1,"amountRevisionCount":2,"confirmActiveSeconds":71,"recipientConfirmSeconds":15,"totalFlowSeconds":100}}
+{"transferHoldId":123,"flowId":"3f1c2b7e-8a4d-4f0e-9c1a-2b6d5e7f8a90","featureVersion":"p6-behavior-v1","features":{"backCount":2,"amountRevisionCount":2,"confirmActiveSeconds":71,"recipientConfirmSeconds":15,"totalFlowSeconds":100}}
 ```
 
 ### Query parameter
@@ -846,3 +846,37 @@ BE에서 연결 실패는 `INFERENCE_SERVICE_UNAVAILABLE`, BE 호출 전체 제�
 FastAPI는 호출마다 로드된 모델로 점수만 계산한다. 보류 사건·점수·멱등 키를 저장하거나 `HELD`·조사 상태를 바꾸지 않는다. 같은 본문의 중복 호출은 부작용이 없으나, 모델 버전이 교체되면 점수도 달라질 수 있어 BE는 응답의 `modelVersion`을 기록한다. BE는 `scoreStatus=PENDING AND scoreAttemptStartedAt IS NULL`인 점수 기록을 원자적으로 선점한 리스너만 Python을 호출한다. 결과가 불명확한 시간 초과·응답 유실 뒤에는 같은 보류를 자동 재추론하지 않으며, 연결 전에 실패했음이 확실한 경우에도 보류 건당 한 번 시도 원칙을 유지한다. 점수 처리 리스너의 재전달·중복 실행은 이미 선점됐거나 저장된 `AVAILABLE`·`UNAVAILABLE`을 덮어쓰지 않고, 위 `PENDING` 조건부 전이·복구 작업과 같은 트랜잭션 경계를 사용한다. B4 조사 재시도는 이 점수 상태를 변경하지 않는다.
 
 BE는 응답의 `transferHoldId`·`flowId`·`featureVersion`과 점수·버전을 검증한 뒤 점수, 모델 버전, 피처 버전을 저장하고 `PENDING → AVAILABLE`을 한 번만 커밋한다. FastAPI 오류나 점수 저장 실패는 `UNAVAILABLE` 사유와 복구 경로를 따른다. Agent 입력 생성 시 P6에 저장된 **`AVAILABLE` 점수만** 보조 정보로 포함하고, 관리자 상세 §7도 저장된 뒤에만 `AVAILABLE`로 표시한다. 저장 실패나 조사 실패가 `HELD`를 풀거나 이체를 기표하지 않는다. 모델 점수만으로 승인·거절하거나 서버 A/B 정책 결과를 바꾸지 않는다. 훅 C는 Python을 호출하지 않는다.
+## #1005 관리자 사기 확정 및 위험 계좌 API
+
+### 사기 확정 및 거절
+
+- Method: `POST`
+- URL: `/api/v1/admin/fds/holds/{transferHoldId}/fraud-reject`
+- 사용자: 관리자
+- 인증: 세션, CSRF, `FDS_FRAUD_CONFIRM`
+- Idempotency-Key: 필수
+- 호출 조건: 최신 콜 결과가 `CUSTOMER_DENIED`이고 위험 상태가 `NO_MATCH` 또는 `UNAVAILABLE`일 때만 호출 가능 (`MATCH` 상태에서는 `FRAUD_REJECT` 불허)
+- Request body: 없음
+- 성공: HTTP 200, `code="0000"`, `data.actionType="FRAUD_REJECT"`
+- 처리: PENDING 조치·등록 의도 커밋 후 P4 호출, 최종 상태·actorId·`FRAUD_CONFIRMED` 대조 후 ACTIVE
+- 오류: `FDS0301` 상태·멱등 충돌, `FDS9002` P4 거절 후 위험 계좌 활성화 실패
+
+### 위험 계좌 목록
+
+- Method: `GET`
+- URL: `/api/v1/admin/fds/risk-accounts`
+- 인증: 세션, `CUSTOMER_READ`, `X-Access-Reason`
+- 성공: 마스킹 계좌, source, 등록·활성화 시각, datasetVersion, 선정 근거 수를 반환
+
+### 위험 계좌 상세와 선정 근거
+
+- Method: `GET`
+- URL: `/api/v1/admin/fds/risk-accounts/{riskAccountId}`
+- 인증: 세션, `CUSTOMER_READ`, `X-Access-Reason`
+- 성공: 계좌 요약과 사건별 transferHoldId, actionId, investigationId, 관리자, 콜 기록, 사유,
+  정책 코드, 점수 상태·버전, 데이터셋 버전을 반환
+- 계좌번호 원문과 Agent 내부 오류는 반환하지 않는다.
+
+보류 상세의 `riskRegistration`은 `registrationId`, `PENDING/ACTIVE/FAILED`, riskAccountId,
+decisionDatasetVersion, 활성화 datasetVersion, failureReason, 생성·활성화·수정 시각과 recoveryRequired를 제공한다. 승인과 일반 거절에는
+이 객체가 없다.
