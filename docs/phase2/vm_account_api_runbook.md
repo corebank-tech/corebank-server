@@ -224,7 +224,7 @@ http {
     location ^~ /api/v1/internal/ { return 404; }
     location = /api/v1/actuator/health { proxy_pass http://127.0.0.1:8080; }
     location ^~ /api/v1/actuator { return 404; }
-    location / { proxy_pass http://127.0.0.1:8080; }
+    location / { return 404; }
   }
 }
 ```
@@ -239,7 +239,7 @@ sudo docker run -d --name demo-nginx --network host --restart unless-stopped \
 - `/api/v1/internal/`(이의제기 Agent 내부 API)과 `/api/v1/actuator`(health 제외)는 외부에 막는다(외부에서 404 확인). 업로드 한도 45MB는 이의제기 첨부(앱 한도 40MB) 때문이다.
 - 설정을 바꾼 뒤에는 `sudo docker exec demo-nginx nginx -t && sudo docker exec demo-nginx nginx -s reload`로 다시 읽힌다(바인드 마운트한 파일은 `sed -i`로 바꾸면 도커가 연결을 놓치니 같은 파일을 덮어쓴다).
 
-**80번 경로(예비)**: 교육장이 제공한 도메인 `corebank.shinhanacademy.co.kr`은 외부 → HTTPS(443) → VM의 80번으로 이어진다. 위 80번 서버 블록이 이를 받는다(11/13 외부에서 health 200, `/internal/` 404 확인). 이 도메인은 `corebank.cloud`와 다른 사이트라 화면의 로그인 쿠키가 따라가지 않아 화면용 경로로는 쓰지 않는다. 터널이 막혔을 때의 예비다.
+**80번 경로(예비)**: 교육장이 제공한 도메인 `corebank.shinhanacademy.co.kr`은 외부 → HTTPS(443) → VM의 80번으로 이어진다. (11/13 외부에서 health 200, `/internal/` 404 확인) HTTPS는 앞단에서 끝나고 그 뒤 VM까지의 구간은 HTTP 평문이며, 그 구간을 누가 볼 수 있는지는 확인하지 못했다. 그래서 80번 서버 블록은 헬스체크(`/api/v1/actuator/health`)만 통과시키고 나머지는 모두 404로 막는다(11/16 PR 리뷰 반영). 이 도메인은 `corebank.cloud`와 다른 사이트라 로그인 쿠키가 따라가지 않아 화면용으로도 쓰지 않는다. 11/16 17시경 VM에 적용했고(`nginx -t` 후 `reload`, 이전 설정은 `/etc/corebank-demo/nginx.conf.bak-20261116`), 80번 health 200, `/api/v1/admin/auth/login` · `/` · `/api/v1/internal/x` 404, 443번 health 200을 확인했다. 바꾸기 전 응답은 측정하지 않았다. 터널이 막혔을 때의 예비다(헬스체크만).
 
 **인증서 (Let's Encrypt)**: 브라우저가 보는 인증서는 Cloudflare가 발급한 것이고, VM의 인증서는 `cloudflared`가 원본 서버 이름 `api.corebank.cloud`로 Nginx에 연결할 때 쓰인다. 2026-11-13 발급, 만료 **2027-02-11**, DNS-01 수동 방식이라 자동 갱신되지 않는다. 갱신이 필요하면 `_acme-challenge.api` TXT를 이제는 **Cloudflare**에 추가한다.
 ```bash
