@@ -17,6 +17,8 @@ export FDS_AGENT_TAG="$FDS_AGENT_GIT_SHA"
 export SPRING_PROFILES_ACTIVE='prod,qa-seed'
 export COREBANK_ENV_FILE='/secure/path/.env.corebank'
 export FDS_ENV_FILE='/secure/path/.env.fds-agent'
+# latest·축약 SHA를 거부하고 두 값이 같은 전체 Git SHA인지 먼저 검증한다.
+./scripts/validate-fds-agent-sha.sh
 # 비밀값을 stdout에 펼치지 않고 두 Compose 파일의 병합 결과만 검증한다.
 docker compose -f docker-compose.yml -f docker-compose.fds.yml config --quiet
 docker compose -f docker-compose.yml -f docker-compose.fds.yml up -d --build minicore-mysql corebank-fds-agent corebank-server

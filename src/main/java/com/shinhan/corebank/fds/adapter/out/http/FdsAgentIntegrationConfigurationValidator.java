@@ -16,19 +16,14 @@ public class FdsAgentIntegrationConfigurationValidator {
         requireConfigured(scoreEnabled, scoreToken, "FDS_SCORE_SERVICE_TOKEN");
         requireConfigured(investigationEnabled, investigationToken, "FDS_INVESTIGATION_SERVICE_TOKEN");
         requireConfigured(investigationEnabled, agentToken, "FDS_AGENT_SERVICE_TOKEN");
-        // 비활성 기능에 남은 값은 사용되지 않으므로 실제로 함께 쓰는 토큰만 분리한다.
+        // Agent 콜백 인증은 항상 등록되므로 활성 outbound 기능 토큰과 콜백 토큰을 분리한다.
         requireDistinct(
                 scoreEnabled && investigationEnabled,
                 scoreToken,
                 investigationToken,
                 "FDS_SCORE_SERVICE_TOKEN",
                 "FDS_INVESTIGATION_SERVICE_TOKEN");
-        requireDistinct(
-                scoreEnabled && investigationEnabled,
-                scoreToken,
-                agentToken,
-                "FDS_SCORE_SERVICE_TOKEN",
-                "FDS_AGENT_SERVICE_TOKEN");
+        requireDistinct(scoreEnabled, scoreToken, agentToken, "FDS_SCORE_SERVICE_TOKEN", "FDS_AGENT_SERVICE_TOKEN");
         requireDistinct(
                 investigationEnabled,
                 investigationToken,

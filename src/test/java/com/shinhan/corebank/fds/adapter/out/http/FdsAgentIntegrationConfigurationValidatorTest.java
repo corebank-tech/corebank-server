@@ -47,8 +47,16 @@ class FdsAgentIntegrationConfigurationValidatorTest {
 
     @Test
     void inactiveFeatureTokensAreNotCompared() {
-        assertThatCode(() -> validator(true, false, "score-secret", "score-secret", "score-secret"))
+        assertThatCode(() -> validator(true, false, "score-secret", "score-secret", "agent-secret"))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    void enabledScoreRejectsAgentCallbackTokenReuseEvenWhenInvestigationIsDisabled() {
+        assertThatThrownBy(() -> validator(true, false, "shared-secret", "unused", "shared-secret"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("must use distinct values")
+                .hasMessageNotContaining("shared-secret");
     }
 
     @Test
