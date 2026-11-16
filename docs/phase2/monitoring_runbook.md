@@ -28,8 +28,9 @@
    ```
 3. 비밀 파일 두 개를 만든다(값은 화면에 남기지 않는다). Grafana 관리자 비밀번호는 무작위로 만들고, 읽을 때만 `sudo cat`으로 확인한다.
    ```bash
-   sudo sh -c 'umask 077; openssl rand -base64 18 > /etc/corebank-monitoring/grafana_admin_password' && sudo chown root:472 /etc/corebank-monitoring/grafana_admin_password && sudo chmod 640 /etc/corebank-monitoring/grafana_admin_password
+   sudo sh -c 'umask 077; openssl rand -base64 18 > /etc/corebank-monitoring/grafana_admin_password' && sudo chown root:root /etc/corebank-monitoring/grafana_admin_password && sudo chmod 640 /etc/corebank-monitoring/grafana_admin_password
    ```
+   Grafana 컨테이너의 사용자는 `uid 472`이지만 **그룹은 `0`(root)**이라 파일 그룹이 root여야 읽는다. 그룹을 `472`로 두면 읽기에 실패하고 Grafana는 오류 없이 기본 비밀번호(`admin`)로 만들어진다(11/16 실제로 겪음). 이미 기동한 뒤라면 파일 그룹을 고치고 `sudo docker exec corebank-grafana sh -c 'grafana cli admin reset-admin-password "$(cat /etc/grafana-secrets/admin_password)"'`로 초기화한다(관리자 비밀번호 설정은 처음 기동할 때만 적용된다).
    Discord 웹훅 주소는 `bash`에서 입력한다(입력이 보이지 않는다). 컨테이너 사용자(`nobody`, 65534)가 읽을 수 있게 그룹만 맞춘다.
    ```bash
    read -rsp "Discord 웹훅 주소: " U; echo; printf '%s\n' "$U" | sudo tee /etc/corebank-monitoring/alertmanager/discord_webhook >/dev/null; unset U; sudo chown root:65534 /etc/corebank-monitoring/alertmanager/discord_webhook && sudo chmod 640 /etc/corebank-monitoring/alertmanager/discord_webhook
@@ -119,32 +120,36 @@
 
 ## 4. 시간 측정
 
-완료 조건은 "알람 발생부터 인지까지 시간을 측정할 수 있다"이다. 시험 규칙 `MonitoringTestAlert`(항상 참, `for` 없음)로 **조건이 성립한 시각**과 **Discord에 알림이 도착한 시각**의 차이를 잰다.
+완료 조건은 "알람 발생부터 인지까지 시간을 측정할 수 있다"이다. 시험 규칙 `MonitoringTestAlert`(항상 참, `for` 없음)를 켠 시각부터 **Alertmanager가 Discord로 전송을 마친 시각**까지를 재고, Discord에서 메시지가 뜬 시각을 눈으로 확인한다.
 
-1. 시험 규칙을 켠다. 이 줄을 실행한 시각이 **t0**이다.
+1. Discord 알림 채널을 열어 둔다.
+2. VM에서 아래 한 줄을 실행한다. 시험 규칙을 켜고, Alertmanager의 Discord 전송 횟수(`alertmanager_notifications_total`)가 올라갈 때까지 0.5초마다 확인해 걸린 시간을 보여 준다(`bash`).
    ```bash
-   date '+t0=%H:%M:%S'; sudo cp /etc/corebank-monitoring/prometheus/alerts-test.yml /etc/corebank-monitoring/prometheus/extra/ && curl -s -X POST http://127.0.0.1:9090/-/reload && echo reloaded
+   t0=$(date +%s.%N); sudo cp /etc/corebank-monitoring/prometheus/alerts-test.yml /etc/corebank-monitoring/prometheus/extra/ && curl -s -X POST http://127.0.0.1:9090/-/reload >/dev/null; until curl -s http://127.0.0.1:9093/metrics | grep -qE '^alertmanager_notifications_total\{[^}]*integration="discord"[^}]*\} [1-9]'; do sleep 0.5; done; t2=$(date +%s.%N); python3 -c "print('규칙 적용 → Alertmanager가 Discord로 전송 완료: %.1f초' % ($t2 - $t0))"
    ```
-2. Prometheus가 알람을 `firing`으로 올린 시각(**t1**)을 본다.
+3. Discord에 알림이 도착한 시각(메시지 시각)을 읽는다. 전송 실패가 없는지 본다.
    ```bash
-   sleep 25; curl -s http://127.0.0.1:9090/api/v1/alerts | python3 -c "import sys,json;[print(a['labels']['alertname'],a['state'],a['activeAt']) for a in json.load(sys.stdin)['data']['alerts']]"
+   curl -s http://127.0.0.1:9093/metrics | grep -E '^alertmanager_notifications_(total|failed_total)\{[^}]*integration="discord"' | cut -c1-120
    ```
-3. Discord 채널에 알림이 도착한 시각(**t2**, 메시지 시각)을 읽는다.
-4. 시험 규칙을 끈다(해제 알림도 온다).
+4. **시험 규칙을 반드시 끈다**(안 끄면 계속 울린다). 끄면 해제 알림이 온다.
    ```bash
    sudo rm /etc/corebank-monitoring/prometheus/extra/alerts-test.yml && curl -s -X POST http://127.0.0.1:9090/-/reload && echo cleaned
    ```
-5. 아래 표에 기록한다. 이론상 최대치는 평가 주기 15초 + Alertmanager `group_wait` 10초 + 전송이다.
 
-| 측정일 | t0 (규칙 적용) | t1 (Prometheus firing) | t2 (Discord 도착) | 인지까지 (t2 − t0) |
-|---|---|---|---|---|
-| 기록 예정 | | | | |
+**측정 결과 (2026-11-16)**
 
-- 실제 장애 알람은 `for`(예: `CorebankServerDown` 1분)가 더해진 뒤 울리므로 인지 시간은 `for` + 위 시간이다.
-- 시험 규칙이 남아 있으면 계속 울린다. 측정이 끝나면 반드시 4번으로 끈다.
+| 구간 | 시간 | 근거 |
+|---|---|---|
+| 규칙 적용 → Alertmanager가 Discord로 전송 완료 | **20.3초** | 위 2번 출력 |
+| Discord 메시지 표시 | 오후 4:42(분 단위) | Discord 화면 |
+
+- 이론상 최대는 규칙 평가 주기 15초 + Alertmanager 묶음 대기(`group_wait`) 10초 + 전송으로 25초 안팎이고, 측정값 20.3초는 그 안이다.
+- 알림 본문(`[FIRING:1] MonitoringTestAlert (demo-vm warning)`)에 라벨, 요약, `runbook_url`이 들어 있고 `runbook_url`이 이 문서의 해당 절로 연결됨을 확인했다.
+- 실제 장애 알람은 `for`(예: `CorebankServerDown` 1분)가 더해진 뒤 올라오므로 인지 시간은 `for` + 위 시간이다.
 
 ## 5. 한계와 끄기
 
+- Discord 알림 맨 아래 `Source` 링크는 `http://vm-server:9090/...`인데 Prometheus가 VM 안(`127.0.0.1`)에서만 열려 있어 클릭해도 열리지 않는다(알림 내용에는 영향 없음).
 - **교육장 안에서만** 대시보드를 볼 수 있다. VM 접속도 교육장에서만 한다(3-Tier 철거로 SSM 세션이 없다).
 - 수집 대상은 계정계 API 하나다. 정보계 API(`info-api`), MySQL, VM 자원(CPU·디스크)은 수집하지 않는다.
 - Prometheus 데이터는 7일 보관하고 VM 디스크(`corebank-prometheus-data` 볼륨)에 쌓인다.
