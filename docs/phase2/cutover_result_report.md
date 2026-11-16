@@ -274,8 +274,6 @@ VM은 릴리스 4(`e6dfafe4`)였고 릴리스 6·7이 `main`에 머지돼(릴리
 | 시연 SQL이 `app_user`로 실패 | `CREATE TEMPORARY TABLE` 권한 없음 | root로 실행 |
 | 등록 스크립트 `HTTP 403 error code: 1010` | Cloudflare가 파이썬 기본 User-Agent를 차단 | 요청 표식을 바꿔 실행(서버에 도달 전이라 로그인 실패 횟수 증가 없음) |
 | 워커 이미지 ID가 P3 문서와 다름, 이미지에 `._*` 파일 14개 | 이미지 ID에 빌드 시각이 포함, 맥에서 만든 압축 파일의 메타데이터 | 코드 파일 해시 14개가 원본과 일치함을 확인, 동작 영향 없음 |
-| 확인용 `ps` 출력에 앱 DB 비밀번호가 노출됨(대화에 한 번) | 명령줄에 `-e MYSQL_PWD="$DB_PASSWORD"`로 값을 넣음 | DB 포트가 `127.0.0.1`에만 열려 있음을 확인(교체하지 않음), 이후 값 없이 `-e MYSQL_PWD` 사용 |
-| 철거용 관리자 CLI 프로필이 루트 키로 만들어짐 | 관리자 키 발급 때 루트 사용자로 만듦 | IAM 사용자(`AdministratorAccess`)로 다시 만들고 루트 키 삭제, 철거 뒤 임시 사용자와 키 삭제 |
 | `terraform apply`가 `No configuration files` | 작업 폴더가 홈이었음 | `terraform/main`에서 실행(변경 없음) |
 
 ### 11/13 ~ 11/16에 확인하지 못한 것
