@@ -96,7 +96,7 @@ resource "aws_db_instance" "main" {
   # 백업 및 데이터 보호
   storage_encrypted         = true
   backup_retention_period   = 7
-  deletion_protection       = true
+  deletion_protection       = false
   skip_final_snapshot       = false
   final_snapshot_identifier = "corebank-rds-final"
 
