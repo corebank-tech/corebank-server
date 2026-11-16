@@ -1,4 +1,4 @@
-# P6 Python Agent Compose 실행
+# P6 Python Agent 독립 컨테이너 실행
 
 ## 준비
 
@@ -7,8 +7,9 @@
 콜백 토큰은 모두 서로 다른 충분히 긴 난수여야 한다. 예제 파일에는 변수명만 두며 실제 비밀값을 커밋하거나
 로그에 출력하지 않는다.
 
-`FDS_AGENT_BUILD_CONTEXT`에는 `corebank-fds-agent` 저장소 경로를 지정하고 이미지 태그는 그 저장소의 전체
-Git SHA로 고정한다.
+BE는 `corebank-server` Compose 프로젝트로 실행하고 Python Agent는 Agent 저장소의 `Dockerfile`로 빌드한
+독립 컨테이너로 실행한다. 둘은 Docker의 `corebank-net` 네트워크만 공유한다. 이미지 태그는 Agent 저장소의
+전체 Git SHA로 고정한다.
 
 ```bash
 export FDS_AGENT_BUILD_CONTEXT='../corebank-fds-agent'
@@ -19,10 +20,32 @@ export COREBANK_ENV_FILE='/secure/path/.env.corebank'
 export FDS_ENV_FILE='/secure/path/.env.fds-agent'
 # latest·축약 SHA를 거부하고 두 값이 같은 전체 Git SHA인지 먼저 검증한다.
 ./scripts/validate-fds-agent-sha.sh
-# 비밀값을 stdout에 펼치지 않고 두 Compose 파일의 병합 결과만 검증한다.
+# 비밀값을 stdout에 펼치지 않고 BE Compose 병합 결과만 검증한다.
 docker compose -f docker-compose.yml -f docker-compose.fds.yml config --quiet
-docker compose -f docker-compose.yml -f docker-compose.fds.yml up -d --build minicore-mysql corebank-fds-agent corebank-server
+docker compose -f docker-compose.yml -f docker-compose.fds.yml up -d minicore-mysql corebank-server
+
+# Agent는 corebank-server Compose 프로젝트에 넣지 않고 독립 컨테이너로 실행한다.
+docker build \
+  --build-arg GIT_SHA="$FDS_AGENT_GIT_SHA" \
+  --tag "corebank-fds-agent:$FDS_AGENT_TAG" \
+  "$FDS_AGENT_BUILD_CONTEXT"
+docker run -d \
+  --name corebank-fds-agent \
+  --restart unless-stopped \
+  --network corebank-net \
+  --env-file "$FDS_ENV_FILE" \
+  --env FDS_BE_INTERNAL_BASE_URL=http://corebank-server:8080 \
+  --expose 8000 \
+  --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).read()\"" \
+  --health-interval 10s \
+  --health-timeout 3s \
+  --health-retries 3 \
+  --health-start-period 20s \
+  "corebank-fds-agent:$FDS_AGENT_TAG"
 ```
+
+Docker Desktop에서는 `corebank-server` 프로젝트 아래에 BE와 MySQL이 표시되고,
+`corebank-fds-agent`는 해당 프로젝트 밖의 독립 컨테이너로 표시되어야 한다.
 
 `prod,qa-seed`는 로컬 QA seed 검증 예시다. O1에서는 현재 실행 중인 프로필을 먼저 확인하고 기존 값이
 `prod,qa-seed`이면 그대로 유지한다. 현재 값이 `prod`라면 배포 담당자 확인 없이 `qa-seed`를 추가하지 않는다.
@@ -35,9 +58,11 @@ BE에는 정책·점수·조사 기능 스위치와 `http://corebank-fds-agent:8
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.fds.yml ps
+docker ps --filter name=^/corebank-fds-agent$
 docker exec corebank-server wget -qO- http://corebank-fds-agent:8000/health
-docker port "$(docker compose -f docker-compose.yml -f docker-compose.fds.yml ps -q corebank-fds-agent)"
-docker compose -f docker-compose.yml -f docker-compose.fds.yml logs --since=10m corebank-server corebank-fds-agent
+docker port corebank-fds-agent
+docker compose -f docker-compose.yml -f docker-compose.fds.yml logs --since=10m corebank-server
+docker logs --since=10m corebank-fds-agent
 ```
 
 `docker port`는 출력이 없어야 한다. Agent의 8000 포트는 `corebank-net`에서만 접근하며 호스트와 외부
@@ -72,10 +97,11 @@ BE는 Agent healthcheck에 `depends_on: condition: service_healthy`로 종속되
 `PENDING`으로 덮어쓰지 않는다.
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.fds.yml stop corebank-fds-agent
+docker stop corebank-fds-agent
 docker compose -f docker-compose.yml -f docker-compose.fds.yml ps
-docker compose -f docker-compose.yml -f docker-compose.fds.yml start corebank-fds-agent
-docker compose -f docker-compose.yml -f docker-compose.fds.yml logs --since=10m corebank-server corebank-fds-agent
+docker start corebank-fds-agent
+docker compose -f docker-compose.yml -f docker-compose.fds.yml logs --since=10m corebank-server
+docker logs --since=10m corebank-fds-agent
 ```
 
 중단 중 BE가 계속 응답하고 해당 이체가 `HELD`인지 확인한다. Agent 재기동 뒤 위 SQL로 남아 있던
@@ -88,8 +114,9 @@ docker compose -f docker-compose.yml -f docker-compose.fds.yml logs --since=10m 
 ## 종료
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.fds.yml stop corebank-server corebank-fds-agent
-docker compose -f docker-compose.yml -f docker-compose.fds.yml rm -f corebank-server corebank-fds-agent
+docker rm -f corebank-fds-agent
+docker compose -f docker-compose.yml -f docker-compose.fds.yml stop corebank-server
+docker compose -f docker-compose.yml -f docker-compose.fds.yml rm -f corebank-server
 ```
 
 공용 MySQL과 Redis를 함께 제거하지 않는다.
