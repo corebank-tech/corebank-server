@@ -1,0 +1,94 @@
+# 알람 규칙. 알림 3원칙: 노이즈 억제(최소 지속 시간·건수 기준), 실행 가능성(무엇을 할지 runbook), Runbook 링크 필수.
+# 각 규칙의 runbook_url은 monitoring_runbook.md의 같은 이름 절이다.
+groups:
+  - name: corebank-server
+    rules:
+      - alert: CorebankServerDown
+        expr: up{job="corebank-server"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "계정계 API 지표를 가져오지 못합니다"
+          description: "1분 넘게 지표 수집이 실패했습니다. 서버 컨테이너가 내려갔거나 응답하지 않을 수 있습니다."
+          runbook_url: "https://github.com/corebank-tech/corebank-server/blob/dev/docs/phase2/monitoring_runbook.md#corebankserverdown"
+
+      - alert: Http5xxBurst
+        expr: sum(increase(http_server_requests_seconds_count{status=~"5.."}[5m])) >= 5
+        labels:
+          severity: warning
+        annotations:
+          summary: "최근 5분에 5xx 응답이 {{ $value | printf \"%.0f\" }}건"
+          description: "서버 오류 응답이 짧은 시간에 몰렸습니다."
+          runbook_url: "https://github.com/corebank-tech/corebank-server/blob/dev/docs/phase2/monitoring_runbook.md#http5xxburst"
+
+      - alert: HikariPoolSaturated
+        expr: max(hikaricp_connections_active) / max(hikaricp_connections_max) > 0.8
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB 연결 풀 사용률 {{ $value | humanizePercentage }}"
+          description: "연결 풀이 2분 넘게 80%를 넘었습니다. 느린 쿼리나 락 대기를 의심합니다."
+          runbook_url: "https://github.com/corebank-tech/corebank-server/blob/dev/docs/phase2/monitoring_runbook.md#hikaripoolsaturated"
+
+      - alert: HeapUsageHigh
+        expr: sum(jvm_memory_used_bytes{area="heap",id=~".*Old Gen|.*Tenured Gen"}) / sum(jvm_memory_max_bytes{area="heap",id=~".*Old Gen|.*Tenured Gen"}) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "JVM 힙(Old Gen) 사용률 {{ $value | humanizePercentage }}"
+          description: "10분 넘게 90%를 넘었습니다. 메모리 누수나 컨테이너 메모리 한도(2GB)를 확인합니다."
+          runbook_url: "https://github.com/corebank-tech/corebank-server/blob/dev/docs/phase2/monitoring_runbook.md#heapusagehigh"
+
+  - name: corebank-transfer
+    rules:
+      - alert: TransferFailures
+        expr: sum(increase(transfer_count_total{result=~"ERROR|EXCEPTION"}[5m])) >= 3
+        labels:
+          severity: warning
+        annotations:
+          summary: "최근 5분 이체 실패·예외 {{ $value | printf \"%.0f\" }}건"
+          description: "이체가 ERROR 또는 EXCEPTION으로 끝난 건이 3건 이상입니다."
+          runbook_url: "https://github.com/corebank-tech/corebank-server/blob/dev/docs/phase2/monitoring_runbook.md#transferfailures"
+
+      - alert: TransferTimeout
+        expr: sum(increase(transfer_count_total{result="TIMEOUT"}[10m])) >= 1
+        labels:
+          severity: critical
+        annotations:
+          summary: "처리 불명(TIMEOUT) 이체 발생"
+          description: "타행 응답이 없어 결과를 모르는 이체가 있습니다. 모의 대외기관 연결과 미확정 거래를 확인합니다."
+          runbook_url: "https://github.com/corebank-tech/corebank-server/blob/dev/docs/phase2/monitoring_runbook.md#transfertimeout"
+
+      - alert: TransferLatencyHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(transfer_duration_seconds_bucket[5m]))) > 2 and sum(rate(transfer_duration_seconds_count[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "이체 p95 응답 시간 {{ $value | printf \"%.1f\" }}초"
+          description: "이체가 5분 넘게 느립니다(p95가 2초 초과, 요청이 어느 정도 있을 때만 판단)."
+          runbook_url: "https://github.com/corebank-tech/corebank-server/blob/dev/docs/phase2/monitoring_runbook.md#transferlatencyhigh"
+
+  - name: corebank-batch
+    rules:
+      - alert: CobStepFailed
+        expr: sum by (step) (increase(cob_step_count_total{status=~"FAILURE|HALTED"}[1h])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "COB 단계 {{ $labels.step }} 실패 또는 중단"
+          description: "COB 단계가 FAILURE 또는 HALTED로 끝났습니다. 다음 밤도 멈출 수 있으니 바로 확인합니다."
+          runbook_url: "https://github.com/corebank-tech/corebank-server/blob/dev/docs/phase2/monitoring_runbook.md#cobstepfailed"
+
+      - alert: NotificationPublicationAbandoned
+        expr: max(notification_publication_abandoned) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "포기된 알림 이벤트가 {{ $value | printf \"%.0f\" }}건"
+          description: "알림 발행을 재시도하다 포기한 건이 있습니다. 고객 알림이 빠졌을 수 있습니다."
+          runbook_url: "https://github.com/corebank-tech/corebank-server/blob/dev/docs/phase2/monitoring_runbook.md#notificationpublicationabandoned"
