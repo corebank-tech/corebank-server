@@ -9,11 +9,6 @@ rule_files:
   # 시험용 규칙(alerts-test.yml)은 시간 측정 때만 이 폴더에 복사했다가 지운다.
   - /etc/prometheus/extra/*.yml
 
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets: ["127.0.0.1:9093"]
-
 scrape_configs:
   # 계정계 API: 같은 VM에서 host 네트워크로 부른다. 앱은 APP_METRICS_ALLOWED_IP(127.0.0.1)에서 온 요청만 지표를 내준다.
   - job_name: corebank-server

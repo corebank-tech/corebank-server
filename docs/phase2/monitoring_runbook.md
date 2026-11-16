@@ -1,18 +1,18 @@
-# 모니터링 런북 (Prometheus · Alertmanager · Grafana, #619)
+# 모니터링 런북 (Prometheus · Grafana, #619)
 
 > 11/18 시연 VM(`192.168.0.211`)에서 계정계 API의 지표를 보고 알람을 받는 구성이다. 설정 파일은 [`docker/monitoring/`](../../docker/monitoring/)에 있고, 이 문서는 설치, 알람별 대응, 알람에서 인지까지의 시간 측정을 다룬다.
 > 3-Tier는 11/16에 철거되어 수집 대상은 **같은 VM의 계정계 API 하나**다(처음 계획한 AWS WAS 수집은 없어졌다).
-> 비밀값(Grafana 관리자 비밀번호, Discord 웹훅 주소)은 저장소에 두지 않고 VM 파일로만 둔다.
+> 알림을 밖으로 보내지 않는다(Discord 같은 외부 채널을 쓰지 않기로 했다). 알람은 Prometheus가 평가하고 Grafana 대시보드의 「활성 알람」 표와 Prometheus 화면에서 본다.
+> 비밀값(Grafana 관리자 비밀번호)은 저장소에 두지 않고 VM 파일로만 둔다.
 
 ## 1. 구성
 
 | 구성 요소 | 이미지 | 주소 | 하는 일 |
 |---|---|---|---|
-| Prometheus | `prom/prometheus:v3.15.1` | `127.0.0.1:9090`(VM 안에서만) | 15초마다 계정계 API 지표를 수집하고 알람 규칙을 평가한다(보관 7일) |
-| Alertmanager | `prom/alertmanager:v0.35.0` | `127.0.0.1:9093`(VM 안에서만) | 알람을 묶어 Discord로 보낸다 |
+| Prometheus | `prom/prometheus:v3.15.1` | `127.0.0.1:9090`(VM 안에서만) | 15초마다 계정계 API 지표를 수집하고 알람 규칙을 평가한다(보관 7일). 알람 목록은 `http://127.0.0.1:9090/alerts` |
 | Grafana | `grafana/grafana:12.4.15` | `http://192.168.0.211:3000`(교육장 안, 로그인 필요) | 대시보드 「CoreBank 계정계 개요」(거래·배치·JVM·DB) |
 
-- 세 컨테이너 모두 `--network host`다. 계정계 API는 `APP_METRICS_ALLOWED_IP=127.0.0.1`에서 온 요청에만 지표를 내주고(`/api/v1/actuator/prometheus`), Nginx는 `/api/v1/actuator`(health 제외)를 외부에 막고 있어서 지표는 VM 밖으로 나가지 않는다.
+- 두 컨테이너 모두 `--network host`다. 계정계 API는 `APP_METRICS_ALLOWED_IP=127.0.0.1`에서 온 요청에만 지표를 내주고(`/api/v1/actuator/prometheus`), Nginx는 `/api/v1/actuator`(health 제외)를 외부에 막고 있어서 지표는 VM 밖으로 나가지 않는다.
 - Grafana만 교육장 네트워크에 열린다(같은 교육장의 다른 사람이 접속 화면까지는 볼 수 있다). 익명 접속과 회원가입은 끄고 관리자 비밀번호를 파일로 준다. 교육장 밖에서 보려면 별도 경로가 필요한데 이 문서의 범위가 아니다.
 - 지표 이름과 라벨: `transfer_count_total{result=SUCCESS|ERROR|EXCEPTION|HELD|PROCESSING|TIMEOUT, replayed}`, `transfer_duration_seconds_*`, `cob_step_count_total{status=SUCCESS|FAILURE|HALTED, step}`, `cob_step_duration_seconds_*`, `notification_publication_abandoned`, `hikaricp_connections_*`, `jvm_*`, `http_server_requests_seconds_*`.
 
@@ -26,36 +26,29 @@
    ```bash
    sudo mkdir -p /etc/corebank-monitoring && sudo cp -r ~/monitoring/. /etc/corebank-monitoring/ && sudo chown -R root:root /etc/corebank-monitoring && sudo chmod -R go-w /etc/corebank-monitoring && ls /etc/corebank-monitoring
    ```
-3. 비밀 파일 두 개를 만든다(값은 화면에 남기지 않는다). Grafana 관리자 비밀번호는 무작위로 만들고, 읽을 때만 `sudo cat`으로 확인한다.
+3. 비밀 파일을 만든다(값은 화면에 남기지 않는다). Grafana 관리자 비밀번호는 무작위로 만들고, 읽을 때만 `sudo cat`으로 확인한다.
    ```bash
    sudo sh -c 'umask 077; openssl rand -base64 18 > /etc/corebank-monitoring/grafana_admin_password' && sudo chown root:472 /etc/corebank-monitoring/grafana_admin_password && sudo chmod 640 /etc/corebank-monitoring/grafana_admin_password
    ```
-   Discord 웹훅 주소는 `bash`에서 입력한다(입력이 보이지 않는다). 컨테이너 사용자(`nobody`, 65534)가 읽을 수 있게 그룹만 맞춘다.
-   ```bash
-   read -rsp "Discord 웹훅 주소: " U; echo; printf '%s\n' "$U" | sudo tee /etc/corebank-monitoring/alertmanager/discord_webhook >/dev/null; unset U; sudo chown root:65534 /etc/corebank-monitoring/alertmanager/discord_webhook && sudo chmod 640 /etc/corebank-monitoring/alertmanager/discord_webhook
-   ```
-4. 컨테이너 세 개를 순서대로 띄운다(한 줄씩).
+4. 컨테이너 두 개를 순서대로 띄운다(한 줄씩).
    ```bash
    sudo docker run -d --name corebank-prometheus --network host --restart unless-stopped --memory 512m -v /etc/corebank-monitoring/prometheus:/etc/prometheus:ro -v corebank-prometheus-data:/prometheus prom/prometheus:v3.15.1 --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.retention.time=7d --web.listen-address=127.0.0.1:9090 --web.enable-lifecycle
-   ```
-   ```bash
-   sudo docker run -d --name corebank-alertmanager --network host --restart unless-stopped --memory 128m -v /etc/corebank-monitoring/alertmanager:/etc/alertmanager:ro -v corebank-alertmanager-data:/alertmanager prom/alertmanager:v0.35.0 --config.file=/etc/alertmanager/alertmanager.yml --web.listen-address=127.0.0.1:9093 --cluster.listen-address=
    ```
    ```bash
    sudo docker run -d --name corebank-grafana --network host --restart unless-stopped --memory 512m -e GF_SERVER_HTTP_ADDR=192.168.0.211 -e GF_SECURITY_ADMIN_PASSWORD__FILE=/etc/grafana-secrets/admin_password -e GF_USERS_ALLOW_SIGN_UP=false -e GF_AUTH_ANONYMOUS_ENABLED=false -e GF_ANALYTICS_REPORTING_ENABLED=false -e GF_ANALYTICS_CHECK_FOR_UPDATES=false -v /etc/corebank-monitoring/grafana/provisioning:/etc/grafana/provisioning:ro -v /etc/corebank-monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro -v /etc/corebank-monitoring/grafana_admin_password:/etc/grafana-secrets/admin_password:ro -v corebank-grafana-data:/var/lib/grafana grafana/grafana:12.4.15
    ```
 5. 확인한다.
    ```bash
-   curl -s http://127.0.0.1:9090/api/v1/targets | python3 -c "import sys,json;[print(t['labels']['job'],t['health']) for t in json.load(sys.stdin)['data']['activeTargets']]"; curl -s -o /dev/null -w 'grafana=%{http_code}\n' http://192.168.0.211:3000/api/health; curl -s -o /dev/null -w 'alertmanager=%{http_code}\n' http://127.0.0.1:9093/-/ready
+   curl -s http://127.0.0.1:9090/api/v1/targets | python3 -c "import sys,json;[print(t['labels']['job'],t['health']) for t in json.load(sys.stdin)['data']['activeTargets']]"; curl -s -o /dev/null -w 'grafana=%{http_code}\n' http://192.168.0.211:3000/api/health
    ```
-   `corebank-server up`, `prometheus up`, `grafana=200`, `alertmanager=200`이어야 한다. 브라우저에서 `http://192.168.0.211:3000`에 `admin`과 위 비밀번호로 로그인하면 `CoreBank` 폴더에 대시보드가 있다.
+   `corebank-server up`, `prometheus up`, `grafana=200`이어야 한다. 브라우저에서 `http://192.168.0.211:3000`에 `admin`과 위 비밀번호로 로그인하면 `CoreBank` 폴더에 대시보드가 있다.
 
-- 설정을 바꾼 뒤에는 컨테이너를 다시 만들지 않고 Prometheus는 `curl -X POST http://127.0.0.1:9090/-/reload`, Alertmanager는 `curl -X POST http://127.0.0.1:9093/-/reload`로 다시 읽힌다(Grafana 대시보드는 파일을 바꾸고 잠시 기다리면 반영된다).
+- 설정을 바꾼 뒤에는 컨테이너를 다시 만들지 않고 `curl -X POST http://127.0.0.1:9090/-/reload`로 Prometheus가 다시 읽는다(Grafana 대시보드는 파일을 바꾸고 잠시 기다리면 반영된다).
 - 서버 컨테이너(`corebank-server`)를 다시 만들어도 Prometheus는 15초 안에 다시 수집한다. 서버가 잠시 내려가면 `CorebankServerDown`이 1분 뒤에 울린다.
 
 ## 3. 알람과 대응
 
-알람은 `docker/monitoring/prometheus/alerts.yml`에 있고 `severity`가 `critical`이면 바로 확인한다. 아래 대응의 DB 조회는 읽기 전용이다(비밀번호를 명령줄에 값으로 쓰지 않고 `export MYSQL_PWD="$DB_PASSWORD"` 뒤 `docker exec -e MYSQL_PWD`로 넘긴다).
+알람은 `docker/monitoring/prometheus/alerts.yml`에 있고 `severity`가 `critical`이면 바로 확인한다. **알림이 밖으로 나가지 않으므로** 대시보드 「활성 알람」 표(맨 위 오른쪽)나 `http://127.0.0.1:9090/alerts`를 보고 있어야 알 수 있다. 아래 대응의 DB 조회는 읽기 전용이다(비밀번호를 명령줄에 값으로 쓰지 않고 `export MYSQL_PWD="$DB_PASSWORD"` 뒤 `docker exec -e MYSQL_PWD`로 넘긴다).
 
 | 알람 | 심각도 | 조건 |
 |---|---|---|
@@ -119,37 +112,38 @@
 
 ## 4. 시간 측정
 
-완료 조건은 "알람 발생부터 인지까지 시간을 측정할 수 있다"이다. 시험 규칙 `MonitoringTestAlert`(항상 참, `for` 없음)로 **조건이 성립한 시각**과 **Discord에 알림이 도착한 시각**의 차이를 잰다.
+완료 조건은 "알람 발생부터 인지까지 시간을 측정할 수 있다"이다. 알림을 밖으로 보내지 않으므로 **인지 = 대시보드 「활성 알람」 표에 알람이 뜬 시각**으로 잰다. 시험 규칙 `MonitoringTestAlert`(항상 참, `for` 없음)로 **조건이 성립한 시각(t0)**, **Prometheus가 알람을 올린 시각(t1)**, **대시보드에 보인 시각(t2)**을 비교한다.
 
-1. 시험 규칙을 켠다. 이 줄을 실행한 시각이 **t0**이다.
+1. 대시보드(`http://192.168.0.211:3000`, 새로고침 15초)를 화면에 띄워 둔다.
+2. VM에서 시험 규칙을 켠다. 이 줄을 실행한 시각이 **t0**이다.
    ```bash
    date '+t0=%H:%M:%S'; sudo cp /etc/corebank-monitoring/prometheus/alerts-test.yml /etc/corebank-monitoring/prometheus/extra/ && curl -s -X POST http://127.0.0.1:9090/-/reload && echo reloaded
    ```
-2. Prometheus가 알람을 `firing`으로 올린 시각(**t1**)을 본다.
+3. 대시보드 「활성 알람」 표에 `MonitoringTestAlert`가 뜨는 순간의 시각을 읽는다(**t2**). 이어서 Prometheus가 알람을 올린 시각(**t1**)을 본다.
    ```bash
-   sleep 25; curl -s http://127.0.0.1:9090/api/v1/alerts | python3 -c "import sys,json;[print(a['labels']['alertname'],a['state'],a['activeAt']) for a in json.load(sys.stdin)['data']['alerts']]"
+   curl -s http://127.0.0.1:9090/api/v1/alerts | python3 -c "import sys,json;[print(a['labels']['alertname'],a['state'],a['activeAt']) for a in json.load(sys.stdin)['data']['alerts']]"
    ```
-3. Discord 채널에 알림이 도착한 시각(**t2**, 메시지 시각)을 읽는다.
-4. 시험 규칙을 끈다(해제 알림도 온다).
+4. 시험 규칙을 끈다(표에서 사라지는 시각도 읽는다).
    ```bash
    sudo rm /etc/corebank-monitoring/prometheus/extra/alerts-test.yml && curl -s -X POST http://127.0.0.1:9090/-/reload && echo cleaned
    ```
-5. 아래 표에 기록한다. 이론상 최대치는 평가 주기 15초 + Alertmanager `group_wait` 10초 + 전송이다.
+5. 아래 표에 기록한다. 이론상 최대치는 규칙 평가 주기 15초 + 수집 간격 15초 + 대시보드 새로고침 15초다.
 
-| 측정일 | t0 (규칙 적용) | t1 (Prometheus firing) | t2 (Discord 도착) | 인지까지 (t2 − t0) |
+| 측정일 | t0 (규칙 적용) | t1 (Prometheus firing) | t2 (대시보드에 뜸) | 인지까지 (t2 − t0) |
 |---|---|---|---|---|
 | 기록 예정 | | | | |
 
-- 실제 장애 알람은 `for`(예: `CorebankServerDown` 1분)가 더해진 뒤 울리므로 인지 시간은 `for` + 위 시간이다.
-- 시험 규칙이 남아 있으면 계속 울린다. 측정이 끝나면 반드시 4번으로 끈다.
+- 실제 장애 알람은 `for`(예: `CorebankServerDown` 1분)가 더해진 뒤 올라오므로 인지 시간은 `for` + 위 시간이다.
+- 시험 규칙이 남아 있으면 계속 떠 있다. 측정이 끝나면 반드시 4번으로 끈다.
 
 ## 5. 한계와 끄기
 
 - **교육장 안에서만** 대시보드를 볼 수 있다. VM 접속도 교육장에서만 한다(3-Tier 철거로 SSM 세션이 없다).
 - 수집 대상은 계정계 API 하나다. 정보계 API(`info-api`), MySQL, VM 자원(CPU·디스크)은 수집하지 않는다.
 - Prometheus 데이터는 7일 보관하고 VM 디스크(`corebank-prometheus-data` 볼륨)에 쌓인다.
+- **알림을 밖으로 밀어 주지 않는다**(채널을 쓰지 않기로 했다). 화면을 보고 있지 않으면 알람을 놓친다. 알림 채널이 정해지면 Alertmanager를 추가하고 `prometheus.yml`에 `alerting` 설정을 넣는다.
 - 알람은 시연 환경 기준의 값이라 운영 임계값이 아니다(이체 지연 2초, 풀 80% 등은 PH-56 결과와 시연 부하를 보고 정했다).
-- 끄기: `sudo docker stop corebank-grafana corebank-alertmanager corebank-prometheus`(데이터는 볼륨에 남는다). 완전히 지우려면 `rm` 뒤 볼륨(`corebank-*-data`)과 `/etc/corebank-monitoring`을 지운다.
+- 끄기: `sudo docker stop corebank-grafana corebank-prometheus`(데이터는 볼륨에 남는다). 완전히 지우려면 `rm` 뒤 볼륨(`corebank-*-data`)과 `/etc/corebank-monitoring`을 지운다.
 
 ## 6. 관련 문서
 
