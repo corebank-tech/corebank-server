@@ -14,6 +14,7 @@ Git SHA로 고정한다.
 export FDS_AGENT_BUILD_CONTEXT='../corebank-fds-agent'
 export FDS_AGENT_GIT_SHA="$(git -C "$FDS_AGENT_BUILD_CONTEXT" rev-parse HEAD)"
 export FDS_AGENT_TAG="$FDS_AGENT_GIT_SHA"
+export COMPOSE_PROJECT_NAME='corebank-server'
 export SPRING_PROFILES_ACTIVE='prod,qa-seed'
 export COREBANK_ENV_FILE='/secure/path/.env.corebank'
 export FDS_ENV_FILE='/secure/path/.env.fds-agent'
@@ -23,6 +24,9 @@ export FDS_ENV_FILE='/secure/path/.env.fds-agent'
 docker compose -f docker-compose.yml -f docker-compose.fds.yml config --quiet
 docker compose -f docker-compose.yml -f docker-compose.fds.yml up -d --build minicore-mysql corebank-fds-agent corebank-server
 ```
+
+`COMPOSE_PROJECT_NAME=corebank-server`를 고정하면 Docker Desktop에서 `corebank-fds-agent`가
+`minicore-mysql` 등과 함께 `corebank-server` 프로젝트 하위에 표시된다.
 
 `prod,qa-seed`는 로컬 QA seed 검증 예시다. O1에서는 현재 실행 중인 프로필을 먼저 확인하고 기존 값이
 `prod,qa-seed`이면 그대로 유지한다. 현재 값이 `prod`라면 배포 담당자 확인 없이 `qa-seed`를 추가하지 않는다.
