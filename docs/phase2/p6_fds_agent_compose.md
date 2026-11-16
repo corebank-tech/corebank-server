@@ -7,45 +7,28 @@
 콜백 토큰은 모두 서로 다른 충분히 긴 난수여야 한다. 예제 파일에는 변수명만 두며 실제 비밀값을 커밋하거나
 로그에 출력하지 않는다.
 
-BE는 `corebank-server` Compose 프로젝트로 실행하고 Python Agent는 Agent 저장소의 `Dockerfile`로 빌드한
-독립 컨테이너로 실행한다. 둘은 Docker의 `corebank-net` 네트워크만 공유한다. 이미지 태그는 Agent 저장소의
-전체 Git SHA로 고정한다.
+BE는 `corebank-server` Compose 프로젝트로 실행하고 Python Agent는 Agent 저장소의
+`corebank-fds-agent` Compose 프로젝트로 실행한다. BE의 DB용 `corebank-net`은 유지하고, 두 프로젝트는
+고정 external network `corebank-fds-shared`만 공유한다. 이미지 태그는 Agent 저장소의 전체 Git SHA로
+고정한다.
 
 ```bash
-export FDS_AGENT_BUILD_CONTEXT='../corebank-fds-agent'
-export FDS_AGENT_GIT_SHA="$(git -C "$FDS_AGENT_BUILD_CONTEXT" rev-parse HEAD)"
-export FDS_AGENT_TAG="$FDS_AGENT_GIT_SHA"
 export SPRING_PROFILES_ACTIVE='prod,qa-seed'
 export COREBANK_ENV_FILE='/secure/path/.env.corebank'
-export FDS_ENV_FILE='/secure/path/.env.fds-agent'
-# latest·축약 SHA를 거부하고 두 값이 같은 전체 Git SHA인지 먼저 검증한다.
-./scripts/validate-fds-agent-sha.sh
-# 비밀값을 stdout에 펼치지 않고 BE Compose 병합 결과만 검증한다.
+docker network inspect corebank-fds-shared >/dev/null 2>&1 || \
+  docker network create corebank-fds-shared
 docker compose -f docker-compose.yml -f docker-compose.fds.yml config --quiet
 docker compose -f docker-compose.yml -f docker-compose.fds.yml up -d minicore-mysql corebank-server
 
-# Agent는 corebank-server Compose 프로젝트에 넣지 않고 독립 컨테이너로 실행한다.
-docker build \
-  --build-arg GIT_SHA="$FDS_AGENT_GIT_SHA" \
-  --tag "corebank-fds-agent:$FDS_AGENT_TAG" \
-  "$FDS_AGENT_BUILD_CONTEXT"
-docker run -d \
-  --name corebank-fds-agent \
-  --restart unless-stopped \
-  --network corebank-net \
-  --env-file "$FDS_ENV_FILE" \
-  --env FDS_BE_INTERNAL_BASE_URL=http://corebank-server:8080 \
-  --expose 8000 \
-  --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).read()\"" \
-  --health-interval 10s \
-  --health-timeout 3s \
-  --health-retries 3 \
-  --health-start-period 20s \
-  "corebank-fds-agent:$FDS_AGENT_TAG"
+cd ../corebank-fds-agent
+cp .env.fds-agent.example .env.fds-agent
+# 비공개 .env.fds-agent에 세 토큰을 채운 뒤 실행한다.
+docker compose config --quiet
+docker compose up -d --build corebank-fds-agent
 ```
 
 Docker Desktop에서는 `corebank-server` 프로젝트 아래에 BE와 MySQL이 표시되고,
-`corebank-fds-agent`는 해당 프로젝트 밖의 독립 컨테이너로 표시되어야 한다.
+별도 `corebank-fds-agent` 프로젝트 아래에 Agent가 표시되어야 한다.
 
 `prod,qa-seed`는 로컬 QA seed 검증 예시다. O1에서는 현재 실행 중인 프로필을 먼저 확인하고 기존 값이
 `prod,qa-seed`이면 그대로 유지한다. 현재 값이 `prod`라면 배포 담당자 확인 없이 `qa-seed`를 추가하지 않는다.
@@ -58,14 +41,16 @@ BE에는 정책·점수·조사 기능 스위치와 `http://corebank-fds-agent:8
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.fds.yml ps
-docker ps --filter name=^/corebank-fds-agent$
 docker exec corebank-server wget -qO- http://corebank-fds-agent:8000/health
-docker port corebank-fds-agent
 docker compose -f docker-compose.yml -f docker-compose.fds.yml logs --since=10m corebank-server
-docker logs --since=10m corebank-fds-agent
+
+cd ../corebank-fds-agent
+docker compose ps
+docker compose port corebank-fds-agent 8000
+docker compose logs --since=10m corebank-fds-agent
 ```
 
-`docker port`는 출력이 없어야 한다. Agent의 8000 포트는 `corebank-net`에서만 접근하며 호스트와 외부
+`docker compose port`는 출력이 없어야 한다. Agent의 8000 포트는 `corebank-fds-shared`에서만 접근하며 호스트와 외부
 프록시에 공개하지 않는다. 로그에서는 토큰 원문, 계좌번호, 고객 식별자가 출력되지 않는지 확인한다.
 
 테스트 이체를 보류시킨 뒤 DB에서 조사 상태와 보고서를 확인한다. 정상 흐름은
@@ -97,11 +82,16 @@ BE는 Agent healthcheck에 `depends_on: condition: service_healthy`로 종속되
 `PENDING`으로 덮어쓰지 않는다.
 
 ```bash
-docker stop corebank-fds-agent
+cd ../corebank-fds-agent
+docker compose stop corebank-fds-agent
+cd ../corebank-server
 docker compose -f docker-compose.yml -f docker-compose.fds.yml ps
-docker start corebank-fds-agent
+cd ../corebank-fds-agent
+docker compose start corebank-fds-agent
+cd ../corebank-server
 docker compose -f docker-compose.yml -f docker-compose.fds.yml logs --since=10m corebank-server
-docker logs --since=10m corebank-fds-agent
+cd ../corebank-fds-agent
+docker compose logs --since=10m corebank-fds-agent
 ```
 
 중단 중 BE가 계속 응답하고 해당 이체가 `HELD`인지 확인한다. Agent 재기동 뒤 위 SQL로 남아 있던
@@ -114,7 +104,10 @@ docker logs --since=10m corebank-fds-agent
 ## 종료
 
 ```bash
-docker rm -f corebank-fds-agent
+cd ../corebank-fds-agent
+docker compose stop corebank-fds-agent
+docker compose rm -f corebank-fds-agent
+cd ../corebank-server
 docker compose -f docker-compose.yml -f docker-compose.fds.yml stop corebank-server
 docker compose -f docker-compose.yml -f docker-compose.fds.yml rm -f corebank-server
 ```
