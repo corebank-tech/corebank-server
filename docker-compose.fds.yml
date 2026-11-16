@@ -1,0 +1,34 @@
+services:
+  corebank-server:
+    env_file:
+      - ${COREBANK_ENV_FILE:-.env.corebank}
+    environment:
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
+      - APP_FDS_POLICY_ENABLED=${APP_FDS_POLICY_ENABLED:-true}
+      - APP_FDS_SCORE_ENABLED=${APP_FDS_SCORE_ENABLED:-true}
+      - APP_FDS_SCORE_BASE_URL=http://corebank-fds-agent:8000
+      - APP_FDS_INVESTIGATION_ENABLED=${APP_FDS_INVESTIGATION_ENABLED:-true}
+      - APP_FDS_INVESTIGATION_BASE_URL=http://corebank-fds-agent:8000
+
+  # SHA 태그는 FDS 통합 구성을 선택한 실행에서만 필수로 검증한다.
+  corebank-fds-agent:
+    image: ${FDS_AGENT_IMAGE:-corebank-fds-agent}:${FDS_AGENT_TAG:?FDS_AGENT_TAG must be an immutable Git SHA}
+    build:
+      context: ${FDS_AGENT_BUILD_CONTEXT:-../corebank-fds-agent}
+      args:
+        GIT_SHA: ${FDS_AGENT_GIT_SHA:?FDS_AGENT_GIT_SHA must be an immutable Git SHA}
+    restart: unless-stopped
+    env_file:
+      - ${FDS_ENV_FILE:-.env.fds-agent}
+    environment:
+      - FDS_BE_INTERNAL_BASE_URL=http://corebank-server:8080
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    networks:
+      - corebank-net

@@ -16,9 +16,25 @@ public class FdsAgentIntegrationConfigurationValidator {
         requireConfigured(scoreEnabled, scoreToken, "FDS_SCORE_SERVICE_TOKEN");
         requireConfigured(investigationEnabled, investigationToken, "FDS_INVESTIGATION_SERVICE_TOKEN");
         requireConfigured(investigationEnabled, agentToken, "FDS_AGENT_SERVICE_TOKEN");
-        requireDistinct(scoreToken, investigationToken, "FDS_SCORE_SERVICE_TOKEN", "FDS_INVESTIGATION_SERVICE_TOKEN");
-        requireDistinct(scoreToken, agentToken, "FDS_SCORE_SERVICE_TOKEN", "FDS_AGENT_SERVICE_TOKEN");
-        requireDistinct(investigationToken, agentToken, "FDS_INVESTIGATION_SERVICE_TOKEN", "FDS_AGENT_SERVICE_TOKEN");
+        // 비활성 기능에 남은 값은 사용되지 않으므로 실제로 함께 쓰는 토큰만 분리한다.
+        requireDistinct(
+                scoreEnabled && investigationEnabled,
+                scoreToken,
+                investigationToken,
+                "FDS_SCORE_SERVICE_TOKEN",
+                "FDS_INVESTIGATION_SERVICE_TOKEN");
+        requireDistinct(
+                scoreEnabled && investigationEnabled,
+                scoreToken,
+                agentToken,
+                "FDS_SCORE_SERVICE_TOKEN",
+                "FDS_AGENT_SERVICE_TOKEN");
+        requireDistinct(
+                investigationEnabled,
+                investigationToken,
+                agentToken,
+                "FDS_INVESTIGATION_SERVICE_TOKEN",
+                "FDS_AGENT_SERVICE_TOKEN");
     }
 
     private static void requireConfigured(boolean enabled, String token, String variableName) {
@@ -27,8 +43,8 @@ public class FdsAgentIntegrationConfigurationValidator {
         }
     }
 
-    private static void requireDistinct(String left, String right, String leftName, String rightName) {
-        if (!left.isBlank() && !right.isBlank() && left.equals(right)) {
+    private static void requireDistinct(boolean enabled, String left, String right, String leftName, String rightName) {
+        if (enabled && !left.isBlank() && !right.isBlank() && left.equals(right)) {
             throw new IllegalStateException(leftName + " and " + rightName + " must use distinct values");
         }
     }

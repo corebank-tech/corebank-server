@@ -10,6 +10,8 @@ class FdsAgentIntegrationConfigurationValidatorTest {
     @Test
     void disabledFeaturesAllowMissingTokens() {
         assertThatCode(() -> validator(false, false, "", "", "")).doesNotThrowAnyException();
+        assertThatCode(() -> validator(false, false, "unused", "unused", "unused"))
+                .doesNotThrowAnyException();
     }
 
     @Test
@@ -37,6 +39,16 @@ class FdsAgentIntegrationConfigurationValidatorTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("must use distinct values")
                 .hasMessageNotContaining("shared-secret");
+        assertThatThrownBy(() -> validator(false, true, "unused", "shared-secret", "shared-secret"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("must use distinct values")
+                .hasMessageNotContaining("shared-secret");
+    }
+
+    @Test
+    void inactiveFeatureTokensAreNotCompared() {
+        assertThatCode(() -> validator(true, false, "score-secret", "score-secret", "score-secret"))
+                .doesNotThrowAnyException();
     }
 
     @Test

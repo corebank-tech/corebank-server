@@ -17,8 +17,9 @@ export FDS_AGENT_TAG="$FDS_AGENT_GIT_SHA"
 export SPRING_PROFILES_ACTIVE='prod,qa-seed'
 export COREBANK_ENV_FILE='/secure/path/.env.corebank'
 export FDS_ENV_FILE='/secure/path/.env.fds-agent'
-docker compose config
-docker compose up -d --build minicore-mysql corebank-fds-agent corebank-server
+# 비밀값을 stdout에 펼치지 않고 두 Compose 파일의 병합 결과만 검증한다.
+docker compose -f docker-compose.yml -f docker-compose.fds.yml config --quiet
+docker compose -f docker-compose.yml -f docker-compose.fds.yml up -d --build minicore-mysql corebank-fds-agent corebank-server
 ```
 
 `prod,qa-seed`는 로컬 QA seed 검증 예시다. O1에서는 현재 실행 중인 프로필을 먼저 확인하고 기존 값이
@@ -31,10 +32,10 @@ BE에는 정책·점수·조사 기능 스위치와 `http://corebank-fds-agent:8
 ## 연결과 상태 확인
 
 ```bash
-docker compose ps
+docker compose -f docker-compose.yml -f docker-compose.fds.yml ps
 docker exec corebank-server wget -qO- http://corebank-fds-agent:8000/health
-docker port "$(docker compose ps -q corebank-fds-agent)"
-docker compose logs --since=10m corebank-server corebank-fds-agent
+docker port "$(docker compose -f docker-compose.yml -f docker-compose.fds.yml ps -q corebank-fds-agent)"
+docker compose -f docker-compose.yml -f docker-compose.fds.yml logs --since=10m corebank-server corebank-fds-agent
 ```
 
 `docker port`는 출력이 없어야 한다. Agent의 8000 포트는 `corebank-net`에서만 접근하며 호스트와 외부
@@ -59,14 +60,20 @@ LIMIT 20;
 ## 장애와 복구 확인
 
 BE는 Agent healthcheck에 `depends_on: condition: service_healthy`로 종속되지 않는다. Agent가 없거나 재기동
-중이어도 BE는 독립적으로 기동하고 이체 보류는 `HELD`로 유지한다. 조사 호출 실패는 재시도 가능한
-`PENDING`으로 돌아가며, 임대 중 Agent가 중단된 경우 임대 만료 뒤 복구 스케줄러가 다시 선점한다.
+중이어도 BE는 독립적으로 기동하고 이체 보류는 `HELD`로 유지한다. 조사 호출은 최대 3회 시도하며, 그 전의
+실패는 `PENDING`으로 돌아간다. 임대 중 Agent가 중단된 경우에도 3회 미만이면 임대 만료 뒤 복구 스케줄러가
+다시 선점한다.
+
+3회 실패하거나 세 번째 임대가 만료되면 작업은 `FAILED`가 된다. `findDue`는 `PENDING`만 조회하므로 Agent
+재시작만으로 `FAILED` 작업이 재개되지는 않는다. 담당자는 원인을 수정한 뒤 장애 이슈에 조사 ID와 실패 사유를
+기록하고, 승인된 운영 변경으로 재처리하거나 후속 이슈로 재처리 API를 제공해야 한다. DB 상태를 임의로
+`PENDING`으로 덮어쓰지 않는다.
 
 ```bash
-docker compose stop corebank-fds-agent
-docker compose ps
-docker compose start corebank-fds-agent
-docker compose logs --since=10m corebank-server corebank-fds-agent
+docker compose -f docker-compose.yml -f docker-compose.fds.yml stop corebank-fds-agent
+docker compose -f docker-compose.yml -f docker-compose.fds.yml ps
+docker compose -f docker-compose.yml -f docker-compose.fds.yml start corebank-fds-agent
+docker compose -f docker-compose.yml -f docker-compose.fds.yml logs --since=10m corebank-server corebank-fds-agent
 ```
 
 중단 중 BE가 계속 응답하고 해당 이체가 `HELD`인지 확인한다. Agent 재기동 뒤 위 SQL로 남아 있던
@@ -79,8 +86,8 @@ docker compose logs --since=10m corebank-server corebank-fds-agent
 ## 종료
 
 ```bash
-docker compose stop corebank-server corebank-fds-agent
-docker compose rm -f corebank-server corebank-fds-agent
+docker compose -f docker-compose.yml -f docker-compose.fds.yml stop corebank-server corebank-fds-agent
+docker compose -f docker-compose.yml -f docker-compose.fds.yml rm -f corebank-server corebank-fds-agent
 ```
 
 공용 MySQL과 Redis를 함께 제거하지 않는다.
