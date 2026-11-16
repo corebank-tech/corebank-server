@@ -23,6 +23,7 @@
 3. **서버 컨테이너 교체**(약 1분 502): `stop`, `rm` 뒤 같은 `docker run`에 새 이미지 태그를 쓴다. 한 줄 명령으로 실행한다(`&&`로 이어 앞 단계 실패 시 멈춤).
 4. **확인**: 컨테이너 이미지 태그, 헬스 200, 로그 `Successfully applied`·`Started CorebankApplication`·`ERROR` 없음, 승격 DB `flyway_schema_history`(마지막 버전, 실패 0), 외부 `api`·`www` 200과 `/internal/`·`prometheus` 404, 화면 로그인·이체 1건과 원장·GL·잔액·알림 정합.
 5. **되돌리기**: 이미지만 이전 버전으로 되돌리는 것은 마이그레이션이 적용된 뒤에는 안전하지 않을 수 있다(시험하지 않았다). 정식 롤백은 백업 복원(root 필요, `/etc/info-etl/replica-root.pw`)이다.
+   - **한계**: 백업은 서비스를 켠 채 받으므로 백업 이후 생긴 거래는 복원하면 사라진다(그 거래를 다시 넣는 절차는 시험하지 않았다). 롤백 결정이 날 때까지 쓰기를 막으려면 서버를 멈춘 채 백업해야 하며, 11/15에는 그렇게 하지 않았다.
 
 ## 3. 이의제기 Agent 반영 (11/16)
 
@@ -30,7 +31,7 @@ P3가 빌드 재료와 시연 데이터를 전달한다(워커 빌드 재료는 
 
 1. **전송**: 맥에서 `scp`로 VM `~/agent-deploy/`(`umask 077`)에 올리고 `sha256sum -c`로 확인한다.
 2. **사전 점검**(읽기 전용): 약관 `TERMS_SERVICE`·`TERMS_PRIVACY` v1.0이 2개, `agent*` 계정 0개, 지급정지 권한 코드 3개, GL 계정 `10100`·`20100`, 계좌번호 시퀀스. 환경 파일에 `PII`·`PAYMENT_STOP`·`FDS` 변수가 없는지(`app.pii.read-encrypted`가 true면 시연 고객 로그인이 깨진다).
-3. **키 생성과 서버 환경 파일**: 환경 파일을 백업하고(`app.env.bak-before-agent`), VM에서 워커 키(`openssl rand -hex 32`)와 문서 암호화 키(`openssl rand -base64 32`)를 만들어 `PAYMENT_STOP_AGENT_ENABLED=true`, `PAYMENT_STOP_WORKER_KEY`, `PAYMENT_STOP_DOCUMENT_KEY`를 추가한다. 같은 워커 키로 `worker.env`(`CORE_SERVER_URL=http://127.0.0.1:8080/api/v1`, `AGENT_LLM=claude` 등)를 만든다. Claude API 키는 `read -rs`로 VM에서 직접 입력한다(`bash`에서만 동작, SSM 기본 셸 `sh`는 불가).
+3. **키 생성과 서버 환경 파일**: 환경 파일을 백업하고(`app.env.bak-before-agent`), VM에서 워커 키(`openssl rand -hex 32`)를 만들어 `PAYMENT_STOP_AGENT_ENABLED=true`, `PAYMENT_STOP_WORKER_KEY`를 추가한다. 문서 암호화 키(`openssl rand -base64 32`)는 환경 파일에 `PAYMENT_STOP_DOCUMENT_KEY`가 **없을 때만** 만들어 추가하고, 이미 있으면 그대로 둔다. 같은 워커 키로 `worker.env`(`CORE_SERVER_URL=http://127.0.0.1:8080/api/v1`, `AGENT_LLM=claude` 등)를 만든다. Claude API 키는 `read -rs`로 VM에서 직접 입력한다(`bash`에서만 동작, SSM 기본 셸 `sh`는 불가).
    - **`PAYMENT_STOP_DOCUMENT_KEY`는 한 번 정하면 바꾸지 않는다**(바꾸면 저장한 신분증 사본을 못 읽는다).
 4. **서버 컨테이너 재생성**: 첨부 볼륨 `-v /var/lib/corebank-objection-docs:/objection-docs -e PAYMENT_STOP_DOCUMENT_ROOT=/objection-docs`를 포함해 다시 만든다.
 5. **워커 이미지 빌드**: 압축을 풀어 `docker build -t objection-worker:release7-878cc1c <폴더>`. 이미지는 공개 레지스트리에 올리지 않는다. **이미지 ID는 빌드 시각이 들어가 P3의 값과 다를 수 있다**(정상). 내용 확인은 이미지 안 `.py` 파일별 해시를 원본과 비교한다(`LC_ALL=C sort`로 정렬을 맞춘다). 빌드 뒤 평문 소스와 압축 파일을 지운다.
@@ -50,7 +51,7 @@ P3가 빌드 재료와 시연 데이터를 전달한다(워커 빌드 재료는 
 ## 5. 끄기와 정리
 
 - 분석만 멈추기: `sudo docker stop objection-worker`(접수 건은 대기열에 남는다). 켜 둬도 사건을 접수하거나 재분석을 요청하지 않으면 Claude 호출은 없다(분석 1건 약 $0.06).
-- 기능 전체 끄기: `PAYMENT_STOP_AGENT_ENABLED=false`로 서버 재생성(키는 환경 파일에 그대로 둔다).
+- 분석 작업 가져가기 끄기: `PAYMENT_STOP_AGENT_ENABLED=false`로 서버 재생성(키는 환경 파일에 그대로 둔다). 워커는 새 작업을 받지 못한다. 이 설정은 접수와 재분석 요청을 막지 않으며(접수 중지 방법은 이 절차에 없다) 그 작업은 대기열에 남는다.
 - 발표 뒤: Claude API 키를 Console에서 폐기한다. VM의 `~/agent-deploy`에는 시드 SQL과 계좌 목록이 남으므로 필요 없으면 지운다.
 
 ## 6. 문제와 대응
