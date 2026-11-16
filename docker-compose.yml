@@ -40,7 +40,6 @@ services:
 
 networks:
   corebank-net:
-    name: corebank-net
     driver: bridge
 
 volumes:
