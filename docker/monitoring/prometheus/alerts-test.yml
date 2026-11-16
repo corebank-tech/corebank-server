@@ -8,5 +8,5 @@ groups:
           severity: warning
         annotations:
           summary: "시험 알람입니다(시간 측정용)"
-          description: "이 알람은 대시보드에 뜨는 시간을 재려는 것입니다. 무시해도 됩니다."
+          description: "이 알람은 알림 채널과 지연 시간을 확인하려는 것입니다. 무시해도 됩니다."
           runbook_url: "https://github.com/corebank-tech/corebank-server/blob/dev/docs/phase2/monitoring_runbook.md#4-시간-측정"
