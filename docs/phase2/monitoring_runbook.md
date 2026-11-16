@@ -123,18 +123,19 @@
 완료 조건은 "알람 발생부터 인지까지 시간을 측정할 수 있다"이다. 시험 규칙 `MonitoringTestAlert`(항상 참, `for` 없음)를 켠 시각부터 **Alertmanager가 Discord로 전송을 마친 시각**까지를 재고, Discord에서 메시지가 뜬 시각을 눈으로 확인한다.
 
 1. Discord 알림 채널을 열어 둔다.
-2. VM에서 아래 한 줄을 실행한다. 시험 규칙을 켜고, Alertmanager의 Discord 전송 횟수(`alertmanager_notifications_total`)가 올라갈 때까지 0.5초마다 확인해 걸린 시간을 보여 준다(`bash`).
+2. VM에서 아래 한 줄을 실행한다. 시작 전 Discord 전송 횟수(`alertmanager_notifications_total`)를 저장하고, 시험 규칙을 켠 뒤 **횟수가 저장한 값에서 바뀌고 Alertmanager에 `MonitoringTestAlert`가 올라올 때까지** 0.5초마다 확인해 걸린 시간을 보여 준다(`bash`). 누적 횟수라서 저장한 값과 비교하지 않으면 이전 전송 때문에 바로 끝난다. 횟수는 알림 이름별이 아니라서 다른 알람의 전송과 구별하지 못한다. 그래서 알람 존재를 함께 보고, 최종 확인은 3번의 Discord 메시지로 한다.
    ```bash
-   t0=$(date +%s.%N); sudo cp /etc/corebank-monitoring/prometheus/alerts-test.yml /etc/corebank-monitoring/prometheus/extra/ && curl -s -X POST http://127.0.0.1:9090/-/reload >/dev/null; until curl -s http://127.0.0.1:9093/metrics | grep -qE '^alertmanager_notifications_total\{[^}]*integration="discord"[^}]*\} [1-9]'; do sleep 0.5; done; t2=$(date +%s.%N); python3 -c "print('규칙 적용 → Alertmanager가 Discord로 전송 완료: %.1f초' % ($t2 - $t0))"
+   m() { curl -s http://127.0.0.1:9093/metrics | grep -E '^alertmanager_notifications_total\{[^}]*integration="discord"' | awk '{print $2}'; }; c0=$(m); t0=$(date +%s.%N); sudo cp /etc/corebank-monitoring/prometheus/alerts-test.yml /etc/corebank-monitoring/prometheus/extra/ && curl -s -X POST http://127.0.0.1:9090/-/reload >/dev/null; until [ "$(m)" != "$c0" ] && curl -s http://127.0.0.1:9093/api/v2/alerts | grep -q MonitoringTestAlert; do sleep 0.5; done; t2=$(date +%s.%N); python3 -c "print('규칙 적용 → Alertmanager가 Discord로 전송 완료: %.1f초 (전송 횟수 %s → %s)' % ($t2 - $t0, '$c0', '$(m)'))"
    ```
 3. Discord에 알림이 도착한 시각(메시지 시각)을 읽는다. 전송 실패가 없는지 본다.
    ```bash
    curl -s http://127.0.0.1:9093/metrics | grep -E '^alertmanager_notifications_(total|failed_total)\{[^}]*integration="discord"' | cut -c1-120
    ```
-4. **시험 규칙을 반드시 끈다**(안 끄면 계속 울린다). 끄면 해제 알림이 온다.
+4. **시험 규칙을 반드시 끈다**(안 끄면 계속 울린다). 끄면 해제 알림이 온다(11/16 실측 141초).
    ```bash
    sudo rm /etc/corebank-monitoring/prometheus/extra/alerts-test.yml && curl -s -X POST http://127.0.0.1:9090/-/reload && echo cleaned
    ```
+   재측정은 Discord에 **해제 알림이 온 뒤**에 한다(해제 알림이 전송 횟수를 올려 새 알림으로 오인된다).
 
 **측정 결과 (2026-11-16)**
 
@@ -142,6 +143,9 @@
 |---|---|---|
 | 규칙 적용 → Alertmanager가 Discord로 전송 완료 | **20.3초** | 위 2번 출력 |
 | Discord 메시지 표시 | 오후 4:42(분 단위) | Discord 화면 |
+| 규칙 적용 → Alertmanager가 Discord로 전송 완료, 같은 프로세스 2회 연속(저녁 재측정) | **22.9초, 17.8초** | 위 2번 출력(전송 횟수 2→3, 4→5) |
+| Discord 메시지 표시(재측정 2회) | 오후 6:03, 6:11(분 단위) | Discord 화면 |
+| 시험 규칙 끈 뒤 해제 알림까지(횟수 3→4) | **141초** | 횟수 변화 대기 출력, Discord `[RESOLVED]` |
 
 - 이론상 최대는 규칙 평가 주기 15초 + Alertmanager 묶음 대기(`group_wait`) 10초 + 전송으로 25초 안팎이고, 측정값 20.3초는 그 안이다.
 - 알림 본문(`[FIRING:1] MonitoringTestAlert (demo-vm warning)`)에 라벨, 요약, `runbook_url`이 들어 있고 `runbook_url`이 이 문서의 해당 절로 연결됨을 확인했다.
