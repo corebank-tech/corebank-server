@@ -45,7 +45,7 @@ groups:
   - name: corebank-transfer
     rules:
       - alert: TransferFailures
-        expr: sum(increase(transfer_count_total{result=~"ERROR|EXCEPTION"}[5m])) >= 3
+        expr: sum(increase(transfer_count_total{result=~"ERROR|EXCEPTION",replayed="false"}[5m])) >= 3
         labels:
           severity: warning
         annotations:

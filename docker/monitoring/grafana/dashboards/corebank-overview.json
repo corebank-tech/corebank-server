@@ -452,7 +452,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(transfer_count_total{result=\"SUCCESS\"}[1h]))",
+          "expr": "sum(increase(transfer_count_total{result=\"SUCCESS\",replayed=\"false\"}[1h]))",
           "legendFormat": "",
           "refId": "A",
           "instant": true
@@ -509,7 +509,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(transfer_count_total{result=~\"ERROR|EXCEPTION\"}[1h]))",
+          "expr": "sum(increase(transfer_count_total{result=~\"ERROR|EXCEPTION\",replayed=\"false\"}[1h]))",
           "legendFormat": "",
           "refId": "A",
           "instant": true
@@ -570,7 +570,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(transfer_count_total{result=\"TIMEOUT\"}[1h]))",
+          "expr": "sum(increase(transfer_count_total{result=\"TIMEOUT\",replayed=\"false\"}[1h]))",
           "legendFormat": "",
           "refId": "A",
           "instant": true
@@ -631,7 +631,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(transfer_count_total{result=\"HELD\"}[1h]))",
+          "expr": "sum(increase(transfer_count_total{result=\"HELD\",replayed=\"false\"}[1h]))",
           "legendFormat": "",
           "refId": "A",
           "instant": true
@@ -810,7 +810,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (result) (increase(transfer_count_total[1m]))",
+          "expr": "sum by (result) (increase(transfer_count_total{replayed=\"false\"}[1m]))",
           "legendFormat": "{{result}}",
           "refId": "A"
         }
