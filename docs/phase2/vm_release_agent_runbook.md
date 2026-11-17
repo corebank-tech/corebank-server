@@ -20,7 +20,13 @@
    - 옵션 `--single-transaction --quick --no-tablespaces --set-gtid-purged=OFF --default-character-set=utf8mb4`, `app_user`(SELECT)로 충분하다.
    - 검증: 종료 코드 0, `gzip -t`, 마지막 줄 `-- Dump completed`, `CREATE TABLE` 수가 DB 테이블 수와 같음(54), `sha256sum` 기록.
    - 한계: 같은 VM 디스크라 VM 손실은 막지 못한다. 폴더가 `700`이라 `ls`와 `*` 확장은 `sudo` 안에서(`sudo bash -c 'ls …/*.gz'`) 해야 한다.
-3. **서버 컨테이너 교체**(약 1분 502): `stop`, `rm` 뒤 같은 `docker run`에 새 이미지 태그를 쓴다. 한 줄 명령으로 실행한다(`&&`로 이어 앞 단계 실패 시 멈춤).
+3. **서버 컨테이너 교체**(약 1분 502). **[VM 계정계 API 런북](vm_account_api_runbook.md) §5의 릴리스 4 기동 명령을 그대로 쓰지 않는다.** 그 명령은 릴리스 4(`e6dfafe4`) 이미지를 고정하고 있어 Agent API가 없는 버전으로 돌아가며, 문서 볼륨과 `-e` 값이 빠져 있어 재생성 뒤 기존 첨부파일을 읽지 못한다. 현재 기준 명령은 아래다(`<새 이미지 SHA>`는 실제 값으로 바꾼다. 11/17 릴리스 8은 `69f2df964420ac3158748a7dcd254585231deafa`). 한 줄 명령으로 실행한다(`&&`로 이어 앞 단계 실패 시 멈춤).
+   ```bash
+   sudo docker stop corebank-server && sudo docker rename corebank-server corebank-server-prev && sudo docker run -d --name corebank-server --network host --cpus 1 --memory 2g -v /var/lib/corebank-audit:/audit -v /var/lib/corebank-objection-docs:/objection-docs --env-file /etc/corebank/app.env --env-file /etc/corebank/app-extra.env corebank/corebank-server:<새 이미지 SHA>
+   ```
+   - 필수 변경 항목: 이미지 태그, 볼륨 2개(`/var/lib/corebank-audit:/audit`, `/var/lib/corebank-objection-docs:/objection-docs`), 환경 파일 2개. `app-extra.env`(root `600`)는 `app.env`에 없고 `-e`로 따로 준 값(`APP_AUDIT_ARCHIVE_LOCAL_DIR`, `APP_INTERBANK_HOST`, `APP_METRICS_ALLOWED_IP`, `JAVA_TOOL_OPTIONS`, `PAYMENT_STOP_DOCUMENT_ROOT`, `SERVER_ADDRESS`)을 옮겨 둔 파일이다. 처음 만들 때는 실행 중인 컨테이너에서 그 이름의 값만 뽑아 파일로 저장한다(값은 화면에 나오지 않는다): `sudo bash -c 'umask 077; docker inspect corebank-server --format "{{range .Config.Env}}{{println .}}{{end}}" | grep -E "^(APP_AUDIT_ARCHIVE_LOCAL_DIR|APP_INTERBANK_HOST|APP_METRICS_ALLOWED_IP|JAVA_TOOL_OPTIONS|PAYMENT_STOP_DOCUMENT_ROOT|SERVER_ADDRESS)=" > /etc/corebank/app-extra.env'`
+   - 이전 컨테이너는 지우지 않고 이름만 바꿔 둔다(`corebank-server-prev`). 새 서버가 안 뜨면 `sudo docker rm -f corebank-server && sudo docker rename corebank-server-prev corebank-server && sudo docker start corebank-server`로 되돌린다. 시연 뒤 지운다.
+   - 서버 컨테이너는 `restart=no`라 VM이 재부팅되면 자동으로 올라오지 않는다.
 4. **확인**: 컨테이너 이미지 태그, 헬스 200, 로그 `Successfully applied`·`Started CorebankApplication`·`ERROR` 없음, 승격 DB `flyway_schema_history`(마지막 버전, 실패 0), 외부 `api`·`www` 200과 `/internal/`·`prometheus` 404, 화면 로그인·이체 1건과 원장·GL·잔액·알림 정합.
 5. **되돌리기**: 이미지만 이전 버전으로 되돌리는 것은 마이그레이션이 적용된 뒤에는 안전하지 않을 수 있다(시험하지 않았다). 정식 롤백은 백업 복원(root 필요, `/etc/info-etl/replica-root.pw`)이다.
    - **한계**: 백업은 서비스를 켠 채 받으므로 백업 이후 생긴 거래는 복원하면 사라진다(그 거래를 다시 넣는 절차는 시험하지 않았다). 롤백 결정이 날 때까지 쓰기를 막으려면 서버를 멈춘 채 백업해야 하며, 11/15에는 그렇게 하지 않았다.
@@ -31,7 +37,7 @@ P3가 빌드 재료와 시연 데이터를 전달한다(워커 빌드 재료는 
 
 1. **전송**: 맥에서 `scp`로 VM `~/agent-deploy/`(`umask 077`)에 올리고 `sha256sum -c`로 확인한다.
 2. **사전 점검**(읽기 전용): 약관 `TERMS_SERVICE`·`TERMS_PRIVACY` v1.0이 2개, `agent*` 계정 0개, 지급정지 권한 코드 3개, GL 계정 `10100`·`20100`, 계좌번호 시퀀스. 환경 파일에 `PII`·`PAYMENT_STOP`·`FDS` 변수가 없는지(`app.pii.read-encrypted`가 true면 시연 고객 로그인이 깨진다).
-3. **키 생성과 서버 환경 파일**: 환경 파일을 백업하고(`app.env.bak-before-agent`), VM에서 워커 키(`openssl rand -hex 32`)를 만들어 `PAYMENT_STOP_AGENT_ENABLED=true`, `PAYMENT_STOP_WORKER_KEY`를 추가한다. 문서 암호화 키(`openssl rand -base64 32`)는 환경 파일에 `PAYMENT_STOP_DOCUMENT_KEY`가 **없을 때만** 만들어 추가하고, 이미 있으면 그대로 둔다. 같은 워커 키로 `worker.env`(`CORE_SERVER_URL=http://127.0.0.1:8080/api/v1`, `AGENT_LLM=claude` 등)를 만든다. Claude API 키는 `read -rs`로 VM에서 직접 입력한다(`bash`에서만 동작, SSM 기본 셸 `sh`는 불가).
+3. **키 생성과 서버 환경 파일**: 환경 파일을 백업하고(`app.env.bak-before-agent`), VM에서 워커 키(`openssl rand -hex 32`)를 만들어 `PAYMENT_STOP_AGENT_ENABLED=true`, `PAYMENT_STOP_WORKER_KEY`를 추가한다. 문서 암호화 키(`openssl rand -base64 32`)는 환경 파일에 `PAYMENT_STOP_DOCUMENT_KEY`가 **없거나 값이 비어 있을 때만** 만들어 넣는다. 값이 있는 줄이 이미 있으면 그대로 둔다. 확인(값은 나오지 않고 개수만): `sudo grep -c -E '^PAYMENT_STOP_DOCUMENT_KEY=.+$' /etc/corebank/app.env` — `1`이면 유효한 키가 있으니 만들지 않고, `0`이면 없거나 빈 값이니 빈 줄(`PAYMENT_STOP_DOCUMENT_KEY=`)을 지우고 새로 만든다. 같은 워커 키로 `worker.env`(`CORE_SERVER_URL=http://127.0.0.1:8080/api/v1`, `AGENT_LLM=claude` 등)를 만든다. Claude API 키는 `read -rs`로 VM에서 직접 입력한다(`bash`에서만 동작, SSM 기본 셸 `sh`는 불가).
    - **`PAYMENT_STOP_DOCUMENT_KEY`는 한 번 정하면 바꾸지 않는다**(바꾸면 저장한 신분증 사본을 못 읽는다).
 4. **서버 컨테이너 재생성**: 첨부 볼륨 `-v /var/lib/corebank-objection-docs:/objection-docs -e PAYMENT_STOP_DOCUMENT_ROOT=/objection-docs`를 포함해 다시 만든다.
 5. **워커 이미지 빌드**: 압축을 풀어 `docker build -t objection-worker:release7-878cc1c <폴더>`. 이미지는 공개 레지스트리에 올리지 않는다. **이미지 ID는 빌드 시각이 들어가 P3의 값과 다를 수 있다**(정상). 내용 확인은 이미지 안 `.py` 파일별 해시를 원본과 비교한다(`LC_ALL=C sort`로 정렬을 맞춘다). 빌드 뒤 평문 소스와 압축 파일을 지운다.
