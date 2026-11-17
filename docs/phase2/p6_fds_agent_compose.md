@@ -1,0 +1,113 @@
+# P6 Python Agent 독립 Compose 실행
+
+## 준비
+
+`.env.corebank.example`과 `.env.fds-agent.example`을 각각 Git 저장소 밖의 `.env.corebank`,
+`.env.fds-agent`로 복사한다. 두 파일에 같은 세 토큰을 주입하되 점수 호출, 조사 호출, Agent Tool·보고서
+콜백 토큰은 모두 서로 다른 충분히 긴 난수여야 한다. 예제 파일에는 변수명만 두며 실제 비밀값을 커밋하거나
+로그에 출력하지 않는다.
+
+BE는 `corebank-server` Compose 프로젝트로 실행하고 Python Agent는 Agent 저장소의
+`corebank-fds-agent` Compose 프로젝트로 실행한다. BE의 DB용 `corebank-net`은 유지하고, 두 프로젝트는
+고정 external network `corebank-fds-shared`만 공유한다. 이미지 태그는 Agent 저장소의 전체 Git SHA로
+고정한다.
+
+```bash
+export FDS_AGENT_REPOSITORY='../corebank-fds-agent'
+export FDS_AGENT_GIT_SHA="$(git -C "$FDS_AGENT_REPOSITORY" rev-parse HEAD)"
+export FDS_AGENT_TAG="$FDS_AGENT_GIT_SHA"
+export FDS_AGENT_ENV_FILE='/secure/path/.env.fds-agent'
+export SPRING_PROFILES_ACTIVE='prod,qa-seed'
+export COREBANK_ENV_FILE='/secure/path/.env.corebank'
+# Agent Compose 실행 전에 latest·축약 SHA·서로 다른 SHA를 거부한다.
+./scripts/validate-fds-agent-sha.sh
+docker network inspect corebank-fds-shared >/dev/null 2>&1 || \
+  docker network create corebank-fds-shared
+docker compose -f docker-compose.yml -f docker-compose.fds.yml config --quiet
+docker compose -f docker-compose.yml -f docker-compose.fds.yml up -d minicore-mysql corebank-server
+
+(
+  cd "$FDS_AGENT_REPOSITORY"
+  docker compose config --quiet
+  docker compose up -d --build corebank-fds-agent
+)
+```
+
+Docker Desktop에서는 `corebank-server` 프로젝트 아래에 BE와 MySQL이 표시되고,
+별도 `corebank-fds-agent` 프로젝트 아래에 Agent가 표시되어야 한다.
+
+`prod,qa-seed`는 로컬 QA seed 검증 예시다. O1에서는 현재 실행 중인 프로필을 먼저 확인하고 기존 값이
+`prod,qa-seed`이면 그대로 유지한다. 현재 값이 `prod`라면 배포 담당자 확인 없이 `qa-seed`를 추가하지 않는다.
+
+BE에는 정책·점수·조사 기능 스위치와 `http://corebank-fds-agent:8000` 주소가, Agent에는
+`FDS_BE_INTERNAL_BASE_URL=http://corebank-server:8080`이 주입된다. 기능이 켜졌는데 필요한 토큰이 없거나
+공백인 경우와 세 토큰 중 두 개가 같은 경우에는 BE가 토큰 원문을 노출하지 않고 기동에 실패한다.
+
+## 연결과 상태 확인
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.fds.yml ps
+docker exec corebank-server wget -qO- http://corebank-fds-agent:8000/health
+docker compose -f docker-compose.yml -f docker-compose.fds.yml logs --since=10m corebank-server
+
+(cd "$FDS_AGENT_REPOSITORY" && docker compose ps)
+(cd "$FDS_AGENT_REPOSITORY" && docker compose port corebank-fds-agent 8000)
+(cd "$FDS_AGENT_REPOSITORY" && docker compose logs --since=10m corebank-fds-agent)
+```
+
+`docker compose port`는 출력이 없어야 한다. Agent의 8000 포트는 `corebank-fds-shared`에서만 접근하며 호스트와 외부
+프록시에 공개하지 않는다. 로그에서는 토큰 원문, 계좌번호, 고객 식별자가 출력되지 않는지 확인한다.
+
+테스트 이체를 보류시킨 뒤 DB에서 조사 상태와 보고서를 확인한다. 정상 흐름은
+`PENDING → RUNNING → COMPLETED`이고 완료 시 보고서가 한 건 존재해야 한다.
+
+```sql
+SELECT investigation_id, transfer_hold_id, job_status, attempt_count,
+       next_attempt_at, lease_expires_at, last_failure_reason
+FROM fds_investigation_job
+ORDER BY created_at DESC
+LIMIT 20;
+
+SELECT investigation_id, schema_version, created_at
+FROM fds_investigation_report
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
+## 장애와 복구 확인
+
+BE는 Agent healthcheck에 `depends_on: condition: service_healthy`로 종속되지 않는다. Agent가 없거나 재기동
+중이어도 BE는 독립적으로 기동하고 이체 보류는 `HELD`로 유지한다. 조사 호출은 최대 3회 시도하며, 그 전의
+실패는 `PENDING`으로 돌아간다. 임대 중 Agent가 중단된 경우에도 3회 미만이면 임대 만료 뒤 복구 스케줄러가
+다시 선점한다.
+
+3회 실패하거나 세 번째 임대가 만료되면 작업은 `FAILED`가 된다. `findDue`는 `PENDING`만 조회하므로 Agent
+재시작만으로 `FAILED` 작업이 재개되지는 않는다. 담당자는 원인을 수정한 뒤 장애 이슈에 조사 ID와 실패 사유를
+기록하고, 승인된 운영 변경으로 재처리하거나 후속 이슈로 재처리 API를 제공해야 한다. DB 상태를 임의로
+`PENDING`으로 덮어쓰지 않는다.
+
+```bash
+(cd "$FDS_AGENT_REPOSITORY" && docker compose stop corebank-fds-agent)
+docker compose -f docker-compose.yml -f docker-compose.fds.yml ps
+(cd "$FDS_AGENT_REPOSITORY" && docker compose start corebank-fds-agent)
+docker compose -f docker-compose.yml -f docker-compose.fds.yml logs --since=10m corebank-server
+(cd "$FDS_AGENT_REPOSITORY" && docker compose logs --since=10m corebank-fds-agent)
+```
+
+중단 중 BE가 계속 응답하고 해당 이체가 `HELD`인지 확인한다. Agent 재기동 뒤 위 SQL로 남아 있던
+`PENDING`이 `RUNNING → COMPLETED`로 처리되는지 확인한다. 점수·조사·Agent 토큰을 서로 바꿔 호출했을 때
+각 내부 API가 거부하는지도 통합 환경에서 확인한다.
+
+관리자 조치가 `PENDING`에 남은 경우 `FdsAdminActionRecoveryScheduler`가 P4 정본 상태를 주기적으로 다시
+대조한다. 수동으로 행 상태를 덮어쓰지 말고 BE 로그와 `fds_admin_action`의 상태를 함께 확인한다.
+
+## 종료
+
+```bash
+(cd "$FDS_AGENT_REPOSITORY" && docker compose stop corebank-fds-agent)
+(cd "$FDS_AGENT_REPOSITORY" && docker compose rm -f corebank-fds-agent)
+docker compose -f docker-compose.yml -f docker-compose.fds.yml stop corebank-server
+docker compose -f docker-compose.yml -f docker-compose.fds.yml rm -f corebank-server
+```
+
+공용 MySQL을 함께 제거하지 않는다.
