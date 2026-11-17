@@ -12,9 +12,9 @@
 | Alertmanager | `prom/alertmanager:v0.35.0` | `127.0.0.1:9093`(VM 안에서만) | 알람을 묶어 Discord로 보낸다 |
 | Grafana | `grafana/grafana:12.4.15` | `http://192.168.0.211:3000`(교육장 안, 로그인 필요) | 대시보드 「CoreBank 계정계 개요」(거래·배치·JVM·DB) |
 
-- 세 컨테이너 모두 `--network host`다. 계정계 API는 `APP_METRICS_ALLOWED_IP=127.0.0.1`에서 온 요청에만 지표를 내주고(`/api/v1/actuator/prometheus`), Nginx는 `/api/v1/actuator`(health 제외)를 외부에 막고 있어서 지표는 VM 밖으로 나가지 않는다.
+- 세 컨테이너 모두 `--network host`다. 계정계 API는 `APP_METRICS_ALLOWED_IP=127.0.0.1`에서 온 요청에만 지표를 내준다(`/api/v1/actuator/prometheus`). Nginx는 `/api/v1/actuator`(health 제외)를 외부에 404로 막는다(11/14 외부 요청 404 확인, [VM 계정계 API 런북](vm_account_api_runbook.md) §8). 허용 IP 검사만으로는 Nginx를 거쳐 온 요청을 구분하지 못할 수 있으므로(프록시 요청은 앱에 `127.0.0.1`로 보일 수 있다) 지표 비노출은 Nginx `location`에 의존한다. Nginx 설정을 바꿀 때는 외부에서 404가 나오는지 다시 확인한다.
 - Grafana만 교육장 네트워크에 열린다(같은 교육장의 다른 사람이 접속 화면까지는 볼 수 있다). 익명 접속과 회원가입은 끄고 관리자 비밀번호를 파일로 준다. 교육장 밖에서 보려면 별도 경로가 필요한데 이 문서의 범위가 아니다.
-- 지표 이름과 라벨: `transfer_count_total{result=SUCCESS|ERROR|EXCEPTION|HELD|PROCESSING|TIMEOUT, replayed}`, `transfer_duration_seconds_*`, `cob_step_count_total{status=SUCCESS|FAILURE|HALTED, step}`, `cob_step_duration_seconds_*`, `notification_publication_abandoned`, `hikaricp_connections_*`, `jvm_*`, `http_server_requests_seconds_*`.
+- 지표 이름과 라벨: `transfer_count_total{result=SUCCESS|ERROR|EXCEPTION|HELD|PROCESSING|TIMEOUT, replayed}`, `transfer_duration_seconds_*`, `cob_step_count_total{status=SUCCESS|FAILURE|HALTED, step}`, `cob_step_duration_seconds_*`, `notification_publication_abandoned`, `hikaricp_connections_*`, `jvm_*`, `http_server_requests_seconds_*`. `replayed="true"`는 이미 처리된 회차를 다시 확인한 호출이라 새 이체가 아니며, 대시보드의 이체 건수와 `TransferFailures` 알람은 `replayed="false"`만 센다(재생은 별도 패널).
 
 ## 2. 설치 (VM, 교육장 안)
 
@@ -116,38 +116,42 @@
 ### NotificationPublicationAbandoned
 
 1. 포기된 이벤트를 본다(읽기 전용): `SELECT LISTENER_ID, PUBLICATION_DATE, COMPLETION_ATTEMPTS FROM EVENT_PUBLICATION WHERE COMPLETION_DATE IS NULL ORDER BY PUBLICATION_DATE DESC LIMIT 10`.
-2. 고객 알림이 빠졌을 수 있다. 서버의 재제출 스케줄러가 처리하는지 지켜보고, 남으면 원인(DB 일시 장애 등)을 확인한다.
+2. 재제출 스케줄러(`NotificationResubmissionScheduler`)는 재제출 횟수가 상한(3회)에 도달한 기록을 대상에서 제외한다. 이 알람이 울린 기록은 기다려도 자동으로 다시 처리되지 않는다. 먼저 원인(DB 일시 장애 등)을 확인한다. 원인을 고친 뒤 쓸 수 있는 승인된 수동 재처리 절차는 확인된 것이 없다(미확인). 알림 도메인 담당자에게 `LISTENER_ID`, `PUBLICATION_DATE`, `COMPLETION_ATTEMPTS`와 같은 시각의 서버 로그를 전달해 처리 방법을 정한다. 그 전까지 해당 고객 알림은 빠진 채로 남는다.
 
 ## 4. 시간 측정
 
-완료 조건은 "알람 발생부터 인지까지 시간을 측정할 수 있다"이다. 시험 규칙 `MonitoringTestAlert`(항상 참, `for` 없음)를 켠 시각부터 **Alertmanager가 Discord로 전송을 마친 시각**까지를 재고, Discord에서 메시지가 뜬 시각을 눈으로 확인한다.
+완료 조건은 "알람 발생부터 인지까지 시간을 측정할 수 있다"이다. 시험 규칙 `MonitoringTestAlert`(항상 참, `for` 없음)를 켠 시각부터 **Alertmanager의 Discord 전송 요청이 성공으로 끝난 시각**까지를 재고, Discord에서 메시지가 뜬 시각을 눈으로 확인한다.
 
 1. Discord 알림 채널을 열어 둔다.
-2. VM에서 아래 한 줄을 실행한다. 시작 전 Discord 전송 횟수(`alertmanager_notifications_total`)를 저장하고, 시험 규칙을 켠 뒤 **횟수가 저장한 값에서 바뀌고 Alertmanager에 `MonitoringTestAlert`가 올라올 때까지** 0.5초마다 확인해 걸린 시간을 보여 준다(`bash`). 누적 횟수라서 저장한 값과 비교하지 않으면 이전 전송 때문에 바로 끝난다. 횟수는 알림 이름별이 아니라서 다른 알람의 전송과 구별하지 못한다. 그래서 알람 존재를 함께 보고, 최종 확인은 3번의 Discord 메시지로 한다.
+2. VM에서 아래 한 줄을 실행한다. 시작 전 Discord 전송 요청 횟수(`alertmanager_notification_requests_total`)와 실패 횟수(`alertmanager_notification_requests_failed_total`)를 저장하고, 시험 규칙을 켠 뒤 **요청 횟수가 저장한 값에서 늘고, 실패 횟수는 그대로이고, Alertmanager에 `MonitoringTestAlert`가 올라올 때까지** 0.5초마다 확인해 걸린 시간을 보여 준다(`bash`).
+   - `alertmanager_notifications_total`은 쓰지 않는다. Alertmanager v0.35.0(`notify/retry_stage.go`)은 이 값을 Discord `Notify()` **호출 전에** 올린다(지표 설명: attempted notifications). 그래서 요청이 끝나기 전에도 조건이 참이 된다. 요청 횟수는 `Notify()`가 돌아온 뒤에 올라가고, 요청이 실패하면 실패 횟수도 오른다.
+   - 두 횟수는 알림 이름별이 아니라서 다른 알람의 전송과 구별하지 못한다. 그래서 알람 존재를 함께 보고, 최종 확인은 3번의 Discord 메시지로 한다. 누적 횟수라서 시작값과 비교하지 않으면 이전 전송 때문에 바로 끝난다.
    ```bash
-   m() { curl -s http://127.0.0.1:9093/metrics | grep -E '^alertmanager_notifications_total\{[^}]*integration="discord"' | awk '{print $2}'; }; c0=$(m); t0=$(date +%s.%N); sudo cp /etc/corebank-monitoring/prometheus/alerts-test.yml /etc/corebank-monitoring/prometheus/extra/ && curl -s -X POST http://127.0.0.1:9090/-/reload >/dev/null; until [ "$(m)" != "$c0" ] && curl -s http://127.0.0.1:9093/api/v2/alerts | grep -q MonitoringTestAlert; do sleep 0.5; done; t2=$(date +%s.%N); python3 -c "print('규칙 적용 → Alertmanager가 Discord로 전송 완료: %.1f초 (전송 횟수 %s → %s)' % ($t2 - $t0, '$c0', '$(m)'))"
+   r() { curl -s http://127.0.0.1:9093/metrics | awk '/^alertmanager_notification_requests_total\{.*integration="discord"/{print $2}'; }; f() { curl -s http://127.0.0.1:9093/metrics | awk '/^alertmanager_notification_requests_failed_total\{.*integration="discord"/{s+=$2} END{print s+0}'; }; c0=$(r); f0=$(f); t0=$(date +%s.%N); sudo cp /etc/corebank-monitoring/prometheus/alerts-test.yml /etc/corebank-monitoring/prometheus/extra/ && curl -s -X POST http://127.0.0.1:9090/-/reload >/dev/null; until [ "$(r)" != "$c0" ] && [ "$(f)" = "$f0" ] && curl -s http://127.0.0.1:9093/api/v2/alerts | grep -q MonitoringTestAlert; do sleep 0.5; done; t2=$(date +%s.%N); python3 -c "print('규칙 적용 → 전송 요청 성공 종료: %.1f초 (요청 횟수 %s → %s, 실패 %s → %s)' % ($t2 - $t0, '$c0', '$(r)', '$f0', '$(f)'))"
    ```
 3. Discord에 알림이 도착한 시각(메시지 시각)을 읽는다. 전송 실패가 없는지 본다.
    ```bash
-   curl -s http://127.0.0.1:9093/metrics | grep -E '^alertmanager_notifications_(total|failed_total)\{[^}]*integration="discord"' | cut -c1-120
+   curl -s http://127.0.0.1:9093/metrics | grep -E '^alertmanager_notification_requests(_failed)?_total\{[^}]*integration="discord"' | cut -c1-140
    ```
-4. **시험 규칙을 반드시 끈다**(안 끄면 계속 울린다). 끄면 해제 알림이 온다(11/16 실측 141초).
+4. **시험 규칙을 반드시 끈다**(안 끄면 계속 울린다). 끄면 해제 알림이 온다(11/16 실측 141초, `alertmanager_notifications_total` 시도 시작 기준).
    ```bash
    sudo rm /etc/corebank-monitoring/prometheus/extra/alerts-test.yml && curl -s -X POST http://127.0.0.1:9090/-/reload && echo cleaned
    ```
-   재측정은 Discord에 **해제 알림이 온 뒤**에 한다(해제 알림이 전송 횟수를 올려 새 알림으로 오인된다).
+   재측정은 Discord에 **해제 알림이 온 뒤**에 한다(해제 알림도 요청 횟수를 올려 새 알림으로 오인된다).
 
-**측정 결과 (2026-11-16)**
+**측정 결과**
 
 | 구간 | 시간 | 근거 |
 |---|---|---|
-| 규칙 적용 → Alertmanager가 Discord로 전송 완료 | **20.3초** | 위 2번 출력 |
-| Discord 메시지 표시 | 오후 4:42(분 단위) | Discord 화면 |
-| 규칙 적용 → Alertmanager가 Discord로 전송 완료, 같은 프로세스 2회 연속(저녁 재측정) | **22.9초, 17.8초** | 위 2번 출력(전송 횟수 2→3, 4→5) |
-| Discord 메시지 표시(재측정 2회) | 오후 6:03, 6:11(분 단위) | Discord 화면 |
-| 시험 규칙 끈 뒤 해제 알림까지(횟수 3→4) | **141초** | 횟수 변화 대기 출력, Discord `[RESOLVED]` |
+| 규칙 적용 → 전송 **시도 시작**(`alertmanager_notifications_total` 증가, 11/16 초기 측정) | 20.3초 | 당시 2번 출력. 전송이 끝난 시각이 아니다 |
+| 규칙 적용 → 전송 **시도 시작**, 같은 프로세스 2회 연속(11/16 저녁) | 22.9초, 17.8초 | 당시 2번 출력(전송 횟수 2→3, 4→5). 전송이 끝난 시각이 아니다 |
+| Discord 메시지 표시(11/16) | 오후 4:42, 6:03, 6:11(분 단위) | Discord 화면 |
+| 규칙 적용 → **전송 요청 성공 종료**(`alertmanager_notification_requests_total` 증가, 실패 증가 없음), 같은 프로세스 2회 연속(11/17 오후) | **24.3초, 13.2초** | 위 2번 출력(요청 횟수 6→7, 8→9, 실패 0→0) |
+| Discord 메시지 표시(11/17) | 오후 2:07, 2:14(분 단위) | Discord 화면 |
+| 시험 규칙 끈 뒤 해제 알림 전송 **시도 시작**까지(11/16, 횟수 3→4) | 141초 | 당시 횟수 변화 대기 출력, Discord `[RESOLVED]` |
 
-- 이론상 최대는 규칙 평가 주기 15초 + Alertmanager 묶음 대기(`group_wait`) 10초 + 전송으로 25초 안팎이고, 측정값 20.3초는 그 안이다.
+- 이론상 최대는 규칙 평가 주기 15초 + Alertmanager 묶음 대기(`group_wait`) 10초 + 전송으로 25초 안팎이고, 측정값 13.2~24.3초는 그 안이다. 표본이 2건이라 평균이나 최대가 아니다.
+- 11/16에 잰 20.3·22.9·17.8초는 전송이 끝난 시각이 아니라 전송을 시도하기 시작한 시각이다(v0.35.0 소스로 확인). 완료 기준으로 다시 잰 값이 11/17 행이다.
 - 알림 본문(`[FIRING:1] MonitoringTestAlert (demo-vm warning)`)에 라벨, 요약, `runbook_url`이 들어 있고 `runbook_url`이 이 문서의 해당 절로 연결됨을 확인했다.
 - 실제 장애 알람은 `for`(예: `CorebankServerDown` 1분)가 더해진 뒤 올라오므로 인지 시간은 `for` + 위 시간이다.
 
