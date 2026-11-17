@@ -62,6 +62,7 @@ class FdsAgentToolServiceTest {
         assertThat(result.hasMore()).isTrue();
         assertThat(result.items()).hasSize(100);
         assertThat(result.items().getFirst().recipientAccountMasked()).isEqualTo("***-**-0000");
+        assertThat(result.items().getFirst().transferredAt().getOffset()).isEqualTo(ZoneOffset.ofHours(9));
         verify(jobs)
                 .recordHistorySnapshot(
                         eq("inv-10"),
@@ -86,6 +87,7 @@ class FdsAgentToolServiceTest {
         var result = service.recipient(10L, 1);
 
         assertThat(result.hasSucceededBeforeWindow()).isTrue();
+        assertThat(result.firstSucceededAt().getOffset()).isEqualTo(ZoneOffset.ofHours(9));
         assertThat(result.otherWithdrawalAccountCount()).isEqualTo(2);
         verify(jobs).recordRecipientSnapshot("inv-10", 10L, 1, 20L, HELD_AT.minusMinutes(11), true, 2, HELD_AT);
     }

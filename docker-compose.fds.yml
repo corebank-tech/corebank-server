@@ -1,0 +1,21 @@
+name: corebank-server
+
+services:
+  corebank-server:
+    env_file:
+      - ${COREBANK_ENV_FILE:-.env.corebank}
+    environment:
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
+      - APP_FDS_POLICY_ENABLED=${APP_FDS_POLICY_ENABLED:-true}
+      - APP_FDS_SCORE_ENABLED=${APP_FDS_SCORE_ENABLED:-true}
+      - APP_FDS_SCORE_BASE_URL=http://corebank-fds-agent:8000
+      - APP_FDS_INVESTIGATION_ENABLED=${APP_FDS_INVESTIGATION_ENABLED:-true}
+      - APP_FDS_INVESTIGATION_BASE_URL=http://corebank-fds-agent:8000
+    networks:
+      - corebank-net
+      - corebank-fds-shared
+
+networks:
+  corebank-fds-shared:
+    external: true
+    name: corebank-fds-shared
