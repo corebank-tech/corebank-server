@@ -74,13 +74,14 @@ conn aws-t1
     dpddelay=10s
     dpdtimeout=30s
     dpdaction=restart
+    closeaction=restart
     mark=100
     forceencaps=yes
 ```
 - `leftid`는 내부 IP(192.168.0.211)가 아니라 **공인 IP**여야 한다. 교육장 공인 IP가 바뀌어도 옛 값이 남은 채로 붙은 사례가 있다(2026-11-03, §5-1).
 - `mark=100`이 빠지면 모든 트래픽이 터널로 들어간다.
 - `if_id_in` 같은 XFRM 키워드는 strongSwan 5.9.5의 `ipsec.conf`가 모른다(`unknown keyword`). 쓰지 않는다.
-- **`auto=start`는 strongSwan이 시작될 때만 연결하고, `dpdaction=restart`는 상대가 응답하지 않을 때만 다시 붙인다.** AWS가 정상적으로 세션 삭제(DELETE)를 보내면 둘 다 작동하지 않아 VM이 재연결하지 않는다(2026-11-01 23:18 실제 사례, #851). `closeaction=restart`로 막을 수 있는지는 복구 뒤 검증할 예정이며, 검증 전에는 이 런북의 설정에 넣지 않았다.
+- **`auto=start`는 strongSwan이 시작될 때만 연결하고, `dpdaction=restart`는 상대가 응답하지 않을 때만 다시 붙인다.** AWS가 정상적으로 세션 삭제(DELETE)를 보내면 둘 다 작동하지 않아 VM이 재연결하지 않는다(2026-11-01 23:18, 2026-11-10 22:14 두 번, #851 · §5-2). `closeaction=restart`는 상대가 CHILD_SA를 예기치 않게 닫을 때 VM이 다시 여는 설정이다(strongSwan 문서 기준). 11/1과 11/10에 관측한 것은 IKE_SA DELETE라서 이 설정이 같은 장애의 자동 복구까지 보장하지는 않는다. 이 설정은 2026-11-11 15시 20분 전후 VM에 적용했다(적용 뒤 터널 1 `UP`, 복제 `Yes/Yes/0`). **AWS가 다시 DELETE를 보낼 때 실제로 재연결되는지는 시험할 방법이 없어 확인하지 못했다.**
 
 ### 3-4. `/etc/ipsec.secrets`
 ```
@@ -181,7 +182,7 @@ PH-100-② 완료 기준이다. 상대 쪽 준비가 끝난 항목부터 따로 
 
 - §3-7을 적용하고 VM을 재부팅해 터널과 경로가 자동 복구되는지 확인한 뒤에 정상 운영으로 넘긴다. 확인 항목: `sudo ipsec statusall`의 `ESTABLISHED`·`INSTALLED, TUNNEL`, `ip route get <WAS 사설 IP>`가 `dev vti1`, RDS 3306 `nc` 성공, 컨테이너 `Up`, `systemctl is-active strongswan-starter vpn-vti`가 `active`.
 - **완료(2026-10-29):** 재부팅 후 약 1분 안에 위 항목이 모두 정상이었다.
-- 위 확인은 VM 재부팅 시나리오만 검증한 것이다. **AWS가 세션 삭제(DELETE)를 보낸 경우에는 자동으로 복구되지 않는다**(2026-11-01, #851).
+- 위 확인은 VM 재부팅 시나리오만 검증한 것이다. AWS가 세션 삭제(DELETE)를 보낸 경우에는 자동으로 복구되지 않았다(2026-11-01, 2026-11-10). `closeaction=restart`를 넣었지만 DELETE 상황에서의 효과는 확인하지 못했다(§3-3).
 
 ## 5. 문제가 생기면
 
@@ -280,6 +281,14 @@ terraform import module.vpn.aws_customer_gateway.onprem <새 CGW ID>
 - `modules/vpn/variables.tf`의 `customer_gateway_ip` 기본값을 새 공인 IP로 고치는 PR을 올린다. 머지는 아래 `plan` 확인 뒤에 한다.
 - `plan`(`-lock=false`, 저장 안 함)에서 `module.vpn` 항목이 하나도 없고 예상하지 않은 destroy/recreate가 없어야 한다. 그 뒤에만 PR을 머지한다.
 - 이 절차는 #868에서 처음 수행한다. 수행 결과를 이 절에 다시 반영한다. `terraform/README.md`의 "VPN을 포함해 apply하기 전에 공인 IP 확인" 절차도 함께 본다.
+
+### 5-2. AWS가 터널 끝점을 교체했을 때 (2026-11-10, 터널 1 약 15시간 40분 끊김)
+
+- 경과(KST): AWS Health 알림 2건(`AWS_VPN_REDUNDANCY_LOSS`, 둘 다 AWS Initiated)이 11/10 22:05:05(터널 2)와 22:11:45(터널 1)에 시작했다. 터널 1은 22:14:10에 VM이 `received DELETE for IKE_SA aws-t1`을 받은 뒤 다시 연결하지 않았다(AWS 상태 `DOWN` 22:14:14). 11/11 13시 50분대에 `sudo ipsec restart`와 `sudo systemctl restart vpn-vti`로 복구했고 AWS 터널 1이 `UP`으로 바뀐 시각은 13:55:01이다. 교체 사유(상태, 소프트웨어, 하드웨어 퇴역)는 알림에 없다.
+- 원인 확인 순서: ① 공인 IP가 고객 게이트웨이와 같은지(§5-1) ② `ipsec statusall`이 `0 up, 0 connecting`인지 ③ 저널에 `received DELETE`가 있는지(데몬이 `systemd` 밖에서 돌면 유닛 기준 조회에는 안 나오니 전체 저널에서 `charon`을 찾는다). 11/10은 셋 모두 "DELETE 뒤 미재연결"과 맞았다.
+- 복구 순서: `sudo ipsec restart` → 20초 뒤 `1 up` → `sudo systemctl restart vpn-vti` → `ip route get 10.30.0.1`이 `dev vti1` → §5-0 복제 확인. 복제 IO 스레드는 재시도 10회를 소진해 `No`로 멈춰 있었고(오류 113), RDS binlog 보존(72시간)과 GTID를 확인한 뒤 재개했다.
+- 끊긴 동안의 영향(VM 레플리카 조회): COB 11/10 대사 111초 `SUCCESS`, `transfer`는 11/11 00:10 일일 이체 206건 `SUCCESS`이고 `ERROR` · `TIMEOUT` · `PROCESSING`은 0건이다. 정보계 ETL은 11/11 03:30에 11/10 마감을 레플리카에서 찾지 못해 적재하지 않았고(성공 0일), 복제 복구 뒤 `systemctl start info-etl.service`로 따라잡았다.
+- 이후 조치: `closeaction=restart`를 적용했다(§3-3). 효과는 확인하지 못했다.
 
 ## 6. 정리 (환경이 끝날 때)
 
