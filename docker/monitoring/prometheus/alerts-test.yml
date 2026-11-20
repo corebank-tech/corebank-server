@@ -1,0 +1,12 @@
+# 알람에서 인지까지의 시간을 재기 위한 시험용 규칙. 평소에는 rule_files에 넣지 않는다(monitoring_runbook.md 「시간 측정」).
+groups:
+  - name: corebank-test
+    rules:
+      - alert: MonitoringTestAlert
+        expr: vector(1)
+        labels:
+          severity: warning
+        annotations:
+          summary: "시험 알람입니다(시간 측정용)"
+          description: "이 알람은 알림 채널과 지연 시간을 확인하려는 것입니다. 무시해도 됩니다."
+          runbook_url: "https://github.com/corebank-tech/corebank-server/blob/dev/docs/phase2/monitoring_runbook.md#4-시간-측정"
