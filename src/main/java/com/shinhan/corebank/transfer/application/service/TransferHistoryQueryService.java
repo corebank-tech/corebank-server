@@ -1,6 +1,5 @@
 package com.shinhan.corebank.transfer.application.service;
 
-import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.util.PageableResolver;
@@ -9,11 +8,13 @@ import com.shinhan.corebank.transfer.application.port.in.TransferHistoryItem;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryPage;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryQueryUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistorySort;
+import com.shinhan.corebank.transfer.application.port.in.TransferHistoryStatus;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistorySummary;
 import com.shinhan.corebank.transfer.application.port.in.TransferMonthlyStatistics;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferHistoryAggregate;
 import com.shinhan.corebank.transfer.application.port.out.TransferHistoryQueryPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferHistoryRecord;
 import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.transfer.domain.Transfer;
 import com.shinhan.corebank.transfer.domain.exception.TransferErrorCode;
@@ -53,7 +54,7 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
     public TransferHistoryPage search(
             Long customerId,
             Long withdrawalAccountId,
-            ProcessResultStatus status,
+            TransferHistoryStatus status,
             LocalDate fromDate,
             LocalDate toDate,
             TransferHistorySort sort,
@@ -77,7 +78,7 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
         }
 
         TransferHistorySort resolvedSort = sort != null ? sort : TransferHistorySort.LATEST;
-        Page<Transfer> result = transferHistoryQueryPort.search(
+        Page<TransferHistoryRecord> result = transferHistoryQueryPort.search(
                 withdrawalAccountId, status, resolvedFromDate, resolvedToDate, resolvedSort, pageable);
         TransferHistoryAggregate aggregate =
                 transferHistoryQueryPort.summarize(withdrawalAccountId, status, resolvedFromDate, resolvedToDate);
@@ -134,19 +135,21 @@ public class TransferHistoryQueryService implements TransferHistoryQueryUseCase 
                 .isPresent();
     }
 
-    private TransferHistoryItem toItem(Transfer transfer) {
+    private TransferHistoryItem toItem(TransferHistoryRecord transfer) {
         return new TransferHistoryItem(
-                transfer.getTransactionNumber(),
-                transfer.getStatus(),
-                transfer.getTransferredAt(),
-                transfer.getWithdrawalAccountId(),
-                transfer.getDepositAccountNumber(),
-                transfer.getPayeeName(),
-                transfer.getAmount(),
-                transfer.getTransferType(),
-                transfer.getChannel(),
-                transfer.getErrorCode(),
-                transfer.getErrorMessage());
+                transfer.historyId(),
+                transfer.transferHoldId(),
+                transfer.transactionNumber(),
+                transfer.status(),
+                transfer.occurredAt(),
+                transfer.withdrawalAccountId(),
+                transfer.depositAccountNumber(),
+                transfer.payeeName(),
+                transfer.amount(),
+                transfer.transferType(),
+                transfer.channel(),
+                transfer.errorCode(),
+                transfer.errorMessage());
     }
 
     private TransferHistoryDetail toDetail(Transfer transfer) {

@@ -13,10 +13,12 @@ import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryDetail;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryPage;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistorySort;
+import com.shinhan.corebank.transfer.application.port.in.TransferHistoryStatus;
 import com.shinhan.corebank.transfer.application.port.in.TransferMonthlyStatistics;
 import com.shinhan.corebank.transfer.application.port.out.AccountLockPort;
 import com.shinhan.corebank.transfer.application.port.out.TransferHistoryAggregate;
 import com.shinhan.corebank.transfer.application.port.out.TransferHistoryQueryPort;
+import com.shinhan.corebank.transfer.application.port.out.TransferHistoryRecord;
 import com.shinhan.corebank.transfer.application.port.out.TransferLookupPort;
 import com.shinhan.corebank.transfer.application.port.out.WithdrawalAccountDetail;
 import com.shinhan.corebank.transfer.domain.Transfer;
@@ -304,24 +306,20 @@ class TransferHistoryQueryServiceTest {
         LocalDate fromDate = LocalDate.of(2026, 8, 1);
         LocalDate toDate = LocalDate.of(2026, 8, 20);
 
-        Transfer transfer = Transfer.create(
+        TransferHistoryRecord transfer = new TransferHistoryRecord(
+                "TRANSFER:20260810IT0000000001",
+                null,
                 "20260810IT0000000001",
+                TransferHistoryStatus.SUCCESS,
+                LocalDateTime.of(2026, 8, 10, 9, 0),
                 WITHDRAWAL_ACCOUNT_ID,
-                202L,
                 "110222222222",
                 "성춘향",
                 10_000L,
-                0L,
                 TransferType.IMMEDIATE,
                 TransferChannel.BT,
                 null,
-                null,
-                null,
-                "출금메모",
-                "입금메모",
-                LocalDateTime.of(2026, 8, 10, 9, 0),
-                TRADE_DATE);
-        transfer.complete(90_000L, LocalDateTime.of(2026, 8, 10, 9, 0));
+                null);
 
         when(transferHistoryQueryPort.search(
                         WITHDRAWAL_ACCOUNT_ID,
@@ -339,7 +337,7 @@ class TransferHistoryQueryServiceTest {
 
         assertThat(result.page().getContent()).hasSize(1);
         assertThat(result.page().getContent().get(0).transactionNumber()).isEqualTo("20260810IT0000000001");
-        assertThat(result.page().getContent().get(0).status()).isEqualTo(ProcessResultStatus.SUCCESS);
+        assertThat(result.page().getContent().get(0).status()).isEqualTo(TransferHistoryStatus.SUCCESS);
         assertThat(result.summary().successCount()).isEqualTo(1L);
         assertThat(result.summary().successAmount()).isEqualTo(10_000L);
     }

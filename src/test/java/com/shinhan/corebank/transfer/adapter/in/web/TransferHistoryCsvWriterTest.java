@@ -2,7 +2,7 @@ package com.shinhan.corebank.transfer.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.shinhan.corebank.common.domain.ProcessResultStatus;
+import com.shinhan.corebank.transfer.application.port.in.TransferHistoryStatus;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import java.nio.charset.StandardCharsets;
@@ -21,15 +21,17 @@ class TransferHistoryCsvWriterTest {
         byte[] csv = TransferHistoryCsvWriter.write(List.of());
 
         String body = stripBom(csv);
-        assertThat(body).isEqualTo("거래번호,처리상태,처리일시,입금계좌번호,예금주명,금액,이체구분,채널,오류코드,실패사유\r\n");
+        assertThat(body).isEqualTo("이력ID,보류ID,거래번호,처리상태,처리일시,입금계좌번호,예금주명,금액,이체구분,채널,오류코드,실패사유\r\n");
     }
 
     @Test
     @DisplayName("정상 건은 헤더 다음 줄에 필드 순서대로 값이 채워진다")
     void normalRow_rendersAllFields() {
         TransferHistoryItemResponse item = new TransferHistoryItemResponse(
+                "TRANSFER:20260810IT0000000012",
+                null,
                 "20260810IT0000000012",
-                ProcessResultStatus.SUCCESS,
+                TransferHistoryStatus.SUCCESS,
                 OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
                 "110******222",
                 "성*향",
@@ -45,15 +47,17 @@ class TransferHistoryCsvWriterTest {
         assertThat(lines).hasSize(2);
         assertThat(lines[1])
                 .isEqualTo(
-                        "20260810IT0000000012,SUCCESS,2026-08-10T09:00:00+09:00,110******222,성*향,10000,IMMEDIATE,WB,,");
+                        "TRANSFER:20260810IT0000000012,,20260810IT0000000012,SUCCESS,2026-08-10T09:00:00+09:00,110******222,성*향,10000,IMMEDIATE,WB,,");
     }
 
     @Test
     @DisplayName("초가 0이어도 처리일시 칼럼은 항상 초까지 고정폭으로 나온다")
     void executedAt_alwaysIncludesSeconds() {
         TransferHistoryItemResponse zeroSeconds = new TransferHistoryItemResponse(
+                "TRANSFER:20260810IT0000000016",
+                null,
                 "20260810IT0000000016",
-                ProcessResultStatus.SUCCESS,
+                TransferHistoryStatus.SUCCESS,
                 OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
                 "110******222",
                 "성*향",
@@ -63,8 +67,10 @@ class TransferHistoryCsvWriterTest {
                 null,
                 null);
         TransferHistoryItemResponse nonZeroSeconds = new TransferHistoryItemResponse(
+                "TRANSFER:20260810IT0000000017",
+                null,
                 "20260810IT0000000017",
-                ProcessResultStatus.SUCCESS,
+                TransferHistoryStatus.SUCCESS,
                 OffsetDateTime.parse("2026-08-10T09:00:05+09:00"),
                 "110******222",
                 "성*향",
@@ -85,8 +91,10 @@ class TransferHistoryCsvWriterTest {
     @DisplayName("예금주명이 =,+,-,@로 시작하면 앞에 작은따옴표를 붙여 Excel 수식 실행을 막는다")
     void payeeNameStartingWithFormulaTrigger_isEscaped() {
         TransferHistoryItemResponse item = new TransferHistoryItemResponse(
+                "TRANSFER:20260810IT0000000018",
+                null,
                 "20260810IT0000000018",
-                ProcessResultStatus.SUCCESS,
+                TransferHistoryStatus.SUCCESS,
                 OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
                 "110******222",
                 "=HYPERLINK(\"http://evil\")",
@@ -106,8 +114,10 @@ class TransferHistoryCsvWriterTest {
     @DisplayName("실패 사유에 쉼표가 있으면 큰따옴표로 감싼다")
     void failureReasonWithComma_isQuoted() {
         TransferHistoryItemResponse item = new TransferHistoryItemResponse(
+                "TRANSFER:20260810IT0000000013",
+                null,
                 "20260810IT0000000013",
-                ProcessResultStatus.ERROR,
+                TransferHistoryStatus.ERROR,
                 OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
                 "110******222",
                 "성*향",
@@ -127,8 +137,10 @@ class TransferHistoryCsvWriterTest {
     @DisplayName("값에 큰따옴표가 있으면 두 번 반복해서 이스케이핑한다")
     void valueWithQuote_isEscapedByDoubling() {
         TransferHistoryItemResponse item = new TransferHistoryItemResponse(
+                "TRANSFER:20260810IT0000000014",
+                null,
                 "20260810IT0000000014",
-                ProcessResultStatus.ERROR,
+                TransferHistoryStatus.ERROR,
                 OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
                 "110******222",
                 "성*향",

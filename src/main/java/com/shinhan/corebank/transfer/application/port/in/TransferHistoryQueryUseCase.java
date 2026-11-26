@@ -1,6 +1,5 @@
 package com.shinhan.corebank.transfer.application.port.in;
 
-import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import java.time.LocalDate;
 import java.time.YearMonth;
 
@@ -10,7 +9,7 @@ public interface TransferHistoryQueryUseCase {
     TransferHistoryPage search(
             Long customerId,
             Long withdrawalAccountId,
-            ProcessResultStatus status,
+            TransferHistoryStatus status,
             LocalDate fromDate,
             LocalDate toDate,
             TransferHistorySort sort,
