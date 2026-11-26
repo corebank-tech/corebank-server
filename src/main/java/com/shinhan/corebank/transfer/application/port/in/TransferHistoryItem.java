@@ -1,14 +1,15 @@
 package com.shinhan.corebank.transfer.application.port.in;
 
-import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.transfer.domain.TransferChannel;
 import com.shinhan.corebank.transfer.domain.TransferType;
 import java.time.LocalDateTime;
 
 // errorCode/errorMessage는 status=ERROR일 때만 채워짐(TransferResponse와 동일 규칙)
 public record TransferHistoryItem(
+        String historyId,
+        Long transferHoldId,
         String transactionNumber,
-        ProcessResultStatus status,
+        TransferHistoryStatus status,
         LocalDateTime transferredAt,
         Long withdrawalAccountId,
         String depositAccountNumber,

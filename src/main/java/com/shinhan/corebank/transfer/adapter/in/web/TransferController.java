@@ -2,7 +2,6 @@ package com.shinhan.corebank.transfer.adapter.in.web;
 
 import com.shinhan.corebank.adapter.in.web.exception.ErrorResponse;
 import com.shinhan.corebank.auth.api.CurrentCustomerProvider;
-import com.shinhan.corebank.common.domain.ProcessResultStatus;
 import com.shinhan.corebank.common.exception.BusinessException;
 import com.shinhan.corebank.common.exception.CommonErrorCode;
 import com.shinhan.corebank.common.idempotency.IdempotentRequestExecutor;
@@ -15,6 +14,7 @@ import com.shinhan.corebank.transfer.application.port.in.TransferExecutionUseCas
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryPage;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistoryQueryUseCase;
 import com.shinhan.corebank.transfer.application.port.in.TransferHistorySort;
+import com.shinhan.corebank.transfer.application.port.in.TransferHistoryStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -243,7 +243,7 @@ public class TransferController {
     public ApiResponse<TransferHistoryPageResponse> search(
             @Parameter(description = "조회할 출금계좌 ID", required = true, example = "101") @RequestParam
                     Long withdrawalAccountId,
-            @Parameter(description = "처리상태 필터. SUCCESS/ERROR/TIMEOUT, 미지정 또는 ALL이면 전체", example = "SUCCESS")
+            @Parameter(description = "처리상태 필터. SUCCESS/ERROR/TIMEOUT/HELD/REJECTED, 미지정 또는 ALL이면 전체", example = "HELD")
                     @RequestParam(required = false)
                     String status,
             @Parameter(description = "조회 시작일(미지정 시 종료일-1개월)", example = "2026-08-01") @RequestParam(required = false)
@@ -289,7 +289,7 @@ public class TransferController {
     public ResponseEntity<byte[]> exportCsv(
             @Parameter(description = "조회할 출금계좌 ID", required = true, example = "101") @RequestParam
                     Long withdrawalAccountId,
-            @Parameter(description = "처리상태 필터. SUCCESS/ERROR/TIMEOUT, 미지정 또는 ALL이면 전체", example = "SUCCESS")
+            @Parameter(description = "처리상태 필터. SUCCESS/ERROR/TIMEOUT/HELD/REJECTED, 미지정 또는 ALL이면 전체", example = "HELD")
                     @RequestParam(required = false)
                     String status,
             @Parameter(description = "조회 시작일(미지정 시 종료일-1개월)", example = "2026-08-01") @RequestParam(required = false)
@@ -369,12 +369,12 @@ public class TransferController {
 
     // ALL은 도메인 Enum에 없는 "조회 조건 전용" 값 — ALL과 미전달 둘 다 "조건 없음"으로 동일하게 처리한다
     // (AutoTransferController·ScheduledTransferController와 동일 관행, api_conventions.md §5-10)
-    private ProcessResultStatus parseStatus(String status) {
+    private TransferHistoryStatus parseStatus(String status) {
         if (status == null || status.equals("ALL")) {
             return null;
         }
         try {
-            return ProcessResultStatus.valueOf(status);
+            return TransferHistoryStatus.valueOf(status);
         } catch (IllegalArgumentException e) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT, "status 값이 올바르지 않습니다.");
         }

@@ -1151,6 +1151,7 @@ COB 대사 스텝이 원장 누적 합계와 `account.balance`가 다른 계좌�
 | UNIQUE | `uk_transfer_hold_transfer` | `transfer_id` — 보류 한 건은 이체 행 하나로만 끝난다 |
 | INDEX | `ix_transfer_hold_status_release` | `status, release_at` — 해제 스케줄러가 해제 시각이 지난 `HELD`와 멈춘 `EXECUTING`을 찾는다 |
 | INDEX | `ix_transfer_hold_customer` | `customer_id, held_at` — 고객의 보류 건 조회 |
+| INDEX | `ix_transfer_hold_withdrawal_held` | `withdrawal_account_id, held_at` — 출금계좌·기간별 고객 이체결과조회(#1022) |
 
 **CHECK 제약**
 

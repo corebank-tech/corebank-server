@@ -370,7 +370,7 @@ erDiagram
     transfer_hold {
         bigint transfer_hold_id PK "실행한 transfer.source_id"
         bigint customer_id
-        bigint withdrawal_account_id
+        bigint withdrawal_account_id "INDEX ix_transfer_hold_withdrawal_held(withdrawal_account_id, held_at)"
         varchar deposit_account_number "VARCHAR(16). 당행"
         bigint amount
         varchar my_passbook_memo "VARCHAR(10)"

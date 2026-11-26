@@ -9,7 +9,7 @@ import java.util.List;
 public class TransferHistoryCsvWriter {
 
     private static final byte[] UTF8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
-    private static final String HEADER_ROW = "거래번호,처리상태,처리일시,입금계좌번호,예금주명,금액,이체구분,채널,오류코드,실패사유";
+    private static final String HEADER_ROW = "이력ID,보류ID,거래번호,처리상태,처리일시,입금계좌번호,예금주명,금액,이체구분,채널,오류코드,실패사유";
     // OffsetDateTime#toString()은 초가 0이면 생략해 열 형식이 행마다 달라진다 — 고정 패턴으로 항상 초까지 남긴다
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssxxx");
     // Excel 등에서 =,+,-,@로 시작하는 셀 값을 수식으로 실행하는 CSV Injection(OWASP)을 막기 위한 트리거 문자
@@ -31,6 +31,8 @@ public class TransferHistoryCsvWriter {
     private static String toRow(TransferHistoryItemResponse item) {
         return String.join(
                 ",",
+                escape(item.historyId()),
+                item.transferHoldId() == null ? "" : String.valueOf(item.transferHoldId()),
                 escape(item.transactionNumber()),
                 escape(item.status().name()),
                 escape(item.executedAt().format(TIMESTAMP_FORMAT)),
